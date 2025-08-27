@@ -1,0 +1,11 @@
+[package]
+name = "mujoco_rs"
+version = "0.2.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+glfw = "0.59.0"
+
+[build-dependencies]
+bindgen = "0.71.1"
