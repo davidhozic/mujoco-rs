@@ -1,0 +1,4 @@
+[submodule "mujoco"]
+	path = mujoco
+	url = git@github.com:davidhozic/mujoco.git
+	branch = feature/non-blocking-loop
