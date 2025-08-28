@@ -50,7 +50,7 @@ impl<'a> MjData<'a> {
     }
 
     pub fn joint(&self, name: &str) -> Option<MjJointInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj__mjOBJ_JOINT as i32, CString::new(name).unwrap().as_ptr())};
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_JOINT as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -79,7 +79,7 @@ impl<'a> MjData<'a> {
         const GEOM_XPOS_LEN: usize = 3;
         const GEOM_XMAT_LEN: usize = 9;
 
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj__mjOBJ_GEOM as i32, CString::new(name).unwrap().as_ptr())};
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_GEOM as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -90,7 +90,7 @@ impl<'a> MjData<'a> {
     }
 
     pub fn actuator(&self, name: &str) -> Option<MjActuatorInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj__mjOBJ_ACTUATOR as i32, CString::new(name).unwrap().as_ptr())};
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_ACTUATOR as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
         }

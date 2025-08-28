@@ -13,6 +13,138 @@ use crate::mujoco_c::*;
 
 
 /***********************************************************************************************************************
+** MjvPerturb
+***********************************************************************************************************************/
+pub type MjvPerturb = mjvPerturb;
+impl Default for MjvPerturb {
+    fn default() -> Self {
+        unsafe {
+            let mut pert = MaybeUninit::uninit();
+            mjv_defaultPerturb(pert.as_mut_ptr());
+            pert.assume_init()
+        }
+    }
+}
+
+
+
+/***********************************************************************************************************************
+** MjvCamera
+***********************************************************************************************************************/
+pub type MjvCamera = mjvCamera;
+impl MjvCamera {
+    pub fn new(camera_id: u32, type_: mjtCamera, model: &MjModel) -> Self {
+        let mut camera: mjvCamera_ = Self::default();
+
+        camera.type_ = type_.clone() as i32;
+        match type_ {
+            mjtCamera_::mjCAMERA_FREE => {
+                unsafe { mjv_defaultFreeCamera(model.ffi(), &mut camera); }
+            }
+            mjtCamera_::mjCAMERA_FIXED | mjtCamera_::mjCAMERA_TRACKING => {
+                camera.fixedcamid = camera_id as i32;
+            }
+
+            mjtCamera_::mjCAMERA_USER => {}
+        }
+
+        camera
+    }
+}
+
+impl Default for MjvCamera {
+    fn default() -> Self {
+        unsafe {
+            let mut c = MaybeUninit::uninit();
+            mjv_defaultCamera(c.as_mut_ptr());
+            c.assume_init()
+        }
+    }
+}
+
+/***********************************************************************************************************************
+** mjvGLCamera
+***********************************************************************************************************************/
+pub type MjvGLCamera = mjvGLCamera;
+
+impl MjvGLCamera {
+    /// Average the current MjvGLCamera with the `other` MjvGLCamera.
+    fn average_camera(&self, other: &Self) -> Self {
+        unsafe { mjv_averageCamera (self, other) }
+    }
+}
+
+/***********************************************************************************************************************
+** MjvGeom
+***********************************************************************************************************************/
+pub type MjvGeom = mjvGeom;
+impl MjvGeom {
+    /// Wrapper around the MuJoCo's mjv_connector function.
+    pub fn connect(&mut self, width: f64, from: [f64; 3], to: [f64; 3]) {
+        unsafe {
+            mjv_connector(self, self.type_, width, from.as_ptr(), to.as_ptr());
+        }
+    }
+
+    /// Compatibility method to convert the ``label`` attribute into a ``String``.
+    pub fn label(&self) -> String {
+        let len = self.label.iter().position(|&c| c == 0).unwrap_or(self.label.len());
+        let bytes: &[u8] = unsafe { std::slice::from_raw_parts(self.label.as_ptr() as *const u8, len) };
+        String::from_utf8_lossy(bytes).to_string()
+    }
+
+    /// Compatibility method to convert the ``s`` parameter into an array that is copied to the ``label`` attribute.
+    pub fn set_label(&mut self, s: &str) {
+        assert!(s.len() < self.label.len());
+        for (i, b) in s.chars().enumerate() {
+            self.label[i] = b as i8;
+        }
+        self.label[s.len()] = 0;
+    }
+}
+
+/***********************************************************************************************************************
+** MjvLight
+***********************************************************************************************************************/
+pub type MjvLight = mjvLight;
+
+/***********************************************************************************************************************
+** MjvOption
+***********************************************************************************************************************/
+pub type MjvOption = mjvOption;
+impl Default for MjvOption {
+    fn default() -> Self {
+        let mut opt = MaybeUninit::uninit();
+        unsafe {
+            mjv_defaultOption(opt.as_mut_ptr());
+            opt.assume_init()
+        }
+    }
+}
+
+/***********************************************************************************************************************
+** MjvOption
+***********************************************************************************************************************/
+pub type MjvFigure = mjvFigure;
+impl Default for MjvFigure {
+    fn default() -> Self {
+        let mut opt = MaybeUninit::uninit();
+        unsafe {
+            mjv_defaultFigure(opt.as_mut_ptr());
+            opt.assume_init()
+        }
+    }
+}
+
+impl MjvFigure {
+    /// Draws the 2D figure.
+    pub fn figure(&mut self, viewport: MjrRectangle, context: &MjrContext) {
+        unsafe { mjr_figure(viewport,self, context.ffi()) };
+    }
+}
+
+
+/***********************************************************************************************************************
 ** MjvScene
 ***********************************************************************************************************************/
 pub struct MjvScene<'m> {
@@ -54,7 +186,7 @@ impl<'m> MjvScene<'m> {
         unsafe {
             mjv_updateScene(
                 self.model.ffi(), data.ffi_mut(), opt, ptr::null(),
-                cam, mjtCatBit__mjCAT_ALL as i32, &mut self.ffi
+                cam, mjtCatBit::mjCAT_ALL as i32, &mut self.ffi
             );
         }
     }
@@ -134,101 +266,6 @@ impl Drop for MjvScene<'_> {
 }
 
 
-/***********************************************************************************************************************
-** MjvCamera
-***********************************************************************************************************************/
-pub type MjvCamera = mjvCamera;
-impl MjvCamera {
-    pub fn new(camera_id: isize, model: &MjModel) -> Self {
-        let mut camera = Self::default();
-
-        camera.fixedcamid = camera_id as i32;
-        if camera_id == -1 {  // free camera
-            camera.type_ = mjtCamera__mjCAMERA_FREE as i32;
-            unsafe { mjv_defaultFreeCamera(model.ffi(), &mut camera); }
-        }
-        else {
-            camera.type_ = mjtCamera__mjCAMERA_FIXED as i32;
-        }
-
-        camera
-    }
-}
-
-impl Default for MjvCamera {
-    fn default() -> Self {
-        unsafe {
-            let mut c = MaybeUninit::uninit();
-            mjv_defaultCamera(c.as_mut_ptr());
-            c.assume_init()
-        }
-    }
-}
-
-/***********************************************************************************************************************
-** MjvPerturb
-***********************************************************************************************************************/
-pub type MjvPerturb = mjvPerturb;
-impl Default for MjvPerturb {
-    fn default() -> Self {
-        unsafe {
-            let mut pert = MaybeUninit::uninit();
-            mjv_defaultPerturb(pert.as_mut_ptr());
-            pert.assume_init()
-        }
-    }
-}
-
-/***********************************************************************************************************************
-** mjvOption
-***********************************************************************************************************************/
-pub type MjvOption = mjvOption;
-impl Default for MjvOption {
-    fn default() -> Self {
-        let mut opt = MaybeUninit::uninit();
-        unsafe {
-            mjv_defaultOption(opt.as_mut_ptr());
-            opt.assume_init()
-        }
-    }
-}
-
-/***********************************************************************************************************************
-** mjvGeom
-***********************************************************************************************************************/
-pub type MjvGeom = mjvGeom;
-impl MjvGeom {
-    /// Wrapper around the MuJoCo's mjv_connector function.
-    pub fn connect(&mut self, width: f64, from: [f64; 3], to: [f64; 3]) {
-        unsafe {
-            mjv_connector(self, self.type_, width, from.as_ptr(), to.as_ptr());
-        }
-    }
-
-    pub fn label(&self) -> String {
-        let len = self.label.iter().position(|&c| c == 0).unwrap_or(self.label.len());
-        let bytes: &[u8] = unsafe { std::slice::from_raw_parts(self.label.as_ptr() as *const u8, len) };
-        String::from_utf8_lossy(bytes).to_string()
-    }
-
-    pub fn set_label(&mut self, s: &str) {
-        assert!(s.len() < self.label.len());
-        for (i, &b) in s.as_bytes().iter().enumerate() {
-            self.label[i] = b as i8;
-        }
-        self.label[s.len()] = 0;
-    }
-}
-
-/***********************************************************************************************************************
-** mjvLight
-***********************************************************************************************************************/
-pub type MjvLight = mjvLight;
-
-/***********************************************************************************************************************
-** mjvGLCamera
-***********************************************************************************************************************/
-pub type MjvGLCamera = mjvGLCamera;
 
 
 #[cfg(test)]

@@ -1,3 +1,4 @@
+use bindgen::callbacks::TypeKind;
 use bindgen::callbacks::{ParseCallbacks, DeriveInfo};
 use std::path::PathBuf;
 use std::env;
@@ -12,6 +13,10 @@ impl ParseCallbacks for CloneCallback {
         let mut data = vec!["Clone".into()];
         if info.name.starts_with("mjui") || info.name == "mjrRect_" {
             data.push("Copy".into());
+        }
+
+        if info.kind == TypeKind::Enum {
+            data.push("TryFromPrimitive".into());
         }
 
         data
@@ -57,6 +62,7 @@ fn main() {
         .derive_default(false)
         .opaque_type("std::.*")
         .derive_copy(false)
+        .rustified_enum(".*")
         .parse_callbacks(Box::new(CloneCallback))
         .generate()
         .expect("unable to generate MuJoCo bindings");
@@ -67,6 +73,10 @@ fn main() {
 
     // Extra adjustments
     fdata = fdata.replace("pub __lx: std_basic_string_value_type<_CharT>,", "pub __lx: std::mem::ManuallyDrop<std_basic_string_value_type<_CharT>>,");
+    let re = regex::Regex::new(r"#\[derive\((.*?Clone.*?), Clone, (.*?)\)\]").unwrap();
+    fdata = re.replace_all(&fdata, "#[derive($1, $2)]").to_string();
+    fdata = "use num_enum::TryFromPrimitive;\n\n".to_string() + &fdata;
+
     fs::write(outputfile_dir, fdata).unwrap();
 
 
