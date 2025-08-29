@@ -69,7 +69,7 @@ pub type MjvGLCamera = mjvGLCamera;
 
 impl MjvGLCamera {
     /// Average the current MjvGLCamera with the `other` MjvGLCamera.
-    fn average_camera(&self, other: &Self) -> Self {
+    pub fn average_camera(&self, other: &Self) -> Self {
         unsafe { mjv_averageCamera (self, other) }
     }
 }
@@ -232,17 +232,8 @@ impl<'m> MjvScene<'m> {
             let mut output = vec![0; width as usize * height as usize * 3];  // width * height * RGB
 
             mjr_render(viewport.clone(), self.ffi_mut(), context.ffi());
-            self.read_pixels(&mut output, viewport, context);
+            context.read_pixels(Some(&mut output), None, viewport);
             output
-        }
-    }
-
-    /// Reads the render scene and writes the image data to `output`. The size of the `output` must 
-    /// be `width * height * 3`, where `width` and `height` are the sizes of the current glfw window
-    /// context.
-    pub fn read_pixels(&self, output: &mut [u8], viewport: &MjrRectangle, context: &MjrContext) {
-        unsafe {
-            mjr_readPixels(output.as_mut_ptr(), ptr::null_mut(), viewport.clone(), context.ffi())
         }
     }
 
