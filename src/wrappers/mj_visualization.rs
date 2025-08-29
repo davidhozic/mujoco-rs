@@ -278,7 +278,7 @@ mod tests {
         let mut scene = MjvScene::new(&model, 1000);
         
         /* Test label handling. Other things are trivial one-liners. */
-        let geom = scene.create_geom(mjtGeom__mjGEOM_SPHERE, None, None, None, None);
+        let geom = scene.create_geom(mjtGeom::mjGEOM_SPHERE, None, None, None, None);
         let label = "Hello World";
         geom.set_label(label);
         assert_eq!(geom.label(), label);
