@@ -22,7 +22,7 @@ unsafe impl Sync for MjData<'_> {}
 
 impl<'a> MjData<'a> {
     /// Constructor for a new MjData. This should is called from MjModel.
-    pub(crate) fn new(model: &'a MjModel) -> Self {
+    pub fn new(model: &'a MjModel) -> Self {
         unsafe {
             Self {
                 data: mj_makeData(model.ffi()),
