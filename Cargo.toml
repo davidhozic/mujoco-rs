@@ -1,8 +1,16 @@
 [package]
-name = "mujoco_rs"
+name = "mujoco_rs_w"
 version = "0.2.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
+
+[features]
+viewer = []
+simulate = []  # Alias for the viewer
+
+default = []
+
+
 
 [dependencies]
 glfw = "0.59.0"
