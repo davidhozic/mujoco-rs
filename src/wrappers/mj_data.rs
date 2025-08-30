@@ -35,7 +35,7 @@ impl<'a> MjData<'a> {
         unsafe { self.data.as_ref().unwrap() }
     }
 
-    pub(crate) fn ffi_mut(&self) -> &mut mjData {
+    pub(crate) fn ffi_mut(&mut self) -> &mut mjData {
         unsafe { self.data.as_mut().unwrap() }
     }
 
