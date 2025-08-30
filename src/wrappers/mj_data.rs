@@ -169,6 +169,15 @@ impl<'a> MjData<'a> {
         force
     }
 
+
+    /// Returns a direct pointer to the underlying model.
+    /// THIS IS NOT TO BE USED.
+    /// It is only meant for the viewer code, which currently still depends
+    /// on mutable pointers to model and data. This will be removed in the future.
+    pub(crate) unsafe fn __raw(&self) -> *mut mjData {
+        self.data
+    }
+
 }
 
 impl Drop for MjData<'_> {
