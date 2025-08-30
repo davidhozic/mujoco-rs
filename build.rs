@@ -43,7 +43,9 @@ fn main() {
         println!("cargo::rerun-if-changed={}", mj_lib_simulate_path.canonicalize().unwrap().display());
         println!("cargo:rustc-link-search={}", mj_lib_pathbuf.canonicalize().unwrap().display());
 
+        #[cfg(feature = "viewer")]
         println!("cargo:rustc-link-lib=simulate");
+
         println!("cargo:rustc-link-lib=mujoco");
         println!("cargo:rustc-link-lib=lodepng");
         println!("cargo:rustc-link-lib=tinyxml2");
@@ -103,19 +105,4 @@ fn main() {
     fdata = "use num_enum::TryFromPrimitive;\n\n".to_string() + &fdata;
 
     fs::write(outputfile_dir, fdata).unwrap();
-
-
-    // Generate lodepng bindings
-    // rust/mujoco_rust/mujoco/build/_deps/lodepng-src
-    // let lodepng_dir = current_dir.join("mujoco/build/_deps/lodepng-src");
-    // bindgen::Builder::default()
-    //     .header(lodepng_dir.join("lodepng.h").to_str().unwrap())
-    //     .allowlist_item("lodepng_.*")
-    //     .layout_tests(false)
-    //     .derive_default(true)
-    //     .clang_args(["-x", "c++"])
-    //     .generate()
-    //     .expect("unable to generate lodepng bindings")
-    //     .write_to_file(output_path.join("lodepng_c.rs"))
-    //     .expect("could not write lodepng bindings");
 }
