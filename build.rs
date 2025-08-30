@@ -43,7 +43,7 @@ fn main() {
         println!("cargo::rerun-if-changed={}", mj_lib_simulate_path.canonicalize().unwrap().display());
         println!("cargo:rustc-link-search={}", mj_lib_pathbuf.canonicalize().unwrap().display());
 
-        #[cfg(feature = "viewer")]
+        #[cfg(feature = "cpp-viewer")]
         println!("cargo:rustc-link-lib=simulate");
 
         println!("cargo:rustc-link-lib=mujoco");

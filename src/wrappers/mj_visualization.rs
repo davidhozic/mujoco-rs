@@ -46,17 +46,30 @@ impl MjvCamera {
 
         camera.type_ = type_.clone() as i32;
         match type_ {
-            mjtCamera_::mjCAMERA_FREE => {
+            MjtCamera::mjCAMERA_FREE => {
                 unsafe { mjv_defaultFreeCamera(model.ffi(), &mut camera); }
             }
-            mjtCamera_::mjCAMERA_FIXED | mjtCamera_::mjCAMERA_TRACKING => {
+            MjtCamera::mjCAMERA_FIXED | MjtCamera::mjCAMERA_TRACKING => {
                 camera.fixedcamid = camera_id as i32;
             }
 
-            mjtCamera_::mjCAMERA_USER => {}
+            MjtCamera::mjCAMERA_USER => {}
         }
 
         camera
+    }
+
+    /// Sets the camera into tracking mode.
+    pub fn track(&mut self, tracking_id: u32) {
+        self.type_ = MjtCamera::mjCAMERA_TRACKING as i32;
+        self.fixedcamid = -1;
+        self.trackbodyid = tracking_id as i32;
+    }
+    
+    /// Sets the camera free from tracking.
+    pub fn free(&mut self) {
+        self.trackbodyid = -1;
+        self.type_ = MjtCamera::mjCAMERA_FREE as i32;
     }
 
     /// Move camera with mouse.
@@ -196,10 +209,10 @@ impl<'m> MjvScene<'m> {
         &mut self.ffi.lights[..self.ffi.nlight as usize]
     }
 
-    pub fn update(&mut self, data: &mut MjData, opt: &MjvOption, cam: &mut MjvCamera) {
+    pub fn update(&mut self, data: &mut MjData, opt: &MjvOption, pertub: &MjvPerturb, cam: &mut MjvCamera) {
         unsafe {
             mjv_updateScene(
-                self.model.ffi(), data.ffi_mut(), opt, ptr::null(),
+                self.model.ffi(), data.ffi_mut(), opt, pertub,
                 cam, mjtCatBit::mjCAT_ALL as i32, &mut self.ffi
             );
         }
@@ -239,6 +252,26 @@ impl<'m> MjvScene<'m> {
         unsafe {
             mjr_render(viewport.clone(), self.ffi_mut(), context.ffi());
         }
+    }
+
+
+    /// Returns the selection point based on a mouse click.
+    /// This is a wrapper around `mjv_select()`.
+    /// The method returns a tuple: (body_id, geom_id, flex_id, skin_id, xyz coordinates of the point)
+    pub fn find_selection(
+        &self, data: &MjData, option: &MjvOption,
+        aspect_ratio: mjtNum, relx: mjtNum, rely: mjtNum,
+    ) -> (i32, i32, i32, i32, [mjtNum; 3]) {
+        let (mut geom_id, mut flex_id, mut skin_id) = (-1 , -1, -1);
+        let mut selpnt = [0.0; 3];
+        let body_id = unsafe {
+            mjv_select(
+                self.model.ffi(), data.ffi(), option,
+                aspect_ratio, relx, rely, self.ffi(), selpnt.as_mut_ptr(),
+                &mut geom_id, &mut flex_id, &mut skin_id
+            )
+        };
+        (body_id, geom_id, flex_id, skin_id, selpnt)
     }
 
     #[allow(unused)]

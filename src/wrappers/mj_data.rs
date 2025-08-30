@@ -169,7 +169,6 @@ impl<'a> MjData<'a> {
         force
     }
 
-
     /// Returns a direct pointer to the underlying model.
     /// THIS IS NOT TO BE USED.
     /// It is only meant for the viewer code, which currently still depends
