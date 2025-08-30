@@ -48,14 +48,15 @@ class Simulate {
   using Clock = std::chrono::steady_clock;
   static_assert(std::ratio_less_equal_v<Clock::period, std::milli>);
 
-  static constexpr int kMaxGeom = 20000;
+  static constexpr int kMaxGeom = 100000;
 
   // create object and initialize the simulate ui
   Simulate(mjvCamera* cam, mjvOption* opt, mjvPerturb* pert, mjvScene* user_scn, bool is_passive);
 
-  // Synchronize mjModel and mjData state with UI inputs, and update
-  // visualization.
-  void Sync();
+  // Synchronize state with UI inputs, and update visualization.  If state_only
+  // is false mjData and mjModel will be updated, otherwise only the subset of
+  // mjData corresponding to mjSTATE_INTEGRATION will be synced.
+  void Sync(bool state_only = false);
 
   void UpdateHField(int hfieldid);
   void UpdateMesh(int meshid);
@@ -129,6 +130,8 @@ class Simulate {
   std::vector<std::optional<std::pair<mjtNum, mjtNum>>> actuator_ctrlrange_;
   std::vector<std::string> actuator_names_;
 
+  std::vector<std::string> equality_names_;
+
   std::vector<mjtNum> history_;  // history buffer (nhistory x state_size)
 
   // mjModel and mjData fields that can be modified by the user through the GUI
@@ -136,9 +139,18 @@ class Simulate {
   std::vector<mjtNum> qpos_prev_;
   std::vector<mjtNum> ctrl_;
   std::vector<mjtNum> ctrl_prev_;
+  std::vector<mjtByte> eq_active_;
+  std::vector<mjtByte> eq_active_prev_;
 
-  mjvSceneState scnstate_;
+  // in passive mode the user owns m_ and d_, these "passive" instances are
+  // owned by Simulate, updated from the user by the Sync() method
+  mjModel* m_passive_ = nullptr;
+  mjData* d_passive_ = nullptr;
+  std::vector<mjvGeom> user_scn_geoms_;
+
   mjOption mjopt_prev_;
+  mjVisual mjvis_prev_;
+  mjStatistic mjstat_prev_;
   mjvOption opt_prev_;
   mjvCamera cam_prev_;
 
@@ -164,8 +176,10 @@ class Simulate {
     bool ui_update_simulation;
     bool ui_update_physics;
     bool ui_update_rendering;
+    bool ui_update_visualization;
     bool ui_update_joint;
     bool ui_update_ctrl;
+    bool ui_update_equality;
     bool ui_remake_ctrl;
   } pending_ = {};
 
@@ -188,7 +202,7 @@ class Simulate {
   int sensor = 0;
   int pause_update = 1;
   int fullscreen = 0;
-  int vsync = 1;
+  int vsync = 0;
   int busywait = 0;
 
   // keyframe index
@@ -205,6 +219,9 @@ class Simulate {
   std::atomic_int droploadrequest = 0;
   std::atomic_int screenshotrequest = 0;
   std::atomic_int uiloadrequest = 0;
+  std::atomic_int newfigurerequest = 0;
+  std::atomic_int newtextrequest = 0;
+  std::atomic_int newimagerequest = 0;
 
   // loadrequest
   //   3: display a loading message
@@ -262,8 +279,11 @@ class Simulate {
   mjvScene* user_scn = nullptr;
   mjtByte user_scn_flags_prev_[mjNRNDFLAG];
   std::vector<std::pair<mjrRect, mjvFigure>> user_figures_;
+  std::vector<std::pair<mjrRect, mjvFigure>> user_figures_new_;
   std::vector<std::tuple<int, int, std::string, std::string>> user_texts_;
-  std::vector<std::tuple<mjrRect, unsigned char*>> user_images_;
+  std::vector<std::tuple<int, int, std::string, std::string>> user_texts_new_;
+  std::vector<std::tuple<mjrRect, std::unique_ptr<unsigned char[]>>> user_images_;
+  std::vector<std::tuple<mjrRect, std::unique_ptr<unsigned char[]>>> user_images_new_;
 
   // OpenGL rendering and UI
   int refresh_rate = 60;
