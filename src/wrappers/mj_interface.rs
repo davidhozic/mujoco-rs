@@ -1,4 +1,5 @@
 //! MuJoCo user interface
+//! This IS NOT YET TESTED.
 use super::mj_rendering::MjrContext;
 use crate::mujoco_c::*;
 

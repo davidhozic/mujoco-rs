@@ -299,11 +299,24 @@ impl Drop for MjvScene<'_> {
 mod tests {
     use super::*;
 
-    const MODEL_PATH: &str = "/home/davidhozic/repo/FuzbAI/rust/fuzbai-simulation/models/miza.xml";
+    const EXAMPLE_MODEL: &str = "
+    <mujoco>
+    <worldbody>
+        <light ambient=\"0.2 0.2 0.2\"/>
+        <body name=\"ball\">
+            <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
+            <joint type=\"free\"/>
+        </body>
+
+        <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\"/>
+
+    </worldbody>
+    </mujoco>
+    ";
 
     /* Tests setup */
     fn load_model() -> MjModel {
-        let model = MjModel::from_xml(MODEL_PATH).unwrap();
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
         model
     }
 

@@ -10,6 +10,9 @@
 //! To access the lower-level ffi structs in the wrappers, call either the ``ffi()`` method
 //! or the ``ffi_mut`` method.
 //! 
+//! The main structs are [`wrappers::mj_model::MjModel`] and [`wrappers::mj_data::MjData`].
+//! The Rust-native viewer is available in [`viewer::MjViewer`].
+//! 
 
 use std::ffi::CStr;
 

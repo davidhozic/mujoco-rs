@@ -5,10 +5,12 @@ use std::path::Path;
 use std::ptr;
 
 use crate::wrappers::mj_data::MjData;
-use super::mj_auxilary::MjVfs;
+use super::mj_auxiliary::MjVfs;
 use crate::mujoco_c::*;
 
 
+/// A Rust-safe wrapper around mjModel.
+/// Automatically clean after itself on destruction.
 #[derive(Debug)]
 pub struct MjModel(*mut mjModel);
 
@@ -95,12 +97,14 @@ impl MjModel {
         }
     }
 
-    pub fn name2id(&self, type_: i32, name: &str) -> i32 {
+    /// Translates `name` to the correct id. Wrapper around `mj_name2id`.
+    pub fn name2id(&self, type_: mjtObj, name: &str) -> i32 {
         unsafe {
-            mj_name2id(self.0, type_, CString::new(name).unwrap().as_ptr())
+            mj_name2id(self.0, type_ as i32, CString::new(name).unwrap().as_ptr())
         }
     }
 
+    /// Creates a new [`MjData`] instances linked to this model.
     pub fn make_data<'m>(&'m self) -> MjData<'m> {
         MjData::new(self)
     }
@@ -115,11 +119,12 @@ impl MjModel {
         }
     }
 
-    /// Returns the raw wrapped value.
+    /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
         unsafe { self.0.as_ref().unwrap() }
     }
 
+    /// Returns a mutable reference to the wrapped FFI struct.
     pub fn ffi_mut(&mut self) -> &mut mjModel {
         unsafe { self.0.as_mut().unwrap() }
     }
@@ -148,15 +153,26 @@ mod tests {
     use std::env;
     use std::fs;
 
-    const MODEL_PATH_VAR: &str = "MODEL_PATH";
+    const EXAMPLE_MODEL: &str = "
+    <mujoco>
+    <worldbody>
+        <light ambient=\"0.2 0.2 0.2\"/>
+        <body name=\"ball\">
+            <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
+            <joint type=\"free\"/>
+        </body>
+
+        <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\"/>
+
+    </worldbody>
+    </mujoco>
+    ";
     const MODEL_SAVE_XML_PATH: &str = "./__TMP_MODEL.xml";
 
     /// Tests if the model can be loaded and then saved.
     #[test]
     fn test_model_load_save() {
-        let model_path = env::var(MODEL_PATH_VAR)
-            .unwrap_or_else(|_| panic!("could not find the env variable ({MODEL_PATH_VAR}) for the model path."));
-        let model = MjModel::from_xml(&model_path).expect("unable to load the model.");
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
         model.save_last_xml(MODEL_SAVE_XML_PATH).expect("could not save the model XML.");      
         fs::remove_file(MODEL_SAVE_XML_PATH).unwrap();
     }
