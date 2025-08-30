@@ -25,6 +25,19 @@ pub enum MjViewerError {
     GlfwInitError (glfw::InitError),
     WindowCreationError
 }
+
+/// A Rust-native implementation of the MuJoCo viewer. To confirm to rust safety rules,
+/// the viewer doesn't store a mutable reference to the [`MjData`] struct, but it instead
+/// accepts it as a parameter at its methods.
+/// 
+/// Currently supported (to be expanded in the future):
+/// - Visualization of the 3D scene,
+/// - Close via Ctrl + Q or by closing the window,
+/// - Body tracking via Ctrl + double left-click,
+/// - Escape from tracked camera via Esc.
+/// 
+/// Only passive mode is available, which means the user must call [`MjViewer::sync`]
+/// to update the state inside the viewer.
 #[derive(Debug)]
 pub struct MjViewer<'m> {
     /* MuJoCo rendering */
@@ -224,7 +237,7 @@ impl<'m> MjViewer<'m> {
                     }
 
                     /* Set tracking camera */
-                    if modifiers == &Modifiers::Control {
+                    if modifiers == &Modifiers::Control && body_id >= 0 {
                         self.camera.track(body_id as u32);
                     }
                 }

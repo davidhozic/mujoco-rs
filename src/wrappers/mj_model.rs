@@ -116,12 +116,11 @@ impl MjModel {
     }
 
     /// Returns the raw wrapped value.
-    pub(crate) fn ffi(&self) -> &mjModel {
+    pub fn ffi(&self) -> &mjModel {
         unsafe { self.0.as_ref().unwrap() }
     }
 
-    #[allow(unused)]
-    pub(crate) fn ffi_mut(&mut self) -> &mut mjModel {
+    pub fn ffi_mut(&mut self) -> &mut mjModel {
         unsafe { self.0.as_mut().unwrap() }
     }
 

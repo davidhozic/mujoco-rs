@@ -82,11 +82,11 @@ impl MjVfs {
         }
     }
 
-    pub(crate) fn ffi(&self) -> &mjVFS {
+    pub fn ffi(&self) -> &mjVFS {
         &self.ffi
     }
 
-    pub(crate) fn ffi_mut(&mut self) -> &mut mjVFS {
+    pub fn ffi_mut(&mut self) -> &mut mjVFS {
         &mut self.ffi
     }
 }

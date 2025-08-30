@@ -1,6 +1,8 @@
 //! Example of the native Rust viewer implementation.
 //! This can only be run in passive mode, which means the user program is the one
 //! controlling everything.
+use std::time::Duration;
+
 use mujoco_rs_w::viewer::MjViewer;
 use mujoco_rs_w::prelude::*;
 
@@ -14,7 +16,7 @@ const EXAMPLE_MODEL: &str = "
         <joint type=\"free\"/>
     </body>
 
-    <geom name=\"floor\" type=\"plane\" size=\"10 10 10\"/>
+    <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\"/>
 
   </worldbody>
 </mujoco>
@@ -28,5 +30,6 @@ fn main() {
     while viewer.running() {
         viewer.sync(&mut data);
         data.step();
+        std::thread::sleep(Duration::from_millis(2));
     }
 }

@@ -31,11 +31,11 @@ impl<'a> MjData<'a> {
         }
     }
 
-    pub(crate) fn ffi(&self) -> &mjData {
+    pub fn ffi(&self) -> &mjData {
         unsafe { self.data.as_ref().unwrap() }
     }
 
-    pub(crate) fn ffi_mut(&mut self) -> &mut mjData {
+    pub fn ffi_mut(&mut self) -> &mut mjData {
         unsafe { self.data.as_mut().unwrap() }
     }
 

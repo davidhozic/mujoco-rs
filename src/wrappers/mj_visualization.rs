@@ -274,12 +274,11 @@ impl<'m> MjvScene<'m> {
         (body_id, geom_id, flex_id, skin_id, selpnt)
     }
 
-    #[allow(unused)]
-    pub(crate) fn ffi(&self) -> &mjvScene {
+    pub fn ffi(&self) -> &mjvScene {
         &self.ffi
     }
 
-    pub(crate) fn ffi_mut(&mut self) -> &mut mjvScene {
+    pub fn ffi_mut(&mut self) -> &mut mjvScene {
         &mut self.ffi
     }
 }

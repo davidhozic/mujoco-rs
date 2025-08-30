@@ -43,6 +43,11 @@ display everything and respond to mouse/keyboard, however perturbations aren't y
 ## Examples
 Examples can be tested under the ``examples/`` directory.
 
+## RAW FFI bindings
+If the current state of the wrappers isn't satisfactory enough, raw FFI bindings to the C MuJoCo
+library can be used. These are available under the ``mujoco_rs_w::mujoco_c`` module.
+To access the FFI level structs of the wrappers, call the ``ffi()`` and ``ffi_mut()`` methods.
+
 ## NOTE
 This project is WIP but functional. I accept pull requests about bug fixes
 and feature requests. If you have any questions, please open a **discussion**.

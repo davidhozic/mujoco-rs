@@ -108,12 +108,11 @@ impl MjrContext {
         unsafe { mjr_setAux(index as i32, self.ffi_mut()); }
     }
 
-    pub(crate) fn ffi(&self) -> &mjrContext {
+    pub fn ffi(&self) -> &mjrContext {
         &self.ffi
     }
 
-    #[allow(unused)]
-    pub(crate) fn ffi_mut(&mut self) -> &mut mjrContext {
+    pub fn ffi_mut(&mut self) -> &mut mjrContext {
         &mut self.ffi
     }
 }

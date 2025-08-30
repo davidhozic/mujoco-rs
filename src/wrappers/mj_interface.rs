@@ -379,11 +379,11 @@ impl MjUI {
         unsafe { mjui_render(self.ffi_mut(), state, context.ffi()); }
     }
 
-    pub(crate) fn ffi(&self) -> &mjUI {
+    pub fn ffi(&self) -> &mjUI {
         &self.ui
     }
 
-    pub(crate) fn ffi_mut(&mut self) -> &mut mjUI {
+    pub fn ffi_mut(&mut self) -> &mut mjUI {
         &mut self.ui
     }
 }
