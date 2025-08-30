@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 viewer = []
 simulate = []  # Alias for the viewer
 
-default = []
+default = ["viewer"]
 
 
 

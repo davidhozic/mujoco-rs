@@ -19,6 +19,7 @@ unsafe impl Sync for MjModel {}
 
 
 impl MjModel {
+    /// Loads the model from an XML file.
     pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
         let mut error_buffer = [0i8; 100];
         unsafe {
@@ -32,18 +33,40 @@ impl MjModel {
         }
     }
 
+    /// Loads the model from an XML file.
+    pub fn from_xml_string(data: &str) -> Result<Self, Error> {
+        let mut vfs = MjVfs::new();
+        let filename = "model.xml";
+
+        // Add the file into a virtual file system
+        vfs.add_from_buffer(filename, data.as_bytes())?;
+
+        let mut error_buffer = [0i8; 100];
+        unsafe {
+            let filename_c = CString::new(filename).unwrap();
+            let raw_ptr = mj_loadXML(
+                filename_c.as_ptr(), vfs.ffi(),
+                &mut error_buffer as *mut i8, error_buffer.len() as c_int
+            );
+
+            Self::check_raw_model(raw_ptr, &error_buffer)
+        }
+    }
+
+    /// Loads the model from MJB raw data.
     pub fn from_buffer(data: &[u8]) -> Result<Self, Error> {
         unsafe {
             // Create a virtual FS since we don't have direct access to the load buffer function (or at least it isn't officially exposed).
             // let raw_ptr = mj_loadModelBuffer(data.as_ptr() as *const c_void, data.len() as i32);
             let mut vfs = MjVfs::new();
-            let filename = "miza.mjb";
+            let filename = "model.mjb";
 
             // Add the file into a virtual file system
             vfs.add_from_buffer(filename, data)?;
 
             // Load the model from the virtual file system
-            let raw_model = mj_loadModel(CString::new(filename).unwrap().as_ptr(), vfs.ffi());
+            let filename_c = CString::new(filename).unwrap();
+            let raw_model = mj_loadModel(filename_c.as_ptr(), vfs.ffi());
             Self::check_raw_model(raw_model, &[])
         }
     }

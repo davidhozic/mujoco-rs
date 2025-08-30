@@ -3,9 +3,6 @@ use std::default::Default;
 use std::mem::MaybeUninit;
 use std::ptr;
 
-use glfw::ffi::{glfwGetCurrentContext, glfwGetWindowSize};
-
-
 use super::mj_rendering::{MjrContext, MjrRectangle};
 use super::mj_model::MjModel;
 use super::mj_data::MjData;
@@ -17,6 +14,11 @@ use crate::mujoco_c::*;
 ** MjtCamera
 ***********************************************************************************************************************/
 pub type MjtCamera = mjtCamera;
+
+/***********************************************************************************************************************
+** MjtMouse
+***********************************************************************************************************************/
+pub type MjtMouse = mjtMouse;
 
 /***********************************************************************************************************************
 ** MjvPerturb
@@ -55,6 +57,11 @@ impl MjvCamera {
         }
 
         camera
+    }
+
+    /// Move camera with mouse.
+    pub fn move_(&mut self, action: mjtMouse, model: &MjModel, dx: mjtNum, dy: mjtNum, scene: &MjvScene) {
+        unsafe { mjv_moveCamera(model.ffi(), action as i32, dx, dy, scene.ffi(), self); };
     }
 }
 
@@ -153,6 +160,7 @@ impl MjvFigure {
 /***********************************************************************************************************************
 ** MjvScene
 ***********************************************************************************************************************/
+#[derive(Debug)]
 pub struct MjvScene<'m> {
     ffi: mjvScene,
     model: &'m MjModel,
@@ -227,19 +235,9 @@ impl<'m> MjvScene<'m> {
     }
 
     /// Renders the scene to the screen. This does not automatically make the OpenGL context current.
-    pub fn render(&mut self, viewport: &MjrRectangle, context: &MjrContext) -> Vec<u8> {
+    pub fn render(&mut self, viewport: &MjrRectangle, context: &MjrContext){
         unsafe {
-            /* Read window size */
-            let window = glfwGetCurrentContext();
-            let mut width  = 0;
-            let mut height = 0;
-            glfwGetWindowSize(window, &mut width, &mut height);
-
-            let mut output = vec![0; width as usize * height as usize * 3];  // width * height * RGB
-
             mjr_render(viewport.clone(), self.ffi_mut(), context.ffi());
-            context.read_pixels(Some(&mut output), None, viewport);
-            output
         }
     }
 
