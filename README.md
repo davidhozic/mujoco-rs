@@ -2,7 +2,7 @@
 MuJoCo bindings and wrappers for the Rust programming language. Includes the viewer.
 
 ## Compilation
-This will improve in the future, currently the steps include compilation of the MuJoCo itself as a static library. The version is currently frozen at 3.3.2
+This will improve in the future, currently the steps include compilation of the MuJoCo itself as a static library. The version is currently frozen at 3.3.5.
 
 Steps:
 1. Clone the repository
