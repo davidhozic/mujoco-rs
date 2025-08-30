@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::ffi::CString;
 
-use super::mj_auxilary::MjContact;
+use super::mj_auxiliary::MjContact;
 use super::mj_model::MjModel;
 use crate::mujoco_c::*;
 
@@ -9,6 +9,8 @@ use crate::util::{PointerViewMut, PointerView};
 use crate::mj_slice_view;
 
 
+/// Wrapper around the ``mjData`` struct.
+/// Provides lifetime guarantees as well as automatic cleanup.
 pub struct MjData<'a> {
     data: *mut mjData,
     model: &'a MjModel
@@ -22,7 +24,7 @@ unsafe impl Sync for MjData<'_> {}
 
 impl<'a> MjData<'a> {
     /// Constructor for a new MjData. This should is called from MjModel.
-    pub(crate) fn new(model: &'a MjModel) -> Self {
+    pub fn new(model: &'a MjModel) -> Self {
         unsafe {
             Self {
                 data: mj_makeData(model.ffi()),
@@ -31,24 +33,27 @@ impl<'a> MjData<'a> {
         }
     }
 
-    pub(crate) fn ffi(&self) -> &mjData {
+    /// Reference to the wrapped FFI struct.
+    pub fn ffi(&self) -> &mjData {
         unsafe { self.data.as_ref().unwrap() }
     }
 
-    pub(crate) fn ffi_mut(&mut self) -> &mut mjData {
+    /// Mutable reference to the wrapped FFI struct.
+    pub fn ffi_mut(&mut self) -> &mut mjData {
         unsafe { self.data.as_mut().unwrap() }
     }
 
     /// Returns a slice of detected contacts.
-    /// # SAFETY
-    /// This is NOT THREAD-SAFE, nor lifetime safe.
-    /// The returned slice must ne dropped before [`MjData`].
+    /// To obtain the contact force, call [`MjData::contact_force`].
     pub fn contacts(&self) -> &[MjContact] {
         unsafe {
             std::slice::from_raw_parts((*self.data).contact, (*self.data).ncon as usize)
         }
     }
 
+    /// Obtains a [`MjJointInfo`] struct containing information about the name, id, and
+    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
+    /// The actual view can be obtained via [`MjJointInfo::view`].
     pub fn joint(&self, name: &str) -> Option<MjJointInfo> {
         let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_JOINT as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
@@ -75,6 +80,9 @@ impl<'a> MjData<'a> {
         Some(MjJointInfo {name: name.to_string(), id: id as usize, qpos, qvel, qacc_warmstart, qacc, qfrc_applied, qfrc_bias})
     }
 
+    /// Obtains a [`MjGeomInfo`] struct containing information about the name, id, and
+    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
+    /// The actual view can be obtained via [`MjGeomInfo::view`].
     pub fn geom(&self, name: &str) -> Option<MjGeomInfo> {
         const GEOM_XPOS_LEN: usize = 3;
         const GEOM_XMAT_LEN: usize = 9;
@@ -89,6 +97,9 @@ impl<'a> MjData<'a> {
         Some(MjGeomInfo { name: name.to_string(), id: id as usize, xmat, xpos })
     }
 
+    /// Obtains a [`MjActuatorInfo`] struct containing information about the name, id, and
+    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
+    /// The actual view can be obtained via [`MjActuatorInfo::view`].
     pub fn actuator(&self, name: &str) -> Option<MjActuatorInfo> {
         let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_ACTUATOR as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
@@ -113,7 +124,7 @@ impl<'a> MjData<'a> {
         }
     }
 
-    /// Calculates new dynamics.
+    /// Calculates new dynamics. This is a wrapper around `mj_step1`.
     pub fn step1(&mut self) {
         unsafe {
             mj_step1(self.model.ffi(), self.ffi_mut());
@@ -121,6 +132,7 @@ impl<'a> MjData<'a> {
     }
 
     /// Calculates the rest after dynamics and integrates in time.
+    /// This is a wrapper around `mj_step2`.
     pub fn step2(&mut self) {
         unsafe {
             mj_step2(self.model.ffi(), self.ffi_mut());
@@ -128,6 +140,7 @@ impl<'a> MjData<'a> {
     }
 
     /// Forward dynamics: same as mj_step but do not integrate in time.
+    /// This is a wrapper around `mj_forward`.
     pub fn forward(&mut self) {
         unsafe { 
             mj_forward(self.model.ffi(), self.ffi_mut());
@@ -135,6 +148,7 @@ impl<'a> MjData<'a> {
     }
 
     /// [`MjData::forward`] dynamics with skip.
+    /// This is a wrapper around `mj_forwardSkip`.
     pub fn forward_skip(&mut self, skipstage: mjtStage, skipsensor: bool) {
         unsafe { 
             mj_forwardSkip(self.model.ffi(), self.ffi_mut(), skipstage as i32, skipsensor as i32);
@@ -142,6 +156,7 @@ impl<'a> MjData<'a> {
     }
 
     /// Inverse dynamics: qacc must be set before calling ([`MjData::forward`]).
+    /// This is a wrapper around `mj_inverse`.
     pub fn inverse(&mut self) {
         unsafe {
             mj_inverse(self.model.ffi(), self.ffi_mut());
@@ -149,6 +164,7 @@ impl<'a> MjData<'a> {
     }
 
     /// [`MjData::inverse`] dynamics with skip; skipstage is mjtStage.
+    /// This is a wrapper around `mj_inverseSkip`.
     pub fn inverse_skip(&mut self, skipstage: mjtStage, skipsensor: bool) {
         unsafe {
             mj_inverseSkip(self.model.ffi(), self.ffi_mut(), skipstage as i32, skipsensor as i32);
@@ -158,6 +174,7 @@ impl<'a> MjData<'a> {
     /// Calculates the contact force for the given `contact_id`.
     /// The `contact_id` matches the index of the contact when iterating
     /// via [`MjData::contacts`].
+    /// Calls `mj_contactForce` internally.
     pub fn contact_force(&self, contact_id: usize) -> [f64; 6] {
         let mut force = [0.0; 6];
         unsafe {
@@ -168,7 +185,6 @@ impl<'a> MjData<'a> {
         }
         force
     }
-
 
     /// Returns a direct pointer to the underlying model.
     /// THIS IS NOT TO BE USED.
@@ -227,11 +243,7 @@ macro_rules! view_creator {
 }
 
 
-/// A MjDataViewX which shows a slice of the joint.
-/// # SAFETY
-/// This is not thread-safe nor lifetime-safe.
-/// The view must be dropped before MjData, which is the
-/// RESPONSIBILITY OF THE USER.
+/// A MjJointInfo which shows a slice of the joint.
 #[derive(Debug, PartialEq)]
 pub struct MjJointInfo{
     pub name: String,
@@ -245,10 +257,12 @@ pub struct MjJointInfo{
 }
 
 impl MjJointInfo {
+    /// Returns a mutable view to the correct fields in [`MjData`].
     pub fn view_mut<'d>(&mut self, data: &'d mut MjData) -> MjJointViewMut<'d, '_> {
         view_creator!(self, MjJointViewMut, data.ffi_mut(), [qpos, qvel, qacc_warmstart, qacc, qfrc_applied, qfrc_bias], [], true)
     }
 
+    /// Returns a view to the correct fields in [`MjData`].
     pub fn view<'d>(&self, data: &'d MjData) -> MjJointView<'d, '_> {
         view_creator!(self, MjJointView, data.ffi(), [qpos, qvel, qacc_warmstart, qacc, qfrc_applied, qfrc_bias], [], false)
     }
@@ -287,11 +301,6 @@ pub struct MjJointView<'d, 'm: 'd> {
 }
 
 
-/// A MjDataViewX which shows a slice of the geom.
-/// # SAFETY
-/// This is not thread-safe nor lifetime-safe.
-/// The view must be dropped before MjData, which is the
-/// RESPONSIBILITY OF THE USER.
 #[derive(Debug, PartialEq)]
 pub struct MjGeomInfo {
     pub name: String,
@@ -301,10 +310,12 @@ pub struct MjGeomInfo {
 }
 
 impl MjGeomInfo {
+    /// Returns a mutable view to the correct fields in [`MjData`].
     pub fn view_mut<'d>(&mut self, data: &'d mut MjData) -> MjGeomViewMut<'d, '_> {
         view_creator!(self, MjGeomViewMut, data.ffi_mut(), [xmat, xpos], [], true)
     }
 
+    /// Returns a view to the correct fields in [`MjData`].
     pub fn view<'d>(&self, data: &'d MjData) -> MjGeomView<'d, '_> {
         view_creator!(self, MjGeomView, data.ffi(), [xmat, xpos], [], false)
     }
@@ -324,10 +335,6 @@ pub struct MjGeomView<'d, 'm: 'd> {
 
 
 /// A MjDataViewX which shows a slice of the actuator.
-/// # SAFETY
-/// This is not thread-safe nor lifetime-safe.
-/// The view must be dropped before MjData, which is the
-/// RESPONSIBILITY OF THE USER.
 #[derive(Debug, PartialEq)]
 pub struct MjActuatorInfo {
     pub name: String,
@@ -337,10 +344,12 @@ pub struct MjActuatorInfo {
 }
 
 impl MjActuatorInfo {
+    /// Returns a mutable view to the correct fields in [`MjData`].
     pub fn view_mut<'d>(&mut self, data: &'d mut MjData) -> MjActuatorViewMut<'d, '_> {
         view_creator!(self, MjActuatorViewMut, data.ffi_mut(), [ctrl], [act], true)
     }
 
+    /// Returns a view to the correct fields in [`MjData`].
     pub fn view<'d>(&self, data: &'d MjData) -> MjActuatorView<'d, '_> {
         view_creator!(self, MjActuatorView, data.ffi(), [ctrl], [act], false)
     }

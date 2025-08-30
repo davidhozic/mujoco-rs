@@ -1,5 +1,5 @@
 //! Definitions related to rendering.
-use std::mem::MaybeUninit;
+use std::mem::{MaybeUninit, zeroed};
 use crate::mujoco_c::*;
 
 use super::mj_model::MjModel;
@@ -20,10 +20,18 @@ impl MjrRectangle {
     }
 }
 
+impl Default for MjrRectangle {
+    fn default() -> Self {
+        unsafe { zeroed() }
+    }
+}
+
+
 
 /***********************************************************************************************************************
 ** MjrContext
 ***********************************************************************************************************************/
+#[derive(Debug)]
 pub struct MjrContext {
     ffi: mjrContext
 }
@@ -100,12 +108,11 @@ impl MjrContext {
         unsafe { mjr_setAux(index as i32, self.ffi_mut()); }
     }
 
-    pub(crate) fn ffi(&self) -> &mjrContext {
+    pub fn ffi(&self) -> &mjrContext {
         &self.ffi
     }
 
-    #[allow(unused)]
-    pub(crate) fn ffi_mut(&mut self) -> &mut mjrContext {
+    pub fn ffi_mut(&mut self) -> &mut mjrContext {
         &mut self.ffi
     }
 }
