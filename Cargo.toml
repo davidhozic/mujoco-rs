@@ -3,6 +3,11 @@ name = "mujoco_rs_w"
 version = "0.3.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
+description = "A Rust wrapper around the MuJoCo C library, with a native simple viewer (re-)written in Rust."
+readme = "README.md"
+repository = "https://github.com/davidhozic/mujoco-rs-w"
+keywords = ["MuJoCo", "Viewer", "Bindings", "Wrapper"]
+categories = ["simulation", "science::robotics", "api-bindings"]
 
 [features]
 viewer = []

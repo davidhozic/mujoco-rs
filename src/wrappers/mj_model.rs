@@ -33,7 +33,7 @@ impl MjModel {
         }
     }
 
-    /// Loads the model from an XML file.
+    /// Loads the model from an XML string.
     pub fn from_xml_string(data: &str) -> Result<Self, Error> {
         let mut vfs = MjVfs::new();
         let filename = "model.xml";

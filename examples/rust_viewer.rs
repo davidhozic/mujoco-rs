@@ -8,8 +8,14 @@ use mujoco_rs_w::prelude::*;
 const EXAMPLE_MODEL: &str = "
 <mujoco>
   <worldbody>
-    <geom name=\"red_box\" type=\"box\" size=\".2 .2 .2\" rgba=\"1 0 0 1\"/>
-    <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
+    <light ambient=\"0.2 0.2 0.2\"/>
+    <body name=\"ball\">
+        <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
+        <joint type=\"free\"/>
+    </body>
+
+    <geom name=\"floor\" type=\"plane\" size=\"10 10 10\"/>
+
   </worldbody>
 </mujoco>
 ";

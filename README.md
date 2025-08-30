@@ -1,10 +1,29 @@
 # mujoco-rs-w
-MuJoCo bindings and wrappers for the Rust programming language. Includes the viewer.
+MuJoCo bindings and wrappers for the Rust programming language. Includes a Rust-native viewer and also
+bindings to a modified C++ one.
 
-## Compilation
-This will improve in the future, currently the steps include compilation of the MuJoCo itself as a static library. The version is currently frozen at 3.3.5.
+## MuJoCo version
+This library uses FFI bindings to MuJoCo **3.3.5**.
+The library can either be provided **dynamically** in the form of share library (.so and .dll):
+- ``MUJOCO_DYNAMIC_LINK_LIB=/path/mujoco/lib/ cargo build``.
 
-Steps:
+When using the shared library, the **Rust-native MuJoCo viewer** can be used,
+but not the original C++ one.
+
+Also note that when the MuJoCo library isn't installed in the standard location,
+the path ``/path/mujoco/lib/`` must be added to `LD_LIBRARY_PATH` like so:
+- ``LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/path/mujoco/lib/``
+
+Now regarding **static linking**.
+If you do not require the **C++ MuJoCO viewer (the simulate UI)** and have
+somehow already obtained statically linkable libraries,
+you can just run the following command:
+- ``MUJOCO_STATIC_LINK_LIB=/path/mujoco/lib/ cargo build``.
+
+Note that the ``/path/mujoco/lib`` needs to contain all the MuJoCo dependencies.
+
+To build **statically** with the support of the **C++ MuJoCo viewer**,
+perform the following:
 1. Clone the repository
 2. ``git submodule update --init --recursive``
 3. ``cd ./mujoco/``
@@ -12,13 +31,18 @@ Steps:
 5. ``cmake --build build --parallel --target libsimulate --config=Release``
 6. Add the crate normally to your Cargo.toml.
 
-## NOTE
-I'm currently using this for a specific project, thus a lot of things are missing. In the future, more things will be added.
-
 
 ## Features
 Optional features can be enabled to add additional features.
 These are:
-- ``viewer`` or its alias ``simulate``: enables the MuJoCo viewer. Currently, this is build as a wrapper around
-  the modified C++ ``Simulate`` from the official MuJoCo repository. It's modified for manual control in such way
-  that it can be used in the same thread as all the other code in a stepping fashion.
+- ``viewer`` (default): enables the Rust-native MuJoCo viewer. This can currently
+display everything and respond to mouse/keyboard, however perturbations aren't yet supported. Additionally, no other UI is cpresent than
+- ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer. This is only available if you build the MuJoCo yourself using the steps above (yes, you need to use the forked repository).
+
+
+## Examples
+Examples can be tested under the ``examples/`` directory.
+
+## NOTE
+This project is WIP but functional. I accept pull requests about bug fixes
+and feature requests. If you have any questions, please open a **discussion**.
