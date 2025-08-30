@@ -14,3 +14,11 @@ Steps:
 
 ## NOTE
 I'm currently using this for a specific project, thus a lot of things are missing. In the future, more things will be added.
+
+
+## Features
+Optional features can be enabled to add additional features.
+These are:
+- ``viewer`` or its alias ``simulate``: enables the MuJoCo viewer. Currently, this is build as a wrapper around
+  the modified C++ ``Simulate`` from the official MuJoCo repository. It's modified for manual control in such way
+  that it can be used in the same thread as all the other code in a stepping fashion.

@@ -1,3 +1,4 @@
+use bindgen::callbacks::TypeKind;
 use bindgen::callbacks::{ParseCallbacks, DeriveInfo};
 use std::path::PathBuf;
 use std::env;
@@ -14,6 +15,10 @@ impl ParseCallbacks for CloneCallback {
             data.push("Copy".into());
         }
 
+        if info.kind == TypeKind::Enum {
+            data.push("TryFromPrimitive".into());
+        }
+
         data
     }
 }
@@ -21,18 +26,45 @@ impl ParseCallbacks for CloneCallback {
 
 
 fn main() {
-    println!("cargo::rerun-if-changed={}", fs::canonicalize("./mujoco/build/lib/libsimulate.a").unwrap().display());
-    println!("cargo:rustc-link-search={}", fs::canonicalize("./mujoco/build/lib/").unwrap().display());
-    // println!("cargo:rustc-link-arg=-Wl,-rpath=./mujoco/build/lib/");
-    println!("cargo:rustc-link-lib=simulate");
-    println!("cargo:rustc-link-lib=mujoco");
-    println!("cargo:rustc-link-lib=lodepng");
-    println!("cargo:rustc-link-lib=tinyxml2");
-    println!("cargo:rustc-link-lib=qhullstatic_r");
-    println!("cargo:rustc-link-lib=ccd");
+    /// Environmental variable which contains the path to the MuJoCo's build/lib/ directory.
+    /// This mean for static linking, otherwise the dynamic MuJoCo library can just be installed and used.
+    const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_LIB";
+    const MUJOCO_DYN_LIB_PATH_VAR: &str = "MUJOCO_DYNAMIC_LINK_LIB";
+    println!("cargo:rerun-if-env-changed={MUJOCO_STATIC_LIB_PATH_VAR}");
+    println!("cargo:rerun-if-env-changed={MUJOCO_DYN_LIB_PATH_VAR}");
 
-    if cfg!(unix) {
-        println!("cargo:rustc-link-lib=stdc++");
+    let mujoco_lib_path= env::var(MUJOCO_STATIC_LIB_PATH_VAR);
+
+    /* Static linking */
+    if let Ok(path) = mujoco_lib_path {
+        let mj_lib_pathbuf = PathBuf::from(path);
+        let mj_lib_simulate_path = mj_lib_pathbuf.join("libsimulate.a");
+
+        println!("cargo::rerun-if-changed={}", mj_lib_simulate_path.canonicalize().unwrap().display());
+        println!("cargo:rustc-link-search={}", mj_lib_pathbuf.canonicalize().unwrap().display());
+
+        #[cfg(feature = "viewer")]
+        println!("cargo:rustc-link-lib=simulate");
+
+        println!("cargo:rustc-link-lib=mujoco");
+        println!("cargo:rustc-link-lib=lodepng");
+        println!("cargo:rustc-link-lib=tinyxml2");
+        println!("cargo:rustc-link-lib=qhullstatic_r");
+        println!("cargo:rustc-link-lib=ccd");
+
+        if cfg!(unix) {
+            println!("cargo:rustc-link-lib=stdc++");
+        }
+    }
+
+    /* Dynamic linking */
+    else {
+        let mujoco_dylib_path = PathBuf::from(env::var(MUJOCO_DYN_LIB_PATH_VAR)
+            .unwrap_or_else(|_| panic!("nor the static library path ({MUJOCO_STATIC_LIB_PATH_VAR}),\
+                nor the dynamic library path ({MUJOCO_DYN_LIB_PATH_VAR}) was given.")));
+
+        println!("cargo:rustc-link-search={}", mujoco_dylib_path.canonicalize().unwrap().display());
+        println!("cargo:rustc-link-lib=mujoco");
     }
 
     let output_path = PathBuf::from("./src/");
@@ -57,6 +89,7 @@ fn main() {
         .derive_default(false)
         .opaque_type("std::.*")
         .derive_copy(false)
+        .rustified_enum(".*")
         .parse_callbacks(Box::new(CloneCallback))
         .generate()
         .expect("unable to generate MuJoCo bindings");
@@ -67,20 +100,9 @@ fn main() {
 
     // Extra adjustments
     fdata = fdata.replace("pub __lx: std_basic_string_value_type<_CharT>,", "pub __lx: std::mem::ManuallyDrop<std_basic_string_value_type<_CharT>>,");
+    let re = regex::Regex::new(r"#\[derive\((.*?Clone.*?), Clone, (.*?)\)\]").unwrap();
+    fdata = re.replace_all(&fdata, "#[derive($1, $2)]").to_string();
+    fdata = "use num_enum::TryFromPrimitive;\n\n".to_string() + &fdata;
+
     fs::write(outputfile_dir, fdata).unwrap();
-
-
-    // Generate lodepng bindings
-    // rust/mujoco_rust/mujoco/build/_deps/lodepng-src
-    let lodepng_dir = current_dir.join("mujoco/build/_deps/lodepng-src");
-    bindgen::Builder::default()
-        .header(lodepng_dir.join("lodepng.h").to_str().unwrap())
-        .allowlist_item("lodepng_.*")
-        .layout_tests(false)
-        .derive_default(true)
-        .clang_args(["-x", "c++"])
-        .generate()
-        .expect("unable to generate lodepng bindings")
-        .write_to_file(output_path.join("lodepng_c.rs"))
-        .expect("could not write lodepng bindings");
 }

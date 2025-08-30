@@ -1,5 +1,5 @@
 //! Module for mjModel
-use std::io::{Error, ErrorKind};
+use std::io::{self, Error, ErrorKind};
 use std::ffi::{c_int, CString};
 use std::path::Path;
 use std::ptr;
@@ -48,6 +48,30 @@ impl MjModel {
         }
     }
 
+
+    /// Saves the last XML loaded.
+    pub fn save_last_xml(&self, filename: &str) -> io::Result<()> {
+        let mut error = [0i8; 100];
+        unsafe {
+            let cstring = CString::new(filename)?;
+            match mj_saveLastXML(
+                cstring.as_ptr(), self.ffi(),
+                error.as_mut_ptr(), (error.len() - 1) as i32
+            ) {
+                1 => Ok(()),
+                0 => {
+                    let cstr_error = String::from_utf8_lossy(
+                        // Reinterpret as u8 data. This does not affect the data as it is ASCII
+                        // encoded and thus negative values aren't possible.
+                        std::slice::from_raw_parts(error.as_ptr() as *const u8, error.len())
+                    );
+                    Err(Error::new(ErrorKind::Other, cstr_error))
+                },
+                _ => unreachable!()
+            }
+        }
+    }
+
     pub fn name2id(&self, type_: i32, name: &str) -> i32 {
         unsafe {
             mj_name2id(self.0, type_, CString::new(name).unwrap().as_ptr())
@@ -92,5 +116,26 @@ impl Drop for MjModel {
         unsafe {
             mj_deleteModel(self.0);
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+
+    const MODEL_PATH_VAR: &str = "MODEL_PATH";
+    const MODEL_SAVE_XML_PATH: &str = "./__TMP_MODEL.xml";
+
+    /// Tests if the model can be loaded and then saved.
+    #[test]
+    fn test_model_load_save() {
+        let model_path = env::var(MODEL_PATH_VAR)
+            .unwrap_or_else(|_| panic!("could not find the env variable ({MODEL_PATH_VAR}) for the model path."));
+        let model = MjModel::from_xml(&model_path).expect("unable to load the model.");
+        model.save_last_xml(MODEL_SAVE_XML_PATH).expect("could not save the model XML.");      
+        fs::remove_file(MODEL_SAVE_XML_PATH).unwrap();
     }
 }

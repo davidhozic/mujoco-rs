@@ -50,7 +50,7 @@ impl<'a> MjData<'a> {
     }
 
     pub fn joint(&self, name: &str) -> Option<MjJointInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj__mjOBJ_JOINT as i32, CString::new(name).unwrap().as_ptr())};
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_JOINT as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -79,7 +79,7 @@ impl<'a> MjData<'a> {
         const GEOM_XPOS_LEN: usize = 3;
         const GEOM_XMAT_LEN: usize = 9;
 
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj__mjOBJ_GEOM as i32, CString::new(name).unwrap().as_ptr())};
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_GEOM as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -90,7 +90,7 @@ impl<'a> MjData<'a> {
     }
 
     pub fn actuator(&self, name: &str) -> Option<MjActuatorInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj__mjOBJ_ACTUATOR as i32, CString::new(name).unwrap().as_ptr())};
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_ACTUATOR as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -107,33 +107,57 @@ impl<'a> MjData<'a> {
     } 
 
     /// Steps the MuJoCo simulation.
-    /// # SAFETY
-    /// This calls the C binding of mj_step, which is not safe by itself.
     pub fn step(&mut self) {
         unsafe {
-            mj_step(self.model.ffi(), self.data);
+            mj_step(self.model.ffi(), self.ffi_mut());
         }
     }
 
     /// Calculates new dynamics.
-    /// # SAFETY
-    /// This calls the C binding of mj_step1, which is not safe by itself.
     pub fn step1(&mut self) {
         unsafe {
-            mj_step1(self.model.ffi(), self.data);
+            mj_step1(self.model.ffi(), self.ffi_mut());
         }
     }
 
     /// Calculates the rest after dynamics and integrates in time.
-    /// # SAFETY
-    /// This calls the C binding of mj_step2, which is not safe by itself.
     pub fn step2(&mut self) {
         unsafe {
-            mj_step2(self.model.ffi(), self.data);
+            mj_step2(self.model.ffi(), self.ffi_mut());
+        }
+    }
+
+    /// Forward dynamics: same as mj_step but do not integrate in time.
+    pub fn forward(&mut self) {
+        unsafe { 
+            mj_forward(self.model.ffi(), self.ffi_mut());
+        }
+    }
+
+    /// [`MjData::forward`] dynamics with skip.
+    pub fn forward_skip(&mut self, skipstage: mjtStage, skipsensor: bool) {
+        unsafe { 
+            mj_forwardSkip(self.model.ffi(), self.ffi_mut(), skipstage as i32, skipsensor as i32);
+        }
+    }
+
+    /// Inverse dynamics: qacc must be set before calling ([`MjData::forward`]).
+    pub fn inverse(&mut self) {
+        unsafe {
+            mj_inverse(self.model.ffi(), self.ffi_mut());
+        }
+    }
+
+    /// [`MjData::inverse`] dynamics with skip; skipstage is mjtStage.
+    pub fn inverse_skip(&mut self, skipstage: mjtStage, skipsensor: bool) {
+        unsafe {
+            mj_inverseSkip(self.model.ffi(), self.ffi_mut(), skipstage as i32, skipsensor as i32);
         }
     }
 
     /// Calculates the contact force for the given `contact_id`.
+    /// The `contact_id` matches the index of the contact when iterating
+    /// via [`MjData::contacts`].
     pub fn contact_force(&self, contact_id: usize) -> [f64; 6] {
         let mut force = [0.0; 6];
         unsafe {
@@ -150,7 +174,7 @@ impl<'a> MjData<'a> {
 impl Drop for MjData<'_> {
     fn drop(&mut self) {
         unsafe {
-            mj_deleteData(self.data);
+            mj_deleteData(self.ffi_mut());
         }
     }
 }

@@ -1,11 +1,21 @@
 [package]
-name = "mujoco_rs"
+name = "mujoco_rs_w"
 version = "0.2.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 
+[features]
+viewer = []
+simulate = []  # Alias for the viewer
+
+default = []
+
+
+
 [dependencies]
 glfw = "0.59.0"
+num_enum = "0.7.4"
 
 [build-dependencies]
 bindgen = "0.71.1"
+regex = "1.11.2"
