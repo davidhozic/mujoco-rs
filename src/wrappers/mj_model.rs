@@ -78,7 +78,7 @@ impl MjModel {
         }
     }
 
-    pub fn make_data(&self) -> MjData {
+    pub fn make_data<'m>(&'m self) -> MjData<'m> {
         MjData::new(self)
     }
 
