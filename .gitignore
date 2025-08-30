@@ -24,6 +24,9 @@ target
 Cargo.lock
 
 
+# Vscode
+settings.json
+
 # Automatically generated files
 src/mujoco_c.rs
 src/lodepng_c.rs
