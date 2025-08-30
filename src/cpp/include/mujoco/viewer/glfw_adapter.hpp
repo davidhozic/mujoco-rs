@@ -31,6 +31,7 @@ class GlfwAdapter {
   GlfwAdapter();
   ~GlfwAdapter();
 
+  void MakeCurrent();
   std::pair<double, double> GetCursorPosition() const;
   double GetDisplayPixelsPerInch() const;
   std::pair<int, int> GetFramebufferSize() const;
