@@ -50,7 +50,7 @@ impl<'m> MjViewer<'m> {
         unsafe {
             sim = new_simulate(&mut *_cam, &mut *_opt, &mut *_pert, _user_scn.ffi_mut(), true);
             (*sim).RenderInit();
-            (*sim).Load(model.__raw(), data.ffi_mut(), CString::new("file.xml").unwrap().as_ptr());
+            (*sim).Load(model.__raw(), data.__raw(), CString::new("file.xml").unwrap().as_ptr());
             (*sim).RenderStep(true);
         }
 
@@ -58,7 +58,7 @@ impl<'m> MjViewer<'m> {
     }
 
     /// Returns the underlying C++ binding object of the viewer.
-    pub fn raw(&mut self) -> *mut mujoco_Simulate {
+    pub fn __raw(&self) -> *mut mujoco_Simulate {
         self.sim
     }
 
@@ -77,7 +77,7 @@ impl<'m> MjViewer<'m> {
 
     pub fn sync(&mut self) {
         unsafe {
-            (*self.sim).Sync();
+            (*self.sim).Sync(false);
         }
     }
 }
