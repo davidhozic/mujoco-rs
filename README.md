@@ -9,7 +9,8 @@ bindings to a modified C++ one.
 ## MuJoCo version
 This library uses FFI bindings to MuJoCo **3.3.5**.
 The library can either be provided **dynamically** in the form of share library (.so and .dll):
-- ``MUJOCO_DYNAMIC_LINK_LIB=/path/mujoco/lib/ cargo build``.
+- ``MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/ cargo build``
+- or ``export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/`` and then ``cargo build``.
 
 When using the shared library, the **Rust-native MuJoCo viewer** can be used,
 but not the original C++ one.
@@ -22,7 +23,8 @@ Now regarding **static linking**.
 If you do not require the **C++ MuJoCO viewer (the simulate UI)** and have
 somehow already obtained statically linkable libraries,
 you can just run the following command:
-- ``MUJOCO_STATIC_LINK_LIB=/path/mujoco/lib/ cargo build``.
+- ``MUJOCO_STATIC_LINK_DIR=/path/mujoco/lib/ cargo build``.
+- or ``export MUJOCO_STATIC_LINK_DIR=/path/mujoco/lib/`` and then ``cargo build``.
 
 Note that the ``/path/mujoco/lib`` needs to contain all the MuJoCo dependencies.
 
@@ -40,8 +42,15 @@ perform the following:
 Optional features can be enabled to add additional features.
 These are:
 - ``viewer`` (default): enables the Rust-native MuJoCo viewer. This can currently
-display everything and respond to mouse/keyboard, however perturbations aren't yet supported. Additionally, no other UI is cpresent than
+                display everything and respond to mouse/keyboard, however perturbations aren't yet supported.
+                Additionally, no side panels exist.
 - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer. This is only available if you build the MuJoCo yourself using the steps above (yes, you need to use the forked repository).
+
+
+## Missing libraries
+The crate should work out of the box after you provide it with the MuJoCo library. If the build fails and asks
+for additional dependencies, install them via your system package manager.
+For example, to install glfw3 on Ubuntu/Debian, this can be done like so: ``apt install libglfw3-dev``.
 
 
 ## Examples
