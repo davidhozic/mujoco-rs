@@ -74,8 +74,8 @@ fn main() {
 
     /// Environmental variable which contains the path to the MuJoCo's build/lib/ directory.
     /// This mean for static linking, otherwise the dynamic MuJoCo library can just be installed and used.
-    const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_PATH";
-    const MUJOCO_DYN_LIB_PATH_VAR: &str = "MUJOCO_DYNAMIC_LINK_LIB";
+    const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_DIR";
+    const MUJOCO_DYN_LIB_PATH_VAR: &str = "MUJOCO_DYNAMIC_LINK_DIR";
 
     println!("cargo:rerun-if-env-changed={MUJOCO_STATIC_LIB_PATH_VAR}");
     println!("cargo:rerun-if-env-changed={MUJOCO_DYN_LIB_PATH_VAR}");
