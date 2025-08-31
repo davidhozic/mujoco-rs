@@ -1,4 +1,4 @@
-# mujoco-rs-w
+# mujoco-rs
 MuJoCo bindings and wrappers for the Rust programming language. Includes a Rust-native viewer and also
 bindings to a modified C++ one.
 
