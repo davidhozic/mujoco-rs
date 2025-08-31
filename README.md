@@ -1,4 +1,8 @@
 # mujoco-rs
+[![docs.rs](https://docs.rs/mujoco-rs/badge.svg)](https://docs.rs/mujoco-rs)
+[![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
+
+
 MuJoCo bindings and wrappers for the Rust programming language. Includes a Rust-native viewer and also
 bindings to a modified C++ one.
 
