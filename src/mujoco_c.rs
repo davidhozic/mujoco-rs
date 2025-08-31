@@ -5852,21 +5852,14 @@ pub struct GLFWmonitor {
 pub struct GLFWwindow {
     _unused: [u8; 0],
 }
-#[doc = " @brief Video mode type.\n\n  This describes a single video mode.\n\n  @sa @ref monitor_modes\n  @sa @ref glfwGetVideoMode\n  @sa @ref glfwGetVideoModes\n\n  @since Added in version 1.0.\n  @glfw3 Added refresh rate member.\n\n  @ingroup monitor"]
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct GLFWvidmode {
-    #[doc = " The width, in screen coordinates, of the video mode."]
     pub width: ::std::os::raw::c_int,
-    #[doc = " The height, in screen coordinates, of the video mode."]
     pub height: ::std::os::raw::c_int,
-    #[doc = " The bit depth of the red channel of the video mode."]
     pub redBits: ::std::os::raw::c_int,
-    #[doc = " The bit depth of the green channel of the video mode."]
     pub greenBits: ::std::os::raw::c_int,
-    #[doc = " The bit depth of the blue channel of the video mode."]
     pub blueBits: ::std::os::raw::c_int,
-    #[doc = " The refresh rate, in Hz, of the video mode."]
     pub refreshRate: ::std::os::raw::c_int,
 }
 #[repr(C)]
