@@ -1,4 +1,4 @@
-//! ## MuJoCo-Rust-W
+//! ## MuJoCo-rs
 //! A wrapper around the MuJoCo C library with a Rust-native viewer.
 //! If you're familiar with MuJoCo, this should be pretty straightforward to use as the wrappers
 //! mainly encapsulate some C structs or just rename them to match the Rust's PascalCase style.
