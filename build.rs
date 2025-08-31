@@ -68,11 +68,9 @@ mod build_dependencies {
 
 
 fn main() {
-    println!("cargo:rerun-if-env-changed=DOCS_RS");
     if std::env::var("DOCS_RS").is_ok() {
         return;
     }
-
 
     /// Environmental variable which contains the path to the MuJoCo's build/lib/ directory.
     /// This mean for static linking, otherwise the dynamic MuJoCo library can just be installed and used.
