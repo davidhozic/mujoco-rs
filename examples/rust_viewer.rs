@@ -3,8 +3,8 @@
 //! controlling everything.
 use std::time::Duration;
 
-use mujoco_rs_w::viewer::MjViewer;
-use mujoco_rs_w::prelude::*;
+use mujoco_rs::viewer::MjViewer;
+use mujoco_rs::prelude::*;
 
 
 const EXAMPLE_MODEL: &str = "

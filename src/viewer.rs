@@ -105,7 +105,7 @@ impl<'m> MjViewer<'m> {
     }
 
     /// Checks whether the window is still open.
-    pub fn running(&mut self) -> bool {
+    pub fn running(&self) -> bool {
         !self.window.should_close()
     }
 

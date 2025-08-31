@@ -38,6 +38,11 @@ fn main() {
 
     let mujoco_lib_path= env::var(MUJOCO_STATIC_LIB_PATH_VAR);
 
+    let generate_ffi = env::var(GENERATE_FFI).map_or(false, |v| v == "y" || v == "1");
+    if !generate_ffi {
+        return;
+    }
+
     /* Static linking */
     if let Ok(path) = mujoco_lib_path {
         let mj_lib_pathbuf = PathBuf::from(path);
@@ -70,46 +75,42 @@ fn main() {
         println!("cargo:rustc-link-lib=mujoco");
     }
 
-    if let Ok(value) = env::var(GENERATE_FFI) {
-        if value == "y" || value == "1" {
-            let output_path = PathBuf::from("./src/");
-            let current_dir = env::current_dir().unwrap();
-            let include_dir_mujoco = current_dir.join("src/cpp/include/mujoco");
-            let include_dir_simulate = include_dir_mujoco.join("viewer");
+    let output_path = PathBuf::from("./src/");
+    let current_dir = env::current_dir().unwrap();
+    let include_dir_mujoco = current_dir.join("src/cpp/include/mujoco");
+    let include_dir_simulate = include_dir_mujoco.join("viewer");
 
-            // Generate MuJoCo bindings
-            let bindings_mujoco = bindgen::Builder::default()
-                .header(include_dir_mujoco.join("mujoco.h").to_str().unwrap())
-                .header(include_dir_simulate.join("simulate.hpp").to_str().unwrap())
-                .header(include_dir_simulate.join("glfw_dispatch.hpp").to_str().unwrap())
-                .clang_arg("-std=c++20")
-                .clang_arg("-stdlib=libc++")
-                .clang_arg(format!("-I{}", current_dir.join("mujoco/build/_deps/glfw3-src/include/").display()))
-                .blocklist_item("std::tuple.*")
-                .allowlist_item("mj.*")
-                .allowlist_item("mujoco::.*")
-                .allowlist_item("new_simulate")
-                .allowlist_item("free_simulate")
-                .layout_tests(false)
-                .derive_default(false)
-                .opaque_type("std::.*")
-                .derive_copy(false)
-                .rustified_enum(".*")
-                .parse_callbacks(Box::new(CloneCallback))
-                .generate()
-                .expect("unable to generate MuJoCo bindings");
+    // Generate MuJoCo bindings
+    let bindings_mujoco = bindgen::Builder::default()
+        .header(include_dir_mujoco.join("mujoco.h").to_str().unwrap())
+        .header(include_dir_simulate.join("simulate.hpp").to_str().unwrap())
+        .header(include_dir_simulate.join("glfw_dispatch.hpp").to_str().unwrap())
+        .clang_arg("-std=c++20")
+        .clang_arg("-stdlib=libc++")
+        .clang_arg(format!("-I{}", current_dir.join("mujoco/build/_deps/glfw3-src/include/").display()))
+        .blocklist_item("std::tuple.*")
+        .allowlist_item("mj.*")
+        .allowlist_item("mujoco::.*")
+        .allowlist_item("new_simulate")
+        .allowlist_item("free_simulate")
+        .layout_tests(false)
+        .derive_default(false)
+        .opaque_type("std::.*")
+        .derive_copy(false)
+        .rustified_enum(".*")
+        .parse_callbacks(Box::new(CloneCallback))
+        .generate()
+        .expect("unable to generate MuJoCo bindings");
 
-            let outputfile_dir = output_path.join("mujoco_c.rs");
-            let mut fdata = bindings_mujoco
-                .to_string();
+    let outputfile_dir = output_path.join("mujoco_c.rs");
+    let mut fdata = bindings_mujoco
+        .to_string();
 
-            // Extra adjustments
-            fdata = fdata.replace("pub __lx: std_basic_string_value_type<_CharT>,", "pub __lx: std::mem::ManuallyDrop<std_basic_string_value_type<_CharT>>,");
-            let re = regex::Regex::new(r"#\[derive\((.*?Clone.*?), Clone, (.*?)\)\]").unwrap();
-            fdata = re.replace_all(&fdata, "#[derive($1, $2)]").to_string();
-            fdata = "use num_enum::TryFromPrimitive;\n\n".to_string() + &fdata;
+    // Extra adjustments
+    fdata = fdata.replace("pub __lx: std_basic_string_value_type<_CharT>,", "pub __lx: std::mem::ManuallyDrop<std_basic_string_value_type<_CharT>>,");
+    let re = regex::Regex::new(r"#\[derive\((.*?Clone.*?), Clone, (.*?)\)\]").unwrap();
+    fdata = re.replace_all(&fdata, "#[derive($1, $2)]").to_string();
+    fdata = "use num_enum::TryFromPrimitive;\n\n".to_string() + &fdata;
 
-            fs::write(outputfile_dir, fdata).unwrap();
-        }
-    }
+    fs::write(outputfile_dir, fdata).unwrap();
 }

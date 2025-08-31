@@ -4,7 +4,7 @@
 //! mainly encapsulate some C structs or just rename them to match the Rust's PascalCase style.
 //! 
 //! Currently, no direct functions are provided. Some of the functions are made into methods at appropriate
-//! structs, while others can be found under ``mujoco_rs_w::mujoco_c`` module. Missing structs
+//! structs, while others can be found under ``mujoco_rs::mujoco_c`` module. Missing structs
 //! can also be obtained there.
 //! 
 //! To access the lower-level ffi structs in the wrappers, call either the ``ffi()`` method
