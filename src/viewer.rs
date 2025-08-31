@@ -148,9 +148,12 @@ impl<'m> MjViewer<'m> {
     /// Processes user input events
     fn process_events(&mut self, data: &mut MjData) {
         self.glfw.poll_events();
-        if let Some((_, event)) = self.events.receive() {
+        while let Some((_, event)) = self.events.receive() {
             match event {
-                WindowEvent::Key(Key::Q, _, _, modifier) if modifier == Modifiers::Control => self.window.set_should_close(true),
+                WindowEvent::Key(Key::Q, _, _, modifier) if modifier == Modifiers::Control => {
+                    self.window.set_should_close(true);
+                    break;  // no use in polling other events
+                },
                 WindowEvent::Key(Key::Escape, _, _, _) => {
                     self.camera.free();
                 },

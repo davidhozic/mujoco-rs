@@ -26,6 +26,12 @@ impl ParseCallbacks for CloneCallback {
 
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=DOCS_RS");
+    if std::env::var("DOCS_RS").map_or(false, |x| x == "y" || x == "1") {
+        return;
+    }
+
+
     /// Environmental variable which contains the path to the MuJoCo's build/lib/ directory.
     /// This mean for static linking, otherwise the dynamic MuJoCo library can just be installed and used.
     const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_LIB";
@@ -37,11 +43,6 @@ fn main() {
     println!("cargo:rerun-if-env-changed={GENERATE_FFI}");
 
     let mujoco_lib_path= env::var(MUJOCO_STATIC_LIB_PATH_VAR);
-
-    let generate_ffi = env::var(GENERATE_FFI).map_or(false, |v| v == "y" || v == "1");
-    if !generate_ffi {
-        return;
-    }
 
     /* Static linking */
     if let Ok(path) = mujoco_lib_path {
@@ -75,12 +76,17 @@ fn main() {
         println!("cargo:rustc-link-lib=mujoco");
     }
 
+
+
+    if !env::var(GENERATE_FFI).map_or(false, |v| v == "y" || v == "1") {
+        return;
+    }
+
     let output_path = PathBuf::from("./src/");
     let current_dir = env::current_dir().unwrap();
     let include_dir_mujoco = current_dir.join("src/cpp/include/mujoco");
     let include_dir_simulate = include_dir_mujoco.join("viewer");
 
-    // Generate MuJoCo bindings
     let bindings_mujoco = bindgen::Builder::default()
         .header(include_dir_mujoco.join("mujoco.h").to_str().unwrap())
         .header(include_dir_simulate.join("simulate.hpp").to_str().unwrap())
