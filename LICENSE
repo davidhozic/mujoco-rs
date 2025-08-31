@@ -1,16 +1,14 @@
-This project is dually licensed. Choose one of: MIT, Apache.
+This project is dual licensed. Choose MIT or Apache.
 
 While most files on this repository (excluding the submodules) are created from scratch,
-the wrapper still relies on raw FFI bindings to **MuJoCo**, whose license can be
-found [HERE](https://github.com/google-deepmind/mujoco?tab=Apache-2.0-1-ov-file).
+the wrapper still relies on raw FFI bindings to MuJoCo.
+
+Any MuJoCo C or C++ code is from https://github.com/google-deepmind/mujoco, which is licensed under the Apache license.
 
 --------------------------------------------------------------------------------------------
 MIT License
 
 Copyright (c) 2025-today David Hozic
-
-Any MuJoCo C or C++ code is from https://github.com/google-deepmind/mujoco.
-
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
