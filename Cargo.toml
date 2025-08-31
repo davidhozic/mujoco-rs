@@ -1,5 +1,5 @@
 [package]
-name = "mujoco_rs_w"
+name = "mujoco-rs-w"
 version = "0.3.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
