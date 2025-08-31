@@ -1,5 +1,5 @@
 # mujoco-rs
-[![docs.rs](https://docs.rs/mujoco-rs/badge.svg)](https://docs.rs/mujoco-rs)
+[![docs.rs](https://img.shields.io/docsrs/mujoco-rs/latest)](https://docs.rs/mujoco-rs)
 [![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
 
 

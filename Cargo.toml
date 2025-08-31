@@ -9,6 +9,7 @@ repository = "https://github.com/davidhozic/mujoco-rs"
 keywords = ["MuJoCo", "Viewer", "Bindings", "Wrapper"]
 categories = ["simulation", "science::robotics", "api-bindings"]
 homepage = "https://crates.io/crates/mujoco-rs"
+documentation = "https://docs.rs/mujoco-rs/"
 
 [features]
 viewer = ["glfw"]
