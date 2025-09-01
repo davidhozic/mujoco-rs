@@ -20,6 +20,13 @@ pub type MjtCamera = mjtCamera;
 ***********************************************************************************************************************/
 pub type MjtMouse = mjtMouse;
 
+
+
+/***********************************************************************************************************************
+** MjtMouse
+***********************************************************************************************************************/
+pub type MjtPertBit = mjtPertBit;
+
 /***********************************************************************************************************************
 ** MjvPerturb
 ***********************************************************************************************************************/
@@ -30,6 +37,35 @@ impl Default for MjvPerturb {
             let mut pert = MaybeUninit::uninit();
             mjv_defaultPerturb(pert.as_mut_ptr());
             pert.assume_init()
+        }
+    }
+}
+
+impl MjvPerturb {
+    pub fn start(&mut self, type_: MjtPertBit, model: &MjModel, data: &mut MjData, scene: &MjvScene) {
+        unsafe { mjv_initPerturb(model.ffi(), data.ffi_mut(), scene.ffi(), self); }
+        self.active = type_ as i32;
+    }
+
+    /// Move an object with mouse. This is a wrapper around `mjv_movePerturb`.
+    pub fn move_(&mut self, model: &MjModel, data: &mut MjData, action: MjtMouse, dx: mjtNum, dy: mjtNum, scene: &MjvScene) {
+        unsafe { mjv_movePerturb(model.ffi(), data.ffi(), action as i32, dx, dy, scene.ffi(), self); }
+    }
+
+    pub fn apply(&mut self, model: &MjModel, data: &mut MjData) {
+        unsafe {
+            mju_zero(data.ffi_mut().xfrc_applied, 6*model.ffi().nbody);
+            mjv_applyPerturbPose(model.ffi(), data.ffi_mut(), self, 0);
+            mjv_applyPerturbForce(model.ffi(), data.ffi_mut(), self);
+        }
+    }
+
+    pub fn update_local_pos(&mut self, selection_xyz: [mjtNum; 3], data: &MjData) {
+        let mut tmp = [0.0; 3];
+        let data_ffi = data.ffi();
+        unsafe { 
+            mju_sub3(tmp.as_mut_ptr(), selection_xyz.as_ptr(), data_ffi.xpos.add(3 * self.select as usize));
+            mju_mulMatTVec(self.localpos.as_mut_ptr(), data_ffi.xmat.add(9 * self.select as usize), tmp.as_ptr(), 3, 3);
         }
     }
 }
@@ -248,9 +284,9 @@ impl<'m> MjvScene<'m> {
     }
 
     /// Renders the scene to the screen. This does not automatically make the OpenGL context current.
-    pub fn render(&mut self, viewport: &MjrRectangle, context: &MjrContext){
+    pub fn render(&mut self, viewport: MjrRectangle, context: &MjrContext){
         unsafe {
-            mjr_render(viewport.clone(), self.ffi_mut(), context.ffi());
+            mjr_render(viewport, self.ffi_mut(), context.ffi());
         }
     }
 

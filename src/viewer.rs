@@ -134,23 +134,18 @@ impl<'m> MjViewer<'m> {
     pub fn sync(&mut self, data: &mut MjData) {
         self.process_events(data);
         self.update(data);
+        self.pert.apply(&self.model, data);
     }
-
 
     /// Updates the screen state
     fn update(&mut self, data: &mut MjData) {
         /* Read the screen size */
-        let mut viewport = MjrRectangle::default();
-        let (width, height) = self.window.get_framebuffer_size();
-        viewport.width = width;
-        viewport.height = height;
-
-        self.update_rectangles((width, height));
+        self.update_rectangles(self.window.get_framebuffer_size());
 
         /* Update the scene from the MjData state */
         let opt = MjvOption::default();
         self.scene.update(data, &opt, &self.pert, &mut self.camera);
-        self.scene.render(&viewport, &self.context);
+        self.scene.render(self.rect_full, &self.context);
 
         /* Display the changes */
         self.window.swap_buffers();
@@ -183,7 +178,7 @@ impl<'m> MjViewer<'m> {
                     self.process_scroll(change);
                 }
                 WindowEvent::CursorPos(x, y) => {
-                    self.process_cursor_pos(x, y);
+                    self.process_cursor_pos(x, y, data);
                 },
 
                 // Match left button presses
@@ -199,7 +194,7 @@ impl<'m> MjViewer<'m> {
         self.camera.move_(MjtMouse::mjMOUSE_ZOOM, self.model, 0.0, -0.05 * change, &self.scene);
     }
 
-    fn process_cursor_pos(&mut self, x: f64, y: f64) {
+    fn process_cursor_pos(&mut self, mut x: f64, mut y: f64, data: &mut MjData) {
         /* Calculate the change in mouse position since last call */
         let dx = x - self.last_x;
         let dy = y - self.last_y;
@@ -208,8 +203,9 @@ impl<'m> MjViewer<'m> {
 
         /* Check mouse presses and move the camera if any of them is pressed */
         let action;
-        let shift = self.window.get_key(Key::LeftShift) == Action::Press;
+        let height = self.window.get_size().1 as mjtNum;
 
+        let shift = self.window.get_key(Key::LeftShift) == Action::Press;
         if self.window.get_mouse_button(MouseButton::Left) == Action::Press {
             action = if shift {MjtMouse::mjMOUSE_ROTATE_H} else {MjtMouse::mjMOUSE_ROTATE_V};
         }
@@ -223,13 +219,45 @@ impl<'m> MjViewer<'m> {
             return;  // If buttons aren't pressed, ignore.
         }
 
-        let height = self.window.get_size().1 as mjtNum;
-        self.camera.move_(action, self.model, dx / height, dy / height, &self.scene);
+        /* When the perturbation isn't active, move the camera */
+        if self.pert.active == 0 {
+            self.camera.move_(action, self.model, dx / height, dy / height, &self.scene);
+        }
+        else {  // When the perturbation is active, move apply the perturbation.
+
+            /* Fix the coordinates */
+            let buffer_ratio = self.window.get_framebuffer_size().0 as mjtNum / self.window.get_size().0 as mjtNum;
+            x *= buffer_ratio;
+            y *= buffer_ratio;
+            y = self.rect_full.height as mjtNum - y;  // match OpenGL's coordinate system.
+
+            let rect = &self.rect_view;
+            let (body_id, _, _, _, xyz) = self.scene.find_selection(
+                data, &MjvOption::default(),
+                rect.width as mjtNum / rect.height as mjtNum,
+                (x - rect.left as mjtNum) / rect.width as mjtNum,
+                (y - rect.bottom as mjtNum) / rect.height as mjtNum
+            );
+
+            // self.pert.update_local_pos(xyz, data);
+            self.pert.move_(self.model, data, action, dx / height, dy / height, &self.scene);
+            println!("Perturbation");
+        }
     }
 
     fn process_left_click(&mut self, data: &mut MjData, action: &Action, modifiers: &Modifiers) {
         self.left_click = match action {
             Action::Press => {
+                /* Clicking and holding applies perturbation */
+                if self.pert.select > 0 && modifiers.contains(Modifiers::Control) {
+                    let type_ = if modifiers.contains(Modifiers::Alt) {
+                        MjtPertBit::mjPERT_TRANSLATE
+                    } else {
+                        MjtPertBit::mjPERT_ROTATE
+                    };
+                    self.pert.start(type_, &self.model, data, &self.scene);
+                }
+
                 /* Double click detection */
                 if !self.left_click && self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
                     let (mut x, mut y) = self.window.get_cursor_pos();
@@ -249,28 +277,32 @@ impl<'m> MjViewer<'m> {
                         (y - rect.bottom as mjtNum) / rect.height as mjtNum
                     );
 
-                    /* Mark selection */
-                    self.pert.select = body_id;
-                    self.pert.flexselect = flex_id;
-                    self.pert.skinselect = skin_id;
-                    self.pert.active = 0;
-
-                    let mut tmp = [0.0; 3];
-                    unsafe {
-                        mju_sub3(tmp.as_mut_ptr(), xyz.as_ptr(), data.ffi().xpos.add((3 *self.pert.select) as usize));
-                        mju_mulMatTVec(self.pert.localpos.as_mut_ptr(), data.ffi().xmat.add((9*self.pert.select) as usize), tmp.as_ptr(), 3, 3);
-                    }
-
                     /* Set tracking camera */
-                    if modifiers == &Modifiers::Control && body_id >= 0 {
-                        self.camera.track(body_id as u32);
+                    if modifiers.contains(Modifiers::Alt) {
+                        if body_id >= 0 {
+                            self.camera.lookat = xyz;
+                            if modifiers.contains(Modifiers::Control) {
+                                self.camera.track(body_id as u32);
+                            }
+                        }
+                    }
+                    else {
+                        /* Mark selection */
+                        self.pert.select = body_id;
+                        self.pert.flexselect = flex_id;
+                        self.pert.skinselect = skin_id;
+                        self.pert.active = 0;
                     }
                 }
                 self.last_bnt_press_time = Instant::now();
                 true
             },
-            Action::Release => false,
-            Action::Repeat => self.left_click
+            Action::Release => {
+                // Clear perturbation when left click is released.
+                self.pert.active = 0;
+                false
+            },
+            Action::Repeat => unreachable!()
         };
     }
 }
