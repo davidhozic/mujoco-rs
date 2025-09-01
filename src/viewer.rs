@@ -194,7 +194,7 @@ impl<'m> MjViewer<'m> {
         self.camera.move_(MjtMouse::mjMOUSE_ZOOM, self.model, 0.0, -0.05 * change, &self.scene);
     }
 
-    fn process_cursor_pos(&mut self, mut x: f64, mut y: f64, data: &mut MjData) {
+    fn process_cursor_pos(&mut self, x: f64, y: f64, data: &mut MjData) {
         /* Calculate the change in mouse position since last call */
         let dx = x - self.last_x;
         let dy = y - self.last_y;
@@ -224,24 +224,7 @@ impl<'m> MjViewer<'m> {
             self.camera.move_(action, self.model, dx / height, dy / height, &self.scene);
         }
         else {  // When the perturbation is active, move apply the perturbation.
-
-            /* Fix the coordinates */
-            let buffer_ratio = self.window.get_framebuffer_size().0 as mjtNum / self.window.get_size().0 as mjtNum;
-            x *= buffer_ratio;
-            y *= buffer_ratio;
-            y = self.rect_full.height as mjtNum - y;  // match OpenGL's coordinate system.
-
-            let rect = &self.rect_view;
-            let (body_id, _, _, _, xyz) = self.scene.find_selection(
-                data, &MjvOption::default(),
-                rect.width as mjtNum / rect.height as mjtNum,
-                (x - rect.left as mjtNum) / rect.width as mjtNum,
-                (y - rect.bottom as mjtNum) / rect.height as mjtNum
-            );
-
-            // self.pert.update_local_pos(xyz, data);
             self.pert.move_(self.model, data, action, dx / height, dy / height, &self.scene);
-            println!("Perturbation");
         }
     }
 
@@ -292,6 +275,7 @@ impl<'m> MjViewer<'m> {
                         self.pert.flexselect = flex_id;
                         self.pert.skinselect = skin_id;
                         self.pert.active = 0;
+                        self.pert.update_local_pos(xyz, data);
                     }
                 }
                 self.last_bnt_press_time = Instant::now();
