@@ -21,6 +21,11 @@ pub type MjtCamera = mjtCamera;
 pub type MjtMouse = mjtMouse;
 
 /***********************************************************************************************************************
+** MjtPertBit
+***********************************************************************************************************************/
+pub type MjtPertBit = mjtPertBit;
+
+/***********************************************************************************************************************
 ** MjvPerturb
 ***********************************************************************************************************************/
 pub type MjvPerturb = mjvPerturb;
@@ -30,6 +35,35 @@ impl Default for MjvPerturb {
             let mut pert = MaybeUninit::uninit();
             mjv_defaultPerturb(pert.as_mut_ptr());
             pert.assume_init()
+        }
+    }
+}
+
+impl MjvPerturb {
+    pub fn start(&mut self, type_: MjtPertBit, model: &MjModel, data: &mut MjData, scene: &MjvScene) {
+        unsafe { mjv_initPerturb(model.ffi(), data.ffi_mut(), scene.ffi(), self); }
+        self.active = type_ as i32;
+    }
+
+    /// Move an object with mouse. This is a wrapper around `mjv_movePerturb`.
+    pub fn move_(&mut self, model: &MjModel, data: &mut MjData, action: MjtMouse, dx: mjtNum, dy: mjtNum, scene: &MjvScene) {
+        unsafe { mjv_movePerturb(model.ffi(), data.ffi(), action as i32, dx, dy, scene.ffi(), self); }
+    }
+
+    pub fn apply(&mut self, model: &MjModel, data: &mut MjData) {
+        unsafe {
+            mju_zero(data.ffi_mut().xfrc_applied, 6 * model.ffi().nbody);
+            mjv_applyPerturbPose(model.ffi(), data.ffi_mut(), self, 0);
+            mjv_applyPerturbForce(model.ffi(), data.ffi_mut(), self);
+        }
+    }
+
+    pub fn update_local_pos(&mut self, selection_xyz: [mjtNum; 3], data: &MjData) {
+        let mut tmp = [0.0; 3];
+        let data_ffi = data.ffi();
+        unsafe { 
+            mju_sub3(tmp.as_mut_ptr(), selection_xyz.as_ptr(), data_ffi.xpos.add(3 * self.select as usize));
+            mju_mulMatTVec(self.localpos.as_mut_ptr(), data_ffi.xmat.add(9 * self.select as usize), tmp.as_ptr(), 3, 3);
         }
     }
 }
@@ -45,6 +79,8 @@ impl MjvCamera {
         let mut camera: mjvCamera_ = Self::default();
 
         camera.type_ = type_.clone() as i32;
+        camera.fixedcamid = -1;
+        camera.trackbodyid = -1;
         match type_ {
             MjtCamera::mjCAMERA_FREE => {
                 unsafe { mjv_defaultFreeCamera(model.ffi(), &mut camera); }
@@ -173,6 +209,10 @@ impl MjvFigure {
 /***********************************************************************************************************************
 ** MjvScene
 ***********************************************************************************************************************/
+/// 3D scene visualization.
+/// This struct provides a way to render visual-only geometry.
+/// To prevent changes of array sizes in [`MjModel`], which can lead to overflows,
+/// a immutable reference is stored inside this struct.
 #[derive(Debug)]
 pub struct MjvScene<'m> {
     ffi: mjvScene,
