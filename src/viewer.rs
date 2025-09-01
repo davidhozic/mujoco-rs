@@ -17,6 +17,8 @@ use crate::wrappers::mj_data::MjData;
 /****************************************** */
 const MJ_VIEWER_DEFAULT_SIZE_PX: (u32, u32) = (1280, 720);
 const MJ_VIEWER_DEFAULT_TITLE: &str = "MuJoCo Viewer (Rust)";
+/// How much extra room to create in the [`MjvScene`]. Useful for drawing labels, etc.
+const MJ_VIEWER_EXTRA_SCENE_GEOM_SPACE: usize = 20;
 const DOUBLE_CLICK_WINDOW_MS: u128 = 250;
 
 
@@ -90,7 +92,7 @@ impl<'m> MjViewer<'m> {
         window.set_all_polling(true);
         glfw.set_swap_interval(glfw::SwapInterval::None);
 
-        let scene = MjvScene::new(model, model.ffi().ngeom as usize + scene_max_ngeom);
+        let scene = MjvScene::new(model, model.ffi().ngeom as usize + scene_max_ngeom + MJ_VIEWER_EXTRA_SCENE_GEOM_SPACE);
         let context= MjrContext::new(model);
         let camera = MjvCamera::new(0, MjtCamera::mjCAMERA_FREE, model);
         let pert = MjvPerturb::default();
