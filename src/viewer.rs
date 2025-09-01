@@ -33,24 +33,15 @@ pub enum MjViewerError {
 /// Currently supported (to be expanded in the future):
 /// - Visualization of the 3D scene,
 /// - Close via Ctrl + Q or by closing the window,
-/// - Body tracking via Ctrl + double left-click,
+/// - Body tracking via Ctrl + Alt + double left-click,
 /// - Escape from tracked camera via Esc.
+/// - Perturbations:
+///     - Select the object of interested by double clicking on it,
+///     - Hold down Control and start dragging for **rotational** perturbations,
+///     - Hold down Control+Alt and start dragging for **translational** perturbations,
+///     - To move in the XY plane instead of the default XZ plane, hold Shift.
 /// 
-/// Only passive mode is available, which means the user must call [`MjViewer::sync`]
-/// to update the state inside the viewer.
-/// 
-/// ## Keyboard and mouse shortcuts
-/// This viewer supports mouse and keyboard interactions. To rotate the camera,
-/// hold down the left mouse button and move the mouse. To move the camera, hold down
-/// the right button and move the camera. By default, camera movements will be in the XZ plane.
-/// To move the camera in the XY plane, additionally hold down shift.
-/// ### Perturbations
-/// You can also perform perturbation (movements) on the objects. First double click on the
-/// **non-fixed** object of interest. To perform rotational perturbations, hold down the left control key
-/// and then drag the mouse while holding down the left mouse key. Same rules about the Shift key
-/// apply as above regarding the XZ (no shift) and XY (shift) planes.
-/// To perform translational perturbations, hold down both the left control key and the left alt key.
-/// Again, the XZ and XY rules applies regarding the shift key.
+/// The [`MjViewer::sync`] method must be called to sync the state of [`MjViewer`] and [`MjData`].
 #[derive(Debug)]
 pub struct MjViewer<'m> {
     /* MuJoCo rendering */
