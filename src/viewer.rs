@@ -60,12 +60,18 @@ pub struct MjViewer<'m> {
     /* OpenGL */
     glfw: Glfw,
     window: PWindow,
-    events: GlfwReceiver<(f64, WindowEvent)>
+    events: GlfwReceiver<(f64, WindowEvent)>,
+
+    /* External interaction */
+    user_scn: MjvScene<'m> // User scene
 }
 
 impl<'m> MjViewer<'m> {
     /// Launches the MuJoCo viewer. A [`Result`] struct is returned that either contains
     /// [`MjViewer`] or a [`MjViewerError`].
+    /// ## Parameters
+    /// * `scene_max_ngeom`: sets the maximum number of geoms inside the user scene,
+    ///         which can be manipulated via [`MjViewer::user_scn`] and [`MjViewer::user_scn_mut`].
     pub fn launch_passive(model: &'m MjModel, scene_max_ngeom: usize) -> Result<Self, MjViewerError> {
         let mut glfw = glfw::init_no_callbacks()
             .map_err(|err| MjViewerError::GlfwInitError(err))?;
@@ -82,12 +88,14 @@ impl<'m> MjViewer<'m> {
         window.set_all_polling(true);
         glfw.set_swap_interval(glfw::SwapInterval::None);
 
-        let scene = MjvScene::new(model, scene_max_ngeom);
+        let scene = MjvScene::new(model, model.ffi().ngeom as usize + scene_max_ngeom);
+        let user_scn = MjvScene::new(model, scene_max_ngeom);
         let context= MjrContext::new(model);
         let camera = MjvCamera::new(0, MjtCamera::mjCAMERA_FREE, model);
         let pert = MjvPerturb::default();
         Ok(Self {
             scene,
+            user_scn,
             context,
             camera,
             model,
@@ -107,6 +115,20 @@ impl<'m> MjViewer<'m> {
     /// Checks whether the window is still open.
     pub fn running(&self) -> bool {
         !self.window.should_close()
+    }
+
+    /// Returns a non-mutable reference to a user scene.
+    /// The user scene can be used to draw external,
+    /// visual-only geoms.
+    pub fn user_scn(&self) -> &MjvScene<'m> {
+        &self.user_scn
+    }
+
+    /// Returns a non-mutable reference to a user scene.
+    /// The user scene can be used to draw external,
+    /// visual-only geoms.
+    pub fn user_scn_mut(&mut self) -> &mut MjvScene<'m> {
+        &mut self.user_scn
     }
 
     pub fn sync(&mut self, data: &mut MjData) {
