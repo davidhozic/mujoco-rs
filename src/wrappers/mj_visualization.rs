@@ -54,7 +54,7 @@ impl MjvPerturb {
 
     pub fn apply(&mut self, model: &MjModel, data: &mut MjData) {
         unsafe {
-            mju_zero(data.ffi_mut().xfrc_applied, 6*model.ffi().nbody);
+            mju_zero(data.ffi_mut().xfrc_applied, 6 * model.ffi().nbody);
             mjv_applyPerturbPose(model.ffi(), data.ffi_mut(), self, 0);
             mjv_applyPerturbForce(model.ffi(), data.ffi_mut(), self);
         }
@@ -81,6 +81,8 @@ impl MjvCamera {
         let mut camera: mjvCamera_ = Self::default();
 
         camera.type_ = type_.clone() as i32;
+        camera.fixedcamid = -1;
+        camera.trackbodyid = -1;
         match type_ {
             MjtCamera::mjCAMERA_FREE => {
                 unsafe { mjv_defaultFreeCamera(model.ffi(), &mut camera); }

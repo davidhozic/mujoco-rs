@@ -38,6 +38,19 @@ pub enum MjViewerError {
 /// 
 /// Only passive mode is available, which means the user must call [`MjViewer::sync`]
 /// to update the state inside the viewer.
+/// 
+/// ## Keyboard and mouse shortcuts
+/// This viewer supports mouse and keyboard interactions. To rotate the camera,
+/// hold down the left mouse button and move the mouse. To move the camera, hold down
+/// the right button and move the camera. By default, camera movements will be in the XZ plane.
+/// To move the camera in the XY plane, additionally hold down shift.
+/// ### Perturbations
+/// You can also perform perturbation (movements) on the objects. First double click on the
+/// **non-fixed** object of interest. To perform rotational perturbations, hold down the left control key
+/// and then drag the mouse while holding down the left mouse key. Same rules about the Shift key
+/// apply as above regarding the XZ (no shift) and XY (shift) planes.
+/// To perform translational perturbations, hold down both the left control key and the left alt key.
+/// Again, the XZ and XY rules applies regarding the shift key.
 #[derive(Debug)]
 pub struct MjViewer<'m> {
     /* MuJoCo rendering */
@@ -61,17 +74,11 @@ pub struct MjViewer<'m> {
     glfw: Glfw,
     window: PWindow,
     events: GlfwReceiver<(f64, WindowEvent)>,
-
-    /* External interaction */
-    user_scn: MjvScene<'m> // User scene
 }
 
 impl<'m> MjViewer<'m> {
     /// Launches the MuJoCo viewer. A [`Result`] struct is returned that either contains
     /// [`MjViewer`] or a [`MjViewerError`].
-    /// ## Parameters
-    /// * `scene_max_ngeom`: sets the maximum number of geoms inside the user scene,
-    ///         which can be manipulated via [`MjViewer::user_scn`] and [`MjViewer::user_scn_mut`].
     pub fn launch_passive(model: &'m MjModel, scene_max_ngeom: usize) -> Result<Self, MjViewerError> {
         let mut glfw = glfw::init_no_callbacks()
             .map_err(|err| MjViewerError::GlfwInitError(err))?;
@@ -89,13 +96,11 @@ impl<'m> MjViewer<'m> {
         glfw.set_swap_interval(glfw::SwapInterval::None);
 
         let scene = MjvScene::new(model, model.ffi().ngeom as usize + scene_max_ngeom);
-        let user_scn = MjvScene::new(model, scene_max_ngeom);
         let context= MjrContext::new(model);
         let camera = MjvCamera::new(0, MjtCamera::mjCAMERA_FREE, model);
         let pert = MjvPerturb::default();
         Ok(Self {
             scene,
-            user_scn,
             context,
             camera,
             model,
@@ -117,24 +122,15 @@ impl<'m> MjViewer<'m> {
         !self.window.should_close()
     }
 
-    /// Returns a non-mutable reference to a user scene.
-    /// The user scene can be used to draw external,
-    /// visual-only geoms.
-    pub fn user_scn(&self) -> &MjvScene<'m> {
-        &self.user_scn
-    }
-
-    /// Returns a non-mutable reference to a user scene.
-    /// The user scene can be used to draw external,
-    /// visual-only geoms.
-    pub fn user_scn_mut(&mut self) -> &mut MjvScene<'m> {
-        &mut self.user_scn
-    }
-
     pub fn sync(&mut self, data: &mut MjData) {
+        /* Process mouse and keyboard events */
         self.process_events(data);
+
+        /* Update the scene from data and render */
         self.update(data);
-        self.pert.apply(&self.model, data);
+
+        /* Apply perturbations */
+        self.pert.apply(self.model, data);
     }
 
     /// Updates the screen state
@@ -206,8 +202,14 @@ impl<'m> MjViewer<'m> {
         let height = self.window.get_size().1 as mjtNum;
 
         let shift = self.window.get_key(Key::LeftShift) == Action::Press;
-        if self.window.get_mouse_button(MouseButton::Left) == Action::Press {
-            action = if shift {MjtMouse::mjMOUSE_ROTATE_H} else {MjtMouse::mjMOUSE_ROTATE_V};
+        
+        if self.left_click {
+            if self.pert.active == MjtPertBit::mjPERT_TRANSLATE as i32 {
+                action = if shift {MjtMouse::mjMOUSE_MOVE_H} else {MjtMouse::mjMOUSE_MOVE_V};
+            }
+            else {
+                action = if shift {MjtMouse::mjMOUSE_ROTATE_H} else {MjtMouse::mjMOUSE_ROTATE_V};
+            }
         }
         else if self.window.get_mouse_button(MouseButton::Right) == Action::Press {
             action = if shift {MjtMouse::mjMOUSE_MOVE_H} else {MjtMouse::mjMOUSE_MOVE_V};
@@ -271,11 +273,18 @@ impl<'m> MjViewer<'m> {
                     }
                     else {
                         /* Mark selection */
-                        self.pert.select = body_id;
-                        self.pert.flexselect = flex_id;
-                        self.pert.skinselect = skin_id;
-                        self.pert.active = 0;
-                        self.pert.update_local_pos(xyz, data);
+                        if body_id >= 0 {
+                            self.pert.select = body_id;
+                            self.pert.flexselect = flex_id;
+                            self.pert.skinselect = skin_id;
+                            self.pert.active = 0;
+                            self.pert.update_local_pos(xyz, data);
+                        }
+                        else {
+                            self.pert.select = 0;
+                            self.pert.flexselect = -1;
+                            self.pert.skinselect = -1;
+                        }
                     }
                 }
                 self.last_bnt_press_time = Instant::now();

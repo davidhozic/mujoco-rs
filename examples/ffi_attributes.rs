@@ -16,11 +16,11 @@ const EXAMPLE_MODEL: &str = "
   <worldbody>
     <light ambient=\"0.2 0.2 0.2\"/>
     <body name=\"ball\">
-        <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
+        <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\" mass=\"0.1\" solref=\"0.004 1\"/>
         <joint type=\"free\"/>
     </body>
 
-    <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\"/>
+    <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\" solref=\"0.004 1\"/>
 
   </worldbody>
 </mujoco>
