@@ -33,7 +33,8 @@ pub enum MjViewerError {
 /// Currently supported (to be expanded in the future):
 /// - Visualization of the 3D scene,
 /// - Close via Ctrl + Q or by closing the window,
-/// - Body tracking via Ctrl + Alt + double left-click,
+/// - Body tracking via Ctrl + Alt + double left click,
+/// - Camera look at object via Alt + double left click,
 /// - Escape from tracked camera via Esc.
 /// - Perturbations:
 ///     - Select the object of interested by double clicking on it,
