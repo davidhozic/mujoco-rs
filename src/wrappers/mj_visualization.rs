@@ -288,9 +288,9 @@ impl<'m> MjvScene<'m> {
     }
 
     /// Renders the scene to the screen. This does not automatically make the OpenGL context current.
-    pub fn render(&mut self, viewport: MjrRectangle, context: &MjrContext){
+    pub fn render(&mut self, viewport: &MjrRectangle, context: &MjrContext){
         unsafe {
-            mjr_render(viewport, self.ffi_mut(), context.ffi());
+            mjr_render(viewport.clone(), self.ffi_mut(), context.ffi());
         }
     }
 

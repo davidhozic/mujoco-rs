@@ -138,7 +138,7 @@ impl<'m> MjViewer<'m> {
         /* Update the scene from the MjData state */
         let opt = MjvOption::default();
         self.scene.update(data, &opt, &self.pert, &mut self.camera);
-        self.scene.render(self.rect_full, &self.context);
+        self.scene.render(&self.rect_full, &self.context);
 
         /* Display the changes */
         self.window.swap_buffers();
