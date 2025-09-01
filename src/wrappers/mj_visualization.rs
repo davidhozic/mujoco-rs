@@ -211,6 +211,10 @@ impl MjvFigure {
 /***********************************************************************************************************************
 ** MjvScene
 ***********************************************************************************************************************/
+/// 3D scene visualization.
+/// This struct provides a way to render visual-only geometry.
+/// To prevent changes of array sizes in [`MjModel`], which can lead to overflows,
+/// a immutable reference is stored inside this struct.
 #[derive(Debug)]
 pub struct MjvScene<'m> {
     ffi: mjvScene,

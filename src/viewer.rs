@@ -42,6 +42,9 @@ pub enum MjViewerError {
 ///     - To move in the XY plane instead of the default XZ plane, hold Shift.
 /// 
 /// The [`MjViewer::sync`] method must be called to sync the state of [`MjViewer`] and [`MjData`].
+/// 
+/// # Safety
+/// Due to the nature of OpenGL, this should only be run in the **main thread**.
 #[derive(Debug)]
 pub struct MjViewer<'m> {
     /* MuJoCo rendering */
@@ -113,6 +116,8 @@ impl<'m> MjViewer<'m> {
         !self.window.should_close()
     }
 
+    /// Syncs the state of `data` with the viewer as well as perform
+    /// rendering on the viewer.
     pub fn sync(&mut self, data: &mut MjData) {
         /* Process mouse and keyboard events */
         self.process_events(data);
@@ -124,7 +129,7 @@ impl<'m> MjViewer<'m> {
         self.pert.apply(self.model, data);
     }
 
-    /// Updates the screen state
+    /// Updates the screen state.
     fn update(&mut self, data: &mut MjData) {
         /* Read the screen size */
         self.update_rectangles(self.window.get_framebuffer_size());
@@ -149,7 +154,7 @@ impl<'m> MjViewer<'m> {
         self.rect_full.height = viewport_size.1;
     }
 
-    /// Processes user input events
+    /// Processes user input events.
     fn process_events(&mut self, data: &mut MjData) {
         self.glfw.poll_events();
         while let Some((_, event)) = self.events.receive() {
@@ -177,10 +182,12 @@ impl<'m> MjViewer<'m> {
         }
     }
 
+    /// Processes scrolling events.
     fn process_scroll(&mut self, change: f64) {
         self.camera.move_(MjtMouse::mjMOUSE_ZOOM, self.model, 0.0, -0.05 * change, &self.scene);
     }
 
+    /// Processes camera and perturbation movements.
     fn process_cursor_pos(&mut self, x: f64, y: f64, data: &mut MjData) {
         /* Calculate the change in mouse position since last call */
         let dx = x - self.last_x;
@@ -221,6 +228,7 @@ impl<'m> MjViewer<'m> {
         }
     }
 
+    /// Processes left clicks and double left clicks.
     fn process_left_click(&mut self, data: &mut MjData, action: &Action, modifiers: &Modifiers) {
         self.left_click = match action {
             Action::Press => {
