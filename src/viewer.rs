@@ -294,7 +294,7 @@ impl<'m> MjViewer<'m> {
                 self.pert.active = 0;
                 false
             },
-            Action::Repeat => unreachable!()
+            Action::Repeat => self.left_click
         };
     }
 }
