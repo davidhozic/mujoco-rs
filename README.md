@@ -20,7 +20,7 @@ the path ``/path/mujoco/lib/`` must be added to `LD_LIBRARY_PATH` like so:
 - ``LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/path/mujoco/lib/``
 
 Now regarding **static linking**.
-If you do not require the **C++ MuJoCO viewer (the simulate UI)** and have
+If you do not require the **C++ MuJoCo viewer (the simulate UI)** and have
 somehow already obtained statically linkable libraries,
 you can just run the following command:
 - ``MUJOCO_STATIC_LINK_DIR=/path/mujoco/lib/ cargo build``.
