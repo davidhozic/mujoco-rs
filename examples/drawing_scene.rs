@@ -30,6 +30,7 @@ const EXAMPLE_MODEL: &str = "
 
 
 fn main() {
+    /* Create model and data */
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
     let mut data = model.make_data();
 
