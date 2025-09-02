@@ -159,9 +159,9 @@ impl<'m> MjViewer<'m> {
         self.scene.update(data, &opt, &self.pert, &mut self.camera);
 
         /* Draw user scene geoms */
+        let ffi = self.scene.ffi_mut();
+        assert!(ffi.ngeom + self.user_scn.ffi().ngeom <= ffi.maxgeom);
         for geom in self.user_scn.geoms() {
-            let ffi = self.scene.ffi_mut();
-            debug_assert!(ffi.ngeom < ffi.maxgeom);
             /* Modify at C level to avoid type issues and improve performance */
             unsafe {
                 let geom_dst = ffi.geoms.add(ffi.ngeom as usize);

@@ -238,18 +238,30 @@ impl<'m> MjvScene<'m> {
     }
 
     pub fn geoms(&self) -> &[MjvGeom] {
+        if self.ffi.ngeom == 0 {
+            return &[];
+        }
         unsafe { std::slice::from_raw_parts(self.ffi.geoms, self.ffi.ngeom as usize) }
     }
 
     pub fn geoms_mut(&mut self) -> &mut [MjvGeom] {
+        if self.ffi.ngeom == 0 {
+            return &mut [];
+        }
         unsafe { std::slice::from_raw_parts_mut(self.ffi.geoms, self.ffi.ngeom as usize) }
     }
 
     pub fn lights(&self) -> &[MjvLight] {
+        if self.ffi.nlight == 0 {
+            return &[];
+        }
         &self.ffi.lights[..self.ffi.nlight as usize]
     }
 
     pub fn lights_mut(&mut self) -> &mut [MjvLight] {
+        if self.ffi.nlight == 0 {
+            return &mut [];
+        }
         &mut self.ffi.lights[..self.ffi.nlight as usize]
     }
 

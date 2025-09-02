@@ -1,4 +1,4 @@
-//! This example illustrate how to use the MjViewer::user_scn_mut to draw custom
+//! This example illustrates how to use the MjViewer::user_scn_mut to draw custom
 //! visual-only geoms.
 use std::time::Duration;
 
@@ -37,7 +37,7 @@ fn main() {
     /* Launch a passive Rust-native viewer */
     let mut viewer = MjViewer::launch_passive(
         &model,
-        10  // create space for 10 visual-only geoms
+        1  // create space for 10 visual-only geoms
     )
         .expect("could not launch the viewer");
 
