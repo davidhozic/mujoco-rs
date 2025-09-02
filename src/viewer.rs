@@ -71,12 +71,17 @@ pub struct MjViewer<'m> {
     glfw: Glfw,
     window: PWindow,
     events: GlfwReceiver<(f64, WindowEvent)>,
+
+    /* External interaction */
+    user_scn: MjvScene<'m>
 }
 
 impl<'m> MjViewer<'m> {
     /// Launches the MuJoCo viewer. A [`Result`] struct is returned that either contains
-    /// [`MjViewer`] or a [`MjViewerError`].
-    pub fn launch_passive(model: &'m MjModel, scene_max_ngeom: usize) -> Result<Self, MjViewerError> {
+    /// [`MjViewer`] or a [`MjViewerError`]. The `scene_max_geom` parameter
+    /// defines how much space will be allocated for additional, user-defined visual-only geoms.
+    /// It can thus be set to 0 if no additional geoms will be drawn by the user.
+    pub fn launch_passive(model: &'m MjModel, scene_max_geom: usize) -> Result<Self, MjViewerError> {
         let mut glfw = glfw::init_no_callbacks()
             .map_err(|err| MjViewerError::GlfwInitError(err))?;
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
@@ -92,7 +97,8 @@ impl<'m> MjViewer<'m> {
         window.set_all_polling(true);
         glfw.set_swap_interval(glfw::SwapInterval::None);
 
-        let scene = MjvScene::new(model, model.ffi().ngeom as usize + scene_max_ngeom + MJ_VIEWER_EXTRA_SCENE_GEOM_SPACE);
+        let scene = MjvScene::new(model, model.ffi().ngeom as usize + scene_max_geom + MJ_VIEWER_EXTRA_SCENE_GEOM_SPACE);
+        let user_scn = MjvScene::new(model, scene_max_geom);
         let context= MjrContext::new(model);
         let camera = MjvCamera::new(0, MjtCamera::mjCAMERA_FREE, model);
         let pert = MjvPerturb::default();
@@ -105,6 +111,7 @@ impl<'m> MjViewer<'m> {
             glfw,
             window,
             events,
+            user_scn,
             last_x: 0.0,
             last_y: 0.0,
             left_click: false,
@@ -117,6 +124,16 @@ impl<'m> MjViewer<'m> {
     /// Checks whether the window is still open.
     pub fn running(&self) -> bool {
         !self.window.should_close()
+    }
+
+    /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
+    pub fn user_scn(&self) -> &MjvScene<'m>{
+        &self.user_scn
+    }
+
+    /// Returns a mutable reference to a user scene for drawing custom visual-only geoms.
+    pub fn user_scn_mut(&mut self) -> &mut MjvScene<'m>{
+        &mut self.user_scn
     }
 
     /// Syncs the state of `data` with the viewer as well as perform
@@ -140,6 +157,20 @@ impl<'m> MjViewer<'m> {
         /* Update the scene from the MjData state */
         let opt = MjvOption::default();
         self.scene.update(data, &opt, &self.pert, &mut self.camera);
+
+        /* Draw user scene geoms */
+        for geom in self.user_scn.geoms() {
+            let ffi = self.scene.ffi_mut();
+            debug_assert!(ffi.ngeom < ffi.maxgeom);
+            /* Modify at C level to avoid type issues and improve performance */
+            unsafe {
+                let geom_dst = ffi.geoms.add(ffi.ngeom as usize);
+                *geom_dst = geom.clone();
+            }
+            ffi.ngeom += 1;
+        }
+
+        /* Render the scene */
         self.scene.render(&self.rect_full, &self.context);
 
         /* Display the changes */

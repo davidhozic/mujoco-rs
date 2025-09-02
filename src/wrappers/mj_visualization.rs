@@ -205,6 +205,10 @@ impl MjvFigure {
     }
 }
 
+/***********************************************************************************************************************
+** MjtGeom
+***********************************************************************************************************************/
+pub type MjtGeom = mjtGeom;
 
 /***********************************************************************************************************************
 ** MjvScene
@@ -262,10 +266,10 @@ impl<'m> MjvScene<'m> {
     /// however it must be dropped before any additional calls to this method or any other methods.
     /// The return reference's lifetime is bound to the lifetime of self.
     pub fn create_geom<'s>(
-        &'s mut self, geom_type: mjtGeom, size: Option<[f64; 3]>,
+        &'s mut self, geom_type: MjtGeom, size: Option<[f64; 3]>,
         pos: Option<[f64; 3]>, mat: Option<[f64; 9]>, rgba: Option<[f32; 4]>
     ) -> &'s mut MjvGeom {
-        assert!(self.ffi.ngeom < self.ffi.maxgeom);
+        assert!(self.ffi.ngeom < self.ffi.maxgeom, "not enough space is allocated, increase 'max_geom'.");
 
         /* Gain raw pointers to data inside the Option enum (which is a C union) */
         let size_ptr = size.as_ref().map_or(ptr::null(), |x| x.as_ptr());
@@ -367,7 +371,7 @@ mod tests {
         let mut scene = MjvScene::new(&model, 1000);
         
         /* Test label handling. Other things are trivial one-liners. */
-        let geom = scene.create_geom(mjtGeom::mjGEOM_SPHERE, None, None, None, None);
+        let geom = scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
         let label = "Hello World";
         geom.set_label(label);
         assert_eq!(geom.label(), label);
