@@ -10,7 +10,7 @@ MuJoCo is a general purpose physics simulator. Link to the MuJoCo website: https
 
 ## MuJoCo version
 This library uses FFI bindings to MuJoCo **3.3.5**.
-The library can either be provided **dynamically** in the form of share library (.so and .dll):
+The library can either be provided **dynamically** in the form of a shared library (.so and .dll):
 - ``MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/ cargo build``
 - or ``export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/`` and then ``cargo build``.
 
