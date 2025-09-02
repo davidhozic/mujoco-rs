@@ -37,7 +37,7 @@ fn main() {
     /* Launch a passive Rust-native viewer */
     let mut viewer = MjViewer::launch_passive(
         &model,
-        1  // create space for 10 visual-only geoms
+        10  // create space for 10 visual-only geoms
     )
         .expect("could not launch the viewer");
 
@@ -59,7 +59,7 @@ fn main() {
         user_scn = viewer.user_scn_mut();  // obtain a mutable reference to the user scene. The method name mirrors the C++ viewer.
         user_scn.clear_geom();  // clear existing geoms
 
-        /* Create a capsulate, that (visually) connects the two balls we have in the example model */
+        /* Create a line, that (visually) connects the two balls we have in the example model */
         let new_geom = user_scn.create_geom(
             MjtGeom::mjGEOM_LINE,  // type of geom to draw.
             None,  // size, ignore here as we set it below.

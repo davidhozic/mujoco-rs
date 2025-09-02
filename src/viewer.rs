@@ -160,7 +160,10 @@ impl<'m> MjViewer<'m> {
 
         /* Draw user scene geoms */
         let ffi = self.scene.ffi_mut();
-        assert!(ffi.ngeom + self.user_scn.ffi().ngeom <= ffi.maxgeom);
+        assert!(
+            ffi.ngeom + self.user_scn.ffi().ngeom <= ffi.maxgeom,
+            "not enough space available in the internal scene; this is a bug, please report it."
+        );
         for geom in self.user_scn.geoms() {
             /* Modify at C level to avoid type issues and improve performance */
             unsafe {
