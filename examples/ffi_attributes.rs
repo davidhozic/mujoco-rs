@@ -1,7 +1,7 @@
 //! An example on how to use ffi attributes.
 //! While most structs in this library are direct FFI structs to the MuJoCo,
 //! some have to be wrapped for safety reasons.
-//! The wrapped structs contain a `ffi()` method and a `ffi_mut` method, which return
+//! The wrapped structs contain a `ffi()` method and a `ffi_mut()` method, which return
 //! a reference to the wrapped FFI struct.
 
 
