@@ -89,7 +89,7 @@ impl MjVfs {
     }
 
     /// Mutable reference to the wrapped FFI struct.
-    pub fn ffi_mut(&mut self) -> &mut mjVFS {
+    pub unsafe fn ffi_mut(&mut self) -> &mut mjVFS {
         &mut self.ffi
     }
 }

@@ -384,7 +384,7 @@ impl MjUI {
         &self.ui
     }
 
-    pub fn ffi_mut(&mut self) -> &mut mjUI {
+    pub unsafe fn ffi_mut(&mut self) -> &mut mjUI {
         &mut self.ui
     }
 }

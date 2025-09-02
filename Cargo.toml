@@ -14,7 +14,7 @@ documentation = "https://docs.rs/mujoco-rs/"
 exclude = ["src/cpp/*", ".gitignore", ".gitmodules"]
 
 [features]
-viewer = ["glfw"]
+viewer = ["glfw", "bitflags"]
 cpp-viewer = []
 
 ffi-regenerate = ["regex", "bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module. 
@@ -22,6 +22,7 @@ ffi-regenerate = ["regex", "bindgen"]  # Generate the ffi bindings. Only used fo
 default = ["viewer"]
 
 [dependencies]
+bitflags = {version = "2.9.4", optional = true}
 glfw = {version = "0.59.0", optional = true}
 
 [build-dependencies]

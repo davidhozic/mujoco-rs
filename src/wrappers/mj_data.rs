@@ -39,7 +39,7 @@ impl<'a> MjData<'a> {
     }
 
     /// Mutable reference to the wrapped FFI struct.
-    pub fn ffi_mut(&mut self) -> &mut mjData {
+    pub unsafe fn ffi_mut(&mut self) -> &mut mjData {
         unsafe { self.data.as_mut().unwrap() }
     }
 

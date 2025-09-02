@@ -125,7 +125,7 @@ impl MjModel {
     }
 
     /// Returns a mutable reference to the wrapped FFI struct.
-    pub fn ffi_mut(&mut self) -> &mut mjModel {
+    pub unsafe fn ffi_mut(&mut self) -> &mut mjModel {
         unsafe { self.0.as_mut().unwrap() }
     }
 
