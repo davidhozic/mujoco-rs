@@ -1,5 +1,5 @@
 //! Definitions related to rendering.
-use std::mem::{MaybeUninit, zeroed};
+use std::{ffi::CString, mem::{zeroed, MaybeUninit}};
 use crate::mujoco_c::*;
 
 use super::mj_model::MjModel;
@@ -27,6 +27,15 @@ impl Default for MjrRectangle {
 }
 
 
+/***********************************************************************************************************************
+** MjtFont
+***********************************************************************************************************************/
+pub type MjtFont = mjtFont;
+
+/***********************************************************************************************************************
+** MjtGridPos
+***********************************************************************************************************************/
+pub type MjtGridPos = mjtGridPos;
 
 /***********************************************************************************************************************
 ** MjrContext
@@ -108,11 +117,24 @@ impl MjrContext {
         unsafe { mjr_setAux(index as i32, self.ffi_mut()); }
     }
 
+    /// Draws a text overlay.
+    pub fn overlay(&mut self, font: MjtFont, gridpos: MjtGridPos, viewport: MjrRectangle, overlay: &str, overlay2: Option<&str>) {
+        let c_overlay = CString::new(overlay).unwrap();
+        let c_overlay2 = overlay2.map(|x| CString::new(x).unwrap());
+
+        unsafe { mjr_overlay(
+            font as i32, gridpos as i32, viewport,
+            c_overlay.as_ptr(),
+            c_overlay2.as_ref().map_or(std::ptr::null(), |x| x.as_ptr()),
+            self.ffi()
+        ); }
+    }
+
     pub fn ffi(&self) -> &mjrContext {
         &self.ffi
     }
 
-    pub fn ffi_mut(&mut self) -> &mut mjrContext {
+    pub unsafe fn ffi_mut(&mut self) -> &mut mjrContext {
         &mut self.ffi
     }
 }

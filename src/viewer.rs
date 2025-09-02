@@ -1,13 +1,14 @@
 use glfw::{Action, Context, Glfw, GlfwReceiver, Key, Modifiers, MouseButton, PWindow, WindowEvent};
+use bitflags::bitflags;
 
 use std::time::Instant;
 
-use crate::mujoco_c::*;
+use crate::{get_mujoco_version, mujoco_c::*};
 
 #[cfg(feature = "cpp-viewer")]
 use std::ffi::CString;
 
-use crate::prelude::{MjrContext, MjrRectangle};
+use crate::prelude::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
@@ -16,11 +17,37 @@ use crate::wrappers::mj_data::MjData;
 // Rust native viewer
 /****************************************** */
 const MJ_VIEWER_DEFAULT_SIZE_PX: (u32, u32) = (1280, 720);
-const MJ_VIEWER_DEFAULT_TITLE: &str = "MuJoCo Viewer (Rust)";
 /// How much extra room to create in the [`MjvScene`]. Useful for drawing labels, etc.
 const MJ_VIEWER_EXTRA_SCENE_GEOM_SPACE: usize = 20;
 const DOUBLE_CLICK_WINDOW_MS: u128 = 250;
 
+const HELP_MENU_TITLES: &str = concat!(
+    "Toggle help\n",
+    "Free camera\n",
+    "Track camera\n",
+    "Camera orbit\n",
+    "Camera pan\n",
+    "Camera look at\n",
+    "Zoom\n",
+    "Object select\n",
+    "Selection rotate\n",
+    "Selection translate\n",
+    "Exit"
+);
+
+const HELP_MENU_VALUES: &str = concat!(
+    "F1\n",
+    "Escape\n",
+    "Control + Alt + double-left click\n",
+    "Left drag\n",
+    "Right [+Shift] drag\n",
+    "Alt + double-left click\n",
+    "Zoom, middle drag\n",
+    "Double-left click\n",
+    "Control + [Shift] + drag\n",
+    "Control + Alt + [Shift] + drag\n",
+    "Control + Q"
+);
 
 #[derive(Debug)]
 pub enum MjViewerError {
@@ -62,10 +89,10 @@ pub struct MjViewer<'m> {
     /* Internal state */
     last_x: mjtNum,
     last_y: mjtNum,
-    left_click: bool,
     last_bnt_press_time: Instant,
     rect_view: MjrRectangle,
     rect_full: MjrRectangle,
+    status_flags: ViewerStatusBits,  // Status flag indicating the state of the menu
 
     /* OpenGL */
     glfw: Glfw,
@@ -84,9 +111,13 @@ impl<'m> MjViewer<'m> {
     pub fn launch_passive(model: &'m MjModel, scene_max_geom: usize) -> Result<Self, MjViewerError> {
         let mut glfw = glfw::init_no_callbacks()
             .map_err(|err| MjViewerError::GlfwInitError(err))?;
+
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
+        let title = format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version());
+
         let (mut window, events) = match glfw.create_window(
-            w, h, MJ_VIEWER_DEFAULT_TITLE, glfw::WindowMode::Windowed
+            w, h, &title,
+            glfw::WindowMode::Windowed
         ) {
             Some(x) => Ok(x),
             None => Err(MjViewerError::WindowCreationError)
@@ -114,7 +145,7 @@ impl<'m> MjViewer<'m> {
             user_scn,
             last_x: 0.0,
             last_y: 0.0,
-            left_click: false,
+            status_flags: ViewerStatusBits::HELP_MENU,
             last_bnt_press_time: Instant::now(),
             rect_view: MjrRectangle::default(),
             rect_full: MjrRectangle::default(),
@@ -143,14 +174,20 @@ impl<'m> MjViewer<'m> {
         self.process_events(data);
 
         /* Update the scene from data and render */
-        self.update(data);
+        self.update_scene(data);
+
+        /* Update the user menu state and overlays */
+        self.update_menus();
+
+        /* Display the drawn content */
+        self.window.swap_buffers();
 
         /* Apply perturbations */
         self.pert.apply(self.model, data);
     }
 
-    /// Updates the screen state.
-    fn update(&mut self, data: &mut MjData) {
+    /// Updates the scene and draws it to the display.
+    fn update_scene(&mut self, data: &mut MjData) {
         /* Read the screen size */
         self.update_rectangles(self.window.get_framebuffer_size());
 
@@ -159,7 +196,7 @@ impl<'m> MjViewer<'m> {
         self.scene.update(data, &opt, &self.pert, &mut self.camera);
 
         /* Draw user scene geoms */
-        let ffi = self.scene.ffi_mut();
+        let ffi = unsafe { self.scene.ffi_mut() };
         assert!(
             ffi.ngeom + self.user_scn.ffi().ngeom <= ffi.maxgeom,
             "not enough space available in the internal scene; this is a bug, please report it."
@@ -172,12 +209,24 @@ impl<'m> MjViewer<'m> {
             self.user_scn.ffi().ngeom as usize
         ) };
         ffi.ngeom += self.user_scn.ffi().ngeom;
-
-        /* Render the scene */
         self.scene.render(&self.rect_full, &self.context);
+    }
 
-        /* Display the changes */
-        self.window.swap_buffers();
+    /// Draws the user menu
+    fn update_menus(&mut self) {
+        let mut rectangle = self.rect_view;
+        rectangle.width = rectangle.width - rectangle.width / 4;
+
+        /* Overlay section */
+
+        if self.status_flags.contains(ViewerStatusBits::HELP_MENU) {  // Help
+            self.context.overlay(
+                MjtFont::mjFONT_NORMAL, MjtGridPos::mjGRID_TOPLEFT,
+                rectangle,
+                HELP_MENU_TITLES,
+                Some(HELP_MENU_VALUES)
+            );
+        }
     }
 
     /// Updates the dimensions of the rectangles defining the dimensions of
@@ -196,13 +245,18 @@ impl<'m> MjViewer<'m> {
         self.glfw.poll_events();
         while let Some((_, event)) = self.events.receive() {
             match event {
-                WindowEvent::Key(Key::Q, _, _, modifier) if modifier == Modifiers::Control => {
+                WindowEvent::Key(Key::Q, _, Action::Press, Modifiers::Control) => {
                     self.window.set_should_close(true);
                     break;  // no use in polling other events
                 },
-                WindowEvent::Key(Key::Escape, _, _, _) => {
+                WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
                     self.camera.free();
                 },
+
+                WindowEvent::Key(Key::F1, _, Action::Press, _) => {
+                    self.status_flags.toggle(ViewerStatusBits::HELP_MENU);
+                }
+
                 WindowEvent::Scroll(_, change) => {
                     self.process_scroll(change);
                 }
@@ -237,8 +291,8 @@ impl<'m> MjViewer<'m> {
         let height = self.window.get_size().1 as mjtNum;
 
         let shift = self.window.get_key(Key::LeftShift) == Action::Press;
-        
-        if self.left_click {
+
+        if self.status_flags.contains(ViewerStatusBits::LEFT_CLICK) {
             if self.pert.active == MjtPertBit::mjPERT_TRANSLATE as i32 {
                 action = if shift {MjtMouse::mjMOUSE_MOVE_H} else {MjtMouse::mjMOUSE_MOVE_V};
             }
@@ -267,7 +321,7 @@ impl<'m> MjViewer<'m> {
 
     /// Processes left clicks and double left clicks.
     fn process_left_click(&mut self, data: &mut MjData, action: &Action, modifiers: &Modifiers) {
-        self.left_click = match action {
+        match action {
             Action::Press => {
                 /* Clicking and holding applies perturbation */
                 if self.pert.select > 0 && modifiers.contains(Modifiers::Control) {
@@ -280,7 +334,7 @@ impl<'m> MjViewer<'m> {
                 }
 
                 /* Double click detection */
-                if !self.left_click && self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
+                if !self.status_flags.contains(ViewerStatusBits::LEFT_CLICK) && self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
                     let (mut x, mut y) = self.window.get_cursor_pos();
 
                     /* Fix the coordinates */
@@ -324,15 +378,27 @@ impl<'m> MjViewer<'m> {
                     }
                 }
                 self.last_bnt_press_time = Instant::now();
-                true
+                self.status_flags.set(ViewerStatusBits::LEFT_CLICK, true);
             },
             Action::Release => {
                 // Clear perturbation when left click is released.
                 self.pert.active = 0;
-                false
+                self.status_flags.remove(ViewerStatusBits::LEFT_CLICK);
             },
-            Action::Repeat => self.left_click
+            Action::Repeat => {}
         };
+    }
+}
+
+
+
+bitflags! {
+    /// Boolean flags that define some of
+    /// the Viewer's internal state.
+    #[derive(Debug)]
+    struct ViewerStatusBits: u8 {
+        const LEFT_CLICK = 1 << 0;
+        const HELP_MENU  = 1 << 1;
     }
 }
 

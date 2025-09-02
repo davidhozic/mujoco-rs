@@ -334,7 +334,7 @@ impl<'m> MjvScene<'m> {
         &self.ffi
     }
 
-    pub fn ffi_mut(&mut self) -> &mut mjvScene {
+    pub unsafe fn ffi_mut(&mut self) -> &mut mjvScene {
         &mut self.ffi
     }
 }
