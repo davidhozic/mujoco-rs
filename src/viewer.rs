@@ -164,14 +164,14 @@ impl<'m> MjViewer<'m> {
             ffi.ngeom + self.user_scn.ffi().ngeom <= ffi.maxgeom,
             "not enough space available in the internal scene; this is a bug, please report it."
         );
-        for geom in self.user_scn.geoms() {
-            /* Modify at C level to avoid type issues and improve performance */
-            unsafe {
-                let geom_dst = ffi.geoms.add(ffi.ngeom as usize);
-                *geom_dst = geom.clone();
-            }
-            ffi.ngeom += 1;
-        }
+
+        /* Fast copy */
+        unsafe { std::ptr::copy_nonoverlapping(
+            self.user_scn.ffi_mut().geoms,
+            ffi.geoms.add(ffi.ngeom as usize),
+            self.user_scn.ffi().ngeom as usize
+        ) };
+        ffi.ngeom += self.user_scn.ffi().ngeom;
 
         /* Render the scene */
         self.scene.render(&self.rect_full, &self.context);
