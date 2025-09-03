@@ -179,6 +179,6 @@ mod tests {
     /// Tests whether the automatic attributes work as expected.
     #[test]
     fn test_model_getters() {
-        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
     }
 }
