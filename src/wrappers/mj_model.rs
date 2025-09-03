@@ -138,8 +138,6 @@ impl MjModel {
     }
 }
 
-
-
 impl Drop for MjModel {
     fn drop(&mut self) {
         unsafe {
