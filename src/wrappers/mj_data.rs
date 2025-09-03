@@ -70,10 +70,8 @@ impl<'a> MjData<'a> {
             let qacc = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
             let xanchor = (id * 3, 3);
             let xaxis = (id * 3, 3);
-            let cdof = (id * 6, 6);
             #[allow(non_snake_case)]
             let qLDiagInv = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
-            let cdof_dot = (id * 6, 6);
             let qfrc_bias = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
             let qfrc_passive = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
             let qfrc_actuator = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
@@ -81,8 +79,13 @@ impl<'a> MjData<'a> {
             let qacc_smooth = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
             let qfrc_constraint = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
             let qfrc_inverse = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            
+            /* Special case attributes, used for some internal calculation */
+            // cdof
+            // cdof_dot
+
             Some(MjJointInfo {name: name.to_string(), id: id as usize,
-                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, cdof, qLDiagInv, cdof_dot, qfrc_bias,
+                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
                 qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
             })
         }
@@ -265,9 +268,7 @@ pub struct MjJointInfo{
     qacc: (usize, usize),
     xanchor: (usize, usize),
     xaxis: (usize, usize),
-    cdof: (usize, usize),
     qLDiagInv: (usize, usize),
-    cdof_dot: (usize, usize),
     qfrc_bias: (usize, usize),
     qfrc_passive: (usize, usize),
     qfrc_actuator: (usize, usize),
@@ -283,7 +284,7 @@ impl MjJointInfo {
         view_creator!(
             self, MjJointViewMut, data.ffi_mut(),
             [
-                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, cdof, qLDiagInv, cdof_dot, qfrc_bias,
+                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
                 qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
             ],
             [], true
@@ -295,7 +296,7 @@ impl MjJointInfo {
         view_creator!(
             self, MjJointView, data.ffi(),
             [
-                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, cdof, qLDiagInv, cdof_dot, qfrc_bias,
+                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
                 qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
             ],
             [], false
@@ -313,9 +314,7 @@ pub struct MjJointViewMut<'d, 'm: 'd> {
     pub qacc: PointerViewMut<f64>,
     pub xanchor: PointerViewMut<f64>,
     pub xaxis: PointerViewMut<f64>,
-    pub cdof: PointerViewMut<f64>,
     pub qLDiagInv: PointerViewMut<f64>,
-    pub cdof_dot: PointerViewMut<f64>,
     pub qfrc_bias: PointerViewMut<f64>,
     pub qfrc_passive: PointerViewMut<f64>,
     pub qfrc_actuator: PointerViewMut<f64>,
@@ -348,9 +347,7 @@ pub struct MjJointView<'d, 'm: 'd> {
     pub qacc: PointerView<f64>,
     pub xanchor: PointerView<f64>,
     pub xaxis: PointerView<f64>,
-    pub cdof: PointerView<f64>,
     pub qLDiagInv: PointerView<f64>,
-    pub cdof_dot: PointerView<f64>,
     pub qfrc_bias: PointerView<f64>,
     pub qfrc_passive: PointerView<f64>,
     pub qfrc_actuator: PointerView<f64>,
