@@ -4,6 +4,7 @@ pub mod mj_interface;
 pub mod mj_statistic;
 pub mod mj_rendering;
 pub mod mj_auxiliary;
+pub mod mj_primitive;
 pub mod mj_option;
 pub mod mj_model;
 pub mod mj_data;

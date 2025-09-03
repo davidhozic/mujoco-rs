@@ -150,7 +150,6 @@ impl Drop for MjModel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
     use std::fs;
 
     const EXAMPLE_MODEL: &str = "
@@ -175,5 +174,11 @@ mod tests {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
         model.save_last_xml(MODEL_SAVE_XML_PATH).expect("could not save the model XML.");      
         fs::remove_file(MODEL_SAVE_XML_PATH).unwrap();
+    }
+
+    /// Tests whether the automatic attributes work as expected.
+    #[test]
+    fn test_model_getters() {
+        MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
     }
 }
