@@ -6,7 +6,7 @@ use super::mj_model::MjModel;
 use crate::mujoco_c::*;
 
 use crate::util::{PointerViewMut, PointerView};
-use crate::mj_slice_view;
+use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 
 
 /// Wrapper around the ``mjData`` struct.
@@ -59,25 +59,32 @@ impl<'a> MjData<'a> {
         if id == -1 {  // not found
             return None;
         }
-
-        let qpos;
-        let qvel;
-        let qacc_warmstart;
-        let qacc;
-        let qfrc_applied;
-        let qfrc_bias;
         let model_ffi = self.model.ffi();
+        let id = id as usize;
         unsafe {
-            // ptr:expr, $id:expr, $addr_map:expr, $njnt:expr, $max_n:expr
-            qpos = mj_slice_view!(self.qpos, id as usize, model_ffi.jnt_qposadr, model_ffi.njnt as usize, model_ffi.nq as usize);
-            qvel = mj_slice_view!(self.qvel, id as usize, model_ffi.jnt_dofadr, model_ffi.njnt as usize, model_ffi.nv as usize);
-            qacc_warmstart = mj_slice_view!(self.qacc_warmstart, id as usize, model_ffi.jnt_dofadr, model_ffi.njnt as usize, model_ffi.nv as usize);
-            qacc = mj_slice_view!(self.qacc, id as usize, model_ffi.jnt_dofadr, model_ffi.njnt as usize, model_ffi.nv as usize);
-            qfrc_applied = mj_slice_view!(self.qfrc_applied, id as usize, model_ffi.jnt_dofadr, model_ffi.njnt as usize, model_ffi.nv as usize);
-            qfrc_bias = mj_slice_view!(self.qfrc_bias, id as usize, model_ffi.jnt_dofadr, model_ffi.njnt as usize, model_ffi.nv as usize);
+            // $id:expr, $addr_map:expr, $njnt:expr, $max_n:expr
+            let qpos = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nq), mj_model_nx_to_nitem!(model_ffi, nq), model_ffi.nq);
+            let qvel = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let qacc_warmstart = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let qfrc_applied = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let qacc = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let xanchor = (id * 3, 3);
+            let xaxis = (id * 3, 3);
+            let cdof = (id * 6, 6);
+            let qLDiagInv = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let cdof_dot = (id * 6, 6);
+            let qfrc_bias = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let qfrc_passive = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let qfrc_actuator = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let qfrc_smooth = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let qacc_smooth = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let qfrc_constraint = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let qfrc_inverse = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            Some(MjJointInfo {name: name.to_string(), id: id as usize,
+                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, cdof, qLDiagInv, cdof_dot, qfrc_bias,
+                qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
+            })
         }
-
-        Some(MjJointInfo {name: name.to_string(), id: id as usize, qpos, qvel, qacc_warmstart, qacc, qfrc_applied, qfrc_bias})
     }
 
     /// Obtains a [`MjGeomInfo`] struct containing information about the name, id, and
@@ -111,7 +118,7 @@ impl<'a> MjData<'a> {
         let model_ffi = self.model.ffi();
         unsafe {
             ctrl = (id as usize, 1);
-            act = mj_slice_view!(self.act, id as usize, model_ffi.actuator_actadr, model_ffi.nu as usize, model_ffi.na as usize);
+            act = mj_view_indices!(id as usize, model_ffi.actuator_actadr, model_ffi.nu as usize, model_ffi.na as usize);
         }
 
         Some(MjActuatorInfo { name: name.to_string(), id: id as usize, ctrl, act})
@@ -251,20 +258,45 @@ pub struct MjJointInfo{
     qpos: (usize, usize),
     qvel: (usize, usize),
     qacc_warmstart: (usize, usize),
-    qacc: (usize, usize),
     qfrc_applied: (usize, usize),
+    qacc: (usize, usize),
+    xanchor: (usize, usize),
+    xaxis: (usize, usize),
+    cdof: (usize, usize),
+    qLDiagInv: (usize, usize),
+    cdof_dot: (usize, usize),
     qfrc_bias: (usize, usize),
+    qfrc_passive: (usize, usize),
+    qfrc_actuator: (usize, usize),
+    qfrc_smooth: (usize, usize),
+    qacc_smooth: (usize, usize),
+    qfrc_constraint: (usize, usize),
+    qfrc_inverse: (usize, usize),
 }
 
 impl MjJointInfo {
     /// Returns a mutable view to the correct fields in [`MjData`].
     pub fn view_mut<'d>(&mut self, data: &'d mut MjData) -> MjJointViewMut<'d, '_> {
-        view_creator!(self, MjJointViewMut, data.ffi_mut(), [qpos, qvel, qacc_warmstart, qacc, qfrc_applied, qfrc_bias], [], true)
+        view_creator!(
+            self, MjJointViewMut, data.ffi_mut(),
+            [
+                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, cdof, qLDiagInv, cdof_dot, qfrc_bias,
+                qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
+            ],
+            [], true
+        )
     }
 
     /// Returns a view to the correct fields in [`MjData`].
     pub fn view<'d>(&self, data: &'d MjData) -> MjJointView<'d, '_> {
-        view_creator!(self, MjJointView, data.ffi(), [qpos, qvel, qacc_warmstart, qacc, qfrc_applied, qfrc_bias], [], false)
+        view_creator!(
+            self, MjJointView, data.ffi(),
+            [
+                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, cdof, qLDiagInv, cdof_dot, qfrc_bias,
+                qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
+            ],
+            [], false
+        )
     }
 }
 
@@ -272,9 +304,20 @@ pub struct MjJointViewMut<'d, 'm: 'd> {
     pub qpos: PointerViewMut<f64>,
     pub qvel: PointerViewMut<f64>,
     pub qacc_warmstart: PointerViewMut<f64>,
-    pub qacc: PointerViewMut<f64>,
     pub qfrc_applied: PointerViewMut<f64>,
+    pub qacc: PointerViewMut<f64>,
+    pub xanchor: PointerViewMut<f64>,
+    pub xaxis: PointerViewMut<f64>,
+    pub cdof: PointerViewMut<f64>,
+    pub qLDiagInv: PointerViewMut<f64>,
+    pub cdof_dot: PointerViewMut<f64>,
     pub qfrc_bias: PointerViewMut<f64>,
+    pub qfrc_passive: PointerViewMut<f64>,
+    pub qfrc_actuator: PointerViewMut<f64>,
+    pub qfrc_smooth: PointerViewMut<f64>,
+    pub qacc_smooth: PointerViewMut<f64>,
+    pub qfrc_constraint: PointerViewMut<f64>,
+    pub qfrc_inverse: PointerViewMut<f64>,
     phantom: PhantomData<&'d MjData<'m>>
 }
 
@@ -294,9 +337,20 @@ pub struct MjJointView<'d, 'm: 'd> {
     pub qpos: PointerView<f64>,
     pub qvel: PointerView<f64>,
     pub qacc_warmstart: PointerView<f64>,
-    pub qacc: PointerView<f64>,
     pub qfrc_applied: PointerView<f64>,
+    pub qacc: PointerView<f64>,
+    pub xanchor: PointerView<f64>,
+    pub xaxis: PointerView<f64>,
+    pub cdof: PointerView<f64>,
+    pub qLDiagInv: PointerView<f64>,
+    pub cdof_dot: PointerView<f64>,
     pub qfrc_bias: PointerView<f64>,
+    pub qfrc_passive: PointerView<f64>,
+    pub qfrc_actuator: PointerView<f64>,
+    pub qfrc_smooth: PointerView<f64>,
+    pub qacc_smooth: PointerView<f64>,
+    pub qfrc_constraint: PointerView<f64>,
+    pub qfrc_inverse: PointerView<f64>,
     phantom: PhantomData<&'d MjData<'m>>
 }
 

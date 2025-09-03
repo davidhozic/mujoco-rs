@@ -2,13 +2,13 @@
 use std::ops::{Deref, DerefMut};
 
 
-/// Creates a [`PointerViewMut`] instance based on the pointer (`ptr`) and other
+/// Creates a [`PointerViewMut`] instance based on
 /// lookup variables that define the mapping in MuJoCo's mjModel struct.
-/// Format: source pointer, item id, map from item id to index inside the array of all items' values,
+/// Format: item id, map from item id to index inside the array of all items' values,
 ///         number of items, maximum number of elements inside the array of all items' values
 #[macro_export]
-macro_rules! mj_slice_view {
-    ($ptr:expr, $id:expr, $addr_map:expr, $njnt:expr, $max_n:expr) => {
+macro_rules! mj_view_indices {
+    ($id:expr, $addr_map:expr, $njnt:expr, $max_n:expr) => {
         {
             let start_addr = *$addr_map.add($id) as isize;
             if start_addr == -1 {
@@ -16,11 +16,36 @@ macro_rules! mj_slice_view {
             }
             else
             {
-                let end_addr = if $id + 1 < $njnt {*$addr_map.add($id + 1) as usize} else {$max_n};
+                let end_addr = if $id + 1 < $njnt as usize {*$addr_map.add($id as usize + 1) as usize} else {$max_n as usize};
                 let n = end_addr - start_addr as usize;
                 (start_addr as usize, n)
             }
         }
+    };
+}
+
+/// Returns the correct address mapping based on the X in nX (nq, nv, nu, ...).
+#[macro_export]
+macro_rules! mj_model_nx_to_mapping {
+    ($model_ffi:ident, nq) => {
+        $model_ffi.jnt_qposadr
+    };
+
+    ($model_ffi:ident, nv) => {
+        $model_ffi.jnt_dofadr
+    };
+}
+
+
+/// Returns the correct number of items based on the X in nX (nq, nv, nu, ...).
+#[macro_export]
+macro_rules! mj_model_nx_to_nitem {
+    ($model_ffi:ident, nq) => {
+        $model_ffi.njnt
+    };
+
+    ($model_ffi:ident, nv) => {
+        $model_ffi.njnt
     };
 }
 
