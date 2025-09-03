@@ -71,6 +71,7 @@ impl<'a> MjData<'a> {
             let xanchor = (id * 3, 3);
             let xaxis = (id * 3, 3);
             let cdof = (id * 6, 6);
+            #[allow(non_snake_case)]
             let qLDiagInv = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
             let cdof_dot = (id * 6, 6);
             let qfrc_bias = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
@@ -250,8 +251,10 @@ macro_rules! view_creator {
 }
 
 
-/// A MjJointInfo which shows a slice of the joint.
+/// A MjJointInfo which describes a joint and allows
+/// creation of views to joint data in MjData.
 #[derive(Debug, PartialEq)]
+#[allow(non_snake_case)]
 pub struct MjJointInfo{
     pub name: String,
     pub id: usize,
@@ -300,6 +303,8 @@ impl MjJointInfo {
     }
 }
 
+/// An mutable view to joint variables of MjData.
+#[allow(non_snake_case)]
 pub struct MjJointViewMut<'d, 'm: 'd> {
     pub qpos: PointerViewMut<f64>,
     pub qvel: PointerViewMut<f64>,
@@ -333,6 +338,8 @@ impl MjJointViewMut<'_, '_> {
 }
 
 
+/// An immutable view to joint variables of MjData.
+#[allow(non_snake_case)]
 pub struct MjJointView<'d, 'm: 'd> {
     pub qpos: PointerView<f64>,
     pub qvel: PointerView<f64>,
