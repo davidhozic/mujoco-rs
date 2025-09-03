@@ -7,7 +7,6 @@ use std::ptr;
 use crate::wrappers::mj_data::MjData;
 use super::mj_auxiliary::MjVfs;
 use crate::mujoco_c::*;
-use crate::impl_getter_setter;
 
 
 /// A Rust-safe wrapper around mjModel.
@@ -139,102 +138,6 @@ impl MjModel {
     }
 }
 
-/// Getter / setters to the mjModel FFI struct.
-impl MjModel {
-    impl_getter_setter!(get, nv, "number of degrees of freedom = dim(qvel)", usize, ffi());
-    impl_getter_setter!(get, nq, "number of generalized coordinates = dim(qpos)", usize, ffi());
-    impl_getter_setter!(get, nu, "number of actuators/controls = dim(ctrl)", usize, ffi());
-    impl_getter_setter!(get, na, "number of activation states = dim(act)", usize, ffi());
-    impl_getter_setter!(get, nbody, "number of bodies", usize, ffi());
-    impl_getter_setter!(get, nbvh, "number of total bounding volumes in all bodies", usize, ffi());
-    impl_getter_setter!(get, nbvhstatic, "number of static bounding volumes (aabb stored in mjModel)", usize, ffi());
-    impl_getter_setter!(get, nbvhdynamic, "number of dynamic bounding volumes (aabb stored in mjData)", usize, ffi());
-    impl_getter_setter!(get, noct, "number of total octree cells in all meshes", usize, ffi());
-    impl_getter_setter!(get, njnt, "number of joints", usize, ffi());
-    impl_getter_setter!(get, ngeom, "number of geoms", usize, ffi());
-    impl_getter_setter!(get, nsite, "number of sites", usize, ffi());
-    impl_getter_setter!(get, ncam, "number of cameras", usize, ffi());
-    impl_getter_setter!(get, nlight, "number of lights", usize, ffi());
-    impl_getter_setter!(get, nflex, "number of flexes", usize, ffi());
-    impl_getter_setter!(get, nflexnode, "number of dofs in all flexes", usize, ffi());
-    impl_getter_setter!(get, nflexvert, "number of vertices in all flexes", usize, ffi());
-    impl_getter_setter!(get, nflexedge, "number of edges in all flexes", usize, ffi());
-    impl_getter_setter!(get, nflexelem, "number of elements in all flexes", usize, ffi());
-    impl_getter_setter!(get, nflexelemdata, "number of element vertex ids in all flexes", usize, ffi());
-    impl_getter_setter!(get, nflexelemedge, "number of element edge ids in all flexes", usize, ffi());
-    impl_getter_setter!(get, nflexshelldata, "number of shell fragment vertex ids in all flexes", usize, ffi());
-    impl_getter_setter!(get, nflexevpair, "number of element-vertex pairs in all flexes", usize, ffi());
-    impl_getter_setter!(get, nflextexcoord, "number of vertices with texture coordinates", usize, ffi());
-    impl_getter_setter!(get, nmesh, "number of meshes", usize, ffi());
-    impl_getter_setter!(get, nmeshvert, "number of vertices in all meshes", usize, ffi());
-    impl_getter_setter!(get, nmeshnormal, "number of normals in all meshes", usize, ffi());
-    impl_getter_setter!(get, nmeshtexcoord, "number of texcoords in all meshes", usize, ffi());
-    impl_getter_setter!(get, nmeshface, "number of triangular faces in all meshes", usize, ffi());
-    impl_getter_setter!(get, nmeshgraph, "number of ints in mesh auxiliary data", usize, ffi());
-    impl_getter_setter!(get, nmeshpoly, "number of polygons in all meshes", usize, ffi());
-    impl_getter_setter!(get, nmeshpolyvert, "number of vertices in all polygons", usize, ffi());
-    impl_getter_setter!(get, nmeshpolymap, "number of polygons in vertex map", usize, ffi());
-    impl_getter_setter!(get, nskin, "number of skins", usize, ffi());
-    impl_getter_setter!(get, nskinvert, "number of vertices in all skins", usize, ffi());
-    impl_getter_setter!(get, nskintexvert, "number of vertices with texcoords in all skins", usize, ffi());
-    impl_getter_setter!(get, nskinface, "number of triangular faces in all skins", usize, ffi());
-    impl_getter_setter!(get, nskinbone, "number of bones in all skins", usize, ffi());
-    impl_getter_setter!(get, nskinbonevert, "number of vertices in all skin bones", usize, ffi());
-    impl_getter_setter!(get, nhfield, "number of heightfields", usize, ffi());
-    impl_getter_setter!(get, nhfielddata, "number of data points in all heightfields", usize, ffi());
-    impl_getter_setter!(get, ntex, "number of textures", usize, ffi());
-    impl_getter_setter!(get, ntexdata, "number of bytes in texture rgb data", usize, ffi());
-    impl_getter_setter!(get, nmat, "number of materials", usize, ffi());
-    impl_getter_setter!(get, npair, "number of predefined geom pairs", usize, ffi());
-    impl_getter_setter!(get, nexclude, "number of excluded geom pairs", usize, ffi());
-    impl_getter_setter!(get, neq, "number of equality constraints", usize, ffi());
-    impl_getter_setter!(get, ntendon, "number of tendons", usize, ffi());
-    impl_getter_setter!(get, nwrap, "number of wrap objects in all tendon paths", usize, ffi());
-    impl_getter_setter!(get, nsensor, "number of sensors", usize, ffi());
-    impl_getter_setter!(get, nnumeric, "number of numeric custom fields", usize, ffi());
-    impl_getter_setter!(get, nnumericdata, "number of mjtNums in all numeric fields", usize, ffi());
-    impl_getter_setter!(get, ntext, "number of text custom fields", usize, ffi());
-    impl_getter_setter!(get, ntextdata, "number of mjtBytes in all text fields", usize, ffi());
-    impl_getter_setter!(get, ntuple, "number of tuple custom fields", usize, ffi());
-    impl_getter_setter!(get, ntupledata, "number of objects in all tuple fields", usize, ffi());
-    impl_getter_setter!(get, nkey, "number of keyframes", usize, ffi());
-    impl_getter_setter!(get, nmocap, "number of mocap bodies", usize, ffi());
-    impl_getter_setter!(get, nplugin, "number of plugin instances", usize, ffi());
-    impl_getter_setter!(get, npluginattr, "number of chars in all plugin config attributes", usize, ffi());
-    impl_getter_setter!(get, nuser_body, "number of mjtNums in body_user", usize, ffi());
-    impl_getter_setter!(get, nuser_jnt, "number of mjtNums in jnt_user", usize, ffi());
-    impl_getter_setter!(get, nuser_geom, "number of mjtNums in geom_user", usize, ffi());
-    impl_getter_setter!(get, nuser_site, "number of mjtNums in site_user", usize, ffi());
-    impl_getter_setter!(get, nuser_cam, "number of mjtNums in cam_user", usize, ffi());
-    impl_getter_setter!(get, nuser_tendon, "number of mjtNums in tendon_user", usize, ffi());
-    impl_getter_setter!(get, nuser_actuator, "number of mjtNums in actuator_user", usize, ffi());
-    impl_getter_setter!(get, nuser_sensor, "number of mjtNums in sensor_user", usize, ffi());
-    impl_getter_setter!(get, nnames, "number of chars in all names", usize, ffi());
-    impl_getter_setter!(get, npaths, "number of chars in all paths", usize, ffi());
-    impl_getter_setter!(get, nnames_map, "number of slots in the names hash map", usize, ffi());
-    impl_getter_setter!(get, nM, "number of non-zeros in sparse inertia matrix", usize, ffi());
-
-    impl_getter_setter!(get, nB, "number of non-zeros in sparse body-dof matrix", usize, ffi());
-    impl_getter_setter!(get, nC, "number of non-zeros in sparse reduced dof-dof matrix", usize, ffi());
-    impl_getter_setter!(get, nD, "number of non-zeros in sparse dof-dof matrix", usize, ffi());
-    impl_getter_setter!(get, nJmom, "number of non-zeros in sparse actuator_moment matrix", usize, ffi());
-    impl_getter_setter!(get, ntree, "number of kinematic trees under world body", usize, ffi());
-    impl_getter_setter!(get, ngravcomp, "number of bodies with nonzero gravcomp", usize, ffi());
-    impl_getter_setter!(get, nemax, "number of potential equality-constraint rows", usize, ffi());
-    impl_getter_setter!(get, njmax, "number of available rows in constraint Jacobian (legacy)", usize, ffi());
-    impl_getter_setter!(get, nconmax, "number of potential contacts in contact list (legacy)", usize, ffi());
-    impl_getter_setter!(get, nuserdata, "number of mjtNums reserved for the user", usize, ffi());
-    impl_getter_setter!(get, nsensordata, "number of mjtNums in sensor data vector", usize, ffi());
-    impl_getter_setter!(get, npluginstate, "number of mjtNums in plugin state vector", usize, ffi());
-
-    impl_getter_setter!(get, narena, "number of bytes in the mjData arena (inclusive of stack)", usize, ffi());
-    impl_getter_setter!(get, nbuffer, "number of bytes in buffer", usize, ffi());
-
-    impl_getter_setter!(get, opt, "physics options", &mjOption, ffi());
-    impl_getter_setter!(get, vis, "visualization options", &mjVisual, ffi());
-    impl_getter_setter!(get, stat, "model statistics", &mjStatistic, ffi());
-
-}
 
 
 impl Drop for MjModel {
