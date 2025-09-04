@@ -102,7 +102,7 @@ macro_rules! fixed_size_info_method {
         paste::paste! {
             #[doc = concat!(
                 "Obtains a [`", stringify!([<Mj $type_:camel Info>]), "`] struct containing information about the name, id, and ",
-                "indices required for obtaining a references to the correct locations in [`MjData`]. ",
+                "indices required for obtaining references to the correct locations in [`MjData`]. ",
                 "The actual view can be obtained via [`", stringify!([<Mj $type_:camel Info>]), "::view`]."
             )]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel Info>]> {
@@ -123,7 +123,7 @@ macro_rules! fixed_size_info_method {
 }
 
 
-/// Creates the xInfo struct along with corresponding views.
+/// Creates the xInfo struct along with corresponding xView and xViewMut structs.
 macro_rules! info_with_view {
     /* PointerView */
 
@@ -136,10 +136,10 @@ macro_rules! info_with_view {
                 pub name: String,
                 pub id: usize,
                 $(
-                    pub $attr: (usize, usize),
+                    $attr: (usize, usize),
                 )*
                 $(
-                    pub $opt_attr: (usize, usize),
+                    $opt_attr: (usize, usize),
                 )*
             }
 
@@ -203,10 +203,10 @@ macro_rules! info_with_view {
                 pub name: String,
                 pub id: usize,
                 $(
-                    pub $attr: (usize, usize),
+                    $attr: (usize, usize),
                 )*
                 $(
-                    pub $opt_attr: (usize, usize),
+                    $opt_attr: (usize, usize),
                 )*
             }
 
@@ -334,6 +334,7 @@ impl<'a> MjData<'a> {
     fixed_size_info_method! { camera, [xpos: 3, xmat: 9] }
     fixed_size_info_method! { geom, [xpos: 3, xmat: 9] }
     fixed_size_info_method! { site, [xpos: 3, xmat: 9] }
+    fixed_size_info_method! { light, [xpos: 3, xdir: 3] }
 
 
     /// Obtains a [`MjJointInfo`] struct containing information about the name, id, and
@@ -549,22 +550,25 @@ info_with_view!(
     ], []
 );
 
-
 /**************************************************************************************************/
 // Camera view
 /**************************************************************************************************/
-info_with_view!(camera, [xpos: f64, xmat: f64], []);
-
+info_with_view!(camera, cam_, [xpos: f64, xmat: f64], []);
 
 /**************************************************************************************************/
 // Site view
 /**************************************************************************************************/
-info_with_view!(site, [xpos: f64, xmat: f64], []);
+info_with_view!(site, site_, [xpos: f64, xmat: f64], []);
 
 /**************************************************************************************************/
 // Tendon view
 /**************************************************************************************************/
 info_with_view!(tendon, ten_, [wrapadr: i32, wrapnum: i32, J_rownnz: i32, J_rowadr: i32, J_colind: i32, length: f64, J: f64, velocity: f64], []);
+
+/**************************************************************************************************/
+// Site view
+/**************************************************************************************************/
+info_with_view!(light, light_, [xpos: f64, xdir: f64], []);
 
 /**************************************************************************************************/
 // Unit tests
