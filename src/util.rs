@@ -4,11 +4,13 @@ use std::{marker::PhantomData, ops::{Deref, DerefMut}};
 use crate::mujoco_c::mjData;
 
 
-/// Creates a [`PointerViewMut`] instance based on
+/// Creates a (start, length) tuple based on
 /// lookup variables that define the mapping in MuJoCo's mjModel struct.
+/// The tuple is used to create views to correct addresses in corresponding structs.
 /// Format: item id, map from item id to index inside the array of all items' values,
 ///         number of items, maximum number of elements inside the array of all items' values
 #[macro_export]
+#[doc(hidden)]
 macro_rules! mj_view_indices {
     ($id:expr, $addr_map:expr, $njnt:expr, $max_n:expr) => {
         {
@@ -28,6 +30,7 @@ macro_rules! mj_view_indices {
 
 /// Returns the correct address mapping based on the X in nX (nq, nv, nu, ...).
 #[macro_export]
+#[doc(hidden)]
 macro_rules! mj_model_nx_to_mapping {
     ($model_ffi:ident, nq) => {
         $model_ffi.jnt_qposadr
@@ -41,6 +44,7 @@ macro_rules! mj_model_nx_to_mapping {
 
 /// Returns the correct number of items based on the X in nX (nq, nv, nu, ...).
 #[macro_export]
+#[doc(hidden)]
 macro_rules! mj_model_nx_to_nitem {
     ($model_ffi:ident, nq) => {
         $model_ffi.njnt

@@ -251,7 +251,7 @@ macro_rules! view_creator {
 }
 
 
-/// A MjJointInfo which describes a joint and allows
+/// Describes a joint and allows
 /// creation of views to joint data in MjData.
 #[derive(Debug, PartialEq)]
 #[allow(non_snake_case)]
@@ -301,7 +301,7 @@ impl MjJointInfo {
     }
 }
 
-/// An mutable view to joint variables of MjData.
+/// A mutable view to joint variables of MjData.
 #[allow(non_snake_case)]
 pub struct MjJointViewMut<'d> {
     pub qpos: PointerViewMut<'d, f64>,
@@ -370,6 +370,8 @@ pub struct MjJointView<'d> {
 }
 
 
+/// Describes a geom and allows
+/// creation of views to geom data in MjData.
 #[derive(Debug, PartialEq)]
 pub struct MjGeomInfo {
     pub name: String,
@@ -390,6 +392,7 @@ impl MjGeomInfo {
     }
 }
 
+/// A mutable view to geom variables of MjData.
 pub struct MjGeomViewMut<'d> {
     pub xmat: PointerViewMut<'d, f64>,
     pub xpos: PointerViewMut<'d, f64>,
@@ -403,14 +406,15 @@ impl MjGeomViewMut<'_> {
     }
 }
 
-
+/// An immutable view to geom variables of MjData.
 pub struct MjGeomView<'d> {
     pub xmat: PointerView<'d, f64>,
     pub xpos: PointerView<'d, f64>,
 }
 
 
-/// A MjDataViewX which shows a slice of the actuator.
+/// Describes an actuator and allows
+/// creation of views to actuator data in MjData.
 #[derive(Debug, PartialEq)]
 pub struct MjActuatorInfo {
     pub name: String,
@@ -431,6 +435,7 @@ impl MjActuatorInfo {
     }
 }
 
+/// A mutable view to actuator variables of MjData.
 pub struct MjActuatorViewMut<'d> {
     pub ctrl: PointerViewMut<'d, f64>,
     pub act: Option<PointerViewMut<'d, f64>>,
@@ -447,7 +452,7 @@ impl MjActuatorViewMut<'_> {
     }
 }
 
-
+/// An immutable view to actuator variables of MjData.
 pub struct MjActuatorView<'d> {
     pub ctrl: PointerView<'d, f64>,
     pub act: Option<PointerView<'d, f64>>,

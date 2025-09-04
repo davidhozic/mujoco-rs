@@ -1,11 +1,30 @@
 # Changelog
 
+## 2.0.0 (MuJoCo 3.3.5)
+**Breaking changes:**
+- Fixed bug [#18](https://github.com/davidhozic/mujoco-rs/issues/18) where data races could occur
+  under incorrect usage.
+
+Other bug fixes:
+- Fixed bug [#17](https://github.com/davidhozic/mujoco-rs/issues/17) where the `MjGeomView` and `MjGeomViewMut`
+  pointed to the wrong address, which belonged to the body and not the geom.
+
+Other changes:
+- Added new modules: `wrappers::mj_primitive`.
+- Added more attributes to the view to `MjJointView[Mut]`.
+
 ## 1.0.1 (MuJoCo 3.3.5)
 Bug fixes:
 - Smaller changes inside Drop implementations to make sure there is no undefined behaviors.
+## Versioning
+This project uses [semantic versioning](https://semver.org/):
+- Breaking changes: major version bump (e. g. 1.0.0 -> 2.0.0),
+- Non-breaking feature changes: minor version bump (e. g. 1.0.0 -> 1.1.0),
+- Non-breaking bug fixes: patch version bump (e. g. 1.0.0 -> 1.0.1).
+
 
 ## 1.0.0 (MuJoCo 3.3.5)
-Breaking changes:
+**Breaking changes:**
 - Made all `ffi_mut()` methods require unsafe blocks.
 
 Viewer:
