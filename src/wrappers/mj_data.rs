@@ -9,6 +9,121 @@ use crate::util::{PointerViewMut, PointerView};
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 
 
+/**************************************************************************************************/
+// Macros
+/**************************************************************************************************/
+
+/// Creates a $view struct, mapping $field and $opt_field to the same location as in $data.
+macro_rules! view_creator {
+    /* Pointer view */
+    ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
+        unsafe {
+            $view {
+                $(
+                    $field: $ptr_view($data.$field.add($self.$field.0), $self.$field.1),
+                )*
+                $(
+                    $opt_field: if $self.$opt_field.1 > 0 {
+                        Some($ptr_view($data.$opt_field.add($self.$opt_field.0), $self.$opt_field.1))
+                    } else {None},
+                )*
+            }
+        }
+    };
+
+    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
+        paste::paste! {
+            unsafe {
+                $view {
+                    $(
+                        $field: $ptr_view($data.[<$prefix $field>].add($self.$field.0), $self.$field.1),
+                    )*
+                    $(
+                        $opt_field: if $self.$opt_field.1 > 0 {
+                            Some($ptr_view($data.[<$prefix $opt_field>].add($self.$opt_field.0), $self.$opt_field.1))
+                        } else {None},
+                    )*
+                }
+            }
+        }
+    };
+
+    /* Direct reference */
+    ($self:expr, $view:ident, $data:expr, [$($field:ident: &mut [$type:ty; $len:literal]),*]) => {
+        unsafe {
+            $view {
+                $(
+                    $field: ($data.$field.add($self.id * $len) as *mut [$type; $len]).as_mut().unwrap(),
+                )*
+            }
+        }
+    };
+
+    ($self:expr, $view:ident, $data:expr, [$($field:ident: &[$type:ty; $len:literal]),*]) => {
+        unsafe {
+            $view {
+                $(
+                    $field: ($data.$field.add($self.id * $len) as *const [$type; $len]).as_ref().unwrap(),
+                )*
+            }
+        }
+    };
+
+    /* Direct reference with prefix */
+    ($self:expr, $view:ident, $data:expr, [$($prefix:ident $field:ident: &mut [$type:ty; $len:literal]),*]) => {
+        paste::paste! {
+            unsafe {
+                $view {
+                    $(
+                        $field: ($data.[<$prefix $field>].add($self.id * $len) as *mut [$type; $len]).as_mut().unwrap(),
+                    )*
+                }
+            }
+        }
+    };
+
+    ($self:expr, $view:ident, $data:expr, [$($prefix:ident $field:ident: &[$type:ty; $len:literal]),*]) => {
+        paste::paste! {
+            unsafe {
+                $view {
+                    $(
+                        $field: ($data.[<$prefix $field>].add($self.id * $len) as *const [$type; $len]).as_ref().unwrap(),
+                    )*
+                }
+            }
+        }
+    };
+}
+
+
+/// Macro for reducing duplicated code when creating info structs to
+/// items that have fixed size arrays in [`MjData`].
+macro_rules! fixed_size_info_method {
+    ($type_:ident) => {
+        paste::paste! {
+            #[doc = concat!(
+                "Obtains a [`", stringify!([<Mj $type_:camel Info>]), "`] struct containing information about the name, id, and ",
+                "indices required for obtaining a references to the correct locations in [`MjData`]. ",
+                "The actual view can be obtained via [`", stringify!([<Mj $type_:camel Info>]), "::view`]."
+            )]
+            pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel Info>]> {
+                let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::[<mjOBJ_ $type_:upper>] as i32, CString::new(name).unwrap().as_ptr())};
+                if id == -1 {  // not found
+                    return None;
+                }
+
+                let id = id as usize;
+                Some([<Mj $type_:camel Info>] {name: name.to_string(), id})
+            }
+        }
+    }
+}
+
+
+/**************************************************************************************************/
+// MjData
+/**************************************************************************************************/
+
 /// Wrapper around the ``mjData`` struct.
 /// Provides lifetime guarantees as well as automatic cleanup.
 pub struct MjData<'a> {
@@ -71,15 +186,9 @@ impl<'a> MjData<'a> {
         Some(MjActuatorInfo { name: name.to_string(), id: id as usize, ctrl, act})
     }
 
-    pub fn body(&self, name:&str) -> Option<MjBodyInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_BODY as i32, CString::new(name).unwrap().as_ptr())};
-        if id == -1 {  // not found
-            return None;
-        }
-
-        let id = id as usize;
-        Some(MjBodyInfo {name: name.to_string(), id})
-    }
+    fixed_size_info_method! { body }
+    fixed_size_info_method! { camera }
+    fixed_size_info_method! { geom }
 
 
     /// Obtains a [`MjJointInfo`] struct containing information about the name, id, and
@@ -120,22 +229,6 @@ impl<'a> MjData<'a> {
                 qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
             })
         }
-    }
-
-    /// Obtains a [`MjGeomInfo`] struct containing information about the name, id, and
-    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
-    /// The actual view can be obtained via [`MjGeomInfo::view`].
-    pub fn geom(&self, name: &str) -> Option<MjGeomInfo> {
-        let cname = CString::new(name).unwrap();
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_GEOM as i32, cname.as_ptr())};
-        if id == -1 {  // not found
-            return None;
-        }
-
-        let id = id as usize;
-        let xpos = (id * 3, 3);
-        let xmat = (id * 9, 9);
-        Some(MjGeomInfo { name: name.to_string(), id: id as usize, xmat, xpos })
     }
 
     /// Steps the MuJoCo simulation.
@@ -223,64 +316,6 @@ impl Drop for MjData<'_> {
             mj_deleteData(self.data);
         }
     }
-}
-
-
-/// Creates a $view struct, mapping $field and $opt_field to the same location as in $data.
-macro_rules! view_creator {
-    /* Pointer view */
-    ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
-        unsafe {
-            $view {
-                $(
-                    $field: $ptr_view($data.$field.add($self.$field.0), $self.$field.1),
-                )*
-                $(
-                    $opt_field: if $self.$opt_field.1 > 0 {
-                        Some($ptr_view($data.$opt_field.add($self.$opt_field.0), $self.$opt_field.1))
-                    } else {None},
-                )*
-            }
-        }
-    };
-
-    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
-        paste::paste! {
-            unsafe {
-                $view {
-                    $(
-                        $field: $ptr_view($data.[<$prefix $field>].add($self.$field.0), $self.$field.1),
-                    )*
-                    $(
-                        $opt_field: if $self.$opt_field.1 > 0 {
-                            Some($ptr_view($data.[<$prefix $opt_field>].add($self.$opt_field.0), $self.$opt_field.1))
-                        } else {None},
-                    )*
-                }
-            }
-        }
-    };
-
-    /* Direct reference */
-    ($self:expr, $view:ident, $data:expr, [$($field:ident: &mut [$type:ty; $len:literal]),*]) => {
-        unsafe {
-            $view {
-                $(
-                    $field: ($data.$field.add($self.id * $len) as *mut [$type; $len]).as_mut().unwrap(),
-                )*
-            }
-        }
-    };
-
-    ($self:expr, $view:ident, $data:expr, [$($field:ident: &[$type:ty; $len:literal]),*]) => {
-        unsafe {
-            $view {
-                $(
-                    $field: ($data.$field.add($self.id * $len) as *const [$type; $len]).as_ref().unwrap(),
-                )*
-            }
-        }
-    };
 }
 
 
@@ -417,26 +452,36 @@ pub struct MjJointView<'d> {
 pub struct MjGeomInfo {
     pub name: String,
     pub id: usize,
-    xmat: (usize, usize),
-    xpos: (usize, usize)
 }
 
 impl MjGeomInfo {
     /// Returns a mutable view to the correct fields in [`MjData`].
     pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjGeomViewMut<'d> {
-        view_creator!(self, MjGeomViewMut, data.ffi(), geom_, [xmat, xpos], [], PointerViewMut::new)
+        view_creator!(
+            self, MjGeomViewMut, data.ffi(),
+            [
+                xpos: &mut [f64; 3],
+                xmat: &mut [f64; 9]
+            ]
+        )
     }
 
     /// Returns a view to the correct fields in [`MjData`].
     pub fn view<'d>(&self, data: &'d MjData) -> MjGeomView<'d> {
-        view_creator!(self, MjGeomView, data.ffi(), geom_, [xmat, xpos], [], PointerView::new)
+        view_creator!(
+            self, MjGeomView, data.ffi(),
+            [
+                xpos: &mut [f64; 3],
+                xmat: &mut [f64; 9]
+            ]
+        )
     }
 }
 
 /// A mutable view to geom variables of MjData.
 pub struct MjGeomViewMut<'d> {
-    pub xmat: PointerViewMut<'d, f64>,
-    pub xpos: PointerViewMut<'d, f64>,
+    pub xpos: &'d mut [f64; 3],
+    pub xmat: &'d mut [f64; 9],
 }
 
 impl MjGeomViewMut<'_> {
@@ -449,8 +494,8 @@ impl MjGeomViewMut<'_> {
 
 /// An immutable view to geom variables of MjData.
 pub struct MjGeomView<'d> {
-    pub xmat: PointerView<'d, f64>,
-    pub xpos: PointerView<'d, f64>,
+    pub xpos: &'d [f64; 3],
+    pub xmat: &'d [f64; 9],
 }
 
 
@@ -510,7 +555,7 @@ pub struct MjActuatorView<'d> {
 
 /// Describes a body and allows
 /// creation of views to body data in MjData.
-// #[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct MjBodyInfo {
     pub name: String,
     pub id: usize,
@@ -552,7 +597,7 @@ impl MjBodyInfo {
     }
 }
 
-/// A mutable view to actuator variables of MjData.
+/// A mutable view to body variables of MjData.
 pub struct MjBodyViewMut<'d> {
     pub xfrc_applied: &'d mut [f64; 6],
 }
@@ -565,7 +610,7 @@ impl MjBodyViewMut<'_> {
     }
 }
 
-/// An immutable view to actuator variables of MjData.
+/// An immutable view to body variables of MjData.
 pub struct MjBodyView<'d> {
     pub xfrc_applied: &'d [f64; 6],
     pub xpos: &'d [f64; 3],
@@ -584,6 +629,61 @@ pub struct MjBodyView<'d> {
     pub cfrc_ext: &'d [f64; 6]
 }
 
+
+
+/**************************************************************************************************/
+// Camera view
+/**************************************************************************************************/
+
+/// Describes a camera and allows
+/// creation of views to camera data in MjData.
+#[derive(Debug)]
+pub struct MjCameraInfo {
+    pub name: String,
+    pub id: usize,
+}
+
+impl MjCameraInfo {
+    /// Returns a mutable view to the correct fields in [`MjData`].
+    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjCameraViewMut<'d> {
+        view_creator!(
+            self, MjCameraViewMut, data.ffi(),
+            [
+                /* The variables xpos are prefixed with cam_ in MjData (cam_xpos, cam_xmat) */
+                cam_ xpos: &mut [f64; 3],
+                cam_ xmat: &mut [f64; 9]
+            ]
+        )
+    }
+
+    /// Returns a view to the correct fields in [`MjData`].
+    pub fn view<'d>(&self, data: &'d MjData) -> MjCameraView<'d> {
+        view_creator!(
+            self, MjCameraView, data.ffi(),
+            [
+                /* The variables xpos are prefixed with cam_ in MjData (cam_xpos, cam_xmat) */
+                cam_ xpos: &[f64; 3],
+                cam_ xmat: &[f64; 9]
+            ]
+        )
+    }
+}
+
+/// A mutable view to actuator variables of MjData.
+pub struct MjCameraViewMut<'d> {
+    pub xpos: &'d mut [f64; 3],
+    pub xmat: &'d mut [f64; 9],
+}
+
+/// An immutable view to actuator variables of MjData.
+pub struct MjCameraView<'d> {
+    pub xpos: &'d [f64; 3],
+    pub xmat: &'d [f64; 9],
+}
+
+/**************************************************************************************************/
+// Unit tests
+/**************************************************************************************************/
 
 #[cfg(test)]
 mod test {
@@ -651,5 +751,12 @@ mod test {
 
         data.step2();
         data.step1();
+    }
+
+    #[test]
+    fn test_camera_view() {
+        let body = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = body.make_data();
+        // let body_info = data.body("ball").unwrap();
     }
 }
