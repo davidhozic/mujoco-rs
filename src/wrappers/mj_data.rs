@@ -236,21 +236,19 @@ macro_rules! view_creator {
         }
     };
 
-    /* With a prefix */
-    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
-        paste::paste! {
-            unsafe {
-                $view {
-                    $(
-                        $field: $ptr_view($data.[<$prefix $field>].add($self.$field.0), $self.$field.1),
-                    )*
-                    $(
-                        $opt_field: if $self.$opt_field.1 > 0 {
-                            Some($ptr_view($data.[<$prefix $opt_field>].add($self.$opt_field.0), $self.$opt_field.1))
-                        } else {None},
-                    )*
-                    phantom: PhantomData,
-                }
+    // Non-mutable
+    ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], false) => {
+        unsafe {
+            $view {
+                $(
+                    $field: PointerView::new($data.$field.add($self.$field.0), $self.$field.1),
+                )*
+                $(
+                    $opt_field: if $self.$opt_field.1 > 0 {
+                        Some(PointerView::new($data.$opt_field.add($self.$opt_field.0), $self.$opt_field.1))
+                    } else {None},
+                )*
+                phantom: PhantomData,
             }
         }
     };
@@ -283,7 +281,7 @@ pub struct MjJointInfo{
 
 impl MjJointInfo {
     /// Returns a mutable view to the correct fields in [`MjData`].
-    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjJointViewMut<'d, '_> {
+    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjJointViewMut<'d> {
         view_creator!(
             self, MjJointViewMut, data.ffi(),
             [
@@ -295,7 +293,7 @@ impl MjJointInfo {
     }
 
     /// Returns a view to the correct fields in [`MjData`].
-    pub fn view<'d>(&self, data: &'d MjData) -> MjJointView<'d, '_> {
+    pub fn view<'d>(&self, data: &'d MjData) -> MjJointView<'d> {
         view_creator!(
             self, MjJointView, data.ffi(),
             [
@@ -328,7 +326,7 @@ pub struct MjJointViewMut<'d, 'm: 'd> {
     phantom: PhantomData<&'d MjData<'m>>
 }
 
-impl MjJointViewMut<'_, '_> {
+impl MjJointViewMut<'_> {
     /// Deprecated. Use [`MjJointViewMut::zero`] instead.
     #[deprecated]
     pub fn reset(&mut self) {
@@ -388,20 +386,19 @@ pub struct MjGeomInfo {
 
 impl MjGeomInfo {
     /// Returns a mutable view to the correct fields in [`MjData`].
-    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjGeomViewMut<'d, '_> {
+    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjGeomViewMut<'d> {
         view_creator!(self, MjGeomViewMut, data.ffi(), geom_, [xmat, xpos], [], PointerViewMut::new)
     }
 
     /// Returns a view to the correct fields in [`MjData`].
-    pub fn view<'d>(&self, data: &'d MjData) -> MjGeomView<'d, '_> {
+    pub fn view<'d>(&self, data: &'d MjData) -> MjGeomView<'d> {
         view_creator!(self, MjGeomView, data.ffi(), geom_, [xmat, xpos], [], PointerView::new)
     }
 }
 
-pub struct MjGeomViewMut<'d, 'm: 'd> {
-    pub xmat: PointerViewMut<f64>,
-    pub xpos: PointerViewMut<f64>,
-    phantom: PhantomData<&'d MjData<'m>>
+pub struct MjGeomViewMut<'d> {
+    pub xmat: PointerViewMut<'d, f64>,
+    pub xpos: PointerViewMut<'d, f64>,
 }
 
 impl MjGeomViewMut<'_, '_> {
@@ -412,10 +409,17 @@ impl MjGeomViewMut<'_, '_> {
     }
 }
 
-pub struct MjGeomView<'d, 'm: 'd> {
-    pub xmat: PointerView<f64>,
-    pub xpos: PointerView<f64>,
-    phantom: PhantomData<&'d MjData<'m>>
+impl MjGeomViewMut<'_, '_> {
+    /// Resets the internal variables to 0.0.
+    pub fn zero(&mut self) {
+        self.xmat.fill(0.0);
+        self.xpos.fill(0.0);
+    }
+}
+
+pub struct MjGeomView<'d> {
+    pub xmat: PointerView<'d, f64>,
+    pub xpos: PointerView<'d, f64>,
 }
 
 
@@ -430,20 +434,19 @@ pub struct MjActuatorInfo {
 
 impl MjActuatorInfo {
     /// Returns a mutable view to the correct fields in [`MjData`].
-    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjActuatorViewMut<'d, '_> {
+    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjActuatorViewMut<'d> {
         view_creator!(self, MjActuatorViewMut, data.ffi(), [ctrl], [act], PointerViewMut::new)
     }
 
     /// Returns a view to the correct fields in [`MjData`].
-    pub fn view<'d>(&self, data: &'d MjData) -> MjActuatorView<'d, '_> {
+    pub fn view<'d>(&self, data: &'d MjData) -> MjActuatorView<'d> {
         view_creator!(self, MjActuatorView, data.ffi(), [ctrl], [act], PointerView::new)
     }
 }
 
-pub struct MjActuatorViewMut<'d, 'm: 'd> {
-    pub ctrl: PointerViewMut<f64>,
-    pub act: Option<PointerViewMut<f64>>,
-    phantom: PhantomData<&'d MjData<'m>>
+pub struct MjActuatorViewMut<'d> {
+    pub ctrl: PointerViewMut<'d, f64>,
+    pub act: Option<PointerViewMut<'d, f64>>,
 }
 
 
@@ -457,8 +460,18 @@ impl MjActuatorViewMut<'_, '_> {
     }
 }
 
-pub struct MjActuatorView<'d, 'm: 'd> {
-    pub ctrl: PointerView<f64>,
-    pub act: Option<PointerView<f64>>,
-    phantom: PhantomData<&'d MjData<'m>>
+
+impl MjActuatorViewMut<'_, '_> {
+    /// Resets the internal variables to 0.0.
+    pub fn zero(&mut self) {
+        self.ctrl.fill(0.0);
+        if let Some(a) = &mut self.act {
+            a.fill(0.0);
+        }
+    }
+}
+
+pub struct MjActuatorView<'d> {
+    pub ctrl: PointerView<'d, f64>,
+    pub act: Option<PointerView<'d, f64>>,
 }

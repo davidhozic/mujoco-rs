@@ -33,14 +33,16 @@ fn main() {
         .expect("could not launch the viewer");
 
     /* Create the joint info */
-    let ball_info = data.joint("ball_joint").unwrap();
+    let mut ball_info = data.joint("ball_joint").unwrap();
     while viewer.running() {
         /* Step the simulation and sync the viewer */
         viewer.sync(&mut data);
         data.step();
 
         /* Obtain the view and access first three variables of `qpos` (x, y, z) */
-        let xyz = &ball_info.view(&data).qpos[..3];
+        let xyz = &mut ball_info.view_mut(&mut  data).qpos[..3];
+        ball_info.view_mut(&mut data).zero();
+        
         println!("The ball's position is: {xyz:.2?}");
 
         std::thread::sleep(Duration::from_secs_f64(0.002));

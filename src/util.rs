@@ -1,5 +1,7 @@
 //! Utility related data
-use std::ops::{Deref, DerefMut};
+use std::{marker::PhantomData, ops::{Deref, DerefMut}};
+
+use crate::mujoco_c::mjData;
 
 
 /// Creates a [`PointerViewMut`] instance based on
@@ -57,14 +59,15 @@ macro_rules! mj_model_nx_to_nitem {
 /// time from the saved pointers.
 /// This should ONLY be used within a wrapper who fully encapsulates the underlying data.
 #[derive(Debug)]
-pub struct PointerViewMut<T> {
+pub struct PointerViewMut<'d, T> {
     ptr: *mut T,
     len: usize,
+    phantom: PhantomData<&'d mut ()>
 }
 
-impl<T> PointerViewMut<T> {
+impl<'d, T> PointerViewMut<'d, T> {
     pub(crate) fn new(ptr: *mut T, len: usize) -> Self {
-        Self {ptr, len}
+        Self {ptr, len, phantom: PhantomData}
     }
 
     #[allow(unused)]
@@ -74,20 +77,20 @@ impl<T> PointerViewMut<T> {
 }
 
 /// Compares if the two views point to the same data.
-impl<T> PartialEq for PointerViewMut<T> {
+impl<T> PartialEq for PointerViewMut<'_, T> {
     fn eq(&self, other: &Self) -> bool {
         self.ptr == other.ptr  // if the pointer differs, this isn't a view to the same data
     }
 }
 
-impl<T> Deref for PointerViewMut<T> {
+impl<T> Deref for PointerViewMut<'_, T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
-impl<T> DerefMut for PointerViewMut<T> {
+impl<T> DerefMut for PointerViewMut<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
@@ -101,14 +104,15 @@ impl<T> DerefMut for PointerViewMut<T> {
 /// time from the saved pointers.
 /// This should ONLY be used within a wrapper who fully encapsulates the underlying data.
 #[derive(Debug)]
-pub struct PointerView<T> {
+pub struct PointerView<'d, T> {
     ptr: *const T,
     len: usize,
+    phantom: PhantomData<&'d ()>
 }
 
-impl<T> PointerView<T> {
+impl<'d, T> PointerView<'d, T> {
     pub(crate) fn new(ptr: *const T, len: usize) -> Self {
-        Self {ptr, len}
+        Self {ptr, len, phantom: PhantomData}
     }
     
     #[allow(unused)]
@@ -118,13 +122,13 @@ impl<T> PointerView<T> {
 }
 
 /// Compares if the two views point to the same data.
-impl<T> PartialEq for PointerView<T> {
+impl<T> PartialEq for PointerView<'_, T> {
     fn eq(&self, other: &Self) -> bool {
         self.ptr == other.ptr  // if the pointer differs, this isn't a view to the same data
     }
 }
 
-impl<T> Deref for PointerView<T> {
+impl<T> Deref for PointerView<'_, T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
