@@ -1,8 +1,6 @@
 //! Utility related data
 use std::{marker::PhantomData, ops::{Deref, DerefMut}};
 
-use crate::mujoco_c::mjData;
-
 
 /// Creates a (start, length) tuple based on
 /// lookup variables that define the mapping in MuJoCo's mjModel struct.
@@ -39,6 +37,10 @@ macro_rules! mj_model_nx_to_mapping {
     ($model_ffi:ident, nv) => {
         $model_ffi.jnt_dofadr
     };
+
+    ($model_ffi:ident, nsensordata) => {
+        $model_ffi.sensor_adr
+    }
 }
 
 
@@ -52,6 +54,10 @@ macro_rules! mj_model_nx_to_nitem {
 
     ($model_ffi:ident, nv) => {
         $model_ffi.njnt
+    };
+
+    ($model_ffi:ident, nsensordata) => {
+        $model_ffi.nsensor
     };
 }
 

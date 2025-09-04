@@ -1,12 +1,10 @@
-use std::marker::PhantomData;
-use std::ffi::CString;
-
 use super::mj_auxiliary::MjContact;
 use super::mj_model::MjModel;
 use crate::mujoco_c::*;
+use std::ffi::CString;
 
-use crate::util::{PointerViewMut, PointerView};
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
+use crate::util::{PointerViewMut, PointerView};
 
 
 /**************************************************************************************************/
@@ -70,7 +68,7 @@ macro_rules! view_creator {
     };
 
     /* Direct reference with prefix */
-    ($self:expr, $view:ident, $data:expr, [$($prefix:ident $field:ident: &mut [$type:ty; $len:literal]),*]) => {
+    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident: &mut [$type:ty; $len:literal]),*]) => {
         paste::paste! {
             unsafe {
                 $view {
@@ -82,7 +80,7 @@ macro_rules! view_creator {
         }
     };
 
-    ($self:expr, $view:ident, $data:expr, [$($prefix:ident $field:ident: &[$type:ty; $len:literal]),*]) => {
+    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident: &[$type:ty; $len:literal]),*]) => {
         paste::paste! {
             unsafe {
                 $view {
@@ -98,6 +96,7 @@ macro_rules! view_creator {
 
 /// Macro for reducing duplicated code when creating info structs to
 /// items that have fixed size arrays in [`MjData`].
+/// This creates a method `X(self, name; &str) -> XInfo`.
 macro_rules! fixed_size_info_method {
     ($type_:ident) => {
         paste::paste! {
@@ -117,6 +116,233 @@ macro_rules! fixed_size_info_method {
             }
         }
     }
+}
+
+
+/// Creates the xInfo struct along with corresponding views.
+macro_rules! info_with_view {
+    /* PointerView */
+
+    /* name of the view/info, attribute prefix in MjData, [attributes always present], [attributes that can be None] */
+    ($name:ident, $prefix:ident, [$($attr:ident),*], [$($opt_attr:ident),*]) => {
+        paste::paste! {
+            #[doc = "Stores information required to create views to MjData arrays corresponding to a " $name "."]
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel Info>] {
+                pub name: String,
+                pub id: usize,
+                $(
+                    pub $attr: (usize, usize),
+                )*
+                $(
+                    pub $opt_attr: (usize, usize),
+                )*
+            }
+
+            impl [<Mj $name:camel Info>] {
+                /// Returns a mutable view to the correct fields in [`MjData`].
+                pub fn view_mut<'d>(&self, data: &'d mut MjData) -> [<Mj $name:camel ViewMut>]<'d> {
+                    view_creator!(self, [<Mj $name:camel ViewMut>], data.ffi(), $prefix, [$($attr),*], [$($opt_attr),*], PointerViewMut::new)
+                }
+
+                /// Returns a view to the correct fields in [`MjData`].
+                pub fn view<'d>(&self, data: &'d MjData) -> [<Mj $name:camel View>]<'d> {
+                    view_creator!(self, [<Mj $name:camel View>], data.ffi(), $prefix, [$($attr),*], [$($opt_attr),*], PointerView::new)
+                }
+            }
+
+
+            /// A mutable view to joint variables of MjData.
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel ViewMut>]<'d> {
+                $(
+                    pub $attr: PointerViewMut<'d, f64>,
+                )*
+                $(
+                    pub $opt_attr: Option<PointerViewMut<'d, f64>>,
+                )*
+            }
+
+            impl [<Mj $name:camel ViewMut>]<'_> {
+                /// Resets the internal variables to 0.0.
+                pub fn zero(&mut self) {
+                    $(
+                        self.$attr.fill(0.0);
+                    )*
+                    $(
+                        if let Some(x) = &mut self.$opt_attr {
+                            x.fill(0.0);
+                        }
+                    )*
+                }
+            }
+
+
+            /// An immutable view to joint variables of MjData.
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel View>]<'d> {
+                $(
+                    pub $attr: PointerView<'d, f64>,
+                )*
+                $(
+                    pub $opt_attr: Option<PointerView<'d, f64>>,
+                )*
+            }
+        }
+    };
+
+    /* name of the view/info, [attributes always present], [attributes that can be None] */
+    ($name:ident, [$($attr:ident),*], [$($opt_attr:ident),*]) => {
+        paste::paste! {
+            #[doc = "Stores information required to create views to MjData arrays corresponding to a " $name "."]
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel Info>] {
+                pub name: String,
+                pub id: usize,
+                $(
+                    pub $attr: (usize, usize),
+                )*
+                $(
+                    pub $opt_attr: (usize, usize),
+                )*
+            }
+
+            impl [<Mj $name:camel Info>] {
+                /// Returns a mutable view to the correct fields in [`MjData`].
+                pub fn view_mut<'d>(&self, data: &'d mut MjData) -> [<Mj $name:camel ViewMut>]<'d> {
+                    view_creator!(self, [<Mj $name:camel ViewMut>], data.ffi(), [$($attr),*], [$($opt_attr),*], PointerViewMut::new)
+                }
+
+                /// Returns a view to the correct fields in [`MjData`].
+                pub fn view<'d>(&self, data: &'d MjData) -> [<Mj $name:camel View>]<'d> {
+                    view_creator!(self, [<Mj $name:camel View>], data.ffi(), [$($attr),*], [$($opt_attr),*], PointerView::new)
+                }
+            }
+
+
+            /// A mutable view to joint variables of MjData.
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel ViewMut>]<'d> {
+                $(
+                    pub $attr: PointerViewMut<'d, f64>,
+                )*
+                $(
+                    pub $opt_attr: Option<PointerViewMut<'d, f64>>,
+                )*
+            }
+
+            impl [<Mj $name:camel ViewMut>]<'_> {
+                /// Resets the internal variables to 0.0.
+                pub fn zero(&mut self) {
+                    $(
+                        self.$attr.fill(0.0);
+                    )*
+                    $(
+                        if let Some(x) = &mut self.$opt_attr {
+                            x.fill(0.0);
+                        }
+                    )*
+                }
+            }
+
+
+            /// An immutable view to joint variables of MjData.
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel View>]<'d> {
+                $(
+                    pub $attr: PointerView<'d, f64>,
+                )*
+                $(
+                    pub $opt_attr: Option<PointerView<'d, f64>>,
+                )*
+            }
+        }
+    };
+
+    /* Direct reference */
+    /* name of the view/info, attribute prefix in MjData, [attribute_name: &[type; len]] */
+    ($name:ident, $prefix: ident, [$($field:ident: &[$type:ty; $len:literal]),*]) => {
+        paste::paste! {
+            #[doc = "Stores information required to create views to MjData arrays corresponding to a " $name "."]
+            pub struct [<Mj $name:camel Info>] {
+                pub name: String,
+                pub id: usize,
+            }
+
+            impl [<Mj $name:camel Info>] {
+                /// Returns a mutable view to the correct fields in [`MjData`].
+                pub fn view_mut<'d>(&self, data: &'d mut MjData) -> [<Mj $name:camel ViewMut>]<'d> {
+                    view_creator!(self, [<Mj $name:camel ViewMut>], data.ffi(), $prefix, [$($field: &mut [$type; $len]),*])
+                }
+
+                /// Returns a view to the correct fields in [`MjData`].
+                pub fn view<'d>(&self, data: &'d MjData) -> [<Mj $name:camel View>]<'d> {
+                    view_creator!(self, [<Mj $name:camel View>], data.ffi(), $prefix, [$($field: &[$type; $len]),*])
+                }
+            }
+
+            /// A mutable view to joint variables of MjData.
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel ViewMut>]<'d> {
+                $(pub $field: &'d mut [$type; $len],)*
+            }
+
+            impl [<Mj $name:camel ViewMut>]<'_>  {
+                /// Resets the internal variables to 0.0.
+                pub fn zero(&mut self) {
+                    $(self.$field.fill(0.0);)*
+                }
+            }
+
+            /// An immutable view to geom variables of MjData.
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel View>]<'d>  {
+                $(pub $field: &'d [$type; $len],)*
+            }
+        }
+    };
+    /* name of the view/info, [attribute_name: &[type; len]] */
+    ($name:ident, [$($field:ident: &[$type:ty; $len:literal]),*]) => {
+        paste::paste! {
+            #[doc = "Stores information required to create views to MjData arrays corresponding to a " $name "."]
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel Info>] {
+                pub name: String,
+                pub id: usize,
+            }
+
+            impl [<Mj $name:camel Info>] {
+                /// Returns a mutable view to the correct fields in [`MjData`].
+                pub fn view_mut<'d>(&self, data: &'d mut MjData) -> [<Mj $name:camel ViewMut>]<'d> {
+                    view_creator!(self, [<Mj $name:camel ViewMut>], data.ffi(),[$($field: &mut [$type; $len]),*])
+                }
+
+                /// Returns a view to the correct fields in [`MjData`].
+                pub fn view<'d>(&self, data: &'d MjData) -> [<Mj $name:camel View>]<'d> {
+                    view_creator!(self, [<Mj $name:camel View>], data.ffi(),[$($field: &[$type; $len]),*])
+                }
+            }
+
+            /// A mutable view to joint variables of MjData.
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel ViewMut>]<'d>  {
+                $(pub $field: &'d mut [$type; $len],)*
+            }
+
+            impl [<Mj $name:camel ViewMut>]<'_>  {
+                /// Resets the internal variables to 0.0.
+                pub fn zero(&mut self) {
+                    $(self.$field.fill(0.0);)*
+                }
+            }
+
+            /// An immutable view to geom variables of MjData.
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel View>]<'d>  {
+                $(pub $field: &'d [$type; $len],)*
+            }
+        }
+    };
 }
 
 
@@ -189,6 +415,7 @@ impl<'a> MjData<'a> {
     fixed_size_info_method! { body }
     fixed_size_info_method! { camera }
     fixed_size_info_method! { geom }
+    fixed_size_info_method! { site }
 
 
     /// Obtains a [`MjJointInfo`] struct containing information about the name, id, and
@@ -228,6 +455,20 @@ impl<'a> MjData<'a> {
                 qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
                 qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
             })
+        }
+    }
+
+    pub fn sensor(&self, name: &str) -> Option<MjSensorInfo> {
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_SENSOR as i32, CString::new(name).unwrap().as_ptr())};
+        if id == -1 {  // not found
+            return None;
+        }
+        let model_ffi = self.model.ffi();
+        let id = id as usize;
+
+        unsafe {
+            let data = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nsensordata), mj_model_nx_to_nitem!(model_ffi, nsensordata), model_ffi.nsensordata);
+            Some(MjSensorInfo { id, name: name.to_string(), data })
         }
     }
 
@@ -322,364 +563,74 @@ impl Drop for MjData<'_> {
 /**************************************************************************************************/
 // Joint view
 /**************************************************************************************************/
+info_with_view!(
+    joint,
+    [
+        qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
+        qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
+    ],
+    []
+);
 
-/// Describes a joint and allows
-/// creation of views to joint data in MjData.
-#[derive(Debug, PartialEq)]
-#[allow(non_snake_case)]
-pub struct MjJointInfo{
-    pub name: String,
-    pub id: usize,
-    qpos: (usize, usize),
-    qvel: (usize, usize),
-    qacc_warmstart: (usize, usize),
-    qfrc_applied: (usize, usize),
-    qacc: (usize, usize),
-    xanchor: (usize, usize),
-    xaxis: (usize, usize),
-    qLDiagInv: (usize, usize),
-    qfrc_bias: (usize, usize),
-    qfrc_passive: (usize, usize),
-    qfrc_actuator: (usize, usize),
-    qfrc_smooth: (usize, usize),
-    qacc_smooth: (usize, usize),
-    qfrc_constraint: (usize, usize),
-    qfrc_inverse: (usize, usize),
-}
-
-impl MjJointInfo {
-    /// Returns a mutable view to the correct fields in [`MjData`].
-    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjJointViewMut<'d> {
-        view_creator!(
-            self, MjJointViewMut, data.ffi(),
-            [
-                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
-                qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
-            ],
-            [], PointerViewMut::new
-        )
-    }
-
-    /// Returns a view to the correct fields in [`MjData`].
-    pub fn view<'d>(&self, data: &'d MjData) -> MjJointView<'d> {
-        view_creator!(
-            self, MjJointView, data.ffi(),
-            [
-                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
-                qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
-            ],
-            [], PointerView::new
-        )
-    }
-}
-
-/// A mutable view to joint variables of MjData.
-#[allow(non_snake_case)]
-pub struct MjJointViewMut<'d> {
-    pub qpos: PointerViewMut<'d, f64>,
-    pub qvel: PointerViewMut<'d, f64>,
-    pub qacc_warmstart: PointerViewMut<'d, f64>,
-    pub qfrc_applied: PointerViewMut<'d, f64>,
-    pub qacc: PointerViewMut<'d, f64>,
-    pub xanchor: PointerViewMut<'d, f64>,
-    pub xaxis: PointerViewMut<'d, f64>,
-    pub qLDiagInv: PointerViewMut<'d, f64>,
-    pub qfrc_bias: PointerViewMut<'d, f64>,
-    pub qfrc_passive: PointerViewMut<'d, f64>,
-    pub qfrc_actuator: PointerViewMut<'d, f64>,
-    pub qfrc_smooth: PointerViewMut<'d, f64>,
-    pub qacc_smooth: PointerViewMut<'d, f64>,
-    pub qfrc_constraint: PointerViewMut<'d, f64>,
-    pub qfrc_inverse: PointerViewMut<'d, f64>,
-}
-
+/* Backward compatibility */
 impl MjJointViewMut<'_> {
     /// Deprecated. Use [`MjJointViewMut::zero`] instead.
     #[deprecated]
     pub fn reset(&mut self) {
         self.zero();
     }
-
-    /// Resets the internal variables to 0.0.
-    pub fn zero(&mut self) {
-        self.qpos.fill(0.0);
-        self.qvel.fill(0.0);
-        self.qacc_warmstart.fill(0.0);
-        self.qfrc_applied.fill(0.0);
-        self.qacc.fill(0.0);
-        self.xanchor.fill(0.0);
-        self.xaxis.fill(0.0);
-        self.qLDiagInv.fill(0.0);
-        self.qfrc_bias.fill(0.0);
-        self.qfrc_passive.fill(0.0);
-        self.qfrc_actuator.fill(0.0);
-        self.qfrc_smooth.fill(0.0);
-        self.qacc_smooth.fill(0.0);
-        self.qfrc_constraint.fill(0.0);
-        self.qfrc_inverse.fill(0.0);
-    }
 }
 
 
-/// An immutable view to joint variables of MjData.
-#[allow(non_snake_case)]
-pub struct MjJointView<'d> {
-    pub qpos: PointerView<'d, f64>,
-    pub qvel: PointerView<'d, f64>,
-    pub qacc_warmstart: PointerView<'d, f64>,
-    pub qfrc_applied: PointerView<'d, f64>,
-    pub qacc: PointerView<'d, f64>,
-    pub xanchor: PointerView<'d, f64>,
-    pub xaxis: PointerView<'d, f64>,
-    pub qLDiagInv: PointerView<'d, f64>,
-    pub qfrc_bias: PointerView<'d, f64>,
-    pub qfrc_passive: PointerView<'d, f64>,
-    pub qfrc_actuator: PointerView<'d, f64>,
-    pub qfrc_smooth: PointerView<'d, f64>,
-    pub qacc_smooth: PointerView<'d, f64>,
-    pub qfrc_constraint: PointerView<'d, f64>,
-    pub qfrc_inverse: PointerView<'d, f64>,
-}
-
+/**************************************************************************************************/
+// Sensor view
+/**************************************************************************************************/
+info_with_view!(sensor, sensor, [data], []);
 
 /**************************************************************************************************/
 // Geom view
 /**************************************************************************************************/
-
-/// Describes a geom and allows
-/// creation of views to geom data in MjData.
-#[derive(Debug, PartialEq)]
-pub struct MjGeomInfo {
-    pub name: String,
-    pub id: usize,
-}
-
-impl MjGeomInfo {
-    /// Returns a mutable view to the correct fields in [`MjData`].
-    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjGeomViewMut<'d> {
-        view_creator!(
-            self, MjGeomViewMut, data.ffi(),
-            [
-                xpos: &mut [f64; 3],
-                xmat: &mut [f64; 9]
-            ]
-        )
-    }
-
-    /// Returns a view to the correct fields in [`MjData`].
-    pub fn view<'d>(&self, data: &'d MjData) -> MjGeomView<'d> {
-        view_creator!(
-            self, MjGeomView, data.ffi(),
-            [
-                xpos: &mut [f64; 3],
-                xmat: &mut [f64; 9]
-            ]
-        )
-    }
-}
-
-/// A mutable view to geom variables of MjData.
-pub struct MjGeomViewMut<'d> {
-    pub xpos: &'d mut [f64; 3],
-    pub xmat: &'d mut [f64; 9],
-}
-
-impl MjGeomViewMut<'_> {
-    /// Resets the internal variables to 0.0.
-    pub fn zero(&mut self) {
-        self.xmat.fill(0.0);
-        self.xpos.fill(0.0);
-    }
-}
-
-/// An immutable view to geom variables of MjData.
-pub struct MjGeomView<'d> {
-    pub xpos: &'d [f64; 3],
-    pub xmat: &'d [f64; 9],
-}
-
+info_with_view!(geom, geom_, [xpos: &[f64; 3], xmat: &[f64; 9]]);
 
 /**************************************************************************************************/
 // Actuator view
 /**************************************************************************************************/
-
-/// Describes an actuator and allows
-/// creation of views to actuator data in MjData.
-#[derive(Debug, PartialEq)]
-pub struct MjActuatorInfo {
-    pub name: String,
-    pub id: usize,
-    ctrl: (usize, usize),
-    act: (usize, usize),
-}
-
-impl MjActuatorInfo {
-    /// Returns a mutable view to the correct fields in [`MjData`].
-    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjActuatorViewMut<'d> {
-        view_creator!(self, MjActuatorViewMut, data.ffi(), [ctrl], [act], PointerViewMut::new)
-    }
-
-    /// Returns a view to the correct fields in [`MjData`].
-    pub fn view<'d>(&self, data: &'d MjData) -> MjActuatorView<'d> {
-        view_creator!(self, MjActuatorView, data.ffi(), [ctrl], [act], PointerView::new)
-    }
-}
-
-/// A mutable view to actuator variables of MjData.
-pub struct MjActuatorViewMut<'d> {
-    pub ctrl: PointerViewMut<'d, f64>,
-    pub act: Option<PointerViewMut<'d, f64>>,
-}
-
-
-impl MjActuatorViewMut<'_> {
-    /// Resets the internal variables to 0.0.
-    pub fn zero(&mut self) {
-        self.ctrl.fill(0.0);
-        if let Some(a) = &mut self.act {
-            a.fill(0.0);
-        }
-    }
-}
-
-/// An immutable view to actuator variables of MjData.
-pub struct MjActuatorView<'d> {
-    pub ctrl: PointerView<'d, f64>,
-    pub act: Option<PointerView<'d, f64>>,
-}
-
+info_with_view!(actuator, [ctrl], [act]);
 
 /**************************************************************************************************/
 // Body view
 /**************************************************************************************************/
-
-/// Describes a body and allows
-/// creation of views to body data in MjData.
-#[derive(Debug)]
-pub struct MjBodyInfo {
-    pub name: String,
-    pub id: usize,
-}
-
-impl MjBodyInfo {
-    /// Returns a mutable view to the correct fields in [`MjData`].
-    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjBodyViewMut<'d> {
-        view_creator!(
-            self, MjBodyViewMut, data.ffi(),
-            [
-                xfrc_applied: &mut [f64; 6]
-            ]
-        )
-    }
-
-    /// Returns a view to the correct fields in [`MjData`].
-    pub fn view<'d>(&self, data: &'d MjData) -> MjBodyView<'d> {
-        view_creator!(
-            self, MjBodyView, data.ffi(),
-            [
-                xfrc_applied: &[f64; 6],
-                xpos: &[f64; 3],
-                xquat: &[f64; 4],
-                xmat: &[f64; 9],
-                xipos: &[f64; 3],
-                ximat: &[f64; 9],
-                subtree_com: &[f64; 3],
-                cinert: &[f64; 10],
-                crb: & [f64; 10],
-                cvel: & [f64; 6],
-                subtree_linvel: &[f64; 3],
-                subtree_angmom: &[f64; 3],
-                cacc: &[f64; 6],
-                cfrc_int: &[f64; 6],
-                cfrc_ext: &[f64; 6]
-            ]
-        )
-    }
-}
-
-/// A mutable view to body variables of MjData.
-pub struct MjBodyViewMut<'d> {
-    pub xfrc_applied: &'d mut [f64; 6],
-}
-
-
-impl MjBodyViewMut<'_> {
-    /// Resets the internal variables to 0.0.
-    pub fn zero(&mut self) {
-        self.xfrc_applied.fill(0.0);
-    }
-}
-
-/// An immutable view to body variables of MjData.
-pub struct MjBodyView<'d> {
-    pub xfrc_applied: &'d [f64; 6],
-    pub xpos: &'d [f64; 3],
-    pub xquat: &'d [f64; 4],
-    pub xmat: &'d [f64; 9],
-    pub xipos: &'d [f64; 3],
-    pub ximat: &'d [f64; 9],
-    pub subtree_com: &'d [f64; 3],
-    pub cinert: &'d [f64; 10],
-    pub crb: &'d [f64; 10],
-    pub cvel: &'d [f64; 6],
-    pub subtree_linvel: &'d [f64; 3],
-    pub subtree_angmom: &'d [f64; 3],
-    pub cacc: &'d [f64; 6],
-    pub cfrc_int: &'d [f64; 6],
-    pub cfrc_ext: &'d [f64; 6]
-}
+info_with_view!(body, [
+    xfrc_applied: &[f64; 6],
+    xpos: &[f64; 3],
+    xquat: &[f64; 4],
+    xmat: &[f64; 9],
+    xipos: &[f64; 3],
+    ximat: &[f64; 9],
+    subtree_com: &[f64; 3],
+    cinert: &[f64; 10],
+    crb: & [f64; 10],
+    cvel: & [f64; 6],
+    subtree_linvel: &[f64; 3],
+    subtree_angmom: &[f64; 3],
+    cacc: &[f64; 6],
+    cfrc_int: &[f64; 6],
+    cfrc_ext: &[f64; 6]
+]);
 
 
 
 /**************************************************************************************************/
 // Camera view
 /**************************************************************************************************/
+info_with_view!(camera, [xpos: &[f64; 3], xmat: &[f64; 9]]);
 
-/// Describes a camera and allows
-/// creation of views to camera data in MjData.
-#[derive(Debug)]
-pub struct MjCameraInfo {
-    pub name: String,
-    pub id: usize,
-}
 
-impl MjCameraInfo {
-    /// Returns a mutable view to the correct fields in [`MjData`].
-    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjCameraViewMut<'d> {
-        view_creator!(
-            self, MjCameraViewMut, data.ffi(),
-            [
-                /* The variables xpos are prefixed with cam_ in MjData (cam_xpos, cam_xmat) */
-                cam_ xpos: &mut [f64; 3],
-                cam_ xmat: &mut [f64; 9]
-            ]
-        )
-    }
 
-    /// Returns a view to the correct fields in [`MjData`].
-    pub fn view<'d>(&self, data: &'d MjData) -> MjCameraView<'d> {
-        view_creator!(
-            self, MjCameraView, data.ffi(),
-            [
-                /* The variables xpos are prefixed with cam_ in MjData (cam_xpos, cam_xmat) */
-                cam_ xpos: &[f64; 3],
-                cam_ xmat: &[f64; 9]
-            ]
-        )
-    }
-}
-
-/// A mutable view to actuator variables of MjData.
-pub struct MjCameraViewMut<'d> {
-    pub xpos: &'d mut [f64; 3],
-    pub xmat: &'d mut [f64; 9],
-}
-
-/// An immutable view to actuator variables of MjData.
-pub struct MjCameraView<'d> {
-    pub xpos: &'d [f64; 3],
-    pub xmat: &'d [f64; 9],
-}
+/**************************************************************************************************/
+// Site view
+/**************************************************************************************************/
+info_with_view!(site, [xpos: &[f64; 3], xmat: &[f64; 9]]);
 
 /**************************************************************************************************/
 // Unit tests
