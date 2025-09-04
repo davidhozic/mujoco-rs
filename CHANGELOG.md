@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 (MuJoCo 3.3.5)
+Bug fixes:
+- Smaller changes inside Drop implementations to make sure there is no undefined behaviors.
+
 ## 1.0.0 (MuJoCo 3.3.5)
 Breaking changes:
 - Made all `ffi_mut()` methods require unsafe blocks.
