@@ -217,38 +217,34 @@ impl Drop for MjData<'_> {
 
 /// Creates a $view struct, mapping $field and $opt_field to the same location as in $data.
 macro_rules! view_creator {
-    // Mutable
     ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
-        paste::paste! {
-            unsafe {
-                $view {
-                    $(
-                        $field: $ptr_view($data.$field.add($self.$field.0), $self.$field.1),
-                    )*
-                    $(
-                        $opt_field: if $self.$opt_field.1 > 0 {
-                            Some($ptr_view($data.$opt_field.add($self.$opt_field.0), $self.$opt_field.1))
-                        } else {None},
-                    )*
-                    phantom: PhantomData,
-                }
+        unsafe {
+            $view {
+                $(
+                    $field: $ptr_view($data.$field.add($self.$field.0), $self.$field.1),
+                )*
+                $(
+                    $opt_field: if $self.$opt_field.1 > 0 {
+                        Some($ptr_view($data.$opt_field.add($self.$opt_field.0), $self.$opt_field.1))
+                    } else {None},
+                )*
             }
         }
     };
 
-    // Non-mutable
-    ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], false) => {
-        unsafe {
-            $view {
-                $(
-                    $field: PointerView::new($data.$field.add($self.$field.0), $self.$field.1),
-                )*
-                $(
-                    $opt_field: if $self.$opt_field.1 > 0 {
-                        Some(PointerView::new($data.$opt_field.add($self.$opt_field.0), $self.$opt_field.1))
-                    } else {None},
-                )*
-                phantom: PhantomData,
+    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
+        paste::paste! {
+            unsafe {
+                $view {
+                    $(
+                        $field: $ptr_view($data.[<$prefix $field>].add($self.$field.0), $self.$field.1),
+                    )*
+                    $(
+                        $opt_field: if $self.$opt_field.1 > 0 {
+                            Some($ptr_view($data.[<$prefix $opt_field>].add($self.$opt_field.0), $self.$opt_field.1))
+                        } else {None},
+                    )*
+                }
             }
         }
     };
@@ -307,23 +303,22 @@ impl MjJointInfo {
 
 /// An mutable view to joint variables of MjData.
 #[allow(non_snake_case)]
-pub struct MjJointViewMut<'d, 'm: 'd> {
-    pub qpos: PointerViewMut<f64>,
-    pub qvel: PointerViewMut<f64>,
-    pub qacc_warmstart: PointerViewMut<f64>,
-    pub qfrc_applied: PointerViewMut<f64>,
-    pub qacc: PointerViewMut<f64>,
-    pub xanchor: PointerViewMut<f64>,
-    pub xaxis: PointerViewMut<f64>,
-    pub qLDiagInv: PointerViewMut<f64>,
-    pub qfrc_bias: PointerViewMut<f64>,
-    pub qfrc_passive: PointerViewMut<f64>,
-    pub qfrc_actuator: PointerViewMut<f64>,
-    pub qfrc_smooth: PointerViewMut<f64>,
-    pub qacc_smooth: PointerViewMut<f64>,
-    pub qfrc_constraint: PointerViewMut<f64>,
-    pub qfrc_inverse: PointerViewMut<f64>,
-    phantom: PhantomData<&'d MjData<'m>>
+pub struct MjJointViewMut<'d> {
+    pub qpos: PointerViewMut<'d, f64>,
+    pub qvel: PointerViewMut<'d, f64>,
+    pub qacc_warmstart: PointerViewMut<'d, f64>,
+    pub qfrc_applied: PointerViewMut<'d, f64>,
+    pub qacc: PointerViewMut<'d, f64>,
+    pub xanchor: PointerViewMut<'d, f64>,
+    pub xaxis: PointerViewMut<'d, f64>,
+    pub qLDiagInv: PointerViewMut<'d, f64>,
+    pub qfrc_bias: PointerViewMut<'d, f64>,
+    pub qfrc_passive: PointerViewMut<'d, f64>,
+    pub qfrc_actuator: PointerViewMut<'d, f64>,
+    pub qfrc_smooth: PointerViewMut<'d, f64>,
+    pub qacc_smooth: PointerViewMut<'d, f64>,
+    pub qfrc_constraint: PointerViewMut<'d, f64>,
+    pub qfrc_inverse: PointerViewMut<'d, f64>,
 }
 
 impl MjJointViewMut<'_> {
@@ -356,23 +351,22 @@ impl MjJointViewMut<'_> {
 
 /// An immutable view to joint variables of MjData.
 #[allow(non_snake_case)]
-pub struct MjJointView<'d, 'm: 'd> {
-    pub qpos: PointerView<f64>,
-    pub qvel: PointerView<f64>,
-    pub qacc_warmstart: PointerView<f64>,
-    pub qfrc_applied: PointerView<f64>,
-    pub qacc: PointerView<f64>,
-    pub xanchor: PointerView<f64>,
-    pub xaxis: PointerView<f64>,
-    pub qLDiagInv: PointerView<f64>,
-    pub qfrc_bias: PointerView<f64>,
-    pub qfrc_passive: PointerView<f64>,
-    pub qfrc_actuator: PointerView<f64>,
-    pub qfrc_smooth: PointerView<f64>,
-    pub qacc_smooth: PointerView<f64>,
-    pub qfrc_constraint: PointerView<f64>,
-    pub qfrc_inverse: PointerView<f64>,
-    phantom: PhantomData<&'d MjData<'m>>
+pub struct MjJointView<'d> {
+    pub qpos: PointerView<'d, f64>,
+    pub qvel: PointerView<'d, f64>,
+    pub qacc_warmstart: PointerView<'d, f64>,
+    pub qfrc_applied: PointerView<'d, f64>,
+    pub qacc: PointerView<'d, f64>,
+    pub xanchor: PointerView<'d, f64>,
+    pub xaxis: PointerView<'d, f64>,
+    pub qLDiagInv: PointerView<'d, f64>,
+    pub qfrc_bias: PointerView<'d, f64>,
+    pub qfrc_passive: PointerView<'d, f64>,
+    pub qfrc_actuator: PointerView<'d, f64>,
+    pub qfrc_smooth: PointerView<'d, f64>,
+    pub qacc_smooth: PointerView<'d, f64>,
+    pub qfrc_constraint: PointerView<'d, f64>,
+    pub qfrc_inverse: PointerView<'d, f64>,
 }
 
 
@@ -401,7 +395,7 @@ pub struct MjGeomViewMut<'d> {
     pub xpos: PointerViewMut<'d, f64>,
 }
 
-impl MjGeomViewMut<'_, '_> {
+impl MjGeomViewMut<'_> {
     /// Resets the internal variables to 0.0.
     pub fn zero(&mut self) {
         self.xmat.fill(0.0);
@@ -409,13 +403,6 @@ impl MjGeomViewMut<'_, '_> {
     }
 }
 
-impl MjGeomViewMut<'_, '_> {
-    /// Resets the internal variables to 0.0.
-    pub fn zero(&mut self) {
-        self.xmat.fill(0.0);
-        self.xpos.fill(0.0);
-    }
-}
 
 pub struct MjGeomView<'d> {
     pub xmat: PointerView<'d, f64>,
@@ -450,7 +437,7 @@ pub struct MjActuatorViewMut<'d> {
 }
 
 
-impl MjActuatorViewMut<'_, '_> {
+impl MjActuatorViewMut<'_> {
     /// Resets the internal variables to 0.0.
     pub fn zero(&mut self) {
         self.ctrl.fill(0.0);
@@ -460,16 +447,6 @@ impl MjActuatorViewMut<'_, '_> {
     }
 }
 
-
-impl MjActuatorViewMut<'_, '_> {
-    /// Resets the internal variables to 0.0.
-    pub fn zero(&mut self) {
-        self.ctrl.fill(0.0);
-        if let Some(a) = &mut self.act {
-            a.fill(0.0);
-        }
-    }
-}
 
 pub struct MjActuatorView<'d> {
     pub ctrl: PointerView<'d, f64>,
