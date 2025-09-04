@@ -22,12 +22,6 @@ Other changes:
 ## 1.0.1 (MuJoCo 3.3.5)
 Bug fixes:
 - Smaller changes inside Drop implementations to make sure there is no undefined behaviors.
-## Versioning
-This project uses [semantic versioning](https://semver.org/):
-- Breaking changes: major version bump (e. g. 1.0.0 -> 2.0.0),
-- Non-breaking feature changes: minor version bump (e. g. 1.0.0 -> 1.1.0),
-- Non-breaking bug fixes: patch version bump (e. g. 1.0.0 -> 1.0.1).
-
 
 ## 1.0.0 (MuJoCo 3.3.5)
 **Breaking changes:**

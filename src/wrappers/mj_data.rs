@@ -400,7 +400,6 @@ impl<'a> MjData<'a> {
 
         let model_ffi = self.model.ffi();
         let id = id as usize;
-        let ntendon = model_ffi.ntendon as usize;
         let nv = model_ffi.nv as usize;
         let wrapadr = (id, 1);
         let wrapnum = (id, 1);
@@ -409,7 +408,7 @@ impl<'a> MjData<'a> {
         let J_colind = (id * nv, nv);
         let length = (id, 1);
         let J = (id * nv, nv);
-        let velocity = (ntendon, 1);
+        let velocity = (id, 1);
 
         Some(MjTendonInfo { id, name: name.to_string(), wrapadr, wrapnum, J_rownnz, J_rowadr, J_colind, length, J, velocity })
     }
