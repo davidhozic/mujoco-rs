@@ -8,6 +8,11 @@ bindings to a modified C++ one.
 
 MuJoCo is a general purpose physics simulator. Link to the MuJoCo website: https://mujoco.org/.
 
+
+Example of the build-in Rust viewer. Showing scene from https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot.
+![](docs/img_common/viewer_spot.png)
+
+
 ## MuJoCo version
 This library uses FFI bindings to MuJoCo **3.3.5**.
 The library can either be provided **dynamically** in the form of a shared library (.so and .dll):
