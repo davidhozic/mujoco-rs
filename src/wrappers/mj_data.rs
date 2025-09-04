@@ -95,16 +95,15 @@ impl<'a> MjData<'a> {
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjGeomInfo::view`].
     pub fn geom(&self, name: &str) -> Option<MjGeomInfo> {
-        const GEOM_XPOS_LEN: usize = 3;
-        const GEOM_XMAT_LEN: usize = 9;
-
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_GEOM as i32, CString::new(name).unwrap().as_ptr())};
+        let cname = CString::new(name).unwrap();
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_GEOM as i32, cname.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
 
-        let xpos = (GEOM_XPOS_LEN * id as usize, 3);
-        let xmat = (GEOM_XMAT_LEN * id as usize, 9);
+        let id = id as usize;
+        let xpos = (id * 3, 3);
+        let xmat = (id * 9, 9);
         Some(MjGeomInfo { name: name.to_string(), id: id as usize, xmat, xpos })
     }
 
@@ -219,35 +218,39 @@ impl Drop for MjData<'_> {
 /// Creates a $view struct, mapping $field and $opt_field to the same location as in $data.
 macro_rules! view_creator {
     // Mutable
-    ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], true) => {
-        unsafe {
-            $view {
-                $(
-                    $field: PointerViewMut::new($data.$field.add($self.$field.0), $self.$field.1),
-                )*
-                $(
-                    $opt_field: if $self.$opt_field.1 > 0 {
-                        Some(PointerViewMut::new($data.$opt_field.add($self.$opt_field.0), $self.$opt_field.1))
-                    } else {None},
-                )*
-                phantom: PhantomData,
+    ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
+        paste::paste! {
+            unsafe {
+                $view {
+                    $(
+                        $field: $ptr_view($data.$field.add($self.$field.0), $self.$field.1),
+                    )*
+                    $(
+                        $opt_field: if $self.$opt_field.1 > 0 {
+                            Some($ptr_view($data.$opt_field.add($self.$opt_field.0), $self.$opt_field.1))
+                        } else {None},
+                    )*
+                    phantom: PhantomData,
+                }
             }
         }
     };
 
-    // Non-mutable
-    ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], false) => {
-        unsafe {
-            $view {
-                $(
-                    $field: PointerView::new($data.$field.add($self.$field.0), $self.$field.1),
-                )*
-                $(
-                    $opt_field: if $self.$opt_field.1 > 0 {
-                        Some(PointerView::new($data.$opt_field.add($self.$opt_field.0), $self.$opt_field.1))
-                    } else {None},
-                )*
-                phantom: PhantomData,
+    /* With a prefix */
+    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
+        paste::paste! {
+            unsafe {
+                $view {
+                    $(
+                        $field: $ptr_view($data.[<$prefix $field>].add($self.$field.0), $self.$field.1),
+                    )*
+                    $(
+                        $opt_field: if $self.$opt_field.1 > 0 {
+                            Some($ptr_view($data.[<$prefix $opt_field>].add($self.$opt_field.0), $self.$opt_field.1))
+                        } else {None},
+                    )*
+                    phantom: PhantomData,
+                }
             }
         }
     };
@@ -280,14 +283,14 @@ pub struct MjJointInfo{
 
 impl MjJointInfo {
     /// Returns a mutable view to the correct fields in [`MjData`].
-    pub fn view_mut<'d>(&mut self, data: &'d mut MjData) -> MjJointViewMut<'d, '_> {
+    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjJointViewMut<'d, '_> {
         view_creator!(
-            self, MjJointViewMut, data.ffi_mut(),
+            self, MjJointViewMut, data.ffi(),
             [
                 qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
                 qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
             ],
-            [], true
+            [], PointerViewMut::new
         )
     }
 
@@ -299,7 +302,7 @@ impl MjJointInfo {
                 qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
                 qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
             ],
-            [], false
+            [], PointerView::new
         )
     }
 }
@@ -326,13 +329,29 @@ pub struct MjJointViewMut<'d, 'm: 'd> {
 }
 
 impl MjJointViewMut<'_, '_> {
+    /// Deprecated. Use [`MjJointViewMut::zero`] instead.
+    #[deprecated]
     pub fn reset(&mut self) {
+        self.zero();
+    }
+
+    /// Resets the internal variables to 0.0.
+    pub fn zero(&mut self) {
         self.qpos.fill(0.0);
         self.qvel.fill(0.0);
         self.qacc_warmstart.fill(0.0);
-        self.qacc.fill(0.0);
         self.qfrc_applied.fill(0.0);
+        self.qacc.fill(0.0);
+        self.xanchor.fill(0.0);
+        self.xaxis.fill(0.0);
+        self.qLDiagInv.fill(0.0);
         self.qfrc_bias.fill(0.0);
+        self.qfrc_passive.fill(0.0);
+        self.qfrc_actuator.fill(0.0);
+        self.qfrc_smooth.fill(0.0);
+        self.qacc_smooth.fill(0.0);
+        self.qfrc_constraint.fill(0.0);
+        self.qfrc_inverse.fill(0.0);
     }
 }
 
@@ -369,13 +388,13 @@ pub struct MjGeomInfo {
 
 impl MjGeomInfo {
     /// Returns a mutable view to the correct fields in [`MjData`].
-    pub fn view_mut<'d>(&mut self, data: &'d mut MjData) -> MjGeomViewMut<'d, '_> {
-        view_creator!(self, MjGeomViewMut, data.ffi_mut(), [xmat, xpos], [], true)
+    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjGeomViewMut<'d, '_> {
+        view_creator!(self, MjGeomViewMut, data.ffi(), geom_, [xmat, xpos], [], PointerViewMut::new)
     }
 
     /// Returns a view to the correct fields in [`MjData`].
     pub fn view<'d>(&self, data: &'d MjData) -> MjGeomView<'d, '_> {
-        view_creator!(self, MjGeomView, data.ffi(), [xmat, xpos], [], false)
+        view_creator!(self, MjGeomView, data.ffi(), geom_, [xmat, xpos], [], PointerView::new)
     }
 }
 
@@ -383,6 +402,14 @@ pub struct MjGeomViewMut<'d, 'm: 'd> {
     pub xmat: PointerViewMut<f64>,
     pub xpos: PointerViewMut<f64>,
     phantom: PhantomData<&'d MjData<'m>>
+}
+
+impl MjGeomViewMut<'_, '_> {
+    /// Resets the internal variables to 0.0.
+    pub fn zero(&mut self) {
+        self.xmat.fill(0.0);
+        self.xpos.fill(0.0);
+    }
 }
 
 pub struct MjGeomView<'d, 'm: 'd> {
@@ -403,13 +430,13 @@ pub struct MjActuatorInfo {
 
 impl MjActuatorInfo {
     /// Returns a mutable view to the correct fields in [`MjData`].
-    pub fn view_mut<'d>(&mut self, data: &'d mut MjData) -> MjActuatorViewMut<'d, '_> {
-        view_creator!(self, MjActuatorViewMut, data.ffi_mut(), [ctrl], [act], true)
+    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjActuatorViewMut<'d, '_> {
+        view_creator!(self, MjActuatorViewMut, data.ffi(), [ctrl], [act], PointerViewMut::new)
     }
 
     /// Returns a view to the correct fields in [`MjData`].
     pub fn view<'d>(&self, data: &'d MjData) -> MjActuatorView<'d, '_> {
-        view_creator!(self, MjActuatorView, data.ffi(), [ctrl], [act], false)
+        view_creator!(self, MjActuatorView, data.ffi(), [ctrl], [act], PointerView::new)
     }
 }
 
@@ -417,6 +444,17 @@ pub struct MjActuatorViewMut<'d, 'm: 'd> {
     pub ctrl: PointerViewMut<f64>,
     pub act: Option<PointerViewMut<f64>>,
     phantom: PhantomData<&'d MjData<'m>>
+}
+
+
+impl MjActuatorViewMut<'_, '_> {
+    /// Resets the internal variables to 0.0.
+    pub fn zero(&mut self) {
+        self.ctrl.fill(0.0);
+        if let Some(a) = &mut self.act {
+            a.fill(0.0);
+        }
+    }
 }
 
 pub struct MjActuatorView<'d, 'm: 'd> {
