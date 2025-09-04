@@ -1,9 +1,13 @@
 # Changelog
 
-## 2.0.0 (MuJoCo 3.3.5)
-**Breaking changes:**
+## Versioning
+This project uses [semantic versioning](https://semver.org/):
+
+## 1.1.0 (MuJoCo 3.3.5)
+**Potentially breaking changes:**
 - Fixed bug [#18](https://github.com/davidhozic/mujoco-rs/issues/18) where data races could occur
-  under incorrect usage.
+  under incorrect usage. The major version of MuJoCo-rs is not increased as this safety bugs
+  should not be something to rely on.
 
 Other bug fixes:
 - Fixed bug [#17](https://github.com/davidhozic/mujoco-rs/issues/17) where the `MjGeomView` and `MjGeomViewMut`
