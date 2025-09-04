@@ -565,7 +565,7 @@ info_with_view!(site, site_, [xpos: f64, xmat: f64], []);
 info_with_view!(tendon, ten_, [wrapadr: i32, wrapnum: i32, J_rownnz: i32, J_rowadr: i32, J_colind: i32, length: f64, J: f64, velocity: f64], []);
 
 /**************************************************************************************************/
-// Site view
+// Light view
 /**************************************************************************************************/
 info_with_view!(light, light_, [xpos: f64, xdir: f64], []);
 
