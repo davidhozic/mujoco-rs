@@ -128,7 +128,7 @@ macro_rules! info_with_view {
     /* PointerView */
 
     /* name of the view/info, attribute prefix in MjData, [attributes always present], [attributes that can be None] */
-    ($name:ident, $prefix:ident, [$($attr:ident),*], [$($opt_attr:ident),*]) => {
+    ($name:ident, $prefix:ident, [$($attr:ident: $type_:ty),*], [$($opt_attr:ident: $type_opt:ty),*]) => {
         paste::paste! {
             #[doc = "Stores information required to create views to [`MjData`] arrays corresponding to a " $name "."]
             #[allow(non_snake_case)]
@@ -159,10 +159,10 @@ macro_rules! info_with_view {
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel ViewMut>]<'d> {
                 $(
-                    pub $attr: PointerViewMut<'d, f64>,
+                    pub $attr: PointerViewMut<'d, $type_>,
                 )*
                 $(
-                    pub $opt_attr: Option<PointerViewMut<'d, f64>>,
+                    pub $opt_attr: Option<PointerViewMut<'d, $type_opt>>,
                 )*
             }
 
@@ -170,11 +170,11 @@ macro_rules! info_with_view {
                 /// Resets the internal variables to 0.0.
                 pub fn zero(&mut self) {
                     $(
-                        self.$attr.fill(0.0);
+                        self.$attr.fill(0.0 as $type_);
                     )*
                     $(
                         if let Some(x) = &mut self.$opt_attr {
-                            x.fill(0.0);
+                            x.fill(0.0 as $type_opt);
                         }
                     )*
                 }
@@ -185,17 +185,17 @@ macro_rules! info_with_view {
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel View>]<'d> {
                 $(
-                    pub $attr: PointerView<'d, f64>,
+                    pub $attr: PointerView<'d, $type_>,
                 )*
                 $(
-                    pub $opt_attr: Option<PointerView<'d, f64>>,
+                    pub $opt_attr: Option<PointerView<'d, $type_opt>>,
                 )*
             }
         }
     };
 
     /* name of the view/info, [attributes always present], [attributes that can be None] */
-    ($name:ident, [$($attr:ident),*], [$($opt_attr:ident),*]) => {
+    ($name:ident, [$($attr:ident: $type_:ty),*], [$($opt_attr:ident: $type_opt:ty),*]) => {
         paste::paste! {
             #[doc = "Stores information required to create views to MjData arrays corresponding to a " $name "."]
             #[allow(non_snake_case)]
@@ -227,10 +227,10 @@ macro_rules! info_with_view {
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel ViewMut>]<'d> {
                 $(
-                    pub $attr: PointerViewMut<'d, f64>,
+                    pub $attr: PointerViewMut<'d, $type_>,
                 )*
                 $(
-                    pub $opt_attr: Option<PointerViewMut<'d, f64>>,
+                    pub $opt_attr: Option<PointerViewMut<'d, $type_opt>>,
                 )*
             }
 
@@ -238,11 +238,11 @@ macro_rules! info_with_view {
                 /// Resets the internal variables to 0.0.
                 pub fn zero(&mut self) {
                     $(
-                        self.$attr.fill(0.0);
+                        self.$attr.fill(0.0 as $type_);
                     )*
                     $(
                         if let Some(x) = &mut self.$opt_attr {
-                            x.fill(0.0);
+                            x.fill(0.0 as $type_opt);
                         }
                     )*
                 }
@@ -253,10 +253,10 @@ macro_rules! info_with_view {
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel View>]<'d> {
                 $(
-                    pub $attr: PointerView<'d, f64>,
+                    pub $attr: PointerView<'d, $type_>,
                 )*
                 $(
-                    pub $opt_attr: Option<PointerView<'d, f64>>,
+                    pub $opt_attr: Option<PointerView<'d, $type_opt>>,
                 )*
             }
         }
@@ -390,6 +390,29 @@ impl<'a> MjData<'a> {
         }
     }
 
+    #[allow(non_snake_case)]
+    pub fn tendon(&self, name: &str) -> Option<MjTendonInfo> {
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_TENDON as i32, CString::new(name).unwrap().as_ptr())};
+        if id == -1 {  // not found
+            return None;
+        }
+
+        let model_ffi = self.model.ffi();
+        let id = id as usize;
+        let ntendon = model_ffi.ntendon as usize;
+        let nv = model_ffi.nv as usize;
+        let wrapadr = (id, 1);
+        let wrapnum = (id, 1);
+        let J_rownnz = (id, 1);
+        let J_rowadr = (id, 1);
+        let J_colind = (id * nv, nv);
+        let length = (id, 1);
+        let J = (id * nv, nv);
+        let velocity = (ntendon, 1);
+
+        Some(MjTendonInfo { id, name: name.to_string(), wrapadr, wrapnum, J_rownnz, J_rowadr, J_colind, length, J, velocity })
+    }
+
     /// Steps the MuJoCo simulation.
     pub fn step(&mut self) {
         unsafe {
@@ -484,8 +507,8 @@ impl Drop for MjData<'_> {
 info_with_view!(
     joint,
     [
-        qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
-        qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
+        qpos: f64, qvel: f64, qacc_warmstart: f64, qfrc_applied: f64, qacc: f64, xanchor: f64, xaxis: f64, qLDiagInv: f64, qfrc_bias: f64,
+        qfrc_passive: f64, qfrc_actuator: f64, qfrc_smooth: f64, qacc_smooth: f64, qfrc_constraint: f64, qfrc_inverse: f64
     ],
     []
 );
@@ -503,34 +526,45 @@ impl MjJointViewMut<'_> {
 /**************************************************************************************************/
 // Sensor view
 /**************************************************************************************************/
-info_with_view!(sensor, sensor, [data], []);
+info_with_view!(sensor, sensor, [data: f64], []);
 
 /**************************************************************************************************/
 // Geom view
 /**************************************************************************************************/
-info_with_view!(geom, geom_, [xpos, xmat], []);
+info_with_view!(geom, geom_, [xpos: f64, xmat: f64], []);
 
 /**************************************************************************************************/
 // Actuator view
 /**************************************************************************************************/
-info_with_view!(actuator, [ctrl], [act]);
+info_with_view!(actuator, [ctrl: f64], [act: f64]);
 
 /**************************************************************************************************/
 // Body view
 /**************************************************************************************************/
-info_with_view!(body, [xfrc_applied, xpos, xquat, xmat, xipos, ximat, subtree_com, cinert, crb , cvel, subtree_linvel, subtree_angmom, cacc, cfrc_int, cfrc_ext], []);
+info_with_view!(
+    body, [
+        xfrc_applied: f64, xpos: f64, xquat: f64, xmat: f64, xipos: f64, ximat: f64,
+        subtree_com: f64, cinert: f64, crb: f64, cvel: f64, subtree_linvel: f64,
+        subtree_angmom: f64, cacc: f64, cfrc_int: f64, cfrc_ext: f64
+    ], []
+);
 
 
 /**************************************************************************************************/
 // Camera view
 /**************************************************************************************************/
-info_with_view!(camera, [xpos, xmat], []);
+info_with_view!(camera, [xpos: f64, xmat: f64], []);
 
 
 /**************************************************************************************************/
 // Site view
 /**************************************************************************************************/
-info_with_view!(site, [xpos, xmat], []);
+info_with_view!(site, [xpos: f64, xmat: f64], []);
+
+/**************************************************************************************************/
+// Tendon view
+/**************************************************************************************************/
+info_with_view!(tendon, ten_, [wrapadr: i32, wrapnum: i32, J_rownnz: i32, J_rowadr: i32, J_colind: i32, length: f64, J: f64, velocity: f64], []);
 
 /**************************************************************************************************/
 // Unit tests
