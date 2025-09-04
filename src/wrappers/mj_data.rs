@@ -199,7 +199,7 @@ impl<'a> MjData<'a> {
 impl Drop for MjData<'_> {
     fn drop(&mut self) {
         unsafe {
-            mj_deleteData(self.ffi_mut());
+            mj_deleteData(self.data);
         }
     }
 }

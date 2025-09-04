@@ -97,7 +97,7 @@ impl MjVfs {
 impl Drop for MjVfs {
     fn drop(&mut self) {
         unsafe {
-            mj_deleteVFS(self.ffi_mut());
+            mj_deleteVFS(&mut self.ffi);
         }
     }
 }
