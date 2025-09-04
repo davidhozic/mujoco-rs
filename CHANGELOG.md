@@ -3,7 +3,7 @@
 ## Versioning
 This project uses [semantic versioning](https://semver.org/):
 
-## 1.1.0 (MuJoCo 3.3.5)
+## [Future release] 1.1.0 (MuJoCo 3.3.5)
 **Potentially breaking changes:**
 - Fixed bug [#18](https://github.com/davidhozic/mujoco-rs/issues/18) where data races could occur
   under incorrect usage. The major version of MuJoCo-rs is not increased as this safety bugs
@@ -16,6 +16,8 @@ Other bug fixes:
 Other changes:
 - Added new modules: `wrappers::mj_primitive`.
 - Added more attributes to the view to `MjJointView[Mut]`.
+- Added more views:
+    - `MjData`: Body view
 
 ## 1.0.1 (MuJoCo 3.3.5)
 Bug fixes:

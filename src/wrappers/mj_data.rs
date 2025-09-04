@@ -51,6 +51,37 @@ impl<'a> MjData<'a> {
         }
     }
 
+    /// Obtains a [`MjActuatorInfo`] struct containing information about the name, id, and
+    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
+    /// The actual view can be obtained via [`MjActuatorInfo::view`].
+    pub fn actuator(&self, name: &str) -> Option<MjActuatorInfo> {
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_ACTUATOR as i32, CString::new(name).unwrap().as_ptr())};
+        if id == -1 {  // not found
+            return None;
+        }
+
+        let ctrl;
+        let act;
+        let model_ffi = self.model.ffi();
+        unsafe {
+            ctrl = (id as usize, 1);
+            act = mj_view_indices!(id as usize, model_ffi.actuator_actadr, model_ffi.nu as usize, model_ffi.na as usize);
+        }
+
+        Some(MjActuatorInfo { name: name.to_string(), id: id as usize, ctrl, act})
+    }
+
+    pub fn body(&self, name:&str) -> Option<MjBodyInfo> {
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_BODY as i32, CString::new(name).unwrap().as_ptr())};
+        if id == -1 {  // not found
+            return None;
+        }
+
+        let id = id as usize;
+        Some(MjBodyInfo {name: name.to_string(), id})
+    }
+
+
     /// Obtains a [`MjJointInfo`] struct containing information about the name, id, and
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjJointInfo::view`].
@@ -106,26 +137,6 @@ impl<'a> MjData<'a> {
         let xmat = (id * 9, 9);
         Some(MjGeomInfo { name: name.to_string(), id: id as usize, xmat, xpos })
     }
-
-    /// Obtains a [`MjActuatorInfo`] struct containing information about the name, id, and
-    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
-    /// The actual view can be obtained via [`MjActuatorInfo::view`].
-    pub fn actuator(&self, name: &str) -> Option<MjActuatorInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_ACTUATOR as i32, CString::new(name).unwrap().as_ptr())};
-        if id == -1 {  // not found
-            return None;
-        }
-
-        let ctrl;
-        let act;
-        let model_ffi = self.model.ffi();
-        unsafe {
-            ctrl = (id as usize, 1);
-            act = mj_view_indices!(id as usize, model_ffi.actuator_actadr, model_ffi.nu as usize, model_ffi.na as usize);
-        }
-
-        Some(MjActuatorInfo { name: name.to_string(), id: id as usize, ctrl, act})
-    } 
 
     /// Steps the MuJoCo simulation.
     pub fn step(&mut self) {
@@ -217,6 +228,7 @@ impl Drop for MjData<'_> {
 
 /// Creates a $view struct, mapping $field and $opt_field to the same location as in $data.
 macro_rules! view_creator {
+    /* Pointer view */
     ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
         unsafe {
             $view {
@@ -248,8 +260,33 @@ macro_rules! view_creator {
             }
         }
     };
+
+    /* Direct reference */
+    ($self:expr, $view:ident, $data:expr, mut, [$(($field:ident; $length:expr)),*]) => {
+        unsafe {
+            $view {
+                $(
+                    $field: ($data.$field.add($self.id * $length) as *mut [f64; $length]).as_mut().unwrap(),
+                )*
+            }
+        }
+    };
+
+    ($self:expr, $view:ident, $data:expr, const, [$(($field:ident; $length:expr)),*]) => {
+        unsafe {
+            $view {
+                $(
+                    $field: ($data.$field.add($self.id * $length) as *const [f64; $length]).as_ref().unwrap(),
+                )*
+            }
+        }
+    };
 }
 
+
+/**************************************************************************************************/
+// Joint view
+/**************************************************************************************************/
 
 /// Describes a joint and allows
 /// creation of views to joint data in MjData.
@@ -370,6 +407,10 @@ pub struct MjJointView<'d> {
 }
 
 
+/**************************************************************************************************/
+// Geom view
+/**************************************************************************************************/
+
 /// Describes a geom and allows
 /// creation of views to geom data in MjData.
 #[derive(Debug, PartialEq)]
@@ -412,6 +453,10 @@ pub struct MjGeomView<'d> {
     pub xpos: PointerView<'d, f64>,
 }
 
+
+/**************************************************************************************************/
+// Actuator view
+/**************************************************************************************************/
 
 /// Describes an actuator and allows
 /// creation of views to actuator data in MjData.
@@ -456,4 +501,127 @@ impl MjActuatorViewMut<'_> {
 pub struct MjActuatorView<'d> {
     pub ctrl: PointerView<'d, f64>,
     pub act: Option<PointerView<'d, f64>>,
+}
+
+
+/**************************************************************************************************/
+// Body view
+/**************************************************************************************************/
+
+/// Describes a body and allows
+/// creation of views to body data in MjData.
+// #[derive(Debug, PartialEq)]
+pub struct MjBodyInfo {
+    pub name: String,
+    pub id: usize,
+}
+
+impl MjBodyInfo {
+    /// Returns a mutable view to the correct fields in [`MjData`].
+    pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjBodyViewMut<'d> {
+        view_creator!(
+            self, MjBodyViewMut, data.ffi(), mut,
+            [
+                (xfrc_applied; 6),
+                (xpos; 3),
+                (xquat; 4),
+                (xmat; 9),
+                (xipos; 3),
+                (ximat; 9),
+                (subtree_com; 3),
+                (cinert; 10),
+                (crb; 10),
+                (cvel; 6),
+                (subtree_linvel; 3),
+                (subtree_angmom; 3),
+                (cacc; 6),
+                (cfrc_int; 6),
+                (cfrc_ext; 6)
+            ]
+        )
+    }
+
+    /// Returns a view to the correct fields in [`MjData`].
+    pub fn view<'d>(&self, data: &'d MjData) -> MjBodyView<'d> {
+        view_creator!(
+            self, MjBodyView, data.ffi(), const,
+            [
+                (xfrc_applied; 6),
+                (xpos; 3),
+                (xquat; 4),
+                (xmat; 9),
+                (xipos; 3),
+                (ximat; 9),
+                (subtree_com; 3),
+                (cinert; 10),
+                (crb; 10),
+                (cvel; 6),
+                (subtree_linvel; 3),
+                (subtree_angmom; 3),
+                (cacc; 6),
+                (cfrc_int; 6),
+                (cfrc_ext; 6)
+            ]
+        )
+    }
+}
+
+/// A mutable view to actuator variables of MjData.
+pub struct MjBodyViewMut<'d> {
+    pub xfrc_applied: &'d mut [f64; 6],
+    pub xpos: &'d mut [f64; 3],
+    pub xquat: &'d mut [f64; 4],
+    pub xmat: &'d mut [f64; 9],
+    pub xipos: &'d mut [f64; 3],
+    pub ximat: &'d mut [f64; 9],
+    pub subtree_com: &'d mut [f64; 3],
+    pub cinert: &'d mut [f64; 10],
+    pub crb: &'d mut [f64; 10],
+    pub cvel: &'d mut [f64; 6],
+    pub subtree_linvel: &'d mut [f64; 3],
+    pub subtree_angmom: &'d mut [f64; 3],
+    pub cacc: &'d mut [f64; 6],
+    pub cfrc_int: &'d mut [f64; 6],
+    pub cfrc_ext: &'d mut [f64; 6]
+}
+
+
+impl MjBodyViewMut<'_> {
+    /// Resets the internal variables to 0.0.
+    pub fn zero(&mut self) {
+        self.xfrc_applied.fill(0.0);
+        self.xpos.fill(0.0);
+        self.xquat.fill(0.0);
+        self.xmat.fill(0.0);
+        self.xipos.fill(0.0);
+        self.ximat.fill(0.0);
+        self.subtree_com.fill(0.0);
+        self.cinert.fill(0.0);
+        self.crb.fill(0.0);
+        self.cvel.fill(0.0);
+        self.subtree_linvel.fill(0.0);
+        self.subtree_angmom.fill(0.0);
+        self.cacc.fill(0.0);
+        self.cfrc_int.fill(0.0);
+        self.cfrc_ext.fill(0.0);
+    }
+}
+
+/// An immutable view to actuator variables of MjData.
+pub struct MjBodyView<'d> {
+    pub xfrc_applied: &'d [f64; 6],
+    pub xpos: &'d [f64; 3],
+    pub xquat: &'d [f64; 4],
+    pub xmat: &'d [f64; 9],
+    pub xipos: &'d [f64; 3],
+    pub ximat: &'d [f64; 9],
+    pub subtree_com: &'d [f64; 3],
+    pub cinert: &'d [f64; 10],
+    pub crb: &'d [f64; 10],
+    pub cvel: &'d [f64; 6],
+    pub subtree_linvel: &'d [f64; 3],
+    pub subtree_angmom: &'d [f64; 3],
+    pub cacc: &'d [f64; 6],
+    pub cfrc_int: &'d [f64; 6],
+    pub cfrc_ext: &'d [f64; 6]
 }
