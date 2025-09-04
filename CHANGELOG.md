@@ -1,11 +1,30 @@
 # Changelog
 
+## Versioning
+This project uses [semantic versioning](https://semver.org/):
+
+## [Future release] 1.1.0 (MuJoCo 3.3.5)
+**Potentially breaking changes:**
+- Fixed bug [#18](https://github.com/davidhozic/mujoco-rs/issues/18) where data races could occur
+  under incorrect usage. The major version of MuJoCo-rs is not increased as this safety bugs
+  should not be something to rely on.
+
+Other bug fixes:
+- Fixed bug [#17](https://github.com/davidhozic/mujoco-rs/issues/17) where the `MjGeomView` and `MjGeomViewMut`
+  pointed to the wrong address, which belonged to the body and not the geom.
+
+Other changes:
+- Added new modules: `wrappers::mj_primitive`.
+- Added more attributes to the view to `MjJointView[Mut]`.
+- Added more views. All the views available now:
+    - `MjData`: actuator, body, camera, geom, site, light, joint, sensor and tendon.
+
 ## 1.0.1 (MuJoCo 3.3.5)
 Bug fixes:
 - Smaller changes inside Drop implementations to make sure there is no undefined behaviors.
 
 ## 1.0.0 (MuJoCo 3.3.5)
-Breaking changes:
+**Breaking changes:**
 - Made all `ffi_mut()` methods require unsafe blocks.
 
 Viewer:

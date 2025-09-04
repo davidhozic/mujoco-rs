@@ -42,4 +42,39 @@ mod tests {
         let version = get_mujoco_version();
         println!("{version}");
     }
+
+
+    #[allow(unused)]
+    pub(crate) fn test_leaks() {
+        use super::*;
+        use wrappers::*;
+        use std::hint::black_box;
+
+        const N_ITEMS: usize = 10000;
+        const N_REPEATS: usize = 1000;
+        const EXAMPLE_MODEL: &str = "
+        <mujoco>
+        <worldbody>
+            <light ambient=\"0.2 0.2 0.2\"/>
+            <body name=\"ball\">
+                <geom name=\"sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
+                <joint name=\"sphere\" type=\"free\"/>
+            </body>
+
+            <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\"/>
+
+        </worldbody>
+        </mujoco>
+        ";
+
+        for _ in 0..N_REPEATS {
+            let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("failed to load the model.");
+            let mut datas: Vec<_> = (0..N_ITEMS).map(|_| model.make_data()).collect();
+
+            for data in datas.iter_mut() {
+                data.joint("sphere").unwrap().view_mut(data).qpos[0] /= 2.0;
+                data.step();
+            }
+        }
+    }
 }

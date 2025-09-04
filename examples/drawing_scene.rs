@@ -42,7 +42,7 @@ fn main() {
         .expect("could not launch the viewer");
 
     /* Obtain joint info */
-    let mut ball1_joint_info = data.joint("ball1_joint").unwrap();
+    let ball1_joint_info = data.joint("ball1_joint").unwrap();
     let ball2_joint_info = data.joint("ball2_joint").unwrap();
 
     /* Give the first ball some y-velocity to showcase the visualization */
