@@ -12,13 +12,11 @@ const EXAMPLE_MODEL: &str = "
   <worldbody>
     <light ambient=\"0.2 0.2 0.2\"/>
     <body name=\"ball\">
-        <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\" solref=\"0.004 1.0\"/>
+        <geom name=\"green_sphere\" pos=\".2 .2 .1\" size=\".1\" rgba=\"0 1 0 1\" solref=\"0.004 1.0\"/>
         <joint name=\"ball_joint\" type=\"free\"/>
     </body>
 
-    <geom name=\"floor1\" type=\"plane\" size=\"10 10 1\" euler=\"15 4 0\" solref=\"0.004 1.0\"/>
-    <geom name=\"floor2\" type=\"plane\" pos=\"15 -20 0\" size=\"10 10 1\" euler=\"-15 -4 0\" solref=\"0.004 1.0\"/>
-
+    <geom name=\"floor1\" type=\"plane\" size=\"10 10 1\" solref=\"0.004 1.0\"/>
   </worldbody>
 </mujoco>
 ";
@@ -34,14 +32,21 @@ fn main() {
 
     /* Create the joint info */
     let ball_info = data.joint("ball_joint").unwrap();
+    let ball_info = data.body("ball").unwrap();
+    ball_info.view_mut(&mut data).xfrc_applied;
     while viewer.running() {
         /* Step the simulation and sync the viewer */
         viewer.sync(&mut data);
-        data.step();
 
-        /* Obtain the view and access first three variables of `qpos` (x, y, z) */
-        let xyz = &ball_info.view(&data).qpos[..3];
-        println!("The ball's position is: {xyz:.2?}");
+        data.step1();
+        let xyz = ball_info.view_mut(&mut data).xfrc_applied;
+        // 
+        println!("{xyz:?}");
+        data.step2();
+
+        let xyz2 = ball_info.view(&data).xpos;
+        println!("{xyz2:.2?}");
+
 
         std::thread::sleep(Duration::from_secs_f64(0.002));
     }

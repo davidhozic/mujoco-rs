@@ -262,21 +262,21 @@ macro_rules! view_creator {
     };
 
     /* Direct reference */
-    ($self:expr, $view:ident, $data:expr, mut, [$(($field:ident; $length:expr)),*]) => {
+    ($self:expr, $view:ident, $data:expr, [$($field:ident: &mut [$type:ty; $len:literal]),*]) => {
         unsafe {
             $view {
                 $(
-                    $field: ($data.$field.add($self.id * $length) as *mut [f64; $length]).as_mut().unwrap(),
+                    $field: ($data.$field.add($self.id * $len) as *mut [$type; $len]).as_mut().unwrap(),
                 )*
             }
         }
     };
 
-    ($self:expr, $view:ident, $data:expr, const, [$(($field:ident; $length:expr)),*]) => {
+    ($self:expr, $view:ident, $data:expr, [$($field:ident: &[$type:ty; $len:literal]),*]) => {
         unsafe {
             $view {
                 $(
-                    $field: ($data.$field.add($self.id * $length) as *const [f64; $length]).as_ref().unwrap(),
+                    $field: ($data.$field.add($self.id * $len) as *const [$type; $len]).as_ref().unwrap(),
                 )*
             }
         }
@@ -520,23 +520,9 @@ impl MjBodyInfo {
     /// Returns a mutable view to the correct fields in [`MjData`].
     pub fn view_mut<'d>(&self, data: &'d mut MjData) -> MjBodyViewMut<'d> {
         view_creator!(
-            self, MjBodyViewMut, data.ffi(), mut,
+            self, MjBodyViewMut, data.ffi(),
             [
-                (xfrc_applied; 6),
-                (xpos; 3),
-                (xquat; 4),
-                (xmat; 9),
-                (xipos; 3),
-                (ximat; 9),
-                (subtree_com; 3),
-                (cinert; 10),
-                (crb; 10),
-                (cvel; 6),
-                (subtree_linvel; 3),
-                (subtree_angmom; 3),
-                (cacc; 6),
-                (cfrc_int; 6),
-                (cfrc_ext; 6)
+                xfrc_applied: &mut [f64; 6]
             ]
         )
     }
@@ -544,23 +530,23 @@ impl MjBodyInfo {
     /// Returns a view to the correct fields in [`MjData`].
     pub fn view<'d>(&self, data: &'d MjData) -> MjBodyView<'d> {
         view_creator!(
-            self, MjBodyView, data.ffi(), const,
+            self, MjBodyView, data.ffi(),
             [
-                (xfrc_applied; 6),
-                (xpos; 3),
-                (xquat; 4),
-                (xmat; 9),
-                (xipos; 3),
-                (ximat; 9),
-                (subtree_com; 3),
-                (cinert; 10),
-                (crb; 10),
-                (cvel; 6),
-                (subtree_linvel; 3),
-                (subtree_angmom; 3),
-                (cacc; 6),
-                (cfrc_int; 6),
-                (cfrc_ext; 6)
+                xfrc_applied: &[f64; 6],
+                xpos: &[f64; 3],
+                xquat: &[f64; 4],
+                xmat: &[f64; 9],
+                xipos: &[f64; 3],
+                ximat: &[f64; 9],
+                subtree_com: &[f64; 3],
+                cinert: &[f64; 10],
+                crb: & [f64; 10],
+                cvel: & [f64; 6],
+                subtree_linvel: &[f64; 3],
+                subtree_angmom: &[f64; 3],
+                cacc: &[f64; 6],
+                cfrc_int: &[f64; 6],
+                cfrc_ext: &[f64; 6]
             ]
         )
     }
@@ -569,20 +555,6 @@ impl MjBodyInfo {
 /// A mutable view to actuator variables of MjData.
 pub struct MjBodyViewMut<'d> {
     pub xfrc_applied: &'d mut [f64; 6],
-    pub xpos: &'d mut [f64; 3],
-    pub xquat: &'d mut [f64; 4],
-    pub xmat: &'d mut [f64; 9],
-    pub xipos: &'d mut [f64; 3],
-    pub ximat: &'d mut [f64; 9],
-    pub subtree_com: &'d mut [f64; 3],
-    pub cinert: &'d mut [f64; 10],
-    pub crb: &'d mut [f64; 10],
-    pub cvel: &'d mut [f64; 6],
-    pub subtree_linvel: &'d mut [f64; 3],
-    pub subtree_angmom: &'d mut [f64; 3],
-    pub cacc: &'d mut [f64; 6],
-    pub cfrc_int: &'d mut [f64; 6],
-    pub cfrc_ext: &'d mut [f64; 6]
 }
 
 
@@ -590,20 +562,6 @@ impl MjBodyViewMut<'_> {
     /// Resets the internal variables to 0.0.
     pub fn zero(&mut self) {
         self.xfrc_applied.fill(0.0);
-        self.xpos.fill(0.0);
-        self.xquat.fill(0.0);
-        self.xmat.fill(0.0);
-        self.xipos.fill(0.0);
-        self.ximat.fill(0.0);
-        self.subtree_com.fill(0.0);
-        self.cinert.fill(0.0);
-        self.crb.fill(0.0);
-        self.cvel.fill(0.0);
-        self.subtree_linvel.fill(0.0);
-        self.subtree_angmom.fill(0.0);
-        self.cacc.fill(0.0);
-        self.cfrc_int.fill(0.0);
-        self.cfrc_ext.fill(0.0);
     }
 }
 
@@ -624,4 +582,74 @@ pub struct MjBodyView<'d> {
     pub cacc: &'d [f64; 6],
     pub cfrc_int: &'d [f64; 6],
     pub cfrc_ext: &'d [f64; 6]
+}
+
+
+#[cfg(test)]
+mod test {
+    use crate::prelude::*;
+
+    const MODEL: &str = "
+<mujoco>
+  <worldbody>
+    <light ambient=\"0.2 0.2 0.2\"/>
+    <body name=\"ball\">
+        <geom name=\"green_sphere\" pos=\".2 .2 .1\" size=\".1\" rgba=\"0 1 0 1\" solref=\"0.004 1.0\"/>
+        <joint name=\"ball_joint\" type=\"free\"/>
+    </body>
+
+    <geom name=\"floor1\" type=\"plane\" size=\"10 10 1\" solref=\"0.004 1.0\"/>
+  </worldbody>
+</mujoco>
+";
+
+    macro_rules! assert_almost_eq {
+        ($a:expr, $b:expr) => {
+            assert!(($a - $b).abs() < 1e-6)
+        }
+    }
+
+    #[test]
+    fn test_body_view() {
+        let body = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = body.make_data();
+        let body_info = data.body("ball").unwrap();
+        let mut cvel;
+
+        data.step1();
+
+        for _ in 0..10 {
+            data.step2();
+            data.step1();  // step() and step2() update before integration, thus we need to manually update non-state variables.
+        }
+
+        // The ball should start in a still position
+        cvel = body_info.view(&data).cvel;
+        assert_almost_eq!(cvel[0], 0.0);
+        assert_almost_eq!(cvel[1], 0.0);
+        assert_almost_eq!(cvel[2], 0.0);
+        assert_almost_eq!(cvel[3], 0.0);
+        assert_almost_eq!(cvel[4], 0.0);
+        // assert_almost_eq!(cvel[5], 0.0);  // Ignore due to slight instability of the model.
+
+        // Give the ball some velocity
+        body_info.view_mut(&mut data).xfrc_applied[0] = 5.0;
+        data.step2();
+        data.step1();
+
+        let view = body_info.view(&data);
+        cvel = view.cvel;
+        println!("{:?}", cvel);
+        assert_almost_eq!(cvel[0], 0.0);
+        assert!(cvel[1] > 0.0);  // wy should be positive when rolling with positive vx.
+        assert_almost_eq!(cvel[2], 0.0);
+        assert!(cvel[3] > 0.0);  // vx should point in the direction of the applied force.
+        assert_almost_eq!(cvel[4], 0.0);  // vy should be 0.
+        // assert_almost_eq!(cvel[5], 0.0);  // vz should be 0, but we don't test it due to jumpiness (instability) of the ball.
+
+        assert_almost_eq!(view.xfrc_applied[0], 5.0); // the original force should stay applied.
+
+        data.step2();
+        data.step1();
+    }
 }
