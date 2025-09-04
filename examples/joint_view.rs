@@ -32,21 +32,14 @@ fn main() {
 
     /* Create the joint info */
     let ball_info = data.joint("ball_joint").unwrap();
-    let ball_info = data.body("ball").unwrap();
-    ball_info.view_mut(&mut data).xfrc_applied;
     while viewer.running() {
         /* Step the simulation and sync the viewer */
         viewer.sync(&mut data);
 
         data.step1();
-        let xyz = ball_info.view_mut(&mut data).xfrc_applied;
-        // 
-        println!("{xyz:?}");
+        let xyz = &ball_info.view(&mut data).qpos[..3];
+        println!("{xyz:.2?}");
         data.step2();
-
-        let xyz2 = ball_info.view(&data).xpos;
-        println!("{xyz2:.2?}");
-
 
         std::thread::sleep(Duration::from_secs_f64(0.002));
     }
