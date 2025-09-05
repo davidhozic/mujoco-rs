@@ -50,7 +50,7 @@ pub type MjtGeom = mjtGeom;
 /// Types of frame alignment of elements with their parent bodies.
 pub type MjtSameFrame = mjtSameFrame;
 
-/// Dynamic modes for cameras and lights, specifying how the camera/light position and orientation are computed. 
+/// Dynamic modes for cameras and lights, specifying how the camera/light position and orientation are computed.
 pub type MjtCamLight = mjtCamLight;
 
 /*******************************************/
