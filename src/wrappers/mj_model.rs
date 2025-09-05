@@ -50,6 +50,9 @@ pub type MjtGeom = mjtGeom;
 /// Types of frame alignment of elements with their parent bodies.
 pub type MjtSameFrame = mjtSameFrame;
 
+/// Dynamic modes for cameras and lights, specifying how the camera/light position and orientation are computed. 
+pub type MjtCamLight = mjtCamLight;
+
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
@@ -210,6 +213,12 @@ impl MjModel {
         contype: 1, conaffinity: 1, bvhadr: 1, bvhnum: 1
     ]}
 
+    fixed_size_info_method! { Model, ffi(), camera, [
+        mode: 1, bodyid: 1, targetbodyid: 1, pos: 3, quat: 4,
+        poscom0: 3, pos0: 3, mat0: 9, orthographic: 1, fovy: 1,
+        ipd: 1, resolution: 2, sensorsize: 2, intrinsic: 4
+    ] }
+
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
         unsafe { self.0.as_ref().unwrap() }
@@ -319,6 +328,17 @@ info_with_view!(Model, body, body_,
 );
 
 
+/**************************************************************************************************/
+// Camera view
+/**************************************************************************************************/
+info_with_view!(Model, camera, cam_,
+    [
+        mode: MjtCamLight, bodyid: i32, targetbodyid: i32, pos: MjtNum, quat: MjtNum,
+        poscom0: MjtNum, pos0: MjtNum, mat0: MjtNum, orthographic: bool, fovy: MjtNum,
+        ipd: MjtNum, resolution: i32, sensorsize: f32, intrinsic: f32
+    ], []
+);
+
 
 #[cfg(test)]
 mod tests {
@@ -328,6 +348,8 @@ mod tests {
     const EXAMPLE_MODEL: &str = "
     <mujoco>
         <worldbody>
+            <camera name=\"cam1\" fovy=\"50\" resolution=\"100 200\"/>
+
             <light ambient=\"0.2 0.2 0.2\"/>
             <body name=\"ball\">
                 <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
@@ -484,5 +506,22 @@ mod tests {
         let mut view_mut = model_info.view_mut(&mut model);
         view_mut.pos[0] = 1.0;
         assert_eq!(view_mut.pos[0], 1.0);
+    }
+
+
+    #[test]
+    fn test_camera_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let model_info = model.camera("cam1").unwrap();
+        let view = model_info.view(&model);
+
+        /* Test read */
+        assert_eq!(&view.resolution[..], [100, 200]);
+        assert_eq!(view.fovy[0], 50.0);
+
+        /* Test write */
+        let mut view_mut = model_info.view_mut(&mut model);
+        view_mut.fovy[0] = 60.0;
+        assert_eq!(view_mut.fovy[0], 60.0);
     }
 }

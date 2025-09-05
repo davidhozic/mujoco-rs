@@ -17,7 +17,8 @@ Other changes:
 - Added new modules: `wrappers::mj_primitive`.
 - Added more attributes to the view to `MjJointView[Mut]`.
 - Added more views. All the views available now:
-    - `MjData`: actuator, body, camera, geom, site, light, joint, sensor and tendon.
+    - `MjData`: actuator, body, camera, geom, joint, light, sensor, site, tendon.
+    - `MjModel`: actuator, body, camera, geom, joint, sensor, tendon.
 
 ## 1.0.1 (MuJoCo 3.3.5)
 Bug fixes:
