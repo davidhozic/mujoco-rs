@@ -68,8 +68,7 @@ perform the following:
 Optional features can be enabled to add additional features.
 These are:
 - ``viewer`` (default): enables the Rust-native MuJoCo viewer. This can currently
-                display everything and respond to mouse/keyboard, however perturbations aren't yet supported.
-                Additionally, no side panels exist.
+                display everything and respond to mouse/keyboard. No side-panels (the user menu) currently exists.
 - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer. This is only available if you build the MuJoCo yourself using the steps above (yes, you need to use the forked repository).
 
 
