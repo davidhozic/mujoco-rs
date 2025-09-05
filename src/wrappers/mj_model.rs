@@ -8,6 +8,8 @@ use crate::wrappers::mj_data::MjData;
 use super::mj_auxiliary::MjVfs;
 use crate::mujoco_c::*;
 
+use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
+use crate::{view_creator, fixed_size_info_method, info_with_view};
 
 /// A Rust-safe wrapper around mjModel.
 /// Automatically clean after itself on destruction.
@@ -118,6 +120,10 @@ impl MjModel {
             Ok(Self(ptr_model))
         }
     }
+
+    // fixed_size_info_method! { actuator, [
+    //     trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, trnid: 2, actadr: 1, actnum: 1, group: 1, ctrllimited: 1,
+    //     forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize] }
 
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {

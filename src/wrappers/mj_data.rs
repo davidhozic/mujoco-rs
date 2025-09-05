@@ -55,10 +55,10 @@ impl<'a> MjData<'a> {
         }
     }
 
-    /// Obtains a [`MjActuatorInfo`] struct containing information about the name, id, and
+    /// Obtains a [`MjActuatorDataInfo`] struct containing information about the name, id, and
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
-    /// The actual view can be obtained via [`MjActuatorInfo::view`].
-    pub fn actuator(&self, name: &str) -> Option<MjActuatorInfo> {
+    /// The actual view can be obtained via [`MjActuatorDataInfo::view`].
+    pub fn actuator(&self, name: &str) -> Option<MjActuatorDataInfo> {
         let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_ACTUATOR as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
@@ -72,20 +72,20 @@ impl<'a> MjData<'a> {
             act = mj_view_indices!(id as usize, model_ffi.actuator_actadr, model_ffi.nu as usize, model_ffi.na as usize);
         }
 
-        Some(MjActuatorInfo { name: name.to_string(), id: id as usize, ctrl, act})
+        Some(MjActuatorDataInfo { name: name.to_string(), id: id as usize, ctrl, act})
     }
 
-    fixed_size_info_method! { body, [xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10, crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6] }
-    fixed_size_info_method! { camera, [xpos: 3, xmat: 9] }
-    fixed_size_info_method! { geom, [xpos: 3, xmat: 9] }
-    fixed_size_info_method! { site, [xpos: 3, xmat: 9] }
-    fixed_size_info_method! { light, [xpos: 3, xdir: 3] }
+    fixed_size_info_method! { Data, model.ffi(), body, [xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10, crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6] }
+    fixed_size_info_method! { Data, model.ffi(), camera, [xpos: 3, xmat: 9] }
+    fixed_size_info_method! { Data, model.ffi(), geom, [xpos: 3, xmat: 9] }
+    fixed_size_info_method! { Data, model.ffi(), site, [xpos: 3, xmat: 9] }
+    fixed_size_info_method! { Data, model.ffi(), light, [xpos: 3, xdir: 3] }
 
 
-    /// Obtains a [`MjJointInfo`] struct containing information about the name, id, and
+    /// Obtains a [`MjJointDataInfo`] struct containing information about the name, id, and
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
-    /// The actual view can be obtained via [`MjJointInfo::view`].
-    pub fn joint(&self, name: &str) -> Option<MjJointInfo> {
+    /// The actual view can be obtained via [`MjJointDataInfo::view`].
+    pub fn joint(&self, name: &str) -> Option<MjJointDataInfo> {
         let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_JOINT as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
@@ -118,14 +118,14 @@ impl<'a> MjData<'a> {
             // cdof
             // cdof_dot
 
-            Some(MjJointInfo {name: name.to_string(), id: id as usize,
+            Some(MjJointDataInfo {name: name.to_string(), id: id as usize,
                 qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
                 qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
             })
         }
     }
 
-    pub fn sensor(&self, name: &str) -> Option<MjSensorInfo> {
+    pub fn sensor(&self, name: &str) -> Option<MjSensorDataInfo> {
         let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_SENSOR as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
@@ -135,12 +135,12 @@ impl<'a> MjData<'a> {
 
         unsafe {
             let data = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nsensordata), mj_model_nx_to_nitem!(model_ffi, nsensordata), model_ffi.nsensordata);
-            Some(MjSensorInfo { id, name: name.to_string(), data })
+            Some(MjSensorDataInfo { id, name: name.to_string(), data })
         }
     }
 
     #[allow(non_snake_case)]
-    pub fn tendon(&self, name: &str) -> Option<MjTendonInfo> {
+    pub fn tendon(&self, name: &str) -> Option<MjTendonDataInfo> {
         let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_TENDON as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
@@ -158,7 +158,7 @@ impl<'a> MjData<'a> {
         let J = (id * nv, nv);
         let velocity = (id, 1);
 
-        Some(MjTendonInfo { id, name: name.to_string(), wrapadr, wrapnum, J_rownnz, J_rowadr, J_colind, length, J, velocity })
+        Some(MjTendonDataInfo { id, name: name.to_string(), wrapadr, wrapnum, J_rownnz, J_rowadr, J_colind, length, J, velocity })
     }
 
     /// Steps the MuJoCo simulation.
@@ -253,6 +253,7 @@ impl Drop for MjData<'_> {
 // Joint view
 /**************************************************************************************************/
 info_with_view!(
+    Data,
     joint,
     [
         qpos: f64, qvel: f64, qacc_warmstart: f64, qfrc_applied: f64, qacc: f64, xanchor: f64, xaxis: f64, qLDiagInv: f64, qfrc_bias: f64,
@@ -261,36 +262,72 @@ info_with_view!(
     []
 );
 
+/// Deprecated name for [`MjJointDataInfo`].
+#[deprecated]
+pub type MjJointInfo = MjJointDataInfo;
+
+
 /* Backward compatibility */
-impl MjJointViewMut<'_> {
-    /// Deprecated. Use [`MjJointViewMut::zero`] instead.
+impl MjJointDataViewMut<'_> {
+    /// Deprecated. Use [`MjJointDataViewMut::zero`] instead.
     #[deprecated]
     pub fn reset(&mut self) {
         self.zero();
     }
 }
 
+/// Deprecated name for [`MjJointDataView`].
+#[deprecated]
+pub type MjJointView<'d> = MjJointDataView<'d>;
+
+/// Deprecated name for [`MjJointDataViewMut`].
+#[deprecated]
+pub type MjJointViewMut<'d> = MjJointDataViewMut<'d>;
 
 /**************************************************************************************************/
 // Sensor view
 /**************************************************************************************************/
-info_with_view!(sensor, sensor, [data: f64], []);
+info_with_view!(Data, sensor, sensor, [data: f64], []);
 
 /**************************************************************************************************/
 // Geom view
 /**************************************************************************************************/
-info_with_view!(geom, geom_, [xpos: f64, xmat: f64], []);
+info_with_view!(Data, geom, geom_, [xpos: f64, xmat: f64], []);
+
+/// Deprecated name for [`MjGeomDataInfo`].
+#[deprecated]
+pub type MjGeomInfo = MjGeomDataInfo;
+
+/// Deprecated name for [`MjGeomDataView`].
+#[deprecated]
+pub type MjGeomView<'d> = MjGeomDataView<'d>;
+
+/// Deprecated name for [`MjGeomDataViewMut`].
+#[deprecated]
+pub type MjGeomViewMut<'d> = MjGeomDataViewMut<'d>;
 
 /**************************************************************************************************/
 // Actuator view
 /**************************************************************************************************/
-info_with_view!(actuator, [ctrl: f64], [act: f64]);
+info_with_view!(Data, actuator, [ctrl: f64], [act: f64]);
+
+/// Deprecated name for [`MjActuatorDataInfo`].
+#[deprecated]
+pub type MjActuatorInfo = MjActuatorDataInfo;
+
+/// Deprecated name for [`MjActuatorDataView`].
+#[deprecated]
+pub type MjActuatorView<'d> = MjActuatorDataView<'d>;
+
+/// Deprecated name for [`MjActuatorDataViewMut`].
+#[deprecated]
+pub type MjActuatorViewMut<'d> = MjActuatorDataViewMut<'d>;
 
 /**************************************************************************************************/
 // Body view
 /**************************************************************************************************/
 info_with_view!(
-    body, [
+    Data, body, [
         xfrc_applied: f64, xpos: f64, xquat: f64, xmat: f64, xipos: f64, ximat: f64,
         subtree_com: f64, cinert: f64, crb: f64, cvel: f64, subtree_linvel: f64,
         subtree_angmom: f64, cacc: f64, cfrc_int: f64, cfrc_ext: f64
@@ -300,22 +337,22 @@ info_with_view!(
 /**************************************************************************************************/
 // Camera view
 /**************************************************************************************************/
-info_with_view!(camera, cam_, [xpos: f64, xmat: f64], []);
+info_with_view!(Data, camera, cam_, [xpos: f64, xmat: f64], []);
 
 /**************************************************************************************************/
 // Site view
 /**************************************************************************************************/
-info_with_view!(site, site_, [xpos: f64, xmat: f64], []);
+info_with_view!(Data, site, site_, [xpos: f64, xmat: f64], []);
 
 /**************************************************************************************************/
 // Tendon view
 /**************************************************************************************************/
-info_with_view!(tendon, ten_, [wrapadr: i32, wrapnum: i32, J_rownnz: i32, J_rowadr: i32, J_colind: i32, length: f64, J: f64, velocity: f64], []);
+info_with_view!(Data, tendon, ten_, [wrapadr: i32, wrapnum: i32, J_rownnz: i32, J_rowadr: i32, J_colind: i32, length: f64, J: f64, velocity: f64], []);
 
 /**************************************************************************************************/
 // Light view
 /**************************************************************************************************/
-info_with_view!(light, light_, [xpos: f64, xdir: f64], []);
+info_with_view!(Data, light, light_, [xpos: f64, xdir: f64], []);
 
 /**************************************************************************************************/
 // Unit tests
