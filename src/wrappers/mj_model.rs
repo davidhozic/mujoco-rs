@@ -15,6 +15,8 @@ use crate::{view_creator, fixed_size_info_method, info_with_view};
 
 /*******************************************/
 // Types
+
+/* Actuator */
 /// Actuator transmission types.
 pub type MjtTrn = mjtTrn;
 /// Actuator dynamics types.
@@ -23,6 +25,22 @@ pub type MjtDyn = mjtDyn;
 pub type MjtGain = mjtGain;
 /// Actuator bias types.
 pub type MjtBias = mjtBias;
+
+/* Sensor */
+/// Sensor types.
+pub type MjtSensor = mjtSensor;
+
+/// These are the possible sensor data types.
+pub type MjtDataType = mjtDataType;
+
+/* Other */
+/// These are the compute stages for the skipstage parameters of [`mj_forwardSkip`] and [`mj_inverseSkip`].
+pub type MjtStage = mjtStage;
+
+/// MuJoCo object types. These are used, for example, in the support functions [`mj_name2id`] and
+/// [`mj_id2name`] to convert between object names and integer ids.
+pub type MjtObj = mjtObj;
+
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
@@ -142,6 +160,12 @@ impl MjModel {
         length0: 1,  lengthrange: 2
     ] }
 
+    fixed_size_info_method! { Model, ffi(), sensor, [
+        r#type: 1, datatype: 1, needstage: 1,
+        objtype: 1, objid: 1, reftype: 1, refid: 1, intprm: mjNSENS as usize,
+        dim: 1, adr: 1, cutoff: 1, noise: 1
+    ] }
+
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
         unsafe { self.0.as_ref().unwrap() }
@@ -184,6 +208,18 @@ info_with_view!(Model, actuator, actuator_,
 );
 
 
+/**************************************************************************************************/
+// Sensor view
+/**************************************************************************************************/
+info_with_view!(Model, sensor, sensor_,
+    [
+        r#type: MjtSensor, datatype: MjtDataType, needstage: MjtStage,
+        objtype: MjtObj, objid: i32, reftype: MjtObj, refid: i32, intprm: i32,
+        dim: i32, adr: i32, cutoff: MjtNum, noise: MjtNum
+    ], []
+);
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,6 +232,7 @@ mod tests {
             <body name=\"ball\">
                 <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
                 <joint type=\"free\"/>
+                <site name=\"touch\" size=\"1\" type=\"box\"/>
             </body>
 
             <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\"/>
@@ -209,6 +246,10 @@ mod tests {
         <actuator>
             <general name=\"slider\" joint=\"rod\" biastype=\"affine\" ctrlrange=\"0 1\" gaintype=\"fixed\"/>
         </actuator>
+
+        <sensor>
+            <touch name=\"touch\" site=\"touch\"/>
+        </sensor>
     </mujoco>
     ";
     const MODEL_SAVE_XML_PATH: &str = "./__TMP_MODEL.xml";
@@ -241,5 +282,23 @@ mod tests {
         assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_AFFINE);
         view_mut.zero();
         assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_FIXED);
+    }
+
+    #[test]
+    fn test_sensor_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let sensor_model_info = model.sensor("touch").unwrap();
+        let view = sensor_model_info.view(&model);
+        
+        /* Test read */
+        assert_eq!(view.dim[0], 1);
+        assert_eq!(view.objtype[0], MjtObj::mjOBJ_SITE);
+        assert_eq!(view.noise[0], 0.0);
+        assert_eq!(view.r#type[0], MjtSensor::mjSENS_TOUCH);
+
+        /* Test write */
+        let mut view_mut = sensor_model_info.view_mut(&mut model);
+        view_mut.noise[0] = 1.0;
+        assert_eq!(view_mut.noise[0], 1.0);
     }
 }
