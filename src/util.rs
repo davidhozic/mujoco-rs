@@ -235,7 +235,7 @@ macro_rules! view_creator {
 
 
 /// Macro for reducing duplicated code when creating info structs to
-/// items that have fixed size arrays in [`MjData`](crate::prelude::MjData).
+/// items that have fixed size arrays in [`MjData`](crate::prelude::MjData) or [`MjModel`](crate::prelude::MjModel).
 /// This creates a method `X(self, name; &str) -> XInfo`.
 #[macro_export]
 macro_rules! fixed_size_info_method {
@@ -269,10 +269,10 @@ macro_rules! fixed_size_info_method {
 macro_rules! info_with_view {
     /* PointerView */
 
-    /* name of the view/info, attribute prefix in MjData, [attributes always present], [attributes that can be None] */
+    /* name of the view/info, attribute prefix in MjData/MjModel, [attributes always present], [attributes that can be None] */
     ($info_type:ident, $name:ident, $prefix:ident, [$($attr:ident: $type_:ty),*], [$($opt_attr:ident: $type_opt:ty),*]) => {
         paste::paste! {
-            #[doc = "Stores information required to create views to [`MjData`] arrays corresponding to a " $name "."]
+            #[doc = "Stores information required to create views to [`Mj" $info_type "`] arrays corresponding to a " $name "."]
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel $info_type Info>] {
                 pub name: String,
@@ -286,18 +286,18 @@ macro_rules! info_with_view {
             }
 
             impl [<Mj $name:camel $info_type Info>] {
-                /// Returns a mutable view to the correct fields in [`MjData`].
-                pub fn view_mut<'d>(&self, data: &'d mut MjData) -> [<Mj $name:camel $info_type ViewMut>]<'d> {
-                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], data.ffi(), $prefix, [$($attr),*], [$($opt_attr),*], PointerViewMut::new)
+                #[doc = "Returns a mutable view to the correct fields in [`Mj" $info_type "`]"]
+                pub fn view_mut<'d>(&self, [<$info_type:lower>]: &'d mut [<Mj $info_type>]) -> [<Mj $name:camel $info_type ViewMut>]<'d> {
+                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), $prefix, [$($attr),*], [$($opt_attr),*], PointerViewMut::new)
                 }
 
-                /// Returns a view to the correct fields in [`MjData`].
-                pub fn view<'d>(&self, data: &'d MjData) -> [<Mj $name:camel $info_type View>]<'d> {
-                    view_creator!(self, [<Mj $name:camel $info_type View>], data.ffi(), $prefix, [$($attr),*], [$($opt_attr),*], PointerView::new)
+                #[doc = "Returns a view to the correct fields in [`Mj" $info_type "`]"]
+                pub fn view<'d>(&self, [<$info_type:lower>]: &'d [<Mj $info_type>]) -> [<Mj $name:camel $info_type View>]<'d> {
+                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), $prefix, [$($attr),*], [$($opt_attr),*], PointerView::new)
                 }
             }
 
-            #[doc = "A mutable view to " $name " variables of [`MjData`]."]
+            #[doc = "A mutable view to " $name " variables of [`Mj" $info_type "`]."]
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel $info_type ViewMut>]<'d> {
                 $(
@@ -322,8 +322,7 @@ macro_rules! info_with_view {
                 }
             }
 
-
-            #[doc = "An immutable view to " $name " variables of [`MjData`]."]
+            #[doc = "An immutable view to " $name " variables of [`Mj" $info_type "`]."]
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel $info_type View>]<'d> {
                 $(
@@ -339,7 +338,7 @@ macro_rules! info_with_view {
     /* name of the view/info, [attributes always present], [attributes that can be None] */
     ($info_type:ident, $name:ident, [$($attr:ident: $type_:ty),*], [$($opt_attr:ident: $type_opt:ty),*]) => {
         paste::paste! {
-            #[doc = "Stores information required to create views to MjData arrays corresponding to a " $name "."]
+            #[doc = "Stores information required to create views to [`Mj" $info_type "`] arrays corresponding to a " $name "."]
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel $info_type Info>] {
                 pub name: String,
@@ -353,19 +352,18 @@ macro_rules! info_with_view {
             }
 
             impl [<Mj $name:camel $info_type Info>] {
-                /// Returns a mutable view to the correct fields in [`MjData`].
-                pub fn view_mut<'d>(&self, data: &'d mut MjData) -> [<Mj $name:camel $info_type ViewMut>]<'d> {
-                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], data.ffi(), [$($attr),*], [$($opt_attr),*], PointerViewMut::new)
+                #[doc = "Returns a mutable view to the correct fields in [`Mj" $info_type "`]"]
+                pub fn view_mut<'d>(&self, [<$info_type:lower>]: &'d mut [<Mj $info_type>]) -> [<Mj $name:camel $info_type ViewMut>]<'d> {
+                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($attr),*], [$($opt_attr),*], PointerViewMut::new)
                 }
 
-                /// Returns a view to the correct fields in [`MjData`].
-                pub fn view<'d>(&self, data: &'d MjData) -> [<Mj $name:camel $info_type View>]<'d> {
-                    view_creator!(self, [<Mj $name:camel $info_type View>], data.ffi(), [$($attr),*], [$($opt_attr),*], PointerView::new)
+                #[doc = "Returns a view to the correct fields in [`Mj" $info_type "`]"]
+                pub fn view<'d>(&self, [<$info_type:lower>]: &'d [<Mj $info_type>]) -> [<Mj $name:camel $info_type View>]<'d> {
+                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($attr),*], [$($opt_attr),*], PointerView::new)
                 }
             }
 
-
-            #[doc = "A mutable view to " $name " variables of [`MjData`]."]
+            #[doc = "A mutable view to " $name " variables of [`Mj" $info_type "`]."]
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel $info_type ViewMut>]<'d> {
                 $(
@@ -390,8 +388,7 @@ macro_rules! info_with_view {
                 }
             }
 
-
-            #[doc = "An immutable view to " $name " variables of [`MjData`]."]
+            #[doc = "An immutable view to " $name " variables of [`Mj" $info_type "`]."]
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel $info_type View>]<'d> {
                 $(
