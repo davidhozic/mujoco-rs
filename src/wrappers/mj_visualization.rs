@@ -4,7 +4,7 @@ use std::mem::MaybeUninit;
 use std::ptr;
 
 use super::mj_rendering::{MjrContext, MjrRectangle};
-use super::mj_model::MjModel;
+use super::mj_model::{MjModel, MjtGeom};
 use super::mj_data::MjData;
 use crate::mujoco_c::*;
 
@@ -205,10 +205,6 @@ impl MjvFigure {
     }
 }
 
-/***********************************************************************************************************************
-** MjtGeom
-***********************************************************************************************************************/
-pub type MjtGeom = mjtGeom;
 
 /***********************************************************************************************************************
 ** MjvScene

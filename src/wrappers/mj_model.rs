@@ -6,8 +6,54 @@ use std::ptr;
 
 use crate::wrappers::mj_data::MjData;
 use super::mj_auxiliary::MjVfs;
+use super::mj_primitive::*;
 use crate::mujoco_c::*;
 
+use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
+use crate::{view_creator, fixed_size_info_method, info_with_view};
+
+
+/*******************************************/
+// Types
+
+/* Actuator */
+/// Actuator transmission types.
+pub type MjtTrn = mjtTrn;
+/// Actuator dynamics types.
+pub type MjtDyn = mjtDyn;
+/// Actuator gain types.
+pub type MjtGain = mjtGain;
+/// Actuator bias types.
+pub type MjtBias = mjtBias;
+
+/* Sensor */
+/// Sensor types.
+pub type MjtSensor = mjtSensor;
+
+/// These are the possible sensor data types.
+pub type MjtDataType = mjtDataType;
+
+/* Other */
+/// These are the compute stages for the skipstage parameters of [`mj_forwardSkip`] and [`mj_inverseSkip`].
+pub type MjtStage = mjtStage;
+
+/// MuJoCo object types. These are used, for example, in the support functions [`mj_name2id`] and
+/// [`mj_id2name`] to convert between object names and integer ids.
+pub type MjtObj = mjtObj;
+
+/// Primitive joint types.
+pub type MjtJoint = mjtJoint;
+
+/// Geometric types supported by MuJoCo.
+pub type MjtGeom = mjtGeom;
+
+/// Types of frame alignment of elements with their parent bodies.
+pub type MjtSameFrame = mjtSameFrame;
+
+/// Dynamic modes for cameras and lights, specifying how the camera/light position and orientation are computed.
+pub type MjtCamLight = mjtCamLight;
+
+/*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
 /// Automatically clean after itself on destruction.
@@ -119,6 +165,60 @@ impl MjModel {
         }
     }
 
+    fixed_size_info_method! { Model, ffi(), actuator, [
+        trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, trnid: 2, actadr: 1, actnum: 1, group: 1, ctrllimited: 1,
+        forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize,  biasprm: mjNBIAS as usize, 
+        actearly: 1,  ctrlrange: 2, forcerange: 2,  actrange: 2,  gear: 6,  cranklength: 1,  acc0: 1, 
+        length0: 1,  lengthrange: 2
+    ] }
+
+    fixed_size_info_method! { Model, ffi(), sensor, [
+        r#type: 1, datatype: 1, needstage: 1,
+        objtype: 1, objid: 1, reftype: 1, refid: 1, intprm: mjNSENS as usize,
+        dim: 1, adr: 1, cutoff: 1, noise: 1
+    ] }
+
+
+    fixed_size_info_method! { Model, ffi(), tendon, [
+        adr: 1, num: 1, matid: 1, group: 1, limited: 1,
+        actfrclimited: 1, width: 1, solref_lim: mjNREF as usize,
+        solimp_lim: mjNIMP as usize, solref_fri: mjNREF as usize, solimp_fri: mjNIMP as usize,
+        range: 2, actfrcrange: 2, margin: 1, stiffness: 1,
+        damping: 1, armature: 1, frictionloss: 1, lengthspring: 2,
+        length0: 1, invweight0: 1, rgba: 4
+    ] }
+
+    fixed_size_info_method! { Model, ffi(), joint, [
+        r#type: 1, qposadr: 1, dofadr: 1, bodyid: 1, group: 1,
+        limited: 1, actfrclimited: 1, actgravcomp: 1, solref: mjNREF as usize,
+        solimp: mjNIMP as usize, pos: 3, axis: 3, stiffness: 1,
+        range: 2, actfrcrange: 2, margin: 1
+    ] }
+
+    fixed_size_info_method! { Model, ffi(), geom, [
+        r#type: 1, contype: 1, conaffinity: 1, condim: 1, bodyid: 1, dataid: 1, matid: 1,
+        group: 1, priority: 1, plugin: 1, sameframe: 1, solmix: 1, solref: mjNREF as usize,
+        solimp: mjNIMP as usize,
+        size: 3, aabb: 6, rbound: 1, pos: 3, quat: 4, friction: 3, margin: 1, gap: 1,
+        fluid: mjNFLUID as usize, rgba: 4
+    ] }
+
+    fixed_size_info_method! { Model, ffi(), body, [
+        parentid: 1, rootid: 1, weldid: 1, mocapid: 1,
+        jntnum: 1, jntadr: 1, dofnum: 1, dofadr: 1,
+        treeid: 1, geomnum: 1, geomadr: 1, simple: 1,
+        sameframe: 1, pos: 3, quat: 4, ipos: 3, iquat: 4,
+        mass: 1, subtreemass: 1, inertia: 3, invweight0: 2,
+        gravcomp: 1, margin: 1, plugin: 1,
+        contype: 1, conaffinity: 1, bvhadr: 1, bvhnum: 1
+    ]}
+
+    fixed_size_info_method! { Model, ffi(), camera, [
+        mode: 1, bodyid: 1, targetbodyid: 1, pos: 3, quat: 4,
+        poscom0: 3, pos0: 3, mat0: 9, orthographic: 1, fovy: 1,
+        ipd: 1, resolution: 2, sensorsize: 2, intrinsic: 4
+    ] }
+
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
         unsafe { self.0.as_ref().unwrap() }
@@ -147,6 +247,99 @@ impl Drop for MjModel {
 }
 
 
+/**************************************************************************************************/
+// Actuator view
+/**************************************************************************************************/
+info_with_view!(Model, actuator, actuator_,
+    [
+        trntype: MjtTrn, dyntype: MjtDyn, gaintype: MjtGain, biastype: MjtBias, trnid: i32,
+        actadr: i32, actnum: i32, group: i32, ctrllimited: bool,
+        forcelimited: bool, actlimited: bool, dynprm: MjtNum, gainprm: MjtNum, biasprm: MjtNum,
+        actearly: bool, ctrlrange: MjtNum, forcerange: MjtNum, actrange: MjtNum,
+        gear: MjtNum, cranklength: MjtNum, acc0: MjtNum, length0: MjtNum, lengthrange: MjtNum
+    ], []
+);
+
+
+/**************************************************************************************************/
+// Sensor view
+/**************************************************************************************************/
+info_with_view!(Model, sensor, sensor_,
+    [
+        r#type: MjtSensor, datatype: MjtDataType, needstage: MjtStage,
+        objtype: MjtObj, objid: i32, reftype: MjtObj, refid: i32, intprm: i32,
+        dim: i32, adr: i32, cutoff: MjtNum, noise: MjtNum
+    ], []
+);
+
+
+/**************************************************************************************************/
+// Tendon view
+/**************************************************************************************************/
+info_with_view!(Model, tendon, tendon_,
+    [
+        adr: i32, num: i32, matid: i32, group: i32, limited: bool,
+        actfrclimited: bool, width: MjtNum, solref_lim: MjtNum,
+        solimp_lim: MjtNum, solref_fri: MjtNum, solimp_fri: MjtNum,
+        range: MjtNum, actfrcrange: MjtNum, margin: MjtNum, stiffness: MjtNum,
+        damping: MjtNum, armature: MjtNum, frictionloss: MjtNum, lengthspring: MjtNum,
+        length0: MjtNum, invweight0: MjtNum, rgba: f32
+    ], []
+);
+
+
+/**************************************************************************************************/
+// Joint view
+/**************************************************************************************************/
+info_with_view!(Model, joint, jnt_,
+    [
+        r#type: MjtJoint, qposadr: i32, dofadr: i32, bodyid: i32, group: i32,
+        limited: bool, actfrclimited: bool, actgravcomp: bool, solref: MjtNum,
+        solimp: MjtNum, pos: MjtNum, axis: MjtNum, stiffness: MjtNum,
+        range: MjtNum, actfrcrange: MjtNum, margin: MjtNum
+    ], []
+);
+
+/**************************************************************************************************/
+// Geom view
+/**************************************************************************************************/
+info_with_view!(Model, geom, geom_,
+    [
+        r#type: MjtGeom, contype: i32, conaffinity: i32, condim: i32, bodyid: i32, dataid: i32, matid: i32,
+        group: i32, priority: i32, plugin: i32, sameframe: MjtSameFrame, solmix: MjtNum, solref: MjtNum, solimp: MjtNum,
+        size: MjtNum, aabb: MjtNum, rbound: MjtNum, pos: MjtNum, quat: MjtNum, friction: MjtNum, margin: MjtNum, gap: MjtNum,
+        fluid: MjtNum, rgba: f32
+    ], []
+);
+
+/**************************************************************************************************/
+// Body view
+/**************************************************************************************************/
+info_with_view!(Model, body, body_,
+    [
+        parentid: i32, rootid: i32, weldid: i32, mocapid: i32,
+        jntnum: i32, jntadr: i32, dofnum: i32, dofadr: i32,
+        treeid: i32, geomnum: i32, geomadr: i32, simple: MjtByte,
+        sameframe: MjtSameFrame, pos: MjtNum, quat: MjtNum, ipos: MjtNum, iquat: MjtNum,
+        mass: MjtNum, subtreemass: MjtNum, inertia: MjtNum, invweight0: MjtNum,
+        gravcomp: MjtNum, margin: MjtNum, plugin: i32,
+        contype: i32, conaffinity: i32, bvhadr: i32, bvhnum: i32
+    ], []
+);
+
+
+/**************************************************************************************************/
+// Camera view
+/**************************************************************************************************/
+info_with_view!(Model, camera, cam_,
+    [
+        mode: MjtCamLight, bodyid: i32, targetbodyid: i32, pos: MjtNum, quat: MjtNum,
+        poscom0: MjtNum, pos0: MjtNum, mat0: MjtNum, orthographic: bool, fovy: MjtNum,
+        ipd: MjtNum, resolution: i32, sensorsize: f32, intrinsic: f32
+    ], []
+);
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,16 +347,50 @@ mod tests {
 
     const EXAMPLE_MODEL: &str = "
     <mujoco>
-    <worldbody>
-        <light ambient=\"0.2 0.2 0.2\"/>
-        <body name=\"ball\">
-            <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
-            <joint type=\"free\"/>
-        </body>
+        <worldbody>
+            <camera name=\"cam1\" fovy=\"50\" resolution=\"100 200\"/>
 
-        <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\"/>
+            <light ambient=\"0.2 0.2 0.2\"/>
+            <body name=\"ball\">
+                <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
+                <joint name=\"ball\" type=\"free\" axis=\"1 1 1\"/>
+                <site name=\"touch\" size=\"1\" type=\"box\"/>
+            </body>
 
-    </worldbody>
+            <body name=\"ball1\" pos=\"-.5 0 0\">
+                <geom size=\".1\" rgba=\"0 1 0 1\" mass=\"1\"/>
+                <joint type=\"free\"/>
+                <site name=\"ball1\" size=\".1 .1 .1\" pos=\"0 0 0\" rgba=\"0 1 0 0.2\" type=\"box\"/>
+            </body>
+
+            <body name=\"ball2\"  pos=\".5 0 0\">
+                <geom name=\"ball2\" size=\".5\" rgba=\"0 1 1 1\" mass=\"1\"/>
+                <joint type=\"free\"/>
+                <site name=\"ball2\" size=\".1 .1 .1\" pos=\"0 0 0\" rgba=\"0 1 1 0.2\" type=\"box\"/>
+            </body>
+
+            <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\"/>
+
+            <body name=\"slider\">
+                <geom name=\"rod\" type=\"cylinder\" size=\"1 10 0\" euler=\"90 0 0\" pos=\"0 0 10\"/>
+                <joint name=\"rod\" type=\"slide\" axis=\"0 1 0\" range=\"0 1\"/>
+            </body>
+        </worldbody>
+
+        <actuator>
+            <general name=\"slider\" joint=\"rod\" biastype=\"affine\" ctrlrange=\"0 1\" gaintype=\"fixed\"/>
+        </actuator>
+
+        <sensor>
+            <touch name=\"touch\" site=\"touch\"/>
+        </sensor>
+
+        <tendon>
+            <spatial name=\"tendon\" limited=\"true\" range=\"0 1\" rgba=\"0 .1 1 1\" width=\".005\">
+            <site site=\"ball1\"/>
+            <site site=\"ball2\"/>
+        </spatial>
+    </tendon>
     </mujoco>
     ";
     const MODEL_SAVE_XML_PATH: &str = "./__TMP_MODEL.xml";
@@ -176,9 +403,125 @@ mod tests {
         fs::remove_file(MODEL_SAVE_XML_PATH).unwrap();
     }
 
-    /// Tests whether the automatic attributes work as expected.
     #[test]
-    fn test_model_getters() {
-        MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+    fn test_actuator_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let actuator_model_info = model.actuator("slider").unwrap();
+        let view = actuator_model_info.view(&model);
+
+        /* Test read */
+        assert_eq!(view.biastype[0], MjtBias::mjBIAS_AFFINE);
+        assert_eq!(&view.ctrlrange[..], [0.0, 1.0]);
+        assert_eq!(view.ctrllimited[0], true);
+        assert_eq!(view.forcelimited[0], false);
+        assert_eq!(view.trntype[0], MjtTrn::mjTRN_JOINT);
+        assert_eq!(view.gaintype[0], MjtGain::mjGAIN_FIXED);
+
+        /* Test write */
+        let mut view_mut = actuator_model_info.view_mut(&mut model);
+        view_mut.gaintype[0] = MjtGain::mjGAIN_AFFINE;
+        assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_AFFINE);
+        view_mut.zero();
+        assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_FIXED);
+    }
+
+    #[test]
+    fn test_sensor_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let sensor_model_info = model.sensor("touch").unwrap();
+        let view = sensor_model_info.view(&model);
+        
+        /* Test read */
+        assert_eq!(view.dim[0], 1);
+        assert_eq!(view.objtype[0], MjtObj::mjOBJ_SITE);
+        assert_eq!(view.noise[0], 0.0);
+        assert_eq!(view.r#type[0], MjtSensor::mjSENS_TOUCH);
+
+        /* Test write */
+        let mut view_mut = sensor_model_info.view_mut(&mut model);
+        view_mut.noise[0] = 1.0;
+        assert_eq!(view_mut.noise[0], 1.0);
+    }
+
+    #[test]
+    fn test_tendon_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let tendon_model_info = model.tendon("tendon").unwrap();
+        let view = tendon_model_info.view(&model);
+        
+        /* Test read */
+        assert_eq!(&view.range[..], [0.0, 1.0]);
+        assert_eq!(view.limited[0], true);
+        assert_eq!(view.width[0], 0.005);
+
+        /* Test write */
+        let mut view_mut = tendon_model_info.view_mut(&mut model);
+        view_mut.frictionloss[0] = 5e-2;
+        assert_eq!(view_mut.frictionloss[0], 5e-2);
+    }
+
+    #[test]
+    fn test_joint_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let model_info = model.joint("rod").unwrap();
+        let view = model_info.view(&model);
+        
+        /* Test read */
+        assert_eq!(view.r#type[0], MjtJoint::mjJNT_SLIDE);
+        assert_eq!(view.limited[0], true);
+        assert_eq!(&view.axis[..], [0.0, 1.0 , 0.0]);
+
+        /* Test write */
+        let mut view_mut = model_info.view_mut(&mut model);
+        view_mut.axis.copy_from_slice(&[1.0, 0.0, 0.0]);
+        assert_eq!(&view_mut.axis[..], [1.0, 0.0 , 0.0]);
+    }
+
+    #[test]
+    fn test_geom_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let model_info = model.geom("ball2").unwrap();
+        let view = model_info.view(&model);
+        
+        /* Test read */
+        assert_eq!(view.r#type[0], MjtGeom::mjGEOM_SPHERE);
+        assert_eq!(view.size[0], 0.5);
+
+        /* Test write */
+        let mut view_mut = model_info.view_mut(&mut model);
+        view_mut.size[0] = 1.0;
+        assert_eq!(view_mut.size[0], 1.0);
+    }
+
+    #[test]
+    fn test_body_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let model_info = model.body("ball2").unwrap();
+        let view = model_info.view(&model);
+        
+        /* Test read */
+        assert_eq!(view.pos[0], 0.5);
+
+        /* Test write */
+        let mut view_mut = model_info.view_mut(&mut model);
+        view_mut.pos[0] = 1.0;
+        assert_eq!(view_mut.pos[0], 1.0);
+    }
+
+
+    #[test]
+    fn test_camera_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let model_info = model.camera("cam1").unwrap();
+        let view = model_info.view(&model);
+
+        /* Test read */
+        assert_eq!(&view.resolution[..], [100, 200]);
+        assert_eq!(view.fovy[0], 50.0);
+
+        /* Test write */
+        let mut view_mut = model_info.view_mut(&mut model);
+        view_mut.fovy[0] = 60.0;
+        assert_eq!(view_mut.fovy[0], 60.0);
     }
 }

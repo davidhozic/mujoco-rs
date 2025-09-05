@@ -6,262 +6,7 @@ use std::ffi::CString;
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::util::{PointerViewMut, PointerView};
 
-
-/**************************************************************************************************/
-// Macros
-/**************************************************************************************************/
-
-/// Creates a $view struct, mapping $field and $opt_field to the same location as in $data.
-macro_rules! view_creator {
-    /* Pointer view */
-    ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
-        unsafe {
-            $view {
-                $(
-                    $field: $ptr_view($data.$field.add($self.$field.0), $self.$field.1),
-                )*
-                $(
-                    $opt_field: if $self.$opt_field.1 > 0 {
-                        Some($ptr_view($data.$opt_field.add($self.$opt_field.0), $self.$opt_field.1))
-                    } else {None},
-                )*
-            }
-        }
-    };
-
-    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
-        paste::paste! {
-            unsafe {
-                $view {
-                    $(
-                        $field: $ptr_view($data.[<$prefix $field>].add($self.$field.0), $self.$field.1),
-                    )*
-                    $(
-                        $opt_field: if $self.$opt_field.1 > 0 {
-                            Some($ptr_view($data.[<$prefix $opt_field>].add($self.$opt_field.0), $self.$opt_field.1))
-                        } else {None},
-                    )*
-                }
-            }
-        }
-    };
-
-    /* Direct reference */
-    ($self:expr, $view:ident, $data:expr, [$($field:ident: &mut [$type:ty; $len:literal]),*]) => {
-        unsafe {
-            $view {
-                $(
-                    $field: ($data.$field.add($self.id * $len) as *mut [$type; $len]).as_mut().unwrap(),
-                )*
-            }
-        }
-    };
-
-    ($self:expr, $view:ident, $data:expr, [$($field:ident: &[$type:ty; $len:literal]),*]) => {
-        unsafe {
-            $view {
-                $(
-                    $field: ($data.$field.add($self.id * $len) as *const [$type; $len]).as_ref().unwrap(),
-                )*
-            }
-        }
-    };
-
-    /* Direct reference with prefix */
-    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident: &mut [$type:ty; $len:literal]),*]) => {
-        paste::paste! {
-            unsafe {
-                $view {
-                    $(
-                        $field: ($data.[<$prefix $field>].add($self.id * $len) as *mut [$type; $len]).as_mut().unwrap(),
-                    )*
-                }
-            }
-        }
-    };
-
-    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident: &[$type:ty; $len:literal]),*]) => {
-        paste::paste! {
-            unsafe {
-                $view {
-                    $(
-                        $field: ($data.[<$prefix $field>].add($self.id * $len) as *const [$type; $len]).as_ref().unwrap(),
-                    )*
-                }
-            }
-        }
-    };
-}
-
-
-/// Macro for reducing duplicated code when creating info structs to
-/// items that have fixed size arrays in [`MjData`].
-/// This creates a method `X(self, name; &str) -> XInfo`.
-macro_rules! fixed_size_info_method {
-    ($type_:ident, [$($attr:ident: $len:literal),*]) => {
-        paste::paste! {
-            #[doc = concat!(
-                "Obtains a [`", stringify!([<Mj $type_:camel Info>]), "`] struct containing information about the name, id, and ",
-                "indices required for obtaining references to the correct locations in [`MjData`]. ",
-                "The actual view can be obtained via [`", stringify!([<Mj $type_:camel Info>]), "::view`]."
-            )]
-            pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel Info>]> {
-                let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::[<mjOBJ_ $type_:upper>] as i32, CString::new(name).unwrap().as_ptr())};
-                if id == -1 {  // not found
-                    return None;
-                }
-
-                let id = id as usize;
-                $(
-                    let $attr = (id * $len, $len);
-                )*
-
-                Some([<Mj $type_:camel Info>] {name: name.to_string(), id, $($attr),*})
-            }
-        }
-    }
-}
-
-
-/// Creates the xInfo struct along with corresponding xView and xViewMut structs.
-macro_rules! info_with_view {
-    /* PointerView */
-
-    /* name of the view/info, attribute prefix in MjData, [attributes always present], [attributes that can be None] */
-    ($name:ident, $prefix:ident, [$($attr:ident: $type_:ty),*], [$($opt_attr:ident: $type_opt:ty),*]) => {
-        paste::paste! {
-            #[doc = "Stores information required to create views to [`MjData`] arrays corresponding to a " $name "."]
-            #[allow(non_snake_case)]
-            pub struct [<Mj $name:camel Info>] {
-                pub name: String,
-                pub id: usize,
-                $(
-                    $attr: (usize, usize),
-                )*
-                $(
-                    $opt_attr: (usize, usize),
-                )*
-            }
-
-            impl [<Mj $name:camel Info>] {
-                /// Returns a mutable view to the correct fields in [`MjData`].
-                pub fn view_mut<'d>(&self, data: &'d mut MjData) -> [<Mj $name:camel ViewMut>]<'d> {
-                    view_creator!(self, [<Mj $name:camel ViewMut>], data.ffi(), $prefix, [$($attr),*], [$($opt_attr),*], PointerViewMut::new)
-                }
-
-                /// Returns a view to the correct fields in [`MjData`].
-                pub fn view<'d>(&self, data: &'d MjData) -> [<Mj $name:camel View>]<'d> {
-                    view_creator!(self, [<Mj $name:camel View>], data.ffi(), $prefix, [$($attr),*], [$($opt_attr),*], PointerView::new)
-                }
-            }
-
-            #[doc = "A mutable view to " $name " variables of [`MjData`]."]
-            #[allow(non_snake_case)]
-            pub struct [<Mj $name:camel ViewMut>]<'d> {
-                $(
-                    pub $attr: PointerViewMut<'d, $type_>,
-                )*
-                $(
-                    pub $opt_attr: Option<PointerViewMut<'d, $type_opt>>,
-                )*
-            }
-
-            impl [<Mj $name:camel ViewMut>]<'_> {
-                /// Resets the internal variables to 0.0.
-                pub fn zero(&mut self) {
-                    $(
-                        self.$attr.fill(0.0 as $type_);
-                    )*
-                    $(
-                        if let Some(x) = &mut self.$opt_attr {
-                            x.fill(0.0 as $type_opt);
-                        }
-                    )*
-                }
-            }
-
-
-            #[doc = "An immutable view to " $name " variables of [`MjData`]."]
-            #[allow(non_snake_case)]
-            pub struct [<Mj $name:camel View>]<'d> {
-                $(
-                    pub $attr: PointerView<'d, $type_>,
-                )*
-                $(
-                    pub $opt_attr: Option<PointerView<'d, $type_opt>>,
-                )*
-            }
-        }
-    };
-
-    /* name of the view/info, [attributes always present], [attributes that can be None] */
-    ($name:ident, [$($attr:ident: $type_:ty),*], [$($opt_attr:ident: $type_opt:ty),*]) => {
-        paste::paste! {
-            #[doc = "Stores information required to create views to MjData arrays corresponding to a " $name "."]
-            #[allow(non_snake_case)]
-            pub struct [<Mj $name:camel Info>] {
-                pub name: String,
-                pub id: usize,
-                $(
-                    $attr: (usize, usize),
-                )*
-                $(
-                    $opt_attr: (usize, usize),
-                )*
-            }
-
-            impl [<Mj $name:camel Info>] {
-                /// Returns a mutable view to the correct fields in [`MjData`].
-                pub fn view_mut<'d>(&self, data: &'d mut MjData) -> [<Mj $name:camel ViewMut>]<'d> {
-                    view_creator!(self, [<Mj $name:camel ViewMut>], data.ffi(), [$($attr),*], [$($opt_attr),*], PointerViewMut::new)
-                }
-
-                /// Returns a view to the correct fields in [`MjData`].
-                pub fn view<'d>(&self, data: &'d MjData) -> [<Mj $name:camel View>]<'d> {
-                    view_creator!(self, [<Mj $name:camel View>], data.ffi(), [$($attr),*], [$($opt_attr),*], PointerView::new)
-                }
-            }
-
-
-            #[doc = "A mutable view to " $name " variables of [`MjData`]."]
-            #[allow(non_snake_case)]
-            pub struct [<Mj $name:camel ViewMut>]<'d> {
-                $(
-                    pub $attr: PointerViewMut<'d, $type_>,
-                )*
-                $(
-                    pub $opt_attr: Option<PointerViewMut<'d, $type_opt>>,
-                )*
-            }
-
-            impl [<Mj $name:camel ViewMut>]<'_> {
-                /// Resets the internal variables to 0.0.
-                pub fn zero(&mut self) {
-                    $(
-                        self.$attr.fill(0.0 as $type_);
-                    )*
-                    $(
-                        if let Some(x) = &mut self.$opt_attr {
-                            x.fill(0.0 as $type_opt);
-                        }
-                    )*
-                }
-            }
-
-
-            #[doc = "An immutable view to " $name " variables of [`MjData`]."]
-            #[allow(non_snake_case)]
-            pub struct [<Mj $name:camel View>]<'d> {
-                $(
-                    pub $attr: PointerView<'d, $type_>,
-                )*
-                $(
-                    pub $opt_attr: Option<PointerView<'d, $type_opt>>,
-                )*
-            }
-        }
-    };
-}
+use crate::{view_creator, fixed_size_info_method, info_with_view};
 
 
 /**************************************************************************************************/
@@ -310,10 +55,10 @@ impl<'a> MjData<'a> {
         }
     }
 
-    /// Obtains a [`MjActuatorInfo`] struct containing information about the name, id, and
+    /// Obtains a [`MjActuatorDataInfo`] struct containing information about the name, id, and
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
-    /// The actual view can be obtained via [`MjActuatorInfo::view`].
-    pub fn actuator(&self, name: &str) -> Option<MjActuatorInfo> {
+    /// The actual view can be obtained via [`MjActuatorDataInfo::view`].
+    pub fn actuator(&self, name: &str) -> Option<MjActuatorDataInfo> {
         let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_ACTUATOR as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
@@ -327,20 +72,20 @@ impl<'a> MjData<'a> {
             act = mj_view_indices!(id as usize, model_ffi.actuator_actadr, model_ffi.nu as usize, model_ffi.na as usize);
         }
 
-        Some(MjActuatorInfo { name: name.to_string(), id: id as usize, ctrl, act})
+        Some(MjActuatorDataInfo { name: name.to_string(), id: id as usize, ctrl, act})
     }
 
-    fixed_size_info_method! { body, [xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10, crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6] }
-    fixed_size_info_method! { camera, [xpos: 3, xmat: 9] }
-    fixed_size_info_method! { geom, [xpos: 3, xmat: 9] }
-    fixed_size_info_method! { site, [xpos: 3, xmat: 9] }
-    fixed_size_info_method! { light, [xpos: 3, xdir: 3] }
+    fixed_size_info_method! { Data, model.ffi(), body, [xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10, crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6] }
+    fixed_size_info_method! { Data, model.ffi(), camera, [xpos: 3, xmat: 9] }
+    fixed_size_info_method! { Data, model.ffi(), geom, [xpos: 3, xmat: 9] }
+    fixed_size_info_method! { Data, model.ffi(), site, [xpos: 3, xmat: 9] }
+    fixed_size_info_method! { Data, model.ffi(), light, [xpos: 3, xdir: 3] }
 
 
-    /// Obtains a [`MjJointInfo`] struct containing information about the name, id, and
+    /// Obtains a [`MjJointDataInfo`] struct containing information about the name, id, and
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
-    /// The actual view can be obtained via [`MjJointInfo::view`].
-    pub fn joint(&self, name: &str) -> Option<MjJointInfo> {
+    /// The actual view can be obtained via [`MjJointDataInfo::view`].
+    pub fn joint(&self, name: &str) -> Option<MjJointDataInfo> {
         let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_JOINT as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
@@ -348,36 +93,39 @@ impl<'a> MjData<'a> {
         let model_ffi = self.model.ffi();
         let id = id as usize;
         unsafe {
+            let nq_range = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nq), mj_model_nx_to_nitem!(model_ffi, nq), model_ffi.nq);
+            let nv_range = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+
             // $id:expr, $addr_map:expr, $njnt:expr, $max_n:expr
-            let qpos = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nq), mj_model_nx_to_nitem!(model_ffi, nq), model_ffi.nq);
-            let qvel = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
-            let qacc_warmstart = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
-            let qfrc_applied = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
-            let qacc = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let qpos = nq_range;
+            let qvel = nv_range;
+            let qacc_warmstart = nv_range;
+            let qfrc_applied = nv_range;
+            let qacc = nv_range;
             let xanchor = (id * 3, 3);
             let xaxis = (id * 3, 3);
             #[allow(non_snake_case)]
-            let qLDiagInv = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
-            let qfrc_bias = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
-            let qfrc_passive = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
-            let qfrc_actuator = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
-            let qfrc_smooth = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
-            let qacc_smooth = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
-            let qfrc_constraint = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
-            let qfrc_inverse = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+            let qLDiagInv = nv_range;
+            let qfrc_bias = nv_range;
+            let qfrc_passive = nv_range;
+            let qfrc_actuator = nv_range;
+            let qfrc_smooth = nv_range;
+            let qacc_smooth = nv_range;
+            let qfrc_constraint = nv_range;
+            let qfrc_inverse = nv_range;
             
             /* Special case attributes, used for some internal calculation */
             // cdof
             // cdof_dot
 
-            Some(MjJointInfo {name: name.to_string(), id: id as usize,
+            Some(MjJointDataInfo {name: name.to_string(), id: id as usize,
                 qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
                 qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
             })
         }
     }
 
-    pub fn sensor(&self, name: &str) -> Option<MjSensorInfo> {
+    pub fn sensor(&self, name: &str) -> Option<MjSensorDataInfo> {
         let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_SENSOR as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
@@ -387,12 +135,12 @@ impl<'a> MjData<'a> {
 
         unsafe {
             let data = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nsensordata), mj_model_nx_to_nitem!(model_ffi, nsensordata), model_ffi.nsensordata);
-            Some(MjSensorInfo { id, name: name.to_string(), data })
+            Some(MjSensorDataInfo { id, name: name.to_string(), data })
         }
     }
 
     #[allow(non_snake_case)]
-    pub fn tendon(&self, name: &str) -> Option<MjTendonInfo> {
+    pub fn tendon(&self, name: &str) -> Option<MjTendonDataInfo> {
         let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_TENDON as i32, CString::new(name).unwrap().as_ptr())};
         if id == -1 {  // not found
             return None;
@@ -410,7 +158,7 @@ impl<'a> MjData<'a> {
         let J = (id * nv, nv);
         let velocity = (id, 1);
 
-        Some(MjTendonInfo { id, name: name.to_string(), wrapadr, wrapnum, J_rownnz, J_rowadr, J_colind, length, J, velocity })
+        Some(MjTendonDataInfo { id, name: name.to_string(), wrapadr, wrapnum, J_rownnz, J_rowadr, J_colind, length, J, velocity })
     }
 
     /// Steps the MuJoCo simulation.
@@ -505,6 +253,7 @@ impl Drop for MjData<'_> {
 // Joint view
 /**************************************************************************************************/
 info_with_view!(
+    Data,
     joint,
     [
         qpos: f64, qvel: f64, qacc_warmstart: f64, qfrc_applied: f64, qacc: f64, xanchor: f64, xaxis: f64, qLDiagInv: f64, qfrc_bias: f64,
@@ -513,36 +262,72 @@ info_with_view!(
     []
 );
 
+/// Deprecated name for [`MjJointDataInfo`].
+#[deprecated]
+pub type MjJointInfo = MjJointDataInfo;
+
+
 /* Backward compatibility */
-impl MjJointViewMut<'_> {
-    /// Deprecated. Use [`MjJointViewMut::zero`] instead.
+impl MjJointDataViewMut<'_> {
+    /// Deprecated. Use [`MjJointDataViewMut::zero`] instead.
     #[deprecated]
     pub fn reset(&mut self) {
         self.zero();
     }
 }
 
+/// Deprecated name for [`MjJointDataView`].
+#[deprecated]
+pub type MjJointView<'d> = MjJointDataView<'d>;
+
+/// Deprecated name for [`MjJointDataViewMut`].
+#[deprecated]
+pub type MjJointViewMut<'d> = MjJointDataViewMut<'d>;
 
 /**************************************************************************************************/
 // Sensor view
 /**************************************************************************************************/
-info_with_view!(sensor, sensor, [data: f64], []);
+info_with_view!(Data, sensor, sensor, [data: f64], []);
 
 /**************************************************************************************************/
 // Geom view
 /**************************************************************************************************/
-info_with_view!(geom, geom_, [xpos: f64, xmat: f64], []);
+info_with_view!(Data, geom, geom_, [xpos: f64, xmat: f64], []);
+
+/// Deprecated name for [`MjGeomDataInfo`].
+#[deprecated]
+pub type MjGeomInfo = MjGeomDataInfo;
+
+/// Deprecated name for [`MjGeomDataView`].
+#[deprecated]
+pub type MjGeomView<'d> = MjGeomDataView<'d>;
+
+/// Deprecated name for [`MjGeomDataViewMut`].
+#[deprecated]
+pub type MjGeomViewMut<'d> = MjGeomDataViewMut<'d>;
 
 /**************************************************************************************************/
 // Actuator view
 /**************************************************************************************************/
-info_with_view!(actuator, [ctrl: f64], [act: f64]);
+info_with_view!(Data, actuator, [ctrl: f64], [act: f64]);
+
+/// Deprecated name for [`MjActuatorDataInfo`].
+#[deprecated]
+pub type MjActuatorInfo = MjActuatorDataInfo;
+
+/// Deprecated name for [`MjActuatorDataView`].
+#[deprecated]
+pub type MjActuatorView<'d> = MjActuatorDataView<'d>;
+
+/// Deprecated name for [`MjActuatorDataViewMut`].
+#[deprecated]
+pub type MjActuatorViewMut<'d> = MjActuatorDataViewMut<'d>;
 
 /**************************************************************************************************/
 // Body view
 /**************************************************************************************************/
 info_with_view!(
-    body, [
+    Data, body, [
         xfrc_applied: f64, xpos: f64, xquat: f64, xmat: f64, xipos: f64, ximat: f64,
         subtree_com: f64, cinert: f64, crb: f64, cvel: f64, subtree_linvel: f64,
         subtree_angmom: f64, cacc: f64, cfrc_int: f64, cfrc_ext: f64
@@ -552,22 +337,22 @@ info_with_view!(
 /**************************************************************************************************/
 // Camera view
 /**************************************************************************************************/
-info_with_view!(camera, cam_, [xpos: f64, xmat: f64], []);
+info_with_view!(Data, camera, cam_, [xpos: f64, xmat: f64], []);
 
 /**************************************************************************************************/
 // Site view
 /**************************************************************************************************/
-info_with_view!(site, site_, [xpos: f64, xmat: f64], []);
+info_with_view!(Data, site, site_, [xpos: f64, xmat: f64], []);
 
 /**************************************************************************************************/
 // Tendon view
 /**************************************************************************************************/
-info_with_view!(tendon, ten_, [wrapadr: i32, wrapnum: i32, J_rownnz: i32, J_rowadr: i32, J_colind: i32, length: f64, J: f64, velocity: f64], []);
+info_with_view!(Data, tendon, ten_, [wrapadr: i32, wrapnum: i32, J_rownnz: i32, J_rowadr: i32, J_colind: i32, length: f64, J: f64, velocity: f64], []);
 
 /**************************************************************************************************/
 // Light view
 /**************************************************************************************************/
-info_with_view!(light, light_, [xpos: f64, xdir: f64], []);
+info_with_view!(Data, light, light_, [xpos: f64, xdir: f64], []);
 
 /**************************************************************************************************/
 // Unit tests
