@@ -166,6 +166,16 @@ impl MjModel {
         dim: 1, adr: 1, cutoff: 1, noise: 1
     ] }
 
+
+    fixed_size_info_method! { Model, ffi(), tendon, [
+        adr: 1, num: 1, matid: 1, group: 1, limited: 1,
+        actfrclimited: 1, width: 1, solref_lim: mjNREF as usize,
+        solimp_lim: mjNIMP as usize, solref_fri: mjNREF as usize, solimp_fri: mjNIMP as usize,
+        range: 2, actfrcrange: 2, margin: 1, stiffness: 1,
+        damping: 1, armature: 1, frictionloss: 1, lengthspring: 2,
+        length0: 1, invweight0: 1, rgba: 4
+    ] }
+
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
         unsafe { self.0.as_ref().unwrap() }
@@ -220,6 +230,21 @@ info_with_view!(Model, sensor, sensor_,
 );
 
 
+/**************************************************************************************************/
+// Tendon view
+/**************************************************************************************************/
+info_with_view!(Model, tendon, tendon_,
+    [
+        adr: i32, num: i32, matid: i32, group: i32, limited: bool,
+        actfrclimited: bool, width: MjtNum, solref_lim: MjtNum,
+        solimp_lim: MjtNum, solref_fri: MjtNum, solimp_fri: MjtNum,
+        range: MjtNum, actfrcrange: MjtNum, margin: MjtNum, stiffness: MjtNum,
+        damping: MjtNum, armature: MjtNum, frictionloss: MjtNum, lengthspring: MjtNum,
+        length0: MjtNum, invweight0: MjtNum, rgba: f32
+    ], []
+);
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,6 +258,18 @@ mod tests {
                 <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
                 <joint type=\"free\"/>
                 <site name=\"touch\" size=\"1\" type=\"box\"/>
+            </body>
+
+            <body name=\"ball1\" pos=\"-.5 0 0\">
+                <geom size=\".1\" rgba=\"0 1 0 1\" mass=\"1\"/>
+                <joint type=\"free\"/>
+                <site name=\"ball1\" size=\".1 .1 .1\" pos=\"0 0 0\" rgba=\"0 1 0 0.2\" type=\"box\"/>
+            </body>
+
+            <body name=\"ball2\"  pos=\".5 0 0\">
+                <geom size=\".1\" rgba=\"0 1 1 1\" mass=\"1\"/>
+                <joint type=\"free\"/>
+                <site name=\"ball2\" size=\".1 .1 .1\" pos=\"0 0 0\" rgba=\"0 1 1 0.2\" type=\"box\"/>
             </body>
 
             <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\"/>
@@ -250,6 +287,13 @@ mod tests {
         <sensor>
             <touch name=\"touch\" site=\"touch\"/>
         </sensor>
+
+        <tendon>
+            <spatial name=\"tendon\" limited=\"true\" range=\"0 1\" rgba=\"0 .1 1 1\" width=\".005\">
+            <site site=\"ball1\"/>
+            <site site=\"ball2\"/>
+        </spatial>
+    </tendon>
     </mujoco>
     ";
     const MODEL_SAVE_XML_PATH: &str = "./__TMP_MODEL.xml";
@@ -300,5 +344,22 @@ mod tests {
         let mut view_mut = sensor_model_info.view_mut(&mut model);
         view_mut.noise[0] = 1.0;
         assert_eq!(view_mut.noise[0], 1.0);
+    }
+
+    #[test]
+    fn test_tendon_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let tendon_model_info = model.tendon("tendon").unwrap();
+        let view = tendon_model_info.view(&model);
+        
+        /* Test read */
+        assert_eq!(&view.range[..], [0.0, 1.0]);
+        assert_eq!(view.limited[0], true);
+        assert_eq!(view.width[0], 0.005);
+
+        /* Test write */
+        let mut view_mut = tendon_model_info.view_mut(&mut model);
+        view_mut.frictionloss[0] = 5e-2;
+        assert_eq!(view_mut.frictionloss[0], 5e-2);
     }
 }
