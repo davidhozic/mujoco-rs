@@ -16,6 +16,7 @@ Example of the built-in Rust viewer. Showing scene from [MuJoCo's menagerie](htt
 
 ## MuJoCo version
 This library uses FFI bindings to MuJoCo **3.3.5**.
+### Dynamic linking
 The library can either be provided **dynamically** in the form of a shared library (.so and .dll):
 - ``MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/ cargo build``
 - or ``export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/`` and then ``cargo build``.
@@ -23,10 +24,27 @@ The library can either be provided **dynamically** in the form of a shared libra
 When using the shared library, the **Rust-native MuJoCo viewer** can be used,
 but not the original C++ one.
 
-Also note that when the MuJoCo library isn't installed in the standard location,
-the path ``/path/mujoco/lib/`` must be added to `LD_LIBRARY_PATH` like so:
-- ``LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/path/mujoco/lib/``
 
+#### Linux
+Also on **Linux** note that when the MuJoCo library isn't installed in the standard location,
+the path ``/path/mujoco/lib/`` must be added to `LD_LIBRARY_PATH` like so:
+- ``LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/path/mujoco/lib/``.
+
+#### Windows notice
+If you're on **Windows**, make sure to compile with path to the **mujoco.lib** file:
+- ``export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/`` <---- notice the **/lib/**,
+- ``cargo build``.
+
+To actually run the compiled code, the path containing the **mujoco.dll** must be given.
+This can be set via environmental variables or, if you're using bash, like so:
+- ``export PATH="/path/mujoco/bin/:$PATH"`` <---- notice the **/bin/**
+
+All of the above together:
+- ``export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/``,
+- ``export PATH="/path/mujoco/bin/:$PATH``,
+- ``cargo run --example touch_sensor``.
+
+### Static linking
 Now regarding **static linking**.
 If you do not require the **C++ MuJoCo viewer (the simulate UI)** and have
 somehow already obtained statically linkable libraries,
