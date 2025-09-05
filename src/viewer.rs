@@ -18,7 +18,7 @@ use crate::wrappers::mj_data::MjData;
 /****************************************** */
 const MJ_VIEWER_DEFAULT_SIZE_PX: (u32, u32) = (1280, 720);
 /// How much extra room to create in the [`MjvScene`]. Useful for drawing labels, etc.
-const MJ_VIEWER_EXTRA_SCENE_GEOM_SPACE: usize = 20;
+const MJ_VIEWER_EXTRA_SCENE_GEOM_SPACE: usize = 100;
 const DOUBLE_CLICK_WINDOW_MS: u128 = 250;
 
 const HELP_MENU_TITLES: &str = concat!(
