@@ -158,11 +158,11 @@ macro_rules! view_creator {
         unsafe {
             $view {
                 $(
-                    $field: $ptr_view($data.$field.add($self.$field.0), $self.$field.1),
+                    $field: $ptr_view(std::mem::transmute($data.$field.add($self.$field.0)), $self.$field.1),
                 )*
                 $(
                     $opt_field: if $self.$opt_field.1 > 0 {
-                        Some($ptr_view($data.$opt_field.add($self.$opt_field.0), $self.$opt_field.1))
+                        Some($ptr_view(std::mem::transmute($data.$opt_field.add($self.$opt_field.0)), $self.$opt_field.1))
                     } else {None},
                 )*
             }
@@ -174,58 +174,12 @@ macro_rules! view_creator {
             unsafe {
                 $view {
                     $(
-                        $field: $ptr_view($data.[<$prefix $field>].add($self.$field.0), $self.$field.1),
+                        $field: $ptr_view(std::mem::transmute($data.[<$prefix $field>].add($self.$field.0)), $self.$field.1),
                     )*
                     $(
                         $opt_field: if $self.$opt_field.1 > 0 {
-                            Some($ptr_view($data.[<$prefix $opt_field>].add($self.$opt_field.0), $self.$opt_field.1))
+                            Some($ptr_view(std::mem::transmute($data.[<$prefix $opt_field>].add($self.$opt_field.0)), $self.$opt_field.1))
                         } else {None},
-                    )*
-                }
-            }
-        }
-    };
-
-    /* Direct reference */
-    ($self:expr, $view:ident, $data:expr, [$($field:ident: &mut [$type:ty; $len:literal]),*]) => {
-        unsafe {
-            $view {
-                $(
-                    $field: ($data.$field.add($self.id * $len) as *mut [$type; $len]).as_mut().unwrap(),
-                )*
-            }
-        }
-    };
-
-    ($self:expr, $view:ident, $data:expr, [$($field:ident: &[$type:ty; $len:literal]),*]) => {
-        unsafe {
-            $view {
-                $(
-                    $field: ($data.$field.add($self.id * $len) as *const [$type; $len]).as_ref().unwrap(),
-                )*
-            }
-        }
-    };
-
-    /* Direct reference with prefix */
-    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident: &mut [$type:ty; $len:literal]),*]) => {
-        paste::paste! {
-            unsafe {
-                $view {
-                    $(
-                        $field: ($data.[<$prefix $field>].add($self.id * $len) as *mut [$type; $len]).as_mut().unwrap(),
-                    )*
-                }
-            }
-        }
-    };
-
-    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident: &[$type:ty; $len:literal]),*]) => {
-        paste::paste! {
-            unsafe {
-                $view {
-                    $(
-                        $field: ($data.[<$prefix $field>].add($self.id * $len) as *const [$type; $len]).as_ref().unwrap(),
                     )*
                 }
             }
@@ -288,12 +242,12 @@ macro_rules! info_with_view {
             impl [<Mj $name:camel $info_type Info>] {
                 #[doc = "Returns a mutable view to the correct fields in [`Mj" $info_type "`]"]
                 pub fn view_mut<'d>(&self, [<$info_type:lower>]: &'d mut [<Mj $info_type>]) -> [<Mj $name:camel $info_type ViewMut>]<'d> {
-                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), $prefix, [$($attr),*], [$($opt_attr),*], PointerViewMut::new)
+                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), $prefix, [$($attr),*], [$($opt_attr),*], crate::util::PointerViewMut::new)
                 }
 
                 #[doc = "Returns a view to the correct fields in [`Mj" $info_type "`]"]
                 pub fn view<'d>(&self, [<$info_type:lower>]: &'d [<Mj $info_type>]) -> [<Mj $name:camel $info_type View>]<'d> {
-                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), $prefix, [$($attr),*], [$($opt_attr),*], PointerView::new)
+                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), $prefix, [$($attr),*], [$($opt_attr),*], crate::util::PointerView::new)
                 }
             }
 
@@ -301,10 +255,10 @@ macro_rules! info_with_view {
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel $info_type ViewMut>]<'d> {
                 $(
-                    pub $attr: PointerViewMut<'d, $type_>,
+                    pub $attr: crate::util::PointerViewMut<'d, $type_>,
                 )*
                 $(
-                    pub $opt_attr: Option<PointerViewMut<'d, $type_opt>>,
+                    pub $opt_attr: Option<crate::util::PointerViewMut<'d, $type_opt>>,
                 )*
             }
 
@@ -312,11 +266,11 @@ macro_rules! info_with_view {
                 /// Resets the internal variables to 0.0.
                 pub fn zero(&mut self) {
                     $(
-                        self.$attr.fill(0.0 as $type_);
+                        self.$attr.fill(unsafe { std::mem::zeroed() });
                     )*
                     $(
                         if let Some(x) = &mut self.$opt_attr {
-                            x.fill(0.0 as $type_opt);
+                            x.fill(unsafe { std::mem::zeroed() });
                         }
                     )*
                 }
@@ -326,10 +280,10 @@ macro_rules! info_with_view {
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel $info_type View>]<'d> {
                 $(
-                    pub $attr: PointerView<'d, $type_>,
+                    pub $attr: crate::util::PointerView<'d, $type_>,
                 )*
                 $(
-                    pub $opt_attr: Option<PointerView<'d, $type_opt>>,
+                    pub $opt_attr: Option<crate::util::PointerView<'d, $type_opt>>,
                 )*
             }
         }
@@ -354,12 +308,12 @@ macro_rules! info_with_view {
             impl [<Mj $name:camel $info_type Info>] {
                 #[doc = "Returns a mutable view to the correct fields in [`Mj" $info_type "`]"]
                 pub fn view_mut<'d>(&self, [<$info_type:lower>]: &'d mut [<Mj $info_type>]) -> [<Mj $name:camel $info_type ViewMut>]<'d> {
-                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($attr),*], [$($opt_attr),*], PointerViewMut::new)
+                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($attr),*], [$($opt_attr),*], crate::util::PointerViewMut::new)
                 }
 
                 #[doc = "Returns a view to the correct fields in [`Mj" $info_type "`]"]
                 pub fn view<'d>(&self, [<$info_type:lower>]: &'d [<Mj $info_type>]) -> [<Mj $name:camel $info_type View>]<'d> {
-                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($attr),*], [$($opt_attr),*], PointerView::new)
+                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($attr),*], [$($opt_attr),*], crate::util::PointerView::new)
                 }
             }
 
@@ -367,10 +321,10 @@ macro_rules! info_with_view {
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel $info_type ViewMut>]<'d> {
                 $(
-                    pub $attr: PointerViewMut<'d, $type_>,
+                    pub $attr: crate::util::PointerViewMut<'d, $type_>,
                 )*
                 $(
-                    pub $opt_attr: Option<PointerViewMut<'d, $type_opt>>,
+                    pub $opt_attr: Option<crate::util::PointerViewMut<'d, $type_opt>>,
                 )*
             }
 
@@ -378,11 +332,11 @@ macro_rules! info_with_view {
                 /// Resets the internal variables to 0.0.
                 pub fn zero(&mut self) {
                     $(
-                        self.$attr.fill(0.0 as $type_);
+                        self.$attr.fill(unsafe { std::mem::zeroed() });
                     )*
                     $(
                         if let Some(x) = &mut self.$opt_attr {
-                            x.fill(0.0 as $type_opt);
+                            x.fill(unsafe { std::mem::zeroed() });
                         }
                     )*
                 }
@@ -392,10 +346,10 @@ macro_rules! info_with_view {
             #[allow(non_snake_case)]
             pub struct [<Mj $name:camel $info_type View>]<'d> {
                 $(
-                    pub $attr: PointerView<'d, $type_>,
+                    pub $attr: crate::util::PointerView<'d, $type_>,
                 )*
                 $(
-                    pub $opt_attr: Option<PointerView<'d, $type_opt>>,
+                    pub $opt_attr: Option<crate::util::PointerView<'d, $type_opt>>,
                 )*
             }
         }

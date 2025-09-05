@@ -6,10 +6,24 @@ use std::ptr;
 
 use crate::wrappers::mj_data::MjData;
 use super::mj_auxiliary::MjVfs;
+use super::mj_primitive::*;
 use crate::mujoco_c::*;
 
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, fixed_size_info_method, info_with_view};
+
+
+/*******************************************/
+// Types
+/// Actuator transmission types.
+pub type MjtTrn = mjtTrn;
+/// Actuator dynamics types.
+pub type MjtDyn = mjtDyn;
+/// Actuator gain types.
+pub type MjtGain = mjtGain;
+/// Actuator bias types.
+pub type MjtBias = mjtBias;
+/*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
 /// Automatically clean after itself on destruction.
@@ -121,9 +135,12 @@ impl MjModel {
         }
     }
 
-    // fixed_size_info_method! { actuator, [
-    //     trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, trnid: 2, actadr: 1, actnum: 1, group: 1, ctrllimited: 1,
-    //     forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize] }
+    fixed_size_info_method! { Model, ffi(), actuator, [
+        trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, trnid: 2, actadr: 1, actnum: 1, group: 1, ctrllimited: 1,
+        forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize,  biasprm: mjNBIAS as usize, 
+        actearly: 1,  ctrlrange: 2, forcerange: 2,  actrange: 2,  gear: 6,  cranklength: 1,  acc0: 1, 
+        length0: 1,  lengthrange: 2
+    ] }
 
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
@@ -153,6 +170,20 @@ impl Drop for MjModel {
 }
 
 
+/**************************************************************************************************/
+// Actuator view
+/**************************************************************************************************/
+info_with_view!(Model, actuator, actuator_,
+    [
+        trntype: MjtTrn, dyntype: MjtDyn, gaintype: MjtGain, biastype: MjtBias, trnid: i32,
+        actadr: i32, actnum: i32, group: i32, ctrllimited: bool,
+        forcelimited: bool, actlimited: bool, dynprm: MjtNum, gainprm: MjtNum, biasprm: MjtNum,
+        actearly: bool, ctrlrange: MjtNum, forcerange: MjtNum, actrange: MjtNum,
+        gear: MjtNum, cranklength: MjtNum, acc0: MjtNum, length0: MjtNum, lengthrange: MjtNum
+    ], []
+);
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,16 +191,24 @@ mod tests {
 
     const EXAMPLE_MODEL: &str = "
     <mujoco>
-    <worldbody>
-        <light ambient=\"0.2 0.2 0.2\"/>
-        <body name=\"ball\">
-            <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
-            <joint type=\"free\"/>
-        </body>
+        <worldbody>
+            <light ambient=\"0.2 0.2 0.2\"/>
+            <body name=\"ball\">
+                <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
+                <joint type=\"free\"/>
+            </body>
 
-        <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\"/>
+            <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\"/>
 
-    </worldbody>
+            <body name=\"slider\">
+                <geom name=\"rod\" type=\"cylinder\" size=\"1 10 0\" euler=\"90 0 0\" pos=\"0 0 10\"/>
+                <joint name=\"rod\" type=\"slide\" axis=\"0 1 0\" range=\"0 1\"/>
+            </body>
+        </worldbody>
+
+        <actuator>
+            <general name=\"slider\" joint=\"rod\" biastype=\"affine\" ctrlrange=\"0 1\" gaintype=\"fixed\"/>
+        </actuator>
     </mujoco>
     ";
     const MODEL_SAVE_XML_PATH: &str = "./__TMP_MODEL.xml";
@@ -182,9 +221,25 @@ mod tests {
         fs::remove_file(MODEL_SAVE_XML_PATH).unwrap();
     }
 
-    /// Tests whether the automatic attributes work as expected.
     #[test]
-    fn test_model_getters() {
-        MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+    fn test_actuator_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let actuator_model_info = model.actuator("slider").unwrap();
+        let view = actuator_model_info.view(&model);
+
+        /* Test read */
+        assert_eq!(view.biastype[0], MjtBias::mjBIAS_AFFINE);
+        assert_eq!(&view.ctrlrange[..], [0.0, 1.0]);
+        assert_eq!(view.ctrllimited[0], true);
+        assert_eq!(view.forcelimited[0], false);
+        assert_eq!(view.trntype[0], MjtTrn::mjTRN_JOINT);
+        assert_eq!(view.gaintype[0], MjtGain::mjGAIN_FIXED);
+
+        /* Test write */
+        let mut view_mut = actuator_model_info.view_mut(&mut model);
+        view_mut.gaintype[0] = MjtGain::mjGAIN_AFFINE;
+        assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_AFFINE);
+        view_mut.zero();
+        assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_FIXED);
     }
 }
