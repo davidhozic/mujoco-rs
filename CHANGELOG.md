@@ -3,7 +3,7 @@
 ## Versioning
 This project uses [semantic versioning](https://semver.org/):
 
-## [Future release] 1.1.0 (MuJoCo 3.3.5)
+## 1.1.0 (MuJoCo 3.3.5)
 **Potentially breaking changes:**
 - Fixed bug [#18](https://github.com/davidhozic/mujoco-rs/issues/18) where data races could occur
   under incorrect usage. The major version of MuJoCo-rs is not increased as this safety bugs
@@ -12,6 +12,9 @@ This project uses [semantic versioning](https://semver.org/):
 Other bug fixes:
 - Fixed bug [#17](https://github.com/davidhozic/mujoco-rs/issues/17) where the `MjGeomView` and `MjGeomViewMut`
   pointed to the wrong address, which belonged to the body and not the geom.
+- Fixed bug [#19](https://github.com/davidhozic/mujoco-rs/issues/19) where a warning about the scene buffer
+  would be printed when loading some of MuJoCo's example scenes.
+
 
 Other changes:
 - Added new modules: `wrappers::mj_primitive`.
