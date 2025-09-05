@@ -144,3 +144,263 @@ impl<T> Deref for PointerView<'_, T> {
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
+
+
+/**************************************************************************************************/
+// View creation for MjData and MjModel
+/**************************************************************************************************/
+
+/// Creates a $view struct, mapping $field and $opt_field to the same location as in $data.
+#[macro_export]
+macro_rules! view_creator {
+    /* Pointer view */
+    ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
+        unsafe {
+            $view {
+                $(
+                    $field: $ptr_view($data.$field.add($self.$field.0), $self.$field.1),
+                )*
+                $(
+                    $opt_field: if $self.$opt_field.1 > 0 {
+                        Some($ptr_view($data.$opt_field.add($self.$opt_field.0), $self.$opt_field.1))
+                    } else {None},
+                )*
+            }
+        }
+    };
+
+    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
+        paste::paste! {
+            unsafe {
+                $view {
+                    $(
+                        $field: $ptr_view($data.[<$prefix $field>].add($self.$field.0), $self.$field.1),
+                    )*
+                    $(
+                        $opt_field: if $self.$opt_field.1 > 0 {
+                            Some($ptr_view($data.[<$prefix $opt_field>].add($self.$opt_field.0), $self.$opt_field.1))
+                        } else {None},
+                    )*
+                }
+            }
+        }
+    };
+
+    /* Direct reference */
+    ($self:expr, $view:ident, $data:expr, [$($field:ident: &mut [$type:ty; $len:literal]),*]) => {
+        unsafe {
+            $view {
+                $(
+                    $field: ($data.$field.add($self.id * $len) as *mut [$type; $len]).as_mut().unwrap(),
+                )*
+            }
+        }
+    };
+
+    ($self:expr, $view:ident, $data:expr, [$($field:ident: &[$type:ty; $len:literal]),*]) => {
+        unsafe {
+            $view {
+                $(
+                    $field: ($data.$field.add($self.id * $len) as *const [$type; $len]).as_ref().unwrap(),
+                )*
+            }
+        }
+    };
+
+    /* Direct reference with prefix */
+    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident: &mut [$type:ty; $len:literal]),*]) => {
+        paste::paste! {
+            unsafe {
+                $view {
+                    $(
+                        $field: ($data.[<$prefix $field>].add($self.id * $len) as *mut [$type; $len]).as_mut().unwrap(),
+                    )*
+                }
+            }
+        }
+    };
+
+    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident: &[$type:ty; $len:literal]),*]) => {
+        paste::paste! {
+            unsafe {
+                $view {
+                    $(
+                        $field: ($data.[<$prefix $field>].add($self.id * $len) as *const [$type; $len]).as_ref().unwrap(),
+                    )*
+                }
+            }
+        }
+    };
+}
+
+
+/// Macro for reducing duplicated code when creating info structs to
+/// items that have fixed size arrays in [`MjData`].
+/// This creates a method `X(self, name; &str) -> XInfo`.
+#[macro_export]
+macro_rules! fixed_size_info_method {
+    ($type_:ident, [$($attr:ident: $len:literal),*]) => {
+        paste::paste! {
+            #[doc = concat!(
+                "Obtains a [`", stringify!([<Mj $type_:camel Info>]), "`] struct containing information about the name, id, and ",
+                "indices required for obtaining references to the correct locations in [`MjData`]. ",
+                "The actual view can be obtained via [`", stringify!([<Mj $type_:camel Info>]), "::view`]."
+            )]
+            pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel Info>]> {
+                let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::[<mjOBJ_ $type_:upper>] as i32, CString::new(name).unwrap().as_ptr())};
+                if id == -1 {  // not found
+                    return None;
+                }
+
+                let id = id as usize;
+                $(
+                    let $attr = (id * $len, $len);
+                )*
+
+                Some([<Mj $type_:camel Info>] {name: name.to_string(), id, $($attr),*})
+            }
+        }
+    }
+}
+
+
+/// Creates the xInfo struct along with corresponding xView and xViewMut structs.
+#[macro_export]
+macro_rules! info_with_view {
+    /* PointerView */
+
+    /* name of the view/info, attribute prefix in MjData, [attributes always present], [attributes that can be None] */
+    ($name:ident, $prefix:ident, [$($attr:ident: $type_:ty),*], [$($opt_attr:ident: $type_opt:ty),*]) => {
+        paste::paste! {
+            #[doc = "Stores information required to create views to [`MjData`] arrays corresponding to a " $name "."]
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel Info>] {
+                pub name: String,
+                pub id: usize,
+                $(
+                    $attr: (usize, usize),
+                )*
+                $(
+                    $opt_attr: (usize, usize),
+                )*
+            }
+
+            impl [<Mj $name:camel Info>] {
+                /// Returns a mutable view to the correct fields in [`MjData`].
+                pub fn view_mut<'d>(&self, data: &'d mut MjData) -> [<Mj $name:camel ViewMut>]<'d> {
+                    view_creator!(self, [<Mj $name:camel ViewMut>], data.ffi(), $prefix, [$($attr),*], [$($opt_attr),*], PointerViewMut::new)
+                }
+
+                /// Returns a view to the correct fields in [`MjData`].
+                pub fn view<'d>(&self, data: &'d MjData) -> [<Mj $name:camel View>]<'d> {
+                    view_creator!(self, [<Mj $name:camel View>], data.ffi(), $prefix, [$($attr),*], [$($opt_attr),*], PointerView::new)
+                }
+            }
+
+            #[doc = "A mutable view to " $name " variables of [`MjData`]."]
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel ViewMut>]<'d> {
+                $(
+                    pub $attr: PointerViewMut<'d, $type_>,
+                )*
+                $(
+                    pub $opt_attr: Option<PointerViewMut<'d, $type_opt>>,
+                )*
+            }
+
+            impl [<Mj $name:camel ViewMut>]<'_> {
+                /// Resets the internal variables to 0.0.
+                pub fn zero(&mut self) {
+                    $(
+                        self.$attr.fill(0.0 as $type_);
+                    )*
+                    $(
+                        if let Some(x) = &mut self.$opt_attr {
+                            x.fill(0.0 as $type_opt);
+                        }
+                    )*
+                }
+            }
+
+
+            #[doc = "An immutable view to " $name " variables of [`MjData`]."]
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel View>]<'d> {
+                $(
+                    pub $attr: PointerView<'d, $type_>,
+                )*
+                $(
+                    pub $opt_attr: Option<PointerView<'d, $type_opt>>,
+                )*
+            }
+        }
+    };
+
+    /* name of the view/info, [attributes always present], [attributes that can be None] */
+    ($name:ident, [$($attr:ident: $type_:ty),*], [$($opt_attr:ident: $type_opt:ty),*]) => {
+        paste::paste! {
+            #[doc = "Stores information required to create views to MjData arrays corresponding to a " $name "."]
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel Info>] {
+                pub name: String,
+                pub id: usize,
+                $(
+                    $attr: (usize, usize),
+                )*
+                $(
+                    $opt_attr: (usize, usize),
+                )*
+            }
+
+            impl [<Mj $name:camel Info>] {
+                /// Returns a mutable view to the correct fields in [`MjData`].
+                pub fn view_mut<'d>(&self, data: &'d mut MjData) -> [<Mj $name:camel ViewMut>]<'d> {
+                    view_creator!(self, [<Mj $name:camel ViewMut>], data.ffi(), [$($attr),*], [$($opt_attr),*], PointerViewMut::new)
+                }
+
+                /// Returns a view to the correct fields in [`MjData`].
+                pub fn view<'d>(&self, data: &'d MjData) -> [<Mj $name:camel View>]<'d> {
+                    view_creator!(self, [<Mj $name:camel View>], data.ffi(), [$($attr),*], [$($opt_attr),*], PointerView::new)
+                }
+            }
+
+
+            #[doc = "A mutable view to " $name " variables of [`MjData`]."]
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel ViewMut>]<'d> {
+                $(
+                    pub $attr: PointerViewMut<'d, $type_>,
+                )*
+                $(
+                    pub $opt_attr: Option<PointerViewMut<'d, $type_opt>>,
+                )*
+            }
+
+            impl [<Mj $name:camel ViewMut>]<'_> {
+                /// Resets the internal variables to 0.0.
+                pub fn zero(&mut self) {
+                    $(
+                        self.$attr.fill(0.0 as $type_);
+                    )*
+                    $(
+                        if let Some(x) = &mut self.$opt_attr {
+                            x.fill(0.0 as $type_opt);
+                        }
+                    )*
+                }
+            }
+
+
+            #[doc = "An immutable view to " $name " variables of [`MjData`]."]
+            #[allow(non_snake_case)]
+            pub struct [<Mj $name:camel View>]<'d> {
+                $(
+                    pub $attr: PointerView<'d, $type_>,
+                )*
+                $(
+                    pub $opt_attr: Option<PointerView<'d, $type_opt>>,
+                )*
+            }
+        }
+    };
+}
