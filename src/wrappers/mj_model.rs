@@ -41,6 +41,15 @@ pub type MjtStage = mjtStage;
 /// [`mj_id2name`] to convert between object names and integer ids.
 pub type MjtObj = mjtObj;
 
+/// Primitive joint types.
+pub type MjtJoint = mjtJoint;
+
+/// Geometric types supported by MuJoCo.
+pub type MjtGeom = mjtGeom;
+
+/// Types of frame alignment of elements with their parent bodies.
+pub type MjtSameFrame = mjtSameFrame;
+
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
@@ -176,6 +185,31 @@ impl MjModel {
         length0: 1, invweight0: 1, rgba: 4
     ] }
 
+    fixed_size_info_method! { Model, ffi(), joint, [
+        r#type: 1, qposadr: 1, dofadr: 1, bodyid: 1, group: 1,
+        limited: 1, actfrclimited: 1, actgravcomp: 1, solref: mjNREF as usize,
+        solimp: mjNIMP as usize, pos: 3, axis: 3, stiffness: 1,
+        range: 2, actfrcrange: 2, margin: 1
+    ] }
+
+    fixed_size_info_method! { Model, ffi(), geom, [
+        r#type: 1, contype: 1, conaffinity: 1, condim: 1, bodyid: 1, dataid: 1, matid: 1,
+        group: 1, priority: 1, plugin: 1, sameframe: 1, solmix: 1, solref: mjNREF as usize,
+        solimp: mjNIMP as usize,
+        size: 3, aabb: 6, rbound: 1, pos: 3, quat: 4, friction: 3, margin: 1, gap: 1,
+        fluid: mjNFLUID as usize, rgba: 4
+    ] }
+
+    fixed_size_info_method! { Model, ffi(), body, [
+        parentid: 1, rootid: 1, weldid: 1, mocapid: 1,
+        jntnum: 1, jntadr: 1, dofnum: 1, dofadr: 1,
+        treeid: 1, geomnum: 1, geomadr: 1, simple: 1,
+        sameframe: 1, pos: 3, quat: 4, ipos: 3, iquat: 4,
+        mass: 1, subtreemass: 1, inertia: 3, invweight0: 2,
+        gravcomp: 1, margin: 1, plugin: 1,
+        contype: 1, conaffinity: 1, bvhadr: 1, bvhnum: 1
+    ]}
+
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
         unsafe { self.0.as_ref().unwrap() }
@@ -245,6 +279,47 @@ info_with_view!(Model, tendon, tendon_,
 );
 
 
+/**************************************************************************************************/
+// Joint view
+/**************************************************************************************************/
+info_with_view!(Model, joint, jnt_,
+    [
+        r#type: MjtJoint, qposadr: i32, dofadr: i32, bodyid: i32, group: i32,
+        limited: bool, actfrclimited: bool, actgravcomp: bool, solref: MjtNum,
+        solimp: MjtNum, pos: MjtNum, axis: MjtNum, stiffness: MjtNum,
+        range: MjtNum, actfrcrange: MjtNum, margin: MjtNum
+    ], []
+);
+
+/**************************************************************************************************/
+// Geom view
+/**************************************************************************************************/
+info_with_view!(Model, geom, geom_,
+    [
+        r#type: MjtGeom, contype: i32, conaffinity: i32, condim: i32, bodyid: i32, dataid: i32, matid: i32,
+        group: i32, priority: i32, plugin: i32, sameframe: MjtSameFrame, solmix: MjtNum, solref: MjtNum, solimp: MjtNum,
+        size: MjtNum, aabb: MjtNum, rbound: MjtNum, pos: MjtNum, quat: MjtNum, friction: MjtNum, margin: MjtNum, gap: MjtNum,
+        fluid: MjtNum, rgba: f32
+    ], []
+);
+
+/**************************************************************************************************/
+// Body view
+/**************************************************************************************************/
+info_with_view!(Model, body, body_,
+    [
+        parentid: i32, rootid: i32, weldid: i32, mocapid: i32,
+        jntnum: i32, jntadr: i32, dofnum: i32, dofadr: i32,
+        treeid: i32, geomnum: i32, geomadr: i32, simple: MjtByte,
+        sameframe: MjtSameFrame, pos: MjtNum, quat: MjtNum, ipos: MjtNum, iquat: MjtNum,
+        mass: MjtNum, subtreemass: MjtNum, inertia: MjtNum, invweight0: MjtNum,
+        gravcomp: MjtNum, margin: MjtNum, plugin: i32,
+        contype: i32, conaffinity: i32, bvhadr: i32, bvhnum: i32
+    ], []
+);
+
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,7 +331,7 @@ mod tests {
             <light ambient=\"0.2 0.2 0.2\"/>
             <body name=\"ball\">
                 <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
-                <joint type=\"free\"/>
+                <joint name=\"ball\" type=\"free\" axis=\"1 1 1\"/>
                 <site name=\"touch\" size=\"1\" type=\"box\"/>
             </body>
 
@@ -267,7 +342,7 @@ mod tests {
             </body>
 
             <body name=\"ball2\"  pos=\".5 0 0\">
-                <geom size=\".1\" rgba=\"0 1 1 1\" mass=\"1\"/>
+                <geom name=\"ball2\" size=\".5\" rgba=\"0 1 1 1\" mass=\"1\"/>
                 <joint type=\"free\"/>
                 <site name=\"ball2\" size=\".1 .1 .1\" pos=\"0 0 0\" rgba=\"0 1 1 0.2\" type=\"box\"/>
             </body>
@@ -361,5 +436,53 @@ mod tests {
         let mut view_mut = tendon_model_info.view_mut(&mut model);
         view_mut.frictionloss[0] = 5e-2;
         assert_eq!(view_mut.frictionloss[0], 5e-2);
+    }
+
+    #[test]
+    fn test_joint_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let model_info = model.joint("rod").unwrap();
+        let view = model_info.view(&model);
+        
+        /* Test read */
+        assert_eq!(view.r#type[0], MjtJoint::mjJNT_SLIDE);
+        assert_eq!(view.limited[0], true);
+        assert_eq!(&view.axis[..], [0.0, 1.0 , 0.0]);
+
+        /* Test write */
+        let mut view_mut = model_info.view_mut(&mut model);
+        view_mut.axis.copy_from_slice(&[1.0, 0.0, 0.0]);
+        assert_eq!(&view_mut.axis[..], [1.0, 0.0 , 0.0]);
+    }
+
+    #[test]
+    fn test_geom_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let model_info = model.geom("ball2").unwrap();
+        let view = model_info.view(&model);
+        
+        /* Test read */
+        assert_eq!(view.r#type[0], MjtGeom::mjGEOM_SPHERE);
+        assert_eq!(view.size[0], 0.5);
+
+        /* Test write */
+        let mut view_mut = model_info.view_mut(&mut model);
+        view_mut.size[0] = 1.0;
+        assert_eq!(view_mut.size[0], 1.0);
+    }
+
+    #[test]
+    fn test_body_model_view() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let model_info = model.body("ball2").unwrap();
+        let view = model_info.view(&model);
+        
+        /* Test read */
+        assert_eq!(view.pos[0], 0.5);
+
+        /* Test write */
+        let mut view_mut = model_info.view_mut(&mut model);
+        view_mut.pos[0] = 1.0;
+        assert_eq!(view_mut.pos[0], 1.0);
     }
 }
