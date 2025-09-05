@@ -9,7 +9,6 @@ use super::mj_auxiliary::MjVfs;
 use super::mj_primitive::*;
 use crate::mujoco_c::*;
 
-use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, fixed_size_info_method, info_with_view};
 
 

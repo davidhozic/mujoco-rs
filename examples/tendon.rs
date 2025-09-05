@@ -43,14 +43,10 @@ fn main() {
     let mut viewer = MjViewer::launch_passive(&model, 0)
         .expect("could not launch the viewer");
 
-    // let sensor_data_info = data.sensor("touch").unwrap();
     while viewer.running() {
         /* Step the simulation and sync the viewer */
         viewer.sync(&mut data);
         data.step();
-
-        /* Print the touch sensor output, which is the contact force */
-        // println!("{}", sensor_data_info.view(&data).data[0]);
 
         std::thread::sleep(Duration::from_secs_f64(0.002));
     }
