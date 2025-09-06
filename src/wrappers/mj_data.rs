@@ -423,11 +423,4 @@ mod test {
         data.step2();
         data.step1();
     }
-
-    #[test]
-    fn test_camera_view() {
-        let body = MjModel::from_xml_string(MODEL).unwrap();
-        let mut data = body.make_data();
-        // let body_info = data.body("ball").unwrap();
-    }
 }
