@@ -15,9 +15,9 @@ pub fn mju_fill(res: &mut [MjtNum], val: MjtNum)  {
 }
 
 /// Set res = vec.
-pub fn mju_copy(res: &mut [MjtNum], vec: &mut [MjtNum])  {
+pub fn mju_copy(res: &mut [MjtNum], vec: &[MjtNum])  {
     assert!(res.len() == vec.len());
-    unsafe { mujoco_c::mju_copy(res.as_mut_ptr(), vec.as_mut_ptr(), res.len() as i32) }
+    unsafe { mujoco_c::mju_copy(res.as_mut_ptr(), vec.as_ptr(), res.len() as i32) }
 }
 
 /// Return the sum of all elements in the vector `vec`.

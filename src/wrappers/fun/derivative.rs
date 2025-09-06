@@ -21,7 +21,7 @@ pub fn mjd_quat_integrate(vel: &[MjtNum; 3], scale: MjtNum, dquat: Option<&mut [
         vel.as_ptr(), scale,
         dquat.map_or(ptr::null_mut(), |d| d.as_mut_ptr()),
         dvel.map_or(ptr::null_mut(), |d| d.as_mut_ptr()),
-        dscale.map_or(ptr::null_mut(), |d| d.as_mut_ptr(),)
+        dscale.map_or(ptr::null_mut(), |d| d.as_mut_ptr())
     ) }
 }
 
