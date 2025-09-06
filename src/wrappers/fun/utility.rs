@@ -407,12 +407,12 @@ pub fn mju_eig_3(eigval: &mut [MjtNum; 3], eigvec: &mut [MjtNum; 9], quat: &mut 
     unsafe { mujoco_c::mju_eig3(eigval.as_mut_ptr(), eigvec.as_mut_ptr(), quat.as_mut_ptr(), mat.as_ptr()) }
 }
 
-/// Muscle active force, prm = (range[2], force, scale, lmin, lmax, vmax, fpmax, fvmax).
+/// Muscle active force, prm = (range\[2\], force, scale, lmin, lmax, vmax, fpmax, fvmax).
 pub fn mju_muscle_gain(len: MjtNum, vel: MjtNum, lengthrange: &[MjtNum; 2], acc_0: MjtNum, prm: &[MjtNum; 9]) -> MjtNum  {
     unsafe { mujoco_c::mju_muscleGain(len, vel, lengthrange.as_ptr(), acc_0, prm.as_ptr()) }
 }
 
-/// Muscle passive force, prm = (range[2], force, scale, lmin, lmax, vmax, fpmax, fvmax).
+/// Muscle passive force, prm = (range\[2\], force, scale, lmin, lmax, vmax, fpmax, fvmax).
 pub fn mju_muscle_bias(len: MjtNum, lengthrange: &[MjtNum; 2], acc_0: MjtNum, prm: &[MjtNum; 9]) -> MjtNum  {
     unsafe { mujoco_c::mju_muscleBias(len, lengthrange.as_ptr(), acc_0, prm.as_ptr()) }
 }
