@@ -1,7 +1,10 @@
 # Changelog
 
 ## Versioning
-This project uses [semantic versioning](https://semver.org/):
+This project uses [semantic versioning](https://semver.org/).
+
+## [FUTURE RELEASE] 1.2.0 (MuJoCo 3.3.5)
+- Added function wrappers around some utility functions and both the derivative functions (available under `wrappers::fim`).
 
 ## 1.1.0 (MuJoCo 3.3.5)
 **Potentially breaking changes:**
