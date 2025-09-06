@@ -161,7 +161,7 @@ pub fn mju_sqr_mat_td(res: &mut [MjtNum], mat: &[MjtNum], diag: Option<&[MjtNum]
         assert!(d.len() == nr);
         unsafe { mujoco_c::mju_sqrMatTD(res.as_mut_ptr(), mat.as_ptr(), d.as_ptr(), nr as i32, nc as i32) }
     } else {
-        unsafe { mujoco_c::mju_sqrMatTD(res.as_mut_ptr(), mat.as_ptr(), std::ptr::null(), nr as i32, nc as i32) }
+        unsafe { mujoco_c::mju_sqrMatTD(res.as_mut_ptr(), mat.as_ptr(), ptr::null(), nr as i32, nc as i32) }
     }
 }
 
