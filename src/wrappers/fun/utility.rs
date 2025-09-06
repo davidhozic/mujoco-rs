@@ -451,19 +451,19 @@ mod tests {
 
     #[test]
     fn test_mju_add_3() {
-        let mut a = [1.0, 2.0, 3.0];
-        let mut b = [5.0, 6.0, 7.0];
+        let a = [1.0, 2.0, 3.0];
+        let b = [5.0, 6.0, 7.0];
         let mut c = [0.0; 3];
-        mju_add_3(&mut c, &mut a, &mut b);
+        mju_add_3(&mut c, &a, &b);
         assert_eq!(c, [6.0, 8.0, 10.0]);
     }
 
     #[test]
     fn test_mju_sub_3() {
-        let mut a = [1.0, 2.0, 3.0];
-        let mut b = [1.0, 4.0, 2.0];
+        let a = [1.0, 2.0, 3.0];
+        let b = [1.0, 4.0, 2.0];
         let mut c = [0.0; 3];
-        mju_sub_3(&mut c, &mut a, &mut b);
+        mju_sub_3(&mut c, &a, &b);
         assert_eq!(c, [0.0, -2.0, 1.0]);
     }
 
@@ -474,10 +474,10 @@ mod tests {
 
     #[test]
     pub fn test_mju_cross() {
-        let mut a = [1.0, 2.0, 3.0];
-        let mut b = [1.0, 4.0, 2.0];
+        let a = [1.0, 2.0, 3.0];
+        let b = [1.0, 4.0, 2.0];
         let mut c = [0.0; 3];
-        mju_cross(&mut c, &mut a, &mut b);
+        mju_cross(&mut c, &a, &b);
         assert_eq!(c, [-8.0, 1.0, 2.0]);
     }
 
@@ -497,9 +497,9 @@ mod tests {
 
     #[test]
     fn test_mju_copy() {
-        let mut a = [1.0, 2.0, 3.0];
+        let a = [1.0, 2.0, 3.0];
         let mut b = [0.0; 3];
-        mju_copy(&mut b, &mut a);
+        mju_copy(&mut b, &a);
         assert_eq!(b, [1.0, 2.0, 3.0]);
     }
 
