@@ -1,6 +1,7 @@
 //! Module containing safe wrappers around utility functions.
 use crate::wrappers::mj_primitive::*;
 use crate::mujoco_c;
+use std::ptr;
 
 /* Manually added */
 /// Set res = 0.
@@ -169,6 +170,7 @@ pub fn mju_sqr_mat_td(res: &mut [MjtNum], mat: &[MjtNum], diag: Option<&[MjtNum]
 /* Auto generated */
 /*******************************/
 /// Intersect ray with pure geom, return nearest distance or -1 if no intersection.
+/// Nullable: vertid.
 pub fn mju_ray_geom(pos: &[MjtNum; 3], mat: &[MjtNum; 9], size: &[MjtNum; 3], pnt: &[MjtNum; 3], vec: &[MjtNum; 3], geomtype: std::ffi::c_int) -> MjtNum  {
     unsafe { mujoco_c::mju_rayGeom(pos.as_ptr(), mat.as_ptr(), size.as_ptr(), pnt.as_ptr(), vec.as_ptr(), geomtype) }
 }
@@ -276,8 +278,11 @@ pub fn mju_normalize_4(vec: &mut [MjtNum; 4]) -> MjtNum  {
 /// Coordinate transform of 6D motion or force vector in rotation:translation format.
 /// rotnew2old is 3-by-3, NULL means no rotation; flg_force specifies force or motion type.
 /// Nullable: rotnew2old
-pub fn mju_transform_spatial(res: &mut [MjtNum; 6], vec: &[MjtNum; 6], flg_force: std::ffi::c_int, newpos: &[MjtNum; 3], oldpos: &[MjtNum; 3], rotnew_2old: &[MjtNum; 9])  {
-    unsafe { mujoco_c::mju_transformSpatial(res.as_mut_ptr(), vec.as_ptr(), flg_force, newpos.as_ptr(), oldpos.as_ptr(), rotnew_2old.as_ptr()) }
+pub fn mju_transform_spatial(res: &mut [MjtNum; 6], vec: &[MjtNum; 6], flg_force: std::ffi::c_int, newpos: &[MjtNum; 3], oldpos: &[MjtNum; 3], rotnew_2old: Option<&[MjtNum; 9]>)  {
+    unsafe { mujoco_c::mju_transformSpatial(
+        res.as_mut_ptr(), vec.as_ptr(), flg_force, newpos.as_ptr(), oldpos.as_ptr(),
+        rotnew_2old.map_or(ptr::null(), |d| d.as_ptr())
+    ) }
 }
 
 /// Rotate vector by quaternion.
@@ -434,6 +439,7 @@ pub fn mju_sigmoid(x: MjtNum) -> MjtNum  {
 
 #[cfg(test)]
 mod tests {
+    use crate::assert_relative_eq;
     use super::*;
 
     #[test]
@@ -722,4 +728,57 @@ mod tests {
                         116.0, 144.0]);
     }
 
+    #[test]
+    fn test_identity_transform_motion() {
+        let vec = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let mut res = [0.0; 6];
+
+        let newpos = [0.0, 0.0, 0.0];
+        let oldpos = [0.0, 0.0, 0.0];
+
+        // No rotation
+        mju_transform_spatial(&mut res, &vec, 0, &newpos, &oldpos, None);
+
+        assert_relative_eq!(res[0], vec[0], epsilon = 1e-9);
+        assert_relative_eq!(res[1], vec[1], epsilon = 1e-9);
+        assert_relative_eq!(res[2], vec[2], epsilon = 1e-9);
+    }
+
+    #[test]
+    fn test_identity_transform_force() {
+        let vec = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
+        let mut res = [0.0; 6];
+
+        let newpos = [0.0, 0.0, 0.0];
+        let oldpos = [0.0, 0.0, 0.0];
+
+        // Force flag
+        mju_transform_spatial(&mut res, &vec, 1, &newpos, &oldpos, None);
+
+        assert_relative_eq!(res[0], vec[0], epsilon = 1e-9);
+        assert_relative_eq!(res[1], vec[1], epsilon = 1e-9);
+        assert_relative_eq!(res[2], vec[2], epsilon = 1e-9);
+    }
+
+    #[test]
+    fn test_rotation_identity_matrix() {
+        let vec = [7.0, 8.0, 9.0, 1.0, 2.0, 3.0];
+        let mut res = [0.0; 6];
+
+        let newpos = [0.0, 0.0, 0.0];
+        let oldpos = [0.0, 0.0, 0.0];
+
+        // Identity rotation matrix (should not change the result)
+        let rot_identity: [f64; 9] = [
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, 1.0,
+        ];
+
+        mju_transform_spatial(&mut res, &vec, 0, &newpos, &oldpos, Some(&rot_identity));
+
+        assert_relative_eq!(res[0], vec[0], epsilon = 1e-9);
+        assert_relative_eq!(res[1], vec[1], epsilon = 1e-9);
+        assert_relative_eq!(res[2], vec[2], epsilon = 1e-9);
+    }
 }
