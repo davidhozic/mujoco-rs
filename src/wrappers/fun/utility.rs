@@ -170,7 +170,6 @@ pub fn mju_sqr_mat_td(res: &mut [MjtNum], mat: &[MjtNum], diag: Option<&[MjtNum]
 /* Auto generated */
 /*******************************/
 /// Intersect ray with pure geom, return nearest distance or -1 if no intersection.
-/// Nullable: vertid.
 pub fn mju_ray_geom(pos: &[MjtNum; 3], mat: &[MjtNum; 9], size: &[MjtNum; 3], pnt: &[MjtNum; 3], vec: &[MjtNum; 3], geomtype: std::ffi::c_int) -> MjtNum  {
     unsafe { mujoco_c::mju_rayGeom(pos.as_ptr(), mat.as_ptr(), size.as_ptr(), pnt.as_ptr(), vec.as_ptr(), geomtype) }
 }
