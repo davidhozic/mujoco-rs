@@ -3,200 +3,164 @@ use crate::wrappers::mj_primitive::*;
 use crate::mujoco_c;
 
 /* Manually added */
+/// Set res = 0.
 pub fn mju_zero(res: &mut [MjtNum])  {
     unsafe { mujoco_c::mju_zero(res.as_mut_ptr(), res.len() as i32) }
 }
 
+/// Set res = val.
 pub fn mju_fill(res: &mut [MjtNum], val: MjtNum)  {
     unsafe { mujoco_c::mju_fill(res.as_mut_ptr(), val, res.len() as i32) }
 }
 
+/// Set res = vec.
 pub fn mju_copy(res: &mut [MjtNum], vec: &mut [MjtNum])  {
     assert!(res.len() == vec.len());
     unsafe { mujoco_c::mju_copy(res.as_mut_ptr(), vec.as_mut_ptr(), res.len() as i32) }
 }
+
+/// Return the sum of all elements in the vector `vec`.
 pub fn mju_sum(vec: &[MjtNum]) -> MjtNum {
     unsafe { mujoco_c::mju_sum(vec.as_ptr(), vec.len() as i32) }
 }
 
+/// Return the L1 norm of the vector `vec` (sum of absolute values).
 pub fn mju_l1(vec: &[MjtNum]) -> MjtNum {
     unsafe { mujoco_c::mju_L1(vec.as_ptr(), vec.len() as i32) }
 }
 
+/// Scale a vector: `res = vec * scl`.
 pub fn mju_scl(res: &mut [MjtNum], vec: &[MjtNum], scl: MjtNum) {
     assert!(res.len() == vec.len());
     unsafe { mujoco_c::mju_scl(res.as_mut_ptr(), vec.as_ptr(), scl, vec.len() as i32) }
 }
 
+/// Add two vectors element-wise: `res = vec1 + vec2`.
 pub fn mju_add(res: &mut [MjtNum], vec1: &[MjtNum], vec2: &[MjtNum]) {
     assert!(res.len() == vec1.len() && vec1.len() == vec2.len());
     unsafe { mujoco_c::mju_add(res.as_mut_ptr(), vec1.as_ptr(), vec2.as_ptr(), vec1.len() as i32) }
 }
 
+/// Subtract two vectors element-wise: `res = vec1 - vec2`.
 pub fn mju_sub(res: &mut [MjtNum], vec1: &[MjtNum], vec2: &[MjtNum]) {
     assert!(res.len() == vec1.len() && vec1.len() == vec2.len());
     unsafe { mujoco_c::mju_sub(res.as_mut_ptr(), vec1.as_ptr(), vec2.as_ptr(), vec1.len() as i32) }
 }
 
+/// Add vector `vec` to `res` in place: `res += vec`.
 pub fn mju_add_to(res: &mut [MjtNum], vec: &[MjtNum]) {
     assert!(res.len() == vec.len());
     unsafe { mujoco_c::mju_addTo(res.as_mut_ptr(), vec.as_ptr(), vec.len() as i32) }
 }
 
+/// Subtract vector `vec` from `res` in place: `res -= vec`.
 pub fn mju_sub_from(res: &mut [MjtNum], vec: &[MjtNum]) {
     assert!(res.len() == vec.len());
     unsafe { mujoco_c::mju_subFrom(res.as_mut_ptr(), vec.as_ptr(), vec.len() as i32) }
 }
 
+/// Add scaled vector to `res` in place: `res += vec * scl`.
 pub fn mju_add_to_scl(res: &mut [MjtNum], vec: &[MjtNum], scl: MjtNum) {
     assert!(res.len() == vec.len());
     unsafe { mujoco_c::mju_addToScl(res.as_mut_ptr(), vec.as_ptr(), scl, vec.len() as i32) }
 }
 
+/// Add a vector and a scaled vector: `res = vec1 + vec2 * scl`.
 pub fn mju_add_scl(res: &mut [MjtNum], vec1: &[MjtNum], vec2: &[MjtNum], scl: MjtNum) {
     assert!(res.len() == vec1.len() && vec1.len() == vec2.len());
     unsafe { mujoco_c::mju_addScl(res.as_mut_ptr(), vec1.as_ptr(), vec2.as_ptr(), scl, vec1.len() as i32) }
 }
 
+/// Normalize a vector in place and return its length before normalization.
 pub fn mju_normalize(res: &mut [MjtNum]) -> MjtNum {
     unsafe { mujoco_c::mju_normalize(res.as_mut_ptr(), res.len() as i32) }
 }
 
+/// Return the Euclidean norm (length) of a vector.
 pub fn mju_norm(vec: &[MjtNum]) -> MjtNum {
     unsafe { mujoco_c::mju_norm(vec.as_ptr(), vec.len() as i32) }
 }
 
+/// Return the dot product of two vectors.
 pub fn mju_dot(vec1: &[MjtNum], vec2: &[MjtNum]) -> MjtNum {
     assert!(vec1.len() == vec2.len());
     unsafe { mujoco_c::mju_dot(vec1.as_ptr(), vec2.as_ptr(), vec1.len() as i32) }
 }
 
+/// Multiply matrix and vector: `res = mat * vec`.
 pub fn mju_mul_mat_vec(res: &mut [MjtNum], mat: &[MjtNum], vec: &[MjtNum]) {
     let nr = res.len();
     let nc = vec.len();
     assert!(mat.len() == nr * nc);
-    unsafe {
-        mujoco_c::mju_mulMatVec(
-            res.as_mut_ptr(),
-            mat.as_ptr(),
-            vec.as_ptr(),
-            nr as i32,
-            nc as i32,
-        )
-    }
+    unsafe { mujoco_c::mju_mulMatVec(res.as_mut_ptr(), mat.as_ptr(), vec.as_ptr(), nr as i32, nc as i32) }
 }
 
+/// Multiply transposed matrix and vector: `res = mat^T * vec`.
 pub fn mju_mul_mat_t_vec(res: &mut [MjtNum], mat: &[MjtNum], vec: &[MjtNum]) {
     let nc = res.len();
     let nr = vec.len();
     assert!(mat.len() == nr * nc);
-    unsafe {
-        mujoco_c::mju_mulMatTVec(
-            res.as_mut_ptr(),
-            mat.as_ptr(),
-            vec.as_ptr(),
-            nr as i32,
-            nc as i32,
-        )
-    }
+    unsafe { mujoco_c::mju_mulMatTVec(res.as_mut_ptr(), mat.as_ptr(), vec.as_ptr(), nr as i32, nc as i32) }
 }
 
+/// Multiply square matrix with vectors on both sides: returns `vec1^T * mat * vec2`.
 pub fn mju_mul_vec_mat_vec(vec1: &[MjtNum], mat: &[MjtNum], vec2: &[MjtNum]) -> MjtNum {
     let n = vec1.len();
-    assert!(vec2.len() == n);
-    assert!(mat.len() == n * n);
+    assert!(vec2.len() == n && mat.len() == n * n);
     unsafe { mujoco_c::mju_mulVecMatVec(vec1.as_ptr(), mat.as_ptr(), vec2.as_ptr(), n as i32) }
 }
 
+/// Transpose a matrix: `res = mat^T`.
 pub fn mju_transpose(res: &mut [MjtNum], mat: &[MjtNum], nr: usize, nc: usize) {
-    assert!(res.len() == nr * nc);
-    assert!(mat.len() == nr * nc);
+    assert!(res.len() == nr * nc && mat.len() == nr * nc);
     unsafe { mujoco_c::mju_transpose(res.as_mut_ptr(), mat.as_ptr(), nr as i32, nc as i32) }
 }
 
+/// Symmetrize a square matrix: `res = (mat + mat^T)/2`.
 pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum], n: usize) {
-    assert!(res.len() == n * n);
-    assert!(mat.len() == n * n);
+    assert!(res.len() == n * n && mat.len() == n * n);
     unsafe { mujoco_c::mju_symmetrize(res.as_mut_ptr(), mat.as_ptr(), n as i32) }
 }
 
+/// Set a square matrix to identity.
 pub fn mju_eye(mat: &mut [MjtNum], n: usize) {
     assert!(mat.len() == n * n);
     unsafe { mujoco_c::mju_eye(mat.as_mut_ptr(), n as i32) }
 }
 
+/// Multiply matrices: `res = mat1 * mat2`.
 pub fn mju_mul_mat_mat(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r1: usize, c1: usize, c2: usize) {
     assert!(mat1.len() == r1 * c1);
     assert!(mat2.len() == c1 * c2);
     assert!(res.len() == r1 * c2);
-    unsafe {
-        mujoco_c::mju_mulMatMat(
-            res.as_mut_ptr(),
-            mat1.as_ptr(),
-            mat2.as_ptr(),
-            r1 as i32,
-            c1 as i32,
-            c2 as i32,
-        )
-    }
+    unsafe { mujoco_c::mju_mulMatMat(res.as_mut_ptr(), mat1.as_ptr(), mat2.as_ptr(), r1 as i32, c1 as i32, c2 as i32) }
 }
 
+/// Multiply matrices, second transposed: `res = mat1 * mat2^T`.
 pub fn mju_mul_mat_mat_t(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r1: usize, c1: usize, r2: usize) {
     assert!(mat1.len() == r1 * c1);
     assert!(mat2.len() == r2 * c1);
     assert!(res.len() == r1 * r2);
-    unsafe {
-        mujoco_c::mju_mulMatMatT(
-            res.as_mut_ptr(),
-            mat1.as_ptr(),
-            mat2.as_ptr(),
-            r1 as i32,
-            c1 as i32,
-            r2 as i32,
-        )
-    }
+    unsafe { mujoco_c::mju_mulMatMatT(res.as_mut_ptr(), mat1.as_ptr(), mat2.as_ptr(), r1 as i32, c1 as i32, r2 as i32) }
 }
 
+/// Multiply matrices, first transposed: `res = mat1^T * mat2`.
 pub fn mju_mul_mat_t_mat(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r1: usize, c1: usize, c2: usize) {
     assert!(mat1.len() == r1 * c1);
     assert!(mat2.len() == r1 * c2);
     assert!(res.len() == c1 * c2);
-    unsafe {
-        mujoco_c::mju_mulMatTMat(
-            res.as_mut_ptr(),
-            mat1.as_ptr(),
-            mat2.as_ptr(),
-            r1 as i32,
-            c1 as i32,
-            c2 as i32,
-        )
-    }
+    unsafe { mujoco_c::mju_mulMatTMat(res.as_mut_ptr(), mat1.as_ptr(), mat2.as_ptr(), r1 as i32, c1 as i32, c2 as i32) }
 }
 
+/// Compute `res = mat^T * diag * mat` if `diag` is Some, else `res = mat^T * mat`.
 pub fn mju_sqr_mat_td(res: &mut [MjtNum], mat: &[MjtNum], diag: Option<&[MjtNum]>, nr: usize, nc: usize) {
     assert!(mat.len() == nr * nc);
     assert!(res.len() == nc * nc);
     if let Some(d) = diag {
         assert!(d.len() == nr);
-        unsafe {
-            mujoco_c::mju_sqrMatTD(
-                res.as_mut_ptr(),
-                mat.as_ptr(),
-                d.as_ptr(),
-                nr as i32,
-                nc as i32,
-            )
-        }
+        unsafe { mujoco_c::mju_sqrMatTD(res.as_mut_ptr(), mat.as_ptr(), d.as_ptr(), nr as i32, nc as i32) }
     } else {
-        unsafe {
-            mujoco_c::mju_sqrMatTD(
-                res.as_mut_ptr(),
-                mat.as_ptr(),
-                std::ptr::null(),
-                nr as i32,
-                nc as i32,
-            )
-        }
+        unsafe { mujoco_c::mju_sqrMatTD(res.as_mut_ptr(), mat.as_ptr(), std::ptr::null(), nr as i32, nc as i32) }
     }
 }
 
@@ -437,7 +401,7 @@ pub fn mju_max(a: MjtNum, b: MjtNum) -> MjtNum  {
     unsafe { mujoco_c::mju_max(a, b) }
 }
 
-/// Clip x to the range [min, max].
+/// Clip x to the range \[min, max\].
 pub fn mju_clip(x: MjtNum, min: MjtNum, max: MjtNum) -> MjtNum  {
     unsafe { mujoco_c::mju_clip(x, min, max) }
 }
