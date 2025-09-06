@@ -152,6 +152,7 @@ impl<T> Deref for PointerView<'_, T> {
 
 /// Creates a $view struct, mapping $field and $opt_field to the same location as in $data.
 #[macro_export]
+#[doc(hidden)]
 macro_rules! view_creator {
     /* Pointer view */
     ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
@@ -191,6 +192,7 @@ macro_rules! view_creator {
 /// Macro for reducing duplicated code when creating info structs to
 /// items that have fixed size arrays in [`MjData`](crate::prelude::MjData) or [`MjModel`](crate::prelude::MjModel).
 /// This creates a method `X(self, name; &str) -> XInfo`.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! fixed_size_info_method {
     ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*]) => {
@@ -219,6 +221,7 @@ macro_rules! fixed_size_info_method {
 
 
 /// Creates the xInfo struct along with corresponding xView and xViewMut structs.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! info_with_view {
     /* PointerView */
@@ -354,4 +357,16 @@ macro_rules! info_with_view {
             }
         }
     };
+}
+
+
+/// assert_eq!, but with tolerance for floating point rounding.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! assert_relative_eq {
+    ($a:expr, $b:expr, epsilon = $eps:expr) => {{
+        let (a, b, eps) = ($a as f64, $b as f64, $eps as f64);
+        let tol = eps * a.abs().max(b.abs()).max(1.0);
+        assert!((a - b).abs() <= tol, "left={:?} right={:?} tol={:?}", a, b, tol);
+    }};
 }

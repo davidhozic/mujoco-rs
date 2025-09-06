@@ -9,6 +9,8 @@ pub mod mj_option;
 pub mod mj_model;
 pub mod mj_data;
 
+pub mod fun;
+
 pub use mj_visualization::*;
 pub use mj_rendering::*;
 pub use mj_option::*;
