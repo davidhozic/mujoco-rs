@@ -75,12 +75,11 @@ impl MjVfs {
     /// exists in the MuJoCo library, where setting NULL for `directory`
     /// results in a crash. For that purpose, always pass Some("./") if you wish to omit the directory.
     pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> io::Result<()> {
-        assert!(
-            directory.is_some(),
-            "due to a bug in the MuJoCo C library, the 'directory' argument must always be given. \
+        if directory.is_none() {
+            return Err(Error::new(ErrorKind::InvalidInput, "due to a bug in the MuJoCo C library, the 'directory' argument must always be given. \
             This assertion will be removed when the bug is fixed.\
-            see https://github.com/google-deepmind/mujoco/issues/2839 for more information."
-        );
+            see https://github.com/google-deepmind/mujoco/issues/2839 for more information."))
+        };
 
         let c_directory = directory.map(|d| CString::new(d).unwrap());
         let c_filename = CString::new(filename).unwrap();
@@ -119,7 +118,7 @@ impl MjVfs {
             0 => Ok(()),
             2 => Err(Error::new(ErrorKind::AlreadyExists, "repeated name")),
             -1 => Err(Error::new(ErrorKind::InvalidData, "failed to load")),
-            _ => unreachable!()
+            _ => Err(Error::new(ErrorKind::Other, "unknown MuJoCo error"))
         }
     }
 
@@ -127,7 +126,7 @@ impl MjVfs {
         match result {
             0 => Ok(()),
             -1 => Err(Error::new(ErrorKind::NotFound, "file not found in the VFS")),
-            _ => unreachable!()
+            _ => Err(Error::new(ErrorKind::Other, "unknown MuJoCo error"))
         }
     }
 
@@ -198,9 +197,10 @@ mod tests {
         ** It is disabled due to a segmentation fault bug at the MuJoCo's side:
         ** https://github.com/google-deepmind/mujoco/issues/2839
         */
-        // vfs = MjVfs::new();
-        // assert!(vfs.add_from_file(None, REAL_FILE_NAME).is_ok());
-        // drop(vfs);
+        vfs = MjVfs::new();
+        let err = vfs.add_from_file(None, REAL_FILE_NAME).unwrap_err();
+        assert!(err.kind() == ErrorKind::InvalidInput);
+        drop(vfs);
 
         /* With directory */
         vfs = MjVfs::new();
