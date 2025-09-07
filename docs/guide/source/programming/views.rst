@@ -31,7 +31,7 @@ like so:
         let joint_info = data.joint("football-ball").expect("name not found");
         loop {
             data.step();
-            
+            ...
         }
     }
 
@@ -40,17 +40,15 @@ To actually view the data, we will now call
 a reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so:
 
 .. code-block:: rust
-    :emphasize-lines: 5, 8
+    :emphasize-lines: 7
 
     fn main() {
         let model = MjModel::from_xml("model.rs").expect("could not load the model");
         let mut data = model.make_data();
         let joint_info = data.joint("football-ball").expect("name not found");
-        let mut position;
         loop {
             data.step();
-            position = &joint_info.view(&data).qpos[..3];
-            println!("{position}");
+            println!("{:?}", &joint_info.view(&data).qpos[..3]);  // print x, y and z coordinates.
         }
     }
 
@@ -66,17 +64,15 @@ The above examples show a read-only view. To be able to write to the viewed data
 and passed a mutable reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so:
 
 .. code-block:: rust
-    :emphasize-lines: 5, 8, 9
+    :emphasize-lines: 7
 
     fn main() {
         let model = MjModel::from_xml("model.rs").expect("could not load the model");
         let mut data = model.make_data();
         let joint_info = data.joint("football-ball").expect("name not found");
-        let mut velocity;
         loop {
             data.step();
-            velocity = &joint_info.view_mut(&mut data).qpos[..3];
-            velocity[0] = 0.5;
+            joint_info.view_mut(&mut data).qpos[0] = 0.5;
         }
     }
 
