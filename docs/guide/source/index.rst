@@ -45,4 +45,5 @@ Table of contents
 
    installation
    programming
+   viewer
    api
