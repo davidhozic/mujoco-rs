@@ -77,8 +77,8 @@ impl MjVfs {
     pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> io::Result<()> {
         if directory.is_none() {
             return Err(Error::new(ErrorKind::InvalidInput, "due to a bug in the MuJoCo C library, the 'directory' argument must always be given. \
-            This assertion will be removed when the bug is fixed.\
-            see https://github.com/google-deepmind/mujoco/issues/2839 for more information."))
+            This assertion will be removed when the bug is fixed. \
+            See https://github.com/google-deepmind/mujoco/issues/2839 for more information."))
         };
 
         let c_directory = directory.map(|d| CString::new(d).unwrap());
@@ -198,7 +198,7 @@ mod tests {
         ** https://github.com/google-deepmind/mujoco/issues/2839
         */
         vfs = MjVfs::new();
-        let err = vfs.add_from_file(None, REAL_FILE_NAME).unwrap_err();
+        let err = dbg!(vfs.add_from_file(None, REAL_FILE_NAME).unwrap_err());
         assert!(err.kind() == ErrorKind::InvalidInput);
         drop(vfs);
 
