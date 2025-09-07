@@ -45,3 +45,4 @@ Table of contents
 
    installation
    programming
+   api
