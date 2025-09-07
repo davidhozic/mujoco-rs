@@ -2,6 +2,8 @@
 [![docs.rs](https://img.shields.io/docsrs/mujoco-rs/latest)](https://docs.rs/mujoco-rs)
 [![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
 
+[![Guide](https://img.shields.io/badge/Documentation-green)](https://mujoco-rs.readthedocs.io/en/latest/)
+
 
 MuJoCo bindings and wrappers for the Rust programming language. Includes a Rust-native viewer and also
 bindings to a modified C++ one.
@@ -10,8 +12,9 @@ MuJoCo is a general purpose physics simulator. Link to the MuJoCo website: https
 
 
 ## Documentation
-More detailed documentation is available either at https://docs.rs/mujoco-rs for the API docs
-and TODO for the guide (book).
+More detailed documentation is available at the:
+- [**API docs**](https://docs.rs/mujoco-rs)
+- [**Guide book**](https://mujoco-rs.readthedocs.io/en/latest/)
 
 
 ## Rust-native viewer
