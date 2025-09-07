@@ -70,6 +70,7 @@ def link_docs_rs(name, rawtext, text, lineno, inliner, options={}, content=[]):
         root = text
         parts = tuple()
 
+    root = root.lstrip("~")  # The ~ commands to only display the last part
     path = "/".join(parts)
     if html_ref:
         path += f"#{html_ref}"
@@ -87,5 +88,10 @@ class StripSpecifiers(Transform):
         for node in self.document.traverse(nodes.Text):
             text = node.astext()
             text = re.sub(r"<(\w+)>", "", text)
+            if text.startswith("~~"): # Keep the last two parts
+                text = "::".join(text.split("::")[-2:])
+            elif text.startswith("~"):  # Keep the last part
+                text = text.split("::")[-1]
+
             node.parent.replace(node, nodes.Text(text))
 
