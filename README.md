@@ -9,6 +9,11 @@ bindings to a modified C++ one.
 MuJoCo is a general purpose physics simulator. Link to the MuJoCo website: https://mujoco.org/.
 
 
+## Documentation
+More detailed documentation is available either at https://docs.rs/mujoco-rs for the API docs
+and TODO for the guide (book).
+
+
 ## Rust-native viewer
 Screenshot of the built-in Rust viewer. Showing scene from [MuJoCo's menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot).
 ![](docs/img_common/viewer_spot.png)
