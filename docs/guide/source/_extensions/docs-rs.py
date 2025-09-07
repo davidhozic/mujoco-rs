@@ -60,7 +60,7 @@ def link_docs_rs(name, rawtext, text, lineno, inliner, options={}, content=[]):
         for i, (mapped, type_) in enumerate(map_specifier(parts)):
             parts[i] = mapped
 
-        if type_ in {"method", "variant"}:  # last iteration result
+        if type_ in {"method", "variant", "structfield"}:  # last iteration result
             parts[-2] += ".html"
             html_ref = parts.pop()
         elif type_:

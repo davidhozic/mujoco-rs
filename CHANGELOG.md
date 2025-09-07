@@ -3,7 +3,7 @@
 ## Versioning
 This project uses [semantic versioning](https://semver.org/).
 
-## [FUTURE RELEASE] 1.2.0 (MuJoCo 3.3.5)
+## [FUTURE RELEASE] (MuJoCo 3.3.5)
 - Added function wrappers around some utility functions and both the derivative functions (available under `wrappers::fun`).
 - Completed the virtual file system wrapper.
   - Added methods `add_from_file` and `delete_file` to `MjVfs`.

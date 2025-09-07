@@ -1,4 +1,5 @@
 .. _installation:
+
 =============================
 Installation
 =============================
@@ -11,6 +12,7 @@ MuJoCo-rs
 
 
 MuJoCo-rs can be added to your project by running:
+
 ::
 
     cargo add mujoco-rs
@@ -32,7 +34,8 @@ Dynamic linking
 --------------------
 The main variable that needs to be set is ``MUJOCO_DYNAMIC_LINK_DIR``:
 ::
-    export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/
+
+   export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/
 
 After OS-dependent configuration, described below, projects using MuJoCo-rs can compile normally with ``cargo build``.
 
@@ -63,15 +66,15 @@ MacOS is currently untested.
 ----------------------
 
 .. _static_linking:
+
 Static linking
 --------------------
 We also provide an optional to statically link:
-
 ::
 
-  export MUJOCO_STATIC_LINK_DIR=/path/mujoco/lib/
-  cargo build
-    
+   export MUJOCO_STATIC_LINK_DIR=/path/mujoco/lib/
+   cargo build
+
 
 Note that the ``/path/mujoco/lib`` needs to contain all the MuJoCo dependencies.
 
@@ -87,13 +90,12 @@ To build statically linkable libs with C++ viewer included, perform the followin
 
 1. Clone the repository
 2. Run commands:
+   ::
 
-::
-
-    git submodule update --init --recursive
-    cd ./mujoco/
-    cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF -DCMAKE_EXE_LINKER_FLAGS:STRING=-Wl,--no-as-needed
-    cmake --build build --parallel --target libsimulate --config=Release
+       git submodule update --init --recursive
+       cd ./mujoco/
+       cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF -DCMAKE_EXE_LINKER_FLAGS:STRING=-Wl,--no-as-needed
+       cmake --build build --parallel --target libsimulate --config=Release
 
 3. Follow instructions in the :ref:`Static linking <static_linking>` section.
 

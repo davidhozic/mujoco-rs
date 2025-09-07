@@ -10,4 +10,5 @@ This chapter contains documentation describing how to use the MuJoCo-rs crate.
 
     programming/changes
     programming/basic
+    programming/views
     programming/ffi
