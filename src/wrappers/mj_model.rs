@@ -66,13 +66,22 @@ unsafe impl Sync for MjModel {}
 
 
 impl MjModel {
-    /// Loads the model from an XML file.
+    /// Loads the model from an XML file. To load from a virtual file system, use [`MjModel::from_xml_vfs`].
     pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
+        Self::from_xml_file(path, None)
+    }
+
+    /// Loads the model from an XML file, located in a virtual file system (`vfs`).
+    pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
+        Self::from_xml_file(path, Some(vfs))
+    }
+
+    fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, Error> {
         let mut error_buffer = [0i8; 100];
         unsafe {
             let path = CString::new(path.as_ref().to_str().expect("invalid utf")).unwrap();
             let raw_ptr = mj_loadXML(
-                path.as_ptr(), ptr::null(),
+                path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
                 &mut error_buffer as *mut i8, error_buffer.len() as c_int
             );
 
