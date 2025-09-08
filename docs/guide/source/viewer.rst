@@ -44,7 +44,7 @@ like shown in the following example:
 
             /* Update the simulation state */
             data.step();
-            std::thread::sleep(Duration::from_secs(timestep));
+            std::thread::sleep(Duration::from_secs_f64(timestep));
         }
     }
 
@@ -55,6 +55,7 @@ the simulation model (:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel
 - the internal 3D scene needed for the actual viewer to mirror the simulation state and
 - the user 3D scene that can be used to draw custom user objects (obtainable via
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn`).
+  This is in more detail described in :ref:`custom_visualization`.
 
 
 The above example runs until the viewer is closed (:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running`)
@@ -72,7 +73,7 @@ and mirrors/syncs the simulation state with :docs-rs:`~~mujoco_rs::viewer::<stru
 
 At the beginning we also obtained the simulation timestep (time per each call to
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>step`), which is used to
-sleep after the step with ``std::thread::sleep(Duration::from_secs(timestep));``
+sleep after the step with ``std::thread::sleep(Duration::from_secs_f64(timestep));``
 This is optional and can be removed or reduced to run the simulation time faster than realtime.
 
 Interaction with the viewer is described with the help menu, which is open by default on launch.

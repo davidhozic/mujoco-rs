@@ -1,3 +1,5 @@
+.. _custom_visualization:
+
 =====================
 Custom visualization
 =====================
@@ -47,3 +49,6 @@ This `example <https://github.com/davidhozic/mujoco-rs/blob/main/examples/drawin
 illustrates how to draw a line between two independent balls.
 In the example, we also call :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>connect`,
 which scales, orients and positions the geom, in order to make it point from point to the other.
+The example will draw following white line as shown in the picture:
+
+.. image:: ../img/visualization-example.png
