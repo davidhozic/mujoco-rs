@@ -7,6 +7,11 @@ version: 2
 # Set the OS, Python version, and other tools you might need
 build:
   os: ubuntu-24.04
+  jobs:
+    pre_install:
+      - git lfs install
+      - git lfs fetch --all
+
   tools:
     python: "3.13"
 

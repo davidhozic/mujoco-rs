@@ -2,10 +2,8 @@
 Raw bindings (FFI)
 =========================
 
-
-
-When the MuJoCo-rs doesn't provide the desired control, the raw Foreign Function Interface (FFI)
-can be used the raw bindings to the MuJoCo C code.
+When MuJoCo-rs doesn't provide the desired control, the raw Foreign Function Interface (FFI)
+can be used to obtain raw bindings to the MuJoCo C code.
 
 The whole set of public types and functions to the MuJoCo C code is available in the 
 :docs-rs:`mujoco_rs::mujoco_c` module.

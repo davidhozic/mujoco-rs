@@ -18,7 +18,7 @@ To overcome this, the so called "info" structs must be created first.
 Reading
 ======================
 
-For example, let's say we want to read-only view the position of a free **joint**.
+For example, let's say we want to read the position of a free **joint**.
 We will first create an info struct by calling :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>joint`
 like so:
 
@@ -79,5 +79,6 @@ and passed a mutable reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<stru
 
 Other views
 ======================
-Views can be created for other types of items too and for :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
-too. The process is exactly the same as shown above.
+Views can be created for other types of items too, as well as for
+:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`.
+The process is exactly the same as shown above.

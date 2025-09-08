@@ -69,7 +69,7 @@ MacOS is currently untested.
 
 Static linking
 --------------------
-We also provide an optional to statically link:
+We also provide an option to statically link:
 ::
 
    export MUJOCO_STATIC_LINK_DIR=/path/mujoco/lib/
@@ -88,7 +88,7 @@ enabling static linking and a safe interface between Rust and the C++ Simulate c
 
 To build statically linkable libs with C++ viewer included, perform the following steps:
 
-1. Clone the repository
+1. Clone the MuJoCo-rs repository
 2. Run commands:
    ::
 
@@ -106,7 +106,7 @@ The builds are tested with the ``gcc`` compiler.
 
 Missing libraries
 ==================
-The crate should work out of the box after you provide it with the MuJoCo library. If the build fails and asks
+MuJoCo-rs should work out of the box after you provide it with the MuJoCo library. If the build fails and asks
 for additional dependencies, install them via your system package manager.
 For example, to install glfw3 on Ubuntu/Debian, this can be done like so: ``apt install libglfw3-dev``.
 

@@ -6,19 +6,18 @@ Custom visualization
 
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
 
-Aside to the true simulation state MuJoCo provides ways to draw additional 3D geometries (geoms)
-on to an existing 3D scene.
+Aside to the true simulation state, MuJoCo provides ways to draw additional 3D geometries (geoms)
+onto an existing 3D scene.
 
 MuJoCo-rs tries to provide a higher-level API to drawing custom geoms.
 All the visualization definitions are available under the :docs-rs:`mujoco_rs::wrappers::mj_visualization` module.
-While the module contains many visualization related definitions, the one we're looking at for custom
-drawing is the |mjv_scene|.
+While the module contains many visualization related definitions, the one we're looking for is |mjv_scene|.
 
 The scene can be directly constructed with
 :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>new`, however this is currently
 not useful on its own. In the future, MuJoCo-rs wil support a custom renderer, like the MuJoCo Python supports,
 where |mjv_scene| will be used as the
-drawing reference. Currently, it can be directly used to draw custom geometries the :ref:`mj_rust_viewer`.
+drawing reference. Currently, the scene can be directly used to draw custom geometries to the :ref:`mj_rust_viewer`.
 
 
 

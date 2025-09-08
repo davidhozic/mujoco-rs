@@ -24,7 +24,7 @@ and needs to be periodically "synced" by the user application.
 The user application is the one that needs to run the actual physical simulation, like shown in
 :ref:`basic_sim` and also below.
 
-The viewer can be launched with the :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive`,
+The viewer can be launched with :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive`,
 like shown in the following example:
 
 .. code-block:: rust
@@ -50,7 +50,7 @@ like shown in the following example:
 
 
 The method :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive` accepts an immutable reference to
-the simulation model (:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel`) and uses it construct two scenes:
+the simulation model (:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel`) and uses it to construct two scenes:
 
 - the internal 3D scene needed for the actual viewer to mirror the simulation state and
 - the user 3D scene that can be used to draw custom user objects (obtainable via
@@ -71,11 +71,11 @@ and mirrors/syncs the simulation state with :docs-rs:`~~mujoco_rs::viewer::<stru
         ...
     }
 
-At the beginning we also obtained the simulation timestep (time per each call to
+At the beginning, we also obtained the simulation timestep (time passed in simulation per each call to
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>step`), which is used to
-sleep after the step with ``std::thread::sleep(Duration::from_secs_f64(timestep));``
-This is optional and can be removed or reduced to run the simulation time faster than realtime.
+sleep after the step with ``std::thread::sleep(Duration::from_secs_f64(timestep));``.
+This is optional and can be removed or reduced to run the simulation faster than realtime.
 
-Interaction with the viewer is described with the help menu, which is open by default on launch.
+Interaction with the viewer is described with a help menu, which is shown on launch of the viewer.
 For more, refer to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
 `examples <https://github.com/davidhozic/mujoco-rs/tree/main/examples>`_.
