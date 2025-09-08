@@ -1,6 +1,6 @@
 //! Module for mjModel
+use std::ffi::{c_int, CStr, CString, NulError};
 use std::io::{self, Error, ErrorKind};
-use std::ffi::{c_int, CString};
 use std::path::Path;
 use std::ptr;
 
@@ -219,25 +219,7 @@ impl MjModel {
         poscom0: 3, pos0: 3, mat0: 9, orthographic: 1, fovy: 1,
         ipd: 1, resolution: 2, sensorsize: 2, intrinsic: 4
     ] }
-
-    /* Support */
-
-    /// Determine type of friction cone.
-    pub fn is_pyramidical(&self) -> bool {
-        unsafe { mj_isPyramidal(self.ffi()) == 1 }
-    }
-
-    /// Determine type of constraint Jacobian.
-    pub fn is_sparse(&self) -> bool {
-        unsafe { mj_isPyramidal(self.ffi()) == 1 }
-    }
-
-    /// Determine type of solver (PGS is dual, CG and Newton are primal).
-    pub fn is_dual(&self) -> bool {
-        unsafe { mj_isPyramidal(self.ffi()) == 1 }
-    }
-
-    
+   
     /// Deprecated alias for [`MjModel::name_to_id`].
     #[deprecated]
     pub fn name2id(&self, type_: mjtObj, name: &str) -> i32 {
@@ -252,9 +234,97 @@ impl MjModel {
         }
     }
 
+    /* Partially auto-generated */
+
+    /// Clones the model.
+    pub fn clone(&self) -> Option<MjModel> {
+        let ptr = unsafe { mj_copyModel(ptr::null_mut(), self.ffi()) };
+        if ptr.is_null() {
+            None
+        }
+        else {
+            Some(MjModel(ptr))
+        }
+    }
+
+    /// Save model to binary MJB file or memory buffer; buffer has precedence when given.
+    pub fn save(&self, filename: Option<&str>, buffer: Option<&mut [u8]>) {
+        let c_filename = filename.map(|f| CString::new(f).unwrap());
+        let (buffer_ptr, buffer_len) = if let Some(b) = buffer {
+            (b.as_mut_ptr(), b.len())
+        }
+        else {
+            (ptr::null_mut(), 0)
+        };
+        let c_filename_ptr = c_filename.as_ref().map_or(ptr::null(), |f| f.as_ptr());
+
+        unsafe { mj_saveModel(
+            self.ffi(), c_filename_ptr,
+            buffer_ptr as *mut std::ffi::c_void, buffer_len as i32
+        ) };
+    }
+
+    /// Return size of buffer needed to hold model.
+    pub fn size(&self) -> std::ffi::c_int {
+        unsafe { mj_sizeModel(self.ffi()) }
+    }
+
+    /// Print mjModel to text file, specifying format.
+    /// float_format must be a valid printf-style format string for a single float value.
+    pub fn print_formatted(&self, filename: &str, float_format: &str) -> Result<(), NulError> {
+        let c_filename = CString::new(filename)?;
+        let c_float_format = CString::new(float_format)?;
+        unsafe { mj_printFormattedModel(self.ffi(), c_filename.as_ptr(), c_float_format.as_ptr()) }
+        Ok(())
+    }
+
+    /// Print model to text file.
+    pub fn print(&self, filename: &str) -> Result<(), NulError> {
+        let c_filename = CString::new(filename)?;
+        unsafe { mj_printModel(self.ffi(), c_filename.as_ptr()) }
+        Ok(())
+    }
+
+    /// Return size of state specification. The bits of the integer spec correspond to element fields of [`MjtState`](crate::wrappers::mj_data::MjtState).
+    pub fn state_size(&self, spec: std::ffi::c_uint) -> std::ffi::c_int {
+        unsafe { mj_stateSize(self.ffi(), spec) }
+    }
+
+    /// Determine type of friction cone.
+    pub fn is_pyramidal(&self) -> bool {
+        unsafe { mj_isPyramidal(self.ffi()) == 1 }
+    }
+
+    /// Determine type of constraint Jacobian.
+    pub fn is_sparse(&self) -> bool {
+        unsafe { mj_isSparse(self.ffi()) == 1 }
+    }
+
+    /// Determine type of solver (PGS is dual, CG and Newton are primal).
+    pub fn is_dual(&self) -> bool {
+        unsafe { mj_isDual(self.ffi()) == 1 }
+    }
+
+    /// Get name of object with the specified mjtObj type and id, returns NULL if name not found.
+    pub fn id_2name(&self, type_: MjtObj, id: std::ffi::c_int) -> Option<&str> {
+        let ptr = unsafe { mj_id2name(self.ffi(), type_ as i32, id) };
+        if ptr.is_null() {
+            None
+        }
+        else {
+            let cstr = unsafe { CStr::from_ptr(ptr).to_str().unwrap() };
+            Some(cstr)
+        }
+    }
+
     /// Sum all body masses.
-    pub fn total_mass(&self) -> MjtNum {
+    pub fn get_totalmass(&self) -> MjtNum {
         unsafe { mj_getTotalmass(self.ffi()) }
+    }
+
+    /// Scale body masses and inertias to achieve specified total mass.
+    pub fn set_totalmass(&mut self, newmass: MjtNum) {
+        unsafe { mj_setTotalmass(self.ffi_mut(), newmass) }
     }
 
     /* FFI */
@@ -381,6 +451,8 @@ info_with_view!(Model, camera, cam_,
 
 #[cfg(test)]
 mod tests {
+    use crate::assert_relative_eq;
+
     use super::*;
     use std::fs;
 
@@ -432,11 +504,11 @@ mod tests {
     </tendon>
     </mujoco>
     ";
-    const MODEL_SAVE_XML_PATH: &str = "./__TMP_MODEL.xml";
 
     /// Tests if the model can be loaded and then saved.
     #[test]
     fn test_model_load_save() {
+        const MODEL_SAVE_XML_PATH: &str = "./__TMP_MODEL1.xml";
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
         model.save_last_xml(MODEL_SAVE_XML_PATH).expect("could not save the model XML.");      
         fs::remove_file(MODEL_SAVE_XML_PATH).unwrap();
@@ -562,5 +634,70 @@ mod tests {
         let mut view_mut = model_info.view_mut(&mut model);
         view_mut.fovy[0] = 60.0;
         assert_eq!(view_mut.fovy[0], 60.0);
+    }
+
+    #[test]
+    fn test_id_2name_valid() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+
+        // Body with id=1 should exist ("box")
+        let name = model.id_2name(MjtObj::mjOBJ_BODY, 1);
+        assert_eq!(name, Some("ball"));
+    }
+
+    #[test]
+    fn test_model_prints() {
+        const TMP_FILE: &str = "tmpprint.txt";
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        assert!(model.print(TMP_FILE).is_ok());
+        fs::remove_file(TMP_FILE).unwrap();
+
+        assert!(model.print_formatted(TMP_FILE, "%.2f").is_ok());
+        fs::remove_file(TMP_FILE).unwrap();
+    }
+
+    #[test]
+    fn test_id_2name_invalid() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+
+        // Invalid id should return None
+        let name = model.id_2name(MjtObj::mjOBJ_BODY, 9999);
+        assert_eq!(name, None);
+    }
+
+    #[test]
+    fn test_totalmass_set_and_get() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+
+        let mass_before = model.get_totalmass();
+        model.set_totalmass(5.0);
+        let mass_after = model.get_totalmass();
+
+        assert_relative_eq!(mass_after, 5.0, epsilon = 1e-9);
+        assert_ne!(mass_before, mass_after);
+    }
+
+    /// Tests if copying the model works without any memory problems.
+    #[test]
+    fn test_copy_model() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        assert!(model.clone().is_some());
+    }
+
+    #[test]
+    fn test_model_save() {
+        const MODEL_SAVE_PATH: &str = "./__TMP_MODEL2.mjb";
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        model.save(Some(MODEL_SAVE_PATH), None);
+
+        let saved_data = fs::read(MODEL_SAVE_PATH).unwrap();
+        let mut data = vec![0; saved_data.len()];
+        model.save(None, Some(&mut data));
+
+        assert_eq!(saved_data, data);
+        fs::remove_file(MODEL_SAVE_PATH).unwrap();
+
+        /* Test virtual file system load */
+        assert!(MjModel::from_buffer(&saved_data).is_ok());
     }
 }
