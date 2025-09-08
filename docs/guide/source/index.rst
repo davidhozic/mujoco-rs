@@ -47,3 +47,4 @@ Table of contents
    programming
    viewer
    api
+   changelog

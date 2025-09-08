@@ -54,7 +54,7 @@ the simulation model (:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel
 
 - the internal 3D scene needed for the actual viewer to mirror the simulation state and
 - the user 3D scene that can be used to draw custom user objects (obtainable via
-  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn`).
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn_mut`).
   This is in more detail described in :ref:`custom_visualization`.
 
 

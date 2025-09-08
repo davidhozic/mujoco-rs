@@ -32,7 +32,7 @@ add a new geom to the scene.
 
 Drawing to the viewer
 -----------------------
-To draw to the 3D viewer, we will use the :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn`
+To draw to the 3D viewer, we will use the :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn_mut`
 method, which will give as a mutable reference to the internal user scene.
 The user scene has a limited amount of allowed geoms, which can be configured by the user's
 application in the :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive` method.
