@@ -1,7 +1,11 @@
+use super::mj_model::{MjModel, MjtSameFrame, MjtObj};
+use std::io::{self, Error, ErrorKind};
+use std::mem::MaybeUninit;
 use super::mj_auxiliary::MjContact;
-use super::mj_model::MjModel;
+use super::mj_primitive::*;
 use crate::mujoco_c::*;
 use std::ffi::CString;
+use std::ptr;
 
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, fixed_size_info_method, info_with_view};
@@ -244,6 +248,428 @@ impl<'a> MjData<'a> {
             );
         }
         force
+    }
+
+    /* Partially auto-generated */
+
+    /// Copy mjData.
+    /// m is only required to contain the size fields from MJMODEL_INTS.
+    pub fn copy(&self) -> Option<MjData> {
+        let ptr = unsafe { mj_copyData(ptr::null_mut(), self.model.ffi(), self.ffi()) };
+        if ptr.is_null() {
+            None
+        }
+        else {
+            Some( MjData { data: ptr, model: self.model })
+        }
+    }
+
+    /// Reset data to defaults.
+    pub fn reset(&mut self) {
+        unsafe { mj_resetData(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Reset data to defaults, fill everything else with debug_value.
+    pub fn reset_debug(&mut self, debug_value: u8) {
+        unsafe { mj_resetDataDebug(self.model.ffi(), self.ffi_mut(), debug_value) }
+    }
+
+    /// Reset data. If 0 <= key < nkey, set fields from specified keyframe.
+    pub fn reset_data_keyframe(&mut self, key: i32) {
+        unsafe { mj_resetDataKeyframe(self.model.ffi(), self.ffi_mut(), key) }
+    }
+
+    /// Print mjData to text file, specifying format.
+    /// float_format must be a valid printf-style format string for a single float value
+    pub fn print_formatted_data(&self, filename: String, float_format: String) {
+        let c_filename = CString::new(filename).unwrap();
+        let c_float_format = CString::new(float_format).unwrap();
+        unsafe { mj_printFormattedData(self.model.ffi(), self.ffi(), c_filename.as_ptr(), c_float_format.as_ptr()) }
+    }
+
+    /// Print data to text file.
+    pub fn print_data(&self, filename: String) {
+        let c_filename = CString::new(filename).unwrap();
+        unsafe { mj_printData(self.model.ffi(), self.ffi(), c_filename.as_ptr()) }
+    }
+
+    /// Run position-dependent computations.
+    pub fn fwd_position(&mut self) {
+        unsafe { mj_fwdPosition(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run velocity-dependent computations.
+    pub fn fwd_velocity(&mut self) {
+        unsafe { mj_fwdVelocity(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute actuator force qfrc_actuator.
+    pub fn fwd_actuation(&mut self) {
+        unsafe { mj_fwdActuation(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Add up all non-constraint forces, compute qacc_smooth.
+    pub fn fwd_acceleration(&mut self) {
+        unsafe { mj_fwdAcceleration(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run selected constraint solver.
+    pub fn fwd_constraint(&mut self) {
+        unsafe { mj_fwdConstraint(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Euler integrator, semi-implicit in velocity.
+    pub fn euler(&mut self) {
+        unsafe { mj_Euler(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Runge-Kutta explicit order-N integrator.
+    pub fn runge_kutta(&mut self, n: i32) {
+        unsafe { mj_RungeKutta(self.model.ffi(), self.ffi_mut(), n) }
+    }
+
+    /// Implicit-in-velocity integrators.
+    pub fn implicit(&mut self) {
+        unsafe { mj_implicit(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run position-dependent computations in inverse dynamics.
+    pub fn inv_position(&mut self) {
+        unsafe { mj_invPosition(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run velocity-dependent computations in inverse dynamics.
+    pub fn inv_velocity(&mut self) {
+        unsafe { mj_invVelocity(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Apply the analytical formula for inverse constraint dynamics.
+    pub fn inv_constraint(&mut self) {
+        unsafe { mj_invConstraint(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compare forward and inverse dynamics, save results in fwdinv.
+    pub fn compare_fwd_inv(&mut self,) {
+        unsafe { mj_compareFwdInv(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Evaluate position-dependent sensors.
+    pub fn sensor_pos(&mut self) {
+        unsafe { mj_sensorPos(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Evaluate velocity-dependent sensors.
+    pub fn sensor_vel(&mut self) {
+        unsafe { mj_sensorVel(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Evaluate acceleration and force-dependent sensors.
+    pub fn sensor_acc(&mut self) {
+        unsafe { mj_sensorAcc(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Evaluate position-dependent energy (potential).
+    pub fn energy_pos(&mut self) {
+        unsafe { mj_energyPos(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Evaluate velocity-dependent energy (kinetic).
+    pub fn energy_vel(&mut self) {
+        unsafe { mj_energyVel(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Check qpos, reset if any element is too big or nan.
+    pub fn check_pos(&mut self) {
+        unsafe { mj_checkPos(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Check qvel, reset if any element is too big or nan.
+    pub fn check_vel(&mut self) {
+        unsafe { mj_checkVel(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Check qacc, reset if any element is too big or nan.
+    pub fn check_acc(&mut self) {
+        unsafe { mj_checkAcc(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run forward kinematics.
+    pub fn kinematics(&mut self) {
+        unsafe { mj_kinematics(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Map inertias and motion dofs to global frame centered at CoM.
+    pub fn com_pos(&mut self) {
+        unsafe { mj_comPos(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute camera and light positions and orientations.
+    pub fn camlight(&mut self) {
+        unsafe { mj_camlight(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute flex-related quantities.
+    pub fn flex_comp(&mut self) {
+        unsafe { mj_flex(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute tendon lengths, velocities and moment arms.
+    pub fn tendon_comp(&mut self) {
+        unsafe { mj_tendon(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute actuator transmission lengths and moments.
+    pub fn transmission(&mut self) {
+        unsafe { mj_transmission(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run composite rigid body inertia algorithm (CRB).
+    pub fn crb(&mut self) {
+        unsafe { mj_crb(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Make inertia matrix.
+    pub fn make_m(&mut self) {
+        unsafe { mj_makeM(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute sparse L'*D*L factorizaton of inertia matrix.
+    pub fn factor_m(&mut self) {
+        unsafe { mj_factorM(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute cvel, cdof_dot.
+    pub fn com_vel(&mut self) {
+        unsafe { mj_comVel(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute qfrc_passive from spring-dampers, gravity compensation and fluid forces.
+    pub fn passive(&mut self) {
+        unsafe { mj_passive(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Sub-tree linear velocity and angular momentum: compute subtree_linvel, subtree_angmom.
+    pub fn subtree_vel(&mut self) {
+        unsafe { mj_subtreeVel(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// RNE: compute M(qpos)*qacc + C(qpos,qvel); flg_acc=false removes inertial term.
+    pub fn rne(&mut self, flg_acc: bool) -> MjtNum {
+        let mut out = 0.0;
+        unsafe { mj_rne(self.model.ffi(), self.ffi_mut(), flg_acc as i32, &mut out) };
+        out
+    }
+
+    /// RNE with complete data: compute cacc, cfrc_ext, cfrc_int.
+    pub fn rne_post_constraint(&mut self) {
+        unsafe { mj_rnePostConstraint(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run collision detection.
+    pub fn collision(&mut self) {
+        unsafe { mj_collision(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Construct constraints.
+    pub fn make_constraint(&mut self) {
+        unsafe { mj_makeConstraint(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Find constraint islands.
+    pub fn island(&mut self) {
+        unsafe { mj_island(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute inverse constraint inertia efc_AR.
+    pub fn project_constraint(&mut self) {
+        unsafe { mj_projectConstraint(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute efc_vel, efc_aref.
+    pub fn reference_constraint(&mut self) {
+        unsafe { mj_referenceConstraint(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
+    /// If cost is not NULL, set *cost = s(jar) where jar = Jac*qacc-aref.
+    /// Nullable: cost
+    pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) {
+        unsafe { mj_constraintUpdate(
+            self.model.ffi(), self.ffi_mut(),
+            jar.as_ptr(), cost.map_or(ptr::null_mut(), |x| x as *mut MjtNum),
+            flg_cone_hessian as i32
+        ) }
+    }
+
+    /// Add contact to d->contact list; return 0 if success; 1 if buffer full.
+    pub fn add_contact(&mut self, con: &MjContact) -> io::Result<()> {
+        match unsafe { mj_addContact(self.model.ffi(), self.ffi_mut(), con) } {
+            0 => Ok(()),
+            1 => Err(Error::new(ErrorKind::StorageFull, "buffer full")),
+            _ => Err(Error::new(ErrorKind::Other, "unknown error"))
+        }
+    }
+
+    /// Compute 3/6-by-nv end-effector Jacobian of global point attached to given body.
+    /// Nullable: jacp, jacr
+    pub fn jac(&self, jacp: &mut [MjtNum], jacr: &mut [MjtNum], point: &[MjtNum; 3], body_id: i32) -> io::Result<()> {
+        let required_len = 3 * self.model.ffi().nv as usize;
+        if jacp.len() != required_len || jacr.len() != required_len {
+            return Err(Error::new(ErrorKind::InvalidInput, "jacp and jacr need to be 3 * nv"));
+        }
+
+        unsafe { mj_jac(
+            self.model.ffi() ,self.ffi(),
+            jacp.as_mut_ptr(), jacr.as_mut_ptr(),
+            point.as_ptr(), body_id
+        ) };
+
+        Ok(())
+    }
+
+    /// Compute body frame end-effector Jacobian.
+    /// Nullable: jacp, jacr
+    pub fn jac_body(&self, jacp: &mut [MjtNum], jacr: &mut [MjtNum], body_id: i32) -> io::Result<()> {
+        let required_len = 3 * self.model.ffi().nv as usize;
+        if jacp.len() != required_len || jacr.len() != required_len {
+            return Err(Error::new(ErrorKind::InvalidInput, "jacp and jacr need to be 3 * nv"));
+        }
+
+        unsafe { mj_jacBody(self.model.ffi(), self.ffi(), jacp.as_mut_ptr(), jacr.as_mut_ptr(), body_id) };
+        Ok(())
+    }
+
+    /// Compute body center-of-mass end-effector Jacobian.
+    /// Nullable: jacp, jacr
+    pub fn jac_body_com(&self, jacp: &mut [MjtNum], jacr: &mut [MjtNum], body_id: i32) -> io::Result<()> {
+        let required_len = 3 * self.model.ffi().nv as usize;
+        if jacp.len() != required_len || jacr.len() != required_len {
+            return Err(Error::new(ErrorKind::InvalidInput, "jacp and jacr need to be 3 * nv"));
+        }
+
+        unsafe { mj_jacBodyCom(self.model.ffi(), self.ffi(), jacp.as_mut_ptr(), jacr.as_mut_ptr(), body_id) };
+        Ok(())
+    }
+
+    /// Compute subtree center-of-mass end-effector Jacobian.
+    pub fn jac_subtree_com(&mut self, jacp: &mut [MjtNum], body_id: i32) -> io::Result<()> {
+        let required_len = 3 * self.model.ffi().nv as usize;
+        if jacp.len() != required_len {
+            return Err(Error::new(ErrorKind::InvalidInput, "jacp need to be 3 * nv"));
+        }
+
+        unsafe { mj_jacSubtreeCom(self.model.ffi(), self.ffi_mut(), jacp.as_mut_ptr(), body_id) };
+        Ok(())
+    }
+
+    /// Compute geom end-effector Jacobian.
+    /// Nullable: jacp, jacr
+    pub fn jac_geom(&self, jacp: &mut [MjtNum], jacr: &mut [MjtNum], geom_id: i32) -> io::Result<()> {
+        let required_len = 3 * self.model.ffi().nv as usize;
+        if jacp.len() != required_len || jacr.len() != required_len {
+            return Err(Error::new(ErrorKind::InvalidInput, "jacp need to be 3 * nv"));
+        }
+
+        unsafe { mj_jacGeom(self.model.ffi(), self.ffi(), jacp.as_mut_ptr(), jacr.as_mut_ptr(), geom_id) };
+        Ok(())
+    }
+
+    /// Compute site end-effector Jacobian.
+    /// Nullable: jacp, jacr
+    pub fn jac_site(&self, jacp: &mut [MjtNum], jacr: &mut [MjtNum], site_id: i32) -> io::Result<()> {
+        let required_len = 3 * self.model.ffi().nv as usize;
+        if jacp.len() != required_len || jacr.len() != required_len {
+            return Err(Error::new(ErrorKind::InvalidInput, "jacp need to be 3 * nv"));
+        }
+
+        unsafe { mj_jacSite(self.model.ffi(), self.ffi(), jacp.as_mut_ptr(), jacr.as_mut_ptr(), site_id) };
+        Ok(())
+    }
+
+    /// Compute subtree angular momentum matrix.
+    pub fn angmom_mat(&mut self, body_id: i32) -> Vec<MjtNum> {
+        let mut mat = vec![0.0; 3 * self.model.ffi().nv as usize];
+        unsafe { mj_angmomMat(self.model.ffi(), self.ffi_mut(), mat.as_mut_ptr(), body_id) };
+        mat
+    }
+
+    /// Compute object 6D velocity (rot:lin) in object-centered frame, world/local orientation.
+    pub fn object_velocity(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> [MjtNum; 6] {
+        let mut result: [MjtNum; 6] = unsafe { MaybeUninit::uninit().assume_init() };
+        unsafe { mj_objectVelocity(
+            self.model.ffi(), self.ffi(),
+            obj_type as i32, obj_id,
+            result.as_mut_ptr(), flg_local as i32
+        ) };
+        result
+    }
+
+    /// Compute object 6D acceleration (rot:lin) in object-centered frame, world/local orientation.
+    pub fn object_acceleration(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> [MjtNum; 6] {
+        let mut result: [MjtNum; 6] = unsafe { MaybeUninit::uninit().assume_init() };
+        unsafe { mj_objectAcceleration(
+            self.model.ffi(), self.ffi(),
+            obj_type as i32, obj_id,
+            result.as_mut_ptr(), flg_local as i32
+        ) };
+        result
+    }
+
+    /// Returns smallest signed distance between two geoms and optionally segment from geom1 to geom2.
+    pub fn geom_distance(&self, geom1_id: i32, geom2_id: i32, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
+        unsafe { mj_geomDistance(
+            self.model.ffi(), self.ffi(),
+            geom1_id, geom2_id, dist_max,
+            fromto.map_or(ptr::null_mut(), |x| x.as_mut_ptr())
+        ) }
+    }
+
+    /// Map from body local to global Cartesian coordinates, sameframe takes values from mjtSameFrame.
+    /// Returns (global position, global orientation matrix)
+    pub fn local_2_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: i32, sameframe: MjtSameFrame) -> ([MjtNum; 3], [MjtNum; 9]) {
+        /* Create uninitialized because this gets filled by the function. */
+        let mut xpos: [MjtNum; 3] =  unsafe { MaybeUninit::uninit().assume_init() };
+        let mut xmat: [MjtNum; 9] = unsafe { MaybeUninit::uninit().assume_init() };
+        unsafe { mj_local2Global(self.ffi_mut(), xpos.as_mut_ptr(), xmat.as_mut_ptr(), pos.as_ptr(), quat.as_ptr(), body_id, sameframe as MjtByte) };
+        (xpos, xmat)
+    }
+
+    /// Intersect multiple rays emanating from a single point.
+    /// Similar semantics to mj_ray, but vec is an array of (nray x 3) directions.
+    /// Returns (geomids, distances).
+    pub fn multi_ray(
+        &mut self, pnt: &[MjtNum; 3], vec: &[MjtNum], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
+        flg_static: bool, bodyexclude: i32, cutoff: MjtNum
+    ) -> (Vec<i32>, Vec<MjtNum>) {
+        let nray = vec.len();
+        let mut geom_id = vec![0; nray];
+        let mut distance = vec![0.0; nray];
+
+        unsafe { mj_multiRay(
+            self.model.ffi(), self.ffi_mut(), pnt.as_ptr(),
+            vec.as_ptr(), geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
+            flg_static as u8, bodyexclude, geom_id.as_mut_ptr(),
+            distance.as_mut_ptr(), nray as i32, cutoff
+        ) };
+
+        (geom_id, distance)
+    }
+
+    /// Intersect ray (pnt+x*vec, x>=0) with visible geoms, except geoms in bodyexclude.
+    /// Return distance (x) to nearest surface, or -1 if no intersection and output geomid.
+    /// geomgroup, flg_static are as in mjvOption; geomgroup==NULL skips group exclusion.
+    pub fn ray(
+        &self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
+        geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: bool, bodyexclude: i32
+    ) -> (i32, MjtNum) {
+        let mut geom_id = -1;
+        let dist = unsafe { mj_ray(
+            self.model.ffi(), self.ffi(),
+            pnt.as_ptr(), vec.as_ptr(),
+            geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
+            flg_static as MjtByte, bodyexclude, &mut geom_id
+        ) };
+        (geom_id, dist)
     }
 
     /// Returns a direct pointer to the underlying model.
