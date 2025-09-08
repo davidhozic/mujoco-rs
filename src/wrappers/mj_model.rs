@@ -151,13 +151,6 @@ impl MjModel {
         }
     }
 
-    /// Translates `name` to the correct id. Wrapper around `mj_name2id`.
-    pub fn name2id(&self, type_: mjtObj, name: &str) -> i32 {
-        unsafe {
-            mj_name2id(self.0, type_ as i32, CString::new(name).unwrap().as_ptr())
-        }
-    }
-
     /// Creates a new [`MjData`] instances linked to this model.
     pub fn make_data<'m>(&'m self) -> MjData<'m> {
         MjData::new(self)
@@ -227,6 +220,44 @@ impl MjModel {
         ipd: 1, resolution: 2, sensorsize: 2, intrinsic: 4
     ] }
 
+    /* Support */
+
+    /// Determine type of friction cone.
+    pub fn is_pyramidical(&self) -> bool {
+        unsafe { mj_isPyramidal(self.ffi()) == 1 }
+    }
+
+    /// Determine type of constraint Jacobian.
+    pub fn is_sparse(&self) -> bool {
+        unsafe { mj_isPyramidal(self.ffi()) == 1 }
+    }
+
+    /// Determine type of solver (PGS is dual, CG and Newton are primal).
+    pub fn is_dual(&self) -> bool {
+        unsafe { mj_isPyramidal(self.ffi()) == 1 }
+    }
+
+    
+    /// Deprecated alias for [`MjModel::name_to_id`].
+    #[deprecated]
+    pub fn name2id(&self, type_: mjtObj, name: &str) -> i32 {
+        self.name_to_id(type_, name)
+    }
+
+    /// Translates `name` to the correct id. Wrapper around `mj_name2id`.
+    pub fn name_to_id(&self, type_: mjtObj, name: &str) -> i32 {
+        let c_string = CString::new(name).unwrap();
+        unsafe {
+            mj_name2id(self.0, type_ as i32, c_string.as_ptr())
+        }
+    }
+
+    /// Sum all body masses.
+    pub fn total_mass(&self) -> MjtNum {
+        unsafe { mj_getTotalmass(self.ffi()) }
+    }
+
+    /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
         unsafe { self.0.as_ref().unwrap() }

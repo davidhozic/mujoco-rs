@@ -441,10 +441,11 @@ impl<'m> MjViewerCpp<'m> {
         let mut _pert = Box::new(MjvPerturb::default());
         let mut _user_scn = Box::new(MjvScene::new(&model, scene_max_ngeom));
         let sim;
+        let c_filename = CString::new("file.xml").unwrap();
         unsafe {
             sim = new_simulate(&mut *_cam, &mut *_opt, &mut *_pert, _user_scn.ffi_mut(), true);
             (*sim).RenderInit();
-            (*sim).Load(model.__raw(), data.__raw(), CString::new("file.xml").unwrap().as_ptr());
+            (*sim).Load(model.__raw(), data.__raw(), c_filename.as_ptr());
             (*sim).RenderStep(true);
         }
 

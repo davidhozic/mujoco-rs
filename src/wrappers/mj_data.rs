@@ -57,7 +57,8 @@ impl<'a> MjData<'a> {
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjActuatorDataInfo::view`].
     pub fn actuator(&self, name: &str) -> Option<MjActuatorDataInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_ACTUATOR as i32, CString::new(name).unwrap().as_ptr())};
+        let c_name = CString::new(name).unwrap();
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_ACTUATOR as i32, c_name.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -84,7 +85,8 @@ impl<'a> MjData<'a> {
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjJointDataInfo::view`].
     pub fn joint(&self, name: &str) -> Option<MjJointDataInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_JOINT as i32, CString::new(name).unwrap().as_ptr())};
+        let c_name = CString::new(name).unwrap();
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_JOINT as i32, c_name.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -123,8 +125,12 @@ impl<'a> MjData<'a> {
         }
     }
 
+    /// Obtains a [`MjSensorDataInfo`] struct containing information about the name, id, and
+    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
+    /// The actual view can be obtained via [`MjJointDataInfo::view`].
     pub fn sensor(&self, name: &str) -> Option<MjSensorDataInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_SENSOR as i32, CString::new(name).unwrap().as_ptr())};
+        let c_name = CString::new(name).unwrap();
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_SENSOR as i32, c_name.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -137,9 +143,14 @@ impl<'a> MjData<'a> {
         }
     }
 
+
+    /// Obtains a [`MjTendonDataInfo`] struct containing information about the name, id, and
+    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
+    /// The actual view can be obtained via [`MjJointDataInfo::view`].
     #[allow(non_snake_case)]
     pub fn tendon(&self, name: &str) -> Option<MjTendonDataInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_TENDON as i32, CString::new(name).unwrap().as_ptr())};
+        let c_name = CString::new(name).unwrap();
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_TENDON as i32, c_name.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
