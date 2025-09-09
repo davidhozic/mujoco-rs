@@ -1,4 +1,4 @@
-//! This example shows how to use the [`Renderer`](mujoco_rs::renderer::Renderer)
+//! This example shows how to use the [`MjRenderer`].
 //! struct to obtain images of the simulation.
 use mujoco_rs::renderer::MjRenderer;
 use mujoco_rs::prelude::*;

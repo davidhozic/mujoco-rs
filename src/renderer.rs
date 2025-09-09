@@ -13,7 +13,7 @@ use std::fs::File;
 use std::path::Path;
 
 
-/// A renderer for rendering for rendering 3D scenes.
+/// A renderer for rendering 3D scenes.
 /// By default, RGB rendering is enabled and depth rendering is disabled.
 pub struct MjRenderer<'m, const WIDTH: usize, const HEIGHT: usize> {
     scene: MjvScene<'m>,
@@ -130,7 +130,7 @@ impl<'m, const WIDTH: usize, const HEIGHT: usize> MjRenderer<'m, WIDTH, HEIGHT> 
         let vp = MjrRectangle::new(0, 0, WIDTH as i32, HEIGHT as i32);
         self.scene.render(&vp, &self.context);
 
-        /* Fullt flatten everything  */
+        /* Fully flatten everything */
         let flat_rgb = self.rgb.as_deref_mut().map(|x| x.as_flattened_mut().as_flattened_mut());
         let flat_depth = self.depth.as_deref_mut().map(|b| b.as_flattened_mut());
 
