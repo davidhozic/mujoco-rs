@@ -1063,7 +1063,7 @@ mod test {
         assert_eq!(acc, acc);
     }
 
-        #[test]
+    #[test]
     fn test_geom_distance_and_transforms() {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let mut data = model.make_data();
