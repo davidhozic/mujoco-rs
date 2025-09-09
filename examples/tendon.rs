@@ -1,4 +1,4 @@
-//! Example of using sensor interaction: touch sensor.
+//! Example of using using a tendon model.
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;

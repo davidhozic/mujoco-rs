@@ -11,8 +11,8 @@ const EXAMPLE_MODEL: &str = "
 <mujoco>
   <worldbody>
     <light ambient=\"0.2 0.2 0.2\"/>
-    <body name=\"ball\">
-        <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\" solref=\"0.004 1.0\"/>
+    <body name=\"ball\" pos=\".2 .2 .2\">
+        <geom name=\"green_sphere\" size=\".1\" rgba=\"0 1 0 1\" solref=\"0.004 1.0\"/>
         <joint name=\"ball_joint\" type=\"free\"/>
     </body>
 

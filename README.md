@@ -116,7 +116,7 @@ const EXAMPLE_MODEL: &str = "
   <worldbody>
     <light ambient=\"0.2 0.2 0.2\"/>
     <body name=\"ball\">
-        <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\" solref=\"0.004 1.0\"/>
+        <geom name=\"green_sphere\" size=\".1\" rgba=\"0 1 0 1\" solref=\"0.004 1.0\"/>
         <joint name=\"ball_joint\" type=\"free\"/>
     </body>
 
@@ -138,6 +138,10 @@ fn main() {
 
     /* Create the joint info */
     let ball_info = data.joint("ball_joint").unwrap();
+
+    /* Obtain the timestep through the wrapped mjModel */
+    let timestep = model.ffi().opt.timestep;
+
     while viewer.running() {
         /* Step the simulation and sync the viewer */
         viewer.sync(&mut data);
@@ -147,7 +151,7 @@ fn main() {
         let xyz = &ball_info.view(&data).qpos[..3];
         println!("The ball's position is: {xyz:.2?}");
 
-        std::thread::sleep(Duration::from_secs_f64(0.002));
+        std::thread::sleep(Duration::from_secs_f64(timestep));
     }
 }
 ```

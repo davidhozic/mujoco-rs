@@ -10,9 +10,9 @@ use mujoco_rs::prelude::*;
 const EXAMPLE_MODEL: &str = "
 <mujoco>
   <worldbody>
-    <light ambient=\"0.2 0.2 0.2\"/>
+    <light ambient=\"0.2 0.2 0.2\" pos=\".2 .2 .2\"/>
     <body name=\"ball\">
-        <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
+        <geom name=\"green_sphere\" size=\".1\" rgba=\"0 1 0 1\"/>
         <joint type=\"free\"/>
     </body>
 
