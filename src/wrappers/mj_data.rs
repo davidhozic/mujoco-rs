@@ -262,7 +262,7 @@ impl<'a> MjData<'a> {
     }
 
     /// Reset data. If 0 <= key < nkey, set fields from specified keyframe.
-    pub fn reset_data_keyframe(&mut self, key: i32) {
+    pub fn reset_keyframe(&mut self, key: i32) {
         unsafe { mj_resetDataKeyframe(self.model.ffi(), self.ffi_mut(), key) }
     }
 
@@ -336,7 +336,7 @@ impl<'a> MjData<'a> {
     }
 
     /// Compare forward and inverse dynamics, save results in fwdinv.
-    pub fn compare_fwd_inv(&mut self,) {
+    pub fn compare_fwd_inv(&mut self) {
         unsafe { mj_compareFwdInv(self.model.ffi(), self.ffi_mut()) }
     }
 
@@ -915,7 +915,7 @@ mod test {
         // Test reset variants
         data.reset();
         data.reset_debug(7);
-        data.reset_data_keyframe(0);
+        data.reset_keyframe(0);
     }
 
     #[test]
