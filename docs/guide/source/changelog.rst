@@ -12,6 +12,14 @@ Versioning
 =================
 This project uses `semantic versioning <https://semver.org/>`_.
 
+Future release (MuJoCo 3.3.5)
+================================
+- Added a module for offscreen scene rendering: :docs-rs:`mujoco_rs::renderer`:
+
+  - Added the :docs-rs:`~mujoco_rs::renderer::MjRenderer` for actual offscreen rendering of the simulation state.
+
+
+
 1.2.0 (MuJoCo 3.3.5)
 ================================
 - Added function wrappers around some utility functions and both the derivative functions (available under :docs-rs:`mujoco_rs::wrappers::fun`).
