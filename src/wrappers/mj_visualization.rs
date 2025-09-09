@@ -105,7 +105,7 @@ impl MjvCamera {
         camera
     }
 
-    /// Creates a new tracking camera to track a body with the given ``tracking_id``.
+    /// Creates a new tracking camera to track a body with the given `tracking_id`.
     pub fn new_tracking(tracking_id: u32) -> Self {
         let mut camera: mjvCamera_ = Self::default();
         camera.type_ = MjtCamera::mjCAMERA_TRACKING as i32;
