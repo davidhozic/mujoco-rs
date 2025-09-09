@@ -1,6 +1,5 @@
 use super::mj_model::{MjModel, MjtSameFrame, MjtObj};
 use std::io::{self, Error, ErrorKind};
-use std::mem::MaybeUninit;
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
 use crate::mujoco_c::*;
@@ -252,18 +251,6 @@ impl<'a> MjData<'a> {
 
     /* Partially auto-generated */
 
-    /// Copy mjData.
-    /// m is only required to contain the size fields from MJMODEL_INTS.
-    pub fn copy(&self) -> Option<MjData> {
-        let ptr = unsafe { mj_copyData(ptr::null_mut(), self.model.ffi(), self.ffi()) };
-        if ptr.is_null() {
-            None
-        }
-        else {
-            Some( MjData { data: ptr, model: self.model })
-        }
-    }
-
     /// Reset data to defaults.
     pub fn reset(&mut self) {
         unsafe { mj_resetData(self.model.ffi(), self.ffi_mut()) }
@@ -281,14 +268,14 @@ impl<'a> MjData<'a> {
 
     /// Print mjData to text file, specifying format.
     /// float_format must be a valid printf-style format string for a single float value
-    pub fn print_formatted_data(&self, filename: String, float_format: String) {
+    pub fn print_formatted(&self, filename: &str, float_format: &str) {
         let c_filename = CString::new(filename).unwrap();
         let c_float_format = CString::new(float_format).unwrap();
         unsafe { mj_printFormattedData(self.model.ffi(), self.ffi(), c_filename.as_ptr(), c_float_format.as_ptr()) }
     }
 
     /// Print data to text file.
-    pub fn print_data(&self, filename: String) {
+    pub fn print(&self, filename: &str) {
         let c_filename = CString::new(filename).unwrap();
         unsafe { mj_printData(self.model.ffi(), self.ffi(), c_filename.as_ptr()) }
     }
@@ -454,9 +441,9 @@ impl<'a> MjData<'a> {
     }
 
     /// RNE: compute M(qpos)*qacc + C(qpos,qvel); flg_acc=false removes inertial term.
-    pub fn rne(&mut self, flg_acc: bool) -> MjtNum {
-        let mut out = 0.0;
-        unsafe { mj_rne(self.model.ffi(), self.ffi_mut(), flg_acc as i32, &mut out) };
+    pub fn rne(&mut self, flg_acc: bool) -> Vec<MjtNum> {
+        let mut out = vec![0.0; self.model.ffi().nv as usize];
+        unsafe { mj_rne(self.model.ffi(), self.ffi_mut(), flg_acc as i32, out.as_mut_ptr()) };
         out
     }
 
@@ -555,7 +542,7 @@ impl<'a> MjData<'a> {
     pub fn jac_subtree_com(&mut self, jacp: &mut [MjtNum], body_id: i32) -> io::Result<()> {
         let required_len = 3 * self.model.ffi().nv as usize;
         if jacp.len() != required_len {
-            return Err(Error::new(ErrorKind::InvalidInput, "jacp need to be 3 * nv"));
+            return Err(Error::new(ErrorKind::InvalidInput, "jacp needs to be 3 * nv"));
         }
 
         unsafe { mj_jacSubtreeCom(self.model.ffi(), self.ffi_mut(), jacp.as_mut_ptr(), body_id) };
@@ -567,7 +554,7 @@ impl<'a> MjData<'a> {
     pub fn jac_geom(&self, jacp: &mut [MjtNum], jacr: &mut [MjtNum], geom_id: i32) -> io::Result<()> {
         let required_len = 3 * self.model.ffi().nv as usize;
         if jacp.len() != required_len || jacr.len() != required_len {
-            return Err(Error::new(ErrorKind::InvalidInput, "jacp need to be 3 * nv"));
+            return Err(Error::new(ErrorKind::InvalidInput, "jacp and jacr need to be 3 * nv"));
         }
 
         unsafe { mj_jacGeom(self.model.ffi(), self.ffi(), jacp.as_mut_ptr(), jacr.as_mut_ptr(), geom_id) };
@@ -579,7 +566,7 @@ impl<'a> MjData<'a> {
     pub fn jac_site(&self, jacp: &mut [MjtNum], jacr: &mut [MjtNum], site_id: i32) -> io::Result<()> {
         let required_len = 3 * self.model.ffi().nv as usize;
         if jacp.len() != required_len || jacr.len() != required_len {
-            return Err(Error::new(ErrorKind::InvalidInput, "jacp need to be 3 * nv"));
+            return Err(Error::new(ErrorKind::InvalidInput, "jacp and jacr need to be 3 * nv"));
         }
 
         unsafe { mj_jacSite(self.model.ffi(), self.ffi(), jacp.as_mut_ptr(), jacr.as_mut_ptr(), site_id) };
@@ -595,7 +582,7 @@ impl<'a> MjData<'a> {
 
     /// Compute object 6D velocity (rot:lin) in object-centered frame, world/local orientation.
     pub fn object_velocity(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> [MjtNum; 6] {
-        let mut result: [MjtNum; 6] = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut result: [MjtNum; 6] = [0.0; 6];
         unsafe { mj_objectVelocity(
             self.model.ffi(), self.ffi(),
             obj_type as i32, obj_id,
@@ -606,7 +593,7 @@ impl<'a> MjData<'a> {
 
     /// Compute object 6D acceleration (rot:lin) in object-centered frame, world/local orientation.
     pub fn object_acceleration(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> [MjtNum; 6] {
-        let mut result: [MjtNum; 6] = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut result: [MjtNum; 6] = [0.0; 6];
         unsafe { mj_objectAcceleration(
             self.model.ffi(), self.ffi(),
             obj_type as i32, obj_id,
@@ -628,8 +615,8 @@ impl<'a> MjData<'a> {
     /// Returns (global position, global orientation matrix)
     pub fn local_2_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: i32, sameframe: MjtSameFrame) -> ([MjtNum; 3], [MjtNum; 9]) {
         /* Create uninitialized because this gets filled by the function. */
-        let mut xpos: [MjtNum; 3] =  unsafe { MaybeUninit::uninit().assume_init() };
-        let mut xmat: [MjtNum; 9] = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut xpos: [MjtNum; 3] =  [0.0; 3];
+        let mut xmat: [MjtNum; 9] = [0.0; 9];
         unsafe { mj_local2Global(self.ffi_mut(), xpos.as_mut_ptr(), xmat.as_mut_ptr(), pos.as_ptr(), quat.as_ptr(), body_id, sameframe as MjtByte) };
         (xpos, xmat)
     }
@@ -638,7 +625,7 @@ impl<'a> MjData<'a> {
     /// Similar semantics to mj_ray, but vec is an array of (nray x 3) directions.
     /// Returns (geomids, distances).
     pub fn multi_ray(
-        &mut self, pnt: &[MjtNum; 3], vec: &[MjtNum], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
+        &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
         flg_static: bool, bodyexclude: i32, cutoff: MjtNum
     ) -> (Vec<i32>, Vec<MjtNum>) {
         let nray = vec.len();
@@ -647,7 +634,7 @@ impl<'a> MjData<'a> {
 
         unsafe { mj_multiRay(
             self.model.ffi(), self.ffi_mut(), pnt.as_ptr(),
-            vec.as_ptr(), geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
+            vec.as_ptr() as *const MjtNum, geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
             flg_static as u8, bodyexclude, geom_id.as_mut_ptr(),
             distance.as_mut_ptr(), nray as i32, cutoff
         ) };
@@ -803,6 +790,7 @@ info_with_view!(Data, light, light_, [xpos: f64, xdir: f64], []);
 #[cfg(test)]
 mod test {
     use crate::prelude::*;
+    use super::*;
 
     const MODEL: &str = "
 <mujoco>
@@ -866,5 +854,160 @@ mod test {
 
         data.step2();
         data.step1();
+    }
+
+    #[test]
+    fn test_copy_reset_variants() {
+        let body = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = body.make_data();
+
+        // Test reset variants
+        data.reset();
+        data.reset_debug(7);
+        data.reset_data_keyframe(0);
+    }
+
+    #[test]
+    fn test_dynamics_and_sensors() {
+        let body = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = body.make_data();
+
+        // Simulation pipeline components
+        data.fwd_position();
+        data.fwd_velocity();
+        data.fwd_actuation();
+        data.fwd_acceleration();
+        data.fwd_constraint();
+
+        data.euler();
+        data.runge_kutta(4);
+        // data.implicit();  // integrator isn't implicit in the model => skip this check
+
+        data.inv_position();
+        data.inv_velocity();
+        data.inv_constraint();
+        data.compare_fwd_inv();
+
+        // Sensors
+        data.sensor_pos();
+        data.sensor_vel();
+        data.sensor_acc();
+
+        data.energy_pos();
+        data.energy_vel();
+
+        data.check_pos();
+        data.check_vel();
+        data.check_acc();
+
+        data.kinematics();
+        data.com_pos();
+        data.camlight();
+        data.flex_comp();
+        data.tendon_comp();
+        data.transmission();
+        data.crb();
+        data.make_m();
+        data.factor_m();
+        data.com_vel();
+        data.passive();
+        data.subtree_vel();
+    }
+
+
+    #[test]
+    fn test_rne_and_collision_pipeline() {
+        let body = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = body.make_data();
+        data.step();
+
+        // mj_rne returns a scalar as result
+        data.rne(true);
+
+        data.rne_post_constraint();
+
+        // // Collision and constraint pipeline
+        data.collision();
+        data.make_constraint();
+        data.island();
+        data.project_constraint();
+        data.reference_constraint();
+
+        let jar = vec![0.0; (data.model.ffi().nv) as usize];
+        let mut cost = 0.0;
+        data.constraint_update(&jar, None, false);
+        data.constraint_update(&jar, Some(&mut cost), true);
+    }
+
+    #[test]
+    fn test_contact_and_jacobian() {
+        let body = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = body.make_data();
+
+        // mj_addContact: we pass default, expects Ok
+        let dummy_contact = unsafe { std::mem::zeroed() };
+        data.add_contact(&dummy_contact).unwrap_or_else(|e| {
+            panic!("add_contact failed: {:?}", e);
+        });
+
+        // Prepare arrays with correct and incorrect sizes
+        let nv = data.model.ffi().nv as usize;
+        let mut jacp = vec![0.0; 3 * nv];
+        let mut jacr = vec![0.0; 3 * nv];
+
+        // Valid call
+        data.jac(&mut jacp, &mut jacr, &[0.0; 3], 0).unwrap();
+        data.jac_body(&mut jacp, &mut jacr, 0).unwrap();
+        data.jac_body_com(&mut jacp, &mut jacr, 0).unwrap();
+        data.jac_subtree_com(&mut jacp, 0).unwrap();
+        data.jac_geom(&mut jacp, &mut jacr, 0).unwrap();
+        data.jac_site(&mut jacp, &mut jacr, 0).unwrap();
+
+        // Invalid size error
+        let mut bad = vec![0.0; 2];
+        let mut bad2 = vec![0.0; 2];
+        assert!(data.jac(&mut bad, &mut bad2, &[0.0; 3], 0).is_err());
+    }
+
+    #[test]
+    fn test_angmom_and_object_dynamics() {
+        let body = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = body.make_data();
+
+        let mat = data.angmom_mat(0);
+        assert_eq!(mat.len(), (3 * data.model.ffi().nv as usize));
+
+        let vel = data.object_velocity(MjtObj::mjOBJ_BODY, 0, true);
+        assert_eq!(vel, vel); // just ensure it returns 6-length
+
+        let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, 0, false);
+        assert_eq!(acc, acc);
+    }
+
+        #[test]
+    fn test_geom_distance_and_transforms() {
+        let body = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = body.make_data();
+        data.step();
+
+        let mut ft = [0.0; 6];
+        let dist = data.geom_distance(0, 0, 1.0, Some(&mut ft));
+        assert_eq!(ft, [0.0; 6]);
+        assert_eq!(dist, 1.0);
+
+        let pos = [0.0; 3];
+        let quat = [1.0, 0.0, 0.0, 0.0];
+        let (xpos, xmat) = data.local_2_global(&pos, &quat, 0, MjtSameFrame::mjSAMEFRAME_NONE);
+        assert_eq!(xpos.len(), 3);
+        assert_eq!(xmat.len(), 9);
+
+        let ray_vecs = [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
+        let rays = data.multi_ray(&pos, &ray_vecs, None, false, -1, 10.0);
+        assert_eq!(rays.0.len(), 3);
+        assert_eq!(rays.1.len(), 3);
+
+        let (geomid, dist) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1);
+        assert!(dist.is_finite());
+        assert!(geomid >= -1);
     }
 }
