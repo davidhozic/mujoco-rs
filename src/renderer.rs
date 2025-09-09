@@ -169,7 +169,7 @@ impl<'m, const WIDTH: usize, const HEIGHT: usize> MjRenderer<'m, WIDTH, HEIGHT> 
             encoder.set_compression(png::Compression::NoCompression);
 
             let mut writer = encoder.write_header()?;
-            let slice = unsafe { std::slice::from_raw_parts(rgb.as_ptr() as *const u8, 3 * WIDTH * HEIGHT) };
+            let slice = rgb.as_flattened().as_flattened();
             writer.write_image_data(slice)?;
             Ok(())
         }
