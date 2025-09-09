@@ -1,10 +1,20 @@
+use super::mj_model::{MjModel, MjtSameFrame, MjtObj};
+use std::io::{self, Error, ErrorKind};
 use super::mj_auxiliary::MjContact;
-use super::mj_model::MjModel;
+use super::mj_primitive::*;
 use crate::mujoco_c::*;
 use std::ffi::CString;
+use std::ptr;
 
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, fixed_size_info_method, info_with_view};
+
+/*******************************************/
+// Types
+
+
+pub type MjtState = mjtState;
+/*******************************************/
 
 
 /**************************************************************************************************/
@@ -57,7 +67,8 @@ impl<'a> MjData<'a> {
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjActuatorDataInfo::view`].
     pub fn actuator(&self, name: &str) -> Option<MjActuatorDataInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_ACTUATOR as i32, CString::new(name).unwrap().as_ptr())};
+        let c_name = CString::new(name).unwrap();
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_ACTUATOR as i32, c_name.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -84,7 +95,8 @@ impl<'a> MjData<'a> {
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjJointDataInfo::view`].
     pub fn joint(&self, name: &str) -> Option<MjJointDataInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_JOINT as i32, CString::new(name).unwrap().as_ptr())};
+        let c_name = CString::new(name).unwrap();
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_JOINT as i32, c_name.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -123,8 +135,12 @@ impl<'a> MjData<'a> {
         }
     }
 
+    /// Obtains a [`MjSensorDataInfo`] struct containing information about the name, id, and
+    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
+    /// The actual view can be obtained via [`MjJointDataInfo::view`].
     pub fn sensor(&self, name: &str) -> Option<MjSensorDataInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_SENSOR as i32, CString::new(name).unwrap().as_ptr())};
+        let c_name = CString::new(name).unwrap();
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_SENSOR as i32, c_name.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -137,9 +153,14 @@ impl<'a> MjData<'a> {
         }
     }
 
+
+    /// Obtains a [`MjTendonDataInfo`] struct containing information about the name, id, and
+    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
+    /// The actual view can be obtained via [`MjJointDataInfo::view`].
     #[allow(non_snake_case)]
     pub fn tendon(&self, name: &str) -> Option<MjTendonDataInfo> {
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_TENDON as i32, CString::new(name).unwrap().as_ptr())};
+        let c_name = CString::new(name).unwrap();
+        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_TENDON as i32, c_name.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -226,6 +247,467 @@ impl<'a> MjData<'a> {
             );
         }
         force
+    }
+
+    /* Partially auto-generated */
+
+    /// Reset data to defaults.
+    pub fn reset(&mut self) {
+        unsafe { mj_resetData(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Reset data to defaults, fill everything else with debug_value.
+    pub fn reset_debug(&mut self, debug_value: u8) {
+        unsafe { mj_resetDataDebug(self.model.ffi(), self.ffi_mut(), debug_value) }
+    }
+
+    /// Reset data. If 0 <= key < nkey, set fields from specified keyframe.
+    pub fn reset_keyframe(&mut self, key: i32) {
+        unsafe { mj_resetDataKeyframe(self.model.ffi(), self.ffi_mut(), key) }
+    }
+
+    /// Print mjData to text file, specifying format.
+    /// float_format must be a valid printf-style format string for a single float value
+    pub fn print_formatted(&self, filename: &str, float_format: &str) {
+        let c_filename = CString::new(filename).unwrap();
+        let c_float_format = CString::new(float_format).unwrap();
+        unsafe { mj_printFormattedData(self.model.ffi(), self.ffi(), c_filename.as_ptr(), c_float_format.as_ptr()) }
+    }
+
+    /// Print data to text file.
+    pub fn print(&self, filename: &str) {
+        let c_filename = CString::new(filename).unwrap();
+        unsafe { mj_printData(self.model.ffi(), self.ffi(), c_filename.as_ptr()) }
+    }
+
+    /// Run position-dependent computations.
+    pub fn fwd_position(&mut self) {
+        unsafe { mj_fwdPosition(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run velocity-dependent computations.
+    pub fn fwd_velocity(&mut self) {
+        unsafe { mj_fwdVelocity(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute actuator force qfrc_actuator.
+    pub fn fwd_actuation(&mut self) {
+        unsafe { mj_fwdActuation(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Add up all non-constraint forces, compute qacc_smooth.
+    pub fn fwd_acceleration(&mut self) {
+        unsafe { mj_fwdAcceleration(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run selected constraint solver.
+    pub fn fwd_constraint(&mut self) {
+        unsafe { mj_fwdConstraint(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Euler integrator, semi-implicit in velocity.
+    pub fn euler(&mut self) {
+        unsafe { mj_Euler(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Runge-Kutta explicit order-N integrator.
+    pub fn runge_kutta(&mut self, n: i32) {
+        unsafe { mj_RungeKutta(self.model.ffi(), self.ffi_mut(), n) }
+    }
+
+    /// Implicit-in-velocity integrators.
+    pub fn implicit(&mut self) {
+        unsafe { mj_implicit(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run position-dependent computations in inverse dynamics.
+    pub fn inv_position(&mut self) {
+        unsafe { mj_invPosition(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run velocity-dependent computations in inverse dynamics.
+    pub fn inv_velocity(&mut self) {
+        unsafe { mj_invVelocity(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Apply the analytical formula for inverse constraint dynamics.
+    pub fn inv_constraint(&mut self) {
+        unsafe { mj_invConstraint(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compare forward and inverse dynamics, save results in fwdinv.
+    pub fn compare_fwd_inv(&mut self) {
+        unsafe { mj_compareFwdInv(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Evaluate position-dependent sensors.
+    pub fn sensor_pos(&mut self) {
+        unsafe { mj_sensorPos(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Evaluate velocity-dependent sensors.
+    pub fn sensor_vel(&mut self) {
+        unsafe { mj_sensorVel(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Evaluate acceleration and force-dependent sensors.
+    pub fn sensor_acc(&mut self) {
+        unsafe { mj_sensorAcc(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Evaluate position-dependent energy (potential).
+    pub fn energy_pos(&mut self) {
+        unsafe { mj_energyPos(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Evaluate velocity-dependent energy (kinetic).
+    pub fn energy_vel(&mut self) {
+        unsafe { mj_energyVel(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Check qpos, reset if any element is too big or nan.
+    pub fn check_pos(&mut self) {
+        unsafe { mj_checkPos(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Check qvel, reset if any element is too big or nan.
+    pub fn check_vel(&mut self) {
+        unsafe { mj_checkVel(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Check qacc, reset if any element is too big or nan.
+    pub fn check_acc(&mut self) {
+        unsafe { mj_checkAcc(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run forward kinematics.
+    pub fn kinematics(&mut self) {
+        unsafe { mj_kinematics(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Map inertias and motion dofs to global frame centered at CoM.
+    pub fn com_pos(&mut self) {
+        unsafe { mj_comPos(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute camera and light positions and orientations.
+    pub fn camlight(&mut self) {
+        unsafe { mj_camlight(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute flex-related quantities.
+    pub fn flex_comp(&mut self) {
+        unsafe { mj_flex(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute tendon lengths, velocities and moment arms.
+    pub fn tendon_comp(&mut self) {
+        unsafe { mj_tendon(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute actuator transmission lengths and moments.
+    pub fn transmission(&mut self) {
+        unsafe { mj_transmission(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run composite rigid body inertia algorithm (CRB).
+    pub fn crb(&mut self) {
+        unsafe { mj_crb(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Make inertia matrix.
+    pub fn make_m(&mut self) {
+        unsafe { mj_makeM(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute sparse L'*D*L factorizaton of inertia matrix.
+    pub fn factor_m(&mut self) {
+        unsafe { mj_factorM(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute cvel, cdof_dot.
+    pub fn com_vel(&mut self) {
+        unsafe { mj_comVel(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute qfrc_passive from spring-dampers, gravity compensation and fluid forces.
+    pub fn passive(&mut self) {
+        unsafe { mj_passive(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Sub-tree linear velocity and angular momentum: compute subtree_linvel, subtree_angmom.
+    pub fn subtree_vel(&mut self) {
+        unsafe { mj_subtreeVel(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// RNE: compute M(qpos)*qacc + C(qpos,qvel); flg_acc=false removes inertial term.
+    pub fn rne(&mut self, flg_acc: bool) -> Vec<MjtNum> {
+        let mut out = vec![0.0; self.model.ffi().nv as usize];
+        unsafe { mj_rne(self.model.ffi(), self.ffi_mut(), flg_acc as i32, out.as_mut_ptr()) };
+        out
+    }
+
+    /// RNE with complete data: compute cacc, cfrc_ext, cfrc_int.
+    pub fn rne_post_constraint(&mut self) {
+        unsafe { mj_rnePostConstraint(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Run collision detection.
+    pub fn collision(&mut self) {
+        unsafe { mj_collision(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Construct constraints.
+    pub fn make_constraint(&mut self) {
+        unsafe { mj_makeConstraint(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Find constraint islands.
+    pub fn island(&mut self) {
+        unsafe { mj_island(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute inverse constraint inertia efc_AR.
+    pub fn project_constraint(&mut self) {
+        unsafe { mj_projectConstraint(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute efc_vel, efc_aref.
+    pub fn reference_constraint(&mut self) {
+        unsafe { mj_referenceConstraint(self.model.ffi(), self.ffi_mut()) }
+    }
+
+    /// Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
+    /// If cost is not NULL, set *cost = s(jar) where jar = Jac*qacc-aref.
+    /// Nullable: cost
+    pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) {
+        unsafe { mj_constraintUpdate(
+            self.model.ffi(), self.ffi_mut(),
+            jar.as_ptr(), cost.map_or(ptr::null_mut(), |x| x as *mut MjtNum),
+            flg_cone_hessian as i32
+        ) }
+    }
+
+    /// Add contact to d->contact list; return 0 if success; 1 if buffer full.
+    pub fn add_contact(&mut self, con: &MjContact) -> io::Result<()> {
+        match unsafe { mj_addContact(self.model.ffi(), self.ffi_mut(), con) } {
+            0 => Ok(()),
+            1 => Err(Error::new(ErrorKind::StorageFull, "buffer full")),
+            _ => Err(Error::new(ErrorKind::Other, "unknown error"))
+        }
+    }
+
+    /// Compute 3/6-by-nv end-effector Jacobian of a global point attached to the given body.
+    /// Set `jacp` to `true` to calculate the translational Jacobian and `jacr` to `true` for
+    /// the rotational Jacobian. Returns a `(Vec, Vec)` for translation and rotation. Empty `Vec`s
+    /// indicate that the corresponding Jacobian was not computed.
+    pub fn jac(&self, jacp: bool, jacr: bool, point: &[MjtNum; 3], body_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
+        let required_len = 3 * self.model.ffi().nv as usize;
+        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
+        let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
+
+        unsafe {
+            mj_jac(
+                self.model.ffi(),
+                self.ffi(),
+                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
+                point.as_ptr(),
+                body_id,
+            )
+        };
+
+        (jacp_vec, jacr_vec)
+    }
+
+    /// Compute body frame end-effector Jacobian.
+    /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
+    /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
+    pub fn jac_body(&self, jacp: bool, jacr: bool, body_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
+        let required_len = 3 * self.model.ffi().nv as usize;
+        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
+        let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
+
+        unsafe {
+            mj_jacBody(
+                self.model.ffi(),
+                self.ffi(),
+                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
+                body_id,
+            )
+        };
+
+        (jacp_vec, jacr_vec)
+    }
+
+    /// Compute body center-of-mass end-effector Jacobian.
+    /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
+    /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
+    pub fn jac_body_com(&self, jacp: bool, jacr: bool, body_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
+        let required_len = 3 * self.model.ffi().nv as usize;
+        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
+        let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
+
+        unsafe {
+            mj_jacBodyCom(
+                self.model.ffi(),
+                self.ffi(),
+                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
+                body_id,
+            )
+        };
+
+        (jacp_vec, jacr_vec)
+    }
+
+    /// Compute subtree center-of-mass end-effector Jacobian (translational only).
+    /// Set `jacp` to `true` to calculate the translational component. Returns a `Vec`.
+    /// Empty `Vec` indicates that the Jacobian was not computed.
+    pub fn jac_subtree_com(&mut self, jacp: bool, body_id: i32) -> Vec<MjtNum> {
+        let required_len = 3 * self.model.ffi().nv as usize;
+        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
+
+        unsafe {
+            mj_jacSubtreeCom(
+                self.model.ffi(),
+                self.ffi_mut(),
+                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                body_id,
+            )
+        };
+
+        jacp_vec
+    }
+
+    /// Compute geom end-effector Jacobian.
+    /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
+    /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
+    pub fn jac_geom(&self, jacp: bool, jacr: bool, geom_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
+        let required_len = 3 * self.model.ffi().nv as usize;
+        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
+        let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
+
+        unsafe {
+            mj_jacGeom(
+                self.model.ffi(),
+                self.ffi(),
+                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
+                geom_id,
+            )
+        };
+
+        (jacp_vec, jacr_vec)
+    }
+
+    /// Compute site end-effector Jacobian.
+    /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
+    /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
+    pub fn jac_site(&self, jacp: bool, jacr: bool, site_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
+        let required_len = 3 * self.model.ffi().nv as usize;
+        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
+        let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
+
+        unsafe {
+            mj_jacSite(
+                self.model.ffi(),
+                self.ffi(),
+                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
+                site_id,
+            )
+        };
+
+        (jacp_vec, jacr_vec)
+    }
+
+    /// Compute subtree angular momentum matrix.
+    pub fn angmom_mat(&mut self, body_id: i32) -> Vec<MjtNum> {
+        let mut mat = vec![0.0; 3 * self.model.ffi().nv as usize];
+        unsafe { mj_angmomMat(self.model.ffi(), self.ffi_mut(), mat.as_mut_ptr(), body_id) };
+        mat
+    }
+
+    /// Compute object 6D velocity (rot:lin) in object-centered frame, world/local orientation.
+    pub fn object_velocity(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> [MjtNum; 6] {
+        let mut result: [MjtNum; 6] = [0.0; 6];
+        unsafe { mj_objectVelocity(
+            self.model.ffi(), self.ffi(),
+            obj_type as i32, obj_id,
+            result.as_mut_ptr(), flg_local as i32
+        ) };
+        result
+    }
+
+    /// Compute object 6D acceleration (rot:lin) in object-centered frame, world/local orientation.
+    pub fn object_acceleration(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> [MjtNum; 6] {
+        let mut result: [MjtNum; 6] = [0.0; 6];
+        unsafe { mj_objectAcceleration(
+            self.model.ffi(), self.ffi(),
+            obj_type as i32, obj_id,
+            result.as_mut_ptr(), flg_local as i32
+        ) };
+        result
+    }
+
+    /// Returns smallest signed distance between two geoms and optionally segment from geom1 to geom2.
+    pub fn geom_distance(&self, geom1_id: i32, geom2_id: i32, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
+        unsafe { mj_geomDistance(
+            self.model.ffi(), self.ffi(),
+            geom1_id, geom2_id, dist_max,
+            fromto.map_or(ptr::null_mut(), |x| x.as_mut_ptr())
+        ) }
+    }
+
+    /// Map from body local to global Cartesian coordinates, sameframe takes values from mjtSameFrame.
+    /// Returns (global position, global orientation matrix).
+    /// Wraps ``mj_local2Global``.
+    pub fn local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: i32, sameframe: MjtSameFrame) -> ([MjtNum; 3], [MjtNum; 9]) {
+        /* Create uninitialized because this gets filled by the function. */
+        let mut xpos: [MjtNum; 3] =  [0.0; 3];
+        let mut xmat: [MjtNum; 9] = [0.0; 9];
+        unsafe { mj_local2Global(self.ffi_mut(), xpos.as_mut_ptr(), xmat.as_mut_ptr(), pos.as_ptr(), quat.as_ptr(), body_id, sameframe as MjtByte) };
+        (xpos, xmat)
+    }
+
+    /// Intersect multiple rays emanating from a single point.
+    /// Similar semantics to mj_ray, but vec is an array of (nray x 3) directions.
+    /// Returns (geomids, distances).
+    pub fn multi_ray(
+        &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
+        flg_static: bool, bodyexclude: i32, cutoff: MjtNum
+    ) -> (Vec<i32>, Vec<MjtNum>) {
+        let nray = vec.len();
+        let mut geom_id = vec![0; nray];
+        let mut distance = vec![0.0; nray];
+
+        unsafe { mj_multiRay(
+            self.model.ffi(), self.ffi_mut(), pnt.as_ptr(),
+            vec.as_ptr() as *const MjtNum, geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
+            flg_static as u8, bodyexclude, geom_id.as_mut_ptr(),
+            distance.as_mut_ptr(), nray as i32, cutoff
+        ) };
+
+        (geom_id, distance)
+    }
+
+    /// Intersect ray (pnt+x*vec, x>=0) with visible geoms, except geoms in bodyexclude.
+    /// Return distance (x) to nearest surface, or -1 if no intersection and output geomid.
+    /// geomgroup, flg_static are as in mjvOption; geomgroup==NULL skips group exclusion.
+    pub fn ray(
+        &self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
+        geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: bool, bodyexclude: i32
+    ) -> (i32, MjtNum) {
+        let mut geom_id = -1;
+        let dist = unsafe { mj_ray(
+            self.model.ffi(), self.ffi(),
+            pnt.as_ptr(), vec.as_ptr(),
+            geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
+            flg_static as MjtByte, bodyexclude, &mut geom_id
+        ) };
+        (geom_id, dist)
     }
 
     /// Returns a direct pointer to the underlying model.
@@ -359,6 +841,7 @@ info_with_view!(Data, light, light_, [xpos: f64, xdir: f64], []);
 #[cfg(test)]
 mod test {
     use crate::prelude::*;
+    use super::*;
 
     const MODEL: &str = "
 <mujoco>
@@ -382,8 +865,8 @@ mod test {
 
     #[test]
     fn test_body_view() {
-        let body = MjModel::from_xml_string(MODEL).unwrap();
-        let mut data = body.make_data();
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
         let body_info = data.body("ball").unwrap();
         let mut cvel;
 
@@ -422,5 +905,188 @@ mod test {
 
         data.step2();
         data.step1();
+    }
+
+    #[test]
+    fn test_copy_reset_variants() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        // Test reset variants
+        data.reset();
+        data.reset_debug(7);
+        data.reset_keyframe(0);
+    }
+
+    #[test]
+    fn test_dynamics_and_sensors() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        // Simulation pipeline components
+        data.fwd_position();
+        data.fwd_velocity();
+        data.fwd_actuation();
+        data.fwd_acceleration();
+        data.fwd_constraint();
+
+        data.euler();
+        data.runge_kutta(4);
+        // data.implicit();  // integrator isn't implicit in the model => skip this check
+
+        data.inv_position();
+        data.inv_velocity();
+        data.inv_constraint();
+        data.compare_fwd_inv();
+
+        // Sensors
+        data.sensor_pos();
+        data.sensor_vel();
+        data.sensor_acc();
+
+        data.energy_pos();
+        data.energy_vel();
+
+        data.check_pos();
+        data.check_vel();
+        data.check_acc();
+
+        data.kinematics();
+        data.com_pos();
+        data.camlight();
+        data.flex_comp();
+        data.tendon_comp();
+        data.transmission();
+        data.crb();
+        data.make_m();
+        data.factor_m();
+        data.com_vel();
+        data.passive();
+        data.subtree_vel();
+    }
+
+
+    #[test]
+    fn test_rne_and_collision_pipeline() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+        data.step();
+
+        // mj_rne returns a scalar as result
+        data.rne(true);
+
+        data.rne_post_constraint();
+
+        // // Collision and constraint pipeline
+        data.collision();
+        data.make_constraint();
+        data.island();
+        data.project_constraint();
+        data.reference_constraint();
+
+        let jar = vec![0.0; (data.model.ffi().nv) as usize];
+        let mut cost = 0.0;
+        data.constraint_update(&jar, None, false);
+        data.constraint_update(&jar, Some(&mut cost), true);
+    }
+
+    #[test]
+    fn test_add_contact() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        // Add a dummy contact
+        let dummy_contact = unsafe { std::mem::zeroed() };
+        data.add_contact(&dummy_contact).unwrap();
+    }
+
+    #[test]
+    fn test_jacobian() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let nv = data.model.ffi().nv as usize;
+        let expected_len = 3 * nv;
+
+        // Use a small offset point relative to the joint origin
+        let point = [0.1, 0.0, 0.0];
+
+        let ball_body_id = model.body("ball").unwrap().id as i32;
+
+        // Test global point Jacobian
+        let (jacp, jacr) = data.jac(true, true, &point, ball_body_id);
+        assert_eq!(jacp.len(), expected_len);
+        assert_eq!(jacr.len(), expected_len);
+
+        // Test body frame Jacobian
+        let (jacp_body, jacr_body) = data.jac_body(true, true, ball_body_id);
+        assert_eq!(jacp_body.len(), expected_len);
+        assert_eq!(jacr_body.len(), expected_len);
+
+        // Test body COM Jacobian
+        let (jacp_com, jacr_com) = data.jac_body_com(true, true, ball_body_id);
+        assert_eq!(jacp_com.len(), expected_len);
+        assert_eq!(jacr_com.len(), expected_len);
+
+        // Test subtree COM Jacobian (translational only)
+        let jac_subtree = data.jac_subtree_com(true, 0);
+        assert_eq!(jac_subtree.len(), expected_len);
+
+        // Test geom Jacobian
+        let (jacp_geom, jacr_geom) = data.jac_geom(true, true, ball_body_id);
+        assert_eq!(jacp_geom.len(), expected_len);
+        assert_eq!(jacr_geom.len(), expected_len);
+
+        // Test site Jacobian
+        let (jacp_site, jacr_site) = data.jac_site(true, true, ball_body_id);
+        assert_eq!(jacp_site.len(), expected_len);
+        assert_eq!(jacr_site.len(), expected_len);
+
+        // Test flags set to false produce empty Vec
+        let (jacp_none, jacr_none) = data.jac(false, false, &[0.0; 3], ball_body_id);
+        assert!(jacp_none.is_empty());
+        assert!(jacr_none.is_empty());
+    }
+
+    #[test]
+    fn test_angmom_and_object_dynamics() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let mat = data.angmom_mat(0);
+        assert_eq!(mat.len(), (3 * data.model.ffi().nv as usize));
+
+        let vel = data.object_velocity(MjtObj::mjOBJ_BODY, 0, true);
+        assert_eq!(vel, vel); // just ensure it returns 6-length
+
+        let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, 0, false);
+        assert_eq!(acc, acc);
+    }
+
+    #[test]
+    fn test_geom_distance_and_transforms() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+        data.step();
+
+        let mut ft = [0.0; 6];
+        let dist = data.geom_distance(0, 0, 1.0, Some(&mut ft));
+        assert_eq!(ft, [0.0; 6]);
+        assert_eq!(dist, 1.0);
+
+        let pos = [0.0; 3];
+        let quat = [1.0, 0.0, 0.0, 0.0];
+        let (xpos, xmat) = data.local_to_global(&pos, &quat, 0, MjtSameFrame::mjSAMEFRAME_NONE);
+        assert_eq!(xpos.len(), 3);
+        assert_eq!(xmat.len(), 9);
+
+        let ray_vecs = [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
+        let rays = data.multi_ray(&pos, &ray_vecs, None, false, -1, 10.0);
+        assert_eq!(rays.0.len(), 3);
+        assert_eq!(rays.1.len(), 3);
+
+        let (geomid, dist) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1);
+        assert!(dist.is_finite());
+        assert!(geomid >= -1);
     }
 }

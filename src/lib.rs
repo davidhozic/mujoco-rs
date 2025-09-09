@@ -40,7 +40,7 @@ mod tests {
     #[test]
     fn test_version() {
         let version = get_mujoco_version();
-        println!("{version}");
+        assert!(!version.is_empty());
     }
 
 

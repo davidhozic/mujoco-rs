@@ -203,7 +203,8 @@ macro_rules! fixed_size_info_method {
                 "The actual view can be obtained via [`", stringify!([<Mj $type_:camel $info_type Info>]), "::view`]."
             )]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
-                let id = unsafe { mj_name2id(self.$ffi, mjtObj::[<mjOBJ_ $type_:upper>] as i32, CString::new(name).unwrap().as_ptr())};
+                let c_name = CString::new(name).unwrap();
+                let id = unsafe { mj_name2id(self.$ffi, mjtObj::[<mjOBJ_ $type_:upper>] as i32, c_name.as_ptr())};
                 if id == -1 {  // not found
                     return None;
                 }
