@@ -497,80 +497,130 @@ impl<'a> MjData<'a> {
         }
     }
 
-    /// Compute 3/6-by-nv end-effector Jacobian of global point attached to given body.
-    /// Nullable: jacp, jacr
-    pub fn jac(&self, jacp: &mut [MjtNum], jacr: &mut [MjtNum], point: &[MjtNum; 3], body_id: i32) -> io::Result<()> {
+    /// Compute 3/6-by-nv end-effector Jacobian of a global point attached to the given body.
+    /// Set `jacp` to `true` to calculate the translational Jacobian and `jacr` to `true` for
+    /// the rotational Jacobian. Returns a `(Vec, Vec)` for translation and rotation. Empty `Vec`s
+    /// indicate that the corresponding Jacobian was not computed.
+    pub fn jac(&self, jacp: bool, jacr: bool, point: &[MjtNum; 3], body_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
         let required_len = 3 * self.model.ffi().nv as usize;
-        if jacp.len() != required_len || jacr.len() != required_len {
-            return Err(Error::new(ErrorKind::InvalidInput, "jacp and jacr need to be 3 * nv"));
-        }
+        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
+        let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
 
-        unsafe { mj_jac(
-            self.model.ffi() ,self.ffi(),
-            jacp.as_mut_ptr(), jacr.as_mut_ptr(),
-            point.as_ptr(), body_id
-        ) };
+        unsafe {
+            mj_jac(
+                self.model.ffi(),
+                self.ffi(),
+                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
+                point.as_ptr(),
+                body_id,
+            )
+        };
 
-        Ok(())
+        (jacp_vec, jacr_vec)
     }
 
     /// Compute body frame end-effector Jacobian.
-    /// Nullable: jacp, jacr
-    pub fn jac_body(&self, jacp: &mut [MjtNum], jacr: &mut [MjtNum], body_id: i32) -> io::Result<()> {
+    /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
+    /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
+    pub fn jac_body(&self, jacp: bool, jacr: bool, body_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
         let required_len = 3 * self.model.ffi().nv as usize;
-        if jacp.len() != required_len || jacr.len() != required_len {
-            return Err(Error::new(ErrorKind::InvalidInput, "jacp and jacr need to be 3 * nv"));
-        }
+        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
+        let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
 
-        unsafe { mj_jacBody(self.model.ffi(), self.ffi(), jacp.as_mut_ptr(), jacr.as_mut_ptr(), body_id) };
-        Ok(())
+        unsafe {
+            mj_jacBody(
+                self.model.ffi(),
+                self.ffi(),
+                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
+                body_id,
+            )
+        };
+
+        (jacp_vec, jacr_vec)
     }
 
     /// Compute body center-of-mass end-effector Jacobian.
-    /// Nullable: jacp, jacr
-    pub fn jac_body_com(&self, jacp: &mut [MjtNum], jacr: &mut [MjtNum], body_id: i32) -> io::Result<()> {
+    /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
+    /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
+    pub fn jac_body_com(&self, jacp: bool, jacr: bool, body_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
         let required_len = 3 * self.model.ffi().nv as usize;
-        if jacp.len() != required_len || jacr.len() != required_len {
-            return Err(Error::new(ErrorKind::InvalidInput, "jacp and jacr need to be 3 * nv"));
-        }
+        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
+        let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
 
-        unsafe { mj_jacBodyCom(self.model.ffi(), self.ffi(), jacp.as_mut_ptr(), jacr.as_mut_ptr(), body_id) };
-        Ok(())
+        unsafe {
+            mj_jacBodyCom(
+                self.model.ffi(),
+                self.ffi(),
+                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
+                body_id,
+            )
+        };
+
+        (jacp_vec, jacr_vec)
     }
 
-    /// Compute subtree center-of-mass end-effector Jacobian.
-    pub fn jac_subtree_com(&mut self, jacp: &mut [MjtNum], body_id: i32) -> io::Result<()> {
+    /// Compute subtree center-of-mass end-effector Jacobian (translational only).
+    /// Set `jacp` to `true` to calculate the translational component. Returns a `Vec`.
+    /// Empty `Vec` indicates that the Jacobian was not computed.
+    pub fn jac_subtree_com(&mut self, jacp: bool, body_id: i32) -> Vec<MjtNum> {
         let required_len = 3 * self.model.ffi().nv as usize;
-        if jacp.len() != required_len {
-            return Err(Error::new(ErrorKind::InvalidInput, "jacp needs to be 3 * nv"));
-        }
+        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
 
-        unsafe { mj_jacSubtreeCom(self.model.ffi(), self.ffi_mut(), jacp.as_mut_ptr(), body_id) };
-        Ok(())
+        unsafe {
+            mj_jacSubtreeCom(
+                self.model.ffi(),
+                self.ffi_mut(),
+                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                body_id,
+            )
+        };
+
+        jacp_vec
     }
 
     /// Compute geom end-effector Jacobian.
-    /// Nullable: jacp, jacr
-    pub fn jac_geom(&self, jacp: &mut [MjtNum], jacr: &mut [MjtNum], geom_id: i32) -> io::Result<()> {
+    /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
+    /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
+    pub fn jac_geom(&self, jacp: bool, jacr: bool, geom_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
         let required_len = 3 * self.model.ffi().nv as usize;
-        if jacp.len() != required_len || jacr.len() != required_len {
-            return Err(Error::new(ErrorKind::InvalidInput, "jacp and jacr need to be 3 * nv"));
-        }
+        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
+        let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
 
-        unsafe { mj_jacGeom(self.model.ffi(), self.ffi(), jacp.as_mut_ptr(), jacr.as_mut_ptr(), geom_id) };
-        Ok(())
+        unsafe {
+            mj_jacGeom(
+                self.model.ffi(),
+                self.ffi(),
+                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
+                geom_id,
+            )
+        };
+
+        (jacp_vec, jacr_vec)
     }
 
     /// Compute site end-effector Jacobian.
-    /// Nullable: jacp, jacr
-    pub fn jac_site(&self, jacp: &mut [MjtNum], jacr: &mut [MjtNum], site_id: i32) -> io::Result<()> {
+    /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
+    /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
+    pub fn jac_site(&self, jacp: bool, jacr: bool, site_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
         let required_len = 3 * self.model.ffi().nv as usize;
-        if jacp.len() != required_len || jacr.len() != required_len {
-            return Err(Error::new(ErrorKind::InvalidInput, "jacp and jacr need to be 3 * nv"));
-        }
+        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
+        let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
 
-        unsafe { mj_jacSite(self.model.ffi(), self.ffi(), jacp.as_mut_ptr(), jacr.as_mut_ptr(), site_id) };
-        Ok(())
+        unsafe {
+            mj_jacSite(
+                self.model.ffi(),
+                self.ffi(),
+                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
+                site_id,
+            )
+        };
+
+        (jacp_vec, jacr_vec)
     }
 
     /// Compute subtree angular momentum matrix.
@@ -612,8 +662,9 @@ impl<'a> MjData<'a> {
     }
 
     /// Map from body local to global Cartesian coordinates, sameframe takes values from mjtSameFrame.
-    /// Returns (global position, global orientation matrix)
-    pub fn local_2_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: i32, sameframe: MjtSameFrame) -> ([MjtNum; 3], [MjtNum; 9]) {
+    /// Returns (global position, global orientation matrix).
+    /// Wraps ``mj_local2Global``.
+    pub fn local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: i32, sameframe: MjtSameFrame) -> ([MjtNum; 3], [MjtNum; 9]) {
         /* Create uninitialized because this gets filled by the function. */
         let mut xpos: [MjtNum; 3] =  [0.0; 3];
         let mut xmat: [MjtNum; 9] = [0.0; 9];
@@ -814,8 +865,8 @@ mod test {
 
     #[test]
     fn test_body_view() {
-        let body = MjModel::from_xml_string(MODEL).unwrap();
-        let mut data = body.make_data();
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
         let body_info = data.body("ball").unwrap();
         let mut cvel;
 
@@ -858,8 +909,8 @@ mod test {
 
     #[test]
     fn test_copy_reset_variants() {
-        let body = MjModel::from_xml_string(MODEL).unwrap();
-        let mut data = body.make_data();
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
 
         // Test reset variants
         data.reset();
@@ -869,8 +920,8 @@ mod test {
 
     #[test]
     fn test_dynamics_and_sensors() {
-        let body = MjModel::from_xml_string(MODEL).unwrap();
-        let mut data = body.make_data();
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
 
         // Simulation pipeline components
         data.fwd_position();
@@ -917,8 +968,8 @@ mod test {
 
     #[test]
     fn test_rne_and_collision_pipeline() {
-        let body = MjModel::from_xml_string(MODEL).unwrap();
-        let mut data = body.make_data();
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
         data.step();
 
         // mj_rne returns a scalar as result
@@ -940,39 +991,67 @@ mod test {
     }
 
     #[test]
-    fn test_contact_and_jacobian() {
-        let body = MjModel::from_xml_string(MODEL).unwrap();
-        let mut data = body.make_data();
+    fn test_add_contact() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
 
-        // mj_addContact: we pass default, expects Ok
+        // Add a dummy contact
         let dummy_contact = unsafe { std::mem::zeroed() };
-        data.add_contact(&dummy_contact).unwrap_or_else(|e| {
-            panic!("add_contact failed: {:?}", e);
-        });
+        data.add_contact(&dummy_contact).unwrap();
+    }
 
-        // Prepare arrays with correct and incorrect sizes
+    #[test]
+    fn test_jacobian() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
         let nv = data.model.ffi().nv as usize;
-        let mut jacp = vec![0.0; 3 * nv];
-        let mut jacr = vec![0.0; 3 * nv];
+        let expected_len = 3 * nv;
 
-        // Valid call
-        data.jac(&mut jacp, &mut jacr, &[0.0; 3], 0).unwrap();
-        data.jac_body(&mut jacp, &mut jacr, 0).unwrap();
-        data.jac_body_com(&mut jacp, &mut jacr, 0).unwrap();
-        data.jac_subtree_com(&mut jacp, 0).unwrap();
-        data.jac_geom(&mut jacp, &mut jacr, 0).unwrap();
-        data.jac_site(&mut jacp, &mut jacr, 0).unwrap();
+        // Use a small offset point relative to the joint origin
+        let point = [0.1, 0.0, 0.0];
 
-        // Invalid size error
-        let mut bad = vec![0.0; 2];
-        let mut bad2 = vec![0.0; 2];
-        assert!(data.jac(&mut bad, &mut bad2, &[0.0; 3], 0).is_err());
+        let ball_body_id = model.body("ball").unwrap().id as i32;
+
+        // Test global point Jacobian
+        let (jacp, jacr) = data.jac(true, true, &point, ball_body_id);
+        assert_eq!(jacp.len(), expected_len);
+        assert_eq!(jacr.len(), expected_len);
+
+        // Test body frame Jacobian
+        let (jacp_body, jacr_body) = data.jac_body(true, true, ball_body_id);
+        assert_eq!(jacp_body.len(), expected_len);
+        assert_eq!(jacr_body.len(), expected_len);
+
+        // Test body COM Jacobian
+        let (jacp_com, jacr_com) = data.jac_body_com(true, true, ball_body_id);
+        assert_eq!(jacp_com.len(), expected_len);
+        assert_eq!(jacr_com.len(), expected_len);
+
+        // Test subtree COM Jacobian (translational only)
+        let jac_subtree = data.jac_subtree_com(true, 0);
+        assert_eq!(jac_subtree.len(), expected_len);
+
+        // Test geom Jacobian
+        let (jacp_geom, jacr_geom) = data.jac_geom(true, true, ball_body_id);
+        assert_eq!(jacp_geom.len(), expected_len);
+        assert_eq!(jacr_geom.len(), expected_len);
+
+        // Test site Jacobian
+        let (jacp_site, jacr_site) = data.jac_site(true, true, ball_body_id);
+        assert_eq!(jacp_site.len(), expected_len);
+        assert_eq!(jacr_site.len(), expected_len);
+
+        // Test flags set to false produce empty Vec
+        let (jacp_none, jacr_none) = data.jac(false, false, &[0.0; 3], ball_body_id);
+        assert!(jacp_none.is_empty());
+        assert!(jacr_none.is_empty());
     }
 
     #[test]
     fn test_angmom_and_object_dynamics() {
-        let body = MjModel::from_xml_string(MODEL).unwrap();
-        let mut data = body.make_data();
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
 
         let mat = data.angmom_mat(0);
         assert_eq!(mat.len(), (3 * data.model.ffi().nv as usize));
@@ -986,8 +1065,8 @@ mod test {
 
         #[test]
     fn test_geom_distance_and_transforms() {
-        let body = MjModel::from_xml_string(MODEL).unwrap();
-        let mut data = body.make_data();
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
         data.step();
 
         let mut ft = [0.0; 6];
@@ -997,7 +1076,7 @@ mod test {
 
         let pos = [0.0; 3];
         let quat = [1.0, 0.0, 0.0, 0.0];
-        let (xpos, xmat) = data.local_2_global(&pos, &quat, 0, MjtSameFrame::mjSAMEFRAME_NONE);
+        let (xpos, xmat) = data.local_to_global(&pos, &quat, 0, MjtSameFrame::mjSAMEFRAME_NONE);
         assert_eq!(xpos.len(), 3);
         assert_eq!(xmat.len(), 9);
 
