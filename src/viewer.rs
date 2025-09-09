@@ -1,3 +1,5 @@
+//! Module related to implementation of the [`MjViewer`] and [`MjViewerCpp`].
+
 use glfw::{Action, Context, Glfw, GlfwReceiver, Key, Modifiers, MouseButton, PWindow, WindowEvent};
 use bitflags::bitflags;
 
@@ -131,7 +133,7 @@ impl<'m> MjViewer<'m> {
         let scene = MjvScene::new(model, model.ffi().ngeom as usize + scene_max_geom + MJ_VIEWER_EXTRA_SCENE_GEOM_SPACE);
         let user_scn = MjvScene::new(model, scene_max_geom);
         let context= MjrContext::new(model);
-        let camera = MjvCamera::new(0, MjtCamera::mjCAMERA_FREE, model);
+        let camera = MjvCamera::new_free(model);
         let pert = MjvPerturb::default();
         Ok(Self {
             scene,
@@ -188,6 +190,10 @@ impl<'m> MjViewer<'m> {
 
     /// Updates the scene and draws it to the display.
     fn update_scene(&mut self, data: &mut MjData) {
+        let model_data_ptr = unsafe {  data.model().__raw() };
+        let bound_model_ptr = unsafe { self.model.__raw() };
+        assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the renderer.");
+
         /* Read the screen size */
         self.update_rectangles(self.window.get_framebuffer_size());
 

@@ -33,6 +33,11 @@ impl Default for MjrRectangle {
 pub type MjtFont = mjtFont;
 
 /***********************************************************************************************************************
+** MjtFontScale
+***********************************************************************************************************************/
+pub type MjtFontScale = mjtFontScale;
+
+/***********************************************************************************************************************
 ** MjtGridPos
 ***********************************************************************************************************************/
 pub type MjtGridPos = mjtGridPos;
@@ -72,7 +77,7 @@ impl MjrContext {
     }
 
     /// Change font of existing context.
-    pub fn change_font(&mut self, fontscale: mjtFontScale) {
+    pub fn change_font(&mut self, fontscale: MjtFontScale) {
         unsafe { mjr_changeFont(fontscale as i32, self.ffi_mut()) }
     }
 

@@ -55,6 +55,13 @@ impl<'a> MjData<'a> {
         unsafe { self.data.as_mut().unwrap() }
     }
 
+    /// Returns a reference to data's [`MjModel`].
+    /// This is used for checking whether the correct
+    /// data is used in `update_x(data)` methods.
+    pub(crate) fn model(&self) -> &MjModel {
+        self.model
+    }
+
     /// Returns a slice of detected contacts.
     /// To obtain the contact force, call [`MjData::contact_force`].
     pub fn contacts(&self) -> &[MjContact] {

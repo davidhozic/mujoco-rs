@@ -9,7 +9,6 @@ use super::mj_data::MjData;
 use crate::mujoco_c::*;
 
 
-
 /***********************************************************************************************************************
 ** MjtCamera
 ***********************************************************************************************************************/
@@ -75,24 +74,50 @@ impl MjvPerturb {
 ***********************************************************************************************************************/
 pub type MjvCamera = mjvCamera;
 impl MjvCamera {
+    /// Redundant and deprecated method. Use one of:
+    /// - [`MjvCamera::new_free`],
+    /// - [`MjvCamera::new_fixed`],
+    /// - [`MjvCamera::new_tracking`],
+    /// - [`MjvCamera::new_user`].
+    #[deprecated]
     pub fn new(camera_id: u32, type_: MjtCamera, model: &MjModel) -> Self {
-        let mut camera: mjvCamera_ = Self::default();
-
-        camera.type_ = type_.clone() as i32;
-        camera.fixedcamid = -1;
-        camera.trackbodyid = -1;
         match type_ {
-            MjtCamera::mjCAMERA_FREE => {
-                unsafe { mjv_defaultFreeCamera(model.ffi(), &mut camera); }
-            }
-            MjtCamera::mjCAMERA_FIXED | MjtCamera::mjCAMERA_TRACKING => {
-                camera.fixedcamid = camera_id as i32;
-            }
-
-            MjtCamera::mjCAMERA_USER => {}
+            MjtCamera::mjCAMERA_FIXED => Self::new_fixed(camera_id),
+            MjtCamera::mjCAMERA_TRACKING => Self::new_tracking(camera_id),
+            MjtCamera::mjCAMERA_FREE => Self::new_free(model),
+            MjtCamera::mjCAMERA_USER => Self::new_user()
         }
+    }
 
+    /// Creates a new free camera.
+    /// By default, the camera will look at the center of the model.
+    pub fn new_free(model: &MjModel) -> Self {
+        let mut camera: mjvCamera_ = Self::default();
+        unsafe { mjv_defaultFreeCamera(model.ffi(), &mut camera); }
         camera
+    }
+
+    /// Creates a new fixed camera.
+    pub fn new_fixed(camera_id: u32) -> Self {
+        let mut camera: mjvCamera_ = Self::default();
+        camera.type_ = MjtCamera::mjCAMERA_FIXED as i32;
+        camera.fixedcamid = camera_id as i32;
+        camera
+    }
+
+    /// Creates a new tracking camera to track a body with the given ``tracking_id``.
+    pub fn new_tracking(tracking_id: u32) -> Self {
+        let mut camera: mjvCamera_ = Self::default();
+        camera.type_ = MjtCamera::mjCAMERA_TRACKING as i32;
+        camera.trackbodyid = tracking_id as i32;
+        camera
+    }
+
+    /// Creates a new camera of user type.
+    pub fn new_user() -> Self {
+        let mut cam = Self::default();
+        cam.type_ = MjtCamera::mjCAMERA_USER as i32;
+        cam
     }
 
     /// Sets the camera into tracking mode.
