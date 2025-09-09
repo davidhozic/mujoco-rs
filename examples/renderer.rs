@@ -16,13 +16,13 @@ const EXAMPLE_MODEL: &str = "
         <light ambient=\"0.2 0.2 0.2\"/>
         <body name=\"ball\">
             <geom name=\"green_sphere\" size=\".1\" rgba=\"0 1 0 1\" mass=\"1\"/>
-            <joint type=\"free\"/>
-            <site name=\"touch\" size=\".1 .1 .1\" pos=\"0 0 0\" rgba=\"0 1 0 0.2\" type=\"box\"/>
+            <joint name=\"ball\" type=\"free\"/>
+            <site name=\"touch\" size=\".1 .1 .1\" pos=\"0 0 0\" rgba=\"0 0 0 0.0\" type=\"box\"/>
         </body>
 
-        <body>
-            <geom type=\"box\" size=\"1 1 1\" pos=\"2 1 1\" rgba=\"0 1 1 1\"/>
-            <joint type=\"free\"/>
+        <body pos=\"2 0 2\">
+            <geom type=\"box\" size=\"1 1 1\" rgba=\"0 1 1 1\"/>
+            <joint name=\"box\" type=\"free\"/>
         </body>
 
         <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"20 0 0\"/>
@@ -47,7 +47,7 @@ fn main() {
     let mut data = model.make_data();
 
     /* Renderer for rendering at 1280x720 px */
-    let mut renderer: MjRenderer<1280, 720> = MjRenderer::new(&model).unwrap();
+    let mut renderer: MjRenderer<1280, 720> = MjRenderer::new(&model, 5).unwrap();
 
     /* Make a camera that follows the ball */
     let ball_body_id = model.body("ball").unwrap().id;
@@ -60,20 +60,18 @@ fn main() {
     renderer
         .with_camera(camera);
         // .with_font_scale(MjtFontScale::mjFONTSCALE_100)
-        // .with_opts(MjvOption::default());
+        // .with_opts(MjvOption::default())
+        // .with_rgb_rendering(true)
+        // .with_depth_rendering(true);
 
     for i in 0..1000 {
         data.step();
 
         /* Save an image every SAVE_FREQUENCY step */
         if i % SAVE_FREQUENCY == 0 {
-            renderer
-            // .with_font_scale(MjtFontScale::mjFONTSCALE_100)
-            // .with_camera(MjvCamera::new_fixed(cam1_id as u32))
-            // .with_opts(opts.clone())
-            .update_scene(&mut data)
-            .render()
-            .save_rgb(format!("{OUTPUT_DIRECTORY}/img{i}.png"));
+            renderer.update_scene(&mut data);
+            renderer.render();
+            renderer.save_rgb(format!("{OUTPUT_DIRECTORY}/img{i}.png")).unwrap();
         }
     }
 }

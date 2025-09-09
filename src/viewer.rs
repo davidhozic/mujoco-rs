@@ -172,6 +172,9 @@ impl<'m> MjViewer<'m> {
     /// Syncs the state of `data` with the viewer as well as perform
     /// rendering on the viewer.
     pub fn sync(&mut self, data: &mut MjData) {
+        /* Make sure everything is done on the viewer's window */
+        self.window.make_current();
+
         /* Process mouse and keyboard events */
         self.process_events(data);
 
