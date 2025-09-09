@@ -12,7 +12,7 @@ Versioning
 =================
 This project uses `semantic versioning <https://semver.org/>`_.
 
-[FUTURE RELEASE] (MuJoCo 3.3.5)
+1.2.0 (MuJoCo 3.3.5)
 ================================
 - Added function wrappers around some utility functions and both the derivative functions (available under :docs-rs:`mujoco_rs::wrappers::fun`).
 - Completed the virtual file system wrapper.
