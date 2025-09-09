@@ -19,6 +19,7 @@ This project uses `semantic versioning <https://semver.org/>`_.
 
   - Added methods :docs-rs:`~~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>add_from_file` and :docs-rs:`~~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>delete_file`.
   - Added method :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml_vfs`.
+  - Added a bunch of methods to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, see the Git diff on GitHub for more information.
 
 1.1.0 (MuJoCo 3.3.5)
 =====================
