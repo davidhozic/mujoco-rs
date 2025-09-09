@@ -9,8 +9,10 @@ use bitflags::bitflags;
 use png::Encoder;
 
 use std::io::{self, BufWriter, ErrorKind, Write};
-use std::fs::File;
+use std::fmt::Display;
+use std::error::Error;
 use std::path::Path;
+use std::fs::File;
 
 
 /// A renderer for rendering 3D scenes.
@@ -190,7 +192,7 @@ impl<'m, const WIDTH: usize, const HEIGHT: usize> MjRenderer<'m, WIDTH, HEIGHT> 
             Ok(())
         }
         else {
-            Err(io::Error::new(ErrorKind::InvalidInput, "depth rendering is not enabled (render.with_depth_rendering(true)"))
+            Err(io::Error::new(ErrorKind::InvalidInput, "depth rendering is not enabled (render.with_depth_rendering(true))"))
         }
     }
 }
@@ -200,6 +202,24 @@ impl<'m, const WIDTH: usize, const HEIGHT: usize> MjRenderer<'m, WIDTH, HEIGHT> 
 pub enum RendererError {
     GlfwInitError(InitError),
     WindowCreationError
+}
+
+impl Display for RendererError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::GlfwInitError(e) => write!(f, "glfw failed to initialize: {}", e),
+            Self::WindowCreationError => write!(f, "failed to create window"),
+        }
+    }
+}
+
+impl Error for RendererError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::GlfwInitError(e) => Some(e),
+            _ => None
+        }
+    }
 }
 
 bitflags! { 

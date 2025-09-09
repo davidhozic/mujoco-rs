@@ -74,7 +74,7 @@ impl MjvPerturb {
 ***********************************************************************************************************************/
 pub type MjvCamera = mjvCamera;
 impl MjvCamera {
-    /// Redundant and deprecated method. Use one of:
+    /// Deprecated method. Use one of:
     /// - [`MjvCamera::new_free`],
     /// - [`MjvCamera::new_fixed`],
     /// - [`MjvCamera::new_tracking`],

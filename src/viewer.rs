@@ -4,6 +4,8 @@ use glfw::{Action, Context, Glfw, GlfwReceiver, Key, Modifiers, MouseButton, PWi
 use bitflags::bitflags;
 
 use std::time::Instant;
+use std::fmt::Display;
+use std::error::Error;
 
 use crate::{get_mujoco_version, mujoco_c::*};
 
@@ -55,6 +57,24 @@ const HELP_MENU_VALUES: &str = concat!(
 pub enum MjViewerError {
     GlfwInitError (glfw::InitError),
     WindowCreationError
+}
+
+impl Display for MjViewerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::GlfwInitError(e) => write!(f, "glfw failed to initialize: {}", e),
+            Self::WindowCreationError => write!(f, "failed to create window"),
+        }
+    }
+}
+
+impl Error for MjViewerError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::GlfwInitError(e) => Some(e),
+            _ => None
+        }
+    }
 }
 
 /// A Rust-native implementation of the MuJoCo viewer. To confirm to rust safety rules,
