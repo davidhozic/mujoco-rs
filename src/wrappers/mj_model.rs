@@ -306,7 +306,8 @@ impl MjModel {
     }
 
     /// Get name of object with the specified mjtObj type and id, returns NULL if name not found.
-    pub fn id_2name(&self, type_: MjtObj, id: std::ffi::c_int) -> Option<&str> {
+    /// Wraps ``mj_id2name``.
+    pub fn id_to_name(&self, type_: MjtObj, id: std::ffi::c_int) -> Option<&str> {
         let ptr = unsafe { mj_id2name(self.ffi(), type_ as i32, id) };
         if ptr.is_null() {
             None
@@ -641,7 +642,7 @@ mod tests {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
 
         // Body with id=1 should exist ("box")
-        let name = model.id_2name(MjtObj::mjOBJ_BODY, 1);
+        let name = model.id_to_name(MjtObj::mjOBJ_BODY, 1);
         assert_eq!(name, Some("ball"));
     }
 
@@ -661,7 +662,7 @@ mod tests {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
 
         // Invalid id should return None
-        let name = model.id_2name(MjtObj::mjOBJ_BODY, 9999);
+        let name = model.id_to_name(MjtObj::mjOBJ_BODY, 9999);
         assert_eq!(name, None);
     }
 
