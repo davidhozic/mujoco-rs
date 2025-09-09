@@ -159,11 +159,11 @@ macro_rules! view_creator {
         unsafe {
             $view {
                 $(
-                    $field: $ptr_view(std::mem::transmute($data.$field.add($self.$field.0)), $self.$field.1),
+                    $field: $ptr_view($data.$field.add($self.$field.0).cast(), $self.$field.1),
                 )*
                 $(
                     $opt_field: if $self.$opt_field.1 > 0 {
-                        Some($ptr_view(std::mem::transmute($data.$opt_field.add($self.$opt_field.0)), $self.$opt_field.1))
+                        Some($ptr_view($data.$opt_field.add($self.$opt_field.0).cast(), $self.$opt_field.1))
                     } else {None},
                 )*
             }
@@ -175,11 +175,11 @@ macro_rules! view_creator {
             unsafe {
                 $view {
                     $(
-                        $field: $ptr_view(std::mem::transmute($data.[<$prefix $field>].add($self.$field.0)), $self.$field.1),
+                        $field: $ptr_view($data.[<$prefix $field>].add($self.$field.0).cast(), $self.$field.1),
                     )*
                     $(
                         $opt_field: if $self.$opt_field.1 > 0 {
-                            Some($ptr_view(std::mem::transmute($data.[<$prefix $opt_field>].add($self.$opt_field.0)), $self.$opt_field.1))
+                            Some($ptr_view($data.[<$prefix $opt_field>].add($self.$opt_field.0).cast(), $self.$opt_field.1))
                         } else {None},
                     )*
                 }
