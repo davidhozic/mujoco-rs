@@ -1,3 +1,5 @@
+.. _attribute_views:
+
 ===================
 Attribute views
 ===================

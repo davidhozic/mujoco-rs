@@ -3,17 +3,23 @@
 =======================
 3D viewer
 =======================
+MuJoCo provides an official viewer application, written in C++, which can also be used in MuJoCo's
+Python package. To avoid C++ dependencies, MuJoCo-rs provides its own 3D viewer, written in Rust.
 
-MuJoCo-rs also provides a 3D viewer, written in Rust. It is written to be analog to the C++ viewer (the Simulate UI),
-but available without C++ dependencies.
+We also provide the ability to use the official C++ based viewer, however this requires
+static linking, as described in :ref:`static_link_with_cpp_viewer`.
 
-The viewer supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
+
+Rust-native 3D viewer
+=======================
+
+Rust-native 3D viewer supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
 This also includes object perturbations.
-Currently, no UI is provided (buttons, drop-downs, etc.), however it is planned for future development.
+Currently, no user interface is provided (buttons, drop-downs, etc.), however it is planned for future development.
 
 A screenshot of the Rust 3D viewer is shown below.
 
-.. figure:: ../../img_common/viewer_spot.png
+.. figure:: ../../../../img_common/viewer_spot.png
 
     Rust-native interactive 3D viewer.
     Showing the `Spot <https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot>`_ scene from
@@ -47,15 +53,6 @@ like shown in the following example:
             std::thread::sleep(Duration::from_secs_f64(timestep));
         }
     }
-
-
-The method :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive` accepts an immutable reference to
-the simulation model (:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel`) and uses it to construct two scenes:
-
-- the internal 3D scene needed for the actual viewer to mirror the simulation state and
-- the user 3D scene that can be used to draw custom user objects (obtainable via
-  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn_mut`).
-  This is in more detail described in :ref:`custom_visualization`.
 
 
 The above example runs until the viewer is closed (:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running`)
