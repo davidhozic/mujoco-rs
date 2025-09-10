@@ -16,10 +16,9 @@ function :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mju_rayGeom` is replaced with
 :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom`.
 
 Structs
-===================
-Since most MuJoCo's structs are just plain data structs, we avoid wrapping them and mostly
-only rename them to follow the PascalCase style. Structs that contain heap allocated data
-are however replaced with a safe Rust wrapper that automatically cleans after itself and provides
-safe access to some of the attributes. Attributes that aren't directly exposed can be accessed
-with the ``.ffi()`` or ``.ffi_mut()`` method. Note that the ``.ffi_mut()`` requires the use ``unsafe``
-blocks due to the exposure of raw pointers, which are NOT to be replaced.
+====================
+Most of MuJoCo's structs are plain data structs. In Rust, we mostly keep them as-is, renaming them to PascalCase. 
+Structs with heap-allocated data are wrapped in safe Rust types that automatically manage memory and provide safe attribute access. 
+
+Attributes not directly exposed can be accessed via the ``.ffi()`` or ``.ffi_mut()`` methods.
+For more details, see :ref:`interface_c_api`.
