@@ -171,7 +171,7 @@ impl MjvGLCamera {
 pub type MjvGeom = mjvGeom;
 impl MjvGeom {
     /// Wrapper around the MuJoCo's mjv_connector function.
-    /// Calculates the geom attributes to result it pointing from point `from` to point `to`.
+    /// Calculates the geom attributes so that it points from point `from` to point `to`.
     pub fn connect(&mut self, width: f64, from: [f64; 3], to: [f64; 3]) {
         unsafe {
             mjv_connector(self, self.type_, width, from.as_ptr(), to.as_ptr());
