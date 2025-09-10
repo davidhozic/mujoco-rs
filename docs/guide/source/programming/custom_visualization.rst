@@ -5,6 +5,9 @@ Custom visualization
 =====================
 
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
+.. |mj_viewer| replace:: :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`
+.. |mj_renderer| replace:: :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`
+
 
 Aside to the true simulation state, MuJoCo provides ways to draw additional 3D geometries (geoms)
 onto an existing 3D scene.
@@ -12,26 +15,28 @@ onto an existing 3D scene.
 MuJoCo-rs tries to provide a higher-level API to drawing custom geoms.
 All the visualization definitions are available under the :docs-rs:`mujoco_rs::wrappers::mj_visualization` module.
 While the module contains many visualization related definitions, the one we're looking for is |mjv_scene|.
+It represents an abstraction to visually represent the 3D world of the simulation and additionally
+draw custom visual-only geoms.
 
 The scene can be directly constructed with
-:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>new`, however this is currently
-not useful on its own. In the future, MuJoCo-rs wil support a custom renderer, like the MuJoCo Python supports,
-where |mjv_scene| will be used as the
-drawing reference. Currently, the scene can be directly used to draw custom geometries to the :ref:`mj_rust_viewer`.
+:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>new`, however this is
+not useful on its own, unless implementing custom structs. MuJoCo-rs provides two places where the scene
+is used and custom visualization can be done:
 
+- the :ref:`mj_rust_viewer` (|mj_viewer|)
+- and the renderer (|mj_renderer|).
 
 
 Using the scene
 ===================
-The main two methods that will need to be called are
-:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>clear_geom`, which
-will remove all the geoms from the scene, and
+The main method that will need to be called is
 :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>add_geom`, which will
 add a new geom to the scene.
 
+
 Drawing to the viewer
------------------------
-To draw to the 3D viewer, we will use the :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn_mut`
+------------------------
+To draw to the scene inside the viewer, we will use the :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn_mut`
 method, which will give as a mutable reference to the internal user scene.
 The user scene has a limited amount of allowed geoms, which can be configured by the user's
 application in the :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive` method.
@@ -39,7 +44,8 @@ application in the :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>laun
 The user scene is empty at beginning. It is also only cleared after calling 
 :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>clear_geom`,
 which allows the viewer to be synced at higher frequencies than the frequency the user scene is
-updated at.
+updated at. This method needs to be called every time existing geoms are supposed to be re-rendered
+or older ones removed.
 
 To draw to the scene, the method :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>add_geom`
 can be used to create the geom and then obtain a mutable reference to it, for purposes of additional modification.
