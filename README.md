@@ -25,21 +25,21 @@ This library uses FFI bindings to MuJoCo **3.3.5**.
 For installation see the [**guide book**](https://mujoco-rs.readthedocs.io/en/latest/).
 
 ## Main features
-MuJoCo-rs tries to stay close to the MuJoCo's, with a few additional features for ease of use.
+MuJoCo-rs tries to stay close to the MuJoCo's C API, with a few additional features for ease of use.
 The main features on top of MuJoCo include
 
 - Safe wrappers around structs:
   
-  - Automatic allocation and cleanup
-  - Lifetime guarantees
+  - Automatic allocation and cleanup.
+  - Lifetime guarantees.
 
-- Methods as function wrappers
-- Easy manipulation of simulation data via attribute views
+- Methods as function wrappers.
+- Easy manipulation of simulation data via attribute views.
 
 - Visualization:
 
-  - Renderer: offscreen rendering to array or file
-  - Viewer: onscreen visualization of the 3D simulation
+  - Renderer: offscreen rendering to array or file.
+  - Viewer: onscreen visualization of the 3D simulation.
 
 
 

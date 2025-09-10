@@ -60,7 +60,7 @@ def link_docs_rs(name, rawtext, text: str, lineno, inliner, options={}, content=
         # Input is in form of `display text <link>`
         if link_text.endswith(">"):
             text, link = link_text.split("<", 1)
-            link_text = link[:-1]  # -1 to remove '>' 
+            link_text = link[:-1]  # -1 to remove '>'
             text = text.strip()
 
         root, *parts = link_text.split("::")
