@@ -11,8 +11,8 @@ Direct FFI bindings are available inside the :docs-rs:`mujoco_rs::mujoco_c` modu
 
 Mixing between the direct FFI bindings and the rest of MuJoCo-rs is also possible.
 Most of MuJoCo-rs's structs are actually just FFI structs aliased to a PascalCase name.
-The rest of the structs, which are wrappers around the FFI structs, the ``ffi()`` and
-``ffi_mut()`` methods can be called to obtain a reference to the inner FFI struct.
+To obtain a reference to the FFI type inside of a wrapped type, call either ``ffi()`` or
+``ffi_mut()``.
 For example, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ffi_mut`
 and :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>ffi` can be used
 as parameters inside :docs-rs:`~mujoco_rs::mujoco_c::<fn>mj_step`.

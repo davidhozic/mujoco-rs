@@ -23,21 +23,21 @@ MuJoCo-rs uses FFI bindings to MuJoCo |MUJOCO_VERSION_BOLD|.
 
 Main features
 =======================
-MuJoCo-rs tries to stay close to the MuJoCo's, with a few additional features for ease of use.
-The main features on top of MuJoCo include
+MuJoCo-rs tries to stay close to the MuJoCo's C API, with a few additional features for ease of use.
+The main features on top of MuJoCo include:
 
 - Safe wrappers around structs:
   
-  - Automatic allocation and cleanup
-  - Lifetime guarantees
+  - Automatic allocation and cleanup.
+  - Lifetime guarantees.
 
-- Methods as function wrappers
-- Easy manipulation of simulation data via :ref:`attribute_views`
+- Methods as function wrappers.
+- Easy manipulation of simulation data via :ref:`attribute_views`.
 
 - :ref:`visualization`:
 
-  - :ref:`mj_renderer`: offscreen rendering to array or file
-  - :ref:`mj_rust_viewer`: onscreen visualization of the 3D simulation
+  - :ref:`mj_renderer`: offscreen rendering to array or file.
+  - :ref:`mj_rust_viewer`: onscreen visualization of the 3D simulation.
 
     .. image:: ../../img_common/viewer_spot.png
         :width: 50%
@@ -55,9 +55,8 @@ Optional Cargo features can be enabled:
     display everything and respond to mouse/keyboard events.
     No side-panels (the user menu) currently exists.
   - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
-    This is only available if you build the MuJoCo yourself using the steps above
-    (yes, you need to use the forked repository).
-  - ``renderer``: enables the offscreen rendering code for reading RGB and
+    This requires static linking to a modified fork of MuJoCo, as described in :ref:`installation`.
+  - ``renderer``: enables offscreen rendering for writing RGB and
     depth data to memory or file.
 
 By default, ``viewer`` and ``renderer`` are enabled.

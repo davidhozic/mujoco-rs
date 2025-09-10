@@ -55,15 +55,6 @@ like shown in the following example:
     }
 
 
-The method :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive` accepts an immutable reference to
-the simulation model (:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel`) and uses it to construct two scenes:
-
-- the internal 3D scene needed for the actual viewer to mirror the simulation state and
-- the user 3D scene that can be used to draw custom user objects (obtainable via
-  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scene_mut`).
-  This is in more detail described in :ref:`scene_drawing`.
-
-
 The above example runs until the viewer is closed (:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running`)
 and mirrors/syncs the simulation state with :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync`.
 

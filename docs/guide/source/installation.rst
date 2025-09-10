@@ -18,15 +18,17 @@ MuJoCo-rs can be added to your project by running:
     cargo add mujoco-rs
 
 
-Because the library itself doesn't directly bundle MuJoCo's C libraries,
-MuJoCo itself, in the form of either a shared or static library, must be `downloaded <mj_download_>`_
+Because the MuJoCo-rs doesn't directly bundle MuJoCo,
+the latter, in the form, must be `downloaded <mj_download_>`_
 or compiled. Make sure to download or compile MuJoCo version |MUJOCO_VERSION_BOLD|.
 
 Linking MuJoCo
 ====================
 To compile your code, you must first set some environmental variables,
-telling MuJoCo-rs where to obtain the MuJoCo library. The variables
-depend on the operating system and whether you want to dynamically link or statically link.
+telling MuJoCo-rs where to obtain the MuJoCo library.
+
+The linking process depends on whether you plan do dynamically link (recommended),
+statically link or statically link with the support of C++ based viewer (instead of the Rust-native one).
 
 -----------------------------
 
@@ -38,13 +40,18 @@ Dynamic linking is OS-dependent. To dynamically link, the primary variable
 
 Linux
 ~~~~~~~~~~~~~~~~~~~~~~
-When using Linux (bash), the variable can be set like so:
+When using Linux (bash), the primary variable can be set like so:
 ::
 
    export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/
 
-Additionally, in the event that the program refuses to build (link),
-the path to the MuJoCo library's directory must be added to ``LD_LIBRARY_PATH``:
+This is assuming MuJoCo's **.so** file is located inside ``/path/mujoco/lib/``.
+
+Additionally, in the event that the user's program refuses to run and outputs something like:
+
+    "error while loading shared libraries: libmujoco.so"
+
+the path to the MuJoCo library's directory must also be added to ``LD_LIBRARY_PATH``:
 ::
 
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco/lib/
@@ -58,10 +65,15 @@ When using Windows (powershell), the primary variable can be set like so:
 
    $env:MUJOCO_DYNAMIC_LINK_DIR = "/path/mujoco/lib/"
 
-
 Additionally, the library in DLL form must be added to the **PATH variable**.
 For help adding the path ``/path/mujoco/bin/`` to the PATH variable, see
 `here <https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/>`_.
+
+.. attention::
+
+    Make sure the PATH variable contains the path to the **.dll** file, **NOT .lib**.
+    The **.lib** file is used only for compilation, while the **.dll** is used at runtime.
+    The **.dll** file should be contained in the ``bin/`` directory of the MuJoCo download.
 
 
 MacOS
