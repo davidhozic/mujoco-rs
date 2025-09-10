@@ -18,8 +18,8 @@ MuJoCo-rs can be added to your project by running:
     cargo add mujoco-rs
 
 
-Because the MuJoCo-rs doesn't directly bundle MuJoCo,
-the latter, in the form, must be `downloaded <mj_download_>`_
+Because MuJoCo-rs doesn't directly bundle MuJoCo,
+the latter, in the form of a pre-built binary or source code, must be `downloaded <mj_download_>`_
 or compiled. Make sure to download or compile MuJoCo version |MUJOCO_VERSION_BOLD|.
 
 Linking MuJoCo
