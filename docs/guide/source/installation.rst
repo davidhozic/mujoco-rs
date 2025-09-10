@@ -32,30 +32,36 @@ depend on the operating system and whether you want to dynamically link or stati
 
 Dynamic linking
 --------------------
-The main variable that needs to be set is ``MUJOCO_DYNAMIC_LINK_DIR``:
+Dynamic linking is OS-dependent. To dynamically link, the primary variable
+``MUJOCO_DYNAMIC_LINK_DIR`` must be set. 
+
+
+Linux
+~~~~~~~~~~~~~~~~~~~~~~
+When using Linux (bash), the variable can be set like so:
 ::
 
    export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/
 
-After OS-dependent configuration, described below, projects using MuJoCo-rs can compile normally with ``cargo build``.
-
-Linux
-~~~~~~~~~~~~~~~~~~~~~~
-When using Linux, the library must be either:
-
-- installed in a discoverable library location (e. g., ``/usr/local/lib``)
-- or the path to the library's directory manually added to ``LD_LIBRARY_PATH`` like so:  
-  ::
+Additionally, in the event that the program refuses to build (link),
+the path to the MuJoCo library's directory must be added to ``LD_LIBRARY_PATH``:
+::
 
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco/lib/
 
 
 Windows
 ~~~~~~~~~~~~~~~~~~~~~~~~~
-When using Windows, the ``.dll`` file must be discoverable in the environmental variable: **PATH**.
-Unlike the ``.lib`` file, the ``.dll`` file is located in ``/path/mujoco/bin/`` (notice the **/bin/** part).
+When using Windows (powershell), the primary variable can be set like so:
 
-For help adding the path ``/path/mujoco/bin/`` to the PATH variable, see `here <https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/>`_.
+::
+
+   $env:MUJOCO_DYNAMIC_LINK_DIR = "/path/mujoco/lib/"
+
+
+Additionally, the library in DLL form must be added to the **PATH variable**.
+For help adding the path ``/path/mujoco/bin/`` to the PATH variable, see
+`here <https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/>`_.
 
 
 MacOS
@@ -78,6 +84,7 @@ We also provide an option to statically link:
 
 Note that the ``/path/mujoco/lib`` needs to contain all the MuJoCo dependencies.
 
+.. _static_link_with_cpp_viewer:
 
 Static linking with C++ viewer
 ---------------------------------

@@ -53,10 +53,18 @@ def map_specifier(parts: list[str]):
         else:
             yield part, ""
 
-def link_docs_rs(name, rawtext, text, lineno, inliner, options={}, content=[]):
+def link_docs_rs(name, rawtext, text: str, lineno, inliner, options={}, content=[]):
     html_ref = ""
     try:
-        root, *parts = text.split("::")
+        link_text = text
+        # Input is in form of `display text <link>`
+        if link_text.endswith(">"):
+            text, link = link_text.split("<", 1)
+            link_text = link[:-1]  # -1 to remove '>' 
+            text = text.strip()
+
+        root, *parts = link_text.split("::")
+        type_ = ""
         for i, (mapped, type_) in enumerate(map_specifier(parts)):
             parts[i] = mapped
 
@@ -67,7 +75,7 @@ def link_docs_rs(name, rawtext, text, lineno, inliner, options={}, content=[]):
             parts[-1] += ".html"
 
     except ValueError:
-        root = text
+        root = link_text
         parts = tuple()
 
     root = root.lstrip("~")  # The ~ commands to only display the last part

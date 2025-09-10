@@ -2,4 +2,4 @@
 API
 ======================
 
-The API documentation is available at `docs.rs <https://docs.rs/mujoco-rs/latest/mujoco_rs/>`_.
+The API documentation is available at :docs-rs:`docs.rs <mujoco_rs>`.
