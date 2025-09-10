@@ -12,13 +12,35 @@ MuJoCo-rs documentation
 
 
 MuJoCo bindings and wrappers for the Rust programming language.
-Includes a Rust-native viewer and also bindings to a modified C++ one.
+Includes a Rust-native :ref:`mj_rust_viewer` and also bindings to a modified C++ one.
 
 `MuJoCo <https://mujoco.org/>`_ is a general purpose physics simulator.
 
 MuJoCo version
 =======================
-This library uses FFI bindings to MuJoCo |MUJOCO_VERSION_BOLD|.
+MuJoCo-rs uses FFI bindings to MuJoCo |MUJOCO_VERSION_BOLD|.
+
+
+Main features
+=======================
+MuJoCo-rs tries to stay close to the MuJoCo's, with a few additional features for ease of use.
+The main features on top of MuJoCo include
+
+- Safe wrappers around structs:
+  
+  - Automatic allocation and cleanup
+  - Lifetime guarantees
+
+- Methods as function wrappers
+- Easy manipulation of simulation data via :ref:`attribute_views`
+
+- :ref:`visualization`:
+
+  - :ref:`mj_renderer`: offscreen rendering to array or file
+  - :ref:`mj_rust_viewer`: onscreen visualization of the 3D simulation
+
+    .. image:: ../../img_common/viewer_spot.png
+        :width: 50%
 
 
 
@@ -26,15 +48,19 @@ Installation
 =======================
 For installation, see :ref:`installation`.
 
+Optional Cargo features
+=======================
+Optional Cargo features can be enabled:
+  - ``viewer``: enables the Rust-native MuJoCo viewer. It can
+    display everything and respond to mouse/keyboard events.
+    No side-panels (the user menu) currently exists.
+  - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
+    This is only available if you build the MuJoCo yourself using the steps above
+    (yes, you need to use the forked repository).
+  - ``renderer``: enables the offscreen rendering code for reading RGB and
+    depth data to memory or file.
 
-Cargo features
-=================
-The following Cargo features can be enabled:
-
-- ``viewer`` (default): enables the Rust-native MuJoCo viewer. This can currently
-                display everything and respond to mouse/keyboard. No side-panels (the user menu) currently exists.
-- ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer. This is only available if you build the MuJoCo yourself using the steps above (yes, you need to use the forked repository).
-
+By default, ``viewer`` and ``renderer`` are enabled.
 
 
 Table of contents
@@ -44,7 +70,6 @@ Table of contents
    :maxdepth: 2
 
    installation
-   programming
-   viewer
+   programming/programming
    api
    changelog
