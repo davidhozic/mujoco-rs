@@ -90,6 +90,6 @@ The simulation timestep can be obtained through the simulation options:
         let timestep = model.opt().timestep;
         loop {
             data.step();
-            thread::sleep(Duration::from_secsf64(timestep))
+            thread::sleep(Duration::from_secs_f64(timestep))
         }
     }
