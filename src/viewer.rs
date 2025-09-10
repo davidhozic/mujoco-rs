@@ -1,7 +1,11 @@
+//! Module related to implementation of the [`MjViewer`] and [`MjViewerCpp`].
+
 use glfw::{Action, Context, Glfw, GlfwReceiver, Key, Modifiers, MouseButton, PWindow, WindowEvent};
 use bitflags::bitflags;
 
 use std::time::Instant;
+use std::fmt::Display;
+use std::error::Error;
 
 use crate::{get_mujoco_version, mujoco_c::*};
 
@@ -17,8 +21,6 @@ use crate::wrappers::mj_data::MjData;
 // Rust native viewer
 /****************************************** */
 const MJ_VIEWER_DEFAULT_SIZE_PX: (u32, u32) = (1280, 720);
-/// How much extra room to create in the [`MjvScene`]. Useful for drawing labels, etc.
-const MJ_VIEWER_EXTRA_SCENE_GEOM_SPACE: usize = 100;
 const DOUBLE_CLICK_WINDOW_MS: u128 = 250;
 
 const HELP_MENU_TITLES: &str = concat!(
@@ -53,6 +55,24 @@ const HELP_MENU_VALUES: &str = concat!(
 pub enum MjViewerError {
     GlfwInitError (glfw::InitError),
     WindowCreationError
+}
+
+impl Display for MjViewerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::GlfwInitError(e) => write!(f, "glfw failed to initialize: {}", e),
+            Self::WindowCreationError => write!(f, "failed to create window"),
+        }
+    }
+}
+
+impl Error for MjViewerError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::GlfwInitError(e) => Some(e),
+            _ => None
+        }
+    }
 }
 
 /// A Rust-native implementation of the MuJoCo viewer. To confirm to rust safety rules,
@@ -100,7 +120,7 @@ pub struct MjViewer<'m> {
     events: GlfwReceiver<(f64, WindowEvent)>,
 
     /* External interaction */
-    user_scn: MjvScene<'m>
+    user_scene: MjvScene<'m>
 }
 
 impl<'m> MjViewer<'m> {
@@ -128,10 +148,10 @@ impl<'m> MjViewer<'m> {
         window.set_all_polling(true);
         glfw.set_swap_interval(glfw::SwapInterval::None);
 
-        let scene = MjvScene::new(model, model.ffi().ngeom as usize + scene_max_geom + MJ_VIEWER_EXTRA_SCENE_GEOM_SPACE);
-        let user_scn = MjvScene::new(model, scene_max_geom);
+        let scene = MjvScene::new(model, model.ffi().ngeom as usize + scene_max_geom + EXTRA_SCENE_GEOM_SPACE);
+        let user_scene = MjvScene::new(model, scene_max_geom);
         let context= MjrContext::new(model);
-        let camera = MjvCamera::new(0, MjtCamera::mjCAMERA_FREE, model);
+        let camera = MjvCamera::new_free(model);
         let pert = MjvPerturb::default();
         Ok(Self {
             scene,
@@ -142,7 +162,7 @@ impl<'m> MjViewer<'m> {
             glfw,
             window,
             events,
-            user_scn,
+            user_scene,
             last_x: 0.0,
             last_y: 0.0,
             status_flags: ViewerStatusBits::HELP_MENU,
@@ -158,18 +178,33 @@ impl<'m> MjViewer<'m> {
     }
 
     /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
-    pub fn user_scn(&self) -> &MjvScene<'m>{
-        &self.user_scn
+    /// Geoms in the user scene are preserved between calls to [`MjViewer::sync`].
+    pub fn user_scene(&self) -> &MjvScene<'m>{
+        &self.user_scene
     }
 
     /// Returns a mutable reference to a user scene for drawing custom visual-only geoms.
-    pub fn user_scn_mut(&mut self) -> &mut MjvScene<'m>{
-        &mut self.user_scn
+    /// Geoms in the user scene are preserved between calls to [`MjViewer::sync`].
+    pub fn user_scene_mut(&mut self) -> &mut MjvScene<'m>{
+        &mut self.user_scene
+    }
+
+    #[deprecated(since = "1.3.0", note = "use user_scene")]
+    pub fn user_scn(&self) -> &MjvScene<'m> {
+        self.user_scene()
+    }
+
+    #[deprecated(since = "1.3.0", note = "use user_scene_mut")]
+    pub fn user_scn_mut(&mut self) -> &mut MjvScene<'m> {
+        self.user_scene_mut()
     }
 
     /// Syncs the state of `data` with the viewer as well as perform
     /// rendering on the viewer.
     pub fn sync(&mut self, data: &mut MjData) {
+        /* Make sure everything is done on the viewer's window */
+        self.window.make_current();
+
         /* Process mouse and keyboard events */
         self.process_events(data);
 
@@ -188,6 +223,10 @@ impl<'m> MjViewer<'m> {
 
     /// Updates the scene and draws it to the display.
     fn update_scene(&mut self, data: &mut MjData) {
+        let model_data_ptr = unsafe {  data.model().__raw() };
+        let bound_model_ptr = unsafe { self.model.__raw() };
+        assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the viewer.");
+
         /* Read the screen size */
         self.update_rectangles(self.window.get_framebuffer_size());
 
@@ -196,19 +235,9 @@ impl<'m> MjViewer<'m> {
         self.scene.update(data, &opt, &self.pert, &mut self.camera);
 
         /* Draw user scene geoms */
-        let ffi = unsafe { self.scene.ffi_mut() };
-        assert!(
-            ffi.ngeom + self.user_scn.ffi().ngeom <= ffi.maxgeom,
-            "not enough space available in the internal scene; this is a bug, please report it."
-        );
+        sync_geoms(&self.user_scene, &mut self.scene)
+            .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
 
-        /* Fast copy */
-        unsafe { std::ptr::copy_nonoverlapping(
-            self.user_scn.ffi_mut().geoms,
-            ffi.geoms.add(ffi.ngeom as usize),
-            self.user_scn.ffi().ngeom as usize
-        ) };
-        ffi.ngeom += self.user_scn.ffi().ngeom;
         self.scene.render(&self.rect_full, &self.context);
     }
 

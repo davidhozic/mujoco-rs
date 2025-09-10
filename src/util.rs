@@ -1,5 +1,7 @@
 //! Utility related data
 use std::{marker::PhantomData, ops::{Deref, DerefMut}};
+use std::mem;
+use std::ptr;
 
 
 /// Creates a (start, length) tuple based on
@@ -370,4 +372,16 @@ macro_rules! assert_relative_eq {
         let tol = eps * a.abs().max(b.abs()).max(1.0);
         assert!((a - b).abs() <= tol, "left={:?} right={:?} tol={:?}", a, b, tol);
     }};
+}
+
+
+/// Creates data on the heap, zero initialized.
+pub(crate) fn box_zeroed<T>() -> Box<T> {
+    let mut b: Box<mem::MaybeUninit<T>> = Box::new_uninit();
+
+    unsafe {
+        let ptr = b.as_mut_ptr() as *mut u8;
+        ptr::write_bytes(ptr, 0, mem::size_of::<T>());
+        b.assume_init()
+    }
 }

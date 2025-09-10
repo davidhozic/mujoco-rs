@@ -1,24 +1,48 @@
-//! ## MuJoCo-rs
+//! # MuJoCo-rs
 //! A wrapper around the MuJoCo C library with a Rust-native viewer.
 //! If you're familiar with MuJoCo, this should be pretty straightforward to use as the wrappers
 //! mainly encapsulate some C structs or just rename them to match the Rust's PascalCase style.
 //! 
-//! Currently, no direct functions are provided. Some of the functions are made into methods at appropriate
-//! structs, while others can be found under ``mujoco_rs::mujoco_c`` module. Missing structs
-//! can also be obtained there.
-//! 
-//! To access the lower-level ffi structs in the wrappers, call either the ``ffi()`` method
-//! or the ``ffi_mut()`` method.
-//! 
 //! The main structs are [`wrappers::mj_model::MjModel`] and [`wrappers::mj_data::MjData`].
-//! The Rust-native viewer is available in [`viewer::MjViewer`].
+//! These two structs (and some other) wrap the C structure in order to achieve memory safety.
 //! 
+//! Their fields aren't publicly exposed and can instead be manipulated through views
+//! (e. g., [`MjData::joint`](wrappers::mj_data::MjData::joint) and then [`wrappers::mj_data::MjJointDataInfo::view`]).
+//! To access the wrapped attributes directly, call the corresponding `ffi()` methods
+//! (e. g., [`MjData::ffi`](wrappers::MjData::ffi))
+//! 
+//! ## Documentation
+//! A more guided documentation can be obtained [here](https://mujoco-rs.readthedocs.io/en/latest/).
+//! 
+//! ## 3D viewer
+//! The Rust-native viewer is available ([`viewer::MjViewer`]), as well as the MuJoCo's original C++
+//! one ([`viewer::MjViewerCpp`]).
+//! The C++ viewer however requires manual compilation of a patched MuJoCo repository,
+//! like described [here](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking-with-c-viewer).
+//! 
+//! ## Features
+//! This crate has the following public features:
+//! - `viewer`, which enables the Rust-native viewer ([`viewer::MjViewer`]),
+//!   - `cpp-viewer`, which additionally enables the MuJoCo's original viewer (C++ based) ([`viewer::MjViewerCpp`]),
+//! - `renderer`, which enables the image renderer ([`renderer::MjRenderer`]).
+//! 
+//! ## Functions
+//! Most functions are wrapped under methods at different structs. Some functions
+//! are available under the [`wrappers::fun`] module.
+//! 
+//! If a certain function can't be found, you can use the raw FFI bindings, available under 
+//! the [`mujoco_c`] module. Note that to access the lower-level ffi structs inside of wrappers,
+//! `ffi()` or `ffi_mut()` must be called (e. g., [`wrappers::MjData::ffi`] and [`wrappers::MjModel::ffi`]). 
 
 use std::ffi::CStr;
 
 pub mod wrappers;
 pub mod prelude;
 pub mod util;
+
+
+#[cfg(feature = "renderer")]
+pub mod renderer;
 
 #[cfg(feature = "viewer")]
 pub mod viewer;

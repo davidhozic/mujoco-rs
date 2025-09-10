@@ -49,18 +49,18 @@ fn main() {
     ball1_joint_info.view_mut(&mut data).qvel[1] = 2.0;
 
     let timestep = model.ffi().opt.timestep;
-    let mut user_scn;
+    let mut scene;
     while viewer.running() {
         /* Step the simulation and sync the viewer */
         viewer.sync(&mut data);
         data.step();
 
         /* Prepare the scene */
-        user_scn = viewer.user_scn_mut();  // obtain a mutable reference to the user scene. The method name mirrors the C++ viewer.
-        user_scn.clear_geom();  // clear existing geoms
+        scene = viewer.user_scene_mut();  // obtain a mutable reference to the user scene. The method name mirrors the C++ viewer.
+        scene.clear_geom();  // clear existing geoms
 
         /* Create a line, that (visually) connects the two balls we have in the example model */
-        let new_geom = user_scn.create_geom(
+        let new_geom = scene.create_geom(
             MjtGeom::mjGEOM_LINE,  // type of geom to draw.
             None,  // size, ignore here as we set it below.
             None,   // position: ignore here as we set it below.
