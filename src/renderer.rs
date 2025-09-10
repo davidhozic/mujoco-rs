@@ -94,7 +94,7 @@ impl<'m, const WIDTH: usize, const HEIGHT: usize> MjRenderer<'m, WIDTH, HEIGHT> 
     /// Returns an immutable reference to the internal scene. This can be used to control the camera
     /// when the camera is returned via [`MjRenderer::camera`].
     pub fn scene(&self) -> &MjvScene<'m>{
-        &self.user_scene
+        &self.scene
     }
 
     /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.

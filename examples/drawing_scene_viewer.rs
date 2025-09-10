@@ -76,7 +76,7 @@ fn main() {
 
         /* Modify the visual geom's position, orientation and length, to connect the balls */
         new_geom.connect(
-            0.01,            // width
+            0.0,            // width
             ball1_position,  // from
             ball2_position     //  to
         );
