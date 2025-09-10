@@ -1,4 +1,4 @@
-//! Module related to implementation of the [`MjRenderer`]
+//! Module related to implementation of the [`MjRenderer`].
 use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_rendering::MjrContext;
 use crate::util::box_zeroed;
@@ -141,7 +141,7 @@ impl<'m, const WIDTH: usize, const HEIGHT: usize> MjRenderer<'m, WIDTH, HEIGHT> 
     }
 
     /// Draws the scene to internal arrays.
-    /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image image.
+    /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image.
     fn render(&mut self) {
         self.window.make_current();
         let vp = MjrRectangle::new(0, 0, WIDTH as i32, HEIGHT as i32);
