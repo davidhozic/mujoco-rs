@@ -374,7 +374,10 @@ impl Drop for MjvScene<'_> {
 }
 
 
-/// Copies data (geoms only) from the `src` to the `dst`.
+/// Copies geometry data (geoms only) from the `src` to `dst`.
+/// # Errors
+/// Returns an [`io::Error`] of kind [`io::ErrorKind::StorageFull`] if the destination scene does not have
+/// enough space to accommodate the additional geoms from the source scene.
 pub(crate) fn sync_geoms(src: &MjvScene, dst: &mut MjvScene) -> io::Result<()> {
     let ffi_src = src.ffi();
     let ffi_dst = unsafe { dst.ffi_mut() };

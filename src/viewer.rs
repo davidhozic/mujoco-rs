@@ -225,7 +225,7 @@ impl<'m> MjViewer<'m> {
     fn update_scene(&mut self, data: &mut MjData) {
         let model_data_ptr = unsafe {  data.model().__raw() };
         let bound_model_ptr = unsafe { self.model.__raw() };
-        assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the renderer.");
+        assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the viewer.");
 
         /* Read the screen size */
         self.update_rectangles(self.window.get_framebuffer_size());
