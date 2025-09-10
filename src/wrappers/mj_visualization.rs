@@ -2,12 +2,16 @@
 use std::default::Default;
 use std::mem::MaybeUninit;
 use std::ptr;
+use std::io;
 
 use super::mj_rendering::{MjrContext, MjrRectangle};
 use super::mj_model::{MjModel, MjtGeom};
 use super::mj_data::MjData;
 use crate::mujoco_c::*;
 
+
+/// How much extra room to create in the internal [`MjvScene`]. Useful for drawing labels, etc.
+pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 100;
 
 /***********************************************************************************************************************
 ** MjtCamera
@@ -370,6 +374,26 @@ impl Drop for MjvScene<'_> {
 }
 
 
+/// Copies data (geoms only) from the `src` to the `dst`.
+pub(crate) fn sync_geoms(src: &MjvScene, dst: &mut MjvScene) -> io::Result<()> {
+    let ffi_src = src.ffi();
+    let ffi_dst = unsafe { dst.ffi_mut() };
+    let new_len = ffi_dst.ngeom + ffi_src.ngeom;
+
+    if new_len > ffi_dst.maxgeom {
+        return Err(io::Error::new(io::ErrorKind::StorageFull, "not enough space available in the destination scene"))
+    }
+
+    /* Fast copy */
+    unsafe { std::ptr::copy_nonoverlapping(
+        ffi_src.geoms,
+        ffi_dst.geoms.add(ffi_dst.ngeom as usize),
+        ffi_src.ngeom as usize
+    ) };
+
+    ffi_dst.ngeom = new_len;
+    Ok(())
+}
 
 
 #[cfg(test)]

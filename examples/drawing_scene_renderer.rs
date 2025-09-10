@@ -1,5 +1,4 @@
-//! This example shows how to use the [`MjRenderer`].
-//! struct to obtain images of the simulation.
+//! This example shows how to draw custom geoms to [`MjRenderer`].
 use mujoco_rs::renderer::MjRenderer;
 use mujoco_rs::prelude::*;
 use std::fs;
@@ -59,13 +58,31 @@ fn main() {
     camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -1.0, renderer.scene());
     renderer = renderer.with_camera(camera);  // zoom-out a bit
 
+    /* Obtain joint info */
+    let ball_joint_info = data.joint("ball").unwrap();
+    let box_joint_info = data.joint("box").unwrap();
+
+    let mut scene;
     for i in 0..1000 {
         data.step();
 
         /* Save an image every SAVE_FREQUENCY step */
         if i % SAVE_FREQUENCY == 0 {
+            /* Obtain coordinates of the ball and the box */
+            let from = ball_joint_info.view(&data).qpos[..3].try_into().unwrap();
+            let to = box_joint_info.view(&data).qpos[..3].try_into().unwrap();
+
+            /* Draw a line between the ball and the box */
+            scene = renderer.user_scene_mut();
+            scene.clear_geom();
+            scene.create_geom(
+                MjtGeom::mjGEOM_LINE,
+                None, None, None,
+                Some([1.0, 1.0, 1.0, 1.0])
+            ).connect(0.05, from, to);  // adjust size, pos and mat to make the line connect the ball and the box.
+
             renderer.sync(&mut data);
-            renderer.save_rgb(format!("{OUTPUT_DIRECTORY}/img{i}.png")).unwrap();
+            renderer.save_rgb(format!("{OUTPUT_DIRECTORY}/img{i}.png")).unwrap();  // save the internal buffers to file
         }
     }
 }

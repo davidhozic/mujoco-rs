@@ -19,6 +19,7 @@ use std::fs::File;
 /// By default, RGB rendering is enabled and depth rendering is disabled.
 pub struct MjRenderer<'m, const WIDTH: usize, const HEIGHT: usize> {
     scene: MjvScene<'m>,
+    user_scene: MjvScene<'m>,
     context: MjrContext,
     model: &'m MjModel,
 
@@ -60,22 +61,23 @@ impl<'m, const WIDTH: usize, const HEIGHT: usize> MjRenderer<'m, WIDTH, HEIGHT> 
         context.offscreen();
 
         /* The 3D scene for visualization */
-        let scene = MjvScene::new(model, max_geom);
+        let scene = MjvScene::new(model, model.ffi().ngeom as usize + max_geom + EXTRA_SCENE_GEOM_SPACE);
+        let user_scene = MjvScene::new(model, max_geom);
 
         let camera = MjvCamera::new_free(model);
         let option = MjvOption::default();
 
         let mut s = Self {
-            scene, context, window: _window, model, camera, option,
+            scene, user_scene, context, window: _window, model, camera, option,
             flags: RendererFlags::empty(), rgb: None, depth: None
         };
 
-        s.with_rgb_rendering(true);
+        s = s.with_rgb_rendering(true);
         Ok(s)
     }
 
     /// Enables/disables RGB rendering. To be used on construction.
-    pub fn with_rgb_rendering(&mut self, enable: bool) -> &mut Self {
+    pub fn with_rgb_rendering(mut self, enable: bool) -> Self {
         // 1. Define the type we want to allocate
         self.flags.set(RendererFlags::RENDER_RGB, enable);
         self.rgb = if enable { Some(box_zeroed()) } else { None } ;
@@ -83,51 +85,64 @@ impl<'m, const WIDTH: usize, const HEIGHT: usize> MjRenderer<'m, WIDTH, HEIGHT> 
     }
 
     /// Enables/disables depth rendering. To be used on construction.
-    pub fn with_depth_rendering(&mut self, enable: bool) -> &mut Self {
+    pub fn with_depth_rendering(mut self, enable: bool) -> Self {
         self.flags.set(RendererFlags::RENDER_DEPTH, enable);
         self.depth = if enable { Some(box_zeroed()) } else { None } ;
         self
     }
 
-    /// Returns a reference to the stored scene
-    pub fn scene(&self) -> &MjvScene<'m> {
-        &self.scene
+    /// Returns an immutable reference to the internal scene. This can be used to control the camera
+    /// when the camera is returned via [`MjRenderer::camera`].
+    pub fn scene(&self) -> &MjvScene<'m>{
+        &self.user_scene
     }
 
-    /// Returns a mutable reference to the stored scene
-    pub fn scene_mut(&mut self) -> &mut MjvScene<'m> {
-        &mut self.scene
+    /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
+    pub fn user_scene(&self) -> &MjvScene<'m>{
+        &self.user_scene
     }
 
-    /// Sets the font size.
-    pub fn with_font_scale(&mut self, font_scale: MjtFontScale) -> &mut Self {
+    /// Returns a mutable reference to a user scene for drawing custom visual-only geoms.
+    pub fn user_scene_mut(&mut self) -> &mut MjvScene<'m>{
+        &mut self.user_scene
+    }
+
+    /// Sets the font size. To be used on construction.
+    pub fn with_font_scale(mut self, font_scale: MjtFontScale) -> Self {
         self.context.change_font(font_scale);
         self
     }
 
-    /// Update the visualization options and return a reference to self.
-    pub fn with_opts(&mut self, options: MjvOption) -> &mut Self {
+    /// Update the visualization options and return a reference to self. To be used on construction.
+    pub fn with_opts(mut self, options: MjvOption) -> Self {
         self.option = options;
         self
     }
 
-    /// Render images using the `camera`.
-    pub fn with_camera(&mut self, camera: MjvCamera) -> &mut Self  {
+    /// Render images using the `camera`. To be used on construction.
+    pub fn with_camera(mut self, camera: MjvCamera) -> Self  {
         self.camera = camera;
         self
     }
 
     /// Update the scene with new data from data.
-    pub fn update_scene(&mut self, data: &mut MjData) {
+    pub fn sync(&mut self, data: &mut MjData) {
         let model_data_ptr = unsafe {  data.model().__raw() };
         let bound_model_ptr = unsafe { self.model.__raw() };
         assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the renderer.");
 
         self.scene.update(data, &self.option, &MjvPerturb::default(), &mut self.camera);
+
+        /* Draw user scene geoms */
+        sync_geoms(&self.user_scene, &mut self.scene)
+            .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
+
+        self.render();
     }
 
-    /// Draws the scene to an array.
-    pub fn render(&mut self) {
+    /// Draws the scene to internal arrays.
+    /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image image.
+    fn render(&mut self) {
         self.window.make_current();
         let vp = MjrRectangle::new(0, 0, WIDTH as i32, HEIGHT as i32);
         self.scene.render(&vp, &self.context);

@@ -16,7 +16,7 @@ Future release (MuJoCo 3.3.5)
 ================================
 - Added a module for offscreen scene rendering: :docs-rs:`mujoco_rs::renderer`:
 
-  - Added the :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` for actual offscreen rendering of the simulation state.
+  - Added :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` for actual offscreen rendering of the simulation state.
 
 - Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new` and replaced it with:
 
@@ -25,6 +25,10 @@ Future release (MuJoCo 3.3.5)
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new_tracking` and
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new_user`.
 
+- Deprecated :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn` and
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn_mut`. They are replaced with
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scene` and
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scene_mut`.
 
 1.2.0 (MuJoCo 3.3.5)
 ================================
