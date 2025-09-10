@@ -189,7 +189,7 @@ impl<'m, const WIDTH: usize, const HEIGHT: usize> MjRenderer<'m, WIDTH, HEIGHT> 
             Ok(())
         }
         else {
-            Err(io::Error::new(ErrorKind::InvalidInput, "RGB rendering is not enabled (render.with_rgb_rendering(true))"))
+            Err(io::Error::new(ErrorKind::InvalidInput, "RGB rendering is not enabled (renderer.with_rgb_rendering(true))"))
         }
     }
 
@@ -207,7 +207,7 @@ impl<'m, const WIDTH: usize, const HEIGHT: usize> MjRenderer<'m, WIDTH, HEIGHT> 
             Ok(())
         }
         else {
-            Err(io::Error::new(ErrorKind::InvalidInput, "depth rendering is not enabled (render.with_depth_rendering(true))"))
+            Err(io::Error::new(ErrorKind::InvalidInput, "depth rendering is not enabled (renderer.with_depth_rendering(true))"))
         }
     }
 }
