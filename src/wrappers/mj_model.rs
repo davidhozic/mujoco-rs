@@ -4,8 +4,9 @@ use std::io::{self, Error, ErrorKind};
 use std::path::Path;
 use std::ptr;
 
+use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
+use crate::wrappers::mj_option::MjOption;
 use crate::wrappers::mj_data::MjData;
-use super::mj_auxiliary::MjVfs;
 use super::mj_primitive::*;
 use crate::mujoco_c::*;
 
@@ -347,6 +348,48 @@ impl MjModel {
         self.0
     }
 }
+
+
+/// Public attribute methods.
+impl MjModel {
+    /// Compilation signature.
+    pub fn signature(&self) -> u64 {
+        self.ffi().signature
+    }
+
+    /// An immutable reference to physics options.
+    pub fn opt(&self) -> &MjOption {
+        &self.ffi().opt
+    }
+
+    /// A mutable reference to physics options.
+    pub fn opt_mut(&mut self) -> &mut MjOption {
+        // SAFETY: changing the options can't break anything in terms of memory or UB.
+        &mut unsafe { self.ffi_mut() }.opt
+    }
+
+    /// An immutable reference to visualization options.
+    pub fn vis(&self) -> &MjVisual {
+        &self.ffi().vis
+    }
+
+    /// A mutable reference to visualization options.
+    pub fn vis_mut(&mut self) -> &mut MjVisual {
+        // SAFETY: changing the visualization options can't break anything in terms of memory or UB.
+        &mut unsafe { self.ffi_mut() }.vis
+    }
+
+    /// An imutable reference to model statistics.
+    pub fn stat(&self) -> &MjStatistic {
+        &self.ffi().stat
+    }
+
+    /// An imutable reference to model statistics.
+    pub fn stat_mut(&mut self) -> &mut MjStatistic {
+        &mut unsafe { self.ffi_mut() }.stat
+    }
+}
+
 
 impl Drop for MjModel {
     fn drop(&mut self) {
