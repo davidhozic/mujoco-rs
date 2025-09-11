@@ -7,7 +7,7 @@
 
 Unlike the :ref:`mj_rust_viewer`, which displays the simulation's 3D scene onto a window,
 the renderer exists to provide users the ability to render offscreen. This includes
-rendering RGB and depth images to either an array or into a file.
+rendering RGB and depth images to either an array or to a file.
 
 The renderer can be constructed via the :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`
 method. The method accepts a reference to :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
