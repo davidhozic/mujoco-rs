@@ -468,7 +468,7 @@ impl<'m> MjViewerCpp<'m> {
     /// Unlike the Rust-native viewer ([`MjViewer`]), this also accepts a `data` parameter.
     /// Additionally, this just returns a [`MjViewerCpp`] instance directly, without result
     /// as the initialization may fail internally in C++ anyway, which we have no way of checking.
-    /// 
+    ///
     /// # Safety
     /// To allow certain flexibility, while still maintaining
     /// compatibility with the C++ code, [`MjViewerCpp`] keeps internals pointers to mjModel and mjData,
