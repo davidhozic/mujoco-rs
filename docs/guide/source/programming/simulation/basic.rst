@@ -64,7 +64,7 @@ The method :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ste
 :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step` FFI function.
 Similarly, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>step1` and
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>step2` wrap
-:docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step1` and :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step2` respectively.
+:docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step1` and :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step2`, respectively.
 
 For more information about the specific MuJoCo functions, see the
 `MuJoCo documentation <https://mujoco.readthedocs.io/en/stable/APIreference/APIfunctions.html#mj-step>`_.

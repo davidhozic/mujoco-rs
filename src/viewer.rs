@@ -434,7 +434,8 @@ bitflags! {
 /****************************************** */
 // C++ viewer wrapper
 /****************************************** */
-/// Wrapper around the C++ implementation of MujoCo viewer
+/// Wrapper around the C++ implementation of MujoCo viewer.
+/// If you don't need the side UI, we recommend you use the Rust-native viewer [`MjViewer`] instead.
 #[cfg(feature = "cpp-viewer")]
 pub struct MjViewerCpp<'m> {
     sim: *mut mujoco_Simulate,
@@ -461,14 +462,29 @@ impl<'m> MjViewerCpp<'m> {
         &mut self._user_scn
     }
 
-    pub fn launch_passive(model: &'m MjModel, data: &MjData, scene_max_ngeom: usize) -> Self {
+    /// Launches a wrapper around MuJoCo's C++ viewer. The `scene_max_geom` parameter
+    /// defines how much space will be allocated for additional, user-defined visual-only geoms.
+    /// It can thus be set to 0 if no additional geoms will be drawn by the user.
+    /// Unlike the Rust-native viewer ([`MjViewer`]), this also accepts a `data` parameter.
+    /// Additionally, this just returns a [`MjViewerCpp`] instance directly, without result
+    /// as the initialization may fail internally in C++ anyway, which we have no way of checking.
+    ///
+    /// # Safety
+    /// To allow certain flexibility, while still maintaining
+    /// compatibility with the C++ code, [`MjViewerCpp`] keeps internals pointers to mjModel and mjData,
+    /// which are wrapped inside [`MjModel`] and [`MjData`], respectively.
+    /// This technically allows `model` and `data` to be modified
+    /// while the viewer keeps a pointer to them (their wrapped pointers).
+    /// Undefined behavior should not occur, however caution is advised as this is a violation
+    /// of the Rust's borrowing rules.
+    pub fn launch_passive(model: &'m MjModel, data: &MjData, scene_max_geom: usize) -> Self {
         let mut _glfw = glfw::init(glfw::fail_on_errors).unwrap();
 
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut _cam = Box::new(MjvCamera::default());
         let mut _opt: Box<MjvOption> = Box::new(MjvOption::default());
         let mut _pert = Box::new(MjvPerturb::default());
-        let mut _user_scn = Box::new(MjvScene::new(&model, scene_max_ngeom));
+        let mut _user_scn = Box::new(MjvScene::new(&model, scene_max_geom));
         let sim;
         let c_filename = CString::new("file.xml").unwrap();
         unsafe {
@@ -499,6 +515,8 @@ impl<'m> MjViewerCpp<'m> {
         }
     }
 
+    /// Syncs the simulation state with the viewer as well as perform
+    /// rendering on the viewer.
     pub fn sync(&mut self) {
         unsafe {
             (*self.sim).Sync(false);
