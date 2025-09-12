@@ -16,7 +16,7 @@ const EXAMPLE_MODEL: &str = "
             <site name=\"ball1\" size=\".1 .1 .1\" pos=\"0 0 0\" rgba=\"0 1 0 0.2\" type=\"box\"/>
         </body>
 
-        <body name=\"ball2\"  pos=\"0 0 0\">
+        <body name=\"ball2\"  pos=\".5 0 0\">
             <geom size=\".1\" rgba=\"0 1 1 1\" mass=\"1\"/>
             <joint type=\"free\"/>
             <site name=\"ball2\" size=\".1 .1 .1\" pos=\"0 0 0\" rgba=\"0 1 1 0.2\" type=\"box\"/>
@@ -36,22 +36,18 @@ const EXAMPLE_MODEL: &str = "
 
 fn main() {
     /* Load the model and create data */
-    let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
-    // let mut data = model.make_data();  // or MjData::new(&model);
+    let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
+    let mut data = model.make_data();  // or MjData::new(&model);
 
-    // /* Launch a passive Rust-native viewer */
-    // let mut viewer = MjViewer::launch_passive(&model, 0)
-    //     .expect("could not launch the viewer");
+    /* Launch a passive Rust-native viewer */
+    let mut viewer = MjViewer::launch_passive(&model, 0)
+        .expect("could not launch the viewer");
 
-
-
-
-    loop {
+    while viewer.running() {
         /* Step the simulation and sync the viewer */
-        // viewer.sync(&mut data);
-        // data.step();
+        viewer.sync(&mut data);
+        data.step();
 
-        println!("{:?}", model.signature());
-        std::thread::sleep(Duration::from_secs_f64(model.opt().timestep));
+        std::thread::sleep(Duration::from_secs_f64(0.002));
     }
 }
