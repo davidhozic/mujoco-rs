@@ -1,8 +1,10 @@
+use super::mj_statistic::{MjWarningStat, MjTimerStat};
 use super::mj_model::{MjModel, MjtSameFrame, MjtObj};
-use std::io::{self, Error, ErrorKind};
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
 use crate::mujoco_c::*;
+
+use std::io::{self, Error, ErrorKind};
 use std::ffi::CString;
 use std::ptr;
 
@@ -70,6 +72,12 @@ impl<'a> MjData<'a> {
         }
     }
 
+    fixed_size_info_method! { Data, model.ffi(), body, [xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10, crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6] }
+    fixed_size_info_method! { Data, model.ffi(), camera, [xpos: 3, xmat: 9] }
+    fixed_size_info_method! { Data, model.ffi(), geom, [xpos: 3, xmat: 9] }
+    fixed_size_info_method! { Data, model.ffi(), site, [xpos: 3, xmat: 9] }
+    fixed_size_info_method! { Data, model.ffi(), light, [xpos: 3, xdir: 3] }
+
     /// Obtains a [`MjActuatorDataInfo`] struct containing information about the name, id, and
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjActuatorDataInfo::view`].
@@ -90,13 +98,6 @@ impl<'a> MjData<'a> {
 
         Some(MjActuatorDataInfo { name: name.to_string(), id: id as usize, ctrl, act})
     }
-
-    fixed_size_info_method! { Data, model.ffi(), body, [xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10, crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6] }
-    fixed_size_info_method! { Data, model.ffi(), camera, [xpos: 3, xmat: 9] }
-    fixed_size_info_method! { Data, model.ffi(), geom, [xpos: 3, xmat: 9] }
-    fixed_size_info_method! { Data, model.ffi(), site, [xpos: 3, xmat: 9] }
-    fixed_size_info_method! { Data, model.ffi(), light, [xpos: 3, xdir: 3] }
-
 
     /// Obtains a [`MjJointDataInfo`] struct containing information about the name, id, and
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
@@ -144,7 +145,7 @@ impl<'a> MjData<'a> {
 
     /// Obtains a [`MjSensorDataInfo`] struct containing information about the name, id, and
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
-    /// The actual view can be obtained via [`MjJointDataInfo::view`].
+    /// The actual view can be obtained via [`MjSensorDataInfo::view`].
     pub fn sensor(&self, name: &str) -> Option<MjSensorDataInfo> {
         let c_name = CString::new(name).unwrap();
         let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_SENSOR as i32, c_name.as_ptr())};
@@ -163,7 +164,7 @@ impl<'a> MjData<'a> {
 
     /// Obtains a [`MjTendonDataInfo`] struct containing information about the name, id, and
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
-    /// The actual view can be obtained via [`MjJointDataInfo::view`].
+    /// The actual view can be obtained via [`MjTendonDataInfo::view`].
     #[allow(non_snake_case)]
     pub fn tendon(&self, name: &str) -> Option<MjTendonDataInfo> {
         let c_name = CString::new(name).unwrap();
@@ -725,6 +726,40 @@ impl<'a> MjData<'a> {
         self.data
     }
 
+}
+
+
+/// Some public attribute methods.
+impl MjData<'_> {
+    /// Maximum stack allocation in bytes.
+    pub fn maxuse_stack(&self) -> MjtSize {
+        self.ffi().maxuse_stack
+    }
+
+    /// Maximum stack allocation per thread in bytes.
+    pub fn maxuse_threadstack(&self) -> &[MjtSize] {
+        &self.ffi().maxuse_threadstack
+    }
+
+    /// Warning statistics.
+    pub fn warning_stats(&self) -> &[MjWarningStat] {
+        &self.ffi().warning
+    }
+
+    /// Timer statistics.
+    pub fn timer_stats(&self) -> &[MjTimerStat] {
+        &self.ffi().timer
+    }
+
+    /// Simulation time
+    pub fn time(&self) -> MjtNum {
+        self.ffi().time
+    }
+
+    /// Potential, kinetic energy.
+    pub fn energy(&self) -> &[MjtNum] {
+        &self.ffi().energy
+    }
 }
 
 impl Drop for MjData<'_> {
