@@ -1,5 +1,5 @@
+use super::mj_model::{MjModel, MjtSameFrame, MjtObj, MjtStage};
 use super::mj_statistic::{MjWarningStat, MjTimerStat};
-use super::mj_model::{MjModel, MjtSameFrame, MjtObj};
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
 use crate::mujoco_c::*;
@@ -83,7 +83,7 @@ impl<'a> MjData<'a> {
     /// The actual view can be obtained via [`MjActuatorDataInfo::view`].
     pub fn actuator(&self, name: &str) -> Option<MjActuatorDataInfo> {
         let c_name = CString::new(name).unwrap();
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_ACTUATOR as i32, c_name.as_ptr())};
+        let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_ACTUATOR as i32, c_name.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -104,7 +104,7 @@ impl<'a> MjData<'a> {
     /// The actual view can be obtained via [`MjJointDataInfo::view`].
     pub fn joint(&self, name: &str) -> Option<MjJointDataInfo> {
         let c_name = CString::new(name).unwrap();
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_JOINT as i32, c_name.as_ptr())};
+        let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_JOINT as i32, c_name.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -153,7 +153,7 @@ impl<'a> MjData<'a> {
     /// The actual view can be obtained via [`MjSensorDataInfo::view`].
     pub fn sensor(&self, name: &str) -> Option<MjSensorDataInfo> {
         let c_name = CString::new(name).unwrap();
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_SENSOR as i32, c_name.as_ptr())};
+        let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_SENSOR as i32, c_name.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -173,7 +173,7 @@ impl<'a> MjData<'a> {
     #[allow(non_snake_case)]
     pub fn tendon(&self, name: &str) -> Option<MjTendonDataInfo> {
         let c_name = CString::new(name).unwrap();
-        let id = unsafe { mj_name2id(self.model.ffi(), mjtObj::mjOBJ_TENDON as i32, c_name.as_ptr())};
+        let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_TENDON as i32, c_name.as_ptr())};
         if id == -1 {  // not found
             return None;
         }
@@ -225,7 +225,7 @@ impl<'a> MjData<'a> {
 
     /// [`MjData::forward`] dynamics with skip.
     /// This is a wrapper around `mj_forwardSkip`.
-    pub fn forward_skip(&mut self, skipstage: mjtStage, skipsensor: bool) {
+    pub fn forward_skip(&mut self, skipstage: MjtStage, skipsensor: bool) {
         unsafe { 
             mj_forwardSkip(self.model.ffi(), self.ffi_mut(), skipstage as i32, skipsensor as i32);
         }
@@ -239,9 +239,9 @@ impl<'a> MjData<'a> {
         }
     }
 
-    /// [`MjData::inverse`] dynamics with skip; skipstage is mjtStage.
+    /// [`MjData::inverse`] dynamics with skip; skipstage is [`MjtStage`].
     /// This is a wrapper around `mj_inverseSkip`.
-    pub fn inverse_skip(&mut self, skipstage: mjtStage, skipsensor: bool) {
+    pub fn inverse_skip(&mut self, skipstage: MjtStage, skipsensor: bool) {
         unsafe {
             mj_inverseSkip(self.model.ffi(), self.ffi_mut(), skipstage as i32, skipsensor as i32);
         }
@@ -674,7 +674,7 @@ impl<'a> MjData<'a> {
         ) }
     }
 
-    /// Map from body local to global Cartesian coordinates, sameframe takes values from mjtSameFrame.
+    /// Map from body local to global Cartesian coordinates, sameframe takes values from [`MjtSameFrame`].
     /// Returns (global position, global orientation matrix).
     /// Wraps ``mj_local2Global``.
     pub fn local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: i32, sameframe: MjtSameFrame) -> ([MjtNum; 3], [MjtNum; 9]) {

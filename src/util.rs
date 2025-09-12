@@ -206,7 +206,7 @@ macro_rules! fixed_size_info_method {
             )]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let c_name = CString::new(name).unwrap();
-                let id = unsafe { mj_name2id(self.$ffi, mjtObj::[<mjOBJ_ $type_:upper>] as i32, c_name.as_ptr())};
+                let id = unsafe { mj_name2id(self.$ffi, MjtObj::[<mjOBJ_ $type_:upper>] as i32, c_name.as_ptr())};
                 if id == -1 {  // not found
                     return None;
                 }
