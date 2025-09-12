@@ -13,6 +13,7 @@ build:
   jobs:
     pre_install:
       - git lfs install
+      - sync
       - git lfs fetch --all
 
   tools:
