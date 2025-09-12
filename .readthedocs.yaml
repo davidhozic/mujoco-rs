@@ -12,9 +12,8 @@ build:
 
   jobs:
     pre_install:
-      - git remote set-url origin git@github.com:davidhozic/mujoco-rs.git
       - git lfs install
-      - git lfs fetch --all
+      - git lfs pull
 
   tools:
     python: "3.13"
