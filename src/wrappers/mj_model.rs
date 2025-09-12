@@ -364,7 +364,7 @@ impl MjModel {
 
     /// A mutable reference to physics options.
     pub fn opt_mut(&mut self) -> &mut MjOption {
-        // SAFETY: changing the options can't break anything in terms of memory or UB.
+        // SAFETY: changing options can't break anything in terms of memory or UB.
         &mut unsafe { self.ffi_mut() }.opt
     }
 
@@ -375,7 +375,7 @@ impl MjModel {
 
     /// A mutable reference to visualization options.
     pub fn vis_mut(&mut self) -> &mut MjVisual {
-        // SAFETY: changing the visualization options can't break anything in terms of memory or UB.
+        // SAFETY: changing visualization options can't break anything in terms of memory or UB.
         &mut unsafe { self.ffi_mut() }.vis
     }
 
@@ -386,6 +386,7 @@ impl MjModel {
 
     /// An imutable reference to model statistics.
     pub fn stat_mut(&mut self) -> &mut MjStatistic {
+        // SAFETY: changing model statistics can't break anything in terms of memory or UB.
         &mut unsafe { self.ffi_mut() }.stat
     }
 }
