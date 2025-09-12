@@ -379,12 +379,12 @@ impl MjModel {
         &mut unsafe { self.ffi_mut() }.vis
     }
 
-    /// An imutable reference to model statistics.
+    /// An immmutable reference to model statistics.
     pub fn stat(&self) -> &MjStatistic {
         &self.ffi().stat
     }
 
-    /// An imutable reference to model statistics.
+    /// An immutable reference to model statistics.
     pub fn stat_mut(&mut self) -> &mut MjStatistic {
         // SAFETY: changing model statistics can't break anything in terms of memory or UB.
         &mut unsafe { self.ffi_mut() }.stat
