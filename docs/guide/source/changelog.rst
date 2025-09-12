@@ -30,6 +30,28 @@ Future release (MuJoCo 3.3.5)
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scene` and
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scene_mut`.
 
+- Added new methods for obtaining public attributes:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>maxuse_stack`,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>maxuse_threadstack`,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>warning_stats`,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>timer_stats`,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>time`,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy`.
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>signature`,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>opt`,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>opt_mut`,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>vis`,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>vis_mut`,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>stat`,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>stat_mut`.
+
+
 1.2.0 (MuJoCo 3.3.5)
 ================================
 - Added function wrappers around some utility functions and both the derivative functions (available under :docs-rs:`mujoco_rs::wrappers::fun`).
