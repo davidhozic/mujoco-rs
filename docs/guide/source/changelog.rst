@@ -51,6 +51,13 @@ Future release (MuJoCo 3.3.5)
     - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>stat`,
     - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>stat_mut`.
 
+- Added extra attributes to the :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`'s joint view:
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qfrc_spring`;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qfrc_damper`;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qfrc_gravcomp`;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qfrc_fluid`;
+
 
 1.2.0 (MuJoCo 3.3.5)
 ================================

@@ -132,13 +132,18 @@ impl<'a> MjData<'a> {
             let qfrc_constraint = nv_range;
             let qfrc_inverse = nv_range;
             
+            let qfrc_spring = nv_range;
+            let qfrc_damper = nv_range;
+            let qfrc_gravcomp = nv_range;
+            let qfrc_fluid = nv_range;
             /* Special case attributes, used for some internal calculation */
             // cdof
             // cdof_dot
 
             Some(MjJointDataInfo {name: name.to_string(), id: id as usize,
                 qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
-                qfrc_passive, qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
+                qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_passive,
+                qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
             })
         }
     }
@@ -246,7 +251,7 @@ impl<'a> MjData<'a> {
     /// The `contact_id` matches the index of the contact when iterating
     /// via [`MjData::contacts`].
     /// Calls `mj_contactForce` internally.
-    pub fn contact_force(&self, contact_id: usize) -> [f64; 6] {
+    pub fn contact_force(&self, contact_id: usize) -> [MjtNum; 6] {
         let mut force = [0.0; 6];
         unsafe {
             mj_contactForce(
@@ -778,8 +783,9 @@ info_with_view!(
     Data,
     joint,
     [
-        qpos: f64, qvel: f64, qacc_warmstart: f64, qfrc_applied: f64, qacc: f64, xanchor: f64, xaxis: f64, qLDiagInv: f64, qfrc_bias: f64,
-        qfrc_passive: f64, qfrc_actuator: f64, qfrc_smooth: f64, qacc_smooth: f64, qfrc_constraint: f64, qfrc_inverse: f64
+        qpos: MjtNum, qvel: MjtNum, qacc_warmstart: MjtNum, qfrc_applied: MjtNum, qacc: MjtNum, xanchor: MjtNum, xaxis: MjtNum, qLDiagInv: MjtNum,
+        qfrc_bias: MjtNum, qfrc_spring: MjtNum, qfrc_damper: MjtNum, qfrc_gravcomp: MjtNum, qfrc_fluid: MjtNum, qfrc_passive: MjtNum,
+        qfrc_actuator: MjtNum, qfrc_smooth: MjtNum, qacc_smooth: MjtNum, qfrc_constraint: MjtNum, qfrc_inverse: MjtNum
     ],
     []
 );
@@ -809,12 +815,12 @@ pub type MjJointViewMut<'d> = MjJointDataViewMut<'d>;
 /**************************************************************************************************/
 // Sensor view
 /**************************************************************************************************/
-info_with_view!(Data, sensor, sensor, [data: f64], []);
+info_with_view!(Data, sensor, sensor, [data: MjtNum], []);
 
 /**************************************************************************************************/
 // Geom view
 /**************************************************************************************************/
-info_with_view!(Data, geom, geom_, [xpos: f64, xmat: f64], []);
+info_with_view!(Data, geom, geom_, [xpos: MjtNum, xmat: MjtNum], []);
 
 /// Deprecated name for [`MjGeomDataInfo`].
 #[deprecated]
@@ -831,7 +837,7 @@ pub type MjGeomViewMut<'d> = MjGeomDataViewMut<'d>;
 /**************************************************************************************************/
 // Actuator view
 /**************************************************************************************************/
-info_with_view!(Data, actuator, [ctrl: f64], [act: f64]);
+info_with_view!(Data, actuator, [ctrl: MjtNum], [act: MjtNum]);
 
 /// Deprecated name for [`MjActuatorDataInfo`].
 #[deprecated]
@@ -850,31 +856,31 @@ pub type MjActuatorViewMut<'d> = MjActuatorDataViewMut<'d>;
 /**************************************************************************************************/
 info_with_view!(
     Data, body, [
-        xfrc_applied: f64, xpos: f64, xquat: f64, xmat: f64, xipos: f64, ximat: f64,
-        subtree_com: f64, cinert: f64, crb: f64, cvel: f64, subtree_linvel: f64,
-        subtree_angmom: f64, cacc: f64, cfrc_int: f64, cfrc_ext: f64
+        xfrc_applied: MjtNum, xpos: MjtNum, xquat: MjtNum, xmat: MjtNum, xipos: MjtNum, ximat: MjtNum,
+        subtree_com: MjtNum, cinert: MjtNum, crb: MjtNum, cvel: MjtNum, subtree_linvel: MjtNum,
+        subtree_angmom: MjtNum, cacc: MjtNum, cfrc_int: MjtNum, cfrc_ext: MjtNum
     ], []
 );
 
 /**************************************************************************************************/
 // Camera view
 /**************************************************************************************************/
-info_with_view!(Data, camera, cam_, [xpos: f64, xmat: f64], []);
+info_with_view!(Data, camera, cam_, [xpos: MjtNum, xmat: MjtNum], []);
 
 /**************************************************************************************************/
 // Site view
 /**************************************************************************************************/
-info_with_view!(Data, site, site_, [xpos: f64, xmat: f64], []);
+info_with_view!(Data, site, site_, [xpos: MjtNum, xmat: MjtNum], []);
 
 /**************************************************************************************************/
 // Tendon view
 /**************************************************************************************************/
-info_with_view!(Data, tendon, ten_, [wrapadr: i32, wrapnum: i32, J_rownnz: i32, J_rowadr: i32, J_colind: i32, length: f64, J: f64, velocity: f64], []);
+info_with_view!(Data, tendon, ten_, [wrapadr: i32, wrapnum: i32, J_rownnz: i32, J_rowadr: i32, J_colind: i32, length: MjtNum, J: MjtNum, velocity: MjtNum], []);
 
 /**************************************************************************************************/
 // Light view
 /**************************************************************************************************/
-info_with_view!(Data, light, light_, [xpos: f64, xdir: f64], []);
+info_with_view!(Data, light, light_, [xpos: MjtNum, xdir: MjtNum], []);
 
 /**************************************************************************************************/
 // Unit tests
@@ -882,6 +888,7 @@ info_with_view!(Data, light, light_, [xpos: f64, xdir: f64], []);
 
 #[cfg(test)]
 mod test {
+    use crate::assert_relative_eq;
     use crate::prelude::*;
     use super::*;
 
@@ -889,27 +896,91 @@ mod test {
 <mujoco>
   <worldbody>
     <light ambient=\"0.2 0.2 0.2\"/>
-    <body name=\"ball\">
-        <geom name=\"green_sphere\" pos=\".2 .2 .1\" size=\".1\" rgba=\"0 1 0 1\" solref=\"0.004 1.0\"/>
-        <joint name=\"ball_joint\" type=\"free\"/>
+    <body name=\"ball\" pos=\".2 .2 .1\">
+        <geom name=\"green_sphere\" size=\".1\" rgba=\"0 1 0 1\" solref=\"0.004 1.0\"/>
+        <joint name=\"ball\" type=\"free\"/>
+    </body>
+
+    <body name=\"ball2\" pos=\".7 .2 .1\">
+        <geom name=\"green_sphere2\" size=\".1\" rgba=\"0 1 0 1\" solref=\"0.004 1.0\"/>
+        <joint name=\"ball2\" type=\"free\"/>
     </body>
 
     <geom name=\"floor1\" type=\"plane\" size=\"10 10 1\" solref=\"0.004 1.0\"/>
   </worldbody>
-</mujoco>
-";
+</mujoco>";
 
-    macro_rules! assert_almost_eq {
-        ($a:expr, $b:expr) => {
-            assert!(($a - $b).abs() < 1e-6)
+
+    #[test]
+    fn test_joint_view() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+        let joint_info = data.joint("ball").unwrap();
+        let body_info = data.body("ball").unwrap();
+
+        for _ in 0..10 {
+            data.step();
         }
+
+        /* The ball should start in a still position */
+        let mut joint_view = joint_info.view(&data);
+        assert_relative_eq!(joint_view.qvel[0], 0.0, epsilon=1e-9);  // vx
+        assert_relative_eq!(joint_view.qvel[1], 0.0, epsilon=1e-9);  // vy
+        // assert_relative_eq!(view.qvel[2], 0.0);  // vz Ignore due to slight instability of the model.
+        assert_relative_eq!(joint_view.qvel[3], 0.0, epsilon=1e-9);  // wx
+        assert_relative_eq!(joint_view.qvel[4], 0.0, epsilon=1e-9);  // wy
+        assert_relative_eq!(joint_view.qvel[5], 0.0, epsilon=1e-9);  // wz
+
+        /* Give the ball some velocity */
+        let mut joint_view_mut = joint_info.view_mut(&mut data);
+        joint_view_mut.qvel[0] = 0.5;  // vx = 0.5 m/s
+        joint_view_mut.qvel[4] = 0.5 / 0.1;  // wy = 0.5 m/s / 0.1 m
+
+        let initial_qpos: [MjtNum; 3] = joint_view_mut.qpos[..3].try_into().unwrap();  // initial x, y and z.
+        data.step();
+
+        /* Test if the ball is moving in the x direction and rotating around y. */
+        joint_view = joint_info.view(&data);
+        assert_relative_eq!(joint_view.qvel[0], 0.5, epsilon=1e-3);  // vx
+        assert_relative_eq!(joint_view.qvel[4], 0.5 / 0.1, epsilon=1e-3);  // wy
+
+        /* Test correct placement */
+        let timestep = model.opt().timestep;
+        assert_relative_eq!(joint_view.qpos[0], initial_qpos[0] + timestep * joint_view.qvel[0], epsilon=1e-9);  // p = p + dp/dt * dt
+        assert_relative_eq!(joint_view.qpos[1], initial_qpos[1] + timestep * joint_view.qvel[1], epsilon=1e-9);
+        assert_relative_eq!(joint_view.qpos[2], initial_qpos[2] + timestep * joint_view.qvel[2], epsilon=1e-9);
+
+        /* Test consistency with the body */
+        data.step1();  // update derived variables.
+
+        
+        joint_view = joint_info.view(&data);
+        let body_view = body_info.view(&data);
+        /* Consistency in position */
+        assert_relative_eq!(joint_view.qpos[0], body_view.xpos[0], epsilon=1e-9);  // same position.
+        assert_relative_eq!(joint_view.qpos[1], body_view.xpos[1], epsilon=1e-9);
+        assert_relative_eq!(joint_view.qpos[2], body_view.xpos[2], epsilon=1e-9);
+
+        assert_relative_eq!(joint_view.qpos[3], body_view.xquat[0], epsilon=1e-9);  // same orientation.
+        assert_relative_eq!(joint_view.qpos[4], body_view.xquat[1], epsilon=1e-9);
+        assert_relative_eq!(joint_view.qpos[5], body_view.xquat[2], epsilon=1e-9);
+        assert_relative_eq!(joint_view.qpos[6], body_view.xquat[3], epsilon=1e-9);
+
+        /* Consistency in velocity */
+        assert_relative_eq!(joint_view.qvel[0], body_view.cvel[3], epsilon=1e-9);  // same position velocity.
+        assert_relative_eq!(joint_view.qvel[1], body_view.cvel[4], epsilon=1e-9);
+        assert_relative_eq!(joint_view.qvel[2], body_view.cvel[5], epsilon=1e-9);
+
+        assert_relative_eq!(joint_view.qvel[3], body_view.cvel[0], epsilon=1e-9);  // same rotational velocity.
+        assert_relative_eq!(joint_view.qvel[4], body_view.cvel[1], epsilon=1e-9);
+        assert_relative_eq!(joint_view.qvel[5], body_view.cvel[2], epsilon=1e-9);
     }
 
     #[test]
     fn test_body_view() {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let mut data = model.make_data();
-        let body_info = data.body("ball").unwrap();
+        let body_info = data.body("ball2").unwrap();
         let mut cvel;
 
         data.step1();
@@ -921,12 +992,12 @@ mod test {
 
         // The ball should start in a still position
         cvel = body_info.view(&data).cvel;
-        assert_almost_eq!(cvel[0], 0.0);
-        assert_almost_eq!(cvel[1], 0.0);
-        assert_almost_eq!(cvel[2], 0.0);
-        assert_almost_eq!(cvel[3], 0.0);
-        assert_almost_eq!(cvel[4], 0.0);
-        // assert_almost_eq!(cvel[5], 0.0);  // Ignore due to slight instability of the model.
+        assert_relative_eq!(cvel[0], 0.0, epsilon=1e-9);
+        assert_relative_eq!(cvel[1], 0.0, epsilon=1e-9);
+        assert_relative_eq!(cvel[2], 0.0, epsilon=1e-9);
+        assert_relative_eq!(cvel[3], 0.0, epsilon=1e-9);
+        assert_relative_eq!(cvel[4], 0.0, epsilon=1e-9);
+        // assert_relative_eq!(cvel[5], 0.0);  // Ignore due to slight instability of the model.
 
         // Give the ball some velocity
         body_info.view_mut(&mut data).xfrc_applied[0] = 5.0;
@@ -936,14 +1007,14 @@ mod test {
         let view = body_info.view(&data);
         cvel = view.cvel;
         println!("{:?}", cvel);
-        assert_almost_eq!(cvel[0], 0.0);
+        assert_relative_eq!(cvel[0], 0.0, epsilon=1e-9);
         assert!(cvel[1] > 0.0);  // wy should be positive when rolling with positive vx.
-        assert_almost_eq!(cvel[2], 0.0);
+        assert_relative_eq!(cvel[2], 0.0, epsilon=1e-9);
         assert!(cvel[3] > 0.0);  // vx should point in the direction of the applied force.
-        assert_almost_eq!(cvel[4], 0.0);  // vy should be 0.
-        // assert_almost_eq!(cvel[5], 0.0);  // vz should be 0, but we don't test it due to jumpiness (instability) of the ball.
+        assert_relative_eq!(cvel[4], 0.0, epsilon=1e-9);  // vy should be 0.
+        // assert_relative_eq!(cvel[5], 0.0);  // vz should be 0, but we don't test it due to jumpiness (instability) of the ball.
 
-        assert_almost_eq!(view.xfrc_applied[0], 5.0); // the original force should stay applied.
+        assert_relative_eq!(view.xfrc_applied[0], 5.0, epsilon=1e-9); // the original force should stay applied.
 
         data.step2();
         data.step1();
