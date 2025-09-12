@@ -369,8 +369,7 @@ macro_rules! info_with_view {
 macro_rules! assert_relative_eq {
     ($a:expr, $b:expr, epsilon = $eps:expr) => {{
         let (a, b, eps) = ($a as f64, $b as f64, $eps as f64);
-        let tol = eps * a.abs().max(b.abs()).max(1.0);
-        assert!((a - b).abs() <= tol, "left={:?} right={:?} tol={:?}", a, b, tol);
+        assert!((a - b).abs() <= eps, "left={:?} right={:?} tol={:?}", a, b, eps);
     }};
 }
 
