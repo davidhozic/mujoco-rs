@@ -6,6 +6,7 @@ use std::io;
 
 use super::mj_rendering::{MjrContext, MjrRectangle};
 use super::mj_model::{MjModel, MjtGeom};
+use super::mj_primitive::MjtNum;
 use super::mj_data::MjData;
 use crate::mujoco_c::*;
 
@@ -29,6 +30,11 @@ pub type MjtMouse = mjtMouse;
 pub type MjtPertBit = mjtPertBit;
 
 /***********************************************************************************************************************
+** MjtCatBit
+***********************************************************************************************************************/
+pub type MjtCatBit = mjtCatBit;
+
+/***********************************************************************************************************************
 ** MjvPerturb
 ***********************************************************************************************************************/
 pub type MjvPerturb = mjvPerturb;
@@ -49,7 +55,7 @@ impl MjvPerturb {
     }
 
     /// Move an object with mouse. This is a wrapper around `mjv_movePerturb`.
-    pub fn move_(&mut self, model: &MjModel, data: &mut MjData, action: MjtMouse, dx: mjtNum, dy: mjtNum, scene: &MjvScene) {
+    pub fn move_(&mut self, model: &MjModel, data: &mut MjData, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
         unsafe { mjv_movePerturb(model.ffi(), data.ffi(), action as i32, dx, dy, scene.ffi(), self); }
     }
 
@@ -61,7 +67,7 @@ impl MjvPerturb {
         }
     }
 
-    pub fn update_local_pos(&mut self, selection_xyz: [mjtNum; 3], data: &MjData) {
+    pub fn update_local_pos(&mut self, selection_xyz: [MjtNum; 3], data: &MjData) {
         let mut tmp = [0.0; 3];
         let data_ffi = data.ffi();
         unsafe { 
@@ -138,7 +144,7 @@ impl MjvCamera {
     }
 
     /// Move camera with mouse.
-    pub fn move_(&mut self, action: mjtMouse, model: &MjModel, dx: mjtNum, dy: mjtNum, scene: &MjvScene) {
+    pub fn move_(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
         unsafe { mjv_moveCamera(model.ffi(), action as i32, dx, dy, scene.ffi(), self); };
     }
 }
@@ -172,7 +178,7 @@ pub type MjvGeom = mjvGeom;
 impl MjvGeom {
     /// Wrapper around the MuJoCo's mjv_connector function.
     /// Calculates the geom attributes so that it points from point `from` to point `to`.
-    pub fn connect(&mut self, width: f64, from: [f64; 3], to: [f64; 3]) {
+    pub fn connect(&mut self, width: MjtNum, from: [MjtNum; 3], to: [MjtNum; 3]) {
         unsafe {
             mjv_connector(self, self.type_, width, from.as_ptr(), to.as_ptr());
         }
@@ -295,7 +301,7 @@ impl<'m> MjvScene<'m> {
         unsafe {
             mjv_updateScene(
                 self.model.ffi(), data.ffi_mut(), opt, pertub,
-                cam, mjtCatBit::mjCAT_ALL as i32, &mut self.ffi
+                cam, MjtCatBit::mjCAT_ALL as i32, &mut self.ffi
             );
         }
     }
@@ -304,8 +310,8 @@ impl<'m> MjvScene<'m> {
     /// however it must be dropped before any additional calls to this method or any other methods.
     /// The return reference's lifetime is bound to the lifetime of self.
     pub fn create_geom<'s>(
-        &'s mut self, geom_type: MjtGeom, size: Option<[f64; 3]>,
-        pos: Option<[f64; 3]>, mat: Option<[f64; 9]>, rgba: Option<[f32; 4]>
+        &'s mut self, geom_type: MjtGeom, size: Option<[MjtNum; 3]>,
+        pos: Option<[MjtNum; 3]>, mat: Option<[MjtNum; 9]>, rgba: Option<[f32; 4]>
     ) -> &'s mut MjvGeom {
         assert!(self.ffi.ngeom < self.ffi.maxgeom, "not enough space is allocated, increase 'max_geom'.");
 
@@ -342,8 +348,8 @@ impl<'m> MjvScene<'m> {
     /// The method returns a tuple: (body_id, geom_id, flex_id, skin_id, xyz coordinates of the point)
     pub fn find_selection(
         &self, data: &MjData, option: &MjvOption,
-        aspect_ratio: mjtNum, relx: mjtNum, rely: mjtNum,
-    ) -> (i32, i32, i32, i32, [mjtNum; 3]) {
+        aspect_ratio: MjtNum, relx: MjtNum, rely: MjtNum,
+    ) -> (i32, i32, i32, i32, [MjtNum; 3]) {
         let (mut geom_id, mut flex_id, mut skin_id) = (-1 , -1, -1);
         let mut selpnt = [0.0; 3];
         let body_id = unsafe {

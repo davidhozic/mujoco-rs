@@ -13,6 +13,7 @@ use crate::{get_mujoco_version, mujoco_c::*};
 use std::ffi::CString;
 
 use crate::prelude::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
+use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
@@ -107,8 +108,8 @@ pub struct MjViewer<'m> {
     pert: MjvPerturb,
 
     /* Internal state */
-    last_x: mjtNum,
-    last_y: mjtNum,
+    last_x: f64,
+    last_y: f64,
     last_bnt_press_time: Instant,
     rect_view: MjrRectangle,
     rect_full: MjrRectangle,
@@ -317,7 +318,7 @@ impl<'m> MjViewer<'m> {
 
         /* Check mouse presses and move the camera if any of them is pressed */
         let action;
-        let height = self.window.get_size().1 as mjtNum;
+        let height = self.window.get_size().1 as f64;
 
         let shift = self.window.get_key(Key::LeftShift) == Action::Press;
 
@@ -367,18 +368,18 @@ impl<'m> MjViewer<'m> {
                     let (mut x, mut y) = self.window.get_cursor_pos();
 
                     /* Fix the coordinates */
-                    let buffer_ratio = self.window.get_framebuffer_size().0 as mjtNum / self.window.get_size().0 as mjtNum;
+                    let buffer_ratio = self.window.get_framebuffer_size().0 as f64 / self.window.get_size().0 as f64;
                     x *= buffer_ratio;
                     y *= buffer_ratio;
-                    y = self.rect_full.height as mjtNum - y;  // match OpenGL's coordinate system.
+                    y = self.rect_full.height as f64 - y;  // match OpenGL's coordinate system.
 
                     /* Obtain the selection */ 
                     let rect: &mjrRect_ = &self.rect_view;
                     let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
                         data, &MjvOption::default(),
-                        rect.width as mjtNum / rect.height as mjtNum,
-                        (x - rect.left as mjtNum) / rect.width as mjtNum,
-                        (y - rect.bottom as mjtNum) / rect.height as mjtNum
+                        rect.width as MjtNum / rect.height as MjtNum,
+                        (x - rect.left as MjtNum) / rect.width as MjtNum,
+                        (y - rect.bottom as MjtNum) / rect.height as MjtNum
                     );
 
                     /* Set tracking camera */

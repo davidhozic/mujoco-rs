@@ -768,7 +768,7 @@ mod tests {
         let oldpos = [0.0, 0.0, 0.0];
 
         // Identity rotation matrix (should not change the result)
-        let rot_identity: [f64; 9] = [
+        let rot_identity: [MjtNum; 9] = [
             1.0, 0.0, 0.0,
             0.0, 1.0, 0.0,
             0.0, 0.0, 1.0,

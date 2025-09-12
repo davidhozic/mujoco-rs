@@ -223,12 +223,12 @@ impl MjModel {
    
     /// Deprecated alias for [`MjModel::name_to_id`].
     #[deprecated]
-    pub fn name2id(&self, type_: mjtObj, name: &str) -> i32 {
+    pub fn name2id(&self, type_: MjtObj, name: &str) -> i32 {
         self.name_to_id(type_, name)
     }
 
     /// Translates `name` to the correct id. Wrapper around `mj_name2id`.
-    pub fn name_to_id(&self, type_: mjtObj, name: &str) -> i32 {
+    pub fn name_to_id(&self, type_: MjtObj, name: &str) -> i32 {
         let c_string = CString::new(name).unwrap();
         unsafe {
             mj_name2id(self.0, type_ as i32, c_string.as_ptr())
@@ -306,7 +306,7 @@ impl MjModel {
         unsafe { mj_isDual(self.ffi()) == 1 }
     }
 
-    /// Get name of object with the specified mjtObj type and id, returns NULL if name not found.
+    /// Get name of object with the specified [`MjtObj`] type and id, returns NULL if name not found.
     /// Wraps ``mj_id2name``.
     pub fn id_to_name(&self, type_: MjtObj, id: std::ffi::c_int) -> Option<&str> {
         let ptr = unsafe { mj_id2name(self.ffi(), type_ as i32, id) };
