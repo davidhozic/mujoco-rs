@@ -12,8 +12,8 @@ build:
 
   jobs:
     pre_install:
+      - git remote set-url origin git@github.com:davidhozic/mujoco-rs.git
       - git lfs install
-      - sync
       - git lfs fetch --all
 
   tools:
