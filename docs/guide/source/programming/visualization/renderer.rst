@@ -10,15 +10,18 @@ the renderer exists to provide users the ability to render offscreen. This inclu
 rendering RGB and depth images to either an array or to a file.
 
 The renderer can be constructed via the :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`
-method. The method accepts a reference to :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
-and the two parameters representing the dimensions of rendered images.
+method. The method accepts a reference to :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`,
+two parameters representing the dimensions of rendered images, and the maximum number of visual-only geoms,
+drawn by the user program.
 
 After construction, additional options can be set using ``with_`` methods,
-like shown below. By default, RGB rendering is enabled, while depth rendering is disabled.
+like shown below. These follow the builder pattern.
+By default, RGB rendering is enabled, while depth rendering is disabled.
 
 .. code-block:: rust
-
-    let mut renderer: MjRenderer<1280, 720> = MjRenderer::new(&model, 5).unwrap()
+    
+    /* Construct the renderer (model, width, height, max_geom) */.
+    let mut renderer = MjRenderer::new(&model, 1280, 720, 5).unwrap()
         .with_font_scale(MjtFontScale::mjFONTSCALE_100)
         .with_opts(MjvOption::default())
         .with_rgb_rendering(true)  // enabled by default.
@@ -47,7 +50,14 @@ using :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`.
 
 After syncing, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb` and
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth` can be used to obtain
-a reference of the rendered image.
+a reference of the rendered image in correct shape, which needs to be specified via method's const generic parameters,
+or :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` and
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth_flat` can be used to obtain
+a flattened images.
 
 To save rendered images to a file, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb`
 and :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth` can be used.
+These will encode the image into a uncompressed PNG format, where the RGB image will be 8 bits and
+the depth will be 16 bits. These are meant **for visualization**.
+To save depth data in float-32 bit format, which represents **actual distance values** from the camera,
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw` can be used.

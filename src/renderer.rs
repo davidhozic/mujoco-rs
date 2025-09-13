@@ -147,36 +147,6 @@ impl<'m> MjRenderer<'m> {
         self.render();
     }
 
-    /// Draws the scene to internal arrays.
-    /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image.
-    fn render(&mut self) {
-        self.window.make_current();
-        let vp = MjrRectangle::new(0, 0, self.width as i32, self.height as i32);
-        self.scene.render(&vp, &self.context);
-
-        /* Fully flatten everything */
-        let flat_rgb = self.rgb.as_deref_mut();
-        let flat_depth = self.depth.as_deref_mut();
-
-        /* Read to whatever is enabled */
-        self.context.read_pixels(
-            flat_rgb,
-            flat_depth,
-            &vp
-        );
-
-        /* Make depth values be the actual distance in meters */
-        if let Some(depth) = self.depth.as_deref_mut() {
-            let map = &self.model.vis().map;
-            let near = map.znear;
-            let far = map.zfar;
-            for value in depth {
-                let z_ndc = 2.0 * *value - 1.0;
-                *value = 2.0 * near * far / (far + near - z_ndc * (far - near));
-            }
-        }
-    }
-
     /// Returns a flattened RGB image of the scene.
     pub fn rgb_flat(&self) -> Option<&[u8]> {
         self.rgb.as_deref()
@@ -313,6 +283,36 @@ impl<'m> MjRenderer<'m> {
         }
         else {
             Err(io::Error::new(ErrorKind::NotFound, DEPTH_NOT_FOUND_ERR_STR))
+        }
+    }
+
+    /// Draws the scene to internal arrays.
+    /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image.
+    fn render(&mut self) {
+        self.window.make_current();
+        let vp = MjrRectangle::new(0, 0, self.width as i32, self.height as i32);
+        self.scene.render(&vp, &self.context);
+
+        /* Fully flatten everything */
+        let flat_rgb = self.rgb.as_deref_mut();
+        let flat_depth = self.depth.as_deref_mut();
+
+        /* Read to whatever is enabled */
+        self.context.read_pixels(
+            flat_rgb,
+            flat_depth,
+            &vp
+        );
+
+        /* Make depth values be the actual distance in meters */
+        if let Some(depth) = self.depth.as_deref_mut() {
+            let map = &self.model.vis().map;
+            let near = map.znear;
+            let far = map.zfar;
+            for value in depth {
+                let z_ndc = 2.0 * *value - 1.0;
+                *value = 2.0 * near * far / (far + near - z_ndc * (far - near));
+            }
         }
     }
 }
