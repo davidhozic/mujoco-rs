@@ -23,3 +23,7 @@ Structs with heap-allocated data are wrapped in safe Rust types that automatical
 
 Attributes not directly exposed can be accessed via the ``.ffi()`` or ``.ffi_mut()`` methods.
 For more details, see :ref:`interface_c_api`.
+
+Additionally, :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` and
+:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel` provide :ref:`attribute_views` to specific
+item types (joint, body, geom, etc.).

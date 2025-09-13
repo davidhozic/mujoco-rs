@@ -32,7 +32,7 @@ To draw custom geoms to a scene inside a viewer or a renderer, applications need
 This example_ shows how to draw a line between two balls.
 
 In the example we start drawing by first obtaining a mutable reference the user scene and clearing
-its geoms, which are otherwise preserved between viewer syncs:
+its geoms, which are otherwise preserved between syncs:
 
 
 .. code-block:: rust

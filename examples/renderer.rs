@@ -35,7 +35,7 @@ const EXAMPLE_MODEL: &str = "
 ";
 
 const OUTPUT_DIRECTORY: &str = "./output_renderer/";
-const SAVE_FREQUENCY: u32 = 5;
+const SAVE_FREQUENCY: u32 = 50;
 
 
 fn main() {
@@ -47,11 +47,11 @@ fn main() {
     let mut data = model.make_data();
 
     /* Renderer for rendering at 1280x720 px (width x height) */
-    let mut renderer: MjRenderer<1280, 720> = MjRenderer::new(&model, 5).unwrap()
+    let mut renderer = MjRenderer::new(&model, 1280, 720, 5).unwrap()
         .with_font_scale(MjtFontScale::mjFONTSCALE_100)
         .with_opts(MjvOption::default())
-        .with_rgb_rendering(true)
-        .with_depth_rendering(true);
+        .with_rgb_rendering(true)  // enabled by default.
+        .with_depth_rendering(true);  // disabled by default.
 
     /* Make a camera that follows the ball */
     let ball_body_id = model.body("ball").unwrap().id;
@@ -65,7 +65,8 @@ fn main() {
         /* Save an image every SAVE_FREQUENCY step */
         if i % SAVE_FREQUENCY == 0 {
             renderer.sync(&mut data);
-            renderer.save_rgb(format!("{OUTPUT_DIRECTORY}/img{i}.png")).unwrap();
+            renderer.save_rgb(format!("{OUTPUT_DIRECTORY}/img_rgb{i}.png")).unwrap();
+            let (_min, _max) = renderer.save_depth(format!("{OUTPUT_DIRECTORY}/img_depth{i}.png"), true).unwrap();
         }
     }
 }
