@@ -230,7 +230,7 @@ impl<'m> MjRenderer<'m> {
     /// # Returns
     /// An [`Ok`]`((min, max))` is returned, where min and max represent the normalization parameters.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] when RGB rendering is disabled,
+    /// - [`ErrorKind::NotFound`] when depth rendering is disabled,
     /// - other errors related to write.
     pub fn save_depth<T: AsRef<Path>>(&self, path: T, normalize: bool) -> io::Result<(f32, f32)> {
         if let Some(depth) = &self.depth {
