@@ -109,7 +109,7 @@ fn main() {
     let ball_info = data.joint("ball_joint").unwrap();
 
     /* Obtain the timestep through the wrapped mjModel */
-    let timestep = model.ffi().opt.timestep;
+    let timestep = model.opt().timestep;
 
     while viewer.running() {
         /* Step the simulation and sync the viewer */

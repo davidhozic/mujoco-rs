@@ -26,7 +26,7 @@ fn main() {
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
     let mut data = model.make_data();  // or MjData::new(&model);
     let mut viewer = MjViewerCpp::launch_passive(&model, &data, 100);
-    let step = model.ffi().opt.timestep;
+    let step = model.opt().timestep;
     while viewer.running() {
         viewer.sync();
         viewer.render(true);
