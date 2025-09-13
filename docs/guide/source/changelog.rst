@@ -12,7 +12,7 @@ Versioning
 =================
 This project uses `semantic versioning <https://semver.org/>`_.
 
-Future release (MuJoCo 3.3.5)
+1.3.0 (MuJoCo 3.3.5)
 ================================
 - Added a module for offscreen scene rendering: :docs-rs:`mujoco_rs::renderer`:
 
