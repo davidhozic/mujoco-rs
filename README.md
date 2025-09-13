@@ -2,7 +2,7 @@
 [![docs.rs](https://img.shields.io/docsrs/mujoco-rs/latest)](https://docs.rs/mujoco-rs)
 [![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
 
-[![Guide](https://img.shields.io/badge/Documentation-green)](https://mujoco-rs.readthedocs.io/en/latest/)
+[![Guide](https://img.shields.io/badge/Documentation-green)](https://mujoco-rs.readthedocs.io/en/stable/)
 
 
 MuJoCo bindings and wrappers for the Rust programming language. Includes a Rust-native viewer and also
@@ -14,15 +14,13 @@ bindings to a modified C++ one.
 ## Documentation
 More detailed documentation is available at the:
 - [**API docs**](https://docs.rs/mujoco-rs)
-- [**Guide book**](https://mujoco-rs.readthedocs.io/en/latest/)
-
-We especially recommend using the [**guide book**](https://mujoco-rs.readthedocs.io/en/latest/).
+- [**Guide book**](https://mujoco-rs.readthedocs.io/en/stable/)
 
 ## MuJoCo version
 This library uses FFI bindings to MuJoCo **3.3.5**.
 
 ## Installation
-For installation see the [**guide book**](https://mujoco-rs.readthedocs.io/en/latest/).
+For installation see the [**guide book**](https://mujoco-rs.readthedocs.io/en/stable/).
 
 ## Main features
 MuJoCo-rs tries to stay close to the MuJoCo's C API, with a few additional features for ease of use.
