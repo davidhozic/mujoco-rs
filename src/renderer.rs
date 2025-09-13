@@ -223,7 +223,7 @@ impl<'m> MjRenderer<'m> {
     }
 
     /// Save a depth image of the scene to a path. The image is 16-bit PNG, which
-    /// can be converted into depth (distance) data by diving the grayscale values by 65535.0 an applying reverse denormalization.
+    /// can be converted into depth (distance) data by dividing the grayscale values by 65535.0 an applying reverse denormalization.
     /// If `normalize` is `true`, then the data is normalized with min-max normalization.
     /// Use of [`MjRenderer::save_depth_raw`] is recommended if performance is critical, as
     /// it skips PNG encoding and also saves the true depth values directly.
@@ -257,7 +257,7 @@ impl<'m> MjRenderer<'m> {
             Ok((min, max))
         }
         else {
-            Err(io::Error::new(ErrorKind::NotFound, RGB_NOT_FOUND_ERR_STR))
+            Err(io::Error::new(ErrorKind::NotFound, DEPTH_NOT_FOUND_ERR_STR))
         }
     }
 
