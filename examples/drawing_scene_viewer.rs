@@ -48,7 +48,7 @@ fn main() {
     /* Give the first ball some y-velocity to showcase the visualization */
     ball1_joint_info.view_mut(&mut data).qvel[1] = 2.0;
 
-    let timestep = model.ffi().opt.timestep;
+    let timestep = model.opt().timestep;
     let mut scene;
     while viewer.running() {
         /* Step the simulation and sync the viewer */

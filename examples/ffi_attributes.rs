@@ -31,7 +31,7 @@ fn main() {
 
     /******************************************/
     /* Access a FFI attribute */
-    let timestep = model.ffi().opt.timestep;
+    let timestep = model.opt().timestep;
     /******************************************/
 
     let mut data = model.make_data();  // or MjData::new(&model);

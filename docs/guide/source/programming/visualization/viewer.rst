@@ -42,7 +42,7 @@ like shown in the following example:
         /* Initiate the physics simulation */
         let model = MjModel::from_xml("path/to/model.xml").expect("could not load the model");
         let mut data = model.make_data();
-        let timestep = model.ffi().opt.timestep;
+        let timestep = model.opt().timestep;
 
         /* Launch the viewer  */
         let mut viewer = MjViewer::launch_passive(&model, 100).expect("could not launch the viewer");
