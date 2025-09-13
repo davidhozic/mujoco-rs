@@ -34,7 +34,7 @@ const EXAMPLE_MODEL: &str = "
 ";
 
 const OUTPUT_DIRECTORY: &str = "./output_renderer/";
-const SAVE_FREQUENCY: u32 = 5;
+const SAVE_FREQUENCY: u32 = 50;
 
 
 fn main() {
@@ -46,7 +46,7 @@ fn main() {
     let mut data = model.make_data();
 
     /* Renderer for rendering at 1280x720 px (width x height) */
-    let mut renderer: MjRenderer<1280, 720> = MjRenderer::new(&model, 5).unwrap()
+    let mut renderer: MjRenderer = MjRenderer::new(&model, 1280, 720, 5).unwrap()
         .with_font_scale(MjtFontScale::mjFONTSCALE_100)
         .with_opts(MjvOption::default())
         .with_rgb_rendering(true)
@@ -82,7 +82,8 @@ fn main() {
             ).connect(0.05, from, to);  // adjust size, pos and mat to make the line connect the ball and the box.
 
             renderer.sync(&mut data);
-            renderer.save_rgb(format!("{OUTPUT_DIRECTORY}/img{i}.png")).unwrap();  // save the internal buffers to file
+            renderer.save_rgb(format!("{OUTPUT_DIRECTORY}/img_rgb{i}.png")).unwrap();
+            renderer.save_depth(format!("{OUTPUT_DIRECTORY}/img_depth{i}.png"), true).unwrap();
         }
     }
 }
