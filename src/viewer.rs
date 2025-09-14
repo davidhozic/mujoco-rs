@@ -1,6 +1,6 @@
 //! Module related to implementation of the [`MjViewer`] and [`MjViewerCpp`].
 
-use glfw::{Action, Context, Glfw, GlfwReceiver, Key, Modifiers, MouseButton, PWindow, WindowEvent};
+use glfw::{Action, Context, Glfw, GlfwReceiver, Key, Modifiers, MouseButton, PWindow, WindowEvent, WindowMode};
 use bitflags::bitflags;
 
 use std::time::Instant;
@@ -26,6 +26,7 @@ const DOUBLE_CLICK_WINDOW_MS: u128 = 250;
 
 const HELP_MENU_TITLES: &str = concat!(
     "Toggle help\n",
+    "Toggle full screen\n",
     "Free camera\n",
     "Track camera\n",
     "Camera orbit\n",
@@ -35,11 +36,13 @@ const HELP_MENU_TITLES: &str = concat!(
     "Object select\n",
     "Selection rotate\n",
     "Selection translate\n",
-    "Exit"
+    "Exit\n",
+    "Reset simulation"
 );
 
 const HELP_MENU_VALUES: &str = concat!(
     "F1\n",
+    "F5\n",
     "Escape\n",
     "Control + Alt + double-left click\n",
     "Left drag\n",
@@ -49,7 +52,8 @@ const HELP_MENU_VALUES: &str = concat!(
     "Double-left click\n",
     "Control + [Shift] + drag\n",
     "Control + Alt + [Shift] + drag\n",
-    "Control + Q"
+    "Control + Q\n",
+    "Backspace"
 );
 
 #[derive(Debug)]
@@ -79,18 +83,6 @@ impl Error for MjViewerError {
 /// A Rust-native implementation of the MuJoCo viewer. To confirm to rust safety rules,
 /// the viewer doesn't store a mutable reference to the [`MjData`] struct, but it instead
 /// accepts it as a parameter at its methods.
-/// 
-/// Currently supported (to be expanded in the future):
-/// - Visualization of the 3D scene,
-/// - Close via Ctrl + Q or by closing the window,
-/// - Body tracking via Ctrl + Alt + double left click,
-/// - Camera look at object via Alt + double left click,
-/// - Escape from tracked camera via Esc.
-/// - Perturbations:
-///     - Select the object of interested by double clicking on it,
-///     - Hold down Control and start dragging for **rotational** perturbations,
-///     - Hold down Control+Alt and start dragging for **translational** perturbations,
-///     - To move in the XY plane instead of the default XZ plane, hold Shift.
 /// 
 /// The [`MjViewer::sync`] method must be called to sync the state of [`MjViewer`] and [`MjData`].
 /// 
@@ -275,32 +267,74 @@ impl<'m> MjViewer<'m> {
         self.glfw.poll_events();
         while let Some((_, event)) = self.events.receive() {
             match event {
+                // Set the viewer's state to pending exit.
                 WindowEvent::Key(Key::Q, _, Action::Press, Modifiers::Control) => {
                     self.window.set_should_close(true);
                     break;  // no use in polling other events
                 },
+                // Free the camera from tracking.
                 WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
                     self.camera.free();
                 },
-
+                // Display the help menu.
                 WindowEvent::Key(Key::F1, _, Action::Press, _) => {
                     self.status_flags.toggle(ViewerStatusBits::HELP_MENU);
                 }
-
+                // Full screen
+                WindowEvent::Key(Key::F5, _, Action::Press, _) => {
+                    self.toggle_full_screen();
+                }
+                // Reset the simulation (the data).
+                WindowEvent::Key(Key::Backspace, _, Action::Press, _) => {
+                    data.reset();
+                    data.forward();
+                }
+                // Zoom in/out
                 WindowEvent::Scroll(_, change) => {
                     self.process_scroll(change);
                 }
+                // Track cursor, possibly applying perturbations.
                 WindowEvent::CursorPos(x, y) => {
                     self.process_cursor_pos(x, y, data);
                 },
 
-                // Match left button presses
+                // Process left clicks, for selection ob bodies.
                 WindowEvent::MouseButton(MouseButton::Left, action, modifiers) => {
                     self.process_left_click(data, &action, &modifiers);
                 }
                 _ => {}  // ignore other events
             }
         }
+    }
+
+    /// Toggles full screen mode.
+    fn toggle_full_screen(&mut self) {
+        self.glfw.with_primary_monitor(|_, m| {
+            if let Some(monitor) = m {
+                /* Obtain the new window mode outside due to lifetimes requirements */
+                let (
+                    new_mode,
+                    w, h,
+                    x, y
+                ) = self.window.with_window_mode(|mode| {
+                    // Try to obtain the monitor size, so we can center the window after.
+                    // Assume 720p (16:9) if the size can't be read.
+                    let (w, h) = monitor.get_video_mode()
+                        .map_or((1280, 720), |x| (x.width, x.height));
+                    if let WindowMode::FullScreen(_) = mode {
+                        (WindowMode::Windowed, 1280, 720, (w - 1280) / 2, (h - 720) / 2)
+                    }
+                    else {
+                        (WindowMode::FullScreen(monitor), w, h, 0, 0)
+                    }
+                });
+                self.window.set_monitor(
+                    new_mode,
+                    x as i32, y as i32,
+                    w, h, None
+                );
+            }
+        });
     }
 
     /// Processes scrolling events.

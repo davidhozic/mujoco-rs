@@ -12,6 +12,16 @@ Versioning
 =================
 This project uses `semantic versioning <https://semver.org/>`_.
 
+Unreleased
+================================
+- :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer`:
+
+  - Added events for keys:
+
+    - Backspace: resets the simulation,
+    - F5: toggles full screen mode.
+
+
 1.3.0 (MuJoCo 3.3.5)
 ================================
 - Added a module for offscreen scene rendering: :docs-rs:`mujoco_rs::renderer`:
