@@ -14,13 +14,21 @@ This project uses `semantic versioning <https://semver.org/>`_.
 
 Unreleased
 ================================
-- :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer`:
+- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
 
   - Added events for keys:
 
-    - Backspace: resets the simulation,
-    - F5: toggles full screen mode.
+    - ``Backspace``: resets the simulation,
+    - ``F5``: toggles full screen mode,
+    - ``[`` and ``]``: cycles cameras.
 
+
+- :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`:
+
+  - Added methods:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::fix`:
+      changes the camera struct parameters to display a fixed camera.
 
 1.3.0 (MuJoCo 3.3.5)
 ================================

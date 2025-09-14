@@ -37,7 +37,8 @@ const HELP_MENU_TITLES: &str = concat!(
     "Selection rotate\n",
     "Selection translate\n",
     "Exit\n",
-    "Reset simulation"
+    "Reset simulation\n",
+    "Cycle cameras"
 );
 
 const HELP_MENU_VALUES: &str = concat!(
@@ -53,7 +54,8 @@ const HELP_MENU_VALUES: &str = concat!(
     "Control + [Shift] + drag\n",
     "Control + Alt + [Shift] + drag\n",
     "Control + Q\n",
-    "Backspace"
+    "Backspace\n",
+    "[ ]"
 );
 
 #[derive(Debug)]
@@ -289,6 +291,14 @@ impl<'m> MjViewer<'m> {
                     data.reset();
                     data.forward();
                 }
+                // Cycle to the next camera
+                WindowEvent::Key(Key::RightBracket, _, Action::Press, _) => {
+                    self.cycle_camera(1)
+                }
+                // Cycle to the previous camera
+                WindowEvent::Key(Key::LeftBracket, _, Action::Press, _) => {
+                    self.cycle_camera(-1)
+                }
                 // Zoom in/out
                 WindowEvent::Scroll(_, change) => {
                     self.process_scroll(change);
@@ -305,6 +315,25 @@ impl<'m> MjViewer<'m> {
                 _ => {}  // ignore other events
             }
         }
+    }
+
+
+    fn cycle_camera(&mut self, direction: i32) {
+        let n_cam = self.model.ffi().ncam;
+        if n_cam == 0 {  // No cameras, ignore.
+            println!("No cameras!");
+            return;
+        }
+
+        let mut new_id = self.camera.fixedcamid + direction;
+        if new_id < 0 {
+            new_id = n_cam - 1;
+        }
+        else {
+            new_id = new_id.rem_euclid(n_cam);
+        }
+
+        self.camera.fix(new_id as u32);
     }
 
     /// Toggles full screen mode.

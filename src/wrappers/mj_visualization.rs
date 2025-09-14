@@ -143,6 +143,13 @@ impl MjvCamera {
         self.type_ = MjtCamera::mjCAMERA_FREE as i32;
     }
 
+    /// Sets the camera to a fixed `camera_id`.
+    pub fn fix(&mut self, camera_id: u32) {
+        self.type_ = MjtCamera::mjCAMERA_FIXED as i32;
+        self.fixedcamid = camera_id as i32;
+        self.trackbodyid = -1;
+    }
+
     /// Move camera with mouse.
     pub fn move_(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
         unsafe { mjv_moveCamera(model.ffi(), action as i32, dx, dy, scene.ffi(), self); };
