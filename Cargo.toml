@@ -18,11 +18,11 @@ all-features = true
 
 
 [features]
-viewer = ["glfw", "bitflags"]
-renderer = ["png", "glfw"]
+viewer = ["dep:glfw", "dep:bitflags"]
+renderer = ["dep:png", "dep:glfw"]
 cpp-viewer = []
 
-ffi-regenerate = ["regex", "bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module. 
+ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module. 
 
 default = ["viewer", "renderer"]
 

@@ -321,7 +321,6 @@ impl<'m> MjViewer<'m> {
     fn cycle_camera(&mut self, direction: i32) {
         let n_cam = self.model.ffi().ncam;
         if n_cam == 0 {  // No cameras, ignore.
-            println!("No cameras!");
             return;
         }
 
