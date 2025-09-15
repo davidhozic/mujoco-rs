@@ -20,7 +20,17 @@ Unreleased
 
     - ``Backspace``: resets the simulation,
     - ``F5``: toggles full screen mode,
-    - ``[`` and ``]``: cycles cameras.
+    - ``[`` and ``]``: cycles cameras,
+    - Visualization toggles:
+
+      - ``C``: camera,
+      - ``U``: actuator,
+      - ``J``: joint,
+      - ``M``: center of mass,
+      - ``H``: convex hull,
+      - ``Z``: light,
+      - ``T``: transparent,
+      - ``I``: inertia.
 
 
 - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`:

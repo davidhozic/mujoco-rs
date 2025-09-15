@@ -38,7 +38,8 @@ const HELP_MENU_TITLES: &str = concat!(
     "Selection translate\n",
     "Exit\n",
     "Reset simulation\n",
-    "Cycle cameras"
+    "Cycle cameras\n",
+    "Visualization toggles",
 );
 
 const HELP_MENU_VALUES: &str = concat!(
@@ -55,7 +56,8 @@ const HELP_MENU_VALUES: &str = concat!(
     "Control + Alt + [Shift] + drag\n",
     "Control + Q\n",
     "Backspace\n",
-    "[ ]"
+    "[ ]\n",
+    "See MjViewer docs"
 );
 
 #[derive(Debug)]
@@ -88,6 +90,19 @@ impl Error for MjViewerError {
 /// 
 /// The [`MjViewer::sync`] method must be called to sync the state of [`MjViewer`] and [`MjData`].
 /// 
+/// # Shortcuts
+/// Main keyboard and mouse shortcuts can be viewed by pressing ``F1``.
+/// Additionally, some visualization toggles are included, but not displayed
+/// in the ``F1`` help menu:
+/// - C: camera,
+/// - U: actuator,
+/// - J: joint,
+/// - M: center of mass,
+/// - H: convex hull,
+/// - Z: light,
+/// - T: transparent,
+/// - I: inertia.
+/// 
 /// # Safety
 /// Due to the nature of OpenGL, this should only be run in the **main thread**.
 #[derive(Debug)]
@@ -100,6 +115,7 @@ pub struct MjViewer<'m> {
     /* Other MuJoCo related */
     model: &'m MjModel,
     pert: MjvPerturb,
+    opt: MjvOption,
 
     /* Internal state */
     last_x: f64,
@@ -143,21 +159,17 @@ impl<'m> MjViewer<'m> {
         window.set_all_polling(true);
         glfw.set_swap_interval(glfw::SwapInterval::None);
 
-        let scene = MjvScene::new(model, model.ffi().ngeom as usize + scene_max_geom + EXTRA_SCENE_GEOM_SPACE);
-        let user_scene = MjvScene::new(model, scene_max_geom);
-        let context= MjrContext::new(model);
-        let camera = MjvCamera::new_free(model);
-        let pert = MjvPerturb::default();
         Ok(Self {
-            scene,
-            context,
-            camera,
-            model,
-            pert,
             glfw,
             window,
             events,
-            user_scene,
+            model,
+            scene: MjvScene::new(model, model.ffi().ngeom as usize + scene_max_geom + EXTRA_SCENE_GEOM_SPACE),
+            context: MjrContext::new(model),
+            camera: MjvCamera::new_free(model),
+            pert: MjvPerturb::default(),
+            opt: MjvOption::default(),
+            user_scene: MjvScene::new(model, scene_max_geom),
             last_x: 0.0,
             last_y: 0.0,
             status_flags: ViewerStatusBits::HELP_MENU,
@@ -226,8 +238,7 @@ impl<'m> MjViewer<'m> {
         self.update_rectangles(self.window.get_framebuffer_size());
 
         /* Update the scene from the MjData state */
-        let opt = MjvOption::default();
-        self.scene.update(data, &opt, &self.pert, &mut self.camera);
+        self.scene.update(data, &self.opt, &self.pert, &mut self.camera);
 
         /* Draw user scene geoms */
         sync_geoms(&self.user_scene, &mut self.scene)
@@ -242,7 +253,6 @@ impl<'m> MjViewer<'m> {
         rectangle.width = rectangle.width - rectangle.width / 4;
 
         /* Overlay section */
-
         if self.status_flags.contains(ViewerStatusBits::HELP_MENU) {  // Help
             self.context.overlay(
                 MjtFont::mjFONT_NORMAL, MjtGridPos::mjGRID_TOPLEFT,
@@ -299,6 +309,31 @@ impl<'m> MjViewer<'m> {
                 WindowEvent::Key(Key::LeftBracket, _, Action::Press, _) => {
                     self.cycle_camera(-1)
                 }
+                // Toggles camera visualization.
+                WindowEvent::Key(Key::C, _, Action::Press, _) => {
+                    self.toggle_opt_flag(MjtVisFlag::mjVIS_CAMERA);
+                }
+                WindowEvent::Key(Key::U, _, Action::Press, _) => {
+                    self.toggle_opt_flag(MjtVisFlag::mjVIS_ACTUATOR);
+                }
+                WindowEvent::Key(Key::J, _, Action::Press, _) => {
+                    self.toggle_opt_flag(MjtVisFlag::mjVIS_JOINT);
+                }
+                WindowEvent::Key(Key::M, _, Action::Press, _) => {
+                    self.toggle_opt_flag(MjtVisFlag::mjVIS_COM);
+                }
+                WindowEvent::Key(Key::H, _, Action::Press, _) => {
+                    self.toggle_opt_flag(MjtVisFlag::mjVIS_CONVEXHULL);
+                }
+                WindowEvent::Key(Key::Z, _, Action::Press, _) => {
+                    self.toggle_opt_flag(MjtVisFlag::mjVIS_LIGHT);
+                }
+                WindowEvent::Key(Key::T, _, Action::Press, _) => {
+                    self.toggle_opt_flag(MjtVisFlag::mjVIS_TRANSPARENT);
+                }
+                WindowEvent::Key(Key::I, _, Action::Press, _) => {
+                    self.toggle_opt_flag(MjtVisFlag::mjVIS_INERTIA);
+                }
                 // Zoom in/out
                 WindowEvent::Scroll(_, change) => {
                     self.process_scroll(change);
@@ -317,7 +352,13 @@ impl<'m> MjViewer<'m> {
         }
     }
 
+    /// Toggles visualization options.
+    fn toggle_opt_flag(&mut self, flag: MjtVisFlag) {
+        let index = flag as usize;
+        self.opt.flags[index] = !self.opt.flags[index];
+    }
 
+    /// Cycle MJCF defined cameras.
     fn cycle_camera(&mut self, direction: i32) {
         let n_cam = self.model.ffi().ncam;
         if n_cam == 0 {  // No cameras, ignore.
@@ -438,7 +479,7 @@ impl<'m> MjViewer<'m> {
                     /* Obtain the selection */ 
                     let rect: &mjrRect_ = &self.rect_view;
                     let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
-                        data, &MjvOption::default(),
+                        data, &self.opt,
                         rect.width as MjtNum / rect.height as MjtNum,
                         (x - rect.left as MjtNum) / rect.width as MjtNum,
                         (y - rect.bottom as MjtNum) / rect.height as MjtNum
