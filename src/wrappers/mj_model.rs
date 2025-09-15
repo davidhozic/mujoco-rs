@@ -128,6 +128,10 @@ impl MjModel {
         }
     }
 
+    /// Creates a [`MjModel`] from a raw pointer.
+    pub(crate) fn from_raw(ptr: *mut mjModel) -> Result<Self, Error> {
+        Self::check_raw_model(ptr, &[])
+    }
 
     /// Saves the last XML loaded.
     pub fn save_last_xml(&self, filename: &str) -> io::Result<()> {
