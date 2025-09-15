@@ -35,6 +35,11 @@ pub type MjtPertBit = mjtPertBit;
 pub type MjtCatBit = mjtCatBit;
 
 /***********************************************************************************************************************
+** MjtVisFlag
+***********************************************************************************************************************/
+pub type MjtVisFlag = mjtVisFlag;
+
+/***********************************************************************************************************************
 ** MjvPerturb
 ***********************************************************************************************************************/
 pub type MjvPerturb = mjvPerturb;
@@ -141,6 +146,13 @@ impl MjvCamera {
     pub fn free(&mut self) {
         self.trackbodyid = -1;
         self.type_ = MjtCamera::mjCAMERA_FREE as i32;
+    }
+
+    /// Sets the camera to a fixed `camera_id`.
+    pub fn fix(&mut self, camera_id: u32) {
+        self.type_ = MjtCamera::mjCAMERA_FIXED as i32;
+        self.fixedcamid = camera_id as i32;
+        self.trackbodyid = -1;
     }
 
     /// Move camera with mouse.
