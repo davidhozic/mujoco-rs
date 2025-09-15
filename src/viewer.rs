@@ -303,11 +303,11 @@ impl<'m> MjViewer<'m> {
                 }
                 // Cycle to the next camera
                 WindowEvent::Key(Key::RightBracket, _, Action::Press, _) => {
-                    self.cycle_camera(1)
+                    self.cycle_camera(1);
                 }
                 // Cycle to the previous camera
                 WindowEvent::Key(Key::LeftBracket, _, Action::Press, _) => {
-                    self.cycle_camera(-1)
+                    self.cycle_camera(-1);
                 }
                 // Toggles camera visualization.
                 WindowEvent::Key(Key::C, _, Action::Press, _) => {
@@ -365,15 +365,7 @@ impl<'m> MjViewer<'m> {
             return;
         }
 
-        let mut new_id = self.camera.fixedcamid + direction;
-        if new_id < 0 {
-            new_id = n_cam - 1;
-        }
-        else {
-            new_id = new_id.rem_euclid(n_cam);
-        }
-
-        self.camera.fix(new_id as u32);
+        self.camera.fix((self.camera.fixedcamid + direction).rem_euclid(n_cam) as u32);
     }
 
     /// Toggles full screen mode.
