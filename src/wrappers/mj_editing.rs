@@ -5,26 +5,62 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::ptr;
 
+use crate::wrappers::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
+use crate::wrappers::mj_model::{MjModel, MjtObj};
 use crate::wrappers::mj_option::MjOption;
-use crate::wrappers::mj_auxiliary::MjVfs;
-use crate::wrappers::mj_model::MjModel;
 use crate::mujoco_c::*;
+
+// Re-export with lowercase 'f' to fix method generation
+use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
 
 
 /// Represents all the types that [`MjSpec`] supports.
-/// This used used as an interface inside [`MjSpec::delete_element`].
-pub trait SpecItem {
+pub trait SpecItem: Sized {
     /// Returns the internal element struct.
     /// The element struct is the C++ implementation of the
     /// actual item, which is hidden to the user, but is needed
     /// in some functions.
     unsafe fn element_pointer(&self) -> *mut mjsElement;
+
+    /// Returns the item's name.
+    fn name(&self) -> &str {
+        read_mjs_string( unsafe { mjs_getName(self.element_pointer()).as_ref().unwrap() } )
+    }
+
+    /// Set a new name.
+    fn set_name(&mut self, name: &str) {
+        let cstr = CString::new(name).unwrap();  // always has valid UTF-8
+        unsafe { mjs_setName(self.element_pointer(), cstr.as_ptr()) };
+    }
+
+    /// Delete the item.
+    fn delete(self) -> Result<(), Error> {
+        let element = unsafe { self.element_pointer() };
+        let spec = unsafe { dbg!(mjs_getSpec(element)) };
+        let result = unsafe { mjs_delete(spec, element) };
+        match result {
+            0 => Ok(()),
+            _ => Err(Error::new(ErrorKind::Other, unsafe { CStr::from_ptr(mjs_getError(spec)).to_str().unwrap() }))
+        }
+    }
+}
+
+/***************************
+** Utility functions
+***************************/
+/// Reads a MJS string (C++) as a &str.
+fn read_mjs_string(string: &mjString) -> &str {
+    unsafe {
+        let ptr = mjs_getString(string);
+        CStr::from_ptr(ptr).to_str().unwrap()  // can't be invalid utf-8
+    }
 }
 
 /***************************
 ** Helper macros
 ***************************/
 /// Creates an `add_ $name` method for adding new elements of $name into the body / spec.
+/// Also sets the default as null();
 macro_rules! add_x_method {
     ($name:ident) => {paste::paste! {
         #[doc = concat!("Add and return a child ", stringify!($name), ".")]
@@ -35,6 +71,40 @@ macro_rules! add_x_method {
     }};
 }
 
+/// Creates an `add_ $name` method for adding new elements of $name into the body / spec.
+/// This is for methods that don't accept a default.
+macro_rules! add_x_method_no_default {
+    ($name:ident) => {paste::paste! {
+        #[doc = concat!("Add and return a child ", stringify!($name), ".")]
+        pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>] {
+            let ptr = unsafe { [<mjs_add $name:camel>](self.0) };
+            [<Mjs $name:camel>](ptr, PhantomData)
+        }
+    }};
+}
+
+
+/// Creates an `get_ $name` method for finding items in spec / body.
+/// Also sets the default as null();
+macro_rules! find_x_method {
+    ($item:ident) => {paste::paste! {
+        #[doc = concat!("Obtain a reference to the ", stringify!($item), " with the given `name`.")]
+        pub fn $item(&mut self, name: &str) -> Option<[<Mjs $item:camel>]> {
+            let c_name = CString::new(name).unwrap();
+            unsafe {
+                let ptr = mjs_findElement(self.0, MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
+                if ptr.is_null() {
+                    None
+                }
+                else {
+                    Some([<Mjs $item:camel>]([<mjs_as $item:camel>](ptr), PhantomData))
+                }
+            }
+        }
+    }};
+}
+
+
 /// Creates a wrapper around a mjs$ffi_name item. It also implements the methods: `ffi()`, `ffi_mut()`
 /// and traits: [`SpecItem`], [`Sync`], [`Send`].
 macro_rules! mjs_wrapper {
@@ -43,9 +113,12 @@ macro_rules! mjs_wrapper {
         pub struct [<Mjs $ffi_name>]<'s>(*mut [<mjs $ffi_name>], PhantomData<&'s mut ()>);  // the lifetime belongs to the parent
 
         impl [<Mjs $ffi_name>]<'_> {
+            /// Returns an immutable reference to the inner struct.
             pub fn ffi(&self) -> &[<mjs $ffi_name>] {
                 unsafe { self.0.as_ref().unwrap() }
             }
+
+            /// Returns a mutable reference to the inner struct.
             pub unsafe fn ffi_mut(&self) -> &mut [<mjs $ffi_name>] {
                 unsafe { self.0.as_mut().unwrap() }
             }
@@ -124,15 +197,6 @@ impl MjSpec {
         }
     }
 
-    /// Removes an element from the specification.
-    pub fn delete_element<T: SpecItem>(&mut self, element: T) -> Result<(), Error> {
-        let result = unsafe { mjs_delete(self.0, element.element_pointer()) };
-        match result {
-            0 => Ok(()),
-            _ => Err(Error::new(ErrorKind::Other, unsafe { CStr::from_ptr(mjs_getError(self.0)).to_str().unwrap() }))
-        }
-    }
-
     /// An immutable reference to the internal FFI struct.
     pub fn ffi(&self) -> &mjSpec {
         unsafe { self.0.as_ref().unwrap() }
@@ -141,28 +205,6 @@ impl MjSpec {
     /// A mutable reference to the internal FFI struct.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjSpec {
         unsafe { self.0.as_mut().unwrap() }
-    }
-}
-
-/// Children accessor methods.
-impl MjSpec {
-    /// Returns [`Some`] `(body)` with `name` if exists, otherwise [`None`].
-    pub fn body(&mut self, name: &str) -> Option<MjsBody> {
-        let c_name = CString::new(name).unwrap();
-        unsafe {
-            let body_ptr = mjs_findBody(self.0, c_name.as_ptr());
-            if body_ptr.is_null() {
-                None
-            }
-            else {
-                Some(MjsBody(body_ptr, PhantomData))
-            }
-        }
-    }
-
-    /// The `<worldbody>` element.
-    pub fn world_body(&mut self) -> MjsBody {
-        self.body("world").unwrap()  // this exists always
     }
 
     /// Compile [`MjSpec`] to [`MjModel`].
@@ -173,15 +215,107 @@ impl MjSpec {
     }
 }
 
+/// Children accessor methods.
+impl MjSpec {
+    find_x_method!(body);
+    find_x_method!(joint);
+    find_x_method!(actuator);
+    find_x_method!(sensor);
+    find_x_method!(flex);
+    find_x_method!(pair);
+    find_x_method!(exclude);
+    find_x_method!(equality);
+    find_x_method!(tendon);
+
+    // Wrap
+    find_x_method!(numeric);
+    find_x_method!(text);
+    find_x_method!(tuple);
+    find_x_method!(key);
+    find_x_method!(plugin);
+    // Default
+
+    /* Assets */
+    find_x_method!(mesh);
+    find_x_method!(hfield);
+    find_x_method!(skin);
+    find_x_method!(texture);
+    find_x_method!(material);
+
+    /// Returns the world body.
+    pub fn world_body(&mut self) -> MjsBody {
+        self.body("world").unwrap()  // this exists always
+    }
+}
+
 /// Public attributes.
 impl MjSpec {
+    /// Returns an immutable reference to simulation options ([`MjOption`]).
     pub fn option(&self) -> &MjOption {
         &self.ffi().option
     }
 
+    /// Returns a mutable reference to simulation options ([`MjOption`]).
     pub fn option_mut(&mut self) -> &mut MjOption {
         unsafe { &mut self.ffi_mut().option }
     }
+    
+    /// Returns an immutable reference to visualization options ([`MjVisual`]).
+    pub fn visual(&self) -> &MjVisual {
+        &self.ffi().visual
+    }
+
+    /// Returns a mutable reference to visualization options ([`MjVisual`]).
+    pub fn visual_mut(&mut self) -> &mut MjVisual {
+        unsafe { &mut self.ffi_mut().visual }
+    }
+
+    /// Returns an immutable reference to statistic overrides ([`MjStatistic`]).
+    pub fn stat(&self) -> &MjStatistic {
+        &self.ffi().stat
+    }
+
+    /// Returns a mutable reference to statistic overrides ([`MjStatistic`]).
+    pub fn stat_mut(&mut self) -> &mut MjStatistic {
+        unsafe { &mut self.ffi_mut().stat }
+    }
+
+    /// Obtains the model name.
+    pub fn model_name(&self) -> &str {
+        read_mjs_string(unsafe { self.ffi().modelname.as_ref().unwrap() })
+    }
+
+    /// Sets the model name.
+    pub fn set_model_name(&mut self, name: &str) {
+        let cstr = CString::new(name).unwrap();  // always has valid UTF-8
+        unsafe { mjs_setString(self.ffi_mut().modelname, cstr.as_ptr()); };
+    }
+}
+
+/// Methods for adding non-tree elements.
+impl MjSpec {
+    add_x_method!(actuator);
+    add_x_method_no_default!(sensor);
+    add_x_method_no_default!(flex);
+    add_x_method!(pair);
+    add_x_method_no_default!(exclude);
+    add_x_method!(equality);
+    add_x_method!(tendon);
+
+    // Wrap
+    add_x_method_no_default!(numeric);
+    add_x_method_no_default!(text);
+    add_x_method_no_default!(tuple);
+    add_x_method_no_default!(key);
+    add_x_method_no_default!(plugin);
+    // Default
+
+    /* Assets */
+    add_x_method!(mesh);
+    add_x_method_no_default!(hfield);
+    add_x_method_no_default!(skin);
+    add_x_method_no_default!(texture);
+    add_x_method!(material);
 }
 
 
@@ -221,7 +355,7 @@ mjs_wrapper!(Plugin);
 
 /* Assets */
 mjs_wrapper!(Mesh);
-mjs_wrapper!(HField);
+mjs_wrapper!(Hfield);
 mjs_wrapper!(Skin);
 mjs_wrapper!(Texture);
 mjs_wrapper!(Material);
@@ -238,6 +372,19 @@ impl MjsBody<'_> {
     add_x_method!(camera);
     add_x_method!(light);
     // add_frame
+
+    // Special case: the world body can't be deleted, however MuJoCo doesn't prevent that.
+    // When the world body is deleted, the drop of MjSpec will crash on cleanup.
+
+    /// Delete the item.
+    pub fn delete(self) -> Result<(), Error> {
+        if self.name() != "world" {
+            SpecItem::delete(self)
+        }
+        else {
+            Err(Error::new(ErrorKind::Unsupported, "the world body can't be deleted"))
+        }
+    }
 }
 
 
@@ -293,5 +440,83 @@ mod tests {
 
         let compiled = spec.compile().expect("could not compile the model");
         assert_eq!(compiled.opt().timestep, TIMESTEP);
+    }
+
+    #[test]
+    fn test_model_name() {
+        const DEFAULT_MODEL_NAME: &str = "MuJoCo Model";
+        const NEW_MODEL_NAME: &str = "Test model";
+
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+
+        /* Test read */
+        assert_eq!(spec.model_name(), DEFAULT_MODEL_NAME);
+        /* Test write */
+        spec.set_model_name(NEW_MODEL_NAME);
+        assert_eq!(spec.model_name(), NEW_MODEL_NAME)
+    }
+
+    #[test]
+    fn test_item_name() {
+        const NEW_MODEL_NAME: &str = "Test model";
+
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut world = spec.world_body();
+        let mut body = world.add_body();
+        assert_eq!(body.name(), "");
+        body.set_name(NEW_MODEL_NAME);
+        assert_eq!(body.name(), NEW_MODEL_NAME);
+    }
+
+    #[test]
+    fn test_body_remove() {
+        const NEW_MODEL_NAME: &str = "Test model";
+
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut world = spec.world_body();
+        let mut body = world.add_body();
+        body.set_name(NEW_MODEL_NAME);
+        drop(body);
+
+        /* Test normal body deletion */
+        let body = spec.body(NEW_MODEL_NAME).expect("failed to obtain the body");
+        assert!(body.delete().is_ok(), "failed to delete model");
+        assert!(spec.body(NEW_MODEL_NAME).is_none(), "body was not removed from spec");
+
+        /* Test world body deletion */
+        let world = spec.world_body();
+        assert!(world.delete().is_err(), "the world model should not be deletable");
+    }
+
+    #[test]
+    fn test_joint_remove() {
+        const NEW_NAME: &str = "Test model";
+
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut world = spec.world_body();
+        let mut joint = world.add_joint();
+        joint.set_name(NEW_NAME);
+        drop(joint);
+
+        /* Test normal body deletion */
+        let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
+        assert!(joint.delete().is_ok(), "failed to delete model");
+        assert!(spec.joint(NEW_NAME).is_none(), "body was not removed from spec");
+    }
+
+    #[test]
+    fn test_hfield_remove() {
+        const NEW_NAME: &str = "Test model";
+
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut world = spec.world_body();
+        let mut joint = world.add_joint();
+        joint.set_name(NEW_NAME);
+        drop(joint);
+
+        /* Test normal body deletion */
+        let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
+        assert!(joint.delete().is_ok(), "failed to delete model");
+        assert!(spec.joint(NEW_NAME).is_none(), "body was not removed from spec");
     }
 }
