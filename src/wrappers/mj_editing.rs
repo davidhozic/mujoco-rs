@@ -45,9 +45,26 @@ pub trait SpecItem: Sized {
         unsafe { mjs_setName(self.element_mut_pointer(), cstr.as_ptr()) };
     }
 
+    /// Returns the used default.
+    fn default(&self) -> MjsDefault {
+        MjsDefault(unsafe { mjs_getDefault(self.element_pointer()) }, PhantomData)
+    }
+
     /// Make the item inherit properties from `default`.
-    fn set_default(&mut self, default: &MjsDefault) {
-        unsafe { mjs_setDefault(self.element_mut_pointer(), default.ffi()); }
+    /// # Errors
+    /// Returns a [`ErrorKind::NotFound`] when the default with the `class_name` doesn't exist.
+    fn set_default(&mut self, class_name: &str) -> Result<(), Error> {
+        /* Workaround to pass the borrow checker (we use the existing borrow) */
+        let cname = CString::new(class_name).unwrap();  // class_name is always valid UTF-8.
+        let element = unsafe { self.element_mut_pointer() };
+        let spec = unsafe { mjs_getSpec(element) };
+        let default = unsafe { mjs_findDefault(spec, cname.as_ptr()) };
+        if default.is_null() {
+            return Err(Error::new(ErrorKind::NotFound, "class doesn't exist"));
+        }
+
+        unsafe { mjs_setDefault(self.element_mut_pointer(), default); }
+        Ok(())
     }
 
     /// Delete the item.
@@ -113,13 +130,6 @@ macro_rules! add_x_method {
             #[doc = concat!("Add and return a child ", stringify!($name), ".")]
             pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>] {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.0, ptr::null()) };
-                [<Mjs $name:camel>](ptr, PhantomData)
-            }
-
-            /* With default */
-            #[doc = concat!("Add and return a child ", stringify!($name), ", while inheriting the `default` settings.")]
-            pub fn [<add_ $name _with_default>](&mut self, default: &MjsDefault) -> [<Mjs $name:camel>] {
-                let ptr = unsafe { [<mjs_add $name:camel>](self.0, default.ffi()) };
                 [<Mjs $name:camel>](ptr, PhantomData)
             }
         )*
@@ -378,6 +388,10 @@ impl MjSpec {
             }
         }
     }
+
+    pub fn element_pointer(&self) -> *mut mjsElement {
+        unsafe { self.0.as_ref().unwrap().element }
+    }
 }
 
 
@@ -418,7 +432,6 @@ mjs_wrapper!(Tuple);
 mjs_wrapper!(Key);
 mjs_wrapper!(Plugin);
 
-mjs_wrapper!(Default);
 
 /* Assets */
 mjs_wrapper!(Mesh);
@@ -426,6 +439,44 @@ mjs_wrapper!(Hfield);
 mjs_wrapper!(Skin);
 mjs_wrapper!(Texture);
 mjs_wrapper!(Material);
+
+/***************************
+** Default specification
+***************************/
+// This is implemented manually since we can't directly borrow check if something is using the default.
+// We also override the delete method to panic instead of deleting.
+
+/// Default specification. This wraps the FFI type [`mjsDefault`] internally.
+pub struct MjsDefault<'s>(*mut mjsDefault, PhantomData<&'s mut ()>);  // the lifetime belongs to the parent
+
+impl MjsDefault<'_> {
+    /// Returns an immutable reference to the inner struct.
+    pub fn ffi(&self) -> &mjsDefault {
+        unsafe { self.0.as_ref().unwrap() }
+    }
+
+    /// Returns a mutable reference to the inner struct.
+    pub unsafe fn ffi_mut(&mut self) -> &mut mjsDefault {
+        unsafe { self.0.as_mut().unwrap() }
+    }
+}
+
+impl SpecItem for MjsDefault<'_> {
+    unsafe fn element_pointer(&self) -> *mut mjsElement {
+        self.ffi().element
+    }
+
+    /// Defaults can't be deleted.
+    fn delete(self) -> Result<(), Error> {
+        unimplemented!()
+    }
+}
+
+// SAFETY: These are safe to implement, as access to them is available only
+// through methods or through ffi() and ffi_mut() methods, where the latter is unsafe.
+unsafe impl Sync for MjsDefault<'_> {}
+unsafe impl Send for MjsDefault<'_> {}
+
 
 
 /***************************
@@ -693,10 +744,9 @@ mod tests {
 
         /* Test search */
         spec.add_default(DEFAULT_NAME).unwrap();
-        assert!(spec.default(NOT_DEFAULT_NAME).is_none());
 
         /* Test delete */
-        // default.delete();
-        // assert!(spec.default(DEFAULT_NAME).is_none());
+        assert!(spec.default(DEFAULT_NAME).is_some());
+        assert!(spec.default(NOT_DEFAULT_NAME).is_none());
     }
 }
