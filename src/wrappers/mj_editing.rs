@@ -212,6 +212,16 @@ macro_rules! mjs_wrapper {
             pub unsafe fn ffi_mut(&mut self) -> &mut [<mjs $ffi_name>] {
                 unsafe { self.0.as_mut().unwrap() }
             }
+
+            /// Returns the message appended to compiler errors.
+            pub fn info(&self) {
+                read_mjs_string(unsafe { self.ffi().info.as_ref().unwrap() });
+            }
+
+            /// Sets the message appended to compiler errors.
+            pub fn set_info(&mut self, info: &str) {
+                write_mjs_string(info, unsafe { self.ffi_mut().info.as_mut().unwrap() });
+            }
         }
 
         impl SpecItem for [<Mjs $ffi_name>]<'_> {
@@ -569,7 +579,6 @@ impl MjsBody<'_> {
     }
 }
 
-/// Getters and setters.
 impl MjsBody<'_> {
     // Complex types with mutable and immutable reference returns.
     getter_setter! {
@@ -616,17 +625,6 @@ impl MjsBody<'_> {
     pub fn set_userdata<T: AsRef<[f64]>>(&mut self, userdata: T) {
         write_mjs_vec_f64(userdata.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() })
     }
-
-    /// Returns the message appended to compiler errors.
-    pub fn info(&self) {
-        read_mjs_string(unsafe { self.ffi().info.as_ref().unwrap() });
-    }
-
-    /// Sets the message appended to compiler errors.
-    pub fn set_info(&mut self, info: &str) {
-        write_mjs_string(info, unsafe { self.ffi_mut().info.as_mut().unwrap() });
-    }
-
 }
 
 
