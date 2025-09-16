@@ -4,8 +4,8 @@ use std::io::{Error, ErrorKind};
 use std::marker::PhantomData;
 use std::path::Path;
 use std::ptr;
-use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
-use super::mj_model::{MjModel, MjtObj};
+use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic,};
+use super::mj_model::{MjModel, MjtObj, MjtGeom};
 use super::mj_option::MjOption;
 use crate::mujoco_c::*;
 
@@ -74,7 +74,7 @@ pub trait SpecItem: Sized {
         let result = unsafe { mjs_delete(spec, element) };
         match result {
             0 => Ok(()),
-            _ => Err(Error::new(ErrorKind::Other, unsafe { CStr::from_ptr(mjs_getError(spec)).to_str().unwrap() }))
+            _ => Err(Error::new(ErrorKind::Other, unsafe { CStr::from_ptr(mjs_getError(spec)).to_string_lossy().into_owned() }))
         }
     }
 }
@@ -199,7 +199,7 @@ macro_rules! find_x_method_direct {
 /// and traits: [`SpecItem`], [`Sync`], [`Send`].
 macro_rules! mjs_wrapper {
     ($ffi_name:ident) => {paste::paste!{
-        #[doc = concat!(stringify!($ffi_name), " specification. This wraps the FFI type [`", stringify!([<mjs $ffi_name>]), "`] internally.")]
+        #[doc = concat!(stringify!($ffi_name), " specification. This acts as a safe reference to a FFI type [`", stringify!([<mjs $ffi_name>]), "`] internally.")]
         pub struct [<Mjs $ffi_name>]<'s>(*mut [<mjs $ffi_name>], PhantomData<&'s mut ()>);  // the lifetime belongs to the parent
 
         impl [<Mjs $ffi_name>]<'_> {
@@ -240,6 +240,11 @@ unsafe impl Sync for MjSpec {}
 unsafe impl Send for MjSpec {}
 
 impl MjSpec {
+    /// Creates an empty [`MjSpec`].
+    pub fn new() -> Self {
+        Self::check_spec(unsafe { mj_makeSpec() }, &[]).unwrap()
+    }
+
     /// Creates a [`MjSpec`] from the `path` to a file.
     pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
         Self::from_xml_file(path, None)
@@ -301,7 +306,48 @@ impl MjSpec {
     /// A spec can be edited and compiled multiple times,
     /// returning a new mjModel instance that takes the edits into account.
     pub fn compile(&mut self) -> Result<MjModel, Error> {
-        unsafe { MjModel::from_raw( mj_compile(self.0, ptr::null()) ) }
+        let result = unsafe { MjModel::from_raw( mj_compile(self.0, ptr::null()) ) };
+        result.map_err(|_| {
+            let error = unsafe { CStr::from_ptr(mjs_getError(self.ffi_mut())).to_string_lossy().into_owned() };
+            Error::new(ErrorKind::InvalidData, error)
+        })
+    }
+
+    /// Save spec to an XML file.
+    pub fn save_xml(&self, filename: &str) -> Result<(), Error> {
+        let mut error_buff = [0; 100];
+        let cname = CString::new(filename).unwrap();  // filename is always UTF-8
+        let result = unsafe { mj_saveXML(
+            self.ffi(), cname.as_ptr(),
+            error_buff.as_mut_ptr(), error_buff.len() as i32
+        ) };
+        match result {
+            0 => Ok(()),
+            _ => Err(
+                Error::new(
+                    ErrorKind::Other,
+                    unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().into_owned() }
+                ))
+        }
+    }
+
+    /// Save spec to an XML string. The `buffer_size` controls
+    /// how much space is allocated for conversion.
+    pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, Error> {
+        let mut error_buff = [0; 100];
+        let mut result_buff = vec![0u8; buffer_size];
+        let result = unsafe { mj_saveXMLString(
+            self.ffi(), result_buff.as_mut_ptr().cast(), result_buff.len() as i32,
+            error_buff.as_mut_ptr(), error_buff.len() as i32
+        ) };
+        match result {
+            0 => Ok(CStr::from_bytes_until_nul(&result_buff).unwrap().to_string_lossy().into_owned()),
+            _ => Err(
+                Error::new(
+                    ErrorKind::Other,
+                    unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().to_string() }
+                ))
+        }
     }
 }
 
@@ -396,12 +442,39 @@ impl Drop for MjSpec {
     }
 }
 
-/*******************************
-** Other specification wrappers
-*******************************/
-/* Tree elements */
+
+/***************************
+** Site specification
+***************************/
 mjs_wrapper!(Site);
-mjs_wrapper!(Body);
+impl MjsSite<'_> {
+    getter_setter! {
+        get, [
+            // frame, size
+            pos:  &[f64; 3];              "position";
+            quat: &[f64; 4];              "orientation";
+            alt:  &MjsOrientation;        "alternative orientation";
+            fromto: &[f64; 6];            "alternative for capsule, cylinder, box, ellipsoid";
+            size: &[f64; 3];              "geom size";
+
+            // visual
+            rgba: &[f32; 4];              "rgba when material is omitted";
+            // other
+            // mjString* material;              "name of material";
+            // mjDoubleVec* userdata;           "user data";
+            // mjString* info;                  "message appended to compiler errors";
+    ]}
+
+    getter_setter!(get, set, [
+        type_: MjtGeom;                   "geom type";
+        group: i32;                       "group";
+    ]);
+}
+
+
+/***************************
+** template specification
+***************************/
 mjs_wrapper!(Joint);
 mjs_wrapper!(Geom);
 mjs_wrapper!(Camera);
@@ -477,6 +550,7 @@ unsafe impl Send for MjsDefault<'_> {}
 /***************************
 ** Body specification
 ***************************/
+mjs_wrapper!(Body);
 impl MjsBody<'_> {
     add_x_method! { body, site, joint, geom, camera, light }
     // add_frame
@@ -743,5 +817,35 @@ mod tests {
         /* Test delete */
         assert!(spec.default(DEFAULT_NAME).is_some());
         assert!(spec.default(NOT_DEFAULT_NAME).is_none());
+
+        assert!(spec.add_actuator().set_default(DEFAULT_NAME).is_ok());
+    }
+
+    #[test]
+    fn test_save() {
+        const EXPECTED_XML: &str = "\
+<mujoco model=\"MuJoCo Model\">
+  <compiler angle=\"radian\"/>
+
+  <worldbody>
+    <body>
+      <site pos=\"0 0 0\"/>
+      <camera pos=\"0 0 0\"/>
+      <light pos=\"0 0 0\" dir=\"0 0 -1\"/>
+    </body>
+  </worldbody>
+</mujoco>
+";
+
+        let mut spec = MjSpec::new();
+        let mut world = spec.world_body();
+        let mut body = world.add_body();
+        body.add_camera();
+        // let geom = body.add_geom();
+        body.add_light();
+        body.add_site();
+
+        spec.compile().unwrap();
+        assert_eq!(spec.save_xml_string(1000).unwrap(), EXPECTED_XML);
     }
 }
