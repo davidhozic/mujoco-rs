@@ -361,6 +361,71 @@ macro_rules! info_with_view {
 }
 
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! getter_setter {
+    (get, [$($name:ident: bool; $comment:expr);* $(;)?]) => {
+        $(
+            #[doc = concat!("Checks ", $comment)]
+            pub fn $name(&self) -> bool {
+                self.ffi().$name == 1
+            }
+        )*
+    };
+
+    (get, [$($name:ident: & $type:ty; $comment:expr);* $(;)?]) => {
+        $(
+            #[doc = concat!("Returns an immutable reference to ", $comment)]
+            pub fn $name(&self) -> &$type {
+                &self.ffi().$name
+            }
+
+            paste::paste!{
+                #[doc = concat!("Returns a mutable reference to ", $comment)]
+                pub fn [<$name _mut>](&mut self) -> &mut $type {
+                    unsafe { &mut self.ffi_mut().$name }
+                }
+            }
+        )*
+    };
+
+    (get, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+        $(
+            #[doc = concat!("Returns value of ", $comment)]
+            pub fn $name(&self) -> $type {
+                self.ffi().$name
+            }
+        )*
+    };
+
+    (set, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+        paste::paste!{ 
+            $(
+                #[doc = concat!("Sets ", $comment)]
+                pub fn [<set_ $name>](&mut self, $name: $type) {
+                    unsafe { self.ffi_mut().$name = $name.into() };
+                }
+            )*
+        }
+    };
+
+    /* Handling of optional arguments */
+    (get, set, [ $( $name:ident : bool ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name : bool ; $comment );* ]);
+        $crate::getter_setter!(set, [ $( $name : bool ; $comment );* ]);
+    };
+
+    (get, set, [ $( $name:ident : & $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name : & $type ; $comment );* ]);
+        $crate::getter_setter!(set, [ $( $name : $type ; $comment );* ]);
+    };
+
+    (get, set, [ $( $name:ident : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name : $type ; $comment );* ]);
+        $crate::getter_setter!(set, [ $( $name : $type ; $comment );* ]);
+    };
+}
+
 /// assert_eq!, but with tolerance for floating point rounding.
 #[doc(hidden)]
 #[macro_export]

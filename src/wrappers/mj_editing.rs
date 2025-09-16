@@ -4,23 +4,35 @@ use std::io::{Error, ErrorKind};
 use std::marker::PhantomData;
 use std::path::Path;
 use std::ptr;
-
-use crate::wrappers::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
-use crate::wrappers::mj_model::{MjModel, MjtObj};
-use crate::wrappers::mj_option::MjOption;
+use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
+use super::mj_model::{MjModel, MjtObj};
+use super::mj_option::MjOption;
 use crate::mujoco_c::*;
+
+use crate::getter_setter;
 
 // Re-export with lowercase 'f' to fix method generation
 use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
 
 
 /// Represents all the types that [`MjSpec`] supports.
+/// This is pre-implemented for all the specification types and is not
+/// meant to be implemented by the user.
 pub trait SpecItem: Sized {
     /// Returns the internal element struct.
     /// The element struct is the C++ implementation of the
     /// actual item, which is hidden to the user, but is needed
     /// in some functions.
+    /// 
+    /// # SAFETY
+    /// This borrows immutably, but returns a mutable pointer. This is done to overcome MJS's wrong
+    /// use of mutable pointers in functions, such as [`mjs_getName`].
     unsafe fn element_pointer(&self) -> *mut mjsElement;
+
+    /// Same as [`SpecItem::element_pointer`], but with a mutable borrow.
+    unsafe fn element_mut_pointer(&mut self) -> *mut mjsElement {
+        unsafe { self.element_pointer() }
+    }
 
     /// Returns the item's name.
     fn name(&self) -> &str {
@@ -30,13 +42,18 @@ pub trait SpecItem: Sized {
     /// Set a new name.
     fn set_name(&mut self, name: &str) {
         let cstr = CString::new(name).unwrap();  // always has valid UTF-8
-        unsafe { mjs_setName(self.element_pointer(), cstr.as_ptr()) };
+        unsafe { mjs_setName(self.element_mut_pointer(), cstr.as_ptr()) };
+    }
+
+    /// Make the item inherit properties from `default`.
+    fn set_default(&mut self, default: &MjsDefault) {
+        unsafe { mjs_setDefault(self.element_mut_pointer(), default.ffi()); }
     }
 
     /// Delete the item.
-    fn delete(self) -> Result<(), Error> {
-        let element = unsafe { self.element_pointer() };
-        let spec = unsafe { dbg!(mjs_getSpec(element)) };
+    fn delete(mut self) -> Result<(), Error> {
+        let element = unsafe { self.element_mut_pointer() };
+        let spec = unsafe { mjs_getSpec(element) };
         let result = unsafe { mjs_delete(spec, element) };
         match result {
             0 => Ok(()),
@@ -48,11 +65,39 @@ pub trait SpecItem: Sized {
 /***************************
 ** Utility functions
 ***************************/
-/// Reads a MJS string (C++) as a &str.
+/// Reads a MJS string (C++) as a `&str`.
 fn read_mjs_string(string: &mjString) -> &str {
     unsafe {
         let ptr = mjs_getString(string);
-        CStr::from_ptr(ptr).to_str().unwrap()  // can't be invalid utf-8
+        CStr::from_ptr(ptr).to_str().unwrap()  // can't be invalid UTF-8.
+    }
+}
+
+/// Writes to a `destination` MJS string (C++) from a `source` `&str`.
+fn write_mjs_string(source: &str, destination: &mut mjString) {
+    unsafe {
+        let c_source = CString::new(source).unwrap();  // can't be invalid UTF-8.
+        mjs_setString(destination, c_source.as_ptr());
+    }
+}
+
+/// Reads as MJS double vector (C++) as a `&\[f64\]`.
+fn read_mjs_vec_f64(array: &mjDoubleVec) -> &[f64] {
+    let mut userdata_length = 0;
+    unsafe {
+        let ptr_arr = mjs_getDouble(array, &mut userdata_length);
+        if ptr_arr.is_null() {
+            return &[];
+        }
+
+        std::slice::from_raw_parts(ptr_arr, userdata_length as usize)
+    }
+}
+
+/// Writes as MJS double vector (C++) from a `source` to `destination`.
+fn write_mjs_vec_f64(source: &[f64], destination: &mut mjDoubleVec) {
+    unsafe {
+        mjs_setDouble(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
@@ -62,24 +107,36 @@ fn read_mjs_string(string: &mjString) -> &str {
 /// Creates an `add_ $name` method for adding new elements of $name into the body / spec.
 /// Also sets the default as null();
 macro_rules! add_x_method {
-    ($name:ident) => {paste::paste! {
-        #[doc = concat!("Add and return a child ", stringify!($name), ".")]
-        pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>] {
-            let ptr = unsafe { [<mjs_add $name:camel>](self.0, ptr::null()) };
-            [<Mjs $name:camel>](ptr, PhantomData)
-        }
+    ($($name:ident),*) => {paste::paste! {
+        $(
+            /* Without default */
+            #[doc = concat!("Add and return a child ", stringify!($name), ".")]
+            pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>] {
+                let ptr = unsafe { [<mjs_add $name:camel>](self.0, ptr::null()) };
+                [<Mjs $name:camel>](ptr, PhantomData)
+            }
+
+            /* With default */
+            #[doc = concat!("Add and return a child ", stringify!($name), ", while inheriting the `default` settings.")]
+            pub fn [<add_ $name _with_default>](&mut self, default: &MjsDefault) -> [<Mjs $name:camel>] {
+                let ptr = unsafe { [<mjs_add $name:camel>](self.0, default.ffi()) };
+                [<Mjs $name:camel>](ptr, PhantomData)
+            }
+        )*
     }};
 }
 
 /// Creates an `add_ $name` method for adding new elements of $name into the body / spec.
 /// This is for methods that don't accept a default.
 macro_rules! add_x_method_no_default {
-    ($name:ident) => {paste::paste! {
-        #[doc = concat!("Add and return a child ", stringify!($name), ".")]
-        pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>] {
-            let ptr = unsafe { [<mjs_add $name:camel>](self.0) };
-            [<Mjs $name:camel>](ptr, PhantomData)
-        }
+    ($($name:ident),*) => {paste::paste! {
+        $(
+            #[doc = concat!("Add and return a child ", stringify!($name), ".")]
+            pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>] {
+                let ptr = unsafe { [<mjs_add $name:camel>](self.0) };
+                [<Mjs $name:camel>](ptr, PhantomData)
+            }
+        )*
     }};
 }
 
@@ -87,20 +144,43 @@ macro_rules! add_x_method_no_default {
 /// Creates an `get_ $name` method for finding items in spec / body.
 /// Also sets the default as null();
 macro_rules! find_x_method {
-    ($item:ident) => {paste::paste! {
-        #[doc = concat!("Obtain a reference to the ", stringify!($item), " with the given `name`.")]
-        pub fn $item(&mut self, name: &str) -> Option<[<Mjs $item:camel>]> {
-            let c_name = CString::new(name).unwrap();
-            unsafe {
-                let ptr = mjs_findElement(self.0, MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
-                if ptr.is_null() {
-                    None
-                }
-                else {
-                    Some([<Mjs $item:camel>]([<mjs_as $item:camel>](ptr), PhantomData))
+    ($($item:ident),*) => {paste::paste! {
+        $(
+            #[doc = concat!("Obtain a reference to the ", stringify!($item), " with the given `name`.")]
+            pub fn $item(&self, name: &str) -> Option<[<Mjs $item:camel>]> {
+                let c_name = CString::new(name).unwrap();
+                unsafe {
+                    let ptr = mjs_findElement(self.0, MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
+                    if ptr.is_null() {
+                        None
+                    }
+                    else {
+                        Some([<Mjs $item:camel>]([<mjs_as $item:camel>](ptr), PhantomData))
+                    }
                 }
             }
-        }
+        )*
+    }};
+}
+
+/// Same as [`find_x_method`], but for types that have corresponding methods (instead of `mjs_findElement`).
+macro_rules! find_x_method_direct {
+    ($($item:ident),*) => {paste::paste!{
+        $(
+            #[doc = concat!("Obtain a reference to the ", stringify!($item), " with the given `name`.")]
+            pub fn $item(&self, name: &str) -> Option<[<Mjs $item:camel>]> {
+                let c_name = CString::new(name).unwrap();
+                unsafe {
+                    let ptr = [<mjs_find $item:camel>](self.0, c_name.as_ptr());
+                    if ptr.is_null() {
+                        None
+                    }
+                    else {
+                        Some([<Mjs $item:camel>](ptr, PhantomData))
+                    }
+                }
+            }
+        )*
     }};
 }
 
@@ -119,7 +199,7 @@ macro_rules! mjs_wrapper {
             }
 
             /// Returns a mutable reference to the inner struct.
-            pub unsafe fn ffi_mut(&self) -> &mut [<mjs $ffi_name>] {
+            pub unsafe fn ffi_mut(&mut self) -> &mut [<mjs $ffi_name>] {
                 unsafe { self.0.as_mut().unwrap() }
             }
         }
@@ -217,30 +297,12 @@ impl MjSpec {
 
 /// Children accessor methods.
 impl MjSpec {
-    find_x_method!(body);
-    find_x_method!(joint);
-    find_x_method!(actuator);
-    find_x_method!(sensor);
-    find_x_method!(flex);
-    find_x_method!(pair);
-    find_x_method!(exclude);
-    find_x_method!(equality);
-    find_x_method!(tendon);
+    find_x_method! {
+        body, joint, actuator, sensor, flex, pair, exclude, equality, tendon,
+        numeric, text, tuple, key, plugin, mesh, hfield, skin, texture, material
+    }
 
-    // Wrap
-    find_x_method!(numeric);
-    find_x_method!(text);
-    find_x_method!(tuple);
-    find_x_method!(key);
-    find_x_method!(plugin);
-    // Default
-
-    /* Assets */
-    find_x_method!(mesh);
-    find_x_method!(hfield);
-    find_x_method!(skin);
-    find_x_method!(texture);
-    find_x_method!(material);
+    find_x_method_direct! { default }
 
     /// Returns the world body.
     pub fn world_body(&mut self) -> MjsBody {
@@ -294,28 +356,28 @@ impl MjSpec {
 
 /// Methods for adding non-tree elements.
 impl MjSpec {
-    add_x_method!(actuator);
-    add_x_method_no_default!(sensor);
-    add_x_method_no_default!(flex);
-    add_x_method!(pair);
-    add_x_method_no_default!(exclude);
-    add_x_method!(equality);
-    add_x_method!(tendon);
+    add_x_method! { actuator, pair, equality, tendon, mesh, material }
+    add_x_method_no_default! {
+        sensor, flex, exclude, numeric, text, tuple, key, plugin,
+        hfield, skin, texture
+        // Wrap
+    }
 
-    // Wrap
-    add_x_method_no_default!(numeric);
-    add_x_method_no_default!(text);
-    add_x_method_no_default!(tuple);
-    add_x_method_no_default!(key);
-    add_x_method_no_default!(plugin);
-    // Default
-
-    /* Assets */
-    add_x_method!(mesh);
-    add_x_method_no_default!(hfield);
-    add_x_method_no_default!(skin);
-    add_x_method_no_default!(texture);
-    add_x_method!(material);
+    /// Adds a new `<default>` element.
+    /// # Errors
+    /// Returns a [`ErrorKind::AlreadyExists`] error when `class_name` already exists.
+    pub fn add_default(&mut self, class_name: &str) -> Result<MjsDefault, Error> {
+        let c_class_name = CString::new(class_name).unwrap ();  // can't have non-valid UTF-8
+        unsafe {
+            let ptr_default = mjs_addDefault(self.ffi_mut(), c_class_name.as_ptr(), ptr::null());
+            if ptr_default.is_null() {
+                Err(Error::new(ErrorKind::AlreadyExists, "duplicated name"))
+            }
+            else {
+                Ok(MjsDefault(ptr_default, PhantomData))
+            }
+        }
+    }
 }
 
 
@@ -345,13 +407,18 @@ mjs_wrapper!(Pair);
 mjs_wrapper!(Exclude);
 mjs_wrapper!(Equality);
 mjs_wrapper!(Tendon);
+
 // Wrap
+mjs_wrapper!(Wrap);
+
+
 mjs_wrapper!(Numeric);
 mjs_wrapper!(Text);
 mjs_wrapper!(Tuple);
 mjs_wrapper!(Key);
 mjs_wrapper!(Plugin);
-// Default
+
+mjs_wrapper!(Default);
 
 /* Assets */
 mjs_wrapper!(Mesh);
@@ -365,12 +432,7 @@ mjs_wrapper!(Material);
 ** Body specification
 ***************************/
 impl MjsBody<'_> {
-    add_x_method!(body);
-    add_x_method!(site);
-    add_x_method!(joint);
-    add_x_method!(geom);
-    add_x_method!(camera);
-    add_x_method!(light);
+    add_x_method! { body, site, joint, geom, camera, light }
     // add_frame
 
     // Special case: the world body can't be deleted, however MuJoCo doesn't prevent that.
@@ -387,7 +449,81 @@ impl MjsBody<'_> {
     }
 }
 
+/// Getters and setters.
+impl MjsBody<'_> {
+    // Complex types with mutable and immutable reference returns.
+    getter_setter! {
+        get, [
+            // body frame
+            pos: &[f64; 3];                   "frame position.";
+            quat: &[f64; 4];                  "frame orientation.";
+            alt: &MjsOrientation;             "frame alternative orientation.";
 
+            //inertial frame
+            ipos: &[f64; 3];                  "inertial frame position.";
+            iquat: &[f64; 4];                 "inertial frame orientation.";
+            inertia: &[f64; 3];               "diagonal inertia (in i-frame).";
+            ialt: &MjsOrientation;            "inertial frame alternative orientation.";
+        ]
+    }
+
+    // Plain types with normal getters and setters.
+    getter_setter! {
+        get, set, [
+            mass: f64;                     "mass.";
+            gravcomp: f64;                 "gravity compensation.";
+        ]
+    }
+
+    getter_setter! {
+        get, set, [
+            mocap: bool;                   "whether this is a mocap body.";
+            explicitinertial: bool;        "whether to save the body with explicit inertial clause.";
+        ]
+    }
+
+    /// Returns a wrapper around the `plugin` attribute.
+    pub fn plugin_wrapper(&mut self) -> MjsPlugin<'_> {
+        unsafe { MjsPlugin(&mut self.ffi_mut().plugin, PhantomData) }
+    }
+
+    /// Returns an immutable slice to userdata.
+    pub fn userdata(&self) -> &[f64] {
+        read_mjs_vec_f64(unsafe { (*self.0).userdata.as_ref().unwrap() })
+    }
+    
+    /// Sets new userdata.
+    pub fn set_userdata<T: AsRef<[f64]>>(&mut self, userdata: T) {
+        write_mjs_vec_f64(userdata.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() })
+    }
+
+    /// Returns the message appended to compiler errors.
+    pub fn info(&self) {
+        read_mjs_string(unsafe { self.ffi().info.as_ref().unwrap() });
+    }
+
+    /// Sets the message appended to compiler errors.
+    pub fn set_info(&mut self, info: &str) {
+        write_mjs_string(info, unsafe { self.ffi_mut().info.as_mut().unwrap() });
+    }
+
+}
+
+
+
+/******************************
+** Orientation representation
+******************************/
+/// Alternative orientation specifiers.
+pub type MjsOrientation = mjsOrientation;
+
+/// Type of orientation specifier.
+pub type MjtOrientation = mjtOrientation;
+
+
+/******************************
+** Tests
+******************************/
 #[cfg(test)]
 mod tests {
     use std::io::Write;
@@ -511,6 +647,7 @@ mod tests {
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
         let mut world = spec.world_body();
         let mut joint = world.add_joint();
+
         joint.set_name(NEW_NAME);
         drop(joint);
 
@@ -518,5 +655,48 @@ mod tests {
         let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
         assert!(joint.delete().is_ok(), "failed to delete model");
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed from spec");
+    }
+
+    #[test]
+    fn test_body_userdata() {
+        const NEW_USERDATA: [f64; 3] = [1.0, 2.0, 3.0];
+
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut world = spec.world_body();
+
+        assert_eq!(world.userdata(), []);
+
+        world.set_userdata(NEW_USERDATA);
+        assert_eq!(world.userdata(), NEW_USERDATA);
+    }
+
+    #[test]
+    fn test_body_attrs() {
+        const TEST_VALUE_F64: f64 = 5.25;
+
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut world = spec.world_body();
+
+        world.set_gravcomp(TEST_VALUE_F64);
+        assert_eq!(world.gravcomp(), TEST_VALUE_F64);
+
+        world.pos_mut()[0] = TEST_VALUE_F64;
+        assert_eq!(world.pos()[0], TEST_VALUE_F64);
+    }
+
+    #[test]
+    fn test_default() {
+        const DEFAULT_NAME: &str = "floor";
+        const NOT_DEFAULT_NAME: &str = "floor-not";
+
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+
+        /* Test search */
+        spec.add_default(DEFAULT_NAME).unwrap();
+        assert!(spec.default(NOT_DEFAULT_NAME).is_none());
+
+        /* Test delete */
+        // default.delete();
+        // assert!(spec.default(DEFAULT_NAME).is_none());
     }
 }
