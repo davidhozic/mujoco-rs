@@ -19,6 +19,10 @@ mod build_dependencies {
                 data.push("Copy".into());
             }
 
+            else if info.name.starts_with("mjt") {  // enums
+                data.push("Copy".into());
+            }
+
             data
         }
     }
