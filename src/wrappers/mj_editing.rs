@@ -388,12 +388,7 @@ impl MjSpec {
             }
         }
     }
-
-    pub fn element_pointer(&self) -> *mut mjsElement {
-        unsafe { self.0.as_ref().unwrap().element }
-    }
 }
-
 
 impl Drop for MjSpec {
     fn drop(&mut self) {
