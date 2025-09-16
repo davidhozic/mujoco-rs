@@ -238,6 +238,21 @@ macro_rules! mjs_wrapper {
 }
 
 
+/// Implements the userdata method.
+macro_rules! userdata_method {
+    () => {
+        /// Returns an immutable slice to userdata.
+        pub fn userdata(&self) -> &[f64] {
+            read_mjs_vec_f64(unsafe { (*self.0).userdata.as_ref().unwrap() })
+        }
+        
+        /// Sets new userdata.
+        pub fn set_userdata<T: AsRef<[f64]>>(&mut self, userdata: T) {
+            write_mjs_vec_f64(userdata.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() })
+        }
+    };
+}
+
 
 /***************************
 ** Model Specification
@@ -452,36 +467,6 @@ impl Drop for MjSpec {
     }
 }
 
-
-/***************************
-** Site specification
-***************************/
-mjs_wrapper!(Site);
-impl MjsSite<'_> {
-    getter_setter! {
-        get, [
-            // frame, size
-            pos:  &[f64; 3];              "position";
-            quat: &[f64; 4];              "orientation";
-            alt:  &MjsOrientation;        "alternative orientation";
-            fromto: &[f64; 6];            "alternative for capsule, cylinder, box, ellipsoid";
-            size: &[f64; 3];              "geom size";
-
-            // visual
-            rgba: &[f32; 4];              "rgba when material is omitted";
-            // other
-            // mjString* material;              "name of material";
-            // mjDoubleVec* userdata;           "user data";
-            // mjString* info;                  "message appended to compiler errors";
-    ]}
-
-    getter_setter!(get, set, [
-        type_: MjtGeom;                   "geom type";
-        group: i32;                       "group";
-    ]);
-}
-
-
 /***************************
 ** template specification
 ***************************/
@@ -517,6 +502,43 @@ mjs_wrapper!(Hfield);
 mjs_wrapper!(Skin);
 mjs_wrapper!(Texture);
 mjs_wrapper!(Material);
+
+
+/***************************
+** Site specification
+***************************/
+mjs_wrapper!(Site);
+impl MjsSite<'_> {
+    getter_setter! {
+        get, [
+            // frame, size
+            pos:  &[f64; 3];              "position";
+            quat: &[f64; 4];              "orientation";
+            alt:  &MjsOrientation;        "alternative orientation";
+            fromto: &[f64; 6];            "alternative for capsule, cylinder, box, ellipsoid";
+            size: &[f64; 3];              "geom size";
+
+            // visual
+            rgba: &[f32; 4];              "rgba when material is omitted";
+    ]}
+
+    getter_setter!(get, set, [
+        type_: MjtGeom;                   "geom type";
+        group: i32;                       "group";
+    ]);
+
+    userdata_method!();
+
+    /// Returns an immutable slice to name of material.
+    pub fn material(&self) -> &str {
+        read_mjs_string(unsafe { (*self.0).material.as_ref().unwrap() })
+    }
+
+    /// Sets new name of material. Does not check if the material exists.
+    pub fn set_material(&mut self, material: &str) {
+        write_mjs_string(material, unsafe {self.ffi_mut().material.as_mut().unwrap() })
+    }
+}
 
 /***************************
 ** Default specification
@@ -845,5 +867,31 @@ mod tests {
 
         spec.compile().unwrap();
         assert_eq!(spec.save_xml_string(1000).unwrap(), EXPECTED_XML);
+    }
+
+    #[test]
+    fn test_site() {
+        const TEST_MATERIAL: &str = "material 1";
+        const TEST_POSITION: [f64; 3] = [1.0, 2.0, 3.0];
+
+        let mut spec = MjSpec::new();
+        let mut world = spec.world_body();
+        let mut site = world.add_site();
+
+        /* material */
+        assert_eq!(site.material(), "");
+        site.set_material(TEST_MATERIAL);
+        assert_eq!(site.material(), TEST_MATERIAL);
+
+        /* userdata */
+        let test_userdata: Vec<f64> = vec![0.0; 5];
+        assert_eq!(site.userdata(), []);
+        site.set_userdata(&test_userdata);
+        assert_eq!(site.userdata(), test_userdata);
+
+        /* position */
+        assert_eq!(site.pos(), &[0.0; 3]);
+        *site.pos_mut() = TEST_POSITION;
+        assert_eq!(site.pos(), &TEST_POSITION);
     }
 }
