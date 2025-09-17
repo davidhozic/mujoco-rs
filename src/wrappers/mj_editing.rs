@@ -49,6 +49,11 @@ pub type MjtMark = mjtMark;
 /// Compiler options.
 pub type MjsCompiler = mjsCompiler;
 
+/// Type of inertia inference.
+pub type MjtGeomInertia = mjtGeomInertia;
+
+pub type MjtFlexSelf = mjtFlexSelf;
+
 /***************************
 ** Model Specification
 ***************************/
@@ -285,26 +290,6 @@ impl MjsSite<'_> {
     string_set_get! {
         material; "name of material.";
     }
-
-    // mjsElement* element;             // element type
-
-    // // frame, size
-    // double pos[3];                   // position
-    // double quat[4];                  // orientation
-    // mjsOrientation alt;              // alternative orientation
-    // double fromto[6];                // alternative for capsule, cylinder, box, ellipsoid
-    // double size[3];                  // geom size
-
-    // // visual
-    // mjtGeom type;                    // geom type
-    // mjString* material;              // name of material
-    // int group;                       // group
-    // float rgba[4];                   // rgba when material is omitted
-
-    // // other
-    // mjDoubleVec* userdata;           // user data
-    // mjString* info;                  // message appended to compiler errors
-
 }
 
 /***************************
@@ -336,71 +321,48 @@ mjs_wrapper!(Geom);
 impl MjsGeom<'_> {
     getter_setter! {
         get, [
-            pos: &[f64; 3];               "geom position.";
-            quat: &[f64; 4];              "geom orientation.";
-            alt: &MjsOrientation;         "alternative orientation.";
-            fromto: &[f64; 6];            "alternative for capsule, cylinder, box, ellipsoid.";
-            size: &[f64; 3];              "geom size.";
-            rgba: &[f32; 4];              "rgba when material is omitted.";
+            pos: &[f64; 3];                         "geom position.";
+            quat: &[f64; 4];                        "geom orientation.";
+            alt: &MjsOrientation;                   "alternative orientation.";
+            fromto: &[f64; 6];                      "alternative for capsule, cylinder, box, ellipsoid.";
+            size: &[f64; 3];                        "geom size.";
+            rgba: &[f32; 4];                        "rgba when material is omitted.";
+            friction: &[f64; 3];                    "one-sided friction coefficients: slide, roll, spin.";
+            solref: &[MjtNum; mjNREF as usize];     "solver reference.";
+            solimp: &[MjtNum; mjNIMP as usize];     "solver impedance.";
+            fluid_coefs: &[MjtNum; 5];              "ellipsoid-fluid interaction coefs."
         ]
     }
 
     getter_setter!(get, set, [
         type_: MjtGeom;                "geom type.";
         group: i32;                    "group.";
+        contype: i32;                  "contact type.";
+        conaffinity: i32;              "contact affinity.";
+        condim: i32;                   "contact dimensionality.";
+        priority: i32;                 "contact priority.";
+        solmix: f64;                   "solver mixing for contact pairs.";
+        margin: f64;                   "margin for contact detection.";
+        gap: f64;                      "include in solver if dist < margin-gap.";
+        mass: f64;                     "used to compute density.";
+        density: f64;                  "used to compute mass and inertia from volume or surface.";
+        typeinertia: MjtGeomInertia;   "selects between surface and volume inertia.";
+        fluid_ellipsoid: MjtNum;       "whether ellipsoid-fluid model is active.";
+        fitscale: f64;                 "scale mesh uniformly.";
     ]);
 
     userdata_method!(f64);
 
     string_set_get! {
-        meshname; "mesh attached to geom.";
-        material; "name of material.";
+        meshname;   "mesh attached to geom.";
+        material;   "name of material.";
+        hfieldname; "heightfield attached to geom.";
     }
 
-    // mjsElement* element;             // element type
-    // mjtGeom type;                    // geom type
-
-    // // frame, size
-    // double pos[3];                   // position
-    // double quat[4];                  // orientation
-    // mjsOrientation alt;              // alternative orientation
-    // double fromto[6];                // alternative for capsule, cylinder, box, ellipsoid
-    // double size[3];                  // type-specific size
-
-    // // contact related
-    // int contype;                     // contact type
-    // int conaffinity;                 // contact affinity
-    // int condim;                      // contact dimensionality
-    // int priority;                    // contact priority
-    // double friction[3];              // one-sided friction coefficients: slide, roll, spin
-    // double solmix;                   // solver mixing for contact pairs
-    // mjtNum solref[mjNREF];           // solver reference
-    // mjtNum solimp[mjNIMP];           // solver impedance
-    // double margin;                   // margin for contact detection
-    // double gap;                      // include in solver if dist < margin-gap
-
-    // // inertia inference
-    // double mass;                     // used to compute density
-    // double density;                  // used to compute mass and inertia from volume or surface
-    // mjtGeomInertia typeinertia;      // selects between surface and volume inertia
-
-    // // fluid forces
-    // mjtNum fluid_ellipsoid;          // whether ellipsoid-fluid model is active
-    // mjtNum fluid_coefs[5];           // ellipsoid-fluid interaction coefs
-
-    // // visual
-    // mjString* material;              // name of material
-    // float rgba[4];                   // rgba when material is omitted
-    // int group;                       // group
-
-    // // other
-    // mjString* hfieldname;            // heightfield attached to geom
-    // mjString* meshname;              // mesh attached to geom
-    // double fitscale;                 // scale mesh uniformly
-    // mjDoubleVec* userdata;           // user data
-    // mjsPlugin plugin;                // sdf plugin
-    // mjString* info;                  // message appended to compiler errors
-
+    /// Returns a wrapper around the `plugin` attribute.
+    pub fn plugin_wrapper(&mut self) -> MjsPlugin<'_> {
+        unsafe { MjsPlugin(&mut self.ffi_mut().plugin, PhantomData) }
+    }
 }
 
 /***************************
@@ -416,6 +378,10 @@ impl MjsCamera<'_> {
             intrinsic: &[f32; 4];         "intrinsic parameters.";
             sensor_size: &[f32; 2];       "sensor size.";
             resolution: &[f32; 2];        "resolution.";
+            focal_length: &[f32; 2];      "focal length (length).";
+            focal_pixel: &[f32; 2];       "focal length (pixel).";
+            principal_length: &[f32; 2];  "principal point (length).";
+            principal_pixel: &[f32; 2];   "principal point (pixel).";
         ]
     }
 
@@ -425,37 +391,15 @@ impl MjsCamera<'_> {
         ipd: f64;                     "inter-pupillary distance for stereo.";
     ]);
 
+    getter_setter! {
+        get, set, [orthographic: bool; "is camera orthographic."]
+    }
+
     userdata_method!(f64);
 
     string_set_get! {
         targetbody; "target body for tracking/targeting.";
     }
-
-    // mjsElement* element;             // element type
-
-    // // extrinsics
-    // double pos[3];                   // position
-    // double quat[4];                  // orientation
-    // mjsOrientation alt;              // alternative orientation
-    // mjtCamLight mode;                // tracking mode
-    // mjString* targetbody;            // target body for tracking/targeting
-
-    // // intrinsics
-    // int orthographic;                // is camera orthographic
-    // double fovy;                     // y-field of view
-    // double ipd;                      // inter-pupilary distance
-    // float intrinsic[4];              // camera intrinsics (length)
-    // float sensor_size[2];            // sensor size (length)
-    // float resolution[2];             // resolution (pixel)
-    // float focal_length[2];           // focal length (length)
-    // float focal_pixel[2];            // focal length (pixel)
-    // float principal_length[2];       // principal point (length)
-    // float principal_pixel[2];        // principal point (pixel)
-
-    // // other
-    // mjDoubleVec* userdata;           // user data
-    // mjString* info;                  // message appended to compiler errors
-
 }
 
 /***************************
@@ -470,46 +414,31 @@ impl MjsLight<'_> {
             ambient: &[f32; 3];           "ambient color.";
             diffuse: &[f32; 3];           "diffuse color.";
             specular: &[f32; 3];          "specular color.";
+            attenuation: &[f32; 3];       "OpenGL attenuation (quadratic model).";
         ]
     }
 
     getter_setter!(get, set, [
         mode: MjtCamLight;             "light mode.";
         type_: MjtLightType;           "light type.";
-        active: u8;                   "active flag.";
+        bulbradius: f32;               "bulb radius, for soft shadows.";
+        intensity: f32;                "intensity, in candelas.";
+        range: f32;                    "range of effectiveness.";
+        cutoff: f32;                   "OpenGL cutoff.";
+        exponent: f32;                 "OpenGL exponent.";
     ]);
+
+    getter_setter! {
+        get, set, [
+            active: bool;       "active flag.";
+            castshadow: bool;   "whether light cast shadows."
+        ]
+    }
 
     string_set_get! {
         texture; "texture name for image lights.";
         targetbody; "target body for targeting.";
     }
-
-    // mjsElement* element;             // element type
-
-    // // frame
-    // double pos[3];                   // position
-    // double dir[3];                   // direction
-    // mjtCamLight mode;                // tracking mode
-    // mjString* targetbody;            // target body for targeting
-
-    // // intrinsics
-    // mjtByte active;                  // is light active
-    // mjtLightType type;               // type of light
-    // mjString* texture;               // texture name for image lights
-    // mjtByte castshadow;              // does light cast shadows
-    // float bulbradius;                // bulb radius, for soft shadows
-    // float intensity;                 // intensity, in candelas
-    // float range;                     // range of effectiveness
-    // float attenuation[3];            // OpenGL attenuation (quadratic model)
-    // float cutoff;                    // OpenGL cutoff
-    // float exponent;                  // OpenGL exponent
-    // float ambient[3];                // ambient color
-    // float diffuse[3];                // diffuse color
-    // float specular[3];               // specular color
-
-    // // other
-    // mjString* info;                  // message appended to compiler errorsx
-
 }
 
 /***************************
@@ -528,14 +457,6 @@ impl MjsFrame<'_> {
     string_set_get! {
         childclass; "childclass name.";
     }
-
-    // mjsElement* element;             // element type
-    // mjString* childclass;            // childclass name
-    // double pos[3];                   // position
-    // double quat[4];                  // orientation
-    // mjsOrientation alt;              // alternative orientation
-    // mjString* info;                  // message appended to compiler errors
-
 }
 
 /* Non-tree elements */
@@ -666,62 +587,73 @@ mjs_wrapper!(Flex);
 impl MjsFlex<'_> {
     getter_setter! {
         get, [
-            rgba: &[f32; 4];              "rgba when material is omitted.";
+            rgba: &[f32; 4];                                "rgba when material is omitted.";
+            friction: &[f64; 3];                            "contact friction vector.";
+            solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
+            solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
         ]
     }
 
-    getter_setter!(get, set, [
-        group: i32;                    "group.";
-        young: f64;                    "elastic stiffness.";
-    ]);
+    getter_setter! {
+        get, set, [
+            young: f64;                    "elastic stiffness.";
+            group: i32;                    "group.";
+            contype: i32;                  "contact type.";
+            conaffinity: i32;              "contact affinity.";
+            condim: i32;                   "contact dimensionality.";
+            priority: i32;                 "contact priority.";
+            solmix: f64;                   "solver mixing for contact pairs.";
+            margin: f64;                   "margin for contact detection.";
+            gap: f64;                      "include in solver if dist < margin-gap.";
 
+            dim: i32;                "element dimensionality.";
+            radius: f64;             "radius around primitive element.";
+            activelayers: i32;       "number of active element layers in 3D.";
+            edgestiffness: f64;      "edge stiffness.";
+            edgedamping: f64;        "edge damping.";
+            poisson: f64;            "Poisson's ratio.";
+            damping: f64;            "Rayleigh's damping.";
+            thickness: f64;          "thickness (2D only).";
+            elastic2d: i32;          "2D passive forces; 0: none, 1: bending, 2: stretching, 3: both.";
+        ]
+    }
+
+    getter_setter! {
+        get, set, [
+            internal: bool;       "enable internal collisions.";
+            flatskin: bool;       "render flex skin with flat shading.";
+            vertcollide: bool;    "mode for vertex collision.";
+        ]        
+    }
+
+    getter_setter! {
+        force!, get, set, [
+            selfcollide: MjtFlexSelf;        "mode for flex self collision.";
+        ]
+    }
 
     string_set_get! {
         material; "name of material used for rendering.";
     }
 
-    // contact properties
-    // int contype;                     // contact type
-    // int conaffinity;                 // contact affinity
-    // int condim;                      // contact dimensionality
-    // int priority;                    // contact priority
-    // double friction[3];              // one-sided friction coefficients: slide, roll, spin
-    // double solmix;                   // solver mixing for contact pairs
-    // mjtNum solref[mjNREF];           // solver reference
-    // mjtNum solimp[mjNIMP];           // solver impedance
-    // double margin;                   // margin for contact detection
-    // double gap;                      // include in solver if dist<margin-gap
+    vec_string_set_append! {
+        nodebody; "node body names.";
+        vertbody; "vertex body names.";
+    }
 
-    // // other properties
-    // int dim;                         // element dimensionality
-    // double radius;                   // radius around primitive element
-    // mjtByte internal;                // enable internal collisions
-    // mjtByte flatskin;                // render flex skin with flat shading
-    // int selfcollide;                 // mode for flex self collision
-    // int vertcollide;                 // mode for vertex collision
-    // int passive;                     // mode for passive collisions
-    // int activelayers;                // number of active element layers in 3D
-    // int group;                       // group for visualizatioh
-    // double edgestiffness;            // edge stiffness
-    // double edgedamping;              // edge damping
-    // float rgba[4];                   // rgba when material is omitted
-    // mjString* material;              // name of material used for rendering
-    // double young;                    // Young's modulus
-    // double poisson;                  // Poisson's ratio
-    // double damping;                  // Rayleigh's damping
-    // double thickness;                // thickness (2D only)
-    // int elastic2d;                   // 2D passive forces; 0: none, 1: bending, 2: stretching, 3: both
+    float_vec_set_get! {
+        node: f64;      "node positions.";
+        vert: f64;      "vertex positions.";
+    }
 
-    // // mesh properties
-    // mjStringVec* nodebody;           // node body names
-    // mjStringVec* vertbody;           // vertex body names
-    // mjDoubleVec* node;               // node positions
-    // mjDoubleVec* vert;               // vertex positions
-    // mjIntVec* elem;                  // element vertex ids
-    // mjFloatVec* texcoord;            // vertex texture coordinates
-    // mjIntVec* elemtexcoord;          // element texture coordinates
+    float_vec_set! {
+        texcoord: f32;  "vertex texture coordinates";
+    }
 
-    // // other
+    int_vec_set! {
+        elem; "element vertex ids.";
+        elemtexcoord; "element texture coordinates.";
+    }
 }
 
 /***************************
@@ -874,7 +806,10 @@ impl MjsTuple<'_> {
         objtype; "object types.";
     }
 
-    vec_string_set_append!(objname);
+    vec_string_set_append! {
+        objname; "object names.";
+    }
+
     float_vec_set_get! {
         objprm: f64; "object parameters.";
     }
@@ -1023,7 +958,9 @@ impl MjsTexture<'_> {
         ]
     }
 
-    vec_string_set_append!(cubefiles);
+    vec_string_set_append! {
+        cubefiles; "different file for each side of the cube.";
+    }
 
     getter_setter! {get, set, [
         hflip: bool;    "horizontal flip";
@@ -1065,7 +1002,9 @@ impl MjsMaterial<'_> {
         ]
     }
 
-    vec_string_set_append!(textures);
+    vec_string_set_append! {
+        textures; "names of textures (empty: none).";
+    }
 }
 
 
@@ -1105,6 +1044,7 @@ impl MjsBody<'_> {
             iquat: &[f64; 4];                 "inertial frame orientation.";
             inertia: &[f64; 3];               "diagonal inertia (in i-frame).";
             ialt: &MjsOrientation;            "inertial frame alternative orientation.";
+            fullinertia: &[f64; 6];           "non-axis-aligned inertia matrix.";
         ]
     }
 
@@ -1123,6 +1063,7 @@ impl MjsBody<'_> {
         ]
     }
 
+    // TODO: Test the plugin wrapper.
     /// Returns a wrapper around the `plugin` attribute.
     pub fn plugin_wrapper(&mut self) -> MjsPlugin<'_> {
         unsafe { MjsPlugin(&mut self.ffi_mut().plugin, PhantomData) }

@@ -219,14 +219,14 @@ macro_rules! userdata_method {
 
 /// Implements vector of strings methods for given attribute $name.
 macro_rules! vec_string_set_append {
-    ($($name:ident),*) => {paste::paste!{
+    ($($name:ident; $comment:expr);* $(;)?) => {paste::paste!{
         $(
-            #[doc = concat!("Splits the `", stringify!($name), "` and put the split text as the corresponding attribute.")]
+            #[doc = concat!("Splits the `", stringify!($name), "` and put the split text as ", $comment, ".")]
             pub fn [<set_ $name>](&mut self, $name: &str) {
                 write_mjs_vec_string($name, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
             }
 
-            #[doc = concat!("Splits the `", stringify!($name), "` and append the split text to the corresponding attribute.")]
+            #[doc = concat!("Splits the `", stringify!($name), "` and append the split text to ", $comment, ".")]
             pub fn [<append_ $name>](&mut self, $name: &str) {
                 append_mjs_vec_string($name, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
             }
@@ -253,13 +253,22 @@ macro_rules! string_set_get {
 
 /// Implements getters and setters for floating point  (f32 or f64) attributes.
 macro_rules! float_vec_set_get {
-    ($($name:ident: $type:ty; $comment:expr;)*) => {paste::paste!{
+    ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
             #[doc = concat!("Returns `", $comment, "`.")]
             pub fn $name(&self) -> &[$type] {
                 [<read_mjs_vec_ $type>](unsafe { (*self.0).$name.as_ref().unwrap() })
             }
+        )*
 
+        float_vec_set!($($name: $type; $comment);*);
+    }};
+}
+
+/// Implements setters for floating point  (f32 or f64) attributes.
+macro_rules! float_vec_set {
+    ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
+        $(
             #[doc = concat!("Sets `", $comment, "`.")]
             pub fn [<set_ $name>](&mut self, $name: &[$type]) {
                 [<write_mjs_vec_ $type>]($name, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
@@ -271,7 +280,7 @@ macro_rules! float_vec_set_get {
 
 /// Implements setters for integer (i32) attributes.
 macro_rules! int_vec_set {
-    ($($name:ident; $comment:expr;)*) => {paste::paste!{
+    ($($name:ident; $comment:expr);* $(;)?) => {paste::paste!{
         $(
             #[doc = concat!("Sets `", $comment, "`.")]
             pub fn [<set_ $name>](&mut self, $name: &[i32]) {

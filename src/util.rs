@@ -366,7 +366,7 @@ macro_rules! info_with_view {
 macro_rules! getter_setter {
     (get, [$($name:ident: bool; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
-            #[doc = concat!("Checks ", $comment)]
+            #[doc = concat!("Check ", $comment)]
             pub fn [<$name:lower>](&self) -> bool {
                 self.ffi().$name == 1
             }
@@ -375,12 +375,12 @@ macro_rules! getter_setter {
 
     (get, [$($name:ident: & $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
-            #[doc = concat!("Returns an immutable reference to ", $comment)]
+            #[doc = concat!("Return an immutable reference to ", $comment)]
             pub fn [<$name:lower>](&self) -> &$type {
                 &self.ffi().$name
             }
 
-            #[doc = concat!("Returns a mutable reference to ", $comment)]
+            #[doc = concat!("Return a mutable reference to ", $comment)]
             pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
                 unsafe { &mut self.ffi_mut().$name }
             }
@@ -389,7 +389,7 @@ macro_rules! getter_setter {
 
     (get, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
-            #[doc = concat!("Returns value of ", $comment)]
+            #[doc = concat!("Return value of ", $comment)]
             pub fn [<$name:lower>](&self) -> $type {
                 self.ffi().$name.into()
             }
@@ -399,7 +399,7 @@ macro_rules! getter_setter {
     (set, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
-                #[doc = concat!("Sets ", $comment)]
+                #[doc = concat!("Set ", $comment)]
                 pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
                     #[allow(unnecessary_transmutes)]
                     unsafe { self.ffi_mut().$name = value.into() };
@@ -411,7 +411,7 @@ macro_rules! getter_setter {
     /* Enum conversion */
     (force!, get, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
-            #[doc = concat!("Returns value of ", $comment)]
+            #[doc = concat!("Return value of ", $comment)]
             pub fn [<$name:lower>](&self) -> $type {
                 unsafe { std::mem::transmute(self.ffi().$name) }
             }
@@ -421,7 +421,7 @@ macro_rules! getter_setter {
     (force!, set, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
-                #[doc = concat!("Sets ", $comment)]
+                #[doc = concat!("Set ", $comment)]
                 pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
                     #[allow(unnecessary_transmutes)]
                     unsafe { self.ffi_mut().$name = std::mem::transmute(value) };
