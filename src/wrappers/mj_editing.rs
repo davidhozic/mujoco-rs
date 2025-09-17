@@ -46,6 +46,8 @@ pub type MjtBuiltin = mjtBuiltin;
 /// Mark type for procedural textures.
 pub type MjtMark = mjtMark;
 
+/// Compiler options.
+pub type MjsCompiler = mjsCompiler;
 
 /***************************
 ** Model Specification
@@ -186,45 +188,40 @@ impl MjSpec {
 
 /// Public attributes.
 impl MjSpec {
-    /// Returns an immutable reference to simulation options ([`MjOption`]).
-    pub fn option(&self) -> &MjOption {
-        &self.ffi().option
+    string_set_get! {
+        modelname; "model name.";
+        comment; "comment at top of XML.";
+        modelfiledir; "path to model file.";
     }
 
-    /// Returns a mutable reference to simulation options ([`MjOption`]).
-    pub fn option_mut(&mut self) -> &mut MjOption {
-        unsafe { &mut self.ffi_mut().option }
-    }
-    
-    /// Returns an immutable reference to visualization options ([`MjVisual`]).
-    pub fn visual(&self) -> &MjVisual {
-        &self.ffi().visual
-    }
-
-    /// Returns a mutable reference to visualization options ([`MjVisual`]).
-    pub fn visual_mut(&mut self) -> &mut MjVisual {
-        unsafe { &mut self.ffi_mut().visual }
+    getter_setter! {
+        get, [
+            compiler: &MjsCompiler; "compiler options.";
+            stat: &MjStatistic; "statistic overrides.";
+            visual: &MjVisual; "visualization options.";
+            option: &MjOption; "simulation options";
+        ]
     }
 
-    /// Returns an immutable reference to statistic overrides ([`MjStatistic`]).
-    pub fn stat(&self) -> &MjStatistic {
-        &self.ffi().stat
+    getter_setter! {
+        get, set, [strippath: bool; "whether to strip paths from mesh files."]
     }
 
-    /// Returns a mutable reference to statistic overrides ([`MjStatistic`]).
-    pub fn stat_mut(&mut self) -> &mut MjStatistic {
-        unsafe { &mut self.ffi_mut().stat }
-    }
-
-    /// Obtains the model name.
-    pub fn model_name(&self) -> &str {
-        read_mjs_string(unsafe { self.ffi().modelname.as_ref().unwrap() })
-    }
-
-    /// Sets the model name.
-    pub fn set_model_name(&mut self, name: &str) {
-        let cstr = CString::new(name).unwrap();  // always has valid UTF-8
-        unsafe { mjs_setString(self.ffi_mut().modelname, cstr.as_ptr()); };
+    getter_setter! {
+        get, [
+            memory: MjtSize;      "number of bytes in arena+stack memory";
+            nemax: i32;             "max number of equality constraints.";
+            nuserdata: i32;              "number of mjtNums in userdata.";
+            nuser_body: i32;            "number of mjtNums in body_user.";
+            nuser_jnt: i32;              "number of mjtNums in jnt_user.";
+            nuser_geom: i32;            "number of mjtNums in geom_user.";
+            nuser_site: i32;            "number of mjtNums in site_user.";
+            nuser_cam: i32;              "number of mjtNums in cam_user.";
+            nuser_tendon: i32;        "number of mjtNums in tendon_user.";
+            nuser_actuator: i32;    "number of mjtNums in actuator_user.";
+            nuser_sensor: i32;        "number of mjtNums in sensor_user.";
+            nkey: i32;                             "number of keyframes.";
+        ]
     }
 }
 
@@ -1200,10 +1197,10 @@ mod tests {
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
 
         /* Test read */
-        assert_eq!(spec.model_name(), DEFAULT_MODEL_NAME);
+        assert_eq!(spec.modelname(), DEFAULT_MODEL_NAME);
         /* Test write */
-        spec.set_model_name(NEW_MODEL_NAME);
-        assert_eq!(spec.model_name(), NEW_MODEL_NAME)
+        spec.set_modelname(NEW_MODEL_NAME);
+        assert_eq!(spec.modelname(), NEW_MODEL_NAME)
     }
 
     #[test]

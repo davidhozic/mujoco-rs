@@ -238,12 +238,12 @@ macro_rules! vec_string_set_append {
 macro_rules! string_set_get {
     ($($name:ident; $comment:expr;)*) => {paste::paste!{
         $(
-            #[doc = concat!("Returns `", $comment, "`.")]
+            #[doc = concat!("Returns ", $comment)]
             pub fn $name(&self) -> &str {
                 read_mjs_string(unsafe { (*self.0).$name.as_ref().unwrap() })
             }
 
-            #[doc = concat!("Sets `", $comment, "`.")]
+            #[doc = concat!("Sets ", $comment)]
             pub fn [<set_ $name>](&mut self, $name: &str) {
                 write_mjs_string($name, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
             }
