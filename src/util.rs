@@ -364,53 +364,80 @@ macro_rules! info_with_view {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! getter_setter {
-    (get, [$($name:ident: bool; $comment:expr);* $(;)?]) => {
+    (get, [$($name:ident: bool; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Checks ", $comment)]
-            pub fn $name(&self) -> bool {
+            pub fn [<$name:lower>](&self) -> bool {
                 self.ffi().$name == 1
             }
         )*
-    };
+    }};
 
-    (get, [$($name:ident: & $type:ty; $comment:expr);* $(;)?]) => {
+    (get, [$($name:ident: & $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Returns an immutable reference to ", $comment)]
-            pub fn $name(&self) -> &$type {
+            pub fn [<$name:lower>](&self) -> &$type {
                 &self.ffi().$name
             }
 
-            paste::paste!{
-                #[doc = concat!("Returns a mutable reference to ", $comment)]
-                pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
-                    unsafe { &mut self.ffi_mut().$name }
-                }
+            #[doc = concat!("Returns a mutable reference to ", $comment)]
+            pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
+                unsafe { &mut self.ffi_mut().$name }
             }
         )*
-    };
+    }};
 
-    (get, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+    (get, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Returns value of ", $comment)]
-            pub fn $name(&self) -> $type {
-                unsafe { std::mem::transmute(self.ffi().$name) }
+            pub fn [<$name:lower>](&self) -> $type {
+                self.ffi().$name.into()
             }
         )*
-    };
+    }};
 
     (set, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
                 #[doc = concat!("Sets ", $comment)]
-                pub fn [<set_ $name>](&mut self, $name: $type) {
+                pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
                     #[allow(unnecessary_transmutes)]
-                    unsafe { self.ffi_mut().$name = std::mem::transmute($name) };
+                    unsafe { self.ffi_mut().$name = value.into() };
                 }
             )*
         }
     };
 
+    /* Enum conversion */
+    (force!, get, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
+        $(
+            #[doc = concat!("Returns value of ", $comment)]
+            pub fn [<$name:lower>](&self) -> $type {
+                unsafe { std::mem::transmute(self.ffi().$name) }
+            }
+        )*
+    }};
+
+    (force!, set, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+        paste::paste!{ 
+            $(
+                #[doc = concat!("Sets ", $comment)]
+                pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
+                    #[allow(unnecessary_transmutes)]
+                    unsafe { self.ffi_mut().$name = std::mem::transmute(value) };
+                }
+            )*
+        }
+    };
+    
+
     /* Handling of optional arguments */
+    /* Enum pass */
+    (force!, get, set, [ $( $name:ident : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(force!, get, [ $( $name : $type ; $comment );* ]);
+        $crate::getter_setter!(force!, set, [ $( $name : $type ; $comment );* ]);
+    };
+
     (get, set, [ $( $name:ident : bool ; $comment:expr );* $(;)?]) => {
         $crate::getter_setter!(get, [ $( $name : bool ; $comment );* ]);
         $crate::getter_setter!(set, [ $( $name : bool ; $comment );* ]);

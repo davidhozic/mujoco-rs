@@ -1,5 +1,6 @@
 //! Utilities for model editing purposes.
 use std::ffi::{CStr, CString};
+use std::mem::size_of;
 use crate::mujoco_c::*;
 
 
@@ -51,11 +52,11 @@ pub(crate) fn write_mjs_vec_f32(source: &[f32], destination: &mut mjFloatVec) {
 }
 
 // /// Writes as MJS int vector (C++) from a `source` to `destination`.
-// pub(crate) fn write_mjs_vec_int(source: &[i32], destination: &mut mjIntVec) {
-//     unsafe {
-//         mjs_setInt(destination, source.as_ptr(), source.len() as i32);
-//     }
-// }
+pub(crate) fn write_mjs_vec_int(source: &[i32], destination: &mut mjIntVec) {
+    unsafe {
+        mjs_setInt(destination, source.as_ptr(), source.len() as i32);
+    }
+}
 
 /// Split `source` to entries and copy to `destination` (C++).
 pub(crate) fn write_mjs_vec_string(source: &str, destination: &mut mjStringVec) {
@@ -70,6 +71,13 @@ pub(crate) fn append_mjs_vec_string(source: &str, destination: &mut mjStringVec)
     let c_source = CString::new(source).unwrap();  // can't be invalid UTF-8.
     unsafe {
         mjs_appendString(destination, c_source.as_ptr());
+    }
+}
+
+// /// Writes as MJS byte vector (C++) from a `source` to `destination`.
+pub(crate) fn write_mjs_vec_byte<T>(source: &[T], destination: &mut mjByteVec) {
+    unsafe {
+        mjs_setBuffer(destination, source.as_ptr().cast(), (size_of::<T>() * source.len()) as i32);
     }
 }
 
@@ -228,17 +236,48 @@ macro_rules! vec_string_set_append {
 
 /// Implements string methods for given attribute $name.
 macro_rules! string_set_get {
-    ($($name:ident),*) => {paste::paste!{
+    ($($name:ident; $comment:expr;)*) => {paste::paste!{
         $(
-            #[doc = concat!("Returns `", stringify!($name), "`.")]
+            #[doc = concat!("Returns `", $comment, "`.")]
             pub fn $name(&self) -> &str {
                 read_mjs_string(unsafe { (*self.0).$name.as_ref().unwrap() })
             }
 
-            #[doc = concat!("Sets `", stringify!($name), "`.")]
+            #[doc = concat!("Sets `", $comment, "`.")]
             pub fn [<set_ $name>](&mut self, $name: &str) {
                 write_mjs_string($name, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
             }
         )*
     }};
 }
+
+/// Implements getters and setters for floating point  (f32 or f64) attributes.
+macro_rules! float_vec_set_get {
+    ($($name:ident: $type:ty; $comment:expr;)*) => {paste::paste!{
+        $(
+            #[doc = concat!("Returns `", $comment, "`.")]
+            pub fn $name(&self) -> &[$type] {
+                [<read_mjs_vec_ $type>](unsafe { (*self.0).$name.as_ref().unwrap() })
+            }
+
+            #[doc = concat!("Sets `", $comment, "`.")]
+            pub fn [<set_ $name>](&mut self, $name: &[$type]) {
+                [<write_mjs_vec_ $type>]($name, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
+            }
+        )*
+    }};
+}
+
+
+/// Implements setters for integer (i32) attributes.
+macro_rules! int_vec_set {
+    ($($name:ident; $comment:expr;)*) => {paste::paste!{
+        $(
+            #[doc = concat!("Sets `", $comment, "`.")]
+            pub fn [<set_ $name>](&mut self, $name: &[i32]) {
+                write_mjs_vec_int($name, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
+            }
+        )*
+    }};
+}
+

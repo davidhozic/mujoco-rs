@@ -285,7 +285,29 @@ impl MjsSite<'_> {
 
     userdata_method!(f64);
 
-    string_set_get!(material);
+    string_set_get! {
+        material; "name of material.";
+    }
+
+    // mjsElement* element;             // element type
+
+    // // frame, size
+    // double pos[3];                   // position
+    // double quat[4];                  // orientation
+    // mjsOrientation alt;              // alternative orientation
+    // double fromto[6];                // alternative for capsule, cylinder, box, ellipsoid
+    // double size[3];                  // geom size
+
+    // // visual
+    // mjtGeom type;                    // geom type
+    // mjString* material;              // name of material
+    // int group;                       // group
+    // float rgba[4];                   // rgba when material is omitted
+
+    // // other
+    // mjDoubleVec* userdata;           // user data
+    // mjString* info;                  // message appended to compiler errors
+
 }
 
 /***************************
@@ -333,7 +355,55 @@ impl MjsGeom<'_> {
 
     userdata_method!(f64);
 
-    string_set_get!(meshname, material);
+    string_set_get! {
+        meshname; "mesh attached to geom.";
+        material; "name of material.";
+    }
+
+    // mjsElement* element;             // element type
+    // mjtGeom type;                    // geom type
+
+    // // frame, size
+    // double pos[3];                   // position
+    // double quat[4];                  // orientation
+    // mjsOrientation alt;              // alternative orientation
+    // double fromto[6];                // alternative for capsule, cylinder, box, ellipsoid
+    // double size[3];                  // type-specific size
+
+    // // contact related
+    // int contype;                     // contact type
+    // int conaffinity;                 // contact affinity
+    // int condim;                      // contact dimensionality
+    // int priority;                    // contact priority
+    // double friction[3];              // one-sided friction coefficients: slide, roll, spin
+    // double solmix;                   // solver mixing for contact pairs
+    // mjtNum solref[mjNREF];           // solver reference
+    // mjtNum solimp[mjNIMP];           // solver impedance
+    // double margin;                   // margin for contact detection
+    // double gap;                      // include in solver if dist < margin-gap
+
+    // // inertia inference
+    // double mass;                     // used to compute density
+    // double density;                  // used to compute mass and inertia from volume or surface
+    // mjtGeomInertia typeinertia;      // selects between surface and volume inertia
+
+    // // fluid forces
+    // mjtNum fluid_ellipsoid;          // whether ellipsoid-fluid model is active
+    // mjtNum fluid_coefs[5];           // ellipsoid-fluid interaction coefs
+
+    // // visual
+    // mjString* material;              // name of material
+    // float rgba[4];                   // rgba when material is omitted
+    // int group;                       // group
+
+    // // other
+    // mjString* hfieldname;            // heightfield attached to geom
+    // mjString* meshname;              // mesh attached to geom
+    // double fitscale;                 // scale mesh uniformly
+    // mjDoubleVec* userdata;           // user data
+    // mjsPlugin plugin;                // sdf plugin
+    // mjString* info;                  // message appended to compiler errors
+
 }
 
 /***************************
@@ -360,7 +430,35 @@ impl MjsCamera<'_> {
 
     userdata_method!(f64);
 
-    string_set_get!(targetbody);
+    string_set_get! {
+        targetbody; "target body for tracking/targeting.";
+    }
+
+    // mjsElement* element;             // element type
+
+    // // extrinsics
+    // double pos[3];                   // position
+    // double quat[4];                  // orientation
+    // mjsOrientation alt;              // alternative orientation
+    // mjtCamLight mode;                // tracking mode
+    // mjString* targetbody;            // target body for tracking/targeting
+
+    // // intrinsics
+    // int orthographic;                // is camera orthographic
+    // double fovy;                     // y-field of view
+    // double ipd;                      // inter-pupilary distance
+    // float intrinsic[4];              // camera intrinsics (length)
+    // float sensor_size[2];            // sensor size (length)
+    // float resolution[2];             // resolution (pixel)
+    // float focal_length[2];           // focal length (length)
+    // float focal_pixel[2];            // focal length (pixel)
+    // float principal_length[2];       // principal point (length)
+    // float principal_pixel[2];        // principal point (pixel)
+
+    // // other
+    // mjDoubleVec* userdata;           // user data
+    // mjString* info;                  // message appended to compiler errors
+
 }
 
 /***************************
@@ -384,7 +482,37 @@ impl MjsLight<'_> {
         active: u8;                   "active flag.";
     ]);
 
-    string_set_get!(texture, targetbody);
+    string_set_get! {
+        texture; "texture name for image lights.";
+        targetbody; "target body for targeting.";
+    }
+
+    // mjsElement* element;             // element type
+
+    // // frame
+    // double pos[3];                   // position
+    // double dir[3];                   // direction
+    // mjtCamLight mode;                // tracking mode
+    // mjString* targetbody;            // target body for targeting
+
+    // // intrinsics
+    // mjtByte active;                  // is light active
+    // mjtLightType type;               // type of light
+    // mjString* texture;               // texture name for image lights
+    // mjtByte castshadow;              // does light cast shadows
+    // float bulbradius;                // bulb radius, for soft shadows
+    // float intensity;                 // intensity, in candelas
+    // float range;                     // range of effectiveness
+    // float attenuation[3];            // OpenGL attenuation (quadratic model)
+    // float cutoff;                    // OpenGL cutoff
+    // float exponent;                  // OpenGL exponent
+    // float ambient[3];                // ambient color
+    // float diffuse[3];                // diffuse color
+    // float specular[3];               // specular color
+
+    // // other
+    // mjString* info;                  // message appended to compiler errorsx
+
 }
 
 /***************************
@@ -400,7 +528,17 @@ impl MjsFrame<'_> {
         ]
     }
 
-    string_set_get!(childclass);
+    string_set_get! {
+        childclass; "childclass name.";
+    }
+
+    // mjsElement* element;             // element type
+    // mjString* childclass;            // childclass name
+    // double pos[3];                   // position
+    // double quat[4];                  // orientation
+    // mjsOrientation alt;              // alternative orientation
+    // mjString* info;                  // message appended to compiler errors
+
 }
 
 /* Non-tree elements */
@@ -428,7 +566,48 @@ impl MjsActuator<'_> {
 
     userdata_method!(f64);
 
-    string_set_get!(target);
+    string_set_get! {
+        target; "name of transmission target";
+    }
+
+    // mjsElement* element;             // element type
+
+    // // gain, bias
+    // mjtGain gaintype;                // gain type
+    // double gainprm[mjNGAIN];         // gain parameters
+    // mjtBias biastype;                // bias type
+    // double biasprm[mjNGAIN];         // bias parameters
+
+    // // activation state
+    // mjtDyn dyntype;                  // dynamics type
+    // double dynprm[mjNDYN];           // dynamics parameters
+    // int actdim;                      // number of activation variables
+    // mjtByte actearly;                // apply next activations to qfrc
+
+    // // transmission
+    // mjtTrn trntype;                  // transmission type
+    // double gear[6];                  // length and transmitted force scaling
+    // mjString* target;                // name of transmission target
+    // mjString* refsite;               // reference site, for site transmission
+    // mjString* slidersite;            // site defining cylinder, for slider-crank
+    // double cranklength;              // crank length, for slider-crank
+    // double lengthrange[2];           // transmission length range
+    // double inheritrange;             // automatic range setting for position and intvelocity
+
+    // // input/output clamping
+    // int ctrllimited;                 // are control limits defined (mjtLimited)
+    // double ctrlrange[2];             // control range
+    // int forcelimited;                // are force limits defined (mjtLimited)
+    // double forcerange[2];            // force range
+    // int actlimited;                  // are activation limits defined (mjtLimited)
+    // double actrange[2];              // activation range
+
+    // // other
+    // int group;                       // group
+    // mjDoubleVec* userdata;           // user data
+    // mjsPlugin plugin;                // actuator plugin
+    // mjString* info;                  // message appended to compiler errors
+
 }
 
 /***************************
@@ -452,7 +631,35 @@ impl MjsSensor<'_> {
 
     userdata_method!(f64);
 
-    string_set_get!(refname, objname);
+    string_set_get! {
+        refname; "name of referenced object.";
+        objname; "name of sensorized object.";
+    }
+
+    // mjsElement* element;             // element type
+
+    // // sensor definition
+    // mjtSensor type;                  // type of sensor
+    // mjtObj objtype;                  // type of sensorized object
+    // mjString* objname;               // name of sensorized object
+    // mjtObj reftype;                  // type of referenced object
+    // mjString* refname;               // name of referenced object
+    // int intprm[mjNSENS];             // integer parameters
+
+    // // user-defined sensors
+    // mjtDataType datatype;            // data type for sensor measurement
+    // mjtStage needstage;              // compute stage needed to simulate sensor
+    // int dim;                         // number of scalar outputs
+
+    // // output post-processing
+    // double cutoff;                   // cutoff for real and positive datatypes
+    // double noise;                    // noise stdev
+
+    // // other
+    // mjDoubleVec* userdata;           // user data
+    // mjsPlugin plugin;                // sensor plugin
+    // mjString* info;                  // message appended to compiler errors
+
 }
 
 /***************************
@@ -472,7 +679,52 @@ impl MjsFlex<'_> {
     ]);
 
 
-    string_set_get!(material);
+    string_set_get! {
+        material; "name of material used for rendering.";
+    }
+
+    // contact properties
+    // int contype;                     // contact type
+    // int conaffinity;                 // contact affinity
+    // int condim;                      // contact dimensionality
+    // int priority;                    // contact priority
+    // double friction[3];              // one-sided friction coefficients: slide, roll, spin
+    // double solmix;                   // solver mixing for contact pairs
+    // mjtNum solref[mjNREF];           // solver reference
+    // mjtNum solimp[mjNIMP];           // solver impedance
+    // double margin;                   // margin for contact detection
+    // double gap;                      // include in solver if dist<margin-gap
+
+    // // other properties
+    // int dim;                         // element dimensionality
+    // double radius;                   // radius around primitive element
+    // mjtByte internal;                // enable internal collisions
+    // mjtByte flatskin;                // render flex skin with flat shading
+    // int selfcollide;                 // mode for flex self collision
+    // int vertcollide;                 // mode for vertex collision
+    // int passive;                     // mode for passive collisions
+    // int activelayers;                // number of active element layers in 3D
+    // int group;                       // group for visualizatioh
+    // double edgestiffness;            // edge stiffness
+    // double edgedamping;              // edge damping
+    // float rgba[4];                   // rgba when material is omitted
+    // mjString* material;              // name of material used for rendering
+    // double young;                    // Young's modulus
+    // double poisson;                  // Poisson's ratio
+    // double damping;                  // Rayleigh's damping
+    // double thickness;                // thickness (2D only)
+    // int elastic2d;                   // 2D passive forces; 0: none, 1: bending, 2: stretching, 3: both
+
+    // // mesh properties
+    // mjStringVec* nodebody;           // node body names
+    // mjStringVec* vertbody;           // vertex body names
+    // mjDoubleVec* node;               // node positions
+    // mjDoubleVec* vert;               // vertex positions
+    // mjIntVec* elem;                  // element vertex ids
+    // mjFloatVec* texcoord;            // vertex texture coordinates
+    // mjIntVec* elemtexcoord;          // element texture coordinates
+
+    // // other
 }
 
 /***************************
@@ -482,13 +734,25 @@ mjs_wrapper!(Pair);
 impl MjsPair<'_> {
     getter_setter! {
         get, [
-            friction: &[f64; 5];          "contact friction vector.";
-            solref: &[MjtNum; 2];         "solref for the pair.";
-            solimp: &[MjtNum; 5];         "solimp for the pair.";
+            friction: &[f64; 5];                            "contact friction vector.";
+            solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
+            solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
+            solreffriction: &[MjtNum; mjNREF as usize];     "solver reference, frictional directions.";
         ]
     }
 
-    string_set_get!(geomname1, geomname2);
+    getter_setter! {
+        get, set, [
+            margin: f64;             "margin for contact detection.";
+            gap: f64;        "include in solver if dist<margin-gap.";
+            condim: i32;                   "contact dimensionality.";
+        ]
+    }
+
+    string_set_get! {
+        geomname1; "name of geom 1.";
+        geomname2; "name of geom 2.";
+    }
 }
 
 /***************************
@@ -496,7 +760,10 @@ impl MjsPair<'_> {
 ***************************/
 mjs_wrapper!(Exclude);
 impl MjsExclude<'_> {
-    string_set_get!(bodyname1, bodyname2);
+    string_set_get! {
+        bodyname1; "name of body 1.";
+        bodyname2; "name of body 2.";
+    }
 }
 
 /***************************
@@ -506,16 +773,25 @@ mjs_wrapper!(Equality);
 impl MjsEquality<'_> {
     getter_setter! {
         get, [
-            data: &[f64; 11];           "data array for equality parameters.";
+            data: &[f64; mjNEQDATA as usize];   "data array for equality parameters.";
+            solref: &[f64; mjNREF as usize];    "solver reference";         
+            solimp: &[f64; mjNIMP as usize];    "solver impedance";
         ]
     }
 
-    getter_setter!(get, set, [
-        type_: MjtEq;                                        "equality type.";
-        active: u8;                                            "active flag.";
-    ]);
+    getter_setter! {get, set, [
+        active: bool;   "active flag.";
+    ]}
 
-    string_set_get!(name1, name2);
+    getter_setter! {get, set, [
+        type_: MjtEq;   "equality type.";
+        objtype: MjtObj; "type of both objects";
+    ]}
+
+    string_set_get! {
+        name1; "name of object 1";
+        name2; "name of object 2";
+    }
 }
 
 /***************************
@@ -525,19 +801,38 @@ mjs_wrapper!(Tendon);
 impl MjsTendon<'_> {
     getter_setter! {
         get, [
-            rgba: &[f32; 4];              "rgba when material omitted.";
-            range: &[f64; 2];             "range.";
-            springlength: &[f64; 2];      "spring length.";
+            springlength: &[f64; 2];                    "spring length.";
+            solref_friction: &[f64; mjNREF as usize];   "solver reference: tendon friction.";
+            solimp_friction: &[f64; mjNIMP as usize];   "solver impedance: tendon friction.";
+            range: &[f64; 2];                           "range.";
+            actfrcrange: &[f64; 2];                     "actuator force limits.";
+            solref_limit: &[f64; mjNREF as usize];      "solver reference: tendon limits.";
+            solimp_limit: &[f64; mjNIMP as usize];      "solver impedance: tendon limits.";
+            rgba: &[f32; 4];                            "rgba when material omitted.";
         ]
     }
 
-    getter_setter!(get, set, [
-        group: i32;                    "group.";
-    ]);
+    getter_setter! {get, set, [
+        group: i32;         "group.";
+        damping: f64;       "damping coefficient.";
+        stiffness: f64;     "stiffness coefficient.";
+        frictionloss: f64;  "friction loss.";
+        armature: f64;      "inertia associated with tendon velocity.";
+        margin: f64;        "margin value for tendon limit detection.";
+        width: f64;         "width for rendering.";
+    ]}
+
+    getter_setter! {
+        get, set, [
+            limited: bool;       "does tendon have limits (mjtLimited).";
+            actfrclimited: bool; "does tendon have actuator force limits."
+        ]
+    }
 
     userdata_method!(f64);
-
-    string_set_get!(material);
+    string_set_get! {
+        material; "name of material for rendering.";
+    }
 }
 
 /***************************
@@ -557,6 +852,10 @@ impl MjsNumeric<'_> {
             size: i32;                     "size of the numeric array.";
         ]
     }
+
+    float_vec_set_get! {
+        data: f64; "initialization data.";
+    }
 }
 
 /***************************
@@ -564,6 +863,9 @@ impl MjsNumeric<'_> {
 ***************************/
 mjs_wrapper!(Text);
 impl MjsText<'_> {
+    string_set_get! {
+        data; "text string.";
+    }
 }
 
 /***************************
@@ -571,6 +873,14 @@ impl MjsText<'_> {
 ***************************/
 mjs_wrapper!(Tuple);
 impl MjsTuple<'_> {
+    int_vec_set! {
+        objtype; "object types.";
+    }
+
+    vec_string_set_append!(objname);
+    float_vec_set_get! {
+        objprm: f64; "object parameters.";
+    }
 }
 
 /***************************
@@ -578,6 +888,20 @@ impl MjsTuple<'_> {
 ***************************/
 mjs_wrapper!(Key);
 impl MjsKey<'_> {
+    getter_setter! {
+        get, set, [
+            time: f64; "time."
+        ]
+    }
+
+    float_vec_set_get! {
+        qpos: f64; "qpos.";
+        qvel: f64; "qvel.";
+        act: f64; "act.";
+        mpos: f64; "mocap pos.";
+        mquat: f64; "mocap quat.";
+        ctrl: f64; "ctrl.";
+    }
 }
 
 /***************************
@@ -585,6 +909,16 @@ impl MjsKey<'_> {
 ***************************/
 mjs_wrapper!(Plugin);
 impl MjsPlugin<'_> {
+    string_set_get! {
+        name; "instance name.";
+        plugin_name; "plugin name.";
+    }
+
+    getter_setter! {
+        get, set, [
+            active: bool; "is the plugin active.";
+        ]
+    }
 }
 
 /* Assets */
@@ -602,7 +936,10 @@ impl MjsMesh<'_> {
         ]
     }
 
-    string_set_get!(file, content_type);
+    string_set_get! {
+        content_type; "content type of file.";
+        file; "mesh file.";
+    }
 }
 
 /***************************
@@ -616,7 +953,15 @@ impl MjsHfield<'_> {
         ]
     }
 
-    string_set_get!(content_type, file);
+    getter_setter! { get, set, [
+        nrow: i32;  "number of rows.";
+        ncol: i32;  "number of columns.";
+    ]}
+
+    string_set_get! {
+        content_type; "content type of file.";
+        file; "file: (nrow, ncol, [elevation data]).";
+    }
 
     /// Sets `userdata`.
     pub fn set_userdata<T: AsRef<[f32]>>(&mut self, userdata: T) {
@@ -637,12 +982,15 @@ impl MjsSkin<'_> {
 
     getter_setter! {
         get, set, [
-            inflate: f32;       "inflate in normal direction";
-            group: i32;         "group for visualization";
+            inflate: f32;       "inflate in normal direction.";
+            group: i32;         "group for visualization.";
         ]
     }
 
-    string_set_get!(material, file);
+    string_set_get! {
+        material; "name of material used for rendering.";
+        file; "skin file.";
+    }
 }
 
 /***************************
@@ -652,47 +1000,45 @@ mjs_wrapper!(Texture);
 impl MjsTexture<'_> {
     getter_setter! {
         get, [
-            /* Method 1: builtin */
             rgb1: &[f64; 3];                  "first color for builtin";
             rgb2: &[f64; 3];                  "second color for builtin";
             markrgb: &[f64; 3];               "mark color";
-
-            /* Method 2: single file */
-
-            /* Method 3: separate files */
+            gridsize: &[i32; 2];           "size of grid for composite file; (1,1)-repeat";
+            gridlayout: &[i8; 13];         "row-major: L,R,F,B,U,D for faces; . for unused";
         ]
     }
 
     getter_setter! {
         get, set, [
-            /* Method 1: builtin */
-            type_: MjtTexture;            "texture type.";
-            colorspace: MjtColorSpace;    "colorspace.";
-            builtin: MjtBuiltin;          "builtin type";
-            mark: MjtMark;                "mark type";
             random: f64;                  "probability of random dots";
             width: i32;                   "image width.";
             height: i32;                  "image height.";
             nchannel: i32;                "number of channels.";
+        ]
+    }
 
-            /* Method 2: single file */
-            gridsize: [i32; 2];           "size of grid for composite file; (1,1)-repeat";
-            gridlayout: [i8; 13];         "row-major: L,R,F,B,U,D for faces; . for unused";
-
-            /* Method 3: separate files */
+    getter_setter! {
+        force!, get, set, [
+            type_: MjtTexture;            "texture type.";
+            colorspace: MjtColorSpace;    "colorspace.";
+            builtin: MjtBuiltin;          "builtin type";
+            mark: MjtMark;                "mark type";
         ]
     }
 
     vec_string_set_append!(cubefiles);
 
-    // // method 4: from buffer read by user
-    // mjByteVec* data;                  // texture data
+    getter_setter! {get, set, [
+        hflip: bool;    "horizontal flip";
+        vflip: bool;    "vertical flip";
+    ]}
 
-    // // flip options
-    // mjtByte hflip;                   // horizontal flip
-    // mjtByte vflip;                   // vertical flip
+    /// Sets texture `data`.
+    pub fn set_data<T>(&mut self, data: &[T]) {
+        write_mjs_vec_byte(data, unsafe { self.ffi_mut().data.as_mut().unwrap() });
+    }
 
-    string_set_get!(file);
+    string_set_get!(file; "png file to load; use for all sides of cube";);
 }
 
 /***************************
