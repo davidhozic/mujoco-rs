@@ -382,7 +382,7 @@ macro_rules! getter_setter {
 
             paste::paste!{
                 #[doc = concat!("Returns a mutable reference to ", $comment)]
-                pub fn [<$name _mut>](&mut self) -> &mut $type {
+                pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
                     unsafe { &mut self.ffi_mut().$name }
                 }
             }
@@ -393,7 +393,7 @@ macro_rules! getter_setter {
         $(
             #[doc = concat!("Returns value of ", $comment)]
             pub fn $name(&self) -> $type {
-                self.ffi().$name
+                unsafe { std::mem::transmute(self.ffi().$name) }
             }
         )*
     };
@@ -403,7 +403,8 @@ macro_rules! getter_setter {
             $(
                 #[doc = concat!("Sets ", $comment)]
                 pub fn [<set_ $name>](&mut self, $name: $type) {
-                    unsafe { self.ffi_mut().$name = $name.into() };
+                    #[allow(unnecessary_transmutes)]
+                    unsafe { self.ffi_mut().$name = std::mem::transmute($name) };
                 }
             )*
         }

@@ -53,6 +53,18 @@ pub type MjtSameFrame = mjtSameFrame;
 /// Dynamic modes for cameras and lights, specifying how the camera/light position and orientation are computed.
 pub type MjtCamLight = mjtCamLight;
 
+/// The type of a light source describing how its position, orientation and
+/// other properties will interact with the objects in the scene.
+pub type MjtLightType = mjtLightType;
+
+/// Equality constraint types.
+pub type MjtEq = mjtEq;
+
+/// Texture types, specifying how the texture will be mapped
+pub type MjtTexture = mjtTexture;
+
+/// Type of color space encoding for textures.
+pub type MjtColorSpace = mjtColorSpace;
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.

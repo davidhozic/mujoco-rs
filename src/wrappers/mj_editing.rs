@@ -4,15 +4,36 @@ use std::io::{Error, ErrorKind};
 use std::marker::PhantomData;
 use std::path::Path;
 use std::ptr;
+
+use super::mj_model::{
+    MjModel, MjtObj, MjtGeom, MjtJoint, MjtCamLight,
+    MjtLightType, MjtSensor, MjtDataType, MjtGain,
+    MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace
+};
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic,};
-use super::mj_model::{MjModel, MjtObj, MjtGeom};
 use super::mj_option::MjOption;
+use super::mj_primitive::*;
 use crate::mujoco_c::*;
 
 use crate::getter_setter;
 
 // Re-export with lowercase 'f' to fix method generation
 use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
+
+
+/******************************
+** Type aliases
+******************************/
+/// Alternative orientation specifiers.
+pub type MjsOrientation = mjsOrientation;
+
+/// Type of orientation specifier.
+pub type MjtOrientation = mjtOrientation;
+
+/// Type of built-in procedural texture.
+pub type MjtBuiltin = mjtBuiltin;
+
+pub type MjtMark = mjtMark;
 
 
 /// Represents all the types that [`MjSpec`] supports.
@@ -115,6 +136,37 @@ fn read_mjs_vec_f64(array: &mjDoubleVec) -> &[f64] {
 fn write_mjs_vec_f64(source: &[f64], destination: &mut mjDoubleVec) {
     unsafe {
         mjs_setDouble(destination, source.as_ptr(), source.len() as i32);
+    }
+}
+
+
+/// Writes as MJS float vector (C++) from a `source` to `destination`.
+fn write_mjs_vec_f32(source: &[f32], destination: &mut mjFloatVec) {
+    unsafe {
+        mjs_setFloat(destination, source.as_ptr(), source.len() as i32);
+    }
+}
+
+/// Writes as MJS int vector (C++) from a `source` to `destination`.
+fn write_mjs_vec_int(source: &[i32], destination: &mut mjIntVec) {
+    unsafe {
+        mjs_setInt(destination, source.as_ptr(), source.len() as i32);
+    }
+}
+
+/// Split `source` to entries and copy to `destination` (C++).
+fn write_mjs_vec_string(source: &str, destination: &mut mjStringVec) {
+    let c_source = CString::new(source).unwrap();  // can't be invalid UTF-8.
+    unsafe {
+        mjs_setStringVec(destination, c_source.as_ptr());
+    }
+}
+
+/// Split `source` to entries and append to `destination` (C++).
+fn append_mjs_vec_string(source: &str, destination: &mut mjStringVec) {
+    let c_source = CString::new(source).unwrap();  // can't be invalid UTF-8.
+    unsafe {
+        mjs_appendString(destination, c_source.as_ptr());
     }
 }
 
@@ -240,17 +292,51 @@ macro_rules! mjs_wrapper {
 
 /// Implements the userdata method.
 macro_rules! userdata_method {
-    () => {
+    ($type:ty) => {paste::paste!{
         /// Returns an immutable slice to userdata.
-        pub fn userdata(&self) -> &[f64] {
-            read_mjs_vec_f64(unsafe { (*self.0).userdata.as_ref().unwrap() })
+        pub fn userdata(&self) -> &[$type] {
+            [<read_mjs_vec_ $type>](unsafe { (*self.0).userdata.as_ref().unwrap() })
         }
         
-        /// Sets new userdata.
-        pub fn set_userdata<T: AsRef<[f64]>>(&mut self, userdata: T) {
-            write_mjs_vec_f64(userdata.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() })
+        /// Sets `userdata`.
+        pub fn set_userdata<T: AsRef<[$type]>>(&mut self, userdata: T) {
+            [<write_mjs_vec_ $type>](userdata.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() })
         }
-    };
+    }};
+}
+
+/// Implements vector of strings methods for given attribute $name.
+macro_rules! vec_string_set_append {
+    ($($name:ident),*) => {paste::paste!{
+        $(
+            #[doc = concat!("Splits the `", stringify!($name), "` and put the split text as the corresponding attribute.")]
+            pub fn [<set_ $name>](&mut self, $name: &str) {
+                write_mjs_vec_string($name, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
+            }
+
+            #[doc = concat!("Splits the `", stringify!($name), "` and append the split text to the corresponding attribute.")]
+            pub fn [<append_ $name>](&mut self, $name: &str) {
+                append_mjs_vec_string($name, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
+            }
+        )*
+    }};
+}
+
+/// Implements string methods for given attribute $name.
+macro_rules! string_set_get {
+    ($($name:ident),*) => {paste::paste!{
+        $(
+            #[doc = concat!("Returns `", stringify!($name), "`.")]
+            pub fn $name(&self) -> &str {
+                read_mjs_string(unsafe { (*self.0).$name.as_ref().unwrap() })
+            }
+
+            #[doc = concat!("Sets `", stringify!($name), "`.")]
+            pub fn [<set_ $name>](&mut self, $name: &str) {
+                write_mjs_string($name, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
+            }
+        )*
+    }};
 }
 
 
@@ -468,43 +554,6 @@ impl Drop for MjSpec {
 }
 
 /***************************
-** template specification
-***************************/
-mjs_wrapper!(Joint);
-mjs_wrapper!(Geom);
-mjs_wrapper!(Camera);
-mjs_wrapper!(Light);
-mjs_wrapper!(Frame);
-
-/* Non-tree elements */
-mjs_wrapper!(Actuator);
-mjs_wrapper!(Sensor);
-mjs_wrapper!(Flex);
-mjs_wrapper!(Pair);
-mjs_wrapper!(Exclude);
-mjs_wrapper!(Equality);
-mjs_wrapper!(Tendon);
-
-// Wrap
-mjs_wrapper!(Wrap);
-
-
-mjs_wrapper!(Numeric);
-mjs_wrapper!(Text);
-mjs_wrapper!(Tuple);
-mjs_wrapper!(Key);
-mjs_wrapper!(Plugin);
-
-
-/* Assets */
-mjs_wrapper!(Mesh);
-mjs_wrapper!(Hfield);
-mjs_wrapper!(Skin);
-mjs_wrapper!(Texture);
-mjs_wrapper!(Material);
-
-
-/***************************
 ** Site specification
 ***************************/
 mjs_wrapper!(Site);
@@ -527,18 +576,448 @@ impl MjsSite<'_> {
         group: i32;                       "group";
     ]);
 
-    userdata_method!();
+    userdata_method!(f64);
 
-    /// Returns an immutable slice to name of material.
-    pub fn material(&self) -> &str {
-        read_mjs_string(unsafe { (*self.0).material.as_ref().unwrap() })
+    string_set_get!(material);
+}
+
+/***************************
+** Joint specification
+***************************/
+mjs_wrapper!(Joint);
+impl MjsJoint<'_> {
+    getter_setter! {
+        get, [
+            pos:     &[f64; 3];         "joint position.";
+            axis:    &[f64; 3];             "joint axis.";
+            ref_:    &f64;             "joint reference.";
+            range:   &[f64; 2];            "joint range.";
+        ]
     }
 
-    /// Sets new name of material. Does not check if the material exists.
-    pub fn set_material(&mut self, material: &str) {
-        write_mjs_string(material, unsafe {self.ffi_mut().material.as_mut().unwrap() })
+    getter_setter!(get, set, [
+        type_: MjtJoint;               "joint type.";
+        group: i32;                    "joint group.";
+    ]);
+
+    userdata_method!(f64);
+}
+
+/***************************
+** Geom specification
+***************************/
+mjs_wrapper!(Geom);
+impl MjsGeom<'_> {
+    getter_setter! {
+        get, [
+            pos: &[f64; 3];               "geom position.";
+            quat: &[f64; 4];              "geom orientation.";
+            alt: &MjsOrientation;         "alternative orientation.";
+            fromto: &[f64; 6];            "alternative for capsule, cylinder, box, ellipsoid.";
+            size: &[f64; 3];              "geom size.";
+            rgba: &[f32; 4];              "rgba when material is omitted.";
+        ]
+    }
+
+    getter_setter!(get, set, [
+        type_: MjtGeom;                "geom type.";
+        group: i32;                    "group.";
+    ]);
+
+    userdata_method!(f64);
+
+    string_set_get!(meshname, material);
+}
+
+/***************************
+** Camera specification
+***************************/
+mjs_wrapper!(Camera);
+impl MjsCamera<'_> {
+    getter_setter! {
+        get, [
+            pos: &[f64; 3];               "camera position.";
+            quat: &[f64; 4];              "camera orientation.";
+            alt: &MjsOrientation;         "alternative orientation.";
+            intrinsic: &[f32; 4];         "intrinsic parameters.";
+            sensor_size: &[f32; 2];       "sensor size.";
+            resolution: &[f32; 2];        "resolution.";
+        ]
+    }
+
+    getter_setter!(get, set, [
+        mode: MjtCamLight;             "camera mode.";
+        fovy: f64;                    "field of view in y direction.";
+        ipd: f64;                     "inter-pupillary distance for stereo.";
+    ]);
+
+    userdata_method!(f64);
+
+    string_set_get!(targetbody);
+}
+
+/***************************
+** Light specification
+***************************/
+mjs_wrapper!(Light);
+impl MjsLight<'_> {
+    getter_setter! {
+        get, [
+            pos: &[f64; 3];               "light position.";
+            dir: &[f64; 3];               "light direction.";
+            ambient: &[f32; 3];           "ambient color.";
+            diffuse: &[f32; 3];           "diffuse color.";
+            specular: &[f32; 3];          "specular color.";
+        ]
+    }
+
+    getter_setter!(get, set, [
+        mode: MjtCamLight;             "light mode.";
+        type_: MjtLightType;           "light type.";
+        active: u8;                   "active flag.";
+    ]);
+
+    string_set_get!(texture, targetbody);
+}
+
+/***************************
+** Frame specification
+***************************/
+mjs_wrapper!(Frame);
+impl MjsFrame<'_> {
+    getter_setter! {
+        get, [
+            pos: &[f64; 3];               "frame position.";
+            quat: &[f64; 4];              "frame orientation.";
+            alt: &MjsOrientation;         "alternative orientation.";
+        ]
+    }
+
+    string_set_get!(childclass);
+}
+
+/* Non-tree elements */
+
+/***************************
+** Actuator specification
+***************************/
+mjs_wrapper!(Actuator);
+impl MjsActuator<'_> {
+    getter_setter! {
+        get, [
+            gear: &[f64; 6];              "gear parameters.";
+            gainprm: &[f64; 10];          "gain parameters.";
+            biasprm: &[f64; 10];          "bias parameters.";
+            dynprm: &[f64; 10];           "dynamic parameters.";
+        ]
+    }
+
+    getter_setter!(get, set, [
+        gaintype: MjtGain;             "gain type.";
+        biastype: MjtBias;             "bias type.";
+        dyntype: MjtDyn;               "dyn type.";
+        group: i32;                    "group.";
+    ]);
+
+    userdata_method!(f64);
+
+    string_set_get!(target);
+}
+
+/***************************
+** Sensor specification
+***************************/
+mjs_wrapper!(Sensor);
+impl MjsSensor<'_> {
+    getter_setter! {
+        get, [
+            intprm: &[i32; 3];            "integer parameters.";
+        ]
+    }
+
+    getter_setter!(get, set, [
+        type_: MjtSensor;              "sensor type.";
+        objtype: MjtObj;               "object type the sensor refers to.";
+        datatype: MjtDataType;         "data type.";
+        cutoff: f64;                  "cutoff parameter.";
+        noise: f64;                   "noise parameter.";
+    ]);
+
+    userdata_method!(f64);
+
+    string_set_get!(refname, objname);
+}
+
+/***************************
+** Flex specification
+***************************/
+mjs_wrapper!(Flex);
+impl MjsFlex<'_> {
+    getter_setter! {
+        get, [
+            rgba: &[f32; 4];              "rgba when material is omitted.";
+        ]
+    }
+
+    getter_setter!(get, set, [
+        group: i32;                    "group.";
+        young: f64;                    "elastic stiffness.";
+    ]);
+
+
+    string_set_get!(material);
+}
+
+/***************************
+** Pair specification
+***************************/
+mjs_wrapper!(Pair);
+impl MjsPair<'_> {
+    getter_setter! {
+        get, [
+            friction: &[f64; 5];          "contact friction vector.";
+            solref: &[MjtNum; 2];         "solref for the pair.";
+            solimp: &[MjtNum; 5];         "solimp for the pair.";
+        ]
+    }
+
+    string_set_get!(geomname1, geomname2);
+}
+
+/***************************
+** Exclude specification
+***************************/
+mjs_wrapper!(Exclude);
+impl MjsExclude<'_> {
+    string_set_get!(bodyname1, bodyname2);
+}
+
+/***************************
+** Equality specification
+***************************/
+mjs_wrapper!(Equality);
+impl MjsEquality<'_> {
+    getter_setter! {
+        get, [
+            data: &[f64; 11];           "data array for equality parameters.";
+        ]
+    }
+
+    getter_setter!(get, set, [
+        type_: MjtEq;                                        "equality type.";
+        active: u8;                                            "active flag.";
+    ]);
+
+    string_set_get!(name1, name2);
+}
+
+/***************************
+** Tendon specification
+***************************/
+mjs_wrapper!(Tendon);
+impl MjsTendon<'_> {
+    getter_setter! {
+        get, [
+            rgba: &[f32; 4];              "rgba when material omitted.";
+            range: &[f64; 2];             "range.";
+            springlength: &[f64; 2];      "spring length.";
+        ]
+    }
+
+    getter_setter!(get, set, [
+        group: i32;                    "group.";
+    ]);
+
+    userdata_method!(f64);
+
+    string_set_get!(material);
+}
+
+/***************************
+** Wrap specification
+***************************/
+mjs_wrapper!(Wrap);
+impl MjsWrap<'_> {
+}
+
+/***************************
+** Numeric specification
+***************************/
+mjs_wrapper!(Numeric);
+impl MjsNumeric<'_> {
+    getter_setter! {
+        get, set, [
+            size: i32;                     "size of the numeric array.";
+        ]
     }
 }
+
+/***************************
+** Text specification
+***************************/
+mjs_wrapper!(Text);
+impl MjsText<'_> {
+}
+
+/***************************
+** Tuple specification
+***************************/
+mjs_wrapper!(Tuple);
+impl MjsTuple<'_> {
+}
+
+/***************************
+** Key specification
+***************************/
+mjs_wrapper!(Key);
+impl MjsKey<'_> {
+}
+
+/***************************
+** Plugin specification
+***************************/
+mjs_wrapper!(Plugin);
+impl MjsPlugin<'_> {
+}
+
+/* Assets */
+
+/***************************
+** Mesh specification
+***************************/
+mjs_wrapper!(Mesh);
+impl MjsMesh<'_> {
+    getter_setter! {
+        get, [
+            refpos: &[f64; 3];            "reference position.";
+            refquat: &[f64; 4];           "reference orientation.";
+            scale: &[f64; 3];             "scale vector.";
+        ]
+    }
+
+    string_set_get!(file, content_type);
+}
+
+/***************************
+** Hfield specification
+***************************/
+mjs_wrapper!(Hfield);
+impl MjsHfield<'_> {
+    getter_setter! {
+        get, [
+            size: &[f64; 4];              "size of the hfield.";
+        ]
+    }
+
+    string_set_get!(content_type, file);
+
+    /// Sets `userdata`.
+    pub fn set_userdata<T: AsRef<[f32]>>(&mut self, userdata: T) {
+        write_mjs_vec_f32(userdata.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() })
+    }
+}
+
+/***************************
+** Skin specification
+***************************/
+mjs_wrapper!(Skin);
+impl MjsSkin<'_> {
+    getter_setter! {
+        get, [
+            rgba: &[f32; 4];    "rgba when material is omitted.";
+        ]
+    }
+
+    getter_setter! {
+        get, set, [
+            inflate: f32;       "inflate in normal direction";
+            group: i32;         "group for visualization";
+        ]
+    }
+
+    string_set_get!(material, file);
+}
+
+/***************************
+** Texture specification
+***************************/
+mjs_wrapper!(Texture);
+impl MjsTexture<'_> {
+    getter_setter! {
+        get, [
+            /* Method 1: builtin */
+            rgb1: &[f64; 3];                  "first color for builtin";
+            rgb2: &[f64; 3];                  "second color for builtin";
+            markrgb: &[f64; 3];               "mark color";
+
+            /* Method 2: single file */
+
+            /* Method 3: separate files */
+        ]
+    }
+
+    getter_setter! {
+        get, set, [
+            /* Method 1: builtin */
+            type_: MjtTexture;            "texture type.";
+            colorspace: MjtColorSpace;    "colorspace.";
+            builtin: MjtBuiltin;          "builtin type";
+            mark: MjtMark;                "mark type";
+            random: f64;                  "probability of random dots";
+            width: i32;                   "image width.";
+            height: i32;                  "image height.";
+            nchannel: i32;                "number of channels.";
+
+            /* Method 2: single file */
+            gridsize: [i32; 2];           "size of grid for composite file; (1,1)-repeat";
+            gridlayout: [i8; 13];         "row-major: L,R,F,B,U,D for faces; . for unused";
+
+            /* Method 3: separate files */
+        ]
+    }
+
+    vec_string_set_append!(cubefiles);
+
+    // // method 4: from buffer read by user
+    // mjByteVec* data;                  // texture data
+
+    // // flip options
+    // mjtByte hflip;                   // horizontal flip
+    // mjtByte vflip;                   // vertical flip
+
+    string_set_get!(file);
+}
+
+/***************************
+** Material specification
+***************************/
+mjs_wrapper!(Material);
+impl MjsMaterial<'_> {
+    getter_setter! {
+        get, [
+            rgba: &[f32; 4];                               "rgba color.";
+            texrepeat: &[f32; 2];    "texture repetition for 2D mapping";
+        ]
+    }
+
+    getter_setter! {get, set, [
+        texuniform: bool;       "make texture cube uniform";
+    ]}
+
+    getter_setter! {
+        get, set, [
+            emission: f32;                           "emission";
+            specular: f32;                           "specular";
+            shininess: f32;                         "shininess";
+            reflectance: f32;                     "reflectance";
+            metallic: f32;                           "metallic";
+            roughness: f32;                         "roughness";
+        ]
+    }
+
+    vec_string_set_append!(textures);
+}
+
 
 /***************************
 ** Default specification
@@ -638,27 +1117,8 @@ impl MjsBody<'_> {
         unsafe { MjsPlugin(&mut self.ffi_mut().plugin, PhantomData) }
     }
 
-    /// Returns an immutable slice to userdata.
-    pub fn userdata(&self) -> &[f64] {
-        read_mjs_vec_f64(unsafe { (*self.0).userdata.as_ref().unwrap() })
-    }
-    
-    /// Sets new userdata.
-    pub fn set_userdata<T: AsRef<[f64]>>(&mut self, userdata: T) {
-        write_mjs_vec_f64(userdata.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() })
-    }
+    userdata_method!(f64);
 }
-
-
-
-/******************************
-** Orientation representation
-******************************/
-/// Alternative orientation specifiers.
-pub type MjsOrientation = mjsOrientation;
-
-/// Type of orientation specifier.
-pub type MjtOrientation = mjtOrientation;
 
 
 /******************************
