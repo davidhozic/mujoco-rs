@@ -4,9 +4,9 @@
 Attribute views
 ===================
 
-The MuJoCo library stores information about joints, bodies, etc., in a
-contiguous arrays, which can be hard to work with, especially when the
-item in question doesn't always have a fixed-size number of e. g. degrees of freedom.
+The MuJoCo library stores data about joints, bodies, and other elements in contiguous arrays.
+These can be challenging to work with, particularly when the array's length varies between elements.
+For example, different types of joints may have different number of degrees of freedom.
 `MuJoCo's Python bindings <https://mujoco.readthedocs.io/en/stable/python.html>`_ solve
 this issue by providing views to specific ranges in the corresponding arrays.
 
@@ -14,8 +14,10 @@ Like MuJoCo's Python bindings, MuJoCo-rs also provides views. Specifically, we p
 attributes of :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` and
 :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`.
 
-A view cannot be created directly, as that would violate Rust's borrow checker rules.
-To overcome this, the so called "info" structs must be created first.
+A view cannot be created directly, as that would require recreating the view after each simulation
+step. Allowing preservation of views between simulation steps would violate Rust's borrow checker rules. 
+To overcome this, "info" structs exist, which store required information for fast view
+creation after each step.
 
 Reading
 ======================

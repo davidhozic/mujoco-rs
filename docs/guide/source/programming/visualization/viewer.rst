@@ -83,8 +83,8 @@ For more, refer to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
 Wrapper of MuJoCo's C++ 3D viewer
 =====================================
 MuJoCo-rs also provides a wrapper around a modified MuJoCo's C++ 3D viewer.
-Modifications to the C++ viewer are minor with the purpose of preserving future compatibility
-and to allow viewer rendering in a user-controller loop.
+Modifications to the C++ viewer are minor with the purpose of preserving future compatibility.
+The changes to the viewer are made to allow viewer rendering in a user-controller loop.
 
 .. attention::
 
