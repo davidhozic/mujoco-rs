@@ -18,7 +18,10 @@ with open("../../../Cargo.toml", "rb") as file:
     crate_meta = tomllib.load(file)
 
 
-release = crate_meta["package"]["version"]
+release = crate_meta["package"]["version"].split(".")
+release[-1] = 'x'  # bug fixes share the same documentation
+release = '.'.join(release)
+
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

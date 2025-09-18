@@ -24,11 +24,12 @@ or compiled. Make sure to download or compile MuJoCo version |MUJOCO_VERSION_BOL
 
 Linking MuJoCo
 ====================
-To compile your code, you must first set some environmental variables,
-telling MuJoCo-rs where to obtain the MuJoCo library.
+Compilation of MuJoCo-rs incudes linking the MuJoCo library.
+This requires some environmental variables to be set, which tell
+MuJoCo-rs where to obtain the MuJoCo library.
 
-The linking process depends on whether you plan do dynamically link (recommended),
-statically link or statically link with the support of C++ based viewer (instead of the Rust-native one).
+The linking process depends on whether you plan to dynamically link (recommended),
+statically link or statically link with support of C++ based viewer (instead of the Rust-native one).
 
 -----------------------------
 
@@ -96,19 +97,26 @@ We also provide an option to statically link:
 
 Note that the ``/path/mujoco/lib`` needs to contain all the MuJoCo dependencies.
 
+Additionally, official MuJoCo builds include the precompiled MuJoCo library only in its shared (dynamic) form.
+To statically link, you'll need to compile the library yourself.
+MuJoCo's build system doesn't (yet) support static linking, however
+we provide a modified MuJoCo repository, which allow static linking (see :ref:`static_link_with_cpp_viewer`).
+
+
 .. _static_link_with_cpp_viewer:
 
 Static linking with C++ viewer
 ---------------------------------
-While MuJoCo-rs already provides **a Rust-native 3D viewer**, we understand that some projects wish
-to use the original C++ 3D viewer (also named Simulate).
+While MuJoCo-rs already provides a :ref:`rust_native_viewer`, we understand that some projects wish
+to use the original C++ based 3D viewer (also named Simulate).
 To enable this, we provide a modified MuJoCo repository, with modifications
 enabling static linking and a safe interface between Rust and the C++ Simulate code.
 
-To build statically linkable libs with C++ viewer included, perform the following steps:
+To build statically linkable libs with C++ based viewer included, perform the following steps:
 
-1. Clone the MuJoCo-rs repository
-2. Run commands:
+1. Clone the MuJoCo-rs repository,
+2. Change your directory to the cloned repository,
+3. Run commands:
    ::
 
        git submodule update --init --recursive
@@ -116,7 +124,7 @@ To build statically linkable libs with C++ viewer included, perform the followin
        cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF -DCMAKE_EXE_LINKER_FLAGS:STRING=-Wl,--no-as-needed
        cmake --build build --parallel --target libsimulate --config=Release
 
-3. Follow instructions in the :ref:`Static linking <static_linking>` section.
+4. Follow instructions in the :ref:`Static linking <static_linking>` section.
 
 The builds are tested with the ``gcc`` compiler.
 
@@ -129,7 +137,7 @@ MuJoCo-rs should work out of the box after you provide it with the MuJoCo librar
 for additional dependencies, install them via your system package manager.
 For example, to install glfw3 on Ubuntu/Debian, this can be done like so: ``apt install libglfw3-dev``.
 
-Note that on Windows, GLFW will be compiled from scratch.
+Note that on Windows, GLFW will either be compiled from source or downloaded from GLFW's repository.
 If the build doesn't work, please `report this as a bug <https://github.com/davidhozic/mujoco-rs/issues>`_.
 
 

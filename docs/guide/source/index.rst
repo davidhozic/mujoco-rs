@@ -29,7 +29,7 @@ The main features on top of MuJoCo include:
 - Safe wrappers around structs:
   
   - Automatic allocation and cleanup.
-  - Lifetime guarantees.
+  - Lifetime checks.
 
 - Methods as function wrappers.
 - Easy manipulation of simulation data via :ref:`attribute_views`.
@@ -37,7 +37,7 @@ The main features on top of MuJoCo include:
 - :ref:`visualization`:
 
   - :ref:`mj_renderer`: offscreen rendering to array or file.
-  - :ref:`mj_rust_viewer`: onscreen visualization of the 3D simulation.
+  - :ref:`mj_rust_viewer`: onscreen visualization.
 
     .. image:: ../../img_common/viewer_spot.png
         :width: 50%

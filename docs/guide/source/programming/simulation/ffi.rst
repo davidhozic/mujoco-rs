@@ -9,7 +9,7 @@ C language structs and functions can be used.
 
 Direct FFI bindings are available inside the :docs-rs:`mujoco_rs::mujoco_c` module.
 
-Mixing between the direct FFI bindings and the rest of MuJoCo-rs is also possible.
+Mixing between direct FFI bindings and the rest of MuJoCo-rs is also possible.
 Most of MuJoCo-rs's structs are actually just FFI structs aliased to a PascalCase name.
 To obtain a reference to the FFI type inside of a wrapped type, call either ``ffi()`` or
 ``ffi_mut()``.
