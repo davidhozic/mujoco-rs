@@ -49,10 +49,14 @@ pub type MjtMark = mjtMark;
 /// Compiler options.
 pub type MjsCompiler = mjsCompiler;
 
-/// Type of inertia inference.
+/// Type of geom inertia inference.
 pub type MjtGeomInertia = mjtGeomInertia;
 
+/// Types of flex self-collisions midphase.
 pub type MjtFlexSelf = mjtFlexSelf;
+
+/// Type of mesh inertia (convex, legacy, exact, shell)
+pub type MjtMeshInertia = mjtMeshInertia;
 
 /***************************
 ** Model Specification
@@ -641,18 +645,15 @@ impl MjsFlex<'_> {
         vertbody; "vertex body names.";
     }
 
-    float_vec_set_get! {
+    vec_set_get! {
         node: f64;      "node positions.";
         vert: f64;      "vertex positions.";
     }
 
-    float_vec_set! {
-        texcoord: f32;  "vertex texture coordinates";
-    }
-
-    int_vec_set! {
-        elem; "element vertex ids.";
-        elemtexcoord; "element texture coordinates.";
+    vec_set! {
+        texcoord: f32;          "vertex texture coordinates";
+        elem: i32;              "element vertex ids.";
+        elemtexcoord: i32;      "element texture coordinates.";
     }
 }
 
@@ -782,7 +783,7 @@ impl MjsNumeric<'_> {
         ]
     }
 
-    float_vec_set_get! {
+    vec_set_get! {
         data: f64; "initialization data.";
     }
 }
@@ -802,15 +803,15 @@ impl MjsText<'_> {
 ***************************/
 mjs_wrapper!(Tuple);
 impl MjsTuple<'_> {
-    int_vec_set! {
-        objtype; "object types.";
+    vec_set! {
+        objtype: i32; "object types.";
     }
 
     vec_string_set_append! {
         objname; "object names.";
     }
 
-    float_vec_set_get! {
+    vec_set_get! {
         objprm: f64; "object parameters.";
     }
 }
@@ -826,7 +827,7 @@ impl MjsKey<'_> {
         ]
     }
 
-    float_vec_set_get! {
+    vec_set_get! {
         qpos: f64; "qpos.";
         qvel: f64; "qvel.";
         act: f64; "act.";
@@ -868,9 +869,31 @@ impl MjsMesh<'_> {
         ]
     }
 
+    getter_setter! {
+        get, set, [
+            inertia: MjtMeshInertia;      "inertia type (convex, legacy, exact, shell).";
+            smoothnormal: MjtByte;        "do not exclude large-angle faces from normals.";
+            needsdf: MjtByte;             "compute sdf from mesh.";
+            maxhullvert: i32;             "maximum vertex count for the convex hull.";
+        ]
+    }
+
     string_set_get! {
         content_type; "content type of file.";
         file; "mesh file.";
+    }
+
+    vec_set! {
+        uservert: f32;               "user vertex data.";
+        usernormal: f32;             "user normal data.";
+        usertexcoord: f32;           "user texcoord data.";
+        userface: i32;               "user vertex indices.";
+        userfacetexcoord: i32;       "user texcoord indices.";
+    }
+
+    /// Returns a wrapper around the `plugin` attribute.
+    pub fn plugin_wrapper(&mut self) -> MjsPlugin<'_> {
+        unsafe { MjsPlugin(&mut self.ffi_mut().plugin, PhantomData) }
     }
 }
 
@@ -920,8 +943,25 @@ impl MjsSkin<'_> {
     }
 
     string_set_get! {
-        material; "name of material used for rendering.";
-        file; "skin file.";
+        material;               "name of material used for rendering.";
+        file;                   "skin file.";
+    }
+
+    vec_string_set_append! {
+        bodyname;               "body names.";
+    }
+
+    vec_set! {
+        vert: f32;              "vertex positions.";
+        texcoord: f32;          "texture coordinates.";
+        bindpos: f32;           "bind pos.";
+        bindquat: f32;          "bind quat.";
+        face: i32;              "faces.";
+    }
+
+    vec_vec_append! {
+        vertid: i32;                     "vertex ids.";
+        vertweight: f32;                 "vertex weights.";
     }
 }
 
@@ -932,9 +972,9 @@ mjs_wrapper!(Texture);
 impl MjsTexture<'_> {
     getter_setter! {
         get, [
-            rgb1: &[f64; 3];                  "first color for builtin";
-            rgb2: &[f64; 3];                  "second color for builtin";
-            markrgb: &[f64; 3];               "mark color";
+            rgb1: &[f64; 3];               "first color for builtin";
+            rgb2: &[f64; 3];               "second color for builtin";
+            markrgb: &[f64; 3];            "mark color";
             gridsize: &[i32; 2];           "size of grid for composite file; (1,1)-repeat";
             gridlayout: &[i8; 13];         "row-major: L,R,F,B,U,D for faces; . for unused";
         ]
