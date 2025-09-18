@@ -9,11 +9,11 @@ Loading
 To perform basic simulation with MuJoCo, create a :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
 struct by calling one of the following methods:
 
-- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml` (loads xml from a file),
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml` (loads XML from a file),
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml_vfs`
-  (loads xml from a file on a virtual file system),
+  (loads XML from a file on a virtual file system),
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml_string`
-  (loads xml from a model defined in a string in memory).
+  (loads XML from a model defined in a string in memory).
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`
   (loads a compiled model from a buffer)
 
@@ -22,7 +22,7 @@ For example:
 .. code-block:: rust
 
     fn main() {
-        let model = MjModel::from_xml("model.rs").expect("could not load the model");
+        let model = MjModel::from_xml("model.xml").expect("could not load the model");
     }
 
 
@@ -38,7 +38,7 @@ For example:
     :emphasize-lines: 3
 
     fn main() {
-        let model = MjModel::from_xml("model.rs").expect("could not load the model");
+        let model = MjModel::from_xml("model.xml").expect("could not load the model");
         let mut data = model.make_data();  // or MjData::new(&model);
     }
 
@@ -53,7 +53,7 @@ method like so:
     :emphasize-lines: 5
 
     fn main() {
-        let model = MjModel::from_xml("model.rs").expect("could not load the model");
+        let model = MjModel::from_xml("model.xml").expect("could not load the model");
         let mut data = model.make_data();  // or MjData::new(&model);
         loop {
             data.step();
@@ -66,30 +66,33 @@ Similarly, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ste
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>step2` wrap
 :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step1` and :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step2`, respectively.
 
-For more information about the specific MuJoCo functions, see the
+For more information about specific MuJoCo functions, see the
 `MuJoCo documentation <https://mujoco.readthedocs.io/en/stable/APIreference/APIfunctions.html#mj-step>`_.
 
 Realtime
 ----------------------
-The above example will run the simulation as fast as possible.
-To run the simulation at slower pace, simply add a ``std::thread::sleep``
-line after the step.
+The example above runs the simulation as fast as possible.
+To slow it down, you can either add a call to
+`std::thread::sleep <https://doc.rust-lang.org/std/thread/fn.sleep.html>`_
+for an approximate delay, or use
+`std::time::Instant <https://doc.rust-lang.org/std/time/struct.Instant.html>`_
+with `Instant::elapsed <https://doc.rust-lang.org/std/time/struct.Instant.html#method.elapsed>`_
+for precise timing.
 
-To run the code in realtime, the duration in the sleep must match the simulation timestep.
-The simulation timestep can be obtained through the simulation options:
 
 .. code-block:: rust
-    :emphasize-lines: 7, 10
+    :emphasize-lines: 7, 10, 11
 
     use std::time::Duration;
     use std::thread;
 
     fn main() {
-        let model = MjModel::from_xml("model.rs").expect("could not load the model");
+        let model = MjModel::from_xml("model.xml").expect("could not load the model");
         let mut data = model.make_data();  // or MjData::new(&model);
         let timestep = model.opt().timestep;
         loop {
             data.step();
+            /* Approximate-time delay */
             thread::sleep(Duration::from_secs_f64(timestep))
         }
     }

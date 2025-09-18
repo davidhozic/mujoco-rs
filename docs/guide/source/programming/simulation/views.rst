@@ -4,18 +4,20 @@
 Attribute views
 ===================
 
-The MuJoCo library stores information about joints, bodies, etc., in a
-contiguous arrays, which can be hard to work with, especially when the
-item in question doesn't always have a fixed-size number of e. g. degrees of freedom.
-
-The `Python <https://mujoco.readthedocs.io/en/stable/python.html>`_ MuJoCo bindings solve
+The MuJoCo library stores data about joints, bodies, and other elements in contiguous arrays.
+These can be challenging to work with, particularly when the array's length varies between elements.
+For example, different types of joints may have different number of degrees of freedom.
+`MuJoCo's Python bindings <https://mujoco.readthedocs.io/en/stable/python.html>`_ solve
 this issue by providing views to specific ranges in the corresponding arrays.
-MuJoCo-rs follows this and also provides views. Specifically we provide views for
-attributes of :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` and attributes of
-:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`:
 
-A view cannot be created directly, as that would violate Rust's borrow checker rules.
-To overcome this, the so called "info" structs must be created first.
+Like MuJoCo's Python bindings, MuJoCo-rs also provides views. Specifically, we provide views for
+attributes of :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` and
+:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`.
+
+A view cannot be created directly, as that would require recreating the view after each simulation
+step. Allowing preservation of views between simulation steps would violate Rust's borrow checker rules. 
+To overcome this, "info" structs exist, which store required information for fast view
+creation after each step.
 
 Reading
 ======================
@@ -28,7 +30,7 @@ like so:
     :emphasize-lines: 4
 
     fn main() {
-        let model = MjModel::from_xml("model.rs").expect("could not load the model");
+        let model = MjModel::from_xml("model.xml").expect("could not load the model");
         let mut data = model.make_data();
         let joint_info = data.joint("football-ball").expect("name not found");
         loop {
@@ -45,7 +47,7 @@ a reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so
     :emphasize-lines: 7
 
     fn main() {
-        let model = MjModel::from_xml("model.rs").expect("could not load the model");
+        let model = MjModel::from_xml("model.xml").expect("could not load the model");
         let mut data = model.make_data();
         let joint_info = data.joint("football-ball").expect("name not found");
         loop {
@@ -55,13 +57,15 @@ a reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so
     }
 
 All the attributes inside views, like :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qpos`,
-are instances of :docs-rs:`mujoco_rs::util::<struct>PointerView`, which implements the ``Deref`` trait and thus
-acts like a slice. This is also true for fields that may actually be scalers, which we still treat
-like arrays for consistency and simplicity reasons.
+are instances of :docs-rs:`mujoco_rs::util::<struct>PointerView`, which implements the
+`Deref <https://doc.rust-lang.org/std/ops/trait.Deref.html>`_ trait and on deref
+acts like a slice. While some fields might be scalers, we still treat those as arrays
+for implementation simplicity reasons.
+
 
 Writing
 ==================
-The above examples show a read-only view. To be able to write to the viewed data,
+The above example shows a read-only view. For mutability, 
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>view_mut` must be called
 and passed a mutable reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so:
 
@@ -69,7 +73,7 @@ and passed a mutable reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<stru
     :emphasize-lines: 7
 
     fn main() {
-        let model = MjModel::from_xml("model.rs").expect("could not load the model");
+        let model = MjModel::from_xml("model.xml").expect("could not load the model");
         let mut data = model.make_data();
         let joint_info = data.joint("football-ball").expect("name not found");
         loop {
