@@ -28,8 +28,8 @@ Compilation of MuJoCo-rs incudes linking the MuJoCo library.
 This requires some environmental variables to be set, which tell
 MuJoCo-rs where to obtain the MuJoCo library.
 
-The linking process depends on whether you plan do dynamically link (recommended),
-statically link or statically link with the support of C++ based viewer (instead of the Rust-native one).
+The linking process depends on whether you plan to dynamically link (recommended),
+statically link or statically link with support of C++ based viewer (instead of the Rust-native one).
 
 -----------------------------
 
