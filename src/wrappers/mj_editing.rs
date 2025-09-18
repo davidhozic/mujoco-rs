@@ -18,7 +18,8 @@ pub use default::*;
 use super::mj_model::{
     MjModel, MjtObj, MjtGeom, MjtJoint, MjtCamLight,
     MjtLightType, MjtSensor, MjtDataType, MjtGain,
-    MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace
+    MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace,
+    MjtTrn, MjtStage
 };
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic,};
 use super::mj_option::MjOption;
@@ -57,6 +58,9 @@ pub type MjtFlexSelf = mjtFlexSelf;
 
 /// Type of mesh inertia (convex, legacy, exact, shell)
 pub type MjtMeshInertia = mjtMeshInertia;
+
+/// Type of limit specification.
+pub type MjtLimited = mjtLimited;
 
 /***************************
 ** Model Specification
@@ -363,10 +367,7 @@ impl MjsGeom<'_> {
         hfieldname; "heightfield attached to geom.";
     }
 
-    /// Returns a wrapper around the `plugin` attribute.
-    pub fn plugin_wrapper(&mut self) -> MjsPlugin<'_> {
-        unsafe { MjsPlugin(&mut self.ffi_mut().plugin, PhantomData) }
-    }
+    plugin_wrapper_method!();
 }
 
 /***************************
@@ -472,10 +473,14 @@ mjs_wrapper!(Actuator);
 impl MjsActuator<'_> {
     getter_setter! {
         get, [
-            gear: &[f64; 6];              "gear parameters.";
-            gainprm: &[f64; 10];          "gain parameters.";
-            biasprm: &[f64; 10];          "bias parameters.";
-            dynprm: &[f64; 10];           "dynamic parameters.";
+            gear: &[f64; 6];                            "gear parameters.";
+            gainprm: &[f64; mjNGAIN as usize];          "gain parameters.";
+            biasprm: &[f64; mjNBIAS as usize];          "bias parameters.";
+            dynprm: &[f64; mjNDYN as usize];            "dynamic parameters.";
+            lengthrange: &[f64; 2];                     "transmission length range.";
+            ctrlrange: &[f64; 2];                       "control range.";
+            forcerange: &[f64; 2];                      "force range.";
+            actrange: &[f64; 2];                        "activation range.";
         ]
     }
 
@@ -484,52 +489,35 @@ impl MjsActuator<'_> {
         biastype: MjtBias;             "bias type.";
         dyntype: MjtDyn;               "dyn type.";
         group: i32;                    "group.";
+        actdim: i32;                   "number of activation variables.";
+        trntype: MjtTrn;               "transmission type.";
+        cranklength: f64;              "crank length, for slider-crank.";
+        inheritrange: f64;             "automatic range setting for position and intvelocity.";
     ]);
+
+    getter_setter! {
+        force!, get, set, [
+            ctrllimited: MjtLimited;        "are control limits defined.";
+            forcelimited: MjtLimited;       "are force limits defined.";
+            actlimited: MjtLimited;         "are activation limits defined.";
+        ]
+    }
+
+    getter_setter! {
+        get, set, [
+            actearly: bool;                "apply next activations to qfrc.";
+        ]
+    }
 
     userdata_method!(f64);
 
     string_set_get! {
-        target; "name of transmission target";
+        target;                 "name of transmission target";
+        refsite;                "reference site, for site transmission";
+        slidersite;             "site defining cylinder, for slider-crank";
     }
 
-    // mjsElement* element;             // element type
-
-    // // gain, bias
-    // mjtGain gaintype;                // gain type
-    // double gainprm[mjNGAIN];         // gain parameters
-    // mjtBias biastype;                // bias type
-    // double biasprm[mjNGAIN];         // bias parameters
-
-    // // activation state
-    // mjtDyn dyntype;                  // dynamics type
-    // double dynprm[mjNDYN];           // dynamics parameters
-    // int actdim;                      // number of activation variables
-    // mjtByte actearly;                // apply next activations to qfrc
-
-    // // transmission
-    // mjtTrn trntype;                  // transmission type
-    // double gear[6];                  // length and transmitted force scaling
-    // mjString* target;                // name of transmission target
-    // mjString* refsite;               // reference site, for site transmission
-    // mjString* slidersite;            // site defining cylinder, for slider-crank
-    // double cranklength;              // crank length, for slider-crank
-    // double lengthrange[2];           // transmission length range
-    // double inheritrange;             // automatic range setting for position and intvelocity
-
-    // // input/output clamping
-    // int ctrllimited;                 // are control limits defined (mjtLimited)
-    // double ctrlrange[2];             // control range
-    // int forcelimited;                // are force limits defined (mjtLimited)
-    // double forcerange[2];            // force range
-    // int actlimited;                  // are activation limits defined (mjtLimited)
-    // double actrange[2];              // activation range
-
-    // // other
-    // int group;                       // group
-    // mjDoubleVec* userdata;           // user data
-    // mjsPlugin plugin;                // actuator plugin
-    // mjString* info;                  // message appended to compiler errors
-
+    plugin_wrapper_method!();
 }
 
 /***************************
@@ -539,16 +527,19 @@ mjs_wrapper!(Sensor);
 impl MjsSensor<'_> {
     getter_setter! {
         get, [
-            intprm: &[i32; 3];            "integer parameters.";
+            intprm: &[i32; mjNSENS as usize];            "integer parameters.";
         ]
     }
 
     getter_setter!(get, set, [
         type_: MjtSensor;              "sensor type.";
         objtype: MjtObj;               "object type the sensor refers to.";
+        reftype: MjtObj;               "type of referenced object";
         datatype: MjtDataType;         "data type.";
-        cutoff: f64;                  "cutoff parameter.";
-        noise: f64;                   "noise parameter.";
+        cutoff: f64;                   "cutoff for real and positive datatypes.";
+        noise: f64;                    "noise stdev.";
+        needstage: MjtStage;           "compute stage needed to simulate sensor.";
+        dim: i32;                      "number of scalar outputs.";
     ]);
 
     userdata_method!(f64);
@@ -558,30 +549,7 @@ impl MjsSensor<'_> {
         objname; "name of sensorized object.";
     }
 
-    // mjsElement* element;             // element type
-
-    // // sensor definition
-    // mjtSensor type;                  // type of sensor
-    // mjtObj objtype;                  // type of sensorized object
-    // mjString* objname;               // name of sensorized object
-    // mjtObj reftype;                  // type of referenced object
-    // mjString* refname;               // name of referenced object
-    // int intprm[mjNSENS];             // integer parameters
-
-    // // user-defined sensors
-    // mjtDataType datatype;            // data type for sensor measurement
-    // mjtStage needstage;              // compute stage needed to simulate sensor
-    // int dim;                         // number of scalar outputs
-
-    // // output post-processing
-    // double cutoff;                   // cutoff for real and positive datatypes
-    // double noise;                    // noise stdev
-
-    // // other
-    // mjDoubleVec* userdata;           // user data
-    // mjsPlugin plugin;                // sensor plugin
-    // mjString* info;                  // message appended to compiler errors
-
+    plugin_wrapper_method!();
 }
 
 /***************************
@@ -770,6 +738,7 @@ impl MjsTendon<'_> {
 ***************************/
 mjs_wrapper!(Wrap);
 impl MjsWrap<'_> {
+    /* Auto-implemented */
 }
 
 /***************************
@@ -891,10 +860,7 @@ impl MjsMesh<'_> {
         userfacetexcoord: i32;       "user texcoord indices.";
     }
 
-    /// Returns a wrapper around the `plugin` attribute.
-    pub fn plugin_wrapper(&mut self) -> MjsPlugin<'_> {
-        unsafe { MjsPlugin(&mut self.ffi_mut().plugin, PhantomData) }
-    }
+    plugin_wrapper_method!();
 }
 
 /***************************
@@ -1003,8 +969,8 @@ impl MjsTexture<'_> {
     }
 
     getter_setter! {get, set, [
-        hflip: bool;    "horizontal flip";
-        vflip: bool;    "vertical flip";
+        hflip: bool;    "horizontal flip.";
+        vflip: bool;    "vertical flip.";
     ]}
 
     /// Sets texture `data`.
@@ -1012,7 +978,10 @@ impl MjsTexture<'_> {
         write_mjs_vec_byte(data, unsafe { self.ffi_mut().data.as_mut().unwrap() });
     }
 
-    string_set_get!(file; "png file to load; use for all sides of cube";);
+    string_set_get! {
+        file; "png file to load; use for all sides of cube.";
+        content_type; "content type of file.";
+    }
 }
 
 /***************************
@@ -1104,10 +1073,7 @@ impl MjsBody<'_> {
     }
 
     // TODO: Test the plugin wrapper.
-    /// Returns a wrapper around the `plugin` attribute.
-    pub fn plugin_wrapper(&mut self) -> MjsPlugin<'_> {
-        unsafe { MjsPlugin(&mut self.ffi_mut().plugin, PhantomData) }
-    }
+    plugin_wrapper_method!();
 
     userdata_method!(f64);
 }

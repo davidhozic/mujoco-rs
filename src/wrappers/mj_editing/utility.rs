@@ -301,3 +301,13 @@ macro_rules! vec_vec_append {
         )*
     }};
 }
+
+/// Implements the plugin wrapper.
+macro_rules! plugin_wrapper_method {
+    () => {
+        /// Returns a wrapper around the `plugin` attribute.
+        pub fn plugin_wrapper(&mut self) -> MjsPlugin<'_> {
+            unsafe { MjsPlugin(&mut self.ffi_mut().plugin, PhantomData) }
+        }
+    };
+}
