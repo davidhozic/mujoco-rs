@@ -58,7 +58,5 @@ fn create_model() -> MjModel {
     ball_body.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
     // Compile the model (required for saving)
-    let model = spec.compile().expect("failed to compile");
-    spec.save_xml("test.xml").unwrap();
-    model
+    spec.compile().expect("failed to compile")
 }
