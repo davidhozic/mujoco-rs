@@ -65,6 +65,12 @@ pub type MjtTexture = mjtTexture;
 
 /// Type of color space encoding for textures.
 pub type MjtColorSpace = mjtColorSpace;
+
+/// Constants which are powers of 2. They are used as bitmasks for the field `disableflags` of [`MjOption`].
+pub type MjtDisableBit = mjtDisableBit;
+
+/// Constants which are powers of 2. They are used as bitmasks for the field `enableflags` of [`MjOption`].
+pub type MjtEnableBit = mjtEnableBit;
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
