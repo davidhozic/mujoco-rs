@@ -41,12 +41,7 @@ fn create_model() -> MjModel {
     let mut direction;
     for i in -2..2 {
         for j in -2..2 {
-            if rand::random_bool(0.5) {
-                direction = 1;
-            }
-            else {
-                direction = -1;
-            }
+            direction = if rand::random_bool(0.5) { 1 } else { -1 };
 
             /* Generate each step */
             stairs(&mut spec, [i as f64 * 2.0 * 2.0, j as f64 * 2.0 * 2.0], 4, direction, &format!("{base_name}{i}_{j}"));
@@ -90,13 +85,12 @@ fn stairs(spec: &mut MjSpec, grid_loc: [f64; 2] , num_stairs: u32, direction: i8
     let mut y_pos_down = [0.0, y_end, direction as f64 * V_SIZE];
 
     for i in 0..num_stairs {
-        size_one[1] = SQUARE_LENGTH - H_STEP * i as f64;
-        size_two[0] = SQUARE_LENGTH - H_STEP * i as f64;
+        size_one[1] = SQUARE_LENGTH - H_STEP * i as f64 - H_STEP;
+        size_two[0] = SQUARE_LENGTH - H_STEP * i as f64 ;
         [x_pos_l[2], x_pos_r[2], y_pos_up[2], y_pos_down[2]]  = [direction as f64 * ( V_SIZE + V_STEP * i as f64); 4];
         
         // Left side
         x_pos_l[0] = x_beginning + H_STEP * i as f64;
-        // body.add_geom(pos=x_pos_l, size=size_one, rgba=BROWN)
         body.add_geom().with_rgba(BROWN).with_size(size_one).with_pos(x_pos_l).with_type(MjtGeom::mjGEOM_BOX);
         // Right side
         x_pos_r[0] = x_end - H_STEP * i as f64;

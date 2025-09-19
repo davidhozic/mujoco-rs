@@ -1,7 +1,7 @@
 //! Module implements [`MjsDefault`], which is a special type of [`SpecItem`].
 
 use std::marker::PhantomData;
-use std::io::Error;
+use std::io::{Error, ErrorKind};
 
 use super::traits::SpecItem;
 use crate::mujoco_c::*;
@@ -31,8 +31,10 @@ impl SpecItem for MjsDefault<'_> {
     }
 
     /// Defaults can't be deleted.
+    /// # Errors
+    /// This will always error with [`ErrorKind::Unsupported`].
     fn delete(self) -> Result<(), Error> {
-        unimplemented!()
+        Err(Error::new(ErrorKind::Unsupported, "can't delete defaults"))
     }
 }
 
