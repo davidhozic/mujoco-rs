@@ -194,7 +194,7 @@ impl MjSpec {
     find_x_method_direct! { default }
 
     /// Returns the world body.
-    pub fn world_body(&mut self) -> MjsBody {
+    pub fn world_body(&mut self) -> MjsBody<'_> {
         self.body("world").unwrap()  // this exists always
     }
 }
@@ -250,7 +250,7 @@ impl MjSpec {
     /// Adds a new `<default>` element.
     /// # Errors
     /// Returns a [`ErrorKind::AlreadyExists`] error when `class_name` already exists.
-    pub fn add_default(&mut self, class_name: &str) -> Result<MjsDefault, Error> {
+    pub fn add_default(&mut self, class_name: &str) -> Result<MjsDefault<'_>, Error> {
         let c_class_name = CString::new(class_name).unwrap ();  // can't have non-valid UTF-8
         unsafe {
             let ptr_default = mjs_addDefault(self.ffi_mut(), c_class_name.as_ptr(), ptr::null());

@@ -105,7 +105,7 @@ macro_rules! add_x_method {
         $(
             /* Without default */
             #[doc = concat!("Add and return a child ", stringify!($name), ".")]
-            pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>] {
+            pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>]<'_> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.0, ptr::null()) };
                 [<Mjs $name:camel>](ptr, PhantomData)
             }
@@ -119,7 +119,7 @@ macro_rules! add_x_method_no_default {
     ($($name:ident),*) => {paste::paste! {
         $(
             #[doc = concat!("Add and return a child ", stringify!($name), ".")]
-            pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>] {
+            pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>]<'_> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.0) };
                 [<Mjs $name:camel>](ptr, PhantomData)
             }
@@ -134,7 +134,7 @@ macro_rules! find_x_method {
     ($($item:ident),*) => {paste::paste! {
         $(
             #[doc = concat!("Obtain a reference to the ", stringify!($item), " with the given `name`.")]
-            pub fn $item(&self, name: &str) -> Option<[<Mjs $item:camel>]> {
+            pub fn $item(&self, name: &str) -> Option<[<Mjs $item:camel>]<'_>> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
                     let ptr = mjs_findElement(self.0, MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
@@ -155,7 +155,7 @@ macro_rules! find_x_method_direct {
     ($($item:ident),*) => {paste::paste!{
         $(
             #[doc = concat!("Obtain a reference to the ", stringify!($item), " with the given `name`.")]
-            pub fn $item(&self, name: &str) -> Option<[<Mjs $item:camel>]> {
+            pub fn $item(&self, name: &str) -> Option<[<Mjs $item:camel>]<'_>> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
                     let ptr = [<mjs_find $item:camel>](self.0, c_name.as_ptr());
