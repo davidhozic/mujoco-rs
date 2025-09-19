@@ -21,7 +21,7 @@ use super::mj_model::{
     MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace,
     MjtTrn, MjtStage
 };
-use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic,};
+use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic, MjLROpt};
 use super::mj_option::MjOption;
 use super::mj_primitive::*;
 use crate::mujoco_c::*;
@@ -37,6 +37,37 @@ use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mj
 ******************************/
 /// Alternative orientation specifiers.
 pub type MjsOrientation = mjsOrientation;
+impl MjsOrientation {
+    /// Sets orientation in Euler space.
+    pub fn set_euler(&mut self, angle: &[f64; 3]) {
+        self.type_ = MjtOrientation::mjORIENTATION_EULER;
+        self.euler = *angle;
+    }
+
+    /// Sets orientation in axis angle space.
+    pub fn set_axis_angle(&mut self, angle: &[f64; 4]) {
+        self.type_ = MjtOrientation::mjORIENTATION_AXISANGLE;
+        self.axisangle = *angle;
+    }
+
+    /// Sets orientation in XY axes space.
+    pub fn set_xy_axis(&mut self, angle: &[f64; 6]) {
+        self.type_ = MjtOrientation::mjORIENTATION_XYAXES;
+        self.xyaxes = *angle;
+    }
+
+    /// Sets orientation in Z axis space.
+    pub fn set_z_axis(&mut self, angle: &[f64; 3]) {
+        self.type_ = MjtOrientation::mjORIENTATION_ZAXIS;
+        self.zaxis = *angle;
+    }
+
+    /// Changes the orientation mode to quaternions. The orientation must
+    /// be specified via the main angle attribute, not through [`MjsOrientation`].
+    pub fn switch_quat<T: AsRef<[f64; 4]>>(&mut self) {
+        self.type_ = MjtOrientation::mjORIENTATION_QUAT;
+    }
+}
 
 /// Type of orientation specifier.
 pub type MjtOrientation = mjtOrientation;
@@ -49,6 +80,48 @@ pub type MjtMark = mjtMark;
 
 /// Compiler options.
 pub type MjsCompiler = mjsCompiler;
+impl MjsCompiler {
+    getter_setter! {get, set, [
+        autolimits: bool;              "infer \"limited\" attribute based on range.";
+        balanceinertia: bool;          "automatically impose A + B >= C rule.";
+        fitaabb: bool;                 "meshfit to aabb instead of inertia box.";
+        degree: bool;                  "angles in radians or degrees.";
+        discardvisual: bool;           "discard visual geoms in parser.";
+        usethread: bool;               "use multiple threads to speed up compiler.";
+        fusestatic: bool;              "fuse static bodies with parent.";
+        saveinertial: bool;            "save explicit inertial clause for all bodies to XML.";
+        alignfree: bool;               "align free joints with inertial frame.";
+    ]}
+
+    getter_setter! {get, set, [
+        boundmass: f64;                "enforce minimum body mass.";
+        boundinertia: f64;             "enforce minimum body diagonal inertia.";
+        settotalmass: f64;             "rescale masses and inertias; <=0: ignore.";
+    ]}
+
+    getter_setter! {force!, get, set, [
+        inertiafromgeom: MjtInertiaFromGeom;  "use geom inertias.";
+    ]}
+
+    getter_setter! {get, [
+        inertiagrouprange: &[i32; 2];       "range of geom groups used to compute inertia.";
+        eulerseq: &[i8; 3];                 "sequence for euler rotations.";
+        LRopt: &MjLROpt;                    "options for lengthrange computation.";
+    ]}
+
+
+    /* Proxy methods to simplify macro access. */
+    #[inline]
+    fn ffi(&self) -> &Self {
+        self
+    }
+
+    #[inline]
+    unsafe fn ffi_mut(&mut self) -> &mut Self {
+        self
+    }
+}
+
 
 /// Type of geom inertia inference.
 pub type MjtGeomInertia = mjtGeomInertia;
@@ -61,6 +134,9 @@ pub type MjtMeshInertia = mjtMeshInertia;
 
 /// Type of limit specification.
 pub type MjtLimited = mjtLimited;
+
+/// Whether to infer body inertias from child geoms.
+pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
 
 /***************************
 ** Model Specification
@@ -1078,18 +1154,19 @@ impl MjsBody<'_> {
 
     // Plain types with normal getters and setters.
     getter_setter! {
-        get, set, [
+        with, get, set, [
             mass: f64;                     "mass.";
             gravcomp: f64;                 "gravity compensation.";
         ]
     }
 
     getter_setter! {
-        get, set, [
+        with, get, set, [
             mocap: bool;                   "whether this is a mocap body.";
             explicitinertial: bool;        "whether to save the body with explicit inertial clause.";
         ]
     }
+    
 
     // TODO: Test the plugin wrapper.
     plugin_wrapper_method!();
