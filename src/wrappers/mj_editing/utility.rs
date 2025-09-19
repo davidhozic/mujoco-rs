@@ -234,12 +234,12 @@ macro_rules! userdata_method {
 macro_rules! vec_string_set_append {
     ($($name:ident; $comment:expr);* $(;)?) => {paste::paste!{
         $(
-            #[doc = concat!("Splits the `", stringify!($name), "` and put the split text as ", $comment, ".")]
+            #[doc = concat!("Splits the `", stringify!($name), "` and put the split text as ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &str) {
                 write_mjs_vec_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
             }
 
-            #[doc = concat!("Splits the `", stringify!($name), "` and append the split text to ", $comment, ".")]
+            #[doc = concat!("Splits the `", stringify!($name), "` and append the split text to ", $comment)]
             pub fn [<append_ $name>](&mut self, value: &str) {
                 append_mjs_vec_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
             }
@@ -268,7 +268,7 @@ macro_rules! string_set_get {
 macro_rules! vec_set_get {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
-            #[doc = concat!("Returns `", $comment, "`.")]
+            #[doc = concat!("Returns ", $comment)]
             pub fn $name(&self) -> &[$type] {
                 [<read_mjs_vec_ $type>](unsafe { (*self.0).$name.as_ref().unwrap() })
             }
@@ -282,7 +282,7 @@ macro_rules! vec_set_get {
 macro_rules! vec_set {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
-            #[doc = concat!("Sets `", $comment, "`.")]
+            #[doc = concat!("Sets ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
                 [<write_mjs_vec_ $type>](value, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
             }
@@ -294,7 +294,7 @@ macro_rules! vec_set {
 macro_rules! vec_vec_append {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
-            #[doc = concat!("Sets `", $comment, "`.")]
+            #[doc = concat!("Sets ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
                 [<append_mjs_vec_vec_ $type>](value, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
             }

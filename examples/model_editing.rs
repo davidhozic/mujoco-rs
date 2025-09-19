@@ -36,28 +36,26 @@ fn create_model() -> MjModel {
     let mut world = spec.world_body();
 
     // Create a plane
-    let mut plane_geom = world.add_geom();
-    plane_geom.set_type(MjtGeom::mjGEOM_PLANE);
-    *plane_geom.size_mut() = [1.0, 1.0, 1.0];
+    let mut plane_geom = world.add_geom()
+        .with_type(MjtGeom::mjGEOM_PLANE)
+        .with_size([1.0, 1.0, 1.0]);
 
-    plane_geom.alt_mut().set_euler(&[2.0, 0.0, 0.0]);
+    plane_geom.alt_mut().set_euler(&[2.0, 0.0, 0.0]);  // two degrees
+    // or
     // plane_geom.alt_mut().type_ = MjtOrientation::mjORIENTATION_EULER;
     // plane_geom.alt_mut().euler = [2.0, 0.0, 0.0];
 
     // Create a ball
     let mut ball_body = world.add_body()
-        .with_gravcomp(0.981);  // make it like in space.
-        
+        .with_gravcomp(0.981)  // make it like in space.
+        .with_name("ball");
 
-    ball_body.set_name("ball");
+    ball_body.add_geom()
+        .with_type(MjtGeom::mjGEOM_SPHERE)
+        .with_size([0.020, 0.0, 0.0])
+        .with_rgba([1.0, 1.0, 0.0, 1.0]);  // make the ball yellow.
 
-    let mut ball_geom = ball_body.add_geom();
-    ball_geom.set_type(MjtGeom::mjGEOM_SPHERE);
-    ball_geom.size_mut()[0] = 0.020;  // set the radius to 20 mm.
-    *ball_geom.rgba_mut() = [1.0, 1.0, 0.0, 1.0];  // make the ball yellow.
-
-    let mut ball_joint = ball_body.add_joint();
-    ball_joint.set_type(MjtJoint::mjJNT_FREE);
+    ball_body.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
     // Compile the model (required for saving)
     let model = spec.compile().expect("failed to compile");

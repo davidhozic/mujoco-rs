@@ -39,12 +39,18 @@ pub trait SpecItem: Sized {
         unsafe { mjs_setName(self.element_mut_pointer(), cstr.as_ptr()) };
     }
 
+    /// Builder style set a new name.
+    fn with_name(mut self, name: &str) -> Self {
+        self.set_name(name);
+        self
+    }
+
     /// Returns the used default.
     fn default(&self) -> MjsDefault<'_> {
         MjsDefault(unsafe { mjs_getDefault(self.element_pointer()) }, PhantomData)
     }
 
-    /// Make the item inherit properties from `default`.
+    /// Make the item inherit properties from a default class.
     /// # Errors
     /// Returns a [`ErrorKind::NotFound`] when the default with the `class_name` doesn't exist.
     fn set_default(&mut self, class_name: &str) -> Result<(), Error> {
@@ -59,6 +65,12 @@ pub trait SpecItem: Sized {
 
         unsafe { mjs_setDefault(self.element_mut_pointer(), default); }
         Ok(())
+    }
+
+    /// Builder style make the item inherit from a default class.
+    fn with_default(mut self, class_name: &str) -> Result<Self, Error> {
+        self.set_default(class_name)?;
+        Ok(self)
     }
 
     /// Delete the item.

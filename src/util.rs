@@ -490,6 +490,11 @@ macro_rules! getter_setter {
         $crate::getter_setter!(force!, set, [ $( $name : $type ; $comment );* ]);
         $crate::getter_setter!(force!, with, [ $( $name : $type ; $comment );* ]);
     };
+
+    (with, get, [ $( $name:ident : & $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name : & $type ; $comment );* ]);
+        $crate::getter_setter!(with, [ $( $name : $type ; $comment );* ]);
+    };
 }
 
 /// assert_eq!, but with tolerance for floating point rounding.
