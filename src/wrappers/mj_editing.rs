@@ -249,11 +249,25 @@ impl MjSpec {
 
     /// Adds a new `<default>` element.
     /// # Errors
-    /// Returns a [`ErrorKind::AlreadyExists`] error when `class_name` already exists.
-    pub fn add_default(&mut self, class_name: &str) -> Result<MjsDefault<'_>, Error> {
+    /// Errors a [`ErrorKind::AlreadyExists`] error when `class_name` already exists.
+    /// Errors a [`ErrorKind::NotFound`] when `parent_class_name` doesn't exist.
+    pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<MjsDefault<'_>, Error> {
         let c_class_name = CString::new(class_name).unwrap ();  // can't have non-valid UTF-8
+        
+        let parent_ptr = if let Some(name) = parent_class_name {
+                self.default(name).ok_or_else(
+                    || Error::new(ErrorKind::NotFound, "invalid parent name")
+                )?.0
+        } else {
+            ptr::null()
+        };
+
         unsafe {
-            let ptr_default = mjs_addDefault(self.ffi_mut(), c_class_name.as_ptr(), ptr::null());
+            let ptr_default = mjs_addDefault(
+                self.ffi_mut(),
+                c_class_name.as_ptr(),
+                parent_ptr
+            );
             if ptr_default.is_null() {
                 Err(Error::new(ErrorKind::AlreadyExists, "duplicated name"))
             }
@@ -297,6 +311,11 @@ impl MjsSite<'_> {
 
     string_set_get! {
         material; "name of material.";
+    }
+
+    /// Attaches
+    pub fn attach(&mut self) {
+
     }
 }
 
@@ -1250,7 +1269,7 @@ mod tests {
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
 
         /* Test search */
-        spec.add_default(DEFAULT_NAME).unwrap();
+        spec.add_default(DEFAULT_NAME, None).unwrap();
 
         /* Test delete */
         assert!(spec.default(DEFAULT_NAME).is_some());
