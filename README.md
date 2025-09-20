@@ -33,7 +33,7 @@ The main features on top of MuJoCo include
 
 - Methods as function wrappers.
 - Easy manipulation of simulation data via attribute views.
-
+- High-level model editing.
 - Visualization:
 
   - Renderer: offscreen rendering to array or file.

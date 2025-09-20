@@ -33,7 +33,7 @@ The main features on top of MuJoCo include:
 
 - Methods as function wrappers.
 - Easy manipulation of simulation data via :ref:`attribute_views`.
-
+- High-level :ref:`model_editing`.
 - :ref:`visualization`:
 
   - :ref:`mj_renderer`: offscreen rendering to array or file.
@@ -41,7 +41,6 @@ The main features on top of MuJoCo include:
 
     .. image:: ../../img_common/viewer_spot.png
         :width: 50%
-
 
 
 Installation

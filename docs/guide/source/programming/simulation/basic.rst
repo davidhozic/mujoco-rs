@@ -13,9 +13,9 @@ struct by calling one of the following methods:
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml_vfs`
   (loads XML from a file on a virtual file system),
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml_string`
-  (loads XML from a model defined in a string in memory).
+  (loads XML from a model defined in a string in memory),
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`
-  (loads a compiled model from a buffer)
+  (loads a compiled model from a buffer).
 
 For example:
 
