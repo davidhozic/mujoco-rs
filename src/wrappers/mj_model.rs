@@ -53,6 +53,24 @@ pub type MjtSameFrame = mjtSameFrame;
 /// Dynamic modes for cameras and lights, specifying how the camera/light position and orientation are computed.
 pub type MjtCamLight = mjtCamLight;
 
+/// The type of a light source describing how its position, orientation and
+/// other properties will interact with the objects in the scene.
+pub type MjtLightType = mjtLightType;
+
+/// Equality constraint types.
+pub type MjtEq = mjtEq;
+
+/// Texture types, specifying how the texture will be mapped
+pub type MjtTexture = mjtTexture;
+
+/// Type of color space encoding for textures.
+pub type MjtColorSpace = mjtColorSpace;
+
+/// Constants which are powers of 2. They are used as bitmasks for the field `disableflags` of [`MjOption`].
+pub type MjtDisableBit = mjtDisableBit;
+
+/// Constants which are powers of 2. They are used as bitmasks for the field `enableflags` of [`MjOption`].
+pub type MjtEnableBit = mjtEnableBit;
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
@@ -128,6 +146,10 @@ impl MjModel {
         }
     }
 
+    /// Creates a [`MjModel`] from a raw pointer.
+    pub(crate) fn from_raw(ptr: *mut mjModel) -> Result<Self, Error> {
+        Self::check_raw_model(ptr, &[])
+    }
 
     /// Saves the last XML loaded.
     pub fn save_last_xml(&self, filename: &str) -> io::Result<()> {
