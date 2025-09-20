@@ -5,7 +5,22 @@ use std::io::{Error, ErrorKind};
 
 use super::traits::SpecItem;
 use crate::mujoco_c::*;
+use crate::wrappers::mj_editing::{
+    MjsJoint, MjsGeom, MjsSite, MjsCamera, MjsLight, MjsFlex, MjsMesh, MjsMaterial,
+    MjsPair, MjsEquality, MjsTendon, MjsActuator
+};
 
+
+macro_rules! default_accessor_wrapper {
+    ($($name:ident),*) => {paste::paste! {
+        $(
+            #[doc = concat!("Returns a wrapper to  `", stringify!($name), "`.")]
+            pub fn $name(&mut self) -> [<Mjs $name:camel>]<'_> {
+                [<Mjs $name:camel>](unsafe { self.ffi_mut().$name }, PhantomData )
+            }
+        )*
+    }};
+}
 
 // This is implemented manually since we can't directly borrow check if something is using the default.
 // We also override the delete method to panic instead of deleting.
@@ -14,6 +29,11 @@ use crate::mujoco_c::*;
 pub struct MjsDefault<'s>(pub(crate) *mut mjsDefault, pub(crate) PhantomData<&'s mut ()>);  // the lifetime belongs to the parent
 
 impl MjsDefault<'_> {
+    default_accessor_wrapper! {
+        joint, geom, site, camera, light, flex, mesh, material,
+        pair, equality, tendon, actuator
+    }
+
     /// Returns an immutable reference to the inner struct.
     pub fn ffi(&self) -> &mjsDefault {
         unsafe { self.0.as_ref().unwrap() }

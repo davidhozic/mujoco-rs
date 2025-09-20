@@ -4,10 +4,13 @@
 //! https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb#scrollTo=P2F0ObC2T8w8&line=40&uniqifier=1
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
-use std::time::Duration;
+use std::time::Instant;
 
 
-fn main() {
+fn main() {   
+    const FPS: f64 = 60.0;  // the refresh rate of the viewer
+    const SYNC_TIME_MS: u128 = (1000.0 / FPS) as u128;  //  time to wait before updating the viewer (1 / FPS)
+
     // Create the model programmatically.
     let model = create_model();
 
@@ -15,10 +18,24 @@ fn main() {
     let mut data = model.make_data();
     let mut viewer = MjViewer::launch_passive(&model, 0).expect("could not launch viewer");
     let timestep = model.opt().timestep;
+    let mut timer = Instant::now();  // for stepping data
+    let mut timer_refresh = Instant::now();  // for syncing viewer
+
+    // Main loop
     while viewer.running() {
-        viewer.sync(&mut data);
-        data.step();
-        std::thread::sleep(Duration::from_secs_f64(timestep));
+
+        // The timestep is quite small, thus it makes sense to refresh at a lower pace.
+        // Syncs are also expensive in this example.
+        if timer_refresh.elapsed().as_millis() > SYNC_TIME_MS {
+            timer_refresh = Instant::now();
+            viewer.sync(&mut data);
+        }
+
+        // Step data in realtime
+        if timer.elapsed().as_secs_f64() > timestep {  // don't use sleep as it's not accurate enough
+            timer = Instant::now();
+            data.step();
+        }
     }
 }
 
@@ -27,23 +44,47 @@ fn main() {
 fn create_model() -> MjModel {
     let mut spec = MjSpec::new();
     spec.compiler_mut().set_degree(false);
-    let mut world = spec.world_body();
 
-    /* Create lights */
+    // Set the timestep to 0.5 ms
+    spec.option_mut().timestep = 0.0005;  
+
+    // Change the default stiffness parameters and geom type
+    let mut main_class = spec.default("main").unwrap();
+    let timeconst = 2.0 * spec.option().timestep;
+    main_class.geom()
+        .with_solref([timeconst, 0.5])
+        .with_type(MjtGeom::mjGEOM_BOX);
+
+
+    // Create lights
+    let mut world = spec.world_body();
     for x in (-5..5).step_by(5) {
         for y in (-5..5).step_by(5) {
             world.add_light().with_pos([x as f64, y as f64, 40.0]).with_dir([-x as f64, -y as f64, -15.0]);
         }
     }
 
-    /* Create multiple stairs in a grid */
+    // Create some spheres
+    for i in -5..5 {
+        for j in -5..5 {
+            let mut ball = world.add_body();
+            ball.add_geom()
+                .with_type(MjtGeom::mjGEOM_SPHERE)
+                .with_size([0.1, 0.0, 0.0])
+                .with_pos([i as f64 * 0.5, j as f64 * 0.5, 5.0])
+                .with_mass(0.001);
+            ball.add_joint().with_type(MjtJoint::mjJNT_FREE);
+        }
+    }
+
+    // Create multiple stairs in a grid
     let base_name = "stairs".to_string();
     let mut direction;
     for i in -2..2 {
         for j in -2..2 {
             direction = if rand::random_bool(0.5) { 1 } else { -1 };
 
-            /* Generate each step */
+            // Generate each step
             stairs(&mut spec, [i as f64 * 2.0 * 2.0, j as f64 * 2.0 * 2.0], 4, direction, &format!("{base_name}{i}_{j}"));
         }
     }
@@ -64,10 +105,6 @@ fn stairs(spec: &mut MjSpec, grid_loc: [f64; 2] , num_stairs: u32, direction: i8
     const H_STEP: f64 = H_SIZE * 2.0;
     const V_STEP: f64 = V_SIZE * 2.0;
     const BROWN: [f32; 4] = [0.460, 0.362, 0.216, 1.0];
-
-    // Defaults
-    // let main = spec.default("main");
-    // let main.geom.type = mj.mjtGeom.mjGEOM_BOX
 
     let body_pos = [grid_loc[0], grid_loc[1], 0.0];
     let mut world = spec.world_body();
@@ -91,20 +128,20 @@ fn stairs(spec: &mut MjSpec, grid_loc: [f64; 2] , num_stairs: u32, direction: i8
         
         // Left side
         x_pos_l[0] = x_beginning + H_STEP * i as f64;
-        body.add_geom().with_rgba(BROWN).with_size(size_one).with_pos(x_pos_l).with_type(MjtGeom::mjGEOM_BOX);
+        body.add_geom().with_rgba(BROWN).with_size(size_one).with_pos(x_pos_l);
         // Right side
         x_pos_r[0] = x_end - H_STEP * i as f64;
-        body.add_geom().with_rgba(BROWN).with_size(size_one).with_pos(x_pos_r).with_type(MjtGeom::mjGEOM_BOX);
+        body.add_geom().with_rgba(BROWN).with_size(size_one).with_pos(x_pos_r);
         // Top
         y_pos_up[1] = y_beginning - H_STEP * i as f64;
-        body.add_geom().with_rgba(BROWN).with_size(size_two).with_pos(y_pos_up).with_type(MjtGeom::mjGEOM_BOX);
+        body.add_geom().with_rgba(BROWN).with_size(size_two).with_pos(y_pos_up);
         // Bottom
         y_pos_down[1] = y_end + H_STEP * i as f64;
-        body.add_geom().with_rgba(BROWN).with_size(size_two).with_pos(y_pos_down).with_type(MjtGeom::mjGEOM_BOX);
+        body.add_geom().with_rgba(BROWN).with_size(size_two).with_pos(y_pos_down);
     }
 
     // Closing
     let size = [SQUARE_LENGTH - H_STEP * num_stairs as f64, SQUARE_LENGTH - H_STEP * num_stairs as f64, V_SIZE];
     let pos = [0.0, 0.0, direction as f64 * (V_SIZE + V_STEP * num_stairs as f64)];
-    body.add_geom().with_pos(pos).with_size(size).with_rgba(BROWN).with_type(MjtGeom::mjGEOM_BOX);
+    body.add_geom().with_pos(pos).with_size(size).with_rgba(BROWN);
 }

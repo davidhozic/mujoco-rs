@@ -20,6 +20,10 @@
 //! The C++ viewer however requires manual compilation of a patched MuJoCo repository,
 //! like described [here](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking-with-c-viewer).
 //! 
+//! ## Model editing
+//! [`MjModel`](wrappers::MjModel) can be procedurally generated through the model editing module.
+//! The specification representing the model is [wrappers::mj_editing::MjSpec]
+//! 
 //! ## Features
 //! This crate has the following public features:
 //! - `viewer`, which enables the Rust-native viewer ([`viewer::MjViewer`]),
@@ -32,7 +36,7 @@
 //! 
 //! If a certain function can't be found, you can use the raw FFI bindings, available under 
 //! the [`mujoco_c`] module. Note that to access the lower-level ffi structs inside of wrappers,
-//! `ffi()` or `ffi_mut()` must be called (e. g., [`wrappers::MjData::ffi`] and [`wrappers::MjModel::ffi`]). 
+//! `ffi()` or `ffi_mut()` must be called (e. g., [`MjData::ffi`](wrappers::MjData::ffi) and [`MjModel::ffi`](wrappers::MjModel::ffi)). 
 
 use std::ffi::CStr;
 
