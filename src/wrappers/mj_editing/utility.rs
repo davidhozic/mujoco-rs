@@ -17,10 +17,10 @@ pub(crate) fn read_mjs_string(string: &mjString) -> &str {
 
 /// Writes to a `destination` MJS string (C++) from a `source` `&str`.
 /// # Panics
-/// When the `source` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
+/// When the `source` contains '\0' characters, a panic occurs.
 pub(crate) fn write_mjs_string(source: &str, destination: &mut mjString) {
     unsafe {
-        let c_source = CString::new(source).unwrap();  // can't be invalid UTF-8.
+        let c_source = CString::new(source).unwrap();
         mjs_setString(destination, c_source.as_ptr());
     }
 }
@@ -75,9 +75,9 @@ pub(crate) fn append_mjs_vec_vec_i32(source: &[i32], destination: &mut mjIntVecV
 
 /// Split `source` to entries and copy to `destination` (C++).
 /// # Panics
-/// When the `source` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
+/// When the `source` contains '\0' characters, a panic occurs.
 pub(crate) fn write_mjs_vec_string(source: &str, destination: &mut mjStringVec) {
-    let c_source = CString::new(source).unwrap();  // can't be invalid UTF-8.
+    let c_source = CString::new(source).unwrap();
     unsafe {
         mjs_setStringVec(destination, c_source.as_ptr());
     }
@@ -85,9 +85,9 @@ pub(crate) fn write_mjs_vec_string(source: &str, destination: &mut mjStringVec) 
 
 /// Split `source` to entries and append to `destination` (C++).
 /// # Panics
-/// When the `source` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
+/// When the `source` contains '\0' characters, a panic occurs.
 pub(crate) fn append_mjs_vec_string(source: &str, destination: &mut mjStringVec) {
-    let c_source = CString::new(source).unwrap();  // can't be invalid UTF-8.
+    let c_source = CString::new(source).unwrap();
     unsafe {
         mjs_appendString(destination, c_source.as_ptr());
     }
@@ -161,7 +161,7 @@ macro_rules! find_x_method {
             #[doc = concat!(
                 "Obtain a reference to the ", stringify!($item), " with the given `name`.\n",
                 "# Panics\n",
-                "When the `name` contains invalid UTF-8 or has '\\0' characters mid string, a panic occurs."
+                "When the `name` contains '\\0' characters, a panic occurs."
             )]
             pub fn $item(&self, name: &str) -> Option<[<Mjs $item:camel>]<'_>> {
                 let c_name = CString::new(name).unwrap();
@@ -186,7 +186,7 @@ macro_rules! find_x_method_direct {
             #[doc = concat!(
                 "Obtain a reference to the ", stringify!($item), " with the given `name`.\n",
                 "# Panics\n",
-                "When the `name` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs."
+                "When the `name` contains '\\0' characters, a panic occurs."
             )]
             pub fn $item(&self, name: &str) -> Option<[<Mjs $item:camel>]<'_>> {
                 let c_name = CString::new(name).unwrap();
@@ -230,7 +230,7 @@ macro_rules! mjs_wrapper {
 
             /// Sets the message appended to compiler errors.
             /// # Panics
-            /// When the `info` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
+            /// When the `info` contains '\0' characters, a panic occurs.
             pub fn set_info(&mut self, info: &str) {
                 write_mjs_string(info, unsafe { self.ffi_mut().info.as_mut().unwrap() });
             }
@@ -279,7 +279,7 @@ macro_rules! vec_string_set_append {
                 "Splits the `", stringify!($name), "` and put the split text as ", $comment,
                 "\n",
                 "# Panics\n",
-                "When the `value` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs."
+                "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<set_ $name>](&mut self, value: &str) {
                 write_mjs_vec_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
@@ -289,7 +289,7 @@ macro_rules! vec_string_set_append {
                 "Splits the `", stringify!($name), "` and append the split text to ", $comment,
                 "\n",
                 "# Panics\n",
-                "When the `value` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs."
+                "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<append_ $name>](&mut self, value: &str) {
                 append_mjs_vec_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
@@ -311,7 +311,7 @@ macro_rules! string_set_get_with {
                 "Sets ", $comment,
                 "\n",
                 "# Panics\n",
-                "When the `value` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs."
+                "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<set_ $name>](&mut self, value: &str) {
                 write_mjs_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
@@ -321,7 +321,7 @@ macro_rules! string_set_get_with {
                 "Builder method for setting ", $comment,
                 "\n",
                 "# Panics\n",
-                "When the `value` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs."
+                "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<with_ $name>](mut self, value: &str) -> Self {
                 write_mjs_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() });

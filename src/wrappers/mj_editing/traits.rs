@@ -35,7 +35,7 @@ pub trait SpecItem: Sized {
 
     /// Set a new name.
     /// # Panics
-    /// When the `name` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
+    /// When the `name` contains '\0' characters mid string, a panic occurs.
     fn set_name(&mut self, name: &str) {
         let cstr = CString::new(name).unwrap();  // always has valid UTF-8
         unsafe { mjs_setName(self.element_mut_pointer(), cstr.as_ptr()) };
