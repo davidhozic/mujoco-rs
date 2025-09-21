@@ -200,7 +200,9 @@ macro_rules! fixed_size_info_method {
             #[doc = concat!(
                 "Obtains a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] struct containing information about the name, id, and ",
                 "indices required for obtaining references to the correct locations in [`Mj", stringify!($info_type), "`]. ",
-                "The actual view can be obtained via [`", stringify!([<Mj $type_:camel $info_type Info>]), "::view`]."
+                "The actual view can be obtained via [`", stringify!([<Mj $type_:camel $info_type Info>]), "::view`].\n",
+                "# Panics\n",
+                "A panic will occur if `name` contains invalid UTF-8 or has `\0` characters mid string."
             )]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let c_name = CString::new(name).unwrap();

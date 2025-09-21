@@ -34,6 +34,8 @@ pub trait SpecItem: Sized {
     }
 
     /// Set a new name.
+    /// # Panics
+    /// When the `name` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
     fn set_name(&mut self, name: &str) {
         let cstr = CString::new(name).unwrap();  // always has valid UTF-8
         unsafe { mjs_setName(self.element_mut_pointer(), cstr.as_ptr()) };
@@ -53,6 +55,8 @@ pub trait SpecItem: Sized {
     /// Make the item inherit properties from a default class.
     /// # Errors
     /// Returns a [`ErrorKind::NotFound`] when the default with the `class_name` doesn't exist.
+    /// # Panics
+    /// When the `class_name` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
     fn set_default(&mut self, class_name: &str) -> Result<(), Error> {
         /* Workaround to pass the borrow checker (we use the existing borrow) */
         let cname = CString::new(class_name).unwrap();  // class_name is always valid UTF-8.

@@ -252,6 +252,8 @@ impl MjModel {
     }
 
     /// Translates `name` to the correct id. Wrapper around `mj_name2id`.
+    /// # Panics
+    /// When the `name` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
     pub fn name_to_id(&self, type_: MjtObj, name: &str) -> i32 {
         let c_string = CString::new(name).unwrap();
         unsafe {
@@ -273,6 +275,8 @@ impl MjModel {
     }
 
     /// Save model to binary MJB file or memory buffer; buffer has precedence when given.
+    /// # Panics
+    /// When the `filename` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
     pub fn save(&self, filename: Option<&str>, buffer: Option<&mut [u8]>) {
         let c_filename = filename.map(|f| CString::new(f).unwrap());
         let (buffer_ptr, buffer_len) = if let Some(b) = buffer {

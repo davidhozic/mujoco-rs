@@ -55,7 +55,9 @@ pub mod viewer;
 pub mod mujoco_c;  // raw MuJoCo C and C++ bindings
 
 
-/// Returns the version string of the MuJoCo library
+/// Returns the version string of the MuJoCo library.
+/// # Panics
+/// When the version is invalid UTF-8 or contains \0 characters mid string.
 pub fn get_mujoco_version() -> &'static str {
     let arr = unsafe { mujoco_c::mj_versionString() };
     unsafe { CStr::from_ptr(arr).to_str().unwrap() }
@@ -95,14 +97,14 @@ mod tests {
         </mujoco>
         ";
 
-        for _ in 0..N_REPEATS {
-            let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("failed to load the model.");
-            let mut datas: Vec<_> = (0..N_ITEMS).map(|_| model.make_data()).collect();
-
-            for data in datas.iter_mut() {
-                data.joint("sphere").unwrap().view_mut(data).qpos[0] /= 2.0;
-                data.step();
+        std::hint::black_box(
+            for _ in 0..N_REPEATS {
+                let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("failed to load the model.");
+                for mut data in (0..N_ITEMS).map(|_| model.make_data()) {
+                    data.joint("sphere").unwrap().view_mut(&mut data).qpos[0] /= 2.0;
+                    data.step();
+                }
             }
-        }
+        )
     }
 }

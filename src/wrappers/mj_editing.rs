@@ -155,11 +155,15 @@ impl MjSpec {
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
+    /// # Panics
+    /// When the `path` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
     pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
         Self::from_xml_file(path, None)
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file, located in a virtual file system (`vfs`).
+    /// # Panics
+    /// When the `path` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
     pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
         Self::from_xml_file(path, Some(vfs))
     }
@@ -178,6 +182,8 @@ impl MjSpec {
     }
 
     /// Creates a [`MjSpec`] from an `xml` string.
+    /// # Panics
+    /// When the `xml` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
     pub fn from_xml_string(xml: &str) -> Result<Self, Error> {
         let c_xml = CString::new(xml).unwrap();
         let mut error_buffer = [0i8; 100];
@@ -225,6 +231,8 @@ impl MjSpec {
     }
 
     /// Save spec to an XML file.
+    /// # Panics
+    /// When the `filename` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
     pub fn save_xml(&self, filename: &str) -> Result<(), Error> {
         let mut error_buff = [0; 100];
         let cname = CString::new(filename).unwrap();  // filename is always UTF-8
@@ -329,6 +337,8 @@ impl MjSpec {
     /// # Errors
     /// Errors a [`ErrorKind::AlreadyExists`] error when `class_name` already exists.
     /// Errors a [`ErrorKind::NotFound`] when `parent_class_name` doesn't exist.
+    /// # Panics
+    /// When the `class_name` or `parent_class_name` contain invalid UTF-8 or have '\0' characters mid string, a panic occurs.
     pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<MjsDefault<'_>, Error> {
         let c_class_name = CString::new(class_name).unwrap ();  // can't have non-valid UTF-8
         
@@ -837,6 +847,8 @@ impl MjsTendon<'_> {
     }
 
     /// Wrap a site corresponding to `name`, using the tendon.
+    /// # Panics
+    /// When the `name` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
     pub fn wrap_site(&mut self, name: &str) -> MjsWrap<'_> {
         let cname = CString::new(name).unwrap();  // invalid utf-8 is not expected, neither are null bytes.
         let wrap_ptr = unsafe { mjs_wrapSite(self.ffi_mut(), cname.as_ptr()) };
@@ -844,6 +856,8 @@ impl MjsTendon<'_> {
     }
 
     /// Wrap a geom corresponding to `name`, using the tendon.
+    /// # Panics
+    /// When the `name` or `sidesite` contain invalid UTF-8 or have '\0' characters mid string, a panic occurs.
     pub fn wrap_geom(&mut self, name: &str, sidesite: &str) -> MjsWrap<'_> {
         let cname = CString::new(name).unwrap();  // invalid utf-8 is not expected, neither are null bytes.
         let csidesite = CString::new(sidesite).unwrap();
@@ -855,6 +869,8 @@ impl MjsTendon<'_> {
     }
 
     /// Wrap a joint corresponding to `name`, using the tendon.
+    /// # Panics
+    /// When the `name` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
     pub fn wrap_joint(&mut self, name: &str, coef: f64) -> MjsWrap<'_> {
         let cname = CString::new(name).unwrap();  // invalid utf-8 is not expected, neither are null bytes.
         let wrap_ptr = unsafe { mjs_wrapJoint(self.ffi_mut(), cname.as_ptr(), coef) };
