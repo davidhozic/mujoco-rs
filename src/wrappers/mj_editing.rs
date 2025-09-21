@@ -193,8 +193,10 @@ impl MjSpec {
     fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[i8]) -> Result<Self, Error> {
         if spec_ptr.is_null() {
             // SAFETY: i8 and u8 have the same size, and no negative values can appear in the error_buffer.
-            let err_u8 = unsafe { std::mem::transmute(error_buffer) };
-            Err(Error::new(ErrorKind::UnexpectedEof,  String::from_utf8_lossy(err_u8)))
+            Err(Error::new(
+                ErrorKind::UnexpectedEof, 
+                unsafe { CStr::from_ptr(error_buffer.as_ptr().cast()).to_string_lossy().into_owned() }
+            ))
         }
         else {
             Ok(MjSpec(spec_ptr))

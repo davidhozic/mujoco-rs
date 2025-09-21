@@ -181,8 +181,10 @@ impl MjModel {
 
     fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[i8]) -> Result<Self, Error> {
         if ptr_model.is_null() {
-            let err_u8 = error_buffer.into_iter().map(|x| *x as u8).take_while(|&x| x != 0).collect();
-            Err(Error::new(ErrorKind::UnexpectedEof,  String::from_utf8(err_u8).expect("could not parse error")))
+            Err(Error::new(
+                ErrorKind::UnexpectedEof,
+                unsafe { CStr::from_ptr(error_buffer.as_ptr().cast()).to_string_lossy().into_owned() }
+            ))
         }
         else {
             Ok(Self(ptr_model))

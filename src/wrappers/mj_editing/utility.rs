@@ -7,7 +7,7 @@ use crate::mujoco_c::*;
 /***************************
 ** Utility functions
 ***************************/
-/// Reads a MJS string (C++) as a `&str`.
+/// Reads MJS string (C++) as a `&str`.
 pub(crate) fn read_mjs_string(string: &mjString) -> &str {
     unsafe {
         let ptr = mjs_getString(string);
@@ -23,7 +23,7 @@ pub(crate) fn write_mjs_string(source: &str, destination: &mut mjString) {
     }
 }
 
-/// Reads as MJS double vector (C++) as a `&\[f64\]`.
+/// Reads MJS double vector (C++) as a `&\[f64\]`.
 pub(crate) fn read_mjs_vec_f64(array: &mjDoubleVec) -> &[f64] {
     let mut userdata_length = 0;
     unsafe {
@@ -36,35 +36,35 @@ pub(crate) fn read_mjs_vec_f64(array: &mjDoubleVec) -> &[f64] {
     }
 }
 
-/// Writes as MJS double vector (C++) from a `source` to `destination`.
+/// Writes MJS double vector (C++) from a `source` to `destination`.
 pub(crate) fn write_mjs_vec_f64(source: &[f64], destination: &mut mjDoubleVec) {
     unsafe {
         mjs_setDouble(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
-/// Writes as MJS float vector (C++) from a `source` to `destination`.
+/// Writes MJS float vector (C++) from a `source` to `destination`.
 pub(crate) fn write_mjs_vec_f32(source: &[f32], destination: &mut mjFloatVec) {
     unsafe {
         mjs_setFloat(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
-/// Appends as MJS float vector (C++) from a `source` to `destination`.
+/// Appends MJS float vector (C++) from a `source` to `destination`.
 pub(crate) fn append_mjs_vec_vec_f32(source: &[f32], destination: &mut mjFloatVecVec) {
     unsafe {
         mjs_appendFloatVec(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
-/// Writes as MJS int vector (C++) from a `source` to `destination`.
+/// Writes MJS int vector (C++) from a `source` to `destination`.
 pub(crate) fn write_mjs_vec_i32(source: &[i32], destination: &mut mjIntVec) {
     unsafe {
         mjs_setInt(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
-/// Appends as MJS int vector (C++) from a `source` to `destination`.
+/// Appends MJS int vector (C++) from a `source` to `destination`.
 pub(crate) fn append_mjs_vec_vec_i32(source: &[i32], destination: &mut mjIntVecVec) {
     unsafe {
         mjs_appendIntVec(destination, source.as_ptr(), source.len() as i32);
@@ -87,7 +87,7 @@ pub(crate) fn append_mjs_vec_string(source: &str, destination: &mut mjStringVec)
     }
 }
 
-// /// Writes as MJS byte vector (C++) from a `source` to `destination`.
+// /// Writes MJS byte vector (C++) from a `source` to `destination`.
 pub(crate) fn write_mjs_vec_byte<T>(source: &[T], destination: &mut mjByteVec) {
     unsafe {
         mjs_setBuffer(destination, source.as_ptr().cast(), (size_of::<T>() * source.len()) as i32);
