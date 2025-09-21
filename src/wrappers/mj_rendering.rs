@@ -129,7 +129,7 @@ impl MjrContext {
 
     /// Draws a text overlay. The optional `overlay2` parameter displays additional overlay, next to `overlay`.
     /// # Panics
-    /// When the `overlay` or `overlay2` contain invalid UTF-8 or have '\0' characters mid string, a panic occurs.
+    /// When the `overlay` or `overlay2` contain '\0' characters, a panic occurs.
     pub fn overlay(&mut self, font: MjtFont, gridpos: MjtGridPos, viewport: MjrRectangle, overlay: &str, overlay2: Option<&str>) {
         let c_overlay = CString::new(overlay).unwrap();
         let c_overlay2 = overlay2.map(|x| CString::new(x).unwrap());

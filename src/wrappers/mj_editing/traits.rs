@@ -56,7 +56,7 @@ pub trait SpecItem: Sized {
     /// # Errors
     /// Returns a [`ErrorKind::NotFound`] when the default with the `class_name` doesn't exist.
     /// # Panics
-    /// When the `class_name` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
+    /// When the `class_name` contains '\0' characters, a panic occurs.
     fn set_default(&mut self, class_name: &str) -> Result<(), Error> {
         /* Workaround to pass the borrow checker (we use the existing borrow) */
         let cname = CString::new(class_name).unwrap();  // class_name is always valid UTF-8.

@@ -56,8 +56,6 @@ pub mod mujoco_c;  // raw MuJoCo C and C++ bindings
 
 
 /// Returns the version string of the MuJoCo library.
-/// # Panics
-/// When the version is invalid UTF-8 or contains \0 characters mid string.
 pub fn get_mujoco_version() -> &'static str {
     let arr = unsafe { mujoco_c::mj_versionString() };
     unsafe { CStr::from_ptr(arr).to_str().unwrap() }

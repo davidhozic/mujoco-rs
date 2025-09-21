@@ -82,7 +82,7 @@ impl<'a> MjData<'a> {
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjActuatorDataInfo::view`].
     /// # Panics
-    /// When the `name` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
+    /// When the `name` contains '\0' characters, a panic occurs.
     pub fn actuator(&self, name: &str) -> Option<MjActuatorDataInfo> {
         let c_name = CString::new(name).unwrap();
         let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_ACTUATOR as i32, c_name.as_ptr())};
@@ -105,7 +105,7 @@ impl<'a> MjData<'a> {
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjJointDataInfo::view`].
     /// # Panics
-    /// When the `name` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
+    /// When the `name` contains \0' characters, a panic occurs.
     pub fn joint(&self, name: &str) -> Option<MjJointDataInfo> {
         let c_name = CString::new(name).unwrap();
         let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_JOINT as i32, c_name.as_ptr())};
@@ -156,7 +156,7 @@ impl<'a> MjData<'a> {
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjSensorDataInfo::view`].
     /// # Panics
-    /// When the `name` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
+    /// When the `name` contains '\0' characters, a panic occurs.
     pub fn sensor(&self, name: &str) -> Option<MjSensorDataInfo> {
         let c_name = CString::new(name).unwrap();
         let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_SENSOR as i32, c_name.as_ptr())};
@@ -177,7 +177,7 @@ impl<'a> MjData<'a> {
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjTendonDataInfo::view`].
     /// # Panics
-    /// When the `name` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
+    /// When the `name` contains '\0' characters, a panic occurs.
     #[allow(non_snake_case)]
     pub fn tendon(&self, name: &str) -> Option<MjTendonDataInfo> {
         let c_name = CString::new(name).unwrap();
@@ -290,7 +290,7 @@ impl<'a> MjData<'a> {
     /// Print mjData to text file, specifying format.
     /// float_format must be a valid printf-style format string for a single float value
     /// # Panics
-    /// When the `filename` or `float_format` contain invalid UTF-8 or have '\0' characters mid string, a panic occurs.
+    /// When the `filename` or `float_format` contain '\0' characters, a panic occurs.
     pub fn print_formatted(&self, filename: &str, float_format: &str) {
         let c_filename = CString::new(filename).unwrap();
         let c_float_format = CString::new(float_format).unwrap();
@@ -299,7 +299,7 @@ impl<'a> MjData<'a> {
 
     /// Print data to text file.
     /// # Panics
-    /// When the `filename` contains invalid UTF-8 or has '\0' characters mid string, a panic occurs.
+    /// When the `filename` contains '\0' characters, a panic occurs.
     pub fn print(&self, filename: &str) {
         let c_filename = CString::new(filename).unwrap();
         unsafe { mj_printData(self.model.ffi(), self.ffi(), c_filename.as_ptr()) }

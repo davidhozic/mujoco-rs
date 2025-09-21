@@ -11,7 +11,7 @@ use crate::mujoco_c::*;
 pub(crate) fn read_mjs_string(string: &mjString) -> &str {
     unsafe {
         let ptr = mjs_getString(string);
-        CStr::from_ptr(ptr).to_str().unwrap()  // can't be invalid UTF-8.
+        CStr::from_ptr(ptr).to_str().unwrap()
     }
 }
 
