@@ -47,8 +47,9 @@ pub struct MjRenderer<'m> {
 
 impl<'m> MjRenderer<'m> {
     /// Construct a new renderer.
-    /// `max_geom` represents the maximum number of geoms the [`MjvScene`] can hold, which
-    /// includes both the user-drawn geoms and the required from [`MjData`] state.
+    /// The `max_geom` parameter
+    /// defines how much space will be allocated for additional, user-defined visual-only geoms.
+    /// It can thus be set to 0 if no additional geoms will be drawn by the user.
     pub fn new(model: &'m MjModel, width: usize, height: usize, max_geom: usize) -> Result<Self, RendererError> {
         let mut glfw = glfw::init_no_callbacks()
             .map_err(|err| RendererError::GlfwInitError(err))?;

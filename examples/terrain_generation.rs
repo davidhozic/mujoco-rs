@@ -64,18 +64,7 @@ fn create_model() -> MjModel {
         }
     }
 
-    // Create some spheres
-    for i in -5..5 {
-        for j in -5..5 {
-            let mut ball = world.add_body();
-            ball.add_geom()
-                .with_type(MjtGeom::mjGEOM_SPHERE)
-                .with_size([0.1, 0.0, 0.0])
-                .with_pos([i as f64 * 0.5, j as f64 * 0.5, 5.0])
-                .with_mass(0.001);
-            ball.add_joint().with_type(MjtJoint::mjJNT_FREE);
-        }
-    }
+    connected_spheres(&mut spec);
 
     // Create multiple stairs in a grid
     let base_name = "stairs".to_string();
@@ -144,4 +133,39 @@ fn stairs(spec: &mut MjSpec, grid_loc: [f64; 2] , num_stairs: u32, direction: i8
     let size = [SQUARE_LENGTH - H_STEP * num_stairs as f64, SQUARE_LENGTH - H_STEP * num_stairs as f64, V_SIZE];
     let pos = [0.0, 0.0, direction as f64 * (V_SIZE + V_STEP * num_stairs as f64)];
     body.add_geom().with_pos(pos).with_size(size).with_rgba(BROWN);
+}
+
+
+/// Creates an array of spheres, connected by tendons.
+fn connected_spheres(spec: &mut MjSpec) {
+    const GRID_LIMIT: i32 = 3;
+
+    // Create some spheres
+    // Connect the first ball with the last ball.
+    let mut last_site_name = format!("ball_{}_{}", GRID_LIMIT-1, GRID_LIMIT-1);
+    for i in -GRID_LIMIT..GRID_LIMIT {
+        for j in -GRID_LIMIT..GRID_LIMIT {
+            let site_name = format!("ball_{i}_{j}");
+
+            // Connect spheres with a tendon
+            let mut tendon = spec.add_tendon()
+                .with_range([0.0, 2.0]);
+
+            tendon.wrap_site(&site_name);  // one part of tendon attached to the new ball
+            tendon.wrap_site(&last_site_name);  // second part of tendon attached to the previous ball
+
+            // Create a sphere
+            let mut world = spec.world_body();
+            let mut ball = world.add_body()
+                .with_pos([i as f64 * 0.5, j as f64 * 0.5, 5.0]);
+            ball.add_geom()
+                .with_type(MjtGeom::mjGEOM_SPHERE)
+                .with_size([0.1, 0.0, 0.0])
+                .with_mass(0.001);
+
+            ball.add_joint().with_type(MjtJoint::mjJNT_FREE);
+            ball.add_site().with_name(&site_name);
+            last_site_name = site_name;
+        }
+    }
 }

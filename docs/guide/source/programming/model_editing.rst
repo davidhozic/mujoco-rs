@@ -9,6 +9,20 @@ Model editing
 .. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
 .. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`
 
+
+.. admonition:: Known bugs
+
+    Model editing currently has the following known **bugs**,
+    which are bugs within **MuJoCo itself** and not caused by MuJoCo-rs:
+
+    - setting the compiler's angle option to degrees is ignored,
+    - using quaternions doesn't affect rotation,
+    - integer (C ``int``) vectors and 32 bit float (C ``float``) vectors can not be read,
+    - adding ``frame`` XML elements doesn't do anything.
+
+    If you encounter any other bugs, please `report them <https://github.com/davidhozic/mujoco-rs/issues>`_.
+
+
 The most general way to create an |mj_model| instance is by loading an XML file
 via :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml`.
 Due to |mj_model| only allowing (some) changes to parameters and not to the actual

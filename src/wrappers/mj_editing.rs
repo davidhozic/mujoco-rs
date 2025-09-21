@@ -277,7 +277,7 @@ impl MjSpec {
 
 /// Public attributes.
 impl MjSpec {
-    string_set_get! {
+    string_set_get_with! {
         modelname; "model name.";
         comment; "comment at top of XML.";
         modelfiledir; "path to model file.";
@@ -385,13 +385,8 @@ impl MjsSite<'_> {
 
     userdata_method!(f64);
 
-    string_set_get! {
+    string_set_get_with! {
         material; "name of material.";
-    }
-
-    /// Attaches
-    pub fn attach(&mut self) {
-
     }
 }
 
@@ -456,7 +451,7 @@ impl MjsGeom<'_> {
 
     userdata_method!(f64);
 
-    string_set_get! {
+    string_set_get_with! {
         meshname;   "mesh attached to geom.";
         material;   "name of material.";
         hfieldname; "heightfield attached to geom.";
@@ -497,7 +492,7 @@ impl MjsCamera<'_> {
 
     userdata_method!(f64);
 
-    string_set_get! {
+    string_set_get_with! {
         targetbody; "target body for tracking/targeting.";
     }
 }
@@ -535,7 +530,7 @@ impl MjsLight<'_> {
         ]
     }
 
-    string_set_get! {
+    string_set_get_with! {
         texture; "texture name for image lights.";
         targetbody; "target body for targeting.";
     }
@@ -556,7 +551,7 @@ impl MjsFrame<'_> {
         ]
     }
 
-    string_set_get! {
+    string_set_get_with! {
         childclass; "childclass name.";
     }
 
@@ -618,7 +613,7 @@ impl MjsActuator<'_> {
 
     userdata_method!(f64);
 
-    string_set_get! {
+    string_set_get_with! {
         target;                 "name of transmission target";
         refsite;                "reference site, for site transmission";
         slidersite;             "site defining cylinder, for slider-crank";
@@ -651,7 +646,7 @@ impl MjsSensor<'_> {
 
     userdata_method!(f64);
 
-    string_set_get! {
+    string_set_get_with! {
         refname; "name of referenced object.";
         objname; "name of sensorized object.";
     }
@@ -711,7 +706,7 @@ impl MjsFlex<'_> {
         ]
     }
 
-    string_set_get! {
+    string_set_get_with! {
         material; "name of material used for rendering.";
     }
 
@@ -754,7 +749,7 @@ impl MjsPair<'_> {
         ]
     }
 
-    string_set_get! {
+    string_set_get_with! {
         geomname1; "name of geom 1.";
         geomname2; "name of geom 2.";
     }
@@ -765,7 +760,7 @@ impl MjsPair<'_> {
 ***************************/
 mjs_wrapper!(Exclude);
 impl MjsExclude<'_> {
-    string_set_get! {
+    string_set_get_with! {
         bodyname1; "name of body 1.";
         bodyname2; "name of body 2.";
     }
@@ -793,7 +788,7 @@ impl MjsEquality<'_> {
         objtype: MjtObj; "type of both objects";
     ]}
 
-    string_set_get! {
+    string_set_get_with! {
         name1; "name of object 1";
         name2; "name of object 2";
     }
@@ -835,8 +830,39 @@ impl MjsTendon<'_> {
     }
 
     userdata_method!(f64);
-    string_set_get! {
+    string_set_get_with! {
         material; "name of material for rendering.";
+    }
+
+    /// Wrap a site corresponding to `name`, using the tendon.
+    pub fn wrap_site(&mut self, name: &str) -> MjsWrap<'_> {
+        let cname = CString::new(name).unwrap();  // invalid utf-8 is not expected, neither are null bytes.
+        let wrap_ptr = unsafe { mjs_wrapSite(self.ffi_mut(), cname.as_ptr()) };
+        MjsWrap(wrap_ptr, PhantomData)
+    }
+
+    /// Wrap a geom corresponding to `name`, using the tendon.
+    pub fn wrap_geom(&mut self, name: &str, sidesite: &str) -> MjsWrap<'_> {
+        let cname = CString::new(name).unwrap();  // invalid utf-8 is not expected, neither are null bytes.
+        let csidesite = CString::new(sidesite).unwrap();
+        let wrap_ptr = unsafe { mjs_wrapGeom(
+            self.ffi_mut(),
+            cname.as_ptr(), csidesite.as_ptr()
+        ) };
+        MjsWrap(wrap_ptr, PhantomData)
+    }
+
+    /// Wrap a joint corresponding to `name`, using the tendon.
+    pub fn wrap_joint(&mut self, name: &str, coef: f64) -> MjsWrap<'_> {
+        let cname = CString::new(name).unwrap();  // invalid utf-8 is not expected, neither are null bytes.
+        let wrap_ptr = unsafe { mjs_wrapJoint(self.ffi_mut(), cname.as_ptr(), coef) };
+        MjsWrap(wrap_ptr, PhantomData)
+    }
+
+    /// Wrap a pulley using the tendon.
+    pub fn wrap_pulley(&mut self, divisor: f64) -> MjsWrap<'_> {
+        let wrap_ptr = unsafe { mjs_wrapPulley(self.ffi_mut(), divisor) };
+        MjsWrap(wrap_ptr, PhantomData)
     }
 }
 
@@ -869,7 +895,7 @@ impl MjsNumeric<'_> {
 ***************************/
 mjs_wrapper!(Text);
 impl MjsText<'_> {
-    string_set_get! {
+    string_set_get_with! {
         data; "text string.";
     }
 }
@@ -918,7 +944,7 @@ impl MjsKey<'_> {
 ***************************/
 mjs_wrapper!(Plugin);
 impl MjsPlugin<'_> {
-    string_set_get! {
+    string_set_get_with! {
         name; "instance name.";
         plugin_name; "plugin name.";
     }
@@ -954,7 +980,7 @@ impl MjsMesh<'_> {
         ]
     }
 
-    string_set_get! {
+    string_set_get_with! {
         content_type; "content type of file.";
         file; "mesh file.";
     }
@@ -986,7 +1012,7 @@ impl MjsHfield<'_> {
         ncol: i32;  "number of columns.";
     ]}
 
-    string_set_get! {
+    string_set_get_with! {
         content_type; "content type of file.";
         file; "file: (nrow, ncol, [elevation data]).";
     }
@@ -1015,7 +1041,7 @@ impl MjsSkin<'_> {
         ]
     }
 
-    string_set_get! {
+    string_set_get_with! {
         material;               "name of material used for rendering.";
         file;                   "skin file.";
     }
@@ -1085,7 +1111,7 @@ impl MjsTexture<'_> {
         write_mjs_vec_byte(data, unsafe { self.ffi_mut().data.as_mut().unwrap() });
     }
 
-    string_set_get! {
+    string_set_get_with! {
         file; "png file to load; use for all sides of cube.";
         content_type; "content type of file.";
     }
@@ -1402,12 +1428,14 @@ mod tests {
 
     #[test]
     fn test_save() {
+        /* TODO: when the bug gets fixed in MuJoCo, switch the angle="radian"to angle="degree" */
         const EXPECTED_XML: &str = "\
 <mujoco model=\"MuJoCo Model\">
   <compiler angle=\"radian\"/>
 
   <worldbody>
     <body>
+      <geom size=\"0.01\"/>
       <site pos=\"0 0 0\"/>
       <camera pos=\"0 0 0\"/>
       <light pos=\"0 0 0\" dir=\"0 0 -1\"/>
@@ -1420,7 +1448,7 @@ mod tests {
         let mut world = spec.world_body();
         let mut body = world.add_body();
         body.add_camera();
-        // let geom = body.add_geom();
+        body.add_geom().with_size([0.010, 0.0, 0.0]);
         body.add_light();
         body.add_site();
 
@@ -1474,6 +1502,31 @@ mod tests {
             .add_body()
             .add_geom()
             .with_size([1.0, 0.0, 0.0]);
+
+        spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_wrap() {
+        let mut spec = MjSpec::new();
+        let mut world = spec.world_body();
+        let mut body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
+        body1.add_geom().with_size([0.010;3]);
+        body1.add_site().with_name("ball1");
+        body1.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        let mut body2= world.add_body().with_pos([0.0, 0.0, 0.5]);
+        body2.add_geom().with_size([0.010;3]);
+        body2.add_site().with_name("ball2");
+        body2.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        let mut tendon = spec.add_tendon()
+            .with_range([0.0, 0.25])
+            .with_rgba([1.0, 0.5, 0.0, 1.0]);  // orange
+        tendon.wrap_site("ball1");
+        tendon.wrap_site("ball2");
+
+        spec.world_body().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
 
         spec.compile().unwrap();
     }

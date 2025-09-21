@@ -20,6 +20,10 @@ Unreleased
   - Added module :docs-rs:`mujoco_rs::wrappers::mj_editing`.
   - Added two examples. One on basic model editing and one on terrain generation.
 
+- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
+
+  - Increased the headroom for visual-only geoms, which aren't drawn by the user, from 100 to 2000.
+
 - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
 
   - Added events for keys:
@@ -37,7 +41,6 @@ Unreleased
       - ``Z``: light,
       - ``T``: transparent,
       - ``I``: inertia.
-
 
 - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`:
 

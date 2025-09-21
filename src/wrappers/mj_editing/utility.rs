@@ -246,6 +246,12 @@ macro_rules! userdata_method {
         pub fn set_userdata<T: AsRef<[$type]>>(&mut self, value: T) {
             [<write_mjs_vec_ $type>](value.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() })
         }
+
+        /// Builder method for setting `userdata`.
+        pub fn with_userdata<T: AsRef<[$type]>>(mut self, value: T) -> Self {
+            [<write_mjs_vec_ $type>](value.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() });
+            self
+        }
     }};
 }
 
@@ -267,7 +273,7 @@ macro_rules! vec_string_set_append {
 }
 
 /// Implements string methods for given attribute $name.
-macro_rules! string_set_get {
+macro_rules! string_set_get_with {
     ($($name:ident; $comment:expr;)*) => {paste::paste!{
         $(
             #[doc = concat!("Returns ", $comment)]
@@ -278,6 +284,12 @@ macro_rules! string_set_get {
             #[doc = concat!("Sets ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &str) {
                 write_mjs_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
+            }
+
+            #[doc = concat!("Builder method for setting ", $comment)]
+            pub fn [<with_ $name>](mut self, value: &str) -> Self {
+                write_mjs_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
+                self
             }
         )*
     }};
