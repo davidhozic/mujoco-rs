@@ -546,6 +546,8 @@ impl MjsLight<'_> {
 ***************************/
 mjs_wrapper!(Frame);
 impl MjsFrame<'_> {
+    add_x_method_by_frame! { body, site, joint, geom, camera, light }
+
     getter_setter! {
         with, get, [
             pos: &[f64; 3];               "frame position.";
@@ -556,6 +558,16 @@ impl MjsFrame<'_> {
 
     string_set_get! {
         childclass; "childclass name.";
+    }
+
+    /// Adds a child frame.
+    pub fn add_frame(&mut self) -> MjsFrame<'_> {
+        unsafe {
+            let parent_body = mjs_getParent(self.element_mut_pointer());
+            let parent_frame = self.element_mut_pointer();
+            let frame_ptr = mjs_addFrame(parent_body, parent_frame.cast());
+            MjsFrame(frame_ptr, PhantomData)
+        }
     }
 }
 
@@ -1118,7 +1130,13 @@ impl MjsMaterial<'_> {
 mjs_wrapper!(Body);
 impl MjsBody<'_> {
     add_x_method! { body, site, joint, geom, camera, light }
-    // add_frame
+    
+    // Special case
+    /// Add and return a child frame.
+    pub fn add_frame(&mut self) -> MjsFrame<'_> {
+        let ptr = unsafe { mjs_addFrame(self.ffi_mut(), ptr::null_mut()) };
+        MjsFrame(ptr, PhantomData)
+    }
 
     // Special case: the world body can't be deleted, however MuJoCo doesn't prevent that.
     // When the world body is deleted, the drop of MjSpec will crash on cleanup.
@@ -1230,6 +1248,8 @@ mod tests {
 
         let compiled = spec.compile().expect("could not compile the model");
         assert_eq!(compiled.opt().timestep, TIMESTEP);
+
+        spec.compile().unwrap();
     }
 
     #[test]
@@ -1243,7 +1263,9 @@ mod tests {
         assert_eq!(spec.modelname(), DEFAULT_MODEL_NAME);
         /* Test write */
         spec.set_modelname(NEW_MODEL_NAME);
-        assert_eq!(spec.modelname(), NEW_MODEL_NAME)
+        assert_eq!(spec.modelname(), NEW_MODEL_NAME);
+
+        spec.compile().unwrap();
     }
 
     #[test]
@@ -1256,6 +1278,8 @@ mod tests {
         assert_eq!(body.name(), "");
         body.set_name(NEW_MODEL_NAME);
         assert_eq!(body.name(), NEW_MODEL_NAME);
+
+        spec.compile().unwrap();
     }
 
     #[test]
@@ -1276,6 +1300,8 @@ mod tests {
         /* Test world body deletion */
         let world = spec.world_body();
         assert!(world.delete().is_err(), "the world model should not be deletable");
+
+        spec.compile().unwrap();
     }
 
     #[test]
@@ -1291,7 +1317,9 @@ mod tests {
         /* Test normal body deletion */
         let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
         assert!(joint.delete().is_ok(), "failed to delete model");
-        assert!(spec.joint(NEW_NAME).is_none(), "body was not removed from spec");
+        assert!(spec.joint(NEW_NAME).is_none(), "body was not removed fom spec");
+
+        spec.compile().unwrap();
     }
 
     #[test]
@@ -1309,6 +1337,8 @@ mod tests {
         let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
         assert!(joint.delete().is_ok(), "failed to delete model");
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed from spec");
+
+        spec.compile().unwrap();
     }
 
     #[test]
@@ -1322,6 +1352,8 @@ mod tests {
 
         world.set_userdata(NEW_USERDATA);
         assert_eq!(world.userdata(), NEW_USERDATA);
+
+        spec.compile().unwrap();
     }
 
     #[test]
@@ -1336,6 +1368,8 @@ mod tests {
 
         world.pos_mut()[0] = TEST_VALUE_F64;
         assert_eq!(world.pos()[0], TEST_VALUE_F64);
+
+        spec.compile().unwrap();
     }
 
     #[test]
@@ -1352,7 +1386,18 @@ mod tests {
         assert!(spec.default(DEFAULT_NAME).is_some());
         assert!(spec.default(NOT_DEFAULT_NAME).is_none());
 
-        assert!(spec.add_actuator().set_default(DEFAULT_NAME).is_ok());
+        let mut world = spec.world_body();
+        let mut some_body = world.add_body();
+        some_body.add_joint().with_name("test");
+        some_body.add_geom().with_size([0.010, 0.0, 0.0]);
+
+        let mut actuator = spec.add_actuator()
+            .with_trntype(MjtTrn::mjTRN_JOINT);
+        actuator.set_target("test");
+        
+        assert!(actuator.set_default(DEFAULT_NAME).is_ok());
+
+        spec.compile().unwrap();
     }
 
     #[test]
@@ -1381,6 +1426,8 @@ mod tests {
 
         spec.compile().unwrap();
         assert_eq!(spec.save_xml_string(1000).unwrap(), EXPECTED_XML);
+
+        spec.compile().unwrap();
     }
 
     #[test]
@@ -1389,6 +1436,11 @@ mod tests {
         const TEST_POSITION: [f64; 3] = [1.0, 2.0, 3.0];
 
         let mut spec = MjSpec::new();
+
+        /* add material */
+        spec.add_material().with_name(TEST_MATERIAL);
+
+        /* add site */
         let mut world = spec.world_body();
         let mut site = world.add_site();
 
@@ -1407,5 +1459,22 @@ mod tests {
         assert_eq!(site.pos(), &[0.0; 3]);
         *site.pos_mut() = TEST_POSITION;
         assert_eq!(site.pos(), &TEST_POSITION);
+
+        spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_frame() {
+        let mut spec = MjSpec::new();
+        let mut world = spec.world_body()
+            .with_gravcomp(10.0);
+
+        world.add_frame()
+            .with_pos([0.5, 0.5, 0.05])
+            .add_body()
+            .add_geom()
+            .with_size([1.0, 0.0, 0.0]);
+
+        spec.compile().unwrap();
     }
 }

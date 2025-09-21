@@ -103,11 +103,29 @@ pub(crate) fn write_mjs_vec_byte<T>(source: &[T], destination: &mut mjByteVec) {
 macro_rules! add_x_method {
     ($($name:ident),*) => {paste::paste! {
         $(
-            /* Without default */
+            /* With default */
             #[doc = concat!("Add and return a child ", stringify!($name), ".")]
             pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>]<'_> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.0, ptr::null()) };
                 [<Mjs $name:camel>](ptr, PhantomData)
+            }
+        )*
+    }};
+}
+
+/// Creates an `add_$name` method for adding new elements into a frame.
+macro_rules! add_x_method_by_frame {
+    ($($name:ident),*) => {paste::paste! {
+        $(
+            /* With default */
+            #[doc = concat!("Add and return a child ", stringify!($name), ".")]
+            pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>]<'_> {
+                unsafe {
+                    let body_ptr = mjs_getParent(self.element_mut_pointer());
+                    let ptr = [<mjs_add $name:camel>](body_ptr, ptr::null());
+                    mjs_attach(self.element_mut_pointer(), ptr.cast(), ptr::null(), ptr::null());
+                    [<Mjs $name:camel>](ptr, PhantomData)
+                }
             }
         )*
     }};
@@ -118,6 +136,7 @@ macro_rules! add_x_method {
 macro_rules! add_x_method_no_default {
     ($($name:ident),*) => {paste::paste! {
         $(
+            /* Without default */
             #[doc = concat!("Add and return a child ", stringify!($name), ".")]
             pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>]<'_> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.0) };
@@ -191,8 +210,8 @@ macro_rules! mjs_wrapper {
             }
 
             /// Returns the message appended to compiler errors.
-            pub fn info(&self) {
-                read_mjs_string(unsafe { self.ffi().info.as_ref().unwrap() });
+            pub fn info(&self) -> &str {
+                read_mjs_string(unsafe { self.ffi().info.as_ref().unwrap() })
             }
 
             /// Sets the message appended to compiler errors.
