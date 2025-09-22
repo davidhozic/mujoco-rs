@@ -85,12 +85,12 @@ which can be configured at the top of the model's XML like so:
         num_visual_internal_geom: u32; "\
             maximum number of additional visual-only internal geoms to allocate for.
             Note that the total number of geoms in the internal scene will be
-            `num_visual_user_geom` + `num_visual_user_geom`.";
+            `num_visual_internal_geom` + `num_visual_user_geom`.";
 
         num_visual_user_geom: u32;      "maximum number of additional visual-only user geoms (drawn by the user).";
         rgb: bool;                      "RGB rendering enabled (true) or disabled (false).";
         depth: bool;                    "depth rendering enabled (true) or disabled (false).";
-        font_scale: MjtFontScale;       "font scale of drawn text (with [MjrContext].";
+        font_scale: MjtFontScale;       "font scale of drawn text (with [MjrContext]).";
         camera: MjvCamera;              "camera used for drawing.";
         opts: MjvOption;                "visualization options.";
 
@@ -100,7 +100,7 @@ which can be configured at the top of the model's XML like so:
     pub fn build(self, model: &MjModel) -> Result<MjRenderer<'_>, RendererError> {
         // Assume model's maximum should be used
         let mut height = self.height;
-        let mut width = self.height;
+        let mut width = self.width;
         if width == 0 && height == 0 {
             let global = &model.vis().global;
             height = global.offheight as u32;
@@ -139,12 +139,9 @@ which can be configured at the top of the model's XML like so:
             self.num_visual_user_geom as usize
         );
 
-        let camera = MjvCamera::new_free(model);
-        let option = MjvOption::default();
-
         // Construct the renderer and create allocated buffers.
         let renderer = MjRenderer {
-            scene, user_scene, context, window, model, camera, option,
+            scene, user_scene, context, window, model, camera: self.camera, option: self.opts,
             flags: RendererFlags::empty(), rgb: None, depth: None,
             width: width as usize, height: height as usize
         }   // These require special care
