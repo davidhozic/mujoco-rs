@@ -9,24 +9,38 @@ Unlike the :ref:`mj_rust_viewer`, which displays the simulation's 3D scene onto 
 the renderer exists to provide users the ability to render offscreen. This includes
 rendering RGB and depth images to either an array or to a file.
 
-The renderer can be constructed via the :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`
-method. The method accepts a reference to :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`,
-two parameters representing the dimensions of rendered images, and the maximum number of visual-only geoms,
-drawn by the user program.
-
-After construction, additional options can be set using ``with_`` methods,
-like shown below. These follow the builder pattern.
-By default, RGB rendering is enabled, while depth rendering is disabled.
+The renderer can be constructed by its builder (:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>builder`)
+or directly with :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`, however the latter offers less control.
+method. By default, RGB rendering is enabled, while depth rendering is disabled.
 
 .. code-block:: rust
     
-    /* Construct the renderer (model, width, height, max_geom) */.
-    let mut renderer = MjRenderer::new(&model, 1280, 720, 5).unwrap()
-        .with_font_scale(MjtFontScale::mjFONTSCALE_100)
-        .with_opts(MjvOption::default())
-        .with_rgb_rendering(true)  // enabled by default.
-        .with_depth_rendering(false)  // disabled by default.
-        .with_camera(MjvCamera::new_free(&model));
+    /* Build the renderer */.
+    let mut renderer = MjRenderer::builder()
+        .width(0).height(0)  // set to width(0) and height(0) to set automatically based on <global offwidth="1920" offheight="1080"/>
+        .num_visual_user_geom(5)  // maximum number of visual-only geoms as result of the user
+        .num_visual_internal_geom(0)  // maximum number of visual-only geoms not as result of the user
+        .font_scale(MjtFontScale::mjFONTSCALE_100)  // scale of the font drawn by OpenGL
+        .rgb(true)  // rgb rendering
+        .depth(true)  // depth rendering
+        .camera(MjvCamera::default())  // default free camera
+        .build(&model).expect("failed to initialize the renderer");
+
+
+.. attention::
+
+    Renderer's *width* and *height* must be equal to or less than the offscreen buffer size,
+    configured during MuJoCo's model definition:
+
+    .. code-block:: xml
+
+        <mujoco>
+            <visual>
+                <global offwidth="1920" offheight="1080"/>
+            </visual>
+            ...
+        </mujoco>
+
 
 Much like the viewer, the renderer must also be synced with the simulation state,
 using :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`.

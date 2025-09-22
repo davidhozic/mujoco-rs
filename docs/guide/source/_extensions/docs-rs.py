@@ -95,7 +95,7 @@ class StripSpecifiers(Transform):
     def apply(self):
         for node in self.document.traverse(nodes.Text):
             text = node.astext()
-            text = re.sub(r"<(\w+)>", "", text)
+            text = re.sub(r"<\w+>(?=\w)", "", text)
             if text.startswith("~~"): # Keep the last two parts
                 text = "::".join(text.split("::")[-2:])
             elif text.startswith("~"):  # Keep the last part
