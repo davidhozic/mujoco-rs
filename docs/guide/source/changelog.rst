@@ -27,7 +27,7 @@ Unreleased
 - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
 
   - Added additional getters and setters.
-  - Added :docs-rs:`~mujoco_rs::renderer::<struct>MjBuilder` for purposes of better
+  - Added :docs-rs:`~mujoco_rs::renderer::<struct>MjRendererBuilder` for purposes of better
     configuration.
 
 - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:

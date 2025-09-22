@@ -209,9 +209,9 @@ impl<'m> MjRenderer<'m> {
     /// which can be configured at the top of the model's XML like so:
     /// 
     /// ```xml
-    ///<visual>
+    /// <visual>
     ///    <global offwidth="1920" offheight="1080"/>
-    ///</visual>
+    /// </visual>
     /// ```
     /// 
     /// </div>
@@ -449,7 +449,7 @@ impl<'m> MjRenderer<'m> {
 
     /// Save a depth image of the scene to a path. The image is 16-bit PNG, which
     /// can be converted into depth (distance) data by dividing the grayscale values by
-    /// 65535.0 and removing normalization: `depth = min + (grayscale / 65535.0) * (max - min)`.
+    /// 65535.0 and applying inverse normalization: `depth = min + (grayscale / 65535.0) * (max - min)`.
     /// If `normalize` is `true`, then the data is normalized with min-max normalization.
     /// Use of [`MjRenderer::save_depth_raw`] is recommended if performance is critical, as
     /// it skips PNG encoding and also saves the true depth values directly.
@@ -548,7 +548,6 @@ impl<'m> MjRenderer<'m> {
 pub enum RendererError {
     GlfwInitError(InitError),
     WindowCreationError,
-    InvalidParameter(&'static str),
 }
 
 impl Display for RendererError {
@@ -556,7 +555,6 @@ impl Display for RendererError {
         match self {
             Self::GlfwInitError(e) => write!(f, "glfw failed to initialize: {}", e),
             Self::WindowCreationError => write!(f, "failed to create window"),
-            Self::InvalidParameter(e) => write!(f, "parameter {} is invalid", e)
         }
     }
 }
