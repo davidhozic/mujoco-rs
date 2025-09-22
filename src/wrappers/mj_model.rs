@@ -708,6 +708,15 @@ mod tests {
             qvel="0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0"
             ctrl="0.5"/>
     </keyframe>
+
+    <custom>
+        <tuple name="tuple_example">
+            <!-- First entry: a body -->
+            <element objtype="body" objname="ball2" prm="0.5"/>
+            <!-- Second entry: a site -->
+            <element objtype="site" objname="ball1" prm="1.0"/>
+        </tuple>
+    </custom>
     </mujoco>
 );
 
@@ -986,4 +995,25 @@ mod tests {
         assert_eq!(&view_key.ctrl[..model.ffi().nu as usize], CTRL);
     }
 
+    #[test]
+    fn test_tuple_view() {
+        const TUPLE_NAME: &str = "tuple_example";
+        const SIZE: i32 = 2;
+        const OBJTYPE: &[MjtObj] = &[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_SITE];
+        const OBJPRM: &[f64]  = &[0.5, 1.0];
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let info_tuple = model.tuple(TUPLE_NAME).unwrap();
+        let view_tuple = info_tuple.view(&model);
+
+        let objid = &[
+            model.body("ball2").unwrap().id as i32,
+            model.site("ball1").unwrap().id as i32,
+        ];
+
+        assert_eq!(view_tuple.size[0], SIZE);
+        assert_eq!(&view_tuple.objtype[..SIZE as usize], OBJTYPE);
+        assert_eq!(&view_tuple.objid[..SIZE as usize], objid);
+        assert_eq!(&view_tuple.objprm[..SIZE as usize], OBJPRM);
+    }
 }
