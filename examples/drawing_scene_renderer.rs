@@ -59,8 +59,8 @@ fn main() {
     /* Make a camera that follows the ball */
     let ball_body_id = model.body("ball").unwrap().id;
     let mut camera = MjvCamera::new_tracking(ball_body_id as u32);
-    camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -1.0, renderer.scene());
-    renderer = renderer.with_camera(camera);  // zoom-out a bit
+    camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -1.0, renderer.scene());  // zoom-out a bit
+    renderer.set_camera(camera);
 
     /* Obtain joint info */
     let ball_joint_info = data.joint("ball").unwrap();

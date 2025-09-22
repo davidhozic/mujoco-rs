@@ -310,7 +310,7 @@ impl<'m> MjRenderer<'m> {
         self.option = options;
     }
 
-    /// Render images using the `camera`.
+    /// Set the camera used for rendering.
     pub fn set_camera(&mut self, camera: MjvCamera)  {
         self.camera = camera;
     }
@@ -339,7 +339,7 @@ impl<'m> MjRenderer<'m> {
         self
     }
 
-    /// Render images using the `camera`. To be used on construction.
+    /// Set the camera used for rendering. To be used on construction.
     pub fn with_camera(mut self, camera: MjvCamera) -> Self  {
         self.set_camera(camera);
         self
