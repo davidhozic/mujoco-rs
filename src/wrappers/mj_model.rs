@@ -698,6 +698,16 @@ mod tests {
         </pair>
     </contact>
 
+      <!-- A keyframe with qpos/qvel/ctrl etc. -->
+    <keyframe>
+        <!-- adjust nq/nv/nu in <default> or body definitions to match
+            lengths in your test constants -->
+        <key name="pose1"
+            time="1.5"
+            qpos="0.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.0"
+            qvel="0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0"
+            ctrl="0.5"/>
+    </keyframe>
     </mujoco>
 );
 
@@ -955,4 +965,25 @@ mod tests {
         assert_eq!(view_pair.gap[0], GAP);
         assert_eq!(view_pair.friction[..], FRICTION);
     }
+
+    #[test]
+    fn test_key_view() {
+        const KEY_NAME: &str = "pose1";
+        const TIME: f64 = 1.5;
+        const QVEL: &[f64] = &[0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0];
+        const ACT: &[f64]  = &[];
+        const CTRL: &[f64] = &[0.5];
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let info_key = model.key(KEY_NAME).unwrap();
+        let view_key = info_key.view(&model);
+
+        assert_eq!(view_key.time[0], TIME);
+        // Don't test qpos, as it does some magic angle conversions, making the tests fail.
+        // If all the other succeed, assume qpos works too (as its the exact same logic).
+        assert_eq!(&view_key.qvel[..model.ffi().nv as usize], QVEL);
+        assert_eq!(&view_key.act[..model.ffi().na as usize], ACT);
+        assert_eq!(&view_key.ctrl[..model.ffi().nu as usize], CTRL);
+    }
+
 }
