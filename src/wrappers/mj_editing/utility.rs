@@ -105,7 +105,7 @@ pub(crate) fn write_mjs_vec_byte<T>(source: &[T], destination: &mut mjByteVec) {
 ** Helper macros
 ***************************/
 /// Creates an `add_ $name` method for adding new elements of $name into the body / spec.
-/// Also sets the default as null();
+/// Also sets the default to null();
 macro_rules! add_x_method {
     ($($name:ident),*) => {paste::paste! {
         $(
@@ -154,7 +154,7 @@ macro_rules! add_x_method_no_default {
 
 
 /// Creates an `get_ $name` method for finding items in spec / body.
-/// Also sets the default as null();
+/// Also sets the default to null();
 macro_rules! find_x_method {
     ($($item:ident),*) => {paste::paste! {
         $(
