@@ -17,9 +17,11 @@ use std::fs::File;
 const RGB_NOT_FOUND_ERR_STR: &str = "RGB rendering is not enabled (renderer.with_rgb_rendering(true))";
 const DEPTH_NOT_FOUND_ERR_STR: &str = "depth rendering is not enabled (renderer.with_depth_rendering(true))";
 const INVALID_INPUT_SIZE: &str = "the input width and height don't match the renderer's configuration";
+const EXTRA_INTERNAL_VISUAL_GEOMS: usize = 100;
 
 
 /// A builder for [`MjRenderer`].
+#[derive(Debug)]
 pub struct MjRendererBuilder {
     width: u32,
     height: u32,
@@ -43,7 +45,7 @@ impl MjRendererBuilder {
     pub fn new() -> Self {
         Self {
             width: 0, height: 0,
-            num_visual_internal_geom: 100, num_visual_user_geom: 0,
+            num_visual_internal_geom: EXTRA_INTERNAL_VISUAL_GEOMS as u32, num_visual_user_geom: 0,
             rgb: true, depth: false, font_scale: MjtFontScale::mjFONTSCALE_100,
             camera: MjvCamera::default(), opts: MjvOption::default()
         }
@@ -214,8 +216,6 @@ impl<'m> MjRenderer<'m> {
     /// 
     /// </div>
     pub fn new(model: &'m MjModel, width: usize, height: usize, max_geom: usize) -> Result<Self, RendererError> {
-        const EXTRA_INTERNAL_VISUAL_GEOMS: usize = 100;
-
         let mut glfw = glfw::init_no_callbacks()
             .map_err(|err| RendererError::GlfwInitError(err))?;
 
@@ -448,7 +448,8 @@ impl<'m> MjRenderer<'m> {
     }
 
     /// Save a depth image of the scene to a path. The image is 16-bit PNG, which
-    /// can be converted into depth (distance) data by dividing the grayscale values by 65535.0 and applying denormalization.
+    /// can be converted into depth (distance) data by dividing the grayscale values by
+    /// 65535.0 and removing normalization: `depth = min + (grayscale / 65535.0) * (max - min)`.
     /// If `normalize` is `true`, then the data is normalized with min-max normalization.
     /// Use of [`MjRenderer::save_depth_raw`] is recommended if performance is critical, as
     /// it skips PNG encoding and also saves the true depth values directly.
