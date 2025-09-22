@@ -29,7 +29,7 @@ method. By default, RGB rendering is enabled, while depth rendering is disabled.
 
 .. attention::
 
-    Renderer's *width* and *depth* must be equal to or less than the offscreen buffer size,
+    Renderer's *width* and *height* must be equal to or less than the offscreen buffer size,
     configured during MuJoCo's model definition:
 
     .. code-block:: xml
