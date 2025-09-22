@@ -20,6 +20,10 @@
 //! The C++ viewer however requires manual compilation of a patched MuJoCo repository,
 //! like described [here](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking-with-c-viewer).
 //! 
+//! ## Model editing
+//! [`MjModel`](wrappers::MjModel) can be procedurally generated through the model editing module.
+//! The specification representing the model is [wrappers::mj_editing::MjSpec]
+//! 
 //! ## Features
 //! This crate has the following public features:
 //! - `viewer`, which enables the Rust-native viewer ([`viewer::MjViewer`]),
@@ -32,7 +36,7 @@
 //! 
 //! If a certain function can't be found, you can use the raw FFI bindings, available under 
 //! the [`mujoco_c`] module. Note that to access the lower-level ffi structs inside of wrappers,
-//! `ffi()` or `ffi_mut()` must be called (e. g., [`wrappers::MjData::ffi`] and [`wrappers::MjModel::ffi`]). 
+//! `ffi()` or `ffi_mut()` must be called (e. g., [`MjData::ffi`](wrappers::MjData::ffi) and [`MjModel::ffi`](wrappers::MjModel::ffi)). 
 
 use std::ffi::CStr;
 
@@ -51,7 +55,7 @@ pub mod viewer;
 pub mod mujoco_c;  // raw MuJoCo C and C++ bindings
 
 
-/// Returns the version string of the MuJoCo library
+/// Returns the version string of the MuJoCo library.
 pub fn get_mujoco_version() -> &'static str {
     let arr = unsafe { mujoco_c::mj_versionString() };
     unsafe { CStr::from_ptr(arr).to_str().unwrap() }
@@ -91,14 +95,14 @@ mod tests {
         </mujoco>
         ";
 
-        for _ in 0..N_REPEATS {
-            let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("failed to load the model.");
-            let mut datas: Vec<_> = (0..N_ITEMS).map(|_| model.make_data()).collect();
-
-            for data in datas.iter_mut() {
-                data.joint("sphere").unwrap().view_mut(data).qpos[0] /= 2.0;
-                data.step();
+        std::hint::black_box(
+            for _ in 0..N_REPEATS {
+                let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("failed to load the model.");
+                for mut data in (0..N_ITEMS).map(|_| model.make_data()) {
+                    data.joint("sphere").unwrap().view_mut(&mut data).qpos[0] /= 2.0;
+                    data.step();
+                }
             }
-        }
+        )
     }
 }

@@ -73,7 +73,9 @@ impl MjVfs {
     /// Adds a file to the virtual file system.
     /// NOTE: Currently, a [bug](https://github.com/google-deepmind/mujoco/issues/2839)
     /// exists in the MuJoCo library, where setting NULL for `directory`
-    /// results in a crash. For that purpose, always pass Some("./") if you wish to omit the directory.
+    /// results in a crash. For that purpose, always pass `Some("./")` if you wish to omit the directory.
+    /// # Panics
+    /// A panic will occur if `directory` or `filename` contain `\0` characters.
     pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> io::Result<()> {
         if directory.is_none() {
             return Err(Error::new(ErrorKind::InvalidInput, "due to a bug in the MuJoCo C library, the 'directory' argument must always be given. \
@@ -93,6 +95,8 @@ impl MjVfs {
     }
 
     /// Adds a file to the virtual file system from a buffer.
+    /// # Panics
+    /// When the `filename` contains '\0' characters, a panic occurs.
     pub fn add_from_buffer(&mut self, filename: &str, buffer: &[u8]) -> io::Result<()> {
         let c_filename = CString::new(filename).unwrap();
         Self::handle_add_result(unsafe {
@@ -104,6 +108,8 @@ impl MjVfs {
     }
 
     /// Removes a file from the virtual file system.
+    /// # Panics
+    /// When the `filename` contains '\0' characters, a panic occurs.
     pub fn delete_file(&mut self, filename: &str) -> io::Result<()> {
         let c_filename = CString::new(filename).unwrap();
         unsafe {

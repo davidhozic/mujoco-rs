@@ -15,13 +15,13 @@ To obtain a reference to the FFI type inside of a wrapped type, call either ``ff
 ``ffi_mut()``.
 For example, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ffi_mut`
 and :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>ffi` can be used
-as parameters inside :docs-rs:`~mujoco_rs::mujoco_c::<fn>mj_step`.
+as arguments to :docs-rs:`~mujoco_rs::mujoco_c::<fn>mj_step`.
 
 .. code-block:: rust
 
     unsafe { mujoco_rs::mujoco_c::mj_step(model.ffi(), data.ffi_mut()) }
 
-The FFI bindings can also be used to read specific attributes that aren't directly exposed
+FFI bindings can also be used to read specific attributes that aren't directly exposed
 via wrapped structs:
 
 .. code-block:: rust

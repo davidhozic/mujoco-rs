@@ -12,7 +12,7 @@ use crate::mujoco_c::*;
 
 
 /// How much extra room to create in the internal [`MjvScene`]. Useful for drawing labels, etc.
-pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 100;
+pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
 
 /***********************************************************************************************************************
 ** MjtCamera

@@ -53,6 +53,24 @@ pub type MjtSameFrame = mjtSameFrame;
 /// Dynamic modes for cameras and lights, specifying how the camera/light position and orientation are computed.
 pub type MjtCamLight = mjtCamLight;
 
+/// The type of a light source describing how its position, orientation and
+/// other properties will interact with the objects in the scene.
+pub type MjtLightType = mjtLightType;
+
+/// Equality constraint types.
+pub type MjtEq = mjtEq;
+
+/// Texture types, specifying how the texture will be mapped
+pub type MjtTexture = mjtTexture;
+
+/// Type of color space encoding for textures.
+pub type MjtColorSpace = mjtColorSpace;
+
+/// Constants which are powers of 2. They are used as bitmasks for the field `disableflags` of [`MjOption`].
+pub type MjtDisableBit = mjtDisableBit;
+
+/// Constants which are powers of 2. They are used as bitmasks for the field `enableflags` of [`MjOption`].
+pub type MjtEnableBit = mjtEnableBit;
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
@@ -128,6 +146,10 @@ impl MjModel {
         }
     }
 
+    /// Creates a [`MjModel`] from a raw pointer.
+    pub(crate) fn from_raw(ptr: *mut mjModel) -> Result<Self, Error> {
+        Self::check_raw_model(ptr, &[])
+    }
 
     /// Saves the last XML loaded.
     pub fn save_last_xml(&self, filename: &str) -> io::Result<()> {
@@ -159,8 +181,10 @@ impl MjModel {
 
     fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[i8]) -> Result<Self, Error> {
         if ptr_model.is_null() {
-            let err_u8 = error_buffer.into_iter().map(|x| *x as u8).take_while(|&x| x != 0).collect();
-            Err(Error::new(ErrorKind::UnexpectedEof,  String::from_utf8(err_u8).expect("could not parse error")))
+            Err(Error::new(
+                ErrorKind::UnexpectedEof,
+                unsafe { CStr::from_ptr(error_buffer.as_ptr().cast()).to_string_lossy().into_owned() }
+            ))
         }
         else {
             Ok(Self(ptr_model))
@@ -228,6 +252,8 @@ impl MjModel {
     }
 
     /// Translates `name` to the correct id. Wrapper around `mj_name2id`.
+    /// # Panics
+    /// When the `name` contains '\0' characters, a panic occurs.
     pub fn name_to_id(&self, type_: MjtObj, name: &str) -> i32 {
         let c_string = CString::new(name).unwrap();
         unsafe {
@@ -249,6 +275,8 @@ impl MjModel {
     }
 
     /// Save model to binary MJB file or memory buffer; buffer has precedence when given.
+    /// # Panics
+    /// When the `filename` contains '\0' characters, a panic occurs.
     pub fn save(&self, filename: Option<&str>, buffer: Option<&mut [u8]>) {
         let c_filename = filename.map(|f| CString::new(f).unwrap());
         let (buffer_ptr, buffer_len) = if let Some(b) = buffer {

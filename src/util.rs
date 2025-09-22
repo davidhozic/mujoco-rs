@@ -200,7 +200,9 @@ macro_rules! fixed_size_info_method {
             #[doc = concat!(
                 "Obtains a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] struct containing information about the name, id, and ",
                 "indices required for obtaining references to the correct locations in [`Mj", stringify!($info_type), "`]. ",
-                "The actual view can be obtained via [`", stringify!([<Mj $type_:camel $info_type Info>]), "::view`]."
+                "The actual view can be obtained via [`", stringify!([<Mj $type_:camel $info_type Info>]), "::view`].\n",
+                "# Panics\n",
+                "A panic will occur if `name` contains `\\0` characters."
             )]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let c_name = CString::new(name).unwrap();
@@ -360,6 +362,142 @@ macro_rules! info_with_view {
     };
 }
 
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! getter_setter {
+    (get, [$($name:ident: bool; $comment:expr);* $(;)?]) => {paste::paste!{
+        $(
+            #[doc = concat!("Check ", $comment)]
+            pub fn [<$name:lower>](&self) -> bool {
+                self.ffi().$name == 1
+            }
+        )*
+    }};
+
+    (get, [$($name:ident: & $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
+        $(
+            #[doc = concat!("Return an immutable reference to ", $comment)]
+            pub fn [<$name:lower>](&self) -> &$type {
+                &self.ffi().$name
+            }
+
+            #[doc = concat!("Return a mutable reference to ", $comment)]
+            pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
+                unsafe { &mut self.ffi_mut().$name }
+            }
+        )*
+    }};
+
+    (get, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
+        $(
+            #[doc = concat!("Return value of ", $comment)]
+            pub fn [<$name:lower>](&self) -> $type {
+                self.ffi().$name.into()
+            }
+        )*
+    }};
+
+    (set, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+        paste::paste!{ 
+            $(
+                #[doc = concat!("Set ", $comment)]
+                pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
+                    unsafe { self.ffi_mut().$name = value.into() };
+                }
+            )*
+        }
+    };
+
+    /* Enum conversion */
+    (force!, get, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
+        $(
+            #[doc = concat!("Return value of ", $comment)]
+            pub fn [<$name:lower>](&self) -> $type {
+                unsafe { std::mem::transmute(self.ffi().$name) }
+            }
+        )*
+    }};
+
+    (force!, set, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+        paste::paste!{ 
+            $(
+                #[doc = concat!("Set ", $comment)]
+                pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
+                    #[allow(unnecessary_transmutes)]
+                    unsafe { self.ffi_mut().$name = std::mem::transmute(value) };
+                }
+            )*
+        }
+    };
+
+    /* Builder pattern */
+    (force!, with, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+        paste::paste!{ 
+            $(
+                #[doc = concat!("Builder method for setting ", $comment)]
+                pub fn [<with_ $name:camel:snake>](mut self, value: $type) -> Self {
+                    #[allow(unnecessary_transmutes)]
+                    unsafe { self.ffi_mut().$name = std::mem::transmute(value) };
+                    self
+                }
+            )*
+        }
+    };
+
+    (with, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+        paste::paste!{ 
+            $(
+                #[doc = concat!("Builder method for setting ", $comment)]
+                pub fn [<with_ $name:camel:snake>](mut self, value: $type) -> Self {
+                    unsafe { self.ffi_mut().$name = value.into() };
+                    self
+                }
+            )*
+        }
+    };
+    
+    /* Handling of optional arguments */
+    /* Enum pass */
+    (force!, get, set, [ $( $name:ident : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(force!, get, [ $( $name : $type ; $comment );* ]);
+        $crate::getter_setter!(force!, set, [ $( $name : $type ; $comment );* ]);
+    };
+
+    (get, set, [ $( $name:ident : bool ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name : bool ; $comment );* ]);
+        $crate::getter_setter!(set, [ $( $name : bool ; $comment );* ]);
+    };
+
+    (get, set, [ $( $name:ident : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name : $type ; $comment );* ]);
+        $crate::getter_setter!(set, [ $( $name : $type ; $comment );* ]);
+    };
+
+    /* Builder pattern */
+    (with, get, set, [ $( $name:ident : bool ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name : bool ; $comment );* ]);
+        $crate::getter_setter!(set, [ $( $name : bool ; $comment );* ]);
+        $crate::getter_setter!(with, [ $( $name : bool ; $comment );* ]);
+    };
+
+    (with, get, set, [ $( $name:ident : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name : $type ; $comment );* ]);
+        $crate::getter_setter!(set, [ $( $name : $type ; $comment );* ]);
+        $crate::getter_setter!(with, [ $( $name : $type ; $comment );* ]);
+    };
+
+    (force!, with, get, set, [ $( $name:ident : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(force!, get, [ $( $name : $type ; $comment );* ]);
+        $crate::getter_setter!(force!, set, [ $( $name : $type ; $comment );* ]);
+        $crate::getter_setter!(force!, with, [ $( $name : $type ; $comment );* ]);
+    };
+
+    (with, get, [ $( $name:ident : & $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name : & $type ; $comment );* ]);
+        $crate::getter_setter!(with, [ $( $name : $type ; $comment );* ]);
+    };
+}
 
 /// assert_eq!, but with tolerance for floating point rounding.
 #[doc(hidden)]

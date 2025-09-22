@@ -33,7 +33,8 @@ sys.path.append(os.path.abspath("./_extensions/"))
 
 extensions = [
     "sphinx.ext.extlinks",
-    "docs-rs"
+    "docs-rs",
+    "gh-example"
 ]
 
 templates_path = ['_templates']
