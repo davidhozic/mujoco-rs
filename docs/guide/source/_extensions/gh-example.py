@@ -62,5 +62,5 @@ class StripSpecifiers(Transform):
     def apply(self):
         for node in self.document.traverse(nodes.Text):
             text = node.astext()
-            text = re.sub(r"<(\w+)>", "", text)
+            text = re.sub(r"<\w+>(?=\w)", "", text)
             node.parent.replace(node, nodes.Text(text))

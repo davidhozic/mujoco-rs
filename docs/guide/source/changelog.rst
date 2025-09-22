@@ -11,6 +11,10 @@ Changelog
 Versioning
 =================
 This project uses `semantic versioning <https://semver.org/>`_.
+This means that any incompatible changes increase the major version (**Y**.x.x).
+This also includes breaking changes that MuJoCo itself introduced, thus even an
+update of MuJoCo alone can increase the major version.
+
 
 Unreleased
 ================================
@@ -20,9 +24,11 @@ Unreleased
   - Added module :docs-rs:`mujoco_rs::wrappers::mj_editing`.
   - Added two examples. One on basic model editing and one on terrain generation.
 
-- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
+- :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
 
-  - Increased the headroom for visual-only geoms, which aren't drawn by the user, from 100 to 2000.
+  - Added additional getters and setters.
+  - Added :docs-rs:`~mujoco_rs::renderer::<struct>MjBuilder` for purposes of better
+    configuration.
 
 - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
 
@@ -41,6 +47,8 @@ Unreleased
       - ``Z``: light,
       - ``T``: transparent,
       - ``I``: inertia.
+
+    - Increased the headroom for visual-only geoms, which aren't drawn by the user, from 100 to 2000.
 
 - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`:
 

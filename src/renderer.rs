@@ -198,11 +198,11 @@ impl<'m> MjRenderer<'m> {
     /// - the internal scene: used by the renderer to draw the model's state.
     /// - the user scene: used by the user to add additional geoms to the internal scene
     /// 
-    /// The **internal scene** allocates the amount of space needed to fit every preexisting
+    /// The **internal scene** allocates the amount of space needed to fit every pre-existing
     /// model geom + user visual-only geoms + additional visual-only geoms that aren't from the user (e. g., tendons).
     /// By default, the renderer reserves 100 extra geom slots for drawing the additional visual-only geoms.
-    /// If that is not enough or it is too much, you can construct a builder
-    /// [`MjRenderer::builder`], which allows more fine-grained configuration. 
+    /// If that is not enough or it is too much, you can construct [`MjRenderer`] via its builder
+    /// ([`MjRenderer::builder`]), which allows more configuration. 
     /// 
     /// <div class="warning">
     /// 
@@ -258,51 +258,105 @@ impl<'m> MjRenderer<'m> {
         MjRendererBuilder::new()
     }
 
-    /// Enables/disables RGB rendering. To be used on construction.
-    pub fn with_rgb_rendering(mut self, enable: bool) -> Self {
-        // 1. Define the type we want to allocate
-        self.flags.set(RendererFlags::RENDER_RGB, enable);
-        self.rgb = if enable { Some(vec![0; 3 * self.width * self.height].into_boxed_slice()) } else { None } ;
-        self
-    }
-
-    /// Enables/disables depth rendering. To be used on construction.
-    pub fn with_depth_rendering(mut self, enable: bool) -> Self {
-        self.flags.set(RendererFlags::RENDER_DEPTH, enable);
-        self.depth = if enable { Some(vec![0.0; self.width * self.height].into_boxed_slice()) } else { None } ;
-        self
-    }
-
-    /// Returns an immutable reference to the internal scene.
+    /// Return an immutable reference to the internal scene.
     pub fn scene(&self) -> &MjvScene<'m>{
         &self.scene
     }
 
-    /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
+    /// Return an immutable reference to a user scene for drawing custom visual-only geoms.
     pub fn user_scene(&self) -> &MjvScene<'m>{
         &self.user_scene
     }
 
-    /// Returns a mutable reference to a user scene for drawing custom visual-only geoms.
+    /// Return a mutable reference to a user scene for drawing custom visual-only geoms.
     pub fn user_scene_mut(&mut self) -> &mut MjvScene<'m>{
         &mut self.user_scene
     }
 
+    /// Return an immutable reference to visualization options.
+    pub fn opts(&self) -> &MjvOption {
+        &self.option
+    }
+
+    /// Return a mutable reference to visualization options.
+    pub fn opts_mut(&mut self) -> &mut MjvOption {
+        &mut self.option
+    }
+
+    /// Return an immutable reference to the camera.
+    pub fn camera(&self) -> &MjvCamera {
+        &self.camera
+    }
+
+    /// Return a mutable reference to the camera.
+    pub fn camera_mut(&mut self) -> &mut MjvCamera {
+        &mut self.camera
+    }
+
+    /// Check if RGB rendering is enabled.
+    pub fn rgb_enabled(&self) -> bool {
+        self.flags.contains(RendererFlags::RENDER_RGB)
+    }
+
+    /// Check if depth rendering is enabled.
+    pub fn depth_enabled(&self) -> bool {
+        self.flags.contains(RendererFlags::RENDER_DEPTH)
+    }
+
+    /// Sets the font size.
+    pub fn set_font_scale(&mut self, font_scale: MjtFontScale) {
+        self.context.change_font(font_scale);
+    }
+
+    /// Update the visualization options and return a reference to self.
+    pub fn set_opts(&mut self, options: MjvOption) {
+        self.option = options;
+    }
+
+    /// Render images using the `camera`.
+    pub fn set_camera(&mut self, camera: MjvCamera)  {
+        self.camera = camera;
+    }
+
+    /// Enables/disables RGB rendering.
+    pub fn set_rgb_rendering(&mut self, enable: bool) {
+        self.flags.set(RendererFlags::RENDER_RGB, enable);
+        self.rgb = if enable { Some(vec![0; 3 * self.width * self.height].into_boxed_slice()) } else { None } ;
+    }
+
+    /// Enables/disables depth rendering.
+    pub fn set_depth_rendering(&mut self, enable: bool) {
+        self.flags.set(RendererFlags::RENDER_DEPTH, enable);
+        self.depth = if enable { Some(vec![0.0; self.width * self.height].into_boxed_slice()) } else { None } ;
+    }
+
     /// Sets the font size. To be used on construction.
     pub fn with_font_scale(mut self, font_scale: MjtFontScale) -> Self {
-        self.context.change_font(font_scale);
+        self.set_font_scale(font_scale);
         self
     }
 
     /// Update the visualization options and return a reference to self. To be used on construction.
     pub fn with_opts(mut self, options: MjvOption) -> Self {
-        self.option = options;
+        self.set_opts(options);
         self
     }
 
     /// Render images using the `camera`. To be used on construction.
     pub fn with_camera(mut self, camera: MjvCamera) -> Self  {
-        self.camera = camera;
+        self.set_camera(camera);
+        self
+    }
+
+    /// Enables/disables RGB rendering. To be used on construction.
+    pub fn with_rgb_rendering(mut self, enable: bool) -> Self {
+        self.set_rgb_rendering(enable);
+        self
+    }
+
+    /// Enables/disables depth rendering. To be used on construction.
+    pub fn with_depth_rendering(mut self, enable: bool) -> Self {
+        self.set_depth_rendering(enable);
         self
     }
 
@@ -321,12 +375,12 @@ impl<'m> MjRenderer<'m> {
         self.render();
     }
 
-    /// Returns a flattened RGB image of the scene.
+    /// Return a flattened RGB image of the scene.
     pub fn rgb_flat(&self) -> Option<&[u8]> {
         self.rgb.as_deref()
     }
 
-    /// Returns an RGB image of the scene. This methods accepts two generic parameters <WIDTH, HEIGHT>
+    /// Return an RGB image of the scene. This methods accepts two generic parameters <WIDTH, HEIGHT>
     /// that define the shape of the output slice.
     pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> io::Result<&[[[u8; 3]; WIDTH]; HEIGHT]> {
         if let Some(flat) = self.rgb_flat() {
@@ -347,12 +401,12 @@ impl<'m> MjRenderer<'m> {
         }
     }
 
-    /// Returns a flattened depth image of the scene.
+    /// Return a flattened depth image of the scene.
     pub fn depth_flat(&self) -> Option<&[f32]> {
         self.depth.as_deref()
     }
 
-    /// Returns a depth image of the scene. This methods accepts two generic parameters <WIDTH, HEIGHT>
+    /// Return a depth image of the scene. This methods accepts two generic parameters <WIDTH, HEIGHT>
     /// that define the shape of the output slice.
     pub fn depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> io::Result<&[[f32; WIDTH]; HEIGHT]> {
         if let Some(flat) = self.depth_flat() {

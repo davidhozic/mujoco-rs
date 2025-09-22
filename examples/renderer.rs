@@ -5,34 +5,34 @@ use mujoco_rs::prelude::*;
 use std::fs;
 
 
-const EXAMPLE_MODEL: &str = "
+const EXAMPLE_MODEL: &str = stringify!(
 <mujoco>
     <!--  OpenGL buffer size  -->
     <visual>
-    <global offwidth=\"1920\" offheight=\"1080\"/>
+    <global offwidth="1920" offheight="1080"/>
     </visual>
 
     <worldbody>
-        <light ambient=\"0.2 0.2 0.2\"/>
-        <body name=\"ball\">
-            <geom name=\"green_sphere\" size=\".1\" rgba=\"0 1 0 1\" mass=\"1\"/>
-            <joint name=\"ball\" type=\"free\"/>
-            <site name=\"touch\" size=\".1 .1 .1\" pos=\"0 0 0\" rgba=\"0 0 0 0.0\" type=\"box\"/>
+        <light ambient="0.2 0.2 0.2"/>
+        <body name="ball">
+            <geom name="green_sphere" size=".1" rgba="0 1 0 1" mass="1"/>
+            <joint name="ball" type="free"/>
+            <site name="touch" size=".1 .1 .1" pos="0 0 0" rgba="0 0 0 0.0" type="box"/>
         </body>
 
-        <body pos=\"2 0 2\">
-            <geom type=\"box\" size=\"1 1 1\" rgba=\"0 1 1 1\"/>
-            <joint name=\"box\" type=\"free\"/>
+        <body pos="2 0 2">
+            <geom type="box" size="1 1 1" rgba="0 1 1 1"/>
+            <joint name="box" type="free"/>
         </body>
 
-        <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"20 0 0\"/>
+        <geom name="floor" type="plane" size="10 10 1" euler="20 0 0"/>
     </worldbody>
 
     <sensor>
-        <touch name=\"touch\" site=\"touch\"/>
+        <touch name="touch" site="touch"/>
     </sensor>
 </mujoco>
-";
+);
 
 const OUTPUT_DIRECTORY: &str = "./output_renderer/";
 const SAVE_FREQUENCY: u32 = 50;
