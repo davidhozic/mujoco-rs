@@ -499,6 +499,22 @@ macro_rules! getter_setter {
     };
 }
 
+
+#[doc(hidden)]
+#[macro_export]
+/// Constructs builder methods.
+macro_rules! builder_setters {
+    ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {
+        $(
+            #[doc = concat!("Set ", $comment)]
+            pub fn $name(mut self, value: $type) -> Self {
+                self.$name = value;
+                self
+            }
+        )*
+    };
+}
+
 /// assert_eq!, but with tolerance for floating point rounding.
 #[doc(hidden)]
 #[macro_export]

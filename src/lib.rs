@@ -22,7 +22,7 @@
 //! 
 //! ## Model editing
 //! [`MjModel`](wrappers::MjModel) can be procedurally generated through the model editing module.
-//! The specification representing the model is [wrappers::mj_editing::MjSpec]
+//! The specification representing the model is [`wrappers::mj_editing::MjSpec`]
 //! 
 //! ## Features
 //! This crate has the following public features:

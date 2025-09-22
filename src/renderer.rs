@@ -1,6 +1,7 @@
 //! Module related to implementation of the [`MjRenderer`].
 use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_rendering::MjrContext;
+use crate::builder_setters;
 use crate::prelude::*;
 
 use glfw::{Context, InitError, PWindow, WindowHint};
@@ -13,11 +14,153 @@ use std::error::Error;
 use std::path::Path;
 use std::fs::File;
 
-
 const RGB_NOT_FOUND_ERR_STR: &str = "RGB rendering is not enabled (renderer.with_rgb_rendering(true))";
 const DEPTH_NOT_FOUND_ERR_STR: &str = "depth rendering is not enabled (renderer.with_depth_rendering(true))";
 const INVALID_INPUT_SIZE: &str = "the input width and height don't match the renderer's configuration";
 
+
+/// A builder for [`MjRenderer`].
+pub struct MjRendererBuilder {
+    width: u32,
+    height: u32,
+    num_visual_internal_geom: u32,
+    num_visual_user_geom: u32,
+    rgb: bool,
+    depth: bool,
+    font_scale: MjtFontScale,
+    camera: MjvCamera,
+    opts: MjvOption,
+}
+
+impl MjRendererBuilder {
+    /// Create a builder with default configuration.
+    /// Defaults are:
+    /// - `width` and `height`: use offwidth and offheight of MuJoCo's visual/global settings from the model,
+    /// - `num_visual_internal_geom`: 100,
+    /// - `num_visual_user_geom`: 0,
+    /// - `rgb`: true,
+    /// - `depth`: false.
+    pub fn new() -> Self {
+        Self {
+            width: 0, height: 0,
+            num_visual_internal_geom: 100, num_visual_user_geom: 0,
+            rgb: true, depth: false, font_scale: MjtFontScale::mjFONTSCALE_100,
+            camera: MjvCamera::default(), opts: MjvOption::default()
+        }
+    }
+
+    builder_setters! {
+        width: u32; "
+image width.
+
+<div class=\"warning\">
+
+The width must be less or equal to the offscreen buffer width,
+which can be configured at the top of the model's XML like so:
+
+```xml
+<visual>
+    <global offwidth=\"1920\" .../>
+</visual>
+```
+
+</div>";
+
+        height: u32; "\
+image height.
+
+<div class=\"warning\">
+
+The height must be less or equal to the offscreen buffer height,
+which can be configured at the top of the model's XML like so:
+
+```xml
+<visual>
+    <global offheight=\"1080\" .../>
+</visual>
+```
+
+</div>";
+
+        num_visual_internal_geom: u32; "\
+            maximum number of additional visual-only internal geoms to allocate for.
+            Note that the total number of geoms in the internal scene will be
+            `num_visual_user_geom` + `num_visual_user_geom`.";
+
+        num_visual_user_geom: u32;      "maximum number of additional visual-only user geoms (drawn by the user).";
+        rgb: bool;                      "RGB rendering enabled (true) or disabled (false).";
+        depth: bool;                    "depth rendering enabled (true) or disabled (false).";
+        font_scale: MjtFontScale;       "font scale of drawn text (with [MjrContext].";
+        camera: MjvCamera;              "camera used for drawing.";
+        opts: MjvOption;                "visualization options.";
+
+    }
+
+    /// Builds a [`MjRenderer`].
+    pub fn build(self, model: &MjModel) -> Result<MjRenderer<'_>, RendererError> {
+        // Assume model's maximum should be used
+        let mut height = self.height;
+        let mut width = self.height;
+        if width == 0 && height == 0 {
+            let global = &model.vis().global;
+            height = global.offheight as u32;
+            width = global.offheight as u32;
+        }
+
+        let mut glfw = glfw::init_no_callbacks()
+            .map_err(|err| RendererError::GlfwInitError(err))?;
+
+        // Create window for rendering
+        glfw.window_hint(WindowHint::Visible(false));
+        let (mut window, _) = match glfw.create_window(
+            width, height,
+            "", glfw::WindowMode::Windowed
+        ) {
+            Some(x) => Ok(x),
+            None => Err(RendererError::WindowCreationError)
+        }?;
+
+        window.make_current();
+        glfw.set_swap_interval(glfw::SwapInterval::None);
+
+        // Initialize the rendering context to render to the offscreen buffer.
+        let mut context = MjrContext::new(model);
+        context.offscreen();
+
+        // The 3D scene for visualization
+        let scene = MjvScene::new(
+            model,
+            model.ffi().ngeom as usize + self.num_visual_internal_geom as usize
+            + self.num_visual_user_geom as usize
+        );
+
+        let user_scene = MjvScene::new(
+            model,
+            self.num_visual_user_geom as usize
+        );
+
+        let camera = MjvCamera::new_free(model);
+        let option = MjvOption::default();
+
+        // Construct the renderer and create allocated buffers.
+        let renderer = MjRenderer {
+            scene, user_scene, context, window, model, camera, option,
+            flags: RendererFlags::empty(), rgb: None, depth: None,
+            width: width as usize, height: height as usize
+        }   // These require special care
+            .with_rgb_rendering(self.rgb)
+            .with_depth_rendering(self.depth);
+
+        Ok(renderer)
+    }
+}
+
+
+impl Default for MjRendererBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// A renderer for rendering 3D scenes.
 /// By default, RGB rendering is enabled and depth rendering is disabled.
@@ -50,7 +193,32 @@ impl<'m> MjRenderer<'m> {
     /// The `max_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
     /// It can thus be set to 0 if no additional geoms will be drawn by the user.
+    /// # Scene allocation
+    /// The renderer uses two scenes:
+    /// - the internal scene: used by the renderer to draw the model's state.
+    /// - the user scene: used by the user to add additional geoms to the internal scene
+    /// 
+    /// The **internal scene** allocates the amount of space needed to fit every preexisting
+    /// model geom + user visual-only geoms + additional visual-only geoms that aren't from the user (e. g., tendons).
+    /// By default, the renderer reserves 100 extra geom slots for drawing the additional visual-only geoms.
+    /// If that is not enough or it is too much, you can construct a builder
+    /// [`MjRenderer::builder`], which allows more fine-grained configuration. 
+    /// 
+    /// <div class="warning">
+    /// 
+    /// Parameters `width` and `height` must be less or equal to the offscreen buffer size,
+    /// which can be configured at the top of the model's XML like so:
+    /// 
+    /// ```xml
+    ///<visual>
+    ///    <global offwidth="1920" offheight="1080"/>
+    ///</visual>
+    /// ```
+    /// 
+    /// </div>
     pub fn new(model: &'m MjModel, width: usize, height: usize, max_geom: usize) -> Result<Self, RendererError> {
+        const EXTRA_INTERNAL_VISUAL_GEOMS: usize = 100;
+
         let mut glfw = glfw::init_no_callbacks()
             .map_err(|err| RendererError::GlfwInitError(err))?;
 
@@ -69,7 +237,7 @@ impl<'m> MjRenderer<'m> {
         context.offscreen();
 
         /* The 3D scene for visualization */
-        let scene = MjvScene::new(model, model.ffi().ngeom as usize + max_geom + EXTRA_SCENE_GEOM_SPACE);
+        let scene = MjvScene::new(model, model.ffi().ngeom as usize + max_geom + EXTRA_INTERNAL_VISUAL_GEOMS);
         let user_scene = MjvScene::new(model, max_geom);
 
         let camera = MjvCamera::new_free(model);
@@ -83,6 +251,11 @@ impl<'m> MjRenderer<'m> {
 
         s = s.with_rgb_rendering(true);
         Ok(s)
+    }
+
+    /// Create a [`MjRendererBuilder`] to configure [`MjRenderer`].
+    pub fn builder() -> MjRendererBuilder {
+        MjRendererBuilder::new()
     }
 
     /// Enables/disables RGB rendering. To be used on construction.
@@ -224,7 +397,7 @@ impl<'m> MjRenderer<'m> {
     }
 
     /// Save a depth image of the scene to a path. The image is 16-bit PNG, which
-    /// can be converted into depth (distance) data by dividing the grayscale values by 65535.0 an applying reverse denormalization.
+    /// can be converted into depth (distance) data by dividing the grayscale values by 65535.0 an applying denormalization.
     /// If `normalize` is `true`, then the data is normalized with min-max normalization.
     /// Use of [`MjRenderer::save_depth_raw`] is recommended if performance is critical, as
     /// it skips PNG encoding and also saves the true depth values directly.
@@ -322,7 +495,8 @@ impl<'m> MjRenderer<'m> {
 #[derive(Debug)]
 pub enum RendererError {
     GlfwInitError(InitError),
-    WindowCreationError
+    WindowCreationError,
+    InvalidParameter(&'static str),
 }
 
 impl Display for RendererError {
@@ -330,6 +504,7 @@ impl Display for RendererError {
         match self {
             Self::GlfwInitError(e) => write!(f, "glfw failed to initialize: {}", e),
             Self::WindowCreationError => write!(f, "failed to create window"),
+            Self::InvalidParameter(e) => write!(f, "parameter {} is invalid", e)
         }
     }
 }
