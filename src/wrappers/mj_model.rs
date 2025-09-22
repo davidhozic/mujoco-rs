@@ -10,7 +10,10 @@ use crate::wrappers::mj_data::MjData;
 use super::mj_primitive::*;
 use crate::mujoco_c::*;
 
-use crate::{view_creator, fixed_size_info_method, info_with_view};
+use crate::{
+    view_creator, fixed_size_info_method, info_with_view,
+    mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem
+};
 
 
 /*******************************************/
@@ -196,13 +199,13 @@ impl MjModel {
         forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize,  biasprm: mjNBIAS as usize, 
         actearly: 1,  ctrlrange: 2, forcerange: 2,  actrange: 2,  gear: 6,  cranklength: 1,  acc0: 1, 
         length0: 1,  lengthrange: 2
-    ] }
+    ], [], []}
 
     fixed_size_info_method! { Model, ffi(), sensor, [
         r#type: 1, datatype: 1, needstage: 1,
         objtype: 1, objid: 1, reftype: 1, refid: 1, intprm: mjNSENS as usize,
         dim: 1, adr: 1, cutoff: 1, noise: 1
-    ] }
+    ], [], []}
 
 
     fixed_size_info_method! { Model, ffi(), tendon, [
@@ -212,14 +215,14 @@ impl MjModel {
         range: 2, actfrcrange: 2, margin: 1, stiffness: 1,
         damping: 1, armature: 1, frictionloss: 1, lengthspring: 2,
         length0: 1, invweight0: 1, rgba: 4
-    ] }
+    ], [], []}
 
     fixed_size_info_method! { Model, ffi(), joint, [
         r#type: 1, qposadr: 1, dofadr: 1, bodyid: 1, group: 1,
         limited: 1, actfrclimited: 1, actgravcomp: 1, solref: mjNREF as usize,
         solimp: mjNIMP as usize, pos: 3, axis: 3, stiffness: 1,
         range: 2, actfrcrange: 2, margin: 1
-    ] }
+    ], [], []}
 
     fixed_size_info_method! { Model, ffi(), geom, [
         r#type: 1, contype: 1, conaffinity: 1, condim: 1, bodyid: 1, dataid: 1, matid: 1,
@@ -227,7 +230,7 @@ impl MjModel {
         solimp: mjNIMP as usize,
         size: 3, aabb: 6, rbound: 1, pos: 3, quat: 4, friction: 3, margin: 1, gap: 1,
         fluid: mjNFLUID as usize, rgba: 4
-    ] }
+    ], [], []}
 
     fixed_size_info_method! { Model, ffi(), body, [
         parentid: 1, rootid: 1, weldid: 1, mocapid: 1,
@@ -237,14 +240,46 @@ impl MjModel {
         mass: 1, subtreemass: 1, inertia: 3, invweight0: 2,
         gravcomp: 1, margin: 1, plugin: 1,
         contype: 1, conaffinity: 1, bvhadr: 1, bvhnum: 1
-    ]}
+    ], [], []}
 
     fixed_size_info_method! { Model, ffi(), camera, [
         mode: 1, bodyid: 1, targetbodyid: 1, pos: 3, quat: 4,
         poscom0: 3, pos0: 3, mat0: 9, orthographic: 1, fovy: 1,
         ipd: 1, resolution: 2, sensorsize: 2, intrinsic: 4
-    ] }
-   
+    ], [], []}
+
+    fixed_size_info_method! { Model, ffi(), key, [
+        time: 1
+    ], [
+        qpos: nq, qvel: nv, act: na, mpos: nmocap * 3, mquat: nmocap * 4,
+        ctrl: nu
+    ], []}
+
+    fixed_size_info_method! { Model, ffi(), tuple, [
+        size: 1
+    ], [], [
+        objtype: ntupledata, objid: ntupledata, objprm: ntupledata
+    ]}
+
+    fixed_size_info_method! { Model, ffi(), texture, [
+        r#type: 1, colorspace: 1, height: 1, width: 1, nchannel: 1, pathadr: 1
+    ], [], [
+        data: ntexdata
+    ]}
+
+    // TODO: skin
+
+    fixed_size_info_method! { Model, ffi(), site, [
+        r#type: 1, bodyid: 1, group: 1, sameframe: 1, size: 3,
+        pos: 3, quat: 4, rgba: 4, matid: 1
+    ], [user: nuser_site], []}
+
+    fixed_size_info_method! { Model, ffi(), pair, [
+        dim: 1, geom1: 1, geom2: 1, signature: 1, solref: mjNREF as usize,
+        solreffriction: mjNREF as usize, solimp: mjNIMP as usize, margin: 1,
+        gap: 1, friction: 5
+    ], [], []}
+
     /// Deprecated alias for [`MjModel::name_to_id`].
     #[deprecated]
     pub fn name2id(&self, type_: MjtObj, name: &str) -> i32 {
@@ -518,6 +553,70 @@ info_with_view!(Model, camera, cam_,
         mode: MjtCamLight, bodyid: i32, targetbodyid: i32, pos: MjtNum, quat: MjtNum,
         poscom0: MjtNum, pos0: MjtNum, mat0: MjtNum, orthographic: bool, fovy: MjtNum,
         ipd: MjtNum, resolution: i32, sensorsize: f32, intrinsic: f32
+    ], []
+);
+
+/**************************************************************************************************/
+// KeyFrame view
+/**************************************************************************************************/
+info_with_view!(Model, key, key_,
+    [
+        time: MjtNum, qpos: MjtNum, qvel: MjtNum, act: MjtNum, mpos: MjtNum,
+        mquat: MjtNum, ctrl: MjtNum
+    ], []
+);
+
+/**************************************************************************************************/
+// Tuple view
+/**************************************************************************************************/
+info_with_view!(Model, tuple, tuple_,
+    [
+        size: i32, objtype: MjtObj, objid: i32, objprm: MjtNum
+    ], []
+);
+
+
+/**************************************************************************************************/
+// Texture view
+/**************************************************************************************************/
+info_with_view!(Model, texture, tex_,
+    [
+        r#type: MjtTexture, colorspace: MjtColorSpace, height: i32, width: i32, nchannel: i32,
+        data: MjtByte, pathadr: i32
+    ], []
+);
+
+/**************************************************************************************************/
+// Skin view
+/**************************************************************************************************/
+info_with_view!(Model, skin, skin_,
+    [
+        matid: i32, group: i32, rgba: i32, inflate: i32, vertadr: i32, vertnum: i32, texcoordadr: i32,
+        faceadr: i32, facenum: i32, boneadr: i32, bonenum: i32, vert: f32, texcoord: f32,
+        face: i32, bonevertadr: i32, bonevertnum: i32, bonebindpos: f32,
+        bonebindquat: f32, bonebodyid: i32, bonevertid: i32, bonevertweight: f32,
+        pathadr: i32
+    ], []
+);
+
+
+/**************************************************************************************************/
+// Site view
+/**************************************************************************************************/
+info_with_view!(Model, site, site_,
+    [
+        r#type: MjtGeom, bodyid: i32, group: i32, sameframe: MjtSameFrame, size: MjtNum,
+        pos: MjtNum, quat: MjtNum, user: MjtNum, rgba: f32
+    ], [matid: i32]
+);
+
+/**************************************************************************************************/
+// Pair view
+/**************************************************************************************************/
+info_with_view!(Model, pair, pair_,
+    [
+        dim: i32, geom1: i32, geom2: i32, signature: i32, solref: MjtNum, solreffriction: MjtNum,
+        solimp: MjtNum, margin: MjtNum, gap: MjtNum, friction: MjtNum
     ], []
 );
 

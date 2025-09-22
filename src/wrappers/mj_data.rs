@@ -72,11 +72,14 @@ impl<'a> MjData<'a> {
         }
     }
 
-    fixed_size_info_method! { Data, model.ffi(), body, [xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10, crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6] }
-    fixed_size_info_method! { Data, model.ffi(), camera, [xpos: 3, xmat: 9] }
-    fixed_size_info_method! { Data, model.ffi(), geom, [xpos: 3, xmat: 9] }
-    fixed_size_info_method! { Data, model.ffi(), site, [xpos: 3, xmat: 9] }
-    fixed_size_info_method! { Data, model.ffi(), light, [xpos: 3, xdir: 3] }
+    fixed_size_info_method! { Data, model.ffi(), body, [
+        xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10,
+        crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6
+    ], [], []}
+    fixed_size_info_method! { Data, model.ffi(), camera, [xpos: 3, xmat: 9], [], []}
+    fixed_size_info_method! { Data, model.ffi(), geom, [xpos: 3, xmat: 9], [], []}
+    fixed_size_info_method! { Data, model.ffi(), site, [xpos: 3, xmat: 9], [], []}
+    fixed_size_info_method! { Data, model.ffi(), light, [xpos: 3, xdir: 3], [], []}
 
     /// Obtains a [`MjActuatorDataInfo`] struct containing information about the name, id, and
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].

@@ -40,7 +40,13 @@ macro_rules! mj_model_nx_to_mapping {
 
     ($model_ffi:ident, nsensordata) => {
         $model_ffi.sensor_adr
-    }
+    };
+    ($model_ffi:ident, ntupledata) => {
+        $model_ffi.tuple_adr
+    };
+    ($model_ffi:ident, ntexdata) => {
+        $model_ffi.tex_adr
+    };
 }
 
 
@@ -58,6 +64,12 @@ macro_rules! mj_model_nx_to_nitem {
 
     ($model_ffi:ident, nsensordata) => {
         $model_ffi.nsensor
+    };
+    ($model_ffi:ident, ntupledata) => {
+        $model_ffi.ntuple
+    };
+    ($model_ffi:ident, ntexdata) => {
+        $model_ffi.ntex
     };
 }
 
@@ -195,7 +207,7 @@ macro_rules! view_creator {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! fixed_size_info_method {
-    ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*]) => {
+    ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*], [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*], [$($attr_dyn:ident: $ffi_len_dyn:expr),*]) => {
         paste::paste! {
             #[doc = concat!(
                 "Obtains a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] struct containing information about the name, id, and ",
@@ -206,7 +218,8 @@ macro_rules! fixed_size_info_method {
             )]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let c_name = CString::new(name).unwrap();
-                let id = unsafe { mj_name2id(self.$ffi, MjtObj::[<mjOBJ_ $type_:upper>] as i32, c_name.as_ptr())};
+                let ffi = self.$ffi;
+                let id = unsafe { mj_name2id(ffi, MjtObj::[<mjOBJ_ $type_:upper>] as i32, c_name.as_ptr())};
                 if id == -1 {  // not found
                     return None;
                 }
@@ -216,7 +229,20 @@ macro_rules! fixed_size_info_method {
                     let $attr = (id * $len, $len);
                 )*
 
-                Some([<Mj $type_:camel $info_type Info>] {name: name.to_string(), id, $($attr),*})
+                $(
+                    let $attr_ffi = (id * ffi.$len_ffi as usize $( * $multiplier)*, ffi.$len_ffi as usize $( * $multiplier)*);
+                )*
+
+                $(
+                    let $attr_dyn = unsafe { mj_view_indices!(
+                        id,
+                        mj_model_nx_to_mapping!(ffi, $ffi_len_dyn),
+                        mj_model_nx_to_nitem!(ffi, $ffi_len_dyn),
+                        ffi.$ffi_len_dyn
+                    ) };
+                )*
+
+                Some([<Mj $type_:camel $info_type Info>] {name: name.to_string(), id, $($attr,)* $($attr_ffi,)* $($attr_dyn),*})
             }
         }
     }
