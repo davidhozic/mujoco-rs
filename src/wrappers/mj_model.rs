@@ -628,54 +628,78 @@ mod tests {
     use super::*;
     use std::fs;
 
-    const EXAMPLE_MODEL: &str = "
+    const EXAMPLE_MODEL: &str = stringify!(
     <mujoco>
         <worldbody>
-            <camera name=\"cam1\" fovy=\"50\" resolution=\"100 200\"/>
+            <camera name="cam1" fovy="50" resolution="100 200"/>
 
-            <light ambient=\"0.2 0.2 0.2\"/>
-            <body name=\"ball\">
-                <geom name=\"green_sphere\" pos=\".2 .2 .2\" size=\".1\" rgba=\"0 1 0 1\"/>
-                <joint name=\"ball\" type=\"free\" axis=\"1 1 1\"/>
-                <site name=\"touch\" size=\"1\" type=\"box\"/>
+            <light ambient="0.2 0.2 0.2"/>
+            <body name="ball">
+                <geom name="green_sphere" pos=".2 .2 .2" size=".1" rgba="0 1 0 1"/>
+                <joint name="ball" type="free" axis="1 1 1"/>
+                <site name="touch" size="1" type="box"/>
             </body>
 
-            <body name=\"ball1\" pos=\"-.5 0 0\">
-                <geom size=\".1\" rgba=\"0 1 0 1\" mass=\"1\"/>
-                <joint type=\"free\"/>
-                <site name=\"ball1\" size=\".1 .1 .1\" pos=\"0 0 0\" rgba=\"0 1 0 0.2\" type=\"box\"/>
+            <body name="ball1" pos="-.5 0 0">
+                <geom size=".1" rgba="0 1 0 1" mass="1"/>
+                <joint type="free"/>
+                <site name="ball1" size=".1 .1 .1" pos="0 0 0" rgba="0 1 0 0.2" type="box"/>
+                <site name="ball12" size=".1 .1 .1" pos="0 0 0" rgba="0 1 1 0.2" type="box"/>
+                <site name="ball13" size=".1 .1 .1" pos="0 0 0" rgba="0 1 1 0.2" type="box"/>
             </body>
 
-            <body name=\"ball2\"  pos=\".5 0 0\">
-                <geom name=\"ball2\" size=\".5\" rgba=\"0 1 1 1\" mass=\"1\"/>
-                <joint type=\"free\"/>
-                <site name=\"ball2\" size=\".1 .1 .1\" pos=\"0 0 0\" rgba=\"0 1 1 0.2\" type=\"box\"/>
+            <body name="ball2"  pos=".5 0 0">
+                <geom name="ball2" size=".5" rgba="0 1 1 1" mass="1"/>
+                <joint type="free"/>
+                <site name="ball2" size=".1 .1 .1" pos="0 0 0" rgba="0 1 1 0.2" type="box"/>
+                <site name="ball22" size="0.5 0.25 0.5" pos="5 1 3" rgba="1 2 3 1" type="box"/>
+                <site name="ball23" size=".1 .1 .1" pos="0 0 0" rgba="0 1 1 0.2" type="box"/>
             </body>
 
-            <geom name=\"floor\" type=\"plane\" size=\"10 10 1\" euler=\"5 0 0\"/>
+            <geom name="floor" type="plane" size="10 10 1" euler="5 0 0"/>
 
-            <body name=\"slider\">
-                <geom name=\"rod\" type=\"cylinder\" size=\"1 10 0\" euler=\"90 0 0\" pos=\"0 0 10\"/>
-                <joint name=\"rod\" type=\"slide\" axis=\"0 1 0\" range=\"0 1\"/>
+            <body name="slider">
+                <geom name="rod" type="cylinder" size="1 10 0" euler="90 0 0" pos="0 0 10"/>
+                <joint name="rod" type="slide" axis="0 1 0" range="0 1"/>
+            </body>
+
+            <body name="ball3"  pos="0 0 5">
+                <geom name="ball31" size=".5" rgba="0 1 1 1" mass="1"/>
+                <joint type="slide"/>
+            </body>
+
+            <body name="ball32"  pos="0 0 -5">
+                <geom name="ball32" size=".5" rgba="0 1 1 1" mass="1"/>
+                <joint type="slide"/>
             </body>
         </worldbody>
 
         <actuator>
-            <general name=\"slider\" joint=\"rod\" biastype=\"affine\" ctrlrange=\"0 1\" gaintype=\"fixed\"/>
+            <general name="slider" joint="rod" biastype="affine" ctrlrange="0 1" gaintype="fixed"/>
         </actuator>
 
         <sensor>
-            <touch name=\"touch\" site=\"touch\"/>
+            <touch name="touch" site="touch"/>
         </sensor>
 
         <tendon>
-            <spatial name=\"tendon\" limited=\"true\" range=\"0 1\" rgba=\"0 .1 1 1\" width=\".005\">
-            <site site=\"ball1\"/>
-            <site site=\"ball2\"/>
+            <spatial name="tendon" limited="true" range="0 1" rgba="0 .1 1 1" width=".005">
+            <site site="ball1"/>
+            <site site="ball2"/>
         </spatial>
     </tendon>
+
+
+    <!-- Contact pair between the two geoms -->
+    <contact>
+        <pair name="geom_pair" geom1="ball31" geom2="ball32" condim="3" solref="0.02 1"
+            solreffriction="0.01 0.5" solimp="0.0 0.95 0.001 0.5 2" margin="0.001" gap="0"
+            friction="1.0 0.8 0.6 0.0 0.0">
+        </pair>
+    </contact>
+
     </mujoco>
-    ";
+);
 
     /// Tests if the model can be loaded and then saved.
     #[test]
@@ -871,5 +895,64 @@ mod tests {
 
         /* Test virtual file system load */
         assert!(MjModel::from_buffer(&saved_data).is_ok());
+    }
+
+    #[test]
+    fn test_site_view() {
+        // <site name="ball22" size="0 0.25 0" pos="5 1 3" rgba="1 2 3 1" type="box"/>
+        const BODY_NAME: &str = "ball2";
+        const SITE_NAME: &str = "ball22";
+        const SITE_SIZE: [f64; 3] = [0.5, 0.25, 0.5];
+        const SITE_POS: [f64; 3] = [5.0, 1.0, 3.0];
+        const SITE_RGBA: [f32; 4] = [1.0, 2.0, 3.0, 1.0];
+        const SITE_TYPE: MjtGeom = MjtGeom::mjGEOM_BOX;
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let info_ball = model.body(BODY_NAME).unwrap();
+        let info_site = model.site(SITE_NAME).unwrap();
+        let view_site = info_site.view(&model);
+
+        /* Check if all the attributes given match */
+        assert_eq!(info_site.name, SITE_NAME);
+        assert_eq!(view_site.size[..], SITE_SIZE);
+        assert_eq!(view_site.pos[..], SITE_POS);
+        assert_eq!(view_site.rgba[..], SITE_RGBA);
+        assert_eq!(view_site.r#type[0], SITE_TYPE);
+
+        assert_eq!(view_site.bodyid[0] as usize, info_ball.id)
+    }
+
+    #[test]
+    fn test_pair_view() {
+        const PAIR_NAME: &str = "geom_pair";
+        const DIM: i32 = 3;
+        const GEOM1_NAME: &str = "ball31";
+        const GEOM2_NAME: &str = "ball32";
+        const SOLREF: [f64; mjNREF as usize] = [0.02, 1.0];
+        const SOLREFFRICTION: [f64; mjNREF as usize] = [0.01, 0.5];
+        const SOLIMP: [f64; mjNIMP as usize] = [0., 0.95, 0.001, 0.5, 2.0];
+        const MARGIN: f64 = 0.001;
+        const GAP: f64 = 0.0;
+        const FRICTION: [f64; 5] = [1.0, 0.8, 0.6, 0.0, 0.0];
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let info_pair = model.pair(PAIR_NAME).unwrap();
+        let view_pair = info_pair.view(&model);
+
+        let geom1_info = model.geom(GEOM1_NAME).unwrap();
+        let geom2_info = model.geom(GEOM2_NAME).unwrap();
+
+        let signature = ((geom1_info.view(&model).bodyid[0] as u32) << 16) + geom2_info.view(&model).bodyid[0] as u32;
+
+        assert_eq!(view_pair.dim[0], DIM);
+        assert_eq!(view_pair.geom1[0] as usize, geom1_info.id);
+        assert_eq!(view_pair.geom2[0] as usize, geom2_info.id);
+        assert_eq!(view_pair.signature[0] as u32, signature);  // body1 << 16 + body2
+        assert_eq!(view_pair.solref[..], SOLREF);
+        assert_eq!(view_pair.solreffriction[..], SOLREFFRICTION);
+        assert_eq!(view_pair.solimp[..], SOLIMP);
+        assert_eq!(view_pair.margin[0], MARGIN);
+        assert_eq!(view_pair.gap[0], GAP);
+        assert_eq!(view_pair.friction[..], FRICTION);
     }
 }
