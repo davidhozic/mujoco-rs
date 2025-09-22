@@ -47,11 +47,15 @@ fn main() {
     let mut data = model.make_data();
 
     /* Renderer for rendering at 1280x720 px (width x height) */
-    let mut renderer = MjRenderer::new(&model, 1280, 720, 5).unwrap()
-        .with_font_scale(MjtFontScale::mjFONTSCALE_100)
-        .with_opts(MjvOption::default())
-        .with_rgb_rendering(true)  // enabled by default.
-        .with_depth_rendering(true);  // disabled by default.
+    let mut renderer = MjRenderer::builder()
+        .width(0).height(0)  // set to width(0) and height(0) to set automatically based on <global offwidth="1920" offheight="1080"/>
+        .num_visual_user_geom(5)  // maximum number of visual-only geoms as result of the user
+        .num_visual_internal_geom(0)  // maximum number of visual-only geoms not as result of the user
+        .font_scale(MjtFontScale::mjFONTSCALE_100)  // scale of the font drawn by OpenGL
+        .rgb(true)  // rgb rendering
+        .depth(true)  // depth rendering
+        .camera(MjvCamera::default())  // default free camera
+        .build(&model).expect("failed to initialize the renderer");
 
     /* Make a camera that follows the ball */
     let ball_body_id = model.body("ball").unwrap().id;

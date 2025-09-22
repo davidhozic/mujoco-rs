@@ -104,7 +104,7 @@ which can be configured at the top of the model's XML like so:
         if width == 0 && height == 0 {
             let global = &model.vis().global;
             height = global.offheight as u32;
-            width = global.offheight as u32;
+            width = global.offwidth as u32;
         }
 
         let mut glfw = glfw::init_no_callbacks()
@@ -397,7 +397,7 @@ impl<'m> MjRenderer<'m> {
     }
 
     /// Save a depth image of the scene to a path. The image is 16-bit PNG, which
-    /// can be converted into depth (distance) data by dividing the grayscale values by 65535.0 an applying denormalization.
+    /// can be converted into depth (distance) data by dividing the grayscale values by 65535.0 and applying denormalization.
     /// If `normalize` is `true`, then the data is normalized with min-max normalization.
     /// Use of [`MjRenderer::save_depth_raw`] is recommended if performance is critical, as
     /// it skips PNG encoding and also saves the true depth values directly.
