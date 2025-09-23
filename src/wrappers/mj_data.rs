@@ -28,7 +28,7 @@ pub type MjtConstraintState = mjtConstraintState;
 /// which is also the length of the array `mjData.warning`.
 pub type MjtWarning = mjtWarning;
 
-/// Timer types. The number of timer types is given by `mjtTimer.mjNTIMER`
+/// Timer types. The number of timer types is given by `mjNTIMER`
 /// which is also the length of the array `mjData.timer`, as well as the length of
 /// the string array `mjTIMERSTRING` with timer names.
 pub type MjtTimer = mjtTimer;
