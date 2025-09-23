@@ -75,7 +75,7 @@ pub type MjtDisableBit = mjtDisableBit;
 /// Constants which are powers of 2. They are used as bitmasks for the field `enableflags` of [`MjOption`].
 pub type MjtEnableBit = mjtEnableBit;
 
-/// Texture roles, specifying how the renderer should interpret the texture
+/// Texture roles, specifying how the renderer should interpret the texture.
 pub type MjtTextureRole = mjtTextureRole;
 /*******************************************/
 

@@ -216,7 +216,7 @@ macro_rules! view_creator {
 /// Macro for reducing duplicated code when creating info structs to
 /// items in [`MjData`](crate::prelude::MjData) or [`MjModel`](crate::prelude::MjModel).
 /// This creates a method `X(self, name; &str) -> XInfo`.
-/// Compatible entries: (..., [name: fixed number], [name: ffi().attribute (* repeats)], [length of the item's data array (e. g., hfield -> nhfielddata, texture -> ntexdata)])
+/// Compatible entries: (..., [name: fixed number], [name: ffi().attribute (* repeats)], [length of the item's data array (e.g., hfield -> nhfielddata, texture -> ntexdata)])
 #[doc(hidden)]
 #[macro_export]
 macro_rules! info_method {
@@ -278,7 +278,7 @@ macro_rules! info_method {
 /// - **Dynamic length (from item's data array)**:  
 ///   `[field_name: data_array_length]`.  
 ///   Example: `[hfielddata: nhfielddata]` (where `nhfielddata` is the length of the hfield data array).
-///   Note: nhfielddata is the major index (i. e., [nhfielddata x something] in the C array.)
+///   Note: nhfielddata is the major index (i.e., [nhfielddata x something] in the C array.)
 ///
 #[doc(hidden)]
 #[macro_export]
