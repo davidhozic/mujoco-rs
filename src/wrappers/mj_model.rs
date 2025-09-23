@@ -199,9 +199,9 @@ impl MjModel {
 
     info_method! { Model, ffi(), actuator, [
         trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, trnid: 2, actadr: 1, actnum: 1, group: 1, ctrllimited: 1,
-        forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize,  biasprm: mjNBIAS as usize, 
-        actearly: 1,  ctrlrange: 2, forcerange: 2,  actrange: 2,  gear: 6,  cranklength: 1,  acc0: 1, 
-        length0: 1,  lengthrange: 2
+        forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize, biasprm: mjNBIAS as usize, 
+        actearly: 1, ctrlrange: 2, forcerange: 2, actrange: 2, gear: 6, cranklength: 1, acc0: 1, 
+        length0: 1, lengthrange: 2
     ], [], []}
 
     info_method! { Model, ffi(), sensor, [
@@ -288,7 +288,7 @@ impl MjModel {
 
     info_method! { Model, ffi(), material, [
         texuniform: 1,
-        texrepeat: 2, 
+        texrepeat: 2,
         emission: 1,
         specular: 1,
         shininess: 1,
