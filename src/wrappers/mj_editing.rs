@@ -90,12 +90,10 @@ pub type MjtAlignFree = mjtAlignFree;
 /// Whether to infer body inertias from child geoms.
 pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
 
-/// Type of mesh inertia (convex, legacy, exact, shell)
-/// TODO: document in MuJoCo
+/// Type of mesh inertia.
 pub type MjtMeshInertia = mjtMeshInertia;
 
 /// Types of flex self-collisions midphase.
-/// TODO: document in MuJoCo
 pub type MjtFlexSelf = mjtFlexSelf;
 
 /// Compiler options.
