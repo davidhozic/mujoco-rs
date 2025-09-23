@@ -18,6 +18,20 @@ update of MuJoCo alone can increase the major version.
 
 Unreleased
 ================================
+- |mj_model|:
+
+  - Added more views:
+    :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>key` (keyframe),
+    :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tuple`,
+    :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>texture`,
+    :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>site`,
+    :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>pair`,
+    :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>numeric`,
+    :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>material`,
+    :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>light`,
+    :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>hfield`,
+    :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>equality`.
+
 - :ref:`model_editing` support, which can be used to procedurally generate |mj_model|. It can be used
   for terrain generation, parameter randomization, etc. 
 

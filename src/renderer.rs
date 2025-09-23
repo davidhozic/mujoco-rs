@@ -198,7 +198,7 @@ impl<'m> MjRenderer<'m> {
     /// - the user scene: used by the user to add additional geoms to the internal scene
     /// 
     /// The **internal scene** allocates the amount of space needed to fit every pre-existing
-    /// model geom + user visual-only geoms + additional visual-only geoms that aren't from the user (e. g., tendons).
+    /// model geom + user visual-only geoms + additional visual-only geoms that aren't from the user (e.g., tendons).
     /// By default, the renderer reserves 100 extra geom slots for drawing the additional visual-only geoms.
     /// If that is not enough or it is too much, you can construct [`MjRenderer`] via its builder
     /// ([`MjRenderer::builder`]), which allows more configuration. 

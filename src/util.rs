@@ -40,7 +40,19 @@ macro_rules! mj_model_nx_to_mapping {
 
     ($model_ffi:ident, nsensordata) => {
         $model_ffi.sensor_adr
-    }
+    };
+    ($model_ffi:ident, ntupledata) => {
+        $model_ffi.tuple_adr
+    };
+    ($model_ffi:ident, ntexdata) => {
+        $model_ffi.tex_adr
+    };
+    ($model_ffi:ident, nnumericdata) => {
+        $model_ffi.numeric_adr
+    };
+    ($model_ffi:ident, nhfielddata) => {
+        $model_ffi.hfield_adr
+    };
 }
 
 
@@ -58,6 +70,18 @@ macro_rules! mj_model_nx_to_nitem {
 
     ($model_ffi:ident, nsensordata) => {
         $model_ffi.nsensor
+    };
+    ($model_ffi:ident, ntupledata) => {
+        $model_ffi.ntuple
+    };
+    ($model_ffi:ident, ntexdata) => {
+        $model_ffi.ntex
+    };
+    ($model_ffi:ident, nnumericdata) => {
+        $model_ffi.nnumeric
+    };
+    ($model_ffi:ident, nhfielddata) => {
+        $model_ffi.nhfield
     };
 }
 
@@ -190,12 +214,13 @@ macro_rules! view_creator {
 
 
 /// Macro for reducing duplicated code when creating info structs to
-/// items that have fixed size arrays in [`MjData`](crate::prelude::MjData) or [`MjModel`](crate::prelude::MjModel).
+/// items in [`MjData`](crate::prelude::MjData) or [`MjModel`](crate::prelude::MjModel).
 /// This creates a method `X(self, name; &str) -> XInfo`.
+/// Compatible entries: (..., [name: fixed number], [name: ffi().attribute (* repeats)], [length of the item's data array (e.g., hfield -> nhfielddata, texture -> ntexdata)])
 #[doc(hidden)]
 #[macro_export]
-macro_rules! fixed_size_info_method {
-    ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*]) => {
+macro_rules! info_method {
+    ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*], [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*], [$($attr_dyn:ident: $ffi_len_dyn:expr),*]) => {
         paste::paste! {
             #[doc = concat!(
                 "Obtains a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] struct containing information about the name, id, and ",
@@ -206,7 +231,8 @@ macro_rules! fixed_size_info_method {
             )]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let c_name = CString::new(name).unwrap();
-                let id = unsafe { mj_name2id(self.$ffi, MjtObj::[<mjOBJ_ $type_:upper>] as i32, c_name.as_ptr())};
+                let ffi = self.$ffi;
+                let id = unsafe { mj_name2id(ffi, MjtObj::[<mjOBJ_ $type_:upper>] as i32, c_name.as_ptr())};
                 if id == -1 {  // not found
                     return None;
                 }
@@ -216,14 +242,44 @@ macro_rules! fixed_size_info_method {
                     let $attr = (id * $len, $len);
                 )*
 
-                Some([<Mj $type_:camel $info_type Info>] {name: name.to_string(), id, $($attr),*})
+                $(
+                    let $attr_ffi = (id * ffi.$len_ffi as usize $( * $multiplier)*, ffi.$len_ffi as usize $( * $multiplier)*);
+                )*
+
+                $(
+                    let $attr_dyn = unsafe { mj_view_indices!(
+                        id,
+                        mj_model_nx_to_mapping!(ffi, $ffi_len_dyn),
+                        mj_model_nx_to_nitem!(ffi, $ffi_len_dyn),
+                        ffi.$ffi_len_dyn
+                    ) };
+                )*
+
+                Some([<Mj $type_:camel $info_type Info>] {name: name.to_string(), id, $($attr,)* $($attr_ffi,)* $($attr_dyn),*})
             }
         }
     }
 }
 
 
-/// Creates the xInfo struct along with corresponding xView and xViewMut structs.
+/// This creates a method `X(self, name: &str) -> XInfo`.
+/// 
+/// # Compatible Entry Types
+/// The macro supports the following types of entries for struct fields:
+/// 
+/// - **Fixed number**:  
+///   `[field_name: fixed_length]`.  
+///   Example: `[id: 1]` (for a field with a fixed length of 1)
+/// 
+/// - **FFI attribute (possibly with multiplier)**:  
+///   `[field_name: ffi_attribute (* multiplier)]`.  
+///   Example: `[matid: nmatid * 2]` (where `nmatid` is an attribute from the FFI struct, and the field length is `nmatid * 2`)
+/// 
+/// - **Dynamic length (from item's data array)**:  
+///   `[field_name: data_array_length]`.  
+///   Example: `[hfielddata: nhfielddata]` (where `nhfielddata` is the length of the hfield data array).
+///   Note: nhfielddata is the major index (i.e., [nhfielddata x something] in the C array.)
+///
 #[doc(hidden)]
 #[macro_export]
 macro_rules! info_with_view {

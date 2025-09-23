@@ -27,7 +27,7 @@ A screenshot of the Rust 3D viewer is shown below.
     Showing the `Spot <https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot>`_ scene from
     `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/stable/models.html>`_.
 
-The viewer can be launched only in **passive mode**, i. e. it won't run as a separate application,
+The viewer can be launched only in **passive mode**, i.e. it won't run as a separate application,
 and needs to be periodically "synced" by the user application.
 The user application is the one that needs to run the actual physical simulation, like shown in
 :ref:`basic_sim` and also below.

@@ -7,9 +7,9 @@
 //! These two structs (and some other) wrap the C structure in order to achieve memory safety.
 //! 
 //! Their fields aren't publicly exposed and can instead be manipulated through views
-//! (e. g., [`MjData::joint`](wrappers::mj_data::MjData::joint) and then [`wrappers::mj_data::MjJointDataInfo::view`]).
+//! (e.g., [`MjData::joint`](wrappers::mj_data::MjData::joint) and then [`wrappers::mj_data::MjJointDataInfo::view`]).
 //! To access the wrapped attributes directly, call the corresponding `ffi()` methods
-//! (e. g., [`MjData::ffi`](wrappers::MjData::ffi))
+//! (e.g., [`MjData::ffi`](wrappers::MjData::ffi))
 //! 
 //! ## Documentation
 //! A more guided documentation can be obtained [here](https://mujoco-rs.readthedocs.io/en/latest/).
@@ -36,7 +36,7 @@
 //! 
 //! If a certain function can't be found, you can use the raw FFI bindings, available under 
 //! the [`mujoco_c`] module. Note that to access the lower-level ffi structs inside of wrappers,
-//! `ffi()` or `ffi_mut()` must be called (e. g., [`MjData::ffi`](wrappers::MjData::ffi) and [`MjModel::ffi`](wrappers::MjModel::ffi)). 
+//! `ffi()` or `ffi_mut()` must be called (e.g., [`MjData::ffi`](wrappers::MjData::ffi) and [`MjModel::ffi`](wrappers::MjModel::ffi)). 
 
 use std::ffi::CStr;
 
