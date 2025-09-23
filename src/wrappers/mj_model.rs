@@ -11,7 +11,7 @@ use super::mj_primitive::*;
 use crate::mujoco_c::*;
 
 use crate::{
-    view_creator, fixed_size_info_method, info_with_view,
+    view_creator, info_method, info_with_view,
     mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem
 };
 
@@ -197,21 +197,21 @@ impl MjModel {
         }
     }
 
-    fixed_size_info_method! { Model, ffi(), actuator, [
+    info_method! { Model, ffi(), actuator, [
         trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, trnid: 2, actadr: 1, actnum: 1, group: 1, ctrllimited: 1,
         forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize,  biasprm: mjNBIAS as usize, 
         actearly: 1,  ctrlrange: 2, forcerange: 2,  actrange: 2,  gear: 6,  cranklength: 1,  acc0: 1, 
         length0: 1,  lengthrange: 2
     ], [], []}
 
-    fixed_size_info_method! { Model, ffi(), sensor, [
+    info_method! { Model, ffi(), sensor, [
         r#type: 1, datatype: 1, needstage: 1,
         objtype: 1, objid: 1, reftype: 1, refid: 1, intprm: mjNSENS as usize,
         dim: 1, adr: 1, cutoff: 1, noise: 1
     ], [], []}
 
 
-    fixed_size_info_method! { Model, ffi(), tendon, [
+    info_method! { Model, ffi(), tendon, [
         adr: 1, num: 1, matid: 1, group: 1, limited: 1,
         actfrclimited: 1, width: 1, solref_lim: mjNREF as usize,
         solimp_lim: mjNIMP as usize, solref_fri: mjNREF as usize, solimp_fri: mjNIMP as usize,
@@ -220,14 +220,14 @@ impl MjModel {
         length0: 1, invweight0: 1, rgba: 4
     ], [], []}
 
-    fixed_size_info_method! { Model, ffi(), joint, [
+    info_method! { Model, ffi(), joint, [
         r#type: 1, qposadr: 1, dofadr: 1, bodyid: 1, group: 1,
         limited: 1, actfrclimited: 1, actgravcomp: 1, solref: mjNREF as usize,
         solimp: mjNIMP as usize, pos: 3, axis: 3, stiffness: 1,
         range: 2, actfrcrange: 2, margin: 1
     ], [], []}
 
-    fixed_size_info_method! { Model, ffi(), geom, [
+    info_method! { Model, ffi(), geom, [
         r#type: 1, contype: 1, conaffinity: 1, condim: 1, bodyid: 1, dataid: 1, matid: 1,
         group: 1, priority: 1, plugin: 1, sameframe: 1, solmix: 1, solref: mjNREF as usize,
         solimp: mjNIMP as usize,
@@ -235,7 +235,7 @@ impl MjModel {
         fluid: mjNFLUID as usize, rgba: 4
     ], [], []}
 
-    fixed_size_info_method! { Model, ffi(), body, [
+    info_method! { Model, ffi(), body, [
         parentid: 1, rootid: 1, weldid: 1, mocapid: 1,
         jntnum: 1, jntadr: 1, dofnum: 1, dofadr: 1,
         treeid: 1, geomnum: 1, geomadr: 1, simple: 1,
@@ -245,26 +245,26 @@ impl MjModel {
         contype: 1, conaffinity: 1, bvhadr: 1, bvhnum: 1
     ], [], []}
 
-    fixed_size_info_method! { Model, ffi(), camera, [
+    info_method! { Model, ffi(), camera, [
         mode: 1, bodyid: 1, targetbodyid: 1, pos: 3, quat: 4,
         poscom0: 3, pos0: 3, mat0: 9, orthographic: 1, fovy: 1,
         ipd: 1, resolution: 2, sensorsize: 2, intrinsic: 4
     ], [], []}
 
-    fixed_size_info_method! { Model, ffi(), key, [
+    info_method! { Model, ffi(), key, [
         time: 1
     ], [
         qpos: nq, qvel: nv, act: na, mpos: nmocap * 3, mquat: nmocap * 4,
         ctrl: nu
     ], []}
 
-    fixed_size_info_method! { Model, ffi(), tuple, [
+    info_method! { Model, ffi(), tuple, [
         size: 1
     ], [], [
         objtype: ntupledata, objid: ntupledata, objprm: ntupledata
     ]}
 
-    fixed_size_info_method! { Model, ffi(), texture, [
+    info_method! { Model, ffi(), texture, [
         r#type: 1, colorspace: 1, height: 1, width: 1, nchannel: 1, pathadr: 1
     ], [], [
         data: ntexdata
@@ -272,23 +272,23 @@ impl MjModel {
 
     // TODO: skin
 
-    fixed_size_info_method! { Model, ffi(), site, [
+    info_method! { Model, ffi(), site, [
         r#type: 1, bodyid: 1, group: 1, sameframe: 1, size: 3,
         pos: 3, quat: 4, rgba: 4, matid: 1
     ], [user: nuser_site], []}
 
-    fixed_size_info_method! { Model, ffi(), pair, [
+    info_method! { Model, ffi(), pair, [
         dim: 1, geom1: 1, geom2: 1, signature: 1, solref: mjNREF as usize,
         solreffriction: mjNREF as usize, solimp: mjNIMP as usize, margin: 1,
         gap: 1, friction: 5
     ], [], []}
 
-    fixed_size_info_method! { Model, ffi(), numeric, [
+    info_method! { Model, ffi(), numeric, [
         size: 1
     ], [], [data: nnumericdata]}
 
 
-    fixed_size_info_method! { Model, ffi(), material, [
+    info_method! { Model, ffi(), material, [
         texuniform: 1,
         texrepeat: 2, 
         emission: 1,
@@ -302,13 +302,13 @@ impl MjModel {
     ], [], [] }
 
 
-    fixed_size_info_method! { Model, ffi(), light, [
+    info_method! { Model, ffi(), light, [
         mode: 1, bodyid: 1, targetbodyid: 1, r#type: 1, texid: 1, castshadow: 1, bulbradius: 1,
         intensity: 1, range: 1, active: 1, pos: 3, dir: 3, poscom0: 3, pos0: 3, dir0: 3,
         attenuation: 3, cutoff: 1, exponent: 1, ambient: 3, diffuse: 3, specular: 3
     ], [], []}
 
-    fixed_size_info_method! { Model, ffi(), equality, [
+    info_method! { Model, ffi(), equality, [
         r#type: 1,          // mjtEq enum
         obj1id: 1,
         obj2id: 1,
@@ -318,6 +318,15 @@ impl MjModel {
         solimp: mjNIMP as usize,
         data: mjNEQDATA as usize
     ], [], []}
+
+    info_method! { Model, ffi(), hfield, [
+        size: 4,
+        nrow: 1,
+        ncol: 1,
+        pathadr: 1
+    ], [], [
+        data: nhfielddata
+    ]}
 
     /// Deprecated alias for [`MjModel::name_to_id`].
     #[deprecated]
@@ -715,6 +724,20 @@ info_with_view!(Model, equality, eq_,
     ], []
 );
 
+
+/**************************************************************************************************/
+// Height field view
+/**************************************************************************************************/
+info_with_view!(Model, hfield, hfield_,
+    [
+        size: MjtNum,
+        nrow: i32,
+        ncol: i32,
+        data: f32,
+        pathadr: i32
+    ], []
+);
+
 #[cfg(test)]
 mod tests {
     use crate::assert_relative_eq;
@@ -884,6 +907,10 @@ mod tests {
             roughness="0.5"
             texuniform="false"
             texrepeat="2 2"/>
+
+        <hfield name="hf1" nrow="2" ncol="3" size="1 1 1 0.1"/>
+        <hfield name="hf2" nrow="5" ncol="3" size="1 1 1 5.25"/>
+        <hfield name="hf3" nrow="2" ncol="3" size="1 1 1 0.1"/>
     </asset>
     </mujoco>
 );
@@ -1329,4 +1356,30 @@ mod tests {
         assert_eq!(anchor[2], 0.0);
     }
 
+    #[test]
+    fn test_hfield_view() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+
+        // Access first height field
+        let info_hf = model.hfield("hf2").unwrap();
+        let view_hf = info_hf.view(&model);
+
+        // Expected values
+        let expected_size: [f64; 4] = [1.0, 1.0, 1.0, 5.25]; // radius_x, radius_y, elevation_z, base_z
+        let expected_nrow = 5;
+        let expected_ncol = 3;
+        let expected_data: [f32; 15] = [0.0; 15];
+
+        // Assertions
+        assert_eq!(view_hf.size[..], expected_size);
+        assert_eq!(view_hf.nrow[0], expected_nrow);
+        assert_eq!(view_hf.ncol[0], expected_ncol);
+
+        // hfield_data length should match nrow * ncol
+        assert_eq!(view_hf.data.len(), (expected_nrow * expected_ncol) as usize);
+        assert_eq!(view_hf.data[..], expected_data[..]);
+
+        // Pathadr is -1 (no external file)
+        assert_eq!(view_hf.pathadr[0], -1);
+    }
 }

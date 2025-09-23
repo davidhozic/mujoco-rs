@@ -50,6 +50,9 @@ macro_rules! mj_model_nx_to_mapping {
     ($model_ffi:ident, nnumericdata) => {
         $model_ffi.numeric_adr
     };
+    ($model_ffi:ident, nhfielddata) => {
+        $model_ffi.hfield_adr
+    };
 }
 
 
@@ -76,6 +79,9 @@ macro_rules! mj_model_nx_to_nitem {
     };
     ($model_ffi:ident, nnumericdata) => {
         $model_ffi.nnumeric
+    };
+    ($model_ffi:ident, nhfielddata) => {
+        $model_ffi.nhfield
     };
 }
 
@@ -208,11 +214,12 @@ macro_rules! view_creator {
 
 
 /// Macro for reducing duplicated code when creating info structs to
-/// items that have fixed size arrays in [`MjData`](crate::prelude::MjData) or [`MjModel`](crate::prelude::MjModel).
+/// items in [`MjData`](crate::prelude::MjData) or [`MjModel`](crate::prelude::MjModel).
 /// This creates a method `X(self, name; &str) -> XInfo`.
+/// Compatible entries: (..., [name: fixed number], [name: ffi().attribute (* repeats)], [length of the item's data array (e. g., hfield -> nhfielddata, texture -> ntexdata)])
 #[doc(hidden)]
 #[macro_export]
-macro_rules! fixed_size_info_method {
+macro_rules! info_method {
     ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*], [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*], [$($attr_dyn:ident: $ffi_len_dyn:expr),*]) => {
         paste::paste! {
             #[doc = concat!(
