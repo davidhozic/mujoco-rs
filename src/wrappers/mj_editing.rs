@@ -19,7 +19,7 @@ use super::mj_model::{
     MjModel, MjtObj, MjtGeom, MjtJoint, MjtCamLight,
     MjtLightType, MjtSensor, MjtDataType, MjtGain,
     MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace,
-    MjtTrn, MjtStage
+    MjtTrn, MjtStage, MjtFlexSelf
 };
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic, MjLROpt};
 use super::mj_option::MjOption;
@@ -69,11 +69,11 @@ impl MjsOrientation {
     }
 }
 
-/// Type of orientation specifier.
-pub type MjtOrientation = mjtOrientation;
-
 /// Type of inertia inference.
 pub type MjtGeomInertia = mjtGeomInertia;
+
+/// Type of mesh inertia.
+pub type MjtMeshInertia = mjtMeshInertia;
 
 /// Type of built-in procedural texture.
 pub type MjtBuiltin = mjtBuiltin;
@@ -90,11 +90,8 @@ pub type MjtAlignFree = mjtAlignFree;
 /// Whether to infer body inertias from child geoms.
 pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
 
-/// Type of mesh inertia.
-pub type MjtMeshInertia = mjtMeshInertia;
-
-/// Types of flex self-collisions midphase.
-pub type MjtFlexSelf = mjtFlexSelf;
+/// Type of orientation specifier.
+pub type MjtOrientation = mjtOrientation;
 
 /// Compiler options.
 pub type MjsCompiler = mjsCompiler;

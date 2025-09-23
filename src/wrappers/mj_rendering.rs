@@ -28,13 +28,14 @@ impl Default for MjrRectangle {
 
 
 /// These are the possible grid positions for text overlays. They are used as an argument to the function
-/// :ref:`mjr_overlay`.
+/// `mjr_overlay`.
 pub type MjtGridPos = mjtGridPos;
 
-/// These are the possible framebuffers. They are used as an argument to the function :ref:`mjr_setBuffer`.
+/// These are the possible framebuffers. They are used as an argument to the function `mjr_setBuffer`.
 pub type MjtFramebuffer = mjtFramebuffer;
 
-/// to control how the depth returned by :ref:`mjr_readPixels` is mapped from
+/// These are the depth mapping options. They are used as a value for the ``readPixelDepth`` attribute of the
+/// `mjrContext` struct, to control how the depth returned by `mjr_readPixels` is mapped from
 /// ``znear`` to ``zfar``.
 pub type MjtDepthMap = mjtDepthMap;
 
