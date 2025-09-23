@@ -14,30 +14,36 @@ use crate::mujoco_c::*;
 /// How much extra room to create in the internal [`MjvScene`]. Useful for drawing labels, etc.
 pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
 
-/***********************************************************************************************************************
-** MjtCamera
-***********************************************************************************************************************/
-pub type MjtCamera = mjtCamera;
 
-/***********************************************************************************************************************
-** MjtMouse
-***********************************************************************************************************************/
-pub type MjtMouse = mjtMouse;
-
-/***********************************************************************************************************************
-** MjtPertBit
-***********************************************************************************************************************/
-pub type MjtPertBit = mjtPertBit;
-
-/***********************************************************************************************************************
-** MjtCatBit
-***********************************************************************************************************************/
+/// These are the available categories of geoms in the abstract visualizer. The bitmask can be used in the function
+/// :ref:`mjr_render` to specify which categories should be rendered.
 pub type MjtCatBit = mjtCatBit;
 
-/***********************************************************************************************************************
-** MjtVisFlag
-***********************************************************************************************************************/
+/// as illustrated in :ref:`simulate.cc <saSimulate>`.
+pub type MjtMouse = mjtMouse;
+
+/// both can be enabled simultaneously. They are used
+/// in ``mjvPerturb.active``.
+pub type MjtPertBit = mjtPertBit;
+
+/// used in ``mjvCamera.type``.
+pub type MjtCamera = mjtCamera;
+
+/// These are the abstract visualization elements that can have text labels. Used in ``mjvOption.label``.
+pub type MjtLabel = mjtLabel;
+
+/// These are the MuJoCo objects whose spatial frames can be rendered. Used in ``mjvOption.frame``.
+pub type MjtFrame = mjtFrame;
+
+/// disable the visualization of the
+/// corresponding model or decoration element.
 pub type MjtVisFlag = mjtVisFlag;
+
+/// disable OpenGL rendering effects.
+pub type MjtRndFlag = mjtRndFlag;
+
+/// These are the possible stereo rendering types. They are used in ``mjvScene.stereo``.
+pub type MjtStereo = mjtStereo;
 
 /***********************************************************************************************************************
 ** MjvPerturb

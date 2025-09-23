@@ -12,7 +12,17 @@ const MAX_UI_STORAGE_SIZE: usize = 256;  // Rust-specific constant for the locat
 /******************************** */
 //           Enums
 /******************************** */
+/// Mouse button IDs used in the UI framework.
+pub type MjtButton = mjtButton;
+
+/// Event types used in the UI framework.
+pub type MjtEvent = mjtEvent;
+
+/// Item types used in the UI framework.
 pub type MjtItem = mjtItem;
+
+/// State of a UI section.
+pub type MjtSection = mjtSection;
 
 
 /***********************************************************************************************************************

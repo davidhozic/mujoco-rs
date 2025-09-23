@@ -72,11 +72,31 @@ impl MjsOrientation {
 /// Type of orientation specifier.
 pub type MjtOrientation = mjtOrientation;
 
+/// Type of inertia inference.
+pub type MjtGeomInertia = mjtGeomInertia;
+
 /// Type of built-in procedural texture.
 pub type MjtBuiltin = mjtBuiltin;
 
 /// Mark type for procedural textures.
 pub type MjtMark = mjtMark;
+
+/// Type of limit specification.
+pub type MjtLimited = mjtLimited;
+
+/// Whether to align free joints with the inertial frame.
+pub type MjtAlignFree = mjtAlignFree;
+
+/// Whether to infer body inertias from child geoms.
+pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
+
+/// Type of mesh inertia (convex, legacy, exact, shell)
+/// TODO: document in MuJoCo
+pub type MjtMeshInertia = mjtMeshInertia;
+
+/// Types of flex self-collisions midphase.
+/// TODO: document in MuJoCo
+pub type MjtFlexSelf = mjtFlexSelf;
 
 /// Compiler options.
 pub type MjsCompiler = mjsCompiler;
@@ -121,22 +141,6 @@ impl MjsCompiler {
         self
     }
 }
-
-
-/// Type of geom inertia inference.
-pub type MjtGeomInertia = mjtGeomInertia;
-
-/// Types of flex self-collisions midphase.
-pub type MjtFlexSelf = mjtFlexSelf;
-
-/// Type of mesh inertia (convex, legacy, exact, shell)
-pub type MjtMeshInertia = mjtMeshInertia;
-
-/// Type of limit specification.
-pub type MjtLimited = mjtLimited;
-
-/// Whether to infer body inertias from child geoms.
-pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
 
 /***************************
 ** Model Specification

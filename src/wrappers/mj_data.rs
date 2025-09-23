@@ -13,9 +13,15 @@ use crate::{view_creator, info_method, info_with_view};
 
 /*******************************************/
 // Types
-
-
+/// ref:`mj_setState` and :ref:`mj_stateSize`.
 pub type MjtState = mjtState;
+
+/// Warning types. The number of warning types is given by ``mjNWARNING`` which is also the length of the array
+/// ``mjData.warning``.
+pub type MjtWarning = mjtWarning;
+
+/// as well as the length of the string array :ref:`mjTIMERSTRING` with timer names.
+pub type MjtTimer = mjtTimer;
 /*******************************************/
 
 
