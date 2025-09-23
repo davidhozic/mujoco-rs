@@ -47,6 +47,9 @@ macro_rules! mj_model_nx_to_mapping {
     ($model_ffi:ident, ntexdata) => {
         $model_ffi.tex_adr
     };
+    ($model_ffi:ident, nnumericdata) => {
+        $model_ffi.numeric_adr
+    };
 }
 
 
@@ -70,6 +73,9 @@ macro_rules! mj_model_nx_to_nitem {
     };
     ($model_ffi:ident, ntexdata) => {
         $model_ffi.ntex
+    };
+    ($model_ffi:ident, nnumericdata) => {
+        $model_ffi.nnumeric
     };
 }
 

@@ -74,6 +74,9 @@ pub type MjtDisableBit = mjtDisableBit;
 
 /// Constants which are powers of 2. They are used as bitmasks for the field `enableflags` of [`MjOption`].
 pub type MjtEnableBit = mjtEnableBit;
+
+/// Texture roles, specifying how the renderer should interpret the texture
+pub type MjtTextureRole = mjtTextureRole;
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
@@ -279,6 +282,24 @@ impl MjModel {
         solreffriction: mjNREF as usize, solimp: mjNIMP as usize, margin: 1,
         gap: 1, friction: 5
     ], [], []}
+
+    fixed_size_info_method! { Model, ffi(), numeric, [
+        size: 1
+    ], [], [data: nnumericdata]}
+
+
+    fixed_size_info_method! { Model, ffi(), material, [
+        texuniform: 1,
+        texrepeat: 2, 
+        emission: 1,
+        specular: 1,
+        shininess: 1,
+        reflectance: 1,
+        metallic: 1,
+        roughness: 1,
+        rgba: 4,
+        texid: MjtTextureRole::mjNTEXROLE as usize
+    ], [], [] }
 
     /// Deprecated alias for [`MjModel::name_to_id`].
     #[deprecated]
@@ -582,8 +603,8 @@ info_with_view!(Model, tuple, tuple_,
 info_with_view!(Model, texture, tex_,
     [
         r#type: MjtTexture, colorspace: MjtColorSpace, height: i32, width: i32, nchannel: i32,
-        data: MjtByte, pathadr: i32
-    ], []
+        data: MjtByte
+    ], [pathadr: i32]
 );
 
 /**************************************************************************************************/
@@ -618,6 +639,33 @@ info_with_view!(Model, pair, pair_,
         dim: i32, geom1: i32, geom2: i32, signature: i32, solref: MjtNum, solreffriction: MjtNum,
         solimp: MjtNum, margin: MjtNum, gap: MjtNum, friction: MjtNum
     ], []
+);
+
+
+/**************************************************************************************************/
+// Pair view
+/**************************************************************************************************/
+info_with_view!(Model, numeric, numeric_,
+    [
+        size: i32, data: MjtNum
+    ], []
+);
+
+/**************************************************************************************************/
+// Material view
+/**************************************************************************************************/
+info_with_view!(Model, material, mat_,
+    [
+        texuniform: bool,
+        texrepeat: f32,
+        emission: f32,
+        specular: f32,
+        shininess: f32,
+        reflectance: f32,
+        metallic: f32,
+        roughness: f32,
+        rgba: f32
+    ], [texid: i32]
 );
 
 
@@ -716,7 +764,49 @@ mod tests {
             <!-- Second entry: a site -->
             <element objtype="site" objname="ball1" prm="1.0"/>
         </tuple>
+
+        <!-- Numeric element with a single value -->
+        <numeric name="gain_factor1" size="5" data="3.14159 0 0 0 3.14159"/>
+        <numeric name="gain_factor2" size="3" data="1.25 5.5 10.0"/>
     </custom>
+
+    <!-- Texture definition -->
+    <asset>
+        <texture name="wall_tex"
+            type="2d"
+            colorspace="sRGB"
+            width="128"
+            height="128"
+            nchannel="3"
+            builtin="flat"
+            rgb1="0.6 0.6 0.6"
+            rgb2="0.6 0.6 0.6"
+            mark="none"/>
+
+        <!-- Material definition -->
+        <material name="wood_material"
+            rgba="0.8 0.5 0.3 1"
+            emission="0.1"
+            specular="0.5"
+            shininess="0.7"
+            reflectance="0.2"
+            metallic="0.3"
+            roughness="0.4"
+            texuniform="true"
+            texrepeat="2 2"/>
+
+        <!-- Material definition -->
+        <material name="also_wood_material"
+            rgba="0.8 0.5 0.3 1"
+            emission="0.1"
+            specular="0.5"
+            shininess="0.7"
+            reflectance="0.2"
+            metallic="0.3"
+            roughness="0.5"
+            texuniform="false"
+            texrepeat="2 2"/>
+    </asset>
     </mujoco>
 );
 
@@ -1015,5 +1105,72 @@ mod tests {
         assert_eq!(&view_tuple.objtype[..SIZE as usize], OBJTYPE);
         assert_eq!(&view_tuple.objid[..SIZE as usize], objid);
         assert_eq!(&view_tuple.objprm[..SIZE as usize], OBJPRM);
+    }
+
+    #[test]
+    fn test_texture_view() {
+        const TEX_NAME: &str = "wall_tex";
+        const TYPE: MjtTexture = MjtTexture::mjTEXTURE_2D;          // for example, 2 = 2D texture
+        const COLORSPACE: MjtColorSpace = MjtColorSpace::mjCOLORSPACE_SRGB;    // e.g. RGB
+        const HEIGHT: i32 = 128;
+        const WIDTH: i32 = 128;
+        const NCHANNEL: i32 = 3;
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let info_tex = model.texture(TEX_NAME).unwrap();
+        let view_tex = info_tex.view(&model);
+
+        assert_eq!(view_tex.r#type[0], TYPE);
+        assert_eq!(view_tex.colorspace[0], COLORSPACE);
+        assert_eq!(view_tex.height[0], HEIGHT);
+        assert_eq!(view_tex.width[0], WIDTH);
+        assert_eq!(view_tex.nchannel[0], NCHANNEL);
+
+        assert_eq!(view_tex.data.len(), (WIDTH * HEIGHT * NCHANNEL) as usize);
+    }
+
+    #[test]
+    fn test_numeric_view() {
+        const NUMERIC_NAME: &str = "gain_factor2";
+        const SIZE: i32 = 3;
+        const DATA: [f64; 3] = [1.25, 5.5, 10.0];
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let info_numeric = model.numeric(NUMERIC_NAME).unwrap();
+        let view_numeric = info_numeric.view(&model);
+
+        assert_eq!(view_numeric.size[0], SIZE);
+        assert_eq!(view_numeric.data[..SIZE as usize], DATA);
+    }
+
+    #[test]
+    fn test_material_view() {
+        const MATERIAL_NAME: &str = "also_wood_material";
+
+        const TEXUNIFORM: bool = false;
+        const TEXREPEAT: [f32; 2] = [2.0, 2.0];
+        const EMISSION: f32 = 0.1;
+        const SPECULAR: f32 = 0.5;
+        const SHININESS: f32 = 0.7;
+        const REFLECTANCE: f32 = 0.2;
+        const METALLIC: f32 = 0.3;
+        const ROUGHNESS: f32 = 0.5;
+        const RGBA: [f32; 4] = [0.8, 0.5, 0.3, 1.0];
+        const TEXID: i32 = -1;
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let info_material = model.material(MATERIAL_NAME).unwrap();
+        let view_material = info_material.view(&model);
+
+        assert_eq!(view_material.texuniform[0], TEXUNIFORM);
+        assert_eq!(view_material.texrepeat[..], TEXREPEAT);
+        assert_eq!(view_material.emission[0], EMISSION);
+        assert_eq!(view_material.specular[0], SPECULAR);
+        assert_eq!(view_material.shininess[0], SHININESS);
+        assert_eq!(view_material.reflectance[0], REFLECTANCE);
+        assert_eq!(view_material.metallic[0], METALLIC);
+        assert_eq!(view_material.roughness[0], ROUGHNESS);
+        assert_eq!(view_material.rgba[..], RGBA);
+        assert_eq!(view_material.texid.unwrap()[0], TEXID);
     }
 }
