@@ -32,6 +32,8 @@ Unreleased
     :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>hfield`,
     :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>equality`.
 
+- Added extra renames of enum types from the C API.
+
 - :ref:`model_editing` support, which can be used to procedurally generate |mj_model|. It can be used
   for terrain generation, parameter randomization, etc. 
 
