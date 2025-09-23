@@ -1140,12 +1140,13 @@ mod tests {
         let geom1_info = model.geom(GEOM1_NAME).unwrap();
         let geom2_info = model.geom(GEOM2_NAME).unwrap();
 
+        // signature =  body1 << 16 + body2 according to MuJoCo's documentation.
         let signature = ((geom1_info.view(&model).bodyid[0] as u32) << 16) + geom2_info.view(&model).bodyid[0] as u32;
 
         assert_eq!(view_pair.dim[0], DIM);
         assert_eq!(view_pair.geom1[0] as usize, geom1_info.id);
         assert_eq!(view_pair.geom2[0] as usize, geom2_info.id);
-        assert_eq!(view_pair.signature[0] as u32, signature);  // body1 << 16 + body2
+        assert_eq!(view_pair.signature[0] as u32, signature);
         assert_eq!(view_pair.solref[..], SOLREF);
         assert_eq!(view_pair.solreffriction[..], SOLREFFRICTION);
         assert_eq!(view_pair.solimp[..], SOLIMP);

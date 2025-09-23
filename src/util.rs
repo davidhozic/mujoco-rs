@@ -262,7 +262,24 @@ macro_rules! info_method {
 }
 
 
-/// Creates the xInfo struct along with corresponding xView and xViewMut structs.
+/// This creates a method `X(self, name: &str) -> XInfo`.
+/// 
+/// # Compatible Entry Types
+/// The macro supports the following types of entries for struct fields:
+/// 
+/// - **Fixed number**:  
+///   `[field_name: fixed_length]`.  
+///   Example: `[id: 1]` (for a field with a fixed length of 1)
+/// 
+/// - **FFI attribute (possibly with multiplier)**:  
+///   `[field_name: ffi_attribute (* multiplier)]`.  
+///   Example: `[matid: nmatid * 2]` (where `nmatid` is an attribute from the FFI struct, and the field length is `nmatid * 2`)
+/// 
+/// - **Dynamic length (from item's data array)**:  
+///   `[field_name: data_array_length]`.  
+///   Example: `[hfielddata: nhfielddata]` (where `nhfielddata` is the length of the hfield data array).
+///   Note: nhfielddata is the major index (i. e., [nhfielddata x something] in the C array.)
+///
 #[doc(hidden)]
 #[macro_export]
 macro_rules! info_with_view {
