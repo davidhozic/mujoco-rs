@@ -270,8 +270,6 @@ impl MjModel {
         data: ntexdata
     ]}
 
-    // TODO: skin
-
     info_method! { Model, ffi(), site, [
         r#type: 1, bodyid: 1, group: 1, sameframe: 1, size: 3,
         pos: 3, quat: 4, rgba: 4, matid: 1
@@ -633,20 +631,6 @@ info_with_view!(Model, texture, tex_,
         data: MjtByte
     ], [pathadr: i32]
 );
-
-/**************************************************************************************************/
-// Skin view
-/**************************************************************************************************/
-info_with_view!(Model, skin, skin_,
-    [
-        matid: i32, group: i32, rgba: i32, inflate: i32, vertadr: i32, vertnum: i32, texcoordadr: i32,
-        faceadr: i32, facenum: i32, boneadr: i32, bonenum: i32, vert: f32, texcoord: f32,
-        face: i32, bonevertadr: i32, bonevertnum: i32, bonebindpos: f32,
-        bonebindquat: f32, bonebodyid: i32, bonevertid: i32, bonevertweight: f32,
-        pathadr: i32
-    ], []
-);
-
 
 /**************************************************************************************************/
 // Site view
