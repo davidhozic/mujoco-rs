@@ -43,8 +43,8 @@ or **pre-filled** from XML, with:
   (loads XML from a model defined in a string in memory).
 
 After creation, we can use |mj_spec| to add items to the model, such as joints, geoms, actuators, etc.
-**Non-structured** items can be added through |mj_spec| itself (e. g., actuators, sensors, meshes, etc.).
-**Structured** items can be added through |mjs_body| (e. g., bodies, geoms, joints, etc.).
+**Non-structured** items can be added through |mj_spec| itself (e.g., actuators, sensors, meshes, etc.).
+**Structured** items can be added through |mjs_body| (e.g., bodies, geoms, joints, etc.).
 
 After procedurally creating a specification with |mj_spec|, the latter
 can either be compiled for direct use in the simulation or saved to an XML file.
