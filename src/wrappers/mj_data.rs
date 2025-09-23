@@ -13,7 +13,7 @@ use crate::{view_creator, info_method, info_with_view};
 
 /*******************************************/
 // Types
-/// ref:`mj_setState` and :ref:`mj_stateSize`.
+/// Enumerates state variables.
 pub type MjtState = mjtState;
 
 /// Warning types. The number of warning types is given by ``mjNWARNING`` which is also the length of the array
