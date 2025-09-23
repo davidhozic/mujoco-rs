@@ -13,9 +13,25 @@ use crate::{view_creator, info_method, info_with_view};
 
 /*******************************************/
 // Types
-
-
+/// State component elements as integer bitflags and several convenient combinations of these flags. Used by
+/// `mj_getState`, `mj_setState` and `mj_stateSize`.
 pub type MjtState = mjtState;
+
+/// Constraint types. These values are not used in mjModel, but are used in the mjData field ``d->efc_type`` when the list
+/// of active constraints is constructed at each simulation time step.
+pub type MjtConstraint = mjtConstraint;
+
+/// These values are used by the solver internally to keep track of the constraint states.
+pub type MjtConstraintState = mjtConstraintState;
+
+/// Warning types. The number of warning types is given by `mjNWARNING`
+/// which is also the length of the array `mjData.warning`.
+pub type MjtWarning = mjtWarning;
+
+/// Timer types. The number of timer types is given by `mjNTIMER`
+/// which is also the length of the array `mjData.timer`, as well as the length of
+/// the string array `mjTIMERSTRING` with timer names.
+pub type MjtTimer = mjtTimer;
 /*******************************************/
 
 

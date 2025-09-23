@@ -14,30 +14,38 @@ use crate::mujoco_c::*;
 /// How much extra room to create in the internal [`MjvScene`]. Useful for drawing labels, etc.
 pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
 
-/***********************************************************************************************************************
-** MjtCamera
-***********************************************************************************************************************/
-pub type MjtCamera = mjtCamera;
 
-/***********************************************************************************************************************
-** MjtMouse
-***********************************************************************************************************************/
-pub type MjtMouse = mjtMouse;
-
-/***********************************************************************************************************************
-** MjtPertBit
-***********************************************************************************************************************/
-pub type MjtPertBit = mjtPertBit;
-
-/***********************************************************************************************************************
-** MjtCatBit
-***********************************************************************************************************************/
+/// These are the available categories of geoms in the abstract visualizer. The bitmask can be used in the function
+/// `mjr_render` to specify which categories should be rendered.
 pub type MjtCatBit = mjtCatBit;
 
-/***********************************************************************************************************************
-** MjtVisFlag
-***********************************************************************************************************************/
+/// These are the mouse actions that the abstract visualizer recognizes. It is up to the user to intercept mouse events
+/// and translate them into these actions, as illustrated in `simulate.cc <saSimulate>`.
+pub type MjtMouse = mjtMouse;
+
+/// These bitmasks enable the translational and rotational components of the mouse perturbation. For the regular mouse,
+/// only one can be enabled at a time. For the 3D mouse (SpaceNavigator) both can be enabled simultaneously. They are used
+/// in ``mjvPerturb.active``.
+pub type MjtPertBit = mjtPertBit;
+
+/// These are the possible camera types, used in ``mjvCamera.type``.
+pub type MjtCamera = mjtCamera;
+
+/// These are the abstract visualization elements that can have text labels. Used in ``mjvOption.label``.
+pub type MjtLabel = mjtLabel;
+
+/// These are the MuJoCo objects whose spatial frames can be rendered. Used in ``mjvOption.frame``.
+pub type MjtFrame = mjtFrame;
+
+/// These are indices in the array ``mjvOption.flags``, whose elements enable/disable the visualization of the
+/// corresponding model or decoration element.
 pub type MjtVisFlag = mjtVisFlag;
+
+/// These are indices in the array ``mjvScene.flags``, whose elements enable/disable OpenGL rendering effects.
+pub type MjtRndFlag = mjtRndFlag;
+
+/// These are the possible stereo rendering types. They are used in ``mjvScene.stereo``.
+pub type MjtStereo = mjtStereo;
 
 /***********************************************************************************************************************
 ** MjvPerturb

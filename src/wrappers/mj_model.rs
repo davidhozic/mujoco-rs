@@ -18,65 +18,101 @@ use crate::{
 
 /*******************************************/
 // Types
+/// Constants which are powers of 2. They are used as bitmasks for the field ``disableflags`` of `mjOption`.
+/// At runtime this field is ``m->opt.disableflags``. The number of these constants is given by ``mjNDISABLE`` which is
+/// also the length of the global string array `mjDISABLESTRING` with text descriptions of these flags.
+pub type MjtDisableBit = mjtDisableBit;
 
-/* Actuator */
-/// Actuator transmission types.
-pub type MjtTrn = mjtTrn;
-/// Actuator dynamics types.
-pub type MjtDyn = mjtDyn;
-/// Actuator gain types.
-pub type MjtGain = mjtGain;
-/// Actuator bias types.
-pub type MjtBias = mjtBias;
+/// Constants which are powers of 2. They are used as bitmasks for the field ``enableflags`` of `mjOption`.
+/// At runtime this field is ``m->opt.enableflags``. The number of these constants is given by ``mjNENABLE`` which is also
+/// the length of the global string array `mjENABLESTRING` with text descriptions of these flags.
+pub type MjtEnableBit = mjtEnableBit;
 
-/* Sensor */
-/// Sensor types.
-pub type MjtSensor = mjtSensor;
-
-/// These are the possible sensor data types.
-pub type MjtDataType = mjtDataType;
-
-/* Other */
-/// These are the compute stages for the skipstage parameters of [`mj_forwardSkip`] and [`mj_inverseSkip`].
-pub type MjtStage = mjtStage;
-
-/// MuJoCo object types. These are used, for example, in the support functions [`mj_name2id`] and
-/// [`mj_id2name`] to convert between object names and integer ids.
-pub type MjtObj = mjtObj;
-
-/// Primitive joint types.
+/// Primitive joint types. These values are used in ``m->jnt_type``. The numbers in the comments indicate how many
+/// positional coordinates each joint type has. Note that ball joints and rotational components of free joints are
+/// represented as unit quaternions - which have 4 positional coordinates but 3 degrees of freedom each.
 pub type MjtJoint = mjtJoint;
 
-/// Geometric types supported by MuJoCo.
+/// Geometric types supported by MuJoCo. The first group are "official" geom types that can be used in the model. The
+/// second group are geom types that cannot be used in the model but are used by the visualizer to add decorative
+/// elements. These values are used in ``m->geom_type`` and ``m->site_type``.
 pub type MjtGeom = mjtGeom;
 
-/// Types of frame alignment of elements with their parent bodies.
-pub type MjtSameFrame = mjtSameFrame;
-
-/// Dynamic modes for cameras and lights, specifying how the camera/light position and orientation are computed.
+/// Dynamic modes for cameras and lights, specifying how the camera/light position and orientation are computed. These
+/// values are used in ``m->cam_mode`` and ``m->light_mode``.
 pub type MjtCamLight = mjtCamLight;
 
-/// The type of a light source describing how its position, orientation and
-/// other properties will interact with the objects in the scene.
+/// The type of a light source describing how its position, orientation and other properties will interact with the
+/// objects in the scene. These values are used in ``m->light_type``.
 pub type MjtLightType = mjtLightType;
 
-/// Equality constraint types.
-pub type MjtEq = mjtEq;
-
-/// Texture types, specifying how the texture will be mapped
+/// Texture types, specifying how the texture will be mapped. These values are used in ``m->tex_type``.
 pub type MjtTexture = mjtTexture;
+
+/// Texture roles, specifying how the renderer should interpret the texture.  Note that the MuJoCo built-in renderer only
+/// uses RGB textures.  These values are used to store the texture index in the material's array ``m->mat_texid``.
+pub type MjtTextureRole = mjtTextureRole;
 
 /// Type of color space encoding for textures.
 pub type MjtColorSpace = mjtColorSpace;
 
-/// Constants which are powers of 2. They are used as bitmasks for the field `disableflags` of [`MjOption`].
-pub type MjtDisableBit = mjtDisableBit;
+/// Numerical integrator types. These values are used in ``m->opt.integrator``.
+pub type MjtIntegrator = mjtIntegrator;
 
-/// Constants which are powers of 2. They are used as bitmasks for the field `enableflags` of [`MjOption`].
-pub type MjtEnableBit = mjtEnableBit;
+/// Available friction cone types. These values are used in ``m->opt.cone``.
+pub type MjtCone = mjtCone;
 
-/// Texture roles, specifying how the renderer should interpret the texture.
-pub type MjtTextureRole = mjtTextureRole;
+/// Available Jacobian types. These values are used in ``m->opt.jacobian``.
+pub type MjtJacobian = mjtJacobian;
+
+/// Available constraint solver algorithms. These values are used in ``m->opt.solver``.
+pub type MjtSolver = mjtSolver;
+
+/// Equality constraint types. These values are used in ``m->eq_type``.
+pub type MjtEq = mjtEq;
+
+/// Tendon wrapping object types. These values are used in ``m->wrap_type``.
+pub type MjtWrap = mjtWrap;
+
+/// Actuator transmission types. These values are used in ``m->actuator_trntype``.
+pub type MjtTrn = mjtTrn;
+
+/// Actuator dynamics types. These values are used in ``m->actuator_dyntype``.
+pub type MjtDyn = mjtDyn;
+
+/// Actuator gain types. These values are used in ``m->actuator_gaintype``.
+pub type MjtGain = mjtGain;
+
+/// Actuator bias types. These values are used in ``m->actuator_biastype``.
+pub type MjtBias = mjtBias;
+
+/// MuJoCo object types. These are used, for example, in the support functions `mj_name2id` and
+/// `mj_id2name` to convert between object names and integer ids.
+pub type MjtObj = mjtObj;
+
+/// Sensor types. These values are used in ``m->sensor_type``.
+pub type MjtSensor = mjtSensor;
+
+/// These are the compute stages for the skipstage parameters of `mj_forwardSkip` and
+/// `mj_inverseSkip`.
+pub type MjtStage = mjtStage;
+
+/// These are the possible sensor data types, used in ``mjData.sensor_datatype``.
+pub type MjtDataType = mjtDataType;
+
+/// Types of data fields returned by contact sensors.
+pub type MjtConDataField = mjtConDataField;
+
+/// Types of frame alignment of elements with their parent bodies. Used as shortcuts during `mj_kinematics` in the
+/// last argument to `mj_local2global`.
+pub type MjtSameFrame = mjtSameFrame;
+
+/// Types of flex self-collisions midphase.
+pub type MjtFlexSelf = mjtFlexSelf;
+
+/// Formulas used to combine SDFs when calling mjc_distance and mjc_gradient.
+pub type MjtSDFType = mjtSDFType;
+
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.

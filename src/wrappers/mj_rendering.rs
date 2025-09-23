@@ -27,25 +27,24 @@ impl Default for MjrRectangle {
 }
 
 
-/***********************************************************************************************************************
-** MjtFont
-***********************************************************************************************************************/
-pub type MjtFont = mjtFont;
-
-/***********************************************************************************************************************
-** MjtFontScale
-***********************************************************************************************************************/
-pub type MjtFontScale = mjtFontScale;
-
-/***********************************************************************************************************************
-** MjtGridPos
-***********************************************************************************************************************/
+/// These are the possible grid positions for text overlays. They are used as an argument to the function
+/// `mjr_overlay`.
 pub type MjtGridPos = mjtGridPos;
 
-/***********************************************************************************************************************
-** MjtFramebuffer
-***********************************************************************************************************************/
+/// These are the possible framebuffers. They are used as an argument to the function `mjr_setBuffer`.
 pub type MjtFramebuffer = mjtFramebuffer;
+
+/// These are the depth mapping options. They are used as a value for the ``readPixelDepth`` attribute of the
+/// `mjrContext` struct, to control how the depth returned by `mjr_readPixels` is mapped from
+/// ``znear`` to ``zfar``.
+pub type MjtDepthMap = mjtDepthMap;
+
+/// These are the possible font sizes. The fonts are predefined bitmaps stored in the dynamic library at three different
+/// sizes.
+pub type MjtFontScale = mjtFontScale;
+
+/// These are the possible font types.
+pub type MjtFont = mjtFont;
 
 /***********************************************************************************************************************
 ** MjrContext
