@@ -301,6 +301,14 @@ impl MjModel {
         texid: MjtTextureRole::mjNTEXROLE as usize
     ], [], [] }
 
+
+    fixed_size_info_method! { Model, ffi(), light, [
+        mode: 1, bodyid: 1, targetbodyid: 1, r#type: 1, texid: 1, castshadow: 1, bulbradius: 1,
+        intensity: 1, range: 1, active: 1, pos: 3, dir: 3, poscom0: 3, pos0: 3, dir0: 3,
+        attenuation: 3, cutoff: 1, exponent: 1, ambient: 3, diffuse: 3, specular: 3
+    ], [], []}
+
+
     /// Deprecated alias for [`MjModel::name_to_id`].
     #[deprecated]
     pub fn name2id(&self, type_: MjtObj, name: &str) -> i32 {
@@ -664,10 +672,22 @@ info_with_view!(Model, material, mat_,
         reflectance: f32,
         metallic: f32,
         roughness: f32,
-        rgba: f32
-    ], [texid: i32]
+        rgba: f32,
+        texid: i32
+    ], []
 );
 
+/**************************************************************************************************/
+// Material view
+/**************************************************************************************************/
+info_with_view!(Model, light, light_,
+    [
+        mode: MjtCamLight, bodyid: i32, targetbodyid: i32, r#type: MjtLightType, texid: i32, castshadow: bool,
+        bulbradius: f32, intensity: f32, range: f32, active: bool, pos: MjtNum, dir: MjtNum,
+        poscom0: MjtNum, pos0: MjtNum, dir0: MjtNum, attenuation: f32, cutoff: f32, exponent: f32,
+        ambient: f32, diffuse: f32, specular: f32
+    ], []
+);
 
 #[cfg(test)]
 mod tests {
@@ -679,6 +699,16 @@ mod tests {
     const EXAMPLE_MODEL: &str = stringify!(
     <mujoco>
         <worldbody>
+            <light name="lamp_light1"
+                mode="fixed" type="directional" castshadow="false" bulbradius="0.5" intensity="250"
+                range="10" active="true" pos="0 0 0" dir="0 0 -1" attenuation="0.1 0.05 0.01"
+                cutoff="60" exponent="2" ambient="0.1 0.1 0.25" diffuse="0.5 1 1" specular="1 1.5 1"/>
+
+            <light name="lamp_light2"
+                mode="fixed" type="spot" castshadow="true" bulbradius="0.2" intensity="500"
+                range="10" active="true" pos="0 0 0" dir="0 0 -1" attenuation="0.1 0.05 0.01"
+                cutoff="45" exponent="2" ambient="0.1 0.1 0.1" diffuse="1 1 1" specular="1 1 1"/>
+
             <camera name="cam1" fovy="50" resolution="100 200"/>
 
             <light ambient="0.2 0.2 0.2"/>
@@ -1171,6 +1201,57 @@ mod tests {
         assert_eq!(view_material.metallic[0], METALLIC);
         assert_eq!(view_material.roughness[0], ROUGHNESS);
         assert_eq!(view_material.rgba[..], RGBA);
-        assert_eq!(view_material.texid.unwrap()[0], TEXID);
+        assert_eq!(view_material.texid[0], TEXID);
+    }
+
+    #[test]
+    fn test_light_view() {
+        const LIGHT_NAME: &str = "lamp_light2";
+        const MODE: MjtCamLight = MjtCamLight::mjCAMLIGHT_FIXED;
+        const BODYID: usize = 0;       // lamp body id
+        const TYPE: MjtLightType = MjtLightType::mjLIGHT_SPOT;           // spot light, adjust if mjLightType differs
+        const TEXID: i32 = -1;
+        const CASTSHADOW: bool = true;
+        const BULBRADIUS: f32 = 0.2;
+        const INTENSITY: f32 = 500.0;
+        const RANGE: f32 = 10.0;
+        const ACTIVE: bool = true;
+
+        const POS: [MjtNum; 3] = [0.0, 0.0, 0.0];
+        const DIR: [MjtNum; 3] = [0.0, 0.0, -1.0];
+        const POS0: [MjtNum; 3] = [0.0, 0.0, 0.0];
+        const DIR0: [MjtNum; 3] = [0.0, 0.0, -1.0];
+        const ATTENUATION: [f32; 3] = [0.1, 0.05, 0.01];
+        const CUTOFF: f32 = 45.0;
+        const EXPONENT: f32 = 2.0;
+        const AMBIENT: [f32; 3] = [0.1, 0.1, 0.1];
+        const DIFFUSE: [f32; 3] = [1.0, 1.0, 1.0];
+        const SPECULAR: [f32; 3] = [1.0, 1.0, 1.0];
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let info_light = model.light(LIGHT_NAME).unwrap();
+        let view_light = info_light.view(&model);
+
+        assert_eq!(view_light.mode[0], MODE);
+        assert_eq!(view_light.bodyid[0] as usize, BODYID);
+        assert_eq!(view_light.targetbodyid[0], -1);
+        assert_eq!(view_light.r#type[0], TYPE);
+        assert_eq!(view_light.texid[0], TEXID);
+        assert_eq!(view_light.castshadow[0], CASTSHADOW);
+        assert_eq!(view_light.bulbradius[0], BULBRADIUS);
+        assert_eq!(view_light.intensity[0], INTENSITY);
+        assert_eq!(view_light.range[0], RANGE);
+        assert_eq!(view_light.active[0], ACTIVE);
+
+        assert_eq!(view_light.pos[..], POS);
+        assert_eq!(view_light.dir[..], DIR);
+        assert_eq!(view_light.pos0[..], POS0);
+        assert_eq!(view_light.dir0[..], DIR0);
+        assert_eq!(view_light.attenuation[..], ATTENUATION);
+        assert_eq!(view_light.cutoff[0], CUTOFF);
+        assert_eq!(view_light.exponent[0], EXPONENT);
+        assert_eq!(view_light.ambient[..], AMBIENT);
+        assert_eq!(view_light.diffuse[..], DIFFUSE);
+        assert_eq!(view_light.specular[..], SPECULAR);
     }
 }
