@@ -308,6 +308,16 @@ impl MjModel {
         attenuation: 3, cutoff: 1, exponent: 1, ambient: 3, diffuse: 3, specular: 3
     ], [], []}
 
+    fixed_size_info_method! { Model, ffi(), equality, [
+        r#type: 1,          // mjtEq enum
+        obj1id: 1,
+        obj2id: 1,
+        objtype: 1,       // mjtObj enum
+        active0: 1,
+        solref: mjNREF as usize,
+        solimp: mjNIMP as usize,
+        data: mjNEQDATA as usize
+    ], [], []}
 
     /// Deprecated alias for [`MjModel::name_to_id`].
     #[deprecated]
@@ -651,7 +661,7 @@ info_with_view!(Model, pair, pair_,
 
 
 /**************************************************************************************************/
-// Pair view
+// Numeric view
 /**************************************************************************************************/
 info_with_view!(Model, numeric, numeric_,
     [
@@ -678,7 +688,7 @@ info_with_view!(Model, material, mat_,
 );
 
 /**************************************************************************************************/
-// Material view
+// Light view
 /**************************************************************************************************/
 info_with_view!(Model, light, light_,
     [
@@ -686,6 +696,22 @@ info_with_view!(Model, light, light_,
         bulbradius: f32, intensity: f32, range: f32, active: bool, pos: MjtNum, dir: MjtNum,
         poscom0: MjtNum, pos0: MjtNum, dir0: MjtNum, attenuation: f32, cutoff: f32, exponent: f32,
         ambient: f32, diffuse: f32, specular: f32
+    ], []
+);
+
+/**************************************************************************************************/
+// Equality view
+/**************************************************************************************************/
+info_with_view!(Model, equality, eq_,
+    [
+        r#type: MjtEq,
+        obj1id: i32,
+        obj2id: i32,
+        objtype: MjtObj,
+        active0: bool,
+        solref: MjtNum,
+        solimp: MjtNum,
+        data: MjtNum
     ], []
 );
 
@@ -750,7 +776,29 @@ mod tests {
                 <geom name="ball32" size=".5" rgba="0 1 1 1" mass="1"/>
                 <joint type="slide"/>
             </body>
+
+            <body name="eq_body1" pos="0 0 0">
+                <geom size="0.1"/>
+            </body>
+            <body name="eq_body2" pos="1 0 0">
+                <geom size="0.1"/>
+            </body>
+            <body name="eq_body3" pos="0 0 0">
+                <geom size="0.1"/>
+            </body>
+            <body name="eq_body4" pos="1 0 0">
+                <geom size="0.1"/>
+            </body>
         </worldbody>
+
+        
+        <equality>
+            <connect name="eq1" body1="eq_body1" body2="eq_body2" anchor="15 0 10"/>
+            <connect name="eq2" body1="eq_body2" body2="eq_body1" anchor="-5 0 10"/>
+            <connect name="eq3" body1="eq_body3" body2="eq_body4" anchor="0 5 0"/>
+            <connect name="eq4" body1="eq_body4" body2="eq_body3" anchor="5 5 10"/>
+        </equality>
+
 
         <actuator>
             <general name="slider" joint="rod" biastype="affine" ctrlrange="0 1" gaintype="fixed"/>
@@ -1254,4 +1302,31 @@ mod tests {
         assert_eq!(view_light.diffuse[..], DIFFUSE);
         assert_eq!(view_light.specular[..], SPECULAR);
     }
+
+    #[test]
+    fn test_connect_eq_view() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+
+        // Take the third equality constraint
+        let info_eq = model.equality("eq3").unwrap();
+        let view_eq = info_eq.view(&model);
+
+        // Check type
+        assert_eq!(view_eq.r#type[0], MjtEq::mjEQ_CONNECT);
+
+        // Check connected bodies
+        assert_eq!(view_eq.obj1id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body3"));
+        assert_eq!(view_eq.obj2id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body4"));
+        assert_eq!(view_eq.objtype[0], MjtObj::mjOBJ_BODY);
+
+        // Check active
+        assert_eq!(view_eq.active0[0], true);
+
+        // Check anchor position stored in eq_data
+        let anchor = &view_eq.data[0..3];
+        assert_eq!(anchor[0], 0.0);
+        assert_eq!(anchor[1], 5.0);
+        assert_eq!(anchor[2], 0.0);
+    }
+
 }
