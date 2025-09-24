@@ -24,13 +24,25 @@ cpp-viewer = []
 
 ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module. 
 
+glfw-build = ["glfw/src-build"]
+
 default = ["viewer", "renderer"]
 
 [dependencies]
 bitflags = {version = "2.9.4", optional = true}
-glfw = {version = "0.59.0", optional = true}
 png = {version = "0.18.0", optional = true}
 paste = "1.0.15"
+
+# Pre-built libs on Windows and build everywhere else
+[target.'cfg(unix)'.dependencies]
+glfw = {version = "0.60.0", optional = true, default-features = false, features = [
+    "all", "src-build", "static-link"
+]}
+
+[target.'cfg(windows)'.dependencies]
+glfw = {version = "0.60.0", optional = true, default-features = false, features = [
+    "all", "prebuilt-libs", "static-link"
+]}
 
 [build-dependencies]
 bindgen = {version = "0.71.1", optional = true}
