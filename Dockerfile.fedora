@@ -1,0 +1,35 @@
+# Dockerfile for testing interoperability with C and C++ dependencies on Fedora
+FROM fedora:34
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+
+# Update packages
+RUN dnf -y update && dnf clean all
+
+# Build tools (GCC, CMake, make, etc.)
+RUN dnf -y groupinstall "Development Tools" && \
+    dnf -y install cmake curl && \
+    dnf install -y gcc-c++ && \
+    dnf clean all
+
+# X11 & Wayland
+RUN dnf -y install \
+    libX11-devel \
+    libXext-devel \
+    libXrandr-devel \
+    libXcursor-devel \
+    libXi-devel \
+    libXinerama-devel \
+    libXft-devel \
+    xorg-x11-server-devel \
+    xorg-x11-xauth \
+    xorg-x11-utils \
+    mesa-libGL-devel \
+    mesa-libGLU-devel \
+    wayland-devel wayland-protocols-devel && \
+    dnf clean all
+
+# Rust
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+RUN echo 'source $HOME/.cargo/env' >> $HOME/.bashrc

@@ -43,17 +43,17 @@ GLFW3 (optional, rendering only)
 
    ::
 
-      # Disables GLFW3 dependency
+      # Disables viewer and renderer features, thus disabling glfw3 requirements.
       cargo add mujoco-rs --no-default-features
 
 
 Windows
 :::::::::::::::::::::
-On Windows, a pre-built library will **automatically be downloaded and linked**.
+On Windows, a prebuilt GLFW library will **automatically be downloaded and linked**.
 No steps should be required from the user.
 If an error occurs, please submit an `issue <https://github.com/davidhozic/mujoco-rs/issues>`_.
 
-You can **optionally** build the library by enabling the ``glfw-build`` feature (only on Windows):
+You can **optionally** build the library by enabling the ``glfw-build`` feature:
 
 ::
 
@@ -71,7 +71,7 @@ of **CMake** and **build tools**. For example, on Ubuntu we can install those wi
 
 ::
 
-    sudo apt install build-essential cmake
+    sudo apt install build-essential cmake curl
 
 
 In the future, if the ``glfw-rs`` implements better configuration options, pkg-config will also

@@ -1,0 +1,32 @@
+# Docker file for testing interoperability with C and C++ dependencies.
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+
+# Pre-answer the keyboard questions
+RUN echo "keyboard-configuration  keyboard-configuration/layoutcode string us" | debconf-set-selections && \
+    echo "keyboard-configuration  keyboard-configuration/xkb-keymap select us" | debconf-set-selections
+
+RUN apt update
+
+# Build tools
+RUN apt install --install-recommends -y build-essential cmake curl
+
+# X11 & Wayland
+RUN apt install --install-recommends -y xorg xorg-dev libwayland-dev
+
+# Cleanup
+# Remove cached package files (*.deb)
+RUN apt clean
+
+# Remove package files that can no longer be downloaded
+RUN apt autoclean
+
+# Remove packages that were installed as dependencies but are no longer needed
+RUN apt autoremove -y
+
+
+# Rust
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+RUN echo 'source $HOME/.cargo/env' >> $HOME/.bashrc

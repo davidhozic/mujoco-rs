@@ -36,12 +36,12 @@ paste = "1.0.15"
 # Pre-built libs on Windows and build everywhere else
 [target.'cfg(unix)'.dependencies]
 glfw = {version = "0.60.0", optional = true, default-features = false, features = [
-    "all", "src-build", "static-link"
+    "src-build", "static-link", "raw-window-handle-v0-6", "x11"
 ]}
 
 [target.'cfg(windows)'.dependencies]
 glfw = {version = "0.60.0", optional = true, default-features = false, features = [
-    "all", "prebuilt-libs", "static-link"
+    "prebuilt-libs", "static-link", "raw-window-handle-v0-6"
 ]}
 
 [build-dependencies]
