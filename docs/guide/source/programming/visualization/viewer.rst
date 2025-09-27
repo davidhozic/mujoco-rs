@@ -7,7 +7,7 @@ MuJoCo provides an official viewer application, written in C++, which can also b
 Python package. To avoid C++ dependencies, MuJoCo-rs provides **its own 3D viewer, written in Rust**.
 
 We also provide the ability to use the official C++ based viewer, however this requires
-static linking to modified MuJoCo code, as described in :ref:`static_link_with_cpp_viewer`.
+static linking to modified MuJoCo code, as described in :ref:`static_linking`.
 
 .. _rust_native_viewer:
 

@@ -97,7 +97,7 @@ Alternatively, the DLL file can be placed in the working directory.
 
     Make sure the PATH variable contains the path to the **.dll** file, **NOT .lib**.
     The **.lib** file is used only for compilation, while the **.dll** is used at runtime.
-    The **.dll** file should be contained in the ``bin/`` directory of the MuJoCo download.
+    The **.dll** file is contained in the ``bin/`` directory of the MuJoCo download.
 
 
 MacOS
@@ -111,31 +111,17 @@ MacOS is currently untested.
 
 Static linking
 ~~~~~~~~~~~~~~~~~~
-We also provide an option to statically link:
-::
+**Official MuJoCo builds** include the precompiled MuJoCo library only in its **shared (dynamic) form**.
+To statically link, you'll need to **compile** MuJoCo **yourself**.
+MuJoCo's build system doesn't (yet) support static linking, which is why
+we provide a modified MuJoCo repository with static linking support.
 
-   export MUJOCO_STATIC_LINK_DIR=/path/mujoco/lib/
-   cargo build
-
-
-Note that the ``/path/mujoco/lib`` needs to contain all the MuJoCo dependencies.
-
-Additionally, official MuJoCo builds include the precompiled MuJoCo library only in its shared (dynamic) form.
-To statically link, you'll need to compile the library yourself.
-MuJoCo's build system doesn't (yet) support static linking, however
-we provide a modified MuJoCo repository, which allow static linking (see :ref:`static_link_with_cpp_viewer`).
-
-
-.. _static_link_with_cpp_viewer:
-
-Static linking with C++ viewer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 While MuJoCo-rs already provides a :ref:`rust_native_viewer`, we understand that some projects wish
 to use the original C++ based 3D viewer (also named Simulate).
-To enable this, we provide a modified MuJoCo repository, with modifications
-enabling static linking and a safe interface between Rust and the C++ Simulate code.
+To enable this, the modified MuJoCo repository also includes changes that support
+a safe interface between Rust and the C++ Simulate code.
 
-To build statically linkable libs with C++ based viewer included perform the following steps:
+To build statically linkable libraries, perform the following steps:
 
 1. Clone the MuJoCo-rs repository,
 2. Change your directory to the cloned repository,
@@ -147,9 +133,29 @@ To build statically linkable libs with C++ based viewer included perform the fol
        cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF -DCMAKE_EXE_LINKER_FLAGS:STRING=-Wl,--no-as-needed
        cmake --build build --parallel --target libsimulate --config=Release
 
-4. Follow instructions in the :ref:`Static linking <static_linking>` section.
+   The builds are tested with the ``gcc`` compiler.
 
-The builds are tested with the ``gcc`` compiler.
+4. Set the environmental variable ``MUJOCO_STATIC_LINK_DIR``. Bash example:
+
+   ::
+
+      export MUJOCO_STATIC_LINK_DIR=/path/mujoco/lib/
+
+5. Build MuJoCo-rs
+
+   ::
+
+      cargo build
+
+   .. attention::
+
+      On **Linux**, you may need to tell Rust to use the system linker instead of rust-lld.
+      This is a problem with LTO and different linkers being used to link MuJoCo-rs and MuJoCo.
+      The problem will be addressed in a future MuJoCo-rs release.    
+
+      ::
+
+        RUSTFLAGS="-C linker-features=-lld" cargo build
 
 
 .. _build_deps:
