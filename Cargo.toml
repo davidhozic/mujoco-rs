@@ -25,7 +25,6 @@ cpp-viewer = ["viewer"]
 ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module. 
 
 glfw-build = ["glfw/src-build"]
-glfw-wayland = ["glfw/wayland"]
 
 default = ["viewer", "renderer"]
 

@@ -11,7 +11,7 @@ MuJoCo-rs
 ====================
 
 
-MuJoCo-rs can be added to your project by running:
+MuJoCo-rs can be added to your project like so:
 
 - **With** visualization/rendering support:
 
@@ -29,12 +29,12 @@ MuJoCo-rs can be added to your project by running:
 Then additional dependencies need to be installed/configured:
 
 - :ref:`mujoco_dep` (**required**): The actual physics engine, which is a C library.
-- :ref:`Other build dependencies<build_deps>`. These are **optional** and only required when **visualization** or **rendering** is enabled.
+- :ref:`Other build dependencies<build_deps>`. These are only required when **visualization** or **rendering** is enabled.
 
 
 
 
-Prerequisites
+Dependencies
 =======================
 
 
@@ -135,7 +135,7 @@ to use the original C++ based 3D viewer (also named Simulate).
 To enable this, we provide a modified MuJoCo repository, with modifications
 enabling static linking and a safe interface between Rust and the C++ Simulate code.
 
-To build statically linkable libs with C++ based viewer included, perform the following steps:
+To build statically linkable libs with C++ based viewer included perform the following steps:
 
 1. Clone the MuJoCo-rs repository,
 2. Change your directory to the cloned repository,
@@ -154,10 +154,12 @@ The builds are tested with the ``gcc`` compiler.
 
 .. _build_deps:
 
+---------------------------------------------------------
+
 Build dependencies (visualization/rendering only)
-------------------------------------------
-MuJoCo-rs may require some additional build-time dependencies, depending whether you want
-visualization support. These are needed to build **GLFW** --- a library used for window and OpenGL
+---------------------------------------------------
+When visualization or rendering is required, MuJoCo-rs may require additional build-time dependencies.
+These are needed to build **GLFW** --- a library used for window and OpenGL
 context management.
 
 If you **do not require** the use of :ref:`mj_renderer` or :ref:`mj_rust_viewer`,
@@ -194,12 +196,6 @@ E.g., for Ubuntu/Debian distributions run:
 ::
 
     sudo apt install -y build-essential cmake
-
-
-Wayland
-+++++++++++
-By default, only X11 support is enabled. Use MuJoCo-rs's ``glfw-wayland`` Cargo feature
-to enable Wayland support.
 
 
 MacOS
