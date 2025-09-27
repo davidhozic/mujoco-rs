@@ -1,0 +1,37 @@
+# Docker file for testing interoperability with C and C++ dependencies.
+ARG UBUNTU_VERSION=22.04
+FROM ubuntu:${UBUNTU_VERSION}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Pre-answer the keyboard questions
+RUN echo "keyboard-configuration  keyboard-configuration/layoutcode string us" | debconf-set-selections && \
+    echo "keyboard-configuration  keyboard-configuration/xkb-keymap select us" | debconf-set-selections
+
+RUN apt update
+
+# Build tools
+RUN apt install --install-recommends -y build-essential cmake curl
+
+# X11 & Wayland
+RUN apt install --install-recommends -y xorg xorg-dev
+
+# Cleanup
+# Remove cached package files (*.deb)
+RUN apt clean
+
+# Remove package files that can no longer be downloaded
+RUN apt autoclean
+
+# Remove packages that were installed as dependencies but are no longer needed
+RUN apt autoremove -y
+
+
+# Rust
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+
+ENV MUJOCO_DYNAMIC_LINK_DIR=/mujoco/lib/
+ENV LD_LIBRARY_PATH="/mujoco/lib/"
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /build/

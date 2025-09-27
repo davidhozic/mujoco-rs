@@ -4,43 +4,65 @@
 Installation
 =============================
 
-.. _mj_download: https://github.com/google-deepmind/mujoco/releases
+.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.3.5
 
 
 MuJoCo-rs
 ====================
 
 
-MuJoCo-rs can be added to your project by running:
+MuJoCo-rs can be added to your project like so:
 
-::
+- **With** visualization/rendering support:
+
+  ::
 
     cargo add mujoco-rs
 
+- **Without** visualization/rendering support:
 
+  ::
+
+    cargo add mujoco-rs --no-default-features
+
+
+Then additional dependencies need to be installed/configured:
+
+- :ref:`mujoco_dep` (**required**): The actual physics engine, which is a C library.
+- :ref:`Other build dependencies<build_deps>`. These are only required when **visualization** or **rendering** is enabled.
+
+
+
+
+Dependencies
+=======================
+
+
+.. _mujoco_dep:
+
+MuJoCo
+---------------
 Because MuJoCo-rs doesn't directly bundle MuJoCo,
-the latter, in the form of a pre-built binary or source code, must be `downloaded <mj_download_>`_
+the latter, in the form of a pre-built library or source code, must be `downloaded <mj_download_>`_
 or compiled. Make sure to download or compile MuJoCo version |MUJOCO_VERSION_BOLD|.
 
-Linking MuJoCo
-====================
-Compilation of MuJoCo-rs incudes linking the MuJoCo library.
+Compilation of MuJoCo-rs incudes **linking** the MuJoCo library.
 This requires some environmental variables to be set, which tell
 MuJoCo-rs where to obtain the MuJoCo library.
 
 The linking process depends on whether you plan to dynamically link (recommended),
-statically link or statically link with support of C++ based viewer (instead of the Rust-native one).
+statically link or statically link with support for the C++ based viewer (instead of the Rust-native one).
 
 -----------------------------
 
 Dynamic linking
---------------------
+~~~~~~~~~~~~~~~~~~~~~~
 Dynamic linking is OS-dependent. To dynamically link, the primary variable
 ``MUJOCO_DYNAMIC_LINK_DIR`` must be set. 
 
 
 Linux
-~~~~~~~~~~~~~~~~~~~~~~
+++++++++++++
 When using Linux (bash), the primary variable can be set like so:
 ::
 
@@ -59,7 +81,7 @@ the path to the MuJoCo library's directory must also be added to ``LD_LIBRARY_PA
 
 
 Windows
-~~~~~~~~~~~~~~~~~~~~~~~~~
++++++++++++
 When using Windows (powershell), the primary variable can be set like so:
 
 ::
@@ -69,6 +91,7 @@ When using Windows (powershell), the primary variable can be set like so:
 Additionally, the library in DLL form must be added to the **PATH variable**.
 For help adding the path ``/path/mujoco/bin/`` to the PATH variable, see
 `here <https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/>`_.
+Alternatively, the DLL file can be placed in the working directory.
 
 .. attention::
 
@@ -78,7 +101,7 @@ For help adding the path ``/path/mujoco/bin/`` to the PATH variable, see
 
 
 MacOS
-~~~~~~~~~~~~~~~~~~~~~~~~~
+++++++++++++++++++
 MacOS is currently untested.
 
 
@@ -87,7 +110,7 @@ MacOS is currently untested.
 .. _static_linking:
 
 Static linking
---------------------
+~~~~~~~~~~~~~~~~~~
 We also provide an option to statically link:
 ::
 
@@ -106,13 +129,13 @@ we provide a modified MuJoCo repository, which allow static linking (see :ref:`s
 .. _static_link_with_cpp_viewer:
 
 Static linking with C++ viewer
----------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 While MuJoCo-rs already provides a :ref:`rust_native_viewer`, we understand that some projects wish
 to use the original C++ based 3D viewer (also named Simulate).
 To enable this, we provide a modified MuJoCo repository, with modifications
 enabling static linking and a safe interface between Rust and the C++ Simulate code.
 
-To build statically linkable libs with C++ based viewer included, perform the following steps:
+To build statically linkable libs with C++ based viewer included perform the following steps:
 
 1. Clone the MuJoCo-rs repository,
 2. Change your directory to the cloned repository,
@@ -128,16 +151,53 @@ To build statically linkable libs with C++ based viewer included, perform the fo
 
 The builds are tested with the ``gcc`` compiler.
 
------------------------------
+
+.. _build_deps:
+
+---------------------------------------------------------
+
+Build dependencies (visualization/rendering only)
+---------------------------------------------------
+When visualization or rendering is required, MuJoCo-rs may require additional build-time dependencies.
+These are needed to build **GLFW** --- a library used for window and OpenGL
+context management.
+
+If you **do not require** the use of :ref:`mj_renderer` or :ref:`mj_rust_viewer`,
+you can avoid build-time dependencies by disabling the default features:
+
+::
+
+    # Disables viewer and renderer features.
+    cargo add mujoco-rs --no-default-features
+
+When there is a need for rendering/visualization support, dependencies are OS-dependent.
+
+Windows
+~~~~~~~~~~~~~~~~~~
+On Windows, no additional build-time dependencies are required. GLFW is **obtained automatically**.
+If you run into problems, please submit an `issue <https://github.com/davidhozic/mujoco-rs>`_.
+
+.. hint::
+
+    Optionally, instead of using the pre-built, GLFW can be compiled from scratch by enabling MuJoCo-rs's ``glfw-build``
+    Cargo feature.
+
+Linux
+~~~~~~~~~~~~~~~~~~
+On Linux, MuJoCo-rs will try to use the GLFW installed in your Linux distribution, but only when
+the installed version is **GLFW 3.4**.
+Linkage will be auto-configured through pkg-config. In such case,
+no additional dependencies are needed. For example, Ubuntu 25.04+ and Fedora 42 use GLFW 3.4. 
+
+If you're distribution uses an **older GLFW** version, GLFW **3.4** will be **compiled**.
+This requires **CMake** and common C build tools to be installed.
+E.g., for Ubuntu/Debian distributions run:
+
+::
+
+    sudo apt install -y build-essential cmake
 
 
-Missing libraries
-==================
-MuJoCo-rs should work out of the box after you provide it with the MuJoCo library. If the build fails and asks
-for additional dependencies, install them via your system package manager.
-For example, to install glfw3 on Ubuntu/Debian, this can be done like so: ``apt install libglfw3-dev``.
-
-Note that on Windows, GLFW will either be compiled from source or downloaded from GLFW's repository.
-If the build doesn't work, please `report this as a bug <https://github.com/davidhozic/mujoco-rs/issues>`_.
-
-
+MacOS
+~~~~~~~~~~~~~~~~
+We don't test MacOS builds, however the process should be the same as for Linux.
