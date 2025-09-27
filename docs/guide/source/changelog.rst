@@ -16,7 +16,7 @@ This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
 
-Unreleased
+1.4.0 (MuJoCo 3.3.5)
 ================================
 - |mj_model|:
 
