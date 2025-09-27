@@ -5,7 +5,7 @@ use crate::builder_setters;
 use crate::prelude::*;
 
 use glfw_mjrc_fork as glfw;
-use glfw::{Context, InitError, PWindow, WindowHint};
+use glfw_mjrc_fork::{Context, InitError, PWindow, WindowHint};
 
 
 use bitflags::bitflags;
