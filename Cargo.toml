@@ -18,13 +18,13 @@ all-features = true
 
 
 [features]
-viewer = ["dep:glfw", "dep:bitflags"]
-renderer = ["dep:png", "dep:glfw"]
+viewer = ["dep:glfw-mjrc-fork", "dep:bitflags"]
+renderer = ["dep:png", "dep:glfw-mjrc-fork"]
 cpp-viewer = ["viewer"]
 
 ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module. 
 
-glfw-build = ["glfw/src-build"]
+glfw-build = ["glfw-mjrc-fork/src-build"]
 
 default = ["viewer", "renderer"]
 
@@ -35,18 +35,14 @@ paste = "1.0.15"
 
 # Pre-built libs on Windows and build everywhere else
 [target.'cfg(unix)'.dependencies]
-glfw = {version = "0.60.0", optional = true, default-features = false, features = [
+glfw-mjrc-fork = {version = "0.60.0", optional = true, default-features = false, features = [
    "static-link", "raw-window-handle-v0-6", "x11"
 ]}
 
 [target.'cfg(windows)'.dependencies]
-glfw = {version = "0.60.0", optional = true, default-features = false, features = [
+glfw-mjrc-fork = {version = "0.60.0", optional = true, default-features = false, features = [
     "prebuilt-libs", "static-link", "raw-window-handle-v0-6"
 ]}
-
-[patch.crates-io]
-glfw = {git = "https://github.com/davidhozic/glfw-rs", branch = "patch-1"}
-glfw-sys = {git = "https://github.com/davidhozic/glfw-sys.git", branch = "patch-1"}
 
 
 [build-dependencies]

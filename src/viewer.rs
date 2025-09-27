@@ -1,6 +1,8 @@
 //! Module related to implementation of the [`MjViewer`] and [`MjViewerCpp`].
 
+use glfw_mjrc_fork as glfw;
 use glfw::{Action, Context, Glfw, GlfwReceiver, Key, Modifiers, MouseButton, PWindow, WindowEvent, WindowMode};
+
 use bitflags::bitflags;
 
 use std::time::Instant;

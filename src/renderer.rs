@@ -4,7 +4,10 @@ use crate::wrappers::mj_rendering::MjrContext;
 use crate::builder_setters;
 use crate::prelude::*;
 
+use glfw_mjrc_fork as glfw;
 use glfw::{Context, InitError, PWindow, WindowHint};
+
+
 use bitflags::bitflags;
 use png::Encoder;
 
