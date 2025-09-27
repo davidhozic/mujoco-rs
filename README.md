@@ -19,8 +19,11 @@ More detailed documentation is available at the:
 ## MuJoCo version
 This library uses FFI bindings to MuJoCo **3.3.5**.
 
+You can download it from [official MuJoCo releases](https://github.com/google-deepmind/mujoco/releases/tag/3.3.5).
+
+
 ## Installation
-For installation see the [**guide book**](https://mujoco-rs.readthedocs.io/en/stable/).
+For installation, see the [**guide book**](https://mujoco-rs.readthedocs.io/en/stable/installation.html).
 
 ## Main features
 MuJoCo-rs tries to stay close to the MuJoCo's C API, with a few additional features for ease of use.
@@ -56,9 +59,10 @@ Optional Cargo features can be enabled:
 By default, ``viewer`` and ``renderer`` are enabled.
 
 ## Missing libraries
-The crate should work out of the box after you provide it with the MuJoCo library. If the build fails and asks
-for additional dependencies, install them via your system package manager.
-For example, to install glfw3 on Ubuntu/Debian, this can be done like so: ``apt install libglfw3-dev``.
+MuJoCo-rs should on Windows work without problems after the MuJoCo library
+is provided. On Linux (and potentially MacOS, which we don't test) you may need
+additional build-time dependencies, such as CMake. This depends
+on your Linux distro and whether you want visualization/rendering support. See the [installation guide](https://mujoco-rs.readthedocs.io/en/stable/installation.html#build-dependencies-visualization-rendering-only) for more information.
 
 ## NOTE
 This project is WIP but functional. I accept pull requests about bug fixes

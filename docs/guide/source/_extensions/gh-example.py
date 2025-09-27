@@ -52,7 +52,7 @@ def link_docs_rs(name, rawtext, text: str, lineno, inliner, options={}, content=
     repository = "mujoco-rs"
     author_gh = "davidhozic"
 
-    url = f"https://github.com/{author_gh}/{repository}/blob/release/{release}/examples/{link_text}"
+    url = f"https://github.com/{author_gh}/{repository}/blob/v{release}/examples/{link_text}"
     node = nodes.reference(rawtext, text, refuri=url, **options)
     return [node], []
 
