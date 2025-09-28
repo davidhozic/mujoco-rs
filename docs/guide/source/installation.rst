@@ -195,7 +195,7 @@ the installed version is **GLFW 3.4**.
 Linkage will be auto-configured through pkg-config. In such case,
 no additional dependencies are needed. For example, Ubuntu 25.04+ and Fedora 42 use GLFW 3.4. 
 
-If you're distribution uses an **older GLFW** version, GLFW **3.4** will be **compiled**.
+If your distribution uses an **older GLFW** version, GLFW **3.4** will be **compiled**.
 This requires **CMake** and common C build tools to be installed.
 E.g., for Ubuntu/Debian distributions run:
 
