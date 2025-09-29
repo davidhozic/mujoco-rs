@@ -379,6 +379,7 @@ macro_rules! plugin_wrapper_method {
     };
 }
 
+/// Implements iterators for individual item in [MjSpec](super::MjSpec).
 macro_rules! item_spec_iterator {
     ($($iter_over: ident),*) => {paste::paste!{
         $(
@@ -416,6 +417,21 @@ macro_rules! item_spec_iterator {
     }};
 }
 
+
+/// Generates methods for obtaining iterators to $iter_over spec items.
+/// The $self_lf represents the iterated item's borrow and $parent_lf the lifetime of its parent.
+macro_rules! spec_get_iter {
+    ($($iter_over: ident),*) => {paste::paste!{
+        $(
+            pub fn [<$iter_over _iter>](&mut self) -> [<MjSpec $iter_over:camel Iter>]<'_> {
+                [<MjSpec $iter_over:camel Iter>]::new(self)
+            }
+        )*
+    }};
+}
+
+
+/// Implements iterators for individual item in [MjsBody](super::MjsBody).
 macro_rules! item_body_iterator {
     ($($iter_over: ident),*) => {paste::paste!{
         $(
@@ -431,7 +447,7 @@ macro_rules! item_body_iterator {
                 }
             }
 
-            impl<'a, 'p> Iterator for [<MjsBody $iter_over Iter>]<'a, 'p> {
+            impl<'a> Iterator for [<MjsBody $iter_over Iter>]<'a, '_> {
                 type Item = [<Mjs $iter_over>]<'a>;
 
                 fn next(&mut self) -> Option<Self::Item> {
@@ -449,6 +465,18 @@ macro_rules! item_body_iterator {
                         Some([<Mjs $iter_over>](unsafe { [<mjs_as $iter_over>](next) }, PhantomData))
                     }
                 }
+            }
+        )*
+    }};
+}
+
+/// Generates methods for obtaining iterators to $iter_over body items.
+/// The $self_lf represents the iterated item's borrow and $parent_lf the lifetime of its parent.
+macro_rules! body_get_iter {
+    ($self_lf:lifetime, $parent_lf:lifetime, [$($iter_over: ident),*]) => {paste::paste!{
+        $(
+            pub fn [<$iter_over _iter>](&$self_lf mut self, recurse: bool) -> [<MjsBody $iter_over:camel Iter>]<$self_lf, $parent_lf> {
+                [<MjsBody $iter_over:camel Iter>]::new(self, recurse)
             }
         )*
     }};
