@@ -378,3 +378,78 @@ macro_rules! plugin_wrapper_method {
         }
     };
 }
+
+macro_rules! item_spec_iterator {
+    ($($iter_over: ident),*) => {paste::paste!{
+        $(
+            pub struct [<MjSpec $iter_over Iter>]<'a> {
+                root: &'a mut MjSpec,
+                last: *mut mjsElement
+            }
+
+            impl<'a> [<MjSpec $iter_over Iter>]<'a> {
+                pub fn new(root: &'a mut MjSpec) -> Self {
+                    Self { root,  last: ptr::null_mut() }
+                }
+            }
+
+            impl<'a> Iterator for [<MjSpec $iter_over Iter>]<'a> {
+                type Item = [<Mjs $iter_over>]<'a>;
+
+                fn next(&mut self) -> Option<Self::Item> {
+                    // first element not yet processed.
+                    let next = if self.last.is_null() {
+                        unsafe { mjs_firstElement(self.root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>]) }
+                    } else {
+                        unsafe { mjs_nextElement(self.root.ffi_mut(), self.last) }
+                    };
+
+                    self.last = next;
+                    if next.is_null() {
+                        None
+                    } else {
+                        Some([<Mjs $iter_over>](unsafe { [<mjs_as $iter_over>](next) }, PhantomData))
+                    }
+                }
+            }
+        )*
+    }};
+}
+
+macro_rules! item_body_iterator {
+    ($($iter_over: ident),*) => {paste::paste!{
+        $(
+            pub struct [<MjsBody $iter_over Iter>]<'a, 'p> {
+                root: &'a mut MjsBody<'p>,
+                last: *mut mjsElement,
+                recurse: bool
+            }
+
+            impl<'a, 'p> [<MjsBody $iter_over Iter>]<'a, 'p> {
+                pub fn new(root: &'a mut MjsBody<'p>, recurse: bool) -> Self {
+                    Self { root,  last: ptr::null_mut(), recurse }
+                }
+            }
+
+            impl<'a, 'p> Iterator for [<MjsBody $iter_over Iter>]<'a, 'p> {
+                type Item = [<Mjs $iter_over>]<'a>;
+
+                fn next(&mut self) -> Option<Self::Item> {
+                    // first element not yet processed.
+                    let next = if self.last.is_null() {
+                        unsafe { mjs_firstChild(self.root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>], self.recurse.into()) }
+                    } else {
+                        unsafe { mjs_nextChild(self.root.ffi_mut(), self.last, self.recurse.into()) }
+                    };
+
+                    self.last = next;
+                    if next.is_null() {
+                        None
+                    } else {
+                        Some([<Mjs $iter_over>](unsafe { [<mjs_as $iter_over>](next) }, PhantomData))
+                    }
+                }
+            }
+        )*
+    }};
+}

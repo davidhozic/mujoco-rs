@@ -1237,6 +1237,18 @@ impl MjsBody<'_> {
 
 
 /******************************
+** Iterators
+******************************/
+item_spec_iterator! {
+    Body, Geom, Joint, Site, Camera, Light, Frame, Actuator, Sensor, Flex, Pair, Equality, Exclude, Tendon,
+    Numeric, Text, Tuple, Key, Mesh, Hfield, Skin, Texture, Material, Plugin
+}
+
+item_body_iterator! {
+    Body, Joint, Geom, Site, Camera, Light, Frame
+}
+
+/******************************
 ** Tests
 ******************************/
 #[cfg(test)]
