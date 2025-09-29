@@ -272,8 +272,8 @@ impl MjSpec {
 /// Children accessor methods.
 impl MjSpec {
     find_x_method! {
-        body, joint, actuator, sensor, flex, pair, exclude, equality, tendon,
-        numeric, text, tuple, key, plugin, mesh, hfield, skin, texture, material
+        body, geom, joint, site, camera, light, actuator, sensor, flex, pair, equality, exclude, tendon,
+        numeric, text, tuple, key, mesh, hfield, skin, texture, material, plugin
     }
 
     find_x_method_direct! { default }
@@ -1479,6 +1479,7 @@ mod tests {
     fn test_site() {
         const TEST_MATERIAL: &str = "material 1";
         const TEST_POSITION: [f64; 3] = [1.0, 2.0, 3.0];
+        const SITE_NAME: &str = "test_site";
 
         let mut spec = MjSpec::new();
 
@@ -1487,7 +1488,9 @@ mod tests {
 
         /* add site */
         let mut world = spec.world_body();
-        let mut site = world.add_site();
+        world.add_site()
+            .with_name(SITE_NAME);
+        let mut site = spec.site(SITE_NAME).unwrap();
 
         /* material */
         assert_eq!(site.material(), "");
@@ -1546,5 +1549,61 @@ mod tests {
         spec.world_body().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
 
         spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_geom() {
+        const GEOM_NAME: &str = "test_geom";
+        const GEOM_INVALID_NAME: &str = "geom_test";
+        let mut spec = MjSpec::new();
+        spec.world_body().add_geom()
+            .with_name(GEOM_NAME);
+
+        assert!(spec.geom(GEOM_NAME).is_some());
+        assert!(spec.geom(GEOM_INVALID_NAME).is_none());
+    }
+
+    #[test]
+    fn test_camera() {
+        const CAMERA_NAME: &str = "test_cam";
+        const CAMERA_INVALID_NAME: &str = "cam_test";
+        let mut spec = MjSpec::new();
+        spec.world_body().add_camera()
+            .with_name(CAMERA_NAME);
+
+        assert!(spec.camera(CAMERA_NAME).is_some());
+        assert!(spec.camera(CAMERA_INVALID_NAME).is_none());
+    }
+
+    #[test]
+    fn test_light() {
+        const LIGHT_NAME: &str = "test_light";
+        const LIGHT_INVALID_NAME: &str = "light_test";
+        let mut spec = MjSpec::new();
+        spec.world_body().add_light()
+            .with_name(LIGHT_NAME);
+
+        assert!(spec.light(LIGHT_NAME).is_some());
+        assert!(spec.light(LIGHT_INVALID_NAME).is_none());
+    }
+
+    #[test]
+    fn test_exclude() {
+        const EXCLUDE_NAME: &str = "test_exclude";
+        const EXCLUDE_INVALID_NAME: &str = "exclude_test";
+        let mut spec = MjSpec::new();
+
+        spec.world_body().add_body().with_name("body1-left");
+        spec.world_body().add_body().with_name("body2-right");
+
+        spec.add_exclude()
+            .with_name(EXCLUDE_NAME)
+            .with_bodyname1("body1-left")
+            .with_bodyname2("body2-right");
+
+        assert!(spec.exclude(EXCLUDE_NAME).is_some());
+        assert!(spec.exclude(EXCLUDE_INVALID_NAME).is_none());
+
+        assert!(spec.compile().is_ok());
     }
 }
