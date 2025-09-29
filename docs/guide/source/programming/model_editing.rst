@@ -98,7 +98,9 @@ We can now add our ball's body, geom and joint like so:
     These consume the struct instance, set the corresponding attribute and
     in the end return the consumed instance back to the caller. Thus, they facilitate a builder-style API, where methods
     can be chained together to *build* the instance. Alternatively, methods that have the ``set_``
-    prefix can be used, which don't consume the instance.
+    prefix can be used, which don't consume the instance. Setter (``set_``) methods exists only
+    for simple types. Anything more complex can be modified through getters, which end with the ``_mut``
+    suffix.
 
 Finally, we can now add the base plane, like so:
 
