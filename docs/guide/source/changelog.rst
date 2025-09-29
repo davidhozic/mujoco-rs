@@ -16,6 +16,17 @@ This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
 
+1.4.1 (MuJoCo 3.3.5)
+================================
+Bug fixes:
+
+- Added missing named accessors to :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>geom`,
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>site`,
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>camera`,
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>light`.
+
 1.4.0 (MuJoCo 3.3.5)
 ================================
 - |mj_model|:

@@ -7,8 +7,6 @@ Custom visualization
 
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
 
-.. _example: https://github.com/davidhozic/mujoco-rs/blob/1.3.0/examples/drawing_scene_viewer.rs
-
 
 Aside to the true simulation state, MuJoCo provides ways to draw additional 3D geometries (geoms)
 onto an existing 3D scene.
@@ -26,10 +24,10 @@ To draw custom geoms to a scene inside a viewer or a renderer, applications need
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>clear_geom`, which will
   clear all the existing geoms.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>add_geom`, which will
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>create_geom`, which will
   add a new geom to the scene.
 
-This example_ shows how to draw a line between two balls.
+This :gh-example:`example <drawing_scene_viewer.rs>` shows how to draw a line between two balls.
 
 In the example we start drawing by first obtaining a mutable reference the user scene and clearing
 its geoms, which are otherwise preserved between syncs:
@@ -95,7 +93,7 @@ which calculates the values to result in the geom pointing from one point to ano
 
 
 
-The following image shows the result of the above example_.
+The following image shows the result of the above :gh-example:`example <drawing_scene_viewer.rs>`.
 
 .. image:: ../../img/visualization-example.png
 
