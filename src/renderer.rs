@@ -13,6 +13,7 @@ use png::Encoder;
 use std::io::{self, BufWriter, ErrorKind, Write};
 use std::fmt::Display;
 use std::error::Error;
+use std::ops::Deref;
 use std::path::Path;
 use std::fs::File;
 
@@ -360,7 +361,7 @@ impl<'m> MjRenderer<'m> {
     }
 
     /// Update the scene with new data from data.
-    pub fn sync(&mut self, data: &mut MjData) {
+    pub fn sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         let model_data_ptr = unsafe {  data.model().__raw() };
         let bound_model_ptr = unsafe { self.model.__raw() };
         assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the renderer.");

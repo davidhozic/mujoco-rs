@@ -6,6 +6,7 @@ use crate::mujoco_c::*;
 
 use std::io::{self, Error, ErrorKind};
 use std::ffi::CString;
+use std::ops::Deref;
 use std::ptr;
 
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
@@ -41,18 +42,18 @@ pub type MjtTimer = mjtTimer;
 
 /// Wrapper around the ``mjData`` struct.
 /// Provides lifetime guarantees as well as automatic cleanup.
-pub struct MjData<'a> {
+pub struct MjData<M: Deref<Target = MjModel>> {
     data: *mut mjData,
-    model: &'a MjModel
+    model: M
 }
 
 // Allow usage in threaded contexts as the data won't be shared anywhere outside Rust,
 // except in the C++ code.
-unsafe impl Send for MjData<'_> {}
-unsafe impl Sync for MjData<'_> {}
+unsafe impl<M: Deref<Target = MjModel>> Send for MjData<M> {}
+unsafe impl<M: Deref<Target = MjModel>> Sync for MjData<M> {}
 
 
-impl<'a> MjData<'a> {
+impl<'a> MjData<&'a MjModel> {
     /// Constructor for a new MjData. This should is called from MjModel.
     pub fn new(model: &'a MjModel) -> Self {
         unsafe {
@@ -61,23 +62,6 @@ impl<'a> MjData<'a> {
                 model: model,
             }
         }
-    }
-
-    /// Reference to the wrapped FFI struct.
-    pub fn ffi(&self) -> &mjData {
-        unsafe { self.data.as_ref().unwrap() }
-    }
-
-    /// Mutable reference to the wrapped FFI struct.
-    pub unsafe fn ffi_mut(&mut self) -> &mut mjData {
-        unsafe { self.data.as_mut().unwrap() }
-    }
-
-    /// Returns a reference to data's [`MjModel`].
-    /// This is used for checking whether the correct
-    /// data is used in `update_x(data)` methods.
-    pub(crate) fn model(&self) -> &MjModel {
-        self.model
     }
 
     /// Returns a slice of detected contacts.
@@ -766,7 +750,24 @@ impl<'a> MjData<'a> {
 
 
 /// Some public attribute methods.
-impl MjData<'_> {
+impl<M: Deref<Target = MjModel>> MjData<M> {
+    /// Reference to the wrapped FFI struct.
+    pub fn ffi(&self) -> &mjData {
+        unsafe { self.data.as_ref().unwrap() }
+    }
+
+    /// Mutable reference to the wrapped FFI struct.
+    pub unsafe fn ffi_mut(&mut self) -> &mut mjData {
+        unsafe { self.data.as_mut().unwrap() }
+    }
+
+    /// Returns a reference to data's [`MjModel`].
+    /// This is used for checking whether the correct
+    /// data is used in `update_x(data)` methods.
+    pub(crate) fn model(&self) -> &MjModel {
+        &self.model
+    }
+
     /// Maximum stack allocation in bytes.
     pub fn maxuse_stack(&self) -> MjtSize {
         self.ffi().maxuse_stack
@@ -798,7 +799,7 @@ impl MjData<'_> {
     }
 }
 
-impl Drop for MjData<'_> {
+impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
     fn drop(&mut self) {
         unsafe {
             mj_deleteData(self.data);

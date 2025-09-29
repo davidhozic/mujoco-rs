@@ -303,7 +303,7 @@ macro_rules! info_with_view {
 
             impl [<Mj $name:camel $info_type Info>] {
                 #[doc = "Returns a mutable view to the correct fields in [`Mj" $info_type "`]"]
-                pub fn view_mut<'d>(&self, [<$info_type:lower>]: &'d mut [<Mj $info_type>]) -> [<Mj $name:camel $info_type ViewMut>]<'d> {
+                pub fn view_mut<'d, M>(&self, [<$info_type:lower>]: &'d mut [<Mj $info_type>]) -> [<Mj $name:camel $info_type ViewMut>]<'d> {
                     view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), $prefix, [$($attr),*], [$($opt_attr),*], crate::util::PointerViewMut::new)
                 }
 

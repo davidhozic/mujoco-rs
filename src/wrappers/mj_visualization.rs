@@ -1,6 +1,7 @@
 //! Definitions related to visualization.
 use std::default::Default;
 use std::mem::MaybeUninit;
+use std::ops::Deref;
 use std::ptr;
 use std::io;
 
@@ -62,17 +63,17 @@ impl Default for MjvPerturb {
 }
 
 impl MjvPerturb {
-    pub fn start(&mut self, type_: MjtPertBit, model: &MjModel, data: &mut MjData, scene: &MjvScene) {
+    pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, model: &MjModel, data: &mut MjData<M>, scene: &MjvScene) {
         unsafe { mjv_initPerturb(model.ffi(), data.ffi_mut(), scene.ffi(), self); }
         self.active = type_ as i32;
     }
 
     /// Move an object with mouse. This is a wrapper around `mjv_movePerturb`.
-    pub fn move_(&mut self, model: &MjModel, data: &mut MjData, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
+    pub fn move_<M: Deref<Target = MjModel>>(&mut self, model: &MjModel, data: &mut MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
         unsafe { mjv_movePerturb(model.ffi(), data.ffi(), action as i32, dx, dy, scene.ffi(), self); }
     }
 
-    pub fn apply(&mut self, model: &MjModel, data: &mut MjData) {
+    pub fn apply<M: Deref<Target = MjModel>>(&mut self, model: &MjModel, data: &mut MjData<M>) {
         unsafe {
             mju_zero(data.ffi_mut().xfrc_applied, 6 * model.ffi().nbody);
             mjv_applyPerturbPose(model.ffi(), data.ffi_mut(), self, 0);
@@ -80,7 +81,7 @@ impl MjvPerturb {
         }
     }
 
-    pub fn update_local_pos(&mut self, selection_xyz: [MjtNum; 3], data: &MjData) {
+    pub fn update_local_pos<M: Deref<Target = MjModel>>(&mut self, selection_xyz: [MjtNum; 3], data: &MjData<M>) {
         let mut tmp = [0.0; 3];
         let data_ffi = data.ffi();
         unsafe { 
@@ -317,7 +318,7 @@ impl<'m> MjvScene<'m> {
         &mut self.ffi.lights[..self.ffi.nlight as usize]
     }
 
-    pub fn update(&mut self, data: &mut MjData, opt: &MjvOption, pertub: &MjvPerturb, cam: &mut MjvCamera) {
+    pub fn update<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, opt: &MjvOption, pertub: &MjvPerturb, cam: &mut MjvCamera) {
         unsafe {
             mjv_updateScene(
                 self.model.ffi(), data.ffi_mut(), opt, pertub,
@@ -378,8 +379,8 @@ impl<'m> MjvScene<'m> {
     /// Returns the selection point based on a mouse click.
     /// This is a wrapper around `mjv_select()`.
     /// The method returns a tuple: (body_id, geom_id, flex_id, skin_id, xyz coordinates of the point)
-    pub fn find_selection(
-        &self, data: &MjData, option: &MjvOption,
+    pub fn find_selection<M: Deref<Target = MjModel>>(
+        &self, data: &MjData<M>, option: &MjvOption,
         aspect_ratio: MjtNum, relx: MjtNum, rely: MjtNum,
     ) -> (i32, i32, i32, i32, [MjtNum; 3]) {
         let (mut geom_id, mut flex_id, mut skin_id) = (-1 , -1, -1);
