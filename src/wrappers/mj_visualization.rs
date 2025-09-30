@@ -63,13 +63,13 @@ impl Default for MjvPerturb {
 }
 
 impl MjvPerturb {
-    pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, model: &MjModel, data: &mut MjData<M>, scene: &MjvScene) {
+    pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, model: &MjModel, data: &mut MjData<M>, scene: &MjvScene<M>) {
         unsafe { mjv_initPerturb(model.ffi(), data.ffi_mut(), scene.ffi(), self); }
         self.active = type_ as i32;
     }
 
     /// Move an object with mouse. This is a wrapper around `mjv_movePerturb`.
-    pub fn move_<M: Deref<Target = MjModel>>(&mut self, model: &MjModel, data: &mut MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
+    pub fn move_<M: Deref<Target = MjModel>>(&mut self, model: &MjModel, data: &mut MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene<M>) {
         unsafe { mjv_movePerturb(model.ffi(), data.ffi(), action as i32, dx, dy, scene.ffi(), self); }
     }
 
@@ -165,7 +165,7 @@ impl MjvCamera {
     }
 
     /// Move camera with mouse.
-    pub fn move_(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
+    pub fn move_<M: Deref<Target = MjModel>>(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum, scene: &MjvScene<M>) {
         unsafe { mjv_moveCamera(model.ffi(), action as i32, dx, dy, scene.ffi(), self); };
     }
 }
@@ -271,13 +271,13 @@ impl MjvFigure {
 /// To prevent changes of array sizes in [`MjModel`], which can lead to overflows,
 /// a immutable reference is stored inside this struct.
 #[derive(Debug)]
-pub struct MjvScene<'m> {
+pub struct MjvScene<M: Deref<Target = MjModel>> {
     ffi: mjvScene,
-    model: &'m MjModel,
+    model: M,
 }
 
-impl<'m> MjvScene<'m> {
-    pub fn new(model: &'m MjModel, max_geom: usize) -> Self {
+impl<M: Deref<Target = MjModel>> MjvScene<M> {
+    pub fn new(model: M, max_geom: usize) -> Self {
         let scn = unsafe {
             let mut t = MaybeUninit::uninit();
             mjv_defaultScene(t.as_mut_ptr());
@@ -318,7 +318,7 @@ impl<'m> MjvScene<'m> {
         &mut self.ffi.lights[..self.ffi.nlight as usize]
     }
 
-    pub fn update<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, opt: &MjvOption, pertub: &MjvPerturb, cam: &mut MjvCamera) {
+    pub fn update(&mut self, data: &mut MjData<M>, opt: &MjvOption, pertub: &MjvPerturb, cam: &mut MjvCamera) {
         unsafe {
             mjv_updateScene(
                 self.model.ffi(), data.ffi_mut(), opt, pertub,
@@ -379,7 +379,7 @@ impl<'m> MjvScene<'m> {
     /// Returns the selection point based on a mouse click.
     /// This is a wrapper around `mjv_select()`.
     /// The method returns a tuple: (body_id, geom_id, flex_id, skin_id, xyz coordinates of the point)
-    pub fn find_selection<M: Deref<Target = MjModel>>(
+    pub fn find_selection(
         &self, data: &MjData<M>, option: &MjvOption,
         aspect_ratio: MjtNum, relx: MjtNum, rely: MjtNum,
     ) -> (i32, i32, i32, i32, [MjtNum; 3]) {
@@ -405,7 +405,7 @@ impl<'m> MjvScene<'m> {
 }
 
 
-impl Drop for MjvScene<'_> {
+impl<M: Deref<Target = MjModel>> Drop for MjvScene<M> {
     fn drop(&mut self) {
         unsafe {
             mjv_freeScene(&mut self.ffi);
@@ -418,7 +418,7 @@ impl Drop for MjvScene<'_> {
 /// # Errors
 /// Returns an [`io::Error`] of kind [`io::ErrorKind::StorageFull`] if the destination scene does not have
 /// enough space to accommodate the additional geoms from the source scene.
-pub(crate) fn sync_geoms(src: &MjvScene, dst: &mut MjvScene) -> io::Result<()> {
+pub(crate) fn sync_geoms<M: Deref<Target = MjModel>>(src: &MjvScene<M>, dst: &mut MjvScene<M>) -> io::Result<()> {
     let ffi_src = src.ffi();
     let ffi_dst = unsafe { dst.ffi_mut() };
     let new_len = ffi_dst.ngeom + ffi_src.ngeom;

@@ -217,7 +217,7 @@ impl MjModel {
     }
 
     /// Creates a new [`MjData`] instances linked to this model.
-    pub fn make_data<'m>(&'m self) -> MjData<'m> {
+    pub fn make_data(&self) -> MjData<&Self> {
         MjData::new(self)
     }
 

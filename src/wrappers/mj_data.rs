@@ -53,9 +53,9 @@ unsafe impl<M: Deref<Target = MjModel>> Send for MjData<M> {}
 unsafe impl<M: Deref<Target = MjModel>> Sync for MjData<M> {}
 
 
-impl<'a> MjData<&'a MjModel> {
+impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Constructor for a new MjData. This should is called from MjModel.
-    pub fn new(model: &'a MjModel) -> Self {
+    pub fn new(model: M) -> Self {
         unsafe {
             Self {
                 data: mj_makeData(model.ffi()),
@@ -819,7 +819,8 @@ info_with_view!(
         qfrc_bias: MjtNum, qfrc_spring: MjtNum, qfrc_damper: MjtNum, qfrc_gravcomp: MjtNum, qfrc_fluid: MjtNum, qfrc_passive: MjtNum,
         qfrc_actuator: MjtNum, qfrc_smooth: MjtNum, qacc_smooth: MjtNum, qfrc_constraint: MjtNum, qfrc_inverse: MjtNum
     ],
-    []
+    [],
+    M: Deref<Target = MjModel>
 );
 
 /// Deprecated name for [`MjJointDataInfo`].
@@ -847,12 +848,12 @@ pub type MjJointViewMut<'d> = MjJointDataViewMut<'d>;
 /**************************************************************************************************/
 // Sensor view
 /**************************************************************************************************/
-info_with_view!(Data, sensor, sensor, [data: MjtNum], []);
+info_with_view!(Data, sensor, sensor, [data: MjtNum], [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
 // Geom view
 /**************************************************************************************************/
-info_with_view!(Data, geom, geom_, [xpos: MjtNum, xmat: MjtNum], []);
+info_with_view!(Data, geom, geom_, [xpos: MjtNum, xmat: MjtNum], [], M: Deref<Target = MjModel>);
 
 /// Deprecated name for [`MjGeomDataInfo`].
 #[deprecated]
@@ -869,7 +870,7 @@ pub type MjGeomViewMut<'d> = MjGeomDataViewMut<'d>;
 /**************************************************************************************************/
 // Actuator view
 /**************************************************************************************************/
-info_with_view!(Data, actuator, [ctrl: MjtNum], [act: MjtNum]);
+info_with_view!(Data, actuator, [ctrl: MjtNum], [act: MjtNum], M: Deref<Target = MjModel>);
 
 /// Deprecated name for [`MjActuatorDataInfo`].
 #[deprecated]
@@ -891,28 +892,28 @@ info_with_view!(
         xfrc_applied: MjtNum, xpos: MjtNum, xquat: MjtNum, xmat: MjtNum, xipos: MjtNum, ximat: MjtNum,
         subtree_com: MjtNum, cinert: MjtNum, crb: MjtNum, cvel: MjtNum, subtree_linvel: MjtNum,
         subtree_angmom: MjtNum, cacc: MjtNum, cfrc_int: MjtNum, cfrc_ext: MjtNum
-    ], []
+    ], [], M: Deref<Target = MjModel>
 );
 
 /**************************************************************************************************/
 // Camera view
 /**************************************************************************************************/
-info_with_view!(Data, camera, cam_, [xpos: MjtNum, xmat: MjtNum], []);
-
+info_with_view!(Data, camera, cam_, [xpos: MjtNum, xmat: MjtNum], [], M: Deref<Target = MjModel>);
+    
 /**************************************************************************************************/
 // Site view
 /**************************************************************************************************/
-info_with_view!(Data, site, site_, [xpos: MjtNum, xmat: MjtNum], []);
+info_with_view!(Data, site, site_, [xpos: MjtNum, xmat: MjtNum], [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
 // Tendon view
 /**************************************************************************************************/
-info_with_view!(Data, tendon, ten_, [wrapadr: i32, wrapnum: i32, J_rownnz: i32, J_rowadr: i32, J_colind: i32, length: MjtNum, J: MjtNum, velocity: MjtNum], []);
+info_with_view!(Data, tendon, ten_, [wrapadr: i32, wrapnum: i32, J_rownnz: i32, J_rowadr: i32, J_colind: i32, length: MjtNum, J: MjtNum, velocity: MjtNum], [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
 // Light view
 /**************************************************************************************************/
-info_with_view!(Data, light, light_, [xpos: MjtNum, xdir: MjtNum], []);
+info_with_view!(Data, light, light_, [xpos: MjtNum, xdir: MjtNum], [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
 // Unit tests
