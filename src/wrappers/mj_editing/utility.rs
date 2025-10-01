@@ -390,7 +390,8 @@ macro_rules! item_spec_iterator {
 
             impl<'a> [<MjSpec $iter_over Iter>]<'a> {
                 pub fn new(root: &'a mut MjSpec) -> Self {
-                    Self { root,  last: ptr::null_mut() }
+                    let last = unsafe { mjs_firstElement(root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>]) };
+                    Self { root,  last }
                 }
             }
 
@@ -398,19 +399,13 @@ macro_rules! item_spec_iterator {
                 type Item = [<Mjs $iter_over>]<'a>;
 
                 fn next(&mut self) -> Option<Self::Item> {
-                    // first element not yet processed.
-                    let next = if self.last.is_null() {
-                        unsafe { mjs_firstElement(self.root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>]) }
-                    } else {
-                        unsafe { mjs_nextElement(self.root.ffi_mut(), self.last) }
-                    };
-
-                    self.last = next;
-                    if next.is_null() {
-                        None
-                    } else {
-                        Some([<Mjs $iter_over>](unsafe { [<mjs_as $iter_over>](next) }, PhantomData))
+                    if self.last.is_null() {
+                        return None;
                     }
+
+                    let out = Some([<Mjs $iter_over>](unsafe { [<mjs_as $iter_over>](self.last) }, PhantomData));
+                    self.last = unsafe { mjs_nextElement(self.root.ffi_mut(), self.last) };
+                    out
                 }
             }
         )*
