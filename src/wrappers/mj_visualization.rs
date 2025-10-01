@@ -355,6 +355,15 @@ impl<'m> MjvScene<'m> {
         self.ffi.ngeom = 0;
     }
 
+    /// Removes one geom from the end of the scene.
+    pub fn pop_geom(&mut self) {
+        if self.ffi.ngeom == 0 {
+            return;
+        }
+
+        self.ffi.ngeom -= 1;
+    }
+
     /// Renders the scene to the screen. This does not automatically make the OpenGL context current.
     pub fn render(&mut self, viewport: &MjrRectangle, context: &MjrContext){
         unsafe {
@@ -462,5 +471,28 @@ mod tests {
         let label = "Hello World";
         geom.set_label(label);
         assert_eq!(geom.label(), label);
+    }
+
+    #[test]
+    fn test_scene_geom_pop() {
+        const N_GEOM: usize = 10;
+        const N_GEOM_POP: usize = 11;
+
+        let model = load_model();
+        let mut scene = MjvScene::new(&model, 1000);
+        
+        /* Test label handling. Other things are trivial one-liners. */
+
+        for _ in 0..N_GEOM {
+            scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
+        }
+
+        assert_eq!(scene.geoms().len(), N_GEOM);
+
+        for _ in 0..N_GEOM_POP {
+            scene.pop_geom();
+        }
+
+        assert_eq!(scene.geoms().len(), 0);
     }
 }

@@ -4,8 +4,9 @@ Changelog
 
 .. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
-.. |mj_geomview| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomView`.
-.. |mj_geomviewmut| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomViewMut`.
+.. |mj_geomview| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomView`
+.. |mj_geomviewmut| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomViewMut`
+.. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
 
 
 Versioning
@@ -17,6 +18,11 @@ update of MuJoCo alone can increase the major version.
 
 Unreleased (MuJoCo 3.3.5)
 ================================
+- |mjv_scene|:
+
+  - Added the :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>pop` method
+    for popping a single geom from the end of the scene.
+
 - :ref:`model_editing`:
 
   - Added iterators to :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
