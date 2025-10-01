@@ -329,6 +329,8 @@ impl<'m> MjvScene<'m> {
     /// Creates a new [`MjvGeom`] inside the scene. A reference is returned for additional modification,
     /// however it must be dropped before any additional calls to this method or any other methods.
     /// The return reference's lifetime is bound to the lifetime of self.
+    /// # Panics
+    /// When the allocated space for geoms is full.
     pub fn create_geom<'s>(
         &'s mut self, geom_type: MjtGeom, size: Option<[MjtNum; 3]>,
         pos: Option<[MjtNum; 3]>, mat: Option<[MjtNum; 9]>, rgba: Option<[f32; 4]>
@@ -356,6 +358,7 @@ impl<'m> MjvScene<'m> {
     }
 
     /// Removes one geom from the end of the scene.
+    /// When no geoms are created, this has no effect.
     pub fn pop_geom(&mut self) {
         if self.ffi.ngeom == 0 {
             return;
@@ -480,8 +483,6 @@ mod tests {
 
         let model = load_model();
         let mut scene = MjvScene::new(&model, 1000);
-        
-        /* Test label handling. Other things are trivial one-liners. */
 
         for _ in 0..N_GEOM {
             scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);

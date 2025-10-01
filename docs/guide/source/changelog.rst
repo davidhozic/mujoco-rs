@@ -20,7 +20,7 @@ Unreleased (MuJoCo 3.3.5)
 ================================
 - |mjv_scene|:
 
-  - Added the :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>pop` method
+  - Added the :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>pop_geom` method
     for popping a single geom from the end of the scene.
 
 - :ref:`model_editing`:
