@@ -150,7 +150,7 @@ unsafe impl Send for MjSpec {}
 impl MjSpec {
     /// Creates an empty [`MjSpec`].
     pub fn new() -> Self {
-        Self::check_spec(unsafe { mj_makeSpec() }, &[]).unwrap()
+        unsafe { Self::check_spec(mj_makeSpec(), &[0]).unwrap() }
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
@@ -195,7 +195,10 @@ impl MjSpec {
         }
     }
 
-    fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[i8]) -> Result<Self, Error> {
+    /// Handles spec pointer input.
+    /// # Safety
+    /// `error_buffer` must not be empty and the last element must be 0.
+    unsafe fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[i8]) -> Result<Self, Error> {
         if spec_ptr.is_null() {
             // SAFETY: i8 and u8 have the same size, and no negative values can appear in the error_buffer.
             Err(Error::new(

@@ -15,6 +15,11 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+1.4.2 (MuJoCo 3.3.5)
+================================
+Bug fixes:
+
+- Fixed segmentation fault when the model specification is invalid. (`#65 <https://github.com/davidhozic/mujoco-rs/issues/65>`_).
 
 1.4.1 (MuJoCo 3.3.5)
 ================================

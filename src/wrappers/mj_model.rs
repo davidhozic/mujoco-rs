@@ -184,13 +184,13 @@ impl MjModel {
             // Load the model from the virtual file system
             let filename_c = CString::new(filename).unwrap();
             let raw_model = mj_loadModel(filename_c.as_ptr(), vfs.ffi());
-            Self::check_raw_model(raw_model, &[])
+            Self::check_raw_model(raw_model, &[0])
         }
     }
 
     /// Creates a [`MjModel`] from a raw pointer.
     pub(crate) fn from_raw(ptr: *mut mjModel) -> Result<Self, Error> {
-        Self::check_raw_model(ptr, &[])
+        unsafe { Self::check_raw_model(ptr, &[0]) }
     }
 
     /// Saves the last XML loaded.
@@ -221,7 +221,10 @@ impl MjModel {
         MjData::new(self)
     }
 
-    fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[i8]) -> Result<Self, Error> {
+    /// Handles the pointer to the model.
+    /// # Safety
+    /// `error_buffer` must have at least on element, where the last element must be 0.
+    unsafe fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[i8]) -> Result<Self, Error> {
         if ptr_model.is_null() {
             Err(Error::new(
                 ErrorKind::UnexpectedEof,
