@@ -208,6 +208,13 @@ The only difference is an additional boolean parameter, which enables recursive 
     ...
 
 
+.. attention:: 
+
+    Since all the underlying C functions require mutable pointers, the iterators also make a mutable
+    borrow. As a result |mj_spec| cannot be read during iteration. Iterated elements can however
+    be modified.
+    
+
 Examples
 ================
 Additional examples on model editing are
