@@ -379,7 +379,7 @@ macro_rules! plugin_wrapper_method {
     };
 }
 
-/// Implements iterators for individual item in [MjSpec](super::MjSpec).
+/// Implements iterators for individual items in [MjSpec](super::MjSpec).
 macro_rules! item_spec_iterator {
     ($($iter_over: ident),*) => {paste::paste!{
         $(
@@ -413,8 +413,7 @@ macro_rules! item_spec_iterator {
 }
 
 
-/// Generates methods for obtaining iterators to $iter_over spec items.
-/// The $self_lf represents the iterated item's borrow and $parent_lf the lifetime of its parent.
+/// Generates methods for obtaining iterators to `$iter_over` spec items.
 macro_rules! spec_get_iter {
     ($($iter_over: ident),*) => {paste::paste!{
         $(
@@ -426,7 +425,7 @@ macro_rules! spec_get_iter {
 }
 
 
-/// Implements iterators for individual item in [MjsBody](super::MjsBody).
+/// Implements iterators for individual items in [MjsBody](super::MjsBody).
 macro_rules! item_body_iterator {
     ($($iter_over: ident),*) => {paste::paste!{
         $(
@@ -460,7 +459,7 @@ macro_rules! item_body_iterator {
     }};
 }
 
-/// Generates methods for obtaining iterators to $iter_over body items.
+/// Generates methods for obtaining iterators to `$iter_over` body items.
 /// The $self_lf represents the iterated item's borrow and $parent_lf the lifetime of its parent.
 macro_rules! body_get_iter {
     ($self_lf:lifetime, $parent_lf:lifetime, [$($iter_over: ident),*]) => {paste::paste!{
