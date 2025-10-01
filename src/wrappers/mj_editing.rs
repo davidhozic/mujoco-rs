@@ -1675,7 +1675,6 @@ mod tests {
         assert_eq!(world.geom_iter(true).count(), N_GEOM);
         assert_eq!(world.body_iter(true).count(), N_BODY - 1);  // world must now be excluded
         assert_eq!(world.site_iter(true).count(), N_SITE);
-        assert_eq!(world.body_iter(false).last().unwrap().name(), LAST_WORLD_BODY_NAME)
-
+        assert_eq!(world.body_iter(false).last().unwrap().name(), LAST_WORLD_BODY_NAME);
     }
 }

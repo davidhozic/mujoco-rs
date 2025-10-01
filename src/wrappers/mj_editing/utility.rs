@@ -391,7 +391,7 @@ macro_rules! item_spec_iterator {
             impl<'a> [<MjSpec $iter_over Iter>]<'a> {
                 pub fn new(root: &'a mut MjSpec) -> Self {
                     let last = unsafe { mjs_firstElement(root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>]) };
-                    Self { root,  last }
+                    Self { root, last }
                 }
             }
 
@@ -438,7 +438,8 @@ macro_rules! item_body_iterator {
 
             impl<'a, 'p> [<MjsBody $iter_over Iter>]<'a, 'p> {
                 pub fn new(root: &'a mut MjsBody<'p>, recurse: bool) -> Self {
-                    Self { root,  last: ptr::null_mut(), recurse }
+                    let last = unsafe { mjs_firstChild(root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
+                    Self { root, last, recurse }
                 }
             }
 
@@ -446,19 +447,13 @@ macro_rules! item_body_iterator {
                 type Item = [<Mjs $iter_over>]<'a>;
 
                 fn next(&mut self) -> Option<Self::Item> {
-                    // first element not yet processed.
-                    let next = if self.last.is_null() {
-                        unsafe { mjs_firstChild(self.root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>], self.recurse.into()) }
-                    } else {
-                        unsafe { mjs_nextChild(self.root.ffi_mut(), self.last, self.recurse.into()) }
-                    };
-
-                    self.last = next;
-                    if next.is_null() {
-                        None
-                    } else {
-                        Some([<Mjs $iter_over>](unsafe { [<mjs_as $iter_over>](next) }, PhantomData))
+                    if self.last.is_null() {
+                        return None;
                     }
+
+                    let out = Some([<Mjs $iter_over>](unsafe { [<mjs_as $iter_over>](self.last) }, PhantomData));
+                    self.last = unsafe { mjs_nextChild(self.root.ffi_mut(), self.last, self.recurse.into()) };
+                    out
                 }
             }
         )*
