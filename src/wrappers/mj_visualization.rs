@@ -357,8 +357,8 @@ impl<'m> MjvScene<'m> {
         self.ffi.ngeom = 0;
     }
 
-    /// Removes one geom from the end of the scene.
-    /// When no geoms are created, this has no effect.
+    /// Removes the last geom from the scene.
+    /// Does nothing if the scene contains no geoms.
     pub fn pop_geom(&mut self) {
         if self.ffi.ngeom == 0 {
             return;
