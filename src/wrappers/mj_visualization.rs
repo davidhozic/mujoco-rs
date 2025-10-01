@@ -329,6 +329,8 @@ impl<'m> MjvScene<'m> {
     /// Creates a new [`MjvGeom`] inside the scene. A reference is returned for additional modification,
     /// however it must be dropped before any additional calls to this method or any other methods.
     /// The return reference's lifetime is bound to the lifetime of self.
+    /// # Panics
+    /// When the allocated space for geoms is full.
     pub fn create_geom<'s>(
         &'s mut self, geom_type: MjtGeom, size: Option<[MjtNum; 3]>,
         pos: Option<[MjtNum; 3]>, mat: Option<[MjtNum; 9]>, rgba: Option<[f32; 4]>
@@ -353,6 +355,16 @@ impl<'m> MjvScene<'m> {
     /// Clears the created geoms.
     pub fn clear_geom(&mut self) {
         self.ffi.ngeom = 0;
+    }
+
+    /// Removes the last geom from the scene.
+    /// Does nothing if the scene contains no geoms.
+    pub fn pop_geom(&mut self) {
+        if self.ffi.ngeom == 0 {
+            return;
+        }
+
+        self.ffi.ngeom -= 1;
     }
 
     /// Renders the scene to the screen. This does not automatically make the OpenGL context current.
@@ -462,5 +474,26 @@ mod tests {
         let label = "Hello World";
         geom.set_label(label);
         assert_eq!(geom.label(), label);
+    }
+
+    #[test]
+    fn test_scene_geom_pop() {
+        const N_GEOM: usize = 10;
+        const N_GEOM_POP: usize = 11;
+
+        let model = load_model();
+        let mut scene = MjvScene::new(&model, 1000);
+
+        for _ in 0..N_GEOM {
+            scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
+        }
+
+        assert_eq!(scene.geoms().len(), N_GEOM);
+
+        for _ in 0..N_GEOM_POP {
+            scene.pop_geom();
+        }
+
+        assert_eq!(scene.geoms().len(), 0);
     }
 }
