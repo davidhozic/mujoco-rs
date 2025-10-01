@@ -15,6 +15,14 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+Unreleased (MuJoCo 3.3.5)
+================================
+- :ref:`model_editing`:
+
+  - Added iterators to :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
+    and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`.
+
+
 1.4.2 (MuJoCo 3.3.5)
 ================================
 Bug fixes:
