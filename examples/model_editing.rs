@@ -57,6 +57,17 @@ fn create_model() -> MjModel {
 
     ball_body.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
+    // Iterate all the sub-bodies of the world body recursively.
+    for body in world.body_iter(true) {  // body_iter(recurse: true)
+        println!("Sub-body of world: {}", body.name());
+    }
+
+    // Iterate all bodies recursively through MjSpec.
+    // Also prints out the world body.
+    for body in spec.body_iter() {
+        println!("Body: {}", body.name());
+    }
+
     // Compile the model (required for saving)
     spec.compile().expect("failed to compile")
 }

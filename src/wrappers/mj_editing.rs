@@ -368,6 +368,18 @@ impl MjSpec {
     }
 }
 
+item_spec_iterator! {
+    Body, Geom, Joint, Site, Camera, Light, Frame, Actuator, Sensor, Flex, Pair, Equality, Exclude, Tendon,
+    Numeric, Text, Tuple, Key, Mesh, Hfield, Skin, Texture, Material, Plugin
+}
+/// Iterator methods.
+impl MjSpec {
+    spec_get_iter! {
+        body, geom, joint, site, camera, light, frame, actuator, sensor, flex, pair, equality,
+        exclude, tendon, numeric, text, tuple, key, mesh, hfield, skin, texture, material, plugin
+    }
+}
+
 impl Drop for MjSpec {
     fn drop(&mut self) {
         unsafe { mj_deleteSpec(self.0); }
@@ -1238,6 +1250,14 @@ impl MjsBody<'_> {
     userdata_method!(f64);
 }
 
+item_body_iterator! {
+    Body, Joint, Geom, Site, Camera, Light, Frame
+}
+
+/// Iterator methods.
+impl<'p, 's> MjsBody<'p> {
+    body_get_iter! {'s, 'p, [body, joint, geom, site, camera, light, frame] }
+}
 
 /******************************
 ** Tests
@@ -1608,5 +1628,53 @@ mod tests {
         assert!(spec.exclude(EXCLUDE_INVALID_NAME).is_none());
 
         assert!(spec.compile().is_ok());
+    }
+
+    #[test]
+    fn test_iteration() {
+        const LAST_BODY_NAME: &str = "subbody";
+        const LAST_WORLD_BODY_NAME: &str = "body2";
+        const N_GEOM:   usize = 3;
+        const N_BODY:   usize = 4;  // three added + world
+        const N_SITE:   usize = 2;
+        const N_TENDON: usize = 1;
+        const N_MESH:   usize = 0;
+
+        let mut spec = MjSpec::new();
+        let mut world = spec.world_body();
+        let mut body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
+        body1.add_geom().with_size([0.010;3]);
+        body1.add_site().with_name("ball1");
+        body1.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        let mut body2= world.add_body().with_pos([0.0, 0.0, 0.5]).with_name(LAST_WORLD_BODY_NAME);
+        body2.add_geom().with_size([0.010;3]);
+        body2.add_site().with_name("ball2");
+        body2.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        body2.add_body().with_name(LAST_BODY_NAME);
+
+        let mut tendon = spec.add_tendon()
+            .with_range([0.0, 0.25])
+            .with_rgba([1.0, 0.5, 0.0, 1.0]);  // orange
+        tendon.wrap_site("ball1");
+        tendon.wrap_site("ball2");
+
+        spec.world_body().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+
+        // Iter MjSpec
+        assert_eq!(spec.geom_iter().count(), N_GEOM);
+        assert_eq!(spec.body_iter().count(), N_BODY);
+        assert_eq!(spec.site_iter().count(), N_SITE);
+        assert_eq!(spec.tendon_iter().count(), N_TENDON);
+        assert_eq!(spec.mesh_iter().count(), N_MESH);
+        assert_eq!(spec.body_iter().last().unwrap().name(), LAST_BODY_NAME);
+
+        // Iter MjsBody
+        let mut world = spec.world_body();
+        assert_eq!(world.geom_iter(true).count(), N_GEOM);
+        assert_eq!(world.body_iter(true).count(), N_BODY - 1);  // world must now be excluded
+        assert_eq!(world.site_iter(true).count(), N_SITE);
+        assert_eq!(world.body_iter(false).last().unwrap().name(), LAST_WORLD_BODY_NAME);
     }
 }
