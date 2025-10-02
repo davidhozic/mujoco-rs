@@ -383,19 +383,14 @@ macro_rules! plugin_wrapper_method {
 macro_rules! item_spec_iterator {
     ($($iter_over: ident),*) => {paste::paste!{
         $(
-            pub struct [<MjSpec $iter_over Iter>]<'a> {
-                root: &'a mut MjSpec,
-                last: *mut mjsElement
-            }
-
-            impl<'a> [<MjSpec $iter_over Iter>]<'a> {
-                pub fn new(root: &'a mut MjSpec) -> Self {
+            impl<'a> MjsSpecItemIterMut<'a, [<Mjs $iter_over>]<'_>> {
+                fn new(root: &'a mut MjSpec) -> Self {
                     let last = unsafe { mjs_firstElement(root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>]) };
-                    Self { root, last }
+                    Self { root, last, phantom: PhantomData }
                 }
             }
 
-            impl<'a> Iterator for [<MjSpec $iter_over Iter>]<'a> {
+            impl<'a> Iterator for MjsSpecItemIterMut<'a, [<Mjs $iter_over>]<'_>> {
                 type Item = [<Mjs $iter_over>]<'a>;
 
                 fn next(&mut self) -> Option<Self::Item> {
@@ -417,8 +412,9 @@ macro_rules! item_spec_iterator {
 macro_rules! spec_get_iter {
     ($($iter_over: ident),*) => {paste::paste!{
         $(
-            pub fn [<$iter_over _iter>](&mut self) -> [<MjSpec $iter_over:camel Iter>]<'_> {
-                [<MjSpec $iter_over:camel Iter>]::new(self)
+            #[doc = concat!("Returns an iterator over ", stringify!($iter_over)," items that allows modifying each value.")]
+            pub fn [<$iter_over _iter_mut>](&mut self) -> MjsSpecItemIterMut<'_, [<Mjs $iter_over:camel>]<'_>> {
+                MjsSpecItemIterMut::<[<Mjs $iter_over:camel>]<'_>>::new(self)
             }
         )*
     }};
@@ -429,20 +425,14 @@ macro_rules! spec_get_iter {
 macro_rules! item_body_iterator {
     ($($iter_over: ident),*) => {paste::paste!{
         $(
-            pub struct [<MjsBody $iter_over Iter>]<'a, 'p> {
-                root: &'a mut MjsBody<'p>,
-                last: *mut mjsElement,
-                recurse: bool
-            }
-
-            impl<'a, 'p> [<MjsBody $iter_over Iter>]<'a, 'p> {
-                pub fn new(root: &'a mut MjsBody<'p>, recurse: bool) -> Self {
+            impl<'a, 'p> MjsBodyItemIterMut<'a, 'p, [<Mjs $iter_over>]<'_>> {
+                fn new(root: &'a mut MjsBody<'p>, recurse: bool) -> Self {
                     let last = unsafe { mjs_firstChild(root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
-                    Self { root, last, recurse }
+                    Self { root, last, recurse, phantom: PhantomData }
                 }
             }
 
-            impl<'a> Iterator for [<MjsBody $iter_over Iter>]<'a, '_> {
+            impl<'a> Iterator for MjsBodyItemIterMut<'a, '_, [<Mjs $iter_over>]<'_>> {
                 type Item = [<Mjs $iter_over>]<'a>;
 
                 fn next(&mut self) -> Option<Self::Item> {
@@ -462,10 +452,11 @@ macro_rules! item_body_iterator {
 /// Generates methods for obtaining iterators to `$iter_over` body items.
 /// The $self_lf represents the iterated item's borrow and $parent_lf the lifetime of its parent.
 macro_rules! body_get_iter {
-    ($self_lf:lifetime, $parent_lf:lifetime, [$($iter_over: ident),*]) => {paste::paste!{
+    ($parent_lf:lifetime, [$($iter_over: ident),*]) => {paste::paste!{
         $(
-            pub fn [<$iter_over _iter>](&$self_lf mut self, recurse: bool) -> [<MjsBody $iter_over:camel Iter>]<$self_lf, $parent_lf> {
-                [<MjsBody $iter_over:camel Iter>]::new(self, recurse)
+            #[doc = concat!("Returns an iterator over ", stringify!($iter_over)," items that allows modifying of each value.")]
+            pub fn [<$iter_over _iter_mut>](&mut self, recurse: bool) -> MjsBodyItemIterMut<'_, $parent_lf, [<Mjs $iter_over:camel>]<'_>> {
+                MjsBodyItemIterMut::<[<Mjs $iter_over:camel>]<'_>>::new(self, recurse)
             }
         )*
     }};

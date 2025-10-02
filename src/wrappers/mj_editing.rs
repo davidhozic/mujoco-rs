@@ -368,10 +368,18 @@ impl MjSpec {
     }
 }
 
+/// Mutable iterator over items in [`MjSpec`].
+pub struct MjsSpecItemIterMut<'a, T> {
+    root: &'a mut MjSpec,
+    last: *mut mjsElement,
+    phantom: PhantomData<T>
+}
+
 item_spec_iterator! {
     Body, Geom, Joint, Site, Camera, Light, Frame, Actuator, Sensor, Flex, Pair, Equality, Exclude, Tendon,
     Numeric, Text, Tuple, Key, Mesh, Hfield, Skin, Texture, Material, Plugin
 }
+
 /// Iterator methods.
 impl MjSpec {
     spec_get_iter! {
@@ -1250,13 +1258,21 @@ impl MjsBody<'_> {
     userdata_method!(f64);
 }
 
+/// Mutable iterator over items in [`MjsBody`].
+pub struct MjsBodyItemIterMut<'a, 'p, T> {
+    root: &'a mut MjsBody<'p>,
+    last: *mut mjsElement,
+    recurse: bool,
+    phantom: PhantomData<T>
+}
+
 item_body_iterator! {
     Body, Joint, Geom, Site, Camera, Light, Frame
 }
 
 /// Iterator methods.
-impl<'p, 's> MjsBody<'p> {
-    body_get_iter! {'s, 'p, [body, joint, geom, site, camera, light, frame] }
+impl<'p> MjsBody<'p> {
+    body_get_iter! {'p, [body, joint, geom, site, camera, light, frame] }
 }
 
 /******************************
@@ -1663,18 +1679,18 @@ mod tests {
         spec.world_body().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
 
         // Iter MjSpec
-        assert_eq!(spec.geom_iter().count(), N_GEOM);
-        assert_eq!(spec.body_iter().count(), N_BODY);
-        assert_eq!(spec.site_iter().count(), N_SITE);
-        assert_eq!(spec.tendon_iter().count(), N_TENDON);
-        assert_eq!(spec.mesh_iter().count(), N_MESH);
-        assert_eq!(spec.body_iter().last().unwrap().name(), LAST_BODY_NAME);
+        assert_eq!(spec.geom_iter_mut().count(), N_GEOM);
+        assert_eq!(spec.body_iter_mut().count(), N_BODY);
+        assert_eq!(spec.site_iter_mut().count(), N_SITE);
+        assert_eq!(spec.tendon_iter_mut().count(), N_TENDON);
+        assert_eq!(spec.mesh_iter_mut().count(), N_MESH);
+        assert_eq!(spec.body_iter_mut().last().unwrap().name(), LAST_BODY_NAME);
 
         // Iter MjsBody
         let mut world = spec.world_body();
-        assert_eq!(world.geom_iter(true).count(), N_GEOM);
-        assert_eq!(world.body_iter(true).count(), N_BODY - 1);  // world must now be excluded
-        assert_eq!(world.site_iter(true).count(), N_SITE);
-        assert_eq!(world.body_iter(false).last().unwrap().name(), LAST_WORLD_BODY_NAME);
+        assert_eq!(world.geom_iter_mut(true).count(), N_GEOM);
+        assert_eq!(world.body_iter_mut(true).count(), N_BODY - 1);  // world must now be excluded
+        assert_eq!(world.site_iter_mut(true).count(), N_SITE);
+        assert_eq!(world.body_iter_mut(false).last().unwrap().name(), LAST_WORLD_BODY_NAME);
     }
 }
