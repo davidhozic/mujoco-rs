@@ -762,9 +762,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Returns a reference to data's [`MjModel`].
-    /// This is used for checking whether the correct
-    /// data is used in `update_x(data)` methods.
-    pub(crate) fn model(&self) -> &MjModel {
+    pub fn model(&self) -> &MjModel {
         &self.model
     }
 
