@@ -13,6 +13,8 @@ use png::Encoder;
 use std::io::{self, BufWriter, ErrorKind, Write};
 use std::fmt::Display;
 use std::error::Error;
+use std::marker::PhantomData;
+use std::ops::Deref;
 use std::path::Path;
 use std::fs::File;
 
@@ -24,7 +26,7 @@ const EXTRA_INTERNAL_VISUAL_GEOMS: usize = 100;
 
 /// A builder for [`MjRenderer`].
 #[derive(Debug)]
-pub struct MjRendererBuilder {
+pub struct MjRendererBuilder<M: Deref<Target = MjModel> + Clone> {
     width: u32,
     height: u32,
     num_visual_internal_geom: u32,
@@ -34,9 +36,10 @@ pub struct MjRendererBuilder {
     font_scale: MjtFontScale,
     camera: MjvCamera,
     opts: MjvOption,
+    model_type: PhantomData<M>
 }
 
-impl MjRendererBuilder {
+impl<M: Deref<Target = MjModel> + Clone> MjRendererBuilder<M> {
     /// Create a builder with default configuration.
     /// Defaults are:
     /// - `width` and `height`: use offwidth and offheight of MuJoCo's visual/global settings from the model,
@@ -49,7 +52,7 @@ impl MjRendererBuilder {
             width: 0, height: 0,
             num_visual_internal_geom: EXTRA_INTERNAL_VISUAL_GEOMS as u32, num_visual_user_geom: 0,
             rgb: true, depth: false, font_scale: MjtFontScale::mjFONTSCALE_100,
-            camera: MjvCamera::default(), opts: MjvOption::default()
+            camera: MjvCamera::default(), opts: MjvOption::default(), model_type: PhantomData
         }
     }
 
@@ -101,7 +104,7 @@ which can be configured at the top of the model's XML like so:
     }
 
     /// Builds a [`MjRenderer`].
-    pub fn build(self, model: &MjModel) -> Result<MjRenderer<'_>, RendererError> {
+    pub fn build(self, model: M) -> Result<MjRenderer<M>, RendererError> {
         // Assume model's maximum should be used
         let mut height = self.height;
         let mut width = self.width;
@@ -128,18 +131,18 @@ which can be configured at the top of the model's XML like so:
         glfw.set_swap_interval(glfw::SwapInterval::None);
 
         // Initialize the rendering context to render to the offscreen buffer.
-        let mut context = MjrContext::new(model);
+        let mut context = MjrContext::new(&model);
         context.offscreen();
 
         // The 3D scene for visualization
         let scene = MjvScene::new(
-            model,
+            model.clone(),
             model.ffi().ngeom as usize + self.num_visual_internal_geom as usize
             + self.num_visual_user_geom as usize
         );
 
         let user_scene = MjvScene::new(
-            model,
+            model.clone(),
             self.num_visual_user_geom as usize
         );
 
@@ -157,7 +160,7 @@ which can be configured at the top of the model's XML like so:
 }
 
 
-impl Default for MjRendererBuilder {
+impl<M: Deref<Target = MjModel> + Clone> Default for MjRendererBuilder<M> {
     fn default() -> Self {
         Self::new()
     }
@@ -165,11 +168,11 @@ impl Default for MjRendererBuilder {
 
 /// A renderer for rendering 3D scenes.
 /// By default, RGB rendering is enabled and depth rendering is disabled.
-pub struct MjRenderer<'m> {
-    scene: MjvScene<'m>,
-    user_scene: MjvScene<'m>,
+pub struct MjRenderer<M: Deref<Target = MjModel> + Clone> {
+    scene: MjvScene<M>,
+    user_scene: MjvScene<M>,
     context: MjrContext,
-    model: &'m MjModel,
+    model: M,
 
     /* Glfw */
     window: PWindow,
@@ -189,7 +192,7 @@ pub struct MjRenderer<'m> {
     height: usize,
 }
 
-impl<'m> MjRenderer<'m> {
+impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// Construct a new renderer.
     /// The `max_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
@@ -217,7 +220,7 @@ impl<'m> MjRenderer<'m> {
     /// ```
     /// 
     /// </div>
-    pub fn new(model: &'m MjModel, width: usize, height: usize, max_geom: usize) -> Result<Self, RendererError> {
+    pub fn new(model: M, width: usize, height: usize, max_geom: usize) -> Result<Self, RendererError> {
         let mut glfw = glfw::init_no_callbacks()
             .map_err(|err| RendererError::GlfwInitError(err))?;
 
@@ -232,14 +235,14 @@ impl<'m> MjRenderer<'m> {
         glfw.set_swap_interval(glfw::SwapInterval::None);
 
         /* Initialize the rendering context to render to the offscreen buffer. */
-        let mut context = MjrContext::new(model);
+        let mut context = MjrContext::new(&model);
         context.offscreen();
 
         /* The 3D scene for visualization */
-        let scene = MjvScene::new(model, model.ffi().ngeom as usize + max_geom + EXTRA_INTERNAL_VISUAL_GEOMS);
-        let user_scene = MjvScene::new(model, max_geom);
+        let scene = MjvScene::new(model.clone(), model.ffi().ngeom as usize + max_geom + EXTRA_INTERNAL_VISUAL_GEOMS);
+        let user_scene = MjvScene::new(model.clone(), max_geom);
 
-        let camera = MjvCamera::new_free(model);
+        let camera = MjvCamera::new_free(&model);
         let option = MjvOption::default();
 
         let mut s = Self {
@@ -253,22 +256,22 @@ impl<'m> MjRenderer<'m> {
     }
 
     /// Create a [`MjRendererBuilder`] to configure [`MjRenderer`].
-    pub fn builder() -> MjRendererBuilder {
+    pub fn builder() -> MjRendererBuilder<M> {
         MjRendererBuilder::new()
     }
 
     /// Return an immutable reference to the internal scene.
-    pub fn scene(&self) -> &MjvScene<'m>{
+    pub fn scene(&self) -> &MjvScene<M>{
         &self.scene
     }
 
     /// Return an immutable reference to a user scene for drawing custom visual-only geoms.
-    pub fn user_scene(&self) -> &MjvScene<'m>{
+    pub fn user_scene(&self) -> &MjvScene<M>{
         &self.user_scene
     }
 
     /// Return a mutable reference to a user scene for drawing custom visual-only geoms.
-    pub fn user_scene_mut(&mut self) -> &mut MjvScene<'m>{
+    pub fn user_scene_mut(&mut self) -> &mut MjvScene<M>{
         &mut self.user_scene
     }
 
@@ -360,7 +363,7 @@ impl<'m> MjRenderer<'m> {
     }
 
     /// Update the scene with new data from data.
-    pub fn sync(&mut self, data: &mut MjData) {
+    pub fn sync(&mut self, data: &mut MjData<M>) {
         let model_data_ptr = unsafe {  data.model().__raw() };
         let bound_model_ptr = unsafe { self.model.__raw() };
         assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the renderer.");

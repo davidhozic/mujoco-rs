@@ -5,6 +5,7 @@ use glfw_mjrc_fork::{Action, Context, Glfw, GlfwReceiver, Key, Modifiers, MouseB
 
 use bitflags::bitflags;
 
+use std::ops::Deref;
 use std::time::Instant;
 use std::fmt::Display;
 use std::error::Error;
@@ -108,14 +109,14 @@ impl Error for MjViewerError {
 /// # Safety
 /// Due to the nature of OpenGL, this should only be run in the **main thread**.
 #[derive(Debug)]
-pub struct MjViewer<'m> {
+pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     /* MuJoCo rendering */
-    scene: MjvScene<'m>,
+    scene: MjvScene<M>,
     context: MjrContext,
     camera: MjvCamera,
 
     /* Other MuJoCo related */
-    model: &'m MjModel,
+    model: M,
     pert: MjvPerturb,
     opt: MjvOption,
 
@@ -133,15 +134,15 @@ pub struct MjViewer<'m> {
     events: GlfwReceiver<(f64, WindowEvent)>,
 
     /* External interaction */
-    user_scene: MjvScene<'m>
+    user_scene: MjvScene<M>
 }
 
-impl<'m> MjViewer<'m> {
+impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Launches the MuJoCo viewer. A [`Result`] struct is returned that either contains
     /// [`MjViewer`] or a [`MjViewerError`]. The `scene_max_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
     /// It can thus be set to 0 if no additional geoms will be drawn by the user.
-    pub fn launch_passive(model: &'m MjModel, scene_max_geom: usize) -> Result<Self, MjViewerError> {
+    pub fn launch_passive(model: M, scene_max_geom: usize) -> Result<Self, MjViewerError> {
         let mut glfw = glfw::init_no_callbacks()
             .map_err(|err| MjViewerError::GlfwInitError(err))?;
 
@@ -161,17 +162,23 @@ impl<'m> MjViewer<'m> {
         window.set_all_polling(true);
         glfw.set_swap_interval(glfw::SwapInterval::None);
 
+        let ngeom = model.ffi().ngeom as usize;
+        let scene = MjvScene::new(model.clone(), ngeom + scene_max_geom + EXTRA_SCENE_GEOM_SPACE);
+        let user_scene = MjvScene::new(model.clone(), scene_max_geom);
+        let context = MjrContext::new(&model) ;
+        let camera  = MjvCamera::new_free(&model);
+
         Ok(Self {
             glfw,
             window,
             events,
             model,
-            scene: MjvScene::new(model, model.ffi().ngeom as usize + scene_max_geom + EXTRA_SCENE_GEOM_SPACE),
-            context: MjrContext::new(model),
-            camera: MjvCamera::new_free(model),
+            scene,
+            context,
+            camera,
             pert: MjvPerturb::default(),
             opt: MjvOption::default(),
-            user_scene: MjvScene::new(model, scene_max_geom),
+            user_scene,
             last_x: 0.0,
             last_y: 0.0,
             status_flags: ViewerStatusBits::HELP_MENU,
@@ -188,29 +195,29 @@ impl<'m> MjViewer<'m> {
 
     /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
     /// Geoms in the user scene are preserved between calls to [`MjViewer::sync`].
-    pub fn user_scene(&self) -> &MjvScene<'m>{
+    pub fn user_scene(&self) -> &MjvScene<M>{
         &self.user_scene
     }
 
     /// Returns a mutable reference to a user scene for drawing custom visual-only geoms.
     /// Geoms in the user scene are preserved between calls to [`MjViewer::sync`].
-    pub fn user_scene_mut(&mut self) -> &mut MjvScene<'m>{
+    pub fn user_scene_mut(&mut self) -> &mut MjvScene<M>{
         &mut self.user_scene
     }
 
     #[deprecated(since = "1.3.0", note = "use user_scene")]
-    pub fn user_scn(&self) -> &MjvScene<'m> {
+    pub fn user_scn(&self) -> &MjvScene<M> {
         self.user_scene()
     }
 
     #[deprecated(since = "1.3.0", note = "use user_scene_mut")]
-    pub fn user_scn_mut(&mut self) -> &mut MjvScene<'m> {
+    pub fn user_scn_mut(&mut self) -> &mut MjvScene<M> {
         self.user_scene_mut()
     }
 
     /// Syncs the state of `data` with the viewer as well as perform
     /// rendering on the viewer.
-    pub fn sync(&mut self, data: &mut MjData) {
+    pub fn sync(&mut self, data: &mut MjData<M>) {
         /* Make sure everything is done on the viewer's window */
         self.window.make_current();
 
@@ -227,11 +234,11 @@ impl<'m> MjViewer<'m> {
         self.window.swap_buffers();
 
         /* Apply perturbations */
-        self.pert.apply(self.model, data);
+        self.pert.apply(&self.model, data);
     }
 
     /// Updates the scene and draws it to the display.
-    fn update_scene(&mut self, data: &mut MjData) {
+    fn update_scene(&mut self, data: &mut MjData<M>) {
         let model_data_ptr = unsafe {  data.model().__raw() };
         let bound_model_ptr = unsafe { self.model.__raw() };
         assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the viewer.");
@@ -277,7 +284,7 @@ impl<'m> MjViewer<'m> {
     }
 
     /// Processes user input events.
-    fn process_events(&mut self, data: &mut MjData) {
+    fn process_events(&mut self, data: &mut MjData<M>) {
         self.glfw.poll_events();
         while let Some((_, event)) = self.events.receive() {
             match event {
@@ -402,11 +409,11 @@ impl<'m> MjViewer<'m> {
 
     /// Processes scrolling events.
     fn process_scroll(&mut self, change: f64) {
-        self.camera.move_(MjtMouse::mjMOUSE_ZOOM, self.model, 0.0, -0.05 * change, &self.scene);
+        self.camera.move_(MjtMouse::mjMOUSE_ZOOM, &self.model, 0.0, -0.05 * change, &self.scene);
     }
 
     /// Processes camera and perturbation movements.
-    fn process_cursor_pos(&mut self, x: f64, y: f64, data: &mut MjData) {
+    fn process_cursor_pos(&mut self, x: f64, y: f64, data: &mut MjData<M>) {
         /* Calculate the change in mouse position since last call */
         let dx = x - self.last_x;
         let dy = y - self.last_y;
@@ -439,15 +446,15 @@ impl<'m> MjViewer<'m> {
 
         /* When the perturbation isn't active, move the camera */
         if self.pert.active == 0 {
-            self.camera.move_(action, self.model, dx / height, dy / height, &self.scene);
+            self.camera.move_(action, &self.model, dx / height, dy / height, &self.scene);
         }
         else {  // When the perturbation is active, move apply the perturbation.
-            self.pert.move_(self.model, data, action, dx / height, dy / height, &self.scene);
+            self.pert.move_(&self.model, data, action, dx / height, dy / height, &self.scene);
         }
     }
 
     /// Processes left clicks and double left clicks.
-    fn process_left_click(&mut self, data: &mut MjData, action: &Action, modifiers: &Modifiers) {
+    fn process_left_click(&mut self, data: &mut MjData<M>, action: &Action, modifiers: &Modifiers) {
         match action {
             Action::Press => {
                 /* Clicking and holding applies perturbation */
@@ -535,7 +542,7 @@ bitflags! {
 /// Wrapper around the C++ implementation of MujoCo viewer.
 /// If you don't need the side UI, we recommend you use the Rust-native viewer [`MjViewer`] instead.
 #[cfg(feature = "cpp-viewer")]
-pub struct MjViewerCpp<'m> {
+pub struct MjViewerCpp<M: Deref<Target = MjModel> + Clone> {
     sim: *mut mujoco_Simulate,
     running: bool,
 
@@ -544,19 +551,19 @@ pub struct MjViewerCpp<'m> {
     _cam: Box<MjvCamera>,
     _opt: Box<MjvOption>,
     _pert: Box<MjvPerturb>,
-    _user_scn: Box<MjvScene<'m>>,
+    _user_scn: Box<MjvScene<M>>,
     _glfw: glfw::Glfw
 }
 
 #[cfg(feature = "cpp-viewer")]
-impl<'m> MjViewerCpp<'m> {
+impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
     #[inline]
     pub fn running(&self) -> bool {
         self.running
     }
 
     #[inline]
-    pub fn user_scn_mut(&mut self) -> &mut MjvScene<'m> {
+    pub fn user_scn_mut(&mut self) -> &mut MjvScene<M> {
         &mut self._user_scn
     }
 
@@ -575,14 +582,14 @@ impl<'m> MjViewerCpp<'m> {
     /// while the viewer keeps a pointer to them (their wrapped pointers).
     /// Undefined behavior should not occur, however caution is advised as this is a violation
     /// of the Rust's borrowing rules.
-    pub fn launch_passive(model: &'m MjModel, data: &MjData, scene_max_geom: usize) -> Self {
+    pub fn launch_passive(model: M, data: &MjData<M>, scene_max_geom: usize) -> Self {
         let mut _glfw = glfw::init(glfw::fail_on_errors).unwrap();
 
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut _cam = Box::new(MjvCamera::default());
         let mut _opt: Box<MjvOption> = Box::new(MjvOption::default());
         let mut _pert = Box::new(MjvPerturb::default());
-        let mut _user_scn = Box::new(MjvScene::new(&model, scene_max_geom));
+        let mut _user_scn = Box::new(MjvScene::new(model.clone(), scene_max_geom));
         let sim;
         let c_filename = CString::new("file.xml").unwrap();
         unsafe {
@@ -623,7 +630,7 @@ impl<'m> MjViewerCpp<'m> {
 }
 
 #[cfg(feature = "cpp-viewer")]
-impl Drop for MjViewerCpp<'_> {
+impl<M: Deref<Target = MjModel> + Clone> Drop for MjViewerCpp<M> {
     fn drop(&mut self) {
         unsafe {
             (*self.sim).RenderCleanup();
