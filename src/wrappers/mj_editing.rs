@@ -372,7 +372,8 @@ impl MjSpec {
 pub struct MjsSpecItemIterMut<'a, T> {
     root: &'a mut MjSpec,
     last: *mut mjsElement,
-    phantom: PhantomData<T>
+    /// Used for generic implementation of iterator's methods.
+    item_type: PhantomData<T>
 }
 
 item_spec_iterator! {
@@ -1263,7 +1264,8 @@ pub struct MjsBodyItemIterMut<'a, 'p, T> {
     root: &'a mut MjsBody<'p>,
     last: *mut mjsElement,
     recurse: bool,
-    phantom: PhantomData<T>
+    /// Used for generic implementation of iterator's methods.
+    item_type: PhantomData<T>
 }
 
 item_body_iterator! {

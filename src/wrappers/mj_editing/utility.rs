@@ -386,7 +386,7 @@ macro_rules! item_spec_iterator {
             impl<'a> MjsSpecItemIterMut<'a, [<Mjs $iter_over>]<'_>> {
                 fn new(root: &'a mut MjSpec) -> Self {
                     let last = unsafe { mjs_firstElement(root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>]) };
-                    Self { root, last, phantom: PhantomData }
+                    Self { root, last, item_type: PhantomData }
                 }
             }
 
@@ -428,7 +428,7 @@ macro_rules! item_body_iterator {
             impl<'a, 'p> MjsBodyItemIterMut<'a, 'p, [<Mjs $iter_over>]<'_>> {
                 fn new(root: &'a mut MjsBody<'p>, recurse: bool) -> Self {
                     let last = unsafe { mjs_firstChild(root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
-                    Self { root, last, recurse, phantom: PhantomData }
+                    Self { root, last, recurse, item_type: PhantomData }
                 }
             }
 
