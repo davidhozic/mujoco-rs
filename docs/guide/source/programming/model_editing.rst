@@ -176,12 +176,12 @@ items (geoms, joints, etc.). Iterators exist on :docs-rs:`~mujoco_rs::wrappers::
 and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`.
 
 To iterate over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec` items, call
-``[item_type]_iter``, with ``[item_type]`` replaced by geom, body, etc.
+``[item_type]_iter_mut``, with ``[item_type]`` replaced by geom, body, etc.
 
 .. code-block:: rust
 
     ...
-    for body in spec.body_iter() {  // spec is MjSpec.
+    for body in spec.body_iter_mut() {  // spec is MjSpec.
         println!("{}", body.name());
     }
     ...
@@ -193,7 +193,7 @@ The only difference is an additional boolean parameter, which enables recursive 
 
     ...
     // Iterate top level bodies of body.
-    for body in body.body_iter(false) {  // body is MjsBody.
+    for body in body.body_iter_mut(false) {  // body is MjsBody.
         println!("{}", body.name());
     }
     ...
@@ -202,7 +202,7 @@ The only difference is an additional boolean parameter, which enables recursive 
 
     ...
     // Iterate top level bodies of body + their sub-bodies recursively.
-    for body in body.body_iter(true) {  // body is MjsBody.
+    for body in body.body_iter_mut(true) {  // body is MjsBody.
         println!("{}", body.name());
     }
     ...
