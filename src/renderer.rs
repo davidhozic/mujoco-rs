@@ -1,7 +1,6 @@
 //! Module related to implementation of the [`MjRenderer`].
 use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_rendering::MjrContext;
-use crate::traits::RefOrClone;
 use crate::builder_setters;
 use crate::prelude::*;
 
@@ -14,6 +13,8 @@ use png::Encoder;
 use std::io::{self, BufWriter, ErrorKind, Write};
 use std::fmt::Display;
 use std::error::Error;
+use std::marker::PhantomData;
+use std::ops::Deref;
 use std::path::Path;
 use std::fs::File;
 
@@ -25,7 +26,7 @@ const EXTRA_INTERNAL_VISUAL_GEOMS: usize = 100;
 
 /// A builder for [`MjRenderer`].
 #[derive(Debug)]
-pub struct MjRendererBuilder {
+pub struct MjRendererBuilder<M: Deref<Target = MjModel> + Clone> {
     width: u32,
     height: u32,
     num_visual_internal_geom: u32,
@@ -35,9 +36,10 @@ pub struct MjRendererBuilder {
     font_scale: MjtFontScale,
     camera: MjvCamera,
     opts: MjvOption,
+    model_type: PhantomData<M>
 }
 
-impl MjRendererBuilder {
+impl<M: Deref<Target = MjModel> + Clone> MjRendererBuilder<M> {
     /// Create a builder with default configuration.
     /// Defaults are:
     /// - `width` and `height`: use offwidth and offheight of MuJoCo's visual/global settings from the model,
@@ -50,7 +52,7 @@ impl MjRendererBuilder {
             width: 0, height: 0,
             num_visual_internal_geom: EXTRA_INTERNAL_VISUAL_GEOMS as u32, num_visual_user_geom: 0,
             rgb: true, depth: false, font_scale: MjtFontScale::mjFONTSCALE_100,
-            camera: MjvCamera::default(), opts: MjvOption::default()
+            camera: MjvCamera::default(), opts: MjvOption::default(), model_type: PhantomData
         }
     }
 
@@ -102,7 +104,7 @@ which can be configured at the top of the model's XML like so:
     }
 
     /// Builds a [`MjRenderer`].
-    pub fn build<M: RefOrClone<Target = MjModel>>(self, model: M) -> Result<MjRenderer<M>, RendererError> {
+    pub fn build(self, model: M) -> Result<MjRenderer<M>, RendererError> {
         // Assume model's maximum should be used
         let mut height = self.height;
         let mut width = self.width;
@@ -134,13 +136,13 @@ which can be configured at the top of the model's XML like so:
 
         // The 3D scene for visualization
         let scene = MjvScene::new(
-            model.clone_or_ref(),
+            model.clone(),
             model.ffi().ngeom as usize + self.num_visual_internal_geom as usize
             + self.num_visual_user_geom as usize
         );
 
         let user_scene = MjvScene::new(
-            model.clone_or_ref(),
+            model.clone(),
             self.num_visual_user_geom as usize
         );
 
@@ -158,7 +160,7 @@ which can be configured at the top of the model's XML like so:
 }
 
 
-impl Default for MjRendererBuilder {
+impl<M: Deref<Target = MjModel> + Clone> Default for MjRendererBuilder<M> {
     fn default() -> Self {
         Self::new()
     }
@@ -166,7 +168,7 @@ impl Default for MjRendererBuilder {
 
 /// A renderer for rendering 3D scenes.
 /// By default, RGB rendering is enabled and depth rendering is disabled.
-pub struct MjRenderer<M: RefOrClone<Target = MjModel>> {
+pub struct MjRenderer<M: Deref<Target = MjModel> + Clone> {
     scene: MjvScene<M>,
     user_scene: MjvScene<M>,
     context: MjrContext,
@@ -190,7 +192,7 @@ pub struct MjRenderer<M: RefOrClone<Target = MjModel>> {
     height: usize,
 }
 
-impl<M: RefOrClone<Target = MjModel>> MjRenderer<M> {
+impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// Construct a new renderer.
     /// The `max_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
@@ -237,8 +239,8 @@ impl<M: RefOrClone<Target = MjModel>> MjRenderer<M> {
         context.offscreen();
 
         /* The 3D scene for visualization */
-        let scene = MjvScene::new(model.clone_or_ref(), model.ffi().ngeom as usize + max_geom + EXTRA_INTERNAL_VISUAL_GEOMS);
-        let user_scene = MjvScene::new(model.clone_or_ref(), max_geom);
+        let scene = MjvScene::new(model.clone(), model.ffi().ngeom as usize + max_geom + EXTRA_INTERNAL_VISUAL_GEOMS);
+        let user_scene = MjvScene::new(model.clone(), max_geom);
 
         let camera = MjvCamera::new_free(&model);
         let option = MjvOption::default();
@@ -254,7 +256,7 @@ impl<M: RefOrClone<Target = MjModel>> MjRenderer<M> {
     }
 
     /// Create a [`MjRendererBuilder`] to configure [`MjRenderer`].
-    pub fn builder() -> MjRendererBuilder {
+    pub fn builder() -> MjRendererBuilder<M> {
         MjRendererBuilder::new()
     }
 

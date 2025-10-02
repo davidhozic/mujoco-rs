@@ -5,6 +5,7 @@ use glfw_mjrc_fork::{Action, Context, Glfw, GlfwReceiver, Key, Modifiers, MouseB
 
 use bitflags::bitflags;
 
+use std::ops::Deref;
 use std::time::Instant;
 use std::fmt::Display;
 use std::error::Error;
@@ -19,7 +20,6 @@ use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
-use crate::traits::RefOrClone;
 
 /****************************************** */
 // Rust native viewer
@@ -109,7 +109,7 @@ impl Error for MjViewerError {
 /// # Safety
 /// Due to the nature of OpenGL, this should only be run in the **main thread**.
 #[derive(Debug)]
-pub struct MjViewer<M: RefOrClone<Target = MjModel>> {
+pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     /* MuJoCo rendering */
     scene: MjvScene<M>,
     context: MjrContext,
@@ -137,7 +137,7 @@ pub struct MjViewer<M: RefOrClone<Target = MjModel>> {
     user_scene: MjvScene<M>
 }
 
-impl<M: RefOrClone<Target = MjModel>> MjViewer<M> {
+impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Launches the MuJoCo viewer. A [`Result`] struct is returned that either contains
     /// [`MjViewer`] or a [`MjViewerError`]. The `scene_max_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
@@ -163,8 +163,8 @@ impl<M: RefOrClone<Target = MjModel>> MjViewer<M> {
         glfw.set_swap_interval(glfw::SwapInterval::None);
 
         let ngeom = model.ffi().ngeom as usize;
-        let scene = MjvScene::new(model.clone_or_ref(), ngeom + scene_max_geom + EXTRA_SCENE_GEOM_SPACE);
-        let user_scene = MjvScene::new(model.clone_or_ref(), scene_max_geom);
+        let scene = MjvScene::new(model.clone(), ngeom + scene_max_geom + EXTRA_SCENE_GEOM_SPACE);
+        let user_scene = MjvScene::new(model.clone(), scene_max_geom);
         let context = MjrContext::new(&model) ;
         let camera  = MjvCamera::new_free(&model);
 
@@ -542,7 +542,7 @@ bitflags! {
 /// Wrapper around the C++ implementation of MujoCo viewer.
 /// If you don't need the side UI, we recommend you use the Rust-native viewer [`MjViewer`] instead.
 #[cfg(feature = "cpp-viewer")]
-pub struct MjViewerCpp<M: RefOrClone<Target = MjModel>> {
+pub struct MjViewerCpp<M: Deref<Target = MjModel> + Clone> {
     sim: *mut mujoco_Simulate,
     running: bool,
 
@@ -556,7 +556,7 @@ pub struct MjViewerCpp<M: RefOrClone<Target = MjModel>> {
 }
 
 #[cfg(feature = "cpp-viewer")]
-impl<M: RefOrClone<Target = MjModel>> MjViewerCpp<M> {
+impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
     #[inline]
     pub fn running(&self) -> bool {
         self.running
@@ -589,7 +589,7 @@ impl<M: RefOrClone<Target = MjModel>> MjViewerCpp<M> {
         let mut _cam = Box::new(MjvCamera::default());
         let mut _opt: Box<MjvOption> = Box::new(MjvOption::default());
         let mut _pert = Box::new(MjvPerturb::default());
-        let mut _user_scn = Box::new(MjvScene::new(model.clone_or_ref(), scene_max_geom));
+        let mut _user_scn = Box::new(MjvScene::new(model.clone(), scene_max_geom));
         let sim;
         let c_filename = CString::new("file.xml").unwrap();
         unsafe {
@@ -630,7 +630,7 @@ impl<M: RefOrClone<Target = MjModel>> MjViewerCpp<M> {
 }
 
 #[cfg(feature = "cpp-viewer")]
-impl<M: RefOrClone<Target = MjModel>> Drop for MjViewerCpp<M> {
+impl<M: Deref<Target = MjModel> + Clone> Drop for MjViewerCpp<M> {
     fn drop(&mut self) {
         unsafe {
             (*self.sim).RenderCleanup();

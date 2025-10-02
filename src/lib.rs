@@ -42,7 +42,6 @@ use std::ffi::CStr;
 
 pub mod wrappers;
 pub mod prelude;
-pub mod traits;
 pub mod util;
 
 
