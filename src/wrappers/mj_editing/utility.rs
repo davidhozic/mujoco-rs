@@ -454,7 +454,7 @@ macro_rules! item_body_iterator {
 macro_rules! body_get_iter {
     ($parent_lf:lifetime, [$($iter_over: ident),*]) => {paste::paste!{
         $(
-            #[doc = concat!("Returns an iterator over ", stringify!($iter_over)," items that allows modifying of each value.")]
+            #[doc = concat!("Returns an iterator over ", stringify!($iter_over)," items that allows modifying each value.")]
             pub fn [<$iter_over _iter_mut>](&mut self, recurse: bool) -> MjsBodyItemIterMut<'_, $parent_lf, [<Mjs $iter_over:camel>]<'_>> {
                 MjsBodyItemIterMut::<[<Mjs $iter_over:camel>]<'_>>::new(self, recurse)
             }
