@@ -176,7 +176,7 @@ items (geoms, joints, etc.). Iterators exist on :docs-rs:`~mujoco_rs::wrappers::
 and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`.
 
 To iterate over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec` items, call
-``[item_type]_iter``, with ``[item_type]`` replaced by geom, body, etc.
+``[item_type]_iter_mut``, with ``[item_type]`` replaced by geom, body, etc.
 
 .. code-block:: rust
 
