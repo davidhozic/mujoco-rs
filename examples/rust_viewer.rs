@@ -24,7 +24,7 @@ const EXAMPLE_MODEL: &str = "
 
 fn main() {
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
-    let mut data = model.make_data();  // or MjData::new(&model);
+    let mut data = MjData::new(&model);  // or model.make_data()
     let mut viewer = MjViewer::launch_passive(&model, 100)
         .expect("could not launch the viewer");
     while viewer.running() {

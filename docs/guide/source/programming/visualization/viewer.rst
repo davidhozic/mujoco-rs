@@ -41,7 +41,7 @@ like shown in the following example:
     fn main() {
         /* Initiate the physics simulation */
         let model = MjModel::from_xml("path/to/model.xml").expect("could not load the model");
-        let mut data = model.make_data();
+        let mut data = MjData::new(&model);
         let timestep = model.opt().timestep;
 
         /* Launch the viewer  */
@@ -105,7 +105,7 @@ Here is an example of using the C++ wrapper:
 
     fn main() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
-        let mut data = model.make_data();  // or MjData::new(&model);
+        let mut data = MjData::new(&model);
         let mut viewer = MjViewerCpp::launch_passive(&model, &data, 100);
         let step = model.opt().timestep;
         while viewer.running() {

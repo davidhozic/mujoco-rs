@@ -31,7 +31,7 @@ like so:
 
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
-        let mut data = model.make_data();
+        let mut data = MjData::new(&model);
         let joint_info = data.joint("football-ball").expect("name not found");
         loop {
             data.step();
@@ -48,7 +48,7 @@ a reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so
 
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
-        let mut data = model.make_data();
+        let mut data = MjData::new(&model);
         let joint_info = data.joint("football-ball").expect("name not found");
         loop {
             data.step();
@@ -74,7 +74,7 @@ and passed a mutable reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<stru
 
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
-        let mut data = model.make_data();
+        let mut data = MjData::new(&model);
         let joint_info = data.joint("football-ball").expect("name not found");
         loop {
             data.step();

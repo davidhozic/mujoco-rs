@@ -34,7 +34,7 @@ fn main() {
     let timestep = model.opt().timestep;
     /******************************************/
 
-    let mut data = model.make_data();  // or MjData::new(&model);
+    let mut data = MjData::new(&model);  // or model.make_data()
     let mut viewer = MjViewer::launch_passive(&model, 100)
         .expect("could not launch the viewer");
 
