@@ -1,0 +1,12 @@
+[package]
+name = "pyo3_application"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+
+[dependencies]
+mujoco-rs = {path = "../../"}
+pyo3 = { version = "0.26.0", features = ["abi3"] }

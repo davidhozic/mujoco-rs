@@ -26,7 +26,7 @@ const EXAMPLE_MODEL: &str = "
 fn main() {
     /* Load the model and create data */
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
-    let mut data = model.make_data();  // or MjData::new(&model);
+    let mut data = MjData::new(&model);  // or model.make_data()
 
     /* Launch a passive Rust-native viewer */
     let mut viewer = MjViewer::launch_passive(&model, 0)

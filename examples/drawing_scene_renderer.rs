@@ -43,7 +43,7 @@ fn main() {
 
     /* Model and data */
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
-    let mut data = model.make_data();
+    let mut data = MjData::new(&model);  // or model.make_data()
 
     /* Renderer for rendering at 1280x720 px (width x height) */
     let mut renderer = MjRenderer::builder()

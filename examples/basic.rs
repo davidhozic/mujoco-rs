@@ -22,7 +22,7 @@ const EXAMPLE_MODEL: &str = "
 
 fn main() {
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
-    let mut data = model.make_data();  // or MjData::new(&model);
+    let mut data = MjData::new(&model);  // or model.make_data()
     for i in 0..1000 {
         println!("Step {i}");
         data.step();

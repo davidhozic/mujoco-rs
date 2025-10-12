@@ -21,6 +21,8 @@ For example:
 
 .. code-block:: rust
 
+    use mujoco_rs::prelude::*;
+
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
     }
@@ -39,8 +41,35 @@ For example:
 
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
-        let mut data = model.make_data();  // or MjData::new(&model);
+        let mut data = MjData::new(&model);  // or model.make_data()
     }
+
+
+.. tip::
+
+    Using the :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>new` method is far **more flexible**
+    than using the :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>make_data` method.
+    The former allows parameters to be of any type as long as they implement the `Deref <https://doc.rust-lang.org/std/ops/trait.Deref.html>`_
+    trait (e.g., `Box\<MjModel\> <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_). For example:
+
+    .. code-block:: rust
+        :emphasize-lines: 2
+
+        fn main() {
+            let model = Box::new(MjModel::from_xml("model.xml").expect("could not load the model"));
+            let mut data = MjData::new(model);  // move model into the data
+            let model_ref = data.model();  // obtain the reference to the model
+        }
+
+    Note that `Box\<MjModel\> <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_ can't be used in contexts
+    that require explicit borrowing. One of the examples is :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
+    In such cases, `Rc\<MjModel\> <https://doc.rust-lang.org/std/rc/struct.Rc.html>`_ can be used.
+
+    This datatype model allows usage in environments with restricted lifetime usage.
+    One such example are **Python bindings** created with **PyO3**.
+    The :gh-example:`pyo3_application` example shows how create a simple MuJoCo-rs based application
+    for use from the Python programming language.
+
 
 
 Running
@@ -54,7 +83,7 @@ method like so:
 
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
-        let mut data = model.make_data();  // or MjData::new(&model);
+        let mut data = MjData::new(&model);
         loop {
             data.step();
         }
@@ -88,7 +117,7 @@ for precise timing.
 
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
-        let mut data = model.make_data();  // or MjData::new(&model);
+        let mut data = MjData::new(&model);
         let timestep = model.opt().timestep;
         loop {
             data.step();

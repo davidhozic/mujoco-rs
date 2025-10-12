@@ -11,7 +11,7 @@ fn main() {
     let model = create_model();
 
     // Normal simulation with visualization.
-    let mut data = model.make_data();
+    let mut data = MjData::new(&model);  // or model.make_data()
     let mut viewer = MjViewer::launch_passive(&model, 0).expect("could not launch viewer");
     let timestep = model.opt().timestep;
     while viewer.running() {
