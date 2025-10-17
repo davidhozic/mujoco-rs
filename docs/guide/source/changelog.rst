@@ -16,6 +16,17 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+
+Unreleased (MuJoCo 3.3.5)
+================================
+- **Breaking changes**:
+
+  - Updated the MuJoCo version to 3.3.7.
+  - Changed |mj_data| and other types to accept a generic type for the model,
+    constrained to ``Deref<Target = MjModel>``.
+    This enables use in environments such as `PyO3 <https://github.com/PyO3/pyo3>`_.
+
+
 1.5.0 (MuJoCo 3.3.5)
 ================================
 - |mjv_scene|:
