@@ -736,7 +736,7 @@ impl MjsFlex<'_> {
             internal: bool;       "enable internal collisions.";
             flatskin: bool;       "render flex skin with flat shading.";
             vertcollide: bool;    "mode for vertex collision.";
-            passive: bool;        "mode for passive collisions."
+            passive: bool;        "mode for passive collisions.";
         ]        
     }
 
