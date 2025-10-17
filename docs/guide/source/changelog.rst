@@ -26,6 +26,9 @@ Unreleased (MuJoCo 3.3.7)
     constrained to ``Deref<Target = MjModel>``.
     This enables use in environments such as `PyO3 <https://github.com/PyO3/pyo3>`_.
 
+- Other changes:
+
+  - Any changes to MuJoCo made in MuJoCo 3.3.6 and MuJoCo 3.3.7 (see https://mujoco.readthedocs.io/en/3.3.7/changelog.html).
 
 1.5.0 (MuJoCo 3.3.5)
 ================================
