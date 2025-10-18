@@ -1659,6 +1659,19 @@ mod tests {
     }
 
     #[test]
+    fn test_mesh() {
+        let mut spec = MjSpec::new();
+        let mut mesh = spec.add_mesh();
+        assert!(!mesh.needsdf());
+        mesh.set_needsdf(true);
+        assert!(mesh.needsdf());
+
+        assert!(!mesh.smoothnormal());
+        mesh.set_smoothnormal(true);
+        assert!(mesh.smoothnormal());
+    }
+
+    #[test]
     fn test_iteration() {
         const LAST_BODY_NAME: &str = "subbody";
         const LAST_WORLD_BODY_NAME: &str = "body2";
