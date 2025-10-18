@@ -29,6 +29,7 @@ Unreleased (MuJoCo 3.3.7)
 - Other changes:
 
   - Any changes to MuJoCo made in MuJoCo 3.3.6 and MuJoCo 3.3.7 (see https://mujoco.readthedocs.io/en/3.3.7/changelog.html).
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMesh`: changed ``smoothnormal`` and ``needsdf`` to assume boolean.
 
 1.5.0 (MuJoCo 3.3.5)
 ================================

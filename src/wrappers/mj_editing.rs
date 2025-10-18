@@ -1020,9 +1020,14 @@ impl MjsMesh<'_> {
     getter_setter! {
         with, get, set, [
             inertia: MjtMeshInertia;      "inertia type (convex, legacy, exact, shell).";
-            smoothnormal: MjtByte;        "do not exclude large-angle faces from normals.";
-            needsdf: MjtByte;             "compute sdf from mesh.";
             maxhullvert: i32;             "maximum vertex count for the convex hull.";
+        ]
+    }
+
+    getter_setter! {
+        with, get,set, [
+            smoothnormal: bool;           "do not exclude large-angle faces from normals.";
+            needsdf: bool;                "compute sdf from mesh.";
         ]
     }
 
