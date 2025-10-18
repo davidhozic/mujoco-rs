@@ -40,7 +40,7 @@ extensions = [
 templates_path = ['_templates']
 exclude_patterns = []
 
-MUJOCO_VERSION = "3.3.5"
+MUJOCO_VERSION = "3.3.7"
 
 
 rst_epilog = f"""

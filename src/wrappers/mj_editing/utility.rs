@@ -304,7 +304,7 @@ macro_rules! string_set_get_with {
         $(
             #[doc = concat!("Returns ", $comment)]
             pub fn $name(&self) -> &str {
-                read_mjs_string(unsafe { (*self.0).$name.as_ref().unwrap() })
+                read_mjs_string(unsafe { self.ffi().$name.as_ref().unwrap() })
             }
 
             #[doc = concat!(

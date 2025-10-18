@@ -124,6 +124,10 @@ impl MjsCompiler {
         LRopt: &MjLROpt;                    "options for lengthrange computation.";
     ]}
 
+    string_set_get_with! {
+        meshdir;        "mesh and hfield directory";
+        texturedir;     "texture directory";
+    }
 
     /* Proxy methods to simplify macro access. */
     #[inline]
@@ -732,6 +736,7 @@ impl MjsFlex<'_> {
             internal: bool;       "enable internal collisions.";
             flatskin: bool;       "render flex skin with flat shading.";
             vertcollide: bool;    "mode for vertex collision.";
+            passive: bool;        "mode for passive collisions.";
         ]        
     }
 
@@ -1024,6 +1029,7 @@ impl MjsMesh<'_> {
     string_set_get_with! {
         content_type; "content type of file.";
         file; "mesh file.";
+        material; "name of material";
     }
 
     vec_set! {
@@ -1486,7 +1492,6 @@ mod tests {
 
     #[test]
     fn test_save() {
-        /* TODO: when the bug gets fixed in MuJoCo, switch the angle="radian"to angle="degree" */
         const EXPECTED_XML: &str = "\
 <mujoco model=\"MuJoCo Model\">
   <compiler angle=\"radian\"/>

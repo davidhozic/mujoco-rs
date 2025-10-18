@@ -3,5 +3,5 @@
 for version in 22.04 24.04 25.04; do
     echo Testing $version
     docker buildx build -t mujoco-rs-ubuntu-$version --build-arg UBUNTU_VERSION=$version -f Dockerfile.ubuntu .
-    docker run --rm -it -v .:/build/ -v ./mujoco-3.3.5:/mujoco/ -t mujoco-rs-ubuntu-$version cargo test --lib --release
+    docker run --rm -it -v .:/build/ -v ./mujoco-3.3.7:/mujoco/ -t mujoco-rs-ubuntu-$version cargo test --lib --release
 done

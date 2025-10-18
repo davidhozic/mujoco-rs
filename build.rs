@@ -31,33 +31,35 @@ mod build_dependencies {
     pub(crate) fn generate_ffi() {
         let output_path = PathBuf::from("./src/");
         let current_dir = env::current_dir().unwrap();
-        let include_dir_mujoco = current_dir.join("src/cpp/include/mujoco");
-        let include_dir_simulate = include_dir_mujoco.join("viewer");
+        let include_dir_mujoco = current_dir.join("mujoco/include/mujoco");
+        let include_dir_simulate = current_dir.join("mujoco/simulate/");
 
         let bindings_mujoco = bindgen::Builder::default()
             .header(include_dir_mujoco.join("mujoco.h").to_str().unwrap())
-            .header(include_dir_simulate.join("simulate.hpp").to_str().unwrap())
-            .header(include_dir_simulate.join("glfw_dispatch.hpp").to_str().unwrap())
-            .clang_arg("-std=c++20")
-            .clang_arg("-stdlib=libc++")
-            .clang_arg(format!("-I{}", current_dir.join("mujoco/build/_deps/glfw3-src/include/").display()))
+            .clang_arg(format!("-I{}", include_dir_mujoco.display()))
+            .clang_arg(format!("-I{}", include_dir_mujoco.parent().unwrap().display()))
+            .allowlist_item("mj.*")
+            .layout_tests(false)
+            .derive_default(false)
+            .derive_copy(false)
+            .rustified_enum(".*")
+            .parse_callbacks(Box::new(CloneCallback))
+            /* Simulate C++ stuff */
+            .clang_args(["-x", "c++", "-std=c++20"])
+            .header(include_dir_simulate.join("simulate.h").to_str().unwrap())
+            .header(include_dir_simulate.join("glfw_dispatch.h").to_str().unwrap())
             .blocklist_item("std::tuple.*")
             .allowlist_item("mj.*")
             .allowlist_item("mujoco::.*")
             .allowlist_item("new_simulate")
             .allowlist_item("free_simulate")
-            .layout_tests(false)
-            .derive_default(false)
             .opaque_type("std::.*")
-            .derive_copy(false)
-            .rustified_enum(".*")
-            .parse_callbacks(Box::new(CloneCallback))
+            /* Generate */
             .generate()
             .expect("unable to generate MuJoCo bindings");
 
         let outputfile_dir = output_path.join("mujoco_c.rs");
-        let mut fdata = bindings_mujoco
-            .to_string();
+        let mut fdata = bindings_mujoco.to_string();
 
         /* Extra adjustments */
         fdata = fdata.replace("pub __lx: std_basic_string_value_type<_CharT>,", "pub __lx: std::mem::ManuallyDrop<std_basic_string_value_type<_CharT>>,");
