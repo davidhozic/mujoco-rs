@@ -22,14 +22,14 @@ Unreleased (MuJoCo 3.3.7)
 - **Breaking changes**:
 
   - Updated the MuJoCo version to 3.3.7.
-  - Changed |mj_data| and other types to accept a generic type for the model,
+  - Changed |mj_data| and other types to accept a generic type for the model.
     constrained to ``Deref<Target = MjModel>``.
     This enables use in environments such as `PyO3 <https://github.com/PyO3/pyo3>`_.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMesh`: changed ``smoothnormal`` and ``needsdf`` to assume boolean.
 
 - Other changes:
 
   - Any changes to MuJoCo made in MuJoCo 3.3.6 and MuJoCo 3.3.7 (see https://mujoco.readthedocs.io/en/3.3.7/changelog.html).
-  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMesh`: changed ``smoothnormal`` and ``needsdf`` to assume boolean.
 
 1.5.0 (MuJoCo 3.3.5)
 ================================
