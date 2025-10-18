@@ -1020,9 +1020,14 @@ impl MjsMesh<'_> {
     getter_setter! {
         with, get, set, [
             inertia: MjtMeshInertia;      "inertia type (convex, legacy, exact, shell).";
-            smoothnormal: MjtByte;        "do not exclude large-angle faces from normals.";
-            needsdf: MjtByte;             "compute sdf from mesh.";
             maxhullvert: i32;             "maximum vertex count for the convex hull.";
+        ]
+    }
+
+    getter_setter! {
+        with, get,set, [
+            smoothnormal: bool;           "do not exclude large-angle faces from normals.";
+            needsdf: bool;                "compute sdf from mesh.";
         ]
     }
 
@@ -1651,6 +1656,19 @@ mod tests {
         assert!(spec.exclude(EXCLUDE_INVALID_NAME).is_none());
 
         assert!(spec.compile().is_ok());
+    }
+
+    #[test]
+    fn test_mesh() {
+        let mut spec = MjSpec::new();
+        let mut mesh = spec.add_mesh();
+        assert!(!mesh.needsdf());
+        mesh.set_needsdf(true);
+        assert!(mesh.needsdf());
+
+        assert!(!mesh.smoothnormal());
+        mesh.set_smoothnormal(true);
+        assert!(mesh.smoothnormal());
     }
 
     #[test]

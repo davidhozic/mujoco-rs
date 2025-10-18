@@ -25,6 +25,7 @@ Unreleased (MuJoCo 3.3.7)
   - Changed |mj_data| and other types to accept a generic type for the model,
     constrained to ``Deref<Target = MjModel>``.
     This enables use in environments such as `PyO3 <https://github.com/PyO3/pyo3>`_.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMesh`: changed ``smoothnormal`` and ``needsdf`` to be treated as booleans.
 
 - Other changes:
 
