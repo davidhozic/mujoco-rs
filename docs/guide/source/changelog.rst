@@ -26,10 +26,13 @@ Unreleased (MuJoCo 3.3.7)
     constrained to ``Deref<Target = MjModel>``.
     This enables use in environments such as `PyO3 <https://github.com/PyO3/pyo3>`_.
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMesh`: changed ``smoothnormal`` and ``needsdf`` to be treated as booleans.
+  - |mj_data|: Renamed ``crb`` to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<attr>crb_comp` due to ``crb``
+    now being a method that returns an immutable slice to the ``crb`` attribute of the ffi type.
 
 - Other changes:
 
   - Any changes to MuJoCo made in MuJoCo 3.3.6 and MuJoCo 3.3.7 (see https://mujoco.readthedocs.io/en/3.3.7/changelog.html).
+  - Added array slice methods to |mj_data|.
 
 1.5.0 (MuJoCo 3.3.5)
 ================================
