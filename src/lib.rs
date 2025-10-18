@@ -37,7 +37,6 @@
 //! If a certain function can't be found, you can use the raw FFI bindings, available under 
 //! the [`mujoco_c`] module. Note that to access the lower-level ffi structs inside of wrappers,
 //! `ffi()` or `ffi_mut()` must be called (e.g., [`MjData::ffi`](wrappers::MjData::ffi) and [`MjModel::ffi`](wrappers::MjModel::ffi)). 
-
 use std::ffi::CStr;
 
 pub mod wrappers;

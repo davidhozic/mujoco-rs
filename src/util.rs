@@ -571,6 +571,27 @@ macro_rules! builder_setters {
     };
 }
 
+/// A macro for creating a slice over a raw array of dynamic size (given by some other variable in $len_accessor).
+#[doc(hidden)]
+#[macro_export]
+macro_rules! array_slice_dyn {
+    ([$($name:ident: &[$type:ty; $doc:literal; $($len_accessor:tt)*]),*]) => {
+        paste::paste! {
+            $(
+                #[doc = concat!("Immutable reference to the ", $doc," array.")]
+                pub fn $name(&self) -> &[$type] {
+                    unsafe { std::slice::from_raw_parts(self.ffi().$name, self.$($len_accessor)* as usize) }
+                }
+
+                #[doc = concat!("Mutable reference to the ", $doc," array.")]
+                pub fn [<$name _mut>](&mut self) -> &mut [$type] {
+                    unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name, self.$($len_accessor)* as usize) }
+                }
+            )*
+        }
+    };
+}
+
 /// assert_eq!, but with tolerance for floating point rounding.
 #[doc(hidden)]
 #[macro_export]

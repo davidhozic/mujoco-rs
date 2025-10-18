@@ -10,7 +10,7 @@ use std::ops::Deref;
 use std::ptr;
 
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
-use crate::{view_creator, info_method, info_with_view};
+use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
 
 /*******************************************/
 // Types
@@ -797,6 +797,19 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 }
 
+/// Arrays of dynamic size.
+impl<M: Deref<Target = MjModel>> MjData<M> {
+    array_slice_dyn! {
+        [
+            qpos:           &[MjtNum; "position"; model().ffi().nq],
+            qvel:           &[MjtNum; "velocity"; model().ffi().nv],
+            act:            &[MjtNum; "actuator activation"; model().ffi().na],
+            qacc_warmstart: &[MjtNum; "qacc_warmstart"; model().ffi().nv],
+            plugin_state:   &[MjtNum; "plugin state"; model().ffi().npluginstate]
+        ]
+    }
+}
+
 impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
     fn drop(&mut self) {
         unsafe {
@@ -804,7 +817,6 @@ impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
         }
     }
 }
-
 
 /**************************************************************************************************/
 // Joint view
@@ -1232,5 +1244,23 @@ mod test {
         let (geomid, dist) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1);
         assert!(dist.is_finite());
         assert!(geomid >= -1);
+    }
+
+    #[test]
+    fn test_qpos_view() {
+        const JOINT_BALL_DOF: usize = 7;
+        const BALL_INDEX: usize = 1;
+        const DOF_TO_MODIFY: usize = 2;
+        const MODIFIED_VALUE: f64 = 15.0;
+
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let name = model.id_to_name(MjtObj::mjOBJ_JOINT, BALL_INDEX as i32).unwrap();
+
+        let mut data = MjData::new(&model);
+        let ball2_joint_info = data.joint(name).unwrap();
+        ball2_joint_info.view_mut(&mut data).qpos[DOF_TO_MODIFY] = MODIFIED_VALUE;
+
+        dbg!(data.qpos());
+        assert_eq!(data.qpos()[JOINT_BALL_DOF * BALL_INDEX + DOF_TO_MODIFY], MODIFIED_VALUE);
     }
 }
