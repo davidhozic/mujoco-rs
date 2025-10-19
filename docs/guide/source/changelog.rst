@@ -32,7 +32,11 @@ Unreleased (MuJoCo 3.3.7)
 - Other changes:
 
   - Any changes to MuJoCo made in MuJoCo 3.3.6 and MuJoCo 3.3.7 (see https://mujoco.readthedocs.io/en/3.3.7/changelog.html).
-  - Added array slice methods to |mj_data|.
+  - Added additional getters / setters / array slice methods to:
+
+    - |mj_data|,
+    - |mj_model|,
+    - |mjv_scene|.
 
 1.5.0 (MuJoCo 3.3.5)
 ================================
