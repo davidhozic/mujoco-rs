@@ -575,7 +575,7 @@ macro_rules! builder_setters {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! array_slice_dyn {
-    ([$($name:ident: &[$type:ty; $doc:literal; $($len_accessor:tt)*]),*]) => {
+    ($($name:ident: &[$type:ty; $doc:literal; $($len_accessor:tt)*]),*) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
