@@ -1,8 +1,8 @@
 //! Definitions related to rendering.
 use std::{ffi::CString, mem::{zeroed, MaybeUninit}};
-use crate::mujoco_c::*;
+use crate::{array_slice_dyn, mujoco_c::*};
 
-use super::mj_model::MjModel;
+use super::mj_model::{MjModel, MjtTexture};
 use std::ptr;
 
 /***********************************************************************************************************************
@@ -149,6 +149,18 @@ impl MjrContext {
         &mut self.ffi
     }
 }
+
+/// Array slices.
+impl MjrContext {
+    array_slice_dyn! {
+        textureType: as_ptr as_mut_ptr &[MjtTexture [cast]; "type of texture"; ffi().ntexture],
+        skinvertVBO: &[u32; "skin vertex position VBOs"; ffi().nskin],
+        skinnormalVBO: &[u32; "skin vertex normal VBOs"; ffi().nskin],
+        skintexcoordVBO: &[u32; "skin vertex texture coordinate VBOs"; ffi().nskin],
+        skinfaceVBO: &[u32; "skin face index VBOs"; ffi().nskin]
+    }
+}
+
 
 impl Drop for MjrContext {
     fn drop(&mut self) {

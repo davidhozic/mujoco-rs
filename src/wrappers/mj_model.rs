@@ -540,6 +540,7 @@ impl MjModel {
     }
 }
 
+/// Array slices.
 impl MjModel {
     array_slice_dyn! {
         qpos0: &[MjtNum; "qpos values at default pose"; ffi().nq],
@@ -1237,7 +1238,7 @@ mod tests {
 
             <body name="ball2"  pos=".5 0 0">
                 <geom name="ball2" size=".5" rgba="0 1 1 1" mass="1"/>
-                <joint type="free"/>
+                <joint name="ball2" type="free"/>
                 <site name="ball2" size=".1 .1 .1" pos="0 0 0" rgba="0 1 1 0.2" type="box"/>
                 <site name="ball22" size="0.5 0.25 0.5" pos="5 1 3" rgba="1 2 3 1" type="box"/>
                 <site name="ball23" size=".1 .1 .1" pos="0 0 0" rgba="0 1 1 0.2" type="box"/>
@@ -1284,7 +1285,8 @@ mod tests {
 
 
         <actuator>
-            <general name="slider" joint="rod" biastype="affine" ctrlrange="0 1" gaintype="fixed"/>
+            <general name="slider" joint="rod" biastype="affine" ctrlrange="0 1" dynprm="1 2 3 4 5 6 7 8 9 10" gaintype="fixed"/>
+            <general name="slider2" joint="ball2" biastype="affine" ctrlrange="0 1" dynprm="10 9 8 7 6 5 4 3 2 1" gaintype="fixed"/>
         </actuator>
 
         <sensor>
@@ -1324,11 +1326,16 @@ mod tests {
         <keyframe>
             <!-- adjust nq/nv/nu in <default> or body definitions to match
                 lengths in your test constants -->
+            <key name="pose0"
+                time="0.0"
+                qpos="1.1 1.2 1.3 1.1 0.2 0.3 0.1 1.2 0.3 1.1 0.2 1.3 0.1 1.2 0.3 1.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.0"
+                qvel="0.5 5.0 5.0 0.0 1.0 0.0 0.0 5.0 0.0 5.0 1.0 5.0 0.0 1.0 5.0 0.0 1.0 0.0 0.0 1.0 0.0"
+                ctrl="0.5 0.5"/>
             <key name="pose1"
                 time="1.5"
                 qpos="0.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.3 0.1 0.2 0.0"
                 qvel="0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0 0.0 1.0 0.0"
-                ctrl="0.5"/>
+                ctrl="0.5 0.0"/>
         </keyframe>
 
         <custom>
@@ -1410,6 +1417,9 @@ mod tests {
         assert_eq!(view.forcelimited[0], false);
         assert_eq!(view.trntype[0], MjtTrn::mjTRN_JOINT);
         assert_eq!(view.gaintype[0], MjtGain::mjGAIN_FIXED);
+
+        /* Test direct array slice correspondance */
+        assert_eq!(view.dynprm[..], model.actuator_dynprm()[actuator_model_info.id]);
 
         /* Test write */
         let mut view_mut = actuator_model_info.view_mut(&mut model);
@@ -1661,7 +1671,7 @@ mod tests {
         const TIME: f64 = 1.5;
         const QVEL: &[f64] = &[0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0];
         const ACT: &[f64]  = &[];
-        const CTRL: &[f64] = &[0.5];
+        const CTRL: &[f64] = &[0.5, 0.0];
 
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
         let info_key = model.key(KEY_NAME).unwrap();
