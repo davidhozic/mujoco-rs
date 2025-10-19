@@ -1405,7 +1405,6 @@ mod test {
         let ball2_joint_info = data.joint(name).unwrap();
         ball2_joint_info.view_mut(&mut data).qpos[DOF_TO_MODIFY] = MODIFIED_VALUE;
 
-        dbg!(data.qpos());
         assert_eq!(data.qpos()[JOINT_BALL_DOF * BALL_INDEX + DOF_TO_MODIFY], MODIFIED_VALUE);
     }
 }
