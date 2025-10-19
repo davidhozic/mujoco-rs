@@ -619,7 +619,7 @@ macro_rules! array_slice_dyn {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
-                pub fn [<$name:snake>](&self) -> &[$type] {
+                pub fn [<$name:snake>](&self) -> &[[$type; $multiplier]] {
                     // Obtain a slice to the length array.
                     let length = unsafe { std::slice::from_raw_parts(
                         self.$($len_array)*.cast(),
@@ -633,7 +633,7 @@ macro_rules! array_slice_dyn {
                }
 
                 #[doc = concat!("Mutable slice of the ", $doc," array.")]
-                pub fn [<$name:snake _mut>](&mut self) -> &mut [$type] {
+                pub fn [<$name:snake _mut>](&mut self) -> &mut [[$type; $multiplier]] {
                     let length = unsafe { std::slice::from_raw_parts(
                         self.$($len_array)*.cast(),
                         self.$($len_array_length)* as usize

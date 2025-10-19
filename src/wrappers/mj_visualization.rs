@@ -381,23 +381,23 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
 impl<M: Deref<Target = MjModel>> MjvScene<M> {
     // Scalar length arrays
     array_slice_dyn! {
-        geoms: &[MjvGeom; "buffer for geoms"; ffi().ngeom],
-        geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi().ngeom],
-        flexedgeadr: &[i32; "address of flex edges"; ffi().nflex],
-        flexedgenum: &[i32; "number of edges in flex"; ffi().nflex],
-        flexvertadr: &[i32; "address of flex vertices"; ffi().nflex],
-        flexvertnum: &[i32; "number of vertices in flex"; ffi().nflex],
-        flexfaceadr: &[i32; "address of flex faces"; ffi().nflex],
-        flexfacenum: &[i32; "number of flex faces allocated"; ffi().nflex],
-        flexfaceused: &[i32; "number of flex faces currently in use"; ffi().nflex],
-        flexedge: &[[i32; 2]; "flex edge data"; model.ffi().nflexedge],
-        flexvert: &[[f32; 3]; "flex vertices"; model.ffi().nflexvert],
-        skinfacenum: &[i32; "number of faces in skin"; ffi().nskin],
-        skinvertadr: &[i32; "address of skin vertices"; ffi().nskin],
-        skinvertnum: &[i32; "number of vertices in skin"; ffi().nskin],
-        skinvert: &[[f32; 3]; "skin vertex data"; model.ffi().nskinvert],
-        skinnormal: &[[f32; 3]; "skin normal data"; model.ffi().nskinvert],
-        lights: as_ptr as_mut_ptr &[MjvLight; "buffer for lights"; ffi().nlight]
+        flexedge: &[[i32; 2] [cast]; "flex edge data"; model.ffi().nflexedge],
+        flexvert: &[[f32; 3] [cast]; "flex vertices"; model.ffi().nflexvert],
+        skinvert: &[[f32; 3] [cast]; "skin vertex data"; model.ffi().nskinvert],
+        skinnormal: &[[f32; 3] [cast]; "skin normal data"; model.ffi().nskinvert],
+        geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
+        geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
+        flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
+        flexedgenum: &[i32; "number of edges in flex"; ffi.nflex],
+        flexvertadr: &[i32; "address of flex vertices"; ffi.nflex],
+        flexvertnum: &[i32; "number of vertices in flex"; ffi.nflex],
+        flexfaceadr: &[i32; "address of flex faces"; ffi.nflex],
+        flexfacenum: &[i32; "number of flex faces allocated"; ffi.nflex],
+        flexfaceused: &[i32; "number of flex faces currently in use"; ffi.nflex],
+        skinfacenum: &[i32; "number of faces in skin"; ffi.nskin],
+        skinvertadr: &[i32; "address of skin vertices"; ffi.nskin],
+        skinvertnum: &[i32; "number of vertices in skin"; ffi.nskin],
+        lights: as_ptr as_mut_ptr &[MjvLight; "buffer for lights"; ffi.nlight]
     }
 
     // Arrays whose size is obtained via sum:
@@ -405,9 +405,9 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
     //   => length = multiplier * sum(length_array)
     array_slice_dyn! {
         summed {
-            flexface: &[f32; "flex faces vertices"; [9; (ffi().flexfacenum); (ffi().nflex)]],
-            flexnormal: &[f32; "flex face normals"; [9; (ffi().flexfacenum); (ffi.nflex)]],
-            flextexcoord: &[f32; "flex face texture coordinates"; [6; (ffi().flexfacenum); (ffi().nflex)]]
+            flexface: &[f32; "flex faces vertices"; [9; (ffi.flexfacenum); (ffi.nflex)]],
+            flexnormal: &[f32; "flex face normals"; [9; (ffi.flexfacenum); (ffi.nflex)]],
+            flextexcoord: &[f32; "flex face texture coordinates"; [6; (ffi.flexfacenum); (ffi.nflex)]]
         }
     }
 }
