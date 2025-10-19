@@ -572,20 +572,77 @@ macro_rules! builder_setters {
 }
 
 /// A macro for creating a slice over a raw array of dynamic size (given by some other variable in $len_accessor).
+/// Syntax: attribute: <optional pre-transformations (e.g., `as_ptr as_mut_ptr`)> &[datatype; documentation string;
+/// code to access the length attribute, appearing after `self.`]
+/// Syntax for arrays whose size is a sum from some length array:
+///     summed {
+///         ...
+///         attribute: &[datatype; documentation; [
+///                 size multiplier;
+///                 (code to access the length array, appearing after self);
+///                 (code to access the length array's length, appearing after self)
+///             ]
+///         ],
+///         ...
+///     }
+///
 #[doc(hidden)]
 #[macro_export]
 macro_rules! array_slice_dyn {
-    ($($name:ident: &[$type:ty; $doc:literal; $($len_accessor:tt)*]),*) => {
+    // Arrays that are of scalar variable size
+    ($($name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty; $doc:literal; $($len_accessor:tt)*]),*) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:snake>](&self) -> &[$type] {
-                    unsafe { std::slice::from_raw_parts(self.ffi().$name.cast(), self.$($len_accessor)* as usize) }
-                }
+                    let length = self.$($len_accessor)* as usize;
+                    if length == 0 {
+                        return &[];
+                    }
+                    unsafe { std::slice::from_raw_parts(self.ffi().$name$(.$as_ptr())?.cast(), length) }
+               }
 
                 #[doc = concat!("Mutable slice of the ", $doc," array.")]
                 pub fn [<$name:snake _mut>](&mut self) -> &mut [$type] {
-                    unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name.cast(), self.$($len_accessor)* as usize) }
+                    let length = self.$($len_accessor)* as usize;
+                    if length == 0 {
+                        return &mut [];
+                    }
+                    unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name$(.$as_mut_ptr())?.cast(), length) }
+                }
+            )*
+        }
+    };
+
+    // Arrays that are of summed variable size
+    (summed { $($name:ident: &[$type:ty; $doc:literal; [$multiplier:literal ; ($($len_array:tt)*) ; ($($len_array_length:tt)*)]]),* }) => {
+        paste::paste! {
+            $(
+                #[doc = concat!("Immutable slice of the ", $doc," array.")]
+                pub fn [<$name:snake>](&self) -> &[$type] {
+                    // Obtain a slice to the length array.
+                    let length = unsafe { std::slice::from_raw_parts(
+                        self.$($len_array)*.cast(),
+                        self.$($len_array_length)* as usize
+                    ).into_iter().sum::<u32>() as usize };
+
+                    if length == 0 {
+                        return &[];
+                    }
+                    unsafe { std::slice::from_raw_parts(self.ffi().$name.cast(), length) }
+               }
+
+                #[doc = concat!("Mutable slice of the ", $doc," array.")]
+                pub fn [<$name:snake _mut>](&mut self) -> &mut [$type] {
+                    let length = unsafe { std::slice::from_raw_parts(
+                        self.$($len_array)*.cast(),
+                        self.$($len_array_length)* as usize
+                    ).into_iter().sum::<u32>() as usize };
+
+                    if length == 0 {
+                        return &mut [];
+                    }
+                    unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name.cast(), length) }
                 }
             )*
         }

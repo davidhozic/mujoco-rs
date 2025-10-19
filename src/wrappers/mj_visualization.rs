@@ -9,6 +9,7 @@ use super::mj_rendering::{MjrContext, MjrRectangle};
 use super::mj_model::{MjModel, MjtGeom};
 use super::mj_primitive::MjtNum;
 use super::mj_data::MjData;
+use crate::array_slice_dyn;
 use crate::mujoco_c::*;
 
 
@@ -290,34 +291,6 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
         }
     }
 
-    pub fn geoms(&self) -> &[MjvGeom] {
-        if self.ffi.ngeom == 0 {
-            return &[];
-        }
-        unsafe { std::slice::from_raw_parts(self.ffi.geoms, self.ffi.ngeom as usize) }
-    }
-
-    pub fn geoms_mut(&mut self) -> &mut [MjvGeom] {
-        if self.ffi.ngeom == 0 {
-            return &mut [];
-        }
-        unsafe { std::slice::from_raw_parts_mut(self.ffi.geoms, self.ffi.ngeom as usize) }
-    }
-
-    pub fn lights(&self) -> &[MjvLight] {
-        if self.ffi.nlight == 0 {
-            return &[];
-        }
-        &self.ffi.lights[..self.ffi.nlight as usize]
-    }
-
-    pub fn lights_mut(&mut self) -> &mut [MjvLight] {
-        if self.ffi.nlight == 0 {
-            return &mut [];
-        }
-        &mut self.ffi.lights[..self.ffi.nlight as usize]
-    }
-
     pub fn update(&mut self, data: &mut MjData<M>, opt: &MjvOption, pertub: &MjvPerturb, cam: &mut MjvCamera) {
         unsafe {
             mjv_updateScene(
@@ -401,6 +374,41 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
 
     pub unsafe fn ffi_mut(&mut self) -> &mut mjvScene {
         &mut self.ffi
+    }
+}
+
+/// Array slices.
+impl<M: Deref<Target = MjModel>> MjvScene<M> {
+    // Scalar length arrays
+    array_slice_dyn! {
+        geoms: &[MjvGeom; "buffer for geoms"; ffi().ngeom],
+        geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi().ngeom],
+        flexedgeadr: &[i32; "address of flex edges"; ffi().nflex],
+        flexedgenum: &[i32; "number of edges in flex"; ffi().nflex],
+        flexvertadr: &[i32; "address of flex vertices"; ffi().nflex],
+        flexvertnum: &[i32; "number of vertices in flex"; ffi().nflex],
+        flexfaceadr: &[i32; "address of flex faces"; ffi().nflex],
+        flexfacenum: &[i32; "number of flex faces allocated"; ffi().nflex],
+        flexfaceused: &[i32; "number of flex faces currently in use"; ffi().nflex],
+        flexedge: &[[i32; 2]; "flex edge data"; model.ffi().nflexedge],
+        flexvert: &[[f32; 3]; "flex vertices"; model.ffi().nflexvert],
+        skinfacenum: &[i32; "number of faces in skin"; ffi().nskin],
+        skinvertadr: &[i32; "address of skin vertices"; ffi().nskin],
+        skinvertnum: &[i32; "number of vertices in skin"; ffi().nskin],
+        skinvert: &[[f32; 3]; "skin vertex data"; model.ffi().nskinvert],
+        skinnormal: &[[f32; 3]; "skin normal data"; model.ffi().nskinvert],
+        lights: as_ptr as_mut_ptr &[MjvLight; "buffer for lights"; ffi().nlight]
+    }
+
+    // Arrays whose size is obtained via sum:
+    // (multiplier; length array; length array length)
+    //   => length = multiplier * sum(length_array)
+    array_slice_dyn! {
+        summed {
+            flexface: &[f32; "flex faces vertices"; [9; (ffi().flexfacenum); (ffi().nflex)]],
+            flexnormal: &[f32; "flex face normals"; [9; (ffi().flexfacenum); (ffi.nflex)]],
+            flextexcoord: &[f32; "flex face texture coordinates"; [6; (ffi().flexfacenum); (ffi().nflex)]]
+        }
     }
 }
 
@@ -496,5 +504,15 @@ mod tests {
         }
 
         assert_eq!(scene.geoms().len(), 0);
+    }
+
+    #[test]
+    fn test_scene_slices() {
+        let model = load_model();
+        let scene = MjvScene::new(&model, 100);
+
+        assert_eq!(scene.lights().len(), scene.ffi().nlight as usize);
+        assert_eq!(scene.geomorder().len(), scene.ffi().ngeom as usize);
+        assert_eq!(scene.geoms().len(), scene.ffi().ngeom as usize);
     }
 }
