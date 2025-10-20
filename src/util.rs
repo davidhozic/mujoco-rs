@@ -422,19 +422,19 @@ macro_rules! info_with_view {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! getter_setter {
-    (get, [$($name:ident: bool; $comment:expr);* $(;)?]) => {paste::paste!{
+    (get, [$($name:ident $(+ $symbol:tt)?: bool; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Check ", $comment)]
-            pub fn [<$name:lower>](&self) -> bool {
+            pub fn [<$name:camel:snake $($symbol)?>](&self) -> bool {
                 self.ffi().$name == 1
             }
         )*
     }};
 
-    (get, [$($name:ident: & $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
+    (get, [$($name:ident $(+ $symbol:tt)?: & $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Return an immutable reference to ", $comment)]
-            pub fn [<$name:lower>](&self) -> &$type {
+            pub fn [<$name:camel:snake $($symbol)?>](&self) -> &$type {
                 &self.ffi().$name
             }
 
@@ -445,10 +445,10 @@ macro_rules! getter_setter {
         )*
     }};
 
-    (get, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
+    (get, [$($name:ident $(+ $symbol:tt)?: $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Return value of ", $comment)]
-            pub fn [<$name:lower>](&self) -> $type {
+            pub fn [<$name:camel:snake $($symbol)?>](&self) -> $type {
                 self.ffi().$name.into()
             }
         )*
@@ -466,10 +466,10 @@ macro_rules! getter_setter {
     };
 
     /* Enum conversion */
-    (force!, get, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
+    (force!, get, [$($name:ident $(+ $symbol:tt)? : $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Return value of ", $comment)]
-            pub fn [<$name:lower>](&self) -> $type {
+            pub fn [<$name:camel:snake $($symbol)?>](&self) -> $type {
                 unsafe { std::mem::transmute(self.ffi().$name) }
             }
         )*
@@ -515,42 +515,42 @@ macro_rules! getter_setter {
     
     /* Handling of optional arguments */
     /* Enum pass */
-    (force!, get, set, [ $( $name:ident : $type:ty ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(force!, get, [ $( $name : $type ; $comment );* ]);
+    (force!, get, set, [ $( $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(force!, get, [ $( $name $(+ $symbol)? : $type ; $comment );* ]);
         $crate::getter_setter!(force!, set, [ $( $name : $type ; $comment );* ]);
     };
 
-    (get, set, [ $( $name:ident : bool ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(get, [ $( $name : bool ; $comment );* ]);
+    (get, set, [ $( $name:ident $(+ $symbol:tt)? : bool ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name $(+ $symbol)? : bool ; $comment );* ]);
         $crate::getter_setter!(set, [ $( $name : bool ; $comment );* ]);
     };
 
-    (get, set, [ $( $name:ident : $type:ty ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(get, [ $( $name : $type ; $comment );* ]);
+    (get, set, [ $( $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name $(+ $symbol)? : $type ; $comment );* ]);
         $crate::getter_setter!(set, [ $( $name : $type ; $comment );* ]);
     };
 
     /* Builder pattern */
-    (with, get, set, [ $( $name:ident : bool ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(get, [ $( $name : bool ; $comment );* ]);
+    (with, get, set, [ $( $name:ident $(+ $symbol:tt)? : bool ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name $(+ $symbol)? : bool ; $comment );* ]);
         $crate::getter_setter!(set, [ $( $name : bool ; $comment );* ]);
         $crate::getter_setter!(with, [ $( $name : bool ; $comment );* ]);
     };
 
-    (with, get, set, [ $( $name:ident : $type:ty ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(get, [ $( $name : $type ; $comment );* ]);
+    (with, get, set, [ $( $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name $(+ $symbol)?: $type ; $comment );* ]);
         $crate::getter_setter!(set, [ $( $name : $type ; $comment );* ]);
         $crate::getter_setter!(with, [ $( $name : $type ; $comment );* ]);
     };
 
-    (force!, with, get, set, [ $( $name:ident : $type:ty ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(force!, get, [ $( $name : $type ; $comment );* ]);
-        $crate::getter_setter!(force!, set, [ $( $name : $type ; $comment );* ]);
-        $crate::getter_setter!(force!, with, [ $( $name : $type ; $comment );* ]);
+    (force!, with, get, set, [ $( $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(force!, get, [ $( $name $(+ $symbol)? : $type ; $comment );* ]);
+        $crate::getter_setter!(force!, set, [$( $name : $type ; $comment );* ]);
+        $crate::getter_setter!(force!, with,[$( $name : $type ; $comment );* ]);
     };
 
-    (with, get, [ $( $name:ident : & $type:ty ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(get, [ $( $name : & $type ; $comment );* ]);
+    (with, get, [ $( $name:ident $(+ $symbol:tt)? : & $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $name $(+ $symbol)? : & $type ; $comment );* ]);
         $crate::getter_setter!(with, [ $( $name : $type ; $comment );* ]);
     };
 }

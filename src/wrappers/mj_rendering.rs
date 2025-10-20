@@ -1,8 +1,8 @@
 //! Definitions related to rendering.
 use std::{ffi::CString, mem::{zeroed, MaybeUninit}};
-use crate::{array_slice_dyn, mujoco_c::*};
+use crate::{array_slice_dyn, getter_setter, mujoco_c::*};
 
-use super::mj_model::{MjModel, MjtTexture};
+use super::mj_model::{MjModel, MjtTexture, MjtTextureRole};
 use std::ptr;
 
 /***********************************************************************************************************************
@@ -161,6 +161,69 @@ impl MjrContext {
     }
 }
 
+impl MjrContext {
+    getter_setter! {with, get, set, [
+        lineWidth: f32; "line width for wireframe rendering.";
+        shadowClip: f32; "clipping radius for directional lights.";
+        shadowScale: f32; "fraction of light cutoff for spot lights.";
+        fogStart: f32; "fog start = stat.extent * vis.map.fogstart.";
+        fogEnd: f32; "fog end = stat.extent * vis.map.fogend.";
+        shadowSize: i32; "size of shadow map texture.";
+        offWidth: i32; "width of offscreen buffer.";
+        offHeight: i32; "height of offscreen buffer.";
+        offSamples: i32; "number of offscreen buffer multisamples.";
+        fontScale: i32; "font scale.";
+        offFBO: u32; "offscreen framebuffer object.";
+        offFBO_r: u32; "offscreen framebuffer for resolving multisamples.";
+        offColor: u32; "offscreen color buffer.";
+        offColor_r: u32; "offscreen color buffer for resolving multisamples.";
+        offDepthStencil: u32; "offscreen depth and stencil buffer.";
+        offDepthStencil_r: u32; "offscreen depth and stencil buffer for multisamples.";
+        shadowFBO: u32; "shadow map framebuffer object.";
+        shadowTex: u32; "shadow map texture.";
+        ntexture: i32; "number of allocated textures.";
+        basePlane: u32; "all planes from model.";
+        baseMesh: u32; "all meshes from model.";
+        baseHField: u32; "all height fields from model.";
+        baseBuiltin: u32; "all builtin geoms, with quality from model.";
+        baseFontNormal: u32; "normal font.";
+        baseFontShadow: u32; "shadow font.";
+        baseFontBig: u32; "big font.";
+        rangePlane: i32; "all planes from model.";
+        rangeMesh: i32; "all meshes from model.";
+        rangeHField: i32; "all hfields from model.";
+        rangeBuiltin: i32; "all builtin geoms, with quality from model.";
+        rangeFont: i32; "all characters in font.";
+        nskin: i32; "number of skins.";
+        charHeight: i32; "character heights: normal and shadow.";
+        charHeightBig: i32; "character heights: big.";
+        glInitialized: i32; "is OpenGL initialized.";
+        windowAvailable: i32; "is default/window framebuffer available.";
+        windowSamples: i32; "number of samples for default/window framebuffer.";
+        windowStereo: i32; "is stereo available for default/window framebuffer.";
+        windowDoublebuffer: i32; "is default/window framebuffer double buffered.";
+        currentBuffer: i32; "currently active framebuffer: mjFB_WINDOW or mjFB_OFFSCREEN.";
+        readPixelFormat: i32; "default color pixel format for mjr_readPixels.";
+        readDepthMap: i32; "depth mapping: mjDEPTH_ZERONEAR or mjDEPTH_ZEROFAR.";
+    ]}
+
+    getter_setter! {get, [
+        fogRGBA: &[f32; 4]; "fog rgba.";
+        auxWidth: &[i32; mjNAUX as usize]; "auxiliary buffer width.";
+        auxHeight: &[i32; mjNAUX as usize]; "auxiliary buffer height.";
+        auxSamples: &[i32; mjNAUX as usize]; "auxiliary buffer multisamples.";
+        auxFBO: &[u32; mjNAUX as usize]; "auxiliary framebuffer object.";
+        auxFBO_r: &[u32; mjNAUX as usize]; "auxiliary framebuffer object for resolving.";
+        auxColor: &[u32; mjNAUX as usize]; "auxiliary color buffer.";
+        auxColor_r: &[u32; mjNAUX as usize]; "auxiliary color buffer for resolving.";
+        mat_texid: &[i32; (mjMAXMATERIAL * MjtTextureRole::mjNTEXROLE as u32) as usize]; "material texture ids (-1: no texture).";
+        mat_texuniform: &[i32; mjMAXMATERIAL as usize]; "uniform cube mapping.";
+        mat_texrepeat: &[f32; (mjMAXMATERIAL * 2) as usize]; "texture repetition for 2d mapping.";
+        texture: &[u32; mjMAXTEXTURE as usize]; "texture names.";
+        charWidth: &[i32; 127]; "character widths: normal and shadow.";
+        charWidthBig: &[i32; 127]; "chacarter widths: big.";
+    ]}
+}
 
 impl Drop for MjrContext {
     fn drop(&mut self) {

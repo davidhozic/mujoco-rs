@@ -418,7 +418,7 @@ impl MjsSite<'_> {
     ]}
 
     getter_setter!(with, get, set, [
-        type_: MjtGeom;                   "geom type";
+        type_ + _: MjtGeom;                   "geom type";
         group: i32;                       "group";
     ]);
 
@@ -437,14 +437,14 @@ impl MjsJoint<'_> {
     getter_setter! {
         with, get, [
             pos:     &[f64; 3];         "joint position.";
-            axis:    &[f64; 3];             "joint axis.";
-            ref_:    &f64;             "joint reference.";
-            range:   &[f64; 2];            "joint range.";
+            axis:    &[f64; 3];         "joint axis.";
+            ref_ + _:    &f64;          "joint reference.";
+            range:   &[f64; 2];         "joint range.";
         ]
     }
 
     getter_setter!(with, get, set, [
-        type_: MjtJoint;               "joint type.";
+        type_ + _: MjtJoint;           "joint type.";
         group: i32;                    "joint group.";
     ]);
 
@@ -472,7 +472,7 @@ impl MjsGeom<'_> {
     }
 
     getter_setter!(with, get, set, [
-        type_: MjtGeom;                "geom type.";
+        type_ + _: MjtGeom;            "geom type.";
         group: i32;                    "group.";
         contype: i32;                  "contact type.";
         conaffinity: i32;              "contact affinity.";
@@ -554,7 +554,7 @@ impl MjsLight<'_> {
 
     getter_setter!(with, get, set, [
         mode: MjtCamLight;             "light mode.";
-        type_: MjtLightType;           "light type.";
+        type_ + _: MjtLightType;       "light type.";
         bulbradius: f32;               "bulb radius, for soft shadows.";
         intensity: f32;                "intensity, in candelas.";
         range: f32;                    "range of effectiveness.";
@@ -673,7 +673,7 @@ impl MjsSensor<'_> {
     }
 
     getter_setter!(with, get, set, [
-        type_: MjtSensor;              "sensor type.";
+        type_ + _: MjtSensor;          "sensor type.";
         objtype: MjtObj;               "object type the sensor refers to.";
         reftype: MjtObj;               "type of referenced object";
         datatype: MjtDataType;         "data type.";
@@ -824,8 +824,8 @@ impl MjsEquality<'_> {
     ]}
 
     getter_setter! {with, get, set, [
-        type_: MjtEq;   "equality type.";
-        objtype: MjtObj; "type of both objects";
+        type_ + _: MjtEq;   "equality type.";
+        objtype: MjtObj;    "type of both objects";
     ]}
 
     string_set_get_with! {
@@ -1142,7 +1142,7 @@ impl MjsTexture<'_> {
 
     getter_setter! {
         force!, with, get, set, [
-            type_: MjtTexture;            "texture type.";
+            type_ + _: MjtTexture;        "texture type.";
             colorspace: MjtColorSpace;    "colorspace.";
             builtin: MjtBuiltin;          "builtin type";
             mark: MjtMark;                "mark type";
