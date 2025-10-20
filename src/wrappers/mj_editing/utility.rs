@@ -213,22 +213,22 @@ macro_rules! mjs_wrapper {
         pub struct [<Mjs $ffi_name>]<'s>(*mut [<mjs $ffi_name>], PhantomData<&'s mut ()>);  // the lifetime belongs to the parent
 
         impl [<Mjs $ffi_name>]<'_> {
-            /// Returns an immutable reference to the inner struct.
+            /// Return an immutable reference to the inner struct.
             pub fn ffi(&self) -> &[<mjs $ffi_name>] {
                 unsafe { self.0.as_ref().unwrap() }
             }
 
-            /// Returns a mutable reference to the inner struct.
+            /// Return a mutable reference to the inner struct.
             pub unsafe fn ffi_mut(&mut self) -> &mut [<mjs $ffi_name>] {
                 unsafe { self.0.as_mut().unwrap() }
             }
 
-            /// Returns the message appended to compiler errors.
+            /// Return the message appended to compiler errors.
             pub fn info(&self) -> &str {
                 read_mjs_string(unsafe { self.ffi().info.as_ref().unwrap() })
             }
 
-            /// Sets the message appended to compiler errors.
+            /// Set the message appended to compiler errors.
             /// # Panics
             /// When the `info` contains '\0' characters, a panic occurs.
             pub fn set_info(&mut self, info: &str) {
@@ -253,12 +253,12 @@ macro_rules! mjs_wrapper {
 /// Implements the userdata method.
 macro_rules! userdata_method {
     ($type:ty) => {paste::paste!{
-        /// Returns an immutable slice to userdata.
+        /// Return an immutable slice to userdata.
         pub fn userdata(&self) -> &[$type] {
             [<read_mjs_vec_ $type>](unsafe { (*self.0).userdata.as_ref().unwrap() })
         }
         
-        /// Sets `userdata`.
+        /// Set `userdata`.
         pub fn set_userdata<T: AsRef<[$type]>>(&mut self, value: T) {
             [<write_mjs_vec_ $type>](value.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() })
         }
@@ -302,13 +302,13 @@ macro_rules! vec_string_set_append {
 macro_rules! string_set_get_with {
     ($($name:ident; $comment:expr;)*) => {paste::paste!{
         $(
-            #[doc = concat!("Returns ", $comment)]
+            #[doc = concat!("Return ", $comment)]
             pub fn $name(&self) -> &str {
                 read_mjs_string(unsafe { self.ffi().$name.as_ref().unwrap() })
             }
 
             #[doc = concat!(
-                "Sets ", $comment,
+                "Set ", $comment,
                 "\n",
                 "# Panics\n",
                 "When the `value` contains '\\0' characters, a panic occurs."
@@ -335,7 +335,7 @@ macro_rules! string_set_get_with {
 macro_rules! vec_set_get {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
-            #[doc = concat!("Returns ", $comment)]
+            #[doc = concat!("Return ", $comment)]
             pub fn $name(&self) -> &[$type] {
                 [<read_mjs_vec_ $type>](unsafe { (*self.0).$name.as_ref().unwrap() })
             }
@@ -349,7 +349,7 @@ macro_rules! vec_set_get {
 macro_rules! vec_set {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
-            #[doc = concat!("Sets ", $comment)]
+            #[doc = concat!("Set ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
                 [<write_mjs_vec_ $type>](value, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
             }
@@ -361,7 +361,7 @@ macro_rules! vec_set {
 macro_rules! vec_vec_append {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
-            #[doc = concat!("Sets ", $comment)]
+            #[doc = concat!("Set ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
                 [<append_mjs_vec_vec_ $type>](value, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
             }
@@ -372,7 +372,7 @@ macro_rules! vec_vec_append {
 /// Implements the plugin wrapper.
 macro_rules! plugin_wrapper_method {
     () => {
-        /// Returns a wrapper around the `plugin` attribute.
+        /// Return a wrapper around the `plugin` attribute.
         pub fn plugin_wrapper(&mut self) -> MjsPlugin<'_> {
             unsafe { MjsPlugin(&mut self.ffi_mut().plugin, PhantomData) }
         }
@@ -412,7 +412,7 @@ macro_rules! item_spec_iterator {
 macro_rules! spec_get_iter {
     ($($iter_over: ident),*) => {paste::paste!{
         $(
-            #[doc = concat!("Returns an iterator over ", stringify!($iter_over)," items that allows modifying each value.")]
+            #[doc = concat!("Return an iterator over ", stringify!($iter_over)," items that allows modifying each value.")]
             pub fn [<$iter_over _iter_mut>](&mut self) -> MjsSpecItemIterMut<'_, [<Mjs $iter_over:camel>]<'_>> {
                 MjsSpecItemIterMut::<[<Mjs $iter_over:camel>]<'_>>::new(self)
             }
@@ -454,7 +454,7 @@ macro_rules! item_body_iterator {
 macro_rules! body_get_iter {
     ($parent_lf:lifetime, [$($iter_over: ident),*]) => {paste::paste!{
         $(
-            #[doc = concat!("Returns an iterator over ", stringify!($iter_over)," items that allows modifying each value.")]
+            #[doc = concat!("Return an iterator over ", stringify!($iter_over)," items that allows modifying each value.")]
             pub fn [<$iter_over _iter_mut>](&mut self, recurse: bool) -> MjsBodyItemIterMut<'_, $parent_lf, [<Mjs $iter_over:camel>]<'_>> {
                 MjsBodyItemIterMut::<[<Mjs $iter_over:camel>]<'_>>::new(self, recurse)
             }

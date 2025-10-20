@@ -6,9 +6,11 @@ use std::ptr;
 use std::io;
 
 use super::mj_rendering::{MjrContext, MjrRectangle};
+use super::mj_primitive::{MjtNum, MjtByte};
 use super::mj_model::{MjModel, MjtGeom};
-use super::mj_primitive::MjtNum;
 use super::mj_data::MjData;
+use crate::array_slice_dyn;
+use crate::getter_setter;
 use crate::mujoco_c::*;
 
 
@@ -290,34 +292,6 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
         }
     }
 
-    pub fn geoms(&self) -> &[MjvGeom] {
-        if self.ffi.ngeom == 0 {
-            return &[];
-        }
-        unsafe { std::slice::from_raw_parts(self.ffi.geoms, self.ffi.ngeom as usize) }
-    }
-
-    pub fn geoms_mut(&mut self) -> &mut [MjvGeom] {
-        if self.ffi.ngeom == 0 {
-            return &mut [];
-        }
-        unsafe { std::slice::from_raw_parts_mut(self.ffi.geoms, self.ffi.ngeom as usize) }
-    }
-
-    pub fn lights(&self) -> &[MjvLight] {
-        if self.ffi.nlight == 0 {
-            return &[];
-        }
-        &self.ffi.lights[..self.ffi.nlight as usize]
-    }
-
-    pub fn lights_mut(&mut self) -> &mut [MjvLight] {
-        if self.ffi.nlight == 0 {
-            return &mut [];
-        }
-        &mut self.ffi.lights[..self.ffi.nlight as usize]
-    }
-
     pub fn update(&mut self, data: &mut MjData<M>, opt: &MjvOption, pertub: &MjvPerturb, cam: &mut MjvCamera) {
         unsafe {
             mjv_updateScene(
@@ -402,6 +376,85 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
     pub unsafe fn ffi_mut(&mut self) -> &mut mjvScene {
         &mut self.ffi
     }
+}
+
+/// Array slices.
+impl<M: Deref<Target = MjModel>> MjvScene<M> {
+    // Scalar length arrays
+    array_slice_dyn! {
+        flexedge: &[[i32; 2] [cast]; "flex edge data"; model.ffi().nflexedge],
+        flexvert: &[[f32; 3] [cast]; "flex vertices"; model.ffi().nflexvert],
+        skinvert: &[[f32; 3] [cast]; "skin vertex data"; model.ffi().nskinvert],
+        skinnormal: &[[f32; 3] [cast]; "skin normal data"; model.ffi().nskinvert],
+        geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
+        geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
+        flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
+        flexedgenum: &[i32; "number of edges in flex"; ffi.nflex],
+        flexvertadr: &[i32; "address of flex vertices"; ffi.nflex],
+        flexvertnum: &[i32; "number of vertices in flex"; ffi.nflex],
+        flexfaceadr: &[i32; "address of flex faces"; ffi.nflex],
+        flexfacenum: &[i32; "number of flex faces allocated"; ffi.nflex],
+        flexfaceused: &[i32; "number of flex faces currently in use"; ffi.nflex],
+        skinfacenum: &[i32; "number of faces in skin"; ffi.nskin],
+        skinvertadr: &[i32; "address of skin vertices"; ffi.nskin],
+        skinvertnum: &[i32; "number of vertices in skin"; ffi.nskin],
+        lights: as_ptr as_mut_ptr &[MjvLight; "buffer for lights"; ffi.nlight]
+    }
+
+    // Arrays whose size is obtained via sum:
+    // (multiplier; length array; length array length)
+    //   => length = multiplier * sum(length_array)
+    array_slice_dyn! {
+        summed {
+            flexface: &[f32; "flex faces vertices"; [9; (ffi.flexfacenum); (ffi.nflex)]],
+            flexnormal: &[f32; "flex face normals"; [9; (ffi.flexfacenum); (ffi.nflex)]],
+            flextexcoord: &[f32; "flex face texture coordinates"; [6; (ffi.flexfacenum); (ffi.nflex)]]
+        }
+    }
+}
+
+
+/// Public API getters / setters / builders.
+impl<M: Deref<Target = MjModel>> MjvScene<M> {
+    getter_setter! {get, [
+        maxgeom: i32; "size of allocated geom buffer.";
+        ngeom: i32; "number of geoms currently in buffer.";
+        nflex: i32; "number of flexes.";
+        nskin: i32; "number of skins.";
+        nlight: i32; "number of lights currently in buffer.";
+        status: i32; "status; 0: ok, 1: geoms exhausted.";
+    ]}
+
+    getter_setter! {get, [
+        flexvertopt: bool; "copy of mjVIS_FLEXVERT mjvOption flag.";
+        flexedgeopt: bool; "copy of mjVIS_FLEXEDGE mjvOption flag.";
+        flexfaceopt: bool; "copy of mjVIS_FLEXFACE mjvOption flag.";
+        flexskinopt: bool; "copy of mjVIS_FLEXSKIN mjvOption flag.";
+    ]}
+
+    getter_setter! {force!, with, get, set, [
+        stereo: MjtStereo; "stereoscopic rendering.";
+    ]}
+
+    getter_setter! {with, get, set, [
+        scale: f32; "model scaling.";
+        framewidth: i32; "frame pixel width; 0: disable framing.";
+    ]}
+
+    getter_setter! {with, get, set, [
+        enabletransform: bool; "enable model transformation.";
+    ]}
+
+    getter_setter! {with, get, [
+        camera: &[MjvGLCamera; 2]; "left and right camera.";
+        translate: &[f32; 3]; "model translation.";
+        rotate: &[f32; 4]; "model quaternion rotation.";
+        framergb: &[f32; 3]; "frame color.";
+    ]}
+
+    getter_setter! {get, [
+        flags: &[MjtByte; MjtRndFlag::mjNRNDFLAG as usize]; "rendering flags (indexed by mjtRndFlag).";
+    ]}
 }
 
 
@@ -496,5 +549,15 @@ mod tests {
         }
 
         assert_eq!(scene.geoms().len(), 0);
+    }
+
+    #[test]
+    fn test_scene_slices() {
+        let model = load_model();
+        let scene = MjvScene::new(&model, 100);
+
+        assert_eq!(scene.lights().len(), scene.ffi().nlight as usize);
+        assert_eq!(scene.geomorder().len(), scene.ffi().ngeom as usize);
+        assert_eq!(scene.geoms().len(), scene.ffi().ngeom as usize);
     }
 }

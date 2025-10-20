@@ -64,8 +64,12 @@ mod build_dependencies {
         /* Extra adjustments */
         fdata = fdata.replace("pub __lx: std_basic_string_value_type<_CharT>,", "pub __lx: std::mem::ManuallyDrop<std_basic_string_value_type<_CharT>>,");
         // Remove extra Clone
-        let re = regex::Regex::new(r"#\[derive\((.*?Clone.*?), Clone,?(.*?)\)\]").unwrap();
+        let mut re = regex::Regex::new(r"#\[derive\((.*?Clone.*?), Clone,?(.*?)\)\]").unwrap();
         fdata = re.replace_all(&fdata, "#[derive($1, $2)]").to_string();
+
+        // Make mjtSameFrame be MjtByte as used in all fields.
+        re = regex::Regex::new(r"#\[repr\(u32\)\]\n(.*\npub enum mjtSameFrame_)").unwrap();
+        fdata = re.replace(&fdata, "#[repr(u8)]\n$1").to_string();
 
         fs::write(outputfile_dir, fdata).unwrap();
     }

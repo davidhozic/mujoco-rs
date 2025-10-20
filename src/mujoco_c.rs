@@ -663,7 +663,7 @@ pub enum mjtConDataField_ {
     mjNCONDATA = 7,
 }
 pub use self::mjtConDataField_ as mjtConDataField;
-#[repr(u32)]
+#[repr(u8)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
 pub enum mjtSameFrame_ {
     mjSAMEFRAME_NONE = 0,
