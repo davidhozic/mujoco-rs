@@ -595,7 +595,7 @@ impl MjModel {
         nbuffer: MjtSize; "number of bytes in buffer.";
     ]}
 
-    getter_setter! {with, get, [
+    getter_setter! {get, [
         opt: &MjOption; "physics options.";
         vis: &MjVisual; "visualization options.";
         stat: &MjStatistic; "model statistics.";
