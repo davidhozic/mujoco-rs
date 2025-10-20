@@ -125,8 +125,8 @@ impl MjsCompiler {
     ]}
 
     string_set_get_with! {
-        meshdir;        "mesh and hfield directory";
-        texturedir;     "texture directory";
+        meshdir;        "mesh and hfield directory.";
+        texturedir;     "texture directory.";
     }
 
     /* Proxy methods to simplify macro access. */
@@ -304,7 +304,7 @@ impl MjSpec {
             compiler: &MjsCompiler; "compiler options.";
             stat: &MjStatistic; "statistic overrides.";
             visual: &MjVisual; "visualization options.";
-            option: &MjOption; "simulation options";
+            option: &MjOption; "simulation options.";
         ]
     }
 
@@ -314,7 +314,7 @@ impl MjSpec {
 
     getter_setter! {
         get, [
-            memory: MjtSize;      "number of bytes in arena+stack memory";
+            memory: MjtSize;     "number of bytes in arena+stack memory.";
             nemax: i32;             "max number of equality constraints.";
             nuserdata: i32;              "number of mjtNums in userdata.";
             nuser_body: i32;            "number of mjtNums in body_user.";
@@ -407,19 +407,19 @@ impl MjsSite<'_> {
     getter_setter! {
         with, get, [
             // frame, size
-            pos:  &[f64; 3];              "position";
-            quat: &[f64; 4];              "orientation";
-            alt:  &MjsOrientation;        "alternative orientation";
-            fromto: &[f64; 6];            "alternative for capsule, cylinder, box, ellipsoid";
-            size: &[f64; 3];              "geom size";
+            pos:  &[f64; 3];              "position.";
+            quat: &[f64; 4];              "orientation.";
+            alt:  &MjsOrientation;        "alternative orientation.";
+            fromto: &[f64; 6];            "alternative for capsule, cylinder, box, ellipsoid.";
+            size: &[f64; 3];              "geom size.";
 
             // visual
-            rgba: &[f32; 4];              "rgba when material is omitted";
+            rgba: &[f32; 4];              "rgba when material is omitted.";
     ]}
 
     getter_setter!(with, get, set, [
-        type_ + _: MjtGeom;                   "geom type";
-        group: i32;                       "group";
+        type_ + _: MjtGeom;               "geom type.";
+        group: i32;                       "group.";
     ]);
 
     userdata_method!(f64);
@@ -653,9 +653,9 @@ impl MjsActuator<'_> {
     userdata_method!(f64);
 
     string_set_get_with! {
-        target;                 "name of transmission target";
-        refsite;                "reference site, for site transmission";
-        slidersite;             "site defining cylinder, for slider-crank";
+        target;                 "name of transmission target.";
+        refsite;                "reference site, for site transmission.";
+        slidersite;             "site defining cylinder, for slider-crank.";
     }
 
     plugin_wrapper_method!();
@@ -675,7 +675,7 @@ impl MjsSensor<'_> {
     getter_setter!(with, get, set, [
         type_ + _: MjtSensor;          "sensor type.";
         objtype: MjtObj;               "object type the sensor refers to.";
-        reftype: MjtObj;               "type of referenced object";
+        reftype: MjtObj;               "type of referenced object.";
         datatype: MjtDataType;         "data type.";
         cutoff: f64;                   "cutoff for real and positive datatypes.";
         noise: f64;                    "noise stdev.";
@@ -761,7 +761,7 @@ impl MjsFlex<'_> {
     }
 
     vec_set! {
-        texcoord: f32;          "vertex texture coordinates";
+        texcoord: f32;          "vertex texture coordinates.";
         elem: i32;              "element vertex ids.";
         elemtexcoord: i32;      "element texture coordinates.";
     }
@@ -814,8 +814,8 @@ impl MjsEquality<'_> {
     getter_setter! {
         with, get, [
             data: &[f64; mjNEQDATA as usize];   "data array for equality parameters.";
-            solref: &[f64; mjNREF as usize];    "solver reference";         
-            solimp: &[f64; mjNIMP as usize];    "solver impedance";
+            solref: &[f64; mjNREF as usize];    "solver reference.";         
+            solimp: &[f64; mjNIMP as usize];    "solver impedance.";
         ]
     }
 
@@ -825,7 +825,7 @@ impl MjsEquality<'_> {
 
     getter_setter! {with, get, set, [
         type_ + _: MjtEq;   "equality type.";
-        objtype: MjtObj;    "type of both objects";
+        objtype: MjtObj;    "type of both objects.";
     ]}
 
     string_set_get_with! {
@@ -1034,7 +1034,7 @@ impl MjsMesh<'_> {
     string_set_get_with! {
         content_type; "content type of file.";
         file; "mesh file.";
-        material; "name of material";
+        material; "name of material.";
     }
 
     vec_set! {
@@ -1123,17 +1123,17 @@ mjs_wrapper!(Texture);
 impl MjsTexture<'_> {
     getter_setter! {
         with, get, [
-            rgb1: &[f64; 3];               "first color for builtin";
-            rgb2: &[f64; 3];               "second color for builtin";
-            markrgb: &[f64; 3];            "mark color";
-            gridsize: &[i32; 2];           "size of grid for composite file; (1,1)-repeat";
-            gridlayout: &[i8; 13];         "row-major: L,R,F,B,U,D for faces; . for unused";
+            rgb1: &[f64; 3];               "first color for builtin.";
+            rgb2: &[f64; 3];               "second color for builtin.";
+            markrgb: &[f64; 3];            "mark color.";
+            gridsize: &[i32; 2];           "size of grid for composite file; (1,1)-repeat.";
+            gridlayout: &[i8; 13];         "row-major: L,R,F,B,U,D for faces; . for unused.";
         ]
     }
 
     getter_setter! {
         with, get, set, [
-            random: f64;                  "probability of random dots";
+            random: f64;                  "probability of random dots.";
             width: i32;                   "image width.";
             height: i32;                  "image height.";
             nchannel: i32;                "number of channels.";
@@ -1144,8 +1144,8 @@ impl MjsTexture<'_> {
         force!, with, get, set, [
             type_ + _: MjtTexture;        "texture type.";
             colorspace: MjtColorSpace;    "colorspace.";
-            builtin: MjtBuiltin;          "builtin type";
-            mark: MjtMark;                "mark type";
+            builtin: MjtBuiltin;          "builtin type.";
+            mark: MjtMark;                "mark type.";
         ]
     }
 
@@ -1177,22 +1177,22 @@ impl MjsMaterial<'_> {
     getter_setter! {
         with, get, [
             rgba: &[f32; 4];                               "rgba color.";
-            texrepeat: &[f32; 2];    "texture repetition for 2D mapping";
+            texrepeat: &[f32; 2];    "texture repetition for 2D mapping.";
         ]
     }
 
     getter_setter! {with, get, set, [
-        texuniform: bool;       "make texture cube uniform";
+        texuniform: bool;       "make texture cube uniform.";
     ]}
 
     getter_setter! {
         with, get, set, [
-            emission: f32;                           "emission";
-            specular: f32;                           "specular";
-            shininess: f32;                         "shininess";
-            reflectance: f32;                     "reflectance";
-            metallic: f32;                           "metallic";
-            roughness: f32;                         "roughness";
+            emission: f32;                           "emission.";
+            specular: f32;                           "specular.";
+            shininess: f32;                         "shininess.";
+            reflectance: f32;                     "reflectance.";
+            metallic: f32;                           "metallic.";
+            roughness: f32;                         "roughness.";
         ]
     }
 
