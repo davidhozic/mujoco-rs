@@ -28,15 +28,15 @@ Unreleased (MuJoCo 3.3.7)
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMesh`: changed ``smoothnormal`` and ``needsdf`` to be treated as booleans.
   - |mj_data| methods:
 
-    - Renamed ``crb`` to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<attr>crb_comp` due to ``crb``
+    - Renamed ``crb`` to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>crb_comp` due to ``crb``
       now being a method that returns an immutable slice to the ``crb`` attribute of the ffi type,
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy` now returns a reference to a 2-element array instead of a slice,
 
   - |mj_model| methods:
 
-    - :docs-rs:`~mujoco_rs::wrappers::<struct>MjModel::<method>id_to_name` now accepts ``i32`` instead of ``c_int``,
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjModel::<method>size` now returns ``i32`` instead of ``c_int``,
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjModel::<method>state_size` now accepts ``u32`` instead of ``c_uint``
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>id_to_name` now accepts ``i32`` instead of ``c_int``,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>size` now returns ``i32`` instead of ``c_int``,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>state_size` now accepts ``u32`` instead of ``c_uint``
       and returns ``i32`` instead of ``c_int``,
 
   - :docs-rs:`mujoco_rs::mujoco_c`:
@@ -46,14 +46,14 @@ Unreleased (MuJoCo 3.3.7)
 
   - :docs-rs:`mujoco_rs::wrappers::fun::utility`:
 
-    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_band_diag`: replaced ``c_int`` types with ``i32``,
-    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_eig_3`: replaced ``c_int`` types with ``i32``,
-    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_halton`: replaced ``c_int`` types with ``i32``,
-    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_is_bad`: replaced ``c_int`` types with ``bool``,
-    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_mat_2_rot`: replaced ``c_int`` types with ``i32``,
-    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom`: replaced ``c_int`` types with :docs-rs:`~mujoco_rs::wrappers::MjtGeom`,
-    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_round`: replaced ``c_int`` types with ``i32``,
-    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_transform_spatial`: replaced ``c_int`` types with ``i32``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_band_diag`: replaced ``c_int`` types with ``i32``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_eig_3`: replaced ``c_int`` types with ``i32``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_halton`: replaced ``c_int`` types with ``i32``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_is_bad`: replaced ``c_int`` types with ``bool``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_mat_2_rot`: replaced ``c_int`` types with ``i32``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom`: replaced ``c_int`` types with :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtGeom`,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_round`: replaced ``c_int`` types with ``i32``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_transform_spatial`: replaced ``c_int`` types with ``bool``,
 
 
 - Other changes:
