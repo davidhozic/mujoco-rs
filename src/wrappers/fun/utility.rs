@@ -421,9 +421,9 @@ pub fn mju_round(x: MjtNum) -> i32  {
     unsafe { mujoco_c::mju_round(x) }
 }
 
-/// Return 1 if nan or abs(x)>mjMAXVAL, 0 otherwise. Used by check functions.
-pub fn mju_is_bad(x: MjtNum) -> i32  {
-    unsafe { mujoco_c::mju_isBad(x) }
+/// Return true if nan or abs(x)>mjMAXVAL, false otherwise. Used by check functions.
+pub fn mju_is_bad(x: MjtNum) -> bool  {
+    unsafe { mujoco_c::mju_isBad(x) == 1 }
 }
 
 /// Generate Halton sequence.
@@ -737,7 +737,7 @@ mod tests {
         let oldpos = [0.0, 0.0, 0.0];
 
         // No rotation
-        mju_transform_spatial(&mut res, &vec, 0, &newpos, &oldpos, None);
+        mju_transform_spatial(&mut res, &vec, false, &newpos, &oldpos, None);
 
         assert_relative_eq!(res[0], vec[0], epsilon = 1e-9);
         assert_relative_eq!(res[1], vec[1], epsilon = 1e-9);
@@ -753,7 +753,7 @@ mod tests {
         let oldpos = [0.0, 0.0, 0.0];
 
         // Force flag
-        mju_transform_spatial(&mut res, &vec, 1, &newpos, &oldpos, None);
+        mju_transform_spatial(&mut res, &vec, true, &newpos, &oldpos, None);
 
         assert_relative_eq!(res[0], vec[0], epsilon = 1e-9);
         assert_relative_eq!(res[1], vec[1], epsilon = 1e-9);
@@ -775,7 +775,7 @@ mod tests {
             0.0, 0.0, 1.0,
         ];
 
-        mju_transform_spatial(&mut res, &vec, 0, &newpos, &oldpos, Some(&rot_identity));
+        mju_transform_spatial(&mut res, &vec, false, &newpos, &oldpos, Some(&rot_identity));
 
         assert_relative_eq!(res[0], vec[0], epsilon = 1e-9);
         assert_relative_eq!(res[1], vec[1], epsilon = 1e-9);

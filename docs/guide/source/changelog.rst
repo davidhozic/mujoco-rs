@@ -42,7 +42,19 @@ Unreleased (MuJoCo 3.3.7)
   - :docs-rs:`mujoco_rs::mujoco_c`:
 
     - :docs-rs:`~mujoco_rs::mujoco_c::<enum>mjtSameFrame_` is now ``repr(u8)`` instead of ``repr(u32)``
-      to fix alignment issues with MuJoCo's structs.
+      to fix alignment issues with MuJoCo's structs,
+
+  - :docs-rs:`mujoco_rs::wrappers::fun::utility`:
+
+    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_band_diag`: replaced ``c_int`` types with ``i32``,
+    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_eig_3`: replaced ``c_int`` types with ``i32``,
+    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_halton`: replaced ``c_int`` types with ``i32``,
+    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_is_bad`: replaced ``c_int`` types with ``bool``,
+    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_mat_2_rot`: replaced ``c_int`` types with ``i32``,
+    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom`: replaced ``c_int`` types with :docs-rs:`~mujoco_rs::wrappers::MjtGeom`,
+    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_round`: replaced ``c_int`` types with ``i32``,
+    - :docs:rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_transform_spatial`: replaced ``c_int`` types with ``i32``,
+
 
 - Other changes:
 
