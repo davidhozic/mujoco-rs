@@ -547,7 +547,7 @@ impl MjModel {
         nmeshpolymap: i32; "number of polygons in vertex map.";
         nskin: i32; "number of skins.";
         nskinvert: i32; "number of vertices in all skins.";
-        nskintexvert: i32; "number of vertiex with texcoords in all skins.";
+        nskintexvert: i32; "number of vertices with texcoords in all skins.";
         nskinface: i32; "number of triangular faces in all skins.";
         nskinbone: i32; "number of bones in all skins.";
         nskinbonevert: i32; "number of vertices in all skin bones.";
@@ -796,7 +796,7 @@ impl MjModel {
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
         flex_edgeequality: &[bool [cast]; "is edge equality constraint defined"; ffi().nflex],
-        flex_rigid: &[bool [cast]; "are all verices in the same body"; ffi().nflex],
+        flex_rigid: &[bool [cast]; "are all vertices in the same body"; ffi().nflex],
         flexedge_rigid: &[bool [cast]; "are both edge vertices in same body"; ffi().nflexedge],
         flex_centered: &[bool [cast]; "are all vertex coordinates (0,0,0)"; ffi().nflex],
         flex_flatskin: &[bool [cast]; "render flex skin with flat shading"; ffi().nflex],

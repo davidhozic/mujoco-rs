@@ -221,7 +221,7 @@ impl MjrContext {
         (allow_mut = false) mat_texrepeat: &[f32; (mjMAXMATERIAL * 2) as usize]; "texture repetition for 2d mapping.";
         (allow_mut = false) texture: &[u32; mjMAXTEXTURE as usize]; "texture names.";
         (allow_mut = false) charWidth: &[i32; 127]; "character widths: normal and shadow.";
-        (allow_mut = false) charWidthBig: &[i32; 127]; "chacarter widths: big.";
+        (allow_mut = false) charWidthBig: &[i32; 127]; "character widths: big.";
     ]}
 }
 
