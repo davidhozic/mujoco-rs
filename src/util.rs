@@ -431,13 +431,14 @@ macro_rules! getter_setter {
         )*
     }};
 
-    (get, [$($name:ident $(+ $symbol:tt)?: & $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
+    (get, [$( $((allow_mut = $cfg_mut:literal))? $name:ident $(+ $symbol:tt)?: & $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Return an immutable reference to ", $comment)]
             pub fn [<$name:camel:snake $($symbol)?>](&self) -> &$type {
                 &self.ffi().$name
             }
 
+            $(#[cfg($cfg_mut)])?
             #[doc = concat!("Return a mutable reference to ", $comment)]
             pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
                 unsafe { &mut self.ffi_mut().$name }
@@ -549,8 +550,8 @@ macro_rules! getter_setter {
         $crate::getter_setter!(force!, with,[$( $name : $type ; $comment );* ]);
     };
 
-    (with, get, [ $( $name:ident $(+ $symbol:tt)? : & $type:ty ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(get, [ $( $name $(+ $symbol)? : & $type ; $comment );* ]);
+    (with, get, [ $( $(allow_mut = $cfg_mut:literal)? $name:ident $(+ $symbol:tt)? : & $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $( $(allow_mut = $cfg_mut)? $name $(+ $symbol)? : & $type ; $comment );* ]);
         $crate::getter_setter!(with, [ $( $name : $type ; $comment );* ]);
     };
 }
@@ -590,7 +591,7 @@ macro_rules! builder_setters {
 #[macro_export]
 macro_rules! array_slice_dyn {
     // Arrays that are of scalar variable size
-    ($($name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$cast:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
+    ($($((allow_mut = $cfg_mut:literal))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$cast:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
@@ -600,8 +601,9 @@ macro_rules! array_slice_dyn {
                         return &[];
                     }
                     unsafe { std::slice::from_raw_parts(self.ffi().$name$(.$as_ptr())?$(.$cast())? as *const _, length) }
-               }
+                }
 
+                $(#[cfg($cfg_mut)])?
                 #[doc = concat!("Mutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                     let length = self.$($len_accessor)* as usize;
@@ -615,7 +617,7 @@ macro_rules! array_slice_dyn {
     };
 
     // Arrays that are of summed variable size
-    (summed { $($name:ident: &[$type:ty; $doc:literal; [$multiplier:literal ; ($($len_array:tt)*) ; ($($len_array_length:tt)*)]]),* }) => {
+    (summed { $( $(allow_mut = $cfg_mut:literal)? $name:ident: &[$type:ty; $doc:literal; [$multiplier:literal ; ($($len_array:tt)*) ; ($($len_array_length:tt)*)]]),* }) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
@@ -636,8 +638,9 @@ macro_rules! array_slice_dyn {
                     }
 
                     unsafe { std::slice::from_raw_parts(self.ffi().$name.cast(), length) }
-               }
-
+                }
+                
+                $(#[cfg($cfg_mut)])?
                 #[doc = concat!("Mutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [[$type; $multiplier]] {
                     let length_array_length = self.$($len_array_length)* as usize;
@@ -661,7 +664,7 @@ macro_rules! array_slice_dyn {
     };
 
     // Arrays whose second dimension is dependent on some variable
-    (sublen_dep {$($name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[[$type:ty; $($inner_len_accessor:tt)*] $([$cast:ident])?; $doc:literal; $($len_accessor:tt)*]),*}) => {
+    (sublen_dep {$( $(allow_mut = $cfg_mut:literal)? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[[$type:ty; $($inner_len_accessor:tt)*] $([$cast:ident])?; $doc:literal; $($len_accessor:tt)*]),*}) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
@@ -673,8 +676,9 @@ macro_rules! array_slice_dyn {
 
 
                     unsafe { std::slice::from_raw_parts(self.ffi().$name$(.$as_ptr())?$(.$cast())? as *const _, length) }
-               }
+                }
 
+                $(#[cfg($cfg_mut)])?
                 #[doc = concat!("Mutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                     let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
