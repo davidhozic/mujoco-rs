@@ -436,7 +436,7 @@ impl MjModel {
     }
 
     /// Return size of state specification. The bits of the integer spec correspond to element fields of [`MjtState`](crate::wrappers::mj_data::MjtState).
-    pub fn state_size(&self, spec: std::ffi::c_uint) -> i32 {
+    pub fn state_size(&self, spec: u32) -> i32 {
         unsafe { mj_stateSize(self.ffi(), spec) }
     }
 

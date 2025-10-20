@@ -26,8 +26,23 @@ Unreleased (MuJoCo 3.3.7)
     constrained to ``Deref<Target = MjModel>``.
     This enables use in environments such as `PyO3 <https://github.com/PyO3/pyo3>`_.
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMesh`: changed ``smoothnormal`` and ``needsdf`` to be treated as booleans.
-  - |mj_data|: Renamed ``crb`` to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<attr>crb_comp` due to ``crb``
-    now being a method that returns an immutable slice to the ``crb`` attribute of the ffi type.
+  - |mj_data| methods:
+
+    - Renamed ``crb`` to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<attr>crb_comp` due to ``crb``
+      now being a method that returns an immutable slice to the ``crb`` attribute of the ffi type,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy` now returns a reference to a 2-element array instead of a slice,
+
+  - |mj_model| methods:
+
+    - :docs-rs:`~mujoco_rs::wrappers::<struct>MjModel::<method>id_to_name` now accepts ``i32`` instead of ``c_int``,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjModel::<method>size` now returns ``i32`` instead of ``c_int``,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjModel::<method>state_size` now accepts ``u32`` instead of ``c_uint``
+      and returns ``i32`` instead of ``c_int``,
+
+  - :docs-rs:`mujoco_rs::mujoco_c`:
+
+    - :docs-rs:`~mujoco_rs::mujoco_c::<enum>mjtSameFrame_` is now ``repr(u8)`` instead of ``repr(u32)``
+      to fix alignment issues with MuJoCo's structs.
 
 - Other changes:
 

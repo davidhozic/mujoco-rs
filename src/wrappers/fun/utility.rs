@@ -1,4 +1,5 @@
 //! Module containing safe wrappers around utility functions.
+use crate::wrappers::mj_model::MjtGeom;
 use crate::wrappers::mj_primitive::*;
 use crate::mujoco_c;
 use std::ptr;
@@ -170,8 +171,8 @@ pub fn mju_sqr_mat_td(res: &mut [MjtNum], mat: &[MjtNum], diag: Option<&[MjtNum]
 /* Auto generated */
 /*******************************/
 /// Intersect ray with pure geom, return nearest distance or -1 if no intersection.
-pub fn mju_ray_geom(pos: &[MjtNum; 3], mat: &[MjtNum; 9], size: &[MjtNum; 3], pnt: &[MjtNum; 3], vec: &[MjtNum; 3], geomtype: std::ffi::c_int) -> MjtNum  {
-    unsafe { mujoco_c::mju_rayGeom(pos.as_ptr(), mat.as_ptr(), size.as_ptr(), pnt.as_ptr(), vec.as_ptr(), geomtype) }
+pub fn mju_ray_geom(pos: &[MjtNum; 3], mat: &[MjtNum; 9], size: &[MjtNum; 3], pnt: &[MjtNum; 3], vec: &[MjtNum; 3], geomtype: MjtGeom) -> MjtNum  {
+    unsafe { mujoco_c::mju_rayGeom(pos.as_ptr(), mat.as_ptr(), size.as_ptr(), pnt.as_ptr(), vec.as_ptr(), geomtype as i32) }
 }
 
 /// Set res = 0.
@@ -277,9 +278,9 @@ pub fn mju_normalize_4(vec: &mut [MjtNum; 4]) -> MjtNum  {
 /// Coordinate transform of 6D motion or force vector in rotation:translation format.
 /// rotnew2old is 3-by-3, NULL means no rotation; flg_force specifies force or motion type.
 /// Nullable: rotnew2old
-pub fn mju_transform_spatial(res: &mut [MjtNum; 6], vec: &[MjtNum; 6], flg_force: std::ffi::c_int, newpos: &[MjtNum; 3], oldpos: &[MjtNum; 3], rotnew_2old: Option<&[MjtNum; 9]>)  {
+pub fn mju_transform_spatial(res: &mut [MjtNum; 6], vec: &[MjtNum; 6], flg_force: bool, newpos: &[MjtNum; 3], oldpos: &[MjtNum; 3], rotnew_2old: Option<&[MjtNum; 9]>)  {
     unsafe { mujoco_c::mju_transformSpatial(
-        res.as_mut_ptr(), vec.as_ptr(), flg_force, newpos.as_ptr(), oldpos.as_ptr(),
+        res.as_mut_ptr(), vec.as_ptr(), flg_force as i32, newpos.as_ptr(), oldpos.as_ptr(),
         rotnew_2old.map_or(ptr::null(), |d| d.as_ptr())
     ) }
 }
@@ -346,7 +347,7 @@ pub fn mju_quat_z2_vec(quat: &mut [MjtNum; 4], vec: &[MjtNum; 3])  {
 
 /// Extract 3D rotation from an arbitrary 3x3 matrix by refining the input quaternion.
 /// Returns the number of iterations required to converge
-pub fn mju_mat_2_rot(quat: &mut [MjtNum; 4], mat: &[MjtNum; 9]) -> std::ffi::c_int  {
+pub fn mju_mat_2_rot(quat: &mut [MjtNum; 4], mat: &[MjtNum; 9]) -> i32  {
     unsafe { mujoco_c::mju_mat2Rot(quat.as_mut_ptr(), mat.as_ptr()) }
 }
 
@@ -366,12 +367,12 @@ pub fn mju_trn_vec_pose(res: &mut [MjtNum; 3], pos: &[MjtNum; 3], quat: &[MjtNum
 }
 
 /// Address of diagonal element i in band-dense matrix representation.
-pub fn mju_band_diag(i: std::ffi::c_int, ntotal: std::ffi::c_int, nband: std::ffi::c_int, ndense: std::ffi::c_int) -> std::ffi::c_int  {
+pub fn mju_band_diag(i: i32, ntotal: i32, nband: i32, ndense: i32) -> i32  {
     unsafe { mujoco_c::mju_bandDiag(i, ntotal, nband, ndense) }
 }
 
 /// Eigenvalue decomposition of symmetric 3x3 matrix, mat = eigvec * diag(eigval) * eigvec'.
-pub fn mju_eig_3(eigval: &mut [MjtNum; 3], eigvec: &mut [MjtNum; 9], quat: &mut [MjtNum; 4], mat: &[MjtNum; 9]) -> std::ffi::c_int  {
+pub fn mju_eig_3(eigval: &mut [MjtNum; 3], eigvec: &mut [MjtNum; 9], quat: &mut [MjtNum; 4], mat: &[MjtNum; 9]) -> i32  {
     unsafe { mujoco_c::mju_eig3(eigval.as_mut_ptr(), eigvec.as_mut_ptr(), quat.as_mut_ptr(), mat.as_ptr()) }
 }
 
@@ -416,17 +417,17 @@ pub fn mju_sign(x: MjtNum) -> MjtNum  {
 }
 
 /// Round x to nearest integer.
-pub fn mju_round(x: MjtNum) -> std::ffi::c_int  {
+pub fn mju_round(x: MjtNum) -> i32  {
     unsafe { mujoco_c::mju_round(x) }
 }
 
 /// Return 1 if nan or abs(x)>mjMAXVAL, 0 otherwise. Used by check functions.
-pub fn mju_is_bad(x: MjtNum) -> std::ffi::c_int  {
+pub fn mju_is_bad(x: MjtNum) -> i32  {
     unsafe { mujoco_c::mju_isBad(x) }
 }
 
 /// Generate Halton sequence.
-pub fn mju_halton(index: std::ffi::c_int, base: std::ffi::c_int) -> MjtNum  {
+pub fn mju_halton(index: i32, base: i32) -> MjtNum  {
     unsafe { mujoco_c::mju_Halton(index, base) }
 }
 
