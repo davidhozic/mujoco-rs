@@ -6,10 +6,11 @@ use std::ptr;
 use std::io;
 
 use super::mj_rendering::{MjrContext, MjrRectangle};
+use super::mj_primitive::{MjtNum, MjtByte};
 use super::mj_model::{MjModel, MjtGeom};
-use super::mj_primitive::MjtNum;
 use super::mj_data::MjData;
 use crate::array_slice_dyn;
+use crate::getter_setter;
 use crate::mujoco_c::*;
 
 
@@ -410,6 +411,50 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
             flextexcoord: &[f32; "flex face texture coordinates"; [6; (ffi.flexfacenum); (ffi.nflex)]]
         }
     }
+}
+
+
+/// Public API getters / setters / builders.
+impl<M: Deref<Target = MjModel>> MjvScene<M> {
+    getter_setter! {get, [
+        maxgeom: i32; "size of allocated geom buffer.";
+        ngeom: i32; "number of geoms currently in buffer.";
+        nflex: i32; "number of flexes.";
+        nskin: i32; "number of skins.";
+        nlight: i32; "number of lights currently in buffer.";
+        status: i32; "status; 0: ok, 1: geoms exhausted.";
+    ]}
+
+    getter_setter! {get, [
+        flexvertopt: bool; "copy of mjVIS_FLEXVERT mjvOption flag.";
+        flexedgeopt: bool; "copy of mjVIS_FLEXEDGE mjvOption flag.";
+        flexfaceopt: bool; "copy of mjVIS_FLEXFACE mjvOption flag.";
+        flexskinopt: bool; "copy of mjVIS_FLEXSKIN mjvOption flag.";
+    ]}
+
+    getter_setter! {force!, with, get, set, [
+        stereo: MjtStereo; "stereoscopic rendering.";
+    ]}
+
+    getter_setter! {with, get, set, [
+        scale: f32; "model scaling.";
+        framewidth: i32; "frame pixel width; 0: disable framing.";
+    ]}
+
+    getter_setter! {with, get, set, [
+        enabletransform: bool; "enable model transformation.";
+    ]}
+
+    getter_setter! {with, get, [
+        camera: &[MjvGLCamera; 2]; "left and right camera.";
+        translate: &[f32; 3]; "model translation.";
+        rotate: &[f32; 4]; "model quaternion rotation.";
+        framergb: &[f32; 3]; "frame color.";
+    ]}
+
+    getter_setter! {get, [
+        flags: &[MjtByte; MjtRndFlag::mjNRNDFLAG as usize]; "rendering flags (indexed by mjtRndFlag).";
+    ]}
 }
 
 
