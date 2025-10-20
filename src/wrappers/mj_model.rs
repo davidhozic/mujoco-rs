@@ -13,7 +13,7 @@ use crate::mujoco_c::*;
 use crate::{
     view_creator, info_method, info_with_view,
     mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem,
-    array_slice_dyn
+    array_slice_dyn, getter_setter
 };
 
 
@@ -506,38 +506,100 @@ impl MjModel {
         self.ffi().signature
     }
 
-    /// An immutable reference to physics options.
-    pub fn opt(&self) -> &MjOption {
-        &self.ffi().opt
-    }
+    getter_setter! {get, [
+        nq: i32; "number of generalized coordinates = dim(qpos).";
+        nv: i32; "number of degrees of freedom = dim(qvel).";
+        nu: i32; "number of actuators/controls = dim(ctrl).";
+        na: i32; "number of activation states = dim(act).";
+        nbody: i32; "number of bodies.";
+        nbvh: i32; "number of total bounding volumes in all bodies.";
+        nbvhstatic: i32; "number of static bounding volumes (aabb stored in mjModel).";
+        nbvhdynamic: i32; "number of dynamic bounding volumes (aabb stored in mjData).";
+        noct: i32; "number of total octree cells in all meshes.";
+        njnt: i32; "number of joints.";
+        ntree: i32; "number of kinematic trees under world body.";
+        nM: i32; "number of non-zeros in sparse inertia matrix.";
+        nB: i32; "number of non-zeros in sparse body-dof matrix.";
+        nC: i32; "number of non-zeros in sparse reduced dof-dof matrix.";
+        nD: i32; "number of non-zeros in sparse dof-dof matrix.";
+        ngeom: i32; "number of geoms.";
+        nsite: i32; "number of sites.";
+        ncam: i32; "number of cameras.";
+        nlight: i32; "number of lights.";
+        nflex: i32; "number of flexes.";
+        nflexnode: i32; "number of dofs in all flexes.";
+        nflexvert: i32; "number of vertices in all flexes.";
+        nflexedge: i32; "number of edges in all flexes.";
+        nflexelem: i32; "number of elements in all flexes.";
+        nflexelemdata: i32; "number of element vertex ids in all flexes.";
+        nflexelemedge: i32; "number of element edge ids in all flexes.";
+        nflexshelldata: i32; "number of shell fragment vertex ids in all flexes.";
+        nflexevpair: i32; "number of element-vertex pairs in all flexes.";
+        nflextexcoord: i32; "number of vertices with texture coordinates.";
+        nmesh: i32; "number of meshes.";
+        nmeshvert: i32; "number of vertices in all meshes.";
+        nmeshnormal: i32; "number of normals in all meshes.";
+        nmeshtexcoord: i32; "number of texcoords in all meshes.";
+        nmeshface: i32; "number of triangular faces in all meshes.";
+        nmeshgraph: i32; "number of ints in mesh auxiliary data.";
+        nmeshpoly: i32; "number of polygons in all meshes.";
+        nmeshpolyvert: i32; "number of vertices in all polygons.";
+        nmeshpolymap: i32; "number of polygons in vertex map.";
+        nskin: i32; "number of skins.";
+        nskinvert: i32; "number of vertices in all skins.";
+        nskintexvert: i32; "number of vertiex with texcoords in all skins.";
+        nskinface: i32; "number of triangular faces in all skins.";
+        nskinbone: i32; "number of bones in all skins.";
+        nskinbonevert: i32; "number of vertices in all skin bones.";
+        nhfield: i32; "number of heightfields.";
+        nhfielddata: i32; "number of data points in all heightfields.";
+        ntex: i32; "number of textures.";
+        ntexdata: i32; "number of bytes in texture rgb data.";
+        nmat: i32; "number of materials.";
+        npair: i32; "number of predefined geom pairs.";
+        nexclude: i32; "number of excluded geom pairs.";
+        neq: i32; "number of equality constraints.";
+        ntendon: i32; "number of tendons.";
+        nwrap: i32; "number of wrap objects in all tendon paths.";
+        nsensor: i32; "number of sensors.";
+        nnumeric: i32; "number of numeric custom fields.";
+        nnumericdata: i32; "number of mjtNums in all numeric fields.";
+        ntext: i32; "number of text custom fields.";
+        ntextdata: i32; "number of mjtBytes in all text fields.";
+        ntuple: i32; "number of tuple custom fields.";
+        ntupledata: i32; "number of objects in all tuple fields.";
+        nkey: i32; "number of keyframes.";
+        nmocap: i32; "number of mocap bodies.";
+        nplugin: i32; "number of plugin instances.";
+        npluginattr: i32; "number of chars in all plugin config attributes.";
+        nuser_body: i32; "number of mjtNums in body_user.";
+        nuser_jnt: i32; "number of mjtNums in jnt_user.";
+        nuser_geom: i32; "number of mjtNums in geom_user.";
+        nuser_site: i32; "number of mjtNums in site_user.";
+        nuser_cam: i32; "number of mjtNums in cam_user.";
+        nuser_tendon: i32; "number of mjtNums in tendon_user.";
+        nuser_actuator: i32; "number of mjtNums in actuator_user.";
+        nuser_sensor: i32; "number of mjtNums in sensor_user.";
+        nnames: i32; "number of chars in all names.";
+        npaths: i32; "number of chars in all paths.";
+        nnames_map: i32; "number of slots in the names hash map.";
+        nJmom: i32; "number of non-zeros in sparse actuator_moment matrix.";
+        ngravcomp: i32; "number of bodies with nonzero gravcomp.";
+        nemax: i32; "number of potential equality-constraint rows.";
+        njmax: i32; "number of available rows in constraint Jacobian (legacy).";
+        nconmax: i32; "number of potential contacts in contact list (legacy).";
+        nuserdata: i32; "number of mjtNums reserved for the user.";
+        nsensordata: i32; "number of mjtNums in sensor data vector.";
+        npluginstate: i32; "number of mjtNums in plugin state vector.";
+        narena: MjtSize; "number of bytes in the mjData arena (inclusive of stack).";
+        nbuffer: MjtSize; "number of bytes in buffer.";
+    ]}
 
-    /// A mutable reference to physics options.
-    pub fn opt_mut(&mut self) -> &mut MjOption {
-        // SAFETY: changing options can't break anything in terms of memory or UB.
-        &mut unsafe { self.ffi_mut() }.opt
-    }
-
-    /// An immutable reference to visualization options.
-    pub fn vis(&self) -> &MjVisual {
-        &self.ffi().vis
-    }
-
-    /// A mutable reference to visualization options.
-    pub fn vis_mut(&mut self) -> &mut MjVisual {
-        // SAFETY: changing visualization options can't break anything in terms of memory or UB.
-        &mut unsafe { self.ffi_mut() }.vis
-    }
-
-    /// An immmutable reference to model statistics.
-    pub fn stat(&self) -> &MjStatistic {
-        &self.ffi().stat
-    }
-
-    /// A mutable reference to model statistics.
-    pub fn stat_mut(&mut self) -> &mut MjStatistic {
-        // SAFETY: changing model statistics can't break anything in terms of memory or UB.
-        &mut unsafe { self.ffi_mut() }.stat
-    }
+    getter_setter! {with, get, [
+        opt: &MjOption; "physics options.";
+        vis: &MjVisual; "visualization options.";
+        stat: &MjStatistic; "model statistics.";
+    ]}
 }
 
 /// Array slices.
