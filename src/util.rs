@@ -439,7 +439,7 @@ macro_rules! getter_setter {
             }
 
             #[doc = concat!("Return a mutable reference to ", $comment)]
-            pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
+            pub fn [<$name:camel:lower _mut>](&mut self) -> &mut $type {
                 unsafe { &mut self.ffi_mut().$name }
             }
         )*
@@ -458,7 +458,7 @@ macro_rules! getter_setter {
         paste::paste!{ 
             $(
                 #[doc = concat!("Set ", $comment)]
-                pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
+                pub fn [<set_ $name:camel:lower>](&mut self, value: $type) {
                     unsafe { self.ffi_mut().$name = value.into() };
                 }
             )*
@@ -479,7 +479,7 @@ macro_rules! getter_setter {
         paste::paste!{ 
             $(
                 #[doc = concat!("Set ", $comment)]
-                pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
+                pub fn [<set_ $name:camel:lower>](&mut self, value: $type) {
                     #[allow(unnecessary_transmutes)]
                     unsafe { self.ffi_mut().$name = std::mem::transmute(value) };
                 }
@@ -492,7 +492,7 @@ macro_rules! getter_setter {
         paste::paste!{ 
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
-                pub fn [<with_ $name:camel:snake>](mut self, value: $type) -> Self {
+                pub fn [<with_ $name:camel:lower>](mut self, value: $type) -> Self {
                     #[allow(unnecessary_transmutes)]
                     unsafe { self.ffi_mut().$name = std::mem::transmute(value) };
                     self
@@ -505,7 +505,7 @@ macro_rules! getter_setter {
         paste::paste!{ 
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
-                pub fn [<with_ $name:camel:snake>](mut self, value: $type) -> Self {
+                pub fn [<with_ $name:camel:lower>](mut self, value: $type) -> Self {
                     unsafe { self.ffi_mut().$name = value.into() };
                     self
                 }

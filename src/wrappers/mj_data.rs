@@ -1,8 +1,8 @@
+use super::mj_statistic::{MjWarningStat, MjTimerStat, MjSolverStat};
 use super::mj_model::{MjModel, MjtSameFrame, MjtObj, MjtStage};
-use super::mj_statistic::{MjWarningStat, MjTimerStat};
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
-use crate::mujoco_c::*;
+use crate::{getter_setter, mujoco_c::*};
 
 use std::io::{self, Error, ErrorKind};
 use std::ffi::CString;
@@ -766,34 +766,50 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         &self.model
     }
 
-    /// Maximum stack allocation in bytes.
-    pub fn maxuse_stack(&self) -> MjtSize {
-        self.ffi().maxuse_stack
-    }
-
-    /// Maximum stack allocation per thread in bytes.
-    pub fn maxuse_threadstack(&self) -> &[MjtSize] {
-        &self.ffi().maxuse_threadstack
-    }
-
     /// Warning statistics.
+    #[deprecated(since = "2.0.0", note = "replaced with warning")]
     pub fn warning_stats(&self) -> &[MjWarningStat] {
         &self.ffi().warning
     }
 
-    /// Timer statistics.
+    #[deprecated(since = "2.0.0", note = "replaced with timer")]
     pub fn timer_stats(&self) -> &[MjTimerStat] {
         &self.ffi().timer
     }
 
-    /// Simulation time
-    pub fn time(&self) -> MjtNum {
-        self.ffi().time
-    }
+    getter_setter! {get, [
+        narena: MjtSize; "size of the arena in bytes (inclusive of the stack).";
+        nbuffer: MjtSize; "size of main buffer in bytes.";
+        nplugin: i32; "number of plugin instances.";
+        maxuse_stack: MjtSize; "maximum stack allocation in bytes (mutable).";
+        maxuse_arena: MjtSize; "maximum arena allocation in bytes.";
+        maxuse_con: i32; "maximum number of contacts.";
+        maxuse_efc: i32; "maximum number of scalar constraints.";
+        ncon: i32; "number of detected contacts.";
+        ne: i32; "number of equality constraints.";
+        nf: i32; "number of friction constraints.";
+        nl: i32; "number of limit constraints.";
+        nefc: i32; "number of constraints.";
+        nJ: i32; "number of non-zeros in constraint Jacobian.";
+        nA: i32; "number of non-zeros in constraint inverse inertia matrix.";
+        nisland: i32; "number of detected constraint islands.";
+        nidof: i32; "number of dofs in all islands.";
+        signature: u64; "compilation signature.";
+    ]}
 
-    /// Potential, kinetic energy.
-    pub fn energy(&self) -> &[MjtNum] {
-        &self.ffi().energy
+    getter_setter! {with, get, set, [time: MjtNum; "simulation time.";]}
+
+    getter_setter! {with, get, [energy: &[MjtNum; 2]; "potential, kinetic energy.";]}
+
+    getter_setter! {
+        get, [
+            solver: &[MjSolverStat; (mjNISLAND * mjNSOLVER) as usize]; "solver statistics per island, per iteration.";
+            solver_niter: &[i32; mjNISLAND as usize]; "number of solver iterations, per island.";
+            solver_nnz: &[i32; mjNISLAND as usize]; "number of nonzeros in Hessian or efc_AR, per island.";
+            solver_fwdinv: &[MjtNum; 2]; "forward-inverse comparison: qfrc, efc.";
+            warning: &[MjWarningStat; MjtWarning::mjNWARNING as usize]; "warning statistics (mutable).";
+            timer: &[MjTimerStat; MjtTimer::mjNTIMER as usize]; "timer statistics.";
+        ]
     }
 }
 
