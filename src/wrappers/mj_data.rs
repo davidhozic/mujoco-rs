@@ -777,6 +777,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         &self.ffi().timer
     }
 
+    /// Maximum stack allocation per thread in bytes.
+    pub fn maxuse_threadstack(&self) -> &[MjtSize] {
+        &self.ffi().maxuse_threadstack
+    }
+
     getter_setter! {get, [
         narena: MjtSize; "size of the arena in bytes (inclusive of the stack).";
         nbuffer: MjtSize; "size of main buffer in bytes.";
