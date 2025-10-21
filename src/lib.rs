@@ -53,6 +53,9 @@ pub mod viewer;
 #[allow(warnings)]
 pub mod mujoco_c;  // raw MuJoCo C and C++ bindings
 
+#[cfg(any(feature = "viewer", feature = "renderer"))]
+mod render_base;
+
 
 /// Returns the version string of the MuJoCo library.
 pub fn get_mujoco_version() -> &'static str {

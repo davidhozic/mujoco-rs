@@ -32,6 +32,9 @@ default = ["viewer", "renderer"]
 bitflags = {version = "2.9.4", optional = true}
 png = {version = "0.18.0", optional = true}
 paste = "1.0.15"
+glutin = "0.32.3"
+winit = "0.30.12"
+glutin-winit = "0.5.0"
 
 # Pre-built libs on Windows and build everywhere else
 [target.'cfg(unix)'.dependencies]

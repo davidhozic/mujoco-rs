@@ -1,16 +1,16 @@
 //! Module related to implementation of the [`MjViewer`] and [`MjViewerCpp`].
-
-use glfw_mjrc_fork as glfw;
-use glfw_mjrc_fork::{Action, Context, Glfw, GlfwReceiver, Key, Modifiers, MouseButton, PWindow, WindowEvent, WindowMode};
-
 use bitflags::bitflags;
+use winit::event_loop::EventLoop;
+use winit::platform::pump_events::EventLoopExtPumpEvents;
+use winit::window::Fullscreen;
 
 use std::ops::Deref;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use std::fmt::Display;
 use std::error::Error;
 
-use crate::{get_mujoco_version, mujoco_c::*};
+use crate::render_base::RenderBase;
+use crate::get_mujoco_version;
 
 #[cfg(feature = "cpp-viewer")]
 use std::ffi::CString;
@@ -65,15 +65,15 @@ const HELP_MENU_VALUES: &str = concat!(
 
 #[derive(Debug)]
 pub enum MjViewerError {
-    GlfwInitError (glfw::InitError),
-    WindowCreationError
+    WindowCreationError,
+    WinitError(winit::error::EventLoopError)
 }
 
 impl Display for MjViewerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::GlfwInitError(e) => write!(f, "glfw failed to initialize: {}", e),
             Self::WindowCreationError => write!(f, "failed to create window"),
+            Self::WinitError(e) => write!(f, "failed to initialize winit/glutin: {}", e),
         }
     }
 }
@@ -81,7 +81,7 @@ impl Display for MjViewerError {
 impl Error for MjViewerError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::GlfwInitError(e) => Some(e),
+            Self::WinitError(e) => Some(e),
             _ => None
         }
     }
@@ -129,12 +129,11 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     status_flags: ViewerStatusBits,  // Status flag indicating the state of the menu
 
     /* OpenGL */
-    glfw: Glfw,
-    window: PWindow,
-    events: GlfwReceiver<(f64, WindowEvent)>,
+    adapter: RenderBase,
+    event_loop: EventLoop<()>,
 
     /* External interaction */
-    user_scene: MjvScene<M>
+    user_scene: MjvScene<M>,
 }
 
 impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
@@ -142,25 +141,17 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// [`MjViewer`] or a [`MjViewerError`]. The `scene_max_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
     /// It can thus be set to 0 if no additional geoms will be drawn by the user.
-    pub fn launch_passive(model: M, scene_max_geom: usize) -> Result<Self, MjViewerError> {
-        let mut glfw = glfw::init_no_callbacks()
-            .map_err(|err| MjViewerError::GlfwInitError(err))?;
-
+    pub fn launch_passive(model: M, scene_max_geom: usize) -> Self {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
-        let title = format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version());
-
-        let (mut window, events) = match glfw.create_window(
-            w, h, &title,
-            glfw::WindowMode::Windowed
-        ) {
-            Some(x) => Ok(x),
-            None => Err(MjViewerError::WindowCreationError)
-        }?;
+        let mut event_loop = EventLoop::new().expect("failed to initialize event loop");
+        let adapter = RenderBase::new(
+            w, h,
+            format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version()),
+            &mut event_loop
+        );
 
         /* Initialize the OpenGL related things */
-        window.make_current();
-        window.set_all_polling(true);
-        glfw.set_swap_interval(glfw::SwapInterval::None);
+        adapter.set_swap_interval(glutin::surface::SwapInterval::DontWait);
 
         let ngeom = model.ffi().ngeom as usize;
         let scene = MjvScene::new(model.clone(), ngeom + scene_max_geom + EXTRA_SCENE_GEOM_SPACE);
@@ -168,10 +159,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let context = MjrContext::new(&model) ;
         let camera  = MjvCamera::new_free(&model);
 
-        Ok(Self {
-            glfw,
-            window,
-            events,
+        Self {
             model,
             scene,
             context,
@@ -185,12 +173,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             last_bnt_press_time: Instant::now(),
             rect_view: MjrRectangle::default(),
             rect_full: MjrRectangle::default(),
-        })
+            adapter,
+            event_loop
+        }
     }
 
     /// Checks whether the window is still open.
     pub fn running(&self) -> bool {
-        !self.window.should_close()
+        // !self.di
+        true
     }
 
     /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
@@ -219,21 +210,22 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// rendering on the viewer.
     pub fn sync(&mut self, data: &mut MjData<M>) {
         /* Make sure everything is done on the viewer's window */
-        self.window.make_current();
+        self.adapter.make_current();
 
-        /* Process mouse and keyboard events */
+        // /* Process mouse and keyboard events */
         self.process_events(data);
 
-        /* Update the scene from data and render */
+        // /* Update the scene from data and render */
         self.update_scene(data);
 
-        /* Update the user menu state and overlays */
+        // /* Update the user menu state and overlays */
         self.update_menus();
 
-        /* Display the drawn content */
-        self.window.swap_buffers();
+        // /* Display the drawn content */
+        // self.window.swap_buffers();
+        self.adapter.swap_buffers();
 
-        /* Apply perturbations */
+        // /* Apply perturbations */
         self.pert.apply(&self.model, data);
     }
 
@@ -244,7 +236,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the viewer.");
 
         /* Read the screen size */
-        self.update_rectangles(self.window.get_framebuffer_size());
+        self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
 
         /* Update the scene from the MjData state */
         self.scene.update(data, &self.opt, &self.pert, &mut self.camera);
@@ -285,77 +277,77 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Processes user input events.
     fn process_events(&mut self, data: &mut MjData<M>) {
-        self.glfw.poll_events();
-        while let Some((_, event)) = self.events.receive() {
+        self.event_loop.pump_app_events(Some(Duration::ZERO), &mut self.adapter);
+        while let Ok(event) = self.adapter.channel.1.try_recv() {
             match event {
-                // Set the viewer's state to pending exit.
-                WindowEvent::Key(Key::Q, _, Action::Press, Modifiers::Control) => {
-                    self.window.set_should_close(true);
-                    break;  // no use in polling other events
-                },
-                // Free the camera from tracking.
-                WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
-                    self.camera.free();
-                },
-                // Display the help menu.
-                WindowEvent::Key(Key::F1, _, Action::Press, _) => {
-                    self.status_flags.toggle(ViewerStatusBits::HELP_MENU);
-                }
-                // Full screen
-                WindowEvent::Key(Key::F5, _, Action::Press, _) => {
-                    self.toggle_full_screen();
-                }
-                // Reset the simulation (the data).
-                WindowEvent::Key(Key::Backspace, _, Action::Press, _) => {
-                    data.reset();
-                    data.forward();
-                }
-                // Cycle to the next camera
-                WindowEvent::Key(Key::RightBracket, _, Action::Press, _) => {
-                    self.cycle_camera(1);
-                }
-                // Cycle to the previous camera
-                WindowEvent::Key(Key::LeftBracket, _, Action::Press, _) => {
-                    self.cycle_camera(-1);
-                }
-                // Toggles camera visualization.
-                WindowEvent::Key(Key::C, _, Action::Press, _) => {
-                    self.toggle_opt_flag(MjtVisFlag::mjVIS_CAMERA);
-                }
-                WindowEvent::Key(Key::U, _, Action::Press, _) => {
-                    self.toggle_opt_flag(MjtVisFlag::mjVIS_ACTUATOR);
-                }
-                WindowEvent::Key(Key::J, _, Action::Press, _) => {
-                    self.toggle_opt_flag(MjtVisFlag::mjVIS_JOINT);
-                }
-                WindowEvent::Key(Key::M, _, Action::Press, _) => {
-                    self.toggle_opt_flag(MjtVisFlag::mjVIS_COM);
-                }
-                WindowEvent::Key(Key::H, _, Action::Press, _) => {
-                    self.toggle_opt_flag(MjtVisFlag::mjVIS_CONVEXHULL);
-                }
-                WindowEvent::Key(Key::Z, _, Action::Press, _) => {
-                    self.toggle_opt_flag(MjtVisFlag::mjVIS_LIGHT);
-                }
-                WindowEvent::Key(Key::T, _, Action::Press, _) => {
-                    self.toggle_opt_flag(MjtVisFlag::mjVIS_TRANSPARENT);
-                }
-                WindowEvent::Key(Key::I, _, Action::Press, _) => {
-                    self.toggle_opt_flag(MjtVisFlag::mjVIS_INERTIA);
-                }
-                // Zoom in/out
-                WindowEvent::Scroll(_, change) => {
-                    self.process_scroll(change);
-                }
-                // Track cursor, possibly applying perturbations.
-                WindowEvent::CursorPos(x, y) => {
-                    self.process_cursor_pos(x, y, data);
-                },
+                // // Set the viewer's state to pending exit.
+                // WindowEvent::Key(Key::Q, _, Action::Press, Modifiers::Control) => {
+                //     self.window.set_should_close(true);
+                //     break;  // no use in polling other events
+                // },
+                // // Free the camera from tracking.
+                // WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
+                //     self.camera.free();
+                // },
+                // // Display the help menu.
+                // WindowEvent::Key(Key::F1, _, Action::Press, _) => {
+                //     self.status_flags.toggle(ViewerStatusBits::HELP_MENU);
+                // }
+                // // Full screen
+                // WindowEvent::Key(Key::F5, _, Action::Press, _) => {
+                //     self.toggle_full_screen();
+                // }
+                // // Reset the simulation (the data).
+                // WindowEvent::Key(Key::Backspace, _, Action::Press, _) => {
+                //     data.reset();
+                //     data.forward();
+                // }
+                // // Cycle to the next camera
+                // WindowEvent::Key(Key::RightBracket, _, Action::Press, _) => {
+                //     self.cycle_camera(1);
+                // }
+                // // Cycle to the previous camera
+                // WindowEvent::Key(Key::LeftBracket, _, Action::Press, _) => {
+                //     self.cycle_camera(-1);
+                // }
+                // // Toggles camera visualization.
+                // WindowEvent::Key(Key::C, _, Action::Press, _) => {
+                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_CAMERA);
+                // }
+                // WindowEvent::Key(Key::U, _, Action::Press, _) => {
+                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_ACTUATOR);
+                // }
+                // WindowEvent::Key(Key::J, _, Action::Press, _) => {
+                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_JOINT);
+                // }
+                // WindowEvent::Key(Key::M, _, Action::Press, _) => {
+                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_COM);
+                // }
+                // WindowEvent::Key(Key::H, _, Action::Press, _) => {
+                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_CONVEXHULL);
+                // }
+                // WindowEvent::Key(Key::Z, _, Action::Press, _) => {
+                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_LIGHT);
+                // }
+                // WindowEvent::Key(Key::T, _, Action::Press, _) => {
+                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_TRANSPARENT);
+                // }
+                // WindowEvent::Key(Key::I, _, Action::Press, _) => {
+                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_INERTIA);
+                // }
+                // // Zoom in/out
+                // WindowEvent::Scroll(_, change) => {
+                //     self.process_scroll(change);
+                // }
+                // // Track cursor, possibly applying perturbations.
+                // WindowEvent::CursorPos(x, y) => {
+                //     self.process_cursor_pos(x, y, data);
+                // },
 
-                // Process left clicks, for selection ob bodies.
-                WindowEvent::MouseButton(MouseButton::Left, action, modifiers) => {
-                    self.process_left_click(data, &action, &modifiers);
-                }
+                // // Process left clicks, for selection ob bodies.
+                // WindowEvent::MouseButton(MouseButton::Left, action, modifiers) => {
+                //     self.process_left_click(data, &action, &modifiers);
+                // }
                 _ => {}  // ignore other events
             }
         }
@@ -379,32 +371,13 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Toggles full screen mode.
     fn toggle_full_screen(&mut self) {
-        self.glfw.with_primary_monitor(|_, m| {
-            if let Some(monitor) = m {
-                /* Obtain the new window mode outside due to lifetimes requirements */
-                let (
-                    new_mode,
-                    w, h,
-                    x, y
-                ) = self.window.with_window_mode(|mode| {
-                    // Try to obtain the monitor size, so we can center the window after.
-                    // Assume 720p (16:9) if the size can't be read.
-                    let (w, h) = monitor.get_video_mode()
-                        .map_or((1280, 720), |x| (x.width, x.height));
-                    if let WindowMode::FullScreen(_) = mode {
-                        (WindowMode::Windowed, 1280, 720, (w - 1280) / 2, (h - 720) / 2)
-                    }
-                    else {
-                        (WindowMode::FullScreen(monitor), w, h, 0, 0)
-                    }
-                });
-                self.window.set_monitor(
-                    new_mode,
-                    x as i32, y as i32,
-                    w, h, None
-                );
-            }
-        });
+        let window = &self.adapter.state.as_ref().unwrap().window;
+        if let Some(_) = window.fullscreen() {
+            window.set_fullscreen(None);
+        }
+        else {
+            window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+        }
     }
 
     /// Processes scrolling events.
@@ -419,12 +392,13 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let dy = y - self.last_y;
         self.last_x = x;
         self.last_y = y;
+        let window = &self.adapter.state.as_ref().unwrap().window;
 
         /* Check mouse presses and move the camera if any of them is pressed */
         let action;
-        let height = self.window.get_size().1 as f64;
+        let height = window.outer_size().height as f64;
 
-        let shift = self.window.get_key(Key::LeftShift) == Action::Press;
+        let shift = false; // TODO //self.adapter.gl_surface.get_key(Key::LeftShift) == Action::Press;
 
         if self.status_flags.contains(ViewerStatusBits::LEFT_CLICK) {
             if self.pert.active == MjtPertBit::mjPERT_TRANSLATE as i32 {
@@ -434,10 +408,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 action = if shift {MjtMouse::mjMOUSE_ROTATE_H} else {MjtMouse::mjMOUSE_ROTATE_V};
             }
         }
-        else if self.window.get_mouse_button(MouseButton::Right) == Action::Press {
+        else if false {// TODO //self.window.get_mouse_button(MouseButton::Right) == Action::Press {
             action = if shift {MjtMouse::mjMOUSE_MOVE_H} else {MjtMouse::mjMOUSE_MOVE_V};
         }
-        else if self.window.get_mouse_button(MouseButton::Middle) == Action::Press {
+        else if false {//TODO  //self.window.get_mouse_button(MouseButton::Middle) == Action::Press {
             action = MjtMouse::mjMOUSE_ZOOM;
         }
         else {
@@ -453,75 +427,75 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         }
     }
 
-    /// Processes left clicks and double left clicks.
-    fn process_left_click(&mut self, data: &mut MjData<M>, action: &Action, modifiers: &Modifiers) {
-        match action {
-            Action::Press => {
-                /* Clicking and holding applies perturbation */
-                if self.pert.select > 0 && modifiers.contains(Modifiers::Control) {
-                    let type_ = if modifiers.contains(Modifiers::Alt) {
-                        MjtPertBit::mjPERT_TRANSLATE
-                    } else {
-                        MjtPertBit::mjPERT_ROTATE
-                    };
-                    self.pert.start(type_, &self.model, data, &self.scene);
-                }
+    // /// Processes left clicks and double left clicks.
+    // fn process_left_click(&mut self, data: &mut MjData<M>, action: &Action, modifiers: &Modifiers) {
+    //     match action {
+    //         Action::Press => {
+    //             /* Clicking and holding applies perturbation */
+    //             if self.pert.select > 0 && modifiers.contains(Modifiers::Control) {
+    //                 let type_ = if modifiers.contains(Modifiers::Alt) {
+    //                     MjtPertBit::mjPERT_TRANSLATE
+    //                 } else {
+    //                     MjtPertBit::mjPERT_ROTATE
+    //                 };
+    //                 self.pert.start(type_, &self.model, data, &self.scene);
+    //             }
 
-                /* Double click detection */
-                if !self.status_flags.contains(ViewerStatusBits::LEFT_CLICK) && self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
-                    let (mut x, mut y) = self.window.get_cursor_pos();
+    //             /* Double click detection */
+    //             if !self.status_flags.contains(ViewerStatusBits::LEFT_CLICK) && self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
+    //                 let (mut x, mut y) = self.window.get_cursor_pos();
 
-                    /* Fix the coordinates */
-                    let buffer_ratio = self.window.get_framebuffer_size().0 as f64 / self.window.get_size().0 as f64;
-                    x *= buffer_ratio;
-                    y *= buffer_ratio;
-                    y = self.rect_full.height as f64 - y;  // match OpenGL's coordinate system.
+    //                 /* Fix the coordinates */
+    //                 let buffer_ratio = self.window.get_framebuffer_size().0 as f64 / self.window.get_size().0 as f64;
+    //                 x *= buffer_ratio;
+    //                 y *= buffer_ratio;
+    //                 y = self.rect_full.height as f64 - y;  // match OpenGL's coordinate system.
 
-                    /* Obtain the selection */ 
-                    let rect: &mjrRect_ = &self.rect_view;
-                    let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
-                        data, &self.opt,
-                        rect.width as MjtNum / rect.height as MjtNum,
-                        (x - rect.left as MjtNum) / rect.width as MjtNum,
-                        (y - rect.bottom as MjtNum) / rect.height as MjtNum
-                    );
+    //                 /* Obtain the selection */ 
+    //                 let rect: &mjrRect_ = &self.rect_view;
+    //                 let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
+    //                     data, &self.opt,
+    //                     rect.width as MjtNum / rect.height as MjtNum,
+    //                     (x - rect.left as MjtNum) / rect.width as MjtNum,
+    //                     (y - rect.bottom as MjtNum) / rect.height as MjtNum
+    //                 );
 
-                    /* Set tracking camera */
-                    if modifiers.contains(Modifiers::Alt) {
-                        if body_id >= 0 {
-                            self.camera.lookat = xyz;
-                            if modifiers.contains(Modifiers::Control) {
-                                self.camera.track(body_id as u32);
-                            }
-                        }
-                    }
-                    else {
-                        /* Mark selection */
-                        if body_id >= 0 {
-                            self.pert.select = body_id;
-                            self.pert.flexselect = flex_id;
-                            self.pert.skinselect = skin_id;
-                            self.pert.active = 0;
-                            self.pert.update_local_pos(xyz, data);
-                        }
-                        else {
-                            self.pert.select = 0;
-                            self.pert.flexselect = -1;
-                            self.pert.skinselect = -1;
-                        }
-                    }
-                }
-                self.last_bnt_press_time = Instant::now();
-                self.status_flags.set(ViewerStatusBits::LEFT_CLICK, true);
-            },
-            Action::Release => {
-                // Clear perturbation when left click is released.
-                self.pert.active = 0;
-                self.status_flags.remove(ViewerStatusBits::LEFT_CLICK);
-            },
-            Action::Repeat => {}
-        };
-    }
+    //                 /* Set tracking camera */
+    //                 if modifiers.contains(Modifiers::Alt) {
+    //                     if body_id >= 0 {
+    //                         self.camera.lookat = xyz;
+    //                         if modifiers.contains(Modifiers::Control) {
+    //                             self.camera.track(body_id as u32);
+    //                         }
+    //                     }
+    //                 }
+    //                 else {
+    //                     /* Mark selection */
+    //                     if body_id >= 0 {
+    //                         self.pert.select = body_id;
+    //                         self.pert.flexselect = flex_id;
+    //                         self.pert.skinselect = skin_id;
+    //                         self.pert.active = 0;
+    //                         self.pert.update_local_pos(xyz, data);
+    //                     }
+    //                     else {
+    //                         self.pert.select = 0;
+    //                         self.pert.flexselect = -1;
+    //                         self.pert.skinselect = -1;
+    //                     }
+    //                 }
+    //             }
+    //             self.last_bnt_press_time = Instant::now();
+    //             self.status_flags.set(ViewerStatusBits::LEFT_CLICK, true);
+    //         },
+    //         Action::Release => {
+    //             // Clear perturbation when left click is released.
+    //             self.pert.active = 0;
+    //             self.status_flags.remove(ViewerStatusBits::LEFT_CLICK);
+    //         },
+    //         Action::Repeat => {}
+    //     };
+    // }
 }
 
 
