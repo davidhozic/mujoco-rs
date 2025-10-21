@@ -1,6 +1,5 @@
 //! A set of wrappers around the MuJoCo types and functions.
 pub mod mj_visualization;
-pub mod mj_interface;
 pub mod mj_statistic;
 pub mod mj_rendering;
 pub mod mj_auxiliary;
