@@ -161,7 +161,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let ngeom = model.ffi().ngeom as usize;
         let scene = MjvScene::new(model.clone(), ngeom + scene_max_geom + EXTRA_SCENE_GEOM_SPACE);
         let user_scene = MjvScene::new(model.clone(), scene_max_geom);
-        let context = MjrContext::new(&model) ;
+        let context = MjrContext::new(&model);
         let camera  = MjvCamera::new_free(&model);
 
         Self {
@@ -225,7 +225,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         // /* Update the user menu state and overlays */
         self.update_menus();
 
-        // /* Display the drawn content */
+        /* Display the drawn content */
         self.adapter.swap_buffers().expect("failed to swap buffers");
 
         // /* Apply perturbations */

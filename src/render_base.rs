@@ -91,7 +91,7 @@ impl ApplicationHandler for RenderBase {
 
         let template = ConfigTemplateBuilder::new()
             // Request typical formats; these are hints.
-            .with_alpha_size(8)
+            .with_alpha_size(0)
             .with_depth_size(24)
             .with_stencil_size(8);
 
