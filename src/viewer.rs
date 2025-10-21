@@ -406,7 +406,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 // Zoom in/out
                 WindowEvent::MouseWheel {delta, ..} => {
                     let value = match delta {
-                        MouseScrollDelta::LineDelta(_, down) => -down,  // invert scrolling direction
+                        MouseScrollDelta::LineDelta(_, down) => down,
                         _ => 0.0
                     };
                     self.process_scroll(value.into());
