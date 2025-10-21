@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use std::fmt::Display;
 use std::error::Error;
 
-use crate::render_base::RenderBase;
+use crate::render_base::{ButtonsPressed, RenderBase};
 use crate::get_mujoco_version;
 
 #[cfg(feature = "cpp-viewer")]
@@ -70,14 +70,16 @@ const HELP_MENU_VALUES: &str = concat!(
 #[derive(Debug)]
 pub enum MjViewerError {
     WindowCreationError,
-    WinitError(winit::error::EventLoopError)
+    EventLoopError(winit::error::EventLoopError),
+    GlutinError(glutin::error::Error)
 }
 
 impl Display for MjViewerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::WindowCreationError => write!(f, "failed to create window"),
-            Self::WinitError(e) => write!(f, "failed to initialize winit/glutin: {}", e),
+            Self::EventLoopError(e) => write!(f, "failed to initialize event_loop: {}", e),
+            Self::GlutinError(e) => write!(f, "glutin raised an error: {}", e)
         }
     }
 }
@@ -85,7 +87,8 @@ impl Display for MjViewerError {
 impl Error for MjViewerError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::WinitError(e) => Some(e),
+            Self::EventLoopError(e) => Some(e),
+            Self::GlutinError(e) => Some(e),
             _ => None
         }
     }
@@ -145,9 +148,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// [`MjViewer`] or a [`MjViewerError`]. The `scene_max_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
     /// It can thus be set to 0 if no additional geoms will be drawn by the user.
-    pub fn launch_passive(model: M, scene_max_geom: usize) -> Self {
+    pub fn launch_passive(model: M, scene_max_geom: usize) -> Result<Self, MjViewerError> {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
-        let mut event_loop = EventLoop::new().expect("failed to initialize event loop");
+        let mut event_loop = EventLoop::new()
+            .map_err(|e| MjViewerError::EventLoopError(e))?;
+
         let adapter = RenderBase::new(
             w, h,
             format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version()),
@@ -155,7 +160,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         );
 
         /* Initialize the OpenGL related things */
-        adapter.set_swap_interval(glutin::surface::SwapInterval::DontWait).expect("failed to set swap interval");
+        adapter.set_swap_interval(glutin::surface::SwapInterval::DontWait).map_err(
+            |e| MjViewerError::GlutinError(e)
+        )?;
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
         let ngeom = model.ffi().ngeom as usize;
@@ -164,7 +171,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let context = MjrContext::new(&model);
         let camera  = MjvCamera::new_free(&model);
 
-        Self {
+        Ok(Self {
             model,
             scene,
             context,
@@ -180,7 +187,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             rect_full: MjrRectangle::default(),
             adapter,
             event_loop
-        }
+        })
     }
 
     /// Checks whether the window is still open.
@@ -212,9 +219,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Syncs the state of `data` with the viewer as well as perform
     /// rendering on the viewer.
-    pub fn sync(&mut self, data: &mut MjData<M>) {
+    pub fn sync(&mut self, data: &mut MjData<M>) -> Result<(), MjViewerError> {
         /* Make sure everything is done on the viewer's window */
-        self.adapter.make_current().expect("failed to take OpenGL context");
+        self.adapter.make_current().map_err(|e| MjViewerError::GlutinError(e))?;
 
         // /* Process mouse and keyboard events */
         self.process_events(data);
@@ -226,10 +233,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.update_menus();
 
         /* Display the drawn content */
-        self.adapter.swap_buffers().expect("failed to swap buffers");
+        self.adapter.swap_buffers().map_err(|e| MjViewerError::GlutinError(e))?;
 
         // /* Apply perturbations */
         self.pert.apply(&self.model, data);
+        Ok(())
     }
 
     /// Updates the scene and draws it to the display.
@@ -283,12 +291,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.event_loop.pump_app_events(Some(Duration::ZERO), &mut self.adapter);
         while let Ok(window_event) = self.adapter.channel.1.try_recv() {
             match window_event {
-                // // Set the viewer's state to pending exit.
-                // Window::(Key::Q, _, Action::Press, Modifiers::Control) => {
-                // WindowEvent::KeyboardInput { _, winit::event::KeyEvent::, _ } => {
-                    // self.window.set_should_close(true);
-                    // break;  // no use in polling other events
-                // },
+                // Set the viewer's state to pending exit.
                 WindowEvent::KeyboardInput {
                     event: KeyEvent {
                         physical_key: PhysicalKey::Code(KeyCode::KeyQ),
@@ -359,31 +362,46 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     self.cycle_camera(-1);
                 }
 
-                // // Toggles camera visualization.
-                // WindowEvent::Key(Key::C, _, Action::Press, _) => {
-                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_CAMERA);
-                // }
-                // WindowEvent::Key(Key::U, _, Action::Press, _) => {
-                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_ACTUATOR);
-                // }
-                // WindowEvent::Key(Key::J, _, Action::Press, _) => {
-                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_JOINT);
-                // }
-                // WindowEvent::Key(Key::M, _, Action::Press, _) => {
-                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_COM);
-                // }
-                // WindowEvent::Key(Key::H, _, Action::Press, _) => {
-                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_CONVEXHULL);
-                // }
-                // WindowEvent::Key(Key::Z, _, Action::Press, _) => {
-                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_LIGHT);
-                // }
-                // WindowEvent::Key(Key::T, _, Action::Press, _) => {
-                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_TRANSPARENT);
-                // }
-                // WindowEvent::Key(Key::I, _, Action::Press, _) => {
-                //     self.toggle_opt_flag(MjtVisFlag::mjVIS_INERTIA);
-                // }
+                // Toggles camera visualization.
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyC), state: ElementState::Pressed, ..},
+                    ..
+                } => self.toggle_opt_flag(MjtVisFlag::mjVIS_CAMERA),
+
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyU), state: ElementState::Pressed, ..},
+                    ..
+                } => self.toggle_opt_flag(MjtVisFlag::mjVIS_ACTUATOR),
+
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyJ), state: ElementState::Pressed, ..},
+                    ..
+                } => self.toggle_opt_flag(MjtVisFlag::mjVIS_JOINT),
+
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyM), state: ElementState::Pressed, ..},
+                    ..
+                } => self.toggle_opt_flag(MjtVisFlag::mjVIS_COM),
+
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyH), state: ElementState::Pressed, ..},
+                    ..
+                } => self.toggle_opt_flag(MjtVisFlag::mjVIS_CONVEXHULL),
+
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyZ), state: ElementState::Pressed, ..},
+                    ..
+                } => self.toggle_opt_flag(MjtVisFlag::mjVIS_LIGHT),
+
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyT), state: ElementState::Pressed, ..},
+                    ..
+                } => self.toggle_opt_flag(MjtVisFlag::mjVIS_TRANSPARENT),
+
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyI), state: ElementState::Pressed, ..},
+                    ..
+                } => self.toggle_opt_flag(MjtVisFlag::mjVIS_INERTIA),
 
                 // Zoom in/out
                 WindowEvent::MouseWheel {delta, ..} => {
@@ -449,13 +467,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.last_x = x;
         self.last_y = y;
         let window = &self.adapter.state.as_ref().unwrap().window;
+        let modifiers = &self.adapter.modifiers.state();
+        let buttons = &self.adapter.buttons_pressed;
+        let shift = modifiers.shift_key();
 
         /* Check mouse presses and move the camera if any of them is pressed */
         let action;
         let height = window.outer_size().height as f64;
-
-        let shift = false; // TODO //self.adapter.gl_surface.get_key(Key::LeftShift) == Action::Press;
-
+        
         if self.status_flags.contains(ViewerStatusBits::LEFT_CLICK) {
             if self.pert.active == MjtPertBit::mjPERT_TRANSLATE as i32 {
                 action = if shift {MjtMouse::mjMOUSE_MOVE_H} else {MjtMouse::mjMOUSE_MOVE_V};
@@ -464,10 +483,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 action = if shift {MjtMouse::mjMOUSE_ROTATE_H} else {MjtMouse::mjMOUSE_ROTATE_V};
             }
         }
-        else if false {// TODO //self.window.get_mouse_button(MouseButton::Right) == Action::Press {
+        else if buttons.contains(ButtonsPressed::RIGHT) {
             action = if shift {MjtMouse::mjMOUSE_MOVE_H} else {MjtMouse::mjMOUSE_MOVE_V};
         }
-        else if false {//TODO  //self.window.get_mouse_button(MouseButton::Middle) == Action::Press {
+        else if buttons.contains(ButtonsPressed::MIDDLE) {
             action = MjtMouse::mjMOUSE_ZOOM;
         }
         else {
@@ -501,7 +520,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                 /* Double click detection */
                 if !self.status_flags.contains(ViewerStatusBits::LEFT_CLICK) && self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
-                    let (mut x, mut y) = (0.0, 0.0); // TODO
+                    let cp = self.adapter.cursor_position;
+                    let mut x = cp.0 as f64;
+                    let mut y = cp.1 as f64;
 
                     /* Fix the coordinates */
                     let buffer_ratio = window.inner_size().width as f64 / window.outer_size().width as f64;

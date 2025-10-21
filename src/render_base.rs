@@ -6,17 +6,17 @@ use glutin::context::PossiblyCurrentContext;
 use glutin::config::ConfigTemplateBuilder;
 use glutin::prelude::*;
 
+use winit::event::{ElementState, Modifiers, MouseButton, WindowEvent};
 use winit::platform::pump_events::EventLoopExtPumpEvents;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::raw_window_handle::HasWindowHandle;
 use winit::application::ApplicationHandler;
 use winit::window::{Window, WindowId};
-use winit::event::{Modifiers, WindowEvent};
 use winit::dpi::PhysicalSize;
 
 use glutin_winit::{ApiPreference, DisplayBuilder, GlWindow};
+use bitflags::bitflags;
 use std::sync::mpsc;
-
 
 
 /// Base struct for rendering through Glutin.
@@ -28,6 +28,15 @@ pub(crate) struct GlState {
     pub(crate) gl_surface: Surface<WindowSurface>,
 }
 
+bitflags! {
+    #[derive(Debug)]
+    pub(crate) struct ButtonsPressed: u8 {
+        const LEFT = 0;
+        const MIDDLE = 1;
+        const RIGHT = 2;
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct RenderBase {
     pub(crate) state: Option<GlState>,
@@ -35,6 +44,8 @@ pub(crate) struct RenderBase {
     /* Event related */
     pub(crate) channel: (mpsc::Sender<WindowEvent>, mpsc::Receiver<WindowEvent>),
     pub(crate) modifiers: Modifiers,
+    pub(crate) buttons_pressed: ButtonsPressed,
+    pub(crate) cursor_position: (u32, u32),
 
     /* Storage */
     size: (u32, u32),
@@ -48,8 +59,10 @@ impl RenderBase {
             running: false,
             channel: mpsc::channel(),
             modifiers: Modifiers::default(),
+            buttons_pressed: ButtonsPressed::empty(),
+            cursor_position: (0, 0),
             size: (width, height),
-            title
+            title,
         };
 
         // Initialize through app callbacks.
@@ -79,6 +92,10 @@ impl RenderBase {
             gl_surface.set_swap_interval(gl_context, interval)?;
         }
         Ok(())
+    }
+
+    fn maybe_forward_event(&self, event: WindowEvent) {
+        self.channel.0.send(event).expect("failed to send event")
     }
 }
 
@@ -153,17 +170,31 @@ impl ApplicationHandler for RenderBase {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
                 self.running = false;
-            },
+            }
             WindowEvent::Resized(_) => {
                 if let Some(GlState { window, gl_context, gl_surface }) = &self.state {
                     window.resize_surface(gl_surface, gl_context);
                 }
-            },
-
+            }
             WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
+            WindowEvent::MouseInput {state, button, .. } => {
+                self.maybe_forward_event(event);
+                let index = match button {
+                    MouseButton::Left => ButtonsPressed::LEFT,
+                    MouseButton::Middle => ButtonsPressed::MIDDLE,
+                    MouseButton::Right => ButtonsPressed::RIGHT,
+                    _ => return
+                };
+
+                self.buttons_pressed.set(index, state == ElementState::Pressed);
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor_position = position.into();
+                self.maybe_forward_event(event);
+            }
 
             // Fill the event buffer for everything else
-            _ => self.channel.0.send(event).expect("failed to send event")
+            _ => self.maybe_forward_event(event)
         }
     }
 }
