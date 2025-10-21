@@ -1,46 +1,53 @@
 //! Base definitions needed to support rendering in both `MjViewer` and `MjRenderer`.
-use glutin::config::ConfigTemplateBuilder;
+use glutin::surface::{GlSurface, Surface, SurfaceAttributesBuilder, SwapInterval, WindowSurface};
 use glutin::context::{ContextApi, ContextAttributesBuilder, GlProfile, Version};
 use glutin::display::{GetGlDisplay, GlDisplay}; // for get_proc_address
-use glutin::prelude::*;         // misc extension traits
-use glutin::surface::{GlSurface, Surface, SurfaceAttributesBuilder, SwapInterval, WindowSurface};
-use glutin_winit::{ApiPreference, DisplayBuilder, GlWindow};
-use winit::application::ApplicationHandler;
-use winit::dpi::PhysicalSize;
-use winit::error::EventLoopError;
-use winit::event::{WindowEvent};
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::platform::pump_events::{EventLoopExtPumpEvents, PumpStatus};
-use winit::raw_window_handle::HasWindowHandle;
-use winit::window::{Window, WindowId};
-use std::mem::MaybeUninit;
-use std::sync::mpsc::{self, SendError};
-use std::time::Duration;
 use glutin::context::PossiblyCurrentContext;
+use glutin::config::ConfigTemplateBuilder;
+use glutin::prelude::*;
+
+use winit::platform::pump_events::EventLoopExtPumpEvents;
+use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::raw_window_handle::HasWindowHandle;
+use winit::application::ApplicationHandler;
+use winit::window::{Window, WindowId};
+use winit::event::{Modifiers, WindowEvent};
+use winit::dpi::PhysicalSize;
+
+use glutin_winit::{ApiPreference, DisplayBuilder, GlWindow};
+use std::sync::mpsc;
+
 
 
 /// Base struct for rendering through Glutin.
 /// This is a proxy since Glutin only allows event processing through callbacks, which this implements.
 #[derive(Debug)]
-pub(crate) struct RenderState {
-    pub window: Window,
-    pub gl_context: PossiblyCurrentContext,
-    pub gl_surface: Surface<WindowSurface>,
+pub(crate) struct GlState {
+    pub(crate) window: Window,
+    pub(crate) gl_context: PossiblyCurrentContext,
+    pub(crate) gl_surface: Surface<WindowSurface>,
 }
 
 #[derive(Debug)]
 pub(crate) struct RenderBase {
-    pub state: Option<RenderState>,
-    pub channel: (mpsc::Sender<WindowEvent>, mpsc::Receiver<WindowEvent>),
+    pub(crate) state: Option<GlState>,
+    pub(crate) running: bool,
+    /* Event related */
+    pub(crate) channel: (mpsc::Sender<WindowEvent>, mpsc::Receiver<WindowEvent>),
+    pub(crate) modifiers: Modifiers,
+
+    /* Storage */
     size: (u32, u32),
-    title: String
+    title: String,
 }
 
 impl RenderBase {
     pub(crate) fn new(width: u32, height: u32, title: String, event_loop: &mut EventLoop<()>) -> Self {
         let mut s = Self {
             state: None,
+            running: false,
             channel: mpsc::channel(),
+            modifiers: Modifiers::default(),
             size: (width, height),
             title
         };
@@ -50,25 +57,28 @@ impl RenderBase {
         s
     }
 
-    pub(crate) fn make_current(&self) {
-        if let Some(RenderState { window: _, gl_context, gl_surface })
+    pub(crate) fn make_current(&self) -> glutin::error::Result<()> {
+        if let Some(GlState { window: _, gl_context, gl_surface })
             = &self.state {
-            gl_context.make_current(gl_surface);
+            gl_context.make_current(gl_surface)?;
         }
+        Ok(())
     }
 
-    pub(crate) fn swap_buffers(&self) {
-        if let Some(RenderState { window: _, gl_context, gl_surface })
+    pub(crate) fn swap_buffers(&self) -> glutin::error::Result<()> {
+        if let Some(GlState { window: _, gl_context, gl_surface })
             = &self.state {
-            gl_surface.swap_buffers(gl_context);
+            gl_surface.swap_buffers(gl_context)?;
         }
+        Ok(())
     }
 
-    pub(crate) fn set_swap_interval(&self, interval: SwapInterval) {
-        if let Some(RenderState { window: _, gl_context, gl_surface })
+    pub(crate) fn set_swap_interval(&self, interval: SwapInterval) -> glutin::error::Result<()> {
+        if let Some(GlState { window: _, gl_context, gl_surface })
             = &self.state {
-            gl_surface.set_swap_interval(gl_context, interval);
+            gl_surface.set_swap_interval(gl_context, interval)?;
         }
+        Ok(())
     }
 }
 
@@ -129,7 +139,8 @@ impl ApplicationHandler for RenderBase {
         let gl_context = not_current.make_current(&gl_surface).expect("make current");
 
         // Save state
-        self.state = Some(RenderState { gl_surface, gl_context, window });
+        self.state = Some(GlState { gl_surface, gl_context, window });
+        self.running = true;
     }
 
     fn window_event(
@@ -139,12 +150,17 @@ impl ApplicationHandler for RenderBase {
         event: WindowEvent,
     ) {
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
+                self.running = false;
+            },
             WindowEvent::Resized(_) => {
-                if let Some(RenderState { window, gl_context, gl_surface }) = &self.state {
+                if let Some(GlState { window, gl_context, gl_surface }) = &self.state {
                     window.resize_surface(gl_surface, gl_context);
                 }
-            }
+            },
+
+            WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
 
             // Fill the event buffer for everything else
             _ => self.channel.0.send(event).expect("failed to send event")

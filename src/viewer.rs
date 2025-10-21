@@ -1,8 +1,12 @@
 //! Module related to implementation of the [`MjViewer`] and [`MjViewerCpp`].
 use bitflags::bitflags;
+use winit::application::ApplicationHandler;
+use winit::dpi::PhysicalPosition;
+use winit::event::{ElementState, Event, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::EventLoop;
+use winit::keyboard::{Key, KeyCode, ModifiersKeyState, NamedKey, PhysicalKey};
 use winit::platform::pump_events::EventLoopExtPumpEvents;
-use winit::window::Fullscreen;
+use winit::window::{Fullscreen, Window};
 
 use std::ops::Deref;
 use std::time::{Duration, Instant};
@@ -151,7 +155,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         );
 
         /* Initialize the OpenGL related things */
-        adapter.set_swap_interval(glutin::surface::SwapInterval::DontWait);
+        adapter.set_swap_interval(glutin::surface::SwapInterval::DontWait).expect("failed to set swap interval");
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
         let ngeom = model.ffi().ngeom as usize;
         let scene = MjvScene::new(model.clone(), ngeom + scene_max_geom + EXTRA_SCENE_GEOM_SPACE);
@@ -180,8 +185,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Checks whether the window is still open.
     pub fn running(&self) -> bool {
-        // !self.di
-        true
+        self.adapter.running
     }
 
     /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
@@ -210,7 +214,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// rendering on the viewer.
     pub fn sync(&mut self, data: &mut MjData<M>) {
         /* Make sure everything is done on the viewer's window */
-        self.adapter.make_current();
+        self.adapter.make_current().expect("failed to take OpenGL context");
 
         // /* Process mouse and keyboard events */
         self.process_events(data);
@@ -222,8 +226,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.update_menus();
 
         // /* Display the drawn content */
-        // self.window.swap_buffers();
-        self.adapter.swap_buffers();
+        self.adapter.swap_buffers().expect("failed to swap buffers");
 
         // /* Apply perturbations */
         self.pert.apply(&self.model, data);
@@ -278,38 +281,84 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Processes user input events.
     fn process_events(&mut self, data: &mut MjData<M>) {
         self.event_loop.pump_app_events(Some(Duration::ZERO), &mut self.adapter);
-        while let Ok(event) = self.adapter.channel.1.try_recv() {
-            match event {
+        while let Ok(window_event) = self.adapter.channel.1.try_recv() {
+            match window_event {
                 // // Set the viewer's state to pending exit.
-                // WindowEvent::Key(Key::Q, _, Action::Press, Modifiers::Control) => {
-                //     self.window.set_should_close(true);
-                //     break;  // no use in polling other events
+                // Window::(Key::Q, _, Action::Press, Modifiers::Control) => {
+                // WindowEvent::KeyboardInput { _, winit::event::KeyEvent::, _ } => {
+                    // self.window.set_should_close(true);
+                    // break;  // no use in polling other events
                 // },
-                // // Free the camera from tracking.
-                // WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
-                //     self.camera.free();
-                // },
-                // // Display the help menu.
-                // WindowEvent::Key(Key::F1, _, Action::Press, _) => {
-                //     self.status_flags.toggle(ViewerStatusBits::HELP_MENU);
-                // }
-                // // Full screen
-                // WindowEvent::Key(Key::F5, _, Action::Press, _) => {
-                //     self.toggle_full_screen();
-                // }
-                // // Reset the simulation (the data).
-                // WindowEvent::Key(Key::Backspace, _, Action::Press, _) => {
-                //     data.reset();
-                //     data.forward();
-                // }
-                // // Cycle to the next camera
-                // WindowEvent::Key(Key::RightBracket, _, Action::Press, _) => {
-                //     self.cycle_camera(1);
-                // }
-                // // Cycle to the previous camera
-                // WindowEvent::Key(Key::LeftBracket, _, Action::Press, _) => {
-                //     self.cycle_camera(-1);
-                // }
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {
+                        physical_key: PhysicalKey::Code(KeyCode::KeyQ),
+                        state: ElementState::Pressed, ..
+                    }, ..
+                } if self.adapter.modifiers.state().control_key()  => {
+                    self.adapter.running = false;
+                }
+
+                // Free the camera from tracking.
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {
+                        physical_key: PhysicalKey::Code(KeyCode::Escape),
+                        state: ElementState::Pressed, ..
+                    }, ..
+                } => {
+                    self.camera.free();
+                }
+                
+                // Toggle help menu
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {
+                        physical_key: PhysicalKey::Code(KeyCode::F1),
+                        state: ElementState::Pressed, ..
+                    }, ..
+                } => {
+                    self.status_flags.toggle(ViewerStatusBits::HELP_MENU);
+                }
+
+                // Full screen
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {
+                        physical_key: PhysicalKey::Code(KeyCode::F5),
+                        state: ElementState::Pressed, ..
+                    }, ..
+                } => {
+                    self.toggle_full_screen();
+                }
+
+                // Reset the simulation (the data).
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {
+                        physical_key: PhysicalKey::Code(KeyCode::Backspace),
+                        state: ElementState::Pressed, ..
+                    }, ..
+                } => {
+                    data.reset();
+                    data.forward();
+                }
+
+                // Cycle to the next camera
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {
+                        physical_key: PhysicalKey::Code(KeyCode::BracketRight),
+                        state: ElementState::Pressed, ..
+                    }, ..
+                } => {
+                    self.cycle_camera(1);
+                }
+
+                // Cycle to the previous camera
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {
+                        physical_key: PhysicalKey::Code(KeyCode::BracketLeft),
+                        state: ElementState::Pressed, ..
+                    }, ..
+                } => {
+                    self.cycle_camera(-1);
+                }
+
                 // // Toggles camera visualization.
                 // WindowEvent::Key(Key::C, _, Action::Press, _) => {
                 //     self.toggle_opt_flag(MjtVisFlag::mjVIS_CAMERA);
@@ -335,19 +384,26 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 // WindowEvent::Key(Key::I, _, Action::Press, _) => {
                 //     self.toggle_opt_flag(MjtVisFlag::mjVIS_INERTIA);
                 // }
-                // // Zoom in/out
-                // WindowEvent::Scroll(_, change) => {
-                //     self.process_scroll(change);
-                // }
-                // // Track cursor, possibly applying perturbations.
-                // WindowEvent::CursorPos(x, y) => {
-                //     self.process_cursor_pos(x, y, data);
-                // },
 
-                // // Process left clicks, for selection ob bodies.
-                // WindowEvent::MouseButton(MouseButton::Left, action, modifiers) => {
-                //     self.process_left_click(data, &action, &modifiers);
-                // }
+                // Zoom in/out
+                WindowEvent::MouseWheel {delta, ..} => {
+                    let value = match delta {
+                        MouseScrollDelta::LineDelta(_, down) => -down,  // invert scrolling direction
+                        _ => 0.0
+                    };
+                    self.process_scroll(value.into());
+                }
+
+                // Track cursor, possibly applying perturbations.
+                WindowEvent::CursorMoved { position: PhysicalPosition{ x, y}, .. } => {
+                    self.process_cursor_pos(x, y, data);
+                }
+
+                // Process left clicks, for selection ob bodies.
+                WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => {
+                    self.process_left_click(data, state);
+                }
+
                 _ => {}  // ignore other events
             }
         }
@@ -428,74 +484,75 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     }
 
     // /// Processes left clicks and double left clicks.
-    // fn process_left_click(&mut self, data: &mut MjData<M>, action: &Action, modifiers: &Modifiers) {
-    //     match action {
-    //         Action::Press => {
-    //             /* Clicking and holding applies perturbation */
-    //             if self.pert.select > 0 && modifiers.contains(Modifiers::Control) {
-    //                 let type_ = if modifiers.contains(Modifiers::Alt) {
-    //                     MjtPertBit::mjPERT_TRANSLATE
-    //                 } else {
-    //                     MjtPertBit::mjPERT_ROTATE
-    //                 };
-    //                 self.pert.start(type_, &self.model, data, &self.scene);
-    //             }
+    fn process_left_click(&mut self, data: &mut MjData<M>, state: ElementState) {
+        let modifier_state = self.adapter.modifiers.state();
+        let window = &self.adapter.state.as_ref().unwrap().window;
+        match state {
+            ElementState::Pressed => {
+                /* Clicking and holding applies perturbation */
+                if self.pert.select > 0 && modifier_state.control_key() {
+                    let type_ = if modifier_state.alt_key() {
+                        MjtPertBit::mjPERT_TRANSLATE
+                    } else {
+                        MjtPertBit::mjPERT_ROTATE
+                    };
+                    self.pert.start(type_, &self.model, data, &self.scene);
+                }
 
-    //             /* Double click detection */
-    //             if !self.status_flags.contains(ViewerStatusBits::LEFT_CLICK) && self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
-    //                 let (mut x, mut y) = self.window.get_cursor_pos();
+                /* Double click detection */
+                if !self.status_flags.contains(ViewerStatusBits::LEFT_CLICK) && self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
+                    let (mut x, mut y) = (0.0, 0.0); // TODO
 
-    //                 /* Fix the coordinates */
-    //                 let buffer_ratio = self.window.get_framebuffer_size().0 as f64 / self.window.get_size().0 as f64;
-    //                 x *= buffer_ratio;
-    //                 y *= buffer_ratio;
-    //                 y = self.rect_full.height as f64 - y;  // match OpenGL's coordinate system.
+                    /* Fix the coordinates */
+                    let buffer_ratio = window.inner_size().width as f64 / window.outer_size().width as f64;
+                    x *= buffer_ratio;
+                    y *= buffer_ratio;
+                    y = self.rect_full.height as f64 - y;  // match OpenGL's coordinate system.
 
-    //                 /* Obtain the selection */ 
-    //                 let rect: &mjrRect_ = &self.rect_view;
-    //                 let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
-    //                     data, &self.opt,
-    //                     rect.width as MjtNum / rect.height as MjtNum,
-    //                     (x - rect.left as MjtNum) / rect.width as MjtNum,
-    //                     (y - rect.bottom as MjtNum) / rect.height as MjtNum
-    //                 );
+                    /* Obtain the selection */ 
+                    let rect: &MjrRectangle = &self.rect_view;
+                    let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
+                        data, &self.opt,
+                        rect.width as MjtNum / rect.height as MjtNum,
+                        (x - rect.left as MjtNum) / rect.width as MjtNum,
+                        (y - rect.bottom as MjtNum) / rect.height as MjtNum
+                    );
 
-    //                 /* Set tracking camera */
-    //                 if modifiers.contains(Modifiers::Alt) {
-    //                     if body_id >= 0 {
-    //                         self.camera.lookat = xyz;
-    //                         if modifiers.contains(Modifiers::Control) {
-    //                             self.camera.track(body_id as u32);
-    //                         }
-    //                     }
-    //                 }
-    //                 else {
-    //                     /* Mark selection */
-    //                     if body_id >= 0 {
-    //                         self.pert.select = body_id;
-    //                         self.pert.flexselect = flex_id;
-    //                         self.pert.skinselect = skin_id;
-    //                         self.pert.active = 0;
-    //                         self.pert.update_local_pos(xyz, data);
-    //                     }
-    //                     else {
-    //                         self.pert.select = 0;
-    //                         self.pert.flexselect = -1;
-    //                         self.pert.skinselect = -1;
-    //                     }
-    //                 }
-    //             }
-    //             self.last_bnt_press_time = Instant::now();
-    //             self.status_flags.set(ViewerStatusBits::LEFT_CLICK, true);
-    //         },
-    //         Action::Release => {
-    //             // Clear perturbation when left click is released.
-    //             self.pert.active = 0;
-    //             self.status_flags.remove(ViewerStatusBits::LEFT_CLICK);
-    //         },
-    //         Action::Repeat => {}
-    //     };
-    // }
+                    /* Set tracking camera */
+                    if modifier_state.alt_key() {
+                        if body_id >= 0 {
+                            self.camera.lookat = xyz;
+                            if modifier_state.control_key() {
+                                self.camera.track(body_id as u32);
+                            }
+                        }
+                    }
+                    else {
+                        /* Mark selection */
+                        if body_id >= 0 {
+                            self.pert.select = body_id;
+                            self.pert.flexselect = flex_id;
+                            self.pert.skinselect = skin_id;
+                            self.pert.active = 0;
+                            self.pert.update_local_pos(xyz, data);
+                        }
+                        else {
+                            self.pert.select = 0;
+                            self.pert.flexselect = -1;
+                            self.pert.skinselect = -1;
+                        }
+                    }
+                }
+                self.last_bnt_press_time = Instant::now();
+                self.status_flags.set(ViewerStatusBits::LEFT_CLICK, true);
+            },
+            ElementState::Released => {
+                // Clear perturbation when left click is released.
+                self.pert.active = 0;
+                self.status_flags.remove(ViewerStatusBits::LEFT_CLICK);
+            },
+        };
+    }
 }
 
 
