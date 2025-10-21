@@ -55,6 +55,10 @@ Unreleased (MuJoCo 3.3.7)
     - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_round`: replaced ``c_int`` types with ``i32``,
     - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_transform_spatial`: replaced ``c_int`` types with ``bool``,
 
+  - Removed modules:
+
+    - ``mujoco_rs::wrappers::mj_interface``: this was in early development, but then it became apparent
+      that its completion and usage would violate borrow checker rules, resulting in undefined behavior.
 
 - Other changes:
 
