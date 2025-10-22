@@ -548,7 +548,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         }
     }
 
-    // /// Processes left clicks and double left clicks.
+    /// Processes left clicks and double left clicks.
     fn process_left_click(&mut self, data: &mut MjData<M>, state: ElementState) {
         let modifier_state = self.modifiers.state();
         let window = &self.adapter.state.as_ref().unwrap().window;
