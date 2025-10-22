@@ -81,7 +81,7 @@ impl ApplicationHandler for RenderBase {
             .with_stencil_size(8);
 
         let display_builder = DisplayBuilder::new()
-            .with_preference(ApiPreference::FallbackEgl) // or PreferEgl on Linux
+            .with_preference(ApiPreference::FallbackEgl)
             .with_window_attributes(Some(window_attrs));
 
         // Select the config with most samples.
