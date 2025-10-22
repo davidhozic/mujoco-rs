@@ -29,6 +29,9 @@ Unreleased (MuJoCo 3.3.7)
       as expected, but we can't be sure as we did not test GLFW and Winit being used at the same time.
       Change to Winit also means we don't need any C dependencies, unless the C++ viewer wrapper
       is needed, which also contains breaking changes. The latter is described in the next bullet.
+    
+    - Added and removed variants in :docs-rs:`mujoco_rs::viewer::<enum>MjViewerError` and
+      :docs-rs:`mujoco_rs::renderer::<enum>RendererError`.
 
   - :ref:`mj_cpp_viewer`:
 
