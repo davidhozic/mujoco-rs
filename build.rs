@@ -97,9 +97,14 @@ fn main() {
     /* Static linking */
     if let Ok(path) = mujoco_lib_path {
         let mj_lib_pathbuf = PathBuf::from(path);
-        let mj_lib_simulate_path = mj_lib_pathbuf.join("libsimulate.a");
 
-        println!("cargo::rerun-if-changed={}", mj_lib_simulate_path.canonicalize().unwrap().display());
+        #[cfg(unix)]
+        let mj_lib_mujoco_path = mj_lib_pathbuf.join("libmujoco.a");
+
+        #[cfg(windows)]
+        let mj_lib_mujoco_path = mj_lib_pathbuf.join("mujoco.lib");
+
+        println!("cargo::rerun-if-changed={}", mj_lib_mujoco_path.canonicalize().unwrap().display());
         println!("cargo:rustc-link-search={}", mj_lib_pathbuf.canonicalize().unwrap().display());
 
         #[cfg(feature = "cpp-viewer")]
