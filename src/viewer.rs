@@ -710,7 +710,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
 
     /// Renders the simulation.
     /// `update_timer` flag species whether the time should be updated
-    /// inside the viewer (for vsync purposes).
+    /// inside the viewer (for FPS calculation).
     /// # SAFETY
     /// This needs to be called periodically from the MAIN thread, otherwise
     /// GLFW stops working.

@@ -21,7 +21,7 @@ Structs
 Most of MuJoCo's structs are plain data structs. In Rust, we mostly keep them as-is, renaming them to PascalCase. 
 Structs with heap-allocated data are wrapped in safe Rust types that automatically manage memory and provide safe attribute access. 
 
-Attributes not directly exposed can be accessed via ``.ffi()`` and ``.ffi_mut()`` methods.
+Attributes, which are not directly exposed, can be accessed via ``.ffi()`` and ``.ffi_mut()`` methods.
 For more details, see :ref:`interface_c_api`.
 
 Additionally, :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` and

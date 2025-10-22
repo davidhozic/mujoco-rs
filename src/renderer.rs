@@ -436,7 +436,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Save a depth image of the scene to a path. The image is 16-bit PNG, which
     /// can be converted into depth (distance) data by dividing the grayscale values by
-    /// 65535.0 and applying inverse normalization: `depth = min + (grayscale / 65535.0) * (max - min)`.
+    /// 65535.0 and applying inverse normalization (if it was enabled with `normalize`): `depth = min + (grayscale / 65535.0) * (max - min)`.
     /// If `normalize` is `true`, then the data is normalized with min-max normalization.
     /// Use of [`MjRenderer::save_depth_raw`] is recommended if performance is critical, as
     /// it skips PNG encoding and also saves the true depth values directly.

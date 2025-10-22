@@ -22,6 +22,27 @@ Unreleased (MuJoCo 3.3.7)
 - **Breaking changes**:
 
   - Updated the MuJoCo version to 3.3.7.
+  - :ref:`mj_rust_viewer` and :ref:`mj_renderer`:
+
+    - Changed the backend windowing library to Winit (+ Glutin). This is a **potentially** breaking
+      change because of possible direct GLFW uses in the user code, which will probably still work
+      as expected, but we can't be sure as we did not test GLFW and Winit being used at the same time.
+      Change to Winit also means we don't need any C dependencies, unless the C++ viewer wrapper
+      is needed, which also contains breaking changes. The latter is described in the next bullet.
+
+  - :ref:`mj_cpp_viewer`:
+
+    - Since MuJoCo's build systems downloads GLFW sources anyway, we decided to remove the GLFW
+      requirement from the Rust level and instead made it so that the user needs to compile the GLFW
+      code during the MuJoCo's viewer (simulate) compilation.
+      No change is needed in the user Rust code, users just need to build MuJoCo a bit differently:
+
+      ``cmake --build build --parallel --target glfw libmujoco_simulate --config=Release``.
+
+      The above command, besides the added ``glfw`` part, also contains the ``libmujoco_simulate``
+      part in-place of the previously ``libmujoco_simulate`` part. This change is a consequence
+      of MuJoCo upgrade to version 3.3.7.
+
   - Changed |mj_data| and other types to accept a generic type for the model,
     constrained to ``Deref<Target = MjModel>``.
     This enables use in environments such as `PyO3 <https://github.com/PyO3/pyo3>`_.
