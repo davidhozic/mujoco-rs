@@ -566,7 +566,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     let mut y = cp.1 as f64;
 
                     /* Fix the coordinates */
-                    let buffer_ratio = window.inner_size().width as f64 / window.outer_size().width as f64;
+                    let buffer_ratio = window.scale_factor();
                     x *= buffer_ratio;
                     y *= buffer_ratio;
                     y = self.rect_full.height as f64 - y;  // match OpenGL's coordinate system.
