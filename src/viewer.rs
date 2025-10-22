@@ -22,11 +22,11 @@ use std::ffi::CString;
 use crate::mujoco_c::*;
 
 use crate::prelude::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
+use crate::render_base::{GlState, RenderBase, sync_geoms};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
-use crate::render_base::{GlState, RenderBase};
 use crate::get_mujoco_version;
 
 /****************************************** */
@@ -34,6 +34,9 @@ use crate::get_mujoco_version;
 /****************************************** */
 const MJ_VIEWER_DEFAULT_SIZE_PX: (u32, u32) = (1280, 720);
 const DOUBLE_CLICK_WINDOW_MS: u128 = 250;
+
+/// How much extra room to create in the internal [`MjvScene`]. Useful for drawing labels, etc.
+pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
 
 const HELP_MENU_TITLES: &str = concat!(
     "Toggle help\n",

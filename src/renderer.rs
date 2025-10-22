@@ -1,8 +1,7 @@
 //! Module related to implementation of the [`MjRenderer`].
-use crate::render_base::GlState;
+use crate::render_base::{GlState, RenderBase, sync_geoms};
 use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_rendering::MjrContext;
-use crate::render_base::RenderBase;
 use crate::builder_setters;
 use crate::prelude::*;
 
