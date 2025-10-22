@@ -656,7 +656,6 @@ pub struct MjViewerCpp<M: Deref<Target = MjModel> + Clone> {
     _opt: Box<MjvOption>,
     _pert: Box<MjvPerturb>,
     _user_scn: Box<MjvScene<M>>,
-    _glfw: glfw::Glfw
 }
 
 #[cfg(feature = "cpp-viewer")]
@@ -687,8 +686,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
     /// Undefined behavior should not occur, however caution is advised as this is a violation
     /// of the Rust's borrowing rules.
     pub fn launch_passive(model: M, data: &MjData<M>, scene_max_geom: usize) -> Self {
-        let mut _glfw = glfw::init(glfw::fail_on_errors).unwrap();
-
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut _cam = Box::new(MjvCamera::default());
         let mut _opt: Box<MjvOption> = Box::new(MjvOption::default());
@@ -703,7 +700,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
             (*sim).RenderStep(true);
         }
 
-        Self {sim, running: true, _cam, _opt, _pert, _glfw, _user_scn}
+        Self {sim, running: true, _cam, _opt, _pert, _user_scn}
     }
 
     /// Returns the underlying C++ binding object of the viewer.
