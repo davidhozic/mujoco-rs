@@ -366,7 +366,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 } => {
                     self.camera.free();
                 }
-                
+
                 // Toggle help menu
                 WindowEvent::KeyboardInput {
                     event: KeyEvent {
@@ -577,7 +577,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     y = self.rect_full.height as f64 - y;  // match OpenGL's coordinate system.
 
                     /* Obtain the selection */ 
-                    let rect: &MjrRectangle = &self.rect_view;
+                    let rect = &self.rect_view;
                     let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
                         data, &self.opt,
                         rect.width as MjtNum / rect.height as MjtNum,
