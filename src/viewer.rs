@@ -76,7 +76,6 @@ const HELP_MENU_VALUES: &str = concat!(
 
 #[derive(Debug)]
 pub enum MjViewerError {
-    WindowCreationError,
     EventLoopError(winit::error::EventLoopError),
     GlutinError(glutin::error::Error)
 }
@@ -84,7 +83,6 @@ pub enum MjViewerError {
 impl Display for MjViewerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::WindowCreationError => write!(f, "failed to create window"),
             Self::EventLoopError(e) => write!(f, "failed to initialize event_loop: {}", e),
             Self::GlutinError(e) => write!(f, "glutin raised an error: {}", e)
         }
@@ -95,8 +93,7 @@ impl Error for MjViewerError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::EventLoopError(e) => Some(e),
-            Self::GlutinError(e) => Some(e),
-            _ => None
+            Self::GlutinError(e) => Some(e)
         }
     }
 }
@@ -160,9 +157,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// It can thus be set to 0 if no additional geoms will be drawn by the user.
     pub fn launch_passive(model: M, scene_max_geom: usize) -> Result<Self, MjViewerError> {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
-        let mut event_loop = EventLoop::new()
-            .map_err(|e| MjViewerError::EventLoopError(e))?;
-
+        let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
         let adapter = RenderBase::new(
             w, h,
             format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version()),
@@ -176,7 +171,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             gl_surface,
             ..
         } = adapter.state.as_ref().unwrap();
-        gl_context.make_current(gl_surface).map_err(|e| MjViewerError::GlutinError(e))?;
+        gl_context.make_current(gl_surface).map_err(MjViewerError::GlutinError)?;
         gl_surface.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait).map_err(
             |e| MjViewerError::GlutinError(e)
         )?;
@@ -492,7 +487,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Toggles full screen mode.
     fn toggle_full_screen(&mut self) {
         let window = &self.adapter.state.as_ref().unwrap().window;
-        if let Some(_) = window.fullscreen() {
+        if window.fullscreen().is_some() {
             window.set_fullscreen(None);
         }
         else {

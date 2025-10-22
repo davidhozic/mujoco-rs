@@ -45,7 +45,7 @@ Because MuJoCo-rs doesn't directly bundle MuJoCo,
 the latter, in the form of a pre-built library or source code, must be `downloaded <mj_download_>`_
 or compiled. Make sure to download or compile MuJoCo version |MUJOCO_VERSION_BOLD|.
 
-Compilation of MuJoCo-rs incudes **linking** to the MuJoCo library.
+Compilation of MuJoCo-rs includes **linking** to the MuJoCo library.
 This requires some environmental variables to be set, which tell
 MuJoCo-rs where to obtain the MuJoCo library.
 

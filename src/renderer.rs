@@ -117,9 +117,7 @@ which can be configured at the top of the model's XML like so:
             width = global.offwidth as u32;
         }
 
-        let mut event_loop = EventLoop::new()
-            .map_err(|e| RendererError::EventLoopError(e))?;
-
+        let mut event_loop = EventLoop::new().map_err(RendererError::EventLoopError)?;
         let adapter = RenderBase::new(
             width, height,
             "".to_string(),
@@ -133,7 +131,7 @@ which can be configured at the top of the model's XML like so:
         {
             window.set_visible(false);
             gl_surface.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait)
-                .map_err(|e| RendererError::GlutinError(e))?;
+                .map_err(RendererError::GlutinError)?;
         }
 
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
@@ -535,7 +533,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
 #[derive(Debug)]
 pub enum RendererError {
-    WindowCreationError,
     EventLoopError(winit::error::EventLoopError),
     GlutinError(glutin::error::Error)
 }
@@ -544,8 +541,7 @@ impl Display for RendererError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::EventLoopError(e) => write!(f, "event loop failed to initialize: {}", e),
-            Self::GlutinError(e) => write!(f, "glutin failed to initialize: {}", e),
-            Self::WindowCreationError => write!(f, "failed to create window"),
+            Self::GlutinError(e) => write!(f, "glutin failed to initialize: {}", e)
         }
     }
 }
@@ -554,8 +550,7 @@ impl Error for RendererError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::EventLoopError(e) => Some(e),
-            Self::GlutinError(e) => Some(e),
-            _ => None
+            Self::GlutinError(e) => Some(e)
         }
     }
 }
