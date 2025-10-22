@@ -94,7 +94,7 @@ impl ApplicationHandler for RenderBase {
             .expect("display build");
 
         // Finalize the Window from the config’s requirements
-        let window = maybe_window.expect("failed to create window -- this is a bug, please report it");
+        let window = maybe_window.expect("failed to create window");
 
         // Create the GL context + window surface
         let raw_window_handle = Some(window.window_handle()
