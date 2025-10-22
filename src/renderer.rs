@@ -1,14 +1,17 @@
 //! Module related to implementation of the [`MjRenderer`].
+use crate::render_base::{GlState, RenderBase, sync_geoms};
 use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_rendering::MjrContext;
 use crate::builder_setters;
 use crate::prelude::*;
 
-use glfw_mjrc_fork as glfw;
-use glfw_mjrc_fork::{Context, InitError, PWindow, WindowHint};
+
 
 use bitflags::bitflags;
+use glutin::prelude::PossiblyCurrentGlContext;
+use glutin::surface::GlSurface;
 use png::Encoder;
+use winit::event_loop::EventLoop;
 
 use std::io::{self, BufWriter, ErrorKind, Write};
 use std::fmt::Display;
@@ -21,7 +24,7 @@ use std::fs::File;
 const RGB_NOT_FOUND_ERR_STR: &str = "RGB rendering is not enabled (renderer.with_rgb_rendering(true))";
 const DEPTH_NOT_FOUND_ERR_STR: &str = "depth rendering is not enabled (renderer.with_depth_rendering(true))";
 const INVALID_INPUT_SIZE: &str = "the input width and height don't match the renderer's configuration";
-const EXTRA_INTERNAL_VISUAL_GEOMS: usize = 100;
+const EXTRA_INTERNAL_VISUAL_GEOMS: u32 = 100;
 
 
 /// A builder for [`MjRenderer`].
@@ -50,7 +53,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRendererBuilder<M> {
     pub fn new() -> Self {
         Self {
             width: 0, height: 0,
-            num_visual_internal_geom: EXTRA_INTERNAL_VISUAL_GEOMS as u32, num_visual_user_geom: 0,
+            num_visual_internal_geom: EXTRA_INTERNAL_VISUAL_GEOMS, num_visual_user_geom: 0,
             rgb: true, depth: false, font_scale: MjtFontScale::mjFONTSCALE_100,
             camera: MjvCamera::default(), opts: MjvOption::default(), model_type: PhantomData
         }
@@ -114,21 +117,24 @@ which can be configured at the top of the model's XML like so:
             width = global.offwidth as u32;
         }
 
-        let mut glfw = glfw::init_no_callbacks()
-            .map_err(|err| RendererError::GlfwInitError(err))?;
-
-        // Create window for rendering
-        glfw.window_hint(WindowHint::Visible(false));
-        let (mut window, _) = match glfw.create_window(
+        let mut event_loop = EventLoop::new().map_err(RendererError::EventLoopError)?;
+        let adapter = RenderBase::new(
             width, height,
-            "", glfw::WindowMode::Windowed
-        ) {
-            Some(x) => Ok(x),
-            None => Err(RendererError::WindowCreationError)
-        }?;
+            "".to_string(),
+            &mut event_loop,
+            false  // don't process events
+        );
 
-        window.make_current();
-        glfw.set_swap_interval(glfw::SwapInterval::None);
+        /* Initialize the OpenGL related things */
+        if let Some (GlState { window, gl_context, gl_surface }) = 
+            adapter.state.as_ref()
+        {
+            window.set_visible(false);
+            gl_surface.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait)
+                .map_err(RendererError::GlutinError)?;
+        }
+
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
         // Initialize the rendering context to render to the offscreen buffer.
         let mut context = MjrContext::new(&model);
@@ -148,9 +154,10 @@ which can be configured at the top of the model's XML like so:
 
         // Construct the renderer and create allocated buffers.
         let renderer = MjRenderer {
-            scene, user_scene, context, window, model, camera: self.camera, option: self.opts,
+            scene, user_scene, context, model, camera: self.camera, option: self.opts,
             flags: RendererFlags::empty(), rgb: None, depth: None,
-            width: width as usize, height: height as usize
+            width: width as usize, height: height as usize,
+            adapter, _event_loop: event_loop
         }   // These require special care
             .with_rgb_rendering(self.rgb)
             .with_depth_rendering(self.depth);
@@ -174,8 +181,9 @@ pub struct MjRenderer<M: Deref<Target = MjModel> + Clone> {
     context: MjrContext,
     model: M,
 
-    /* Glfw */
-    window: PWindow,
+    /* OpenGL */
+    adapter: RenderBase,
+    _event_loop: EventLoop<()>,
 
     /* Configuration */
     camera: MjvCamera,
@@ -194,7 +202,7 @@ pub struct MjRenderer<M: Deref<Target = MjModel> + Clone> {
 
 impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// Construct a new renderer.
-    /// The `max_geom` parameter
+    /// The `max_user_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
     /// It can thus be set to 0 if no additional geoms will be drawn by the user.
     /// # Scene allocation
@@ -220,39 +228,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// ```
     /// 
     /// </div>
-    pub fn new(model: M, width: usize, height: usize, max_geom: usize) -> Result<Self, RendererError> {
-        let mut glfw = glfw::init_no_callbacks()
-            .map_err(|err| RendererError::GlfwInitError(err))?;
-
-        /* Create window for rendering */
-        glfw.window_hint(WindowHint::Visible(false));
-        let (mut _window, _) = match glfw.create_window(width as u32, height as u32, "", glfw::WindowMode::Windowed) {
-            Some(x) => Ok(x),
-            None => Err(RendererError::WindowCreationError)
-        }?;
-
-        _window.make_current();
-        glfw.set_swap_interval(glfw::SwapInterval::None);
-
-        /* Initialize the rendering context to render to the offscreen buffer. */
-        let mut context = MjrContext::new(&model);
-        context.offscreen();
-
-        /* The 3D scene for visualization */
-        let scene = MjvScene::new(model.clone(), model.ffi().ngeom as usize + max_geom + EXTRA_INTERNAL_VISUAL_GEOMS);
-        let user_scene = MjvScene::new(model.clone(), max_geom);
-
-        let camera = MjvCamera::new_free(&model);
-        let option = MjvOption::default();
-
-        let mut s = Self {
-            scene, user_scene, context, window: _window, model, camera, option,
-            flags: RendererFlags::empty(), rgb: None, depth: None,
-            width, height
-        };
-
-        s = s.with_rgb_rendering(true);
-        Ok(s)
+    pub fn new(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
+        let builder = Self::builder()
+            .width(width as u32).height(height as u32).num_visual_user_geom(max_user_geom as u32);
+        builder.build(model)
     }
 
     /// Create a [`MjRendererBuilder`] to configure [`MjRenderer`].
@@ -454,7 +433,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Save a depth image of the scene to a path. The image is 16-bit PNG, which
     /// can be converted into depth (distance) data by dividing the grayscale values by
-    /// 65535.0 and applying inverse normalization: `depth = min + (grayscale / 65535.0) * (max - min)`.
+    /// 65535.0 and applying inverse normalization (if it was enabled with `normalize`): `depth = min + (grayscale / 65535.0) * (max - min)`.
     /// If `normalize` is `true`, then the data is normalized with min-max normalization.
     /// Use of [`MjRenderer::save_depth_raw`] is recommended if performance is critical, as
     /// it skips PNG encoding and also saves the true depth values directly.
@@ -520,7 +499,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// Draws the scene to internal arrays.
     /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image.
     fn render(&mut self) {
-        self.window.make_current();
+        let GlState {gl_context, gl_surface, .. }
+            = self.adapter.state.as_ref().unwrap();
+
+        gl_context.make_current(gl_surface).expect("failed to make OpenGL context current");
         let vp = MjrRectangle::new(0, 0, self.width as i32, self.height as i32);
         self.scene.render(&vp, &self.context);
 
@@ -551,15 +533,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
 #[derive(Debug)]
 pub enum RendererError {
-    GlfwInitError(InitError),
-    WindowCreationError,
+    EventLoopError(winit::error::EventLoopError),
+    GlutinError(glutin::error::Error)
 }
 
 impl Display for RendererError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::GlfwInitError(e) => write!(f, "glfw failed to initialize: {}", e),
-            Self::WindowCreationError => write!(f, "failed to create window"),
+            Self::EventLoopError(e) => write!(f, "event loop failed to initialize: {}", e),
+            Self::GlutinError(e) => write!(f, "glutin failed to initialize: {}", e)
         }
     }
 }
@@ -567,8 +549,8 @@ impl Display for RendererError {
 impl Error for RendererError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::GlfwInitError(e) => Some(e),
-            _ => None
+            Self::EventLoopError(e) => Some(e),
+            Self::GlutinError(e) => Some(e)
         }
     }
 }

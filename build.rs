@@ -101,7 +101,10 @@ fn main() {
         println!("cargo:rustc-link-search={}", mj_lib_pathbuf.canonicalize().unwrap().display());
 
         #[cfg(feature = "cpp-viewer")]
-        println!("cargo:rustc-link-lib=simulate");
+        {
+            println!("cargo:rustc-link-lib=simulate");
+            println!("cargo:rustc-link-lib=glfw3");
+        }
 
         println!("cargo:rustc-link-lib=mujoco");
         println!("cargo:rustc-link-lib=lodepng");

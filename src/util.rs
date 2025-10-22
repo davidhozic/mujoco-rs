@@ -692,6 +692,23 @@ macro_rules! array_slice_dyn {
     };
 }
 
+/// View a raw C-string (null terminated) as a Rust string slice.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! c_str_as_str_method {
+    (raw {$( $name:ident : $comment:literal; )*}) => {
+        $(
+            #[doc = $comment]
+            pub fn $name(&self) -> &str {
+                unsafe { 
+                    let c_ptr = self.ffi().$name;
+                    CStr::from_ptr(c_ptr).to_str().unwrap()
+                }
+            }
+        )*
+    };
+}
+
 /// assert_eq!, but with tolerance for floating point rounding.
 #[doc(hidden)]
 #[macro_export]

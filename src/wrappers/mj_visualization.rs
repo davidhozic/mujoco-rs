@@ -3,7 +3,6 @@ use std::default::Default;
 use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::ptr;
-use std::io;
 
 use super::mj_rendering::{MjrContext, MjrRectangle};
 use super::mj_primitive::{MjtNum, MjtByte};
@@ -12,10 +11,6 @@ use super::mj_data::MjData;
 use crate::array_slice_dyn;
 use crate::getter_setter;
 use crate::mujoco_c::*;
-
-
-/// How much extra room to create in the internal [`MjvScene`]. Useful for drawing labels, etc.
-pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
 
 
 /// These are the available categories of geoms in the abstract visualizer. The bitmask can be used in the function
@@ -465,32 +460,6 @@ impl<M: Deref<Target = MjModel>> Drop for MjvScene<M> {
         }
     }
 }
-
-
-/// Copies geometry data (geoms only) from the `src` to `dst`.
-/// # Errors
-/// Returns an [`io::Error`] of kind [`io::ErrorKind::StorageFull`] if the destination scene does not have
-/// enough space to accommodate the additional geoms from the source scene.
-pub(crate) fn sync_geoms<M: Deref<Target = MjModel>>(src: &MjvScene<M>, dst: &mut MjvScene<M>) -> io::Result<()> {
-    let ffi_src = src.ffi();
-    let ffi_dst = unsafe { dst.ffi_mut() };
-    let new_len = ffi_dst.ngeom + ffi_src.ngeom;
-
-    if new_len > ffi_dst.maxgeom {
-        return Err(io::Error::new(io::ErrorKind::StorageFull, "not enough space available in the destination scene"))
-    }
-
-    /* Fast copy */
-    unsafe { std::ptr::copy_nonoverlapping(
-        ffi_src.geoms,
-        ffi_dst.geoms.add(ffi_dst.ngeom as usize),
-        ffi_src.ngeom as usize
-    ) };
-
-    ffi_dst.ngeom = new_len;
-    Ok(())
-}
-
 
 #[cfg(test)]
 mod tests {

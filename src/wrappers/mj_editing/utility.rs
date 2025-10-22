@@ -93,7 +93,7 @@ pub(crate) fn append_mjs_vec_string(source: &str, destination: &mut mjStringVec)
     }
 }
 
-// /// Writes MJS byte vector (C++) from a `source` to `destination`.
+/// Writes MJS byte vector (C++) from a `source` to `destination`.
 pub(crate) fn write_mjs_vec_byte<T>(source: &[T], destination: &mut mjByteVec) {
     unsafe {
         mjs_setBuffer(destination, source.as_ptr().cast(), (size_of::<T>() * source.len()) as i32);

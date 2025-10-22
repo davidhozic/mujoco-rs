@@ -58,14 +58,14 @@ For example:
         fn main() {
             let model = Box::new(MjModel::from_xml("model.xml").expect("could not load the model"));
             let mut data = MjData::new(model);  // move model into the data
-            let model_ref = data.model();  // obtain the reference to the model
+            let model_ref = data.model();  // obtain a reference to the model
         }
 
     Note that `Box\<MjModel\> <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_ can't be used in contexts
-    that require explicit borrowing. One of the examples is :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
-    In such cases, `Rc\<MjModel\> <https://doc.rust-lang.org/std/rc/struct.Rc.html>`_ can be used.
+    that require explicit borrowing. One of such examples is :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
+    In such cases, `Rc\<MjModel\> <https://doc.rust-lang.org/std/rc/struct.Rc.html>`_ can be used instead.
 
-    This datatype model allows usage in environments with restricted lifetime usage.
+    Using ``Box`` or ``Rc`` (instead of direct references) allows usage in environments with lifetime restrictions.
     One such example are **Python bindings** created with **PyO3**.
     The :gh-example:`pyo3_application` example shows how create a simple MuJoCo-rs based application
     for use from the Python programming language.

@@ -20,7 +20,7 @@ to MuJoCo's implementation.
 
 A procedurally generated, not yet compiled, model is represented by its **specification** (|mj_spec|).
 A specification can be created **empty** with :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>new`
-or **pre-filled** from XML, with:
+or **pre-filled** from XML with:
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_xml` (loads XML from a file),
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_xml_vfs`
@@ -47,7 +47,7 @@ We start by creating an |mj_spec| instance:
         let mut spec = MjSpec::new();
     }
 
-Now, we need to create a spherical body, which will be our ball.
+Now we need to create a spherical body, which will be our ball.
 This also includes adding a spherical geom and a free joint.
 Since bodies are structured elements, we can't add them to |mj_spec|.
 Instead, we will add them to the **world body** (the ``worldbody`` element in a model's XML).

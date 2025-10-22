@@ -42,7 +42,6 @@ fn main() {
     /* Launch a passive Rust-native viewer */
     let mut viewer = MjViewer::launch_passive(&model, 0)
         .expect("could not launch the viewer");
-
     while viewer.running() {
         /* Step the simulation and sync the viewer */
         viewer.sync(&mut data);
