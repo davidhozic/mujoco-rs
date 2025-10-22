@@ -1,22 +1,21 @@
 //! Base definitions needed to support rendering in both `MjViewer` and `MjRenderer`.
-use glutin::surface::{GlSurface, Surface, SurfaceAttributesBuilder, SwapInterval, WindowSurface};
 use glutin::context::{ContextApi, ContextAttributesBuilder, GlProfile, Version};
-use glutin::display::{GetGlDisplay, GlDisplay}; // for get_proc_address
+use glutin::surface::{Surface, SurfaceAttributesBuilder, WindowSurface};
+use glutin::display::{GetGlDisplay, GlDisplay};
 use glutin::context::PossiblyCurrentContext;
 use glutin::config::ConfigTemplateBuilder;
 use glutin::prelude::*;
 
-use winit::event::{ElementState, Modifiers, MouseButton, WindowEvent};
 use winit::platform::pump_events::EventLoopExtPumpEvents;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::raw_window_handle::HasWindowHandle;
 use winit::application::ApplicationHandler;
 use winit::window::{Window, WindowId};
+use winit::event::WindowEvent;
 use winit::dpi::PhysicalSize;
 
 use glutin_winit::{ApiPreference, DisplayBuilder, GlWindow};
-use bitflags::bitflags;
-use std::sync::mpsc;
+use std::collections::VecDeque;
 
 
 /// Base struct for rendering through Glutin.
@@ -28,41 +27,28 @@ pub(crate) struct GlState {
     pub(crate) gl_surface: Surface<WindowSurface>,
 }
 
-bitflags! {
-    #[derive(Debug)]
-    pub(crate) struct ButtonsPressed: u8 {
-        const LEFT = 0;
-        const MIDDLE = 1;
-        const RIGHT = 2;
-    }
-}
-
 #[derive(Debug)]
 pub(crate) struct RenderBase {
     pub(crate) state: Option<GlState>,
     pub(crate) running: bool,
     /* Event related */
-    pub(crate) channel: (mpsc::Sender<WindowEvent>, mpsc::Receiver<WindowEvent>),
-    pub(crate) modifiers: Modifiers,
-    pub(crate) buttons_pressed: ButtonsPressed,
-    pub(crate) cursor_position: (u32, u32),
+    pub(crate) queue: VecDeque<WindowEvent>,
 
     /* Storage */
     size: (u32, u32),
     title: String,
+    events: bool
 }
 
 impl RenderBase {
-    pub(crate) fn new(width: u32, height: u32, title: String, event_loop: &mut EventLoop<()>) -> Self {
+    pub(crate) fn new(width: u32, height: u32, title: String, event_loop: &mut EventLoop<()>, events: bool) -> Self {
         let mut s = Self {
             state: None,
             running: false,
-            channel: mpsc::channel(),
-            modifiers: Modifiers::default(),
-            buttons_pressed: ButtonsPressed::empty(),
-            cursor_position: (0, 0),
+            queue: VecDeque::new(),
             size: (width, height),
             title,
+            events
         };
 
         // Initialize through app callbacks.
@@ -70,38 +56,15 @@ impl RenderBase {
         s
     }
 
-    pub(crate) fn make_current(&self) -> glutin::error::Result<()> {
-        if let Some(GlState { window: _, gl_context, gl_surface })
-            = &self.state {
-            gl_context.make_current(gl_surface)?;
+    fn maybe_forward_event(&mut self, event: WindowEvent) {
+        if self.events {
+            self.queue.push_back(event);
         }
-        Ok(())
-    }
-
-    pub(crate) fn swap_buffers(&self) -> glutin::error::Result<()> {
-        if let Some(GlState { window: _, gl_context, gl_surface })
-            = &self.state {
-            gl_surface.swap_buffers(gl_context)?;
-        }
-        Ok(())
-    }
-
-    pub(crate) fn set_swap_interval(&self, interval: SwapInterval) -> glutin::error::Result<()> {
-        if let Some(GlState { window: _, gl_context, gl_surface })
-            = &self.state {
-            gl_surface.set_swap_interval(gl_context, interval)?;
-        }
-        Ok(())
-    }
-
-    fn maybe_forward_event(&self, event: WindowEvent) {
-        self.channel.0.send(event).expect("failed to send event")
     }
 }
 
 impl ApplicationHandler for RenderBase {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        // ---- 1) Pick a GL config and create the window/display ----
         let window_attrs = Window::default_attributes()
             .with_title(&self.title)
             .with_inner_size(PhysicalSize::new(self.size.0, self.size.1));
@@ -116,7 +79,7 @@ impl ApplicationHandler for RenderBase {
             .with_preference(ApiPreference::FallbackEgl) // or PreferEgl on Linux
             .with_window_attributes(Some(window_attrs));
 
-        // Choose a config. Here we just take the first; you could pick the one with most samples, etc.
+        // Select the config with most samples.
         let (maybe_window, gl_config) = display_builder
             .build(event_loop, template, |configs| {
                 configs.into_iter().reduce(|current, cfg|
@@ -125,11 +88,12 @@ impl ApplicationHandler for RenderBase {
             })
             .expect("display build");
 
-        // Create (or finalize) the Window from the config’s requirements.
-        let window = maybe_window.expect("failed to create window");
+        // Finalize the Window from the config’s requirements
+        let window = maybe_window.expect("failed to create window -- this is a bug, please report it");
 
-        // ---- 2) Create the GL context + window surface, then make current ----
-        let raw_window_handle = Some(window.window_handle().map(|x| x.as_raw()).unwrap()); // required on WGL
+        // Create the GL context + window surface
+        let raw_window_handle = Some(window.window_handle()
+            .map(|x| x.as_raw()).unwrap());
         let context_attrs = ContextAttributesBuilder::new()
             .with_profile(GlProfile::Core)
             .with_context_api(ContextApi::OpenGl(Some(Version::new(1, 5))))
@@ -142,7 +106,7 @@ impl ApplicationHandler for RenderBase {
                 .expect("context create")
         };
 
-        // Build surface attributes from the window’s size/handles.
+        // Build surface attributes
         let attrs = window
             .build_surface_attributes(SurfaceAttributesBuilder::<WindowSurface>::new().with_srgb(Some(true)))
             .expect("surface attrs");
@@ -175,22 +139,6 @@ impl ApplicationHandler for RenderBase {
                 if let Some(GlState { window, gl_context, gl_surface }) = &self.state {
                     window.resize_surface(gl_surface, gl_context);
                 }
-            }
-            WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
-            WindowEvent::MouseInput {state, button, .. } => {
-                self.maybe_forward_event(event);
-                let index = match button {
-                    MouseButton::Left => ButtonsPressed::LEFT,
-                    MouseButton::Middle => ButtonsPressed::MIDDLE,
-                    MouseButton::Right => ButtonsPressed::RIGHT,
-                    _ => return
-                };
-
-                self.buttons_pressed.set(index, state == ElementState::Pressed);
-            }
-            WindowEvent::CursorMoved { position, .. } => {
-                self.cursor_position = position.into();
-                self.maybe_forward_event(event);
             }
 
             // Fill the event buffer for everything else

@@ -1,29 +1,33 @@
 //! Module related to implementation of the [`MjViewer`] and [`MjViewerCpp`].
-use bitflags::bitflags;
-use winit::application::ApplicationHandler;
-use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, Event, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::event_loop::EventLoop;
-use winit::keyboard::{Key, KeyCode, ModifiersKeyState, NamedKey, PhysicalKey};
+use glutin::prelude::PossiblyCurrentGlContext;
+use glutin::surface::GlSurface;
+use winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::platform::pump_events::EventLoopExtPumpEvents;
-use winit::window::{Fullscreen, Window};
+use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::event_loop::EventLoop;
+use winit::window::Fullscreen;
 
-use std::ops::Deref;
 use std::time::{Duration, Instant};
-use std::fmt::Display;
 use std::error::Error;
+use std::fmt::Display;
+use std::ops::Deref;
 
-use crate::render_base::{ButtonsPressed, RenderBase};
-use crate::get_mujoco_version;
+use bitflags::bitflags;
+
 
 #[cfg(feature = "cpp-viewer")]
 use std::ffi::CString;
+
+#[cfg(feature = "cpp-viewer")]
+use crate::mujoco_c::*;
 
 use crate::prelude::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
+use crate::render_base::{GlState, RenderBase};
+use crate::get_mujoco_version;
 
 /****************************************** */
 // Rust native viewer
@@ -138,6 +142,9 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     /* OpenGL */
     adapter: RenderBase,
     event_loop: EventLoop<()>,
+    modifiers: Modifiers,
+    buttons_pressed: ButtonsPressed,
+    cursor_position: (u32, u32),
 
     /* External interaction */
     user_scene: MjvScene<M>,
@@ -156,11 +163,18 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let adapter = RenderBase::new(
             w, h,
             format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version()),
-            &mut event_loop
+            &mut event_loop,
+            true  // process events
         );
 
         /* Initialize the OpenGL related things */
-        adapter.set_swap_interval(glutin::surface::SwapInterval::DontWait).map_err(
+        let GlState {
+            gl_context,
+            gl_surface,
+            ..
+        } = adapter.state.as_ref().unwrap();
+        gl_context.make_current(gl_surface).map_err(|e| MjViewerError::GlutinError(e))?;
+        gl_surface.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait).map_err(
             |e| MjViewerError::GlutinError(e)
         )?;
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
@@ -186,7 +200,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             rect_view: MjrRectangle::default(),
             rect_full: MjrRectangle::default(),
             adapter,
-            event_loop
+            event_loop,
+            modifiers: Modifiers::default(),
+            buttons_pressed: ButtonsPressed::empty(),
+            cursor_position: (0, 0)
         })
     }
 
@@ -219,26 +236,41 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Syncs the state of `data` with the viewer as well as perform
     /// rendering on the viewer.
-    pub fn sync(&mut self, data: &mut MjData<M>) -> Result<(), MjViewerError> {
-        /* Make sure everything is done on the viewer's window */
-        self.adapter.make_current().map_err(|e| MjViewerError::GlutinError(e))?;
+    pub fn sync(&mut self, data: &mut MjData<M>) {
+        let GlState {
+            gl_context,
+            gl_surface, ..
+        } = self.adapter.state.as_mut().unwrap();
 
-        // /* Process mouse and keyboard events */
+        /* Make sure everything is done on the viewer's window */
+        gl_context.make_current(gl_surface).expect("could not make OpenGL context current");
+
+        /* Process mouse and keyboard events */
         self.process_events(data);
 
-        // /* Update the scene from data and render */
+        /* Update the scene from data and render */
         self.update_scene(data);
 
-        // /* Update the user menu state and overlays */
+        /* Update the user menu state and overlays */
         self.update_menus();
 
-        /* Display the drawn content */
-        self.adapter.swap_buffers().map_err(|e| MjViewerError::GlutinError(e))?;
+        /* Swap OpenGL buffers */
+        self.render();
 
-        // /* Apply perturbations */
+        /* Apply perturbations */
         self.pert.apply(&self.model, data);
-        Ok(())
     }
+
+    /// Renders the drawn content by swapping buffers.
+    fn render(&mut self) {
+        /* Display the drawn content */
+        let GlState {
+            gl_context,
+            gl_surface, ..
+        } = self.adapter.state.as_mut().unwrap();
+
+        /* Make sure everything is done on the viewer's window */
+        gl_surface.swap_buffers(gl_context).expect("buffer swap in OpenGL failed");    }
 
     /// Updates the scene and draws it to the display.
     fn update_scene(&mut self, data: &mut MjData<M>) {
@@ -289,15 +321,35 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Processes user input events.
     fn process_events(&mut self, data: &mut MjData<M>) {
         self.event_loop.pump_app_events(Some(Duration::ZERO), &mut self.adapter);
-        while let Ok(window_event) = self.adapter.channel.1.try_recv() {
+        while let Some(window_event) = self.adapter.queue.pop_front() {
             match window_event {
+                WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
+                WindowEvent::MouseInput {state, button, .. } => {
+                    let index = match button {
+                        MouseButton::Left => {
+                            self.process_left_click(data, state);
+                            ButtonsPressed::LEFT
+                        },
+                        MouseButton::Middle => ButtonsPressed::MIDDLE,
+                        MouseButton::Right => ButtonsPressed::RIGHT,
+                        _ => return
+                    };
+
+                    self.buttons_pressed.set(index, state == ElementState::Pressed);
+                }
+
+                WindowEvent::CursorMoved { position, .. } => {
+                    self.process_cursor_pos(position.x, position.y, data);
+                    self.cursor_position = position.into();
+                }
+
                 // Set the viewer's state to pending exit.
                 WindowEvent::KeyboardInput {
                     event: KeyEvent {
                         physical_key: PhysicalKey::Code(KeyCode::KeyQ),
                         state: ElementState::Pressed, ..
                     }, ..
-                } if self.adapter.modifiers.state().control_key()  => {
+                } if self.modifiers.state().control_key()  => {
                     self.adapter.running = false;
                 }
 
@@ -412,16 +464,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     self.process_scroll(value.into());
                 }
 
-                // Track cursor, possibly applying perturbations.
-                WindowEvent::CursorMoved { position: PhysicalPosition{ x, y}, .. } => {
-                    self.process_cursor_pos(x, y, data);
-                }
-
-                // Process left clicks, for selection ob bodies.
-                WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => {
-                    self.process_left_click(data, state);
-                }
-
                 _ => {}  // ignore other events
             }
         }
@@ -467,8 +509,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.last_x = x;
         self.last_y = y;
         let window = &self.adapter.state.as_ref().unwrap().window;
-        let modifiers = &self.adapter.modifiers.state();
-        let buttons = &self.adapter.buttons_pressed;
+        let modifiers = &self.modifiers.state();
+        let buttons = &self.buttons_pressed;
         let shift = modifiers.shift_key();
 
         /* Check mouse presses and move the camera if any of them is pressed */
@@ -504,7 +546,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     // /// Processes left clicks and double left clicks.
     fn process_left_click(&mut self, data: &mut MjData<M>, state: ElementState) {
-        let modifier_state = self.adapter.modifiers.state();
+        let modifier_state = self.modifiers.state();
         let window = &self.adapter.state.as_ref().unwrap().window;
         match state {
             ElementState::Pressed => {
@@ -520,7 +562,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                 /* Double click detection */
                 if !self.status_flags.contains(ViewerStatusBits::LEFT_CLICK) && self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
-                    let cp = self.adapter.cursor_position;
+                    let cp = self.cursor_position;
                     let mut x = cp.0 as f64;
                     let mut y = cp.1 as f64;
 
@@ -585,6 +627,16 @@ bitflags! {
     struct ViewerStatusBits: u8 {
         const LEFT_CLICK = 1 << 0;
         const HELP_MENU  = 1 << 1;
+    }
+}
+
+bitflags! {
+    /// Boolean flags for tracking button press events.
+    #[derive(Debug)]
+    struct ButtonsPressed: u8 {
+        const LEFT = 0;
+        const MIDDLE = 1;
+        const RIGHT = 2;
     }
 }
 
