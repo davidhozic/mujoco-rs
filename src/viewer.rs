@@ -693,10 +693,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
         let sim;
         let c_filename = CString::new("file.xml").unwrap();
         unsafe {
-            sim = new_simulate(&mut *_cam, &mut *_opt, &mut *_pert, _user_scn.ffi_mut(), true);
-            (*sim).RenderInit();
-            (*sim).Load(model.__raw(), data.__raw(), c_filename.as_ptr());
-            (*sim).RenderStep(true);
+            sim = mujoco_cSimulate_create(&mut *_cam, &mut *_opt, &mut *_pert, _user_scn.ffi_mut(), true);
+            mujoco_cSimulate_RenderInit(sim);
+            mujoco_cSimulate_Load(sim, model.__raw(), data.__raw(), c_filename.as_ptr());
+            mujoco_cSimulate_RenderStep(sim, true);
         }
 
         Self {sim, running: true, _cam, _opt, _pert, _user_scn}
@@ -716,7 +716,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
     pub fn render(&mut self, update_timer: bool) {
         unsafe {
             assert!(self.running, "render called after viewer has been closed!");
-            self.running = (*self.sim).RenderStep(update_timer);
+            self.running = mujoco_cSimulate_RenderStep(self.sim, update_timer) == 1;
         }
     }
 
@@ -724,7 +724,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
     /// rendering on the viewer.
     pub fn sync(&mut self) {
         unsafe {
-            (*self.sim).Sync(false);
+            mujoco_cSimulate_Sync(self.sim, false);
         }
     }
 }
@@ -733,8 +733,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
 impl<M: Deref<Target = MjModel> + Clone> Drop for MjViewerCpp<M> {
     fn drop(&mut self) {
         unsafe {
-            (*self.sim).RenderCleanup();
-            free_simulate(self.sim);
+            mujoco_cSimulate_destroy(self.sim);
         }
     }
 }

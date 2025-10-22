@@ -48,13 +48,12 @@ mod build_dependencies {
             .parse_callbacks(Box::new(CloneCallback))
             /* Simulate C++ stuff */
             .clang_args(["-x", "c++", "-std=c++20"])
-            .header(include_dir_simulate.join("simulate.h").to_str().unwrap())
+            .header(include_dir_simulate.join("simulate_c_api.h").to_str().unwrap())
             .header(include_dir_simulate.join("glfw_dispatch.h").to_str().unwrap())
             .blocklist_item("std::tuple.*")
             .allowlist_item("mj.*")
             .allowlist_item("mujoco::.*")
-            .allowlist_item("new_simulate")
-            .allowlist_item("free_simulate")
+            .allowlist_function("mujoco_cSimulate.*")
             .opaque_type("std::.*")
             /* Generate */
             .generate()

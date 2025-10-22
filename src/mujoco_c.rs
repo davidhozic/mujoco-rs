@@ -6455,10 +6455,6 @@ unsafe extern "C" {
     pub fn mujoco_Simulate_InjectNoise(this: *mut mujoco_Simulate, key: ::std::os::raw::c_int);
 }
 unsafe extern "C" {
-    #[link_name = "\u{1}_ZN6mujoco8Simulate16destructFromRustEv"]
-    pub fn mujoco_Simulate_destructFromRust(this: *mut mujoco_Simulate);
-}
-unsafe extern "C" {
     #[link_name = "\u{1}_ZN6mujoco8Simulate7RunningEv"]
     pub fn mujoco_Simulate_Running(this: *mut mujoco_Simulate) -> bool;
 }
@@ -6534,10 +6530,6 @@ impl mujoco_Simulate {
     #[inline]
     pub unsafe fn InjectNoise(&mut self, key: ::std::os::raw::c_int) {
         mujoco_Simulate_InjectNoise(self, key)
-    }
-    #[inline]
-    pub unsafe fn destructFromRust(&mut self) {
-        mujoco_Simulate_destructFromRust(self)
     }
     #[inline]
     pub unsafe fn Running(&mut self) -> bool {
@@ -6789,8 +6781,9 @@ pub struct GLFWvidmode {
     pub blueBits: ::std::os::raw::c_int,
     pub refreshRate: ::std::os::raw::c_int,
 }
+pub type Sim = mujoco_Simulate;
 unsafe extern "C" {
-    pub fn new_simulate(
+    pub fn mujoco_cSimulate_create(
         cam: *mut mjvCamera,
         opt: *mut mjvOption,
         pert: *mut mjvPerturb,
@@ -6799,5 +6792,25 @@ unsafe extern "C" {
     ) -> *mut mujoco_Simulate;
 }
 unsafe extern "C" {
-    pub fn free_simulate(simulate: *mut mujoco_Simulate);
+    pub fn mujoco_cSimulate_destroy(sim: *mut Sim);
+}
+unsafe extern "C" {
+    pub fn mujoco_cSimulate_RenderInit(sim: *mut Sim);
+}
+unsafe extern "C" {
+    pub fn mujoco_cSimulate_RenderStep(sim: *mut Sim, update_timer: bool) -> u8;
+}
+unsafe extern "C" {
+    pub fn mujoco_cSimulate_RenderCleanup(sim: *mut Sim);
+}
+unsafe extern "C" {
+    pub fn mujoco_cSimulate_Sync(sim: *mut Sim, stateonly: bool);
+}
+unsafe extern "C" {
+    pub fn mujoco_cSimulate_Load(
+        sim: *mut Sim,
+        m: *mut mjModel,
+        d: *mut mjData,
+        displayed_filename: *const ::std::os::raw::c_char,
+    );
 }
