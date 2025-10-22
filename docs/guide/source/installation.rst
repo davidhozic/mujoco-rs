@@ -133,6 +133,9 @@ To build statically linkable libraries, perform the following steps:
        cmake --build build --parallel --target glfw libmujoco_simulate --config=Release
 
    The builds are tested with the ``gcc`` compiler.
+   
+   Note that ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF`` disables link-time optimization which results in slightly
+   lower performance. Enabling it causes compatibility problems on the Linux platform. See the attention block below for more info.
 
 4. Set the environmental variable ``MUJOCO_STATIC_LINK_DIR``. Bash example:
 
@@ -146,16 +149,26 @@ To build statically linkable libraries, perform the following steps:
 
       cargo build
 
-   .. attention::
+.. attention::
 
-      On **Linux**, if you receive undefined symbol files, you can try using the system linker instead of rust-lld.
-      These kinds of errors can happen when MuJoCo is configured with ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON``,
-      which results in the system linker adding additional information into the built libraries.
-      This information is incompatible with some other linkers, including rust-lld.
+    **Link-time optimization**
 
-      You can use the system linker for Rust code too, which should also resolve these kinds of problems:
+    Above CMake configuration command **disables** link-time optimization (LTO). This results in worse performance
+    but allows the compiled code to be used with the rust-lld linker, which is the default linker
+    since Rust 1.90.0 on the **x86_64-unknown-linux-gnu** target.
 
-      ::
+    If performance is critical for you, link-time optimization of MuJoCo code can be enabled during configuration:
 
-        RUSTFLAGS="-C linker-features=-lld" cargo build
+    ``cmake -B build -S . -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON ...``
+
+    When LTO is enabled, the **system linker** must be used, because rust-lld doesn't know how to read the extra LTO information,
+    produced by other linkers:
+
+    ::
+
+    RUSTFLAGS="-C linker-features=-lld" cargo build
+
+
+    In performance critical cases, it is also recommended to use the official MuJoCo shared (dynamic) libraries,
+    which are generally more optimized. Performance gain with LTO enabled on static builds is about 10% more steps per second.
 
