@@ -124,6 +124,6 @@ Here is an example of using the C++ wrapper:
     }
 
 
-Compared to the Rust-native viewer, the C++ wrapper doesn't take a ``data`` parameter to the :docs-rs:`~mujoco_rs::viewer::<struct>MjViewerCpp::<method>sync`
-method. Additionally, a call to :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewerCpp::<method>render`
+Compared to the Rust-native viewer, the C++ wrapper doesn't take a ``data`` parameter to the :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync`
+method. Additionally, a call to :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render`
 is required.

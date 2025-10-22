@@ -46,6 +46,8 @@ Unreleased (MuJoCo 3.3.7)
       part in place of the previously ``libsimulate`` part. This change is a consequence
       of MuJoCo upgrade to version 3.3.7.
 
+    - Moved the struct definition from ``mujoco_rs::viewer`` to ``mujoco_rs::cpp_viewer``.
+
   - Changed |mj_data| and other types to accept a generic type for the model,
     constrained to ``Deref<Target = MjModel>``.
     This enables use in environments such as `PyO3 <https://github.com/PyO3/pyo3>`_.
