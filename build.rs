@@ -33,11 +33,13 @@ mod build_dependencies {
         let current_dir = env::current_dir().unwrap();
         let include_dir_mujoco = current_dir.join("mujoco/include/mujoco");
         let include_dir_simulate = current_dir.join("mujoco/simulate/");
+        let include_dir_glfw = current_dir.join("mujoco/build/_deps/glfw3-src/include/");
 
         let bindings_mujoco = bindgen::Builder::default()
             .header(include_dir_mujoco.join("mujoco.h").to_str().unwrap())
             .clang_arg(format!("-I{}", include_dir_mujoco.display()))
             .clang_arg(format!("-I{}", include_dir_mujoco.parent().unwrap().display()))
+            .clang_arg(format!("-I{}", include_dir_glfw.display()))
             .allowlist_item("mj.*")
             .layout_tests(false)
             .derive_default(false)
