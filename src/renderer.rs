@@ -505,7 +505,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
         let GlState {gl_context, gl_surface, .. }
             = self.adapter.state.as_ref().unwrap();
 
-        gl_context.make_current(gl_surface).expect("failed to make OpenGL context current");                
+        gl_context.make_current(gl_surface).expect("failed to make OpenGL context current");
         let vp = MjrRectangle::new(0, 0, self.width as i32, self.height as i32);
         self.scene.render(&vp, &self.context);
 

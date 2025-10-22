@@ -40,7 +40,7 @@ Unreleased (MuJoCo 3.3.7)
       ``cmake --build build --parallel --target glfw libmujoco_simulate --config=Release``.
 
       The above command, besides the added ``glfw`` part, also contains the ``libmujoco_simulate``
-      part in-place of the previously ``libmujoco_simulate`` part. This change is a consequence
+      part in place of the previously ``libmujoco_simulate`` part. This change is a consequence
       of MuJoCo upgrade to version 3.3.7.
 
   - Changed |mj_data| and other types to accept a generic type for the model,

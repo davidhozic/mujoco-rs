@@ -270,7 +270,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         } = self.adapter.state.as_mut().unwrap();
 
         /* Make sure everything is done on the viewer's window */
-        gl_surface.swap_buffers(gl_context).expect("buffer swap in OpenGL failed");    }
+        gl_surface.swap_buffers(gl_context).expect("buffer swap in OpenGL failed");
+    }
 
     /// Updates the scene and draws it to the display.
     fn update_scene(&mut self, data: &mut MjData<M>) {
@@ -634,9 +635,9 @@ bitflags! {
     /// Boolean flags for tracking button press events.
     #[derive(Debug)]
     struct ButtonsPressed: u8 {
-        const LEFT = 0;
-        const MIDDLE = 1;
-        const RIGHT = 2;
+        const LEFT = 1 << 0;
+        const MIDDLE = 1 << 1;
+        const RIGHT = 1 << 2;
     }
 }
 
