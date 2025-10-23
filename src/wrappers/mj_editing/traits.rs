@@ -48,8 +48,8 @@ pub trait SpecItem: Sized {
     }
 
     /// Returns the used default.
-    fn default(&self) -> MjsDefault<'_> {
-        MjsDefault(unsafe { mjs_getDefault(self.element_pointer()) }, PhantomData)
+    fn default(&self) -> &MjsDefault {
+        unsafe { mjs_getDefault(self.element_pointer()).as_ref().unwrap() }
     }
 
     /// Make the item inherit properties from a default class.

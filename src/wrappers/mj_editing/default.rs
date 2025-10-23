@@ -15,8 +15,8 @@ macro_rules! default_accessor_wrapper {
     ($($name:ident),*) => {paste::paste! {
         $(
             #[doc = concat!("Returns a wrapper to  `", stringify!($name), "`.")]
-            pub fn $name(&mut self) -> [<Mjs $name:camel>]<'_> {
-                [<Mjs $name:camel>](unsafe { self.ffi_mut().$name }, PhantomData )
+            pub fn $name(&mut self) -> &[<Mjs $name:camel>] {
+                unsafe { self.ffi_mut().$name.as_ref().unwrap() }
             }
         )*
     }};
@@ -26,26 +26,26 @@ macro_rules! default_accessor_wrapper {
 // We also override the delete method to panic instead of deleting.
 
 /// Default specification. This wraps the FFI type [`mjsDefault`] internally.
-pub struct MjsDefault<'s>(pub(crate) *mut mjsDefault, pub(crate) PhantomData<&'s mut ()>);  // the lifetime belongs to the parent
+pub type MjsDefault = mjsDefault;
 
-impl MjsDefault<'_> {
+impl MjsDefault {
     default_accessor_wrapper! {
-        joint, geom, site, camera, light, flex, mesh, material,
+        joint, geom, camera, light, flex, mesh, material,
         pair, equality, tendon, actuator
     }
 
     /// Returns an immutable reference to the inner struct.
     pub fn ffi(&self) -> &mjsDefault {
-        unsafe { self.0.as_ref().unwrap() }
+        self
     }
 
     /// Returns a mutable reference to the inner struct.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjsDefault {
-        unsafe { self.0.as_mut().unwrap() }
+        self
     }
 }
 
-impl SpecItem for MjsDefault<'_> {
+impl SpecItem for MjsDefault {
     unsafe fn element_pointer(&self) -> *mut mjsElement {
         self.ffi().element
     }
@@ -60,5 +60,5 @@ impl SpecItem for MjsDefault<'_> {
 
 // SAFETY: These are safe to implement, as access to them is available only
 // through methods or through ffi() and ffi_mut() methods, where the latter is unsafe.
-unsafe impl Sync for MjsDefault<'_> {}
-unsafe impl Send for MjsDefault<'_> {}
+unsafe impl Sync for MjsDefault {}
+unsafe impl Send for MjsDefault {}

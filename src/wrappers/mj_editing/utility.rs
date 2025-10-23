@@ -111,9 +111,9 @@ macro_rules! add_x_method {
         $(
             /* With default */
             #[doc = concat!("Add and return a child ", stringify!($name), ".")]
-            pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>]<'_> {
-                let ptr = unsafe { [<mjs_add $name:camel>](self.0, ptr::null()) };
-                [<Mjs $name:camel>](ptr, PhantomData)
+            pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
+                let ptr = unsafe { [<mjs_add $name:camel>](self.ffi_mut(), ptr::null()) };
+                unsafe { ptr.as_mut().unwrap() }
             }
         )*
     }};
@@ -125,12 +125,12 @@ macro_rules! add_x_method_by_frame {
         $(
             /* With default */
             #[doc = concat!("Add and return a child ", stringify!($name), ".")]
-            pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>]<'_> {
+            pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 unsafe {
                     let body_ptr = mjs_getParent(self.element_mut_pointer());
                     let ptr = [<mjs_add $name:camel>](body_ptr, ptr::null());
                     mjs_attach(self.element_mut_pointer(), ptr.cast(), ptr::null(), ptr::null());
-                    [<Mjs $name:camel>](ptr, PhantomData)
+                    ptr.as_mut().unwrap()
                 }
             }
         )*
@@ -144,9 +144,9 @@ macro_rules! add_x_method_no_default {
         $(
             /* Without default */
             #[doc = concat!("Add and return a child ", stringify!($name), ".")]
-            pub fn [<add_ $name>](&mut self) -> [<Mjs $name:camel>]<'_> {
+            pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.0) };
-                [<Mjs $name:camel>](ptr, PhantomData)
+                unsafe { ptr.as_mut().unwrap() }
             }
         )*
     }};
@@ -163,7 +163,7 @@ macro_rules! find_x_method {
                 "# Panics\n",
                 "When the `name` contains '\\0' characters, a panic occurs."
             )]
-            pub fn $item(&self, name: &str) -> Option<[<Mjs $item:camel>]<'_>> {
+            pub fn $item(&self, name: &str) -> Option<&mut [<Mjs $item:camel>]> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
                     let ptr = mjs_findElement(self.0, MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
@@ -171,7 +171,7 @@ macro_rules! find_x_method {
                         None
                     }
                     else {
-                        Some([<Mjs $item:camel>]([<mjs_as $item:camel>](ptr), PhantomData))
+                        [<mjs_as $item:camel>](ptr).as_mut()
                     }
                 }
             }
@@ -188,7 +188,7 @@ macro_rules! find_x_method_direct {
                 "# Panics\n",
                 "When the `name` contains '\\0' characters, a panic occurs."
             )]
-            pub fn $item(&self, name: &str) -> Option<[<Mjs $item:camel>]<'_>> {
+            pub fn $item(&self, name: &str) -> Option<&[<Mjs $item:camel>]> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
                     let ptr = [<mjs_find $item:camel>](self.0, c_name.as_ptr());
@@ -196,7 +196,7 @@ macro_rules! find_x_method_direct {
                         None
                     }
                     else {
-                        Some([<Mjs $item:camel>](ptr, PhantomData))
+                        ptr.as_ref()
                     }
                 }
             }
@@ -210,17 +210,17 @@ macro_rules! find_x_method_direct {
 macro_rules! mjs_wrapper {
     ($ffi_name:ident) => {paste::paste!{
         #[doc = concat!(stringify!($ffi_name), " specification. This acts as a safe reference to a FFI type [`", stringify!([<mjs $ffi_name>]), "`] internally.")]
-        pub struct [<Mjs $ffi_name>]<'s>(*mut [<mjs $ffi_name>], PhantomData<&'s mut ()>);  // the lifetime belongs to the parent
+        pub type [<Mjs $ffi_name>] = [<mjs $ffi_name>];
 
-        impl [<Mjs $ffi_name>]<'_> {
+        impl [<Mjs $ffi_name>] {
             /// Return an immutable reference to the inner struct.
-            pub fn ffi(&self) -> &[<mjs $ffi_name>] {
-                unsafe { self.0.as_ref().unwrap() }
+            pub fn ffi(&self) -> &[<Mjs $ffi_name>] {
+                self
             }
 
             /// Return a mutable reference to the inner struct.
-            pub unsafe fn ffi_mut(&mut self) -> &mut [<mjs $ffi_name>] {
-                unsafe { self.0.as_mut().unwrap() }
+            pub unsafe fn ffi_mut(&mut self) -> &mut [<Mjs $ffi_name>] {
+                self
             }
 
             /// Return the message appended to compiler errors.
@@ -236,7 +236,7 @@ macro_rules! mjs_wrapper {
             }
         }
 
-        impl SpecItem for [<Mjs $ffi_name>]<'_> {
+        impl SpecItem for [<Mjs $ffi_name>] {
             unsafe fn element_pointer(&self) -> *mut mjsElement {
                 self.ffi().element
             }
@@ -244,8 +244,8 @@ macro_rules! mjs_wrapper {
 
         // SAFETY: These are safe to implement, as access to them is available only
         // through methods or through ffi() and ffi_mut() methods, where the latter is unsafe.
-        unsafe impl Sync for [<Mjs $ffi_name>]<'_> {}
-        unsafe impl Send for [<Mjs $ffi_name>]<'_> {}
+        unsafe impl Sync for [<Mjs $ffi_name>] {}
+        unsafe impl Send for [<Mjs $ffi_name>] {}
     }};
 }
 
@@ -255,7 +255,7 @@ macro_rules! userdata_method {
     ($type:ty) => {paste::paste!{
         /// Return an immutable slice to userdata.
         pub fn userdata(&self) -> &[$type] {
-            [<read_mjs_vec_ $type>](unsafe { (*self.0).userdata.as_ref().unwrap() })
+            [<read_mjs_vec_ $type>](unsafe { self.ffi().userdata.as_ref().unwrap() })
         }
         
         /// Set `userdata`.
@@ -337,7 +337,7 @@ macro_rules! vec_set_get {
         $(
             #[doc = concat!("Return ", $comment)]
             pub fn $name(&self) -> &[$type] {
-                [<read_mjs_vec_ $type>](unsafe { (*self.0).$name.as_ref().unwrap() })
+                [<read_mjs_vec_ $type>](unsafe { self.ffi().$name.as_ref().unwrap() })
             }
         )*
 
@@ -373,8 +373,8 @@ macro_rules! vec_vec_append {
 macro_rules! plugin_wrapper_method {
     () => {
         /// Return a wrapper around the `plugin` attribute.
-        pub fn plugin_wrapper(&mut self) -> MjsPlugin<'_> {
-            unsafe { MjsPlugin(&mut self.ffi_mut().plugin, PhantomData) }
+        pub fn plugin_wrapper(&mut self) -> &mut MjsPlugin {
+            unsafe { &mut self.ffi_mut().plugin }
         }
     };
 }
@@ -383,24 +383,24 @@ macro_rules! plugin_wrapper_method {
 macro_rules! item_spec_iterator {
     ($($iter_over: ident),*) => {paste::paste!{
         $(
-            impl<'a> MjsSpecItemIterMut<'a, [<Mjs $iter_over>]<'_>> {
+            impl<'a> MjsSpecItemIterMut<'a, [<Mjs $iter_over>]> {
                 fn new(root: &'a mut MjSpec) -> Self {
                     let last = unsafe { mjs_firstElement(root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>]) };
                     Self { root, last, item_type: PhantomData }
                 }
             }
 
-            impl<'a> Iterator for MjsSpecItemIterMut<'a, [<Mjs $iter_over>]<'_>> {
-                type Item = [<Mjs $iter_over>]<'a>;
+            impl<'a> Iterator for MjsSpecItemIterMut<'a, [<Mjs $iter_over>]> {
+                type Item = &'a mut [<Mjs $iter_over>];
 
                 fn next(&mut self) -> Option<Self::Item> {
                     if self.last.is_null() {
                         return None;
                     }
 
-                    let out = Some([<Mjs $iter_over>](unsafe { [<mjs_as $iter_over>](self.last) }, PhantomData));
+                    let out = unsafe { [<mjs_as $iter_over>](self.last).as_mut().unwrap() };
                     self.last = unsafe { mjs_nextElement(self.root.ffi_mut(), self.last) };
-                    out
+                    Some(out)
                 }
             }
         )*
@@ -413,8 +413,8 @@ macro_rules! spec_get_iter {
     ($($iter_over: ident),*) => {paste::paste!{
         $(
             #[doc = concat!("Return an iterator over ", stringify!($iter_over)," items that allows modifying each value.")]
-            pub fn [<$iter_over _iter_mut>](&mut self) -> MjsSpecItemIterMut<'_, [<Mjs $iter_over:camel>]<'_>> {
-                MjsSpecItemIterMut::<[<Mjs $iter_over:camel>]<'_>>::new(self)
+            pub fn [<$iter_over _iter_mut>](&mut self) -> MjsSpecItemIterMut<'_, [<Mjs $iter_over:camel>]> {
+                MjsSpecItemIterMut::<[<Mjs $iter_over:camel>]>::new(self)
             }
         )*
     }};
@@ -425,24 +425,26 @@ macro_rules! spec_get_iter {
 macro_rules! item_body_iterator {
     ($($iter_over: ident),*) => {paste::paste!{
         $(
-            impl<'a, 'p> MjsBodyItemIterMut<'a, 'p, [<Mjs $iter_over>]<'_>> {
-                fn new(root: &'a mut MjsBody<'p>, recurse: bool) -> Self {
+            impl<'a> MjsBodyItemIterMut<'a, [<Mjs $iter_over>]> {
+                fn new(root: &'a mut MjsBody, recurse: bool) -> Self {
                     let last = unsafe { mjs_firstChild(root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
                     Self { root, last, recurse, item_type: PhantomData }
                 }
             }
 
-            impl<'a> Iterator for MjsBodyItemIterMut<'a, '_, [<Mjs $iter_over>]<'_>> {
-                type Item = [<Mjs $iter_over>]<'a>;
+            impl<'a> Iterator for MjsBodyItemIterMut<'a, [<Mjs $iter_over>]> {
+                type Item = &'a mut [<Mjs $iter_over>];
 
                 fn next(&mut self) -> Option<Self::Item> {
                     if self.last.is_null() {
                         return None;
                     }
 
-                    let out = Some([<Mjs $iter_over>](unsafe { [<mjs_as $iter_over>](self.last) }, PhantomData));
-                    self.last = unsafe { mjs_nextChild(self.root.ffi_mut(), self.last, self.recurse.into()) };
-                    out
+                    unsafe {
+                        let out = [<mjs_as $iter_over>](self.last).as_mut();
+                        self.last = mjs_nextChild(self.root.ffi_mut(), self.last, self.recurse.into());
+                        out
+                    }
                 }
             }
         )*
@@ -452,11 +454,11 @@ macro_rules! item_body_iterator {
 /// Generates methods for obtaining iterators to `$iter_over` body items.
 /// The $self_lf represents the iterated item's borrow and $parent_lf the lifetime of its parent.
 macro_rules! body_get_iter {
-    ($parent_lf:lifetime, [$($iter_over: ident),*]) => {paste::paste!{
+    ([$($iter_over: ident),*]) => {paste::paste!{
         $(
             #[doc = concat!("Return an iterator over ", stringify!($iter_over)," items that allows modifying each value.")]
-            pub fn [<$iter_over _iter_mut>](&mut self, recurse: bool) -> MjsBodyItemIterMut<'_, $parent_lf, [<Mjs $iter_over:camel>]<'_>> {
-                MjsBodyItemIterMut::<[<Mjs $iter_over:camel>]<'_>>::new(self, recurse)
+            pub fn [<$iter_over _iter_mut>](&mut self, recurse: bool) -> MjsBodyItemIterMut<'_, [<Mjs $iter_over:camel>]> {
+                MjsBodyItemIterMut::<[<Mjs $iter_over:camel>]>::new(self, recurse)
             }
         )*
     }};
