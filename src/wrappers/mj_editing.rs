@@ -124,7 +124,7 @@ impl MjsCompiler {
         LRopt: &MjLROpt;                    "options for lengthrange computation.";
     ]}
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         meshdir;        "mesh and hfield directory.";
         texturedir;     "texture directory.";
     }
@@ -428,7 +428,7 @@ impl MjsSite {
 
     userdata_method!(f64);
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         material; "name of material.";
     }
 }
@@ -494,7 +494,7 @@ impl MjsGeom {
 
     userdata_method!(f64);
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         meshname;   "mesh attached to geom.";
         material;   "name of material.";
         hfieldname; "heightfield attached to geom.";
@@ -535,7 +535,7 @@ impl MjsCamera {
 
     userdata_method!(f64);
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         targetbody; "target body for tracking/targeting.";
     }
 }
@@ -573,7 +573,7 @@ impl MjsLight {
         ]
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         texture; "texture name for image lights.";
         targetbody; "target body for targeting.";
     }
@@ -594,7 +594,7 @@ impl MjsFrame {
         ]
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         childclass; "childclass name.";
     }
 
@@ -656,7 +656,7 @@ impl MjsActuator {
 
     userdata_method!(f64);
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         target;                 "name of transmission target.";
         refsite;                "reference site, for site transmission.";
         slidersite;             "site defining cylinder, for slider-crank.";
@@ -689,7 +689,7 @@ impl MjsSensor {
 
     userdata_method!(f64);
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         refname; "name of referenced object.";
         objname; "name of sensorized object.";
     }
@@ -750,7 +750,7 @@ impl MjsFlex {
         ]
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         material; "name of material used for rendering.";
     }
 
@@ -793,7 +793,7 @@ impl MjsPair {
         ]
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         geomname1; "name of geom 1.";
         geomname2; "name of geom 2.";
     }
@@ -804,7 +804,7 @@ impl MjsPair {
 ***************************/
 mjs_struct!(Exclude);
 impl MjsExclude {
-    string_set_get_with! {
+    string_set_get_with! {[&]
         bodyname1; "name of body 1.";
         bodyname2; "name of body 2.";
     }
@@ -832,7 +832,7 @@ impl MjsEquality {
         objtype: MjtObj;    "type of both objects.";
     ]}
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         name1; "name of object 1";
         name2; "name of object 2";
     }
@@ -874,7 +874,7 @@ impl MjsTendon {
     }
 
     userdata_method!(f64);
-    string_set_get_with! {
+    string_set_get_with! {[&]
         material; "name of material for rendering.";
     }
 
@@ -945,7 +945,7 @@ impl MjsNumeric {
 ***************************/
 mjs_struct!(Text);
 impl MjsText {
-    string_set_get_with! {
+    string_set_get_with! {[&]
         data; "text string.";
     }
 }
@@ -994,7 +994,7 @@ impl MjsKey {
 ***************************/
 mjs_struct!(Plugin);
 impl MjsPlugin {
-    string_set_get_with! {
+    string_set_get_with! {[&]
         name; "instance name.";
         plugin_name; "plugin name.";
     }
@@ -1035,7 +1035,7 @@ impl MjsMesh {
         ]
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         content_type; "content type of file.";
         file; "mesh file.";
         material; "name of material.";
@@ -1068,7 +1068,7 @@ impl MjsHfield {
         ncol: i32;  "number of columns.";
     ]}
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         content_type; "content type of file.";
         file; "file: (nrow, ncol, [elevation data]).";
     }
@@ -1097,7 +1097,7 @@ impl MjsSkin {
         ]
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         material;               "name of material used for rendering.";
         file;                   "skin file.";
     }
@@ -1167,7 +1167,7 @@ impl MjsTexture {
         write_mjs_vec_byte(data, unsafe { self.data.as_mut().unwrap() });
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         file; "png file to load; use for all sides of cube.";
         content_type; "content type of file.";
     }

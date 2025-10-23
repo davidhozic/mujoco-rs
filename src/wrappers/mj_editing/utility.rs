@@ -333,23 +333,42 @@ macro_rules! vec_string_set_append {
 
 /// Implements string methods for given attribute $name.
 macro_rules! string_set_get_with {
-    ($($([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;)*) => {paste::paste!{
-        $(
-            #[doc = concat!("Return ", $comment)]
-            pub fn $name(&self) -> &str {
-                read_mjs_string(unsafe { self$(.$ffi())?.$name.as_ref().unwrap() })
-            }
+    (@impl common $([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;) => {paste::paste!{
+        #[doc = concat!("Return ", $comment)]
+        pub fn $name(&self) -> &str {
+            read_mjs_string(unsafe { self$(.$ffi())?.$name.as_ref().unwrap() })
+        }
 
+        #[doc = concat!(
+            "Set ", $comment,
+            "\n",
+            "# Panics\n",
+            "When the `value` contains '\\0' characters, a panic occurs."
+        )]
+        pub fn [<set_ $name>](&mut self, value: &str) {
+            write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name.as_mut().unwrap() })
+        }
+    }};
+
+    ( $($([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;)* ) => {paste::paste!{
+        $(
+            string_set_get_with!(@impl common $([$ffi, $ffi_mut])? $name; $comment;);
             #[doc = concat!(
-                "Set ", $comment,
+                "Builder method for setting ", $comment,
                 "\n",
                 "# Panics\n",
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
-            pub fn [<set_ $name>](&mut self, value: &str) {
-                write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name.as_mut().unwrap() })
+            pub fn [<with_ $name>](mut self, value: &str) -> Self {
+                write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name.as_mut().unwrap() });
+                self
             }
+        )*
+    }};
 
+    ([&] $($([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;)* ) => {paste::paste!{
+        $(
+            string_set_get_with!(@impl common $([$ffi, $ffi_mut])? $name; $comment;);
             #[doc = concat!(
                 "Builder method for setting ", $comment,
                 "\n",
