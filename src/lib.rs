@@ -16,7 +16,7 @@
 //! 
 //! ## 3D viewer
 //! The Rust-native viewer is available ([`viewer::MjViewer`]), as well as the MuJoCo's original C++
-//! one ([`viewer::MjViewerCpp`]).
+//! one ([`cpp_viewer::MjViewerCpp`]).
 //! The C++ viewer however requires manual compilation of a patched MuJoCo repository,
 //! like described [here](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking-with-c-viewer).
 //! 
@@ -27,7 +27,7 @@
 //! ## Features
 //! This crate has the following public features:
 //! - `viewer`, which enables the Rust-native viewer ([`viewer::MjViewer`]),
-//!   - `cpp-viewer`, which additionally enables the MuJoCo's original viewer (C++ based) ([`viewer::MjViewerCpp`]),
+//!   - `cpp-viewer`, which additionally enables the MuJoCo's original viewer (C++ based) ([`cpp_viewer::MjViewerCpp`]),
 //! - `renderer`, which enables the image renderer ([`renderer::MjRenderer`]).
 //! 
 //! ## Functions
@@ -49,6 +49,9 @@ pub mod renderer;
 
 #[cfg(feature = "viewer")]
 pub mod viewer;
+
+#[cfg(feature = "cpp-viewer")]
+pub mod cpp_viewer;
 
 #[allow(warnings)]
 pub mod mujoco_c;  // raw MuJoCo C and C++ bindings

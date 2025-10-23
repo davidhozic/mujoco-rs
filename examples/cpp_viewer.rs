@@ -3,7 +3,7 @@
 //! controlling everything.
 use std::time::Duration;
 
-use mujoco_rs::viewer::MjViewerCpp;
+use mujoco_rs::cpp_viewer::MjViewerCpp;
 use mujoco_rs::prelude::*;
 
 
