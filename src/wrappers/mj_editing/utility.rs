@@ -159,11 +159,29 @@ macro_rules! find_x_method {
     ($($item:ident),*) => {paste::paste! {
         $(
             #[doc = concat!(
-                "Obtain a reference to the ", stringify!($item), " with the given `name`.\n",
+                "Obtain an immutable reference to the ", stringify!($item), " with the given `name`.\n",
                 "# Panics\n",
                 "When the `name` contains '\\0' characters, a panic occurs."
             )]
-            pub fn $item(&self, name: &str) -> Option<&mut [<Mjs $item:camel>]> {
+            pub fn $item(&self, name: &str) -> Option<&[<Mjs $item:camel>]> {
+                let c_name = CString::new(name).unwrap();
+                unsafe {
+                    let ptr = mjs_findElement(self.0, MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
+                    if ptr.is_null() {
+                        None
+                    }
+                    else {
+                        [<mjs_as $item:camel>](ptr).as_ref()
+                    }
+                }
+            }
+
+            #[doc = concat!(
+                "Obtain a mutable reference to the ", stringify!($item), " with the given `name`.\n",
+                "# Panics\n",
+                "When the `name` contains '\\0' characters, a panic occurs."
+            )]
+            pub fn [<$item _mut>](&mut self, name: &str) -> Option<&mut [<Mjs $item:camel>]> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
                     let ptr = mjs_findElement(self.0, MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
@@ -184,7 +202,7 @@ macro_rules! find_x_method_direct {
     ($($item:ident),*) => {paste::paste!{
         $(
             #[doc = concat!(
-                "Obtain a reference to the ", stringify!($item), " with the given `name`.\n",
+                "Obtain an immutable reference to the ", stringify!($item), " with the given `name`.\n",
                 "# Panics\n",
                 "When the `name` contains '\\0' characters, a panic occurs."
             )]
@@ -197,6 +215,24 @@ macro_rules! find_x_method_direct {
                     }
                     else {
                         ptr.as_ref()
+                    }
+                }
+            }
+
+            #[doc = concat!(
+                "Obtain a mutable reference to the ", stringify!($item), " with the given `name`.\n",
+                "# Panics\n",
+                "When the `name` contains '\\0' characters, a panic occurs."
+            )]
+            pub fn [<$item _mut>](&mut self, name: &str) -> Option<&mut [<Mjs $item:camel>]> {
+                let c_name = CString::new(name).unwrap();
+                unsafe {
+                    let ptr = [<mjs_find $item:camel>](self.0, c_name.as_ptr());
+                    if ptr.is_null() {
+                        None
+                    }
+                    else {
+                        ptr.as_mut()
                     }
                 }
             }
@@ -323,7 +359,7 @@ macro_rules! string_set_get_with {
                 "# Panics\n",
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
-            pub fn [<with_ $name>](mut self, value: &str) -> Self {
+            pub fn [<with_ $name>](&mut self, value: &str) -> &mut Self {
                 write_mjs_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
                 self
             }

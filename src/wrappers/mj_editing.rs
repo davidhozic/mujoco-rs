@@ -285,9 +285,14 @@ impl MjSpec {
 
     find_x_method_direct! { default }
 
-    /// Returns the world body.
-    pub fn world_body(&mut self) -> &mut MjsBody {
-        self.body("world").unwrap()  // this exists always
+    /// Returns an immutable reference to the world body.
+    pub fn world_body(&self) -> &MjsBody {
+        self.body("world").unwrap()
+    }
+
+    /// Returns a mutable reference to the world body.
+    pub fn world_body_mut(&mut self) -> &mut MjsBody {
+        self.body_mut("world").unwrap()
     }
 }
 
