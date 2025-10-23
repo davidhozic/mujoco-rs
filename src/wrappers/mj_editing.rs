@@ -303,7 +303,10 @@ impl MjSpec {
     }
 
     getter_setter! {
-        with, get, set, [[ffi, ffi_mut] strippath: bool; "whether to strip paths from mesh files."]
+        with, get, set, [
+            [ffi, ffi_mut] strippath: bool; "whether to strip paths from mesh files.";
+            [ffi, ffi_mut] hasImplicitPluginElem: bool; "already encountered an implicit plugin sensor/actuator";
+        ]
     }
 
     getter_setter! {

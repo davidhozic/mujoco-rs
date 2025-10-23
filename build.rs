@@ -30,7 +30,7 @@ mod build_dependencies {
                 &self,
                 _info: bindgen::callbacks::FieldInfo<'_>,
             ) -> Option<bindgen::FieldVisibilityKind> {
-            if _info.type_name.starts_with("mjs") || _info.type_name == "mjSpec_" {
+            if _info.type_name.starts_with("mjs") {
                 Some(bindgen::FieldVisibilityKind::PublicCrate)
             } else { None }
         }
