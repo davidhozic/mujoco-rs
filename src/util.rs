@@ -169,6 +169,16 @@ impl<T> Deref for PointerView<'_, T> {
     }
 }
 
+/***************************/
+//  Evaluation helper macro
+/***************************/
+#[macro_export]
+#[doc(hidden)]
+macro_rules! eval_or_expand {
+    (@eval $(true)? { $($data:tt)* } ) => { $($data)* };
+    (@eval false { $($data:tt)* } ) => {};
+}
+
 
 /**************************************************************************************************/
 // View creation for MjData and MjModel
@@ -438,10 +448,13 @@ macro_rules! getter_setter {
                 &self.ffi().$name
             }
 
-            $(#[cfg($cfg_mut)])?
-            #[doc = concat!("Return a mutable reference to ", $comment)]
-            pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
-                unsafe { &mut self.ffi_mut().$name }
+            crate::eval_or_expand! {
+                @eval $($cfg_mut)? {
+                    #[doc = concat!("Return a mutable reference to ", $comment)]
+                    pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
+                        unsafe { &mut self.ffi_mut().$name }
+                    }
+                }
             }
         )*
     }};
@@ -502,11 +515,36 @@ macro_rules! getter_setter {
         }
     };
 
+    (force!, [&] with, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+        paste::paste!{ 
+            $(
+                #[doc = concat!("Builder method for setting ", $comment)]
+                pub fn [<with_ $name:camel:snake>](&mut self, value: $type) -> &mut Self {
+                    #[allow(unnecessary_transmutes)]
+                    unsafe { self.ffi_mut().$name = std::mem::transmute(value) };
+                    self
+                }
+            )*
+        }
+    };
+
     (with, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
                 pub fn [<with_ $name:camel:snake>](mut self, value: $type) -> Self {
+                    unsafe { self.ffi_mut().$name = value.into() };
+                    self
+                }
+            )*
+        }
+    };
+
+    ([&] with, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+        paste::paste!{ 
+            $(
+                #[doc = concat!("Builder method for setting ", $comment)]
+                pub fn [<with_ $name:camel:snake>](&mut self, value: $type) -> &mut Self {
                     unsafe { self.ffi_mut().$name = value.into() };
                     self
                 }
@@ -532,27 +570,27 @@ macro_rules! getter_setter {
     };
 
     /* Builder pattern */
-    (with, get, set, [ $( $name:ident $(+ $symbol:tt)? : bool ; $comment:expr );* $(;)?]) => {
+    ($([$token:tt])? with, get, set, [ $( $name:ident $(+ $symbol:tt)? : bool ; $comment:expr );* $(;)?]) => {
         $crate::getter_setter!(get, [ $( $name $(+ $symbol)? : bool ; $comment );* ]);
         $crate::getter_setter!(set, [ $( $name : bool ; $comment );* ]);
-        $crate::getter_setter!(with, [ $( $name : bool ; $comment );* ]);
+        $crate::getter_setter!($([$token])? with, [ $( $name : bool ; $comment );* ]);
     };
 
-    (with, get, set, [ $( $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+    ($([$token:tt])? with, get, set, [ $( $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
         $crate::getter_setter!(get, [ $( $name $(+ $symbol)?: $type ; $comment );* ]);
         $crate::getter_setter!(set, [ $( $name : $type ; $comment );* ]);
-        $crate::getter_setter!(with, [ $( $name : $type ; $comment );* ]);
+        $crate::getter_setter!($([$token])? with, [ $( $name : $type ; $comment );* ]);
     };
 
-    (force!, with, get, set, [ $( $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+    (force!, $([$token:tt])? with, get, set, [ $( $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
         $crate::getter_setter!(force!, get, [ $( $name $(+ $symbol)? : $type ; $comment );* ]);
         $crate::getter_setter!(force!, set, [$( $name : $type ; $comment );* ]);
-        $crate::getter_setter!(force!, with,[$( $name : $type ; $comment );* ]);
+        $crate::getter_setter!(force!, $([$token])? with, [$( $name : $type ; $comment );* ]);
     };
 
-    (with, get, [ $( $(allow_mut = $cfg_mut:literal)? $name:ident $(+ $symbol:tt)? : & $type:ty ; $comment:expr );* $(;)?]) => {
+    ($([$token:tt])? with, get, [$( $(allow_mut = $cfg_mut:literal)? $name:ident $(+ $symbol:tt)? : & $type:ty ; $comment:expr );* $(;)?]) => {
         $crate::getter_setter!(get, [ $( $(allow_mut = $cfg_mut)? $name $(+ $symbol)? : & $type ; $comment );* ]);
-        $crate::getter_setter!(with, [ $( $name : $type ; $comment );* ]);
+        $crate::getter_setter!($([$token])? with, [ $( $name : $type ; $comment );* ]);
     };
 }
 
@@ -603,14 +641,17 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(self.ffi().$name$(.$as_ptr())?$(.$cast())? as *const _, length) }
                 }
 
-                $(#[cfg($cfg_mut)])?
-                #[doc = concat!("Mutable slice of the ", $doc," array.")]
-                pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
-                    let length = self.$($len_accessor)* as usize;
-                    if length == 0 {
-                        return &mut [];
+                crate::eval_or_expand! {
+                    @eval $($cfg_mut)? {
+                        #[doc = concat!("Mutable slice of the ", $doc," array.")]
+                        pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
+                            let length = self.$($len_accessor)* as usize;
+                            if length == 0 {
+                                return &mut [];
+                            }
+                            unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast())?, length) }
+                        }
                     }
-                    unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast())?, length) }
                 }
             )*
         }
@@ -640,24 +681,27 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(self.ffi().$name.cast(), length) }
                 }
                 
-                $(#[cfg($cfg_mut)])?
-                #[doc = concat!("Mutable slice of the ", $doc," array.")]
-                pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [[$type; $multiplier]] {
-                    let length_array_length = self.$($len_array_length)* as usize;
-                    if length_array_length == 0 {
-                        return &mut [];
+                crate::eval_or_expand! {
+                    @eval $($cfg_mut)? {
+                        #[doc = concat!("Mutable slice of the ", $doc," array.")]
+                        pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [[$type; $multiplier]] {
+                            let length_array_length = self.$($len_array_length)* as usize;
+                            if length_array_length == 0 {
+                                return &mut [];
+                            }
+
+                            let length = unsafe { std::slice::from_raw_parts(
+                                self.$($len_array)*.cast(),
+                                length_array_length
+                            ).into_iter().sum::<u32>() as usize };
+
+                            if length == 0 {
+                                return &mut [];
+                            }
+
+                            unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name.cast(), length) }
+                        }
                     }
-
-                    let length = unsafe { std::slice::from_raw_parts(
-                        self.$($len_array)*.cast(),
-                        length_array_length
-                    ).into_iter().sum::<u32>() as usize };
-
-                    if length == 0 {
-                        return &mut [];
-                    }
-
-                    unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name.cast(), length) }
                 }
             )*
         }
@@ -678,14 +722,17 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(self.ffi().$name$(.$as_ptr())?$(.$cast())? as *const _, length) }
                 }
 
-                $(#[cfg($cfg_mut)])?
-                #[doc = concat!("Mutable slice of the ", $doc," array.")]
-                pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
-                    let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
-                    if length == 0 {
-                        return &mut [];
+                crate::eval_or_expand! {
+                    @eval $($cfg_mut)? {
+                        #[doc = concat!("Mutable slice of the ", $doc," array.")]
+                        pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
+                            let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
+                            if length == 0 {
+                                return &mut [];
+                            }
+                            unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast())?, length) }
+                        }
                     }
-                    unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast())?, length) }
                 }
             )*
         }

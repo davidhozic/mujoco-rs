@@ -42,7 +42,7 @@ pub trait SpecItem: Sized {
     }
 
     /// Builder style set a new name.
-    fn with_name(mut self, name: &str) -> Self {
+    fn with_name(&mut self, name: &str) -> &mut Self {
         self.set_name(name);
         self
     }
@@ -72,7 +72,7 @@ pub trait SpecItem: Sized {
     }
 
     /// Builder style make the item inherit from a default class.
-    fn with_default(mut self, class_name: &str) -> Result<Self, Error> {
+    fn with_default(&mut self, class_name: &str) -> Result<&mut Self, Error> {
         self.set_default(class_name)?;
         Ok(self)
     }

@@ -96,7 +96,7 @@ pub type MjtOrientation = mjtOrientation;
 /// Compiler options.
 pub type MjsCompiler = mjsCompiler;
 impl MjsCompiler {
-    getter_setter! {with, get, set, [
+    getter_setter! {[&] with, get, set, [
         autolimits: bool;              "infer \"limited\" attribute based on range.";
         balanceinertia: bool;          "automatically impose A + B >= C rule.";
         fitaabb: bool;                 "meshfit to aabb instead of inertia box.";
@@ -108,17 +108,17 @@ impl MjsCompiler {
         alignfree: bool;               "align free joints with inertial frame.";
     ]}
 
-    getter_setter! {with, get, set, [
+    getter_setter! {[&] with, get, set, [
         boundmass: f64;                "enforce minimum body mass.";
         boundinertia: f64;             "enforce minimum body diagonal inertia.";
         settotalmass: f64;             "rescale masses and inertias; <=0: ignore.";
     ]}
 
-    getter_setter! {force!, with, get, set, [
+    getter_setter! {force!, [&] with, get, set, [
         inertiafromgeom: MjtInertiaFromGeom;  "use geom inertias.";
     ]}
 
-    getter_setter! {with, get, [
+    getter_setter! {[&] with, get, [
         inertiagrouprange: &[i32; 2];       "range of geom groups used to compute inertia.";
         eulerseq: &[i8; 3];                 "sequence for euler rotations.";
         LRopt: &MjLROpt;                    "options for lengthrange computation.";
@@ -405,7 +405,7 @@ impl Drop for MjSpec {
 mjs_wrapper!(Site);
 impl MjsSite {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             // frame, size
             pos:  &[f64; 3];              "position.";
             quat: &[f64; 4];              "orientation.";
@@ -417,7 +417,7 @@ impl MjsSite {
             rgba: &[f32; 4];              "rgba when material is omitted.";
     ]}
 
-    getter_setter!(with, get, set, [
+    getter_setter!([&] with, get, set, [
         type_ + _: MjtGeom;               "geom type.";
         group: i32;                       "group.";
     ]);
@@ -435,7 +435,7 @@ impl MjsSite {
 mjs_wrapper!(Joint);
 impl MjsJoint {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             pos:     &[f64; 3];         "joint position.";
             axis:    &[f64; 3];         "joint axis.";
             ref_ + _:    &f64;          "joint reference.";
@@ -443,7 +443,7 @@ impl MjsJoint {
         ]
     }
 
-    getter_setter!(with, get, set, [
+    getter_setter!([&] with, get, set, [
         type_ + _: MjtJoint;           "joint type.";
         group: i32;                    "joint group.";
     ]);
@@ -457,7 +457,7 @@ impl MjsJoint {
 mjs_wrapper!(Geom);
 impl MjsGeom {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             pos: &[f64; 3];                         "geom position.";
             quat: &[f64; 4];                        "geom orientation.";
             alt: &MjsOrientation;                   "alternative orientation.";
@@ -471,7 +471,7 @@ impl MjsGeom {
         ]
     }
 
-    getter_setter!(with, get, set, [
+    getter_setter!([&] with, get, set, [
         type_ + _: MjtGeom;            "geom type.";
         group: i32;                    "group.";
         contype: i32;                  "contact type.";
@@ -505,7 +505,7 @@ impl MjsGeom {
 mjs_wrapper!(Camera);
 impl MjsCamera {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             pos: &[f64; 3];               "camera position.";
             quat: &[f64; 4];              "camera orientation.";
             alt: &MjsOrientation;         "alternative orientation.";
@@ -519,14 +519,14 @@ impl MjsCamera {
         ]
     }
 
-    getter_setter!(with, get, set, [
+    getter_setter!([&] with, get, set, [
         mode: MjtCamLight;             "camera mode.";
         fovy: f64;                    "field of view in y direction.";
         ipd: f64;                     "inter-pupillary distance for stereo.";
     ]);
 
     getter_setter! {
-        with, get, set, [orthographic: bool; "is camera orthographic."]
+        [&] with, get, set, [orthographic: bool; "is camera orthographic."]
     }
 
     userdata_method!(f64);
@@ -542,7 +542,7 @@ impl MjsCamera {
 mjs_wrapper!(Light);
 impl MjsLight {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             pos: &[f64; 3];               "light position.";
             dir: &[f64; 3];               "light direction.";
             ambient: &[f32; 3];           "ambient color.";
@@ -552,7 +552,7 @@ impl MjsLight {
         ]
     }
 
-    getter_setter!(with, get, set, [
+    getter_setter!([&] with, get, set, [
         mode: MjtCamLight;             "light mode.";
         type_ + _: MjtLightType;       "light type.";
         bulbradius: f32;               "bulb radius, for soft shadows.";
@@ -563,7 +563,7 @@ impl MjsLight {
     ]);
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             active: bool;       "active flag.";
             castshadow: bool;   "whether light cast shadows."
         ]
@@ -583,7 +583,7 @@ impl MjsFrame {
     add_x_method_by_frame! { body, site, joint, geom, camera, light }
 
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             pos: &[f64; 3];               "frame position.";
             quat: &[f64; 4];              "frame orientation.";
             alt: &MjsOrientation;         "alternative orientation.";
@@ -613,7 +613,7 @@ impl MjsFrame {
 mjs_wrapper!(Actuator);
 impl MjsActuator {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             gear: &[f64; 6];                            "gear parameters.";
             gainprm: &[f64; mjNGAIN as usize];          "gain parameters.";
             biasprm: &[f64; mjNBIAS as usize];          "bias parameters.";
@@ -625,7 +625,7 @@ impl MjsActuator {
         ]
     }
 
-    getter_setter!(with, get, set, [
+    getter_setter!([&] with, get, set, [
         gaintype: MjtGain;             "gain type.";
         biastype: MjtBias;             "bias type.";
         dyntype: MjtDyn;               "dyn type.";
@@ -637,7 +637,7 @@ impl MjsActuator {
     ]);
 
     getter_setter! {
-        force!, with, get, set, [
+        force!, [&] with, get, set, [
             ctrllimited: MjtLimited;        "are control limits defined.";
             forcelimited: MjtLimited;       "are force limits defined.";
             actlimited: MjtLimited;         "are activation limits defined.";
@@ -645,7 +645,7 @@ impl MjsActuator {
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             actearly: bool;                "apply next activations to qfrc.";
         ]
     }
@@ -667,12 +667,12 @@ impl MjsActuator {
 mjs_wrapper!(Sensor);
 impl MjsSensor {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             intprm: &[i32; mjNSENS as usize];            "integer parameters.";
         ]
     }
 
-    getter_setter!(with, get, set, [
+    getter_setter!([&] with, get, set, [
         type_ + _: MjtSensor;          "sensor type.";
         objtype: MjtObj;               "object type the sensor refers to.";
         reftype: MjtObj;               "type of referenced object.";
@@ -699,7 +699,7 @@ impl MjsSensor {
 mjs_wrapper!(Flex);
 impl MjsFlex {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             rgba: &[f32; 4];                                "rgba when material is omitted.";
             friction: &[f64; 3];                            "contact friction vector.";
             solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
@@ -708,7 +708,7 @@ impl MjsFlex {
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             young: f64;                    "elastic stiffness.";
             group: i32;                    "group.";
             contype: i32;                  "contact type.";
@@ -732,7 +732,7 @@ impl MjsFlex {
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             internal: bool;       "enable internal collisions.";
             flatskin: bool;       "render flex skin with flat shading.";
             vertcollide: bool;    "mode for vertex collision.";
@@ -741,7 +741,7 @@ impl MjsFlex {
     }
 
     getter_setter! {
-        force!, with, get, set, [
+        force!, [&] with, get, set, [
             selfcollide: MjtFlexSelf;        "mode for flex self collision.";
         ]
     }
@@ -773,7 +773,7 @@ impl MjsFlex {
 mjs_wrapper!(Pair);
 impl MjsPair {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             friction: &[f64; 5];                            "contact friction vector.";
             solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
             solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
@@ -782,7 +782,7 @@ impl MjsPair {
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             margin: f64;             "margin for contact detection.";
             gap: f64;        "include in solver if dist<margin-gap.";
             condim: i32;                   "contact dimensionality.";
@@ -812,18 +812,18 @@ impl MjsExclude {
 mjs_wrapper!(Equality);
 impl MjsEquality {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             data: &[f64; mjNEQDATA as usize];   "data array for equality parameters.";
             solref: &[f64; mjNREF as usize];    "solver reference.";         
             solimp: &[f64; mjNIMP as usize];    "solver impedance.";
         ]
     }
 
-    getter_setter! {with, get, set, [
+    getter_setter! {[&] with, get, set, [
         active: bool;   "active flag.";
     ]}
 
-    getter_setter! {with, get, set, [
+    getter_setter! {[&] with, get, set, [
         type_ + _: MjtEq;   "equality type.";
         objtype: MjtObj;    "type of both objects.";
     ]}
@@ -840,7 +840,7 @@ impl MjsEquality {
 mjs_wrapper!(Tendon);
 impl MjsTendon {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             springlength: &[f64; 2];                    "spring length.";
             solref_friction: &[f64; mjNREF as usize];   "solver reference: tendon friction.";
             solimp_friction: &[f64; mjNIMP as usize];   "solver impedance: tendon friction.";
@@ -852,7 +852,7 @@ impl MjsTendon {
         ]
     }
 
-    getter_setter! {with, get, set, [
+    getter_setter! {[&] with, get, set, [
         group: i32;         "group.";
         damping: f64;       "damping coefficient.";
         stiffness: f64;     "stiffness coefficient.";
@@ -863,7 +863,7 @@ impl MjsTendon {
     ]}
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             limited: bool;       "does tendon have limits (mjtLimited).";
             actfrclimited: bool; "does tendon have actuator force limits."
         ]
@@ -926,7 +926,7 @@ impl MjsWrap {
 mjs_wrapper!(Numeric);
 impl MjsNumeric {
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             size: i32;                     "size of the numeric array.";
         ]
     }
@@ -970,7 +970,7 @@ impl MjsTuple {
 mjs_wrapper!(Key);
 impl MjsKey {
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             time: f64; "time."
         ]
     }
@@ -996,7 +996,7 @@ impl MjsPlugin {
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             active: bool; "is the plugin active.";
         ]
     }
@@ -1010,7 +1010,7 @@ impl MjsPlugin {
 mjs_wrapper!(Mesh);
 impl MjsMesh {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             refpos: &[f64; 3];            "reference position.";
             refquat: &[f64; 4];           "reference orientation.";
             scale: &[f64; 3];             "scale vector.";
@@ -1018,14 +1018,14 @@ impl MjsMesh {
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             inertia: MjtMeshInertia;      "inertia type (convex, legacy, exact, shell).";
             maxhullvert: i32;             "maximum vertex count for the convex hull.";
         ]
     }
 
     getter_setter! {
-        with, get,set, [
+        [&] with, get,set, [
             smoothnormal: bool;           "do not exclude large-angle faces from normals.";
             needsdf: bool;                "compute sdf from mesh.";
         ]
@@ -1054,12 +1054,12 @@ impl MjsMesh {
 mjs_wrapper!(Hfield);
 impl MjsHfield {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             size: &[f64; 4];              "size of the hfield.";
         ]
     }
 
-    getter_setter! { with, get, set, [
+    getter_setter! { [&] with, get, set, [
         nrow: i32;  "number of rows.";
         ncol: i32;  "number of columns.";
     ]}
@@ -1081,13 +1081,13 @@ impl MjsHfield {
 mjs_wrapper!(Skin);
 impl MjsSkin {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             rgba: &[f32; 4];    "rgba when material is omitted.";
         ]
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             inflate: f32;       "inflate in normal direction.";
             group: i32;         "group for visualization.";
         ]
@@ -1122,7 +1122,7 @@ impl MjsSkin {
 mjs_wrapper!(Texture);
 impl MjsTexture {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             rgb1: &[f64; 3];               "first color for builtin.";
             rgb2: &[f64; 3];               "second color for builtin.";
             markrgb: &[f64; 3];            "mark color.";
@@ -1132,7 +1132,7 @@ impl MjsTexture {
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             random: f64;                  "probability of random dots.";
             width: i32;                   "image width.";
             height: i32;                  "image height.";
@@ -1141,7 +1141,7 @@ impl MjsTexture {
     }
 
     getter_setter! {
-        force!, with, get, set, [
+        force!, [&] with, get, set, [
             type_ + _: MjtTexture;        "texture type.";
             colorspace: MjtColorSpace;    "colorspace.";
             builtin: MjtBuiltin;          "builtin type.";
@@ -1153,7 +1153,7 @@ impl MjsTexture {
         cubefiles; "different file for each side of the cube.";
     }
 
-    getter_setter! {with, get, set, [
+    getter_setter! {[&] with, get, set, [
         hflip: bool;    "horizontal flip.";
         vflip: bool;    "vertical flip.";
     ]}
@@ -1175,18 +1175,18 @@ impl MjsTexture {
 mjs_wrapper!(Material);
 impl MjsMaterial {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             rgba: &[f32; 4];                               "rgba color.";
             texrepeat: &[f32; 2];    "texture repetition for 2D mapping.";
         ]
     }
 
-    getter_setter! {with, get, set, [
+    getter_setter! {[&] with, get, set, [
         texuniform: bool;       "make texture cube uniform.";
     ]}
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             emission: f32;                           "emission.";
             specular: f32;                           "specular.";
             shininess: f32;                         "shininess.";
@@ -1233,7 +1233,7 @@ impl MjsBody {
 impl MjsBody {
     // Complex types with mutable and immutable reference returns.
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             // body frame
             pos: &[f64; 3];                   "frame position.";
             quat: &[f64; 4];                  "frame orientation.";
@@ -1250,14 +1250,14 @@ impl MjsBody {
 
     // Plain types with normal getters and setters.
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             mass: f64;                     "mass.";
             gravcomp: f64;                 "gravity compensation.";
         ]
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             mocap: bool;                   "whether this is a mocap body.";
             explicitinertial: bool;        "whether to save the body with explicit inertial clause.";
         ]
