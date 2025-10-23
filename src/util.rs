@@ -530,19 +530,6 @@ macro_rules! getter_setter {
         }
     };
 
-    (with, [$($([$ffi_mut:ident])? $name:ident: & $type:ty; $comment:expr);* $(;)?]) => {
-        paste::paste!{ 
-            $(
-                #[doc = concat!("Builder method for setting ", $comment)]
-                pub fn [<with_ $name:camel:snake>](mut self, value: $type) -> Self {
-                    #[allow(unused_unsafe)]
-                    unsafe { self$(.$ffi_mut())?.$name = value.into() };
-                    self
-                }
-            )*
-        }
-    };
-
     (with, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
