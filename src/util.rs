@@ -432,120 +432,137 @@ macro_rules! info_with_view {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! getter_setter {
-    (get, [$($name:ident $(+ $symbol:tt)?: bool; $comment:expr);* $(;)?]) => {paste::paste!{
+    (get, [$($([$ffi:ident])? $name:ident $(+ $symbol:tt)?: bool; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Check ", $comment)]
             pub fn [<$name:camel:snake $($symbol)?>](&self) -> bool {
-                self.ffi().$name == 1
+                self$(.$ffi())?.$name == 1
             }
         )*
     }};
 
-    (get, [$( $((allow_mut = $cfg_mut:literal))? $name:ident $(+ $symbol:tt)?: & $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
+    (get, [$($([$ffi:ident, $ffi_mut:ident])? $((allow_mut = $cfg_mut:literal))? $name:ident $(+ $symbol:tt)?: & $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Return an immutable reference to ", $comment)]
             pub fn [<$name:camel:snake $($symbol)?>](&self) -> &$type {
-                &self.ffi().$name
+                &self$(.$ffi())?.$name
             }
 
             crate::eval_or_expand! {
                 @eval $($cfg_mut)? {
                     #[doc = concat!("Return a mutable reference to ", $comment)]
                     pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
-                        unsafe { &mut self.ffi_mut().$name }
+                        #[allow(unused_unsafe)]
+                        unsafe { &mut self$(.$ffi_mut())?.$name }
                     }
                 }
             }
         )*
     }};
 
-    (get, [$($name:ident $(+ $symbol:tt)?: $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
+    (get, [$($([$ffi:ident])? $name:ident $(+ $symbol:tt)?: $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Return value of ", $comment)]
             pub fn [<$name:camel:snake $($symbol)?>](&self) -> $type {
-                self.ffi().$name.into()
+                self$(.$ffi())?.$name.into()
             }
         )*
     }};
 
-    (set, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+    (set, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
                 #[doc = concat!("Set ", $comment)]
                 pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
-                    unsafe { self.ffi_mut().$name = value.into() };
+                    #[allow(unused_unsafe)]
+                    unsafe { self$(.$ffi_mut())?.$name = value.into() };
                 }
             )*
         }
     };
 
     /* Enum conversion */
-    (force!, get, [$($name:ident $(+ $symbol:tt)? : $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
+    (force!, get, [$($([$ffi:ident])? $name:ident $(+ $symbol:tt)? : $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Return value of ", $comment)]
             pub fn [<$name:camel:snake $($symbol)?>](&self) -> $type {
-                unsafe { std::mem::transmute(self.ffi().$name) }
+                unsafe { std::mem::transmute(self$(.$ffi())?.$name) }
             }
         )*
     }};
 
-    (force!, set, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+    (force!, set, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
                 #[doc = concat!("Set ", $comment)]
                 pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
                     #[allow(unnecessary_transmutes)]
-                    unsafe { self.ffi_mut().$name = std::mem::transmute(value) };
+                    unsafe { self$(.$ffi_mut())?.$name = std::mem::transmute(value) };
                 }
             )*
         }
     };
 
     /* Builder pattern */
-    (force!, with, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+    (force!, with, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
                 pub fn [<with_ $name:camel:snake>](mut self, value: $type) -> Self {
                     #[allow(unnecessary_transmutes)]
-                    unsafe { self.ffi_mut().$name = std::mem::transmute(value) };
+                    unsafe { self$(.$ffi_mut())?.$name = std::mem::transmute(value) };
                     self
                 }
             )*
         }
     };
 
-    (force!, [&] with, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+    (force!, [&] with, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
                 pub fn [<with_ $name:camel:snake>](&mut self, value: $type) -> &mut Self {
                     #[allow(unnecessary_transmutes)]
-                    unsafe { self.ffi_mut().$name = std::mem::transmute(value) };
+                    unsafe { self$(.$ffi_mut())?.$name = std::mem::transmute(value) };
                     self
                 }
             )*
         }
     };
 
-    (with, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+    (with, [$($([$ffi_mut:ident])? $name:ident: & $type:ty; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
                 pub fn [<with_ $name:camel:snake>](mut self, value: $type) -> Self {
-                    unsafe { self.ffi_mut().$name = value.into() };
+                    #[allow(unused_unsafe)]
+                    unsafe { self$(.$ffi_mut())?.$name = value.into() };
                     self
                 }
             )*
         }
     };
 
-    ([&] with, [$($name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+    (with, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+        paste::paste!{ 
+            $(
+                #[doc = concat!("Builder method for setting ", $comment)]
+                pub fn [<with_ $name:camel:snake>](mut self, value: $type) -> Self {
+                    #[allow(unused_unsafe)]
+                    unsafe { self$(.$ffi_mut())?.$name = value.into() };
+                    self
+                }
+            )*
+        }
+    };
+
+    ([&] with, [$($([$ffi: ident, $ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
                 pub fn [<with_ $name:camel:snake>](&mut self, value: $type) -> &mut Self {
-                    unsafe { self.ffi_mut().$name = value.into() };
+                    #[allow(unused_unsafe)]
+                    unsafe { self$(.$ffi_mut())?.$name = value.into() };
                     self
                 }
             )*
@@ -554,43 +571,43 @@ macro_rules! getter_setter {
     
     /* Handling of optional arguments */
     /* Enum pass */
-    (force!, get, set, [ $( $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(force!, get, [ $( $name $(+ $symbol)? : $type ; $comment );* ]);
-        $crate::getter_setter!(force!, set, [ $( $name : $type ; $comment );* ]);
+    (force!, get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(force!, get, [ $($([$ffi])? $name $(+ $symbol)? : $type ; $comment );* ]);
+        $crate::getter_setter!(force!, set, [ $($([$ffi_mut])? $name : $type ; $comment );* ]);
     };
 
-    (get, set, [ $( $name:ident $(+ $symbol:tt)? : bool ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(get, [ $( $name $(+ $symbol)? : bool ; $comment );* ]);
-        $crate::getter_setter!(set, [ $( $name : bool ; $comment );* ]);
+    (get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : bool ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $($([$ffi])? $name $(+ $symbol)? : bool ; $comment );* ]);
+        $crate::getter_setter!(set, [ $($([$ffi_mut])? $name : bool ; $comment );* ]);
     };
 
-    (get, set, [ $( $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(get, [ $( $name $(+ $symbol)? : $type ; $comment );* ]);
-        $crate::getter_setter!(set, [ $( $name : $type ; $comment );* ]);
+    (get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $($([$ffi])? $name $(+ $symbol)? : $type ; $comment );* ]);
+        $crate::getter_setter!(set, [ $($([$ffi_mut])? $name : $type ; $comment );* ]);
     };
 
     /* Builder pattern */
-    ($([$token:tt])? with, get, set, [ $( $name:ident $(+ $symbol:tt)? : bool ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(get, [ $( $name $(+ $symbol)? : bool ; $comment );* ]);
-        $crate::getter_setter!(set, [ $( $name : bool ; $comment );* ]);
-        $crate::getter_setter!($([$token])? with, [ $( $name : bool ; $comment );* ]);
+    ($([$token:tt])? with, get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : bool ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $($([$ffi])? $name $(+ $symbol)? : bool ; $comment );* ]);
+        $crate::getter_setter!(set, [ $($([$ffi_mut])? $name : bool ; $comment );* ]);
+        $crate::getter_setter!($([$token])? with, [ $($([$ffi_mut])? $name : bool ; $comment );* ]);
     };
 
-    ($([$token:tt])? with, get, set, [ $( $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(get, [ $( $name $(+ $symbol)?: $type ; $comment );* ]);
-        $crate::getter_setter!(set, [ $( $name : $type ; $comment );* ]);
-        $crate::getter_setter!($([$token])? with, [ $( $name : $type ; $comment );* ]);
+    ($([$token:tt])? with, get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $($([$ffi])? $name $(+ $symbol)?: $type ; $comment );* ]);
+        $crate::getter_setter!(set, [ $($([$ffi_mut])? $name : $type ; $comment );* ]);
+        $crate::getter_setter!($([$token])? with, [ $($([$ffi_mut])? $name : $type ; $comment );* ]);
     };
 
-    (force!, $([$token:tt])? with, get, set, [ $( $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(force!, get, [ $( $name $(+ $symbol)? : $type ; $comment );* ]);
-        $crate::getter_setter!(force!, set, [$( $name : $type ; $comment );* ]);
-        $crate::getter_setter!(force!, $([$token])? with, [$( $name : $type ; $comment );* ]);
+    (force!, $([$token:tt])? with, get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(force!, get, [$($([$ffi])? $name $(+ $symbol)? : $type ; $comment );* ]);
+        $crate::getter_setter!(force!, set, [$($([$ffi_mut])? $name : $type ; $comment );* ]);
+        $crate::getter_setter!(force!, $([$token])? with, [$($([$ffi_mut])? $name : $type ; $comment );* ]);
     };
 
-    ($([$token:tt])? with, get, [$( $(allow_mut = $cfg_mut:literal)? $name:ident $(+ $symbol:tt)? : & $type:ty ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(get, [ $( $(allow_mut = $cfg_mut)? $name $(+ $symbol)? : & $type ; $comment );* ]);
-        $crate::getter_setter!($([$token])? with, [ $( $name : $type ; $comment );* ]);
+    ($([$token:tt])? with, get, [$($([$ffi: ident, $ffi_mut:ident])? $(allow_mut = $cfg_mut:literal)? $name:ident $(+ $symbol:tt)? : & $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $($([$ffi])?  $(allow_mut = $cfg_mut)? $name $(+ $symbol)? : & $type ; $comment );* ]);
+        $crate::getter_setter!($([$token])? with, [ $($([$ffi_mut])? $name : $type ; $comment );* ]);
     };
 }
 

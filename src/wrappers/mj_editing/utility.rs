@@ -243,38 +243,30 @@ macro_rules! find_x_method_direct {
 
 /// Creates a wrapper around a mjs$ffi_name item. It also implements the methods: `ffi()`, `ffi_mut()`
 /// and traits: [`SpecItem`](super::traits::SpecItem), [`Sync`], [`Send`].
-macro_rules! mjs_wrapper {
+macro_rules! mjs_struct {
     ($ffi_name:ident) => {paste::paste!{
         #[doc = concat!(stringify!($ffi_name), " specification. This acts as a safe reference to a FFI type [`", stringify!([<mjs $ffi_name>]), "`] internally.")]
         pub type [<Mjs $ffi_name>] = [<mjs $ffi_name>];
 
         impl [<Mjs $ffi_name>] {
-            /// Return an immutable reference to the inner struct.
-            pub fn ffi(&self) -> &[<Mjs $ffi_name>] {
-                self
-            }
-
-            /// Return a mutable reference to the inner struct.
-            pub unsafe fn ffi_mut(&mut self) -> &mut [<Mjs $ffi_name>] {
-                self
-            }
+            /// Immutable proxy FFI method that returns self. Exists for interface reasons.
 
             /// Return the message appended to compiler errors.
             pub fn info(&self) -> &str {
-                read_mjs_string(unsafe { self.ffi().info.as_ref().unwrap() })
+                read_mjs_string(unsafe { self.info.as_ref().unwrap() })
             }
 
             /// Set the message appended to compiler errors.
             /// # Panics
             /// When the `info` contains '\0' characters, a panic occurs.
             pub fn set_info(&mut self, info: &str) {
-                write_mjs_string(info, unsafe { self.ffi_mut().info.as_mut().unwrap() });
+                write_mjs_string(info, unsafe { self.info.as_mut().unwrap() });
             }
         }
 
         impl SpecItem for [<Mjs $ffi_name>] {
             unsafe fn element_pointer(&self) -> *mut mjsElement {
-                self.ffi().element
+                self.element
             }
         }
 
@@ -291,17 +283,17 @@ macro_rules! userdata_method {
     ($type:ty) => {paste::paste!{
         /// Return an immutable slice to userdata.
         pub fn userdata(&self) -> &[$type] {
-            [<read_mjs_vec_ $type>](unsafe { self.ffi().userdata.as_ref().unwrap() })
+            [<read_mjs_vec_ $type>](unsafe { self.userdata.as_ref().unwrap() })
         }
         
         /// Set `userdata`.
         pub fn set_userdata<T: AsRef<[$type]>>(&mut self, value: T) {
-            [<write_mjs_vec_ $type>](value.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() })
+            [<write_mjs_vec_ $type>](value.as_ref(), unsafe {self.userdata.as_mut().unwrap() })
         }
 
         /// Builder method for setting `userdata`.
-        pub fn with_userdata<T: AsRef<[$type]>>(mut self, value: T) -> Self {
-            [<write_mjs_vec_ $type>](value.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() });
+        pub fn with_userdata<T: AsRef<[$type]>>(&mut self, value: T) -> &mut Self {
+            [<write_mjs_vec_ $type>](value.as_ref(), unsafe {self.userdata.as_mut().unwrap() });
             self
         }
     }};
@@ -318,7 +310,7 @@ macro_rules! vec_string_set_append {
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<set_ $name>](&mut self, value: &str) {
-                write_mjs_vec_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
+                write_mjs_vec_string(value, unsafe { self.$name.as_mut().unwrap() });
             }
 
             #[doc = concat!(
@@ -328,7 +320,7 @@ macro_rules! vec_string_set_append {
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<append_ $name>](&mut self, value: &str) {
-                append_mjs_vec_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
+                append_mjs_vec_string(value, unsafe { self.$name.as_mut().unwrap() });
             }
         )*
     }};
@@ -336,11 +328,11 @@ macro_rules! vec_string_set_append {
 
 /// Implements string methods for given attribute $name.
 macro_rules! string_set_get_with {
-    ($($name:ident; $comment:expr;)*) => {paste::paste!{
+    ($($([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;)*) => {paste::paste!{
         $(
             #[doc = concat!("Return ", $comment)]
             pub fn $name(&self) -> &str {
-                read_mjs_string(unsafe { self.ffi().$name.as_ref().unwrap() })
+                read_mjs_string(unsafe { self$(.$ffi())?.$name.as_ref().unwrap() })
             }
 
             #[doc = concat!(
@@ -350,7 +342,7 @@ macro_rules! string_set_get_with {
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<set_ $name>](&mut self, value: &str) {
-                write_mjs_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
+                write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name.as_mut().unwrap() })
             }
 
             #[doc = concat!(
@@ -360,7 +352,7 @@ macro_rules! string_set_get_with {
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<with_ $name>](&mut self, value: &str) -> &mut Self {
-                write_mjs_string(value, unsafe { self.ffi_mut().$name.as_mut().unwrap() });
+                write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name.as_mut().unwrap() });
                 self
             }
         )*
@@ -373,7 +365,7 @@ macro_rules! vec_set_get {
         $(
             #[doc = concat!("Return ", $comment)]
             pub fn $name(&self) -> &[$type] {
-                [<read_mjs_vec_ $type>](unsafe { self.ffi().$name.as_ref().unwrap() })
+                [<read_mjs_vec_ $type>](unsafe { self.$name.as_ref().unwrap() })
             }
         )*
 
@@ -387,7 +379,7 @@ macro_rules! vec_set {
         $(
             #[doc = concat!("Set ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
-                [<write_mjs_vec_ $type>](value, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
+                [<write_mjs_vec_ $type>](value, unsafe { self.$name.as_mut().unwrap() })
             }
         )*
     }};
@@ -399,7 +391,7 @@ macro_rules! vec_vec_append {
         $(
             #[doc = concat!("Set ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
-                [<append_mjs_vec_vec_ $type>](value, unsafe { self.ffi_mut().$name.as_mut().unwrap() })
+                [<append_mjs_vec_vec_ $type>](value, unsafe { self.$name.as_mut().unwrap() })
             }
         )*
     }};
@@ -410,7 +402,7 @@ macro_rules! plugin_wrapper_method {
     () => {
         /// Return a wrapper around the `plugin` attribute.
         pub fn plugin_wrapper(&mut self) -> &mut MjsPlugin {
-            unsafe { &mut self.ffi_mut().plugin }
+            &mut self.plugin
         }
     };
 }
@@ -463,7 +455,7 @@ macro_rules! item_body_iterator {
         $(
             impl<'a> MjsBodyItemIterMut<'a, [<Mjs $iter_over>]> {
                 fn new(root: &'a mut MjsBody, recurse: bool) -> Self {
-                    let last = unsafe { mjs_firstChild(root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
+                    let last = unsafe { mjs_firstChild(root, MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
                     Self { root, last, recurse, item_type: PhantomData }
                 }
             }
@@ -478,7 +470,7 @@ macro_rules! item_body_iterator {
 
                     unsafe {
                         let out = [<mjs_as $iter_over>](self.last).as_mut();
-                        self.last = mjs_nextChild(self.root.ffi_mut(), self.last, self.recurse.into());
+                        self.last = mjs_nextChild(self.root, self.last, self.recurse.into());
                         out
                     }
                 }

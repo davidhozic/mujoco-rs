@@ -299,17 +299,17 @@ impl MjSpec {
 /// Public attributes.
 impl MjSpec {
     string_set_get_with! {
-        modelname; "model name.";
-        comment; "comment at top of XML.";
-        modelfiledir; "path to model file.";
+        [ffi, ffi_mut] modelname; "model name.";
+        [ffi, ffi_mut] comment; "comment at top of XML.";
+        [ffi, ffi_mut] modelfiledir; "path to model file.";
     }
 
     getter_setter! {
         with, get, [
-            compiler: &MjsCompiler; "compiler options.";
-            stat: &MjStatistic; "statistic overrides.";
-            visual: &MjVisual; "visualization options.";
-            option: &MjOption; "simulation options.";
+            [ffi, ffi_mut] compiler: &MjsCompiler; "compiler options.";
+            [ffi, ffi_mut] stat: &MjStatistic; "statistic overrides.";
+            [ffi, ffi_mut] visual: &MjVisual; "visualization options.";
+            [ffi, ffi_mut] option: &MjOption; "simulation options.";
         ]
     }
 
@@ -407,7 +407,7 @@ impl Drop for MjSpec {
 /***************************
 ** Site specification
 ***************************/
-mjs_wrapper!(Site);
+mjs_struct!(Site);
 impl MjsSite {
     getter_setter! {
         [&] with, get, [
@@ -437,7 +437,7 @@ impl MjsSite {
 /***************************
 ** Joint specification
 ***************************/
-mjs_wrapper!(Joint);
+mjs_struct!(Joint);
 impl MjsJoint {
     getter_setter! {
         [&] with, get, [
@@ -459,7 +459,7 @@ impl MjsJoint {
 /***************************
 ** Geom specification
 ***************************/
-mjs_wrapper!(Geom);
+mjs_struct!(Geom);
 impl MjsGeom {
     getter_setter! {
         [&] with, get, [
@@ -507,7 +507,7 @@ impl MjsGeom {
 /***************************
 ** Camera specification
 ***************************/
-mjs_wrapper!(Camera);
+mjs_struct!(Camera);
 impl MjsCamera {
     getter_setter! {
         [&] with, get, [
@@ -544,7 +544,7 @@ impl MjsCamera {
 /***************************
 ** Light specification
 ***************************/
-mjs_wrapper!(Light);
+mjs_struct!(Light);
 impl MjsLight {
     getter_setter! {
         [&] with, get, [
@@ -583,7 +583,7 @@ impl MjsLight {
 /***************************
 ** Frame specification
 ***************************/
-mjs_wrapper!(Frame);
+mjs_struct!(Frame);
 impl MjsFrame {
     add_x_method_by_frame! { body, site, joint, geom, camera, light }
 
@@ -615,7 +615,7 @@ impl MjsFrame {
 /***************************
 ** Actuator specification
 ***************************/
-mjs_wrapper!(Actuator);
+mjs_struct!(Actuator);
 impl MjsActuator {
     getter_setter! {
         [&] with, get, [
@@ -669,7 +669,7 @@ impl MjsActuator {
 /***************************
 ** Sensor specification
 ***************************/
-mjs_wrapper!(Sensor);
+mjs_struct!(Sensor);
 impl MjsSensor {
     getter_setter! {
         [&] with, get, [
@@ -701,7 +701,7 @@ impl MjsSensor {
 /***************************
 ** Flex specification
 ***************************/
-mjs_wrapper!(Flex);
+mjs_struct!(Flex);
 impl MjsFlex {
     getter_setter! {
         [&] with, get, [
@@ -775,7 +775,7 @@ impl MjsFlex {
 /***************************
 ** Pair specification
 ***************************/
-mjs_wrapper!(Pair);
+mjs_struct!(Pair);
 impl MjsPair {
     getter_setter! {
         [&] with, get, [
@@ -803,7 +803,7 @@ impl MjsPair {
 /***************************
 ** Exclude specification
 ***************************/
-mjs_wrapper!(Exclude);
+mjs_struct!(Exclude);
 impl MjsExclude {
     string_set_get_with! {
         bodyname1; "name of body 1.";
@@ -814,7 +814,7 @@ impl MjsExclude {
 /***************************
 ** Equality specification
 ***************************/
-mjs_wrapper!(Equality);
+mjs_struct!(Equality);
 impl MjsEquality {
     getter_setter! {
         [&] with, get, [
@@ -842,7 +842,7 @@ impl MjsEquality {
 /***************************
 ** Tendon specification
 ***************************/
-mjs_wrapper!(Tendon);
+mjs_struct!(Tendon);
 impl MjsTendon {
     getter_setter! {
         [&] with, get, [
@@ -884,7 +884,7 @@ impl MjsTendon {
     /// When the `name` contains '\0' characters, a panic occurs.
     pub fn wrap_site(&mut self, name: &str) -> &mut MjsWrap {
         let cname = CString::new(name).unwrap();
-        let wrap_ptr = unsafe { mjs_wrapSite(self.ffi_mut(), cname.as_ptr()) };
+        let wrap_ptr = unsafe { mjs_wrapSite(self, cname.as_ptr()) };
         unsafe { wrap_ptr.as_mut().unwrap() }
     }
 
@@ -895,7 +895,7 @@ impl MjsTendon {
         let cname = CString::new(name).unwrap();
         let csidesite = CString::new(sidesite).unwrap();
         let wrap_ptr = unsafe { mjs_wrapGeom(
-            self.ffi_mut(),
+            self,
             cname.as_ptr(), csidesite.as_ptr()
         ) };
         unsafe { wrap_ptr.as_mut().unwrap() }
@@ -906,13 +906,13 @@ impl MjsTendon {
     /// When the `name` contains '\0' characters, a panic occurs.
     pub fn wrap_joint(&mut self, name: &str, coef: f64) -> &mut MjsWrap {
         let cname = CString::new(name).unwrap();
-        let wrap_ptr = unsafe { mjs_wrapJoint(self.ffi_mut(), cname.as_ptr(), coef) };
+        let wrap_ptr = unsafe { mjs_wrapJoint(self, cname.as_ptr(), coef) };
         unsafe { wrap_ptr.as_mut().unwrap() }
     }
 
     /// Wrap a pulley using the tendon.
     pub fn wrap_pulley(&mut self, divisor: f64) -> &mut MjsWrap {
-        let wrap_ptr = unsafe { mjs_wrapPulley(self.ffi_mut(), divisor) };
+        let wrap_ptr = unsafe { mjs_wrapPulley(self, divisor) };
         unsafe { wrap_ptr.as_mut().unwrap() }
     }
 }
@@ -920,7 +920,7 @@ impl MjsTendon {
 /***************************
 ** Wrap specification
 ***************************/
-mjs_wrapper!(Wrap);
+mjs_struct!(Wrap);
 impl MjsWrap {
     /* Auto-implemented */
 }
@@ -928,7 +928,7 @@ impl MjsWrap {
 /***************************
 ** Numeric specification
 ***************************/
-mjs_wrapper!(Numeric);
+mjs_struct!(Numeric);
 impl MjsNumeric {
     getter_setter! {
         [&] with, get, set, [
@@ -944,7 +944,7 @@ impl MjsNumeric {
 /***************************
 ** Text specification
 ***************************/
-mjs_wrapper!(Text);
+mjs_struct!(Text);
 impl MjsText {
     string_set_get_with! {
         data; "text string.";
@@ -954,7 +954,7 @@ impl MjsText {
 /***************************
 ** Tuple specification
 ***************************/
-mjs_wrapper!(Tuple);
+mjs_struct!(Tuple);
 impl MjsTuple {
     vec_set! {
         objtype: i32; "object types.";
@@ -972,7 +972,7 @@ impl MjsTuple {
 /***************************
 ** Key specification
 ***************************/
-mjs_wrapper!(Key);
+mjs_struct!(Key);
 impl MjsKey {
     getter_setter! {
         [&] with, get, set, [
@@ -993,7 +993,7 @@ impl MjsKey {
 /***************************
 ** Plugin specification
 ***************************/
-mjs_wrapper!(Plugin);
+mjs_struct!(Plugin);
 impl MjsPlugin {
     string_set_get_with! {
         name; "instance name.";
@@ -1012,7 +1012,7 @@ impl MjsPlugin {
 /***************************
 ** Mesh specification
 ***************************/
-mjs_wrapper!(Mesh);
+mjs_struct!(Mesh);
 impl MjsMesh {
     getter_setter! {
         [&] with, get, [
@@ -1056,7 +1056,7 @@ impl MjsMesh {
 /***************************
 ** Hfield specification
 ***************************/
-mjs_wrapper!(Hfield);
+mjs_struct!(Hfield);
 impl MjsHfield {
     getter_setter! {
         [&] with, get, [
@@ -1076,14 +1076,14 @@ impl MjsHfield {
 
     /// Sets `userdata`.
     pub fn set_userdata<T: AsRef<[f32]>>(&mut self, userdata: T) {
-        write_mjs_vec_f32(userdata.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() })
+        write_mjs_vec_f32(userdata.as_ref(), unsafe {self.userdata.as_mut().unwrap() })
     }
 }
 
 /***************************
 ** Skin specification
 ***************************/
-mjs_wrapper!(Skin);
+mjs_struct!(Skin);
 impl MjsSkin {
     getter_setter! {
         [&] with, get, [
@@ -1124,7 +1124,7 @@ impl MjsSkin {
 /***************************
 ** Texture specification
 ***************************/
-mjs_wrapper!(Texture);
+mjs_struct!(Texture);
 impl MjsTexture {
     getter_setter! {
         [&] with, get, [
@@ -1165,7 +1165,7 @@ impl MjsTexture {
 
     /// Sets texture `data`.
     pub fn set_data<T>(&mut self, data: &[T]) {
-        write_mjs_vec_byte(data, unsafe { self.ffi_mut().data.as_mut().unwrap() });
+        write_mjs_vec_byte(data, unsafe { self.data.as_mut().unwrap() });
     }
 
     string_set_get_with! {
@@ -1177,7 +1177,7 @@ impl MjsTexture {
 /***************************
 ** Material specification
 ***************************/
-mjs_wrapper!(Material);
+mjs_struct!(Material);
 impl MjsMaterial {
     getter_setter! {
         [&] with, get, [
@@ -1210,14 +1210,24 @@ impl MjsMaterial {
 /***************************
 ** Body specification
 ***************************/
-mjs_wrapper!(Body);
+mjs_struct!(Body);
 impl MjsBody {
     add_x_method! { body, site, joint, geom, camera, light }
     
+    /// Dummy FFI metho use to simplify access through macros.
+    fn ffi(&self) -> &Self {
+        self
+    }
+
+    /// Dummy mutable FFI method use to simplify access through macros.
+    fn ffi_mut(&mut self) -> &mut Self {
+        self
+    }
+
     // Special case
     /// Add and return a child frame.
     pub fn add_frame(&mut self) -> &mut MjsFrame {
-        let ptr = unsafe { mjs_addFrame(self.ffi_mut(), ptr::null_mut()) };
+        let ptr = unsafe { mjs_addFrame(self, ptr::null_mut()) };
         unsafe { ptr.as_mut().unwrap() }
     }
 
