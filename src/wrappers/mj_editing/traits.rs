@@ -83,6 +83,12 @@ pub trait SpecItem: Sized {
     /// Consequently, the compiler still allows the original reference to be used, which
     /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!.
     fn delete(&mut self) -> Result<(), Error> {
+        self.__delete_default__()
+    }
+
+    /// Default implementation of the delete method.
+    /// Override [`SpecItem::delete`] for custom deletion logic.
+    fn __delete_default__(&mut self) -> Result<(), Error> {
         let element = unsafe { self.element_mut_pointer() };
         let spec = unsafe { mjs_getSpec(element) };
         let result = unsafe { mjs_delete(spec, element) };

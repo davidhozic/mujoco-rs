@@ -245,7 +245,7 @@ macro_rules! find_x_method_direct {
 /// Creates a wrapper around a mjs$ffi_name item. It also implements the methods: `ffi()`, `ffi_mut()`
 /// and traits: [`SpecItem`](super::traits::SpecItem), [`Sync`], [`Send`].
 macro_rules! mjs_struct {
-    ($ffi_name:ident) => {paste::paste!{
+    ($ffi_name:ident $({ $($extra_trait_methods:tt)* })?) => {paste::paste!{
         #[doc = concat!(stringify!($ffi_name), " specification. This is an alias to the FFI type [`", stringify!([<mjs $ffi_name>]), "`].")]
         pub type [<Mjs $ffi_name>] = [<mjs $ffi_name>];
 
@@ -269,6 +269,10 @@ macro_rules! mjs_struct {
             unsafe fn element_pointer(&self) -> *mut mjsElement {
                 self.element
             }
+
+            $($(
+                $extra_trait_methods
+            )*)?
         }
 
         // SAFETY: These are safe to implement, as access to them is available only

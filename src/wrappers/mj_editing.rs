@@ -1206,7 +1206,16 @@ impl MjsMaterial {
 /***************************
 ** Body specification
 ***************************/
-mjs_struct!(Body);
+mjs_struct!(Body {
+    // Override the delete method to prevent deletion of world.
+    fn delete(&mut self) -> Result<(), Error> {
+        if self.name() == "world" {
+            return Err(Error::new(ErrorKind::Unsupported, "world model can't be deleted"));
+        }
+        SpecItem::__delete_default__(self)
+    }
+});
+
 impl MjsBody {
     add_x_method! { body, site, joint, geom, camera, light }
 
@@ -1374,8 +1383,8 @@ mod tests {
         const NEW_MODEL_NAME: &str = "Test model";
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let mut world = spec.world_body();
-        let mut body = world.add_body();
+        let world = spec.world_body_mut();
+        let body = world.add_body();
         assert_eq!(body.name(), "");
         body.set_name(NEW_MODEL_NAME);
         assert_eq!(body.name(), NEW_MODEL_NAME);
@@ -1388,18 +1397,17 @@ mod tests {
         const NEW_MODEL_NAME: &str = "Test model";
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let mut world = spec.world_body();
-        let mut body = world.add_body();
+        let world = spec.world_body_mut();
+        let body = world.add_body();
         body.set_name(NEW_MODEL_NAME);
-        drop(body);
 
         /* Test normal body deletion */
-        let body = spec.body(NEW_MODEL_NAME).expect("failed to obtain the body");
+        let body = spec.body_mut(NEW_MODEL_NAME).expect("failed to obtain the body");
         assert!(body.delete().is_ok(), "failed to delete model");
         assert!(spec.body(NEW_MODEL_NAME).is_none(), "body was not removed from spec");
 
         /* Test world body deletion */
-        let world = spec.world_body();
+        let world = spec.world_body_mut();
         assert!(world.delete().is_err(), "the world model should not be deletable");
 
         spec.compile().unwrap();
@@ -1410,13 +1418,12 @@ mod tests {
         const NEW_NAME: &str = "Test model";
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let mut world = spec.world_body();
-        let mut joint = world.add_joint();
+        let world = spec.world_body_mut();
+        let joint = world.add_joint();
         joint.set_name(NEW_NAME);
-        drop(joint);
 
         /* Test normal body deletion */
-        let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
+        let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
         assert!(joint.delete().is_ok(), "failed to delete model");
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed fom spec");
 
@@ -1428,14 +1435,13 @@ mod tests {
         const NEW_NAME: &str = "Test model";
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let mut world = spec.world_body();
-        let mut joint = world.add_joint();
+        let world = spec.world_body_mut();
+        let joint = world.add_joint();
 
         joint.set_name(NEW_NAME);
-        drop(joint);
 
         /* Test normal body deletion */
-        let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
+        let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
         assert!(joint.delete().is_ok(), "failed to delete model");
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed from spec");
 
@@ -1447,7 +1453,7 @@ mod tests {
         const NEW_USERDATA: [f64; 3] = [1.0, 2.0, 3.0];
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let mut world = spec.world_body();
+        let world = spec.world_body_mut();
 
         assert_eq!(world.userdata(), []);
 
@@ -1462,7 +1468,7 @@ mod tests {
         const TEST_VALUE_F64: f64 = 5.25;
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let mut world = spec.world_body();
+        let world = spec.world_body_mut();
 
         world.set_gravcomp(TEST_VALUE_F64);
         assert_eq!(world.gravcomp(), TEST_VALUE_F64);
@@ -1487,12 +1493,12 @@ mod tests {
         assert!(spec.default(DEFAULT_NAME).is_some());
         assert!(spec.default(NOT_DEFAULT_NAME).is_none());
 
-        let mut world = spec.world_body();
-        let mut some_body = world.add_body();
+        let world = spec.world_body_mut();
+        let some_body = world.add_body();
         some_body.add_joint().with_name("test");
         some_body.add_geom().with_size([0.010, 0.0, 0.0]);
 
-        let mut actuator = spec.add_actuator()
+        let actuator = spec.add_actuator()
             .with_trntype(MjtTrn::mjTRN_JOINT);
         actuator.set_target("test");
         
@@ -1501,77 +1507,77 @@ mod tests {
         spec.compile().unwrap();
     }
 
-//     #[test]
-//     fn test_save() {
-//         const EXPECTED_XML: &str = "\
-// <mujoco model=\"MuJoCo Model\">
-//   <compiler angle=\"radian\"/>
+    #[test]
+    fn test_save() {
+        const EXPECTED_XML: &str = "\
+<mujoco model=\"MuJoCo Model\">
+  <compiler angle=\"radian\"/>
 
-//   <worldbody>
-//     <body>
-//       <geom size=\"0.01\"/>
-//       <site pos=\"0 0 0\"/>
-//       <camera pos=\"0 0 0\"/>
-//       <light pos=\"0 0 0\" dir=\"0 0 -1\"/>
-//     </body>
-//   </worldbody>
-// </mujoco>
-// ";
+  <worldbody>
+    <body>
+      <geom size=\"0.01\"/>
+      <site pos=\"0 0 0\"/>
+      <camera pos=\"0 0 0\"/>
+      <light pos=\"0 0 0\" dir=\"0 0 -1\"/>
+    </body>
+  </worldbody>
+</mujoco>
+";
 
-//         let mut spec = MjSpec::new();
-//         let mut world = spec.world_body();
-//         let mut body = world.add_body();
-//         body.add_camera();
-//         body.add_geom().with_size([0.010, 0.0, 0.0]);
-//         body.add_light();
-//         body.add_site();
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+        let body = world.add_body();
+        body.add_camera();
+        body.add_geom().with_size([0.010, 0.0, 0.0]);
+        body.add_light();
+        body.add_site();
 
-//         spec.compile().unwrap();
-//         assert_eq!(spec.save_xml_string(1000).unwrap(), EXPECTED_XML);
+        spec.compile().unwrap();
+        assert_eq!(spec.save_xml_string(1000).unwrap(), EXPECTED_XML);
 
-//         spec.compile().unwrap();
-//     }
+        spec.compile().unwrap();
+    }
 
-    // #[test]
-    // fn test_site() {
-    //     const TEST_MATERIAL: &str = "material 1";
-    //     const TEST_POSITION: [f64; 3] = [1.0, 2.0, 3.0];
-    //     const SITE_NAME: &str = "test_site";
+    #[test]
+    fn test_site() {
+        const TEST_MATERIAL: &str = "material 1";
+        const TEST_POSITION: [f64; 3] = [1.0, 2.0, 3.0];
+        const SITE_NAME: &str = "test_site";
 
-    //     let mut spec = MjSpec::new();
+        let mut spec = MjSpec::new();
 
-    //     /* add material */
-    //     spec.add_material().with_name(TEST_MATERIAL);
+        /* add material */
+        spec.add_material().with_name(TEST_MATERIAL);
 
-    //     /* add site */
-    //     let mut world = spec.world_body();
-    //     world.add_site()
-    //         .with_name(SITE_NAME);
-    //     let mut site = spec.site(SITE_NAME).unwrap();
+        /* add site */
+        let world = spec.world_body_mut();
+        world.add_site()
+            .with_name(SITE_NAME);
+        let site = spec.site_mut(SITE_NAME).unwrap();
 
-    //     /* material */
-    //     assert_eq!(site.material(), "");
-    //     site.set_material(TEST_MATERIAL);
-    //     assert_eq!(site.material(), TEST_MATERIAL);
+        /* material */
+        assert_eq!(site.material(), "");
+        site.set_material(TEST_MATERIAL);
+        assert_eq!(site.material(), TEST_MATERIAL);
 
-    //     /* userdata */
-    //     let test_userdata: Vec<f64> = vec![0.0; 5];
-    //     assert_eq!(site.userdata(), []);
-    //     site.set_userdata(&test_userdata);
-    //     assert_eq!(site.userdata(), test_userdata);
+        /* userdata */
+        let test_userdata: Vec<f64> = vec![0.0; 5];
+        assert_eq!(site.userdata(), []);
+        site.set_userdata(&test_userdata);
+        assert_eq!(site.userdata(), test_userdata);
 
-    //     /* position */
-    //     assert_eq!(site.pos(), &[0.0; 3]);
-    //     *site.pos_mut() = TEST_POSITION;
-    //     assert_eq!(site.pos(), &TEST_POSITION);
+        /* position */
+        assert_eq!(site.pos(), &[0.0; 3]);
+        *site.pos_mut() = TEST_POSITION;
+        assert_eq!(site.pos(), &TEST_POSITION);
 
-    //     spec.compile().unwrap();
-    // }
+        spec.compile().unwrap();
+    }
 
     #[test]
     fn test_frame() {
         let mut spec = MjSpec::new();
-        let mut world = spec.world_body()
+        let world = spec.world_body_mut()
             .with_gravcomp(10.0);
 
         world.add_frame()
@@ -1583,37 +1589,37 @@ mod tests {
         spec.compile().unwrap();
     }
 
-    // #[test]
-    // fn test_wrap() {
-    //     let mut spec = MjSpec::new();
-    //     let mut world = spec.world_body();
-    //     let mut body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
-    //     body1.add_geom().with_size([0.010;3]);
-    //     body1.add_site().with_name("ball1");
-    //     body1.add_joint().with_type(MjtJoint::mjJNT_FREE);
+    #[test]
+    fn test_wrap() {
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+        let body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
+        body1.add_geom().with_size([0.010;3]);
+        body1.add_site().with_name("ball1");
+        body1.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-    //     let mut body2= world.add_body().with_pos([0.0, 0.0, 0.5]);
-    //     body2.add_geom().with_size([0.010;3]);
-    //     body2.add_site().with_name("ball2");
-    //     body2.add_joint().with_type(MjtJoint::mjJNT_FREE);
+        let body2= world.add_body().with_pos([0.0, 0.0, 0.5]);
+        body2.add_geom().with_size([0.010;3]);
+        body2.add_site().with_name("ball2");
+        body2.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-    //     let mut tendon = spec.add_tendon()
-    //         .with_range([0.0, 0.25])
-    //         .with_rgba([1.0, 0.5, 0.0, 1.0]);  // orange
-    //     tendon.wrap_site("ball1");
-    //     tendon.wrap_site("ball2");
+        let tendon = spec.add_tendon()
+            .with_range([0.0, 0.25])
+            .with_rgba([1.0, 0.5, 0.0, 1.0]);  // orange
+        tendon.wrap_site("ball1");
+        tendon.wrap_site("ball2");
 
-    //     spec.world_body().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+        spec.world_body_mut().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
 
-    //     spec.compile().unwrap();
-    // }
+        spec.compile().unwrap();
+    }
 
     #[test]
     fn test_geom() {
         const GEOM_NAME: &str = "test_geom";
         const GEOM_INVALID_NAME: &str = "geom_test";
         let mut spec = MjSpec::new();
-        spec.world_body().add_geom()
+        spec.world_body_mut().add_geom()
             .with_name(GEOM_NAME);
 
         assert!(spec.geom(GEOM_NAME).is_some());
@@ -1625,7 +1631,7 @@ mod tests {
         const CAMERA_NAME: &str = "test_cam";
         const CAMERA_INVALID_NAME: &str = "cam_test";
         let mut spec = MjSpec::new();
-        spec.world_body().add_camera()
+        spec.world_body_mut().add_camera()
             .with_name(CAMERA_NAME);
 
         assert!(spec.camera(CAMERA_NAME).is_some());
@@ -1637,7 +1643,7 @@ mod tests {
         const LIGHT_NAME: &str = "test_light";
         const LIGHT_INVALID_NAME: &str = "light_test";
         let mut spec = MjSpec::new();
-        spec.world_body().add_light()
+        spec.world_body_mut().add_light()
             .with_name(LIGHT_NAME);
 
         assert!(spec.light(LIGHT_NAME).is_some());
@@ -1650,8 +1656,8 @@ mod tests {
         const EXCLUDE_INVALID_NAME: &str = "exclude_test";
         let mut spec = MjSpec::new();
 
-        spec.world_body().add_body().with_name("body1-left");
-        spec.world_body().add_body().with_name("body2-right");
+        spec.world_body_mut().add_body().with_name("body1-left");
+        spec.world_body_mut().add_body().with_name("body2-right");
 
         spec.add_exclude()
             .with_name(EXCLUDE_NAME)
@@ -1667,7 +1673,7 @@ mod tests {
     #[test]
     fn test_mesh() {
         let mut spec = MjSpec::new();
-        let mut mesh = spec.add_mesh();
+        let mesh = spec.add_mesh();
         assert!(!mesh.needsdf());
         mesh.set_needsdf(true);
         assert!(mesh.needsdf());
@@ -1688,26 +1694,26 @@ mod tests {
         const N_MESH:   usize = 0;
 
         let mut spec = MjSpec::new();
-        let mut world = spec.world_body();
-        let mut body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
+        let world = spec.world_body_mut();
+        let body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
         body1.add_geom().with_size([0.010;3]);
         body1.add_site().with_name("ball1");
         body1.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-        let mut body2= world.add_body().with_pos([0.0, 0.0, 0.5]).with_name(LAST_WORLD_BODY_NAME);
+        let body2= world.add_body().with_pos([0.0, 0.0, 0.5]).with_name(LAST_WORLD_BODY_NAME);
         body2.add_geom().with_size([0.010;3]);
         body2.add_site().with_name("ball2");
         body2.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
         body2.add_body().with_name(LAST_BODY_NAME);
 
-        let mut tendon = spec.add_tendon()
+        let tendon = spec.add_tendon()
             .with_range([0.0, 0.25])
             .with_rgba([1.0, 0.5, 0.0, 1.0]);  // orange
         tendon.wrap_site("ball1");
         tendon.wrap_site("ball2");
 
-        spec.world_body().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+        spec.world_body_mut().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
 
         // Iter MjSpec
         assert_eq!(spec.geom_iter_mut().count(), N_GEOM);
@@ -1718,7 +1724,7 @@ mod tests {
         assert_eq!(spec.body_iter_mut().last().unwrap().name(), LAST_BODY_NAME);
 
         // Iter MjsBody
-        let mut world = spec.world_body();
+        let world = spec.world_body_mut();
         assert_eq!(world.geom_iter_mut(true).count(), N_GEOM);
         assert_eq!(world.body_iter_mut(true).count(), N_BODY - 1);  // world must now be excluded
         assert_eq!(world.site_iter_mut(true).count(), N_SITE);

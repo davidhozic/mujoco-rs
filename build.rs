@@ -25,6 +25,15 @@ mod build_dependencies {
 
             data
         }
+
+        fn field_visibility(
+                &self,
+                _info: bindgen::callbacks::FieldInfo<'_>,
+            ) -> Option<bindgen::FieldVisibilityKind> {
+            if _info.type_name.starts_with("mjs") || _info.type_name == "mjSpec_" {
+                Some(bindgen::FieldVisibilityKind::PublicCrate)
+            } else { None }
+        }
     }
 
 
