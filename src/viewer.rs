@@ -1,5 +1,5 @@
 //! Module related to implementation of the [`MjViewer`]. For implementation of the C++ wrapper,
-//! see and [`crate::cpp_viewer::MjViewerCpp`].
+//! see [`crate::cpp_viewer::MjViewerCpp`].
 use glutin::prelude::PossiblyCurrentGlContext;
 use glutin::surface::GlSurface;
 use winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, WindowEvent};
