@@ -1297,431 +1297,431 @@ impl MjsBody {
 /******************************
 ** Tests
 ******************************/
-// #[cfg(test)]
-// mod tests {
-//     use std::io::Write;
-//     use std::fs;
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+    use std::fs;
 
-//     use super::*;
+    use super::*;
 
-//     const MODEL: &str = "\
-// <mujoco>
-//   <worldbody>
-//     <light ambient=\"0.2 0.2 0.2\"/>
-//     <body name=\"ball\" pos=\".2 .2 .1\">
-//         <geom name=\"green_sphere\" size=\".1\" rgba=\"0 1 0 1\" solref=\"0.004 1.0\"/>
-//         <joint name=\"ball\" type=\"free\"/>
-//     </body>
-//     <geom name=\"floor1\" type=\"plane\" size=\"10 10 1\" solref=\"0.004 1.0\"/>
-//   </worldbody>
-// </mujoco>";
+    const MODEL: &str = "\
+<mujoco>
+  <worldbody>
+    <light ambient=\"0.2 0.2 0.2\"/>
+    <body name=\"ball\" pos=\".2 .2 .1\">
+        <geom name=\"green_sphere\" size=\".1\" rgba=\"0 1 0 1\" solref=\"0.004 1.0\"/>
+        <joint name=\"ball\" type=\"free\"/>
+    </body>
+    <geom name=\"floor1\" type=\"plane\" size=\"10 10 1\" solref=\"0.004 1.0\"/>
+  </worldbody>
+</mujoco>";
 
-//     #[test]
-//     fn test_parse_xml_string() {
-//         assert!(MjSpec::from_xml_string(MODEL).is_ok(), "failed to parse the model");
-//     }
+    #[test]
+    fn test_parse_xml_string() {
+        assert!(MjSpec::from_xml_string(MODEL).is_ok(), "failed to parse the model");
+    }
 
-//     #[test]
-//     fn test_parse_xml_file() {
-//         const PATH: &str = "./mj_spec_test_parse_xml_file.xml";
-//         let mut file = fs::File::create(PATH).expect("file creation failed");
-//         file.write_all(MODEL.as_bytes()).expect("unable to write to file");
-//         file.flush().unwrap();
+    #[test]
+    fn test_parse_xml_file() {
+        const PATH: &str = "./mj_spec_test_parse_xml_file.xml";
+        let mut file = fs::File::create(PATH).expect("file creation failed");
+        file.write_all(MODEL.as_bytes()).expect("unable to write to file");
+        file.flush().unwrap();
 
-//         let spec = MjSpec::from_xml(PATH);
-//         fs::remove_file(PATH).expect("file removal failed");
-//         assert!(spec.is_ok(), "failed to parse the model");
-//     }
+        let spec = MjSpec::from_xml(PATH);
+        fs::remove_file(PATH).expect("file removal failed");
+        assert!(spec.is_ok(), "failed to parse the model");
+    }
 
-//     #[test]
-//     fn test_parse_xml_vfs() {
-//         const PATH: &str = "./mj_spec_test_parse_xml_vfs.xml";
-//         let mut vfs = MjVfs::new();
-//         vfs.add_from_buffer(PATH, MODEL.as_bytes()).unwrap();
-//         assert!(MjSpec::from_xml_vfs(PATH, &vfs).is_ok(), "failed to parse the model");
-//     }
+    #[test]
+    fn test_parse_xml_vfs() {
+        const PATH: &str = "./mj_spec_test_parse_xml_vfs.xml";
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer(PATH, MODEL.as_bytes()).unwrap();
+        assert!(MjSpec::from_xml_vfs(PATH, &vfs).is_ok(), "failed to parse the model");
+    }
 
-//     #[test]
-//     fn test_basic_edit_compile() {
-//         const TIMESTEP: f64 = 0.010;
-//         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-//         spec.option_mut().timestep = TIMESTEP;  // change time step to 10 ms.
+    #[test]
+    fn test_basic_edit_compile() {
+        const TIMESTEP: f64 = 0.010;
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        spec.option_mut().timestep = TIMESTEP;  // change time step to 10 ms.
 
-//         let compiled = spec.compile().expect("could not compile the model");
-//         assert_eq!(compiled.opt().timestep, TIMESTEP);
+        let compiled = spec.compile().expect("could not compile the model");
+        assert_eq!(compiled.opt().timestep, TIMESTEP);
 
-//         spec.compile().unwrap();
-//     }
+        spec.compile().unwrap();
+    }
 
-//     #[test]
-//     fn test_model_name() {
-//         const DEFAULT_MODEL_NAME: &str = "MuJoCo Model";
-//         const NEW_MODEL_NAME: &str = "Test model";
+    #[test]
+    fn test_model_name() {
+        const DEFAULT_MODEL_NAME: &str = "MuJoCo Model";
+        const NEW_MODEL_NAME: &str = "Test model";
 
-//         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
 
-//         /* Test read */
-//         assert_eq!(spec.modelname(), DEFAULT_MODEL_NAME);
-//         /* Test write */
-//         spec.set_modelname(NEW_MODEL_NAME);
-//         assert_eq!(spec.modelname(), NEW_MODEL_NAME);
+        /* Test read */
+        assert_eq!(spec.modelname(), DEFAULT_MODEL_NAME);
+        /* Test write */
+        spec.set_modelname(NEW_MODEL_NAME);
+        assert_eq!(spec.modelname(), NEW_MODEL_NAME);
 
-//         spec.compile().unwrap();
-//     }
+        spec.compile().unwrap();
+    }
 
-//     #[test]
-//     fn test_item_name() {
-//         const NEW_MODEL_NAME: &str = "Test model";
+    #[test]
+    fn test_item_name() {
+        const NEW_MODEL_NAME: &str = "Test model";
 
-//         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-//         let mut world = spec.world_body();
-//         let mut body = world.add_body();
-//         assert_eq!(body.name(), "");
-//         body.set_name(NEW_MODEL_NAME);
-//         assert_eq!(body.name(), NEW_MODEL_NAME);
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut world = spec.world_body();
+        let mut body = world.add_body();
+        assert_eq!(body.name(), "");
+        body.set_name(NEW_MODEL_NAME);
+        assert_eq!(body.name(), NEW_MODEL_NAME);
 
-//         spec.compile().unwrap();
-//     }
+        spec.compile().unwrap();
+    }
 
-//     #[test]
-//     fn test_body_remove() {
-//         const NEW_MODEL_NAME: &str = "Test model";
+    #[test]
+    fn test_body_remove() {
+        const NEW_MODEL_NAME: &str = "Test model";
 
-//         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-//         let mut world = spec.world_body();
-//         let mut body = world.add_body();
-//         body.set_name(NEW_MODEL_NAME);
-//         drop(body);
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut world = spec.world_body();
+        let mut body = world.add_body();
+        body.set_name(NEW_MODEL_NAME);
+        drop(body);
 
-//         /* Test normal body deletion */
-//         let body = spec.body(NEW_MODEL_NAME).expect("failed to obtain the body");
-//         assert!(body.delete().is_ok(), "failed to delete model");
-//         assert!(spec.body(NEW_MODEL_NAME).is_none(), "body was not removed from spec");
+        /* Test normal body deletion */
+        let body = spec.body(NEW_MODEL_NAME).expect("failed to obtain the body");
+        assert!(body.delete().is_ok(), "failed to delete model");
+        assert!(spec.body(NEW_MODEL_NAME).is_none(), "body was not removed from spec");
 
-//         /* Test world body deletion */
-//         let world = spec.world_body();
-//         assert!(world.delete().is_err(), "the world model should not be deletable");
+        /* Test world body deletion */
+        let world = spec.world_body();
+        assert!(world.delete().is_err(), "the world model should not be deletable");
 
-//         spec.compile().unwrap();
-//     }
+        spec.compile().unwrap();
+    }
 
-//     #[test]
-//     fn test_joint_remove() {
-//         const NEW_NAME: &str = "Test model";
+    #[test]
+    fn test_joint_remove() {
+        const NEW_NAME: &str = "Test model";
 
-//         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-//         let mut world = spec.world_body();
-//         let mut joint = world.add_joint();
-//         joint.set_name(NEW_NAME);
-//         drop(joint);
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut world = spec.world_body();
+        let mut joint = world.add_joint();
+        joint.set_name(NEW_NAME);
+        drop(joint);
 
-//         /* Test normal body deletion */
-//         let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
-//         assert!(joint.delete().is_ok(), "failed to delete model");
-//         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed fom spec");
+        /* Test normal body deletion */
+        let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
+        assert!(joint.delete().is_ok(), "failed to delete model");
+        assert!(spec.joint(NEW_NAME).is_none(), "body was not removed fom spec");
 
-//         spec.compile().unwrap();
-//     }
+        spec.compile().unwrap();
+    }
 
-//     #[test]
-//     fn test_hfield_remove() {
-//         const NEW_NAME: &str = "Test model";
+    #[test]
+    fn test_hfield_remove() {
+        const NEW_NAME: &str = "Test model";
 
-//         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-//         let mut world = spec.world_body();
-//         let mut joint = world.add_joint();
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut world = spec.world_body();
+        let mut joint = world.add_joint();
 
-//         joint.set_name(NEW_NAME);
-//         drop(joint);
+        joint.set_name(NEW_NAME);
+        drop(joint);
 
-//         /* Test normal body deletion */
-//         let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
-//         assert!(joint.delete().is_ok(), "failed to delete model");
-//         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed from spec");
+        /* Test normal body deletion */
+        let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
+        assert!(joint.delete().is_ok(), "failed to delete model");
+        assert!(spec.joint(NEW_NAME).is_none(), "body was not removed from spec");
 
-//         spec.compile().unwrap();
-//     }
+        spec.compile().unwrap();
+    }
 
-//     #[test]
-//     fn test_body_userdata() {
-//         const NEW_USERDATA: [f64; 3] = [1.0, 2.0, 3.0];
+    #[test]
+    fn test_body_userdata() {
+        const NEW_USERDATA: [f64; 3] = [1.0, 2.0, 3.0];
 
-//         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-//         let mut world = spec.world_body();
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut world = spec.world_body();
 
-//         assert_eq!(world.userdata(), []);
+        assert_eq!(world.userdata(), []);
 
-//         world.set_userdata(NEW_USERDATA);
-//         assert_eq!(world.userdata(), NEW_USERDATA);
+        world.set_userdata(NEW_USERDATA);
+        assert_eq!(world.userdata(), NEW_USERDATA);
 
-//         spec.compile().unwrap();
-//     }
+        spec.compile().unwrap();
+    }
 
-//     #[test]
-//     fn test_body_attrs() {
-//         const TEST_VALUE_F64: f64 = 5.25;
+    #[test]
+    fn test_body_attrs() {
+        const TEST_VALUE_F64: f64 = 5.25;
 
-//         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-//         let mut world = spec.world_body();
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut world = spec.world_body();
 
-//         world.set_gravcomp(TEST_VALUE_F64);
-//         assert_eq!(world.gravcomp(), TEST_VALUE_F64);
+        world.set_gravcomp(TEST_VALUE_F64);
+        assert_eq!(world.gravcomp(), TEST_VALUE_F64);
 
-//         world.pos_mut()[0] = TEST_VALUE_F64;
-//         assert_eq!(world.pos()[0], TEST_VALUE_F64);
+        world.pos_mut()[0] = TEST_VALUE_F64;
+        assert_eq!(world.pos()[0], TEST_VALUE_F64);
 
-//         spec.compile().unwrap();
-//     }
+        spec.compile().unwrap();
+    }
 
-//     #[test]
-//     fn test_default() {
-//         const DEFAULT_NAME: &str = "floor";
-//         const NOT_DEFAULT_NAME: &str = "floor-not";
+    #[test]
+    fn test_default() {
+        const DEFAULT_NAME: &str = "floor";
+        const NOT_DEFAULT_NAME: &str = "floor-not";
 
-//         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
 
-//         /* Test search */
-//         spec.add_default(DEFAULT_NAME, None).unwrap();
+        /* Test search */
+        spec.add_default(DEFAULT_NAME, None).unwrap();
 
-//         /* Test delete */
-//         assert!(spec.default(DEFAULT_NAME).is_some());
-//         assert!(spec.default(NOT_DEFAULT_NAME).is_none());
+        /* Test delete */
+        assert!(spec.default(DEFAULT_NAME).is_some());
+        assert!(spec.default(NOT_DEFAULT_NAME).is_none());
 
-//         let mut world = spec.world_body();
-//         let mut some_body = world.add_body();
-//         some_body.add_joint().with_name("test");
-//         some_body.add_geom().with_size([0.010, 0.0, 0.0]);
+        let mut world = spec.world_body();
+        let mut some_body = world.add_body();
+        some_body.add_joint().with_name("test");
+        some_body.add_geom().with_size([0.010, 0.0, 0.0]);
 
-//         let mut actuator = spec.add_actuator()
-//             .with_trntype(MjtTrn::mjTRN_JOINT);
-//         actuator.set_target("test");
+        let mut actuator = spec.add_actuator()
+            .with_trntype(MjtTrn::mjTRN_JOINT);
+        actuator.set_target("test");
         
-//         assert!(actuator.set_default(DEFAULT_NAME).is_ok());
+        assert!(actuator.set_default(DEFAULT_NAME).is_ok());
+
+        spec.compile().unwrap();
+    }
+
+//     #[test]
+//     fn test_save() {
+//         const EXPECTED_XML: &str = "\
+// <mujoco model=\"MuJoCo Model\">
+//   <compiler angle=\"radian\"/>
+
+//   <worldbody>
+//     <body>
+//       <geom size=\"0.01\"/>
+//       <site pos=\"0 0 0\"/>
+//       <camera pos=\"0 0 0\"/>
+//       <light pos=\"0 0 0\" dir=\"0 0 -1\"/>
+//     </body>
+//   </worldbody>
+// </mujoco>
+// ";
+
+//         let mut spec = MjSpec::new();
+//         let mut world = spec.world_body();
+//         let mut body = world.add_body();
+//         body.add_camera();
+//         body.add_geom().with_size([0.010, 0.0, 0.0]);
+//         body.add_light();
+//         body.add_site();
+
+//         spec.compile().unwrap();
+//         assert_eq!(spec.save_xml_string(1000).unwrap(), EXPECTED_XML);
 
 //         spec.compile().unwrap();
 //     }
 
-// //     #[test]
-// //     fn test_save() {
-// //         const EXPECTED_XML: &str = "\
-// // <mujoco model=\"MuJoCo Model\">
-// //   <compiler angle=\"radian\"/>
+    // #[test]
+    // fn test_site() {
+    //     const TEST_MATERIAL: &str = "material 1";
+    //     const TEST_POSITION: [f64; 3] = [1.0, 2.0, 3.0];
+    //     const SITE_NAME: &str = "test_site";
 
-// //   <worldbody>
-// //     <body>
-// //       <geom size=\"0.01\"/>
-// //       <site pos=\"0 0 0\"/>
-// //       <camera pos=\"0 0 0\"/>
-// //       <light pos=\"0 0 0\" dir=\"0 0 -1\"/>
-// //     </body>
-// //   </worldbody>
-// // </mujoco>
-// // ";
+    //     let mut spec = MjSpec::new();
 
-// //         let mut spec = MjSpec::new();
-// //         let mut world = spec.world_body();
-// //         let mut body = world.add_body();
-// //         body.add_camera();
-// //         body.add_geom().with_size([0.010, 0.0, 0.0]);
-// //         body.add_light();
-// //         body.add_site();
+    //     /* add material */
+    //     spec.add_material().with_name(TEST_MATERIAL);
 
-// //         spec.compile().unwrap();
-// //         assert_eq!(spec.save_xml_string(1000).unwrap(), EXPECTED_XML);
+    //     /* add site */
+    //     let mut world = spec.world_body();
+    //     world.add_site()
+    //         .with_name(SITE_NAME);
+    //     let mut site = spec.site(SITE_NAME).unwrap();
 
-// //         spec.compile().unwrap();
-// //     }
+    //     /* material */
+    //     assert_eq!(site.material(), "");
+    //     site.set_material(TEST_MATERIAL);
+    //     assert_eq!(site.material(), TEST_MATERIAL);
 
-//     // #[test]
-//     // fn test_site() {
-//     //     const TEST_MATERIAL: &str = "material 1";
-//     //     const TEST_POSITION: [f64; 3] = [1.0, 2.0, 3.0];
-//     //     const SITE_NAME: &str = "test_site";
+    //     /* userdata */
+    //     let test_userdata: Vec<f64> = vec![0.0; 5];
+    //     assert_eq!(site.userdata(), []);
+    //     site.set_userdata(&test_userdata);
+    //     assert_eq!(site.userdata(), test_userdata);
 
-//     //     let mut spec = MjSpec::new();
+    //     /* position */
+    //     assert_eq!(site.pos(), &[0.0; 3]);
+    //     *site.pos_mut() = TEST_POSITION;
+    //     assert_eq!(site.pos(), &TEST_POSITION);
 
-//     //     /* add material */
-//     //     spec.add_material().with_name(TEST_MATERIAL);
+    //     spec.compile().unwrap();
+    // }
 
-//     //     /* add site */
-//     //     let mut world = spec.world_body();
-//     //     world.add_site()
-//     //         .with_name(SITE_NAME);
-//     //     let mut site = spec.site(SITE_NAME).unwrap();
+    #[test]
+    fn test_frame() {
+        let mut spec = MjSpec::new();
+        let mut world = spec.world_body()
+            .with_gravcomp(10.0);
 
-//     //     /* material */
-//     //     assert_eq!(site.material(), "");
-//     //     site.set_material(TEST_MATERIAL);
-//     //     assert_eq!(site.material(), TEST_MATERIAL);
+        world.add_frame()
+            .with_pos([0.5, 0.5, 0.05])
+            .add_body()
+            .add_geom()
+            .with_size([1.0, 0.0, 0.0]);
 
-//     //     /* userdata */
-//     //     let test_userdata: Vec<f64> = vec![0.0; 5];
-//     //     assert_eq!(site.userdata(), []);
-//     //     site.set_userdata(&test_userdata);
-//     //     assert_eq!(site.userdata(), test_userdata);
+        spec.compile().unwrap();
+    }
 
-//     //     /* position */
-//     //     assert_eq!(site.pos(), &[0.0; 3]);
-//     //     *site.pos_mut() = TEST_POSITION;
-//     //     assert_eq!(site.pos(), &TEST_POSITION);
+    // #[test]
+    // fn test_wrap() {
+    //     let mut spec = MjSpec::new();
+    //     let mut world = spec.world_body();
+    //     let mut body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
+    //     body1.add_geom().with_size([0.010;3]);
+    //     body1.add_site().with_name("ball1");
+    //     body1.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-//     //     spec.compile().unwrap();
-//     // }
+    //     let mut body2= world.add_body().with_pos([0.0, 0.0, 0.5]);
+    //     body2.add_geom().with_size([0.010;3]);
+    //     body2.add_site().with_name("ball2");
+    //     body2.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-//     #[test]
-//     fn test_frame() {
-//         let mut spec = MjSpec::new();
-//         let mut world = spec.world_body()
-//             .with_gravcomp(10.0);
+    //     let mut tendon = spec.add_tendon()
+    //         .with_range([0.0, 0.25])
+    //         .with_rgba([1.0, 0.5, 0.0, 1.0]);  // orange
+    //     tendon.wrap_site("ball1");
+    //     tendon.wrap_site("ball2");
 
-//         world.add_frame()
-//             .with_pos([0.5, 0.5, 0.05])
-//             .add_body()
-//             .add_geom()
-//             .with_size([1.0, 0.0, 0.0]);
+    //     spec.world_body().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
 
-//         spec.compile().unwrap();
-//     }
+    //     spec.compile().unwrap();
+    // }
 
-//     // #[test]
-//     // fn test_wrap() {
-//     //     let mut spec = MjSpec::new();
-//     //     let mut world = spec.world_body();
-//     //     let mut body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
-//     //     body1.add_geom().with_size([0.010;3]);
-//     //     body1.add_site().with_name("ball1");
-//     //     body1.add_joint().with_type(MjtJoint::mjJNT_FREE);
+    #[test]
+    fn test_geom() {
+        const GEOM_NAME: &str = "test_geom";
+        const GEOM_INVALID_NAME: &str = "geom_test";
+        let mut spec = MjSpec::new();
+        spec.world_body().add_geom()
+            .with_name(GEOM_NAME);
 
-//     //     let mut body2= world.add_body().with_pos([0.0, 0.0, 0.5]);
-//     //     body2.add_geom().with_size([0.010;3]);
-//     //     body2.add_site().with_name("ball2");
-//     //     body2.add_joint().with_type(MjtJoint::mjJNT_FREE);
+        assert!(spec.geom(GEOM_NAME).is_some());
+        assert!(spec.geom(GEOM_INVALID_NAME).is_none());
+    }
 
-//     //     let mut tendon = spec.add_tendon()
-//     //         .with_range([0.0, 0.25])
-//     //         .with_rgba([1.0, 0.5, 0.0, 1.0]);  // orange
-//     //     tendon.wrap_site("ball1");
-//     //     tendon.wrap_site("ball2");
+    #[test]
+    fn test_camera() {
+        const CAMERA_NAME: &str = "test_cam";
+        const CAMERA_INVALID_NAME: &str = "cam_test";
+        let mut spec = MjSpec::new();
+        spec.world_body().add_camera()
+            .with_name(CAMERA_NAME);
 
-//     //     spec.world_body().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+        assert!(spec.camera(CAMERA_NAME).is_some());
+        assert!(spec.camera(CAMERA_INVALID_NAME).is_none());
+    }
 
-//     //     spec.compile().unwrap();
-//     // }
+    #[test]
+    fn test_light() {
+        const LIGHT_NAME: &str = "test_light";
+        const LIGHT_INVALID_NAME: &str = "light_test";
+        let mut spec = MjSpec::new();
+        spec.world_body().add_light()
+            .with_name(LIGHT_NAME);
 
-//     #[test]
-//     fn test_geom() {
-//         const GEOM_NAME: &str = "test_geom";
-//         const GEOM_INVALID_NAME: &str = "geom_test";
-//         let mut spec = MjSpec::new();
-//         spec.world_body().add_geom()
-//             .with_name(GEOM_NAME);
+        assert!(spec.light(LIGHT_NAME).is_some());
+        assert!(spec.light(LIGHT_INVALID_NAME).is_none());
+    }
 
-//         assert!(spec.geom(GEOM_NAME).is_some());
-//         assert!(spec.geom(GEOM_INVALID_NAME).is_none());
-//     }
+    #[test]
+    fn test_exclude() {
+        const EXCLUDE_NAME: &str = "test_exclude";
+        const EXCLUDE_INVALID_NAME: &str = "exclude_test";
+        let mut spec = MjSpec::new();
 
-//     #[test]
-//     fn test_camera() {
-//         const CAMERA_NAME: &str = "test_cam";
-//         const CAMERA_INVALID_NAME: &str = "cam_test";
-//         let mut spec = MjSpec::new();
-//         spec.world_body().add_camera()
-//             .with_name(CAMERA_NAME);
+        spec.world_body().add_body().with_name("body1-left");
+        spec.world_body().add_body().with_name("body2-right");
 
-//         assert!(spec.camera(CAMERA_NAME).is_some());
-//         assert!(spec.camera(CAMERA_INVALID_NAME).is_none());
-//     }
+        spec.add_exclude()
+            .with_name(EXCLUDE_NAME)
+            .with_bodyname1("body1-left")
+            .with_bodyname2("body2-right");
 
-//     #[test]
-//     fn test_light() {
-//         const LIGHT_NAME: &str = "test_light";
-//         const LIGHT_INVALID_NAME: &str = "light_test";
-//         let mut spec = MjSpec::new();
-//         spec.world_body().add_light()
-//             .with_name(LIGHT_NAME);
+        assert!(spec.exclude(EXCLUDE_NAME).is_some());
+        assert!(spec.exclude(EXCLUDE_INVALID_NAME).is_none());
 
-//         assert!(spec.light(LIGHT_NAME).is_some());
-//         assert!(spec.light(LIGHT_INVALID_NAME).is_none());
-//     }
+        assert!(spec.compile().is_ok());
+    }
 
-//     #[test]
-//     fn test_exclude() {
-//         const EXCLUDE_NAME: &str = "test_exclude";
-//         const EXCLUDE_INVALID_NAME: &str = "exclude_test";
-//         let mut spec = MjSpec::new();
+    #[test]
+    fn test_mesh() {
+        let mut spec = MjSpec::new();
+        let mut mesh = spec.add_mesh();
+        assert!(!mesh.needsdf());
+        mesh.set_needsdf(true);
+        assert!(mesh.needsdf());
 
-//         spec.world_body().add_body().with_name("body1-left");
-//         spec.world_body().add_body().with_name("body2-right");
+        assert!(!mesh.smoothnormal());
+        mesh.set_smoothnormal(true);
+        assert!(mesh.smoothnormal());
+    }
 
-//         spec.add_exclude()
-//             .with_name(EXCLUDE_NAME)
-//             .with_bodyname1("body1-left")
-//             .with_bodyname2("body2-right");
+    #[test]
+    fn test_iteration() {
+        const LAST_BODY_NAME: &str = "subbody";
+        const LAST_WORLD_BODY_NAME: &str = "body2";
+        const N_GEOM:   usize = 3;
+        const N_BODY:   usize = 4;  // three added + world
+        const N_SITE:   usize = 2;
+        const N_TENDON: usize = 1;
+        const N_MESH:   usize = 0;
 
-//         assert!(spec.exclude(EXCLUDE_NAME).is_some());
-//         assert!(spec.exclude(EXCLUDE_INVALID_NAME).is_none());
+        let mut spec = MjSpec::new();
+        let mut world = spec.world_body();
+        let mut body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
+        body1.add_geom().with_size([0.010;3]);
+        body1.add_site().with_name("ball1");
+        body1.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-//         assert!(spec.compile().is_ok());
-//     }
+        let mut body2= world.add_body().with_pos([0.0, 0.0, 0.5]).with_name(LAST_WORLD_BODY_NAME);
+        body2.add_geom().with_size([0.010;3]);
+        body2.add_site().with_name("ball2");
+        body2.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-//     #[test]
-//     fn test_mesh() {
-//         let mut spec = MjSpec::new();
-//         let mut mesh = spec.add_mesh();
-//         assert!(!mesh.needsdf());
-//         mesh.set_needsdf(true);
-//         assert!(mesh.needsdf());
+        body2.add_body().with_name(LAST_BODY_NAME);
 
-//         assert!(!mesh.smoothnormal());
-//         mesh.set_smoothnormal(true);
-//         assert!(mesh.smoothnormal());
-//     }
+        let mut tendon = spec.add_tendon()
+            .with_range([0.0, 0.25])
+            .with_rgba([1.0, 0.5, 0.0, 1.0]);  // orange
+        tendon.wrap_site("ball1");
+        tendon.wrap_site("ball2");
 
-//     // #[test]
-//     // fn test_iteration() {
-//     //     const LAST_BODY_NAME: &str = "subbody";
-//     //     const LAST_WORLD_BODY_NAME: &str = "body2";
-//     //     const N_GEOM:   usize = 3;
-//     //     const N_BODY:   usize = 4;  // three added + world
-//     //     const N_SITE:   usize = 2;
-//     //     const N_TENDON: usize = 1;
-//     //     const N_MESH:   usize = 0;
+        spec.world_body().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
 
-//     //     let mut spec = MjSpec::new();
-//     //     let mut world = spec.world_body();
-//     //     let mut body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
-//     //     body1.add_geom().with_size([0.010;3]);
-//     //     body1.add_site().with_name("ball1");
-//     //     body1.add_joint().with_type(MjtJoint::mjJNT_FREE);
+        // Iter MjSpec
+        assert_eq!(spec.geom_iter_mut().count(), N_GEOM);
+        assert_eq!(spec.body_iter_mut().count(), N_BODY);
+        assert_eq!(spec.site_iter_mut().count(), N_SITE);
+        assert_eq!(spec.tendon_iter_mut().count(), N_TENDON);
+        assert_eq!(spec.mesh_iter_mut().count(), N_MESH);
+        assert_eq!(spec.body_iter_mut().last().unwrap().name(), LAST_BODY_NAME);
 
-//     //     let mut body2= world.add_body().with_pos([0.0, 0.0, 0.5]).with_name(LAST_WORLD_BODY_NAME);
-//     //     body2.add_geom().with_size([0.010;3]);
-//     //     body2.add_site().with_name("ball2");
-//     //     body2.add_joint().with_type(MjtJoint::mjJNT_FREE);
-
-//     //     body2.add_body().with_name(LAST_BODY_NAME);
-
-//     //     let mut tendon = spec.add_tendon()
-//     //         .with_range([0.0, 0.25])
-//     //         .with_rgba([1.0, 0.5, 0.0, 1.0]);  // orange
-//     //     tendon.wrap_site("ball1");
-//     //     tendon.wrap_site("ball2");
-
-//     //     spec.world_body().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
-
-//     //     // Iter MjSpec
-//     //     assert_eq!(spec.geom_iter_mut().count(), N_GEOM);
-//     //     assert_eq!(spec.body_iter_mut().count(), N_BODY);
-//     //     assert_eq!(spec.site_iter_mut().count(), N_SITE);
-//     //     assert_eq!(spec.tendon_iter_mut().count(), N_TENDON);
-//     //     assert_eq!(spec.mesh_iter_mut().count(), N_MESH);
-//     //     assert_eq!(spec.body_iter_mut().last().unwrap().name(), LAST_BODY_NAME);
-
-//     //     // Iter MjsBody
-//     //     let mut world = spec.world_body();
-//     //     assert_eq!(world.geom_iter_mut(true).count(), N_GEOM);
-//     //     assert_eq!(world.body_iter_mut(true).count(), N_BODY - 1);  // world must now be excluded
-//     //     assert_eq!(world.site_iter_mut(true).count(), N_SITE);
-//     //     assert_eq!(world.body_iter_mut(false).last().unwrap().name(), LAST_WORLD_BODY_NAME);
-//     // }
-// }
+        // Iter MjsBody
+        let mut world = spec.world_body();
+        assert_eq!(world.geom_iter_mut(true).count(), N_GEOM);
+        assert_eq!(world.body_iter_mut(true).count(), N_BODY - 1);  // world must now be excluded
+        assert_eq!(world.site_iter_mut(true).count(), N_SITE);
+        assert_eq!(world.body_iter_mut(false).last().unwrap().name(), LAST_WORLD_BODY_NAME);
+    }
+}
