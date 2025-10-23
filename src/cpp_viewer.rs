@@ -8,7 +8,7 @@ use crate::wrappers::mj_data::MjData;
 
 
 /// Wrapper around the C++ implementation of MujoCo viewer.
-/// If you don't need the side UI, we recommend you use the Rust-native viewer [`MjViewer`] instead.
+/// If you don't need the side UI, we recommend you use the Rust-native viewer [`crate::viewer::MjViewer`] instead.
 pub struct MjViewerCpp<M: Deref<Target = MjModel> + Clone> {
     sim: *mut mujoco_Simulate,
     running: bool,
@@ -21,7 +21,6 @@ pub struct MjViewerCpp<M: Deref<Target = MjModel> + Clone> {
     _user_scn: Box<MjvScene<M>>,
 }
 
-#[cfg(feature = "cpp-viewer")]
 impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
     #[inline]
     pub fn running(&self) -> bool {
@@ -36,7 +35,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
     /// Launches a wrapper around MuJoCo's C++ viewer. The `scene_max_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
     /// It can thus be set to 0 if no additional geoms will be drawn by the user.
-    /// Unlike the Rust-native viewer ([`MjViewer`]), this also accepts a `data` parameter.
+    /// Unlike the Rust-native viewer ([`crate::viewer::MjViewer`]), this also accepts a `data` parameter.
     /// Additionally, this just returns a [`MjViewerCpp`] instance directly, without result
     /// as the initialization may fail internally in C++ anyway, which we have no way of checking.
     ///
@@ -72,7 +71,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
     }
 
     /// Renders the simulation.
-    /// `update_timer` flag species whether the time should be updated
+    /// `update_timer` flag specifies whether the time should be updated
     /// inside the viewer (for FPS calculation).
     /// # SAFETY
     /// This needs to be called periodically from the MAIN thread, otherwise
@@ -96,6 +95,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
 impl<M: Deref<Target = MjModel> + Clone> Drop for MjViewerCpp<M> {
     fn drop(&mut self) {
         unsafe {
+            mujoco_cSimulate_RenderCleanup(self.sim);
             mujoco_cSimulate_destroy(self.sim);
         }
     }
