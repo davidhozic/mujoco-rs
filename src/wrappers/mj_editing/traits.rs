@@ -1,7 +1,6 @@
 //! Trait definitions for model editing.
 use std::io::{Error, ErrorKind};
 use std::ffi::{CStr, CString};
-use std::marker::PhantomData;
 
 use crate::mujoco_c::*;
 
@@ -78,7 +77,12 @@ pub trait SpecItem: Sized {
     }
 
     /// Delete the item.
-    fn delete(mut self) -> Result<(), Error> {
+    /// # Safety
+    /// Since this method can't consume variables holding pointers, nor can we consume the
+    /// actual struct, this accepts a mutable reference to the item.
+    /// Consequently, the compiler still allows the original reference to be used, which
+    /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!.
+    fn delete(&mut self) -> Result<(), Error> {
         let element = unsafe { self.element_mut_pointer() };
         let spec = unsafe { mjs_getSpec(element) };
         let result = unsafe { mjs_delete(spec, element) };

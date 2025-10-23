@@ -412,43 +412,43 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
 /// Public API getters / setters / builders.
 impl<M: Deref<Target = MjModel>> MjvScene<M> {
     getter_setter! {get, [
-        maxgeom: i32; "size of allocated geom buffer.";
-        ngeom: i32; "number of geoms currently in buffer.";
-        nflex: i32; "number of flexes.";
-        nskin: i32; "number of skins.";
-        nlight: i32; "number of lights currently in buffer.";
-        status: i32; "status; 0: ok, 1: geoms exhausted.";
+        [ffi] maxgeom: i32; "size of allocated geom buffer.";
+        [ffi] ngeom: i32; "number of geoms currently in buffer.";
+        [ffi] nflex: i32; "number of flexes.";
+        [ffi] nskin: i32; "number of skins.";
+        [ffi] nlight: i32; "number of lights currently in buffer.";
+        [ffi] status: i32; "status; 0: ok, 1: geoms exhausted.";
     ]}
 
     getter_setter! {get, [
-        flexvertopt: bool; "copy of mjVIS_FLEXVERT mjvOption flag.";
-        flexedgeopt: bool; "copy of mjVIS_FLEXEDGE mjvOption flag.";
-        flexfaceopt: bool; "copy of mjVIS_FLEXFACE mjvOption flag.";
-        flexskinopt: bool; "copy of mjVIS_FLEXSKIN mjvOption flag.";
+        [ffi] flexvertopt: bool; "copy of mjVIS_FLEXVERT mjvOption flag.";
+        [ffi] flexedgeopt: bool; "copy of mjVIS_FLEXEDGE mjvOption flag.";
+        [ffi] flexfaceopt: bool; "copy of mjVIS_FLEXFACE mjvOption flag.";
+        [ffi] flexskinopt: bool; "copy of mjVIS_FLEXSKIN mjvOption flag.";
     ]}
 
     getter_setter! {force!, with, get, set, [
-        stereo: MjtStereo; "stereoscopic rendering.";
+        [ffi, ffi_mut] stereo: MjtStereo; "stereoscopic rendering.";
     ]}
 
     getter_setter! {with, get, set, [
-        scale: f32; "model scaling.";
-        framewidth: i32; "frame pixel width; 0: disable framing.";
+        [ffi, ffi_mut] scale: f32; "model scaling.";
+        [ffi, ffi_mut] framewidth: i32; "frame pixel width; 0: disable framing.";
     ]}
 
     getter_setter! {with, get, set, [
-        enabletransform: bool; "enable model transformation.";
+        [ffi, ffi_mut] enabletransform: bool; "enable model transformation.";
     ]}
 
     getter_setter! {with, get, [
-        camera: &[MjvGLCamera; 2]; "left and right camera.";
-        translate: &[f32; 3]; "model translation.";
-        rotate: &[f32; 4]; "model quaternion rotation.";
-        framergb: &[f32; 3]; "frame color.";
+        [ffi, ffi_mut] camera: &[MjvGLCamera; 2]; "left and right camera.";
+        [ffi, ffi_mut] translate: &[f32; 3]; "model translation.";
+        [ffi, ffi_mut] rotate: &[f32; 4]; "model quaternion rotation.";
+        [ffi, ffi_mut] framergb: &[f32; 3]; "frame color.";
     ]}
 
     getter_setter! {get, [
-        flags: &[MjtByte; MjtRndFlag::mjNRNDFLAG as usize]; "rendering flags (indexed by mjtRndFlag).";
+        [ffi, ffi_mut] flags: &[MjtByte; MjtRndFlag::mjNRNDFLAG as usize]; "rendering flags (indexed by mjtRndFlag).";
     ]}
 }
 

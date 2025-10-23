@@ -128,17 +128,6 @@ impl MjsCompiler {
         meshdir;        "mesh and hfield directory.";
         texturedir;     "texture directory.";
     }
-
-    /* Proxy methods to simplify macro access. */
-    #[inline]
-    fn ffi(&self) -> &Self {
-        self
-    }
-
-    #[inline]
-    unsafe fn ffi_mut(&mut self) -> &mut Self {
-        self
-    }
 }
 
 /***************************
@@ -314,23 +303,23 @@ impl MjSpec {
     }
 
     getter_setter! {
-        with, get, set, [strippath: bool; "whether to strip paths from mesh files."]
+        with, get, set, [[ffi, ffi_mut] strippath: bool; "whether to strip paths from mesh files."]
     }
 
     getter_setter! {
         get, [
-            memory: MjtSize;     "number of bytes in arena+stack memory.";
-            nemax: i32;             "max number of equality constraints.";
-            nuserdata: i32;              "number of mjtNums in userdata.";
-            nuser_body: i32;            "number of mjtNums in body_user.";
-            nuser_jnt: i32;              "number of mjtNums in jnt_user.";
-            nuser_geom: i32;            "number of mjtNums in geom_user.";
-            nuser_site: i32;            "number of mjtNums in site_user.";
-            nuser_cam: i32;              "number of mjtNums in cam_user.";
-            nuser_tendon: i32;        "number of mjtNums in tendon_user.";
-            nuser_actuator: i32;    "number of mjtNums in actuator_user.";
-            nuser_sensor: i32;        "number of mjtNums in sensor_user.";
-            nkey: i32;                             "number of keyframes.";
+            [ffi] memory: MjtSize;     "number of bytes in arena+stack memory.";
+            [ffi] nemax: i32;             "max number of equality constraints.";
+            [ffi] nuserdata: i32;              "number of mjtNums in userdata.";
+            [ffi] nuser_body: i32;            "number of mjtNums in body_user.";
+            [ffi] nuser_jnt: i32;              "number of mjtNums in jnt_user.";
+            [ffi] nuser_geom: i32;            "number of mjtNums in geom_user.";
+            [ffi] nuser_site: i32;            "number of mjtNums in site_user.";
+            [ffi] nuser_cam: i32;              "number of mjtNums in cam_user.";
+            [ffi] nuser_tendon: i32;        "number of mjtNums in tendon_user.";
+            [ffi] nuser_actuator: i32;    "number of mjtNums in actuator_user.";
+            [ffi] nuser_sensor: i32;        "number of mjtNums in sensor_user.";
+            [ffi] nkey: i32;                             "number of keyframes.";
         ]
     }
 }
@@ -380,6 +369,13 @@ impl MjSpec {
 /// Mutable iterator over items in [`MjSpec`].
 pub struct MjsSpecItemIterMut<'a, T> {
     root: &'a mut MjSpec,
+    last: *mut mjsElement,
+    /// Used for generic implementation of iterator's methods.
+    item_type: PhantomData<T>
+}
+
+pub struct MjsSpecItemIter<'a, T> {
+    root: &'a MjSpec,
     last: *mut mjsElement,
     /// Used for generic implementation of iterator's methods.
     item_type: PhantomData<T>
@@ -1213,14 +1209,10 @@ impl MjsMaterial {
 mjs_struct!(Body);
 impl MjsBody {
     add_x_method! { body, site, joint, geom, camera, light }
-    
-    /// Dummy FFI metho use to simplify access through macros.
-    fn ffi(&self) -> &Self {
-        self
-    }
 
     /// Dummy mutable FFI method use to simplify access through macros.
-    fn ffi_mut(&mut self) -> &mut Self {
+    #[inline]
+    unsafe fn ffi_mut(&mut self) -> &mut Self {
         self
     }
 
@@ -1233,16 +1225,6 @@ impl MjsBody {
 
     // Special case: the world body can't be deleted, however MuJoCo doesn't prevent that.
     // When the world body is deleted, the drop of MjSpec will crash on cleanup.
-
-    /// Delete the item.
-    pub fn delete(self) -> Result<(), Error> {
-        if self.name() != "world" {
-            SpecItem::delete(self)
-        }
-        else {
-            Err(Error::new(ErrorKind::Unsupported, "the world body can't be deleted"))
-        }
-    }
 }
 
 impl MjsBody {
@@ -1288,6 +1270,15 @@ impl MjsBody {
 /// Mutable iterator over items in [`MjsBody`].
 pub struct MjsBodyItemIterMut<'a, T> {
     root: &'a mut MjsBody,
+    last: *mut mjsElement,
+    recurse: bool,
+    /// Used for generic implementation of iterator's methods.
+    item_type: PhantomData<T>
+}
+
+/// Immutable iterator over items in [`MjsBody`].
+pub struct MjsBodyItemIter<'a, T> {
+    root: &'a MjsBody,
     last: *mut mjsElement,
     recurse: bool,
     /// Used for generic implementation of iterator's methods.

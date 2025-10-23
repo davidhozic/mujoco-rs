@@ -127,9 +127,10 @@ macro_rules! add_x_method_by_frame {
             #[doc = concat!("Add and return a child ", stringify!($name), ".")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 unsafe {
-                    let body_ptr = mjs_getParent(self.element_mut_pointer());
+                    let ep = self.element_mut_pointer();
+                    let body_ptr = mjs_getParent(ep);
                     let ptr = [<mjs_add $name:camel>](body_ptr, ptr::null());
-                    mjs_attach(self.element_mut_pointer(), ptr.cast(), ptr::null(), ptr::null());
+                    mjs_attach(ep, ptr.cast(), ptr::null(), ptr::null());
                     ptr.as_mut().unwrap()
                 }
             }
@@ -245,7 +246,7 @@ macro_rules! find_x_method_direct {
 /// and traits: [`SpecItem`](super::traits::SpecItem), [`Sync`], [`Send`].
 macro_rules! mjs_struct {
     ($ffi_name:ident) => {paste::paste!{
-        #[doc = concat!(stringify!($ffi_name), " specification. This acts as a safe reference to a FFI type [`", stringify!([<mjs $ffi_name>]), "`] internally.")]
+        #[doc = concat!(stringify!($ffi_name), " specification. This is an alias to the FFI type [`", stringify!([<mjs $ffi_name>]), "`].")]
         pub type [<Mjs $ffi_name>] = [<mjs $ffi_name>];
 
         impl [<Mjs $ffi_name>] {
@@ -413,7 +414,14 @@ macro_rules! item_spec_iterator {
         $(
             impl<'a> MjsSpecItemIterMut<'a, [<Mjs $iter_over>]> {
                 fn new(root: &'a mut MjSpec) -> Self {
-                    let last = unsafe { mjs_firstElement(root.ffi_mut(), MjtObj::[<mjOBJ_ $iter_over:upper>]) };
+                    let last = unsafe { mjs_firstElement(root.0, MjtObj::[<mjOBJ_ $iter_over:upper>]) };
+                    Self { root, last, item_type: PhantomData }
+                }
+            }
+
+            impl<'a> MjsSpecItemIter<'a, [<Mjs $iter_over>]> {
+                fn new(root: &'a MjSpec) -> Self {
+                    let last = unsafe { mjs_firstElement(root.0, MjtObj::[<mjOBJ_ $iter_over:upper>]) };
                     Self { root, last, item_type: PhantomData }
                 }
             }
@@ -431,6 +439,20 @@ macro_rules! item_spec_iterator {
                     Some(out)
                 }
             }
+
+            impl<'a> Iterator for MjsSpecItemIter<'a, [<Mjs $iter_over>]> {
+                type Item = &'a [<Mjs $iter_over>];
+
+                fn next(&mut self) -> Option<Self::Item> {
+                    if self.last.is_null() {
+                        return None;
+                    }
+
+                    let out = unsafe { [<mjs_as $iter_over>](self.last).as_mut().unwrap() };
+                    self.last = unsafe { mjs_nextElement(self.root.0, self.last) };
+                    Some(out)
+                }
+            }
         )*
     }};
 }
@@ -444,6 +466,11 @@ macro_rules! spec_get_iter {
             pub fn [<$iter_over _iter_mut>](&mut self) -> MjsSpecItemIterMut<'_, [<Mjs $iter_over:camel>]> {
                 MjsSpecItemIterMut::<[<Mjs $iter_over:camel>]>::new(self)
             }
+
+            #[doc = concat!("Return an immutable iterator over ", stringify!($iter_over)," items.")]
+            pub fn [<$iter_over _iter>](&self) -> MjsSpecItemIter<'_, [<Mjs $iter_over:camel>]> {
+                MjsSpecItemIter::<[<Mjs $iter_over:camel>]>::new(self)
+            }
         )*
     }};
 }
@@ -456,6 +483,15 @@ macro_rules! item_body_iterator {
             impl<'a> MjsBodyItemIterMut<'a, [<Mjs $iter_over>]> {
                 fn new(root: &'a mut MjsBody, recurse: bool) -> Self {
                     let last = unsafe { mjs_firstChild(root, MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
+                    Self { root, last, recurse, item_type: PhantomData }
+                }
+            }
+
+            impl<'a> MjsBodyItemIter<'a, [<Mjs $iter_over>]> {
+                fn new(root: &'a MjsBody, recurse: bool) -> Self {
+                    // transmute here because mjs iterator functions require mutable pointers,
+                    // even though they don't actually modify.
+                    let last = unsafe { mjs_firstChild(std::mem::transmute(root), MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
                     Self { root, last, recurse, item_type: PhantomData }
                 }
             }
@@ -475,6 +511,23 @@ macro_rules! item_body_iterator {
                     }
                 }
             }
+
+            impl<'a> Iterator for MjsBodyItemIter<'a, [<Mjs $iter_over>]> {
+                type Item = &'a [<Mjs $iter_over>];
+
+                fn next(&mut self) -> Option<Self::Item> {
+                    if self.last.is_null() {
+                        return None;
+                    }
+
+                    unsafe {
+                        let out = [<mjs_as $iter_over>](self.last).as_ref();
+                        // mjs_nextChild doesn't actually modify, but still demands a mutable pointer
+                        self.last = mjs_nextChild(std::mem::transmute(self.root), self.last, self.recurse.into());
+                        out
+                    }
+                }
+            }
         )*
     }};
 }
@@ -487,6 +540,11 @@ macro_rules! body_get_iter {
             #[doc = concat!("Return an iterator over ", stringify!($iter_over)," items that allows modifying each value.")]
             pub fn [<$iter_over _iter_mut>](&mut self, recurse: bool) -> MjsBodyItemIterMut<'_, [<Mjs $iter_over:camel>]> {
                 MjsBodyItemIterMut::<[<Mjs $iter_over:camel>]>::new(self, recurse)
+            }
+
+            #[doc = concat!("Return an immutable iterator over ", stringify!($iter_over)," items.")]
+            pub fn [<$iter_over _iter>](&self, recurse: bool) -> MjsBodyItemIter<'_, [<Mjs $iter_over:camel>]> {
+                MjsBodyItemIter::<[<Mjs $iter_over:camel>]>::new(self, recurse)
             }
         )*
     }};

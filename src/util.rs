@@ -441,7 +441,7 @@ macro_rules! getter_setter {
         )*
     }};
 
-    (get, [$($([$ffi:ident, $ffi_mut:ident])? $((allow_mut = $cfg_mut:literal))? $name:ident $(+ $symbol:tt)?: & $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
+    (get, [$($([$ffi:ident $(,$ffi_mut:ident)?])? $((allow_mut = $cfg_mut:literal))? $name:ident $(+ $symbol:tt)?: & $type:ty; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Return an immutable reference to ", $comment)]
             pub fn [<$name:camel:snake $($symbol)?>](&self) -> &$type {
@@ -453,7 +453,7 @@ macro_rules! getter_setter {
                     #[doc = concat!("Return a mutable reference to ", $comment)]
                     pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
                         #[allow(unused_unsafe)]
-                        unsafe { &mut self$(.$ffi_mut())?.$name }
+                        unsafe { &mut self$(.$($ffi_mut())?)?.$name }
                     }
                 }
             }
@@ -543,7 +543,7 @@ macro_rules! getter_setter {
         }
     };
 
-    ([&] with, [$($([$ffi: ident, $ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+    ([&] with, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
@@ -592,9 +592,9 @@ macro_rules! getter_setter {
         $crate::getter_setter!(force!, $([$token])? with, [$($([$ffi_mut])? $name : $type ; $comment );* ]);
     };
 
-    ($([$token:tt])? with, get, [$($([$ffi: ident, $ffi_mut:ident])? $(allow_mut = $cfg_mut:literal)? $name:ident $(+ $symbol:tt)? : & $type:ty ; $comment:expr );* $(;)?]) => {
-        $crate::getter_setter!(get, [ $($([$ffi])?  $(allow_mut = $cfg_mut)? $name $(+ $symbol)? : & $type ; $comment );* ]);
-        $crate::getter_setter!($([$token])? with, [ $($([$ffi_mut])? $name : $type ; $comment );* ]);
+    ($([$token:tt])? with, get, [$( $([$ffi: ident, $ffi_mut:ident])? $((allow_mut = $allow_mut:literal))? $name:ident $(+ $symbol:tt)? : & $type:ty ; $comment:expr );* $(;)?]) => {
+        $crate::getter_setter!(get, [ $($([$ffi, $ffi_mut])? $((allow_mut = $allow_mut))? $name $(+ $symbol)? : & $type ; $comment );* ]);
+        $crate::getter_setter!($([$token])? with, [ $( $([$ffi_mut])? $name : $type ; $comment );* ]);
     };
 }
 
