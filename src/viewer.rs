@@ -2,10 +2,12 @@
 //! see [`crate::cpp_viewer::MjViewerCpp`].
 use glutin::prelude::PossiblyCurrentGlContext;
 use glutin::surface::GlSurface;
+
 use winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::platform::pump_events::EventLoopExtPumpEvents;
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::event_loop::EventLoop;
+use winit::dpi::PhysicalPosition;
 use winit::window::Fullscreen;
 
 use std::time::{Duration, Instant};
@@ -29,6 +31,7 @@ use crate::get_mujoco_version;
 /****************************************** */
 const MJ_VIEWER_DEFAULT_SIZE_PX: (u32, u32) = (1280, 720);
 const DOUBLE_CLICK_WINDOW_MS: u128 = 250;
+const TOUCH_BAR_ZOOM_FACTOR: f64 = 0.1;
 
 /// How much extra room to create in the internal [`MjvScene`]. Useful for drawing labels, etc.
 pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
@@ -452,10 +455,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 // Zoom in/out
                 WindowEvent::MouseWheel {delta, ..} => {
                     let value = match delta {
-                        MouseScrollDelta::LineDelta(_, down) => down,
-                        _ => 0.0
+                        MouseScrollDelta::LineDelta(_, down) => down as f64,
+                        MouseScrollDelta::PixelDelta(PhysicalPosition {y, ..}) => y * TOUCH_BAR_ZOOM_FACTOR
                     };
-                    self.process_scroll(value.into());
+                    self.process_scroll(value);
                 }
 
                 _ => {}  // ignore other events
@@ -511,7 +514,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let action;
         let height = window.outer_size().height as f64;
         
-        if self.status_flags.contains(ViewerStatusBits::LEFT_CLICK) {
+        if buttons.contains(ButtonsPressed::LEFT) {
             if self.pert.active == MjtPertBit::mjPERT_TRANSLATE as i32 {
                 action = if shift {MjtMouse::mjMOUSE_MOVE_H} else {MjtMouse::mjMOUSE_MOVE_V};
             }
@@ -541,7 +544,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Processes left clicks and double left clicks.
     fn process_left_click(&mut self, data: &mut MjData<M>, state: ElementState) {
         let modifier_state = self.modifiers.state();
-        let window = &self.adapter.state.as_ref().unwrap().window;
         match state {
             ElementState::Pressed => {
                 /* Clicking and holding applies perturbation */
@@ -555,16 +557,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 }
 
                 /* Double click detection */
-                if !self.status_flags.contains(ViewerStatusBits::LEFT_CLICK) && self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
+                if self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
                     let cp = self.cursor_position;
-                    let mut x = cp.0 as f64;
-                    let mut y = cp.1 as f64;
-
-                    /* Fix the coordinates */
-                    let buffer_ratio = window.scale_factor();
-                    x *= buffer_ratio;
-                    y *= buffer_ratio;
-                    y = self.rect_full.height as f64 - y;  // match OpenGL's coordinate system.
+                    let x = cp.0 as f64;
+                    let y = (self.rect_full.height as u32 - cp.1) as f64;
 
                     /* Obtain the selection */ 
                     let rect = &self.rect_view;
@@ -601,12 +597,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     }
                 }
                 self.last_bnt_press_time = Instant::now();
-                self.status_flags.set(ViewerStatusBits::LEFT_CLICK, true);
             },
             ElementState::Released => {
                 // Clear perturbation when left click is released.
                 self.pert.active = 0;
-                self.status_flags.remove(ViewerStatusBits::LEFT_CLICK);
             },
         };
     }
@@ -619,8 +613,7 @@ bitflags! {
     /// the Viewer's internal state.
     #[derive(Debug)]
     struct ViewerStatusBits: u8 {
-        const LEFT_CLICK = 1 << 0;
-        const HELP_MENU  = 1 << 1;
+        const HELP_MENU  = 1 << 0;
     }
 }
 
