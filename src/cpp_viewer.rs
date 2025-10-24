@@ -32,7 +32,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
         &mut self._user_scn
     }
 
-    /// Launches a wrapper around MuJoCo's C++ viewer. The `scene_max_geom` parameter
+    /// Launches a wrapper around MuJoCo's C++ viewer. The `max_user_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
     /// It can thus be set to 0 if no additional geoms will be drawn by the user.
     /// Unlike the Rust-native viewer ([`crate::viewer::MjViewer`]), this also accepts a `data` parameter.
@@ -47,12 +47,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
     /// while the viewer keeps a pointer to them (their wrapped pointers).
     /// Undefined behavior should not occur, however caution is advised as this is a violation
     /// of the Rust's borrowing rules.
-    pub fn launch_passive(model: M, data: &MjData<M>, scene_max_geom: usize) -> Self {
+    pub fn launch_passive(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut _cam = Box::new(MjvCamera::default());
         let mut _opt: Box<MjvOption> = Box::new(MjvOption::default());
         let mut _pert = Box::new(MjvPerturb::default());
-        let mut _user_scn = Box::new(MjvScene::new(model.clone(), scene_max_geom));
+        let mut _user_scn = Box::new(MjvScene::new(model.clone(), max_user_geom));
         let sim;
         let c_filename = CString::new("file.xml").unwrap();
         unsafe {

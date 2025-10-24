@@ -150,10 +150,10 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
 
 impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Launches the MuJoCo viewer. A [`Result`] struct is returned that either contains
-    /// [`MjViewer`] or a [`MjViewerError`]. The `scene_max_geom` parameter
+    /// [`MjViewer`] or a [`MjViewerError`]. The `max_user_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
     /// It can thus be set to 0 if no additional geoms will be drawn by the user.
-    pub fn launch_passive(model: M, scene_max_geom: usize) -> Result<Self, MjViewerError> {
+    pub fn launch_passive(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
         let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
         let adapter = RenderBase::new(
@@ -176,8 +176,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
         let ngeom = model.ffi().ngeom as usize;
-        let scene = MjvScene::new(model.clone(), ngeom + scene_max_geom + EXTRA_SCENE_GEOM_SPACE);
-        let user_scene = MjvScene::new(model.clone(), scene_max_geom);
+        let scene = MjvScene::new(model.clone(), ngeom + max_user_geom + EXTRA_SCENE_GEOM_SPACE);
+        let user_scene = MjvScene::new(model.clone(), max_user_geom);
         let context = MjrContext::new(&model);
         let camera  = MjvCamera::new_free(&model);
 
