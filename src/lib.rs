@@ -11,6 +11,10 @@
 //! To access the wrapped attributes directly, call the corresponding `ffi()` methods
 //! (e.g., [`MjData::ffi`](wrappers::MjData::ffi))
 //! 
+//! ## MuJoCo version
+//! 
+//! MuJoCo-rs relies on MuJoCo [3.3.7](https://github.com/google-deepmind/mujoco/releases/tag/3.3.7).
+//! 
 //! ## Documentation
 //! A more guided documentation can be obtained [here](https://mujoco-rs.readthedocs.io/en/latest/).
 //! 
