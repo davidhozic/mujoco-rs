@@ -19,6 +19,7 @@ with open("../../../Cargo.toml", "rb") as file:
 
 
 release, mujoco_version = crate_meta["package"]["version"].split("+")
+release = release.split("-")[0]
 release = release.split(".")
 release[-1] = 'x'  # bug fixes share the same documentation
 release = '.'.join(release)
