@@ -80,7 +80,7 @@ We can now add our ball's body, geom and joint like so:
         ball_body.add_geom()
             .with_size([0.010, 0.0, 0.0])        // set the radius to 10 mm.
             .with_type(MjtGeom::mjGEOM_SPHERE);  // make this a spherical geom (default).
-        
+
         ball_body.add_joint()
             .with_type(MjtJoint::mjJNT_FREE);    // make the ball free to move anywhere.
     }
@@ -110,7 +110,7 @@ Finally, we can now add the base plane, like so:
         ball_body.add_geom()
             .with_size([0.010, 0.0, 0.0])        // set the radius to 10 mm.
             .with_type(MjtGeom::mjGEOM_SPHERE);  // make this a spherical geom (default).
-        
+
         ball_body.add_joint()
             .with_type(MjtJoint::mjJNT_FREE);    // make the ball free to move anywhere.
 
@@ -140,7 +140,7 @@ to an MJB (binary) file:
         ball_body.add_geom()
             .with_size([0.010, 0.0, 0.0])        // set the radius to 10 mm.
             .with_type(MjtGeom::mjGEOM_SPHERE);  // make this a spherical geom (default).
-        
+
         ball_body.add_joint()
             .with_type(MjtJoint::mjJNT_FREE);    // make the ball free to move anywhere.
 

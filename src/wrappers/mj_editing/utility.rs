@@ -471,7 +471,7 @@ macro_rules! item_spec_iterator {
                         return None;
                     }
 
-                    let out = unsafe { [<mjs_as $iter_over>](self.last).as_mut().unwrap() };
+                    let out = unsafe { [<mjs_as $iter_over>](self.last).as_ref().unwrap() };
                     self.last = unsafe { mjs_nextElement(self.root.0, self.last) };
                     Some(out)
                 }
@@ -512,9 +512,9 @@ macro_rules! item_body_iterator {
 
             impl<'a> MjsBodyItemIter<'a, [<Mjs $iter_over>]> {
                 fn new(root: &'a MjsBody, recurse: bool) -> Self {
-                    // transmute here because mjs iterator functions require mutable pointers,
-                    // even though they don't actually modify.
-                    let last = unsafe { mjs_firstChild(std::mem::transmute(root), MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
+                    // we cast to *mut MjsBody because mjs_firstChild requires a mutable pointer, but it doesn't
+                    // actually mutate anything, so it's safe.
+                    let last = unsafe { mjs_firstChild(root as *const MjsBody as *mut MjsBody, MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
                     Self { root, last, recurse, item_type: PhantomData }
                 }
             }
@@ -546,7 +546,7 @@ macro_rules! item_body_iterator {
                     unsafe {
                         let out = [<mjs_as $iter_over>](self.last).as_ref();
                         // mjs_nextChild doesn't actually modify, but still demands a mutable pointer
-                        self.last = mjs_nextChild(std::mem::transmute(self.root), self.last, self.recurse.into());
+                        self.last = mjs_nextChild(self.root as *const MjsBody as *mut MjsBody, self.last, self.recurse.into());
                         out
                     }
                 }

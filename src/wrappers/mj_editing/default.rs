@@ -47,7 +47,7 @@ impl SpecItem for MjsDefault {
     /// Defaults can't be deleted.
     /// # Errors
     /// This will always error with [`ErrorKind::Unsupported`].
-    fn delete(&mut self) -> Result<(), Error> {
+    unsafe fn delete(&mut self) -> Result<(), Error> {
         Err(Error::new(ErrorKind::Unsupported, "defaults can't be deleted"))
     }
 }

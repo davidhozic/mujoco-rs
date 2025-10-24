@@ -1211,11 +1211,11 @@ impl MjsMaterial {
 ***************************/
 mjs_struct!(Body {
     // Override the delete method to prevent deletion of world.
-    fn delete(&mut self) -> Result<(), Error> {
+    unsafe fn delete(&mut self) -> Result<(), Error> {
         if self.name() == "world" {
             return Err(Error::new(ErrorKind::Unsupported, "world model can't be deleted"));
         }
-        SpecItem::__delete_default__(self)
+        unsafe { SpecItem::__delete_default__(self) }
     }
 });
 
@@ -1406,12 +1406,12 @@ mod tests {
 
         /* Test normal body deletion */
         let body = spec.body_mut(NEW_MODEL_NAME).expect("failed to obtain the body");
-        assert!(body.delete().is_ok(), "failed to delete model");
+        assert!(unsafe { body.delete() }.is_ok(), "failed to delete model");
         assert!(spec.body(NEW_MODEL_NAME).is_none(), "body was not removed from spec");
 
         /* Test world body deletion */
         let world = spec.world_body_mut();
-        assert!(world.delete().is_err(), "the world model should not be deletable");
+        assert!(unsafe { world.delete() }.is_err(), "the world model should not be deletable");
 
         spec.compile().unwrap();
     }
@@ -1427,7 +1427,7 @@ mod tests {
 
         /* Test normal body deletion */
         let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
-        assert!(joint.delete().is_ok(), "failed to delete model");
+        assert!(unsafe { joint.delete() }.is_ok(), "failed to delete model");
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed fom spec");
 
         spec.compile().unwrap();
@@ -1445,7 +1445,7 @@ mod tests {
 
         /* Test normal body deletion */
         let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
-        assert!(joint.delete().is_ok(), "failed to delete model");
+        assert!(unsafe { joint.delete() }.is_ok(), "failed to delete model");
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed from spec");
 
         spec.compile().unwrap();

@@ -82,13 +82,18 @@ pub trait SpecItem: Sized {
     /// actual struct, this accepts a mutable reference to the item.
     /// Consequently, the compiler still allows the original reference to be used, which
     /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!.
-    fn delete(&mut self) -> Result<(), Error> {
-        self.__delete_default__()
+    unsafe fn delete(&mut self) -> Result<(), Error> {
+        unsafe { self.__delete_default__() }
     }
 
     /// Default implementation of the delete method.
     /// Override [`SpecItem::delete`] for custom deletion logic.
-    fn __delete_default__(&mut self) -> Result<(), Error> {
+    /// # Safety
+    /// Since this method can't consume variables holding pointers, nor can we consume the
+    /// actual struct, this accepts a mutable reference to the item.
+    /// Consequently, the compiler still allows the original reference to be used, which
+    /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!.
+    unsafe fn __delete_default__(&mut self) -> Result<(), Error> {
         let element = unsafe { self.element_mut_pointer() };
         let spec = unsafe { mjs_getSpec(element) };
         let result = unsafe { mjs_delete(spec, element) };
