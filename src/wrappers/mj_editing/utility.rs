@@ -419,16 +419,6 @@ macro_rules! vec_vec_append {
     }};
 }
 
-/// Implements the plugin wrapper.
-macro_rules! plugin_wrapper_method {
-    () => {
-        /// Return a wrapper around the `plugin` attribute.
-        pub fn plugin_wrapper(&mut self) -> &mut MjsPlugin {
-            &mut self.plugin
-        }
-    };
-}
-
 /// Implements iterators for individual items in [MjSpec](super::MjSpec).
 macro_rules! item_spec_iterator {
     ($($iter_over: ident),*) => {paste::paste!{

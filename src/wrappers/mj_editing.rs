@@ -475,6 +475,12 @@ impl MjsGeom {
         ]
     }
 
+    getter_setter! {
+        get, [
+            plugin: &MjsPlugin;                     "sdf plugin.";
+        ]
+    }
+
     getter_setter!([&] with, get, set, [
         type_ + _: MjtGeom;            "geom type.";
         group: i32;                    "group.";
@@ -499,8 +505,6 @@ impl MjsGeom {
         material;   "name of material.";
         hfieldname; "heightfield attached to geom.";
     }
-
-    plugin_wrapper_method!();
 }
 
 /***************************
@@ -629,6 +633,12 @@ impl MjsActuator {
         ]
     }
 
+    getter_setter! {
+        get, [
+            plugin: &MjsPlugin;                     "actuator plugin.";
+        ]
+    }
+
     getter_setter!([&] with, get, set, [
         gaintype: MjtGain;             "gain type.";
         biastype: MjtBias;             "bias type.";
@@ -661,8 +671,6 @@ impl MjsActuator {
         refsite;                "reference site, for site transmission.";
         slidersite;             "site defining cylinder, for slider-crank.";
     }
-
-    plugin_wrapper_method!();
 }
 
 /***************************
@@ -673,6 +681,12 @@ impl MjsSensor {
     getter_setter! {
         [&] with, get, [
             intprm: &[i32; mjNSENS as usize];            "integer parameters.";
+        ]
+    }
+
+    getter_setter! {
+        get, [
+            plugin: &MjsPlugin;                     "sensor plugin.";
         ]
     }
 
@@ -693,8 +707,6 @@ impl MjsSensor {
         refname; "name of referenced object.";
         objname; "name of sensorized object.";
     }
-
-    plugin_wrapper_method!();
 }
 
 /***************************
@@ -1022,6 +1034,12 @@ impl MjsMesh {
     }
 
     getter_setter! {
+        get, [
+            plugin: &MjsPlugin;                     "sdf plugin.";
+        ]
+    }
+
+    getter_setter! {
         [&] with, get, set, [
             inertia: MjtMeshInertia;      "inertia type (convex, legacy, exact, shell).";
             maxhullvert: i32;             "maximum vertex count for the convex hull.";
@@ -1048,8 +1066,6 @@ impl MjsMesh {
         userface: i32;               "user vertex indices.";
         userfacetexcoord: i32;       "user texcoord indices.";
     }
-
-    plugin_wrapper_method!();
 }
 
 /***************************
@@ -1254,6 +1270,12 @@ impl MjsBody {
         ]
     }
 
+    getter_setter! {
+        get, [
+            plugin: &MjsPlugin;                     "passive force plugin.";
+        ]
+    }
+
     // Plain types with normal getters and setters.
     getter_setter! {
         [&] with, get, set, [
@@ -1268,10 +1290,6 @@ impl MjsBody {
             explicitinertial: bool;        "whether to save the body with explicit inertial clause.";
         ]
     }
-    
-
-    // TODO: Test the plugin wrapper.
-    plugin_wrapper_method!();
 
     userdata_method!(f64);
 }

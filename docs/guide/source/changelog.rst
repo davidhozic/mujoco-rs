@@ -33,6 +33,7 @@ Unreleased (MuJoCo 3.3.7)
     - Added immutable iterators.
     - Changed regular named-access methods to be immutable and added corresponding ``<item>_mut()`` methods
       for mutable access.
+    - Replaced ``plugin_wrapper`` methods with a normal getter method (``plugin`` and ``plugin_mut``).
 
   - :ref:`mj_rust_viewer` and :ref:`mj_renderer`:
 
