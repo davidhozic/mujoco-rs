@@ -13,12 +13,12 @@ use crate::wrappers::mj_editing::{
 macro_rules! default_accessor_wrapper {
     ($($name:ident),*) => {paste::paste! {
         $(
-            #[doc = concat!("Returns a wrapper to  `", stringify!($name), "`.")]
+            #[doc = concat!("Returns an immutable reference to ", stringify!($name), "'s defaults.")]
             pub fn $name(&self) -> &[<Mjs $name:camel>] {
                 unsafe { self.$name.as_ref().unwrap() }
             }
 
-            #[doc = concat!("Returns a wrapper to  `", stringify!($name), "`.")]
+            #[doc = concat!("Returns a mutable reference to ", stringify!($name), "'s defaults.")]
             pub fn [<$name _mut>](&mut self) -> &mut [<Mjs $name:camel>] {
                 unsafe { self.$name.as_mut().unwrap() }
             }

@@ -250,8 +250,6 @@ macro_rules! mjs_struct {
         pub type [<Mjs $ffi_name>] = [<mjs $ffi_name>];
 
         impl [<Mjs $ffi_name>] {
-            /// Immutable proxy FFI method that returns self. Exists for interface reasons.
-
             /// Return the message appended to compiler errors.
             pub fn info(&self) -> &str {
                 read_mjs_string(unsafe { self.info.as_ref().unwrap() })
