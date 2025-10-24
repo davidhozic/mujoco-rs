@@ -16,6 +16,98 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+
+Unreleased (MuJoCo 3.3.7)
+================================
+- **Breaking changes**:
+
+  - Updated the MuJoCo version to 3.3.7.
+  - :ref:`model_editing`:
+
+    - Items (:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsJoint`,
+      :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsGeom`, etc.) are no longer wrapped and are instead
+      just aliased types. Their attributes have been made private to users, so that tools like ``rust-analyzer``
+      don't suggest both the getter name and the attribute name at once.
+      As a result of this change, methods now return true references instead of the wrapper types.
+
+    - Added immutable iterators.
+    - Changed regular named-access methods to be immutable and added corresponding ``<item>_mut()`` methods
+      for mutable access.
+    - Replaced ``plugin_wrapper`` methods with a normal getter method (``plugin`` and ``plugin_mut``).
+
+  - :ref:`mj_rust_viewer` and :ref:`mj_renderer`:
+
+    - Changed the backend windowing library to Winit (+ Glutin). This is a **potentially** breaking
+      change because of possible direct GLFW uses in the user code, which will probably still work
+      as expected, but we can't be sure as we did not test GLFW and Winit being used at the same time.
+      Change to Winit also means we don't need any C dependencies, unless the C++ viewer wrapper
+      is needed, which also contains breaking changes. The latter is described in the next bullet.
+    
+    - Added and removed variants in :docs-rs:`mujoco_rs::viewer::<enum>MjViewerError` and
+      :docs-rs:`mujoco_rs::renderer::<enum>RendererError`.
+
+  - :ref:`mj_cpp_viewer`:
+
+    - Since MuJoCo's build systems downloads GLFW sources anyway, we decided to remove the GLFW
+      requirement from the Rust level and instead made it so that the user needs to compile the GLFW
+      code during the MuJoCo's viewer (simulate) compilation.
+      No change is needed in the user Rust code, users just need to build MuJoCo a bit differently:
+
+      ``cmake --build build --parallel --target glfw libmujoco_simulate --config=Release``.
+
+      The above command, besides the added ``glfw`` part, also contains the ``libmujoco_simulate``
+      part in place of the previously ``libsimulate`` part. This change is a consequence
+      of MuJoCo upgrade to version 3.3.7.
+
+    - Moved the struct definition from ``mujoco_rs::viewer`` to ``mujoco_rs::cpp_viewer``.
+
+  - Changed |mj_data| and other types to accept a generic type for the model,
+    constrained to ``Deref<Target = MjModel>``.
+    This enables use in environments such as `PyO3 <https://github.com/PyO3/pyo3>`_.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMesh`: changed ``smoothnormal`` and ``needsdf`` to be treated as booleans.
+  - |mj_data| methods:
+
+    - Renamed ``crb`` to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>crb_comp` due to ``crb``
+      now being a method that returns an immutable slice to the ``crb`` attribute of the ffi type,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy` now returns a reference to a 2-element array instead of a slice,
+
+  - |mj_model| methods:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>id_to_name` now accepts ``i32`` instead of ``c_int``,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>size` now returns ``i32`` instead of ``c_int``,
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>state_size` now accepts ``u32`` instead of ``c_uint``
+      and returns ``i32`` instead of ``c_int``,
+
+  - :docs-rs:`mujoco_rs::mujoco_c`:
+
+    - :docs-rs:`~mujoco_rs::mujoco_c::<enum>mjtSameFrame_` is now ``repr(u8)`` instead of ``repr(u32)``
+      to fix alignment issues with MuJoCo's structs,
+
+  - :docs-rs:`mujoco_rs::wrappers::fun::utility`:
+
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_band_diag`: replaced ``c_int`` types with ``i32``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_eig_3`: replaced ``c_int`` types with ``i32``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_halton`: replaced ``c_int`` types with ``i32``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_is_bad`: replaced ``c_int`` types with ``bool``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_mat_2_rot`: replaced ``c_int`` types with ``i32``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom`: replaced ``c_int`` types with :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtGeom`,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_round`: replaced ``c_int`` types with ``i32``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_transform_spatial`: replaced ``c_int`` types with ``bool``,
+
+  - Removed modules:
+
+    - ``mujoco_rs::wrappers::mj_interface``: this was in early development, but then it became apparent
+      that its completion and usage would violate borrow checker rules, resulting in undefined behavior.
+
+- Other changes:
+
+  - Any changes to MuJoCo made in MuJoCo 3.3.6 and MuJoCo 3.3.7 (see https://mujoco.readthedocs.io/en/3.3.7/changelog.html).
+  - Added additional getters / setters / array slice methods to:
+
+    - |mj_data|,
+    - |mj_model|,
+    - |mjv_scene|.
+
 1.5.0 (MuJoCo 3.3.5)
 ================================
 - |mjv_scene|:

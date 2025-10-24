@@ -1,7 +1,6 @@
 //! Trait definitions for model editing.
 use std::io::{Error, ErrorKind};
 use std::ffi::{CStr, CString};
-use std::marker::PhantomData;
 
 use crate::mujoco_c::*;
 
@@ -42,14 +41,14 @@ pub trait SpecItem: Sized {
     }
 
     /// Builder style set a new name.
-    fn with_name(mut self, name: &str) -> Self {
+    fn with_name(&mut self, name: &str) -> &mut Self {
         self.set_name(name);
         self
     }
 
     /// Returns the used default.
-    fn default(&self) -> MjsDefault<'_> {
-        MjsDefault(unsafe { mjs_getDefault(self.element_pointer()) }, PhantomData)
+    fn default(&self) -> &MjsDefault {
+        unsafe { mjs_getDefault(self.element_pointer()).as_ref().unwrap() }
     }
 
     /// Make the item inherit properties from a default class.
@@ -72,13 +71,29 @@ pub trait SpecItem: Sized {
     }
 
     /// Builder style make the item inherit from a default class.
-    fn with_default(mut self, class_name: &str) -> Result<Self, Error> {
+    fn with_default(&mut self, class_name: &str) -> Result<&mut Self, Error> {
         self.set_default(class_name)?;
         Ok(self)
     }
 
     /// Delete the item.
-    fn delete(mut self) -> Result<(), Error> {
+    /// # Safety
+    /// Since this method can't consume variables holding pointers, nor can we consume the
+    /// actual struct, this accepts a mutable reference to the item.
+    /// Consequently, the compiler still allows the original reference to be used, which
+    /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!
+    unsafe fn delete(&mut self) -> Result<(), Error> {
+        unsafe { self.__delete_default__() }
+    }
+
+    /// Default implementation of the delete method.
+    /// Override [`SpecItem::delete`] for custom deletion logic.
+    /// # Safety
+    /// Since this method can't consume variables holding pointers, nor can we consume the
+    /// actual struct, this accepts a mutable reference to the item.
+    /// Consequently, the compiler still allows the original reference to be used, which
+    /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!
+    unsafe fn __delete_default__(&mut self) -> Result<(), Error> {
         let element = unsafe { self.element_mut_pointer() };
         let spec = unsafe { mjs_getSpec(element) };
         let result = unsafe { mjs_delete(spec, element) };

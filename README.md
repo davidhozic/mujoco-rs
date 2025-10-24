@@ -17,9 +17,9 @@ More detailed documentation is available at the:
 - [**Guide book**](https://mujoco-rs.readthedocs.io/en/stable/)
 
 ## MuJoCo version
-This library uses FFI bindings to MuJoCo **3.3.5**.
+This library uses FFI bindings to MuJoCo **3.3.7**.
 
-You can download it from [official MuJoCo releases](https://github.com/google-deepmind/mujoco/releases/tag/3.3.5).
+You can download it from [official MuJoCo releases](https://github.com/google-deepmind/mujoco/releases/tag/3.3.7).
 
 
 ## Installation

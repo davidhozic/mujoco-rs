@@ -15,9 +15,10 @@ attributes of :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` and
 :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`.
 
 A view cannot be created directly, as that would require recreating the view after each simulation
-step. Allowing preservation of views between simulation steps would violate Rust's borrow checker rules. 
+step. Allowing preservation of views between simulation steps would violate Rust's borrow checker rules.
 To overcome this, "info" structs exist, which store required information for fast view
 creation after each step.
+
 
 Reading
 ======================

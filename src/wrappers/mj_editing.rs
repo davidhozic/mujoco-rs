@@ -96,7 +96,7 @@ pub type MjtOrientation = mjtOrientation;
 /// Compiler options.
 pub type MjsCompiler = mjsCompiler;
 impl MjsCompiler {
-    getter_setter! {with, get, set, [
+    getter_setter! {[&] with, get, set, [
         autolimits: bool;              "infer \"limited\" attribute based on range.";
         balanceinertia: bool;          "automatically impose A + B >= C rule.";
         fitaabb: bool;                 "meshfit to aabb instead of inertia box.";
@@ -108,32 +108,25 @@ impl MjsCompiler {
         alignfree: bool;               "align free joints with inertial frame.";
     ]}
 
-    getter_setter! {with, get, set, [
+    getter_setter! {[&] with, get, set, [
         boundmass: f64;                "enforce minimum body mass.";
         boundinertia: f64;             "enforce minimum body diagonal inertia.";
         settotalmass: f64;             "rescale masses and inertias; <=0: ignore.";
     ]}
 
-    getter_setter! {force!, with, get, set, [
+    getter_setter! {force!, [&] with, get, set, [
         inertiafromgeom: MjtInertiaFromGeom;  "use geom inertias.";
     ]}
 
-    getter_setter! {with, get, [
+    getter_setter! {[&] with, get, [
         inertiagrouprange: &[i32; 2];       "range of geom groups used to compute inertia.";
         eulerseq: &[i8; 3];                 "sequence for euler rotations.";
         LRopt: &MjLROpt;                    "options for lengthrange computation.";
     ]}
 
-
-    /* Proxy methods to simplify macro access. */
-    #[inline]
-    fn ffi(&self) -> &Self {
-        self
-    }
-
-    #[inline]
-    unsafe fn ffi_mut(&mut self) -> &mut Self {
-        self
+    string_set_get_with! {[&]
+        meshdir;        "mesh and hfield directory.";
+        texturedir;     "texture directory.";
     }
 }
 
@@ -281,47 +274,55 @@ impl MjSpec {
 
     find_x_method_direct! { default }
 
-    /// Returns the world body.
-    pub fn world_body(&mut self) -> MjsBody<'_> {
-        self.body("world").unwrap()  // this exists always
+    /// Returns an immutable reference to the world body.
+    pub fn world_body(&self) -> &MjsBody {
+        self.body("world").unwrap()
+    }
+
+    /// Returns a mutable reference to the world body.
+    pub fn world_body_mut(&mut self) -> &mut MjsBody {
+        self.body_mut("world").unwrap()
     }
 }
 
 /// Public attributes.
 impl MjSpec {
     string_set_get_with! {
-        modelname; "model name.";
-        comment; "comment at top of XML.";
-        modelfiledir; "path to model file.";
+        [ffi, ffi_mut] modelname; "model name.";
+        [ffi, ffi_mut] comment; "comment at top of XML.";
+        [ffi, ffi_mut] modelfiledir; "path to model file.";
     }
 
     getter_setter! {
         with, get, [
-            compiler: &MjsCompiler; "compiler options.";
-            stat: &MjStatistic; "statistic overrides.";
-            visual: &MjVisual; "visualization options.";
-            option: &MjOption; "simulation options";
+            [ffi, ffi_mut] compiler: &MjsCompiler; "compiler options.";
+            [ffi, ffi_mut] stat: &MjStatistic; "statistic overrides.";
+            [ffi, ffi_mut] visual: &MjVisual; "visualization options.";
+            [ffi, ffi_mut] option: &MjOption; "simulation options.";
         ]
     }
 
     getter_setter! {
-        with, get, set, [strippath: bool; "whether to strip paths from mesh files."]
+        with, get, set, [
+            [ffi, ffi_mut] strippath: bool; "whether to strip paths from mesh files.";
+            [ffi, ffi_mut] hasImplicitPluginElem: bool; "already encountered an implicit plugin sensor/actuator.";
+        ]
     }
 
     getter_setter! {
         get, [
-            memory: MjtSize;      "number of bytes in arena+stack memory";
-            nemax: i32;             "max number of equality constraints.";
-            nuserdata: i32;              "number of mjtNums in userdata.";
-            nuser_body: i32;            "number of mjtNums in body_user.";
-            nuser_jnt: i32;              "number of mjtNums in jnt_user.";
-            nuser_geom: i32;            "number of mjtNums in geom_user.";
-            nuser_site: i32;            "number of mjtNums in site_user.";
-            nuser_cam: i32;              "number of mjtNums in cam_user.";
-            nuser_tendon: i32;        "number of mjtNums in tendon_user.";
-            nuser_actuator: i32;    "number of mjtNums in actuator_user.";
-            nuser_sensor: i32;        "number of mjtNums in sensor_user.";
-            nkey: i32;                             "number of keyframes.";
+            [ffi] memory: MjtSize;     "number of bytes in arena+stack memory.";
+            [ffi] nemax: i32;             "max number of equality constraints.";
+            [ffi] nuserdata: i32;              "number of mjtNums in userdata.";
+            [ffi] nuser_body: i32;            "number of mjtNums in body_user.";
+            [ffi] nuser_jnt: i32;              "number of mjtNums in jnt_user.";
+            [ffi] nuser_geom: i32;            "number of mjtNums in geom_user.";
+            [ffi] nuser_site: i32;            "number of mjtNums in site_user.";
+            [ffi] nuser_cam: i32;              "number of mjtNums in cam_user.";
+            [ffi] nuser_tendon: i32;        "number of mjtNums in tendon_user.";
+            [ffi] nuser_actuator: i32;    "number of mjtNums in actuator_user.";
+            [ffi] nuser_sensor: i32;        "number of mjtNums in sensor_user.";
+            [ffi] nkey: i32;                             "number of keyframes.";
         ]
     }
 }
@@ -341,13 +342,13 @@ impl MjSpec {
     /// Errors a [`ErrorKind::NotFound`] when `parent_class_name` doesn't exist.
     /// # Panics
     /// When the `class_name` or `parent_class_name` contain '\0' characters, a panic occurs.
-    pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<MjsDefault<'_>, Error> {
+    pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<&mut MjsDefault, Error> {
         let c_class_name = CString::new(class_name).unwrap();
         
         let parent_ptr = if let Some(name) = parent_class_name {
                 self.default(name).ok_or_else(
                     || Error::new(ErrorKind::NotFound, "invalid parent name")
-                )?.0
+                )?
         } else {
             ptr::null()
         };
@@ -362,7 +363,7 @@ impl MjSpec {
                 Err(Error::new(ErrorKind::AlreadyExists, "duplicated name"))
             }
             else {
-                Ok(MjsDefault(ptr_default, PhantomData))
+                Ok(ptr_default.as_mut().unwrap())
             }
         }
     }
@@ -371,6 +372,13 @@ impl MjSpec {
 /// Mutable iterator over items in [`MjSpec`].
 pub struct MjsSpecItemIterMut<'a, T> {
     root: &'a mut MjSpec,
+    last: *mut mjsElement,
+    /// Used for generic implementation of iterator's methods.
+    item_type: PhantomData<T>
+}
+
+pub struct MjsSpecItemIter<'a, T> {
+    root: &'a MjSpec,
     last: *mut mjsElement,
     /// Used for generic implementation of iterator's methods.
     item_type: PhantomData<T>
@@ -398,29 +406,29 @@ impl Drop for MjSpec {
 /***************************
 ** Site specification
 ***************************/
-mjs_wrapper!(Site);
-impl MjsSite<'_> {
+mjs_struct!(Site);
+impl MjsSite {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             // frame, size
-            pos:  &[f64; 3];              "position";
-            quat: &[f64; 4];              "orientation";
-            alt:  &MjsOrientation;        "alternative orientation";
-            fromto: &[f64; 6];            "alternative for capsule, cylinder, box, ellipsoid";
-            size: &[f64; 3];              "geom size";
+            pos:  &[f64; 3];              "position.";
+            quat: &[f64; 4];              "orientation.";
+            alt:  &MjsOrientation;        "alternative orientation.";
+            fromto: &[f64; 6];            "alternative for capsule, cylinder, box, ellipsoid.";
+            size: &[f64; 3];              "geom size.";
 
             // visual
-            rgba: &[f32; 4];              "rgba when material is omitted";
+            rgba: &[f32; 4];              "rgba when material is omitted.";
     ]}
 
-    getter_setter!(with, get, set, [
-        type_: MjtGeom;                   "geom type";
-        group: i32;                       "group";
+    getter_setter!([&] with, get, set, [
+        type_ + _: MjtGeom;               "geom type.";
+        group: i32;                       "group.";
     ]);
 
     userdata_method!(f64);
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         material; "name of material.";
     }
 }
@@ -428,19 +436,19 @@ impl MjsSite<'_> {
 /***************************
 ** Joint specification
 ***************************/
-mjs_wrapper!(Joint);
-impl MjsJoint<'_> {
+mjs_struct!(Joint);
+impl MjsJoint {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             pos:     &[f64; 3];         "joint position.";
-            axis:    &[f64; 3];             "joint axis.";
-            ref_:    &f64;             "joint reference.";
-            range:   &[f64; 2];            "joint range.";
+            axis:    &[f64; 3];         "joint axis.";
+            ref_ + _:    &f64;          "joint reference.";
+            range:   &[f64; 2];         "joint range.";
         ]
     }
 
-    getter_setter!(with, get, set, [
-        type_: MjtJoint;               "joint type.";
+    getter_setter!([&] with, get, set, [
+        type_ + _: MjtJoint;           "joint type.";
         group: i32;                    "joint group.";
     ]);
 
@@ -450,10 +458,10 @@ impl MjsJoint<'_> {
 /***************************
 ** Geom specification
 ***************************/
-mjs_wrapper!(Geom);
-impl MjsGeom<'_> {
+mjs_struct!(Geom);
+impl MjsGeom {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             pos: &[f64; 3];                         "geom position.";
             quat: &[f64; 4];                        "geom orientation.";
             alt: &MjsOrientation;                   "alternative orientation.";
@@ -467,8 +475,14 @@ impl MjsGeom<'_> {
         ]
     }
 
-    getter_setter!(with, get, set, [
-        type_: MjtGeom;                "geom type.";
+    getter_setter! {
+        get, [
+            plugin: &MjsPlugin;                     "sdf plugin.";
+        ]
+    }
+
+    getter_setter!([&] with, get, set, [
+        type_ + _: MjtGeom;            "geom type.";
         group: i32;                    "group.";
         contype: i32;                  "contact type.";
         conaffinity: i32;              "contact affinity.";
@@ -486,22 +500,20 @@ impl MjsGeom<'_> {
 
     userdata_method!(f64);
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         meshname;   "mesh attached to geom.";
         material;   "name of material.";
         hfieldname; "heightfield attached to geom.";
     }
-
-    plugin_wrapper_method!();
 }
 
 /***************************
 ** Camera specification
 ***************************/
-mjs_wrapper!(Camera);
-impl MjsCamera<'_> {
+mjs_struct!(Camera);
+impl MjsCamera {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             pos: &[f64; 3];               "camera position.";
             quat: &[f64; 4];              "camera orientation.";
             alt: &MjsOrientation;         "alternative orientation.";
@@ -515,19 +527,19 @@ impl MjsCamera<'_> {
         ]
     }
 
-    getter_setter!(with, get, set, [
+    getter_setter!([&] with, get, set, [
         mode: MjtCamLight;             "camera mode.";
         fovy: f64;                    "field of view in y direction.";
         ipd: f64;                     "inter-pupillary distance for stereo.";
     ]);
 
     getter_setter! {
-        with, get, set, [orthographic: bool; "is camera orthographic."]
+        [&] with, get, set, [orthographic: bool; "is camera orthographic."]
     }
 
     userdata_method!(f64);
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         targetbody; "target body for tracking/targeting.";
     }
 }
@@ -535,10 +547,10 @@ impl MjsCamera<'_> {
 /***************************
 ** Light specification
 ***************************/
-mjs_wrapper!(Light);
-impl MjsLight<'_> {
+mjs_struct!(Light);
+impl MjsLight {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             pos: &[f64; 3];               "light position.";
             dir: &[f64; 3];               "light direction.";
             ambient: &[f32; 3];           "ambient color.";
@@ -548,9 +560,9 @@ impl MjsLight<'_> {
         ]
     }
 
-    getter_setter!(with, get, set, [
+    getter_setter!([&] with, get, set, [
         mode: MjtCamLight;             "light mode.";
-        type_: MjtLightType;           "light type.";
+        type_ + _: MjtLightType;       "light type.";
         bulbradius: f32;               "bulb radius, for soft shadows.";
         intensity: f32;                "intensity, in candelas.";
         range: f32;                    "range of effectiveness.";
@@ -559,13 +571,13 @@ impl MjsLight<'_> {
     ]);
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             active: bool;       "active flag.";
             castshadow: bool;   "whether light cast shadows."
         ]
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         texture; "texture name for image lights.";
         targetbody; "target body for targeting.";
     }
@@ -574,29 +586,29 @@ impl MjsLight<'_> {
 /***************************
 ** Frame specification
 ***************************/
-mjs_wrapper!(Frame);
-impl MjsFrame<'_> {
+mjs_struct!(Frame);
+impl MjsFrame {
     add_x_method_by_frame! { body, site, joint, geom, camera, light }
 
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             pos: &[f64; 3];               "frame position.";
             quat: &[f64; 4];              "frame orientation.";
             alt: &MjsOrientation;         "alternative orientation.";
         ]
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         childclass; "childclass name.";
     }
 
     /// Adds a child frame.
-    pub fn add_frame(&mut self) -> MjsFrame<'_> {
+    pub fn add_frame(&mut self) -> &mut MjsFrame {
         unsafe {
             let parent_body = mjs_getParent(self.element_mut_pointer());
             let parent_frame = self.element_mut_pointer();
             let frame_ptr = mjs_addFrame(parent_body, parent_frame.cast());
-            MjsFrame(frame_ptr, PhantomData)
+            frame_ptr.as_mut().unwrap()
         }
     }
 }
@@ -606,10 +618,10 @@ impl MjsFrame<'_> {
 /***************************
 ** Actuator specification
 ***************************/
-mjs_wrapper!(Actuator);
-impl MjsActuator<'_> {
+mjs_struct!(Actuator);
+impl MjsActuator {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             gear: &[f64; 6];                            "gear parameters.";
             gainprm: &[f64; mjNGAIN as usize];          "gain parameters.";
             biasprm: &[f64; mjNBIAS as usize];          "bias parameters.";
@@ -621,7 +633,13 @@ impl MjsActuator<'_> {
         ]
     }
 
-    getter_setter!(with, get, set, [
+    getter_setter! {
+        get, [
+            plugin: &MjsPlugin;                     "actuator plugin.";
+        ]
+    }
+
+    getter_setter!([&] with, get, set, [
         gaintype: MjtGain;             "gain type.";
         biastype: MjtBias;             "bias type.";
         dyntype: MjtDyn;               "dyn type.";
@@ -633,7 +651,7 @@ impl MjsActuator<'_> {
     ]);
 
     getter_setter! {
-        force!, with, get, set, [
+        force!, [&] with, get, set, [
             ctrllimited: MjtLimited;        "are control limits defined.";
             forcelimited: MjtLimited;       "are force limits defined.";
             actlimited: MjtLimited;         "are activation limits defined.";
@@ -641,37 +659,41 @@ impl MjsActuator<'_> {
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             actearly: bool;                "apply next activations to qfrc.";
         ]
     }
 
     userdata_method!(f64);
 
-    string_set_get_with! {
-        target;                 "name of transmission target";
-        refsite;                "reference site, for site transmission";
-        slidersite;             "site defining cylinder, for slider-crank";
+    string_set_get_with! {[&]
+        target;                 "name of transmission target.";
+        refsite;                "reference site, for site transmission.";
+        slidersite;             "site defining cylinder, for slider-crank.";
     }
-
-    plugin_wrapper_method!();
 }
 
 /***************************
 ** Sensor specification
 ***************************/
-mjs_wrapper!(Sensor);
-impl MjsSensor<'_> {
+mjs_struct!(Sensor);
+impl MjsSensor {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             intprm: &[i32; mjNSENS as usize];            "integer parameters.";
         ]
     }
 
-    getter_setter!(with, get, set, [
-        type_: MjtSensor;              "sensor type.";
+    getter_setter! {
+        get, [
+            plugin: &MjsPlugin;                     "sensor plugin.";
+        ]
+    }
+
+    getter_setter!([&] with, get, set, [
+        type_ + _: MjtSensor;          "sensor type.";
         objtype: MjtObj;               "object type the sensor refers to.";
-        reftype: MjtObj;               "type of referenced object";
+        reftype: MjtObj;               "type of referenced object.";
         datatype: MjtDataType;         "data type.";
         cutoff: f64;                   "cutoff for real and positive datatypes.";
         noise: f64;                    "noise stdev.";
@@ -681,21 +703,19 @@ impl MjsSensor<'_> {
 
     userdata_method!(f64);
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         refname; "name of referenced object.";
         objname; "name of sensorized object.";
     }
-
-    plugin_wrapper_method!();
 }
 
 /***************************
 ** Flex specification
 ***************************/
-mjs_wrapper!(Flex);
-impl MjsFlex<'_> {
+mjs_struct!(Flex);
+impl MjsFlex {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             rgba: &[f32; 4];                                "rgba when material is omitted.";
             friction: &[f64; 3];                            "contact friction vector.";
             solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
@@ -704,7 +724,7 @@ impl MjsFlex<'_> {
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             young: f64;                    "elastic stiffness.";
             group: i32;                    "group.";
             contype: i32;                  "contact type.";
@@ -728,20 +748,21 @@ impl MjsFlex<'_> {
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             internal: bool;       "enable internal collisions.";
             flatskin: bool;       "render flex skin with flat shading.";
             vertcollide: bool;    "mode for vertex collision.";
+            passive: bool;        "mode for passive collisions.";
         ]        
     }
 
     getter_setter! {
-        force!, with, get, set, [
+        force!, [&] with, get, set, [
             selfcollide: MjtFlexSelf;        "mode for flex self collision.";
         ]
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         material; "name of material used for rendering.";
     }
 
@@ -756,7 +777,7 @@ impl MjsFlex<'_> {
     }
 
     vec_set! {
-        texcoord: f32;          "vertex texture coordinates";
+        texcoord: f32;          "vertex texture coordinates.";
         elem: i32;              "element vertex ids.";
         elemtexcoord: i32;      "element texture coordinates.";
     }
@@ -765,10 +786,10 @@ impl MjsFlex<'_> {
 /***************************
 ** Pair specification
 ***************************/
-mjs_wrapper!(Pair);
-impl MjsPair<'_> {
+mjs_struct!(Pair);
+impl MjsPair {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             friction: &[f64; 5];                            "contact friction vector.";
             solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
             solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
@@ -777,14 +798,14 @@ impl MjsPair<'_> {
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             margin: f64;             "margin for contact detection.";
             gap: f64;        "include in solver if dist<margin-gap.";
             condim: i32;                   "contact dimensionality.";
         ]
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         geomname1; "name of geom 1.";
         geomname2; "name of geom 2.";
     }
@@ -793,9 +814,9 @@ impl MjsPair<'_> {
 /***************************
 ** Exclude specification
 ***************************/
-mjs_wrapper!(Exclude);
-impl MjsExclude<'_> {
-    string_set_get_with! {
+mjs_struct!(Exclude);
+impl MjsExclude {
+    string_set_get_with! {[&]
         bodyname1; "name of body 1.";
         bodyname2; "name of body 2.";
     }
@@ -804,26 +825,26 @@ impl MjsExclude<'_> {
 /***************************
 ** Equality specification
 ***************************/
-mjs_wrapper!(Equality);
-impl MjsEquality<'_> {
+mjs_struct!(Equality);
+impl MjsEquality {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             data: &[f64; mjNEQDATA as usize];   "data array for equality parameters.";
-            solref: &[f64; mjNREF as usize];    "solver reference";         
-            solimp: &[f64; mjNIMP as usize];    "solver impedance";
+            solref: &[f64; mjNREF as usize];    "solver reference.";         
+            solimp: &[f64; mjNIMP as usize];    "solver impedance.";
         ]
     }
 
-    getter_setter! {with, get, set, [
+    getter_setter! {[&] with, get, set, [
         active: bool;   "active flag.";
     ]}
 
-    getter_setter! {with, get, set, [
-        type_: MjtEq;   "equality type.";
-        objtype: MjtObj; "type of both objects";
+    getter_setter! {[&] with, get, set, [
+        type_ + _: MjtEq;   "equality type.";
+        objtype: MjtObj;    "type of both objects.";
     ]}
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         name1; "name of object 1";
         name2; "name of object 2";
     }
@@ -832,10 +853,10 @@ impl MjsEquality<'_> {
 /***************************
 ** Tendon specification
 ***************************/
-mjs_wrapper!(Tendon);
-impl MjsTendon<'_> {
+mjs_struct!(Tendon);
+impl MjsTendon {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             springlength: &[f64; 2];                    "spring length.";
             solref_friction: &[f64; mjNREF as usize];   "solver reference: tendon friction.";
             solimp_friction: &[f64; mjNIMP as usize];   "solver impedance: tendon friction.";
@@ -847,7 +868,7 @@ impl MjsTendon<'_> {
         ]
     }
 
-    getter_setter! {with, get, set, [
+    getter_setter! {[&] with, get, set, [
         group: i32;         "group.";
         damping: f64;       "damping coefficient.";
         stiffness: f64;     "stiffness coefficient.";
@@ -858,70 +879,70 @@ impl MjsTendon<'_> {
     ]}
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             limited: bool;       "does tendon have limits (mjtLimited).";
             actfrclimited: bool; "does tendon have actuator force limits."
         ]
     }
 
     userdata_method!(f64);
-    string_set_get_with! {
+    string_set_get_with! {[&]
         material; "name of material for rendering.";
     }
 
     /// Wrap a site corresponding to `name`, using the tendon.
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
-    pub fn wrap_site(&mut self, name: &str) -> MjsWrap<'_> {
+    pub fn wrap_site(&mut self, name: &str) -> &mut MjsWrap {
         let cname = CString::new(name).unwrap();
-        let wrap_ptr = unsafe { mjs_wrapSite(self.ffi_mut(), cname.as_ptr()) };
-        MjsWrap(wrap_ptr, PhantomData)
+        let wrap_ptr = unsafe { mjs_wrapSite(self, cname.as_ptr()) };
+        unsafe { wrap_ptr.as_mut().unwrap() }
     }
 
     /// Wrap a geom corresponding to `name`, using the tendon.
     /// # Panics
     /// When the `name` or `sidesite` contain '\0' characters, a panic occurs.
-    pub fn wrap_geom(&mut self, name: &str, sidesite: &str) -> MjsWrap<'_> {
+    pub fn wrap_geom(&mut self, name: &str, sidesite: &str) -> &mut MjsWrap {
         let cname = CString::new(name).unwrap();
         let csidesite = CString::new(sidesite).unwrap();
         let wrap_ptr = unsafe { mjs_wrapGeom(
-            self.ffi_mut(),
+            self,
             cname.as_ptr(), csidesite.as_ptr()
         ) };
-        MjsWrap(wrap_ptr, PhantomData)
+        unsafe { wrap_ptr.as_mut().unwrap() }
     }
 
     /// Wrap a joint corresponding to `name`, using the tendon.
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
-    pub fn wrap_joint(&mut self, name: &str, coef: f64) -> MjsWrap<'_> {
+    pub fn wrap_joint(&mut self, name: &str, coef: f64) -> &mut MjsWrap {
         let cname = CString::new(name).unwrap();
-        let wrap_ptr = unsafe { mjs_wrapJoint(self.ffi_mut(), cname.as_ptr(), coef) };
-        MjsWrap(wrap_ptr, PhantomData)
+        let wrap_ptr = unsafe { mjs_wrapJoint(self, cname.as_ptr(), coef) };
+        unsafe { wrap_ptr.as_mut().unwrap() }
     }
 
     /// Wrap a pulley using the tendon.
-    pub fn wrap_pulley(&mut self, divisor: f64) -> MjsWrap<'_> {
-        let wrap_ptr = unsafe { mjs_wrapPulley(self.ffi_mut(), divisor) };
-        MjsWrap(wrap_ptr, PhantomData)
+    pub fn wrap_pulley(&mut self, divisor: f64) -> &mut MjsWrap {
+        let wrap_ptr = unsafe { mjs_wrapPulley(self, divisor) };
+        unsafe { wrap_ptr.as_mut().unwrap() }
     }
 }
 
 /***************************
 ** Wrap specification
 ***************************/
-mjs_wrapper!(Wrap);
-impl MjsWrap<'_> {
+mjs_struct!(Wrap);
+impl MjsWrap {
     /* Auto-implemented */
 }
 
 /***************************
 ** Numeric specification
 ***************************/
-mjs_wrapper!(Numeric);
-impl MjsNumeric<'_> {
+mjs_struct!(Numeric);
+impl MjsNumeric {
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             size: i32;                     "size of the numeric array.";
         ]
     }
@@ -934,9 +955,9 @@ impl MjsNumeric<'_> {
 /***************************
 ** Text specification
 ***************************/
-mjs_wrapper!(Text);
-impl MjsText<'_> {
-    string_set_get_with! {
+mjs_struct!(Text);
+impl MjsText {
+    string_set_get_with! {[&]
         data; "text string.";
     }
 }
@@ -944,8 +965,8 @@ impl MjsText<'_> {
 /***************************
 ** Tuple specification
 ***************************/
-mjs_wrapper!(Tuple);
-impl MjsTuple<'_> {
+mjs_struct!(Tuple);
+impl MjsTuple {
     vec_set! {
         objtype: i32; "object types.";
     }
@@ -962,10 +983,10 @@ impl MjsTuple<'_> {
 /***************************
 ** Key specification
 ***************************/
-mjs_wrapper!(Key);
-impl MjsKey<'_> {
+mjs_struct!(Key);
+impl MjsKey {
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             time: f64; "time."
         ]
     }
@@ -983,15 +1004,15 @@ impl MjsKey<'_> {
 /***************************
 ** Plugin specification
 ***************************/
-mjs_wrapper!(Plugin);
-impl MjsPlugin<'_> {
-    string_set_get_with! {
+mjs_struct!(Plugin);
+impl MjsPlugin {
+    string_set_get_with! {[&]
         name; "instance name.";
         plugin_name; "plugin name.";
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             active: bool; "is the plugin active.";
         ]
     }
@@ -1002,10 +1023,10 @@ impl MjsPlugin<'_> {
 /***************************
 ** Mesh specification
 ***************************/
-mjs_wrapper!(Mesh);
-impl MjsMesh<'_> {
+mjs_struct!(Mesh);
+impl MjsMesh {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             refpos: &[f64; 3];            "reference position.";
             refquat: &[f64; 4];           "reference orientation.";
             scale: &[f64; 3];             "scale vector.";
@@ -1013,17 +1034,29 @@ impl MjsMesh<'_> {
     }
 
     getter_setter! {
-        with, get, set, [
+        get, [
+            plugin: &MjsPlugin;                     "sdf plugin.";
+        ]
+    }
+
+    getter_setter! {
+        [&] with, get, set, [
             inertia: MjtMeshInertia;      "inertia type (convex, legacy, exact, shell).";
-            smoothnormal: MjtByte;        "do not exclude large-angle faces from normals.";
-            needsdf: MjtByte;             "compute sdf from mesh.";
             maxhullvert: i32;             "maximum vertex count for the convex hull.";
         ]
     }
 
-    string_set_get_with! {
+    getter_setter! {
+        [&] with, get,set, [
+            smoothnormal: bool;           "do not exclude large-angle faces from normals.";
+            needsdf: bool;                "compute sdf from mesh.";
+        ]
+    }
+
+    string_set_get_with! {[&]
         content_type; "content type of file.";
         file; "mesh file.";
+        material; "name of material.";
     }
 
     vec_set! {
@@ -1033,56 +1066,54 @@ impl MjsMesh<'_> {
         userface: i32;               "user vertex indices.";
         userfacetexcoord: i32;       "user texcoord indices.";
     }
-
-    plugin_wrapper_method!();
 }
 
 /***************************
 ** Hfield specification
 ***************************/
-mjs_wrapper!(Hfield);
-impl MjsHfield<'_> {
+mjs_struct!(Hfield);
+impl MjsHfield {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             size: &[f64; 4];              "size of the hfield.";
         ]
     }
 
-    getter_setter! { with, get, set, [
+    getter_setter! { [&] with, get, set, [
         nrow: i32;  "number of rows.";
         ncol: i32;  "number of columns.";
     ]}
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         content_type; "content type of file.";
         file; "file: (nrow, ncol, [elevation data]).";
     }
 
     /// Sets `userdata`.
     pub fn set_userdata<T: AsRef<[f32]>>(&mut self, userdata: T) {
-        write_mjs_vec_f32(userdata.as_ref(), unsafe {self.ffi_mut().userdata.as_mut().unwrap() })
+        write_mjs_vec_f32(userdata.as_ref(), unsafe {self.userdata.as_mut().unwrap() })
     }
 }
 
 /***************************
 ** Skin specification
 ***************************/
-mjs_wrapper!(Skin);
-impl MjsSkin<'_> {
+mjs_struct!(Skin);
+impl MjsSkin {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             rgba: &[f32; 4];    "rgba when material is omitted.";
         ]
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             inflate: f32;       "inflate in normal direction.";
             group: i32;         "group for visualization.";
         ]
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         material;               "name of material used for rendering.";
         file;                   "skin file.";
     }
@@ -1108,21 +1139,21 @@ impl MjsSkin<'_> {
 /***************************
 ** Texture specification
 ***************************/
-mjs_wrapper!(Texture);
-impl MjsTexture<'_> {
+mjs_struct!(Texture);
+impl MjsTexture {
     getter_setter! {
-        with, get, [
-            rgb1: &[f64; 3];               "first color for builtin";
-            rgb2: &[f64; 3];               "second color for builtin";
-            markrgb: &[f64; 3];            "mark color";
-            gridsize: &[i32; 2];           "size of grid for composite file; (1,1)-repeat";
-            gridlayout: &[i8; 13];         "row-major: L,R,F,B,U,D for faces; . for unused";
+        [&] with, get, [
+            rgb1: &[f64; 3];               "first color for builtin.";
+            rgb2: &[f64; 3];               "second color for builtin.";
+            markrgb: &[f64; 3];            "mark color.";
+            gridsize: &[i32; 2];           "size of grid for composite file; (1,1)-repeat.";
+            gridlayout: &[i8; 13];         "row-major: L,R,F,B,U,D for faces; . for unused.";
         ]
     }
 
     getter_setter! {
-        with, get, set, [
-            random: f64;                  "probability of random dots";
+        [&] with, get, set, [
+            random: f64;                  "probability of random dots.";
             width: i32;                   "image width.";
             height: i32;                  "image height.";
             nchannel: i32;                "number of channels.";
@@ -1130,11 +1161,11 @@ impl MjsTexture<'_> {
     }
 
     getter_setter! {
-        force!, with, get, set, [
-            type_: MjtTexture;            "texture type.";
+        force!, [&] with, get, set, [
+            type_ + _: MjtTexture;        "texture type.";
             colorspace: MjtColorSpace;    "colorspace.";
-            builtin: MjtBuiltin;          "builtin type";
-            mark: MjtMark;                "mark type";
+            builtin: MjtBuiltin;          "builtin type.";
+            mark: MjtMark;                "mark type.";
         ]
     }
 
@@ -1142,17 +1173,17 @@ impl MjsTexture<'_> {
         cubefiles; "different file for each side of the cube.";
     }
 
-    getter_setter! {with, get, set, [
+    getter_setter! {[&] with, get, set, [
         hflip: bool;    "horizontal flip.";
         vflip: bool;    "vertical flip.";
     ]}
 
     /// Sets texture `data`.
     pub fn set_data<T>(&mut self, data: &[T]) {
-        write_mjs_vec_byte(data, unsafe { self.ffi_mut().data.as_mut().unwrap() });
+        write_mjs_vec_byte(data, unsafe { self.data.as_mut().unwrap() });
     }
 
-    string_set_get_with! {
+    string_set_get_with! {[&]
         file; "png file to load; use for all sides of cube.";
         content_type; "content type of file.";
     }
@@ -1161,27 +1192,27 @@ impl MjsTexture<'_> {
 /***************************
 ** Material specification
 ***************************/
-mjs_wrapper!(Material);
-impl MjsMaterial<'_> {
+mjs_struct!(Material);
+impl MjsMaterial {
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             rgba: &[f32; 4];                               "rgba color.";
-            texrepeat: &[f32; 2];    "texture repetition for 2D mapping";
+            texrepeat: &[f32; 2];    "texture repetition for 2D mapping.";
         ]
     }
 
-    getter_setter! {with, get, set, [
-        texuniform: bool;       "make texture cube uniform";
+    getter_setter! {[&] with, get, set, [
+        texuniform: bool;       "make texture cube uniform.";
     ]}
 
     getter_setter! {
-        with, get, set, [
-            emission: f32;                           "emission";
-            specular: f32;                           "specular";
-            shininess: f32;                         "shininess";
-            reflectance: f32;                     "reflectance";
-            metallic: f32;                           "metallic";
-            roughness: f32;                         "roughness";
+        [&] with, get, set, [
+            emission: f32;                           "emission.";
+            specular: f32;                           "specular.";
+            shininess: f32;                         "shininess.";
+            reflectance: f32;                     "reflectance.";
+            metallic: f32;                           "metallic.";
+            roughness: f32;                         "roughness.";
         ]
     }
 
@@ -1194,35 +1225,37 @@ impl MjsMaterial<'_> {
 /***************************
 ** Body specification
 ***************************/
-mjs_wrapper!(Body);
-impl MjsBody<'_> {
+mjs_struct!(Body {
+    // Override the delete method to prevent deletion of world.
+    unsafe fn delete(&mut self) -> Result<(), Error> {
+        if self.name() == "world" {
+            return Err(Error::new(ErrorKind::Unsupported, "world body can't be deleted"));
+        }
+        unsafe { SpecItem::__delete_default__(self) }
+    }
+});
+
+impl MjsBody {
     add_x_method! { body, site, joint, geom, camera, light }
-    
-    // Special case
-    /// Add and return a child frame.
-    pub fn add_frame(&mut self) -> MjsFrame<'_> {
-        let ptr = unsafe { mjs_addFrame(self.ffi_mut(), ptr::null_mut()) };
-        MjsFrame(ptr, PhantomData)
+
+    /// Dummy mutable FFI method used to simplify access through macros.
+    #[inline]
+    unsafe fn ffi_mut(&mut self) -> &mut Self {
+        self
     }
 
-    // Special case: the world body can't be deleted, however MuJoCo doesn't prevent that.
-    // When the world body is deleted, the drop of MjSpec will crash on cleanup.
-
-    /// Delete the item.
-    pub fn delete(self) -> Result<(), Error> {
-        if self.name() != "world" {
-            SpecItem::delete(self)
-        }
-        else {
-            Err(Error::new(ErrorKind::Unsupported, "the world body can't be deleted"))
-        }
+    // Special case
+    /// Add and return a child frame.
+    pub fn add_frame(&mut self) -> &mut MjsFrame {
+        let ptr = unsafe { mjs_addFrame(self, ptr::null_mut()) };
+        unsafe { ptr.as_mut().unwrap() }
     }
 }
 
-impl MjsBody<'_> {
+impl MjsBody {
     // Complex types with mutable and immutable reference returns.
     getter_setter! {
-        with, get, [
+        [&] with, get, [
             // body frame
             pos: &[f64; 3];                   "frame position.";
             quat: &[f64; 4];                  "frame orientation.";
@@ -1237,31 +1270,42 @@ impl MjsBody<'_> {
         ]
     }
 
+    getter_setter! {
+        get, [
+            plugin: &MjsPlugin;                     "passive force plugin.";
+        ]
+    }
+
     // Plain types with normal getters and setters.
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             mass: f64;                     "mass.";
             gravcomp: f64;                 "gravity compensation.";
         ]
     }
 
     getter_setter! {
-        with, get, set, [
+        [&] with, get, set, [
             mocap: bool;                   "whether this is a mocap body.";
             explicitinertial: bool;        "whether to save the body with explicit inertial clause.";
         ]
     }
-    
-
-    // TODO: Test the plugin wrapper.
-    plugin_wrapper_method!();
 
     userdata_method!(f64);
 }
 
 /// Mutable iterator over items in [`MjsBody`].
-pub struct MjsBodyItemIterMut<'a, 'p, T> {
-    root: &'a mut MjsBody<'p>,
+pub struct MjsBodyItemIterMut<'a, T> {
+    root: &'a mut MjsBody,
+    last: *mut mjsElement,
+    recurse: bool,
+    /// Used for generic implementation of iterator's methods.
+    item_type: PhantomData<T>
+}
+
+/// Immutable iterator over items in [`MjsBody`].
+pub struct MjsBodyItemIter<'a, T> {
+    root: &'a MjsBody,
     last: *mut mjsElement,
     recurse: bool,
     /// Used for generic implementation of iterator's methods.
@@ -1273,8 +1317,8 @@ item_body_iterator! {
 }
 
 /// Iterator methods.
-impl<'p> MjsBody<'p> {
-    body_get_iter! {'p, [body, joint, geom, site, camera, light, frame] }
+impl MjsBody {
+    body_get_iter! {[body, joint, geom, site, camera, light, frame] }
 }
 
 /******************************
@@ -1357,8 +1401,8 @@ mod tests {
         const NEW_MODEL_NAME: &str = "Test model";
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let mut world = spec.world_body();
-        let mut body = world.add_body();
+        let world = spec.world_body_mut();
+        let body = world.add_body();
         assert_eq!(body.name(), "");
         body.set_name(NEW_MODEL_NAME);
         assert_eq!(body.name(), NEW_MODEL_NAME);
@@ -1371,19 +1415,18 @@ mod tests {
         const NEW_MODEL_NAME: &str = "Test model";
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let mut world = spec.world_body();
-        let mut body = world.add_body();
+        let world = spec.world_body_mut();
+        let body = world.add_body();
         body.set_name(NEW_MODEL_NAME);
-        drop(body);
 
         /* Test normal body deletion */
-        let body = spec.body(NEW_MODEL_NAME).expect("failed to obtain the body");
-        assert!(body.delete().is_ok(), "failed to delete model");
+        let body = spec.body_mut(NEW_MODEL_NAME).expect("failed to obtain the body");
+        assert!(unsafe { body.delete() }.is_ok(), "failed to delete model");
         assert!(spec.body(NEW_MODEL_NAME).is_none(), "body was not removed from spec");
 
         /* Test world body deletion */
-        let world = spec.world_body();
-        assert!(world.delete().is_err(), "the world model should not be deletable");
+        let world = spec.world_body_mut();
+        assert!(unsafe { world.delete() }.is_err(), "the world model should not be deletable");
 
         spec.compile().unwrap();
     }
@@ -1393,14 +1436,13 @@ mod tests {
         const NEW_NAME: &str = "Test model";
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let mut world = spec.world_body();
-        let mut joint = world.add_joint();
+        let world = spec.world_body_mut();
+        let joint = world.add_joint();
         joint.set_name(NEW_NAME);
-        drop(joint);
 
         /* Test normal body deletion */
-        let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
-        assert!(joint.delete().is_ok(), "failed to delete model");
+        let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
+        assert!(unsafe { joint.delete() }.is_ok(), "failed to delete model");
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed fom spec");
 
         spec.compile().unwrap();
@@ -1411,15 +1453,14 @@ mod tests {
         const NEW_NAME: &str = "Test model";
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let mut world = spec.world_body();
-        let mut joint = world.add_joint();
+        let world = spec.world_body_mut();
+        let joint = world.add_joint();
 
         joint.set_name(NEW_NAME);
-        drop(joint);
 
         /* Test normal body deletion */
-        let joint = spec.joint(NEW_NAME).expect("failed to obtain the body");
-        assert!(joint.delete().is_ok(), "failed to delete model");
+        let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
+        assert!(unsafe { joint.delete() }.is_ok(), "failed to delete model");
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed from spec");
 
         spec.compile().unwrap();
@@ -1430,7 +1471,7 @@ mod tests {
         const NEW_USERDATA: [f64; 3] = [1.0, 2.0, 3.0];
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let mut world = spec.world_body();
+        let world = spec.world_body_mut();
 
         assert_eq!(world.userdata(), []);
 
@@ -1445,7 +1486,7 @@ mod tests {
         const TEST_VALUE_F64: f64 = 5.25;
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let mut world = spec.world_body();
+        let world = spec.world_body_mut();
 
         world.set_gravcomp(TEST_VALUE_F64);
         assert_eq!(world.gravcomp(), TEST_VALUE_F64);
@@ -1470,12 +1511,12 @@ mod tests {
         assert!(spec.default(DEFAULT_NAME).is_some());
         assert!(spec.default(NOT_DEFAULT_NAME).is_none());
 
-        let mut world = spec.world_body();
-        let mut some_body = world.add_body();
+        let world = spec.world_body_mut();
+        let some_body = world.add_body();
         some_body.add_joint().with_name("test");
         some_body.add_geom().with_size([0.010, 0.0, 0.0]);
 
-        let mut actuator = spec.add_actuator()
+        let actuator = spec.add_actuator()
             .with_trntype(MjtTrn::mjTRN_JOINT);
         actuator.set_target("test");
         
@@ -1486,7 +1527,6 @@ mod tests {
 
     #[test]
     fn test_save() {
-        /* TODO: when the bug gets fixed in MuJoCo, switch the angle="radian"to angle="degree" */
         const EXPECTED_XML: &str = "\
 <mujoco model=\"MuJoCo Model\">
   <compiler angle=\"radian\"/>
@@ -1503,8 +1543,8 @@ mod tests {
 ";
 
         let mut spec = MjSpec::new();
-        let mut world = spec.world_body();
-        let mut body = world.add_body();
+        let world = spec.world_body_mut();
+        let body = world.add_body();
         body.add_camera();
         body.add_geom().with_size([0.010, 0.0, 0.0]);
         body.add_light();
@@ -1528,10 +1568,10 @@ mod tests {
         spec.add_material().with_name(TEST_MATERIAL);
 
         /* add site */
-        let mut world = spec.world_body();
+        let world = spec.world_body_mut();
         world.add_site()
             .with_name(SITE_NAME);
-        let mut site = spec.site(SITE_NAME).unwrap();
+        let site = spec.site_mut(SITE_NAME).unwrap();
 
         /* material */
         assert_eq!(site.material(), "");
@@ -1555,7 +1595,7 @@ mod tests {
     #[test]
     fn test_frame() {
         let mut spec = MjSpec::new();
-        let mut world = spec.world_body()
+        let world = spec.world_body_mut()
             .with_gravcomp(10.0);
 
         world.add_frame()
@@ -1570,24 +1610,24 @@ mod tests {
     #[test]
     fn test_wrap() {
         let mut spec = MjSpec::new();
-        let mut world = spec.world_body();
-        let mut body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
+        let world = spec.world_body_mut();
+        let body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
         body1.add_geom().with_size([0.010;3]);
         body1.add_site().with_name("ball1");
         body1.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-        let mut body2= world.add_body().with_pos([0.0, 0.0, 0.5]);
+        let body2= world.add_body().with_pos([0.0, 0.0, 0.5]);
         body2.add_geom().with_size([0.010;3]);
         body2.add_site().with_name("ball2");
         body2.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-        let mut tendon = spec.add_tendon()
+        let tendon = spec.add_tendon()
             .with_range([0.0, 0.25])
             .with_rgba([1.0, 0.5, 0.0, 1.0]);  // orange
         tendon.wrap_site("ball1");
         tendon.wrap_site("ball2");
 
-        spec.world_body().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+        spec.world_body_mut().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
 
         spec.compile().unwrap();
     }
@@ -1597,7 +1637,7 @@ mod tests {
         const GEOM_NAME: &str = "test_geom";
         const GEOM_INVALID_NAME: &str = "geom_test";
         let mut spec = MjSpec::new();
-        spec.world_body().add_geom()
+        spec.world_body_mut().add_geom()
             .with_name(GEOM_NAME);
 
         assert!(spec.geom(GEOM_NAME).is_some());
@@ -1609,7 +1649,7 @@ mod tests {
         const CAMERA_NAME: &str = "test_cam";
         const CAMERA_INVALID_NAME: &str = "cam_test";
         let mut spec = MjSpec::new();
-        spec.world_body().add_camera()
+        spec.world_body_mut().add_camera()
             .with_name(CAMERA_NAME);
 
         assert!(spec.camera(CAMERA_NAME).is_some());
@@ -1621,7 +1661,7 @@ mod tests {
         const LIGHT_NAME: &str = "test_light";
         const LIGHT_INVALID_NAME: &str = "light_test";
         let mut spec = MjSpec::new();
-        spec.world_body().add_light()
+        spec.world_body_mut().add_light()
             .with_name(LIGHT_NAME);
 
         assert!(spec.light(LIGHT_NAME).is_some());
@@ -1634,8 +1674,8 @@ mod tests {
         const EXCLUDE_INVALID_NAME: &str = "exclude_test";
         let mut spec = MjSpec::new();
 
-        spec.world_body().add_body().with_name("body1-left");
-        spec.world_body().add_body().with_name("body2-right");
+        spec.world_body_mut().add_body().with_name("body1-left");
+        spec.world_body_mut().add_body().with_name("body2-right");
 
         spec.add_exclude()
             .with_name(EXCLUDE_NAME)
@@ -1649,6 +1689,19 @@ mod tests {
     }
 
     #[test]
+    fn test_mesh() {
+        let mut spec = MjSpec::new();
+        let mesh = spec.add_mesh();
+        assert!(!mesh.needsdf());
+        mesh.set_needsdf(true);
+        assert!(mesh.needsdf());
+
+        assert!(!mesh.smoothnormal());
+        mesh.set_smoothnormal(true);
+        assert!(mesh.smoothnormal());
+    }
+
+    #[test]
     fn test_iteration() {
         const LAST_BODY_NAME: &str = "subbody";
         const LAST_WORLD_BODY_NAME: &str = "body2";
@@ -1659,26 +1712,26 @@ mod tests {
         const N_MESH:   usize = 0;
 
         let mut spec = MjSpec::new();
-        let mut world = spec.world_body();
-        let mut body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
+        let world = spec.world_body_mut();
+        let body1= world.add_body().with_pos([0.0, 0.0, 0.5]);
         body1.add_geom().with_size([0.010;3]);
         body1.add_site().with_name("ball1");
         body1.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-        let mut body2= world.add_body().with_pos([0.0, 0.0, 0.5]).with_name(LAST_WORLD_BODY_NAME);
+        let body2= world.add_body().with_pos([0.0, 0.0, 0.5]).with_name(LAST_WORLD_BODY_NAME);
         body2.add_geom().with_size([0.010;3]);
         body2.add_site().with_name("ball2");
         body2.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
         body2.add_body().with_name(LAST_BODY_NAME);
 
-        let mut tendon = spec.add_tendon()
+        let tendon = spec.add_tendon()
             .with_range([0.0, 0.25])
             .with_rgba([1.0, 0.5, 0.0, 1.0]);  // orange
         tendon.wrap_site("ball1");
         tendon.wrap_site("ball2");
 
-        spec.world_body().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+        spec.world_body_mut().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
 
         // Iter MjSpec
         assert_eq!(spec.geom_iter_mut().count(), N_GEOM);
@@ -1689,7 +1742,7 @@ mod tests {
         assert_eq!(spec.body_iter_mut().last().unwrap().name(), LAST_BODY_NAME);
 
         // Iter MjsBody
-        let mut world = spec.world_body();
+        let world = spec.world_body_mut();
         assert_eq!(world.geom_iter_mut(true).count(), N_GEOM);
         assert_eq!(world.body_iter_mut(true).count(), N_BODY - 1);  // world must now be excluded
         assert_eq!(world.site_iter_mut(true).count(), N_SITE);

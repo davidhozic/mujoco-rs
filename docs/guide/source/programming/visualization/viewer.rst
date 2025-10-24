@@ -29,7 +29,7 @@ A screenshot of the Rust 3D viewer is shown below.
 
 The viewer can be launched only in **passive mode**, i.e. it won't run as a separate application,
 and needs to be periodically "synced" by the user application.
-The user application is the one that needs to run the actual physical simulation, like shown in
+The user application is the one that needs to run the actual physics simulation, like shown in
 :ref:`basic_sim` and also below.
 
 The viewer can be launched with :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive`,
@@ -52,7 +52,7 @@ like shown in the following example:
 
             /* Update the simulation state */
             data.step();
-            std::thread::sleep(Duration::from_secs_f64(timestep));
+            std::thread::sleep(Duration::from_secs_f64(timestep));  // wait approximately timestep seconds
         }
     }
 
@@ -75,10 +75,17 @@ At the beginning, we also obtained the simulation timestep (time passed in simul
 sleep after the step with ``std::thread::sleep(Duration::from_secs_f64(timestep));``.
 This is optional and can be removed or reduced to run the simulation faster than realtime.
 
+.. note::
+
+    The ``sleep()`` function is not accurate. For accurate timing,
+    use `std::time::Instant <https://doc.rust-lang.org/std/time/struct.Instant.html>`_ to poll the elapsed time.
+
 Interaction with the viewer is described with a help menu, which is shown on launch of the viewer.
 For more, refer to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
 `examples <https://github.com/davidhozic/mujoco-rs/tree/main/examples>`_.
 
+
+.. _mj_cpp_viewer:
 
 Wrapper of MuJoCo's C++ 3D viewer
 =====================================
@@ -117,6 +124,6 @@ Here is an example of using the C++ wrapper:
     }
 
 
-Compared to the Rust-native viewer, the C++ wrapper doesn't take a ``data`` parameter to the :docs-rs:`~mujoco_rs::viewer::<struct>MjViewerCpp::<method>sync`
-method. Additionally, a call to :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewerCpp::<method>render`
+Compared to the Rust-native viewer, the C++ wrapper doesn't take a ``data`` parameter to the :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync`
+method. Additionally, a call to :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render`
 is required.

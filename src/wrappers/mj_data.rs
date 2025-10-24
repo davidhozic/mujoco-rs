@@ -1,8 +1,8 @@
+use super::mj_statistic::{MjWarningStat, MjTimerStat, MjSolverStat};
 use super::mj_model::{MjModel, MjtSameFrame, MjtObj, MjtStage};
-use super::mj_statistic::{MjWarningStat, MjTimerStat};
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
-use crate::mujoco_c::*;
+use crate::{getter_setter, mujoco_c::*};
 
 use std::io::{self, Error, ErrorKind};
 use std::ffi::CString;
@@ -10,7 +10,7 @@ use std::ops::Deref;
 use std::ptr;
 
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
-use crate::{view_creator, info_method, info_with_view};
+use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
 
 /*******************************************/
 // Types
@@ -439,7 +439,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Run composite rigid body inertia algorithm (CRB).
-    pub fn crb(&mut self) {
+    pub fn crb_comp(&mut self) {
         unsafe { mj_crb(self.model.ffi(), self.ffi_mut()) }
     }
 
@@ -766,9 +766,15 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         &self.model
     }
 
-    /// Maximum stack allocation in bytes.
-    pub fn maxuse_stack(&self) -> MjtSize {
-        self.ffi().maxuse_stack
+    /// Warning statistics.
+    #[deprecated(since = "2.0.0", note = "replaced with warning")]
+    pub fn warning_stats(&self) -> &[MjWarningStat] {
+        &self.ffi().warning
+    }
+
+    #[deprecated(since = "2.0.0", note = "replaced with timer")]
+    pub fn timer_stats(&self) -> &[MjTimerStat] {
+        &self.ffi().timer
     }
 
     /// Maximum stack allocation per thread in bytes.
@@ -776,24 +782,199 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         &self.ffi().maxuse_threadstack
     }
 
-    /// Warning statistics.
-    pub fn warning_stats(&self) -> &[MjWarningStat] {
-        &self.ffi().warning
+    getter_setter! {get, [
+        [ffi] narena: MjtSize; "size of the arena in bytes (inclusive of the stack).";
+        [ffi] nbuffer: MjtSize; "size of main buffer in bytes.";
+        [ffi] nplugin: i32; "number of plugin instances.";
+        [ffi] maxuse_stack: MjtSize; "maximum stack allocation in bytes (mutable).";
+        [ffi] maxuse_arena: MjtSize; "maximum arena allocation in bytes.";
+        [ffi] maxuse_con: i32; "maximum number of contacts.";
+        [ffi] maxuse_efc: i32; "maximum number of scalar constraints.";
+        [ffi] ncon: i32; "number of detected contacts.";
+        [ffi] ne: i32; "number of equality constraints.";
+        [ffi] nf: i32; "number of friction constraints.";
+        [ffi] nl: i32; "number of limit constraints.";
+        [ffi] nefc: i32; "number of constraints.";
+        [ffi] nJ: i32; "number of non-zeros in constraint Jacobian.";
+        [ffi] nA: i32; "number of non-zeros in constraint inverse inertia matrix.";
+        [ffi] nisland: i32; "number of detected constraint islands.";
+        [ffi] nidof: i32; "number of dofs in all islands.";
+        [ffi] signature: u64; "compilation signature.";
+    ]}
+
+    getter_setter! {with, get, set, [[ffi, ffi_mut] time: MjtNum; "simulation time.";]}
+
+    getter_setter! {with, get, [
+        [ffi, ffi_mut] energy: &[MjtNum; 2]; "potential, kinetic energy.";
+    ]}
+
+    getter_setter! {
+        get, [
+            [ffi, ffi_mut] solver: &[MjSolverStat; (mjNISLAND * mjNSOLVER) as usize]; "solver statistics per island, per iteration.";
+            [ffi, ffi_mut] solver_niter: &[i32; mjNISLAND as usize]; "number of solver iterations, per island.";
+            [ffi, ffi_mut] solver_nnz: &[i32; mjNISLAND as usize]; "number of nonzeros in Hessian or efc_AR, per island.";
+            [ffi, ffi_mut] solver_fwdinv: &[MjtNum; 2]; "forward-inverse comparison: qfrc, efc.";
+            [ffi, ffi_mut] warning: &[MjWarningStat; MjtWarning::mjNWARNING as usize]; "warning statistics (mutable).";
+            [ffi, ffi_mut] timer: &[MjTimerStat; MjtTimer::mjNTIMER as usize]; "timer statistics.";
+        ]
+    }
+}
+
+/// Arrays of dynamic size.
+impl<M: Deref<Target = MjModel>> MjData<M> {
+    array_slice_dyn! {
+        qpos: &[MjtNum; "position"; model.ffi().nq],
+        qvel: &[MjtNum; "velocity"; model.ffi().nv],
+        act: &[MjtNum; "actuator activation"; model.ffi().na],
+        qacc_warmstart: &[MjtNum; "acceleration used for warmstart"; model.ffi().nv],
+        plugin_state: &[MjtNum; "plugin state"; model.ffi().npluginstate],
+        ctrl: &[MjtNum; "control"; model.ffi().nu],
+        qfrc_applied: &[MjtNum; "applied generalized force"; model.ffi().nv],
+        xfrc_applied: &[[MjtNum; 6] [cast]; "applied Cartesian force/torque"; model.ffi().nbody],
+        eq_active: &[bool [cast]; "enable/disable constraints"; model.ffi().neq],
+        mocap_pos: &[[MjtNum; 3] [cast]; "positions of mocap bodies"; model.ffi().nmocap],
+        mocap_quat: &[[MjtNum; 4] [cast]; "orientations of mocap bodies"; model.ffi().nmocap],
+        qacc: &[MjtNum; "acceleration"; model.ffi().nv],
+        act_dot: &[MjtNum; "time-derivative of actuator activation"; model.ffi().na],
+        userdata: &[MjtNum; "user data, not touched by engine"; model.ffi().nuserdata],
+        sensordata: &[MjtNum; "sensor data array"; model.ffi().nsensordata],
+        xpos: &[[MjtNum; 3] [cast]; "Cartesian position of body frame"; model.ffi().nbody],
+        xquat: &[[MjtNum; 4] [cast]; "Cartesian orientation of body frame"; model.ffi().nbody],
+        xmat: &[[MjtNum; 9] [cast]; "Cartesian orientation of body frame"; model.ffi().nbody],
+        xipos: &[[MjtNum; 3] [cast]; "Cartesian position of body com"; model.ffi().nbody],
+        ximat: &[[MjtNum; 9] [cast]; "Cartesian orientation of body inertia"; model.ffi().nbody],
+        xanchor: &[[MjtNum; 3] [cast]; "Cartesian position of joint anchor"; model.ffi().njnt],
+        xaxis: &[[MjtNum; 3] [cast]; "Cartesian joint axis"; model.ffi().njnt],
+        geom_xpos: &[[MjtNum; 3] [cast]; "Cartesian geom position"; model.ffi().ngeom],
+        geom_xmat: &[[MjtNum; 9] [cast]; "Cartesian geom orientation"; model.ffi().ngeom],
+        site_xpos: &[[MjtNum; 3] [cast]; "Cartesian site position"; model.ffi().nsite],
+        site_xmat: &[[MjtNum; 9] [cast]; "Cartesian site orientation"; model.ffi().nsite],
+        cam_xpos: &[[MjtNum; 3] [cast]; "Cartesian camera position"; model.ffi().ncam],
+        cam_xmat: &[[MjtNum; 9] [cast]; "Cartesian camera orientation"; model.ffi().ncam],
+        light_xpos: &[[MjtNum; 3] [cast]; "Cartesian light position"; model.ffi().nlight],
+        light_xdir: &[[MjtNum; 3] [cast]; "Cartesian light direction"; model.ffi().nlight],
+        subtree_com: &[[MjtNum; 3] [cast]; "center of mass of each subtree"; model.ffi().nbody],
+        cdof: &[[MjtNum; 6] [cast]; "com-based motion axis of each dof (rot:lin)"; model.ffi().nv],
+        cinert: &[[MjtNum; 10] [cast]; "com-based body inertia and mass"; model.ffi().nbody],
+        flexvert_xpos: &[[MjtNum; 3] [cast]; "Cartesian flex vertex positions"; model.ffi().nflexvert],
+        flexelem_aabb: &[[MjtNum; 6] [cast]; "flex element bounding boxes (center, size)"; model.ffi().nflexelem],
+        flexedge_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; model.ffi().nflexedge],
+        flexedge_J_rowadr: &[i32; "row start address in colind array"; model.ffi().nflexedge],
+        flexedge_length: &[MjtNum; "flex edge lengths"; model.ffi().nflexedge],
+        bvh_aabb_dyn: &[[MjtNum; 6] [cast]; "global bounding box (center, size)"; model.ffi().nbvhdynamic],
+        ten_wrapadr: &[i32; "start address of tendon's path"; model.ffi().ntendon],
+        ten_wrapnum: &[i32; "number of wrap points in path"; model.ffi().ntendon],
+        ten_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; model.ffi().ntendon],
+        ten_J_rowadr: &[i32; "row start address in colind array"; model.ffi().ntendon],
+        ten_length: &[MjtNum; "tendon lengths"; model.ffi().ntendon],
+        wrap_obj: &[[i32; 2] [cast]; "geom id; -1: site; -2: pulley"; model.ffi().nwrap],
+        wrap_xpos: &[[MjtNum; 6] [cast]; "Cartesian 3D points in all paths"; model.ffi().nwrap],
+        actuator_length: &[MjtNum; "actuator lengths"; model.ffi().nu],
+        moment_rownnz: &[i32; "number of non-zeros in actuator_moment row"; model.ffi().nu],
+        moment_rowadr: &[i32; "row start address in colind array"; model.ffi().nu],
+        moment_colind: &[i32; "column indices in sparse Jacobian"; model.ffi().nJmom],
+        actuator_moment: &[MjtNum; "actuator moments"; model.ffi().nJmom],
+        crb: &[[MjtNum; 10] [cast]; "com-based composite inertia and mass"; model.ffi().nbody],
+        qM: &[MjtNum; "inertia (sparse)"; model.ffi().nM],
+        M: &[MjtNum; "reduced inertia (compressed sparse row)"; model.ffi().nC],
+        qLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
+        qLDiagInv: &[MjtNum; "1/diag(D)"; model.ffi().nv],
+        bvh_active: &[bool [cast]; "was bounding volume checked for collision"; model.ffi().nbvh],
+        flexedge_velocity: &[MjtNum; "flex edge velocities"; model.ffi().nflexedge],
+        ten_velocity: &[MjtNum; "tendon velocities"; model.ffi().ntendon],
+        actuator_velocity: &[MjtNum; "actuator velocities"; model.ffi().nu],
+        cvel: &[[MjtNum; 6] [cast]; "com-based velocity (rot:lin)"; model.ffi().nbody],
+        cdof_dot: &[[MjtNum; 6] [cast]; "time-derivative of cdof (rot:lin)"; model.ffi().nv],
+        qfrc_bias: &[MjtNum; "C(qpos,qvel)"; model.ffi().nv],
+        qfrc_spring: &[MjtNum; "passive spring force"; model.ffi().nv],
+        qfrc_damper: &[MjtNum; "passive damper force"; model.ffi().nv],
+        qfrc_gravcomp: &[MjtNum; "passive gravity compensation force"; model.ffi().nv],
+        qfrc_fluid: &[MjtNum; "passive fluid force"; model.ffi().nv],
+        qfrc_passive: &[MjtNum; "total passive force"; model.ffi().nv],
+        subtree_linvel: &[[MjtNum; 3] [cast]; "linear velocity of subtree com"; model.ffi().nbody],
+        subtree_angmom: &[[MjtNum; 3] [cast]; "angular momentum about subtree com"; model.ffi().nbody],
+        qH: &[MjtNum; "L'*D*L factorization of modified M"; model.ffi().nC],
+        qHDiagInv: &[MjtNum; "1/diag(D) of modified M"; model.ffi().nv],
+        qDeriv: &[MjtNum; "d (passive + actuator - bias) / d qvel"; model.ffi().nD],
+        qLU: &[MjtNum; "sparse LU of (qM - dt*qDeriv)"; model.ffi().nD],
+        actuator_force: &[MjtNum; "actuator force in actuation space"; model.ffi().nu],
+        qfrc_actuator: &[MjtNum; "actuator force"; model.ffi().nv],
+        qfrc_smooth: &[MjtNum; "net unconstrained force"; model.ffi().nv],
+        qacc_smooth: &[MjtNum; "unconstrained acceleration"; model.ffi().nv],
+        qfrc_constraint: &[MjtNum; "constraint force"; model.ffi().nv],
+        cacc: &[[MjtNum; 6] [cast]; "com-based acceleration"; model.ffi().nbody],
+        cfrc_int: &[[MjtNum; 6] [cast]; "com-based interaction force with parent"; model.ffi().nbody],
+        cfrc_ext: &[[MjtNum; 6] [cast]; "com-based external force on body"; model.ffi().nbody],
+        contact: &[MjContact; "array of all detected contacts"; ffi().ncon],
+        efc_type: &[MjtConstraint [cast]; "constraint type"; ffi().nefc],
+        efc_id: &[i32; "id of object of specified type"; ffi().nefc],
+        efc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
+        efc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
+        efc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
+        efc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
+        efc_J: &[MjtNum; "constraint Jacobian"; ffi().nJ],
+        efc_pos: &[MjtNum; "constraint position (equality, contact)"; ffi().nefc],
+        efc_margin: &[MjtNum; "inclusion margin (contact)"; ffi().nefc],
+        efc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],
+        efc_diagApprox: &[MjtNum; "approximation to diagonal of A"; ffi().nefc],
+        efc_KBIP: &[[MjtNum; 4] [cast]; "stiffness, damping, impedance, imp'"; ffi().nefc],
+        efc_D: &[MjtNum; "constraint mass"; ffi().nefc],
+        efc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
+        tendon_efcadr: &[i32; "first efc address involving tendon; -1: none"; model.ffi().ntendon],
+        dof_island: &[i32; "island id of this dof; -1: none"; model.ffi().nv],
+        island_nv: &[i32; "number of dofs in this island"; ffi().nisland],
+        island_idofadr: &[i32; "island start address in idof vector"; ffi().nisland],
+        island_dofadr: &[i32; "island start address in dof vector"; ffi().nisland],
+        map_dof2idof: &[i32; "map from dof to idof"; model.ffi().nv],
+        map_idof2dof: &[i32; "map from idof to dof;  >= nidof: unconstrained"; model.ffi().nv],
+        ifrc_smooth: &[MjtNum; "net unconstrained force"; ffi().nidof],
+        iacc_smooth: &[MjtNum; "unconstrained acceleration"; ffi().nidof],
+        iM_rownnz: &[i32; "inertia: non-zeros in each row"; ffi().nidof],
+        iM_rowadr: &[i32; "inertia: address of each row in iM_colind"; ffi().nidof],
+        iM_colind: &[i32; "inertia: column indices of non-zeros"; model.ffi().nC],
+        iM: &[MjtNum; "total inertia (sparse)"; model.ffi().nC],
+        iLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
+        iLDiagInv: &[MjtNum; "1/diag(D)"; ffi().nidof],
+        iacc: &[MjtNum; "acceleration"; ffi().nidof],
+        efc_island: &[i32; "island id of this constraint"; ffi().nefc],
+        island_ne: &[i32; "number of equality constraints in island"; ffi().nisland],
+        island_nf: &[i32; "number of friction constraints in island"; ffi().nisland],
+        island_nefc: &[i32; "number of constraints in island"; ffi().nisland],
+        island_iefcadr: &[i32; "start address in iefc vector"; ffi().nisland],
+        map_efc2iefc: &[i32; "map from efc to iefc"; ffi().nefc],
+        map_iefc2efc: &[i32; "map from iefc to efc"; ffi().nefc],
+        iefc_type: &[MjtConstraint [cast]; "constraint type"; ffi().nefc],
+        iefc_id: &[i32; "id of object of specified type"; ffi().nefc],
+        iefc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
+        iefc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
+        iefc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
+        iefc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
+        iefc_J: &[MjtNum; "constraint Jacobian"; ffi().nJ],
+        iefc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],
+        iefc_D: &[MjtNum; "constraint mass"; ffi().nefc],
+        iefc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
+        efc_AR_rownnz: &[i32; "number of non-zeros in AR"; ffi().nefc],
+        efc_AR_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
+        efc_AR_colind: &[i32; "column indices in sparse AR"; ffi().nA],
+        efc_AR: &[MjtNum; "J*inv(M)*J' + R"; ffi().nA],
+        efc_vel: &[MjtNum; "velocity in constraint space: J*qvel"; ffi().nefc],
+        efc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
+        efc_b: &[MjtNum; "linear cost term: J*qacc_smooth - aref"; ffi().nefc],
+        iefc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
+        iefc_state: &[MjtConstraintState [cast]; "constraint state"; ffi().nefc],
+        iefc_force: &[MjtNum; "constraint force in constraint space"; ffi().nefc],
+        efc_state: &[MjtConstraintState [cast]; "constraint state"; ffi().nefc],
+        efc_force: &[MjtNum; "constraint force in constraint space"; ffi().nefc],
+        ifrc_constraint: &[MjtNum; "constraint force"; ffi().nidof]
     }
 
-    /// Timer statistics.
-    pub fn timer_stats(&self) -> &[MjTimerStat] {
-        &self.ffi().timer
-    }
-
-    /// Simulation time
-    pub fn time(&self) -> MjtNum {
-        self.ffi().time
-    }
-
-    /// Potential, kinetic energy.
-    pub fn energy(&self) -> &[MjtNum] {
-        &self.ffi().energy
+    array_slice_dyn! {
+        sublen_dep {
+            ten_J_colind: &[[i32; model.ffi().nv as usize] [cast]; "column indices in sparse Jacobian"; model.ffi().ntendon],
+            ten_J: &[[MjtNum; model.ffi().nv as usize] [cast]; "tendon Jacobian"; model.ffi().ntendon],
+            flexedge_J_colind: &[[i32; model.ffi().nv as usize] [cast]; "column indices in sparse Jacobian"; model.ffi().nflexedge],
+            flexedge_J: &[[MjtNum; model.ffi().nv as usize] [cast]; "flex edge Jacobian"; model.ffi().nflexedge]
+        }
     }
 }
 
@@ -804,7 +985,6 @@ impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
         }
     }
 }
-
 
 /**************************************************************************************************/
 // Joint view
@@ -1232,5 +1412,22 @@ mod test {
         let (geomid, dist) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1);
         assert!(dist.is_finite());
         assert!(geomid >= -1);
+    }
+
+    #[test]
+    fn test_qpos_view() {
+        const JOINT_BALL_DOF: usize = 7;
+        const BALL_INDEX: usize = 1;
+        const DOF_TO_MODIFY: usize = 2;
+        const MODIFIED_VALUE: f64 = 15.0;
+
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let name = model.id_to_name(MjtObj::mjOBJ_JOINT, BALL_INDEX as i32).unwrap();
+
+        let mut data = MjData::new(&model);
+        let ball2_joint_info = data.joint(name).unwrap();
+        ball2_joint_info.view_mut(&mut data).qpos[DOF_TO_MODIFY] = MODIFIED_VALUE;
+
+        assert_eq!(data.qpos()[JOINT_BALL_DOF * BALL_INDEX + DOF_TO_MODIFY], MODIFIED_VALUE);
     }
 }

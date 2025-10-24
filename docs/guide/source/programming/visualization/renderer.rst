@@ -15,7 +15,7 @@ method. By default, RGB rendering is enabled, while depth rendering is disabled.
 
 .. code-block:: rust
     
-    /* Build the renderer */.
+    /* Build the renderer */
     let mut renderer = MjRenderer::builder()
         .width(0).height(0)  // set to width(0) and height(0) to set automatically based on <global offwidth="1920" offheight="1080"/>
         .num_visual_user_geom(5)  // maximum number of visual-only geoms as result of the user
@@ -73,5 +73,5 @@ To save rendered images to a file, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRe
 and :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth` can be used.
 These will encode the image into a uncompressed PNG format, where the RGB image will be 8 bits and
 the depth will be 16 bits. These are meant **for visualization**.
-To save depth data in float-32 bit format, which represents **actual distance values** from the camera,
+To save depth data in 32 bit float format, which represents **actual distance values** from the camera,
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw` can be used.

@@ -29,7 +29,7 @@ To draw custom geoms to a scene inside a viewer or a renderer, applications need
 
 This :gh-example:`example <drawing_scene_viewer.rs>` shows how to draw a line between two balls.
 
-In the example we start drawing by first obtaining a mutable reference the user scene and clearing
+In the example, we start drawing by first obtaining a mutable reference to the user scene and clearing
 its geoms, which are otherwise preserved between syncs:
 
 
@@ -39,7 +39,7 @@ its geoms, which are otherwise preserved between syncs:
     scene.clear_geom();  // clear existing geoms
 
 We then initialize a new geom. We make it a line (``MjtGeom::mjGEOM_LINE``) and give it a pure white
-color (``Some([1.0, 1.0, 1.0, 1.0])``). We leave the other fields at ``None`` as they are not needed
+color (``Some([1.0, 1.0, 1.0, 1.0])``). We leave other fields at ``None``, as they are not needed
 at this stage.
 
 
@@ -59,7 +59,7 @@ at this stage.
 
 
 In the above snippet, defining the fields that we've set to None would work, making this the final step.
-However, for that we would need to know their correct values.
+However, we would need to know their correct values.
 We obtain the needed values using :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>connect`,
 which calculates the values to result in the geom pointing from one point to another.
 

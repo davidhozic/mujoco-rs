@@ -33,10 +33,10 @@ fn create_model() -> MjModel {
     spec.option_mut().timestep = 0.005;
 
     // A pseudo reference to the world body
-    let mut world = spec.world_body();
+    let world = spec.world_body_mut();
 
     // Create a plane
-    let mut plane_geom = world.add_geom()
+    let plane_geom = world.add_geom()
         .with_type(MjtGeom::mjGEOM_PLANE)
         .with_size([1.0, 1.0, 1.0]);
 
@@ -46,7 +46,7 @@ fn create_model() -> MjModel {
     // plane_geom.alt_mut().euler = [2.0, 0.0, 0.0];
 
     // Create a ball
-    let mut ball_body = world.add_body()
+    let ball_body = world.add_body()
         .with_gravcomp(0.981)  // make it like in space.
         .with_name("ball");
 

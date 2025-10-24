@@ -71,18 +71,9 @@ impl MjVfs {
     }
 
     /// Adds a file to the virtual file system.
-    /// NOTE: Currently, a [bug](https://github.com/google-deepmind/mujoco/issues/2839)
-    /// exists in the MuJoCo library, where setting NULL for `directory`
-    /// results in a crash. For that purpose, always pass `Some("./")` if you wish to omit the directory.
     /// # Panics
     /// A panic will occur if `directory` or `filename` contain `\0` characters.
     pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> io::Result<()> {
-        if directory.is_none() {
-            return Err(Error::new(ErrorKind::InvalidInput, "due to a bug in the MuJoCo C library, the 'directory' argument must always be given. \
-            This assertion will be removed when the bug is fixed. \
-            See https://github.com/google-deepmind/mujoco/issues/2839 for more information."))
-        };
-
         let c_directory = directory.map(|d| CString::new(d).unwrap());
         let c_filename = CString::new(filename).unwrap();
         Self::handle_add_result(unsafe {
@@ -198,14 +189,8 @@ mod tests {
         fs::write(REAL_FILE_NAME, RAW_FILE_DATA).expect("could not write the file to disk");
 
         /* No directory */
-        /* 
-        ** TODO: Enable this test in the future.
-        ** It is disabled due to a segmentation fault bug at the MuJoCo's side:
-        ** https://github.com/google-deepmind/mujoco/issues/2839
-        */
         vfs = MjVfs::new();
-        let err = dbg!(vfs.add_from_file(None, REAL_FILE_NAME).unwrap_err());
-        assert!(err.kind() == ErrorKind::InvalidInput);
+        assert!(vfs.add_from_file(None, REAL_FILE_NAME).is_ok());
         drop(vfs);
 
         /* With directory */

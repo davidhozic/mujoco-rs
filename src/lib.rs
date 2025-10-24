@@ -11,12 +11,16 @@
 //! To access the wrapped attributes directly, call the corresponding `ffi()` methods
 //! (e.g., [`MjData::ffi`](wrappers::MjData::ffi))
 //! 
+//! ## MuJoCo version
+//! 
+//! MuJoCo-rs relies on MuJoCo [3.3.7](https://github.com/google-deepmind/mujoco/releases/tag/3.3.7).
+//! 
 //! ## Documentation
 //! A more guided documentation can be obtained [here](https://mujoco-rs.readthedocs.io/en/latest/).
 //! 
 //! ## 3D viewer
 //! The Rust-native viewer is available ([`viewer::MjViewer`]), as well as the MuJoCo's original C++
-//! one ([`viewer::MjViewerCpp`]).
+//! one ([`cpp_viewer::MjViewerCpp`]).
 //! The C++ viewer however requires manual compilation of a patched MuJoCo repository,
 //! like described [here](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking-with-c-viewer).
 //! 
@@ -27,7 +31,7 @@
 //! ## Features
 //! This crate has the following public features:
 //! - `viewer`, which enables the Rust-native viewer ([`viewer::MjViewer`]),
-//!   - `cpp-viewer`, which additionally enables the MuJoCo's original viewer (C++ based) ([`viewer::MjViewerCpp`]),
+//!   - `cpp-viewer`, which additionally enables the MuJoCo's original viewer (C++ based) ([`cpp_viewer::MjViewerCpp`]),
 //! - `renderer`, which enables the image renderer ([`renderer::MjRenderer`]).
 //! 
 //! ## Functions
@@ -37,7 +41,6 @@
 //! If a certain function can't be found, you can use the raw FFI bindings, available under 
 //! the [`mujoco_c`] module. Note that to access the lower-level ffi structs inside of wrappers,
 //! `ffi()` or `ffi_mut()` must be called (e.g., [`MjData::ffi`](wrappers::MjData::ffi) and [`MjModel::ffi`](wrappers::MjModel::ffi)). 
-
 use std::ffi::CStr;
 
 pub mod wrappers;
@@ -51,8 +54,14 @@ pub mod renderer;
 #[cfg(feature = "viewer")]
 pub mod viewer;
 
+#[cfg(feature = "cpp-viewer")]
+pub mod cpp_viewer;
+
 #[allow(warnings)]
 pub mod mujoco_c;  // raw MuJoCo C and C++ bindings
+
+#[cfg(any(feature = "viewer", feature = "renderer"))]
+mod render_base;
 
 
 /// Returns the version string of the MuJoCo library.

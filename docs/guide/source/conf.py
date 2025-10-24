@@ -18,9 +18,12 @@ with open("../../../Cargo.toml", "rb") as file:
     crate_meta = tomllib.load(file)
 
 
-release = crate_meta["package"]["version"].split(".")
+release, mujoco_version = crate_meta["package"]["version"].split("+")
+release = release.split("-")[0]
+release = release.split(".")
 release[-1] = 'x'  # bug fixes share the same documentation
 release = '.'.join(release)
+mujoco_version = mujoco_version[3:]  # remove mj-
 
 
 # -- General configuration ---------------------------------------------------
@@ -40,12 +43,10 @@ extensions = [
 templates_path = ['_templates']
 exclude_patterns = []
 
-MUJOCO_VERSION = "3.3.5"
-
 
 rst_epilog = f"""
-.. |MUJOCO_VERSION| replace:: {MUJOCO_VERSION}
-.. |MUJOCO_VERSION_BOLD| replace:: **{MUJOCO_VERSION}**
+.. |MUJOCO_VERSION| replace:: {mujoco_version}
+.. |MUJOCO_VERSION_BOLD| replace:: **{mujoco_version}**
 """
 
 

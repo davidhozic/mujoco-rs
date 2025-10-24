@@ -25,45 +25,61 @@ mod build_dependencies {
 
             data
         }
+
+        fn field_visibility(
+                &self,
+                _info: bindgen::callbacks::FieldInfo<'_>,
+            ) -> Option<bindgen::FieldVisibilityKind> {
+            if _info.type_name.starts_with("mjs") {
+                Some(bindgen::FieldVisibilityKind::PublicCrate)
+            } else { None }
+        }
     }
 
 
     pub(crate) fn generate_ffi() {
         let output_path = PathBuf::from("./src/");
         let current_dir = env::current_dir().unwrap();
-        let include_dir_mujoco = current_dir.join("src/cpp/include/mujoco");
-        let include_dir_simulate = include_dir_mujoco.join("viewer");
+        let include_dir_mujoco = current_dir.join("mujoco/include/mujoco");
+        let include_dir_simulate = current_dir.join("mujoco/simulate/");
+        let include_dir_glfw = current_dir.join("mujoco/build/_deps/glfw3-src/include/");
 
         let bindings_mujoco = bindgen::Builder::default()
             .header(include_dir_mujoco.join("mujoco.h").to_str().unwrap())
-            .header(include_dir_simulate.join("simulate.hpp").to_str().unwrap())
-            .header(include_dir_simulate.join("glfw_dispatch.hpp").to_str().unwrap())
-            .clang_arg("-std=c++20")
-            .clang_arg("-stdlib=libc++")
-            .clang_arg(format!("-I{}", current_dir.join("mujoco/build/_deps/glfw3-src/include/").display()))
-            .blocklist_item("std::tuple.*")
+            .clang_arg(format!("-I{}", include_dir_mujoco.display()))
+            .clang_arg(format!("-I{}", include_dir_mujoco.parent().unwrap().display()))
+            .clang_arg(format!("-I{}", include_dir_glfw.display()))
             .allowlist_item("mj.*")
-            .allowlist_item("mujoco::.*")
-            .allowlist_item("new_simulate")
-            .allowlist_item("free_simulate")
             .layout_tests(false)
             .derive_default(false)
-            .opaque_type("std::.*")
             .derive_copy(false)
             .rustified_enum(".*")
             .parse_callbacks(Box::new(CloneCallback))
+            /* Simulate C++ stuff */
+            .clang_args(["-x", "c++", "-std=c++20"])
+            .header(include_dir_simulate.join("simulate_c_api.h").to_str().unwrap())
+            .header(include_dir_simulate.join("glfw_dispatch.h").to_str().unwrap())
+            .blocklist_item("std::tuple.*")
+            .allowlist_item("mj.*")
+            .allowlist_item("mujoco::.*")
+            .allowlist_function("mujoco_cSimulate.*")
+            .opaque_type("std::.*")
+            /* Generate */
             .generate()
             .expect("unable to generate MuJoCo bindings");
 
         let outputfile_dir = output_path.join("mujoco_c.rs");
-        let mut fdata = bindings_mujoco
-            .to_string();
+        let mut fdata = bindings_mujoco.to_string();
 
         /* Extra adjustments */
         fdata = fdata.replace("pub __lx: std_basic_string_value_type<_CharT>,", "pub __lx: std::mem::ManuallyDrop<std_basic_string_value_type<_CharT>>,");
         // Remove extra Clone
-        let re = regex::Regex::new(r"#\[derive\((.*?Clone.*?), Clone,?(.*?)\)\]").unwrap();
+        let mut re = regex::Regex::new(r"#\[derive\((.*?Clone.*?), Clone,?(.*?)\)\]").unwrap();
         fdata = re.replace_all(&fdata, "#[derive($1, $2)]").to_string();
+
+        // Make mjtSameFrame be MjtByte as used in all fields.
+        re = regex::Regex::new(r"#\[repr\(u32\)\]\n(.*\npub enum mjtSameFrame_)").unwrap();
+        fdata = re.replace(&fdata, "#[repr(u8)]\n$1").to_string();
 
         fs::write(outputfile_dir, fdata).unwrap();
     }
@@ -89,13 +105,21 @@ fn main() {
     /* Static linking */
     if let Ok(path) = mujoco_lib_path {
         let mj_lib_pathbuf = PathBuf::from(path);
-        let mj_lib_simulate_path = mj_lib_pathbuf.join("libsimulate.a");
 
-        println!("cargo::rerun-if-changed={}", mj_lib_simulate_path.canonicalize().unwrap().display());
+        #[cfg(unix)]
+        let mj_lib_mujoco_path = mj_lib_pathbuf.join("libmujoco.a");
+
+        #[cfg(windows)]
+        let mj_lib_mujoco_path = mj_lib_pathbuf.join("mujoco.lib");
+
+        println!("cargo::rerun-if-changed={}", mj_lib_mujoco_path.canonicalize().unwrap().display());
         println!("cargo:rustc-link-search={}", mj_lib_pathbuf.canonicalize().unwrap().display());
 
         #[cfg(feature = "cpp-viewer")]
-        println!("cargo:rustc-link-lib=simulate");
+        {
+            println!("cargo:rustc-link-lib=simulate");
+            println!("cargo:rustc-link-lib=glfw3");
+        }
 
         println!("cargo:rustc-link-lib=mujoco");
         println!("cargo:rustc-link-lib=lodepng");

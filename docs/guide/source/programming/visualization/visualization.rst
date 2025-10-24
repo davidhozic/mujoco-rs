@@ -11,6 +11,7 @@ MuJoCo-rs provides two main ways of visualization:
 
 
 .. toctree::
+    :caption: Table of contents
 
     viewer
     renderer

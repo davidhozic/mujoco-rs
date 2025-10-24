@@ -4,7 +4,7 @@
 Installation
 =============================
 
-.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.3.5
+.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.3.7
 
 
 MuJoCo-rs
@@ -28,8 +28,7 @@ MuJoCo-rs can be added to your project like so:
 
 Then additional dependencies need to be installed/configured:
 
-- :ref:`mujoco_dep` (**required**): The actual physics engine, which is a C library.
-- :ref:`Other build dependencies<build_deps>`. These are only required when **visualization** or **rendering** is enabled.
+- :ref:`mujoco_dep`: The actual physics engine, which is a C library.
 
 
 
@@ -46,7 +45,7 @@ Because MuJoCo-rs doesn't directly bundle MuJoCo,
 the latter, in the form of a pre-built library or source code, must be `downloaded <mj_download_>`_
 or compiled. Make sure to download or compile MuJoCo version |MUJOCO_VERSION_BOLD|.
 
-Compilation of MuJoCo-rs incudes **linking** the MuJoCo library.
+Compilation of MuJoCo-rs includes **linking** to the MuJoCo library.
 This requires some environmental variables to be set, which tell
 MuJoCo-rs where to obtain the MuJoCo library.
 
@@ -102,7 +101,7 @@ Alternatively, the DLL file can be placed in the working directory.
 
 MacOS
 ++++++++++++++++++
-MacOS is currently untested.
+MacOS is untested.
 
 
 ----------------------
@@ -130,10 +129,13 @@ To build statically linkable libraries, perform the following steps:
 
        git submodule update --init --recursive
        cd ./mujoco/
-       cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF -DCMAKE_EXE_LINKER_FLAGS:STRING=-Wl,--no-as-needed
-       cmake --build build --parallel --target libsimulate --config=Release
+       cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF
+       cmake --build build --parallel --target glfw libmujoco_simulate --config=Release
 
    The builds are tested with the ``gcc`` compiler.
+   
+   Note that ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF`` disables link-time optimization which results in slightly
+   lower performance. Enabling it causes compatibility problems on the Linux platform. See the attention block below for more info.
 
 4. Set the environmental variable ``MUJOCO_STATIC_LINK_DIR``. Bash example:
 
@@ -147,63 +149,26 @@ To build statically linkable libraries, perform the following steps:
 
       cargo build
 
-   .. attention::
+.. attention::
 
-      On **Linux**, you may need to tell Rust to use the system linker instead of rust-lld.
-      This is a problem with LTO and different linkers being used to link MuJoCo-rs and MuJoCo.
-      The problem will be addressed in a future MuJoCo-rs release.    
+    **Link-time optimization**
 
-      ::
+    Above CMake configuration command **disables** link-time optimization (LTO). This results in worse performance
+    but allows the compiled code to be used with the rust-lld linker, which is the default linker
+    since Rust 1.90.0 on the **x86_64-unknown-linux-gnu** target.
+
+    If performance is critical for you, link-time optimization of MuJoCo code can be enabled during configuration:
+
+    ``cmake -B build -S . -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON ...``
+
+    When LTO is enabled, the **system linker** must be used, because rust-lld doesn't know how to read the extra LTO information,
+    produced by other linkers:
+
+    ::
 
         RUSTFLAGS="-C linker-features=-lld" cargo build
 
 
-.. _build_deps:
+    In performance critical cases, it is also recommended to use the official MuJoCo shared (dynamic) libraries,
+    which are generally more optimized. Performance gain with LTO enabled on static builds is about 10% more steps per second.
 
----------------------------------------------------------
-
-Build dependencies (visualization/rendering only)
----------------------------------------------------
-When visualization or rendering is required, MuJoCo-rs may require additional build-time dependencies.
-These are needed to build **GLFW** --- a library used for window and OpenGL
-context management.
-
-If you **do not require** the use of :ref:`mj_renderer` or :ref:`mj_rust_viewer`,
-you can avoid build-time dependencies by disabling the default features:
-
-::
-
-    # Disables viewer and renderer features.
-    cargo add mujoco-rs --no-default-features
-
-When there is a need for rendering/visualization support, dependencies are OS-dependent.
-
-Windows
-~~~~~~~~~~~~~~~~~~
-On Windows, no additional build-time dependencies are required. GLFW is **obtained automatically**.
-If you run into problems, please submit an `issue <https://github.com/davidhozic/mujoco-rs>`_.
-
-.. hint::
-
-    Optionally, instead of using the pre-built, GLFW can be compiled from scratch by enabling MuJoCo-rs's ``glfw-build``
-    Cargo feature.
-
-Linux
-~~~~~~~~~~~~~~~~~~
-On Linux, MuJoCo-rs will try to use the GLFW installed in your Linux distribution, but only when
-the installed version is **GLFW 3.4**.
-Linkage will be auto-configured through pkg-config. In such case,
-no additional dependencies are needed. For example, Ubuntu 25.04+ and Fedora 42 use GLFW 3.4. 
-
-If your distribution uses an **older GLFW** version, GLFW **3.4** will be **compiled**.
-This requires **CMake** and common C build tools to be installed.
-E.g., for Ubuntu/Debian distributions run:
-
-::
-
-    sudo apt install -y build-essential cmake
-
-
-MacOS
-~~~~~~~~~~~~~~~~
-We don't test MacOS builds, however the process should be the same as for Linux.
