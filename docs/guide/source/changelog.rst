@@ -17,7 +17,7 @@ This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
 
-Unreleased (MuJoCo 3.3.7)
+2.0.0 (MuJoCo 3.3.7)
 ================================
 - **Breaking changes**:
 
