@@ -305,7 +305,7 @@ impl MjSpec {
     getter_setter! {
         with, get, set, [
             [ffi, ffi_mut] strippath: bool; "whether to strip paths from mesh files.";
-            [ffi, ffi_mut] hasImplicitPluginElem: bool; "already encountered an implicit plugin sensor/actuator";
+            [ffi, ffi_mut] hasImplicitPluginElem: bool; "already encountered an implicit plugin sensor/actuator.";
         ]
     }
 
@@ -1213,7 +1213,7 @@ mjs_struct!(Body {
     // Override the delete method to prevent deletion of world.
     unsafe fn delete(&mut self) -> Result<(), Error> {
         if self.name() == "world" {
-            return Err(Error::new(ErrorKind::Unsupported, "world model can't be deleted"));
+            return Err(Error::new(ErrorKind::Unsupported, "world body can't be deleted"));
         }
         unsafe { SpecItem::__delete_default__(self) }
     }
@@ -1234,9 +1234,6 @@ impl MjsBody {
         let ptr = unsafe { mjs_addFrame(self, ptr::null_mut()) };
         unsafe { ptr.as_mut().unwrap() }
     }
-
-    // Special case: the world body can't be deleted, however MuJoCo doesn't prevent that.
-    // When the world body is deleted, the drop of MjSpec will crash on cleanup.
 }
 
 impl MjsBody {
