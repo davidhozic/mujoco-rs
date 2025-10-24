@@ -172,6 +172,8 @@ impl<T> Deref for PointerView<'_, T> {
 /***************************/
 //  Evaluation helper macro
 /***************************/
+/// When @eval is given false, ignore the given contents.
+/// In other cases, expand the given contents.
 #[macro_export]
 #[doc(hidden)]
 macro_rules! eval_or_expand {

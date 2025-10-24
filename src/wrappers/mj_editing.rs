@@ -1222,7 +1222,7 @@ mjs_struct!(Body {
 impl MjsBody {
     add_x_method! { body, site, joint, geom, camera, light }
 
-    /// Dummy mutable FFI method use to simplify access through macros.
+    /// Dummy mutable FFI method used to simplify access through macros.
     #[inline]
     unsafe fn ffi_mut(&mut self) -> &mut Self {
         self
