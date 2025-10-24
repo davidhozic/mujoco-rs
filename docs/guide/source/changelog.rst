@@ -22,6 +22,18 @@ Unreleased (MuJoCo 3.3.7)
 - **Breaking changes**:
 
   - Updated the MuJoCo version to 3.3.7.
+  - :ref:`model_editing`:
+
+    - Items (:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsJoint`,
+      :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsGeom`, etc.) are no longer wrapped and are instead
+      just aliased types. Their attributes have been made private to users, so that tools like ``rust-analyzer``
+      don't suggest both the getter name and the attribute name at once.
+      As a result of this change, methods now return true references instead of the wrapper types.
+
+    - Added immutable iterators.
+    - Changed regular named-access methods to be immutable and added corresponding ``<item>_mut()`` methods
+      for mutable access.
+
   - :ref:`mj_rust_viewer` and :ref:`mj_renderer`:
 
     - Changed the backend windowing library to Winit (+ Glutin). This is a **potentially** breaking

@@ -783,37 +783,39 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     getter_setter! {get, [
-        narena: MjtSize; "size of the arena in bytes (inclusive of the stack).";
-        nbuffer: MjtSize; "size of main buffer in bytes.";
-        nplugin: i32; "number of plugin instances.";
-        maxuse_stack: MjtSize; "maximum stack allocation in bytes (mutable).";
-        maxuse_arena: MjtSize; "maximum arena allocation in bytes.";
-        maxuse_con: i32; "maximum number of contacts.";
-        maxuse_efc: i32; "maximum number of scalar constraints.";
-        ncon: i32; "number of detected contacts.";
-        ne: i32; "number of equality constraints.";
-        nf: i32; "number of friction constraints.";
-        nl: i32; "number of limit constraints.";
-        nefc: i32; "number of constraints.";
-        nJ: i32; "number of non-zeros in constraint Jacobian.";
-        nA: i32; "number of non-zeros in constraint inverse inertia matrix.";
-        nisland: i32; "number of detected constraint islands.";
-        nidof: i32; "number of dofs in all islands.";
-        signature: u64; "compilation signature.";
+        [ffi] narena: MjtSize; "size of the arena in bytes (inclusive of the stack).";
+        [ffi] nbuffer: MjtSize; "size of main buffer in bytes.";
+        [ffi] nplugin: i32; "number of plugin instances.";
+        [ffi] maxuse_stack: MjtSize; "maximum stack allocation in bytes (mutable).";
+        [ffi] maxuse_arena: MjtSize; "maximum arena allocation in bytes.";
+        [ffi] maxuse_con: i32; "maximum number of contacts.";
+        [ffi] maxuse_efc: i32; "maximum number of scalar constraints.";
+        [ffi] ncon: i32; "number of detected contacts.";
+        [ffi] ne: i32; "number of equality constraints.";
+        [ffi] nf: i32; "number of friction constraints.";
+        [ffi] nl: i32; "number of limit constraints.";
+        [ffi] nefc: i32; "number of constraints.";
+        [ffi] nJ: i32; "number of non-zeros in constraint Jacobian.";
+        [ffi] nA: i32; "number of non-zeros in constraint inverse inertia matrix.";
+        [ffi] nisland: i32; "number of detected constraint islands.";
+        [ffi] nidof: i32; "number of dofs in all islands.";
+        [ffi] signature: u64; "compilation signature.";
     ]}
 
-    getter_setter! {with, get, set, [time: MjtNum; "simulation time.";]}
+    getter_setter! {with, get, set, [[ffi, ffi_mut] time: MjtNum; "simulation time.";]}
 
-    getter_setter! {with, get, [energy: &[MjtNum; 2]; "potential, kinetic energy.";]}
+    getter_setter! {with, get, [
+        [ffi, ffi_mut] energy: &[MjtNum; 2]; "potential, kinetic energy.";
+    ]}
 
     getter_setter! {
         get, [
-            solver: &[MjSolverStat; (mjNISLAND * mjNSOLVER) as usize]; "solver statistics per island, per iteration.";
-            solver_niter: &[i32; mjNISLAND as usize]; "number of solver iterations, per island.";
-            solver_nnz: &[i32; mjNISLAND as usize]; "number of nonzeros in Hessian or efc_AR, per island.";
-            solver_fwdinv: &[MjtNum; 2]; "forward-inverse comparison: qfrc, efc.";
-            warning: &[MjWarningStat; MjtWarning::mjNWARNING as usize]; "warning statistics (mutable).";
-            timer: &[MjTimerStat; MjtTimer::mjNTIMER as usize]; "timer statistics.";
+            [ffi, ffi_mut] solver: &[MjSolverStat; (mjNISLAND * mjNSOLVER) as usize]; "solver statistics per island, per iteration.";
+            [ffi, ffi_mut] solver_niter: &[i32; mjNISLAND as usize]; "number of solver iterations, per island.";
+            [ffi, ffi_mut] solver_nnz: &[i32; mjNISLAND as usize]; "number of nonzeros in Hessian or efc_AR, per island.";
+            [ffi, ffi_mut] solver_fwdinv: &[MjtNum; 2]; "forward-inverse comparison: qfrc, efc.";
+            [ffi, ffi_mut] warning: &[MjWarningStat; MjtWarning::mjNWARNING as usize]; "warning statistics (mutable).";
+            [ffi, ffi_mut] timer: &[MjTimerStat; MjtTimer::mjNTIMER as usize]; "timer statistics.";
         ]
     }
 }

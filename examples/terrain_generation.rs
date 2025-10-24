@@ -48,16 +48,16 @@ fn create_model() -> MjModel {
     // Set the timestep to 0.5 ms
     spec.option_mut().timestep = 0.0005;  
 
-    // Change the default stiffness parameters and geom type
-    let mut main_class = spec.default("main").unwrap();
     let timeconst = 2.0 * spec.option().timestep;
-    main_class.geom()
+    // Change the default stiffness parameters and geom type
+    let main_class = spec.default_mut("main").unwrap();
+    main_class.geom_mut()
         .with_solref([timeconst, 0.5])
         .with_type(MjtGeom::mjGEOM_BOX);
 
 
     // Create lights
-    let mut world = spec.world_body();
+    let world = spec.world_body_mut();
     for x in (-5..5).step_by(5) {
         for y in (-5..5).step_by(5) {
             world.add_light().with_pos([x as f64, y as f64, 40.0]).with_dir([-x as f64, -y as f64, -15.0]);
@@ -96,8 +96,8 @@ fn stairs(spec: &mut MjSpec, grid_loc: [f64; 2] , num_stairs: u32, direction: i8
     const BROWN: [f32; 4] = [0.460, 0.362, 0.216, 1.0];
 
     let body_pos = [grid_loc[0], grid_loc[1], 0.0];
-    let mut world = spec.world_body();
-    let mut body = world.add_body().with_pos(body_pos).with_name(name);
+    let world = spec.world_body_mut();
+    let body = world.add_body().with_pos(body_pos).with_name(name);
     // Offset
     let [x_beginning, y_end] = [-SQUARE_LENGTH + H_SIZE; 2];
     let [x_end, y_beginning] = [SQUARE_LENGTH - H_SIZE; 2];
@@ -148,15 +148,15 @@ fn connected_spheres(spec: &mut MjSpec) {
             let site_name = format!("ball_{i}_{j}");
 
             // Connect spheres with a tendon
-            let mut tendon = spec.add_tendon()
+            let tendon = spec.add_tendon()
                 .with_range([0.0, 2.0]);
 
             tendon.wrap_site(&site_name);  // one part of tendon attached to the new ball
             tendon.wrap_site(&last_site_name);  // second part of tendon attached to the previous ball
 
             // Create a sphere
-            let mut world = spec.world_body();
-            let mut ball = world.add_body()
+            let world = spec.world_body_mut();
+            let ball = world.add_body()
                 .with_pos([i as f64 * 0.5, j as f64 * 0.5, 5.0]);
             ball.add_geom()
                 .with_type(MjtGeom::mjGEOM_SPHERE)

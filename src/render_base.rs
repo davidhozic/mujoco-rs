@@ -113,7 +113,7 @@ impl ApplicationHandler for RenderBase {
 
         // Build surface attributes
         let attrs = window
-            .build_surface_attributes(SurfaceAttributesBuilder::<WindowSurface>::new().with_srgb(Some(true)))
+            .build_surface_attributes(SurfaceAttributesBuilder::<WindowSurface>::new())
             .expect("surface attrs");
 
         let gl_surface = unsafe {

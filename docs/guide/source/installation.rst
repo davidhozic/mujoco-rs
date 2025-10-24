@@ -166,7 +166,7 @@ To build statically linkable libraries, perform the following steps:
 
     ::
 
-    RUSTFLAGS="-C linker-features=-lld" cargo build
+        RUSTFLAGS="-C linker-features=-lld" cargo build
 
 
     In performance critical cases, it is also recommended to use the official MuJoCo shared (dynamic) libraries,

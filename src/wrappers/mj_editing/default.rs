@@ -1,6 +1,5 @@
 //! Module implements [`MjsDefault`], which is a special type of [`SpecItem`].
 
-use std::marker::PhantomData;
 use std::io::{Error, ErrorKind};
 
 use super::traits::SpecItem;
@@ -14,9 +13,14 @@ use crate::wrappers::mj_editing::{
 macro_rules! default_accessor_wrapper {
     ($($name:ident),*) => {paste::paste! {
         $(
-            #[doc = concat!("Returns a wrapper to  `", stringify!($name), "`.")]
-            pub fn $name(&mut self) -> [<Mjs $name:camel>]<'_> {
-                [<Mjs $name:camel>](unsafe { self.ffi_mut().$name }, PhantomData )
+            #[doc = concat!("Returns an immutable reference to ", stringify!($name), "'s defaults.")]
+            pub fn $name(&self) -> &[<Mjs $name:camel>] {
+                unsafe { self.$name.as_ref().unwrap() }
+            }
+
+            #[doc = concat!("Returns a mutable reference to ", stringify!($name), "'s defaults.")]
+            pub fn [<$name _mut>](&mut self) -> &mut [<Mjs $name:camel>] {
+                unsafe { self.$name.as_mut().unwrap() }
             }
         )*
     }};
@@ -25,40 +29,30 @@ macro_rules! default_accessor_wrapper {
 // This is implemented manually since we can't directly borrow check if something is using the default.
 // We also override the delete method to panic instead of deleting.
 
-/// Default specification. This wraps the FFI type [`mjsDefault`] internally.
-pub struct MjsDefault<'s>(pub(crate) *mut mjsDefault, pub(crate) PhantomData<&'s mut ()>);  // the lifetime belongs to the parent
+/// Default specification. This is a type alias to [`mjsDefault`].
+pub type MjsDefault = mjsDefault;
 
-impl MjsDefault<'_> {
+impl MjsDefault {
     default_accessor_wrapper! {
         joint, geom, site, camera, light, flex, mesh, material,
         pair, equality, tendon, actuator
     }
-
-    /// Returns an immutable reference to the inner struct.
-    pub fn ffi(&self) -> &mjsDefault {
-        unsafe { self.0.as_ref().unwrap() }
-    }
-
-    /// Returns a mutable reference to the inner struct.
-    pub unsafe fn ffi_mut(&mut self) -> &mut mjsDefault {
-        unsafe { self.0.as_mut().unwrap() }
-    }
 }
 
-impl SpecItem for MjsDefault<'_> {
+impl SpecItem for MjsDefault {
     unsafe fn element_pointer(&self) -> *mut mjsElement {
-        self.ffi().element
+        self.element
     }
 
     /// Defaults can't be deleted.
     /// # Errors
     /// This will always error with [`ErrorKind::Unsupported`].
-    fn delete(self) -> Result<(), Error> {
-        Err(Error::new(ErrorKind::Unsupported, "can't delete defaults"))
+    unsafe fn delete(&mut self) -> Result<(), Error> {
+        Err(Error::new(ErrorKind::Unsupported, "defaults can't be deleted"))
     }
 }
 
 // SAFETY: These are safe to implement, as access to them is available only
 // through methods or through ffi() and ffi_mut() methods, where the latter is unsafe.
-unsafe impl Sync for MjsDefault<'_> {}
-unsafe impl Send for MjsDefault<'_> {}
+unsafe impl Sync for MjsDefault {}
+unsafe impl Send for MjsDefault {}
