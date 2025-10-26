@@ -24,8 +24,8 @@ update of MuJoCo alone can increase the major version.
   - Updated the MuJoCo version to 3.3.7.
   - :ref:`model_editing`:
 
-    - Items (:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsJoint`,
-      :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsGeom`, etc.) are no longer wrapped and are instead
+    - Items (:docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsJoint`,
+      :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsGeom`, etc.) are no longer wrapped and are instead
       just aliased types. Their attributes have been made private to users, so that tools like ``rust-analyzer``
       don't suggest both the getter name and the attribute name at once.
       As a result of this change, methods now return true references instead of the wrapper types.
@@ -64,7 +64,7 @@ update of MuJoCo alone can increase the major version.
   - Changed |mj_data| and other types to accept a generic type for the model,
     constrained to ``Deref<Target = MjModel>``.
     This enables use in environments such as `PyO3 <https://github.com/PyO3/pyo3>`_.
-  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMesh`: changed ``smoothnormal`` and ``needsdf`` to be treated as booleans.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsMesh`: changed ``smoothnormal`` and ``needsdf`` to be treated as booleans.
   - |mj_data| methods:
 
     - Renamed ``crb`` to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>crb_comp` due to ``crb``
@@ -118,7 +118,7 @@ update of MuJoCo alone can increase the major version.
 - :ref:`model_editing`:
 
   - Added iterators to :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
-    and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`.
+    and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`.
 
 
 1.4.2 (MuJoCo 3.3.5)

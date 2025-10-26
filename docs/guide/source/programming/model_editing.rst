@@ -7,7 +7,7 @@ Model editing
 .. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
 .. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
-.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`
+.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`
 
 The most general way to create an |mj_model| instance is by loading an XML file
 via :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml`.
@@ -165,7 +165,7 @@ Iterators
 ================
 Since MuJoCo-rs 1.5.0, it is possible to also iterate existing :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
 items (geoms, joints, etc.). Iterators exist on :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
-and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`.
+and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`.
 
 To iterate over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec` items, call
 ``[item_type]_iter`` for immutable iteration or ``[item_type]_iter_mut`` for mutable iteration,
@@ -179,7 +179,7 @@ with ``[item_type]`` replaced by geom, body, etc.
     }
     ...
 
-Iteration over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody` items can be used in a similar way.
+Iteration over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody` items can be used in a similar way.
 The only difference is an additional boolean parameter, which enables recursive iteration when ``true``.
 
 .. code-block:: rust
