@@ -31,7 +31,7 @@
 //! ## Features
 //! This crate has the following public features:
 //! - `viewer`, which enables the Rust-native viewer ([`viewer::MjViewer`]),
-//!   - `cpp-viewer`, which additionally enables the MuJoCo's original viewer (C++ based) ([`cpp_viewer::MjViewerCpp`]),
+//! - `cpp-viewer`, which enables the MuJoCo's original viewer (C++ based) ([`cpp_viewer::MjViewerCpp`]),
 //! - `renderer`, which enables the image renderer ([`renderer::MjRenderer`]).
 //! 
 //! ## Functions
