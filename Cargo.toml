@@ -19,7 +19,7 @@ all-features = true
 
 [features]
 viewer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit"]
-renderer = ["dep:png", "dep:glutin", "dep:winit", "dep:glutin-winit"]
+renderer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit", "dep:png"]
 cpp-viewer = []
 
 ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module. 
