@@ -1,5 +1,6 @@
 //! Module related to implementation of the [`MjViewer`]. For implementation of the C++ wrapper,
 //! see [`crate::cpp_viewer::MjViewerCpp`].
+#[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
 use glutin::prelude::PossiblyCurrentGlContext;
 use glutin::surface::GlSurface;
 
@@ -138,7 +139,6 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     last_y: f64,
     last_bnt_press_time: Instant,
     rect_view: MjrRectangle,
-    rect_full: MjrRectangle,
     status_flags: ViewerStatusBits,  // Status flag indicating the state of the menu
 
     /* OpenGL */
@@ -146,7 +146,7 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     event_loop: EventLoop<()>,
     modifiers: Modifiers,
     buttons_pressed: ButtonsPressed,
-    cursor_position: (u32, u32),
+    cursor_position: (f64, f64),
 
     /* External interaction */
     user_scene: MjvScene<M>,
@@ -191,7 +191,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let camera  = MjvCamera::new_free(&model);
 
         #[cfg(feature = "viewer-ui")]
-        let ui = ui::ViewerUI::new(&window);
+        let ui = ui::ViewerUI::new(&window, &gl_surface.display());
 
         Ok(Self {
             model,
@@ -206,12 +206,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             status_flags: ViewerStatusBits::HELP_MENU,
             last_bnt_press_time: Instant::now(),
             rect_view: MjrRectangle::default(),
-            rect_full: MjrRectangle::default(),
             adapter,
             event_loop,
             modifiers: Modifiers::default(),
             buttons_pressed: ButtonsPressed::empty(),
-            cursor_position: (0, 0),
+            cursor_position: (0.0, 0.0),
             #[cfg(feature = "viewer-ui")] ui
         })
     }
@@ -258,11 +257,18 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         /* Process mouse and keyboard events */
         self.process_events(data);
 
+        /* Read the screen size */
+        self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
+
         /* Update the scene from data and render */
         self.update_scene(data);
 
         /* Update the user menu state and overlays */
         self.update_menus();
+
+        /* Draw the user menu on top */
+        #[cfg(feature = "viewer-ui")]
+        self.draw_user_ui();
 
         /* Swap OpenGL buffers */
         self.render();
@@ -289,9 +295,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let bound_model_ptr = unsafe { self.model.__raw() };
         assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the viewer.");
 
-        /* Read the screen size */
-        self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
-
         /* Update the scene from the MjData state */
         self.scene.update(data, &self.opt, &self.pert, &mut self.camera);
 
@@ -299,7 +302,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         sync_geoms(&self.user_scene, &mut self.scene)
             .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
 
-        self.scene.render(&self.rect_full, &self.context);
+        self.scene.render(&self.rect_view, &self.context);
     }
 
     /// Draws the user menu
@@ -318,22 +321,37 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         }
     }
 
+
+    /// Draws the user UI
+    #[cfg(feature = "viewer-ui")]
+    fn draw_user_ui(&mut self) {
+        /* Draw the user interface */
+        let GlState { window, .. } = &self.adapter.state.as_ref().unwrap();
+        let inner_size = window.inner_size();
+        let max_rect = self.ui.draw(window);
+        self.rect_view.left = max_rect.width() as i32;
+        self.rect_view.width = inner_size.width as i32;
+        self.rect_view.height = inner_size.height as i32;
+        self.ui.reset();
+    }
+
     /// Updates the dimensions of the rectangles defining the dimensions of
     /// the user interface, as well as the actual scene viewer.
     fn update_rectangles(&mut self, viewport_size: (i32, i32)) {
         // The scene (middle) rectangle
         self.rect_view.width = viewport_size.0;
         self.rect_view.height = viewport_size.1;
+    }
 
-        self.rect_full.width = viewport_size.0;
-        self.rect_full.height = viewport_size.1;
+    /// Checks whether the cursor is inside the user interface (i.e., outside of MuJoCo's scene).
+    fn is_cursor_outside(&self, x: f64, y: f64) -> bool {
+        x < self.rect_view.left as f64 || y < self.rect_view.bottom as f64
     }
 
     /// Processes user input events.
     fn process_events(&mut self, data: &mut MjData<M>) {
         self.event_loop.pump_app_events(Some(Duration::ZERO), &mut self.adapter);
         while let Some(window_event) = self.adapter.queue.pop_front() {
-
             /* Draw the user interface */
             #[cfg(feature = "viewer-ui")]
             {
@@ -344,6 +362,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             match window_event {
                 WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
                 WindowEvent::MouseInput {state, button, .. } => {
+                    let (x, y) = self.cursor_position;
+                    if self.is_cursor_outside(x, y) {
+                        continue;
+                    }
                     let index = match button {
                         MouseButton::Left => {
                             self.process_left_click(data, state);
@@ -358,7 +380,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 }
 
                 WindowEvent::CursorMoved { position, .. } => {
-                    self.process_cursor_pos(position.x, position.y, data);
+                    let PhysicalPosition { x, y } = position;
+                    if self.is_cursor_outside(x, y) {
+                        continue;
+                    }
+                    self.process_cursor_pos(x, y, data);
                     self.cursor_position = position.into();
                 }
 
@@ -486,12 +512,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 _ => {}  // ignore other events
             }
         }
-
-        #[cfg(feature = "viewer-ui")]
-        {
-            let GlState { window, .. } = &self.adapter.state.as_ref().unwrap();
-            self.ui.draw(window);
-        }
     }
 
     /// Toggles visualization options.
@@ -587,8 +607,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 /* Double click detection */
                 if self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
                     let cp = self.cursor_position;
-                    let x = cp.0 as f64;
-                    let y = (self.rect_full.height as u32 - cp.1) as f64;
+                    let x = cp.0;
+                    let y = self.rect_view.height as f64 - cp.1;
 
                     /* Obtain the selection */ 
                     let rect = &self.rect_view;
