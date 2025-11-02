@@ -26,6 +26,10 @@ use crate::wrappers::mj_data::MjData;
 use crate::get_mujoco_version;
 
 
+#[cfg(feature = "viewer-ui")]
+mod ui;
+
+
 /****************************************** */
 // Rust native viewer
 /****************************************** */
@@ -146,6 +150,10 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
 
     /* External interaction */
     user_scene: MjvScene<M>,
+
+    /* User interface */
+    #[cfg(feature = "viewer-ui")]
+    ui: ui::ViewerUI
 }
 
 impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
@@ -167,6 +175,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let GlState {
             gl_context,
             gl_surface,
+            #[cfg(feature = "viewer-ui")] window,
             ..
         } = adapter.state.as_ref().unwrap();
         gl_context.make_current(gl_surface).map_err(MjViewerError::GlutinError)?;
@@ -180,6 +189,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let user_scene = MjvScene::new(model.clone(), max_user_geom);
         let context = MjrContext::new(&model);
         let camera  = MjvCamera::new_free(&model);
+
+        #[cfg(feature = "viewer-ui")]
+        let ui = ui::ViewerUI::new(&window);
 
         Ok(Self {
             model,
@@ -199,7 +211,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             event_loop,
             modifiers: Modifiers::default(),
             buttons_pressed: ButtonsPressed::empty(),
-            cursor_position: (0, 0)
+            cursor_position: (0, 0),
+            #[cfg(feature = "viewer-ui")] ui
         })
     }
 
@@ -235,7 +248,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     pub fn sync(&mut self, data: &mut MjData<M>) {
         let GlState {
             gl_context,
-            gl_surface, ..
+            gl_surface,
+            ..
         } = self.adapter.state.as_mut().unwrap();
 
         /* Make sure everything is done on the viewer's window */
@@ -319,6 +333,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     fn process_events(&mut self, data: &mut MjData<M>) {
         self.event_loop.pump_app_events(Some(Duration::ZERO), &mut self.adapter);
         while let Some(window_event) = self.adapter.queue.pop_front() {
+
+            /* Draw the user interface */
+            #[cfg(feature = "viewer-ui")]
+            {
+                let window = &self.adapter.state.as_ref().unwrap().window;
+                self.ui.handle_events(window, &window_event);
+            }
+
             match window_event {
                 WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
                 WindowEvent::MouseInput {state, button, .. } => {
@@ -463,6 +485,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                 _ => {}  // ignore other events
             }
+        }
+
+        #[cfg(feature = "viewer-ui")]
+        {
+            let GlState { window, .. } = &self.adapter.state.as_ref().unwrap();
+            self.ui.draw(window);
         }
     }
 

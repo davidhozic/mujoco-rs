@@ -19,6 +19,7 @@ all-features = true
 
 [features]
 viewer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit"]
+viewer-ui = ["viewer", "dep:egui-winit", "dep:egui_glow"]
 renderer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit", "dep:png"]
 cpp-viewer = []
 
@@ -34,6 +35,8 @@ paste = "1.0.15"
 glutin = {version = "0.32.3", optional = true}
 winit = {version = "0.30.12", optional = true}
 glutin-winit = {version = "0.5.0", optional = true}
+egui-winit = {version = "0.33.0", optional = true}
+egui_glow = {version = "0.33.0", features = ["x11", "winit", "wayland", "egui-winit"], optional = true}
 
 [build-dependencies]
 bindgen = {version = "0.71.1", optional = true}
