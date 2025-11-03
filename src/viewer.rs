@@ -139,21 +139,22 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     last_y: f64,
     last_bnt_press_time: Instant,
     rect_view: MjrRectangle,
-    status_flags: ViewerStatusBits,  // Status flag indicating the state of the menu
 
     /* OpenGL */
     adapter: RenderBase,
     event_loop: EventLoop<()>,
     modifiers: Modifiers,
     buttons_pressed: ButtonsPressed,
-    cursor_position: (f64, f64),
+    raw_cursor_position: (f64, f64),
 
     /* External interaction */
     user_scene: MjvScene<M>,
 
     /* User interface */
     #[cfg(feature = "viewer-ui")]
-    ui: ui::ViewerUI
+    ui: ui::ViewerUI,
+
+    status: ViewerStatusBit
 }
 
 impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
@@ -203,15 +204,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             user_scene,
             last_x: 0.0,
             last_y: 0.0,
-            status_flags: ViewerStatusBits::HELP_MENU,
             last_bnt_press_time: Instant::now(),
             rect_view: MjrRectangle::default(),
             adapter,
             event_loop,
             modifiers: Modifiers::default(),
             buttons_pressed: ButtonsPressed::empty(),
-            cursor_position: (0.0, 0.0),
-            #[cfg(feature = "viewer-ui")] ui
+            raw_cursor_position: (0.0, 0.0),
+            #[cfg(feature = "viewer-ui")] ui,
+            status: ViewerStatusBit::HELP
         })
     }
 
@@ -260,15 +261,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         /* Read the screen size */
         self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
 
+        /* Draw the user menu on top */
+        #[cfg(feature = "viewer-ui")]
+        self.process_user_ui(data);
+
         /* Update the scene from data and render */
         self.update_scene(data);
 
         /* Update the user menu state and overlays */
         self.update_menus();
-
-        /* Draw the user menu on top */
-        #[cfg(feature = "viewer-ui")]
-        self.draw_user_ui();
 
         /* Swap OpenGL buffers */
         self.render();
@@ -311,7 +312,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         rectangle.width = rectangle.width - rectangle.width / 4;
 
         /* Overlay section */
-        if self.status_flags.contains(ViewerStatusBits::HELP_MENU) {  // Help
+        if self.status.contains(ViewerStatusBit::HELP) {  // Help
             self.context.overlay(
                 MjtFont::mjFONT_NORMAL, MjtGridPos::mjGRID_TOPLEFT,
                 rectangle,
@@ -324,15 +325,37 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Draws the user UI
     #[cfg(feature = "viewer-ui")]
-    fn draw_user_ui(&mut self) {
+    fn process_user_ui(&mut self, data: &mut MjData<M>) {
         /* Draw the user interface */
+
+        use crate::viewer::ui::UiEvent;
         let GlState { window, .. } = &self.adapter.state.as_ref().unwrap();
         let inner_size = window.inner_size();
-        let max_rect = self.ui.draw(window);
-        self.rect_view.left = max_rect.width() as i32;
+        let max_rect = self.ui.process(window, &mut self.status);
+        
+        /* Adjust the viewport so MuJoCo doesn't draw over the UI */
+        self.rect_view.left = max_rect.right() as i32;
         self.rect_view.width = inner_size.width as i32;
         self.rect_view.height = inner_size.height as i32;
+
+        /* Reset some OpenGL settings so that MuJoCo can still draw */
         self.ui.reset();
+
+        /* Process events made in the user UI */
+        while let Some(event) = self.ui.drain_events() {
+            use UiEvent::*;
+            match event {
+                Close => self.adapter.running = false,
+                Fullscreen => self.toggle_full_screen(),
+                ResetSimulation => {
+                    data.reset();
+                    data.forward();
+                },
+                AlignCamera => {
+                    self.camera = MjvCamera::new_free(&self.model);
+                }
+            }
+        }
     }
 
     /// Updates the dimensions of the rectangles defining the dimensions of
@@ -362,7 +385,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             match window_event {
                 WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
                 WindowEvent::MouseInput {state, button, .. } => {
-                    let (x, y) = self.cursor_position;
+                    let (x, y) = self.raw_cursor_position;
                     if self.is_cursor_outside(x, y) {
                         continue;
                     }
@@ -381,11 +404,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                 WindowEvent::CursorMoved { position, .. } => {
                     let PhysicalPosition { x, y } = position;
+                    self.raw_cursor_position = position.into();
                     if self.is_cursor_outside(x, y) {
                         continue;
                     }
                     self.process_cursor_pos(x, y, data);
-                    self.cursor_position = position.into();
                 }
 
                 // Set the viewer's state to pending exit.
@@ -415,7 +438,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         state: ElementState::Pressed, ..
                     }, ..
                 } => {
-                    self.status_flags.toggle(ViewerStatusBits::HELP_MENU);
+                    self.status.toggle(ViewerStatusBit::HELP);
                 }
 
                 // Full screen
@@ -606,7 +629,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                 /* Double click detection */
                 if self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
-                    let cp = self.cursor_position;
+                    let cp = self.raw_cursor_position;
                     let x = cp.0;
                     let y = self.rect_view.height as f64 - cp.1;
 
@@ -654,14 +677,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     }
 }
 
-
-
 bitflags! {
-    /// Boolean flags that define some of
-    /// the Viewer's internal state.
     #[derive(Debug)]
-    struct ViewerStatusBits: u8 {
-        const HELP_MENU  = 1 << 0;
+    struct ViewerStatusBit: u8 {
+        const HELP = 1 << 0;
     }
 }
 
