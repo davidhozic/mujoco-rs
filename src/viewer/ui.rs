@@ -65,94 +65,121 @@ impl ViewerUI {
     }
 
     /// Draws the UI to the viewport.
-    pub(crate) fn process(&mut self, window: &Window, status: &mut ViewerStatusBit) -> egui::Rect {
+    pub(crate) fn process(&mut self, window: &Window, status: &mut ViewerStatusBit, scene_flags: &mut [u8]) -> f32 {
         let raw_input = self.state.take_egui_input(&window);
-        let mut scene_rect_points = egui::Rect::NOTHING;
+
+        // Viewport reservations, which will be excluded from MuJoCo's viewport.
+        // This way MuJoCo won't draw over the UI.
+        let mut left = 0.0;
         let full_output = self.egui_ctx.run(raw_input, |ui| {
-            egui::SidePanel::new(egui::panel::Side::Left, "left-panel")
-                .resizable(true)
-                .default_width(SIDE_PANEL_DEFAULT_WIDTH)
-                .show(ui, |ui|
-            {
-                /* Basic control */
-                ui.heading(RichText::new("Basic control")
-                    .font(HEADING_FONT)
-                    .underline()
-                );
+            if status.contains(ViewerStatusBit::UI) {
+                egui::SidePanel::new(egui::panel::Side::Left, "left-panel")
+                    .resizable(true)
+                    .default_width(SIDE_PANEL_DEFAULT_WIDTH)
+                    .show(ui, |ui|
+                {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
 
-                ui.add_space(HEADING_POST_SPACE);
+                        /* Basic control */
+                        ui.heading(RichText::new("Basic control")
+                            .font(HEADING_FONT)
+                            .underline()
+                        );
+                        ui.add_space(HEADING_POST_SPACE);
 
-                // Make buttons have more space in the width
-                let spacing = ui.spacing_mut();
-                spacing.button_padding.x = BUTTON_SPACING_X;
-                spacing.button_padding.y = BUTTON_SPACING_Y;
+                        // Make buttons have more space in the width
+                        let spacing = ui.spacing_mut();
+                        spacing.button_padding.x = BUTTON_SPACING_X;
+                        spacing.button_padding.y = BUTTON_SPACING_Y;
 
-                // Viewer controls
-                if ui.add(egui::Button::new(
-                    RichText::new("Quit").font(MAIN_FONT)
-                ).corner_radius(BUTTON_ROUNDING)).clicked() {
-                    self.events.push_back(UiEvent::Close);
-                }
+                        // Viewer controls
+                        if ui.add(egui::Button::new(
+                            RichText::new("Quit").font(MAIN_FONT)
+                        ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                            self.events.push_back(UiEvent::Close);
+                        }
+                        ui.add_space(HEADING_POST_SPACE);
+                        ui.separator();
 
-                ui.add_space(HEADING_POST_SPACE);
-                ui.separator();
+                        /* Option */
+                        ui.heading(RichText::new("Option")
+                            .font(HEADING_FONT)
+                            .underline()
+                        );
+                        ui.add_space(HEADING_POST_SPACE);
+                        ui.horizontal_wrapped(|ui| {
+                            let mut selected = status.contains(ViewerStatusBit::HELP);
+                            ui.toggle_value(&mut selected, RichText::new("Help").font(MAIN_FONT));
+                            status.set(ViewerStatusBit::HELP, selected);
 
-                /* Option */
-                ui.heading(RichText::new("Option")
-                    .font(HEADING_FONT)
-                    .underline()
-                );
-                ui.add_space(HEADING_POST_SPACE);
+                            selected = window.fullscreen().is_some();
+                            if ui.toggle_value(&mut selected, RichText::new("Fullscreen").font(MAIN_FONT)).clicked() {
+                                self.events.push_back(UiEvent::Fullscreen);
+                            };
+                        });
 
-                ui.horizontal_wrapped(|ui| {
-                    let mut selected = status.contains(ViewerStatusBit::HELP);
-                    ui.toggle_value(&mut selected, RichText::new("Help").font(MAIN_FONT));
-                    status.set(ViewerStatusBit::HELP, selected);
+                        ui.add_space(HEADING_POST_SPACE);
+                        ui.separator();
 
-                    selected = window.fullscreen().is_some();
-                    if ui.toggle_value(&mut selected, RichText::new("Fullscreen").font(MAIN_FONT)).clicked() {
-                        self.events.push_back(UiEvent::Fullscreen);
-                    };
+                        /* Simulation  */
+                        ui.heading(RichText::new("Simulation")
+                            .font(HEADING_FONT)
+                            .underline()
+                        );
+                        ui.add_space(HEADING_POST_SPACE);
+                        ui.horizontal_wrapped(|ui| {
+                            // Reset simulation
+                            if ui.add(egui::Button::new(
+                                RichText::new("Reset").font(MAIN_FONT)
+                            ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                                self.events.push_back(UiEvent::ResetSimulation);
+                            }
+
+                            // Align camera
+                            if ui.add(egui::Button::new(
+                                RichText::new("Align").font(MAIN_FONT)
+                            ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                                self.events.push_back(UiEvent::AlignCamera);
+                            }
+                        });
+                        ui.add_space(HEADING_POST_SPACE);
+                        ui.separator();
+
+                        /* OpenGL effects */
+                        ui.heading(RichText::new("Rendering")
+                            .font(HEADING_FONT)
+                            .underline()
+                        );
+                        ui.add_space(HEADING_POST_SPACE);
+                        ui.heading(RichText::new("OpenGL effects")
+                            .font(MAIN_FONT)
+                        );
+                        ui.horizontal_wrapped(|ui| {
+                            let mut selected = scene_flags[super::MjtRndFlag::mjRND_SHADOW as usize] == 1;
+                            ui.toggle_value(&mut selected, RichText::new("Shadows").font(MAIN_FONT));
+                            scene_flags[super::MjtRndFlag::mjRND_SHADOW as usize] = selected as u8;
+                        });
+
+                        // Panel toggle info
+                        ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                            ui.add_space(HEADING_POST_SPACE);
+                            ui.heading("Toggle: Arrow up key");
+                        });
+
+                        // Make the panel track its width on resize
+                        ui.take_available_space();
+                    }); 
                 });
 
-                ui.add_space(HEADING_POST_SPACE);
-                ui.separator();
-
-                /* Simulation  */
-                ui.heading(RichText::new("Simulation")
-                    .font(HEADING_FONT)
-                    .underline()
-                );
-                ui.add_space(HEADING_POST_SPACE);
-                ui.horizontal_wrapped(|ui| {
-                    // Reset simulation
-                    if ui.add(egui::Button::new(
-                        RichText::new("Reset").font(MAIN_FONT)
-                    ).corner_radius(BUTTON_ROUNDING)).clicked() {
-                        self.events.push_back(UiEvent::ResetSimulation);
-                    }
-
-                    // Align camera
-                    if ui.add(egui::Button::new(
-                        RichText::new("Align").font(MAIN_FONT)
-                    ).corner_radius(BUTTON_ROUNDING)).clicked() {
-                        self.events.push_back(UiEvent::AlignCamera);
-                    }
+                egui::SidePanel::new(egui::panel::Side::Left, "left-panel-pad")
+                    .resizable(false)
+                    .default_width(10.0)
+                    .show_separator_line(false)
+                    .show(ui, |ui|
+                {
+                    left = ui.max_rect().max.x;
                 });
-
-
-                // Make the panel track its width on resize
-                ui.take_available_space();
-            });
-
-            egui::SidePanel::new(egui::panel::Side::Left, "left-panel-pad")
-                .resizable(false)
-                .default_width(10.0)
-                .show_separator_line(false)
-                .show(ui, |ui|
-            {
-                scene_rect_points = ui.max_rect();
-            });
+            }
         });
 
         self.state.handle_platform_output(&window, full_output.platform_output);
@@ -169,7 +196,8 @@ impl ViewerUI {
             &clipped_primitives,
             textures_delta
         );
-        scene_rect_points
+
+        left
     }
 
     /// Resets OpenGL state. This is needed for MuJoCo's renderer.

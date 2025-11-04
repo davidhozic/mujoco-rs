@@ -212,7 +212,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             buttons_pressed: ButtonsPressed::empty(),
             raw_cursor_position: (0.0, 0.0),
             #[cfg(feature = "viewer-ui")] ui,
-            status: ViewerStatusBit::HELP
+            status: ViewerStatusBit::all()
         })
     }
 
@@ -286,7 +286,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             gl_surface, ..
         } = self.adapter.state.as_mut().unwrap();
 
-        /* Make sure everything is done on the viewer's window */
         gl_surface.swap_buffers(gl_context).expect("buffer swap in OpenGL failed");
     }
 
@@ -331,12 +330,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         use crate::viewer::ui::UiEvent;
         let GlState { window, .. } = &self.adapter.state.as_ref().unwrap();
         let inner_size = window.inner_size();
-        let max_rect = self.ui.process(window, &mut self.status);
+        let left = self.ui.process(window, &mut self.status, self.scene.flags_mut());
         
         /* Adjust the viewport so MuJoCo doesn't draw over the UI */
-        self.rect_view.left = max_rect.right() as i32;
+        self.rect_view.left = left as i32;
         self.rect_view.width = inner_size.width as i32;
-        self.rect_view.height = inner_size.height as i32;
 
         /* Reset some OpenGL settings so that MuJoCo can still draw */
         self.ui.reset();
@@ -378,7 +376,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             /* Draw the user interface */
             #[cfg(feature = "viewer-ui")]
             {
-                let window = &self.adapter.state.as_ref().unwrap().window;
+                let window: &winit::window::Window = &self.adapter.state.as_ref().unwrap().window;
                 self.ui.handle_events(window, &window_event);
             }
 
@@ -386,7 +384,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
                 WindowEvent::MouseInput {state, button, .. } => {
                     let (x, y) = self.raw_cursor_position;
-                    if self.is_cursor_outside(x, y) {
+                    let is_pressed = state == ElementState::Pressed;
+                    if self.is_cursor_outside(x, y) && is_pressed {
                         continue;
                     }
                     let index = match button {
@@ -399,7 +398,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         _ => return
                     };
 
-                    self.buttons_pressed.set(index, state == ElementState::Pressed);
+                    self.buttons_pressed.set(index, is_pressed);
                 }
 
                 WindowEvent::CursorMoved { position, .. } => {
@@ -522,6 +521,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyI), state: ElementState::Pressed, ..},
                     ..
                 } => self.toggle_opt_flag(MjtVisFlag::mjVIS_INERTIA),
+
+                #[cfg(feature = "viewer-ui")]
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::ArrowUp), state: ElementState::Pressed, ..},
+                    ..
+                } => self.status.toggle(ViewerStatusBit::UI),
 
                 // Zoom in/out
                 WindowEvent::MouseWheel {delta, ..} => {
@@ -681,6 +686,8 @@ bitflags! {
     #[derive(Debug)]
     struct ViewerStatusBit: u8 {
         const HELP = 1 << 0;
+        #[cfg(feature = "viewer-ui")]
+        const UI = 1 << 1;
     }
 }
 
