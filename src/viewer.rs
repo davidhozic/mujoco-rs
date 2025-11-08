@@ -192,7 +192,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let camera  = MjvCamera::new_free(&model);
 
         #[cfg(feature = "viewer-ui")]
-        let ui = ui::ViewerUI::new(&window, &gl_surface.display());
+        let ui = ui::ViewerUI::new(model.clone(), &window, &gl_surface.display());
 
         Ok(Self {
             model,
@@ -332,7 +332,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let inner_size = window.inner_size();
         let left = self.ui.process(
             window, &mut self.status,
-            self.scene.flags_mut(), &mut self.opt
+            self.scene.flags_mut(), &mut self.opt,
+            &mut self.camera
         );
         
         /* Adjust the viewport so MuJoCo doesn't draw over the UI */
@@ -527,7 +528,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                 #[cfg(feature = "viewer-ui")]
                 WindowEvent::KeyboardInput {
-                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::ArrowUp), state: ElementState::Pressed, ..},
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyX), state: ElementState::Pressed, ..},
                     ..
                 } => self.status.toggle(ViewerStatusBit::UI),
 

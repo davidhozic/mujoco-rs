@@ -10,9 +10,14 @@ use egui_winit;
 use std::collections::VecDeque;
 use std::ffi::CString;
 use std::fmt::Debug;
+use std::ops::Deref;
 use std::sync::Arc;
 
-use crate::wrappers::mj_visualization::MjvOption;
+
+use crate::wrappers::mj_visualization::{
+    MjvOption, MjvCamera, MjtCamera
+};
+use crate::wrappers::mj_model::{MjModel, MjtObj};
 use crate::viewer::ViewerStatusBit;
 
 const MAIN_FONT: FontId = FontId::proportional(15.0);
@@ -26,7 +31,7 @@ const SIDE_PANEL_DEFAULT_WIDTH: f32 = 250.0;
 const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
 const SIDE_PANEL_SECOND_WIDTH: f32 = 10.0;
 
-/// Maps MjtRndFlag to their string
+/// Maps [`MjtRndFlag`](crate::wrappers::mj_visualization::MjtRndFlag) to their string
 const GL_EFFECT_MAP: [&str; 10] = [
     "Shadow",
     "Wireframe",
@@ -40,7 +45,7 @@ const GL_EFFECT_MAP: [&str; 10] = [
     "Cull face"
 ];
 
-/// Maps MjtVisFlag to their string
+/// Maps [`MjtVisFlag`](crate::wrappers::mj_visualization::MjtVisFlag) to their string
 const VIS_OPT_MAP: [&str; 31] = [
     "Convex hull",
     "Texture",
@@ -72,7 +77,40 @@ const VIS_OPT_MAP: [&str; 31] = [
     "Flex skin",
     "Body BVH",
     "Mesh BVH",
-    "SDF iteration",
+    "SDF iteration"
+];
+
+/// Maps [`MjtLabel`](crate::wrappers::mj_visualization::MjtLabel) to their string
+const LABEL_TYPE_MAP: [&str; 17] = [
+    "None",
+    "Body",
+    "Joint",
+    "Geom",
+    "Site",
+    "Camera",
+    "Light",
+    "Tendon",
+    "Actuator",
+    "Constraint",
+    "Flex",
+    "Skin",
+    "Selection",
+    "Selection point",
+    "Contact point",
+    "Contact force",
+    "Island"
+];
+
+/// Maps [`MjtFrame`](crate::wrappers::mj_visualization::MjtFrame) to their string
+const FRAME_TYPE_MAP: [&str; 8] = [
+    "None",
+    "Body",
+    "Geom",
+    "Site",
+    "Camera",
+    "Light",
+    "Contact",
+    "World"
 ];
 
 /// Viewer user interface context.
@@ -82,11 +120,12 @@ pub(crate) struct ViewerUI {
     painter: egui_glow::Painter,
     gl: Arc<egui_glow::glow::Context>,
     events: VecDeque<UiEvent>,
+    camera_names: Vec<String>,
 }
 
 impl ViewerUI {
     /// Create a new [`ViewerUI`] instance for the specific winit window.
-    pub(crate) fn new(window: &Window, display: &Display) -> Self {
+    pub(crate) fn new<M: Deref<Target = MjModel>>(model: M, window: &Window, display: &Display) -> Self {
         let egui_ctx = egui::Context::default();
         let viewport_id = egui_ctx.viewport_id();
 
@@ -100,13 +139,19 @@ impl ViewerUI {
         );
         let gl = unsafe { Arc::new(egui_glow::glow::Context::from_loader_function(get_addr)) };
 
+        let cameras = (0..model.ncam()).map(|i| {
+            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i) {
+                name.to_string()
+            } else { format!("Camera {i}") }
+        }).collect();
+
         let painter = egui_glow::Painter::new(
             gl.clone(),
             "",
             None,
             false
         ).unwrap();
-        Self { egui_ctx, state, painter, gl, events: VecDeque::new() }
+        Self { egui_ctx, state, painter, gl, events: VecDeque::new(), camera_names: cameras }
     }
 
     /// Handles winit input events.
@@ -115,7 +160,12 @@ impl ViewerUI {
     }
 
     /// Draws the UI to the viewport.
-    pub(crate) fn process(&mut self, window: &Window, status: &mut ViewerStatusBit, scene_flags: &mut [u8], options: &mut MjvOption) -> f32 {
+    pub(crate) fn process(
+        &mut self,
+        window: &Window, status: &mut ViewerStatusBit,
+        scene_flags: &mut [u8], options: &mut MjvOption,
+        camera: &mut MjvCamera
+    ) -> f32 {
         let raw_input = self.state.take_egui_input(&window);
 
         // Viewport reservations, which will be excluded from MuJoCo's viewport.
@@ -149,7 +199,6 @@ impl ViewerUI {
                                 self.events.push_back(UiEvent::Close);
                             }
                         });
-
                         
                         /* Option */
                         egui::CollapsingHeader::new(RichText::new("Option").font(HEADING_FONT))
@@ -195,6 +244,62 @@ impl ViewerUI {
                             .default_open(false)
                             .show(ui, |ui|
                         {
+                            egui::Grid::new("render_select_grid").show(ui, |ui| {
+                                // Camera
+                                ui.label(RichText::new("Camera").font(MAIN_FONT));
+                                let mut current_cam_name = match unsafe {std::mem::transmute(camera.type_) } {
+                                    MjtCamera::mjCAMERA_FIXED => &self.camera_names[camera.fixedcamid as usize],
+                                    MjtCamera::mjCAMERA_TRACKING => "Tracking",
+                                    MjtCamera::mjCAMERA_FREE => "Free",
+                                    _ => unreachable!()
+                                };
+
+                                ui.menu_button(current_cam_name, |ui| {
+                                    if ui.selectable_value(&mut current_cam_name, "Free", "Free").clicked() {
+                                        camera.free();
+                                    }
+
+                                    for (id, name) in self.camera_names.iter().enumerate() {
+                                        if ui.selectable_value(&mut current_cam_name, &name, name).clicked() {
+                                            *camera = MjvCamera::new_fixed(id as u32);
+                                        }
+                                    }
+                                });
+                                ui.end_row();
+                                
+                                // Label
+                                ui.label(RichText::new("Label").font(MAIN_FONT));
+                                let mut current_lbl_ty = LABEL_TYPE_MAP[options.label as usize];
+                                ui.menu_button(current_lbl_ty, |ui| {
+                                    for (label_type_i, label_type) in LABEL_TYPE_MAP.iter().enumerate() {
+                                        if ui.selectable_value(
+                                            &mut current_lbl_ty,
+                                            label_type, *label_type
+                                        ).clicked() {
+                                            options.label = label_type_i as i32;
+                                        };
+                                    }
+                                    
+                                });
+                                ui.end_row();
+
+                                // Frame
+                                ui.label(RichText::new("Frame").font(MAIN_FONT));
+                                let mut current_frm_ty = FRAME_TYPE_MAP[options.frame as usize];
+                                ui.menu_button(current_frm_ty, |ui| {
+                                    for (frame_type_i, frame_type) in FRAME_TYPE_MAP.iter().enumerate() {
+                                        if ui.selectable_value(
+                                            &mut current_frm_ty,
+                                            frame_type, *frame_type
+                                        ).clicked() {
+                                            options.frame = frame_type_i as i32;
+                                        };
+                                    }
+                                    
+                                });
+                                ui.end_row();
+                            });
+
                             ui.collapsing("Elements", |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     for (flag, enabled) in &mut options.flags.iter_mut().enumerate() {
@@ -220,7 +325,7 @@ impl ViewerUI {
                     // Panel toggle info
                     ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
                         ui.add_space(HEADING_POST_SPACE);
-                        ui.heading("Toggle: Arrow up key");
+                        ui.heading("Toggle: X");
                     });
 
                     // Make the panel track its width on resize
