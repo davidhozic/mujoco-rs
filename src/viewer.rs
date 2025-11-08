@@ -330,7 +330,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         use crate::viewer::ui::UiEvent;
         let GlState { window, .. } = &self.adapter.state.as_ref().unwrap();
         let inner_size = window.inner_size();
-        let left = self.ui.process(window, &mut self.status, self.scene.flags_mut());
+        let left = self.ui.process(
+            window, &mut self.status,
+            self.scene.flags_mut(), &mut self.opt
+        );
         
         /* Adjust the viewport so MuJoCo doesn't draw over the UI */
         self.rect_view.left = left as i32;
@@ -530,6 +533,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                 // Zoom in/out
                 WindowEvent::MouseWheel {delta, ..} => {
+                    let (x, y) = self.raw_cursor_position;
+                    if self.is_cursor_outside(x, y) {
+                        continue;
+                    }
+
                     let value = match delta {
                         MouseScrollDelta::LineDelta(_, down) => down as f64,
                         MouseScrollDelta::PixelDelta(PhysicalPosition {y, ..}) => y * TOUCH_BAR_ZOOM_FACTOR
@@ -545,7 +553,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Toggles visualization options.
     fn toggle_opt_flag(&mut self, flag: MjtVisFlag) {
         let index = flag as usize;
-        self.opt.flags[index] = !self.opt.flags[index];
+        let val = self.opt.flags[index];
+        self.opt.flags[index] = if val == 1 { 0 } else { 1 };
     }
 
     /// Cycle MJCF defined cameras.
