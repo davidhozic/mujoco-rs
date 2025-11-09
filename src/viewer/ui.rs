@@ -14,11 +14,12 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use crate::wrappers::mj_visualization::{
-    MjvOption, MjvCamera, MjtCamera
+    MjvOption, MjvCamera, MjtCamera, MjvScene
 };
 use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint};
 use crate::wrappers::mj_data::MjData;
 use crate::viewer::ViewerStatusBit;
+use crate::mujoco_c::mjNGROUP;
 use bitflags::bitflags;
 
 const MAIN_FONT: FontId = FontId::proportional(15.0);
@@ -198,7 +199,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     pub(crate) fn process(
         &mut self,
         window: &Window, status: &mut ViewerStatusBit,
-        scene_flags: &mut [u8], options: &mut MjvOption,
+        scene: &mut MjvScene<M>, options: &mut MjvOption,
         camera: &mut MjvCamera,
         data: &mut MjData<M>
     ) -> (f32, bool) {
@@ -226,7 +227,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                         spacing.button_padding.y = BUTTON_SPACING_Y;
 
                         /* Window controls */
-                        egui::CollapsingHeader::new(RichText::new("Window").font(HEADING_FONT))
+                        egui::CollapsingHeader::new(RichText::new("Basic").font(HEADING_FONT))
                             .default_open(true)
                             .show(ui, |ui|
                         {
@@ -253,7 +254,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 };
 
                                 selected = self.status.contains(UiStatus::CONTROL_WINDOW);
-                                if ui.toggle_value(&mut selected, RichText::new("Control").font(MAIN_FONT)).clicked() {
+                                if ui.toggle_value(&mut selected, RichText::new("Actuator").font(MAIN_FONT)).clicked() {
                                     self.status.set(UiStatus::CONTROL_WINDOW, selected);
                                 };
 
@@ -265,6 +266,11 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 selected = self.status.contains(UiStatus::EQUALITY_WINDOW);
                                 if ui.toggle_value(&mut selected, RichText::new("Equality").font(MAIN_FONT)).clicked() {
                                     self.status.set(UiStatus::EQUALITY_WINDOW, selected);
+                                };
+
+                                selected = self.status.contains(UiStatus::GROUP_WINDOW);
+                                if ui.toggle_value(&mut selected, RichText::new("Group").font(MAIN_FONT)).clicked() {
+                                    self.status.set(UiStatus::GROUP_WINDOW, selected);
                                 };
                             });
                         });
@@ -360,11 +366,22 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                         }
                                     }
                                 });
+
+                                ui.separator();
+                                ui.horizontal(|ui| {
+                                    ui.label("Tree depth");
+                                    ui.add(egui::Slider::new(&mut options.bvh_depth, 0..=20));
+                                });
+
+                                ui.horizontal(|ui| {
+                                    ui.label("Flex layer");
+                                    ui.add(egui::Slider::new(&mut options.flex_layer, 0..=10));
+                                });
                             });
 
                             ui.collapsing("OpenGL effects", |ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    for (flag, enabled) in scene_flags.iter_mut().enumerate() {
+                                    for (flag, enabled) in scene.flags_mut().iter_mut().enumerate() {
                                         if ui.toggle_value(&mut (*enabled == 1), GL_EFFECT_MAP[flag]).clicked() {
                                             *enabled = if *enabled == 1 { 0 } else { 1 };
                                         }
@@ -372,6 +389,9 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 });
                             });
                         });
+
+                        // Make the scroll bars span to the edges of the sidebar.
+                        ui.take_available_space();
                     });
 
                     // Panel toggle info
@@ -381,13 +401,13 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                     });
 
                     // Make the panel track its width on resize
-                    ui.take_available_space();
                     left = ui.max_rect().max.x + SIDE_PANEL_PAD;
                 });
 
+                /* Windows */
                 // Controls window
                 if self.status.contains(UiStatus::CONTROL_WINDOW) {
-                    egui::Window::new("Control")
+                    egui::Window::new("Actuator")
                         .fade_in(false)
                         .fade_out(false)
                         .scroll(true)
@@ -414,8 +434,6 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                         if ui.button(RichText::new("Clear").font(MAIN_FONT)).clicked() {
                             data.ctrl_mut().fill(0.0);
                         }
-
-                        ui.take_available_space();
                     });
                 }
 
@@ -451,8 +469,6 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 ui.end_row();
                             }
                         });
-
-                        ui.take_available_space();
                     });
                 }
 
@@ -471,7 +487,27 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 ui.toggle_value(active, RichText::new(equality_name).font(MAIN_FONT));
                             }
                         });
-                        ui.take_available_space();
+                    });
+                }
+
+                if self.status.contains(UiStatus::GROUP_WINDOW) {
+                    egui::Window::new("Group")
+                        .fade_in(false)
+                        .fade_out(false)
+                        .show(ctx, |ui|
+                    {
+                        egui::Grid::new("group_grid").show(ui, |ui| {
+                            for i in 0..mjNGROUP as usize {
+                                ui.toggle_value(unsafe { std::mem::transmute(&mut options.geomgroup[i]) }, format!("Geom {i}"));
+                                ui.toggle_value(unsafe { std::mem::transmute(&mut options.sitegroup[i]) }, format!("Site {i}"));
+                                ui.toggle_value(unsafe { std::mem::transmute(&mut options.jointgroup[i]) }, format!("Joint {i}"));
+                                ui.toggle_value(unsafe { std::mem::transmute(&mut options.tendongroup[i]) }, format!("Tendon {i}"));
+                                ui.toggle_value(unsafe { std::mem::transmute(&mut options.actuatorgroup[i]) }, format!("Actuator {i}"));
+                                ui.toggle_value(unsafe { std::mem::transmute(&mut options.flexgroup[i]) }, format!("Flex {i}"));
+                                ui.toggle_value(unsafe { std::mem::transmute(&mut options.skingroup[i]) }, format!("Skin {i}"));
+                                ui.end_row();
+                            }
+                        });
                     });
                 }
 
@@ -532,5 +568,6 @@ bitflags! {
         const CONTROL_WINDOW = 1 << 0;
         const JOINT_WINDOW = 1 << 1;
         const EQUALITY_WINDOW = 1 << 2;
+        const GROUP_WINDOW = 1 << 3;
     }
 }

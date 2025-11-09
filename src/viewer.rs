@@ -336,7 +336,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let inner_size = window.inner_size();
         let (left, is_covered) = self.ui.process(
             window, &mut self.status,
-            self.scene.flags_mut(), &mut self.opt,
+            &mut self.scene, &mut self.opt,
             &mut self.camera, data
         );
 
