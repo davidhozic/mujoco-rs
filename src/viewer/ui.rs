@@ -19,6 +19,7 @@ use crate::wrappers::mj_visualization::{
 use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint};
 use crate::wrappers::mj_data::MjData;
 use crate::viewer::ViewerStatusBit;
+use bitflags::bitflags;
 
 const MAIN_FONT: FontId = FontId::proportional(15.0);
 const HEADING_FONT: FontId = FontId::proportional(20.0);
@@ -122,7 +123,9 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     events: VecDeque<UiEvent>,
     camera_names: Vec<String>,
     actuator_names: Vec<String>,
-    joint_names: Vec<String>,
+    joint_name_id: Vec<(String, usize)>,
+    equality_names: Vec<String>,
+    status: UiStatus,
     model: M
 }
 
@@ -154,15 +157,22 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             } else { format!("Actuator {i}") }
         }).collect();
 
-        let joint_names = (0..model.njnt()).filter_map(|i| {
+        let joint_name_id = (0..model.njnt()).filter_map(|i| {
             match model.jnt_type()[i as usize] {
                 MjtJoint::mjJNT_SLIDE | MjtJoint::mjJNT_HINGE => {
-                    Some(if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, i) {
+                    let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, i) {
                         name.to_string()
-                    } else { format!("Joint {i}") })
+                    } else { format!("Joint {i}") };
+                    Some((name, i as usize))
                 }
                 _ => None
             }
+        }).collect();
+
+        let equality_names = (0..model.neq()).map(|i| {
+            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_EQUALITY, i) {
+                name.to_string()
+            } else { format!("Equality {i}") }
         }).collect();
 
         let painter = egui_glow::Painter::new(
@@ -174,7 +184,8 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
         Self {
             egui_ctx, state, painter, gl, events: VecDeque::new(),
-            camera_names, actuator_names, model, joint_names
+            camera_names, actuator_names, joint_name_id, equality_names,
+            status: UiStatus::empty(), model
         }
     }
 
@@ -239,6 +250,21 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 selected = window.fullscreen().is_some();
                                 if ui.toggle_value(&mut selected, RichText::new("Fullscreen").font(MAIN_FONT)).clicked() {
                                     self.events.push_back(UiEvent::Fullscreen);
+                                };
+
+                                selected = self.status.contains(UiStatus::CONTROL_WINDOW);
+                                if ui.toggle_value(&mut selected, RichText::new("Control").font(MAIN_FONT)).clicked() {
+                                    self.status.set(UiStatus::CONTROL_WINDOW, selected);
+                                };
+
+                                selected = self.status.contains(UiStatus::JOINT_WINDOW);
+                                if ui.toggle_value(&mut selected, RichText::new("Joint").font(MAIN_FONT)).clicked() {
+                                    self.status.set(UiStatus::JOINT_WINDOW, selected);
+                                };
+
+                                selected = self.status.contains(UiStatus::EQUALITY_WINDOW);
+                                if ui.toggle_value(&mut selected, RichText::new("Equality").font(MAIN_FONT)).clicked() {
+                                    self.status.set(UiStatus::EQUALITY_WINDOW, selected);
                                 };
                             });
                         });
@@ -360,81 +386,95 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 });
 
                 // Controls window
-                egui::Window::new("Controls")
-                    .default_open(false)
-                    .fade_in(false)
-                    .fade_out(false)
-                    .scroll(true)
-                    .show(ctx, |ui|
-                {
-                    egui::Grid::new("ctrl_grid").show(ui, |ui| {
-                        for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
-                            .zip(data.ctrl_mut().iter_mut())
-                            .zip(self.model.actuator_ctrlrange())
-                            .zip(self.model.actuator_ctrllimited())
-                        {
-                            ui.label(RichText::new(actuator_name).font(MAIN_FONT));
+                if self.status.contains(UiStatus::CONTROL_WINDOW) {
+                    egui::Window::new("Control")
+                        .fade_in(false)
+                        .fade_out(false)
+                        .scroll(true)
+                        .show(ctx, |ui|
+                    {
+                        egui::Grid::new("ctrl_grid").show(ui, |ui| {
+                            for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
+                                .zip(data.ctrl_mut().iter_mut())
+                                .zip(self.model.actuator_ctrlrange())
+                                .zip(self.model.actuator_ctrllimited())
+                            {
+                                ui.label(RichText::new(actuator_name).font(MAIN_FONT));
 
-                            let range_inc = if *limited {
-                                range[0]..=range[1]
-                            } else { -1.0..=1.0 };
+                                let range_inc = if *limited {
+                                    range[0]..=range[1]
+                                } else { -1.0..=1.0 };
 
-                            ui.add(egui::Slider::new(ctrl, range_inc));
-                            ui.end_row();
+                                ui.add(egui::Slider::new(ctrl, range_inc));
+                                ui.end_row();
+                            }
+                        });
+
+                        // Clear all actuator controls by setting them to 0
+                        if ui.button(RichText::new("Clear").font(MAIN_FONT)).clicked() {
+                            data.ctrl_mut().fill(0.0);
                         }
+
+                        ui.take_available_space();
                     });
-
-                    // Clear all actuator controls by setting them to 0
-                    if ui.button(RichText::new("Clear").font(MAIN_FONT)).clicked() {
-                        data.ctrl_mut().fill(0.0);
-                    }
-
-                    ui.take_available_space();
-                });
+                }
 
                 // Joints window
-                egui::Window::new("Joints")
-                    .default_open(false)
-                    .fade_in(false)
-                    .fade_out(false)
-                    .scroll(true)
-                    .show(ctx, |ui|
-                {
-                    egui::Grid::new("joint_grid").show(ui, |ui| {
-                        let qpos = data.qpos();
-                        for ((value, range, limited), joint_name) in self.model.jnt_range().iter().enumerate()
-                            .zip(self.model.jnt_limited())
-                            .zip(self.model.jnt_type())
-                            .filter_map(|(((jnt_id, range), limited), type_)| {
-                                // Filter joints with more than one degree of freedom as that's the only
-                                // joint we keep track the name for in the joint_names attribute.
-                                match type_ {
-                                    MjtJoint::mjJNT_SLIDE | MjtJoint::mjJNT_HINGE => {
-                                        Some((qpos[self.model.jnt_qposadr()[jnt_id] as usize], range, limited))
-                                    }
-                                    _ => None
-                                }
-                            })
-                            .zip(self.joint_names.iter())
-                        {
-                            ui.label(RichText::new(joint_name).font(MAIN_FONT));
+                if self.status.contains(UiStatus::JOINT_WINDOW) {
+                    egui::Window::new("Joint")
+                        .fade_in(false)
+                        .fade_out(false)
+                        .scroll(true)
+                        .show(ctx, |ui|
+                    {
+                        egui::Grid::new("joint_grid").show(ui, |ui| {
+                            let qpos = data.qpos();
+                            let limiteds = self.model.jnt_limited();
+                            let ranges = self.model.jnt_range();
+                            let qpos_addresses = self.model.jnt_qposadr();
+                            for (name, index) in &self.joint_name_id
+                            {
+                                ui.label(RichText::new(name).font(MAIN_FONT));
+                                let limited = limiteds[*index];
+                                let range = ranges[*index];
+                                let value = qpos[qpos_addresses[*index] as usize];
 
-                            let value_scaled = if *limited {
-                                (value - range[0]) / (range[1] - range[0])
-                            } else { value.clamp(0.0, 1.0) };
+                                let value_scaled = if limited {
+                                    (value - range[0]) / (range[1] - range[0])
+                                } else { value.clamp(0.0, 1.0) };
 
-                            let [ mut low,  mut high] = *range;
-                            ui.add_enabled(true, egui::DragValue::new(&mut value.clone()));
-                            ui.add_enabled(false, egui::DragValue::new(&mut low));
-                            ui.add(egui::ProgressBar::new(value_scaled as f32));
-                            ui.add_enabled(false, egui::DragValue::new(&mut high));
-                            ui.end_row();
-                        }
+                                let [ mut low,  mut high] = range;
+                                ui.add_enabled(true, egui::DragValue::new(&mut value.clone()));
+                                ui.add_enabled(false, egui::DragValue::new(&mut low));
+                                ui.add(egui::ProgressBar::new(value_scaled as f32));
+                                ui.add_enabled(false, egui::DragValue::new(&mut high));
+                                ui.end_row();
+                            }
+                        });
+
+                        ui.take_available_space();
                     });
+                }
 
-                    ui.take_available_space();
-                });
- 
+                // Equalities window
+                if self.status.contains(UiStatus::EQUALITY_WINDOW) {
+                    egui::Window::new("Equality")
+                        .fade_in(false)
+                        .fade_out(false)
+                        .scroll(true)
+                        .show(ctx, |ui|
+                    {
+                        ui.horizontal_wrapped(|ui| {
+                            for (equality_name, active) in self.equality_names.iter()
+                                .zip(data.eq_active_mut())
+                            {
+                                ui.toggle_value(active, RichText::new(equality_name).font(MAIN_FONT));
+                            }
+                        });
+                        ui.take_available_space();
+                    });
+                }
+
                 // Prevent window interactions when covering egui widgets
                 covered = ctx.is_pointer_over_area();
             }
@@ -485,4 +525,12 @@ pub(crate) enum UiEvent {
     Fullscreen,
     ResetSimulation,
     AlignCamera
+}
+
+bitflags! {
+    pub(crate) struct UiStatus: u8 {
+        const CONTROL_WINDOW = 1 << 0;
+        const JOINT_WINDOW = 1 << 1;
+        const EQUALITY_WINDOW = 1 << 2;
+    }
 }
