@@ -401,16 +401,16 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                     .show(ctx, |ui|
                 {
                     egui::Grid::new("joint_grid").show(ui, |ui| {
-                        for ((value, range, limited), joint_name) in  data.qpos().iter()
-                            .zip(self.model.jnt_range())
+                        let qpos = data.qpos();
+                        for ((value, range, limited), joint_name) in self.model.jnt_range().iter().enumerate()
                             .zip(self.model.jnt_limited())
                             .zip(self.model.jnt_type())
-                            .filter_map(|(((qpos, range), limited), type_)| {
+                            .filter_map(|(((jnt_id, range), limited), type_)| {
                                 // Filter joints with more than one degree of freedom as that's the only
                                 // joint we keep track the name for in the joint_names attribute.
                                 match type_ {
                                     MjtJoint::mjJNT_SLIDE | MjtJoint::mjJNT_HINGE => {
-                                        Some((qpos, range, limited))
+                                        Some((qpos[self.model.jnt_qposadr()[jnt_id] as usize], range, limited))
                                     }
                                     _ => None
                                 }
@@ -420,7 +420,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             ui.label(RichText::new(joint_name).font(MAIN_FONT));
 
                             let value_scaled = if *limited {
-                                (*value - range[0]) / (range[1] - range[0])
+                                (value - range[0]) / (range[1] - range[0])
                             } else { value.clamp(0.0, 1.0) };
 
                             let [ mut low,  mut high] = *range;
