@@ -456,8 +456,8 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             ui.label(RichText::new(name).font(MAIN_FONT));
                             let limited = limiteds[*index];
                             let range = ranges[*index];
-                            let value = qpos[qpos_addresses[*index] as usize];
-                            ui.add_enabled(false, egui::DragValue::new(&mut value.clone()));
+                            let mut value = qpos[qpos_addresses[*index] as usize];
+                            ui.add_enabled(false, egui::DragValue::new(&mut value));
 
                             if limited {
                                 let [low, high] = range;
