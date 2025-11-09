@@ -358,7 +358,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 ui.end_row();
                             });
 
-                            ui.collapsing("Elements", |ui| {
+                            ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     for (flag, enabled) in &mut options.flags.iter_mut().enumerate() {
                                         if ui.toggle_value(&mut (*enabled == 1), VIS_OPT_MAP[flag]).clicked() {
@@ -366,20 +366,17 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                         }
                                     }
                                 });
-
                                 ui.separator();
-                                ui.horizontal(|ui| {
+                                egui::Grid::new("tree_flex_slide").show(ui, |ui| {
                                     ui.label("Tree depth");
                                     ui.add(egui::Slider::new(&mut options.bvh_depth, 0..=20));
-                                });
-
-                                ui.horizontal(|ui| {
+                                    ui.end_row();
                                     ui.label("Flex layer");
                                     ui.add(egui::Slider::new(&mut options.flex_layer, 0..=10));
                                 });
                             });
 
-                            ui.collapsing("OpenGL effects", |ui| {
+                            ui.collapsing(RichText::new("OpenGL effects").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     for (flag, enabled) in scene.flags_mut().iter_mut().enumerate() {
                                         if ui.toggle_value(&mut (*enabled == 1), GL_EFFECT_MAP[flag]).clicked() {
@@ -426,7 +423,10 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 range[0]..=range[1]
                             } else { -1.0..=1.0 };
 
-                            ui.add(egui::Slider::new(ctrl, range_inc));
+                            ui.add(
+                                egui::Slider::new(ctrl, range_inc)
+                                .update_while_editing(false)
+                            );
                             ui.end_row();
                         }
                     });
