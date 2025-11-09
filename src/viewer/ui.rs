@@ -202,13 +202,13 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         scene: &mut MjvScene<M>, options: &mut MjvOption,
         camera: &mut MjvCamera,
         data: &mut MjData<M>
-    ) -> (f32, bool) {
-        let raw_input = self.state.take_egui_input(&window);
-
+    ) -> f32 {
         // Viewport reservations, which will be excluded from MuJoCo's viewport.
         // This way MuJoCo won't draw over the UI.
         let mut left = 0.0;
-        let covered;
+
+        // Process the UI
+        let raw_input = self.state.take_egui_input(&window);
         let full_output = self.egui_ctx.run(raw_input, |ctx| {
             if status.contains(ViewerStatusBit::UI) {
                 egui::SidePanel::new(egui::panel::Side::Left,"interface_panel")
@@ -361,9 +361,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     for (flag, enabled) in &mut options.flags.iter_mut().enumerate() {
-                                        if ui.toggle_value(&mut (*enabled == 1), VIS_OPT_MAP[flag]).clicked() {
-                                            *enabled = if *enabled == 1 { 0 } else { 1 };
-                                        }
+                                        ui.toggle_value(unsafe { std::mem::transmute(enabled) }, VIS_OPT_MAP[flag]);
                                     }
                                 });
                                 ui.separator();
@@ -379,9 +377,10 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             ui.collapsing(RichText::new("OpenGL effects").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     for (flag, enabled) in scene.flags_mut().iter_mut().enumerate() {
-                                        if ui.toggle_value(&mut (*enabled == 1), GL_EFFECT_MAP[flag]).clicked() {
-                                            *enabled = if *enabled == 1 { 0 } else { 1 };
-                                        }
+                                        ui.toggle_value(
+                                            unsafe { std::mem::transmute(enabled) },
+                                            GL_EFFECT_MAP[flag]
+                                        );
                                     }
                                 });
                             });
@@ -515,11 +514,9 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         });
 
         // Prevent window interactions when covering egui widgets
-        covered = self.egui_ctx.is_pointer_over_area();
-
         self.state.handle_platform_output(&window, full_output.platform_output);
 
-        // Tesselate
+        // Tessellate
         let pixels_per_point = full_output.pixels_per_point;
         let textures_delta = &full_output.textures_delta;
         let clipped_primitives = self.egui_ctx.tessellate(full_output.shapes, pixels_per_point);
@@ -533,7 +530,17 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             textures_delta
         );
 
-        (left, covered)
+        left
+    }
+
+    /// Checks whether the UI is focused (e.g., typing).
+    pub(crate) fn focused(&self) -> bool {
+        self.egui_ctx.memory(|ui| ui.focused().is_some())
+    }
+
+    /// Checks whether the mouse is over the UI.
+    pub(crate) fn covered(&self) -> bool {
+        self.egui_ctx.is_pointer_over_area()
     }
 
     /// Resets OpenGL state. This is needed for MuJoCo's renderer.
@@ -566,6 +573,7 @@ pub(crate) enum UiEvent {
 
 bitflags! {
     pub(crate) struct UiStatus: u8 {
+        // Normal state
         const CONTROL_WINDOW = 1 << 0;
         const JOINT_WINDOW = 1 << 1;
         const EQUALITY_WINDOW = 1 << 2;

@@ -334,13 +334,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         use crate::viewer::ui::UiEvent;
         let GlState { window, .. } = &self.adapter.state.as_ref().unwrap();
         let inner_size = window.inner_size();
-        let (left, is_covered) = self.ui.process(
+        let left = self.ui.process(
             window, &mut self.status,
             &mut self.scene, &mut self.opt,
             &mut self.camera, data
         );
-
-        self.status.set(ViewerStatusBit::UI_COVERED, is_covered);
 
         /* Adjust the viewport so MuJoCo doesn't draw over the UI */
         self.rect_view.left = left as i32;
@@ -379,14 +377,13 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Checks whether the cursor is inside the user interface (i.e., outside of MuJoCo's scene).
     #[cfg(feature = "viewer-ui")]
-    fn is_cursor_outside(&self, x: f64, y: f64) -> bool {
+    fn cursor_outside(&self, x: f64, y: f64) -> bool {
         const LEFT_EVENT_PAD: f64 = 10.0;  // additional safety to prevent glitches
         let mut left = self.rect_view.left as f64;
         if left > 0.0 {  // don't add safety margin if nothing is overlayed
             left += LEFT_EVENT_PAD;
         }
-        x < left || y < self.rect_view.bottom as f64 ||
-            self.status.contains(ViewerStatusBit::UI_COVERED)
+        x < left || y < self.rect_view.bottom as f64
     }
 
     /// Processes user input events.
@@ -407,7 +404,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     let is_pressed = state == ElementState::Pressed;
                     
                     #[cfg(feature = "viewer-ui")]
-                    if self.is_cursor_outside(x, y) && is_pressed {
+                    if (self.cursor_outside(x, y) || self.ui.covered()) && is_pressed {
                         continue;
                     }
 
@@ -426,13 +423,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                 WindowEvent::CursorMoved { position, .. } => {
                     let PhysicalPosition { x, y } = position;
-                    self.raw_cursor_position = position.into();
-
-                    #[cfg(feature = "viewer-ui")]
-                    if self.is_cursor_outside(x, y) {
-                        continue;
-                    }
-
                     self.process_cursor_pos(x, y, data);
                 }
 
@@ -453,6 +443,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         state: ElementState::Pressed, ..
                     }, ..
                 } => {
+                    #[cfg(feature = "viewer-ui")]
+                    if self.ui.focused() {
+                        continue;
+                    }
                     self.camera.free();
                 }
 
@@ -483,6 +477,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         state: ElementState::Pressed, ..
                     }, ..
                 } => {
+                    #[cfg(feature = "viewer-ui")]
+                    if self.ui.focused() {
+                        continue;
+                    }
+
                     data.reset();
                     data.forward();
                 }
@@ -559,7 +558,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     let (x, y) = self.raw_cursor_position;
 
                     #[cfg(feature = "viewer-ui")]
-                    if self.is_cursor_outside(x, y) {
+                    if self.cursor_outside(x, y) {
                         continue;
                     }
 
@@ -578,8 +577,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Toggles visualization options.
     fn toggle_opt_flag(&mut self, flag: MjtVisFlag) {
         let index = flag as usize;
-        let val = self.opt.flags[index];
-        self.opt.flags[index] = if val == 1 { 0 } else { 1 };
+        self.opt.flags[index] = 1 - self.opt.flags[index];
     }
 
     /// Cycle MJCF defined cameras.
@@ -610,6 +608,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Processes camera and perturbation movements.
     fn process_cursor_pos(&mut self, x: f64, y: f64, data: &mut MjData<M>) {
+        self.raw_cursor_position = (x, y);
         /* Calculate the change in mouse position since last call */
         let dx = x - self.last_x;
         let dy = y - self.last_y;
@@ -722,8 +721,6 @@ bitflags! {
         const HELP = 1 << 0;
         #[cfg(feature = "viewer-ui")]
         const UI = 1 << 1;
-        #[cfg(feature = "viewer-ui")]
-        const UI_COVERED = 1 << 2;
     }
 }
 
