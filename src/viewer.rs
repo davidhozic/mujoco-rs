@@ -380,7 +380,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Checks whether the cursor is inside the user interface (i.e., outside of MuJoCo's scene).
     #[cfg(feature = "viewer-ui")]
     fn is_cursor_outside(&self, x: f64, y: f64) -> bool {
-        x < self.rect_view.left as f64 || y < self.rect_view.bottom as f64 ||
+        const LEFT_EVENT_PAD: f64 = 10.0;  // additional safety to prevent glitches
+        let mut left = self.rect_view.left as f64;
+        if left > 0.0 {  // don't add safety margin if nothing is overlayed
+            left += LEFT_EVENT_PAD;
+        }
+        x < left || y < self.rect_view.bottom as f64 ||
             self.status.contains(ViewerStatusBit::UI_COVERED)
     }
 
