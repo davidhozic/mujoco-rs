@@ -13,11 +13,11 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
 
-
 use crate::wrappers::mj_visualization::{
     MjvOption, MjvCamera, MjtCamera
 };
-use crate::wrappers::mj_model::{MjModel, MjtObj};
+use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint};
+use crate::wrappers::mj_data::MjData;
 use crate::viewer::ViewerStatusBit;
 
 const MAIN_FONT: FontId = FontId::proportional(15.0);
@@ -29,7 +29,7 @@ const BUTTON_ROUNDING: f32 = 50.0;
 
 const SIDE_PANEL_DEFAULT_WIDTH: f32 = 250.0;
 const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
-const SIDE_PANEL_SECOND_WIDTH: f32 = 10.0;
+const SIDE_PANEL_PAD: f32 = 10.0;
 
 /// Maps [`MjtRndFlag`](crate::wrappers::mj_visualization::MjtRndFlag) to their string
 const GL_EFFECT_MAP: [&str; 10] = [
@@ -114,18 +114,21 @@ const FRAME_TYPE_MAP: [&str; 8] = [
 ];
 
 /// Viewer user interface context.
-pub(crate) struct ViewerUI {
+pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     egui_ctx: egui::Context,
     state: egui_winit::State,
     painter: egui_glow::Painter,
     gl: Arc<egui_glow::glow::Context>,
     events: VecDeque<UiEvent>,
     camera_names: Vec<String>,
+    actuator_names: Vec<String>,
+    joint_names: Vec<String>,
+    model: M
 }
 
-impl ViewerUI {
+impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     /// Create a new [`ViewerUI`] instance for the specific winit window.
-    pub(crate) fn new<M: Deref<Target = MjModel>>(model: M, window: &Window, display: &Display) -> Self {
+    pub(crate) fn new(model: M, window: &Window, display: &Display) -> Self {
         let egui_ctx = egui::Context::default();
         let viewport_id = egui_ctx.viewport_id();
 
@@ -139,10 +142,27 @@ impl ViewerUI {
         );
         let gl = unsafe { Arc::new(egui_glow::glow::Context::from_loader_function(get_addr)) };
 
-        let cameras = (0..model.ncam()).map(|i| {
+        let camera_names = (0..model.ncam()).map(|i| {
             if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i) {
                 name.to_string()
             } else { format!("Camera {i}") }
+        }).collect();
+
+        let actuator_names = (0..model.nu()).map(|i| {
+            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, i) {
+                name.to_string()
+            } else { format!("Actuator {i}") }
+        }).collect();
+
+        let joint_names = (0..model.njnt()).filter_map(|i| {
+            match model.jnt_type()[i as usize] {
+                MjtJoint::mjJNT_SLIDE | MjtJoint::mjJNT_HINGE => {
+                    Some(if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, i) {
+                        name.to_string()
+                    } else { format!("Joint {i}") })
+                }
+                _ => None
+            }
         }).collect();
 
         let painter = egui_glow::Painter::new(
@@ -151,7 +171,11 @@ impl ViewerUI {
             None,
             false
         ).unwrap();
-        Self { egui_ctx, state, painter, gl, events: VecDeque::new(), camera_names: cameras }
+
+        Self {
+            egui_ctx, state, painter, gl, events: VecDeque::new(),
+            camera_names, actuator_names, model, joint_names
+        }
     }
 
     /// Handles winit input events.
@@ -164,16 +188,18 @@ impl ViewerUI {
         &mut self,
         window: &Window, status: &mut ViewerStatusBit,
         scene_flags: &mut [u8], options: &mut MjvOption,
-        camera: &mut MjvCamera
-    ) -> f32 {
+        camera: &mut MjvCamera,
+        data: &mut MjData<M>
+    ) -> (f32, bool) {
         let raw_input = self.state.take_egui_input(&window);
 
         // Viewport reservations, which will be excluded from MuJoCo's viewport.
         // This way MuJoCo won't draw over the UI.
         let mut left = 0.0;
+        let mut covered = false;
         let full_output = self.egui_ctx.run(raw_input, |ctx| {
             if status.contains(ViewerStatusBit::UI) {
-                egui::SidePanel::new(egui::panel::Side::Left, "left-panel")
+                egui::SidePanel::new(egui::panel::Side::Left,"interface_panel")
                     .resizable(true)
                     .default_width(SIDE_PANEL_DEFAULT_WIDTH)
                     .show(ctx, |ui|
@@ -251,7 +277,7 @@ impl ViewerUI {
                                     MjtCamera::mjCAMERA_FIXED => &self.camera_names[camera.fixedcamid as usize],
                                     MjtCamera::mjCAMERA_TRACKING => "Tracking",
                                     MjtCamera::mjCAMERA_FREE => "Free",
-                                    _ => unreachable!()
+                                    MjtCamera::mjCAMERA_USER => "User",
                                 };
 
                                 ui.menu_button(current_cam_name, |ui| {
@@ -330,15 +356,87 @@ impl ViewerUI {
 
                     // Make the panel track its width on resize
                     ui.take_available_space();
+                    left = ui.max_rect().max.x + SIDE_PANEL_PAD;
                 });
 
-                egui::SidePanel::new(egui::panel::Side::Left, "left-panel-pad")
-                    .resizable(false)
-                    .default_width(SIDE_PANEL_SECOND_WIDTH)
-                    .show_separator_line(false)
-                    .show(ctx, |ui|{
-                        left = ui.max_rect().max.x;
+                // Controls window
+                egui::Window::new("Controls")
+                    .default_open(false)
+                    .fade_in(false)
+                    .fade_out(false)
+                    .scroll(true)
+                    .show(ctx, |ui|
+                {
+                    egui::Grid::new("ctrl_grid").show(ui, |ui| {
+                        for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
+                            .zip(data.ctrl_mut().iter_mut())
+                            .zip(self.model.actuator_ctrlrange())
+                            .zip(self.model.actuator_ctrllimited())
+                        {
+                            ui.label(RichText::new(actuator_name).font(MAIN_FONT));
+
+                            let range_inc = if *limited {
+                                range[0]..=range[1]
+                            } else { -1.0..=1.0 };
+
+                            ui.add(egui::Slider::new(ctrl, range_inc));
+                            ui.end_row();
+                        }
                     });
+
+                    // Clear all actuator controls by setting them to 0
+                    if ui.button(RichText::new("Clear").font(MAIN_FONT)).clicked() {
+                        data.ctrl_mut().fill(0.0);
+                    }
+
+                    ui.take_available_space();
+                });
+
+                // Joints window
+                egui::Window::new("Joints")
+                    .default_open(false)
+                    .fade_in(false)
+                    .fade_out(false)
+                    .scroll(true)
+                    .show(ctx, |ui|
+                {
+                    egui::Grid::new("joint_grid").show(ui, |ui| {
+                        for ((value, range, limited), joint_name) in  data.qpos().iter()
+                            .zip(self.model.jnt_range())
+                            .zip(self.model.jnt_limited())
+                            .zip(self.model.jnt_type())
+                            .filter_map(|(((qpos, range), limited), type_)| {
+                                // Filter joints with more than one degree of freedom as that's the only
+                                // joint we keep track the name for in the joint_names attribute.
+                                match type_ {
+                                    MjtJoint::mjJNT_SLIDE | MjtJoint::mjJNT_HINGE => {
+                                        Some((qpos, range, limited))
+                                    }
+                                    _ => None
+                                }
+                            })
+                            .zip(self.joint_names.iter())
+                        {
+                            ui.label(RichText::new(joint_name).font(MAIN_FONT));
+
+                            let value_scaled = if *limited {
+                                (*value - range[0]) / (range[1] - range[0])
+                            } else { value.clamp(0.0, 1.0) };
+
+                            let [ mut low,  mut high] = *range;
+                            ui.add_enabled(true, egui::DragValue::new(&mut value.clone()));
+                            ui.add_enabled(false, egui::DragValue::new(&mut low));
+                            ui.add(egui::ProgressBar::new(value_scaled as f32));
+                            ui.add_enabled(false, egui::DragValue::new(&mut high));
+                            ui.end_row();
+                        }
+                    });
+
+                    ui.take_available_space();
+                });
+ 
+                // Prevent window interactions when covering egui widgets
+                covered = ctx.is_pointer_over_area();
             }
         });
 
@@ -358,7 +456,7 @@ impl ViewerUI {
             textures_delta
         );
 
-        left
+        (left, covered)
     }
 
     /// Resets OpenGL state. This is needed for MuJoCo's renderer.
@@ -376,7 +474,7 @@ impl ViewerUI {
 }
 
 /// Implement an empty shell to support use in [`MjViewer`](super::MjViewer).
-impl Debug for ViewerUI {
+impl<M: Deref<Target = MjModel>> Debug for ViewerUI<M> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "ViewerUI {{ .. }}")
     }

@@ -139,6 +139,7 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     last_y: f64,
     last_bnt_press_time: Instant,
     rect_view: MjrRectangle,
+    rect_full: MjrRectangle,
 
     /* OpenGL */
     adapter: RenderBase,
@@ -152,7 +153,7 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
 
     /* User interface */
     #[cfg(feature = "viewer-ui")]
-    ui: ui::ViewerUI,
+    ui: ui::ViewerUI<M>,
 
     status: ViewerStatusBit
 }
@@ -206,13 +207,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             last_y: 0.0,
             last_bnt_press_time: Instant::now(),
             rect_view: MjrRectangle::default(),
+            rect_full: MjrRectangle::default(),
             adapter,
             event_loop,
             modifiers: Modifiers::default(),
             buttons_pressed: ButtonsPressed::empty(),
             raw_cursor_position: (0.0, 0.0),
             #[cfg(feature = "viewer-ui")] ui,
-            status: ViewerStatusBit::all()
+            #[cfg(feature = "viewer-ui")] status: ViewerStatusBit::UI,
+            #[cfg(not(feature = "viewer-ui"))] status: ViewerStatusBit::HELP,
         })
     }
 
@@ -255,18 +258,19 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         /* Make sure everything is done on the viewer's window */
         gl_context.make_current(gl_surface).expect("could not make OpenGL context current");
 
+        /* Read the screen size */
+        self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
+
         /* Process mouse and keyboard events */
         self.process_events(data);
 
-        /* Read the screen size */
-        self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
+
+        /* Update the scene from data and render */
+        self.update_scene(data);
 
         /* Draw the user menu on top */
         #[cfg(feature = "viewer-ui")]
         self.process_user_ui(data);
-
-        /* Update the scene from data and render */
-        self.update_scene(data);
 
         /* Update the user menu state and overlays */
         self.update_menus();
@@ -302,7 +306,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         sync_geoms(&self.user_scene, &mut self.scene)
             .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
 
-        self.scene.render(&self.rect_view, &self.context);
+        self.scene.render(&self.rect_full, &self.context);
     }
 
     /// Draws the user menu
@@ -330,12 +334,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         use crate::viewer::ui::UiEvent;
         let GlState { window, .. } = &self.adapter.state.as_ref().unwrap();
         let inner_size = window.inner_size();
-        let left = self.ui.process(
+        let (left, is_covered) = self.ui.process(
             window, &mut self.status,
             self.scene.flags_mut(), &mut self.opt,
-            &mut self.camera
+            &mut self.camera, data
         );
-        
+
+        self.status.set(ViewerStatusBit::UI_COVERED, is_covered);
+
         /* Adjust the viewport so MuJoCo doesn't draw over the UI */
         self.rect_view.left = left as i32;
         self.rect_view.width = inner_size.width as i32;
@@ -366,11 +372,16 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         // The scene (middle) rectangle
         self.rect_view.width = viewport_size.0;
         self.rect_view.height = viewport_size.1;
+
+        self.rect_full.width = viewport_size.0;
+        self.rect_full.height = viewport_size.1;
     }
 
     /// Checks whether the cursor is inside the user interface (i.e., outside of MuJoCo's scene).
+    #[cfg(feature = "viewer-ui")]
     fn is_cursor_outside(&self, x: f64, y: f64) -> bool {
-        x < self.rect_view.left as f64 || y < self.rect_view.bottom as f64
+        x < self.rect_view.left as f64 || y < self.rect_view.bottom as f64 ||
+            self.status.contains(ViewerStatusBit::UI_COVERED)
     }
 
     /// Processes user input events.
@@ -389,9 +400,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 WindowEvent::MouseInput {state, button, .. } => {
                     let (x, y) = self.raw_cursor_position;
                     let is_pressed = state == ElementState::Pressed;
+                    
+                    #[cfg(feature = "viewer-ui")]
                     if self.is_cursor_outside(x, y) && is_pressed {
                         continue;
                     }
+
                     let index = match button {
                         MouseButton::Left => {
                             self.process_left_click(data, state);
@@ -408,9 +422,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 WindowEvent::CursorMoved { position, .. } => {
                     let PhysicalPosition { x, y } = position;
                     self.raw_cursor_position = position.into();
+
+                    #[cfg(feature = "viewer-ui")]
                     if self.is_cursor_outside(x, y) {
                         continue;
                     }
+
                     self.process_cursor_pos(x, y, data);
                 }
 
@@ -535,6 +552,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 // Zoom in/out
                 WindowEvent::MouseWheel {delta, ..} => {
                     let (x, y) = self.raw_cursor_position;
+
+                    #[cfg(feature = "viewer-ui")]
                     if self.is_cursor_outside(x, y) {
                         continue;
                     }
@@ -646,10 +665,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 if self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
                     let cp = self.raw_cursor_position;
                     let x = cp.0;
-                    let y = self.rect_view.height as f64 - cp.1;
+                    let y = self.rect_full.height as f64 - cp.1;
 
                     /* Obtain the selection */ 
-                    let rect = &self.rect_view;
+                    let rect = &self.rect_full;
                     let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
                         data, &self.opt,
                         rect.width as MjtNum / rect.height as MjtNum,
@@ -698,6 +717,8 @@ bitflags! {
         const HELP = 1 << 0;
         #[cfg(feature = "viewer-ui")]
         const UI = 1 << 1;
+        #[cfg(feature = "viewer-ui")]
+        const UI_COVERED = 1 << 2;
     }
 }
 
