@@ -238,8 +238,8 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             }
                         });
                         
-                        /* Option */
-                        egui::CollapsingHeader::new(RichText::new("Option").font(HEADING_FONT))
+                        /* UI toggles */
+                        egui::CollapsingHeader::new(RichText::new("UI").font(HEADING_FONT))
                             .default_open(true)
                             .show(ui, |ui|
                         {
@@ -530,7 +530,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             textures_delta
         );
 
-        left
+        left * pixels_per_point
     }
 
     /// Checks whether the UI is focused (e.g., typing).
