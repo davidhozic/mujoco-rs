@@ -118,7 +118,8 @@ impl Error for MjViewerError {
 /// - H: convex hull,
 /// - Z: light,
 /// - T: transparent,
-/// - I: inertia.
+/// - I: inertia,
+/// - E: constraint.
 /// 
 /// # Safety
 /// Due to the nature of OpenGL, this should only be run in the **main thread**.
@@ -546,6 +547,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyI), state: ElementState::Pressed, ..},
                     ..
                 } => self.toggle_opt_flag(MjtVisFlag::mjVIS_INERTIA),
+
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyE), state: ElementState::Pressed, ..},
+                    ..
+                } => self.toggle_opt_flag(MjtVisFlag::mjVIS_CONSTRAINT),
 
                 #[cfg(feature = "viewer-ui")]
                 WindowEvent::KeyboardInput {
