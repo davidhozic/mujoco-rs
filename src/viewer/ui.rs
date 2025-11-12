@@ -460,7 +460,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                             if limited {
                                 let [low, high] = range;
-                                let value_scaled = ((value - low) / (high - low)).clamp(-1.0, 1.0);
+                                let value_scaled = ((value - low) / (high - low)).clamp(0.0, 1.0);
                                 ui.add(egui::ProgressBar::new(value_scaled as f32));
                             }
                             else {
