@@ -391,7 +391,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     fn process_events(&mut self, data: &mut MjData<M>) {
         self.event_loop.pump_app_events(Some(Duration::ZERO), &mut self.adapter);
         while let Some(window_event) = self.adapter.queue.pop_front() {
-            /* Draw the user interface */
             #[cfg(feature = "viewer-ui")]
             {
                 let window: &winit::window::Window = &self.adapter.state.as_ref().unwrap().window;
