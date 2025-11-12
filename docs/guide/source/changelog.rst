@@ -16,6 +16,13 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+Unreleased
+================================
+- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
+
+  - Added an optional (enabled by default) user interface, made with `egui <https://github.com/emilk/egui>`_.
+
+
 2.0.1 (MuJoCo 3.3.7)
 ================================
 - Fix the ``renderer`` feature not enabling all the needed crates.
