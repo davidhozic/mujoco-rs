@@ -401,6 +401,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             match window_event {
                 WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
                 WindowEvent::MouseInput {state, button, .. } => {
+                    #[cfg(feature = "viewer-ui")]
                     let (x, y) = self.raw_cursor_position;
                     let is_pressed = state == ElementState::Pressed;
                     
@@ -561,10 +562,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                 // Zoom in/out
                 WindowEvent::MouseWheel {delta, ..} => {
+                    #[cfg(feature = "viewer-ui")]
                     let (x, y) = self.raw_cursor_position;
 
                     #[cfg(feature = "viewer-ui")]
-                    if self.cursor_outside(x, y) {
+                    if self.cursor_outside(x, y) || self.ui.covered() {
                         continue;
                     }
 
