@@ -1,5 +1,6 @@
 //! Module related to implementation of the [`MjViewer`]. For implementation of the C++ wrapper,
 //! see [`crate::cpp_viewer::MjViewerCpp`].
+#[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
 use glutin::prelude::PossiblyCurrentGlContext;
 use glutin::surface::GlSurface;
 
@@ -24,6 +25,10 @@ use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
 use crate::get_mujoco_version;
+
+
+#[cfg(feature = "viewer-ui")]
+mod ui;
 
 
 /****************************************** */
@@ -113,7 +118,8 @@ impl Error for MjViewerError {
 /// - H: convex hull,
 /// - Z: light,
 /// - T: transparent,
-/// - I: inertia.
+/// - I: inertia,
+/// - E: constraint.
 /// 
 /// # Safety
 /// Due to the nature of OpenGL, this should only be run in the **main thread**.
@@ -135,17 +141,22 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     last_bnt_press_time: Instant,
     rect_view: MjrRectangle,
     rect_full: MjrRectangle,
-    status_flags: ViewerStatusBits,  // Status flag indicating the state of the menu
 
     /* OpenGL */
     adapter: RenderBase,
     event_loop: EventLoop<()>,
     modifiers: Modifiers,
     buttons_pressed: ButtonsPressed,
-    cursor_position: (u32, u32),
+    raw_cursor_position: (f64, f64),
 
     /* External interaction */
     user_scene: MjvScene<M>,
+
+    /* User interface */
+    #[cfg(feature = "viewer-ui")]
+    ui: ui::ViewerUI<M>,
+
+    status: ViewerStatusBit
 }
 
 impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
@@ -167,6 +178,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let GlState {
             gl_context,
             gl_surface,
+            #[cfg(feature = "viewer-ui")] window,
             ..
         } = adapter.state.as_ref().unwrap();
         gl_context.make_current(gl_surface).map_err(MjViewerError::GlutinError)?;
@@ -181,6 +193,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let context = MjrContext::new(&model);
         let camera  = MjvCamera::new_free(&model);
 
+        #[cfg(feature = "viewer-ui")]
+        let ui = ui::ViewerUI::new(model.clone(), &window, &gl_surface.display());
+
         Ok(Self {
             model,
             scene,
@@ -191,7 +206,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             user_scene,
             last_x: 0.0,
             last_y: 0.0,
-            status_flags: ViewerStatusBits::HELP_MENU,
             last_bnt_press_time: Instant::now(),
             rect_view: MjrRectangle::default(),
             rect_full: MjrRectangle::default(),
@@ -199,7 +213,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             event_loop,
             modifiers: Modifiers::default(),
             buttons_pressed: ButtonsPressed::empty(),
-            cursor_position: (0, 0)
+            raw_cursor_position: (0.0, 0.0),
+            #[cfg(feature = "viewer-ui")] ui,
+            #[cfg(feature = "viewer-ui")] status: ViewerStatusBit::UI,
+            #[cfg(not(feature = "viewer-ui"))] status: ViewerStatusBit::HELP,
         })
     }
 
@@ -235,17 +252,26 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     pub fn sync(&mut self, data: &mut MjData<M>) {
         let GlState {
             gl_context,
-            gl_surface, ..
+            gl_surface,
+            ..
         } = self.adapter.state.as_mut().unwrap();
 
         /* Make sure everything is done on the viewer's window */
         gl_context.make_current(gl_surface).expect("could not make OpenGL context current");
 
+        /* Read the screen size */
+        self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
+
         /* Process mouse and keyboard events */
         self.process_events(data);
 
+
         /* Update the scene from data and render */
         self.update_scene(data);
+
+        /* Draw the user menu on top */
+        #[cfg(feature = "viewer-ui")]
+        self.process_user_ui(data);
 
         /* Update the user menu state and overlays */
         self.update_menus();
@@ -265,7 +291,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             gl_surface, ..
         } = self.adapter.state.as_mut().unwrap();
 
-        /* Make sure everything is done on the viewer's window */
         gl_surface.swap_buffers(gl_context).expect("buffer swap in OpenGL failed");
     }
 
@@ -274,9 +299,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let model_data_ptr = unsafe {  data.model().__raw() };
         let bound_model_ptr = unsafe { self.model.__raw() };
         assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the viewer.");
-
-        /* Read the screen size */
-        self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
 
         /* Update the scene from the MjData state */
         self.scene.update(data, &self.opt, &self.pert, &mut self.camera);
@@ -294,13 +316,52 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         rectangle.width = rectangle.width - rectangle.width / 4;
 
         /* Overlay section */
-        if self.status_flags.contains(ViewerStatusBits::HELP_MENU) {  // Help
+        if self.status.contains(ViewerStatusBit::HELP) {  // Help
             self.context.overlay(
                 MjtFont::mjFONT_NORMAL, MjtGridPos::mjGRID_TOPLEFT,
                 rectangle,
                 HELP_MENU_TITLES,
                 Some(HELP_MENU_VALUES)
             );
+        }
+    }
+
+
+    /// Draws the user UI
+    #[cfg(feature = "viewer-ui")]
+    fn process_user_ui(&mut self, data: &mut MjData<M>) {
+        /* Draw the user interface */
+
+        use crate::viewer::ui::UiEvent;
+        let GlState { window, .. } = &self.adapter.state.as_ref().unwrap();
+        let inner_size = window.inner_size();
+        let left = self.ui.process(
+            window, &mut self.status,
+            &mut self.scene, &mut self.opt,
+            &mut self.camera, data
+        );
+
+        /* Adjust the viewport so MuJoCo doesn't draw over the UI */
+        self.rect_view.left = left as i32;
+        self.rect_view.width = inner_size.width as i32;
+
+        /* Reset some OpenGL settings so that MuJoCo can still draw */
+        self.ui.reset();
+
+        /* Process events made in the user UI */
+        while let Some(event) = self.ui.drain_events() {
+            use UiEvent::*;
+            match event {
+                Close => self.adapter.running = false,
+                Fullscreen => self.toggle_full_screen(),
+                ResetSimulation => {
+                    data.reset();
+                    data.forward();
+                },
+                AlignCamera => {
+                    self.camera = MjvCamera::new_free(&self.model);
+                }
+            }
         }
     }
 
@@ -315,13 +376,39 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.rect_full.height = viewport_size.1;
     }
 
+    /// Checks whether the cursor is inside the user interface (i.e., outside of MuJoCo's scene).
+    #[cfg(feature = "viewer-ui")]
+    fn cursor_outside(&self, x: f64, y: f64) -> bool {
+        const LEFT_EVENT_PAD: f64 = 10.0;  // additional safety to prevent glitches
+        let mut left = self.rect_view.left as f64;
+        if left > 0.0 {  // don't add safety margin if nothing is overlayed
+            left += LEFT_EVENT_PAD;
+        }
+        x < left || y < self.rect_view.bottom as f64
+    }
+
     /// Processes user input events.
     fn process_events(&mut self, data: &mut MjData<M>) {
         self.event_loop.pump_app_events(Some(Duration::ZERO), &mut self.adapter);
         while let Some(window_event) = self.adapter.queue.pop_front() {
+            #[cfg(feature = "viewer-ui")]
+            {
+                let window: &winit::window::Window = &self.adapter.state.as_ref().unwrap().window;
+                self.ui.handle_events(window, &window_event);
+            }
+
             match window_event {
                 WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
                 WindowEvent::MouseInput {state, button, .. } => {
+                    #[cfg(feature = "viewer-ui")]
+                    let (x, y) = self.raw_cursor_position;
+                    let is_pressed = state == ElementState::Pressed;
+                    
+                    #[cfg(feature = "viewer-ui")]
+                    if (self.cursor_outside(x, y) || self.ui.covered()) && is_pressed {
+                        continue;
+                    }
+
                     let index = match button {
                         MouseButton::Left => {
                             self.process_left_click(data, state);
@@ -332,12 +419,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         _ => return
                     };
 
-                    self.buttons_pressed.set(index, state == ElementState::Pressed);
+                    self.buttons_pressed.set(index, is_pressed);
                 }
 
                 WindowEvent::CursorMoved { position, .. } => {
-                    self.process_cursor_pos(position.x, position.y, data);
-                    self.cursor_position = position.into();
+                    let PhysicalPosition { x, y } = position;
+                    self.process_cursor_pos(x, y, data);
                 }
 
                 // Set the viewer's state to pending exit.
@@ -357,6 +444,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         state: ElementState::Pressed, ..
                     }, ..
                 } => {
+                    #[cfg(feature = "viewer-ui")]
+                    if self.ui.focused() {
+                        continue;
+                    }
                     self.camera.free();
                 }
 
@@ -367,7 +458,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         state: ElementState::Pressed, ..
                     }, ..
                 } => {
-                    self.status_flags.toggle(ViewerStatusBits::HELP_MENU);
+                    self.status.toggle(ViewerStatusBit::HELP);
                 }
 
                 // Full screen
@@ -387,6 +478,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         state: ElementState::Pressed, ..
                     }, ..
                 } => {
+                    #[cfg(feature = "viewer-ui")]
+                    if self.ui.focused() {
+                        continue;
+                    }
+
                     data.reset();
                     data.forward();
                 }
@@ -452,8 +548,27 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     ..
                 } => self.toggle_opt_flag(MjtVisFlag::mjVIS_INERTIA),
 
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyE), state: ElementState::Pressed, ..},
+                    ..
+                } => self.toggle_opt_flag(MjtVisFlag::mjVIS_CONSTRAINT),
+
+                #[cfg(feature = "viewer-ui")]
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyX), state: ElementState::Pressed, ..},
+                    ..
+                } => self.status.toggle(ViewerStatusBit::UI),
+
                 // Zoom in/out
                 WindowEvent::MouseWheel {delta, ..} => {
+                    #[cfg(feature = "viewer-ui")]
+                    let (x, y) = self.raw_cursor_position;
+
+                    #[cfg(feature = "viewer-ui")]
+                    if self.cursor_outside(x, y) || self.ui.covered() {
+                        continue;
+                    }
+
                     let value = match delta {
                         MouseScrollDelta::LineDelta(_, down) => down as f64,
                         MouseScrollDelta::PixelDelta(PhysicalPosition {y, ..}) => y * TOUCH_BAR_ZOOM_FACTOR
@@ -469,7 +584,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Toggles visualization options.
     fn toggle_opt_flag(&mut self, flag: MjtVisFlag) {
         let index = flag as usize;
-        self.opt.flags[index] = !self.opt.flags[index];
+        self.opt.flags[index] = 1 - self.opt.flags[index];
     }
 
     /// Cycle MJCF defined cameras.
@@ -500,6 +615,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Processes camera and perturbation movements.
     fn process_cursor_pos(&mut self, x: f64, y: f64, data: &mut MjData<M>) {
+        self.raw_cursor_position = (x, y);
         /* Calculate the change in mouse position since last call */
         let dx = x - self.last_x;
         let dy = y - self.last_y;
@@ -558,12 +674,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                 /* Double click detection */
                 if self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
-                    let cp = self.cursor_position;
-                    let x = cp.0 as f64;
-                    let y = (self.rect_full.height as u32 - cp.1) as f64;
+                    let cp = self.raw_cursor_position;
+                    let x = cp.0;
+                    let y = self.rect_full.height as f64 - cp.1;
 
                     /* Obtain the selection */ 
-                    let rect = &self.rect_view;
+                    let rect = &self.rect_full;
                     let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
                         data, &self.opt,
                         rect.width as MjtNum / rect.height as MjtNum,
@@ -606,14 +722,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     }
 }
 
-
-
 bitflags! {
-    /// Boolean flags that define some of
-    /// the Viewer's internal state.
     #[derive(Debug)]
-    struct ViewerStatusBits: u8 {
-        const HELP_MENU  = 1 << 0;
+    struct ViewerStatusBit: u8 {
+        const HELP = 1 << 0;
+        #[cfg(feature = "viewer-ui")]
+        const UI = 1 << 1;
     }
 }
 

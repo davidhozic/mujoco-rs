@@ -50,15 +50,16 @@ For installation, see :ref:`installation`.
 Optional Cargo features
 =======================
 Optional Cargo features can be enabled:
-  - ``viewer``: enables the Rust-native MuJoCo viewer. It can
-    display everything and respond to mouse/keyboard events.
-    No side-panels (the user menu) currently exists.
+  - ``viewer``: enables the Rust-native MuJoCo viewer.
+
+    - ``viewer-ui``: enables the (additional) user UI within the viewer.
+
   - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
     This requires static linking to a modified fork of MuJoCo, as described in :ref:`installation`.
   - ``renderer``: enables offscreen rendering for writing RGB and
     depth data to memory or file.
 
-By default, ``viewer`` and ``renderer`` are enabled.
+By default, ``viewer``, ``viewer-ui`` and ``renderer`` are enabled.
 
 
 Table of contents
