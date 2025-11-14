@@ -1,5 +1,5 @@
 
-use std::path::PathBuf;
+use std::path::{PathBuf};
 use std::env;
 
 
@@ -96,6 +96,7 @@ fn main() {
     // This mean for static linking, otherwise the dynamic MuJoCo library can just be installed and used.
     const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_DIR";
     const MUJOCO_DYN_LIB_PATH_VAR: &str = "MUJOCO_DYNAMIC_LINK_DIR";
+    const MUJOCO_BASE_DOWNLOAD_LINK: &str = "https://github.com/google-deepmind/mujoco/releases/download";
 
     println!("cargo:rerun-if-env-changed={MUJOCO_STATIC_LIB_PATH_VAR}");
     println!("cargo:rerun-if-env-changed={MUJOCO_DYN_LIB_PATH_VAR}");
@@ -143,12 +144,48 @@ fn main() {
         println!("cargo:rustc-link-lib=mujoco");
     }
 
-    /* pkg-config fallback */
+    /* pkg-config fallback or automatically download */
     else {
         pkg_config::Config::new()
             .probe("mujoco")
             .unwrap_or_else(|err| panic!("Unable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set ({err})"));
+
+        let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_else(|_| {
+            panic!(
+                "unable to obtain the OS information -- please manually download MuJoCo\
+                and specify {MUJOCO_DYN_LIB_PATH_VAR} (and potentially add the path to LD_LIBRARY_PATH)"
+            )
+        });
+
+        let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| {
+            panic!(
+                "unable to obtain the ARCHITECTURE information -- please manually download MuJoCo\
+                and specify {MUJOCO_DYN_LIB_PATH_VAR} (and potentially add the path to LD_LIBRARY_PATH)"
+            )
+        });
+
+        let mujoco_version = env!("CARGO_PKG_VERSION").split_once("mj-").unwrap().1;
+        let download_path = if cfg!(target_os = "linux") {
+            format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-linux-{target_arch}.tar.gz")
+        }
+        else if cfg!(target_os = "windows") {
+            format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-windows-{target_arch}.zip")
+        }
+        else if cfg!(target_os = "macos") {
+            format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-macos-universal2.dmg")
+        }
+        else {
+            panic!(
+                "automatic download of MuJoCo is not supported on {target_os} --\
+                please manually download MuJoCo and specify {MUJOCO_DYN_LIB_PATH_VAR}\
+                (and potentially add the path to LD_LIBRARY_PATH)"
+            );
+        };
+
+        let filename = download_path.split("/").last().unwrap().to_string();
+        /* TODO: unzip */
     }
+
 
     #[cfg(feature = "ffi-regenerate")]
     build_dependencies::generate_ffi();
