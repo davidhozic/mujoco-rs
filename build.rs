@@ -1,5 +1,6 @@
 
 use std::path::{PathBuf};
+use std::fs::File;
 use std::env;
 
 
@@ -115,8 +116,8 @@ fn main() {
         #[cfg(windows)]
         let mj_lib_mujoco_path = mj_lib_pathbuf.join("mujoco.lib");
 
-        println!("cargo::rerun-if-changed={}", mj_lib_mujoco_path.canonicalize().unwrap().display());
-        println!("cargo:rustc-link-search={}", mj_lib_pathbuf.canonicalize().unwrap().display());
+        println!("cargo::rerun-if-changed={}", mj_lib_mujoco_path.display());
+        println!("cargo:rustc-link-search={}", mj_lib_pathbuf.display());
 
         #[cfg(feature = "cpp-viewer")]
         {
@@ -137,10 +138,7 @@ fn main() {
 
     /* Dynamic linking */
     else if let Some(path) = mujoco_dyn_link_dir {
-        let mujoco_dylib_path = PathBuf::from(path);
-
-        let canonical = mujoco_dylib_path.canonicalize().unwrap();
-        println!("cargo:rustc-link-search={}", canonical.display());
+        println!("cargo:rustc-link-search={}", PathBuf::from(path).display());
         println!("cargo:rustc-link-lib=mujoco");
     }
 
@@ -171,9 +169,6 @@ fn main() {
         else if cfg!(target_os = "windows") {
             format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-windows-{target_arch}.zip")
         }
-        else if cfg!(target_os = "macos") {
-            format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-macos-universal2.dmg")
-        }
         else {
             panic!(
                 "automatic download of MuJoCo is not supported on {target_os} --\
@@ -182,11 +177,67 @@ fn main() {
             );
         };
 
-        let filename = download_path.split("/").last().unwrap().to_string();
-        /* TODO: unzip */
-    }
+        let filename = PathBuf::from(download_path.split("/").last().unwrap().to_string());
+        println!("cargo::rerun-if-changed={}", filename.display());
 
+        if !filename.exists() {  // skip if it exists
+            /* Download the file */
+            let mut response = ureq::get(&download_path).call().unwrap();
+            let mut body_reader = response.body_mut().as_reader();
+
+            let mut file = File::create(&filename).unwrap();
+            std::io::copy(&mut body_reader, &mut file).unwrap();
+
+            /* Extract */
+            #[cfg(target_os = "windows")]
+            extract_windows(file);
+
+            #[cfg(target_os = "linux")]
+            extract_linux(&filename)
+        }
+
+        let libdir_path = PathBuf::from(filename.file_name().unwrap().to_str().unwrap().split("-").take(2)
+            .collect::<Box<[_]>>()
+            .join("-")
+        ).join("lib");
+        let ldp_display = libdir_path.display();
+
+        #[cfg(target_os = "linux")]
+        {
+            let current = std::env::var("LD_LIBRARY_PATH").unwrap();
+            println!("cargo:rustc-env=LD_LIBRARY_PATH={current}:{ldp_display}");
+        }
+
+        println!("cargo:rustc-link-search={ldp_display}");
+        println!("cargo:rustc-link-lib=mujoco");
+    }
 
     #[cfg(feature = "ffi-regenerate")]
     build_dependencies::generate_ffi();
+}
+
+#[cfg(target_os = "windows")]
+fn extract_windows(file: File) {
+    /* Extract */
+    let mut zip = zip::ZipArchive::new(file).unwrap();
+    for i in 0..zip.len() {
+        let mut zipfile = zip.by_index(i).unwrap();
+        let path = if let Some(path) = zipfile.enclosed_name() { path } else { continue };
+
+        if zipfile.is_dir() {
+            std::fs::create_dir_all(&path).unwrap();
+            continue;
+        }
+
+        let mut file = File::create(&path).unwrap();
+        std::io::copy(&mut zipfile, &mut file).unwrap();
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn extract_linux(filename: &PathBuf) {
+    let file = File::open(filename).unwrap();
+    let tar = flate2::read::GzDecoder::new(file);
+    let mut archive = tar::Archive::new(tar);
+    archive.unpack(".").unwrap();
 }
