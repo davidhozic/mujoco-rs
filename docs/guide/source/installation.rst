@@ -26,10 +26,9 @@ MuJoCo-rs can be added to your project like so:
     cargo add mujoco-rs --no-default-features
 
 
-Then additional dependencies need to be installed/configured:
+Then additional dependencies may need to be installed/configured:
 
 - :ref:`mujoco_dep`: The actual physics engine, which is a C library.
-
 
 
 
@@ -41,9 +40,35 @@ Dependencies
 
 MuJoCo
 ---------------
-Because MuJoCo-rs doesn't directly bundle MuJoCo,
-the latter, in the form of a pre-built library or source code, must be `downloaded <mj_download_>`_
-or compiled. Make sure to download or compile MuJoCo version |MUJOCO_VERSION_BOLD|.
+
+Automatic setup
+^^^^^^^^^^^^^^^^^^^^
+
+Since MuJoCo-rs 2.1.0, the MuJoCo library is **automatically downloaded**, extracted and configured
+for **Linux** and **Windows** platforms. By default, the library is downloaded and extracted to the
+current working directory. To change the download and extraction location, a custom
+directory path can be given via the ``MUJOCO_DOWNLOAD_PATH`` environmental variable.
+For example: ``MUJOCO_DOWNLOAD_PATH="/home/username/Downloads/" cargo build``
+
+
+.. attention:: 
+
+    Please note that on **Linux** MuJoCo-rs adds the path to the downloaded library to
+    the ``LD_LIBRARY_PATH`` environmental variable. This works if you're compiling and
+    running your program through Cargo.
+
+    If you run the program and see an error about a missing libmujoco.so file,
+    you can either copy the MuJoCo .so files to a standard location (e.g., /usr/lib/)
+    or add the path to the .so files into ``LD_LIBRARY_PATH``.
+
+    On **Windows**, MuJoCo DLLs either need to be located in the current working directory
+    or their directory path needs to be added to the ``PATH`` environmental variable.
+
+Manual setup
+^^^^^^^^^^^^^^^^^^^^
+
+**Alternatively**, MuJoCo can be provided separately, by the user.
+Make sure to `download <mj_download_>`_ or compile MuJoCo version |MUJOCO_VERSION_BOLD|.
 
 Compilation of MuJoCo-rs includes **linking** to the MuJoCo library.
 This requires some environmental variables to be set, which tell

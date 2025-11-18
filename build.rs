@@ -97,10 +97,12 @@ fn main() {
     // This mean for static linking, otherwise the dynamic MuJoCo library can just be installed and used.
     const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_DIR";
     const MUJOCO_DYN_LIB_PATH_VAR: &str = "MUJOCO_DYNAMIC_LINK_DIR";
+    const MUJOCO_DOWNLOAD_PATH_VAR: &str = "MUJOCO_DOWNLOAD_PATH";
     const MUJOCO_BASE_DOWNLOAD_LINK: &str = "https://github.com/google-deepmind/mujoco/releases/download";
 
     println!("cargo:rerun-if-env-changed={MUJOCO_STATIC_LIB_PATH_VAR}");
     println!("cargo:rerun-if-env-changed={MUJOCO_DYN_LIB_PATH_VAR}");
+    println!("cargo:rerun-if-env-changed={MUJOCO_DOWNLOAD_PATH_VAR}");
     println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
 
     let mujoco_static_link_dir = env::var(MUJOCO_STATIC_LIB_PATH_VAR).ok();
@@ -163,7 +165,7 @@ fn main() {
         });
 
         let mujoco_version = env!("CARGO_PKG_VERSION").split_once("mj-").unwrap().1;
-        let download_path = if cfg!(target_os = "linux") {
+        let download_url = if cfg!(target_os = "linux") {
             format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-linux-{target_arch}.tar.gz")
         }
         else if cfg!(target_os = "windows") {
@@ -177,15 +179,19 @@ fn main() {
             );
         };
 
-        let filename = PathBuf::from(download_path.split("/").last().unwrap().to_string());
-        println!("cargo::rerun-if-changed={}", filename.display());
+        let download_dir = PathBuf::from(
+            std::env::var(MUJOCO_DOWNLOAD_PATH_VAR)
+                .unwrap_or_else(|_| ".".to_string())
+        );
+        let download_path = download_dir.join(download_url.split("/").last().unwrap());
 
-        if !filename.exists() {  // skip if it exists
+        println!("cargo::rerun-if-changed={}", download_path.display());
+        if !download_path.exists() {  // skip if it exists
             /* Download the file */
-            let mut response = ureq::get(&download_path).call().unwrap();
+            let mut response = ureq::get(&download_url).call().unwrap();
             let mut body_reader = response.body_mut().as_reader();
 
-            let mut file = File::create(&filename).unwrap();
+            let mut file = File::create(&download_path).unwrap();
             std::io::copy(&mut body_reader, &mut file).unwrap();
 
             /* Extract */
@@ -193,10 +199,10 @@ fn main() {
             extract_windows(file);
 
             #[cfg(target_os = "linux")]
-            extract_linux(&filename)
+            extract_linux(&download_path)
         }
 
-        let libdir_path = PathBuf::from(filename.file_name().unwrap().to_str().unwrap().split("-").take(2)
+        let libdir_path = download_dir.join(download_path.file_name().unwrap().to_str().unwrap().split("-").take(2)
             .collect::<Box<[_]>>()
             .join("-")
         ).join("lib");
@@ -239,5 +245,5 @@ fn extract_linux(filename: &PathBuf) {
     let file = File::open(filename).unwrap();
     let tar = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(tar);
-    archive.unpack(".").unwrap();
+    archive.unpack(filename.parent().unwrap()).unwrap();
 }
