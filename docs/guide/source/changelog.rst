@@ -18,9 +18,12 @@ update of MuJoCo alone can increase the major version.
 
 Unreleased
 ================================
-- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
+- Option (enabled by default) to automatically pull MuJoCo.
+- Other changes:
 
-  - Added an optional (enabled by default) user interface, made with `egui <https://github.com/emilk/egui>`_.
+  - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
+
+    - Added an optional (enabled by default) user interface, made with `egui <https://github.com/emilk/egui>`_.
 
 2.0.1 (MuJoCo 3.3.7)
 ================================
