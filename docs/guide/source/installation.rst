@@ -49,20 +49,22 @@ for **Linux** and **Windows** platforms. By default, the library is downloaded a
 current working directory. To change the download and extraction location, a custom
 directory path can be given via the ``MUJOCO_DOWNLOAD_PATH`` environmental variable.
 For example: ``MUJOCO_DOWNLOAD_PATH="/home/username/Downloads/" cargo build``
+By default, ``MUJOCO_DOWNLOAD_PATH`` is set to ``./``.
 
 
 .. attention:: 
 
-    Please note that on **Linux** MuJoCo-rs adds the path to the downloaded library to
-    the ``LD_LIBRARY_PATH`` environmental variable. This works if you're compiling and
-    running your program through Cargo.
+    Please note that on **Linux**, MuJoCo-rs sets **RPATH** to the directory path of the downloaded MuJoCo library.
+    When redistributing compiled programs, that use MuJoCo-rs, make sure to keep the MuJoCo folder in the correct location.
+    If you keep ``MUJOCO_DOWNLOAD_PATH`` at its default value (i.e., ``./``), you simply keep the downloaded MuJoCo folder
+    in the current working directory when opening a MuJoCo-rs dependent program.
 
-    If you run the program and see an error about a missing libmujoco.so file,
+    If you run the program and see an error about a missing library files,
     you can either copy the MuJoCo .so files to a standard location (e.g., /usr/lib/)
     or add the path to the .so files into ``LD_LIBRARY_PATH``.
 
-    On **Windows**, MuJoCo DLLs either need to be located in the current working directory
-    or their directory path needs to be added to the ``PATH`` environmental variable.
+    On **Windows**, the MuJoCo **DLL** file either need to be located in the current working directory
+    or its directory path needs to be added to the ``PATH`` environmental variable.
 
 Manual setup
 ^^^^^^^^^^^^^^^^^^^^
@@ -112,14 +114,14 @@ When using Windows (powershell), the primary variable can be set like so:
 
    $env:MUJOCO_DYNAMIC_LINK_DIR = "/path/mujoco/lib/"
 
-Additionally, the library in DLL form must be added to the **PATH variable**.
+Additionally, the directory path to MuJoCo's **DLL library** must be added to the **PATH variable**.
 For help adding the path ``/path/mujoco/bin/`` to the PATH variable, see
 `here <https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/>`_.
-Alternatively, the DLL file can be placed in the working directory.
+**Alternatively**, the DLL file can be placed in the **current working directory**.
 
 .. attention::
 
-    Make sure the PATH variable contains the path to the **.dll** file, **NOT .lib**.
+    Make sure the PATH variable contains the path to the directory of the **.dll** file, **NOT** of the **.lib** file.
     The **.lib** file is used only for compilation, while the **.dll** is used at runtime.
     The **.dll** file is contained in the ``bin/`` directory of the MuJoCo download.
 

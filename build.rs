@@ -210,8 +210,7 @@ fn main() {
 
         #[cfg(target_os = "linux")]
         {
-            let current = std::env::var("LD_LIBRARY_PATH").unwrap();
-            println!("cargo:rustc-env=LD_LIBRARY_PATH={current}:{ldp_display}");
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{ldp_display}");
         }
 
         println!("cargo:rustc-link-search={ldp_display}");
