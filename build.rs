@@ -179,33 +179,45 @@ fn main() {
             );
         };
 
-        let download_dir = PathBuf::from(
+        // Obtain the download directory from MUJOCO_DOWNLOAD_PATH_VAR.
+        // If not given, assume the current working directory. In the latter case,
+        // also assume that the MuJoCo DLL needs to be copied to the current working
+        // directory, otherwise assume the user will manually add its directory to PATH.
+        let (download_dir, copy_dll) = if let Ok(value) =
             std::env::var(MUJOCO_DOWNLOAD_PATH_VAR)
-                .unwrap_or_else(|_| ".".to_string())
-        );
+        {
+            (PathBuf::from(value), false)
+        }
+        else
+        {
+            (PathBuf::from("."), true)
+        };
+
+        // The name oof the downloaded archive file.
         let download_path = download_dir.join(download_url.split("/").last().unwrap());
+        let outdirname = download_dir.join(download_path.file_name().unwrap().to_str().unwrap().split("-").take(2)
+            .collect::<Box<[_]>>()
+            .join("-"));
 
         println!("cargo::rerun-if-changed={}", download_path.display());
         if !download_path.exists() {  // skip if it exists
-            /* Download the file */
+            // Download the file
             let mut response = ureq::get(&download_url).call().unwrap();
             let mut body_reader = response.body_mut().as_reader();
-
+            
+            // Save the response data into an actual file
             let mut file = File::create(&download_path).unwrap();
             std::io::copy(&mut body_reader, &mut file).unwrap();
 
-            /* Extract */
+            /* Extraction */
             #[cfg(target_os = "windows")]
-            extract_windows(file);
+            extract_windows(&download_path, &outdirname, copy_dll);
 
             #[cfg(target_os = "linux")]
-            extract_linux(&download_path)
+            extract_linux(&download_path);
         }
 
-        let libdir_path = download_dir.join(download_path.file_name().unwrap().to_str().unwrap().split("-").take(2)
-            .collect::<Box<[_]>>()
-            .join("-")
-        ).join("lib");
+        let libdir_path = outdirname.join("lib");
         let ldp_display = libdir_path.display();
 
         #[cfg(target_os = "linux")]
@@ -222,20 +234,25 @@ fn main() {
 }
 
 #[cfg(target_os = "windows")]
-fn extract_windows(file: File) {
-    /* Extract */
+fn extract_windows(filename: &PathBuf, outdirname: &PathBuf, copy_mujoco_dll: bool) {
+    let file = File::open(filename).unwrap();
     let mut zip = zip::ZipArchive::new(file).unwrap();
     for i in 0..zip.len() {
         let mut zipfile = zip.by_index(i).unwrap();
-        let path = if let Some(path) = zipfile.enclosed_name() { path } else { continue };
+        let mut path = if let Some(path) = zipfile.enclosed_name() { path } else { continue };
 
-        if zipfile.is_dir() {
-            std::fs::create_dir_all(&path).unwrap();
-            continue;
+        if zipfile.is_file() {
+            // On Windows, place everything in a new folder.
+            // This is for consistency on Linux targets.
+            path = outdirname.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();  // create parents
+            let mut outfile = File::create(&path).unwrap();
+            std::io::copy(&mut zipfile, &mut outfile).unwrap();
         }
+    }
 
-        let mut file = File::create(&path).unwrap();
-        std::io::copy(&mut zipfile, &mut file).unwrap();
+    if copy_mujoco_dll {
+        std::fs::copy(outdirname.join("bin/mujoco.dll"), "mujoco.dll").unwrap();
     }
 }
 
