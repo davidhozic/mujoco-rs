@@ -161,7 +161,7 @@ To build statically linkable libraries, perform the following steps:
 
    The builds are tested with the ``gcc`` compiler.
    
-   Note that ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF`` disables link-time optimization which results in slightly
+   Note that ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF`` disables link-time optimization, thus resulting in slightly
    lower performance. Enabling it causes compatibility problems on the Linux platform. See the attention block below for more info.
 
 4. Set the environmental variable ``MUJOCO_STATIC_LINK_DIR``. Bash example:

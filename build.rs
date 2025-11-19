@@ -183,6 +183,7 @@ fn main() {
         // If not given, assume the current working directory. In the latter case,
         // also assume that the MuJoCo DLL needs to be copied to the current working
         // directory, otherwise assume the user will manually add its directory to PATH.
+        #[allow(unused)]
         let (download_dir, copy_dll) = if let Ok(value) =
             std::env::var(MUJOCO_DOWNLOAD_PATH_VAR)
         {
@@ -199,23 +200,23 @@ fn main() {
             .collect::<Box<[_]>>()
             .join("-"));
 
-        println!("cargo::rerun-if-changed={}", download_path.display());
-        if !download_path.exists() {  // skip if it exists
-            // Download the file
-            let mut response = ureq::get(&download_url).call().unwrap();
-            let mut body_reader = response.body_mut().as_reader();
-            
-            // Save the response data into an actual file
-            let mut file = File::create(&download_path).unwrap();
-            std::io::copy(&mut body_reader, &mut file).unwrap();
+        // Download the file
+        let mut response = ureq::get(&download_url).call().unwrap();
+        let mut body_reader = response.body_mut().as_reader();
+        
+        // Save the response data into an actual file
+        let mut file = File::create(&download_path).unwrap();
+        std::io::copy(&mut body_reader, &mut file).unwrap();
 
-            /* Extraction */
-            #[cfg(target_os = "windows")]
-            extract_windows(&download_path, &outdirname, copy_dll);
+        /* Extraction */
+        #[cfg(target_os = "windows")]
+        extract_windows(&download_path, &outdirname, copy_dll);
 
-            #[cfg(target_os = "linux")]
-            extract_linux(&download_path);
-        }
+        #[cfg(target_os = "linux")]
+        extract_linux(&download_path);
+
+        // No need to keep the downloaded file.
+        std::fs::remove_file(&download_path).unwrap();
 
         let libdir_path = outdirname.join("lib");
         let ldp_display = libdir_path.display();
@@ -223,7 +224,11 @@ fn main() {
         #[cfg(target_os = "linux")]
         {
             println!("cargo:rustc-link-arg=-Wl,-rpath,{ldp_display}");
+            println!("cargo::rerun-if-changed={}", libdir_path.join("libmujoco.so").display());
         }
+
+        #[cfg(target_os = "windows")]
+        println!("cargo::rerun-if-changed={}", libdir_path.join("mujoco.lib").display());
 
         println!("cargo:rustc-link-search={ldp_display}");
         println!("cargo:rustc-link-lib=mujoco");
