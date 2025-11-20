@@ -80,8 +80,7 @@ This is optional and can be removed or reduced to run the simulation faster than
     The ``sleep()`` function is not accurate. For accurate timing,
     use `std::time::Instant <https://doc.rust-lang.org/std/time/struct.Instant.html>`_ to poll the elapsed time.
 
-Interaction with the viewer is described with a help menu, which is shown on launch of the viewer.
-For more, refer to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
+wFor more, refer to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
 `examples <https://github.com/davidhozic/mujoco-rs/tree/main/examples>`_.
 
 

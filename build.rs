@@ -1,5 +1,4 @@
-
-use std::path::{PathBuf};
+use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::env;
 
@@ -173,8 +172,8 @@ fn main() {
         }
         else {
             panic!(
-                "automatic download of MuJoCo is not supported on {target_os} --\
-                please manually download MuJoCo and specify {MUJOCO_DYN_LIB_PATH_VAR}\
+                "automatic download of MuJoCo is not supported on {target_os} -- \
+                please manually download MuJoCo and specify {MUJOCO_DYN_LIB_PATH_VAR} \
                 (and potentially add the path to LD_LIBRARY_PATH)"
             );
         };
@@ -194,7 +193,7 @@ fn main() {
             (PathBuf::from("."), true)
         };
 
-        // The name oof the downloaded archive file.
+        // The name of the downloaded archive file.
         let download_path = download_dir.join(download_url.split("/").last().unwrap());
         let outdirname = download_dir.join(download_path.file_name().unwrap().to_str().unwrap().split("-").take(2)
             .collect::<Box<[_]>>()
@@ -239,7 +238,7 @@ fn main() {
 }
 
 #[cfg(target_os = "windows")]
-fn extract_windows(filename: &PathBuf, outdirname: &PathBuf, copy_mujoco_dll: bool) {
+fn extract_windows(filename: &PathBuf, outdirname: &Path, copy_mujoco_dll: bool) {
     let file = File::open(filename).unwrap();
     let mut zip = zip::ZipArchive::new(file).unwrap();
     for i in 0..zip.len() {
@@ -262,7 +261,7 @@ fn extract_windows(filename: &PathBuf, outdirname: &PathBuf, copy_mujoco_dll: bo
 }
 
 #[cfg(target_os = "linux")]
-fn extract_linux(filename: &PathBuf) {
+fn extract_linux(filename: &Path) {
     let file = File::open(filename).unwrap();
     let tar = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(tar);

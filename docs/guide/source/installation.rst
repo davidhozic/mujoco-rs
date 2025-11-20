@@ -29,6 +29,8 @@ MuJoCo-rs can be added to your project like so:
 Then additional dependencies may need to be installed/configured:
 
 - :ref:`mujoco_dep`: The actual physics engine, which is a C library.
+  This is **automatically configured** since MuJoCo-rs 2.1.0, so you can safely
+  skip it, unless you want extra control.
 
 
 
@@ -46,7 +48,9 @@ Automatic setup
 
 Since MuJoCo-rs 2.1.0, the MuJoCo library is **automatically downloaded**, extracted and configured
 for **Linux** and **Windows** platforms. By default, the library is downloaded and extracted to the
-current working directory. To change the download and extraction location, a custom
+current working directory. If you're happy with this, **nothing further is needed** from your part.
+
+To change the download and extraction location, a custom
 directory path can be given via the ``MUJOCO_DOWNLOAD_PATH`` environmental variable.
 For example: ``MUJOCO_DOWNLOAD_PATH="/home/username/Downloads/" cargo build``
 By default, ``MUJOCO_DOWNLOAD_PATH`` is set to ``./``.
@@ -56,14 +60,15 @@ By default, ``MUJOCO_DOWNLOAD_PATH`` is set to ``./``.
 
     Please note that on **Linux**, MuJoCo-rs sets **RPATH** to the directory path of the downloaded MuJoCo library.
     When redistributing compiled programs, that use MuJoCo-rs, make sure to keep the MuJoCo folder in the correct location.
-    If you keep ``MUJOCO_DOWNLOAD_PATH`` at its default value (i.e., ``./``), you simply keep the downloaded MuJoCo folder
-    in the current working directory when opening a MuJoCo-rs dependent program.
+    If you keep ``MUJOCO_DOWNLOAD_PATH`` at its default value (i.e., ``./``), you simply need to keep the downloaded MuJoCo folder
+    in the current working directory.
 
     If you run the program and see an error about a missing library files,
     you can either copy the MuJoCo .so files to a standard location (e.g., /usr/lib/)
-    or add the path to the .so files into ``LD_LIBRARY_PATH``.
+    or add the path to the .so files into ``LD_LIBRARY_PATH``
+    (e.g., ``export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco/``).
 
-    On **Windows**, the MuJoCo **DLL** file either need to be located in the current working directory
+    On **Windows**, the MuJoCo **DLL** file either needs to be located in the current working directory
     or its directory path needs to be added to the ``PATH`` environmental variable.
 
 Manual setup
@@ -76,10 +81,11 @@ Compilation of MuJoCo-rs includes **linking** to the MuJoCo library.
 This requires some environmental variables to be set, which tell
 MuJoCo-rs where to obtain the MuJoCo library.
 
-The linking process depends on whether you plan to dynamically link (recommended),
-statically link or statically link with support for the C++ based viewer (instead of the Rust-native one).
+The linking process depends on whether you plan to dynamically link (recommended)
+or statically link (with support for the C++ based viewer wrapper, instead of the Rust-native one).
 
------------------------------
+----------------------
+
 
 Dynamic linking
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -114,16 +120,17 @@ When using Windows (powershell), the primary variable can be set like so:
 
    $env:MUJOCO_DYNAMIC_LINK_DIR = "/path/mujoco/lib/"
 
-Additionally, the directory path to MuJoCo's **DLL library** must be added to the **PATH variable**.
+Additionally, when running the program, the ``mujoco.dll`` file needs to be placed in the **current working directory**.
+Alternatively, the path to the DLL file can be added to the PATH environmental variable.
 For help adding the path ``/path/mujoco/bin/`` to the PATH variable, see
 `here <https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/>`_.
-**Alternatively**, the DLL file can be placed in the **current working directory**.
 
 .. attention::
 
     Make sure the PATH variable contains the path to the directory of the **.dll** file, **NOT** of the **.lib** file.
     The **.lib** file is used only for compilation, while the **.dll** is used at runtime.
     The **.dll** file is contained in the ``bin/`` directory of the MuJoCo download.
+    The **.lib** file is contained in the ``lib/`` directory of the MuJoCo download.
 
 
 MacOS
