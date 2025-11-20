@@ -34,6 +34,7 @@ The main features on top of MuJoCo include
   - Automatic allocation and cleanup.
   - Lifetime guarantees.
 
+- Automatic download and setup of MuJoCo.
 - Methods as function wrappers.
 - Easy manipulation of simulation data via attribute views.
 - High-level model editing.

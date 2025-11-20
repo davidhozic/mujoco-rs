@@ -31,6 +31,7 @@ The main features on top of MuJoCo include:
   - Automatic allocation and cleanup.
   - Lifetime checks.
 
+- Automatic download and setup of MuJoCo.
 - Methods as function wrappers.
 - Easy manipulation of simulation data via :ref:`attribute_views`.
 - High-level :ref:`model_editing`.
