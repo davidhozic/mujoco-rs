@@ -92,8 +92,6 @@ fn main() {
         return;
     }
 
-    // Environmental variable which contains the path to the MuJoCo's build/lib/ directory.
-    // This mean for static linking, otherwise the dynamic MuJoCo library can just be installed and used.
     const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_DIR";
     const MUJOCO_DYN_LIB_PATH_VAR: &str = "MUJOCO_DYNAMIC_LINK_DIR";
     const MUJOCO_DOWNLOAD_PATH_VAR: &str = "MUJOCO_DOWNLOAD_PATH";
@@ -198,12 +196,13 @@ fn main() {
         let outdirname = download_dir.join(format!("mujoco-{mujoco_version}"));
 
         // Download the file
-        let mut response = ureq::get(&download_url).call().unwrap();
+        let mut response = ureq::get(&download_url).call().expect("failed to download MuJoCo");
         let mut body_reader = response.body_mut().as_reader();
         
         // Save the response data into an actual file
-        let mut file = File::create(&download_path).unwrap();
-        std::io::copy(&mut body_reader, &mut file).unwrap();
+        const SAVE_ERR_MSG: &str = "failed to save MuJoCo files";
+        let mut file = File::create(&download_path).expect(SAVE_ERR_MSG);
+        std::io::copy(&mut body_reader, &mut file).expect(SAVE_ERR_MSG);
 
         /* Extraction */
         #[cfg(target_os = "windows")]
@@ -254,7 +253,7 @@ fn extract_windows(filename: &PathBuf, outdirname: &Path, copy_mujoco_dll: bool)
     }
 
     if copy_mujoco_dll {
-        std::fs::copy(outdirname.join("bin/mujoco.dll"), "mujoco.dll").unwrap();
+        std::fs::copy(outdirname.join("bin").join("mujoco.dll"), "mujoco.dll").expect("failed to copy mujoco.dll");
     }
 }
 
@@ -263,5 +262,5 @@ fn extract_linux(filename: &Path) {
     let file = File::open(filename).unwrap();
     let tar = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(tar);
-    archive.unpack(filename.parent().unwrap()).unwrap();
+    archive.unpack(filename.parent().unwrap()).expect("failed to unpack MuJoCo archive");
 }

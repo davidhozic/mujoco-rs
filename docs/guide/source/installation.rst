@@ -48,7 +48,7 @@ Automatic setup
 
 Since MuJoCo-rs 2.1.0, the MuJoCo library is **automatically downloaded**, extracted and configured
 for **Linux** and **Windows** platforms. By default, the library is downloaded and extracted to the
-current working directory. If you're happy with this, **nothing further is needed** from your part.
+current working directory. If you're happy with this, **nothing further is needed** on your part.
 
 To change the download and extraction location, a custom
 directory path can be given via the ``MUJOCO_DOWNLOAD_PATH`` environmental variable.
@@ -63,7 +63,7 @@ By default, ``MUJOCO_DOWNLOAD_PATH`` is set to ``./``.
     If you keep ``MUJOCO_DOWNLOAD_PATH`` at its default value (i.e., ``./``), you simply need to keep the downloaded MuJoCo folder
     in the current working directory.
 
-    If you run the program and see an error about a missing library files,
+    If you run the program and see an error about a missing library file,
     you can either copy the MuJoCo .so files to a standard location (e.g., /usr/lib/)
     or add the path to the .so files into ``LD_LIBRARY_PATH``
     (e.g., ``export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco/``).
