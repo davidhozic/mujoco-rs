@@ -242,7 +242,7 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
         let mut zipfile = zip.by_index(i).unwrap();
         let mut path = if let Some(path) = zipfile.enclosed_name() { path } else { continue };
 
-        if zipfile.is_file() && path.starts_with("lib") {
+        if zipfile.is_file() {
             // On Windows, place everything in a new folder.
             // This is for consistency with Linux targets.
             path = outdirname.join(path);
@@ -262,13 +262,5 @@ fn extract_linux(filename: &Path) {
     let file = File::open(filename).unwrap();
     let tar = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(tar);
-    for entry in archive.entries().unwrap() {
-        let mut entry = entry.unwrap();
-        let entry_path = entry.path().unwrap().to_owned();
-
-        // Only extract files that are libraries.
-        if entry_path.extension().is_some() && entry_path.file_name().unwrap().to_str().unwrap().starts_with("lib") {
-           entry.unpack_in(filename.parent().unwrap()).unwrap();
-        }
-    }
+    archive.unpack(filename.parent().unwrap()).expect("failed to unpack MuJoCo archive");
 }
