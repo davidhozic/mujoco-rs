@@ -176,7 +176,7 @@ fn main() {
             );
         };
 
-        // Obtain the download directory from MUJOCO_DOWNLOAD_DIR_VAR.
+        // Obtain the download directory from MUJOCO_DOWNLOAD_PATH_VAR.
         // If not given, assume the current working directory. In the latter case,
         // also assume that the MuJoCo DLL needs to be copied to the current working
         // directory, otherwise assume the user will manually add its directory to PATH.
@@ -244,7 +244,7 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
 
         if zipfile.is_file() {
             // On Windows, place everything in a new folder.
-            // This is for consistency on Linux targets.
+            // This is for consistency with Linux targets.
             path = outdirname.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();  // create parents
             let mut outfile = File::create(&path).unwrap();
