@@ -182,7 +182,7 @@ fn main() {
         // If not given, assume the current working directory. In the latter case,
         // also assume that the MuJoCo DLL needs to be copied to the current working
         // directory, otherwise assume the user will manually add its directory to PATH.
-        #[allow(unused)]
+        #[allow(unused)]  // copy_dll is only relevant to Windows
         let (download_dir, copy_dll) = if let Ok(value) =
             std::env::var(MUJOCO_DOWNLOAD_PATH_VAR)
         {
@@ -194,10 +194,8 @@ fn main() {
         };
 
         // The name of the downloaded archive file.
-        let download_path = download_dir.join(download_url.split("/").last().unwrap());
-        let outdirname = download_dir.join(download_path.file_name().unwrap().to_str().unwrap().split("-").take(2)
-            .collect::<Box<[_]>>()
-            .join("-"));
+        let download_path = download_dir.join(download_url.rsplit_once("/").unwrap().1);
+        let outdirname = download_dir.join(format!("mujoco-{mujoco_version}"));
 
         // Download the file
         let mut response = ureq::get(&download_url).call().unwrap();
