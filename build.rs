@@ -94,7 +94,7 @@ fn main() {
 
     const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_DIR";
     const MUJOCO_DYN_LIB_PATH_VAR: &str = "MUJOCO_DYNAMIC_LINK_DIR";
-    const MUJOCO_DOWNLOAD_PATH_VAR: &str = "MUJOCO_DOWNLOAD_PATH";
+    const MUJOCO_DOWNLOAD_PATH_VAR: &str = "MUJOCO_DOWNLOAD_DIR";
     const MUJOCO_BASE_DOWNLOAD_LINK: &str = "https://github.com/google-deepmind/mujoco/releases/download";
 
     println!("cargo:rerun-if-env-changed={MUJOCO_STATIC_LIB_PATH_VAR}");
@@ -149,14 +149,14 @@ fn main() {
 
         let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_else(|_| {
             panic!(
-                "unable to obtain the OS information -- please manually download MuJoCo\
+                "unable to obtain the OS information -- please manually download MuJoCo \
                 and specify {MUJOCO_DYN_LIB_PATH_VAR} (and potentially add the path to LD_LIBRARY_PATH)"
             )
         });
 
         let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| {
             panic!(
-                "unable to obtain the ARCHITECTURE information -- please manually download MuJoCo\
+                "unable to obtain the ARCHITECTURE information -- please manually download MuJoCo \
                 and specify {MUJOCO_DYN_LIB_PATH_VAR} (and potentially add the path to LD_LIBRARY_PATH)"
             )
         });
@@ -176,7 +176,7 @@ fn main() {
             );
         };
 
-        // Obtain the download directory from MUJOCO_DOWNLOAD_PATH_VAR.
+        // Obtain the download directory from MUJOCO_DOWNLOAD_DIR_VAR.
         // If not given, assume the current working directory. In the latter case,
         // also assume that the MuJoCo DLL needs to be copied to the current working
         // directory, otherwise assume the user will manually add its directory to PATH.
@@ -235,7 +235,7 @@ fn main() {
 }
 
 #[cfg(target_os = "windows")]
-fn extract_windows(filename: &PathBuf, outdirname: &Path, copy_mujoco_dll: bool) {
+fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
     let file = File::open(filename).unwrap();
     let mut zip = zip::ZipArchive::new(file).unwrap();
     for i in 0..zip.len() {

@@ -51,16 +51,16 @@ for **Linux** and **Windows** platforms. By default, the library is downloaded a
 current working directory. If you're happy with this, **nothing further is needed** on your part.
 
 To change the download and extraction location, a custom
-directory path can be given via the ``MUJOCO_DOWNLOAD_PATH`` environmental variable.
-For example: ``MUJOCO_DOWNLOAD_PATH="/home/username/Downloads/" cargo build``
-By default, ``MUJOCO_DOWNLOAD_PATH`` is set to ``./``.
+directory path can be given via the ``MUJOCO_DOWNLOAD_DIR`` environmental variable.
+For example: ``MUJOCO_DOWNLOAD_DIR="/home/username/Downloads/" cargo build``
+By default, ``MUJOCO_DOWNLOAD_DIR`` is set to ``./``.
 
 
 .. attention:: 
 
     Please note that on **Linux**, MuJoCo-rs sets **RPATH** to the directory path of the downloaded MuJoCo library.
     When redistributing compiled programs, that use MuJoCo-rs, make sure to keep the MuJoCo folder in the correct location.
-    If you keep ``MUJOCO_DOWNLOAD_PATH`` at its default value (i.e., ``./``), you simply need to keep the downloaded MuJoCo folder
+    If you keep ``MUJOCO_DOWNLOAD_DIR`` at its default value (i.e., ``./``), you simply need to keep the downloaded MuJoCo folder
     in the current working directory.
 
     If you run the program and see an error about a missing library file,
