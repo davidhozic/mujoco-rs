@@ -48,7 +48,8 @@ Automatic setup
 
 Since MuJoCo-rs 2.1.0, the MuJoCo library is **automatically downloaded**, extracted and configured
 for **Linux** and **Windows** platforms. By default, the library is downloaded and extracted to the
-current working directory. If you're happy with this, **nothing further is needed** on your part.
+**package root directory** (where your Cargo.toml is located). If you're happy with this,
+**nothing further is needed** on your part.
 
 To change the download and extraction location, a custom
 directory path can be given via the ``MUJOCO_DOWNLOAD_DIR`` environmental variable.
@@ -60,16 +61,27 @@ By default, ``MUJOCO_DOWNLOAD_DIR`` is set to ``./``.
 
     Please note that on **Linux**, MuJoCo-rs sets **RPATH** to the directory path of the downloaded MuJoCo library.
     When redistributing compiled programs, that use MuJoCo-rs, make sure to keep the MuJoCo folder in the correct location.
-    If you keep ``MUJOCO_DOWNLOAD_DIR`` at its default value (i.e., ``./``), you simply need to keep the downloaded MuJoCo folder
-    in the current working directory.
+    If you keep ``MUJOCO_DOWNLOAD_DIR`` at its default value (i.e., ``./``), you simply need to keep the downloaded
+    MuJoCo folder in the same directory as the one where your program is run.
 
     If you run the program and see an error about a missing library file,
     you can either copy the MuJoCo .so files to a standard location (e.g., /usr/lib/)
     or add the path to the .so files into ``LD_LIBRARY_PATH``
     (e.g., ``export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco/``).
 
-    On **Windows**, the MuJoCo **DLL** file either needs to be located in the current working directory
-    or its directory path needs to be added to the ``PATH`` environmental variable.
+    On **Windows**, the MuJoCo **DLL** file must be located in the directory from which the executable is run
+    (i.e., the current working directory at runtime), or its directory
+    path must be added to the ``PATH`` environment variable.
+
+
+.. note::
+
+    The extracted MuJoCo folder contains everything from the official archive.
+    Most of that is not needed and can be deleted. The only files that are needed
+    are the ones in the ``lib/`` subdirectory. On Windows, ``bin/mujoco.dll`` is also
+    needed, however that is automatically copied to the project root
+    (where your Cargo.toml is located).
+
 
 Manual setup
 ^^^^^^^^^^^^^^^^^^^^
