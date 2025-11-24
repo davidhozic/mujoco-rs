@@ -247,8 +247,10 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
             // This is for consistency with Linux targets.
             path = outdirname.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();  // create parents
-            let mut outfile = File::create(&path).unwrap();
-            std::io::copy(&mut zipfile, &mut outfile).unwrap();
+            // Don't recreate to avoid trouble with println!("cargo::rerun-if-changed={}", ...)
+            if let Ok(mut outfile) = File::create_new(&path) {
+                std::io::copy(&mut zipfile, &mut outfile).unwrap();
+            }
         }
     }
 
