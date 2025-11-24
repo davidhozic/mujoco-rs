@@ -22,7 +22,6 @@ Unreleased
 
   - Added an optional (enabled by default) user interface, made with `egui <https://github.com/emilk/egui>`_.
 
-
 2.0.1 (MuJoCo 3.3.7)
 ================================
 - Fix the ``renderer`` feature not enabling all the needed crates.

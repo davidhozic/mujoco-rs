@@ -92,18 +92,20 @@ fn main() {
         return;
     }
 
-    /// Environmental variable which contains the path to the MuJoCo's build/lib/ directory.
-    /// This mean for static linking, otherwise the dynamic MuJoCo library can just be installed and used.
+    // Environmental variable which contains the path to the MuJoCo's build/lib/ directory.
+    // This mean for static linking, otherwise the dynamic MuJoCo library can just be installed and used.
     const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_DIR";
     const MUJOCO_DYN_LIB_PATH_VAR: &str = "MUJOCO_DYNAMIC_LINK_DIR";
 
     println!("cargo:rerun-if-env-changed={MUJOCO_STATIC_LIB_PATH_VAR}");
     println!("cargo:rerun-if-env-changed={MUJOCO_DYN_LIB_PATH_VAR}");
+    println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
 
-    let mujoco_lib_path= env::var(MUJOCO_STATIC_LIB_PATH_VAR);
+    let mujoco_static_link_dir = env::var(MUJOCO_STATIC_LIB_PATH_VAR).ok();
+    let mujoco_dyn_link_dir = env::var(MUJOCO_DYN_LIB_PATH_VAR).ok();
 
     /* Static linking */
-    if let Ok(path) = mujoco_lib_path {
+    if let Some(path) = mujoco_static_link_dir {
         let mj_lib_pathbuf = PathBuf::from(path);
 
         #[cfg(unix)]
@@ -133,15 +135,20 @@ fn main() {
     }
 
     /* Dynamic linking */
-    else {
-        let mujoco_dylib_path = PathBuf::from(env::var(MUJOCO_DYN_LIB_PATH_VAR)
-            .unwrap_or_else(|_| panic!("nor the static library path ({MUJOCO_STATIC_LIB_PATH_VAR}),\
-                nor the dynamic library path ({MUJOCO_DYN_LIB_PATH_VAR}) was given.")));
+    else if let Some(path) = mujoco_dyn_link_dir {
+        let mujoco_dylib_path = PathBuf::from(path);
 
-        println!("cargo:rustc-link-search={}", mujoco_dylib_path.canonicalize().unwrap().display());
+        let canonical = mujoco_dylib_path.canonicalize().unwrap();
+        println!("cargo:rustc-link-search={}", canonical.display());
         println!("cargo:rustc-link-lib=mujoco");
     }
 
+    /* pkg-config fallback */
+    else {
+        pkg_config::Config::new()
+            .probe("mujoco")
+            .unwrap_or_else(|err| panic!("Unable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set ({err})"));
+    }
 
     #[cfg(feature = "ffi-regenerate")]
     build_dependencies::generate_ffi();
