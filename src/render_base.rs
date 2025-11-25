@@ -101,7 +101,7 @@ impl ApplicationHandler for RenderBase {
             .map(|x| x.as_raw()).unwrap());
         let context_attrs = ContextAttributesBuilder::new()
             .with_profile(GlProfile::Compatibility)
-            .with_context_api(ContextApi::OpenGl(Some(Version::new(2, 0))))
+            .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 2))))
             .build(raw_window_handle);
 
         let gl_display = gl_config.display();
