@@ -68,7 +68,7 @@ Optional Cargo features can be enabled:
 - ``renderer``: enables offscreen rendering for writing RGB and
   depth data to memory or file.
 
-By default, ``viewer``, ``viewer-ui`` and ``renderer`` are enabled.
+By default, ``auto-download-mujoco``, ``viewer``, ``viewer-ui`` and ``renderer`` are enabled.
 
 
 Table of contents
