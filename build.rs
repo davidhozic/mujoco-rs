@@ -216,9 +216,15 @@ fn main() {
             let mut body_reader = response.body_mut().as_reader();
             
             // Save the response data into an actual file
-            const SAVE_ERR_MSG: &str = "failed to save MuJoCo files";
-            let mut file = File::create(&download_path).expect(SAVE_ERR_MSG);
-            std::io::copy(&mut body_reader, &mut file).expect(SAVE_ERR_MSG);
+            std::fs::create_dir_all(download_path.parent().unwrap()).unwrap_or_else(
+                |err| panic!("failed to create parent directory of \"{}\" ({err})", download_path.display())
+            );
+            let mut file = File::create(&download_path).unwrap_or_else(
+                |err| panic!("could not save archive \"{}\" ({err})", download_path.display())
+            );
+            std::io::copy(&mut body_reader, &mut file).unwrap_or_else(
+                |err| panic!("failed to copy archive contents to \"{}\" ({err})", download_path.display())
+            );
 
             /* Extraction */
             #[cfg(target_os = "windows")]
@@ -228,21 +234,32 @@ fn main() {
             extract_linux(&download_path);
 
             // No need to keep the downloaded file.
-            std::fs::remove_file(&download_path).unwrap();
+            std::fs::remove_file(&download_path).unwrap_or_else(
+                |err| panic!("failed to delete archive \"{}\" ({err})", download_path.display())
+            );
 
             let libdir_path = outdirname.join("lib");
-            let ldp_display = libdir_path.display();
+            let libdir_path_display = libdir_path.display();
 
+            // Set RPATH on Linux targets and rerun the script if the .so is changed.
             #[cfg(target_os = "linux")]
             {
-                println!("cargo:rustc-link-arg=-Wl,-rpath,{ldp_display}");
                 println!("cargo::rerun-if-changed={}", libdir_path.join("libmujoco.so").display());
+
+                // Discover the MuJoCo library relative to the current working directory.
+                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", libdir_path_display);
+
+                // Also allow discovery of the MuJoCo library relative to the binary directory.
+                if libdir_path.is_relative() {
+                    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", PathBuf::from("$ORIGIN").join(&libdir_path).display());
+                }
             }
 
+            // Rerun the script on Windows if the .lib is changed.
             #[cfg(target_os = "windows")]
             println!("cargo::rerun-if-changed={}", libdir_path.join("mujoco.lib").display());
 
-            println!("cargo:rustc-link-search={ldp_display}");
+            println!("cargo:rustc-link-search={}", libdir_path_display);
             println!("cargo:rustc-link-lib=mujoco");
         }
     }
@@ -278,7 +295,9 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
 
 #[cfg(target_os = "linux")]
 fn extract_linux(filename: &Path) {
-    let file = File::open(filename).unwrap();
+    let file = File::open(filename).unwrap_or_else(
+        |err| panic!("failed to open \"{}\" ({err})", filename.display())
+    );
     let tar = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(tar);
     archive.unpack(filename.parent().unwrap()).expect("failed to unpack MuJoCo archive");
