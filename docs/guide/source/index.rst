@@ -48,17 +48,25 @@ Installation
 =======================
 For installation, see :ref:`installation`.
 
+
+.. _opt-cargo-features:
+
 Optional Cargo features
 =======================
 Optional Cargo features can be enabled:
-  - ``viewer``: enables the Rust-native MuJoCo viewer.
+  
+- ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded and configured.
 
-    - ``viewer-ui``: enables the (additional) user UI within the viewer.
+  - This is only available on Linux and Windows.
 
-  - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
-    This requires static linking to a modified fork of MuJoCo, as described in :ref:`installation`.
-  - ``renderer``: enables offscreen rendering for writing RGB and
-    depth data to memory or file.
+- ``viewer``: enables the Rust-native MuJoCo viewer.
+
+  - ``viewer-ui``: enables the (additional) user UI within the viewer.
+
+- ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
+  This requires static linking to a modified fork of MuJoCo, as described in :ref:`installation`.
+- ``renderer``: enables offscreen rendering for writing RGB and
+  depth data to memory or file.
 
 By default, ``viewer``, ``viewer-ui`` and ``renderer`` are enabled.
 

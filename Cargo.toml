@@ -24,7 +24,8 @@ renderer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit", "dep:
 cpp-viewer = []
 
 ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module. 
-default = ["viewer", "viewer-ui", "renderer"]
+auto-download-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip"]
+default = ["viewer", "viewer-ui", "renderer", "auto-download-mujoco"]
 
 [dependencies]
 bitflags = {version = "2.9.4", optional = true}
@@ -45,16 +46,16 @@ bindgen = {version = "0.71.1", optional = true}
 regex = {version = "1.11.2", optional = true}
 
 # Automatic download dependencies
-ureq = "3.1.4"
+ureq = {version = "3.1.4", optional = true}
 
 [target.'cfg(target_os = "linux")'.build-dependencies]
-flate2 = "1.1.5"
-tar = "0.4.44"
+flate2 = {version = "1.1.5", optional = true}
+tar = {version = "0.4.44", optional = true}
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
-zip = { version = "6.0.0", default-features = false, features = ["deflate"] }
+zip = {version = "6.0.0", default-features = false, features = ["deflate"], optional = true}
 
-[target.'cfg(target_os = "macos")'.build-dependencies]
+[target.'cfg(unix)'.build-dependencies]
 pkg-config = "0.3"
 
 [dev-dependencies]

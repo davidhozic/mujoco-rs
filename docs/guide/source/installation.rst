@@ -17,14 +17,15 @@ MuJoCo-rs can be added to your project like so:
 
   ::
 
-    cargo add mujoco-rs
+    cargo add mujoco-rs --no-default-features --features "auto-download-mujoco viewer viewer-ui renderer"
 
 - **Without** visualization/rendering support:
 
   ::
 
-    cargo add mujoco-rs --no-default-features
+    cargo add mujoco-rs --no-default-features --features "auto-download-mujoco"
 
+See :ref:`opt-cargo-features` for information about available Cargo features.
 
 Then additional dependencies may need to be installed/configured:
 
@@ -47,10 +48,14 @@ Automatic setup
 ^^^^^^^^^^^^^^^^^^^^
 
 Since MuJoCo-rs 2.1.0, the MuJoCo library is **automatically downloaded**, extracted and configured
-for **Linux** and **Windows** platforms. By default, the library is downloaded and extracted to the
+for **Linux** and **Windows** platforms.
+The ``auto-download-mujoco`` Cargo feature must be enabled for MuJoCo-rs to automatically download
+and setup the MuJoCo dependency. Note that regardless of this feature, MuJoCo-rs will first try to use
+pkg-config and perform a download only after pkg-config fails.
+
+By default, the library is downloaded and extracted to the
 **package root directory** (where your Cargo.toml is located). If you're happy with this,
 **nothing further is needed** on your part.
-
 To change the download and extraction location, a custom
 directory path can be given via the ``MUJOCO_DOWNLOAD_DIR`` environmental variable.
 For example: ``MUJOCO_DOWNLOAD_DIR="/home/username/Downloads/" cargo build``
@@ -107,6 +112,11 @@ Dynamic linking is OS-dependent. To dynamically link, the primary variable
 
 Linux
 ++++++++++++
+.. note::
+
+    If you somehow managed to register MuJoCo with pkg-config, nothing more is needed.
+    MuJoCo provides no official way to do this, but we still keep the option open.
+
 When using Linux (bash), the primary variable can be set like so:
 ::
 
@@ -147,7 +157,31 @@ For help adding the path ``/path/mujoco/bin/`` to the PATH variable, see
 
 MacOS
 ++++++++++++++++++
-MacOS is untested.
+.. note::
+
+    If you somehow managed to register MuJoCo with pkg-config, nothing more is needed.
+    MuJoCo provides no official way to do this, but we still keep the option open.
+
+To use MuJoCo-rs on MacOS, follow the following steps:
+
+1. Open the downloaded .dmg file.
+2. Copy ``mujoco.framework/Versions/Current/libmujoco.x.x.x.dylib`` to a preferred location.
+3. Create a symbolic link to the copied: ``libmujoco.x.x.x.dylib`` and name it ``libmujoco.dylib``:
+
+   - ``ln -s libmujoco.x.x.x.dylib libmujoco.dylib``.
+
+4. Set the primary environment variable:
+
+   - ``export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/``
+
+Additionally, in the event that the user's program refuses to run and outputs something like:
+
+    "Library not loaded"
+
+the path to the MuJoCo library's directory must also be added to ``DYLD_LIBRARY_PATH``:
+::
+
+    export DYLD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco/lib/
 
 
 ----------------------

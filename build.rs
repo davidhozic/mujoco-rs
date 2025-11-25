@@ -148,21 +148,24 @@ fn main() {
         // We don't support automatic downloads on MacOS, however we do support pkg-config.
         // pkg-config is technically available on Linux, however MuJoCo doesn't really provide
         // a way to install it to the system.
-        #[cfg(target_os = "macos")]
+        #[cfg(unix)]
         {
-            let maybe_error = pkg_config::Config::new()
-            .exactly_version(mujoco_version)
-            .probe("mujoco")
-            .err();
+            #[allow(unused)]
+            let maybe_err = pkg_config::Config::new()
+                .exactly_version(mujoco_version)
+                .probe("mujoco")
+                .err();
 
-            if let Some(err) = maybe_error {
-                panic!("Unable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set ({err})");
+            #[cfg(not(feature =  "auto-download-mujoco"))]
+            if let Some(err) = maybe_err {
+                panic!("Unable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set ({err}).");
             }
-        }
+        };
 
         // On Linux and Windows try to automatically download as a fallback.
         // Other platforms will also fall under this condition, but will panic.
         #[cfg(not(target_os = "macos"))]
+        #[cfg(feature =  "auto-download-mujoco")]
         {
             let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_else(|_| {
                 panic!(
@@ -269,6 +272,7 @@ fn main() {
 }
 
 #[cfg(target_os = "windows")]
+#[cfg(feature = "auto-download-mujoco")]
 fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
     let file = File::open(filename).unwrap();
     let mut zip = zip::ZipArchive::new(file).unwrap();
@@ -294,6 +298,7 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
 }
 
 #[cfg(target_os = "linux")]
+#[cfg(feature = "auto-download-mujoco")]
 fn extract_linux(filename: &Path) {
     let file = File::open(filename).unwrap_or_else(
         |err| panic!("failed to open \"{}\" ({err})", filename.display())
