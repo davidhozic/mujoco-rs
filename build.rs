@@ -149,8 +149,8 @@ fn main() {
         // pkg-config is technically available on Linux, however MuJoCo doesn't really provide
         // a way to install it to the system.
         #[cfg(unix)]
-        {
-            #[allow(unused)]
+        #[allow(unused)]
+        let allow_download = {
             let maybe_err = pkg_config::Config::new()
                 .exactly_version(mujoco_version)
                 .probe("mujoco")
@@ -160,13 +160,20 @@ fn main() {
             if let Some(err) = maybe_err {
                 panic!("Unable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set ({err}).");
             }
+
+            maybe_err.is_some()
         };
+
+        // There is no pkg-config on Windows, thus always download if not otherwise configured.
+        #[cfg(target_os = "windows")]
+        #[allow(unused)]
+        let allow_download = true;
 
         // On Linux and Windows try to automatically download as a fallback.
         // Other platforms will also fall under this condition, but will panic.
         #[cfg(not(target_os = "macos"))]
         #[cfg(feature =  "auto-download-mujoco")]
-        {
+        if allow_download {
             let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_else(|_| {
                 panic!(
                     "unable to obtain the OS information -- please manually download MuJoCo \
@@ -217,7 +224,7 @@ fn main() {
             // Download the file
             let mut response = ureq::get(&download_url).call().expect("failed to download MuJoCo");
             let mut body_reader = response.body_mut().as_reader();
-            
+
             // Save the response data into an actual file
             std::fs::create_dir_all(download_path.parent().unwrap()).unwrap_or_else(
                 |err| panic!("failed to create parent directory of \"{}\" ({err})", download_path.display())

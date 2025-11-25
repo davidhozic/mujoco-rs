@@ -30,10 +30,15 @@ See :ref:`opt-cargo-features` for information about available Cargo features.
 Then additional dependencies may need to be installed/configured:
 
 - :ref:`mujoco_dep`: The actual physics engine, which is a C library.
-  This is **automatically configured** since MuJoCo-rs 2.1.0, so you can safely
-  skip it, unless you want extra control.
+  When the ``auto-download-mujoco`` Cargo feature is enabled, MuJoCo is
+  **automatically fetched and configured** (on Linux and Windows), so you can safely skip it,
+  unless you want extra control.
 
+.. note::
 
+    The ``auto-download-mujoco`` Cargo feature is currently disabled by default to prevent drag of unnecessary
+    crates into projects already relying on MuJoCo-rs. In a future SemVer-major release (i.e., 3.0.0),
+    this feature will most likely be enabled by default.
 
 Dependencies
 =======================
@@ -44,48 +49,55 @@ Dependencies
 MuJoCo
 ---------------
 
-Automatic setup
-^^^^^^^^^^^^^^^^^^^^
+Automatic setup (dynamic linking)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Since MuJoCo-rs 2.1.0, the MuJoCo library is **automatically downloaded**, extracted and configured
-for **Linux** and **Windows** platforms.
-The ``auto-download-mujoco`` Cargo feature must be enabled for MuJoCo-rs to automatically download
-and setup the MuJoCo dependency. Note that regardless of this feature, MuJoCo-rs will first try to use
-pkg-config and perform a download only after pkg-config fails.
+Starting from MuJoCo-rs 2.1.0, the MuJoCo library can be **automatically downloaded**, extracted and configured
+for **Linux** and **Windows** platforms by enabling the ``auto-download-mujoco`` Cargo feature:
+
+::
+
+    cargo add mujoco-rs --features "auto-download-mujoco"
+
+.. attention::
+
+    Official MuJoCo builds only allow **dynamic linking**. When distributing compiled binaries,
+    the downloaded MuJoCo library must be provided to users in addition to the binary.
 
 By default, the library is downloaded and extracted to the
 **package root directory** (where your Cargo.toml is located). If you're happy with this,
-**nothing further is needed** on your part.
+nothing further is needed on your part.
 To change the download and extraction location, a custom
 directory path can be given via the ``MUJOCO_DOWNLOAD_DIR`` environmental variable.
 For example: ``MUJOCO_DOWNLOAD_DIR="/home/username/Downloads/" cargo build``
 By default, ``MUJOCO_DOWNLOAD_DIR`` is set to ``./``.
 
+.. attention::
 
-.. attention:: 
-
-    Please note that on **Linux**, MuJoCo-rs sets **RPATH** to the directory path of the downloaded MuJoCo library.
+    Please note that on **Linux**, MuJoCo-rs updates **RPATH** of the executable.
     When redistributing compiled programs, that use MuJoCo-rs, make sure to keep the MuJoCo folder in the correct location.
     If you keep ``MUJOCO_DOWNLOAD_DIR`` at its default value (i.e., ``./``), you simply need to keep the downloaded
-    MuJoCo folder in the same directory as the one where your program is run.
+    MuJoCo folder in the same directory as the one where your program is run. If you decide to use a custom path,
+    which is a non-standard location, it is recommended to specify relative paths.
 
     If you run the program and see an error about a missing library file,
     you can either copy the MuJoCo .so files to a standard location (e.g., /usr/lib/)
     or add the path to the .so files into ``LD_LIBRARY_PATH``
     (e.g., ``export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco/``).
+    Similarly, on **MacOS**, ``DYLD_LIBRARY_PATH`` can be updated (e.g., ``export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/path/to/mujoco/``).
 
     On **Windows**, the MuJoCo **DLL** file must be located in the directory from which the executable is run
     (i.e., the current working directory at runtime), or its directory
     path must be added to the ``PATH`` environment variable.
 
-
 .. note::
 
-    The extracted MuJoCo folder contains everything from the official archive.
-    Most of that is not needed and can be deleted. The only files that are needed
-    are the ones in the ``lib/`` subdirectory. On Windows, ``bin/mujoco.dll`` is also
-    needed, however that is automatically copied to the project root
-    (where your Cargo.toml is located).
+    Regardless of this feature, MuJoCo-rs will first try to use
+    pkg-config and perform a download only after pkg-config fails. Additionally, use of pkg-config
+    is not officially supported by MuJoCo, thus this mechanism only exists for any custom setups.
+
+
+----------------------
 
 
 Manual setup
@@ -100,8 +112,6 @@ MuJoCo-rs where to obtain the MuJoCo library.
 
 The linking process depends on whether you plan to dynamically link (recommended)
 or statically link (with support for the C++ based viewer wrapper, instead of the Rust-native one).
-
-----------------------
 
 
 Dynamic linking
@@ -181,10 +191,8 @@ Additionally, in the event that the user's program refuses to run and outputs so
 the path to the MuJoCo library's directory must also be added to ``DYLD_LIBRARY_PATH``:
 ::
 
-    export DYLD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco/lib/
+    export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/path/to/mujoco/lib/
 
-
-----------------------
 
 .. _static_linking:
 
@@ -202,7 +210,7 @@ a safe interface between Rust and the C++ Simulate code.
 
 To build statically linkable libraries, perform the following steps:
 
-1. Clone the MuJoCo-rs repository,
+1. Clone MuJoCo-rs's repository,
 2. Change your directory to the cloned repository,
 3. Run commands:
    ::
@@ -212,7 +220,7 @@ To build statically linkable libraries, perform the following steps:
        cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF
        cmake --build build --parallel --target glfw libmujoco_simulate --config=Release
 
-   The builds are tested with the ``gcc`` compiler.
+   This was tested with the ``gcc`` compiler.
    
    Note that ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF`` disables link-time optimization, thus resulting in slightly
    lower performance. Enabling it causes compatibility problems on the Linux platform. See the attention block below for more info.
@@ -241,7 +249,7 @@ To build statically linkable libraries, perform the following steps:
 
     ``cmake -B build -S . -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON ...``
 
-    When LTO is enabled, the **system linker** must be used, because rust-lld doesn't know how to read the extra LTO information,
+    When LTO is enabled, the **system linker** must be used, because rust-lld doesn't know how to read extra LTO information
     produced by other linkers:
 
     ::

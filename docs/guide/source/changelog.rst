@@ -18,8 +18,9 @@ update of MuJoCo alone can increase the major version.
 
 Unreleased
 ================================
-- Option (enabled by default) to automatically pull MuJoCo.
-- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
+- Option to automatically pull MuJoCo.
+- pkg-config support for Linux and MacOS. Note that this is not officially supported by MuJoCo.
+- Changes to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
 
   - Added an optional (enabled by default) user interface, made with `egui <https://github.com/emilk/egui>`_.
 

@@ -26,12 +26,15 @@ Main features
 MuJoCo-rs tries to stay close to the MuJoCo's C API, with a few additional features for ease of use.
 The main features on top of MuJoCo include:
 
+- Automatic download and setup of MuJoCo:
+
+  - When ``auto-download-mujoco`` Cargo feature is enabled.
+
 - Safe wrappers around structs:
   
   - Automatic allocation and cleanup.
   - Lifetime checks.
 
-- Automatic download and setup of MuJoCo.
 - Methods as function wrappers.
 - Easy manipulation of simulation data via :ref:`attribute_views`.
 - High-level :ref:`model_editing`.
@@ -68,7 +71,7 @@ Optional Cargo features can be enabled:
 - ``renderer``: enables offscreen rendering for writing RGB and
   depth data to memory or file.
 
-By default, ``auto-download-mujoco``, ``viewer``, ``viewer-ui`` and ``renderer`` are enabled.
+By default, ``viewer``, ``viewer-ui`` and ``renderer`` are enabled.
 
 
 Table of contents
