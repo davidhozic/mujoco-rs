@@ -4,8 +4,7 @@
 
 [![Guide](https://img.shields.io/badge/Documentation-green)](https://mujoco-rs.readthedocs.io/en/stable/)
 
-
-MuJoCo bindings and wrappers for the Rust programming language. Includes a Rust-native viewer and also
+MuJoCo bindings and high-level wrappers for the Rust programming language. Includes a Rust-native viewer and also
 bindings to a modified C++ one.
 
 [MuJoCo](https://mujoco.org/) is a general purpose physics simulator.
