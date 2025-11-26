@@ -158,7 +158,10 @@ fn main() {
 
             #[cfg(not(feature =  "auto-download-mujoco"))]
             if let Some(err) = maybe_err {
-                panic!("Unable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set ({err}).");
+                panic!(
+                    "Unable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set and\
+                    the \"auto-download-mujoco\" Cargo feature is disabled ({err})."
+                );
             }
 
             maybe_err.is_some()
@@ -168,6 +171,10 @@ fn main() {
         #[cfg(target_os = "windows")]
         #[allow(unused)]
         let allow_download = true;
+
+        #[cfg(not(feature =  "auto-download-mujoco"))]
+        #[cfg(target_os = "windows")]
+        panic!("Unable to locate MuJoCo because \"auto-download-mujoco\" Cargo feature is disabled and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set.");
 
         // On Linux and Windows try to automatically download as a fallback.
         // Other platforms will also fall under this condition, but will panic.
