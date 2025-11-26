@@ -24,7 +24,10 @@ renderer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit", "dep:
 cpp-viewer = []
 
 ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module. 
+
 auto-download-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip", "dep:sha2"]
+use-rpath = []
+
 default = ["viewer", "viewer-ui", "renderer"]
 
 [dependencies]

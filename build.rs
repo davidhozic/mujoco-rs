@@ -137,8 +137,42 @@ fn main() {
 
     /* Dynamic linking */
     else if let Some(path) = mujoco_dyn_link_dir {
-        println!("cargo:rustc-link-search={}", PathBuf::from(path).display());
+        let path = PathBuf::from(path);
+        let path_display = path.display();
+        println!("cargo:rustc-link-search={}", path_display);
         println!("cargo:rustc-link-lib=mujoco");
+
+        // Set the RPATH
+        #[cfg(feature =  "use-rpath")]
+        {
+            #[cfg(target_os = "linux")]
+            {
+                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_display);
+                if path.is_relative() {
+                    let rpath = PathBuf::from("$ORIGIN").join(&path);
+                    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
+                }
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_display);
+                if path.is_relative() {
+                    let rpath = PathBuf::from("@loader_path").join(&path);
+                    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
+                }
+            }
+        }
+
+        // Copy the DLL on Windows, if a relative path is given.
+        // Otherwise assume the DLL is discoverable through PATH.
+        #[cfg(target_os = "windows")]
+        if path.is_relative() {
+            let dll_path = path.parent().unwrap().join("bin/mujoco.dll");
+            if let Err(err) = std::fs::copy(dll_path, "mujoco.dll") {
+                println!("cargo:warning=failed to copy mujoco.dll to the current working directory ({err})");
+            }
+        }
     }
 
     /* pkg-config fallback (MacOS / Linux)  with automatic download (Windows / Linux) on failure */
@@ -317,13 +351,14 @@ fn main() {
             #[cfg(target_os = "linux")]
             {
                 println!("cargo::rerun-if-changed={}", libdir_path.join("libmujoco.so").display());
-
-                // Discover the MuJoCo library relative to the current working directory.
-                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", libdir_path_display);
-
-                // Also allow discovery of the MuJoCo library relative to the binary directory.
-                if libdir_path.is_relative() {
-                    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", PathBuf::from("$ORIGIN").join(&libdir_path).display());
+                // Set the RPATH
+                #[cfg(feature = "use-rpath")]
+                {
+                    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", libdir_path_display);
+                    if libdir_path.is_relative() {
+                        let rpath = PathBuf::from("$ORIGIN").join(&libdir_path);
+                        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
+                    }
                 }
             }
 
@@ -362,7 +397,9 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
     }
 
     if copy_mujoco_dll {
-        std::fs::copy(outdirname.join("bin").join("mujoco.dll"), "mujoco.dll").expect("failed to copy mujoco.dll");
+        if let Err() = std::fs::copy(outdirname.join("bin").join("mujoco.dll"), "mujoco.dll") {
+            println!("cargo:warning=failed to copy mujoco.dll to the current working directory ({err})");
+        }
     }
 }
 

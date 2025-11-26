@@ -28,7 +28,7 @@ The main features on top of MuJoCo include:
 
 - Automatic download and setup of MuJoCo:
 
-  - When ``auto-download-mujoco`` Cargo feature is enabled.
+  - When the ``auto-download-mujoco`` Cargo feature is enabled.
 
 - Safe wrappers around structs:
   
@@ -36,7 +36,7 @@ The main features on top of MuJoCo include:
   - Lifetime checks.
 
 - Methods as function wrappers.
-- Easy manipulation of simulation data via :ref:`attribute_views`.
+- Easy manipulation of simulation data via :ref:`attribute_views` (named access).
 - High-level :ref:`model_editing`.
 - :ref:`visualization`:
 
@@ -62,6 +62,7 @@ Optional Cargo features can be enabled:
 
   - This is only available on Linux and Windows.
 
+- ``use-rpath``: On Linux and MacOS, when dynamically linking, set the RPATH of the final binary.
 - ``viewer``: enables the Rust-native MuJoCo viewer.
 
   - ``viewer-ui``: enables the (additional) user UI within the viewer.

@@ -24,6 +24,11 @@ Unreleased
 
   - Added an optional (enabled by default) user interface, made with `egui <https://github.com/emilk/egui>`_.
 
+- New Cargo features:
+
+  - ``auto-download-mujoco``: will automatically download and setup MuJoCo (Windows and Linux).
+  - ``use-rpath``: will embed the path to the MuJoCo C library into the RPATH of the binary (Linux and MacOS).
+
 2.0.1 (MuJoCo 3.3.7)
 ================================
 - Fix the ``renderer`` feature not enabling all the needed crates.

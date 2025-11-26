@@ -44,7 +44,6 @@ The main features on top of MuJoCo include
   - Viewer: onscreen visualization of the 3D simulation.
 
 
-
 ## Rust-native viewer
 Screenshot of the built-in Rust viewer. Showing scene from [MuJoCo's menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot).
 ![](docs/img_common/viewer_spot.png)
@@ -52,28 +51,28 @@ Screenshot of the built-in Rust viewer. Showing scene from [MuJoCo's menagerie](
 
 ## Optional Cargo features
 Optional Cargo features can be enabled:
-- ``viewer``: enables the Rust-native MuJoCo viewer. This can currently
-                display everything and respond to mouse/keyboard. No side-panels (the user menu) currently exists.
-- ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer. This is only available if you build the MuJoCo yourself using the steps above (yes, you need to use the forked repository).
-- ``renderer``: enables the offscreen rendering code for reading RGB and depth data to memory or file.
+  
+- ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded and configured.
 
-By default, ``viewer`` and ``renderer`` are enabled.
+  - This is only available on Linux and Windows.
 
-## Missing libraries
-MuJoCo-rs should on Windows work without problems after the MuJoCo library
-is provided. On Linux (and potentially MacOS, which we don't test) you may need
-additional build-time dependencies, such as CMake. This depends
-on your Linux distro and whether you want visualization/rendering support. See the [installation guide](https://mujoco-rs.readthedocs.io/en/stable/installation.html#build-dependencies-visualization-rendering-only) for more information.
+- ``use-rpath``: On Linux and MacOS, when dynamically linking, set the RPATH of the final binary.
+- ``viewer``: enables the Rust-native MuJoCo viewer.
 
-## NOTE
-This project is WIP but functional. I accept pull requests about bug fixes
-and feature requests. If you have any questions, please open a **discussion**.
+  - ``viewer-ui``: enables the (additional) user UI within the viewer.
+
+- ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
+  This requires static linking to a modified fork of MuJoCo, as described in :ref:`installation`.
+- ``renderer``: enables offscreen rendering for writing RGB and
+  depth data to memory or file.
+
+By default, ``viewer``, ``viewer-ui`` and ``renderer`` are enabled.
+
 
 ## Example
 This example shows how to launch the viewer and print the coordinates
 of a moving ball to the terminal.
 Other examples can be found under the ``examples/`` directory.
-
 
 ```rust
 //! Example of using views.

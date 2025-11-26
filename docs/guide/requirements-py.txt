@@ -1,3 +1,4 @@
 furo==2025.7.19
 sphinx~=8.2.0
 sphinx-autobuild==2025.8.25
+sphinx-tabs==3.4.7
