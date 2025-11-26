@@ -268,7 +268,7 @@ fn main() {
             );
 
             /* Verify file integrity by verify sha256 match */
-            let mut hashfile_data= String::new();
+            let mut hashfile_data = String::new();
             file = File::open(&download_hash_path).expect("failed to open the hash file");
             file.read_to_string(&mut hashfile_data).expect("failed to read hash file contents");
             let hash_official = hashfile_data.split_once(' ').unwrap().0;
@@ -279,7 +279,7 @@ fn main() {
             let mut hasher = sha2::Sha256::new();
             loop {
                 let n = reader.read(&mut buffer).unwrap_or_else(|err|
-                    panic!("could not read archive '{}' ({err})", download_hash_path.display())
+                    panic!("could not read archive '{}' ({err})", download_path.display())
                 );
                 if n == 0 {
                     break;
