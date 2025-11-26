@@ -169,22 +169,16 @@ Dynamic linking is OS-dependent. To dynamically link, the primary variable
         To use MuJoCo-rs on MacOS, follow the following steps:
 
         1. Open the downloaded .dmg file.
-        2. Copy ``mujoco.framework/Versions/Current/libmujoco.x.x.x.dylib`` to a preferred location.
+        2. Copy ``mujoco.framework`` to the current working directory.
         3. Create a symbolic link to the copied: ``libmujoco.x.x.x.dylib`` and name it ``libmujoco.dylib``:
 
-        - ``ln -s libmujoco.x.x.x.dylib libmujoco.dylib``.
+        - ``ln -s mujoco.framework/Versions/Current/libmujoco.x.x.x.dylib libmujoco.dylib``.
 
         4. Set the primary environment variable:
 
-        - ``export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/``
+        - ``export MUJOCO_DYNAMIC_LINK_DIR=./`
 
-        .. attention::
-
-            When the ``use-rpath`` Cargo feature is enabled, MuJoCo-rs will also update the **RPATH**.
-            To make RPATH work, keep the ``mujoco/`` directory in ``/path/``.
-
-            E.g., if you've set ``MUJOCO_DYNAMIC_LINK_DIR=./mujoco/lib/``, then keep ``mujoco/``
-            in the current working directory (or relative to the compiled binary).
+        5. When compiling, make sure to enable the ``use-rpath`` Cargo feature.
 
         In the event that the user's program refuses to run and outputs something like:
 
