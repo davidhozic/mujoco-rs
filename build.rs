@@ -192,12 +192,22 @@ fn main() {
 
             #[cfg(not(feature =  "auto-download-mujoco"))]
             if let Some(err) = maybe_err {
+                #[cfg(target_os = "linux")]
                 panic!(
                     "{err}\
                     \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
                     \n=================================================================================================\
                     \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set and the 'auto-download-mujoco' Cargo feature is disabled.\
                     \nConsider enabling automatic download of MuJoCo: 'cargo build --features \"auto-download-mujoco use-rpath\"'.\
+                    \n================================================================================================="
+                );
+
+                #[cfg(target_os = "macos")]
+                panic!(
+                    "{err}\
+                    \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
+                    \n=================================================================================================\
+                    \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set.
                     \n================================================================================================="
                 );
             }
