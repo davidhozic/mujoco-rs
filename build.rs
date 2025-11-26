@@ -407,7 +407,7 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
     }
 
     if copy_mujoco_dll {
-        if let Err() = std::fs::copy(outdirname.join("bin").join("mujoco.dll"), "mujoco.dll") {
+        if let Err(err) = std::fs::copy(outdirname.join("bin").join("mujoco.dll"), "mujoco.dll") {
             println!("cargo:warning=failed to copy mujoco.dll to the current working directory ({err})");
         }
     }
