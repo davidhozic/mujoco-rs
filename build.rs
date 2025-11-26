@@ -162,7 +162,7 @@ fn main() {
                     "{err}\
                     \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
                     \n=================================================================================================\
-                    \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set and the \"auto-download-mujoco\" Cargo feature is disabled.\
+                    \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set and the 'auto-download-mujoco' Cargo feature is disabled.\
                     \nConsider enabling automatic download of MuJoCo: 'cargo build --features auto-download-mujoco'.\
                     \n================================================================================================="
                 );
@@ -178,13 +178,19 @@ fn main() {
 
         #[cfg(not(feature =  "auto-download-mujoco"))]
         #[cfg(target_os = "windows")]
-        panic!("Unable to locate MuJoCo because \"auto-download-mujoco\" Cargo feature is disabled and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set.");
+        panic!(
+            "Unable to locate MuJoCo because 'auto-download-mujoco' Cargo feature is disabled and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
+            \nConsider enabling automatic download of MuJoCo: 'cargo build --features auto-download-mujoco'."
+        );
 
         // On Linux and Windows try to automatically download as a fallback.
         // Other platforms will also fall under this condition, but will panic.
         #[cfg(not(target_os = "macos"))]
         #[cfg(feature =  "auto-download-mujoco")]
         if allow_download {
+            use std::{io::{BufReader, Read}};
+            use sha2::Digest;
+
             let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_else(|_| {
                 panic!(
                     "unable to obtain the OS information -- please manually download MuJoCo \
@@ -213,6 +219,9 @@ fn main() {
                 );
             };
 
+            // SHA256 verification of the download.
+            let download_hash_url = format!("{download_url}.sha256");
+
             // Obtain the download directory from MUJOCO_DOWNLOAD_PATH_VAR.
             // If not given, assume the current working directory. In the latter case,
             // also assume that the MuJoCo DLL needs to be copied to the current working
@@ -231,6 +240,7 @@ fn main() {
             // The name of the downloaded archive file.
             let download_path = download_dir.join(download_url.rsplit_once("/").unwrap().1);
             let outdirname = download_dir.join(format!("mujoco-{mujoco_version}"));
+            let download_hash_path = download_dir.join(download_hash_url.rsplit_once("/").unwrap().1);
 
             // Download the file
             let mut response = ureq::get(&download_url).call().expect("failed to download MuJoCo");
@@ -238,14 +248,51 @@ fn main() {
 
             // Save the response data into an actual file
             std::fs::create_dir_all(download_path.parent().unwrap()).unwrap_or_else(
-                |err| panic!("failed to create parent directory of \"{}\" ({err})", download_path.display())
+                |err| panic!("failed to create parent directory of '{}' ({err})", download_path.display())
             );
             let mut file = File::create(&download_path).unwrap_or_else(
-                |err| panic!("could not save archive \"{}\" ({err})", download_path.display())
+                |err| panic!("could not save archive '{}' ({err})", download_path.display())
             );
             std::io::copy(&mut body_reader, &mut file).unwrap_or_else(
-                |err| panic!("failed to copy archive contents to \"{}\" ({err})", download_path.display())
+                |err| panic!("failed to copy archive contents to '{}' ({err})", download_path.display())
             );
+
+            // Download the hash file
+            response = ureq::get(&download_hash_url).call().expect("failed to download MuJoCo's hash file");
+            body_reader = response.body_mut().as_reader();
+            let mut file = File::create(&download_hash_path).unwrap_or_else(
+                |err| panic!("could not save archive '{}' ({err})", download_hash_path.display())
+            );
+            std::io::copy(&mut body_reader, &mut file).unwrap_or_else(
+                |err| panic!("failed to copy archive contents to '{}' ({err})", download_hash_path.display())
+            );
+
+            /* Verify file integrity by verify sha256 match */
+            let mut hashfile_data= String::new();
+            file = File::open(&download_hash_path).expect("failed to open the hash file");
+            file.read_to_string(&mut hashfile_data).expect("failed to read hash file contents");
+            let hash_official = hashfile_data.split_once(' ').unwrap().0;
+
+            file = File::open(&download_path).unwrap();
+            let mut reader = BufReader::new(file);
+            let mut buffer = [0u8; 1024];
+            let mut hasher = sha2::Sha256::new();
+            loop {
+                let n = reader.read(&mut buffer).unwrap_or_else(|err|
+                    panic!("could not read archive '{}' ({err})", download_hash_path.display())
+                );
+                if n == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..n]);
+            }
+            let result = format!("{:x}", hasher.finalize());
+            if hash_official != result {
+                panic!(
+                    "sha256sum of '{}' does not match \
+                    the one stored in the official hash file --- stopping due to security concerns!"
+                , &download_path.display());
+            }
 
             /* Extraction */
             #[cfg(target_os = "windows")]
@@ -254,9 +301,13 @@ fn main() {
             #[cfg(target_os = "linux")]
             extract_linux(&download_path);
 
-            // No need to keep the downloaded file.
+            // No need to keep the downloaded file and its hash file.
             std::fs::remove_file(&download_path).unwrap_or_else(
-                |err| panic!("failed to delete archive \"{}\" ({err})", download_path.display())
+                |err| panic!("failed to delete archive '{}' ({err})", download_path.display())
+            );
+
+            std::fs::remove_file(&download_hash_path).unwrap_or_else(
+                |err| panic!("failed to delete hash file '{}' ({err})", download_hash_path.display())
             );
 
             let libdir_path = outdirname.join("lib");
@@ -319,7 +370,7 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
 #[cfg(feature = "auto-download-mujoco")]
 fn extract_linux(filename: &Path) {
     let file = File::open(filename).unwrap_or_else(
-        |err| panic!("failed to open \"{}\" ({err})", filename.display())
+        |err| panic!("failed to open '{}' ({err})", filename.display())
     );
     let tar = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(tar);
