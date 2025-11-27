@@ -153,7 +153,7 @@ fn main() {
         let path_lib_dir_display = path_lib_dir.display();
 
         let path_lib_file = if cfg!(target_os = "windows") {
-            path_lib_dir.join("libmujoco.so")
+            path_lib_dir.join("mujoco.lib")
         } else if cfg!(target_os = "macos") {
             path_lib_dir.join("libmujoco.dylib")
         } else {
@@ -175,30 +175,25 @@ fn main() {
         // Set the RPATH
         #[cfg(feature = "use-rpath")]
         {
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_lib_dir_display);
             #[cfg(target_os = "linux")]
-            {
-                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_lib_dir_display);
-                if path_lib_dir.is_relative() {
-                    let rpath = PathBuf::from("$ORIGIN").join(&path_lib_dir);
-                    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
-                }
+            if path_lib_dir.is_relative() {
+                let rpath = PathBuf::from("$ORIGIN").join(&path_lib_dir);
+                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
             }
 
             #[cfg(target_os = "macos")]
-            {
-                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_display);
-                if path_lib_dir.is_relative() {
-                    let rpath = PathBuf::from("@loader_path").join(&path_lib_dir);
-                    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
-                }
+            if path_lib_dir.is_relative() {
+                let rpath = PathBuf::from("@loader_path").join(&path_lib_dir);
+                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
             }
         }
 
         // Copy the DLL on Windows, if a relative path is given.
         // Otherwise assume the DLL is discoverable through PATH.
         #[cfg(target_os = "windows")]
-        if path.is_relative() {
-            let dll_path = path_lib.parent().unwrap().join("bin/mujoco.dll");
+        if path_lib_dir.is_relative() {
+            let dll_path = path_lib_dir.parent().unwrap().join("bin/mujoco.dll");
             if let Err(err) = std::fs::copy(dll_path, "mujoco.dll") {
                 println!("cargo:warning=failed to copy mujoco.dll to the current working directory ({err})");
             }
@@ -427,7 +422,10 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
 
     for i in 0..zip.len() {
         let mut zipfile = zip.by_index(i).unwrap();
-        let mut path = if let Some(path) = zipfile.enclosed_name() { path } else { continue };
+        let mut path = if let Some(path) = zipfile.enclosed_name() { path } else {
+            println!("cargo:warning=Skipped potentially unsafe ZIP entry '{}' during extraction", zipfile.name());
+            continue;
+        };
 
         if zipfile.is_file() {
             // On Windows, place everything in a new folder.
