@@ -157,7 +157,7 @@ Dynamic linking is OS-dependent. To dynamically link, the primary variable
 
         .. attention::
 
-            Make sure the PATH variable contains the path to the directory of the **.dll** file, **NOT** of the **.lib** file.
+            Make sure the PATH variable contains the path to the directory of the **.dll** file, **not** of the **.lib** file.
             The **.lib** file is used only for compilation, while the **.dll** is used at runtime.
             The **.dll** file is contained in the ``bin/`` directory of the MuJoCo download.
             The **.lib** file is contained in the ``lib/`` directory of the MuJoCo download.
@@ -165,9 +165,12 @@ Dynamic linking is OS-dependent. To dynamically link, the primary variable
 
    .. tab:: MacOS
 
-        To use MuJoCo-rs on MacOS, follow the following steps:
+        One option is setup your own homebrew file
+        (see `this issue <https://github.com/kcking/homebrew-tap/blob/ffbf7d5e1c11b40ce72ba6bc067f1e5b16c439df/mujoco%403.7.rb>`_).
 
-        1. Open the downloaded .dmg file.
+        Another option is to copy and link some files:
+
+        1. Open the `downloaded <mj_download_>`_ .dmg file.
         2. Copy ``mujoco.framework`` to the current working directory.
         3. Create a symbolic link to the copied: ``libmujoco.x.x.x.dylib`` and name it ``libmujoco.dylib``:
 
@@ -177,7 +180,7 @@ Dynamic linking is OS-dependent. To dynamically link, the primary variable
 
         - ``export MUJOCO_DYNAMIC_LINK_DIR=./``
 
-        5. When compiling, make sure to enable the ``use-rpath`` Cargo feature.
+        5. Enable MuJoCo-rs's ``use-rpath`` Cargo feature.
 
         In the event that the user's program refuses to run and outputs something like:
 
