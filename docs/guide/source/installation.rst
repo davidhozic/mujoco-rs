@@ -37,7 +37,7 @@ Then additional dependencies may need to be installed/configured:
   - When the ``use-rpath`` Cargo feature is enabled, the **RPATH** of the final binary will
     be updated to include the path to the MuJoCo library files. This only affects Linux and MacOS
     and when dynamically linking (including automated downloads). RPATH is a table inside the binary,
-    which tells the dynamic loaded where shared (dynamic) libraries can be found.
+    which tells the dynamic loader where shared (dynamic) libraries can be found.
 
 
 Dependencies
