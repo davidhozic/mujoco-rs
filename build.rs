@@ -112,8 +112,6 @@ fn main() {
 
         let path_lib_file = if cfg!(target_os = "windows") {
             path_lib_dir.join("mujoco.lib")
-        } else if cfg!(target_os = "macos") {
-            path_lib_dir.join("libmujoco.dylib")
         } else {
             path_lib_dir.join("libmujoco.a")
         };
