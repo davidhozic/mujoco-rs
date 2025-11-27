@@ -438,11 +438,17 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
             );
 
             // Don't recreate to avoid trouble with println!("cargo:rerun-if-changed={}", ...)
-            if let Ok(mut outfile) = File::create_new(&path) {
-                std::io::copy(&mut zipfile, &mut outfile).unwrap_or_else(|err|
-                    panic!("failed to copy {} to {} ({err})", zipfile.name(), path.display())
-                );
-            }
+            let mut outfile = File::create(&path).unwrap_or_else(|err|
+                panic!("failed to create file '{}' ({err})", path.display())
+            );
+
+            std::io::copy(&mut zipfile, &mut outfile).unwrap_or_else(|err|
+                panic!("failed to copy {} to {} ({err})", zipfile.name(), path.display())
+            );
+
+            outfile.sync_all().unwrap_or_else(|err|
+                panic!("failed to flush contents to file '{}' ({err})", path.display())
+            );
         }
     }
 
