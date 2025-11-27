@@ -143,7 +143,7 @@ fn main() {
         println!("cargo:rustc-link-lib=mujoco");
 
         // Set the RPATH
-        #[cfg(feature =  "use-rpath")]
+        #[cfg(feature = "use-rpath")]
         {
             #[cfg(target_os = "linux")]
             {
@@ -175,7 +175,7 @@ fn main() {
         }
     }
 
-    /* pkg-config fallback (MacOS / Linux)  with automatic download (Windows / Linux) on failure */
+    /* pkg-config fallback (MacOS / Linux) with automatic download (Windows / Linux) on failure */
     else {
         let mujoco_version = env!("CARGO_PKG_VERSION").split_once("mj-").unwrap().1;
 
@@ -388,8 +388,13 @@ fn main() {
 #[cfg(target_os = "windows")]
 #[cfg(feature = "auto-download-mujoco")]
 fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
-    let file = File::open(filename).unwrap();
-    let mut zip = zip::ZipArchive::new(file).unwrap();
+    let file = File::open(filename).unwrap_or_else(|err| 
+        panic!("failed to open archive '{}' ({err}).", filename.display())
+    );
+    let mut zip = zip::ZipArchive::new(file).unwrap_or_else(|err|
+        panic!("failed to read ZIP metadata ({err}).")
+    );
+
     for i in 0..zip.len() {
         let mut zipfile = zip.by_index(i).unwrap();
         let mut path = if let Some(path) = zipfile.enclosed_name() { path } else { continue };
@@ -398,10 +403,17 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
             // On Windows, place everything in a new folder.
             // This is for consistency with Linux targets.
             path = outdirname.join(path);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();  // create parents
+
+            // Create parents
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap_or_else(|err|
+                panic!("failed to create {} and its parents ({err}).", outdirname.display())
+            );
+
             // Don't recreate to avoid trouble with println!("cargo::rerun-if-changed={}", ...)
             if let Ok(mut outfile) = File::create_new(&path) {
-                std::io::copy(&mut zipfile, &mut outfile).unwrap();
+                std::io::copy(&mut zipfile, &mut outfile).unwrap_or_else(|err|
+                    panic!("failed to copy {} to {} ({err})", zipfile.name(), path.display())
+                );
             }
         }
     }
