@@ -107,16 +107,22 @@ fn main() {
 
     /* Static linking */
     if let Some(path) = mujoco_static_link_dir {
-        let mj_lib_pathbuf = PathBuf::from(path);
+        let path_lib = PathBuf::from(path);
+        let path_lib_display = path_lib.display();
+
+        // Must be mujoco-x.x.x/lib/ not mujoco-x.x.x/
+        if path_lib.file_name().unwrap_or(Default::default()) != "lib" {
+            panic!("{MUJOCO_DYN_LIB_PATH_VAR} must be path to the 'lib/' subdirectory (i.e., 'mujoco-x.x.x/lib/') --- was given '{path_lib_display}'");
+        }
 
         #[cfg(unix)]
-        let mj_lib_mujoco_path = mj_lib_pathbuf.join("libmujoco.a");
+        let path_lib = path_lib.join("libmujoco.a");
 
         #[cfg(windows)]
-        let mj_lib_mujoco_path = mj_lib_pathbuf.join("mujoco.lib");
+        let path_lib = path_lib.join("mujoco.lib");
 
-        println!("cargo::rerun-if-changed={}", mj_lib_mujoco_path.display());
-        println!("cargo:rustc-link-search={}", mj_lib_pathbuf.display());
+        println!("cargo::rerun-if-changed={}", path_lib.display());
+        println!("cargo:rustc-link-search={}", path_lib_display);
 
         #[cfg(feature = "cpp-viewer")]
         {
@@ -137,9 +143,15 @@ fn main() {
 
     /* Dynamic linking */
     else if let Some(path) = mujoco_dyn_link_dir {
-        let path = PathBuf::from(path);
-        let path_display = path.display();
-        println!("cargo:rustc-link-search={}", path_display);
+        let path_lib = PathBuf::from(path);
+        let path_lib_display = path_lib.display();
+
+        // Must be mujoco-x.x.x/lib/ not mujoco-x.x.x/
+        if path_lib.file_name().unwrap_or(Default::default()) != "lib" {
+            panic!("{MUJOCO_DYN_LIB_PATH_VAR} must be path to the 'lib/' subdirectory (i.e., 'mujoco-x.x.x/lib/') --- was given '{path_lib_display}'");
+        }
+
+        println!("cargo:rustc-link-search={}", path_lib_display);
         println!("cargo:rustc-link-lib=mujoco");
 
         // Set the RPATH
@@ -147,9 +159,9 @@ fn main() {
         {
             #[cfg(target_os = "linux")]
             {
-                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_display);
-                if path.is_relative() {
-                    let rpath = PathBuf::from("$ORIGIN").join(&path);
+                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_lib_display);
+                if path_lib.is_relative() {
+                    let rpath = PathBuf::from("$ORIGIN").join(&path_lib);
                     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
                 }
             }
@@ -157,8 +169,8 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_display);
-                if path.is_relative() {
-                    let rpath = PathBuf::from("@loader_path").join(&path);
+                if path_lib.is_relative() {
+                    let rpath = PathBuf::from("@loader_path").join(&path_lib);
                     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
                 }
             }
@@ -168,7 +180,7 @@ fn main() {
         // Otherwise assume the DLL is discoverable through PATH.
         #[cfg(target_os = "windows")]
         if path.is_relative() {
-            let dll_path = path.parent().unwrap().join("bin/mujoco.dll");
+            let dll_path = path_lib.parent().unwrap().join("bin/mujoco.dll");
             if let Err(err) = std::fs::copy(dll_path, "mujoco.dll") {
                 println!("cargo:warning=failed to copy mujoco.dll to the current working directory ({err})");
             }

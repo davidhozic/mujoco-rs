@@ -119,17 +119,16 @@ Dynamic linking is OS-dependent. To dynamically link, the primary variable
 
    .. tab:: Linux
 
-        When using Linux (bash), the primary variable can be set like so:
+        When using Linux (bash), the primary variable can be set like so (assuming MuJoCo's **.so** file is located
+        inside ``/path/mujoco/lib/``.):
         ::
 
             export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/
 
-        This is assuming MuJoCo's **.so** file is located inside ``/path/mujoco/lib/``.
-
         .. attention::
 
             When the ``use-rpath`` Cargo feature is enabled, MuJoCo-rs will also update the **RPATH**.
-            To make RPATH work, keep the ``mujoco/`` directory in ``/path/``.
+            To make RPATH work, keep the ``mujoco/`` in the same (relative) directory given to ``MUJOCO_DYNAMIC_LINK_DIR``.
 
             E.g., if you've set ``MUJOCO_DYNAMIC_LINK_DIR=./mujoco/lib/``, then keep ``mujoco/``
             in the current working directory (or relative to the compiled binary).
@@ -176,7 +175,7 @@ Dynamic linking is OS-dependent. To dynamically link, the primary variable
 
         4. Set the primary environment variable:
 
-        - ``export MUJOCO_DYNAMIC_LINK_DIR=./`
+        - ``export MUJOCO_DYNAMIC_LINK_DIR=./``
 
         5. When compiling, make sure to enable the ``use-rpath`` Cargo feature.
 
