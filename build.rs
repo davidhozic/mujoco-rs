@@ -107,22 +107,28 @@ fn main() {
 
     /* Static linking */
     if let Some(path) = mujoco_static_link_dir {
-        let path_lib = PathBuf::from(path);
-        let path_lib_display = path_lib.display();
+        let path_lib_dir = PathBuf::from(path);
+        let path_lib_dir_display = path_lib_dir.display();
+
+        let path_lib_file = if cfg!(target_os = "windows") {
+            path_lib_dir.join("mujoco.lib")
+        } else if cfg!(target_os = "macos") {
+            path_lib_dir.join("libmujoco.dylib")
+        } else {
+            path_lib_dir.join("libmujoco.a")
+        };
 
         // Must be mujoco-x.x.x/lib/ not mujoco-x.x.x/
-        if path_lib.file_name().unwrap_or(Default::default()) != "lib" {
-            panic!("{MUJOCO_DYN_LIB_PATH_VAR} must be path to the 'lib/' subdirectory (i.e., 'mujoco-x.x.x/lib/') --- was given '{path_lib_display}'");
+        if !path_lib_file.is_file() {
+            panic!(
+                "{MUJOCO_STATIC_LIB_PATH_VAR} must be path to the 'lib/' subdirectory (i.e., 'mujoco-x.x.x/lib/') --- \
+                '{path_lib_dir_display}' does not appear to contain '{}'.",
+                path_lib_file.file_name().unwrap().to_str().unwrap()
+            );
         }
 
-        #[cfg(unix)]
-        let path_lib = path_lib.join("libmujoco.a");
-
-        #[cfg(windows)]
-        let path_lib = path_lib.join("mujoco.lib");
-
-        println!("cargo::rerun-if-changed={}", path_lib.display());
-        println!("cargo:rustc-link-search={}", path_lib_display);
+        println!("cargo:rerun-if-changed={}", path_lib_file.display());
+        println!("cargo:rustc-link-search={}", path_lib_dir_display);
 
         #[cfg(feature = "cpp-viewer")]
         {
@@ -136,22 +142,36 @@ fn main() {
         println!("cargo:rustc-link-lib=qhullstatic_r");
         println!("cargo:rustc-link-lib=ccd");
 
-        if cfg!(unix) {
-            println!("cargo:rustc-link-lib=stdc++");
-        }
+        #[cfg(target_os = "linux")]
+        println!("cargo:rustc-link-lib=stdc++");
+
+        #[cfg(target_os = "macos")]
+        println!("cargo:rustc-link-lib=c++");
     }
 
     /* Dynamic linking */
     else if let Some(path) = mujoco_dyn_link_dir {
-        let path_lib = PathBuf::from(path);
-        let path_lib_display = path_lib.display();
+        let path_lib_dir = PathBuf::from(path);
+        let path_lib_dir_display = path_lib_dir.display();
+
+        let path_lib_file = if cfg!(target_os = "windows") {
+            path_lib_dir.join("libmujoco.so")
+        } else if cfg!(target_os = "macos") {
+            path_lib_dir.join("libmujoco.dylib")
+        } else {
+            path_lib_dir.join("libmujoco.so")
+        };
 
         // Must be mujoco-x.x.x/lib/ not mujoco-x.x.x/
-        if path_lib.file_name().unwrap_or(Default::default()) != "lib" {
-            panic!("{MUJOCO_DYN_LIB_PATH_VAR} must be path to the 'lib/' subdirectory (i.e., 'mujoco-x.x.x/lib/') --- was given '{path_lib_display}'");
+        if !path_lib_file.is_file() {
+            panic!(
+                "{MUJOCO_DYN_LIB_PATH_VAR} must be path to the 'lib/' subdirectory (i.e., 'mujoco-x.x.x/lib/') --- \
+                '{path_lib_dir_display}' does not appear to contain '{}'.",
+                path_lib_file.file_name().unwrap().to_str().unwrap()
+            );
         }
 
-        println!("cargo:rustc-link-search={}", path_lib_display);
+        println!("cargo:rustc-link-search={}", path_lib_dir_display);
         println!("cargo:rustc-link-lib=mujoco");
 
         // Set the RPATH
@@ -159,9 +179,9 @@ fn main() {
         {
             #[cfg(target_os = "linux")]
             {
-                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_lib_display);
-                if path_lib.is_relative() {
-                    let rpath = PathBuf::from("$ORIGIN").join(&path_lib);
+                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_lib_dir_display);
+                if path_lib_dir.is_relative() {
+                    let rpath = PathBuf::from("$ORIGIN").join(&path_lib_dir);
                     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
                 }
             }
@@ -169,8 +189,8 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_display);
-                if path_lib.is_relative() {
-                    let rpath = PathBuf::from("@loader_path").join(&path_lib);
+                if path_lib_dir.is_relative() {
+                    let rpath = PathBuf::from("@loader_path").join(&path_lib_dir);
                     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
                 }
             }
@@ -372,7 +392,7 @@ fn main() {
             // Set RPATH on Linux targets and rerun the script if the .so is changed.
             #[cfg(target_os = "linux")]
             {
-                println!("cargo::rerun-if-changed={}", libdir_path.join("libmujoco.so").display());
+                println!("cargo:rerun-if-changed={}", libdir_path.join("libmujoco.so").display());
                 // Set the RPATH
                 #[cfg(feature = "use-rpath")]
                 {
@@ -386,7 +406,7 @@ fn main() {
 
             // Rerun the script on Windows if the .lib is changed.
             #[cfg(target_os = "windows")]
-            println!("cargo::rerun-if-changed={}", libdir_path.join("mujoco.lib").display());
+            println!("cargo:rerun-if-changed={}", libdir_path.join("mujoco.lib").display());
 
             println!("cargo:rustc-link-search={}", libdir_path_display);
             println!("cargo:rustc-link-lib=mujoco");
@@ -421,7 +441,7 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
                 panic!("failed to create {} and its parents ({err}).", outdirname.display())
             );
 
-            // Don't recreate to avoid trouble with println!("cargo::rerun-if-changed={}", ...)
+            // Don't recreate to avoid trouble with println!("cargo:rerun-if-changed={}", ...)
             if let Ok(mut outfile) = File::create_new(&path) {
                 std::io::copy(&mut zipfile, &mut outfile).unwrap_or_else(|err|
                     panic!("failed to copy {} to {} ({err})", zipfile.name(), path.display())
