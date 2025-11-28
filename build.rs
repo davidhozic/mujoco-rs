@@ -1,5 +1,5 @@
-
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::fs::File;
 use std::env;
 
 
@@ -92,13 +92,14 @@ fn main() {
         return;
     }
 
-    // Environmental variable which contains the path to the MuJoCo's build/lib/ directory.
-    // This mean for static linking, otherwise the dynamic MuJoCo library can just be installed and used.
     const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_DIR";
     const MUJOCO_DYN_LIB_PATH_VAR: &str = "MUJOCO_DYNAMIC_LINK_DIR";
+    const MUJOCO_DOWNLOAD_PATH_VAR: &str = "MUJOCO_DOWNLOAD_DIR";
+    const MUJOCO_BASE_DOWNLOAD_LINK: &str = "https://github.com/google-deepmind/mujoco/releases/download";
 
     println!("cargo:rerun-if-env-changed={MUJOCO_STATIC_LIB_PATH_VAR}");
     println!("cargo:rerun-if-env-changed={MUJOCO_DYN_LIB_PATH_VAR}");
+    println!("cargo:rerun-if-env-changed={MUJOCO_DOWNLOAD_PATH_VAR}");
     println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
 
     let mujoco_static_link_dir = env::var(MUJOCO_STATIC_LIB_PATH_VAR).ok();
@@ -106,16 +107,26 @@ fn main() {
 
     /* Static linking */
     if let Some(path) = mujoco_static_link_dir {
-        let mj_lib_pathbuf = PathBuf::from(path);
+        let path_lib_dir = PathBuf::from(path);
+        let path_lib_dir_display = path_lib_dir.display();
 
-        #[cfg(unix)]
-        let mj_lib_mujoco_path = mj_lib_pathbuf.join("libmujoco.a");
+        let path_lib_file = if cfg!(target_os = "windows") {
+            path_lib_dir.join("mujoco.lib")
+        } else {
+            path_lib_dir.join("libmujoco.a")
+        };
 
-        #[cfg(windows)]
-        let mj_lib_mujoco_path = mj_lib_pathbuf.join("mujoco.lib");
+        // Must be mujoco-x.x.x/lib/ not mujoco-x.x.x/
+        if !path_lib_file.is_file() {
+            panic!(
+                "{MUJOCO_STATIC_LIB_PATH_VAR} must be path to the 'lib/' subdirectory (i.e., 'mujoco-x.x.x/lib/') --- \
+                '{path_lib_dir_display}' does not appear to contain '{}'.",
+                path_lib_file.file_name().unwrap().to_str().unwrap()
+            );
+        }
 
-        println!("cargo::rerun-if-changed={}", mj_lib_mujoco_path.canonicalize().unwrap().display());
-        println!("cargo:rustc-link-search={}", mj_lib_pathbuf.canonicalize().unwrap().display());
+        println!("cargo:rerun-if-changed={}", path_lib_file.display());
+        println!("cargo:rustc-link-search={}", path_lib_dir_display);
 
         #[cfg(feature = "cpp-viewer")]
         {
@@ -129,27 +140,326 @@ fn main() {
         println!("cargo:rustc-link-lib=qhullstatic_r");
         println!("cargo:rustc-link-lib=ccd");
 
-        if cfg!(unix) {
-            println!("cargo:rustc-link-lib=stdc++");
-        }
+        #[cfg(target_os = "linux")]
+        println!("cargo:rustc-link-lib=stdc++");
+
+        #[cfg(target_os = "macos")]
+        println!("cargo:rustc-link-lib=c++");
     }
 
     /* Dynamic linking */
     else if let Some(path) = mujoco_dyn_link_dir {
-        let mujoco_dylib_path = PathBuf::from(path);
+        let path_lib_dir = PathBuf::from(path);
+        let path_lib_dir_display = path_lib_dir.display();
 
-        let canonical = mujoco_dylib_path.canonicalize().unwrap();
-        println!("cargo:rustc-link-search={}", canonical.display());
+        let path_lib_file = if cfg!(target_os = "windows") {
+            path_lib_dir.join("mujoco.lib")
+        } else if cfg!(target_os = "macos") {
+            path_lib_dir.join("libmujoco.dylib")
+        } else {
+            path_lib_dir.join("libmujoco.so")
+        };
+
+        // Must be mujoco-x.x.x/lib/ not mujoco-x.x.x/
+        if !path_lib_file.is_file() {
+            panic!(
+                "{MUJOCO_DYN_LIB_PATH_VAR} must be path to the 'lib/' subdirectory (i.e., 'mujoco-x.x.x/lib/') --- \
+                '{path_lib_dir_display}' does not appear to contain '{}'.",
+                path_lib_file.file_name().unwrap().to_str().unwrap()
+            );
+        }
+
+        println!("cargo:rustc-link-search={}", path_lib_dir_display);
         println!("cargo:rustc-link-lib=mujoco");
+
+        // Set the RPATH
+        #[cfg(feature = "use-rpath")]
+        {
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_lib_dir_display);
+            #[cfg(target_os = "linux")]
+            if path_lib_dir.is_relative() {
+                let rpath = PathBuf::from("$ORIGIN").join(&path_lib_dir);
+                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
+            }
+
+            #[cfg(target_os = "macos")]
+            if path_lib_dir.is_relative() {
+                let rpath = PathBuf::from("@loader_path").join(&path_lib_dir);
+                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
+            }
+        }
+
+        // Copy the DLL on Windows, if a relative path is given.
+        // Otherwise assume the DLL is discoverable through PATH.
+        #[cfg(target_os = "windows")]
+        if path_lib_dir.is_relative() {
+            let dll_path = path_lib_dir.parent().unwrap().join("bin/mujoco.dll");
+            if let Err(err) = std::fs::copy(dll_path, "mujoco.dll") {
+                println!("cargo:warning=failed to copy mujoco.dll to the current working directory ({err})");
+            }
+        }
     }
 
-    /* pkg-config fallback */
+    /* pkg-config fallback (MacOS / Linux) with automatic download (Windows / Linux) on failure */
     else {
-        pkg_config::Config::new()
-            .probe("mujoco")
-            .unwrap_or_else(|err| panic!("Unable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set ({err})"));
+        let mujoco_version = env!("CARGO_PKG_VERSION").split_once("mj-").unwrap().1;
+
+        // We don't support automatic downloads on MacOS, however we do support pkg-config.
+        // pkg-config is technically available on Linux, however MuJoCo doesn't really provide
+        // a way to install it to the system.
+        #[cfg(unix)]
+        #[allow(unused)]
+        let allow_download = {
+            let maybe_err = pkg_config::Config::new()
+                .exactly_version(mujoco_version)
+                .probe("mujoco")
+                .err();
+
+            #[cfg(not(feature =  "auto-download-mujoco"))]
+            if let Some(err) = maybe_err {
+                #[cfg(target_os = "linux")]
+                panic!(
+                    "{err}\
+                    \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
+                    \n=================================================================================================\
+                    \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set and the 'auto-download-mujoco' Cargo feature is disabled.\
+                    \nConsider enabling automatic download of MuJoCo: 'cargo build --features \"auto-download-mujoco use-rpath\"'.\
+                    \n================================================================================================="
+                );
+
+                #[cfg(target_os = "macos")]
+                panic!(
+                    "{err}\
+                    \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
+                    \n=================================================================================================\
+                    \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
+                    \n================================================================================================="
+                );
+            }
+
+            maybe_err.is_some()
+        };
+
+        // There is no pkg-config on Windows, thus always download if not otherwise configured.
+        #[cfg(target_os = "windows")]
+        #[allow(unused)]
+        let allow_download = true;
+
+        #[cfg(not(feature =  "auto-download-mujoco"))]
+        #[cfg(target_os = "windows")]
+        panic!(
+            "Unable to locate MuJoCo because 'auto-download-mujoco' Cargo feature is disabled and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
+            \nConsider enabling automatic download of MuJoCo: 'cargo build --features \"auto-download-mujoco\"'."
+        );
+
+        // On Linux and Windows try to automatically download as a fallback.
+        // Other platforms will also fall under this condition, but will panic.
+        #[cfg(not(target_os = "macos"))]
+        #[cfg(feature =  "auto-download-mujoco")]
+        if allow_download {
+            use std::{io::{BufReader, Read}};
+            use sha2::Digest;
+
+            let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_else(|_| {
+                panic!(
+                    "unable to obtain the OS information -- please manually download MuJoCo \
+                    and specify {MUJOCO_DYN_LIB_PATH_VAR} (and potentially add the path to LD_LIBRARY_PATH)"
+                )
+            });
+
+            let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| {
+                panic!(
+                    "unable to obtain the ARCHITECTURE information -- please manually download MuJoCo \
+                    and specify {MUJOCO_DYN_LIB_PATH_VAR} (and potentially add the path to LD_LIBRARY_PATH)"
+                )
+            });
+
+            let download_url = if cfg!(target_os = "linux") {
+                format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-linux-{target_arch}.tar.gz")
+            }
+            else if cfg!(target_os = "windows") {
+                format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-windows-{target_arch}.zip")
+            }
+            else {
+                panic!(
+                    "automatic download of MuJoCo is not supported on {target_os} -- \
+                    please manually download MuJoCo and specify {MUJOCO_DYN_LIB_PATH_VAR} \
+                    (and potentially add the path to LD_LIBRARY_PATH)"
+                );
+            };
+
+            // SHA256 verification of the download.
+            let download_hash_url = format!("{download_url}.sha256");
+
+            // Obtain the download directory from MUJOCO_DOWNLOAD_PATH_VAR.
+            // If not given, assume the current working directory. In the latter case,
+            // also assume that the MuJoCo DLL needs to be copied to the current working
+            // directory, otherwise assume the user will manually add its directory to PATH.
+            #[allow(unused)]  // copy_dll is only relevant to Windows
+            let (download_dir, copy_dll) = if let Ok(value) =
+                std::env::var(MUJOCO_DOWNLOAD_PATH_VAR)
+            {
+                (PathBuf::from(value), false)
+            }
+            else
+            {
+                (PathBuf::from("."), true)
+            };
+
+            // The name of the downloaded archive file.
+            let download_path = download_dir.join(download_url.rsplit_once("/").unwrap().1);
+            let outdirname = download_dir.join(format!("mujoco-{mujoco_version}"));
+            let download_hash_path = download_dir.join(download_hash_url.rsplit_once("/").unwrap().1);
+
+            // Download the file
+            let mut response = ureq::get(&download_url).call().expect("failed to download MuJoCo");
+            let mut body_reader = response.body_mut().as_reader();
+
+            // Save the response data into an actual file
+            std::fs::create_dir_all(download_path.parent().unwrap()).unwrap_or_else(
+                |err| panic!("failed to create parent directory of '{}' ({err})", download_path.display())
+            );
+            let mut file = File::create(&download_path).unwrap_or_else(
+                |err| panic!("could not save archive '{}' ({err})", download_path.display())
+            );
+            std::io::copy(&mut body_reader, &mut file).unwrap_or_else(
+                |err| panic!("failed to copy archive contents to '{}' ({err})", download_path.display())
+            );
+
+            // Download the hash file
+            response = ureq::get(&download_hash_url).call().expect("failed to download MuJoCo's hash file");
+            body_reader = response.body_mut().as_reader();
+            let mut file = File::create(&download_hash_path).unwrap_or_else(
+                |err| panic!("could not save archive '{}' ({err})", download_hash_path.display())
+            );
+            std::io::copy(&mut body_reader, &mut file).unwrap_or_else(
+                |err| panic!("failed to copy archive contents to '{}' ({err})", download_hash_path.display())
+            );
+
+            /* Verify file integrity by verify sha256 match */
+            let mut hashfile_data = String::new();
+            file = File::open(&download_hash_path).expect("failed to open the hash file");
+            file.read_to_string(&mut hashfile_data).expect("failed to read hash file contents");
+            let hash_official = hashfile_data.split_once(' ').unwrap().0;
+
+            file = File::open(&download_path).unwrap();
+            let mut reader = BufReader::new(file);
+            let mut buffer = [0u8; 1024];
+            let mut hasher = sha2::Sha256::new();
+            loop {
+                let n = reader.read(&mut buffer).unwrap_or_else(|err|
+                    panic!("could not read archive '{}' ({err})", download_path.display())
+                );
+                if n == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..n]);
+            }
+            let result = format!("{:x}", hasher.finalize());
+            if hash_official != result {
+                panic!(
+                    "sha256sum of '{}' does not match \
+                    the one stored in the official hash file --- stopping due to security concerns!"
+                , &download_path.display());
+            }
+
+            /* Extraction */
+            #[cfg(target_os = "windows")]
+            extract_windows(&download_path, &outdirname, copy_dll);
+
+            #[cfg(target_os = "linux")]
+            extract_linux(&download_path);
+
+            // No need to keep the downloaded file and its hash file.
+            std::fs::remove_file(&download_path).unwrap_or_else(
+                |err| panic!("failed to delete archive '{}' ({err})", download_path.display())
+            );
+
+            std::fs::remove_file(&download_hash_path).unwrap_or_else(
+                |err| panic!("failed to delete hash file '{}' ({err})", download_hash_path.display())
+            );
+
+            let libdir_path = outdirname.join("lib");
+            let libdir_path_display = libdir_path.display();
+
+            // Set RPATH on Linux targets and rerun the script if the .so is changed.
+            #[cfg(target_os = "linux")]
+            {
+                // Set the RPATH
+                #[cfg(feature = "use-rpath")]
+                {
+                    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", libdir_path_display);
+                    if libdir_path.is_relative() {
+                        let rpath = PathBuf::from("$ORIGIN").join(&libdir_path);
+                        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
+                    }
+                }
+            }
+
+            println!("cargo:rustc-link-search={}", libdir_path_display);
+            println!("cargo:rustc-link-lib=mujoco");
+        }
     }
 
     #[cfg(feature = "ffi-regenerate")]
     build_dependencies::generate_ffi();
+}
+
+#[cfg(target_os = "windows")]
+#[cfg(feature = "auto-download-mujoco")]
+fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
+    let file = File::open(filename).unwrap_or_else(|err| 
+        panic!("failed to open archive '{}' ({err}).", filename.display())
+    );
+    let mut zip = zip::ZipArchive::new(file).unwrap_or_else(|err|
+        panic!("failed to read ZIP metadata ({err}).")
+    );
+
+    for i in 0..zip.len() {
+        let mut zipfile = zip.by_index(i).unwrap();
+        let mut path = if let Some(path) = zipfile.enclosed_name() { path } else {
+            println!("cargo:warning=Skipped potentially unsafe ZIP entry '{}' during extraction", zipfile.name());
+            continue;
+        };
+
+        if zipfile.is_file() {
+            // On Windows, place everything in a new folder.
+            // This is for consistency with Linux targets.
+            path = outdirname.join(path);
+
+            // Create parents
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap_or_else(|err|
+                panic!("failed to create {} and its parents ({err}).", outdirname.display())
+            );
+
+            let mut outfile = File::create(&path).unwrap_or_else(|err|
+                panic!("failed to create file '{}' ({err})", path.display())
+            );
+
+            std::io::copy(&mut zipfile, &mut outfile).unwrap_or_else(|err|
+                panic!("failed to copy {} to {} ({err})", zipfile.name(), path.display())
+            );
+
+            outfile.sync_all().unwrap_or_else(|err|
+                panic!("failed to flush contents to file '{}' ({err})", path.display())
+            );
+        }
+    }
+
+    if copy_mujoco_dll {
+        if let Err(err) = std::fs::copy(outdirname.join("bin").join("mujoco.dll"), "mujoco.dll") {
+            println!("cargo:warning=failed to copy mujoco.dll to the current working directory ({err})");
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[cfg(feature = "auto-download-mujoco")]
+fn extract_linux(filename: &Path) {
+    let file = File::open(filename).unwrap_or_else(
+        |err| panic!("failed to open '{}' ({err})", filename.display())
+    );
+    let tar = flate2::read::GzDecoder::new(file);
+    let mut archive = tar::Archive::new(tar);
+    archive.unpack(filename.parent().unwrap()).expect("failed to unpack MuJoCo archive");
 }

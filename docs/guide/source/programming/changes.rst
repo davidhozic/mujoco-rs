@@ -2,7 +2,7 @@
 Changes from MuJoCo
 ========================
 
-MuJoCo-rs tries to follow the MuJoCo's API with a few exceptions that make it more Rust-idiomatic,
+MuJoCo-rs tries to follow MuJoCo's API with a few exceptions that make it more Rust-idiomatic,
 safer and easier to use.
 
 Methods
