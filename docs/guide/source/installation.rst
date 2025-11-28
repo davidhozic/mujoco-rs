@@ -166,7 +166,7 @@ Dynamic linking is OS-dependent. To dynamically link, the primary variable
    .. tab:: MacOS
 
         One option is to set up your own homebrew file
-        (see `this issue <https://github.com/kcking/homebrew-tap/blob/ffbf7d5e1c11b40ce72ba6bc067f1e5b16c439df/mujoco%403.7.rb>`_).
+        (see `this issue <https://github.com/davidhozic/mujoco-rs/pull/94>`_).
 
         Another option is to copy and link some files:
 
