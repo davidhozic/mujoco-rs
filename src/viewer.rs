@@ -413,11 +413,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     let PhysicalPosition { x, y } = position;
 
                     // The UI might not be detected as covered as dragging can happen slightly outside
-                    // of a (popup) window. This might seem as a ad-hoc solution, but is at the time the
+                    // of a (popup) window. This might seem like an ad-hoc solution, but is at the time the
                     // shortest and most efficient one.
                     #[cfg(feature = "viewer-ui")]
                     if self.ui.dragged() {
-                        continue;    
+                        continue;
                     }
 
                     self.process_cursor_pos(x, y, data);
