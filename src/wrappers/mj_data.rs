@@ -1,3 +1,4 @@
+//! MjData related.
 use super::mj_statistic::{MjWarningStat, MjTimerStat, MjSolverStat};
 use super::mj_model::{MjModel, MjtSameFrame, MjtObj, MjtStage};
 use super::mj_auxiliary::MjContact;

@@ -1,4 +1,4 @@
-//! Module for mjModel
+//! MjModel related.
 use std::ffi::{c_int, CStr, CString, NulError};
 use std::io::{self, Error, ErrorKind};
 use std::path::Path;
