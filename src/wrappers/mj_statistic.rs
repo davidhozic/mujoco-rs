@@ -1,4 +1,4 @@
-//! Statistics related wrappers
+//! Statistics related wrappers.
 use crate::mujoco_c::*;
 
 /***********************************************************************************************************************

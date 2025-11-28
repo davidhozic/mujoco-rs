@@ -16,6 +16,19 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+2.1.0
+================================
+- Option to automatically pull MuJoCo.
+- pkg-config support for Linux and MacOS. Note that this is not officially supported by MuJoCo.
+- Changes to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
+
+  - Added an optional (enabled by default) user interface, made with `egui <https://github.com/emilk/egui>`_.
+
+- New Cargo features:
+
+  - ``auto-download-mujoco``: will automatically download and setup MuJoCo (Windows and Linux).
+  - ``use-rpath``: will embed the path to the MuJoCo C library into the RPATH of the binary (Linux and MacOS).
+
 2.0.1 (MuJoCo 3.3.7)
 ================================
 - Fix the ``renderer`` feature not enabling all the needed crates.

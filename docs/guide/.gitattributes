@@ -1,1 +1,2 @@
 source/img/visualization-example.png filter=lfs diff=lfs merge=lfs -text
+../img_common/viewer_spot.png filter=lfs diff=lfs merge=lfs -text

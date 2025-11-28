@@ -17,20 +17,27 @@ MuJoCo-rs can be added to your project like so:
 
   ::
 
-    cargo add mujoco-rs
+    cargo add mujoco-rs --no-default-features --features "auto-download-mujoco use-rpath viewer viewer-ui renderer"
 
 - **Without** visualization/rendering support:
 
   ::
 
-    cargo add mujoco-rs --no-default-features
+    cargo add mujoco-rs --no-default-features --features "auto-download-mujoco use-rpath"
 
+See :ref:`opt-cargo-features` for information about available Cargo features.
 
-Then additional dependencies need to be installed/configured:
+Then additional dependencies may need to be installed/configured:
 
 - :ref:`mujoco_dep`: The actual physics engine, which is a C library.
 
-
+  - When the ``auto-download-mujoco`` Cargo feature is enabled, MuJoCo is
+    **automatically fetched and configured** on **Linux** and **Windows** platforms.
+  
+  - When the ``use-rpath`` Cargo feature is enabled, the **RPATH** of the final binary will
+    be updated to include the path to the MuJoCo library files. This only affects Linux and MacOS
+    and when dynamically linking (including automated downloads). RPATH is a table inside the binary,
+    which tells the dynamic loader where shared (dynamic) libraries can be found.
 
 
 Dependencies
@@ -41,70 +48,150 @@ Dependencies
 
 MuJoCo
 ---------------
-Because MuJoCo-rs doesn't directly bundle MuJoCo,
-the latter, in the form of a pre-built library or source code, must be `downloaded <mj_download_>`_
-or compiled. Make sure to download or compile MuJoCo version |MUJOCO_VERSION_BOLD|.
 
-Compilation of MuJoCo-rs includes **linking** to the MuJoCo library.
-This requires some environmental variables to be set, which tell
-MuJoCo-rs where to obtain the MuJoCo library.
+Automatic setup (dynamic linking)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The linking process depends on whether you plan to dynamically link (recommended),
-statically link or statically link with support for the C++ based viewer (instead of the Rust-native one).
+Starting from MuJoCo-rs 2.1.0, the MuJoCo library can be **automatically downloaded**, extracted and configured
+for **Linux** and **Windows** platforms by enabling the ``auto-download-mujoco`` Cargo feature:
 
------------------------------
+::
+
+    cargo add mujoco-rs --features "auto-download-mujoco use-rpath"
+
+.. attention::
+
+    Official MuJoCo builds only allow **dynamic linking**. When distributing compiled binaries,
+    the downloaded MuJoCo library must be provided to users in addition to the binary.
+
+By default, the library is downloaded and extracted inside the
+**package root directory** (where your Cargo.toml is located). If you're happy with this,
+nothing further is needed on your part.
+To change the download and extraction location, a custom
+directory path can be given via the ``MUJOCO_DOWNLOAD_DIR`` environmental variable.
+For example: ``MUJOCO_DOWNLOAD_DIR="/home/username/Downloads/" cargo build``.
+
+.. attention::
+
+    On **Linux**, if you run the program and see an error about a missing library file,
+    you can either copy the MuJoCo .so files to a standard location (e.g., /usr/lib/)
+    or add the path to the .so files into ``LD_LIBRARY_PATH``
+    (e.g., ``export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco/``).
+    If you've enabled the ``use-rpath`` Cargo feature, you can avoid this error,  by placing
+    the downloaded ``mujoco-x.x.x`` directory inside the ``MUJOCO_DOWNLOAD_DIR`` directory, which by default is
+    the current working directory.
+
+    On **Windows**, the MuJoCo **DLL** file must be located in the directory from which the executable is run
+    (i.e., the current working directory at runtime), or its directory
+    path must be added to the ``PATH`` environment variable.
+
+.. note::
+
+    Even if the ``auto-download-mujoco`` Cargo feature is enabled, MuJoCo-rs will first try to use pkg-config
+    (Linux and MacOS only) and perform a download only after pkg-config fails. Note that pkg-config is not officially supported
+    by MuJoCo, so this exists as a courtesy for custom setups.
+
+
+----------------------
+
+
+Manual setup
+^^^^^^^^^^^^^^^^^^^^
+
+MuJoCo can also be provided manually.
+Make sure to `download <mj_download_>`_ or compile MuJoCo version |MUJOCO_VERSION_BOLD|.
+
+The manual setup process depends on whether you plan to dynamically link (recommended)
+or statically link (with support for the C++ based viewer wrapper, as an alternative to the Rust-native one).
+
 
 Dynamic linking
 ~~~~~~~~~~~~~~~~~~~~~~
 Dynamic linking is OS-dependent. To dynamically link, the primary variable
 ``MUJOCO_DYNAMIC_LINK_DIR`` must be set. 
 
+.. note::
 
-Linux
-++++++++++++
-When using Linux (bash), the primary variable can be set like so:
-::
+    On Linux and MacOS, if you somehow managed to register MuJoCo with pkg-config, nothing more is needed.
+    MuJoCo provides no official way to do this, but we still keep the option open.
 
-   export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/
+.. tabs::
 
-This is assuming MuJoCo's **.so** file is located inside ``/path/mujoco/lib/``.
+   .. tab:: Linux
 
-Additionally, in the event that the user's program refuses to run and outputs something like:
+        When using Linux (bash), the primary variable can be set like so (assuming MuJoCo's **.so** file is located
+        inside ``/path/mujoco/lib/``):
+        ::
 
-    "error while loading shared libraries: libmujoco.so"
+            export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/
 
-the path to the MuJoCo library's directory must also be added to ``LD_LIBRARY_PATH``:
-::
+        .. attention::
 
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco/lib/
+            When the ``use-rpath`` Cargo feature is enabled, MuJoCo-rs will also update the **RPATH**.
+            To make RPATH work, keep the ``mujoco/`` in the same (relative) directory given to ``MUJOCO_DYNAMIC_LINK_DIR``.
+
+            E.g., if you've set ``MUJOCO_DYNAMIC_LINK_DIR=./mujoco/lib/``, then keep ``mujoco/``
+            in the current working directory (or relative to the compiled binary).
+
+        In the event that the user's program refuses to run and outputs something like:
+
+            "error while loading shared libraries: libmujoco.so"
+
+        the path to the MuJoCo library's directory must also be added to ``LD_LIBRARY_PATH``:
+        ::
+
+            export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco/lib/
+
+   .. tab:: Windows
+
+        When using Windows (powershell), the primary variable can be set like so:
+
+        ::
+
+        $env:MUJOCO_DYNAMIC_LINK_DIR = "/path/mujoco/lib/"
+
+        Additionally, when running the program, the ``mujoco.dll`` file needs to be placed in the **current working directory**.
+        Alternatively, the path to the DLL file can be added to the PATH environmental variable.
+        For help adding the path ``/path/mujoco/bin/`` to the PATH variable, see
+        `here <https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/>`_.
+
+        .. attention::
+
+            Make sure the PATH variable contains the path to the directory of the **.dll** file, **not** of the **.lib** file.
+            The **.lib** file is used only for compilation, while the **.dll** is used at runtime.
+            The **.dll** file is contained in the ``bin/`` directory of the MuJoCo download.
+            The **.lib** file is contained in the ``lib/`` directory of the MuJoCo download.
 
 
-Windows
-+++++++++++
-When using Windows (powershell), the primary variable can be set like so:
+   .. tab:: MacOS
 
-::
+        One option is to set up your own homebrew file
+        (see `this issue <https://github.com/davidhozic/mujoco-rs/pull/94>`_).
 
-   $env:MUJOCO_DYNAMIC_LINK_DIR = "/path/mujoco/lib/"
+        Another option is to copy and link some files:
 
-Additionally, the library in DLL form must be added to the **PATH variable**.
-For help adding the path ``/path/mujoco/bin/`` to the PATH variable, see
-`here <https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/>`_.
-Alternatively, the DLL file can be placed in the working directory.
+        1. Open the `downloaded <mj_download_>`_ .dmg file.
+        2. Copy ``mujoco.framework`` to the current working directory.
+        3. Create a symbolic link to the copied: ``libmujoco.x.x.x.dylib`` and name it ``libmujoco.dylib``:
 
-.. attention::
+        - ``ln -s mujoco.framework/Versions/Current/libmujoco.x.x.x.dylib libmujoco.dylib``.
 
-    Make sure the PATH variable contains the path to the **.dll** file, **NOT .lib**.
-    The **.lib** file is used only for compilation, while the **.dll** is used at runtime.
-    The **.dll** file is contained in the ``bin/`` directory of the MuJoCo download.
+        4. Set the primary environment variable:
+
+        - ``export MUJOCO_DYNAMIC_LINK_DIR=./``
+
+        5. Enable MuJoCo-rs's ``use-rpath`` Cargo feature.
+
+        In the event that the user's program refuses to run and outputs something like:
+
+            "Library not loaded"
+
+        the path to the MuJoCo library's directory must also be added to ``DYLD_LIBRARY_PATH``:
+        ::
+
+            export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/path/to/mujoco/lib/
 
 
-MacOS
-++++++++++++++++++
-MacOS is untested.
-
-
-----------------------
 
 .. _static_linking:
 
@@ -122,7 +209,7 @@ a safe interface between Rust and the C++ Simulate code.
 
 To build statically linkable libraries, perform the following steps:
 
-1. Clone the MuJoCo-rs repository,
+1. Clone MuJoCo-rs's repository,
 2. Change your directory to the cloned repository,
 3. Run commands:
    ::
@@ -132,9 +219,9 @@ To build statically linkable libraries, perform the following steps:
        cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF
        cmake --build build --parallel --target glfw libmujoco_simulate --config=Release
 
-   The builds are tested with the ``gcc`` compiler.
+   This was tested with the ``gcc`` compiler.
    
-   Note that ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF`` disables link-time optimization which results in slightly
+   Note that ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF`` **disables link-time optimization**, thus resulting in slightly
    lower performance. Enabling it causes compatibility problems on the Linux platform. See the attention block below for more info.
 
 4. Set the environmental variable ``MUJOCO_STATIC_LINK_DIR``. Bash example:
@@ -161,7 +248,7 @@ To build statically linkable libraries, perform the following steps:
 
     ``cmake -B build -S . -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON ...``
 
-    When LTO is enabled, the **system linker** must be used, because rust-lld doesn't know how to read the extra LTO information,
+    When LTO is enabled, the **system linker** must be used, because rust-lld doesn't know how to read extra LTO information
     produced by other linkers:
 
     ::

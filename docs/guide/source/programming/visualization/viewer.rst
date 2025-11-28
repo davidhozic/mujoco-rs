@@ -15,9 +15,9 @@ Rust-native 3D viewer
 =======================
 
 Rust-native 3D viewer supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
-This also includes object perturbations.
-Currently, no user interface is provided (buttons, drop-downs, etc.), however a sort of additional input is
-planned for future development.
+This also includes object perturbations. Optionally, enabled by the ``viewer-ui`` feature (default), the viewer
+also provides a user interface, which tries to replicate the original C++ viewer as best as possible
+and thus allows control of constraints, joints, actuators, etc.
 
 A screenshot of the Rust 3D viewer is shown below.
 
@@ -80,7 +80,6 @@ This is optional and can be removed or reduced to run the simulation faster than
     The ``sleep()`` function is not accurate. For accurate timing,
     use `std::time::Instant <https://doc.rust-lang.org/std/time/struct.Instant.html>`_ to poll the elapsed time.
 
-Interaction with the viewer is described with a help menu, which is shown on launch of the viewer.
 For more, refer to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
 `examples <https://github.com/davidhozic/mujoco-rs/tree/main/examples>`_.
 
