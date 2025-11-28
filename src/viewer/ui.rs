@@ -543,6 +543,11 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         self.egui_ctx.is_pointer_over_area()
     }
 
+    /// Checks whether the UI is currently being dragged.
+    pub(crate) fn dragged(&self) -> bool {
+        self.egui_ctx.dragged_id().is_some()
+    }
+
     /// Resets OpenGL state. This is needed for MuJoCo's renderer.
     pub(crate) fn reset(&mut self) {
         let gl = &self.gl;

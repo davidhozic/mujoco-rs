@@ -376,17 +376,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.rect_full.height = viewport_size.1;
     }
 
-    /// Checks whether the cursor is inside the user interface (i.e., outside of MuJoCo's scene).
-    #[cfg(feature = "viewer-ui")]
-    fn cursor_outside(&self, x: f64, y: f64) -> bool {
-        const LEFT_EVENT_PAD: f64 = 10.0;  // additional safety to prevent glitches
-        let mut left = self.rect_view.left as f64;
-        if left > 0.0 {  // don't add safety margin if nothing is overlayed
-            left += LEFT_EVENT_PAD;
-        }
-        x < left || y < self.rect_view.bottom as f64
-    }
-
     /// Processes user input events.
     fn process_events(&mut self, data: &mut MjData<M>) {
         self.event_loop.pump_app_events(Some(Duration::ZERO), &mut self.adapter);
@@ -400,12 +389,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             match window_event {
                 WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
                 WindowEvent::MouseInput {state, button, .. } => {
-                    #[cfg(feature = "viewer-ui")]
-                    let (x, y) = self.raw_cursor_position;
                     let is_pressed = state == ElementState::Pressed;
                     
                     #[cfg(feature = "viewer-ui")]
-                    if (self.cursor_outside(x, y) || self.ui.covered()) && is_pressed {
+                    if self.ui.covered() && is_pressed {
                         continue;
                     }
 
@@ -424,6 +411,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                 WindowEvent::CursorMoved { position, .. } => {
                     let PhysicalPosition { x, y } = position;
+
+                    // The UI might not be detected as covered as dragging can happen slightly outside
+                    // of a (popup) window. This might seem like an ad-hoc solution, but is at the time the
+                    // shortest and most efficient one.
+                    #[cfg(feature = "viewer-ui")]
+                    if self.ui.dragged() {
+                        continue;
+                    }
+
                     self.process_cursor_pos(x, y, data);
                 }
 
@@ -562,10 +558,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 // Zoom in/out
                 WindowEvent::MouseWheel {delta, ..} => {
                     #[cfg(feature = "viewer-ui")]
-                    let (x, y) = self.raw_cursor_position;
-
-                    #[cfg(feature = "viewer-ui")]
-                    if self.cursor_outside(x, y) || self.ui.covered() {
+                    if self.ui.covered() {
                         continue;
                     }
 
