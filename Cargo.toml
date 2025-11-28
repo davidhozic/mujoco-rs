@@ -11,7 +11,7 @@ categories = ["simulation", "science::robotics", "api-bindings"]
 homepage = "https://crates.io/crates/mujoco-rs"
 documentation = "https://docs.rs/mujoco-rs/"
 
-exclude = ["src/cpp/*", ".gitignore", ".gitmodules", "mujoco/*"]
+exclude = ["src/cpp/*", ".gitignore", ".gitmodules", "mujoco/*", "docs/"]
 
 [package.metadata.docs.rs]
 all-features = true

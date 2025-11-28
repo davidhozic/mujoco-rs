@@ -16,7 +16,7 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
-Unreleased
+2.1.0
 ================================
 - Option to automatically pull MuJoCo.
 - pkg-config support for Linux and MacOS. Note that this is not officially supported by MuJoCo.
