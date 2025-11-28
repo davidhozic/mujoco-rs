@@ -385,7 +385,6 @@ fn main() {
             // Set RPATH on Linux targets and rerun the script if the .so is changed.
             #[cfg(target_os = "linux")]
             {
-                println!("cargo:rerun-if-changed={}", libdir_path.join("libmujoco.so").display());
                 // Set the RPATH
                 #[cfg(feature = "use-rpath")]
                 {
@@ -396,10 +395,6 @@ fn main() {
                     }
                 }
             }
-
-            // Rerun the script on Windows if the .lib is changed.
-            #[cfg(target_os = "windows")]
-            println!("cargo:rerun-if-changed={}", libdir_path.join("mujoco.lib").display());
 
             println!("cargo:rustc-link-search={}", libdir_path_display);
             println!("cargo:rustc-link-lib=mujoco");
@@ -437,7 +432,6 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
                 panic!("failed to create {} and its parents ({err}).", outdirname.display())
             );
 
-            // Don't recreate to avoid trouble with println!("cargo:rerun-if-changed={}", ...)
             let mut outfile = File::create(&path).unwrap_or_else(|err|
                 panic!("failed to create file '{}' ({err})", path.display())
             );

@@ -120,7 +120,7 @@ Dynamic linking is OS-dependent. To dynamically link, the primary variable
    .. tab:: Linux
 
         When using Linux (bash), the primary variable can be set like so (assuming MuJoCo's **.so** file is located
-        inside ``/path/mujoco/lib/``.):
+        inside ``/path/mujoco/lib/``):
         ::
 
             export MUJOCO_DYNAMIC_LINK_DIR=/path/mujoco/lib/
@@ -165,7 +165,7 @@ Dynamic linking is OS-dependent. To dynamically link, the primary variable
 
    .. tab:: MacOS
 
-        One option is setup your own homebrew file
+        One option is to set up your own homebrew file
         (see `this issue <https://github.com/kcking/homebrew-tap/blob/ffbf7d5e1c11b40ce72ba6bc067f1e5b16c439df/mujoco%403.7.rb>`_).
 
         Another option is to copy and link some files:
