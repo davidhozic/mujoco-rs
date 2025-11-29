@@ -30,7 +30,6 @@ The main features on top of MuJoCo include
   - Automatic allocation and cleanup.
   - Lifetime guarantees.
 
-- Automatic download and setup of MuJoCo.
 - Methods as function wrappers.
 - Easy manipulation of simulation data via attribute views.
 - High-level model editing.
@@ -47,12 +46,7 @@ Screenshot of the built-in Rust viewer. Showing scene from [MuJoCo's menagerie](
 
 ## Optional Cargo features
 Optional Cargo features can be enabled:
-  
-- ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded and configured.
 
-  - This is only available on Linux and Windows.
-
-- ``use-rpath``: On Linux and MacOS, when dynamically linking, set the RPATH of the final binary.
 - ``viewer``: enables the Rust-native MuJoCo viewer.
 
   - ``viewer-ui``: enables the (additional) user UI within the viewer.
@@ -61,6 +55,9 @@ Optional Cargo features can be enabled:
   This requires static linking to a modified fork of MuJoCo, as described in :ref:`installation`.
 - ``renderer``: enables offscreen rendering for writing RGB and
   depth data to memory or file.
+- ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded to the specified path.
+
+  - This is only available on Linux and Windows.
 
 By default, ``viewer``, ``viewer-ui`` and ``renderer`` are enabled.
 
