@@ -132,7 +132,7 @@ You should now be able to compile and run your crate.
 
 Regardless of whether MuJoCo is downloaded by MuJoCo-rs or you provided it manually, you may encounter
 **runtime errors** about the library not being found. This can happen if the library is not
-located in a **standard location** nor added to the OS-dependent **path environment variable**.
+located in a **standard location** nor added to the OS-dependent **path environmental variable**.
 You can fix these kind of errors like so:
 
 .. tabs::
