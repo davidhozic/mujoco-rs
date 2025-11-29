@@ -89,7 +89,7 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
         Download MuJoCo from `here <mj_download_>`_.
 
         After download and extraction of MuJoCo, you can tell MuJoCo-rs where to find MuJoCo, by
-        setting the ``MUJOCO_DYNAMIC_LINK_DIR`` environment variable to the path of
+        setting the ``MUJOCO_DYNAMIC_LINK_DIR`` environment variable to the **absolute** path of
         the ``lib/`` subdirectory.
 
         .. tabs::
@@ -206,11 +206,12 @@ To build statically linkable libraries, perform the following steps:
    Note that ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF`` **disables link-time optimization**, thus resulting in slightly
    lower performance. Enabling it causes compatibility problems on the Linux platform. See the attention block below for more info.
 
-4. Set the environmental variable ``MUJOCO_STATIC_LINK_DIR``. Bash example:
+4. Set the environmental variable ``MUJOCO_STATIC_LINK_DIR`` to the **absolute** path of the ``lib/`` subdirectory
+   inside ``mujoco/build/``. Bash example:
 
    ::
 
-      export MUJOCO_STATIC_LINK_DIR=/path/mujoco/lib/
+      export MUJOCO_STATIC_LINK_DIR=/path/mujoco/build/lib/
 
 5. Build MuJoCo-rs
 
