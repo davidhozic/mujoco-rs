@@ -275,9 +275,6 @@ fn main() {
             let download_hash_url = format!("{download_url}.sha256");
 
             // Obtain the download directory from MUJOCO_DOWNLOAD_PATH_VAR.
-            // If not given, assume the current working directory. In the latter case,
-            // also assume that the MuJoCo DLL needs to be copied to the current working
-            // directory, otherwise assume the user will manually add its directory to PATH.
             let download_dir = PathBuf::from(std::env::var(MUJOCO_DOWNLOAD_PATH_VAR).unwrap_or_else(|_| {
                 let os_example = if cfg!(unix) {
                     format!("e.g., export {MUJOCO_DOWNLOAD_PATH_VAR}=\"$(realpath .)\"")

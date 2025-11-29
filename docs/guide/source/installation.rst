@@ -27,7 +27,7 @@ MuJoCo-rs can be added to your project like so:
 
 See :ref:`opt-cargo-features` for information about available Cargo features.
 
-Then :ref:`mujoco_dep` installation needs to be configured, like described below.
+Then :ref:`mujoco_dep` installation needs to be configured, as described below.
 MuJoCo is the actual physics engine that MuJoCo-rs depends on.
 
 Dependencies
@@ -108,7 +108,7 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
                     ::
 
-                    $env:MUJOCO_DYNAMIC_LINK_DIR = "/path/mujoco/lib/"
+                        $env:MUJOCO_DYNAMIC_LINK_DIR = "/path/mujoco/lib/"
 
             .. tab:: MacOS
 
@@ -130,14 +130,10 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
 You should now be able to compile and run your crate.
 
-Regardless of whether MuJoCo is download by MuJoCo-rs or you provided it manually, you may encounter
+Regardless of whether MuJoCo is downloaded by MuJoCo-rs or you provided it manually, you may encounter
 **runtime errors** about the library not being found. This can happen if the library is not
 located in a **standard location** nor added to the OS-dependent **path environment variable**.
 You can fix these kind of errors like so:
-
-.. In the event that the user's program refuses to run and outputs something like:
-
-..     "error while loading shared libraries: libmujoco.so"
 
 .. tabs::
 
@@ -155,7 +151,7 @@ You can fix these kind of errors like so:
 
     .. tab:: Windows
 
-        Place ``mujoco.dll`` file the **current working directory** (next to the EXE).
+        Place the ``mujoco.dll`` file in the **current working directory** (next to the EXE).
         Alternatively, the path to the DLL file's directory can be added to the PATH environmental variable.
         See `here <https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/>`_
         for a tutorial on configuring PATH.
