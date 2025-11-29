@@ -26,10 +26,6 @@ Main features
 MuJoCo-rs tries to stay close to the MuJoCo's C API, with a few additional features for ease of use.
 The main features on top of MuJoCo include:
 
-- Automatic download and setup of MuJoCo:
-
-  - When the ``auto-download-mujoco`` Cargo feature is enabled.
-
 - Safe wrappers around structs:
   
   - Automatic allocation and cleanup.
@@ -57,12 +53,7 @@ For installation, see :ref:`installation`.
 Optional Cargo features
 =======================
 Optional Cargo features can be enabled:
-  
-- ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded and configured.
 
-  - This is only available on Linux and Windows.
-
-- ``use-rpath``: On Linux and MacOS, when dynamically linking, set the RPATH of the final binary.
 - ``viewer``: enables the Rust-native MuJoCo viewer.
 
   - ``viewer-ui``: enables the (additional) user UI within the viewer.
@@ -71,6 +62,9 @@ Optional Cargo features can be enabled:
   This requires static linking to a modified fork of MuJoCo, as described in :ref:`installation`.
 - ``renderer``: enables offscreen rendering for writing RGB and
   depth data to memory or file.
+- ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded to the specified path.
+
+  - This is only available on Linux and Windows.
 
 By default, ``viewer``, ``viewer-ui`` and ``renderer`` are enabled.
 
