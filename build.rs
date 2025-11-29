@@ -172,23 +172,6 @@ fn main() {
         println!("cargo:rustc-link-search={}", path_lib_dir_display);
         println!("cargo:rustc-link-lib=mujoco");
 
-        // Set the RPATH
-        #[cfg(feature = "use-rpath")]
-        {
-            println!("cargo:rustc-link-arg=-Wl,-rpath,{}", path_lib_dir_display);
-            #[cfg(target_os = "linux")]
-            if path_lib_dir.is_relative() {
-                let rpath = PathBuf::from("$ORIGIN").join(&path_lib_dir);
-                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
-            }
-
-            #[cfg(target_os = "macos")]
-            if path_lib_dir.is_relative() {
-                let rpath = PathBuf::from("@loader_path").join(&path_lib_dir);
-                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
-            }
-        }
-
         // Copy the DLL on Windows, if a relative path is given.
         // Otherwise assume the DLL is discoverable through PATH.
         #[cfg(target_os = "windows")]
@@ -223,7 +206,7 @@ fn main() {
                     \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
                     \n=================================================================================================\
                     \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set and the 'auto-download-mujoco' Cargo feature is disabled.\
-                    \nConsider enabling automatic download of MuJoCo: 'cargo build --features \"auto-download-mujoco use-rpath\"'.\
+                    \nConsider enabling automatic download of MuJoCo: 'cargo build --features \"auto-download-mujoco\"'.\
                     \n================================================================================================="
                 );
 
@@ -295,16 +278,26 @@ fn main() {
             // If not given, assume the current working directory. In the latter case,
             // also assume that the MuJoCo DLL needs to be copied to the current working
             // directory, otherwise assume the user will manually add its directory to PATH.
-            #[allow(unused)]  // copy_dll is only relevant to Windows
-            let (download_dir, copy_dll) = if let Ok(value) =
-                std::env::var(MUJOCO_DOWNLOAD_PATH_VAR)
-            {
-                (PathBuf::from(value), false)
+            let download_dir = PathBuf::from(std::env::var(MUJOCO_DOWNLOAD_PATH_VAR).unwrap_or_else(|_| {
+                let os_example = if cfg!(unix) {
+                    format!("e.g., export {MUJOCO_DOWNLOAD_PATH_VAR}=\"$(realpath .)\"")
+                } else {
+                    format!("e.g., $env:{MUJOCO_DOWNLOAD_PATH_VAR}=\"/full/absolute/path/\"")
+                };
+                panic!(
+                    "when Cargo feature 'auto-download-mujoco' is enabled, {MUJOCO_DOWNLOAD_PATH_VAR} must be set to \
+                    an absolute path, into which MuJoCo will be extracted --- \
+                    {os_example}",
+                );
+            }));
+
+            if download_dir.is_relative() {
+                panic!(
+                    "{MUJOCO_DOWNLOAD_PATH_VAR} must be an absolute path to the location \
+                    where MuJoCo will be downloaded and extracted (was given '{}').",
+                    download_dir.display()
+                )
             }
-            else
-            {
-                (PathBuf::from("."), true)
-            };
 
             // The name of the downloaded archive file.
             let download_path = download_dir.join(download_url.rsplit_once("/").unwrap().1);
@@ -381,20 +374,8 @@ fn main() {
 
             let libdir_path = outdirname.join("lib");
             let libdir_path_display = libdir_path.display();
-
-            // Set RPATH on Linux targets and rerun the script if the .so is changed.
-            #[cfg(target_os = "linux")]
-            {
-                // Set the RPATH
-                #[cfg(feature = "use-rpath")]
-                {
-                    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", libdir_path_display);
-                    if libdir_path.is_relative() {
-                        let rpath = PathBuf::from("$ORIGIN").join(&libdir_path);
-                        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", rpath.display());
-                    }
-                }
-            }
+            let outdirname_base = outdirname.file_name().unwrap();
+            let libdir_base = PathBuf::from(outdirname_base).join("lib");
 
             println!("cargo:rustc-link-search={}", libdir_path_display);
             println!("cargo:rustc-link-lib=mujoco");

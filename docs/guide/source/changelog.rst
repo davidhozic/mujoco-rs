@@ -26,8 +26,7 @@ update of MuJoCo alone can increase the major version.
 
 - New Cargo features:
 
-  - ``auto-download-mujoco``: will automatically download and setup MuJoCo (Windows and Linux).
-  - ``use-rpath``: will embed the path to the MuJoCo C library into the RPATH of the binary (Linux and MacOS).
+  - ``auto-download-mujoco``: will automatically download MuJoCo (Windows and Linux).
 
 2.0.1 (MuJoCo 3.3.7)
 ================================
