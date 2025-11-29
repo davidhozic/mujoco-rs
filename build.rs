@@ -120,7 +120,7 @@ fn main() {
         if !path_lib_file.is_file() {
             panic!(
                 "{MUJOCO_STATIC_LIB_PATH_VAR} must be path to the 'lib/' subdirectory (i.e., 'mujoco-x.x.x/lib/') --- \
-                '{path_lib_dir_display}' does not appear to contain '{}'.",
+                '{path_lib_dir_display}' does not appear to contain '{}' or it doesn't exist.",
                 path_lib_file.file_name().unwrap().to_str().unwrap()
             );
         }
@@ -164,7 +164,7 @@ fn main() {
         if !path_lib_file.is_file() {
             panic!(
                 "{MUJOCO_DYN_LIB_PATH_VAR} must be path to the 'lib/' subdirectory (i.e., 'mujoco-x.x.x/lib/') --- \
-                '{path_lib_dir_display}' does not appear to contain '{}'.",
+                '{path_lib_dir_display}' does not appear to contain '{}' or it doesn't exist.",
                 path_lib_file.file_name().unwrap().to_str().unwrap()
             );
         }
