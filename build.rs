@@ -214,7 +214,7 @@ fn main() {
                     \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
                     \n=================================================================================================\
                     \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set and the 'auto-download-mujoco' Cargo feature is disabled.\
-                    \nConsider enabling automatic download of MuJoCo: 'cargo build --features \"auto-download-mujoco\"'.\
+                    \nConsider enabling automatic download of MuJoCo: 'cargo add mujoco-rs --features \"auto-download-mujoco\"'.\
                     \n================================================================================================="
                 );
 
@@ -240,7 +240,7 @@ fn main() {
         #[cfg(target_os = "windows")]
         panic!(
             "Unable to locate MuJoCo because 'auto-download-mujoco' Cargo feature is disabled and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
-            \nConsider enabling automatic download of MuJoCo: 'cargo build --features \"auto-download-mujoco\"'."
+            \nConsider enabling automatic download of MuJoCo: 'cargo add mujoco-rs --features \"auto-download-mujoco\"'."
         );
 
         // On Linux and Windows try to automatically download as a fallback.
