@@ -283,7 +283,7 @@ fn main() {
                 };
                 panic!(
                     "when Cargo feature 'auto-download-mujoco' is enabled, {MUJOCO_DOWNLOAD_PATH_VAR} must be set to \
-                    an absolute path, into which MuJoCo will be extracted --- \
+                    an absolute path, where MuJoCo will be extracted --- \
                     {os_example}",
                 );
             }));
