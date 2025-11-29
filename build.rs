@@ -358,7 +358,7 @@ fn main() {
 
             /* Extraction */
             #[cfg(target_os = "windows")]
-            extract_windows(&download_path, &outdirname, copy_dll);
+            extract_windows(&download_path, &outdirname);
 
             #[cfg(target_os = "linux")]
             extract_linux(&download_path);
@@ -373,11 +373,7 @@ fn main() {
             );
 
             let libdir_path = outdirname.join("lib");
-            let libdir_path_display = libdir_path.display();
-            let outdirname_base = outdirname.file_name().unwrap();
-            let libdir_base = PathBuf::from(outdirname_base).join("lib");
-
-            println!("cargo:rustc-link-search={}", libdir_path_display);
+            println!("cargo:rustc-link-search={}", libdir_path.display());
             println!("cargo:rustc-link-lib=mujoco");
         }
     }
@@ -388,7 +384,7 @@ fn main() {
 
 #[cfg(target_os = "windows")]
 #[cfg(feature = "auto-download-mujoco")]
-fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
+fn extract_windows(filename: &Path, outdirname: &Path) {
     let file = File::open(filename).unwrap_or_else(|err| 
         panic!("failed to open archive '{}' ({err}).", filename.display())
     );
@@ -424,12 +420,6 @@ fn extract_windows(filename: &Path, outdirname: &Path, copy_mujoco_dll: bool) {
             outfile.sync_all().unwrap_or_else(|err|
                 panic!("failed to flush contents to file '{}' ({err})", path.display())
             );
-        }
-    }
-
-    if copy_mujoco_dll {
-        if let Err(err) = std::fs::copy(outdirname.join("bin").join("mujoco.dll"), "mujoco.dll") {
-            println!("cargo:warning=failed to copy mujoco.dll to the current working directory ({err})");
         }
     }
 }
