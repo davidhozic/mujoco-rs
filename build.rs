@@ -110,6 +110,10 @@ fn main() {
         let path_lib_dir = PathBuf::from(path);
         let path_lib_dir_display = path_lib_dir.display();
 
+        if path_lib_dir.is_relative() {
+            panic!("{MUJOCO_STATIC_LIB_PATH_VAR} must be an absolute path ('{path_lib_dir_display}' is not).");
+        }
+
         let path_lib_file = if cfg!(target_os = "windows") {
             path_lib_dir.join("mujoco.lib")
         } else {
@@ -151,6 +155,10 @@ fn main() {
     else if let Some(path) = mujoco_dyn_link_dir {
         let path_lib_dir = PathBuf::from(path);
         let path_lib_dir_display = path_lib_dir.display();
+
+        if path_lib_dir.is_relative() {
+            panic!("{MUJOCO_DYN_LIB_PATH_VAR} must be an absolute path ('{path_lib_dir_display}' is not).");
+        }
 
         let path_lib_file = if cfg!(target_os = "windows") {
             path_lib_dir.join("mujoco.lib")
