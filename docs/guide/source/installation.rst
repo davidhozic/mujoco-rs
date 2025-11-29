@@ -89,7 +89,7 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
         Download MuJoCo from `here <mj_download_>`_.
 
         After download and extraction of MuJoCo, you can tell MuJoCo-rs where to find MuJoCo, by
-        setting the ``MUJOCO_DYNAMIC_LINK_DIR`` environment variable to the **absolute** path of
+        setting the ``MUJOCO_DYNAMIC_LINK_DIR`` environment variable to the path of
         the ``lib/`` subdirectory.
 
         .. tabs::
@@ -140,13 +140,13 @@ You can fix these kind of errors like so:
     .. tab:: Linux
 
         Either copy ``libmujoco.so`` and ``libmujoco.so.x.y.z`` to the standard location (i.e., ``/usr/lib/``)
-        
+
         or,
 
         Update the ``LD_LIBRARY_PATH`` environment variable.
         Assuming ``libmujoco.so`` is located in ``/path/to/mujoco/lib/``:
         ::
-        
+
             export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/mujoco/lib/
 
     .. tab:: Windows
