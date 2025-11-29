@@ -112,7 +112,7 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
             .. tab:: MacOS
 
-                    One option is to set up your own homebrew file
+                    One option is to set up your own homebrew file and install pkg-config
                     (see `this issue <https://github.com/davidhozic/mujoco-rs/pull/94>`_).
 
                     Another option is to copy and link some files:
@@ -139,7 +139,7 @@ You can fix these kind of errors like so:
 
     .. tab:: Linux
 
-        Either copy ``libmujoco.so`` and ``libmujoco.x.y.z.so`` to the standard location (i.e., ``/usr/lib/``)
+        Either copy ``libmujoco.so`` and ``libmujoco.so.x.y.z`` to the standard location (i.e., ``/usr/lib/``)
         
         or,
 
