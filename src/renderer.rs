@@ -42,7 +42,6 @@ pub struct MjRendererBuilder<M: Deref<Target = MjModel> + Clone> {
     font_scale: MjtFontScale,
     camera: MjvCamera,
     opts: MjvOption,
-    multisamples: u8,
     model_type: PhantomData<M>
 }
 
@@ -59,7 +58,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRendererBuilder<M> {
             width: 0, height: 0,
             num_visual_internal_geom: EXTRA_INTERNAL_VISUAL_GEOMS, num_visual_user_geom: 0,
             rgb: true, depth: false, font_scale: MjtFontScale::mjFONTSCALE_100,
-            camera: MjvCamera::default(), opts: MjvOption::default(), multisamples: 0,
+            camera: MjvCamera::default(), opts: MjvOption::default(),
             model_type: PhantomData
         }
     }
@@ -108,8 +107,6 @@ which can be configured at the top of the model's XML like so:
         font_scale: MjtFontScale;       "font scale of drawn text (with [MjrContext]).";
         camera: MjvCamera;              "camera used for drawing.";
         opts: MjvOption;                "visualization options.";
-
-        multisamples: u8;              "number of samples for multisampling";
     }
 
     /// Builds a [`MjRenderer`].
@@ -123,7 +120,7 @@ which can be configured at the top of the model's XML like so:
             width = global.offwidth as u32;
         }
 
-        let gl_state = GlState::new(width.try_into().unwrap(), height.try_into().unwrap(), self.multisamples).map_err(
+        let gl_state = GlState::new(width.try_into().unwrap(), height.try_into().unwrap()).map_err(
             |e| RendererError::GlutinError(e)
         )?;
 

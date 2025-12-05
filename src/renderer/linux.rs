@@ -1,5 +1,3 @@
-use std::num::NonZero;
-
 use glutin::api::egl::display::Display;
 use glutin::api::egl::{context::PossiblyCurrentContext, surface::Surface, device::Device};
 use glutin::context::{ContextApi, ContextAttributesBuilder, GlProfile, Version};
@@ -7,6 +5,7 @@ use glutin::prelude::{GlDisplay, NotCurrentGlContext, PossiblyCurrentGlContext};
 use glutin::surface::{PbufferSurface, SurfaceAttributesBuilder};
 use glutin::config::{ConfigSurfaceTypes, ConfigTemplateBuilder};
 
+use std::num::NonZero;
 
 
 /// GlState implementation, based on EGL for GNU Linux platforms.
@@ -17,7 +16,7 @@ pub(crate) struct GlState {
 
 
 impl GlState {
-    pub(crate) fn new(width: NonZero<u32>, height: NonZero<u32>, multisamples: u8) -> glutin::error::Result<Self>{
+    pub(crate) fn new(width: NonZero<u32>, height: NonZero<u32>) -> glutin::error::Result<Self>{
         let device = Device::query_devices()?.next().unwrap();
         unsafe { 
             let display = Display::with_device(&device, None)?;
@@ -27,11 +26,9 @@ impl GlState {
                 .with_alpha_size(0)
                 .with_depth_size(24)
                 .with_stencil_size(8)
-                .with_multisampling(multisamples)
                 .build();
 
             let config = display.find_configs(config_template)?.next().unwrap();
-
             let context_attrs = ContextAttributesBuilder::new()
                 .with_profile(GlProfile::Compatibility)
                 .with_context_api(ContextApi::OpenGl(Some(Version::new(2, 0))))

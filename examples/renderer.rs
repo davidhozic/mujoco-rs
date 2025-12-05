@@ -42,8 +42,8 @@ fn main() {
     /* Create the output directory for saving png files */
     fs::create_dir_all(OUTPUT_DIRECTORY).unwrap();
 
-    /* Model and data */
-    let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+    // /* Model and data */
+    let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
     let mut data = MjData::new(&model);  // or model.make_data()
 
     /* Renderer for rendering at 1280x720 px (width x height) */
@@ -54,7 +54,6 @@ fn main() {
         .font_scale(MjtFontScale::mjFONTSCALE_100)  // scale of the font drawn by OpenGL
         .rgb(true)  // rgb rendering
         .depth(true)  // depth rendering
-        .multisamples(0)
         .camera(MjvCamera::default())  // default free camera
         .build(&model).expect("failed to initialize the renderer");
 
