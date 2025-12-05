@@ -54,6 +54,7 @@ fn main() {
         .font_scale(MjtFontScale::mjFONTSCALE_100)  // scale of the font drawn by OpenGL
         .rgb(true)  // rgb rendering
         .depth(true)  // depth rendering
+        .multisamples(0)
         .camera(MjvCamera::default())  // default free camera
         .build(&model).expect("failed to initialize the renderer");
 

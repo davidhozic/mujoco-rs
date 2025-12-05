@@ -1,17 +1,12 @@
 //! Module related to implementation of the [`MjRenderer`].
-use crate::render_base::{GlState, RenderBase, sync_geoms};
 use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_rendering::MjrContext;
+use crate::render_base::sync_geoms;
 use crate::builder_setters;
 use crate::prelude::*;
 
-
-
 use bitflags::bitflags;
-use glutin::prelude::PossiblyCurrentGlContext;
-use glutin::surface::GlSurface;
 use png::Encoder;
-use winit::event_loop::EventLoop;
 
 use std::io::{self, BufWriter, ErrorKind, Write};
 use std::fmt::Display;
@@ -20,6 +15,14 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::Path;
 use std::fs::File;
+
+
+#[cfg(target_os = "linux")]
+mod linux;
+
+#[cfg(target_os = "linux")]
+use linux::GlState;
+
 
 const RGB_NOT_FOUND_ERR_STR: &str = "RGB rendering is not enabled (renderer.with_rgb_rendering(true))";
 const DEPTH_NOT_FOUND_ERR_STR: &str = "depth rendering is not enabled (renderer.with_depth_rendering(true))";
@@ -39,6 +42,7 @@ pub struct MjRendererBuilder<M: Deref<Target = MjModel> + Clone> {
     font_scale: MjtFontScale,
     camera: MjvCamera,
     opts: MjvOption,
+    multisamples: u8,
     model_type: PhantomData<M>
 }
 
@@ -55,7 +59,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjRendererBuilder<M> {
             width: 0, height: 0,
             num_visual_internal_geom: EXTRA_INTERNAL_VISUAL_GEOMS, num_visual_user_geom: 0,
             rgb: true, depth: false, font_scale: MjtFontScale::mjFONTSCALE_100,
-            camera: MjvCamera::default(), opts: MjvOption::default(), model_type: PhantomData
+            camera: MjvCamera::default(), opts: MjvOption::default(), multisamples: 0,
+            model_type: PhantomData
         }
     }
 
@@ -104,6 +109,7 @@ which can be configured at the top of the model's XML like so:
         camera: MjvCamera;              "camera used for drawing.";
         opts: MjvOption;                "visualization options.";
 
+        multisamples: u8;              "number of samples for multisampling";
     }
 
     /// Builds a [`MjRenderer`].
@@ -117,24 +123,9 @@ which can be configured at the top of the model's XML like so:
             width = global.offwidth as u32;
         }
 
-        let mut event_loop = EventLoop::new().map_err(RendererError::EventLoopError)?;
-        let adapter = RenderBase::new(
-            width, height,
-            "".to_string(),
-            &mut event_loop,
-            false  // don't process events
-        );
-
-        /* Initialize the OpenGL related things */
-        if let Some (GlState { window, gl_context, gl_surface }) = 
-            adapter.state.as_ref()
-        {
-            window.set_visible(false);
-            gl_surface.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait)
-                .map_err(RendererError::GlutinError)?;
-        }
-
-        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+        let gl_state = GlState::new(width.try_into().unwrap(), height.try_into().unwrap(), self.multisamples).map_err(
+            |e| RendererError::GlutinError(e)
+        )?;
 
         // Initialize the rendering context to render to the offscreen buffer.
         let mut context = MjrContext::new(&model);
@@ -156,8 +147,7 @@ which can be configured at the top of the model's XML like so:
         let renderer = MjRenderer {
             scene, user_scene, context, model, camera: self.camera, option: self.opts,
             flags: RendererFlags::empty(), rgb: None, depth: None,
-            width: width as usize, height: height as usize,
-            adapter, _event_loop: event_loop
+            width: width as usize, height: height as usize, gl_state
         }   // These require special care
             .with_rgb_rendering(self.rgb)
             .with_depth_rendering(self.depth);
@@ -182,8 +172,7 @@ pub struct MjRenderer<M: Deref<Target = MjModel> + Clone> {
     model: M,
 
     /* OpenGL */
-    adapter: RenderBase,
-    _event_loop: EventLoop<()>,
+    gl_state: GlState,
 
     /* Configuration */
     camera: MjvCamera,
@@ -499,10 +488,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// Draws the scene to internal arrays.
     /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image.
     fn render(&mut self) {
-        let GlState {gl_context, gl_surface, .. }
-            = self.adapter.state.as_ref().unwrap();
-
-        gl_context.make_current(gl_surface).expect("failed to make OpenGL context current");
+        self.gl_state.make_current().expect("failed to make OpenGL context current");
         let vp = MjrRectangle::new(0, 0, self.width as i32, self.height as i32);
         self.scene.render(&vp, &self.context);
 
