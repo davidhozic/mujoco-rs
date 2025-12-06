@@ -28,7 +28,7 @@ ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only
 
 auto-download-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip", "dep:sha2"]
 
-default = ["viewer", "viewer-ui", "renderer", "renderer-winit-fallback"]
+default = ["viewer", "viewer-ui", "renderer"]
 
 [dependencies]
 bitflags = {version = "2.9.4", optional = true}
@@ -43,6 +43,9 @@ glutin-winit = {version = "0.5.0", optional = true}
 egui-winit = {version = "0.33.0", default-features = false, features = ["wayland", "x11"], optional = true}
 egui_glow = {version = "0.33.0", features = ["x11", "winit", "wayland", "egui-winit"], optional = true}
 egui = {version = "0.33.0", optional = true}
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.features]
+default = ["renderer-winit-fallback"]
 
 [build-dependencies]
 bindgen = {version = "0.71.1", optional = true}
