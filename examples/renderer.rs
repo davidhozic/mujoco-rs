@@ -42,7 +42,7 @@ fn main() {
     /* Create the output directory for saving png files */
     fs::create_dir_all(OUTPUT_DIRECTORY).unwrap();
 
-    // /* Model and data */
+    /* Model and data */
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
     let mut data = MjData::new(&model);  // or model.make_data()
 

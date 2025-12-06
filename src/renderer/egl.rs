@@ -17,32 +17,36 @@ pub(crate) struct GlStateEgl {
 
 impl GlStateEgl {
     pub(crate) fn new(width: NonZero<u32>, height: NonZero<u32>) -> glutin::error::Result<Self>{
-        let device = Device::query_devices()?.next().unwrap();
-        unsafe { 
-            let display = Display::with_device(&device, None)?;
-            let config_template = ConfigTemplateBuilder::new()
-                .with_surface_type(ConfigSurfaceTypes::PBUFFER)
-                // Request typical formats; these are hints.
-                .with_alpha_size(0)
-                .with_depth_size(24)
-                .with_stencil_size(8)
-                .build();
+        let device = Device::query_devices()?.next().ok_or_else(||
+            glutin::error::ErrorKind::NotSupported("could not find any compatible devices")
+        )?;
 
-            let config = display.find_configs(config_template)?.next().unwrap();
-            let context_attrs = ContextAttributesBuilder::new()
-                .with_profile(GlProfile::Compatibility)
-                .with_context_api(ContextApi::OpenGl(Some(Version::new(2, 0))))
-                .build(None);
+        let display =  unsafe { Display::with_device(&device, None)? };
+        let config_template = ConfigTemplateBuilder::new()
+            .with_surface_type(ConfigSurfaceTypes::PBUFFER)
+            // Request typical formats; these are hints.
+            .with_alpha_size(0)
+            .with_depth_size(24)
+            .with_stencil_size(8)
+            .build();
 
-            let context_not_current = display.create_context(&config, &context_attrs)?;
+        let config = unsafe { display.find_configs(config_template)?.next().ok_or_else(||
+            glutin::error::ErrorKind::NotSupported("could not find any compatible configs")
+        )}?;
 
-            let surface_attrs = SurfaceAttributesBuilder::<PbufferSurface>::new()
-                .build(width, height);
+        let context_attrs = ContextAttributesBuilder::new()
+            .with_profile(GlProfile::Compatibility)
+            .with_context_api(ContextApi::OpenGl(Some(Version::new(2, 0))))
+            .build(None);
 
-            let surface = display.create_pbuffer_surface(&config, &surface_attrs)?;
-            let context = context_not_current.make_current(&surface)?;
-            Ok(Self {context, surface})
-        }
+        let context_not_current = unsafe { display.create_context(&config, &context_attrs)? };
+
+        let surface_attrs = SurfaceAttributesBuilder::<PbufferSurface>::new()
+            .build(width, height);
+
+        let surface = unsafe { display.create_pbuffer_surface(&config, &surface_attrs)? };
+        let context = context_not_current.make_current(&surface)?;
+        Ok(Self {context, surface})
     }
 
     pub(crate) fn make_current(&self) -> Result<(), glutin::error::Error> {
