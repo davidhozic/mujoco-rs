@@ -60,8 +60,11 @@ pub mod cpp_viewer;
 #[allow(warnings)]
 pub mod mujoco_c;  // raw MuJoCo C and C++ bindings
 
+#[cfg(any(feature = "viewer", all(feature = "renderer", feature = "renderer-winit-fallback")))]
+mod winit_gl_base;
+
 #[cfg(any(feature = "viewer", feature = "renderer"))]
-mod render_base;
+mod vis_common;
 
 
 /// Returns the version string of the MuJoCo library.

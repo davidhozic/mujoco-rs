@@ -9,13 +9,13 @@ use std::num::NonZero;
 
 
 /// GlState implementation, based on EGL for GNU Linux platforms.
-pub(crate) struct GlState {
+pub(crate) struct GlStateEgl {
     pub(crate) context: PossiblyCurrentContext,
     pub(crate) surface: Surface<PbufferSurface>,
 }
 
 
-impl GlState {
+impl GlStateEgl {
     pub(crate) fn new(width: NonZero<u32>, height: NonZero<u32>) -> glutin::error::Result<Self>{
         let device = Device::query_devices()?.next().unwrap();
         unsafe { 

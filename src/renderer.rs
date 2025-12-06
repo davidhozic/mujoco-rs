@@ -1,7 +1,8 @@
 //! Module related to implementation of the [`MjRenderer`].
 use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_rendering::MjrContext;
-use crate::render_base::sync_geoms;
+use crate::renderer::egl::GlStateEgl;
+use crate::vis_common::sync_geoms;
 use crate::builder_setters;
 use crate::prelude::*;
 
@@ -12,22 +13,62 @@ use std::io::{self, BufWriter, ErrorKind, Write};
 use std::fmt::Display;
 use std::error::Error;
 use std::marker::PhantomData;
+use std::num::NonZero;
 use std::ops::Deref;
 use std::path::Path;
 use std::fs::File;
 
+#[cfg(feature = "renderer-winit-fallback")]
+mod universal;
+
+#[cfg(feature = "renderer-winit-fallback")]
+use universal::GlStateWinit;
 
 #[cfg(target_os = "linux")]
-mod linux;
-
-#[cfg(target_os = "linux")]
-use linux::GlState;
+mod egl;
 
 
 const RGB_NOT_FOUND_ERR_STR: &str = "RGB rendering is not enabled (renderer.with_rgb_rendering(true))";
 const DEPTH_NOT_FOUND_ERR_STR: &str = "depth rendering is not enabled (renderer.with_depth_rendering(true))";
 const INVALID_INPUT_SIZE: &str = "the input width and height don't match the renderer's configuration";
 const EXTRA_INTERNAL_VISUAL_GEOMS: u32 = 100;
+
+
+/// GlState enum wrapper. By default, headless implementation will be used
+/// when supported. Only on failure an invisible winit window will be used.
+pub(crate) enum GlState {
+    #[cfg(feature = "renderer-winit-fallback")] Winit(GlStateWinit),
+    #[cfg(any(target_os = "linux"))] Egl(egl::GlStateEgl),
+}
+
+impl GlState {
+    /// Creates a new [`GlState`], which by default tries to use
+    /// an offscreen implementation. As a fallback, winit will be used.
+    pub(crate) fn new(width: NonZero<u32>, height: NonZero<u32>) -> Result<Self, RendererError> {
+        #[cfg(target_os = "linux")]
+        #[allow(unused_variables)]
+        let egl_err = match GlStateEgl::new(width, height) {
+            Ok(egl_state) => return Ok(Self::Egl(egl_state)),
+            Err(e) => e,
+        };
+
+        #[cfg(feature = "renderer-winit-fallback")]
+        if let Ok(winit_state) = GlStateWinit::new(width, height) {
+            return Ok(Self::Winit(winit_state));
+        }
+
+        #[cfg(target_os = "linux")]
+        Err(RendererError::GlutinError(egl_err))
+    }
+
+    pub(crate) fn make_current(&self) -> glutin::error::Result<()> {
+        match self {
+            Self::Egl(egl_state) => egl_state.make_current(),
+            #[cfg(feature = "renderer-winit-fallback")]
+            Self::Winit(winit_state) => winit_state.make_current()
+        }
+    }
+}
 
 
 /// A builder for [`MjRenderer`].
@@ -120,9 +161,7 @@ which can be configured at the top of the model's XML like so:
             width = global.offwidth as u32;
         }
 
-        let gl_state = GlState::new(width.try_into().unwrap(), height.try_into().unwrap()).map_err(
-            |e| RendererError::GlutinError(e)
-        )?;
+        let gl_state = GlState::new(width.try_into().unwrap(), height.try_into().unwrap())?;
 
         // Initialize the rendering context to render to the offscreen buffer.
         let mut context = MjrContext::new(&model);
@@ -516,6 +555,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
 #[derive(Debug)]
 pub enum RendererError {
+    #[cfg(feature = "renderer-winit-fallback")]
     EventLoopError(winit::error::EventLoopError),
     GlutinError(glutin::error::Error)
 }
@@ -523,6 +563,7 @@ pub enum RendererError {
 impl Display for RendererError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            #[cfg(feature = "renderer-winit-fallback")]
             Self::EventLoopError(e) => write!(f, "event loop failed to initialize: {}", e),
             Self::GlutinError(e) => write!(f, "glutin failed to initialize: {}", e)
         }
@@ -532,6 +573,7 @@ impl Display for RendererError {
 impl Error for RendererError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
+            #[cfg(feature = "renderer-winit-fallback")]
             Self::EventLoopError(e) => Some(e),
             Self::GlutinError(e) => Some(e)
         }

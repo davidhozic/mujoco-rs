@@ -19,11 +19,12 @@ use std::ops::Deref;
 use bitflags::bitflags;
 
 use crate::prelude::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
-use crate::render_base::{GlState, RenderBase, sync_geoms};
+use crate::winit_gl_base::{GlState, RenderBase};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
+use crate::vis_common::sync_geoms;
 use crate::get_mujoco_version;
 
 
