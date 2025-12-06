@@ -28,11 +28,7 @@ ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only
 
 auto-download-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip", "dep:sha2"]
 
-default = ["viewer", "viewer-ui", "renderer"]
-
-# This is not required on Linux as EGL is present.
-[target.'cfg(any(target_os = "linux", target_os = "macos"))'.features]
-default = ["renderer-winit-fallback"]
+default = ["viewer", "viewer-ui", "renderer", "renderer-winit-fallback"]
 
 [dependencies]
 bitflags = {version = "2.9.4", optional = true}
