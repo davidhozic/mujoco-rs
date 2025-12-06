@@ -16,7 +16,7 @@ pub(crate) struct GlStateEgl {
 
 
 impl GlStateEgl {
-    pub(crate) fn new(width: NonZero<u32>, height: NonZero<u32>) -> glutin::error::Result<Self>{
+    pub(crate) fn new(width: NonZero<u32>, height: NonZero<u32>) -> glutin::error::Result<Self> {
         let device = Device::query_devices().map_err(|e|
             if glutin::error::ErrorKind::NotFound == e.error_kind() {
                 glutin::error::ErrorKind::NotSupported("EGL was not found").into()
