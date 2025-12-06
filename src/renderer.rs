@@ -62,6 +62,8 @@ impl GlState {
             Err(e) => {
                 return Err(e);
             },
+
+            #[cfg(target_os = "linux")]
             _ => {}
         }
 
