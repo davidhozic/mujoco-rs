@@ -41,7 +41,7 @@ const EXTRA_INTERNAL_VISUAL_GEOMS: u32 = 100;
 /// when supported. Only on failure an invisible winit window will be used.
 pub(crate) enum GlState {
     #[cfg(feature = "renderer-winit-fallback")] Winit(GlStateWinit),
-    #[cfg(any(target_os = "linux"))] Egl(egl::GlStateEgl),
+    #[cfg(target_os = "linux")] Egl(egl::GlStateEgl),
 }
 
 impl GlState {
