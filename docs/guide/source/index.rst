@@ -63,10 +63,10 @@ Optional Cargo features can be enabled:
 - ``renderer``: enables offscreen rendering for writing RGB and
   depth data to memory or file.
 
-  - ``renderer-winit-fallback``: enables the invisible window fallback, based on winit, when offscreen
+  - ``renderer-winit-fallback``: enables the invisible window fallback (based on winit) when offscreen
     rendering fails to initialize. Note that true offscreen rendering is only available on Linux platforms
-    when the video driver supports it. On Windows and MacOS, winit invisible window backend will always be used
-    and thus this feature must be enabled on these platforms when ``renderer`` is enabled.
+    when the video driver supports it. On Windows and MacOS, this feature must always be
+    enabled when the ``renderer`` feature is enabled.
 
 - ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded to the specified path.
 
