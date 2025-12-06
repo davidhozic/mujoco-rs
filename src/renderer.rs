@@ -174,8 +174,6 @@ which can be configured at the top of the model's XML like so:
 
         let gl_state = GlState::new(width.try_into().unwrap(), height.try_into().unwrap())?;
 
-        gl_state.make_current().unwrap();
-
         // Initialize the rendering context to render to the offscreen buffer.
         let mut context = MjrContext::new(&model);
         context.offscreen();
