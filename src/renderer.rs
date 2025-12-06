@@ -57,32 +57,24 @@ impl GlState {
     pub(crate) fn new(width: NonZero<u32>, height: NonZero<u32>) -> Result<Self, RendererError> {
         // On Linux, try EGL first for true offscreen rendering
         #[cfg(target_os = "linux")]
-        let egl_result = GlStateEgl::new(width, height);
-        
-        #[cfg(target_os = "linux")]
-        if let Ok(egl_state) = egl_result {
-            return Ok(Self::Egl(egl_state));
-        }
-
-        // Fall back to winit-based rendering (if available)
-        #[cfg(feature = "renderer-winit-fallback")]
-        {
-            let winit_result = GlStateWinit::new(width, height);
-            
-            // On non-Linux platforms, winit is the only option, so return its result directly
-            #[cfg(not(target_os = "linux"))]
-            return winit_result.map(Self::Winit);
-            
-            // On Linux, try winit as a fallback if EGL failed
-            #[cfg(target_os = "linux")]
-            if let Ok(winit_state) = winit_result {
-                return Ok(Self::Winit(winit_state));
+        match GlStateEgl::new(width, height) {
+            Ok(egl_state) => return Ok(Self::Egl(egl_state)),
+            Err(egl_error) => {
+                // EGL failed, try winit fallback if available
+                #[cfg(feature = "renderer-winit-fallback")]
+                if let Ok(winit_state) = GlStateWinit::new(width, height) {
+                    return Ok(Self::Winit(winit_state));
+                }
+                
+                // Both EGL and winit (if enabled) failed, return the EGL error
+                return Err(RendererError::GlutinError(egl_error));
             }
         }
 
-        // If we reach here on Linux, both EGL and winit (if enabled) failed
-        #[cfg(target_os = "linux")]
-        Err(RendererError::GlutinError(egl_result.unwrap_err()))
+        // On non-Linux platforms, winit is the only option (enforced by build.rs)
+        #[cfg(not(target_os = "linux"))]
+        #[cfg(feature = "renderer-winit-fallback")]
+        GlStateWinit::new(width, height).map(Self::Winit)
     }
 
     pub(crate) fn make_current(&self) -> glutin::error::Result<()> {
