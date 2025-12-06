@@ -17,7 +17,7 @@ MuJoCo-rs can be added to your project like so:
 
   ::
 
-    cargo add mujoco-rs --no-default-features --features "auto-download-mujoco viewer viewer-ui renderer"
+    cargo add mujoco-rs --no-default-features --features "auto-download-mujoco viewer viewer-ui renderer renderer-winit-fallback"
 
 - **Without** visualization/rendering support:
 
@@ -25,7 +25,8 @@ MuJoCo-rs can be added to your project like so:
 
     cargo add mujoco-rs --no-default-features --features "auto-download-mujoco"
 
-See :ref:`opt-cargo-features` for information about available Cargo features.
+See :ref:`opt-cargo-features` for information about available Cargo features. We strongly recommend to disable any
+rendering-related features when rendering is not needed, which will reduce compilation time.
 
 Then :ref:`mujoco_dep` installation needs to be configured, as described below.
 MuJoCo is the actual physics engine that MuJoCo-rs depends on.

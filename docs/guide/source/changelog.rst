@@ -16,6 +16,14 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+Unreleased (MuJoCo 3.3.7)
+================================
+- Made :ref:`mj_renderer` use EGL backend by default on Linux for true offscreen rendering (pbuffer).
+  
+  - New feature added for compatibility purposes: ``renderer-winit-fallback``.
+    The feature is enabled by default.
+
+
 2.1.0 / 2.1.1 (MuJoCo 3.3.7)
 ================================
 - Option to automatically pull MuJoCo.

@@ -20,14 +20,15 @@ all-features = true
 [features]
 viewer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit"]
 viewer-ui = ["viewer", "dep:egui-winit", "dep:egui_glow", "dep:egui"]
-renderer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit", "dep:png"]
+renderer = ["dep:bitflags", "dep:glutin", "dep:png"]
+renderer-winit-fallback = ["renderer", "dep:winit", "dep:glutin-winit"]
 cpp-viewer = []
 
 ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module. 
 
 auto-download-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip", "dep:sha2"]
 
-default = ["viewer", "viewer-ui", "renderer"]
+default = ["viewer", "viewer-ui", "renderer", "renderer-winit-fallback"]
 
 [dependencies]
 bitflags = {version = "2.9.4", optional = true}
