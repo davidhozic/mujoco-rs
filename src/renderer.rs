@@ -1,7 +1,10 @@
 //! Module related to implementation of the [`MjRenderer`].
 use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_rendering::MjrContext;
+
+#[cfg(target_os = "linux")]
 use crate::renderer::egl::GlStateEgl;
+
 use crate::vis_common::sync_geoms;
 use crate::builder_setters;
 use crate::prelude::*;
@@ -53,8 +56,12 @@ impl GlState {
         };
 
         #[cfg(feature = "renderer-winit-fallback")]
-        if let Ok(winit_state) = GlStateWinit::new(width, height) {
-            return Ok(Self::Winit(winit_state));
+        match GlStateWinit::new(width, height) {
+            Ok(winit_state) => return Ok(Self::Winit(winit_state)),
+            Err(e) => {
+                #[cfg(not(target_os = "linux"))]
+                return Err(e);
+            },
         }
 
         #[cfg(target_os = "linux")]
@@ -63,6 +70,7 @@ impl GlState {
 
     pub(crate) fn make_current(&self) -> glutin::error::Result<()> {
         match self {
+            #[cfg(target_os = "linux")]
             Self::Egl(egl_state) => egl_state.make_current(),
             #[cfg(feature = "renderer-winit-fallback")]
             Self::Winit(winit_state) => winit_state.make_current()

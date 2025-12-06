@@ -21,7 +21,7 @@ use std::collections::VecDeque;
 /// Base struct for rendering through Glutin.
 /// This is a proxy since Glutin only allows event processing through callbacks, which this implements.
 #[derive(Debug)]
-pub(crate) struct GlState {
+pub(crate) struct RenderBaseGlState {
     pub(crate) window: Window,
     pub(crate) gl_context: PossiblyCurrentContext,
     pub(crate) gl_surface: Surface<WindowSurface>,
@@ -29,7 +29,7 @@ pub(crate) struct GlState {
 
 #[derive(Debug)]
 pub(crate) struct RenderBase {
-    pub(crate) state: Option<GlState>,
+    pub(crate) state: Option<RenderBaseGlState>,
     pub(crate) running: bool,
     /* Event related */
     pub(crate) queue: VecDeque<WindowEvent>,
@@ -67,7 +67,8 @@ impl ApplicationHandler for RenderBase {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attrs = Window::default_attributes()
             .with_title(&self.title)
-            .with_inner_size(PhysicalSize::new(self.size.0, self.size.1));
+            .with_inner_size(PhysicalSize::new(self.size.0, self.size.1))
+            .with_visible(self.events);
 
         let template = ConfigTemplateBuilder::new()
             // Request typical formats; these are hints.
@@ -120,7 +121,7 @@ impl ApplicationHandler for RenderBase {
         let gl_context = not_current.make_current(&gl_surface).expect("make current");
 
         // Save state
-        self.state = Some(GlState { gl_surface, gl_context, window });
+        self.state = Some(RenderBaseGlState { gl_surface, gl_context, window });
         self.running = true;
     }
 
@@ -136,7 +137,7 @@ impl ApplicationHandler for RenderBase {
                 self.running = false;
             }
             WindowEvent::Resized(_) => {
-                if let Some(GlState { window, gl_context, gl_surface }) = &self.state {
+                if let Some(RenderBaseGlState { window, gl_context, gl_surface }) = &self.state {
                     window.resize_surface(gl_surface, gl_context);
                 }
             }

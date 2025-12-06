@@ -19,7 +19,7 @@ use std::ops::Deref;
 use bitflags::bitflags;
 
 use crate::prelude::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
-use crate::winit_gl_base::{GlState, RenderBase};
+use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
@@ -176,7 +176,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         );
 
         /* Initialize the OpenGL related things */
-        let GlState {
+        let RenderBaseGlState {
             gl_context,
             gl_surface,
             #[cfg(feature = "viewer-ui")] window,
@@ -251,7 +251,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Syncs the state of `data` with the viewer as well as perform
     /// rendering on the viewer.
     pub fn sync(&mut self, data: &mut MjData<M>) {
-        let GlState {
+        let RenderBaseGlState {
             gl_context,
             gl_surface,
             ..
@@ -287,7 +287,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Renders the drawn content by swapping buffers.
     fn render(&mut self) {
         /* Display the drawn content */
-        let GlState {
+        let RenderBaseGlState {
             gl_context,
             gl_surface, ..
         } = self.adapter.state.as_mut().unwrap();
@@ -334,7 +334,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         /* Draw the user interface */
 
         use crate::viewer::ui::UiEvent;
-        let GlState { window, .. } = &self.adapter.state.as_ref().unwrap();
+        let RenderBaseGlState { window, .. } = &self.adapter.state.as_ref().unwrap();
         let inner_size = window.inner_size();
         let left = self.ui.process(
             window, &mut self.status,

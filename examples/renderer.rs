@@ -43,7 +43,7 @@ fn main() {
     fs::create_dir_all(OUTPUT_DIRECTORY).unwrap();
 
     // /* Model and data */
-    let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+    let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
     let mut data = MjData::new(&model);  // or model.make_data()
 
     /* Renderer for rendering at 1280x720 px (width x height) */

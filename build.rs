@@ -89,9 +89,10 @@ mod build_dependencies {
 
 fn main() {
     // Verify feature selection before compilation.
+    #[cfg(feature = "renderer")]
     #[cfg(not(target_os = "linux"))]
     #[cfg(not(feature = "renderer-winit-fallback"))]
-    compile_error!("the 'renderer-winit-fallback' must be enabled on non-Linux platforms as only winit based renderer is available.");
+    compile_error!("MuJoCo-rs requires that the 'renderer-winit-fallback' Cargo feature is enabled on non-Linux platforms as only winit based renderer is available.");
 
     // Setup everything.
     if std::env::var("DOCS_RS").is_ok() {
