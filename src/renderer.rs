@@ -58,10 +58,11 @@ impl GlState {
         #[cfg(feature = "renderer-winit-fallback")]
         match GlStateWinit::new(width, height) {
             Ok(winit_state) => return Ok(Self::Winit(winit_state)),
+            #[cfg(not(target_os = "linux"))]
             Err(e) => {
-                #[cfg(not(target_os = "linux"))]
                 return Err(e);
             },
+            _ => {}
         }
 
         #[cfg(target_os = "linux")]
