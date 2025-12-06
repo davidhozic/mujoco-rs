@@ -17,13 +17,13 @@ pub(crate) struct GlStateWinit {
 
 impl GlStateWinit {
     pub(crate) fn new(width: NonZero<u32>, height: NonZero<u32>) -> Result<Self, RendererError> {
-        let mut _event_loop = EventLoop::new().map_err(
+        let mut event_loop = EventLoop::new().map_err(
             |e| RendererError::EventLoopError(e)
         )?;
 
         let inner = RenderBase::new(
             width.into(), height.into(), "".to_string(),
-            &mut _event_loop,
+            &mut event_loop,
             false
         );
 
