@@ -21,7 +21,7 @@ impl GlStateEgl {
             glutin::error::ErrorKind::NotSupported("could not find any compatible devices")
         )?;
 
-        let display =  unsafe { Display::with_device(&device, None)? };
+        let display = unsafe { Display::with_device(&device, None)? };
         let config_template = ConfigTemplateBuilder::new()
             .with_surface_type(ConfigSurfaceTypes::PBUFFER)
             // Request typical formats; these are hints.
