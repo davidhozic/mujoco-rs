@@ -31,6 +31,9 @@ Unreleased (MuJoCo 3.3.7)
 - Changes to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
 
   - Added an optional (enabled by default) user interface, made with `egui <https://github.com/emilk/egui>`_.
+  - Added :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` for custom UI widgets.
+    This allows users to create custom windows, panels, and other UI elements using egui.
+    See :ref:`Custom UI Widgets <rust_native_viewer>` for more information.
 
 - New Cargo features:
 
