@@ -265,6 +265,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// # let model = MjModel::from_xml_string("<mujoco/>").unwrap();
     /// # let mut viewer = MjViewer::launch_passive(&model, 0).unwrap();
     /// viewer.add_ui_callback(|ctx| {
+    ///     use mujoco_rs::viewer::egui;
     ///     egui::Window::new("Custom controls")
     ///         .fade_in(false)
     ///         .fade_out(false)
