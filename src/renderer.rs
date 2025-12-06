@@ -73,8 +73,16 @@ impl GlState {
 
         // On non-Linux platforms, winit is the only option (enforced by build.rs)
         #[cfg(not(target_os = "linux"))]
-        #[cfg(feature = "renderer-winit-fallback")]
-        GlStateWinit::new(width, height).map(Self::Winit)
+        {
+            #[cfg(not(feature = "renderer-winit-fallback"))]
+            compile_error!(
+                "On non-Linux platforms, the 'renderer-winit-fallback' feature must be enabled. \
+                This should have been caught by build.rs."
+            );
+            
+            #[cfg(feature = "renderer-winit-fallback")]
+            return GlStateWinit::new(width, height).map(Self::Winit);
+        }
     }
 
     pub(crate) fn make_current(&self) -> glutin::error::Result<()> {
