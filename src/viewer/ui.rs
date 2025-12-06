@@ -115,6 +115,9 @@ const FRAME_TYPE_MAP: [&str; 8] = [
     "World"
 ];
 
+/// Type alias for a user-provided UI callback function.
+pub(crate) type UiCallback = Box<dyn FnMut(&egui::Context)>;
+
 /// Viewer user interface context.
 pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     egui_ctx: egui::Context,
@@ -127,7 +130,8 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     joint_name_id: Vec<(String, usize)>,
     equality_names: Vec<String>,
     status: UiStatus,
-    model: M
+    model: M,
+    user_ui_callbacks: Vec<UiCallback>
 }
 
 impl<M: Deref<Target = MjModel>> ViewerUI<M> {
@@ -186,7 +190,8 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         Self {
             egui_ctx, state, painter, gl, events: VecDeque::new(),
             camera_names, actuator_names, joint_name_id, equality_names,
-            status: UiStatus::empty(), model
+            status: UiStatus::empty(), model,
+            user_ui_callbacks: Vec::new()
         }
     }
 
@@ -511,6 +516,11 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                     });
                 });
             }
+
+            /* User-defined UI callbacks */
+            for callback in &mut self.user_ui_callbacks {
+                callback(ctx);
+            }
         });
 
         // Prevent window interactions when covering egui widgets
@@ -559,6 +569,16 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     /// Drains events from queue. If no event is queued, [`None`] is returned.
     pub(crate) fn drain_events(&mut self) -> Option<UiEvent> {
         self.events.pop_front()
+    }
+
+    /// Adds a user-defined UI callback that will be invoked during UI rendering.
+    /// The callback receives the egui context and can be used to create custom windows,
+    /// panels, or other UI elements.
+    pub(crate) fn add_ui_callback<F>(&mut self, callback: F)
+    where
+        F: FnMut(&egui::Context) + 'static
+    {
+        self.user_ui_callbacks.push(Box::new(callback));
     }
 }
 

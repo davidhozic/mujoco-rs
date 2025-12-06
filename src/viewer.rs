@@ -31,6 +31,10 @@ use crate::get_mujoco_version;
 #[cfg(feature = "viewer-ui")]
 mod ui;
 
+// Re-export egui for user convenience when using custom UI callbacks
+#[cfg(feature = "viewer-ui")]
+pub use egui;
+
 
 /****************************************** */
 // Rust native viewer
@@ -246,6 +250,36 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     #[deprecated(since = "1.3.0", note = "use user_scene_mut")]
     pub fn user_scn_mut(&mut self) -> &mut MjvScene<M> {
         self.user_scene_mut()
+    }
+
+    /// Adds a user-defined UI callback for custom widgets in the viewer's UI.
+    /// The callback receives an [`egui::Context`] reference and can be used to create
+    /// custom windows, panels, or other UI elements.
+    /// 
+    /// This method is only available when the `viewer-ui` feature is enabled.
+    /// 
+    /// # Example
+    /// ```no_run
+    /// # use mujoco_rs::prelude::*;
+    /// # use mujoco_rs::viewer::MjViewer;
+    /// # let model = MjModel::from_xml_string("<mujoco/>").unwrap();
+    /// # let mut viewer = MjViewer::launch_passive(&model, 0).unwrap();
+    /// viewer.add_ui_callback(|ctx| {
+    ///     egui::Window::new("Custom controls")
+    ///         .fade_in(false)
+    ///         .fade_out(false)
+    ///         .scroll(true)
+    ///         .show(ctx, |ui| {
+    ///             ui.label("Custom UI element");
+    ///         });
+    /// });
+    /// ```
+    #[cfg(feature = "viewer-ui")]
+    pub fn add_ui_callback<F>(&mut self, callback: F)
+    where
+        F: FnMut(&egui::Context) + 'static
+    {
+        self.ui.add_ui_callback(callback);
     }
 
     /// Syncs the state of `data` with the viewer as well as perform
