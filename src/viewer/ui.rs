@@ -131,7 +131,7 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     equality_names: Vec<String>,
     status: UiStatus,
     model: M,
-    user_ui_callbacks: Vec<UiCallback>
+    user_ui_callbacks: Vec<UiCallback>,
 }
 
 impl<M: Deref<Target = MjModel>> ViewerUI<M> {
@@ -191,7 +191,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             egui_ctx, state, painter, gl, events: VecDeque::new(),
             camera_names, actuator_names, joint_name_id, equality_names,
             status: UiStatus::empty(), model,
-            user_ui_callbacks: Vec::new()
+            user_ui_callbacks: Vec::new(),
         }
     }
 

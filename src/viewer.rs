@@ -255,9 +255,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Adds a user-defined UI callback for custom widgets in the viewer's UI.
     /// The callback receives an [`egui::Context`] reference and can be used to create
     /// custom windows, panels, or other UI elements.
-    /// 
+    ///
     /// This method is only available when the `viewer-ui` feature is enabled.
-    /// 
+    ///
     /// # Example
     /// ```no_run
     /// # use mujoco_rs::prelude::*;
