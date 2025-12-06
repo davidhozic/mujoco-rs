@@ -89,9 +89,9 @@ mod build_dependencies {
 
 fn main() {
     // Verify feature selection before compilation.
-    #[cfg(feature = "renderer")]
-    #[cfg(not(target_os = "linux"))]
-    #[cfg(not(feature = "renderer-winit-fallback"))]
+    // On non-Linux platforms (Windows, MacOS), the renderer requires winit-fallback
+    // because EGL-based offscreen rendering is only available on Linux.
+    #[cfg(all(feature = "renderer", not(target_os = "linux"), not(feature = "renderer-winit-fallback")))]
     compile_error!("MuJoCo-rs requires that the 'renderer-winit-fallback' Cargo feature is enabled on non-Linux platforms as only winit based renderer is available.");
 
     // Setup everything.

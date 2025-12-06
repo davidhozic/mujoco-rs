@@ -21,12 +21,14 @@ use std::ops::Deref;
 use std::path::Path;
 use std::fs::File;
 
+// Winit-based fallback implementation (used on all platforms as fallback, required on non-Linux)
 #[cfg(feature = "renderer-winit-fallback")]
 mod universal;
 
 #[cfg(feature = "renderer-winit-fallback")]
 use universal::GlStateWinit;
 
+// EGL-based offscreen implementation (Linux only)
 #[cfg(target_os = "linux")]
 mod egl;
 
@@ -37,36 +39,50 @@ const INVALID_INPUT_SIZE: &str = "the input width and height don't match the ren
 const EXTRA_INTERNAL_VISUAL_GEOMS: u32 = 100;
 
 
-/// GlState enum wrapper. By default, headless implementation will be used
-/// when supported. Only on failure an invisible winit window will be used.
+/// GlState enum wrapper for managing OpenGL context and surface.
+/// 
+/// # Platform support:
+/// - **Linux**: Prefers EGL for true offscreen rendering, falls back to winit if EGL fails
+/// - **Windows/MacOS**: Only winit-based rendering is available
 pub(crate) enum GlState {
-    #[cfg(feature = "renderer-winit-fallback")] Winit(GlStateWinit),
-    #[cfg(any(target_os = "linux"))] Egl(egl::GlStateEgl),
+    #[cfg(feature = "renderer-winit-fallback")]
+    Winit(GlStateWinit),
+    #[cfg(target_os = "linux")]
+    Egl(egl::GlStateEgl),
 }
 
 impl GlState {
     /// Creates a new [`GlState`], which by default tries to use
     /// an offscreen implementation. As a fallback, winit will be used.
     pub(crate) fn new(width: NonZero<u32>, height: NonZero<u32>) -> Result<Self, RendererError> {
+        // On Linux, try EGL first for true offscreen rendering
         #[cfg(target_os = "linux")]
-        #[allow(unused_variables)]
-        let egl_err = match GlStateEgl::new(width, height) {
-            Ok(egl_state) => return Ok(Self::Egl(egl_state)),
-            Err(e) => e,
-        };
-
-        #[cfg(feature = "renderer-winit-fallback")]
-        match GlStateWinit::new(width, height) {
-            Ok(winit_state) => return Ok(Self::Winit(winit_state)),
-            #[cfg(not(target_os = "linux"))]
-            Err(e) => {
-                return Err(e);
-            },
-            _ => {}
+        let egl_result = GlStateEgl::new(width, height);
+        
+        #[cfg(target_os = "linux")]
+        if let Ok(egl_state) = egl_result {
+            return Ok(Self::Egl(egl_state));
         }
 
+        // Fall back to winit-based rendering (if available)
+        #[cfg(feature = "renderer-winit-fallback")]
+        {
+            let winit_result = GlStateWinit::new(width, height);
+            
+            // On non-Linux platforms, winit is the only option, so return its result directly
+            #[cfg(not(target_os = "linux"))]
+            return winit_result.map(Self::Winit);
+            
+            // On Linux, try winit as a fallback if EGL failed
+            #[cfg(target_os = "linux")]
+            if let Ok(winit_state) = winit_result {
+                return Ok(Self::Winit(winit_state));
+            }
+        }
+
+        // If we reach here on Linux, both EGL and winit (if enabled) failed
         #[cfg(target_os = "linux")]
-        Err(RendererError::GlutinError(egl_err))
+        Err(RendererError::GlutinError(egl_result.unwrap_err()))
     }
 
     pub(crate) fn make_current(&self) -> glutin::error::Result<()> {
