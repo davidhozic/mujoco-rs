@@ -2,8 +2,6 @@
 //! This can only be run in passive mode, which means the user program is the one
 //! controlling everything.
 use std::time::Duration;
-use std::cell::Cell;
-use std::rc::Rc;
 
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
