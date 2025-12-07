@@ -142,20 +142,6 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     group_window: bool
 }
 
-/// Helper function to convert u8 to bool for UI toggle values.
-/// Any non-zero value is treated as true.
-#[inline]
-fn u8_to_bool(val: u8) -> bool {
-    val != 0
-}
-
-/// Helper function to convert bool to u8 for storage.
-/// true becomes 1, false becomes 0.
-#[inline]
-fn bool_to_u8(val: bool) -> u8 {
-    val as u8
-}
-
 impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     /// Create a new [`ViewerUI`] instance for the specific winit window.
     pub(crate) fn new(model: M, window: &Window, display: &Display) -> Self {
@@ -378,9 +364,9 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     for (flag, enabled) in &mut options.flags.iter_mut().enumerate() {
-                                        let mut bool_val = u8_to_bool(*enabled);
+                                        let mut bool_val = *enabled != 0;
                                         if ui.toggle_value(&mut bool_val, VIS_OPT_MAP[flag]).changed() {
-                                            *enabled = bool_to_u8(bool_val);
+                                            *enabled = bool_val as u8;
                                         }
                                     }
                                 });
@@ -397,9 +383,9 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             ui.collapsing(RichText::new("OpenGL effects").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     for (flag, enabled) in scene.flags_mut().iter_mut().enumerate() {
-                                        let mut bool_val = u8_to_bool(*enabled);
+                                        let mut bool_val = *enabled != 0;
                                         if ui.toggle_value(&mut bool_val, GL_EFFECT_MAP[flag]).changed() {
-                                            *enabled = bool_to_u8(bool_val);
+                                            *enabled = bool_val as u8;
                                         }
                                     }
                                 });
@@ -506,25 +492,36 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 .open(&mut self.group_window)
                 .show(ctx, |ui|
             {
-                // Macro to reduce code duplication for toggle_value with u8 conversion
-                macro_rules! toggle_u8_group {
-                    ($field:expr, $label:expr) => {
-                        let mut bool_val = u8_to_bool($field);
-                        if ui.toggle_value(&mut bool_val, $label).changed() {
-                            $field = bool_to_u8(bool_val);
-                        }
-                    };
-                }
-
                 egui::Grid::new("group_grid").show(ui, |ui| {
                     for i in 0..mjNGROUP as usize {
-                        toggle_u8_group!(options.geomgroup[i], format!("Geom {i}"));
-                        toggle_u8_group!(options.sitegroup[i], format!("Site {i}"));
-                        toggle_u8_group!(options.jointgroup[i], format!("Joint {i}"));
-                        toggle_u8_group!(options.tendongroup[i], format!("Tendon {i}"));
-                        toggle_u8_group!(options.actuatorgroup[i], format!("Actuator {i}"));
-                        toggle_u8_group!(options.flexgroup[i], format!("Flex {i}"));
-                        toggle_u8_group!(options.skingroup[i], format!("Skin {i}"));
+                        let mut geom_val = options.geomgroup[i] != 0;
+                        if ui.toggle_value(&mut geom_val, format!("Geom {i}")).changed() {
+                            options.geomgroup[i] = geom_val as u8;
+                        }
+                        let mut site_val = options.sitegroup[i] != 0;
+                        if ui.toggle_value(&mut site_val, format!("Site {i}")).changed() {
+                            options.sitegroup[i] = site_val as u8;
+                        }
+                        let mut joint_val = options.jointgroup[i] != 0;
+                        if ui.toggle_value(&mut joint_val, format!("Joint {i}")).changed() {
+                            options.jointgroup[i] = joint_val as u8;
+                        }
+                        let mut tendon_val = options.tendongroup[i] != 0;
+                        if ui.toggle_value(&mut tendon_val, format!("Tendon {i}")).changed() {
+                            options.tendongroup[i] = tendon_val as u8;
+                        }
+                        let mut actuator_val = options.actuatorgroup[i] != 0;
+                        if ui.toggle_value(&mut actuator_val, format!("Actuator {i}")).changed() {
+                            options.actuatorgroup[i] = actuator_val as u8;
+                        }
+                        let mut flex_val = options.flexgroup[i] != 0;
+                        if ui.toggle_value(&mut flex_val, format!("Flex {i}")).changed() {
+                            options.flexgroup[i] = flex_val as u8;
+                        }
+                        let mut skin_val = options.skingroup[i] != 0;
+                        if ui.toggle_value(&mut skin_val, format!("Skin {i}")).changed() {
+                            options.skingroup[i] = skin_val as u8;
+                        }
                         ui.end_row();
                     }
                 });
