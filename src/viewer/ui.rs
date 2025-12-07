@@ -364,7 +364,10 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     for (flag, enabled) in &mut options.flags.iter_mut().enumerate() {
-                                        ui.toggle_value(unsafe { std::mem::transmute(enabled) }, VIS_OPT_MAP[flag]);
+                                        let mut bool_val = *enabled != 0;
+                                        if ui.toggle_value(&mut bool_val, VIS_OPT_MAP[flag]).changed() {
+                                            *enabled = bool_val as u8;
+                                        }
                                     }
                                 });
                                 ui.separator();
@@ -380,10 +383,10 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             ui.collapsing(RichText::new("OpenGL effects").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     for (flag, enabled) in scene.flags_mut().iter_mut().enumerate() {
-                                        ui.toggle_value(
-                                            unsafe { std::mem::transmute(enabled) },
-                                            GL_EFFECT_MAP[flag]
-                                        );
+                                        let mut bool_val = *enabled != 0;
+                                        if ui.toggle_value(&mut bool_val, GL_EFFECT_MAP[flag]).changed() {
+                                            *enabled = bool_val as u8;
+                                        }
                                     }
                                 });
                             });
@@ -491,13 +494,34 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             {
                 egui::Grid::new("group_grid").show(ui, |ui| {
                     for i in 0..mjNGROUP as usize {
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.geomgroup[i]) }, format!("Geom {i}"));
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.sitegroup[i]) }, format!("Site {i}"));
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.jointgroup[i]) }, format!("Joint {i}"));
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.tendongroup[i]) }, format!("Tendon {i}"));
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.actuatorgroup[i]) }, format!("Actuator {i}"));
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.flexgroup[i]) }, format!("Flex {i}"));
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.skingroup[i]) }, format!("Skin {i}"));
+                        let mut geom_val = options.geomgroup[i] != 0;
+                        if ui.toggle_value(&mut geom_val, format!("Geom {i}")).changed() {
+                            options.geomgroup[i] = geom_val as u8;
+                        }
+                        let mut site_val = options.sitegroup[i] != 0;
+                        if ui.toggle_value(&mut site_val, format!("Site {i}")).changed() {
+                            options.sitegroup[i] = site_val as u8;
+                        }
+                        let mut joint_val = options.jointgroup[i] != 0;
+                        if ui.toggle_value(&mut joint_val, format!("Joint {i}")).changed() {
+                            options.jointgroup[i] = joint_val as u8;
+                        }
+                        let mut tendon_val = options.tendongroup[i] != 0;
+                        if ui.toggle_value(&mut tendon_val, format!("Tendon {i}")).changed() {
+                            options.tendongroup[i] = tendon_val as u8;
+                        }
+                        let mut actuator_val = options.actuatorgroup[i] != 0;
+                        if ui.toggle_value(&mut actuator_val, format!("Actuator {i}")).changed() {
+                            options.actuatorgroup[i] = actuator_val as u8;
+                        }
+                        let mut flex_val = options.flexgroup[i] != 0;
+                        if ui.toggle_value(&mut flex_val, format!("Flex {i}")).changed() {
+                            options.flexgroup[i] = flex_val as u8;
+                        }
+                        let mut skin_val = options.skingroup[i] != 0;
+                        if ui.toggle_value(&mut skin_val, format!("Skin {i}")).changed() {
+                            options.skingroup[i] = skin_val as u8;
+                        }
                         ui.end_row();
                     }
                 });
