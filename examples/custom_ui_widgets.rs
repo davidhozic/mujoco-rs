@@ -59,8 +59,25 @@ impl CustomSimulation {
                 // Since we're using Rc, we need RefCell to dynamically borrow.
                 let mut storage_borrow = storage.borrow_mut();
 
+                // Bind key V to toggle the window.
+                if ctx.input(|reader| reader.key_pressed(egui::Key::V)) {
+                    storage_borrow.window_open = !storage_borrow.window_open;
+                }
+
+                // Process input events.
+                ctx.input(|reader| {
+                    for event in reader.events.iter() {
+                        match event {
+                            egui::Event::Key { key, pressed: true, ..} => {
+                                println!("A new key has been pressed: {}", key.name());
+                            }
+                            _ => {}
+                        }
+                    }
+                });
+
+                // Create a side panel, with a button to toggle the window.
                 egui::SidePanel::right("custom_panel")
-                    .default_width(200.0)
                     .show(ctx, |ui| {
                         ui.heading("Custom Panel");
                         ui.separator();
@@ -72,10 +89,8 @@ impl CustomSimulation {
                         }
                     });
 
+                // The window whose visibility can be toggled.
                 egui::Window::new("Simulation Info")
-                    .fade_in(false)
-                    .fade_out(false)
-                    .default_pos([400.0, 50.0])
                     .open(&mut storage_borrow.window_open)
                     .show(ctx, |ui| {
                         ui.heading("Simulation Information");
