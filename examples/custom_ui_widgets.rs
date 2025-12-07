@@ -27,7 +27,6 @@ fn main() {
         .expect("could not launch the viewer");
 
     // Example 1: Simple information window
-    #[cfg(feature = "viewer-ui")]
     viewer.add_ui_callback(|ctx| {
         use mujoco_rs::viewer::egui;
         egui::Window::new("Simulation Info")
@@ -43,7 +42,6 @@ fn main() {
     });
 
     // Example 2: Side panel with controls
-    #[cfg(feature = "viewer-ui")]
     viewer.add_ui_callback(|ctx| {
         use mujoco_rs::viewer::egui;
         egui::SidePanel::right("custom_panel")
@@ -61,7 +59,6 @@ fn main() {
     });
 
     // Example 3: Top panel
-    #[cfg(feature = "viewer-ui")]
     viewer.add_ui_callback(|ctx| {
         use mujoco_rs::viewer::egui;
         egui::TopBottomPanel::top("custom_top_panel")
