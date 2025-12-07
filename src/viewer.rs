@@ -11,6 +11,7 @@ use winit::event_loop::EventLoop;
 use winit::dpi::PhysicalPosition;
 use winit::window::Fullscreen;
 
+use std::borrow::Cow;
 use std::time::{Duration, Instant};
 use std::error::Error;
 use std::fmt::Display;
@@ -25,7 +26,7 @@ use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
 use crate::vis_common::sync_geoms;
-use crate::get_mujoco_version;
+use crate::{builder_setters, get_mujoco_version};
 
 
 #[cfg(feature = "viewer-ui")]
@@ -169,60 +170,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// [`MjViewer`] or a [`MjViewerError`]. The `max_user_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
     /// It can thus be set to 0 if no additional geoms will be drawn by the user.
+    /// 
+    /// Note that the use of [`MjViewerBuilder`] is preferred, because it is more flexible.
     pub fn launch_passive(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
-        let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
-        let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
-        let adapter = RenderBase::new(
-            w, h,
-            format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version()),
-            &mut event_loop,
-            true  // process events
-        );
-
-        /* Initialize the OpenGL related things */
-        let RenderBaseGlState {
-            gl_context,
-            gl_surface,
-            #[cfg(feature = "viewer-ui")] window,
-            ..
-        } = adapter.state.as_ref().unwrap();
-        gl_context.make_current(gl_surface).map_err(MjViewerError::GlutinError)?;
-        gl_surface.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait).map_err(
-            |e| MjViewerError::GlutinError(e)
-        )?;
-        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-
-        let ngeom = model.ffi().ngeom as usize;
-        let scene = MjvScene::new(model.clone(), ngeom + max_user_geom + EXTRA_SCENE_GEOM_SPACE);
-        let user_scene = MjvScene::new(model.clone(), max_user_geom);
-        let context = MjrContext::new(&model);
-        let camera  = MjvCamera::new_free(&model);
-
-        #[cfg(feature = "viewer-ui")]
-        let ui = ui::ViewerUI::new(model.clone(), &window, &gl_surface.display());
-
-        Ok(Self {
-            model,
-            scene,
-            context,
-            camera,
-            pert: MjvPerturb::default(),
-            opt: MjvOption::default(),
-            user_scene,
-            last_x: 0.0,
-            last_y: 0.0,
-            last_bnt_press_time: Instant::now(),
-            rect_view: MjrRectangle::default(),
-            rect_full: MjrRectangle::default(),
-            adapter,
-            event_loop,
-            modifiers: Modifiers::default(),
-            buttons_pressed: ButtonsPressed::empty(),
-            raw_cursor_position: (0.0, 0.0),
-            #[cfg(feature = "viewer-ui")] ui,
-            #[cfg(feature = "viewer-ui")] status: ViewerStatusBit::UI,
-            #[cfg(not(feature = "viewer-ui"))] status: ViewerStatusBit::HELP,
-        })
+        MjViewerBuilder::new()
+            .max_user_geoms(max_user_geom)
+            .build_passive(model)
     }
 
     /// Checks whether the window is still open.
@@ -255,6 +208,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Adds a user-defined UI callback for custom widgets in the viewer's UI.
     /// The callback receives an [`egui::Context`] reference and can be used to create
     /// custom windows, panels, or other UI elements.
+    /// It also receives a mutable reference to [`MjData`], which can be used to read
+    /// and modify simulation state. Note that the model can be accessed through [`MjData::model`].
     ///
     /// This method is only available when the `viewer-ui` feature is enabled.
     ///
@@ -264,7 +219,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// # use mujoco_rs::viewer::MjViewer;
     /// # let model = MjModel::from_xml_string("<mujoco/>").unwrap();
     /// # let mut viewer = MjViewer::launch_passive(&model, 0).unwrap();
-    /// viewer.add_ui_callback(|ctx| {
+    /// viewer.add_ui_callback(|ctx, data| {
     ///     use mujoco_rs::viewer::egui;
     ///     egui::Window::new("Custom controls")
     ///         .fade_in(false)
@@ -278,7 +233,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     #[cfg(feature = "viewer-ui")]
     pub fn add_ui_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&egui::Context) + 'static
+        F: FnMut(&egui::Context, &mut MjData<M>) + 'static
     {
         self.ui.add_ui_callback(callback);
     }
@@ -750,6 +705,86 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         };
     }
 }
+
+
+/// Builder for [`MjViewer`].
+pub struct MjViewerBuilder {
+    window_name: Cow<'static, str>,
+    max_user_geoms: usize
+}
+
+impl MjViewerBuilder {
+    builder_setters! {
+        max_user_geoms: usize; "maximum number of geoms that can be drawn by the user in addition to the regular geoms.";
+        window_name: Cow<'static, str>; "text shown in the title of the window."
+    }
+}
+
+impl MjViewerBuilder {
+    pub fn new() -> Self {
+        Self { 
+            window_name: Cow::Owned(format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version())),
+            max_user_geoms: 0
+        }
+    }
+
+    pub fn build_passive<M: Deref<Target = MjModel> + Clone>(&self, model: M) -> Result<MjViewer<M>, MjViewerError> {
+        let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
+        let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
+        let adapter = RenderBase::new(
+            w, h,
+            format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version()),
+            &mut event_loop,
+            true  // process events
+        );
+
+        /* Initialize the OpenGL related things */
+        let RenderBaseGlState {
+            gl_context,
+            gl_surface,
+            #[cfg(feature = "viewer-ui")] window,
+            ..
+        } = adapter.state.as_ref().unwrap();
+        gl_context.make_current(gl_surface).map_err(MjViewerError::GlutinError)?;
+        gl_surface.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait).map_err(
+            |e| MjViewerError::GlutinError(e)
+        )?;
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+
+        let ngeom = model.ffi().ngeom as usize;
+        let scene = MjvScene::new(model.clone(), ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
+        let user_scene = MjvScene::new(model.clone(), self.max_user_geoms);
+        let context = MjrContext::new(&model);
+        let camera  = MjvCamera::new_free(&model);
+
+        #[cfg(feature = "viewer-ui")]
+        let ui = ui::ViewerUI::new(model.clone(), &window, &gl_surface.display());
+
+        Ok(MjViewer {
+            model,
+            scene,
+            context,
+            camera,
+            pert: MjvPerturb::default(),
+            opt: MjvOption::default(),
+            user_scene,
+            last_x: 0.0,
+            last_y: 0.0,
+            last_bnt_press_time: Instant::now(),
+            rect_view: MjrRectangle::default(),
+            rect_full: MjrRectangle::default(),
+            adapter,
+            event_loop,
+            modifiers: Modifiers::default(),
+            buttons_pressed: ButtonsPressed::empty(),
+            raw_cursor_position: (0.0, 0.0),
+            #[cfg(feature = "viewer-ui")] ui,
+            #[cfg(feature = "viewer-ui")] status: ViewerStatusBit::UI,
+            #[cfg(not(feature = "viewer-ui"))] status: ViewerStatusBit::HELP,
+        })
+    }
+}
+
 
 bitflags! {
     #[derive(Debug)]

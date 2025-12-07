@@ -116,7 +116,7 @@ const FRAME_TYPE_MAP: [&str; 8] = [
 ];
 
 /// Type alias for a user-provided UI callback function.
-pub(crate) type UiCallback = Box<dyn FnMut(&egui::Context)>;
+pub(crate) type UiCallback<M> = Box<dyn FnMut(&egui::Context, &mut MjData<M>)>;
 
 /// Viewer user interface context.
 pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
@@ -131,7 +131,7 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     equality_names: Vec<String>,
     status: UiStatus,
     model: M,
-    user_ui_callbacks: Vec<UiCallback>,
+    user_ui_callbacks: Vec<UiCallback<M>>,
 }
 
 impl<M: Deref<Target = MjModel>> ViewerUI<M> {
@@ -519,7 +519,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
             /* User-defined UI callbacks */
             for callback in self.user_ui_callbacks.iter_mut() {
-                callback(ctx);
+                callback(ctx, data);
             }
         });
 
@@ -576,7 +576,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     /// panels, or other UI elements.
     pub(crate) fn add_ui_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&egui::Context) + 'static
+        F: FnMut(&egui::Context, &mut MjData<M>) + 'static
     {
         self.user_ui_callbacks.push(Box::new(callback));
     }

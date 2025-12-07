@@ -105,7 +105,7 @@ The following example demonstrates how to add a custom window to the viewer:
             .expect("could not launch the viewer");
 
         /* Add a custom UI window */
-        viewer.add_ui_callback(|ctx| {
+        viewer.add_ui_callback(|ctx, data| {
             use mujoco_rs::viewer::egui;
             egui::Window::new("Custom controls")
                 .fade_in(false)

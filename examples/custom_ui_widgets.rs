@@ -53,7 +53,7 @@ impl CustomSimulation {
 
             // Clone the reference counter so that the closure below moves the clone, not the original.
             let storage = storage.clone();
-            move |ctx| {
+            move |ctx, _| {  // accepts parameters: (egui::Context, MjData)
                 use mujoco_rs::viewer::egui;
 
                 // Since we're using Rc, we need RefCell to dynamically borrow.
@@ -105,7 +105,7 @@ impl CustomSimulation {
         viewer.add_ui_callback({
             // Clone the reference counter so that the closure below moves the clone, not the original.
             let storage = storage.clone();
-            move |ctx| {
+            move |ctx, _| {
                 use mujoco_rs::viewer::egui;
 
                 // Since we're using Rc, we need RefCell to dynamically borrow.
