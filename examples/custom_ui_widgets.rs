@@ -32,7 +32,7 @@ struct CustomSimulation {
 
 
 /// Storage for keeping the custom UI state (per closure).
-struct CallBackStorage {
+struct CallbackStorage {
     window_open: bool
 }
 
@@ -45,8 +45,8 @@ impl CustomSimulation {
             .expect("could not launch the viewer");
 
         // Common user-state storage, which can be used in multiple ui callbacks.
-        // For callback local storage, simply use CallBackStorage instead of Rc<RefCell<CallBackStorage>>.
-        let storage = Rc::new(RefCell::new(CallBackStorage { window_open: false }));
+        // For callback local storage, simply use CallbackStorage instead of Rc<RefCell<CallbackStorage>>.
+        let storage = Rc::new(RefCell::new(CallbackStorage { window_open: false }));
 
         // Example 1: Side panel with controls
         viewer.add_ui_callback({
@@ -109,7 +109,7 @@ impl CustomSimulation {
                 use mujoco_rs::viewer::egui;
 
                 // Since we're using Rc, we need RefCell to dynamically borrow.
-                let storage_borrow = storage.borrow_mut();
+                let storage_borrow = storage.borrow();
                 egui::TopBottomPanel::top("custom_top_panel")
                     .show(ctx, |ui| {
                         ui.horizontal(|ui| {
