@@ -30,7 +30,7 @@ fn main() {
 
     // Add a custom UI widget to demonstrate the new feature
     #[cfg(feature = "viewer-ui")]
-    viewer.add_custom_ui_widgets(|ctx| {
+    viewer.add_ui_callback(|ctx| {
         use mujoco_rs::viewer::egui;
         egui::Window::new("Custom controls")
             .fade_in(false)
@@ -38,7 +38,7 @@ fn main() {
             .scroll(true)
             .show(ctx, |ui| {
                 ui.heading("Custom Widget Example");
-                ui.label("This is a custom widget added via add_custom_ui_widgets!");
+                ui.label("This is a custom widget added via add_ui_callback!");
                 ui.separator();
                 ui.label("You can add any egui widgets here.");
             });

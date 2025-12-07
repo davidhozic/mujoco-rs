@@ -264,7 +264,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// # use mujoco_rs::viewer::MjViewer;
     /// # let model = MjModel::from_xml_string("<mujoco/>").unwrap();
     /// # let mut viewer = MjViewer::launch_passive(&model, 0).unwrap();
-    /// viewer.add_custom_ui_widgets(|ctx| {
+    /// viewer.add_ui_callback(|ctx| {
     ///     use mujoco_rs::viewer::egui;
     ///     egui::Window::new("Custom controls")
     ///         .fade_in(false)
@@ -276,11 +276,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// });
     /// ```
     #[cfg(feature = "viewer-ui")]
-    pub fn add_custom_ui_widgets<F>(&mut self, callback: F)
+    pub fn add_ui_callback<F>(&mut self, callback: F)
     where
         F: FnMut(&egui::Context) + 'static
     {
-        self.ui.add_custom_ui_widgets(callback);
+        self.ui.add_ui_callback(callback);
     }
 
     /// Syncs the state of `data` with the viewer as well as perform

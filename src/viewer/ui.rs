@@ -574,7 +574,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     /// Adds a user-defined UI callback that will be invoked during UI rendering.
     /// The callback receives the egui context and can be used to create custom windows,
     /// panels, or other UI elements.
-    pub(crate) fn add_custom_ui_widgets<F>(&mut self, callback: F)
+    pub(crate) fn add_ui_callback<F>(&mut self, callback: F)
     where
         F: FnMut(&egui::Context) + 'static
     {
