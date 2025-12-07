@@ -27,6 +27,23 @@ fn main() {
     let mut data = MjData::new(&model);  // or model.make_data()
     let mut viewer = MjViewer::launch_passive(&model, 100)
         .expect("could not launch the viewer");
+
+    // Add a custom UI widget to demonstrate the new feature
+    #[cfg(feature = "viewer-ui")]
+    viewer.add_ui_callback(|ctx| {
+        use mujoco_rs::viewer::egui;
+        egui::Window::new("Custom controls")
+            .fade_in(false)
+            .fade_out(false)
+            .scroll(true)
+            .show(ctx, |ui| {
+                ui.heading("Custom Widget Example");
+                ui.label("This is a custom widget added via add_ui_callback!");
+                ui.separator();
+                ui.label("You can add any egui widgets here.");
+            });
+    });
+
     while viewer.running() {
         viewer.sync(&mut data);
         data.step();

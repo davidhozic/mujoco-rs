@@ -23,6 +23,12 @@ Unreleased (MuJoCo 3.3.7)
   - New feature added for compatibility purposes: ``renderer-winit-fallback``.
     The feature is enabled by default.
 
+- Changes to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
+
+  - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` for custom UI widgets.
+    This allows users to create custom windows, panels, and other UI elements using `egui <https://github.com/emilk/egui>`_.
+    See :ref:`Custom UI Widgets <rust_native_viewer>` for more information.
+
 
 2.1.0 / 2.1.1 (MuJoCo 3.3.7)
 ================================
