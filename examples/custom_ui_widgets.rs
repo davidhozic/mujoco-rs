@@ -3,6 +3,9 @@
 //! custom windows, panels, and other UI elements using egui.
 
 use std::time::Duration;
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
 
@@ -20,61 +23,111 @@ const EXAMPLE_MODEL: &str = "
 </mujoco>
 ";
 
+
+/// Example of a user-written simulation struct (minimal as possible).
+struct CustomSimulation {
+    data: MjData<Rc<MjModel>>,
+    viewer: MjViewer<Rc<MjModel>>
+}
+
+
+/// Storage for keeping the custom UI state (per closure).
+struct CallBackStorage {
+    window_open: bool
+}
+
+
+impl CustomSimulation {
+    fn new(model_xml_string: &str) -> Self {
+        let model = Rc::new(MjModel::from_xml_string(model_xml_string).expect("could not load the model"));
+        let data = MjData::new(model.clone());
+        let mut viewer = MjViewer::launch_passive(model.clone(), 100)
+            .expect("could not launch the viewer");
+
+        // Common user-state storage, which can be used in multiple ui callbacks.
+        // For callback local storage, simply use CallBackStorage instead of Rc<RefCell<CallBackStorage>>.
+        let storage = Rc::new(RefCell::new(CallBackStorage { window_open: false }));
+
+        // Example 1: Side panel with controls
+        viewer.add_ui_callback({
+
+            // Clone the reference counter so that the closure below moves the clone, not the original.
+            let storage = storage.clone();
+            move |ctx| {
+                use mujoco_rs::viewer::egui;
+
+                // Since we're using Rc, we need RefCell to dynamically borrow.
+                let mut storage_borrow = storage.borrow_mut();
+
+                egui::SidePanel::right("custom_panel")
+                    .default_width(200.0)
+                    .show(ctx, |ui| {
+                        ui.heading("Custom Panel");
+                        ui.separator();
+                        ui.label("This is a custom side panel");
+                        ui.label("Added via add_ui_callback!");
+                        
+                        if ui.button("Example Button").clicked() {
+                            storage_borrow.window_open = !storage_borrow.window_open;
+                        }
+                    });
+
+                egui::Window::new("Simulation Info")
+                    .fade_in(false)
+                    .fade_out(false)
+                    .default_pos([400.0, 50.0])
+                    .open(&mut storage_borrow.window_open)
+                    .show(ctx, |ui| {
+                        ui.heading("Simulation Information");
+                        ui.separator();
+                        ui.label("This is a custom information window.");
+                        ui.label("You can add any egui widgets here!");
+                    });
+            }
+        });
+
+        // Example 2: Top panel
+        viewer.add_ui_callback({
+            // Clone the reference counter so that the closure below moves the clone, not the original.
+            let storage = storage.clone();
+            move |ctx| {
+                use mujoco_rs::viewer::egui;
+
+                // Since we're using Rc, we need RefCell to dynamically borrow.
+                let storage_borrow = storage.borrow_mut();
+                egui::TopBottomPanel::top("custom_top_panel")
+                    .show(ctx, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("Custom Top Bar");
+                            ui.separator();
+                            ui.label("MuJoCo Rust Viewer with Custom Widgets");
+                        });
+                        ui.label(format!("Is window opened: {}", storage_borrow.window_open));
+                    });
+            }
+        });
+
+
+        Self { data, viewer }
+    }
+
+    fn viewer_running(&self) -> bool {
+        self.viewer.running()
+    }
+
+    fn step(&mut self) {
+        self.viewer.sync(&mut self.data);
+        self.data.step();
+    }
+}
+
+
 fn main() {
-    let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
-    let mut data = MjData::new(&model);
-    let mut viewer = MjViewer::launch_passive(&model, 100)
-        .expect("could not launch the viewer");
-
-    // Example 1: Simple information window
-    viewer.add_ui_callback(|ctx| {
-        use mujoco_rs::viewer::egui;
-        egui::Window::new("Simulation Info")
-            .fade_in(false)
-            .fade_out(false)
-            .default_pos([400.0, 50.0])
-            .show(ctx, |ui| {
-                ui.heading("Simulation Information");
-                ui.separator();
-                ui.label("This is a custom information window.");
-                ui.label("You can add any egui widgets here!");
-            });
-    });
-
-    // Example 2: Side panel with controls
-    viewer.add_ui_callback(|ctx| {
-        use mujoco_rs::viewer::egui;
-        egui::SidePanel::right("custom_panel")
-            .default_width(200.0)
-            .show(ctx, |ui| {
-                ui.heading("Custom Panel");
-                ui.separator();
-                ui.label("This is a custom side panel");
-                ui.label("Added via add_ui_callback!");
-                
-                if ui.button("Example Button").clicked() {
-                    println!("Custom button clicked!");
-                }
-            });
-    });
-
-    // Example 3: Top panel
-    viewer.add_ui_callback(|ctx| {
-        use mujoco_rs::viewer::egui;
-        egui::TopBottomPanel::top("custom_top_panel")
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Custom Top Bar");
-                    ui.separator();
-                    ui.label("MuJoCo Rust Viewer with Custom Widgets");
-                });
-            });
-    });
-
+    let mut simulation = CustomSimulation::new(EXAMPLE_MODEL);
+    
     // Run the simulation
-    while viewer.running() {
-        viewer.sync(&mut data);
-        data.step();
+    while simulation.viewer_running() {
+        simulation.step();
         std::thread::sleep(Duration::from_millis(2));
     }
 }
