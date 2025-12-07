@@ -11,10 +11,11 @@ use winit::event_loop::EventLoop;
 use winit::dpi::PhysicalPosition;
 use winit::window::Fullscreen;
 
-use std::borrow::Cow;
 use std::time::{Duration, Instant};
+use std::marker::PhantomData;
 use std::error::Error;
 use std::fmt::Display;
+use std::borrow::Cow;
 use std::ops::Deref;
 
 use bitflags::bitflags;
@@ -172,10 +173,19 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// It can thus be set to 0 if no additional geoms will be drawn by the user.
     /// 
     /// Note that the use of [`MjViewerBuilder`] is preferred, because it is more flexible.
+    /// Call [`MjViewer::builder`] to create a [`MjViewerBuilder`] instance.
     pub fn launch_passive(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
         MjViewerBuilder::new()
             .max_user_geoms(max_user_geom)
             .build_passive(model)
+    }
+
+    /// A shortcut for creating an instance of [`MjViewerBuilder`].
+    /// The builder can be used to build the viewer after configuring it.
+    /// It allows better configuration than [`MjViewer::launch_passive`], which
+    /// is fixed to achieve backward compatibility.
+    pub fn builder() -> MjViewerBuilder<M> {
+        MjViewerBuilder::new()
     }
 
     /// Checks whether the window is still open.
@@ -377,7 +387,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 self.ui.handle_events(window, &window_event);
             }
 
-            match window_event {
+             match window_event {
                 WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
                 WindowEvent::MouseInput {state, button, .. } => {
                     let is_pressed = state == ElementState::Pressed;
@@ -613,7 +623,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         /* Check mouse presses and move the camera if any of them is pressed */
         let action;
         let height = window.outer_size().height as f64;
-        
+
         if buttons.contains(ButtonsPressed::LEFT) {
             if self.pert.active == MjtPertBit::mjPERT_TRANSLATE as i32 {
                 action = if shift {MjtMouse::mjMOUSE_MOVE_H} else {MjtMouse::mjMOUSE_MOVE_V};
@@ -708,32 +718,42 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
 
 /// Builder for [`MjViewer`].
-pub struct MjViewerBuilder {
+/// ### Default settings:
+/// - `window_name`: MuJoCo Rust Viewer (MuJoCo \<MuJoCo version here\>)
+/// - `max_user_geoms`: 0
+/// - `enable_side_panel`: true
+/// 
+pub struct MjViewerBuilder<M: Deref<Target = MjModel> + Clone> {
+    /// The name shown on the window decoration.
     window_name: Cow<'static, str>,
-    max_user_geoms: usize
+    /// Maximum number of geoms that can be given by the user for custom visualization.
+    max_user_geoms: usize,
+
+    /// Used to store the model type only. Useful for type inference.
+    model_type: PhantomData<M>,
 }
 
-impl MjViewerBuilder {
+impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
     builder_setters! {
         max_user_geoms: usize; "maximum number of geoms that can be drawn by the user in addition to the regular geoms.";
-        window_name: Cow<'static, str>; "text shown in the title of the window."
+        window_name: S where S: Into<Cow<'static, str>>; "text shown in the title of the window.";
     }
 }
 
-impl MjViewerBuilder {
+impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
     pub fn new() -> Self {
         Self { 
             window_name: Cow::Owned(format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version())),
-            max_user_geoms: 0
+            max_user_geoms: 0, model_type: PhantomData
         }
     }
 
-    pub fn build_passive<M: Deref<Target = MjModel> + Clone>(&self, model: M) -> Result<MjViewer<M>, MjViewerError> {
+    pub fn build_passive(&self, model: M) -> Result<MjViewer<M>, MjViewerError> {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
         let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
         let adapter = RenderBase::new(
             w, h,
-            format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version()),
+            self.window_name.to_string(),
             &mut event_loop,
             true  // process events
         );
@@ -760,6 +780,12 @@ impl MjViewerBuilder {
         #[cfg(feature = "viewer-ui")]
         let ui = ui::ViewerUI::new(model.clone(), &window, &gl_surface.display());
 
+        #[cfg(feature = "viewer-ui")]
+        let status = ViewerStatusBit::UI;
+
+        #[cfg(not(feature = "viewer-ui"))]
+        let status = ViewerStatusBit::HELP;
+
         Ok(MjViewer {
             model,
             scene,
@@ -779,19 +805,22 @@ impl MjViewerBuilder {
             buttons_pressed: ButtonsPressed::empty(),
             raw_cursor_position: (0.0, 0.0),
             #[cfg(feature = "viewer-ui")] ui,
-            #[cfg(feature = "viewer-ui")] status: ViewerStatusBit::UI,
-            #[cfg(not(feature = "viewer-ui"))] status: ViewerStatusBit::HELP,
+            status
         })
     }
 }
 
+impl<M: Deref<Target = MjModel> + Clone> Default for MjViewerBuilder<M> {
+    fn default() -> Self {
+        MjViewerBuilder::new()
+    }
+}
 
 bitflags! {
     #[derive(Debug)]
     struct ViewerStatusBit: u8 {
         const HELP = 1 << 0;
-        #[cfg(feature = "viewer-ui")]
-        const UI = 1 << 1;
+        #[cfg(feature = "viewer-ui")] const UI = 1 << 1;
     }
 }
 
