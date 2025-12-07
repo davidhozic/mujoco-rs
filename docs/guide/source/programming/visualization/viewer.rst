@@ -85,7 +85,7 @@ For more, refer to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
 
 
 Custom UI Widgets
-==================
+------------------
 The Rust-native viewer supports adding custom UI widgets through the
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` method.
 This allows you to create custom windows, panels, and other UI elements using
@@ -127,9 +127,8 @@ The following example demonstrates how to add a custom window to the viewer:
 Multiple callbacks can be registered by calling ``add_ui_callback`` multiple times.
 Each callback will be invoked during the UI rendering phase with access to the egui context.
 
-For a comprehensive example, see the
-`custom_ui_widgets.rs <https://github.com/davidhozic/mujoco-rs/blob/main/examples/custom_ui_widgets.rs>`_
-example, which demonstrates various types of UI elements including windows, side panels, and top panels.
+For a comprehensive example, see the :gh-example:`custom_ui_widgets.rs` example,
+which demonstrates various types of UI elements including windows, side panels, and top panels.
 
 .. note::
 
