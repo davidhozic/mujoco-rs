@@ -192,6 +192,12 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
         let model_ffi = self.model.ffi();
         let id = id as usize;
+        
+        // Bounds check to ensure id is valid
+        if id >= model_ffi.ntendon as usize {
+            return None;
+        }
+        
         let wrapadr = (id, 1);
         let wrapnum = (id, 1);
         let J_rownnz = (id, 1);
