@@ -232,8 +232,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// viewer.add_ui_callback(|ctx, data| {
     ///     use mujoco_rs::viewer::egui;
     ///     egui::Window::new("Custom controls")
-    ///         .fade_in(false)
-    ///         .fade_out(false)
     ///         .scroll(true)
     ///         .show(ctx, |ui| {
     ///             ui.label("Custom UI element");

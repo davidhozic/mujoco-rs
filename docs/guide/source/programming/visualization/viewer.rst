@@ -108,8 +108,6 @@ The following example demonstrates how to add a custom window to the viewer:
         viewer.add_ui_callback(|ctx, data| {
             use mujoco_rs::viewer::egui;
             egui::Window::new("Custom controls")
-                .fade_in(false)
-                .fade_out(false)
                 .scroll(true)
                 .show(ctx, |ui| {
                     ui.heading("My Custom Widget");
