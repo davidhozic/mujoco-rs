@@ -721,7 +721,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 /// ### Default settings:
 /// - `window_name`: MuJoCo Rust Viewer (MuJoCo \<MuJoCo version here\>)
 /// - `max_user_geoms`: 0
-/// - `enable_side_panel`: true
 /// 
 pub struct MjViewerBuilder<M: Deref<Target = MjModel> + Clone> {
     /// The name shown on the window decoration.
@@ -729,6 +728,7 @@ pub struct MjViewerBuilder<M: Deref<Target = MjModel> + Clone> {
     /// Maximum number of geoms that can be given by the user for custom visualization.
     max_user_geoms: usize,
 
+    /* Miscellaneous */
     /// Used to store the model type only. Useful for type inference.
     model_type: PhantomData<M>,
 }

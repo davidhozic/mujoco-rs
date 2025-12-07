@@ -140,7 +140,6 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     joint_window: bool,
     equality_window: bool,
     group_window: bool
-    
 }
 
 impl<M: Deref<Target = MjModel>> ViewerUI<M> {

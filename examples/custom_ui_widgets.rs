@@ -1,6 +1,7 @@
 //! Example demonstrating custom UI widgets in the MuJoCo viewer.
 //! This example shows how to use the add_ui_callback method to create
 //! custom windows, panels, and other UI elements using egui.
+//! This example requires the `viewer-ui` cargo feature to be enabled.
 
 use std::time::Duration;
 use std::cell::RefCell;
