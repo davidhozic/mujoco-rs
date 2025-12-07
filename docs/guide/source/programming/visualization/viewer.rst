@@ -84,16 +84,19 @@ For more, refer to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
 `examples <https://github.com/davidhozic/mujoco-rs/tree/main/examples>`_.
 
 
-Custom UI Widgets
+.. _custom_ui_widgets:
+
+Custom UI widgets
 ------------------
 The Rust-native viewer supports adding custom UI widgets through the
-:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` method.
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_custom_ui_widgets` method.
 This allows you to create custom windows, panels, and other UI elements using
 `egui <https://docs.rs/egui/latest/egui/>`_.
 
 The following example demonstrates how to add a custom window to the viewer:
 
 .. code-block:: rust
+    :emphasize-lines: 8-21
 
     fn main() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
@@ -101,8 +104,8 @@ The following example demonstrates how to add a custom window to the viewer:
         let mut viewer = MjViewer::launch_passive(&model, 100)
             .expect("could not launch the viewer");
 
-        // Add a custom UI window
-        viewer.add_ui_callback(|ctx| {
+        /* Add a custom UI window */
+        viewer.add_custom_ui_widgets(|ctx| {
             use mujoco_rs::viewer::egui;
             egui::Window::new("Custom controls")
                 .fade_in(false)
@@ -124,7 +127,7 @@ The following example demonstrates how to add a custom window to the viewer:
         }
     }
 
-Multiple callbacks can be registered by calling ``add_ui_callback`` multiple times.
+Multiple callbacks can be registered by calling ``add_custom_ui_widgets`` multiple times.
 Each callback will be invoked during the UI rendering phase with access to the egui context.
 
 For a comprehensive example, see the :gh-example:`custom_ui_widgets.rs` example,

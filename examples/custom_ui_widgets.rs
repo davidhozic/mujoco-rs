@@ -1,5 +1,5 @@
 //! Example demonstrating custom UI widgets in the MuJoCo viewer.
-//! This example shows how to use the add_ui_callback method to create
+//! This example shows how to use the add_custom_ui_widgets method to create
 //! custom windows, panels, and other UI elements using egui.
 
 use std::time::Duration;
@@ -27,7 +27,7 @@ fn main() {
         .expect("could not launch the viewer");
 
     // Example 1: Simple information window
-    viewer.add_ui_callback(|ctx| {
+    viewer.add_custom_ui_widgets(|ctx| {
         use mujoco_rs::viewer::egui;
         egui::Window::new("Simulation Info")
             .fade_in(false)
@@ -42,7 +42,7 @@ fn main() {
     });
 
     // Example 2: Side panel with controls
-    viewer.add_ui_callback(|ctx| {
+    viewer.add_custom_ui_widgets(|ctx| {
         use mujoco_rs::viewer::egui;
         egui::SidePanel::right("custom_panel")
             .default_width(200.0)
@@ -50,7 +50,7 @@ fn main() {
                 ui.heading("Custom Panel");
                 ui.separator();
                 ui.label("This is a custom side panel");
-                ui.label("Added via add_ui_callback!");
+                ui.label("Added via add_custom_ui_widgets!");
                 
                 if ui.button("Example Button").clicked() {
                     println!("Custom button clicked!");
@@ -59,7 +59,7 @@ fn main() {
     });
 
     // Example 3: Top panel
-    viewer.add_ui_callback(|ctx| {
+    viewer.add_custom_ui_widgets(|ctx| {
         use mujoco_rs::viewer::egui;
         egui::TopBottomPanel::top("custom_top_panel")
             .show(ctx, |ui| {
