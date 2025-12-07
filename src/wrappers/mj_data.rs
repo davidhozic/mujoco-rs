@@ -192,15 +192,20 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
         let model_ffi = self.model.ffi();
         let id = id as usize;
-        let nv = model_ffi.nv as usize;
         let wrapadr = (id, 1);
         let wrapnum = (id, 1);
         let J_rownnz = (id, 1);
         let J_rowadr = (id, 1);
-        let J_colind = (id * nv, nv);
         let length = (id, 1);
-        let J = (id * nv, nv);
         let velocity = (id, 1);
+        
+        // For sparse Jacobian, we need to read the actual row address and number of non-zeros
+        // from the data arrays to compute the correct slice indices.
+        let data_ffi = self.ffi();
+        let row_addr = unsafe { *data_ffi.ten_J_rowadr.add(id) } as usize;
+        let row_nnz = unsafe { *data_ffi.ten_J_rownnz.add(id) } as usize;
+        let J_colind = (row_addr, row_nnz);
+        let J = (row_addr, row_nnz);
 
         Some(MjTendonDataInfo { id, name: name.to_string(), wrapadr, wrapnum, J_rownnz, J_rowadr, J_colind, length, J, velocity })
     }
