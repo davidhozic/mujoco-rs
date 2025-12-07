@@ -211,11 +211,12 @@ impl MjvGeom {
 
     /// Compatibility method to convert the ``s`` parameter into an array that is copied to the ``label`` attribute.
     pub fn set_label(&mut self, s: &str) {
-        assert!(s.len() < self.label.len());
-        for (i, b) in s.chars().enumerate() {
+        let bytes = s.as_bytes();
+        assert!(bytes.len() < self.label.len());
+        for (i, &b) in bytes.iter().enumerate() {
             self.label[i] = b as i8;
         }
-        self.label[s.len()] = 0;
+        self.label[bytes.len()] = 0;
     }
 }
 
