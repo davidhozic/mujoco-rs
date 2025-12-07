@@ -387,7 +387,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 self.ui.handle_events(window, &window_event);
             }
 
-             match window_event {
+            match window_event {
                 WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers,
                 WindowEvent::MouseInput {state, button, .. } => {
                     let is_pressed = state == ElementState::Pressed;
