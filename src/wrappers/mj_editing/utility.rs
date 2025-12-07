@@ -8,10 +8,13 @@ use crate::mujoco_c::*;
 ** Utility functions
 ***************************/
 /// Reads MJS string (C++) as a `&str`.
+/// # Panics
+/// Panics if the C++ string contains invalid UTF-8 data.
 pub(crate) fn read_mjs_string(string: &mjString) -> &str {
     unsafe {
         let ptr = mjs_getString(string);
-        CStr::from_ptr(ptr).to_str().unwrap()
+        CStr::from_ptr(ptr).to_str()
+            .expect("MuJoCo returned invalid UTF-8 string")
     }
 }
 

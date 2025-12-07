@@ -603,12 +603,13 @@ impl MjsFrame {
     }
 
     /// Adds a child frame.
-    pub fn add_frame(&mut self) -> &mut MjsFrame {
+    /// Returns `None` if frame creation fails.
+    pub fn add_frame(&mut self) -> Option<&mut MjsFrame> {
         unsafe {
             let parent_body = mjs_getParent(self.element_mut_pointer());
             let parent_frame = self.element_mut_pointer();
             let frame_ptr = mjs_addFrame(parent_body, parent_frame.cast());
-            frame_ptr.as_mut().unwrap()
+            frame_ptr.as_mut()
         }
     }
 }
@@ -891,40 +892,44 @@ impl MjsTendon {
     }
 
     /// Wrap a site corresponding to `name`, using the tendon.
+    /// Returns `None` if the site name is not found.
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
-    pub fn wrap_site(&mut self, name: &str) -> &mut MjsWrap {
+    pub fn wrap_site(&mut self, name: &str) -> Option<&mut MjsWrap> {
         let cname = CString::new(name).unwrap();
         let wrap_ptr = unsafe { mjs_wrapSite(self, cname.as_ptr()) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }
     }
 
     /// Wrap a geom corresponding to `name`, using the tendon.
+    /// Returns `None` if the geom or sidesite name is not found.
     /// # Panics
     /// When the `name` or `sidesite` contain '\0' characters, a panic occurs.
-    pub fn wrap_geom(&mut self, name: &str, sidesite: &str) -> &mut MjsWrap {
+    pub fn wrap_geom(&mut self, name: &str, sidesite: &str) -> Option<&mut MjsWrap> {
         let cname = CString::new(name).unwrap();
         let csidesite = CString::new(sidesite).unwrap();
         let wrap_ptr = unsafe { mjs_wrapGeom(
             self,
             cname.as_ptr(), csidesite.as_ptr()
         ) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }
     }
 
     /// Wrap a joint corresponding to `name`, using the tendon.
+    /// Returns `None` if the joint name is not found.
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
-    pub fn wrap_joint(&mut self, name: &str, coef: f64) -> &mut MjsWrap {
+    pub fn wrap_joint(&mut self, name: &str, coef: f64) -> Option<&mut MjsWrap> {
         let cname = CString::new(name).unwrap();
         let wrap_ptr = unsafe { mjs_wrapJoint(self, cname.as_ptr(), coef) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }
     }
 
     /// Wrap a pulley using the tendon.
-    pub fn wrap_pulley(&mut self, divisor: f64) -> &mut MjsWrap {
+    /// Returns `None` if the operation fails.
+    pub fn wrap_pulley(&mut self, divisor: f64) -> Option<&mut MjsWrap> {
         let wrap_ptr = unsafe { mjs_wrapPulley(self, divisor) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }
     }
 }
 
@@ -1246,9 +1251,10 @@ impl MjsBody {
 
     // Special case
     /// Add and return a child frame.
-    pub fn add_frame(&mut self) -> &mut MjsFrame {
+    /// Returns `None` if frame creation fails.
+    pub fn add_frame(&mut self) -> Option<&mut MjsFrame> {
         let ptr = unsafe { mjs_addFrame(self, ptr::null_mut()) };
-        unsafe { ptr.as_mut().unwrap() }
+        unsafe { ptr.as_mut() }
     }
 }
 
