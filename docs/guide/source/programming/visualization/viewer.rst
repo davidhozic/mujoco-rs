@@ -84,6 +84,59 @@ For more, refer to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
 `examples <https://github.com/davidhozic/mujoco-rs/tree/main/examples>`_.
 
 
+.. _custom_ui_widgets:
+
+Custom UI widgets
+------------------
+The Rust-native viewer supports adding custom UI widgets through the
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` method.
+This allows you to create custom windows, panels, and other UI elements using
+`egui <https://docs.rs/egui/latest/egui/>`_.
+
+The following example demonstrates how to add a custom window to the viewer:
+
+.. code-block:: rust
+    :emphasize-lines: 8-21
+
+    fn main() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
+        let mut data = MjData::new(&model);
+        let mut viewer = MjViewer::launch_passive(&model, 100)
+            .expect("could not launch the viewer");
+
+        /* Add a custom UI window */
+        viewer.add_ui_callback(|ctx, data| {
+            use mujoco_rs::viewer::egui;
+            egui::Window::new("Custom controls")
+                .scroll(true)
+                .show(ctx, |ui| {
+                    ui.heading("My Custom Widget");
+                    ui.label("This is a custom UI element!");
+                    if ui.button("Click me").clicked() {
+                        println!("Button clicked!");
+                    }
+                });
+        });
+
+        while viewer.running() {
+            viewer.sync(&mut data);
+            data.step();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
+Multiple callbacks can be registered by calling ``add_ui_callback`` multiple times.
+Each callback will be invoked during the UI rendering phase with access to the egui context.
+
+For a comprehensive example, see the :gh-example:`custom_ui_widgets.rs` example,
+which demonstrates various types of UI elements including windows, side panels, and top panels.
+
+.. note::
+
+    Custom UI widgets are only available when the ``viewer-ui`` feature is enabled (default).
+    The ``egui`` crate is re-exported from ``mujoco_rs::viewer::egui`` for convenience.
+
+
 .. _mj_cpp_viewer:
 
 Wrapper of MuJoCo's C++ 3D viewer
