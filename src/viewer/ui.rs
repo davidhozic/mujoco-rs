@@ -260,6 +260,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             .default_open(true)
                             .show(ui, |ui|
                         {
+                            // Normal toggles
                             ui.horizontal_wrapped(|ui| {
                                 let mut selected = status.contains(ViewerStatusBit::HELP);
                                 ui.toggle_value(&mut selected, RichText::new("Help").font(MAIN_FONT));
@@ -270,7 +271,18 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                     self.events.push_back(UiEvent::Fullscreen);
                                 };
 
-                                // Window toggles
+                                // VSync
+                                let mut selected = status.contains(ViewerStatusBit::VSYNC);
+                                if ui.toggle_value(&mut selected, RichText::new("V-Sync").font(MAIN_FONT)).clicked() {
+                                    self.events.push_back(UiEvent::VSyncToggle);
+                                };
+                                status.set(ViewerStatusBit::VSYNC, selected);
+                            });
+
+                            ui.separator();
+
+                            // Window toggles
+                            ui.horizontal_wrapped(|ui| {
                                 ui.toggle_value(&mut self.actuator_window, RichText::new("Actuator").font(MAIN_FONT));
                                 ui.toggle_value(&mut self.joint_window, RichText::new("Joint").font(MAIN_FONT));
                                 ui.toggle_value(&mut self.equality_window, RichText::new("Equality").font(MAIN_FONT));
@@ -579,5 +591,6 @@ pub(crate) enum UiEvent {
     Close,
     Fullscreen,
     ResetSimulation,
-    AlignCamera
+    AlignCamera,
+    VSyncToggle
 }

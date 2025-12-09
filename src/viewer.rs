@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 use std::ops::{Deref, DerefMut};
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
+use std::num::NonZero;
 use std::error::Error;
 use std::fmt::Display;
 use std::borrow::Cow;
@@ -406,7 +407,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         /* Draw the user interface */
 
         use crate::viewer::ui::UiEvent;
-        let RenderBaseGlState { window, .. } = &self.adapter.state.as_ref().unwrap();
+        let RenderBaseGlState {window, ..} = &self.adapter.state.as_ref().unwrap();
+
         let inner_size = window.inner_size();
         let left = self.ui.process(
             window, &mut self.status,
@@ -434,8 +436,28 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 },
                 AlignCamera => {
                     self.camera = MjvCamera::new_free(&self.model);
+                },
+                VSyncToggle => {
+                    self.update_vsync();
                 }
             }
+        }
+    }
+
+    /// Reads the state of requested vsync setting and makes appropriate calls to [`glutin`].
+    fn update_vsync(&self) {
+        let RenderBaseGlState {
+            gl_surface, gl_context, ..
+        } = &self.adapter.state.as_ref().unwrap();
+
+        if self.status.contains(ViewerStatusBit::VSYNC) {
+            gl_surface.set_swap_interval(
+                gl_context, glutin::surface::SwapInterval::Wait(NonZero::new(1).unwrap())
+            ).expect("failed to enable vsync");
+        } else {
+            gl_surface.set_swap_interval(
+                gl_context, glutin::surface::SwapInterval::DontWait
+            ).expect("failed to disable vsync");
         }
     }
 
@@ -622,6 +644,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyE), state: ElementState::Pressed, ..},
                     ..
                 } => self.toggle_opt_flag(MjtVisFlag::mjVIS_CONSTRAINT),
+
+                // Toggle VSync
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyV), state: ElementState::Pressed, ..},
+                    ..
+                } => {
+                    self.status.toggle(ViewerStatusBit::VSYNC);
+                    self.update_vsync();
+                },
 
                 #[cfg(feature = "viewer-ui")]
                 WindowEvent::KeyboardInput {
@@ -902,6 +933,7 @@ bitflags! {
     struct ViewerStatusBit: u8 {
         const HELP = 1 << 0;
         #[cfg(feature = "viewer-ui")] const UI = 1 << 1;
+        const VSYNC = 1 << 2;
     }
 }
 
