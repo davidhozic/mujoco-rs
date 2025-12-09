@@ -817,7 +817,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     pub fn copy_visual_to(&self, destination: &mut MjData<M>) {
         unsafe {
             assert_eq!(
-                self.model.__raw(), destination.model.__raw(),
+                self.model.signature(), destination.model.signature(),
                 "destination MjData must be created from the same model as the source MjData."
             );
             mjv_copyData(destination.ffi_mut(), self.model.ffi(), self.ffi());
