@@ -52,6 +52,7 @@ pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
 
 const HELP_MENU_TITLES: &str = concat!(
     "Toggle help\n",
+    "Toggle V-Sync\n",
     "Toggle full screen\n",
     "Free camera\n",
     "Track camera\n",
@@ -70,6 +71,7 @@ const HELP_MENU_TITLES: &str = concat!(
 
 const HELP_MENU_VALUES: &str = concat!(
     "F1\n",
+    "F3\n",
     "F5\n",
     "Escape\n",
     "Control + Alt + double-left click\n",
@@ -124,7 +126,6 @@ pub struct ViewerSharedState<M: Deref<Target = MjModel>>{
     data_passive_state: Box<[MjtNum]>,
     data_passive_state_old: Box<[MjtNum]>,
     data_passive: MjData<M>,
-    model: M,
     pert: MjvPerturb
 }
 
@@ -140,7 +141,6 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
             data_passive_state_old,
             data_passive,
             pert: MjvPerturb::default(),
-            model
         }
     }
 
@@ -203,7 +203,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
 /// 
 /// # Safety
 /// Due to the nature of OpenGL, this should only be run in the **main thread**.
-// #[derive(Debug)]
+#[derive(Debug)]
 pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     /* MuJoCo rendering */
     scene: MjvScene<M>,
@@ -360,11 +360,17 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         /* Update the user menu state and overlays */
         self.update_menus();
 
+        /* Flush to the GPU */
+        self.swap_buffers();
+    }
+
+    /// Perform OpenGL buffer swap.
+    fn swap_buffers(&self) {
         let RenderBaseGlState {
             gl_context,
             gl_surface,
             ..
-        } = self.adapter.state.as_mut().unwrap();
+        } = self.adapter.state.as_ref().unwrap();
 
         /* Swap OpenGL buffers (render to screen) */
         gl_surface.swap_buffers(gl_context).expect("buffer swap in OpenGL failed");
@@ -553,6 +559,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     self.status.toggle(ViewerStatusBit::HELP);
                 }
 
+                // Toggle VSync
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::F3), state: ElementState::Pressed, ..},
+                    ..
+                } => {
+                    self.status.toggle(ViewerStatusBit::VSYNC);
+                    self.update_vsync();
+                }
+
                 // Full screen
                 WindowEvent::KeyboardInput {
                     event: KeyEvent {
@@ -644,15 +659,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyE), state: ElementState::Pressed, ..},
                     ..
                 } => self.toggle_opt_flag(MjtVisFlag::mjVIS_CONSTRAINT),
-
-                // Toggle VSync
-                WindowEvent::KeyboardInput {
-                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyV), state: ElementState::Pressed, ..},
-                    ..
-                } => {
-                    self.status.toggle(ViewerStatusBit::VSYNC);
-                    self.update_vsync();
-                },
 
                 #[cfg(feature = "viewer-ui")]
                 WindowEvent::KeyboardInput {
@@ -829,12 +835,17 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 /// ### Default settings:
 /// - `window_name`: MuJoCo Rust Viewer (MuJoCo \<MuJoCo version here\>)
 /// - `max_user_geoms`: 0
+/// - `vsync`: false
 /// 
 pub struct MjViewerBuilder<M: Deref<Target = MjModel> + Clone> {
     /// The name shown on the window decoration.
     window_name: Cow<'static, str>,
     /// Maximum number of geoms that can be given by the user for custom visualization.
     max_user_geoms: usize,
+    /// Start the viewer with vertical synchronization. This should be used only if rendering
+    /// and simulation are seperated by threads and you are ok with [`MjViewer::render`]
+    /// blocking to achieve the correct refresh rate (of your monitor).
+    vsync: bool,
 
     /* Miscellaneous */
     /// Used to store the model type only. Useful for type inference.
@@ -843,8 +854,9 @@ pub struct MjViewerBuilder<M: Deref<Target = MjModel> + Clone> {
 
 impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
     builder_setters! {
-        max_user_geoms: usize; "maximum number of geoms that can be drawn by the user in addition to the regular geoms.";
         window_name: S where S: Into<Cow<'static, str>>; "text shown in the title of the window.";
+        max_user_geoms: usize; "maximum number of geoms that can be drawn by the user in addition to the regular geoms.";
+        vsync: bool; "enable vertical synchronization by default.";
     }
 }
 
@@ -852,7 +864,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
     pub fn new() -> Self {
         Self { 
             window_name: Cow::Owned(format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version())),
-            max_user_geoms: 0, model_type: PhantomData
+            max_user_geoms: 0, vsync: false,
+            model_type: PhantomData
         }
     }
 
@@ -874,9 +887,19 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
             ..
         } = adapter.state.as_ref().unwrap();
         gl_context.make_current(gl_surface).map_err(MjViewerError::GlutinError)?;
-        gl_surface.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait).map_err(
-            |e| MjViewerError::GlutinError(e)
-        )?;
+
+        // Configure vertical configuration
+        if self.vsync {
+            gl_surface.set_swap_interval(
+                gl_context,
+                glutin::surface::SwapInterval::Wait(NonZero::new(1).unwrap())
+            ).map_err(|e| MjViewerError::GlutinError(e))?;
+        } else {
+            gl_surface.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait).map_err(
+                |e| MjViewerError::GlutinError(e)
+            )?;
+        }
+
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
         let ngeom = model.ffi().ngeom as usize;
@@ -891,12 +914,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
         // User interface
         #[cfg(feature = "viewer-ui")]
         let ui = ui::ViewerUI::new(model.clone(), &window, &gl_surface.display());
-
         #[cfg(feature = "viewer-ui")]
-        let status = ViewerStatusBit::UI;
-
+        let mut status = ViewerStatusBit::UI;
         #[cfg(not(feature = "viewer-ui"))]
-        let status = ViewerStatusBit::HELP;
+        let mut status = ViewerStatusBit::HELP;
+        status.set(ViewerStatusBit::VSYNC, self.vsync);
 
         Ok(MjViewer {
             model,
