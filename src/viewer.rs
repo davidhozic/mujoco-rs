@@ -108,6 +108,77 @@ impl Error for MjViewerError {
     }
 }
 
+
+/// Internal state that is used by [`MjViewer`] to store
+/// [`MjData`]-related state. This is separate from [`MjViewer`]
+/// to allow use in multi-threaded programs, where the physics part
+/// runs in another thread and syncs the state with the viewer
+/// running in the main thread
+#[derive(Debug)]
+pub struct ViewerSharedState<M: Deref<Target = MjModel>>{
+    /// This attribute, [`ViewerSharedState::data_passive`] and [`ViewerSharedState::data_passive_state_old`]
+    /// are used together to detect changes made to the state within the viewer.
+    /// This can happen due to changes made through the UI to joints, equalities, actuators, etc.
+    data_passive_state: Box<[MjtNum]>,
+    data_passive_state_old: Box<[MjtNum]>,
+    data_passive: MjData<M>,
+    model: M,
+    pert: MjvPerturb
+}
+
+impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
+    pub fn new(model: M) -> Self {
+        // Tracking of changes made between syncs
+        let state_size = model.state_size(MjtState::mjSTATE_INTEGRATION as u32) as usize;
+        let data_passive_state = vec![0.0 as MjtNum; state_size].into_boxed_slice();
+        let data_passive_state_old = data_passive_state.clone();
+        let data_passive = MjData::new(model.clone());
+        Self {
+            data_passive_state,
+            data_passive_state_old,
+            data_passive,
+            pert: MjvPerturb::default(),
+            model
+        }
+    }
+
+    pub fn sync(&mut self, data: &mut MjData<M>) {
+        self.data_passive.read_state_into(
+            MjtState::mjSTATE_INTEGRATION as u32,
+            &mut self.data_passive_state
+        );
+        if self.data_passive_state != self.data_passive_state_old {
+            let mut new_data_state = data.get_state(MjtState::mjSTATE_INTEGRATION as u32);
+            for ((new, passive), passive_old) in new_data_state.iter_mut()
+                .zip(&mut self.data_passive_state)
+                .zip(&mut self.data_passive_state_old)
+            {
+                if *passive_old != *passive {
+                    *new = *passive;
+                }
+            }
+
+            data.set_state(&new_data_state, MjtState::mjSTATE_INTEGRATION as u32);
+        }
+
+        // Copy only visually-required information to the internal pasive data.
+        data.copy_visual_to(&mut self.data_passive);
+
+        // Make both saved states the same.
+        // If any modification is made through the viewer
+        // between syncs, then the above if block will trigger a transfer.
+        self.data_passive.read_state_into(  // read to match the synced passive MjData
+            MjtState::mjSTATE_INTEGRATION as u32,
+            &mut self.data_passive_state
+        );
+        self.data_passive_state_old.copy_from_slice(&self.data_passive_state);
+
+        // Apply perturbations
+        self.pert.apply(self.data_passive.model(), data);
+    }
+}
+
+
 /// A Rust-native implementation of the MuJoCo viewer. To confirm to rust safety rules,
 /// the viewer doesn't store a mutable reference to the [`MjData`] struct, but it instead
 /// accepts it as a parameter at its methods.
@@ -139,7 +210,6 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
 
     /* Other MuJoCo related */
     model: M,
-    pert: MjvPerturb,
     opt: MjvOption,
 
     /* Internal state */
@@ -158,12 +228,7 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
 
     /* External interaction */
     user_scene: MjvScene<M>,
-    /// This attribute, [`MjViewer::data_passive`] and [`MjViewer::data_passive_state_old`] are used together
-    /// to detect changes made to the state within the viewer. This can happen
-    /// due to changes made through the UI to joints, equalities, actuators, etc.
-    data_passive_state: Box<[MjtNum]>,
-    data_passive_state_old: Box<[MjtNum]>,
-    data_passive: MjData<M>,
+    shared_state: ViewerSharedState<M>,
 
     /* User interface */
     #[cfg(feature = "viewer-ui")]
@@ -197,6 +262,13 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Checks whether the window is still open.
     pub fn running(&self) -> bool {
         self.adapter.running
+    }
+
+    /// Returns a reference to the shared state [`ViewerSharedState`].
+    /// This struct can be used to sync the state of the viewer with
+    /// the simulation, possibly running in another thread.
+    pub fn state(&self) -> &ViewerSharedState<M> {
+        &self.shared_state
     }
 
     /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
@@ -256,38 +328,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// rendering on the viewer.
     pub fn sync(&mut self, data: &mut MjData<M>) {
         /* Sync integration state */
-        self.data_passive.read_state_into(
-            MjtState::mjSTATE_INTEGRATION as u32,
-            &mut self.data_passive_state
-        );
-        if self.data_passive_state != self.data_passive_state_old {
-            let mut new_data_state = data.get_state(MjtState::mjSTATE_INTEGRATION as u32);
-            for ((new, passive), passive_old) in new_data_state.iter_mut()
-                .zip(&mut self.data_passive_state)
-                .zip(&mut self.data_passive_state_old)
-            {
-                if *passive_old != *passive {
-                    *new = *passive;
-                }
-            }
-
-            data.set_state(&new_data_state, MjtState::mjSTATE_INTEGRATION as u32);
-        }
-
-        // Copy only visually-required information to the internal pasive data.
-        data.copy_visual_to(&mut self.data_passive);
-
-        // Make both saved states the same.
-        // If any modification is made through the viewer
-        // between syncs, then the above if block will trigger a transfer.
-        self.data_passive.read_state_into(  // read to match the synced passive MjData
-            MjtState::mjSTATE_INTEGRATION as u32,
-            &mut self.data_passive_state
-        );
-        self.data_passive_state_old.copy_from_slice(&self.data_passive_state);
-
-        /* Apply perturbations */
-        self.pert.apply(&self.model, data);
+        self.shared_state.sync(data);
     }
 
     /// Renders the drawn content by swapping buffers.
@@ -330,7 +371,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Updates the scene and draws it to the display.
     fn update_scene(&mut self) {
         /* Update the scene from the MjData state */
-        self.scene.update(&mut self.data_passive, &self.opt, &self.pert, &mut self.camera);
+        self.scene.update(&mut self.shared_state.data_passive, &self.opt, &self.shared_state.pert, &mut self.camera);
 
         /* Draw user scene geoms */
         sync_geoms(&self.user_scene, &mut self.scene)
@@ -367,7 +408,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let left = self.ui.process(
             window, &mut self.status,
             &mut self.scene, &mut self.opt,
-            &mut self.camera, &mut self.data_passive
+            &mut self.camera, &mut self.shared_state.data_passive
         );
 
         /* Adjust the viewport so MuJoCo doesn't draw over the UI */
@@ -384,8 +425,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 Close => self.adapter.running = false,
                 Fullscreen => self.toggle_full_screen(),
                 ResetSimulation => {
-                    self.data_passive.reset();
-                    self.data_passive.forward();
+                    self.shared_state.data_passive.reset();
+                    self.shared_state.data_passive.forward();
                 },
                 AlignCamera => {
                     self.camera = MjvCamera::new_free(&self.model);
@@ -507,8 +548,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     if self.ui.focused() {
                         continue;
                     }
-                    self.data_passive.reset();
-                    self.data_passive.forward();
+                    self.shared_state.data_passive.reset();
+                    self.shared_state.data_passive.forward();
                 }
 
                 // Cycle to the next camera
@@ -652,7 +693,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let height = window.outer_size().height as f64;
 
         if buttons.contains(ButtonsPressed::LEFT) {
-            if self.pert.active == MjtPertBit::mjPERT_TRANSLATE as i32 {
+            if self.shared_state.pert.active == MjtPertBit::mjPERT_TRANSLATE as i32 {
                 action = if shift {MjtMouse::mjMOUSE_MOVE_H} else {MjtMouse::mjMOUSE_MOVE_V};
             }
             else {
@@ -670,11 +711,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         }
 
         /* When the perturbation isn't active, move the camera */
-        if self.pert.active == 0 {
+        if self.shared_state.pert.active == 0 {
             self.camera.move_(action, &self.model, dx / height, dy / height, &self.scene);
         }
         else {  // When the perturbation is active, move apply the perturbation.
-            self.pert.move_(&self.model, &mut self.data_passive, action, dx / height, dy / height, &self.scene);
+            self.shared_state.pert.move_(&self.model, &mut self.shared_state.data_passive, action, dx / height, dy / height, &self.scene);
         }
     }
 
@@ -684,13 +725,13 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         match state {
             ElementState::Pressed => {
                 /* Clicking and holding applies perturbation */
-                if self.pert.select > 0 && modifier_state.control_key() {
+                if self.shared_state.pert.select > 0 && modifier_state.control_key() {
                     let type_ = if modifier_state.alt_key() {
                         MjtPertBit::mjPERT_TRANSLATE
                     } else {
                         MjtPertBit::mjPERT_ROTATE
                     };
-                    self.pert.start(type_, &self.model, &mut self.data_passive, &self.scene);
+                    self.shared_state.pert.start(type_, &self.model, &mut self.shared_state.data_passive, &self.scene);
                 }
 
                 /* Double click detection */
@@ -702,7 +743,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     /* Obtain the selection */ 
                     let rect = &self.rect_full;
                     let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
-                        &mut self.data_passive, &self.opt,
+                        &mut self.shared_state.data_passive, &self.opt,
                         rect.width as MjtNum / rect.height as MjtNum,
                         (x - rect.left as MjtNum) / rect.width as MjtNum,
                         (y - rect.bottom as MjtNum) / rect.height as MjtNum
@@ -720,16 +761,16 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     else {
                         /* Mark selection */
                         if body_id >= 0 {
-                            self.pert.select = body_id;
-                            self.pert.flexselect = flex_id;
-                            self.pert.skinselect = skin_id;
-                            self.pert.active = 0;
-                            self.pert.update_local_pos(xyz, &mut self.data_passive);
+                            self.shared_state.pert.select = body_id;
+                            self.shared_state.pert.flexselect = flex_id;
+                            self.shared_state.pert.skinselect = skin_id;
+                            self.shared_state.pert.active = 0;
+                            self.shared_state.pert.update_local_pos(xyz, &mut self.shared_state.data_passive);
                         }
                         else {
-                            self.pert.select = 0;
-                            self.pert.flexselect = -1;
-                            self.pert.skinselect = -1;
+                            self.shared_state.pert.select = 0;
+                            self.shared_state.pert.flexselect = -1;
+                            self.shared_state.pert.skinselect = -1;
                         }
                     }
                 }
@@ -737,7 +778,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             },
             ElementState::Released => {
                 // Clear perturbation when left click is released.
-                self.pert.active = 0;
+                self.shared_state.pert.active = 0;
             },
         };
     }
@@ -805,10 +846,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
         let camera  = MjvCamera::new_free(&model);
 
         // Tracking of changes made between syncs
-        let state_size = model.state_size(MjtState::mjSTATE_INTEGRATION as u32) as usize;
-        let data_passive_state = vec![0.0 as MjtNum; state_size].into_boxed_slice();
-        let data_passive_state_old = data_passive_state.clone();
-        let data_passive = MjData::new(model.clone());
+        let shared_state = ViewerSharedState::new(model.clone());
 
         // User interface
         #[cfg(feature = "viewer-ui")]
@@ -825,12 +863,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
             scene,
             context,
             camera,
-            pert: MjvPerturb::default(),
             opt: MjvOption::default(),
             user_scene,
-            data_passive_state,
-            data_passive_state_old,
-            data_passive,
+            shared_state,
             last_x: 0.0,
             last_y: 0.0,
             last_bnt_press_time: Instant::now(),
