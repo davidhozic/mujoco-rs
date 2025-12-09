@@ -12,11 +12,12 @@ use winit::dpi::PhysicalPosition;
 use winit::window::Fullscreen;
 
 use std::time::{Duration, Instant};
+use std::ops::{Deref, DerefMut};
 use std::marker::PhantomData;
+use std::sync::{Arc, Mutex};
 use std::error::Error;
 use std::fmt::Display;
 use std::borrow::Cow;
-use std::ops::Deref;
 
 use bitflags::bitflags;
 
@@ -201,7 +202,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
 /// 
 /// # Safety
 /// Due to the nature of OpenGL, this should only be run in the **main thread**.
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     /* MuJoCo rendering */
     scene: MjvScene<M>,
@@ -228,7 +229,7 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
 
     /* External interaction */
     user_scene: MjvScene<M>,
-    shared_state: ViewerSharedState<M>,
+    shared_state: Arc<Mutex<ViewerSharedState<M>>>,
 
     /* User interface */
     #[cfg(feature = "viewer-ui")]
@@ -267,7 +268,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Returns a reference to the shared state [`ViewerSharedState`].
     /// This struct can be used to sync the state of the viewer with
     /// the simulation, possibly running in another thread.
-    pub fn state(&self) -> &ViewerSharedState<M> {
+    pub fn state(&self) -> &Arc<Mutex<ViewerSharedState<M>>> {
         &self.shared_state
     }
 
@@ -328,7 +329,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// rendering on the viewer.
     pub fn sync(&mut self, data: &mut MjData<M>) {
         /* Sync integration state */
-        self.shared_state.sync(data);
+        self.shared_state.lock().unwrap().sync(data);
     }
 
     /// Renders the drawn content by swapping buffers.
@@ -371,7 +372,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Updates the scene and draws it to the display.
     fn update_scene(&mut self) {
         /* Update the scene from the MjData state */
-        self.scene.update(&mut self.shared_state.data_passive, &self.opt, &self.shared_state.pert, &mut self.camera);
+        let lock = &mut self.shared_state.lock().unwrap();
+        let ViewerSharedState { data_passive, pert, .. } = lock.deref_mut();
+        self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
 
         /* Draw user scene geoms */
         sync_geoms(&self.user_scene, &mut self.scene)
@@ -408,7 +411,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let left = self.ui.process(
             window, &mut self.status,
             &mut self.scene, &mut self.opt,
-            &mut self.camera, &mut self.shared_state.data_passive
+            &mut self.camera, &mut self.shared_state.lock().unwrap().data_passive
         );
 
         /* Adjust the viewport so MuJoCo doesn't draw over the UI */
@@ -425,8 +428,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 Close => self.adapter.running = false,
                 Fullscreen => self.toggle_full_screen(),
                 ResetSimulation => {
-                    self.shared_state.data_passive.reset();
-                    self.shared_state.data_passive.forward();
+                    let mut lock = self.shared_state.lock().unwrap();
+                    lock.data_passive.reset();
+                    lock.data_passive.forward();
                 },
                 AlignCamera => {
                     self.camera = MjvCamera::new_free(&self.model);
@@ -548,8 +552,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     if self.ui.focused() {
                         continue;
                     }
-                    self.shared_state.data_passive.reset();
-                    self.shared_state.data_passive.forward();
+                    let mut lock = self.shared_state.lock().unwrap();
+                    lock.data_passive.reset();
+                    lock.data_passive.forward();
                 }
 
                 // Cycle to the next camera
@@ -692,8 +697,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let action;
         let height = window.outer_size().height as f64;
 
+        let mut lock = self.shared_state.lock().unwrap();
+        let ViewerSharedState {data_passive, pert, ..} = lock.deref_mut();
         if buttons.contains(ButtonsPressed::LEFT) {
-            if self.shared_state.pert.active == MjtPertBit::mjPERT_TRANSLATE as i32 {
+            if pert.active == MjtPertBit::mjPERT_TRANSLATE as i32 {
                 action = if shift {MjtMouse::mjMOUSE_MOVE_H} else {MjtMouse::mjMOUSE_MOVE_V};
             }
             else {
@@ -711,27 +718,29 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         }
 
         /* When the perturbation isn't active, move the camera */
-        if self.shared_state.pert.active == 0 {
+        if pert.active == 0 {
             self.camera.move_(action, &self.model, dx / height, dy / height, &self.scene);
         }
         else {  // When the perturbation is active, move apply the perturbation.
-            self.shared_state.pert.move_(&self.model, &mut self.shared_state.data_passive, action, dx / height, dy / height, &self.scene);
+            pert.move_(&self.model, data_passive, action, dx / height, dy / height, &self.scene);
         }
     }
 
     /// Processes left clicks and double left clicks.
     fn process_left_click(&mut self, state: ElementState) {
         let modifier_state = self.modifiers.state();
+        let mut lock = self.shared_state.lock().unwrap();
+        let ViewerSharedState {data_passive, pert, ..} = lock.deref_mut();
         match state {
             ElementState::Pressed => {
                 /* Clicking and holding applies perturbation */
-                if self.shared_state.pert.select > 0 && modifier_state.control_key() {
+                if pert.select > 0 && modifier_state.control_key() {
                     let type_ = if modifier_state.alt_key() {
                         MjtPertBit::mjPERT_TRANSLATE
                     } else {
                         MjtPertBit::mjPERT_ROTATE
                     };
-                    self.shared_state.pert.start(type_, &self.model, &mut self.shared_state.data_passive, &self.scene);
+                    pert.start(type_, &self.model, data_passive, &self.scene);
                 }
 
                 /* Double click detection */
@@ -743,7 +752,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     /* Obtain the selection */ 
                     let rect = &self.rect_full;
                     let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
-                        &mut self.shared_state.data_passive, &self.opt,
+                        data_passive, &self.opt,
                         rect.width as MjtNum / rect.height as MjtNum,
                         (x - rect.left as MjtNum) / rect.width as MjtNum,
                         (y - rect.bottom as MjtNum) / rect.height as MjtNum
@@ -761,16 +770,16 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     else {
                         /* Mark selection */
                         if body_id >= 0 {
-                            self.shared_state.pert.select = body_id;
-                            self.shared_state.pert.flexselect = flex_id;
-                            self.shared_state.pert.skinselect = skin_id;
-                            self.shared_state.pert.active = 0;
-                            self.shared_state.pert.update_local_pos(xyz, &mut self.shared_state.data_passive);
+                            pert.select = body_id;
+                            pert.flexselect = flex_id;
+                            pert.skinselect = skin_id;
+                            pert.active = 0;
+                            pert.update_local_pos(xyz, data_passive);
                         }
                         else {
-                            self.shared_state.pert.select = 0;
-                            self.shared_state.pert.flexselect = -1;
-                            self.shared_state.pert.skinselect = -1;
+                            pert.select = 0;
+                            pert.flexselect = -1;
+                            pert.skinselect = -1;
                         }
                     }
                 }
@@ -778,7 +787,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             },
             ElementState::Released => {
                 // Clear perturbation when left click is released.
-                self.shared_state.pert.active = 0;
+                pert.active = 0;
             },
         };
     }
@@ -846,7 +855,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
         let camera  = MjvCamera::new_free(&model);
 
         // Tracking of changes made between syncs
-        let shared_state = ViewerSharedState::new(model.clone());
+        let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(model.clone())));
 
         // User interface
         #[cfg(feature = "viewer-ui")]
