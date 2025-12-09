@@ -267,7 +267,17 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             &mut self.data_passive_state
         );
         if self.data_passive_state != self.data_passive_state_old {
-            data.set_state(&self.data_passive_state, MjtState::mjSTATE_INTEGRATION as u32);
+            let mut new_data_state = data.get_state(MjtState::mjSTATE_INTEGRATION as u32);
+            for ((new, passive), passive_old) in new_data_state.iter_mut()
+                .zip(&mut self.data_passive_state)
+                .zip(&mut self.data_passive_state_old)
+            {
+                if *passive_old != *passive {
+                    *new = *passive;
+                }
+            }
+
+            data.set_state(&new_data_state, MjtState::mjSTATE_INTEGRATION as u32);
         }
 
         // Copy only visually-required information to the internal pasive data.
@@ -289,15 +299,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
 
         /* Process mouse and keyboard events */
-        self.process_events(data);
-
+        self.process_events();
 
         /* Update the scene from data and render */
-        self.update_scene(data);
+        self.update_scene();
 
         /* Draw the user menu on top */
         #[cfg(feature = "viewer-ui")]
-        self.process_user_ui(data);
+        self.process_user_ui();
 
         /* Update the user menu state and overlays */
         self.update_menus();
@@ -321,13 +330,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     }
 
     /// Updates the scene and draws it to the display.
-    fn update_scene(&mut self, data: &mut MjData<M>) {
-        let model_data_ptr = unsafe {  data.model().__raw() };
-        let bound_model_ptr = unsafe { self.model.__raw() };
-        assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the viewer.");
-
+    fn update_scene(&mut self) {
         /* Update the scene from the MjData state */
-        self.scene.update(data, &self.opt, &self.pert, &mut self.camera);
+        self.scene.update(&mut self.data_passive, &self.opt, &self.pert, &mut self.camera);
 
         /* Draw user scene geoms */
         sync_geoms(&self.user_scene, &mut self.scene)
@@ -355,7 +360,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Draws the user UI
     #[cfg(feature = "viewer-ui")]
-    fn process_user_ui(&mut self, data: &mut MjData<M>) {
+    fn process_user_ui(&mut self) {
         /* Draw the user interface */
 
         use crate::viewer::ui::UiEvent;
@@ -364,7 +369,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let left = self.ui.process(
             window, &mut self.status,
             &mut self.scene, &mut self.opt,
-            &mut self.camera, data
+            &mut self.camera, &mut self.data_passive
         );
 
         /* Adjust the viewport so MuJoCo doesn't draw over the UI */
@@ -381,8 +386,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 Close => self.adapter.running = false,
                 Fullscreen => self.toggle_full_screen(),
                 ResetSimulation => {
-                    data.reset();
-                    data.forward();
+                    self.data_passive.reset();
+                    self.data_passive.forward();
                 },
                 AlignCamera => {
                     self.camera = MjvCamera::new_free(&self.model);
@@ -403,7 +408,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     }
 
     /// Processes user input events.
-    fn process_events(&mut self, data: &mut MjData<M>) {
+    fn process_events(&mut self) {
         self.event_loop.pump_app_events(Some(Duration::ZERO), &mut self.adapter);
         while let Some(window_event) = self.adapter.queue.pop_front() {
             #[cfg(feature = "viewer-ui")]
@@ -424,7 +429,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                     let index = match button {
                         MouseButton::Left => {
-                            self.process_left_click(data, state);
+                            self.process_left_click(state);
                             ButtonsPressed::LEFT
                         },
                         MouseButton::Middle => ButtonsPressed::MIDDLE,
@@ -446,7 +451,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         continue;
                     }
 
-                    self.process_cursor_pos(x, y, data);
+                    self.process_cursor_pos(x, y);
                 }
 
                 // Set the viewer's state to pending exit.
@@ -504,9 +509,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     if self.ui.focused() {
                         continue;
                     }
-
-                    data.reset();
-                    data.forward();
+                    self.data_passive.reset();
+                    self.data_passive.forward();
                 }
 
                 // Cycle to the next camera
@@ -633,7 +637,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     }
 
     /// Processes camera and perturbation movements.
-    fn process_cursor_pos(&mut self, x: f64, y: f64, data: &mut MjData<M>) {
+    fn process_cursor_pos(&mut self, x: f64, y: f64) {
         self.raw_cursor_position = (x, y);
         /* Calculate the change in mouse position since last call */
         let dx = x - self.last_x;
@@ -672,12 +676,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             self.camera.move_(action, &self.model, dx / height, dy / height, &self.scene);
         }
         else {  // When the perturbation is active, move apply the perturbation.
-            self.pert.move_(&self.model, data, action, dx / height, dy / height, &self.scene);
+            self.pert.move_(&self.model, &mut self.data_passive, action, dx / height, dy / height, &self.scene);
         }
     }
 
     /// Processes left clicks and double left clicks.
-    fn process_left_click(&mut self, data: &mut MjData<M>, state: ElementState) {
+    fn process_left_click(&mut self, state: ElementState) {
         let modifier_state = self.modifiers.state();
         match state {
             ElementState::Pressed => {
@@ -688,7 +692,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     } else {
                         MjtPertBit::mjPERT_ROTATE
                     };
-                    self.pert.start(type_, &self.model, data, &self.scene);
+                    self.pert.start(type_, &self.model, &mut self.data_passive, &self.scene);
                 }
 
                 /* Double click detection */
@@ -700,7 +704,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     /* Obtain the selection */ 
                     let rect = &self.rect_full;
                     let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
-                        data, &self.opt,
+                        &mut self.data_passive, &self.opt,
                         rect.width as MjtNum / rect.height as MjtNum,
                         (x - rect.left as MjtNum) / rect.width as MjtNum,
                         (y - rect.bottom as MjtNum) / rect.height as MjtNum
@@ -722,7 +726,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                             self.pert.flexselect = flex_id;
                             self.pert.skinselect = skin_id;
                             self.pert.active = 0;
-                            self.pert.update_local_pos(xyz, data);
+                            self.pert.update_local_pos(xyz, &mut self.data_passive);
                         }
                         else {
                             self.pert.select = 0;
