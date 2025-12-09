@@ -255,12 +255,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Syncs the state of `data` with the viewer as well as perform
     /// rendering on the viewer.
     pub fn sync(&mut self, data: &mut MjData<M>) {
-        let RenderBaseGlState {
-            gl_context,
-            gl_surface,
-            ..
-        } = self.adapter.state.as_mut().unwrap();
-
         /* Sync integration state */
         self.data_passive.read_state_into(
             MjtState::mjSTATE_INTEGRATION as u32,
@@ -292,6 +286,18 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         );
         self.data_passive_state_old.copy_from_slice(&self.data_passive_state);
 
+        /* Apply perturbations */
+        self.pert.apply(&self.model, data);
+    }
+
+    /// Renders the drawn content by swapping buffers.
+    pub fn render(&mut self) {
+        let RenderBaseGlState {
+            gl_context,
+            gl_surface,
+            ..
+        } = self.adapter.state.as_mut().unwrap();
+
         /* Make sure everything is done on the viewer's window */
         gl_context.make_current(gl_surface).expect("could not make OpenGL context current");
 
@@ -311,21 +317,13 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         /* Update the user menu state and overlays */
         self.update_menus();
 
-        /* Swap OpenGL buffers */
-        self.render();
-
-        /* Apply perturbations */
-        self.pert.apply(&self.model, data);
-    }
-
-    /// Renders the drawn content by swapping buffers.
-    fn render(&mut self) {
-        /* Display the drawn content */
         let RenderBaseGlState {
             gl_context,
-            gl_surface, ..
+            gl_surface,
+            ..
         } = self.adapter.state.as_mut().unwrap();
 
+        /* Swap OpenGL buffers (render to screen) */
         gl_surface.swap_buffers(gl_context).expect("buffer swap in OpenGL failed");
     }
 
