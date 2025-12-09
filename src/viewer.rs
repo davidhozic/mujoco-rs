@@ -22,10 +22,10 @@ use bitflags::bitflags;
 
 use crate::prelude::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
+use crate::wrappers::mj_data::{MjData, MjtState};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
-use crate::wrappers::mj_data::MjData;
 use crate::vis_common::sync_geoms;
 use crate::{builder_setters, get_mujoco_version};
 
@@ -158,6 +158,12 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
 
     /* External interaction */
     user_scene: MjvScene<M>,
+    /// This attribute, [`MjViewer::data_passive`] and [`MjViewer::data_passive_state_old`] are used together
+    /// to detect changes made to the state within the viewer. This can happen
+    /// due to changes made through the UI to joints, equalities, actuators, etc.
+    data_passive_state: Box<[MjtNum]>,
+    data_passive_state_old: Box<[MjtNum]>,
+    data_passive: MjData<M>,
 
     /* User interface */
     #[cfg(feature = "viewer-ui")]
@@ -254,6 +260,27 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             gl_surface,
             ..
         } = self.adapter.state.as_mut().unwrap();
+
+        /* Sync integration state */
+        self.data_passive.read_state_into(
+            MjtState::mjSTATE_INTEGRATION as u32,
+            &mut self.data_passive_state
+        );
+        if self.data_passive_state != self.data_passive_state_old {
+            data.set_state(&self.data_passive_state, MjtState::mjSTATE_INTEGRATION as u32);
+        }
+
+        // Copy only visually-required information to the internal pasive data.
+        data.copy_visual_to(&mut self.data_passive);
+
+        // Make both saved states the same.
+        // If any modification is made through the viewer
+        // between syncs, then the above if block will trigger a transfer.
+        self.data_passive.read_state_into(  // read to match the synced passive MjData
+            MjtState::mjSTATE_INTEGRATION as u32,
+            &mut self.data_passive_state
+        );
+        self.data_passive_state_old.copy_from_slice(&self.data_passive_state);
 
         /* Make sure everything is done on the viewer's window */
         gl_context.make_current(gl_surface).expect("could not make OpenGL context current");
@@ -775,6 +802,13 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
         let context = MjrContext::new(&model);
         let camera  = MjvCamera::new_free(&model);
 
+        // Tracking of changes made between syncs
+        let state_size = model.state_size(MjtState::mjSTATE_INTEGRATION as u32) as usize;
+        let data_passive_state = vec![0.0 as MjtNum; state_size].into_boxed_slice();
+        let data_passive_state_old = data_passive_state.clone();
+        let data_passive = MjData::new(model.clone());
+
+        // User interface
         #[cfg(feature = "viewer-ui")]
         let ui = ui::ViewerUI::new(model.clone(), &window, &gl_surface.display());
 
@@ -792,6 +826,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
             pert: MjvPerturb::default(),
             opt: MjvOption::default(),
             user_scene,
+            data_passive_state,
+            data_passive_state_old,
+            data_passive,
             last_x: 0.0,
             last_y: 0.0,
             last_bnt_press_time: Instant::now(),

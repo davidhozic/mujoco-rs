@@ -8,6 +8,7 @@ use crate::{getter_setter, mujoco_c::*};
 use std::io::{self, Error, ErrorKind};
 use std::ffi::CString;
 use std::ops::Deref;
+use std::fmt::Debug;
 use std::ptr;
 
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
@@ -46,6 +47,12 @@ pub type MjtTimer = mjtTimer;
 pub struct MjData<M: Deref<Target = MjModel>> {
     data: *mut mjData,
     model: M
+}
+
+impl<M: Deref<Target = MjModel> + Debug> Debug for MjData<M> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MjData {:?}", self.model)
+    }
 }
 
 // Allow usage in threaded contexts as the data won't be shared anywhere outside Rust,
@@ -737,6 +744,84 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             flg_static as MjtByte, bodyexclude, &mut geom_id
         ) };
         (geom_id, dist)
+    }
+
+    /// Reads data's state into `destination`. The `spec` parameter is a bit mask of [`MjtState`] elements,
+    /// which controlls what state gets copied. The `destination` parameter is a mutable
+    /// slice to the location into which the state will be written.
+    /// This is a wrapper around [`mj_getState`].
+    /// 
+    /// # Note
+    /// The `destination` buffer is allowed to be bigger than the
+    /// actual state length, and may in such contain old information.
+    /// This was done for possible performance improvements, where one array
+    /// may hold different parts of simulation state at different times.
+    /// 
+    /// You can use the returned number of [`MjtNum`] elements written to `destination`
+    /// to create a subslice containing only the updated information.
+    /// 
+    /// # Returns
+    /// Number of [`MjtNum`] elements written to `destination`.
+    /// 
+    /// # Panics
+    /// A panic will occur if `destination` is not the same size as [`MjModel::state_size`] with `spec` passed as parameter.
+    pub fn read_state_into<'a>(&self, spec: u32, destination: &'a mut [MjtNum]) -> usize {
+        let state_size = self.model.state_size(spec) as usize;
+        let destination_len = destination.len();
+        assert!(
+            destination_len >= state_size,
+            "destination buffer's size ({destination_len}) is less than the state size ({state_size})",
+        );
+        unsafe {
+            mj_getState(self.model.ffi(), self.ffi(), destination.as_mut_ptr(), spec);
+        }
+
+        state_size
+    }
+
+    /// Same as [`MjData::read_state_into`], except it allocates
+    /// and returns new boxed data containing the state.
+    pub fn get_state(&self, spec: u32) -> Box<[MjtNum]> {
+        let mut destination = vec![0.0; self.model.state_size(spec) as usize].into_boxed_slice();
+        Self::read_state_into(&self, spec, &mut destination);
+        destination
+    }
+
+    /// Sets the `state` to [`MjData`]. This is a wrapper around [`mj_setState`].
+    /// The `state` is an array containing the state to write, based on the `spec`
+    /// bitmask of elements [`MjtState`].
+    /// 
+    /// # Note
+    /// The size of `state` is allowed to be larger. This was done to allow a preallocated
+    /// buffer store any possible state based on `spec`, without having to querry the size
+    /// every time. This benefits performance in some cases.
+    /// 
+    /// # Panics
+    /// A panic will occur if `state`'s length is less than would be copied
+    /// based on `spec`.
+    pub fn set_state(&mut self, state: &[MjtNum], spec: u32) {
+        let state_len = state.len();
+        let required_len = self.model.state_size(spec) as usize;
+        assert!(
+             state_len >= required_len,
+             "size of state ({state_len}) was less than the required len based on spec ({required_len})."
+        );
+        unsafe {
+            mj_setState(self.model.ffi(), self.ffi_mut(), state.as_ptr(), spec);
+        }
+    }
+
+
+    /// Copy [`MjData`] to `destination`, skipping large arrays not required for visualization.
+    /// This is a wrapper for [`mjv_copyData`].
+    pub fn copy_visual_to(&self, destination: &mut MjData<M>) {
+        unsafe {
+            assert_eq!(
+                self.model.__raw(), destination.model.__raw(),
+                "destination MjData must be created from the same model as the source MjData."
+            );
+            mjv_copyData(destination.ffi_mut(), self.model.ffi(), self.ffi());
+        }
     }
 
     /// Returns a direct pointer to the underlying model.
