@@ -140,6 +140,8 @@ pub struct ViewerSharedState<M: Deref<Target = MjModel>>{
     last_sync_time: Instant,
     /// Time factor representing the ratio of viewer syncs with model's selected timestep.
     realtime_factor_smooth: f64,
+    /// Preallocated buffer for storing the state of new [`MjData`] state.
+    data_state_buffer: Box<[MjtNum]>
 }
 
 impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
@@ -149,6 +151,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
         let data_passive_state = vec![0.0 as MjtNum; state_size].into_boxed_slice();
         let data_passive_state_old = data_passive_state.clone();
         let data_passive = MjData::new(model.clone());
+        let data_state_buffer = data_passive_state.clone();
         Self {
             data_passive_state,
             data_passive_state_old,
@@ -158,7 +161,8 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
 
             /* Internal */
             last_sync_time: Instant::now(),
-            realtime_factor_smooth: 1.0
+            realtime_factor_smooth: 1.0,
+            data_state_buffer
         }
     }
 
@@ -191,8 +195,8 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
             &mut self.data_passive_state
         );
         if self.data_passive_state != self.data_passive_state_old {
-            let mut new_data_state = data.get_state(MjtState::mjSTATE_INTEGRATION as u32);
-            for ((new, passive), passive_old) in new_data_state.iter_mut()
+            data.read_state_into(MjtState::mjSTATE_INTEGRATION as u32, &mut self.data_state_buffer);
+            for ((new, passive), passive_old) in self.data_state_buffer.iter_mut()
                 .zip(&mut self.data_passive_state)
                 .zip(&mut self.data_passive_state_old)
             {
@@ -201,7 +205,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
                 }
             }
 
-            data.set_state(&new_data_state, MjtState::mjSTATE_INTEGRATION as u32);
+            data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32);
         }
 
         // Copy only visually-required information to the internal passive data.
