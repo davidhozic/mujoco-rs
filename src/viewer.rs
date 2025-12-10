@@ -56,8 +56,8 @@ pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
 const HELP_MENU_TITLES: &str = concat!(
     "Toggle help\n",
     "Toggle info\n",
-    "Toggle realtime check\n",
     "Toggle v-sync\n",
+    "Toggle realtime check\n",
     "Toggle full screen\n",
     "Free camera\n",
     "Track camera\n",
@@ -179,10 +179,13 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
         /* Update statistics */
         if self.data_passive.time() > 0.0 {  // time = 0 means data was reset
             let time_elapsed_sim = data.time() - self.data_passive.time();
-            self.realtime_factor_smooth += REALTIME_FACTOR_SMOOTHING_FACTOR * (
-                time_elapsed_sim / self.last_sync_time.elapsed().as_secs_f64()
-                - self.realtime_factor_smooth
-            );
+            let elapsed_sync = self.last_sync_time.elapsed();
+            if !elapsed_sync.is_zero() {
+                self.realtime_factor_smooth += REALTIME_FACTOR_SMOOTHING_FACTOR * (
+                    time_elapsed_sim / elapsed_sync.as_secs_f64()
+                    - self.realtime_factor_smooth
+                );
+            }
         } else {  // simulation was reset
             self.realtime_factor_smooth = 1.0;
         }
@@ -457,7 +460,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     }
 
     fn update_smooth_fps(&mut self) {
-        let fps = 1.0 / self.fps_timer.elapsed().as_secs_f64();
+        let elapsed = self.fps_timer.elapsed();
+
+        let fps = if elapsed.is_zero() {
+            self.fps_smooth
+        } else {
+            1.0 / elapsed.as_secs_f64()
+        };
+
         self.fps_timer = Instant::now();
         self.fps_smooth +=  FPS_SMOOTHING_FACTOR * (fps - self.fps_smooth);
     }
@@ -491,7 +501,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             );
         }
 
-        // Read later-required required information and then drop the mutex lock
+        // Read later-required information and then drop the mutex lock
         let (
             time,
             memory_pct,
@@ -500,7 +510,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         ) = {
             let state_lock = self.shared_state.lock().unwrap();
             let data_lock = &state_lock.data_passive;
-            let memory_total = data_lock.narena() as f64;
+            let memory_total = data_lock.narena().max(1) as f64;
             (
                 data_lock.time(),
                 100.0 * data_lock.maxuse_arena() as f64 / memory_total, memory_total,

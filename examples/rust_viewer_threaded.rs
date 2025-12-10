@@ -1,4 +1,4 @@
-//! Example how to use the Rust-native viewer ([`MjViewer`]) in a multi-threaded fashion.
+//! Example on how to use the Rust-native viewer ([`MjViewer`]) in a multi-threaded fashion.
 //! By that we mean rendering can be done on the main thread, and the physics on another.
 use std::time::Instant;
 use std::sync::Arc;

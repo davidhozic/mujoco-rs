@@ -793,7 +793,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// 
     /// # Note
     /// The size of `state` is allowed to be larger. This was done to allow a preallocated
-    /// buffer store any possible state based on `spec`, without having to query the size
+    /// buffer to store any possible state based on `spec`, without having to query the size
     /// every time. This benefits performance in some cases.
     /// 
     /// # Panics
