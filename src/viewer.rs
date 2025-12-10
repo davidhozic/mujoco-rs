@@ -491,6 +491,23 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             );
         }
 
+        // Read later-required required information and then drop the mutex lock
+        let (
+            time,
+            memory_pct,
+            mut total_memory,
+            realtime_factor
+        ) = {
+            let state_lock = self.shared_state.lock().unwrap();
+            let data_lock = &state_lock.data_passive;
+            let memory_total = data_lock.narena() as f64;
+            (
+                data_lock.time(),
+                100.0 * data_lock.maxuse_arena() as f64 / memory_total, memory_total,
+                state_lock.realtime_factor_smooth
+            )
+        };
+
         if self.status.contains(ViewerStatusBit::INFO) {  // Info
             self.update_smooth_fps();
 
@@ -501,22 +518,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 "Memory\n",
                 "Realtime factor"
             );
-
-            let (
-                time,
-                memory_pct,
-                mut total_memory,
-                realtime_factor
-            ) = {
-                let state_lock = self.shared_state.lock().unwrap();
-                let data_lock = &state_lock.data_passive;
-                let memory_total = data_lock.narena() as f64;
-                (
-                    data_lock.time(),
-                    100.0 * data_lock.maxuse_arena() as f64 / memory_total, memory_total,
-                    state_lock.realtime_factor_smooth
-                )
-            };
 
             // Calculate the amount of memory used and represent with SI units.
             let mut memory_unit = ' ';
@@ -554,7 +555,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
         // Check for slowdowns
         if self.status.contains(ViewerStatusBit::WARN_REALTIME) {
-            let realtime_factor = self.shared_state.lock().unwrap().realtime_factor_smooth;
             if (realtime_factor - 1.0).abs() > REALTIME_FACTOR_DISPLAY_THRESHOLD {
                 self.context.overlay(
                     MjtFont::mjFONT_BIG,

@@ -764,13 +764,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Number of [`MjtNum`] elements written to `destination`.
     /// 
     /// # Panics
-    /// A panic will occur if `destination` is not the same size as [`MjModel::state_size`] with `spec` passed as parameter.
+    /// A panic will occur if `destination` is smaller than [`MjModel::state_size`] with `spec` passed as parameter.
     pub fn read_state_into<'a>(&self, spec: u32, destination: &'a mut [MjtNum]) -> usize {
         let state_size = self.model.state_size(spec) as usize;
         let destination_len = destination.len();
         assert!(
             destination_len >= state_size,
-            "destination buffer's size ({destination_len}) is less than the state size ({state_size}).",
+            "destination buffer is too small: got {destination_len} elements, but need at least {state_size} elements.",
         );
         unsafe {
             mj_getState(self.model.ffi(), self.ffi(), destination.as_mut_ptr(), spec);

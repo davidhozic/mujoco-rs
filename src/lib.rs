@@ -23,7 +23,7 @@
 //! MuJoCo-rs cannot fully configure it itself due to MuJoCo being a shared C library. As a result you may encounter
 //! **load-time errors** about **missing libraries**.
 //! 
-//! Information on how configure MuJoCo and resolve these issues is available
+//! Information on how to configure MuJoCo and resolve these issues is available
 //! [here](https://mujoco-rs.readthedocs.io/en/v2.1.x/installation.html#mujoco).
 //! 
 //! ## 3D viewer
