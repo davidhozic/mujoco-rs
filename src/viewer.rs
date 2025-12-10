@@ -138,7 +138,7 @@ pub struct ViewerSharedState<M: Deref<Target = MjModel>>{
 
     /* Internals */
     last_sync_time: Instant,
-    /// Time factor representing the ration of viewer syncs with model's selected timestep.
+    /// Time factor representing the ratio of viewer syncs with model's selected timestep.
     realtime_factor_smooth: f64,
 }
 
@@ -165,7 +165,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
     /// Syncs the state of viewer's internal [`MjData`] with `data`.
     /// Synchronization happens in two steps.
     /// First the viewer checks if any changes have been made to the internal [`MjData`]
-    /// since the last call to this method (sinc the last sync). Any changes made are
+    /// since the last call to this method (since the last sync). Any changes made are
     /// directly copied to the parameter `data`.
     /// Then the `data`'s state overwrites the internal [`MjData`]'s state.
     /// 
@@ -198,7 +198,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
             data.set_state(&new_data_state, MjtState::mjSTATE_INTEGRATION as u32);
         }
 
-        // Copy only visually-required information to the internal pasive data.
+        // Copy only visually-required information to the internal passive data.
         data.copy_visual_to(&mut self.data_passive);
 
         // Make both saved states the same.
@@ -393,10 +393,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// # Example
     /// ```no_run
     /// # let model = MjModel::from_xml("/path/scene.xml");
-    /// # let viewer = MjViewer::builder().build(&model);
-    /// # let data = MjData::new(&model);
-    /// viewer.sync_data(&mut data)  // sync the data
-    /// viewer.render()  // render the scene and process the user interface
+    /// # let mut viewer = MjViewer::builder().build(&model);
+    /// # let mut data = MjData::new(&model);
+    /// viewer.sync_data(&mut data);  // sync the data
+    /// viewer.render();  // render the scene and process the user interface
     /// ```
     pub fn sync_data(&mut self, data: &mut MjData<M>) {
         self.shared_state.lock().unwrap().sync_data(data);
@@ -525,7 +525,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     "{:.3}\n",
                     "{:.3}\n",
                     "{:.3} % out of {:.3} {}\n",
-                    "{:.2} %"
+                    "{:.3} %"
                 ),
                 self.fps_smooth,
                 time,
@@ -550,7 +550,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     MjtFont::mjFONT_BIG,
                     MjtGridPos::mjGRID_BOTTOMRIGHT,
                     rectangle_full,
-                    &format!("Realtime factor: {:.2} %", realtime_factor * 100.0),
+                    &format!("Realtime factor: {:.3} %", realtime_factor * 100.0),
                     None
                 );
             }
@@ -734,7 +734,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     ..
                 } => {
                     self.status.toggle(ViewerStatusBit::WARN_REALTIME);
-                    self.update_vsync();
                 }
 
                 // Full screen
@@ -1013,7 +1012,7 @@ pub struct MjViewerBuilder<M: Deref<Target = MjModel> + Clone> {
     /// Maximum number of geoms that can be given by the user for custom visualization.
     max_user_geoms: usize,
     /// Start the viewer with vertical synchronization. This should be used only if rendering
-    /// and simulation are seperated by threads and you are ok with [`MjViewer::render`]
+    /// and simulation are separated by threads and you are ok with [`MjViewer::render`]
     /// blocking to achieve the correct refresh rate (of your monitor).
     vsync: bool,
 

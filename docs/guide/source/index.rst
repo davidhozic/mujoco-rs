@@ -77,8 +77,8 @@ Optional Cargo features can be enabled:
 
   - This is only available on Linux and Windows.
   - The environmental variable ``MUJOCO_DOWNLOAD_DIR`` must be set to the absolute path of the download location.
-  - Downloaded MuJoCo library is still a shared library, see 
-    [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco)
+  - Downloaded MuJoCo library is still a shared library, see
+    `installation <https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco>`_
     for information on complete configuration.
 
 

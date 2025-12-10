@@ -17,7 +17,7 @@ MuJoCo-rs can be added to your project like so:
 
   ::
 
-    cargo add mujoco-rs --no-default-features --features viewer viewer-ui renderer renderer-winit-fallback"
+    cargo add mujoco-rs --no-default-features --features "viewer viewer-ui renderer renderer-winit-fallback"
 
 - **Without** visualization/rendering support:
 
