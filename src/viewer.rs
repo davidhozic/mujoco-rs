@@ -148,7 +148,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
     pub fn new(model: M) -> Self {
         // Tracking of changes made between syncs
         let state_size = model.state_size(MjtState::mjSTATE_INTEGRATION as u32) as usize;
-        let data_passive_state = vec![0.0 as MjtNum; state_size].into_boxed_slice();
+        let data_passive_state = vec![0.0; state_size].into_boxed_slice();
         let data_passive_state_old = data_passive_state.clone();
         let data_passive = MjData::new(model.clone());
         let data_state_buffer = data_passive_state.clone();

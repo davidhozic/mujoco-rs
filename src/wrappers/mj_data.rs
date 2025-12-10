@@ -765,7 +765,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// 
     /// # Panics
     /// A panic will occur if `destination` is smaller than [`MjModel::state_size`] with `spec` passed as parameter.
-    pub fn read_state_into<'a>(&self, spec: u32, destination: &'a mut [MjtNum]) -> usize {
+    pub fn read_state_into(&self, spec: u32, destination: &mut [MjtNum]) -> usize {
         let state_size = self.model.state_size(spec) as usize;
         let destination_len = destination.len();
         assert!(
