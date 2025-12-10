@@ -298,7 +298,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                             ui.horizontal_wrapped(|ui| {
                                 // Warnings
-                                ui.menu_button(RichText::new("Warnings").font(MAIN_FONT), |ui| {
+                                ui.collapsing(RichText::new("Warnings").font(MAIN_FONT), |ui| {
                                     // Non-realtime factor warning
                                     let mut selected = status.contains(ViewerStatusBit::WARN_REALTIME);
                                     ui.checkbox(&mut selected, RichText::new("Realtime factor").font(MAIN_FONT));

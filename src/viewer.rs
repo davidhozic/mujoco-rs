@@ -47,7 +47,7 @@ const MJ_VIEWER_DEFAULT_SIZE_PX: (u32, u32) = (1280, 720);
 const DOUBLE_CLICK_WINDOW_MS: u128 = 250;
 const TOUCH_BAR_ZOOM_FACTOR: f64 = 0.1;
 const FPS_SMOOTHING_FACTOR: f64 = 0.1;
-const REALTIME_FACTOR_SMOOTHING_FACTOR: f64 = 0.01;
+const REALTIME_FACTOR_SMOOTHING_FACTOR: f64 = 0.1;
 const REALTIME_FACTOR_DISPLAY_THRESHOLD: f64 = 0.02;
 
 /// How much extra room to create in the internal [`MjvScene`]. Useful for drawing labels, etc.
@@ -173,10 +173,16 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
     /// to be rendered and the UI to be processed.
     pub fn sync_data(&mut self, data: &mut MjData<M>) {
         /* Update statistics */
-        self.realtime_factor_smooth += REALTIME_FACTOR_SMOOTHING_FACTOR * (
-            self.data_passive.model().opt().timestep / self.last_sync_time.elapsed().as_secs_f64()
-            - self.realtime_factor_smooth
-        );
+        if self.data_passive.time() > 0.0 {  // time = 0 means data was reset
+            let time_elapsed_sim = data.time() - self.data_passive.time();
+            self.realtime_factor_smooth += REALTIME_FACTOR_SMOOTHING_FACTOR * (
+                time_elapsed_sim / self.last_sync_time.elapsed().as_secs_f64()
+                - self.realtime_factor_smooth
+            );
+        } else {  // simulation was reset
+            self.realtime_factor_smooth = 1.0;
+        }
+
         self.last_sync_time = Instant::now();
 
         /* Sync */
@@ -508,7 +514,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 )
             };
 
-            // Calculate the amount of energy used and represent with SI units.
+            // Calculate the amount of memory used and represent with SI units.
             let mut memory_unit = ' ';
             if total_memory > 1e6 {
                 total_memory /= 1e6;
@@ -1064,7 +1070,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
         } = adapter.state.as_ref().unwrap();
         gl_context.make_current(gl_surface).map_err(MjViewerError::GlutinError)?;
 
-        // Configure vertical configuration
+        // Configure vertical synchronization
         if self.vsync {
             gl_surface.set_swap_interval(
                 gl_context,
@@ -1110,7 +1116,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
             last_y: 0.0,
             last_bnt_press_time: Instant::now(),
             fps_timer: Instant::now(),
-            fps_smooth: 0.0,
+            fps_smooth: 60.0,
             rect_view: MjrRectangle::default(),
             rect_full: MjrRectangle::default(),
             adapter,
