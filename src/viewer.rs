@@ -402,7 +402,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.shared_state.lock().unwrap().sync_data(data);
     }
 
-    /// Renders the drawn content by swapping buffers.
+    /// Processes the UI (when enabled), processes events, draws the scene
+    /// and swaps buffer in OpenGL.
     pub fn render(&mut self) {
         let RenderBaseGlState {
             gl_context,

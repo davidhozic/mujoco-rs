@@ -48,7 +48,8 @@ like shown in the following example:
         let mut viewer = MjViewer::launch_passive(&model, 100).expect("could not launch the viewer");
         while viewer.running() {
             /* Sync the simulation state with the viewer */
-            viewer.sync(&mut data);
+            viewer.sync_data(&mut data);
+            viewer.render();
 
             /* Update the simulation state */
             data.step();
@@ -58,15 +59,18 @@ like shown in the following example:
 
 
 The above example runs until the viewer is closed (:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running`)
-and mirrors/syncs the simulation state with :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync`.
+and mirrors/syncs the simulation state with :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`.
+After or parallel to synchronization, the viewer must also be rendered using the
+with :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` method.
 
 .. code-block:: rust
-    :emphasize-lines: 2, 4
+    :emphasize-lines: 2, 4, 5
 
     ...
     while viewer.running() {
         /* Sync the simulation state with the viewer */
-        viewer.sync(&mut data);
+        viewer.sync_data(&mut data);
+        viewer.render();
         ...
     }
 
@@ -119,7 +123,8 @@ The following example demonstrates how to add a custom window to the viewer:
         });
 
         while viewer.running() {
-            viewer.sync(&mut data);
+            viewer.sync_data(&mut data);
+            viewer.render();
             data.step();
             std::thread::sleep(Duration::from_millis(2));
         }
