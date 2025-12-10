@@ -20,7 +20,7 @@
 //! 
 //! ### Missing library errors
 //! Guided documentation also contains information on how to **configure MuJoCo**.
-//! MuJoCo-rs cannot fully configure it itself due to MuJoCo being a shared C library. As a result you may enounter
+//! MuJoCo-rs cannot fully configure it itself due to MuJoCo being a shared C library. As a result you may encounter
 //! **load-time errors** about **missing libraries**.
 //! 
 //! Information on how configure MuJoCo and resolve these issues is available
