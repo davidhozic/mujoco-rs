@@ -691,6 +691,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     self.shared_state.lock().unwrap().running = false;
                 }
 
+                // Also set the viewer's state to pending exit if the window no longer exists.
+                WindowEvent::CloseRequested => self.shared_state.lock().unwrap().running = false,
+
                 // Free the camera from tracking.
                 WindowEvent::KeyboardInput {
                     event: KeyEvent {

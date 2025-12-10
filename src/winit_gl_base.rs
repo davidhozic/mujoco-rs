@@ -131,6 +131,7 @@ impl ApplicationHandler for RenderBase {
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
+                self.maybe_forward_event(WindowEvent::CloseRequested);
             }
             WindowEvent::Resized(_) => {
                 if let Some(RenderBaseGlState { window, gl_context, gl_surface }) = &self.state {
