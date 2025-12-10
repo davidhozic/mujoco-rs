@@ -30,6 +30,26 @@ Unreleased (MuJoCo 3.3.7)
     See :ref:`custom_ui_widgets` for more information.
 
 
+  - Separate syncing and rendering logic:
+
+    - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`:
+
+      - Deprecates :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync`, which performed
+        both synchronization and rendering.
+      - Rendering must now be done through :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`,
+        which must be called by user code.
+
+    - Added :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState`:
+
+      - Allows synchronization of the viewer and the simulation state in separate threads.
+        Note that the viewer must run in the main thread.
+
+- New examples:
+
+  - :gh-example:`rust_viewer_threaded.rs`.
+
+
+
 2.1.0 / 2.1.1 (MuJoCo 3.3.7)
 ================================
 - Option to automatically pull MuJoCo.
