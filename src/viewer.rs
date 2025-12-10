@@ -25,11 +25,11 @@ use bitflags::bitflags;
 use crate::prelude::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_data::{MjData, MjtState};
+use crate::{builder_setters, get_mujoco_version};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::vis_common::sync_geoms;
-use crate::{builder_setters, get_mujoco_version};
 
 
 #[cfg(feature = "viewer-ui")]
@@ -46,13 +46,15 @@ pub use egui;
 const MJ_VIEWER_DEFAULT_SIZE_PX: (u32, u32) = (1280, 720);
 const DOUBLE_CLICK_WINDOW_MS: u128 = 250;
 const TOUCH_BAR_ZOOM_FACTOR: f64 = 0.1;
+const FPS_SMOOTHING_FACTOR: f64 = 0.1;
 
 /// How much extra room to create in the internal [`MjvScene`]. Useful for drawing labels, etc.
 pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
 
 const HELP_MENU_TITLES: &str = concat!(
     "Toggle help\n",
-    "Toggle V-Sync\n",
+    "Toggle info\n",
+    "Toggle v-sync\n",
     "Toggle full screen\n",
     "Free camera\n",
     "Track camera\n",
@@ -71,6 +73,7 @@ const HELP_MENU_TITLES: &str = concat!(
 
 const HELP_MENU_VALUES: &str = concat!(
     "F1\n",
+    "F2\n",
     "F3\n",
     "F5\n",
     "Escape\n",
@@ -229,6 +232,8 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     last_bnt_press_time: Instant,
     rect_view: MjrRectangle,
     rect_full: MjrRectangle,
+    fps_timer: Instant,
+    fps_smooth: f64,
 
     /* OpenGL */
     adapter: RenderBase,
@@ -412,6 +417,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         gl_surface.swap_buffers(gl_context).expect("buffer swap in OpenGL failed");
     }
 
+    fn update_smooth_fps(&mut self) {
+        let fps = 1.0 / self.fps_timer.elapsed().as_secs_f64();
+        self.fps_timer = Instant::now();
+        self.fps_smooth +=  FPS_SMOOTHING_FACTOR * (fps - self.fps_smooth);
+    }
+
     /// Updates the scene and draws it to the display.
     fn update_scene(&mut self) {
         /* Update the scene from the MjData state */
@@ -440,8 +451,59 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 Some(HELP_MENU_VALUES)
             );
         }
-    }
 
+        if self.status.contains(ViewerStatusBit::INFO) {  // Info
+            self.update_smooth_fps();
+
+            // Overlay headers
+            let headers = concat!(
+                "FPS\n",
+                "Time\n",
+                "Memory",
+            );
+
+            let (
+                time,
+                memory_pct,
+                mut total_memory
+            ) = {
+                let data_lock = &self.shared_state.lock().unwrap().data_passive;
+                let memory_total = data_lock.narena() as f64;
+                (data_lock.time(), 100.0 * data_lock.maxuse_arena() as f64 / memory_total, memory_total)
+            };
+
+            // Calculate the amount of energy used and represent with SI units.
+            let mut memory_unit = ' ';
+            if total_memory > 1e6 {
+                total_memory /= 1e6;
+                memory_unit = 'M';
+            }
+            else if total_memory > 1e3 {
+                total_memory /= 1e3;
+                memory_unit = 'k';
+            };
+
+            // Format values of the overlay.
+            let values = format!(
+                concat!(
+                    "{:.3}\n",
+                    "{:.3}\n",
+                    "{:.3} % out of {:.3} {}"
+                ),
+                self.fps_smooth,
+                time,
+                memory_pct, total_memory, memory_unit
+            );
+
+            self.context.overlay(
+                MjtFont::mjFONT_NORMAL,
+                MjtGridPos::mjGRID_BOTTOMLEFT,
+                rectangle,
+                &headers,
+                Some(&values)
+            );
+        }
+    }
 
     /// Draws the user UI
     #[cfg(feature = "viewer-ui")]
@@ -593,6 +655,16 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     }, ..
                 } => {
                     self.status.toggle(ViewerStatusBit::HELP);
+                }
+
+                 // Toggle info menu
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {
+                        physical_key: PhysicalKey::Code(KeyCode::F2),
+                        state: ElementState::Pressed, ..
+                    }, ..
+                } => {
+                    self.status.toggle(ViewerStatusBit::INFO);
                 }
 
                 // Toggle VSync
@@ -967,6 +1039,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
             last_x: 0.0,
             last_y: 0.0,
             last_bnt_press_time: Instant::now(),
+            fps_timer: Instant::now(),
+            fps_smooth: 0.0,
             rect_view: MjrRectangle::default(),
             rect_full: MjrRectangle::default(),
             adapter,
@@ -990,8 +1064,9 @@ bitflags! {
     #[derive(Debug)]
     struct ViewerStatusBit: u8 {
         const HELP = 1 << 0;
-        #[cfg(feature = "viewer-ui")] const UI = 1 << 1;
-        const VSYNC = 1 << 2;
+        const VSYNC = 1 << 1;
+        const INFO = 1 << 2;
+        #[cfg(feature = "viewer-ui")] const UI = 1 << 3;
     }
 }
 

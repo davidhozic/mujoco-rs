@@ -277,6 +277,10 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                     self.events.push_back(UiEvent::VSyncToggle);
                                 };
                                 status.set(ViewerStatusBit::VSYNC, selected);
+
+                                let mut selected = status.contains(ViewerStatusBit::INFO);
+                                ui.toggle_value(&mut selected, RichText::new("Info").font(MAIN_FONT));
+                                status.set(ViewerStatusBit::INFO, selected);
                             });
 
                             ui.separator();
