@@ -61,7 +61,7 @@ like shown in the following example:
 The above example runs until the viewer is closed (:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running`)
 and mirrors/syncs the simulation state with :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`.
 After or parallel to synchronization, the viewer must also be rendered using the
-with :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` method.
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` method.
 
 .. code-block:: rust
     :emphasize-lines: 2, 4, 5

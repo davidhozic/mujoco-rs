@@ -39,9 +39,9 @@ fn main() {
     let physics_thread = std::thread::spawn(move || {
         while viewer_running {
             let timer = Instant::now();
+            data.step();
             {
                 let mut lock = shared_state.lock().unwrap();
-                data.step();
                 lock.sync_data(&mut data);
                 viewer_running = lock.running();
             }

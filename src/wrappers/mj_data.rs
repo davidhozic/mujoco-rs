@@ -752,8 +752,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// This is a wrapper around [`mj_getState`].
     /// 
     /// # Note
-    /// The `destination` buffer is allowed to be bigger than the
-    /// actual state length, and may in such contain old information.
+    /// The `destination` buffer is allowed to be larger than the
+    /// actual state length, and may thus contain old information.
     /// This was done for possible performance improvements, where one array
     /// may hold different parts of simulation state at different times.
     /// 
@@ -770,7 +770,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         let destination_len = destination.len();
         assert!(
             destination_len >= state_size,
-            "destination buffer's size ({destination_len}) is less than the state size ({state_size})",
+            "destination buffer's size ({destination_len}) is less than the state size ({state_size}).",
         );
         unsafe {
             mj_getState(self.model.ffi(), self.ffi(), destination.as_mut_ptr(), spec);
@@ -804,7 +804,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         let required_len = self.model.state_size(spec) as usize;
         assert!(
              state_len >= required_len,
-             "size of state ({state_len}) was less than the required len based on spec ({required_len})."
+             "input state array's length ({state_len}) is smaller than the\
+              length required ({required_len}), commanded by input spec."
         );
         unsafe {
             mj_setState(self.model.ffi(), self.ffi_mut(), state.as_ptr(), spec);
