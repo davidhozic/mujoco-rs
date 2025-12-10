@@ -1,8 +1,7 @@
 # MuJoCo-rs
+[![Guide](https://img.shields.io/badge/Guide-book-white)](https://mujoco-rs.readthedocs.io/en/stable/)
 [![docs.rs](https://img.shields.io/docsrs/mujoco-rs/latest)](https://docs.rs/mujoco-rs)
 [![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
-
-[![Guide](https://img.shields.io/badge/Documentation-green)](https://mujoco-rs.readthedocs.io/en/stable/)
 
 MuJoCo bindings and high-level wrappers for the Rust programming language. Includes a Rust-native viewer and also
 bindings to a modified C++ one.
@@ -20,6 +19,14 @@ This library uses FFI bindings to MuJoCo **3.3.7**.
 
 ## Installation
 For installation, see the [**guide book**](https://mujoco-rs.readthedocs.io/en/stable/installation.html).
+
+### Missing library errors
+The guide book also contains information on how to **configure MuJoCo**.
+MuJoCo-rs cannot fully configure it itself due to MuJoCo being a shared C library. As a result you may enounter
+**load-time errors** about **missing libraries**.
+
+Information on how configure MuJoCo and resolve these issues is available
+[here](https://mujoco-rs.readthedocs.io/en/v2.1.x/installation.html#mujoco).
 
 ## Main features
 MuJoCo-rs tries to stay close to the MuJoCo's C API, with a few additional features for ease of use.
@@ -65,8 +72,13 @@ Optional Cargo features can be enabled:
 - ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded to the specified path.
 
   - This is only available on Linux and Windows.
+  - The environmental variable ``MUJOCO_DOWNLOAD_DIR`` must be
+    set to the absolute path of the download location.
+  - Downloaded MuJoCo library is still a shared library. See
+    [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco)
+    for information on complete configuration.
 
-By default, ``viewer``, ``viewer-ui`` and ``renderer`` are enabled.
+By default, ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are enabled.
 
 
 ## Example

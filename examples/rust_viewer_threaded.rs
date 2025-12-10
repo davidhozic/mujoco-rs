@@ -38,7 +38,7 @@ fn main() {
     std::thread::spawn(move || {
         loop {
             data.step();
-            shared_state.lock().unwrap().sync(&mut data);
+            shared_state.lock().unwrap().sync_data(&mut data);
             std::thread::sleep(Duration::from_millis(2));
         }
     });

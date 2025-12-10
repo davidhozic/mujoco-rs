@@ -144,7 +144,16 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
         }
     }
 
-    pub fn sync(&mut self, data: &mut MjData<M>) {
+    /// Syncs the state of viewer's internal [`MjData`] with `data`.
+    /// Synchronization happens in two steps.
+    /// First the viewer checks if any changes have been made to the internal [`MjData`]
+    /// since the last call to this method (sinc the last sync). Any changes made are
+    /// directly copied to the parameter `data`.
+    /// Then the `data`'s state overwrites the internal [`MjData`]'s state.
+    /// 
+    /// Note that users must afterward call [`MjViewer::render`] for the scene
+    /// to be rendered and the UI to be processed.
+    pub fn sync_data(&mut self, data: &mut MjData<M>) {
         self.data_passive.read_state_into(
             MjtState::mjSTATE_INTEGRATION as u32,
             &mut self.data_passive_state
@@ -326,11 +335,38 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.ui.add_ui_callback(callback);
     }
 
-    /// Syncs the state of `data` with the viewer as well as perform
-    /// rendering on the viewer.
+    /// Deprecated synchronization and rendering method.
+    /// Users should use [`MjViewer::sync_data`] instead, which is a proxy
+    /// to [`ViewerSharedState::sync_data`].
+    /// # Migration to new API
+    /// To achieve identical behavior, replace the call of this method with
+    /// a call to [`MjViewer::sync_data`] and afterwards [`MjViewer::render`].
+    /// 
+    /// [`MjViewer::render`] must be called by the user, because syncing no longer
+    /// processes the UI and renders the scene. This was changed for the purposes of
+    /// allowing multithreading --- i.e., rendering in main thread and everything else in a separate thread.
+    #[deprecated(since = "2.2.0", note = "replaced with calls to sync_data and render")]
     pub fn sync(&mut self, data: &mut MjData<M>) {
-        /* Sync integration state */
-        self.shared_state.lock().unwrap().sync(data);
+        self.shared_state.lock().unwrap().sync_data(data);
+        self.render();
+    }
+
+    /// Syncs the state of viewer's internal [`MjData`] with `data`.
+    /// This is a proxy to [`ViewerSharedState::sync_data`].
+    /// 
+    /// Note that users must afterward call [`MjViewer::render`] for the scene
+    /// to be rendered and the UI to be processed.
+    /// 
+    /// # Example
+    /// ```no_run
+    /// # let model = MjModel::from_xml("/path/scene.xml");
+    /// # let viewer = MjViewer::builder().build(&model);
+    /// # let data = MjData::new(&model);
+    /// viewer.sync_data(&mut data)  // sync the data
+    /// viewer.render()  // render the scene and process the user interface
+    /// ```
+    pub fn sync_data(&mut self, data: &mut MjData<M>) {
+        self.shared_state.lock().unwrap().sync_data(data);
     }
 
     /// Renders the drawn content by swapping buffers.
@@ -339,7 +375,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             gl_context,
             gl_surface,
             ..
-        } = self.adapter.state.as_mut().unwrap();
+        } = self.adapter.state.as_ref().unwrap();
 
         /* Make sure everything is done on the viewer's window */
         gl_context.make_current(gl_surface).expect("could not make OpenGL context current");
