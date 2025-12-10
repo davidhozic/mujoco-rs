@@ -278,6 +278,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 };
                                 status.set(ViewerStatusBit::VSYNC, selected);
 
+                                // Info menu (FPS, time, etc.)
                                 let mut selected = status.contains(ViewerStatusBit::INFO);
                                 ui.toggle_value(&mut selected, RichText::new("Info").font(MAIN_FONT));
                                 status.set(ViewerStatusBit::INFO, selected);
@@ -291,6 +292,18 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 ui.toggle_value(&mut self.joint_window, RichText::new("Joint").font(MAIN_FONT));
                                 ui.toggle_value(&mut self.equality_window, RichText::new("Equality").font(MAIN_FONT));
                                 ui.toggle_value(&mut self.group_window, RichText::new("Group").font(MAIN_FONT));
+                            });
+
+                            ui.separator();
+
+                            ui.horizontal_wrapped(|ui| {
+                                // Warnings
+                                ui.menu_button(RichText::new("Warnings").font(MAIN_FONT), |ui| {
+                                    // Non-realtime factor warning
+                                    let mut selected = status.contains(ViewerStatusBit::WARN_REALTIME);
+                                    ui.checkbox(&mut selected, RichText::new("Realtime factor").font(MAIN_FONT));
+                                    status.set(ViewerStatusBit::WARN_REALTIME, selected);
+                                });
                             });
                         });
 

@@ -23,7 +23,10 @@ Unreleased (MuJoCo 3.3.7)
   - New feature added for compatibility purposes: ``renderer-winit-fallback``.
     The feature is enabled by default.
 
-- Changes to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
+- Info menu (F2) displaying smoothed FPS, simulation time, and used memory.
+- Realtime warning (F4) for showing the realtime factor [%] when the simulation's sync time deviates at least 2 %
+  from the model's configured timestep.
+- Changes to :ref:`mj_rust_viewer`:
 
   - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` for custom UI widgets.
     This allows users to create custom windows, panels, and other UI elements using `egui <https://github.com/emilk/egui>`_.

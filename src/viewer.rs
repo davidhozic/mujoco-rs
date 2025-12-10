@@ -47,6 +47,8 @@ const MJ_VIEWER_DEFAULT_SIZE_PX: (u32, u32) = (1280, 720);
 const DOUBLE_CLICK_WINDOW_MS: u128 = 250;
 const TOUCH_BAR_ZOOM_FACTOR: f64 = 0.1;
 const FPS_SMOOTHING_FACTOR: f64 = 0.1;
+const REALTIME_FACTOR_SMOOTHING_FACTOR: f64 = 0.01;
+const REALTIME_FACTOR_DISPLAY_THRESHOLD: f64 = 0.02;
 
 /// How much extra room to create in the internal [`MjvScene`]. Useful for drawing labels, etc.
 pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
@@ -54,6 +56,7 @@ pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
 const HELP_MENU_TITLES: &str = concat!(
     "Toggle help\n",
     "Toggle info\n",
+    "Toggle realtime check\n",
     "Toggle v-sync\n",
     "Toggle full screen\n",
     "Free camera\n",
@@ -75,6 +78,7 @@ const HELP_MENU_VALUES: &str = concat!(
     "F1\n",
     "F2\n",
     "F3\n",
+    "F4\n",
     "F5\n",
     "Escape\n",
     "Control + Alt + double-left click\n",
@@ -129,7 +133,13 @@ pub struct ViewerSharedState<M: Deref<Target = MjModel>>{
     data_passive_state: Box<[MjtNum]>,
     data_passive_state_old: Box<[MjtNum]>,
     data_passive: MjData<M>,
-    pert: MjvPerturb
+    pert: MjvPerturb,
+    running: bool,
+
+    /* Internals */
+    last_sync_time: Instant,
+    /// Time factor representing the ration of viewer syncs with model's selected timestep.
+    realtime_factor_smooth: f64,
 }
 
 impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
@@ -144,6 +154,11 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
             data_passive_state_old,
             data_passive,
             pert: MjvPerturb::default(),
+            running: true,
+
+            /* Internal */
+            last_sync_time: Instant::now(),
+            realtime_factor_smooth: 1.0
         }
     }
 
@@ -157,6 +172,14 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
     /// Note that users must afterward call [`MjViewer::render`] for the scene
     /// to be rendered and the UI to be processed.
     pub fn sync_data(&mut self, data: &mut MjData<M>) {
+        /* Update statistics */
+        self.realtime_factor_smooth += REALTIME_FACTOR_SMOOTHING_FACTOR * (
+            self.data_passive.model().opt().timestep / self.last_sync_time.elapsed().as_secs_f64()
+            - self.realtime_factor_smooth
+        );
+        self.last_sync_time = Instant::now();
+
+        /* Sync */
         self.data_passive.read_state_into(
             MjtState::mjSTATE_INTEGRATION as u32,
             &mut self.data_passive_state
@@ -189,6 +212,11 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
 
         // Apply perturbations
         self.pert.apply(self.data_passive.model(), data);
+    }
+
+    /// Checks whether the viewer is still running or is supposed to run.
+    pub fn running(&self) -> bool {
+        self.running
     }
 }
 
@@ -277,7 +305,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Checks whether the window is still open.
     pub fn running(&self) -> bool {
-        self.adapter.running
+        self.shared_state.lock().unwrap().running()
     }
 
     /// Returns a reference to the shared state [`ViewerSharedState`].
@@ -439,14 +467,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Draws the user menu
     fn update_menus(&mut self) {
-        let mut rectangle = self.rect_view;
-        rectangle.width = rectangle.width - rectangle.width / 4;
+        let rectangle_from_ui = self.rect_view;
+        let rectangle_full = self.rect_full;
 
         /* Overlay section */
         if self.status.contains(ViewerStatusBit::HELP) {  // Help
             self.context.overlay(
                 MjtFont::mjFONT_NORMAL, MjtGridPos::mjGRID_TOPLEFT,
-                rectangle,
+                rectangle_from_ui,
                 HELP_MENU_TITLES,
                 Some(HELP_MENU_VALUES)
             );
@@ -459,17 +487,24 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             let headers = concat!(
                 "FPS\n",
                 "Time\n",
-                "Memory",
+                "Memory\n",
+                "Realtime factor"
             );
 
             let (
                 time,
                 memory_pct,
-                mut total_memory
+                mut total_memory,
+                realtime_factor
             ) = {
-                let data_lock = &self.shared_state.lock().unwrap().data_passive;
+                let state_lock = self.shared_state.lock().unwrap();
+                let data_lock = &state_lock.data_passive;
                 let memory_total = data_lock.narena() as f64;
-                (data_lock.time(), 100.0 * data_lock.maxuse_arena() as f64 / memory_total, memory_total)
+                (
+                    data_lock.time(),
+                    100.0 * data_lock.maxuse_arena() as f64 / memory_total, memory_total,
+                    state_lock.realtime_factor_smooth
+                )
             };
 
             // Calculate the amount of energy used and represent with SI units.
@@ -488,20 +523,36 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 concat!(
                     "{:.3}\n",
                     "{:.3}\n",
-                    "{:.3} % out of {:.3} {}"
+                    "{:.3} % out of {:.3} {}\n",
+                    "{:.2} %"
                 ),
                 self.fps_smooth,
                 time,
-                memory_pct, total_memory, memory_unit
+                memory_pct, total_memory, memory_unit,
+                realtime_factor * 100.0
             );
 
             self.context.overlay(
                 MjtFont::mjFONT_NORMAL,
                 MjtGridPos::mjGRID_BOTTOMLEFT,
-                rectangle,
+                rectangle_from_ui,
                 &headers,
                 Some(&values)
             );
+        }
+
+        // Check for slowdowns
+        if self.status.contains(ViewerStatusBit::WARN_REALTIME) {
+            let realtime_factor = self.shared_state.lock().unwrap().realtime_factor_smooth;
+            if (realtime_factor - 1.0).abs() > REALTIME_FACTOR_DISPLAY_THRESHOLD {
+                self.context.overlay(
+                    MjtFont::mjFONT_BIG,
+                    MjtGridPos::mjGRID_BOTTOMRIGHT,
+                    rectangle_full,
+                    &format!("Realtime factor: {:.2} %", realtime_factor * 100.0),
+                    None
+                );
+            }
         }
     }
 
@@ -531,7 +582,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         while let Some(event) = self.ui.drain_events() {
             use UiEvent::*;
             match event {
-                Close => self.adapter.running = false,
+                Close => self.shared_state.lock().unwrap().running = false,
                 Fullscreen => self.toggle_full_screen(),
                 ResetSimulation => {
                     let mut lock = self.shared_state.lock().unwrap();
@@ -630,7 +681,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         state: ElementState::Pressed, ..
                     }, ..
                 } if self.modifiers.state().control_key()  => {
-                    self.adapter.running = false;
+                    self.shared_state.lock().unwrap().running = false;
                 }
 
                 // Free the camera from tracking.
@@ -673,6 +724,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     ..
                 } => {
                     self.status.toggle(ViewerStatusBit::VSYNC);
+                    self.update_vsync();
+                }
+
+                // Non-realtime warnings
+                WindowEvent::KeyboardInput {
+                    event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::F4), state: ElementState::Pressed, ..},
+                    ..
+                } => {
+                    self.status.toggle(ViewerStatusBit::WARN_REALTIME);
                     self.update_vsync();
                 }
 
@@ -944,6 +1004,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 /// - `window_name`: MuJoCo Rust Viewer (MuJoCo \<MuJoCo version here\>)
 /// - `max_user_geoms`: 0
 /// - `vsync`: false
+/// - `warn_non_realtime`: false
 /// 
 pub struct MjViewerBuilder<M: Deref<Target = MjModel> + Clone> {
     /// The name shown on the window decoration.
@@ -955,6 +1016,12 @@ pub struct MjViewerBuilder<M: Deref<Target = MjModel> + Clone> {
     /// blocking to achieve the correct refresh rate (of your monitor).
     vsync: bool,
 
+    /// Start the viewer with warnings enabled for non-realtime synchronization.
+    /// When this is enabled and the simulation state isn't synced in realtime, an overlay will be displayed
+    /// in the bottom right corner indicating the realtime percentage.
+    /// The warning will only be shown if the deviation is 2 % from realtime or more.
+    warn_non_realtime: bool,
+
     /* Miscellaneous */
     /// Used to store the model type only. Useful for type inference.
     model_type: PhantomData<M>,
@@ -965,6 +1032,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
         window_name: S where S: Into<Cow<'static, str>>; "text shown in the title of the window.";
         max_user_geoms: usize; "maximum number of geoms that can be drawn by the user in addition to the regular geoms.";
         vsync: bool; "enable vertical synchronization by default.";
+        warn_non_realtime: bool; "enable showing an overlay when the simulation state isn't synced in realtime (deviation larger than 2 %).";
     }
 }
 
@@ -972,7 +1040,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
     pub fn new() -> Self {
         Self { 
             window_name: Cow::Owned(format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version())),
-            max_user_geoms: 0, vsync: false,
+            max_user_geoms: 0, vsync: false, warn_non_realtime: false,
             model_type: PhantomData
         }
     }
@@ -1026,7 +1094,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
         let mut status = ViewerStatusBit::UI;
         #[cfg(not(feature = "viewer-ui"))]
         let mut status = ViewerStatusBit::HELP;
+
         status.set(ViewerStatusBit::VSYNC, self.vsync);
+        status.set(ViewerStatusBit::WARN_REALTIME, self.warn_non_realtime);
 
         Ok(MjViewer {
             model,
@@ -1066,7 +1136,8 @@ bitflags! {
         const HELP = 1 << 0;
         const VSYNC = 1 << 1;
         const INFO = 1 << 2;
-        #[cfg(feature = "viewer-ui")] const UI = 1 << 3;
+        const WARN_REALTIME = 1 << 3;
+        #[cfg(feature = "viewer-ui")] const UI = 1 << 4;
     }
 }
 

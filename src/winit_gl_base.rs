@@ -30,7 +30,6 @@ pub(crate) struct RenderBaseGlState {
 #[derive(Debug)]
 pub(crate) struct RenderBase {
     pub(crate) state: Option<RenderBaseGlState>,
-    pub(crate) running: bool,
     /* Event related */
     pub(crate) queue: VecDeque<WindowEvent>,
 
@@ -44,7 +43,6 @@ impl RenderBase {
     pub(crate) fn new(width: u32, height: u32, title: String, event_loop: &mut EventLoop<()>, events: bool) -> Self {
         let mut s = Self {
             state: None,
-            running: false,
             queue: VecDeque::new(),
             size: (width, height),
             title,
@@ -122,7 +120,6 @@ impl ApplicationHandler for RenderBase {
 
         // Save state
         self.state = Some(RenderBaseGlState { gl_surface, gl_context, window });
-        self.running = true;
     }
 
     fn window_event(
@@ -134,7 +131,6 @@ impl ApplicationHandler for RenderBase {
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
-                self.running = false;
             }
             WindowEvent::Resized(_) => {
                 if let Some(RenderBaseGlState { window, gl_context, gl_surface }) = &self.state {

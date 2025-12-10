@@ -1,7 +1,7 @@
 //! Example how to use the Rust-native viewer ([`MjViewer`]) in a multi-threaded fashion.
 //! By that we mean rendering can be done on the main thread, and the physics on another.
+use std::time::Instant;
 use std::sync::Arc;
-use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
@@ -35,15 +35,23 @@ fn main() {
         .expect("could not launch the viewer");
 
     let shared_state = viewer.state().clone();
-    std::thread::spawn(move || {
-        loop {
-            data.step();
-            shared_state.lock().unwrap().sync_data(&mut data);
-            std::thread::sleep(Duration::from_millis(2));
+    let mut viewer_running = shared_state.lock().unwrap().running();  // gets moved into the thread
+    let physics_thread = std::thread::spawn(move || {
+        while viewer_running {
+            let timer = Instant::now();
+            {
+                let mut lock = shared_state.lock().unwrap();
+                data.step();
+                lock.sync_data(&mut data);
+                viewer_running = lock.running();
+            }
+            while timer.elapsed().as_secs_f64() < model.opt().timestep {}
         }
     });
 
     while viewer.running() {
         viewer.render();
     }
+
+    physics_thread.join().unwrap();
 }
