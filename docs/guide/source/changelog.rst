@@ -46,7 +46,7 @@ Unreleased (MuJoCo 3.3.7)
 
       - Allows synchronization of the viewer and the simulation state in separate threads.
         Note that the viewer must run in the main thread.
-      - Call :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>state` to obtain it.
+      - Call :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>state` to obtain it.
 
 
 - New methods:
