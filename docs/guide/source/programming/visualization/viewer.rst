@@ -222,7 +222,7 @@ which demonstrates various types of UI elements including windows, side panels, 
 
     Instead of :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`,
     users can call :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full`, which will copy
-    the entire :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` struct at the expanse of performance.
+    the entire :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` struct at the expense of performance.
 
 
 .. _mj_cpp_viewer:
