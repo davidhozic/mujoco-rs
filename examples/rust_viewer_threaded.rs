@@ -45,6 +45,10 @@ fn main() {
                 lock.sync_data(&mut data);
                 viewer_running = lock.running();
             }
+
+            // Use a while loop and polling to wait for accuracy purposes.
+            // To increase performance, std::thread::sleep may be used,
+            // however that comes at the cost of less accuracy.
             while timer.elapsed().as_secs_f64() < model.opt().timestep {}
         }
     });

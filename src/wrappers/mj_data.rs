@@ -747,15 +747,17 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Reads data's state into `destination`. The `spec` parameter is a bit mask of [`MjtState`] elements,
-    /// which controls what state gets copied. The `destination` parameter is a mutable
+    /// which controls what state gets copied. The `destination` parameter is a mutable.
     /// slice to the location into which the state will be written.
     /// This is a wrapper around [`mj_getState`].
     /// 
     /// # Note
     /// The `destination` buffer is allowed to be larger than the
     /// actual state length, and may thus contain old information.
-    /// This was done for possible performance improvements, where one array
-    /// may hold different parts of simulation state at different times.
+    /// Only the first `state_size` elements of `destination` are updated by this function;
+    /// any remaining elements in the buffer are left unchanged. This was done for possible
+    /// performance improvements, where one array may hold different parts of simulation state
+    /// at different times.
     /// 
     /// You can use the returned number of [`MjtNum`] elements written to `destination`
     /// to create a subslice containing only the updated information.

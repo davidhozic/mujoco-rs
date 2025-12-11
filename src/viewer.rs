@@ -400,6 +400,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Syncs the state of viewer's internal [`MjData`] with `data`.
     /// This is a proxy to [`ViewerSharedState::sync_data`].
     /// 
+    /// Additionally, any changes made to the internal [`MjData`] in between syncs,
+    /// get copied back to `data` before the actual sync.
+    /// This includes object perturbations.
+    /// 
     /// Note that users must afterward call [`MjViewer::render`] for the scene
     /// to be rendered and the UI to be processed.
     /// 
@@ -534,11 +538,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             if total_memory > 1e6 {
                 total_memory /= 1e6;
                 memory_unit = 'M';
-            }
-            else if total_memory > 1e3 {
+            } else if total_memory > 1e3 {
                 total_memory /= 1e3;
                 memory_unit = 'k';
-            };
+            }
 
             // Format values of the overlay.
             let values = format!(
@@ -706,7 +709,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 }
 
                 // Also set the viewer's state to pending exit if the window no longer exists.
-                WindowEvent::CloseRequested => self.shared_state.lock().unwrap().running = false,
+                WindowEvent::CloseRequested => { self.shared_state.lock().unwrap().running = false }
 
                 // Free the camera from tracking.
                 WindowEvent::KeyboardInput {
