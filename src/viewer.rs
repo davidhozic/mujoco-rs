@@ -201,7 +201,6 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
     /// - `efc_J_colind` (Column indices for constraint Jacobian)
     /// - `efc_JT_rowadr` (Row addresses for constraint Jacobian transpose)
     /// - `efc_JT_colind` (Column indices for constraint Jacobian transpose)
-    /// - and possibly others --- make sure to verify for the specific attribute yourself
     ///     
     /// If you require those in a UI callback,
     /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).
@@ -464,7 +463,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// - `efc_J_colind` (Column indices for constraint Jacobian)
     /// - `efc_JT_rowadr` (Row addresses for constraint Jacobian transpose)
     /// - `efc_JT_colind` (Column indices for constraint Jacobian transpose)
-    /// - and possibly others --- make sure to verify for the specific attribute yourself
     ///     
     /// If you require those in a UI callback,
     /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).

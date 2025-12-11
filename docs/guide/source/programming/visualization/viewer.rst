@@ -142,6 +142,42 @@ which demonstrates various types of UI elements including windows, side panels, 
     The ``egui`` crate is re-exported from ``mujoco_rs::viewer::egui`` for convenience.
 
 
+.. warning::
+
+    For performance reasons, when :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`
+    is called, the viewer only syncs the state required for visualization --- i.e., it skips
+    some large arrays. As a result, the :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` passed to
+    the callback (added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`)
+    may contain outdated information.
+
+    The following are **NOT SYNCHRONIZED**:
+
+    - ``qM`` (Mass matrix),
+    - ``qLD`` (L*D*L^T factorization of mass matrix),
+    - ``qLDiagInv`` (Inverse diagonal of factorized mass matrix),
+    - ``qLDiagSqrtInv`` (Square root of inverse diagonal),
+    - ``efc_J`` (Constraint Jacobian),
+    - ``efc_JT`` (Constraint Jacobian transpose),
+    - ``efc_pos`` (Constraint position deviation),
+    - ``efc_margin`` (Constraint safety margin),
+    - ``efc_frictionloss`` (Constraint friction loss),
+    - ``efc_diagApprox`` (Approximation of diagonal constraint inertia),
+    - ``efc_KBIP`` (Constraint stiffness, damping, impedance),
+    - ``efc_D`` (Inverse constraint mass),
+    - ``efc_R`` (Inverse constraint regularization),
+    - ``ten_J`` (Tendon Jacobian),
+    - ``ten_J_rowadr`` (Row addresses for tendon Jacobian),
+    - ``ten_J_colind`` (Column indices for tendon Jacobian),
+    - ``efc_J_rowadr`` (Row addresses for constraint Jacobian),
+    - ``efc_J_colind`` (Column indices for constraint Jacobian),
+    - ``efc_JT_rowadr`` (Row addresses for constraint Jacobian transpose),
+    - ``efc_JT_colind`` (Column indices for constraint Jacobian transpose).
+
+    If you require those, make sure to call an appropriate method/function on the
+    passed :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` instance
+    (e.g., :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward`).
+
+
 .. _mj_cpp_viewer:
 
 Wrapper of MuJoCo's C++ 3D viewer
