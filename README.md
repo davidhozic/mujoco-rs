@@ -8,7 +8,6 @@ bindings to a modified C++ one.
 
 [MuJoCo](https://mujoco.org/) is a general purpose physics simulator.
 
-
 ## Documentation
 More detailed documentation is available at the:
 - [**API docs**](https://docs.rs/mujoco-rs)
@@ -16,6 +15,9 @@ More detailed documentation is available at the:
 
 ## MuJoCo version
 This library uses FFI bindings to MuJoCo **3.3.7**.
+
+## Minimum Rust version
+Rust version 1.88 or newer is required.
 
 ## Installation
 For installation, see the [**guide book**](https://mujoco-rs.readthedocs.io/en/stable/installation.html).
