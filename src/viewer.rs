@@ -166,6 +166,12 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
         }
     }
 
+    /// Same as [`ViewerSharedState::sync_data`], except it copies the entire [`MjData`]
+    /// struct (including large Jacobian and other arrays), not just the state needed for visualization.
+    pub fn sync_data_full(&mut self, data: &mut MjData<M>) {
+        self._sync_data(data, true);
+    }
+
     /// Syncs the state of viewer's internal [`MjData`] with `data`.
     /// Synchronization happens in two steps.
     /// First the viewer checks if any changes have been made to the internal [`MjData`]
@@ -180,33 +186,22 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
     /// Synchronization of data is performed via mjv_copyData, which only copies fields
     /// required for visualization purposes.
     /// 
-    /// The following are **NOT SYNCHRONIZED**:
-    /// - `qM` (Mass matrix)
-    /// - `qLD` (L*D*L^T factorization of mass matrix)
-    /// - `qLDiagInv` (Inverse diagonal of factorized mass matrix)
-    /// - `qLDiagSqrtInv` (Square root of inverse diagonal)
-    /// - `efc_J` (Constraint Jacobian)
-    /// - `efc_JT` (Constraint Jacobian transpose)
-    /// - `efc_pos` (Constraint position deviation)
-    /// - `efc_margin` (Constraint safety margin)
-    /// - `efc_frictionloss` (Constraint friction loss)
-    /// - `efc_diagApprox` (Approximation of diagonal constraint inertia)
-    /// - `efc_KBIP` (Constraint stiffness, damping, impedance)
-    /// - `efc_D` (Inverse constraint mass)
-    /// - `efc_R` (Inverse constraint regularization)
-    /// - `ten_J` (Tendon Jacobian)
-    /// - `ten_J_rowadr` (Row addresses for tendon Jacobian)
-    /// - `ten_J_colind` (Column indices for tendon Jacobian)
-    /// - `efc_J_rowadr` (Row addresses for constraint Jacobian)
-    /// - `efc_J_colind` (Column indices for constraint Jacobian)
-    /// - `efc_JT_rowadr` (Row addresses for constraint Jacobian transpose)
-    /// - `efc_JT_colind` (Column indices for constraint Jacobian transpose)
-    ///     
-    /// If you require those in a UI callback,
+    /// If you require everything to be synced for use in a UI callback,
     /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).
+    /// Alternatively, you can opt-in into syncing the entire [`MjData`] struct by calling
+    /// [`MjViewer::sync_data_full`] instead.
+    /// 
+    /// The following are **NOT SYNCHRONIZED**:
+    /// - Jacobian matrices;
+    /// - mass matrices.
     /// </div>
     /// 
     pub fn sync_data(&mut self, data: &mut MjData<M>) {
+        self._sync_data(data, false);
+    }
+
+    /// Data sync implementation.
+    fn _sync_data(&mut self, data: &mut MjData<M>, full_sync: bool) {
         /* Update statistics */
         if self.data_passive.time() > 0.0 {  // time = 0 means data was reset
             let time_elapsed_sim = data.time() - self.data_passive.time();
@@ -242,8 +237,13 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
             data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32);
         }
 
-        // Copy only visually-required information to the internal passive data.
-        data.copy_visual_to(&mut self.data_passive);
+        if full_sync {
+            // Copy everything.
+            data.copy_to(&mut self.data_passive);
+        } else {
+            // Copy only visually-required information to the internal passive data.
+            data.copy_visual_to(&mut self.data_passive);
+        }
 
         // Make both saved states the same.
         // If any modification is made through the viewer
@@ -428,6 +428,13 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.render();
     }
 
+    /// Same as [`MjViewer::sync_data`], except it copies the entire [`MjData`]
+    /// struct (including large Jacobian and other arrays), not just the state needed for visualization.
+    /// This is a proxy to [`ViewerSharedState::sync_data_full`].
+    pub fn sync_data_full(&mut self, data: &mut MjData<M>) {
+        self.shared_state.lock().unwrap().sync_data_full(data);
+    }
+
     /// Syncs the state of viewer's internal [`MjData`] with `data`.
     /// This is a proxy to [`ViewerSharedState::sync_data`].
     /// 
@@ -442,30 +449,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Synchronization of data is performed via mjv_copyData, which only copies fields
     /// required for visualization purposes.
     /// 
-    /// The following are **NOT SYNCHRONIZED**:
-    /// - `qM` (Mass matrix)
-    /// - `qLD` (L*D*L^T factorization of mass matrix)
-    /// - `qLDiagInv` (Inverse diagonal of factorized mass matrix)
-    /// - `qLDiagSqrtInv` (Square root of inverse diagonal)
-    /// - `efc_J` (Constraint Jacobian)
-    /// - `efc_JT` (Constraint Jacobian transpose)
-    /// - `efc_pos` (Constraint position deviation)
-    /// - `efc_margin` (Constraint safety margin)
-    /// - `efc_frictionloss` (Constraint friction loss)
-    /// - `efc_diagApprox` (Approximation of diagonal constraint inertia)
-    /// - `efc_KBIP` (Constraint stiffness, damping, impedance)
-    /// - `efc_D` (Inverse constraint mass)
-    /// - `efc_R` (Inverse constraint regularization)
-    /// - `ten_J` (Tendon Jacobian)
-    /// - `ten_J_rowadr` (Row addresses for tendon Jacobian)
-    /// - `ten_J_colind` (Column indices for tendon Jacobian)
-    /// - `efc_J_rowadr` (Row addresses for constraint Jacobian)
-    /// - `efc_J_colind` (Column indices for constraint Jacobian)
-    /// - `efc_JT_rowadr` (Row addresses for constraint Jacobian transpose)
-    /// - `efc_JT_colind` (Column indices for constraint Jacobian transpose)
-    ///     
-    /// If you require those in a UI callback,
+    /// If you require everything to be synced for use in a UI callback,
     /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).
+    /// Alternatively, you can opt-in into syncing the entire [`MjData`] struct by calling
+    /// [`MjViewer::sync_data_full`] instead.
+    /// 
+    /// The following are **NOT SYNCHRONIZED**:
+    /// - Jacobian matrices;
+    /// - mass matrices.
     /// </div>
     /// 
     /// # Example
