@@ -124,7 +124,7 @@ impl Error for MjViewerError {
 /// [`MjData`]-related state. This is separate from [`MjViewer`]
 /// to allow use in multi-threaded programs, where the physics part
 /// runs in another thread and syncs the state with the viewer
-/// running in the main thread
+/// running in the main thread.
 #[derive(Debug)]
 pub struct ViewerSharedState<M: Deref<Target = MjModel>>{
     /// This attribute, [`ViewerSharedState::data_passive`] and [`ViewerSharedState::data_passive_state_old`]
@@ -189,7 +189,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
     /// If you require everything to be synced for use in a UI callback,
     /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).
     /// Alternatively, you can opt-in into syncing the entire [`MjData`] struct by calling
-    /// [`MjViewer::sync_data_full`] instead.
+    /// [`ViewerSharedState::sync_data_full`] instead.
     /// 
     /// The following are **NOT SYNCHRONIZED**:
     /// - Jacobian matrices;
