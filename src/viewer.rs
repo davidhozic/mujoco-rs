@@ -203,8 +203,10 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
     /// Data sync implementation.
     fn _sync_data(&mut self, data: &mut MjData<M>, full_sync: bool) {
         /* Update statistics */
-        if self.data_passive.time() > 0.0 {  // time = 0 means data was reset
-            let time_elapsed_sim = data.time() - self.data_passive.time();
+        let passive_time = self.data_passive.time();
+        let active_time = data.time();
+        if passive_time > 0.0 && active_time > passive_time {  // time = 0 means data was reset
+            let time_elapsed_sim = active_time - passive_time;
             let elapsed_sync = self.last_sync_time.elapsed();
             if !elapsed_sync.is_zero() {
                 self.realtime_factor_smooth += REALTIME_FACTOR_SMOOTHING_FACTOR * (
