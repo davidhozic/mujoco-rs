@@ -464,7 +464,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// # Example
     /// ```no_run
     /// # let model = MjModel::from_xml("/path/scene.xml");
-    /// # let mut viewer = MjViewer::builder().build(&model);
+    /// # let mut viewer = MjViewer::builder().build_passive(&model);
     /// # let mut data = MjData::new(&model);
     /// viewer.sync_data(&mut data);  // sync the data
     /// viewer.render();  // render the scene and process the user interface
