@@ -828,7 +828,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Copy [`MjData`] to `destination` in full.
-    /// This is a wrapper for [`mjv_copyData`].
+    /// This is a wrapper for [`mj_copyData`].
     pub fn copy_to(&self, destination: &mut MjData<M>) {
         unsafe {
             assert_eq!(
