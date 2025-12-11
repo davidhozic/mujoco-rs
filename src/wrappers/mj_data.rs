@@ -827,6 +827,18 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
     }
 
+    /// Copy [`MjData`] to `destination` in full.
+    /// This is a wrapper for [`mjv_copyData`].
+    pub fn copy_to(&self, destination: &mut MjData<M>) {
+        unsafe {
+            assert_eq!(
+                self.model.signature(), destination.model.signature(),
+                "destination MjData must be created from the same model as the source MjData."
+            );
+            mj_copyData(destination.ffi_mut(), self.model.ffi(), self.ffi());
+        }
+    }
+
     /// Returns a direct pointer to the underlying model.
     /// THIS IS NOT TO BE USED.
     /// It is only meant for the viewer code, which currently still depends
@@ -1072,6 +1084,14 @@ impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
         unsafe {
             mj_deleteData(self.data);
         }
+    }
+}
+
+impl<M: Deref<Target = MjModel> + Clone> Clone for MjData<M> {
+    fn clone(&self) -> Self {
+        let raw = unsafe { mj_copyData(ptr::null_mut(), self.model.ffi(), self.ffi()) };
+        assert!(!raw.is_null(), "not enough space to clone data");
+        Self { data: raw, model: self.model.clone() }
     }
 }
 

@@ -53,6 +53,7 @@ Unreleased (MuJoCo 3.3.7)
   - |mj_data|:
 
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`;
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to`;
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_state`;
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>get_state`;
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_state_into`;

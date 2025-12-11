@@ -175,6 +175,38 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
     /// 
     /// Note that users must afterward call [`MjViewer::render`] for the scene
     /// to be rendered and the UI to be processed.
+    /// 
+    /// <div class="warning">
+    /// Synchronization of data is performed via mjv_copyData, which only copies fields
+    /// required for visualization purposes.
+    /// 
+    /// The following are **NOT SYNCHRONIZED**:
+    /// - `qM` (Mass matrix)
+    /// - `qLD` (L*D*L^T factorization of mass matrix)
+    /// - `qLDiagInv` (Inverse diagonal of factorized mass matrix)
+    /// - `qLDiagSqrtInv` (Square root of inverse diagonal)
+    /// - `efc_J` (Constraint Jacobian)
+    /// - `efc_JT` (Constraint Jacobian transpose)
+    /// - `efc_pos` (Constraint position deviation)
+    /// - `efc_margin` (Constraint safety margin)
+    /// - `efc_frictionloss` (Constraint friction loss)
+    /// - `efc_diagApprox` (Approximation of diagonal constraint inertia)
+    /// - `efc_KBIP` (Constraint stiffness, damping, impedance)
+    /// - `efc_D` (Inverse constraint mass)
+    /// - `efc_R` (Inverse constraint regularization)
+    /// - `ten_J` (Tendon Jacobian)
+    /// - `ten_J_rowadr` (Row addresses for tendon Jacobian)
+    /// - `ten_J_colind` (Column indices for tendon Jacobian)
+    /// - `efc_J_rowadr` (Row addresses for constraint Jacobian)
+    /// - `efc_J_colind` (Column indices for constraint Jacobian)
+    /// - `efc_JT_rowadr` (Row addresses for constraint Jacobian transpose)
+    /// - `efc_JT_colind` (Column indices for constraint Jacobian transpose)
+    /// - and possibly others --- make sure to verify for the specific attribute yourself
+    ///     
+    /// If you require those in a UI callback,
+    /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).
+    /// </div>
+    /// 
     pub fn sync_data(&mut self, data: &mut MjData<M>) {
         /* Update statistics */
         if self.data_passive.time() > 0.0 {  // time = 0 means data was reset
@@ -383,7 +415,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Deprecated synchronization and rendering method.
     /// Users should use [`MjViewer::sync_data`] instead, which is a proxy
-    /// to [`ViewerSharedState::sync_data`].
+    /// to [`ViewerSharedState::sync_data`], and afterwards call [`MjViewer::render`].
     /// # Migration to new API
     /// To achieve identical behavior, replace the call of this method with
     /// a call to [`MjViewer::sync_data`] and afterwards [`MjViewer::render`].
@@ -407,6 +439,37 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Note that users must afterward call [`MjViewer::render`] for the scene
     /// to be rendered and the UI to be processed.
     /// 
+    /// <div class="warning">
+    /// Synchronization of data is performed via mjv_copyData, which only copies fields
+    /// required for visualization purposes.
+    /// 
+    /// The following are **NOT SYNCHRONIZED**:
+    /// - `qM` (Mass matrix)
+    /// - `qLD` (L*D*L^T factorization of mass matrix)
+    /// - `qLDiagInv` (Inverse diagonal of factorized mass matrix)
+    /// - `qLDiagSqrtInv` (Square root of inverse diagonal)
+    /// - `efc_J` (Constraint Jacobian)
+    /// - `efc_JT` (Constraint Jacobian transpose)
+    /// - `efc_pos` (Constraint position deviation)
+    /// - `efc_margin` (Constraint safety margin)
+    /// - `efc_frictionloss` (Constraint friction loss)
+    /// - `efc_diagApprox` (Approximation of diagonal constraint inertia)
+    /// - `efc_KBIP` (Constraint stiffness, damping, impedance)
+    /// - `efc_D` (Inverse constraint mass)
+    /// - `efc_R` (Inverse constraint regularization)
+    /// - `ten_J` (Tendon Jacobian)
+    /// - `ten_J_rowadr` (Row addresses for tendon Jacobian)
+    /// - `ten_J_colind` (Column indices for tendon Jacobian)
+    /// - `efc_J_rowadr` (Row addresses for constraint Jacobian)
+    /// - `efc_J_colind` (Column indices for constraint Jacobian)
+    /// - `efc_JT_rowadr` (Row addresses for constraint Jacobian transpose)
+    /// - `efc_JT_colind` (Column indices for constraint Jacobian transpose)
+    /// - and possibly others --- make sure to verify for the specific attribute yourself
+    ///     
+    /// If you require those in a UI callback,
+    /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).
+    /// </div>
+    /// 
     /// # Example
     /// ```no_run
     /// # let model = MjModel::from_xml("/path/scene.xml");
@@ -420,7 +483,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     }
 
     /// Processes the UI (when enabled), processes events, draws the scene
-    /// and swaps buffer in OpenGL.
+    /// and swaps buffers in OpenGL.
     pub fn render(&mut self) {
         let RenderBaseGlState {
             gl_context,
