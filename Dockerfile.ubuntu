@@ -1,4 +1,4 @@
-# Docker file for testing interoperability with C and C++ dependencies.
+# Docker file for building MuJoCo. This should match MuJoCo's official build environment.
 ARG UBUNTU_VERSION=22.04
 FROM ubuntu:${UBUNTU_VERSION}
 
@@ -11,10 +11,21 @@ RUN echo "keyboard-configuration  keyboard-configuration/layoutcode string us" |
 RUN apt update
 
 # Build tools
-RUN apt install --install-recommends -y build-essential cmake curl
-
-# X11 & Wayland
-RUN apt install --install-recommends -y xorg xorg-dev
+RUN apt install -y \
+    build-essential \
+    cmake \
+    curl \
+    libgl1-mesa-dev \
+    libwayland-dev \
+    libxinerama-dev \
+    libxcursor-dev \
+    libxkbcommon-dev \
+    libxrandr-dev \
+    libxi-dev \
+    ninja-build \
+    git \
+    pkg-config \
+    clang-13
 
 # Cleanup
 # Remove cached package files (*.deb)
@@ -26,12 +37,35 @@ RUN apt autoclean
 # Remove packages that were installed as dependencies but are no longer needed
 RUN apt autoremove -y
 
-
 # Rust
-RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+# RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 
-ENV MUJOCO_DYNAMIC_LINK_DIR=/mujoco/lib/
-ENV LD_LIBRARY_PATH="/mujoco/lib/"
-ENV PATH="/root/.cargo/bin:${PATH}"
+# ENV MUJOCO_STATIC_LINK_DIR=/mujoco/lib/
+# ENV PATH="/root/.cargo/bin:${PATH}"
 
-WORKDIR /build/
+WORKDIR /mujoco/
+
+# Commands.
+# Note that we enable IPO with -DBUILD_SHARED_LIBS:BOOL=OFF and
+# tell CMake to build static libs with -DBUILD_SHARED_LIBS:BOOL=OFF.
+# -----------------------------------------
+# docker buildx build . -t mujoco-build -f Dockerfile.ubuntu
+# -----------------------------------------
+# docker run --rm --volume /path/to/mujoco/:/mujoco/ -it mujoco-build:latest
+# -----------------------------------------
+# cmake -S . -B build \
+#     -DCMAKE_BUILD_TYPE:STRING=Release \
+#     -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON \
+#     -DCMAKE_INSTALL_PREFIX:STRING=${TMPDIR}/mujoco_install \
+#     -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF \
+#     -DBUILD_SHARED_LIBS:BOOL=OFF \
+#     -G Ninja \
+#     -DCMAKE_C_COMPILER:STRING=clang-13 \
+#     -DCMAKE_CXX_COMPILER:STRING=clang++-13 \
+#     -DMUJOCO_HARDEN:BOOL=ON
+# -----------------------------------------
+# cmake --build build --parallel --target glfw libmujoco_simulate --config=Release
+# -----------------------------------------
+# export MUJOCO_STATIC_LINK_DIR=$(realpath mujoco/build/lib/)
+# cargo run ...
+# -----------------------------------------
