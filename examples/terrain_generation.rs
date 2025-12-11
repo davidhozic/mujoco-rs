@@ -9,7 +9,7 @@ use std::time::Instant;
 
 fn main() {   
     const FPS: f64 = 60.0;  // the refresh rate of the viewer
-    const SYNC_TIME_MS: u128 = (1000.0 / FPS) as u128;  //  time to wait before updating the viewer (1 / FPS)
+    const RENDER_TIME_MS: u128 = (1000.0 / FPS) as u128;  //  time to wait before updating the viewer (1 / FPS)
 
     // Create the model programmatically.
     let model = create_model();
@@ -26,15 +26,16 @@ fn main() {
 
         // The timestep is quite small, thus it makes sense to refresh at a lower pace.
         // Syncs are also expensive in this example.
-        if timer_refresh.elapsed().as_millis() > SYNC_TIME_MS {
+        if timer_refresh.elapsed().as_millis() > RENDER_TIME_MS {
             timer_refresh = Instant::now();
-            viewer.sync(&mut data);
+            viewer.render();
         }
 
         // Step data in realtime
         if timer.elapsed().as_secs_f64() > timestep {  // don't use sleep as it's not accurate enough
             timer = Instant::now();
             data.step();
+            viewer.sync_data(&mut data);
         }
     }
 }

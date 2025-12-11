@@ -36,8 +36,9 @@ fn main() {
     let ball_info = data.joint("ball_joint").unwrap();
     while viewer.running() {
         /* Step the simulation and sync the viewer */
-        viewer.sync(&mut data);
         data.step();
+        viewer.sync_data(&mut data);
+        viewer.render();
 
         /* Obtain the view and access first three variables of `qpos` (x, y, z) */
         let xyz = &ball_info.view(&data).qpos[..3];

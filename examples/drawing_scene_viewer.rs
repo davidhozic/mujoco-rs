@@ -52,8 +52,9 @@ fn main() {
     let mut scene;
     while viewer.running() {
         /* Step the simulation and sync the viewer */
-        viewer.sync(&mut data);
         data.step();
+        viewer.sync_data(&mut data);
+        viewer.render();
 
         /* Prepare the scene */
         scene = viewer.user_scene_mut();  // obtain a mutable reference to the user scene. The method name mirrors the C++ viewer.

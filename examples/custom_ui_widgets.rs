@@ -132,8 +132,9 @@ impl CustomSimulation {
     }
 
     fn step(&mut self) {
-        self.viewer.sync(&mut self.data);
         self.data.step();
+        self.viewer.sync_data(&mut self.data);
+        self.viewer.render();
     }
 }
 

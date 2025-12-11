@@ -379,9 +379,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Update the scene with new data from data.
     pub fn sync(&mut self, data: &mut MjData<M>) {
-        let model_data_ptr = unsafe {  data.model().__raw() };
-        let bound_model_ptr = unsafe { self.model.__raw() };
-        assert_eq!(model_data_ptr, bound_model_ptr, "'data' must be created from the same model as the renderer.");
+        assert_eq!(data.model().signature(), self.model.signature(), "'data' must be created from the same model as the renderer.");
 
         self.scene.update(data, &self.option, &MjvPerturb::default(), &mut self.camera);
 

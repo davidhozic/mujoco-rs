@@ -1,6 +1,6 @@
 [package]
 name = "mujoco-rs"
-version = "2.1.1+mj-3.3.7"
+version = "2.2.0+mj-3.3.7"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "A high-level Rust wrapper around the MuJoCo C library, with a native viewer (re-)written in Rust."
@@ -10,8 +10,9 @@ keywords = ["MuJoCo", "Viewer", "Bindings", "Wrapper"]
 categories = ["simulation", "science::robotics", "api-bindings"]
 homepage = "https://crates.io/crates/mujoco-rs"
 documentation = "https://docs.rs/mujoco-rs/"
+rust-version = "1.88"
 
-exclude = ["src/cpp/*", ".gitignore", ".gitmodules", "mujoco/*", "docs/"]
+exclude = [".gitignore", ".gitmodules", "mujoco/*", "docs/"]
 
 [package.metadata.docs.rs]
 all-features = true

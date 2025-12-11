@@ -17,13 +17,13 @@ MuJoCo-rs can be added to your project like so:
 
   ::
 
-    cargo add mujoco-rs --no-default-features --features "auto-download-mujoco viewer viewer-ui renderer renderer-winit-fallback"
+    cargo add mujoco-rs --no-default-features --features "viewer viewer-ui renderer renderer-winit-fallback"
 
 - **Without** visualization/rendering support:
 
   ::
 
-    cargo add mujoco-rs --no-default-features --features "auto-download-mujoco"
+    cargo add mujoco-rs --no-default-features
 
 See :ref:`opt-cargo-features` for information about available Cargo features. We strongly recommend to disable any
 rendering-related features when rendering is not needed, which will reduce compilation time.
@@ -66,7 +66,7 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
         .. tabs::
 
-            .. tab:: Linux/MacOS
+            .. tab:: Linux
 
                 ::
 
@@ -77,6 +77,10 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
                 ::
 
                     $env:MUJOCO_DOWNLOAD_DIR="C:\Users\User\Libraries\"
+
+            .. tab:: MacOS
+
+                Automatic download for MacOS is not supported.
 
     .. tab:: Manual download
 
