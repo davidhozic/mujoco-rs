@@ -30,7 +30,7 @@ fn main() {
     // Create the viewer, bound to the model.
     let mut viewer = MjViewer::builder()
         .max_user_geoms(100)
-        .vsync(true)  // let the viewer handle appropriate refresh rate.
+        .vsync(true)  // let the viewer select the appropriate refresh rate.
         .build_passive(model.clone())
         .expect("could not launch the viewer");
 

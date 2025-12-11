@@ -33,7 +33,7 @@ The user application is the one that needs to run the actual physics simulation,
 :ref:`basic_sim` and also below.
 
 The viewer can be launched with :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive`,
-like shown in the following example:
+like shown in the following (single-threaded) example:
 
 .. code-block:: rust
     :emphasize-lines: 8
@@ -86,6 +86,67 @@ This is optional and can be removed or reduced to run the simulation faster than
 
 For more, refer to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
 `examples <https://github.com/davidhozic/mujoco-rs/tree/main/examples>`_.
+
+
+Multi-threading
+----------------
+Above example shows how to use the viewer synchronously to the simulation loop.
+This can slow down the simulation as :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`
+is relatively expensive to call. Additionally, usage synchronous to simulation causes
+the refresh rate to be equal to the simulation stepping frequency, which puts strain to the GPU.
+
+To prevent slowdowns and allow V-Sync, the viewer can run in the **main thread**, whilst
+the actual physics simulation runs in another.
+
+Here's a cutout from the :gh-example:`example <rust_viewer_threaded.rs>` on how to use the viewer in a multi-threaded way:
+
+.. code-block:: rust
+    :emphasize-lines: 1, 11-13, 18-20, 30-34
+
+    let model = Arc::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
+    let mut data = MjData::new(model.clone());
+
+    // Create the viewer, bound to the model.
+    let mut viewer = MjViewer::builder()
+        .max_user_geoms(100)
+        .vsync(true)  // let the viewer select the appropriate refresh rate.
+        .build_passive(model.clone())
+        .expect("could not launch the viewer");
+
+    let shared_state = viewer.state().clone();
+    let mut viewer_running = shared_state.lock().unwrap().running();  // gets moved into the thread
+    let physics_thread = std::thread::spawn(move || {
+        while viewer_running {
+            let timer = Instant::now();
+            data.step();
+            {
+                let mut lock = shared_state.lock().unwrap();
+                lock.sync_data(&mut data);
+                viewer_running = lock.running();
+            }
+
+            // Use a while loop and polling to wait for accuracy purposes.
+            // To increase performance, std::thread::sleep may be used,
+            // however that comes at the cost of less accuracy.
+            while timer.elapsed().as_secs_f64() < model.opt().timestep {}
+        }
+    });
+
+    while viewer.running() {
+        viewer.render();
+    }
+
+    physics_thread.join().unwrap();
+
+The example mainly differs from the synchronous one in the highlighted lines:
+
+- :docs-rs:`mujoco_rs::wrappers::mj_model::<struct>MjModel` is wrapped into
+  `Arc <https://doc.rust-lang.org/std/sync/struct.Arc.html>`_,
+- Data is synced through :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_data`;
+  
+  - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState` is obtained through
+    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>state`, which returns
+    ``Arc<Mutex<ViewerSharedState>>``;
 
 
 .. _custom_ui_widgets:
@@ -163,6 +224,7 @@ which demonstrates various types of UI elements including windows, side panels, 
     users can call :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full`, which will copy
     the entire :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` struct at the expanse of performance.
 
+
 .. _mj_cpp_viewer:
 
 Wrapper of MuJoCo's C++ 3D viewer
@@ -176,7 +238,7 @@ The changes to the viewer are made to allow viewer rendering in a user-controlle
     To avoid a major rewrite of the C++ viewer,  
     the latter is given raw, mutable pointers to both :docs-rs:`mujoco_rs::mujoco_c::<type>mjModel`  
     and :docs-rs:`mujoco_rs::mujoco_c::<type>mjData`, which are wrapped inside  
-    :docs-rs:`mujoco_rs::wrappers::mj_model::<struct>MjModel`  
+    :docs-rs:`mujoco_rs::wrappers::mj_model::<struct>MjModel`
     and :docs-rs:`mujoco_rs::wrappers::mj_data::<struct>MjData`, respectively.  
     As a result, Rust's borrow-checker rules are violated. Although incorrect behavior is unlikely,  
     caution is advised.
