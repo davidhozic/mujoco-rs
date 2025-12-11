@@ -747,7 +747,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Reads data's state into `destination`. The `spec` parameter is a bit mask of [`MjtState`] elements,
-    /// which controls what state gets copied. The `destination` parameter is a mutable.
+    /// which controls what state gets copied. The `destination` parameter is a mutable
     /// slice to the location into which the state will be written.
     /// This is a wrapper around [`mj_getState`].
     /// 
