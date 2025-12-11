@@ -473,7 +473,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         };
 
         self.fps_timer = Instant::now();
-        self.fps_smooth +=  FPS_SMOOTHING_FACTOR * (fps - self.fps_smooth);
+        self.fps_smooth += FPS_SMOOTHING_FACTOR * (fps - self.fps_smooth);
     }
 
     /// Updates the scene and draws it to the display.

@@ -69,7 +69,7 @@
 //!     [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco)
 //!     for information on complete configuration.
 //! 
-//!   By default, `viewer`, `viewer-ui`, `renderer`, and `renderer-winit-fallback` are enabled.
+//! By default, `viewer`, `viewer-ui`, `renderer`, and `renderer-winit-fallback` are enabled.
 //! 
 //! 
 use std::ffi::CStr;
