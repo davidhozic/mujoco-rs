@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   test:
-    name: "Test library on ${{ matrix.os }} with features: $${{join(matrix.features, ' ')}}"
+    name: "Test library on ${{ matrix.os }} with features: ${{join(matrix.features, ' ')}}"
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
