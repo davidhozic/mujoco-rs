@@ -30,6 +30,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile --features "${{matrix.features}}" --no-default-features
+
       - name: Cache cargo (registry/git and target)
         uses: actions/cache@v4
         with:
