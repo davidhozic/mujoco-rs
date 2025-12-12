@@ -53,10 +53,10 @@ jobs:
         shell: bash
 
       - name: cargo build (debug)
-        run: cargo build --lib --features ${{matrix.features}}
+        run: cargo build --lib --features "${{matrix.features}}"
 
       - name: cargo release (debug)
-        run: cargo build --release --lib --features ${{matrix.features}}
+        run: cargo build --release --lib --features "${{matrix.features}}"
 
       - name: Setup LD_LIBRARY_PATH on Linux
         if: runner.os == 'Linux'
@@ -66,7 +66,7 @@ jobs:
         shell: bash
 
       - name: cargo test (debug)
-        run: cargo test --lib --features ${{matrix.features}}
+        run: cargo test --lib --features "${{matrix.features}}"
 
       - name: cargo test (release)
-        run: cargo test --release --lib --features ${{matrix.features}}
+        run: cargo test --release --lib --features "${{matrix.features}}"
