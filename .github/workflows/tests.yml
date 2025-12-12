@@ -20,7 +20,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-        features: ["renderer auto-download-mujoco", "auto-download-mujoco"]
+        features: ["renderer renderer-winit-fallback auto-download-mujoco", "auto-download-mujoco"]
       fail-fast: false
 
     env:
@@ -38,8 +38,6 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
 
       - name: Set MUJOCO_DOWNLOAD_DIR
         shell: bash
@@ -53,10 +51,10 @@ jobs:
           echo "MUJOCO_DOWNLOAD_DIR=$ABS_PATH" >> $GITHUB_ENV
 
       - name: cargo build (debug)
-        run: cargo build --lib --features "${{matrix.features}}"
+        run: cargo build --lib --features "${{matrix.features}}" --no-default-features
 
       - name: cargo release (debug)
-        run: cargo build --release --lib --features "${{matrix.features}}"
+        run: cargo build --release --lib --features "${{matrix.features}}" --no-default-features
 
       - name: Setup LD_LIBRARY_PATH on Linux
         if: runner.os == 'Linux'
@@ -73,7 +71,7 @@ jobs:
         shell: bash
 
       - name: cargo test (debug)
-        run: cargo test --lib --features "${{matrix.features}}"
+        run: cargo test --lib --features "${{matrix.features}}" --no-default-features
 
       - name: cargo test (release)
-        run: cargo test --release --lib --features "${{matrix.features}}"
+        run: cargo test --release --lib --features "${{matrix.features}}" --no-default-features
