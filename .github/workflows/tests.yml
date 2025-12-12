@@ -4,11 +4,7 @@ on:
   pull_request:
   workflow_dispatch:
   release:
-    types: [published]  
-  push:
-    branches:
-      - "feature/ci-tests"
-
+    types: [published]
 
 permissions:
   contents: read
@@ -60,24 +56,24 @@ jobs:
           libgles2-mesa-dev \
           mesa-utils
 
-          export LIBGL_ALWAYS_SOFTWARE=1
-          export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+      - name: Set MUJOCO_DOWNLOAD_DIR (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $absPath = Resolve-Path . | Select-Object -ExpandProperty Path
+          echo "MUJOCO_DOWNLOAD_DIR=$absPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Set MUJOCO_DOWNLOAD_DIR
+      - name: Set MUJOCO_DOWNLOAD_DIR (non-Windows)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            # PowerShell alternative for Windows
-            ABS_PATH=$(powershell -Command "Resolve-Path . | Select-Object -ExpandProperty Path")
-          else
-            ABS_PATH=$(realpath .)
-          fi
+          ABS_PATH=$(realpath .)
           echo "MUJOCO_DOWNLOAD_DIR=$ABS_PATH" >> $GITHUB_ENV
 
       - name: cargo build (debug)
         run: cargo build --lib --features ${{env.MJRS_FEATURES}} --no-default-features
 
-      - name: cargo release (debug)
+      - name: cargo build (release)
         run: cargo build --release --lib --features ${{env.MJRS_FEATURES}} --no-default-features
 
       - name: Setup LD_LIBRARY_PATH on Linux
