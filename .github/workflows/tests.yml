@@ -75,3 +75,6 @@ jobs:
 
       - name: cargo test (release)
         run: cargo test --release --lib --features "${{matrix.features}}" --no-default-features
+     
+      - name: Run a rendering test
+        run: cargo run --release --example renderer
