@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   test:
-    name: Test (lib-only) on ${{ matrix.os }} with features ${{matrix.features}}
+    name: "Test library on ${{ matrix.os }} with features: $${{join(matrix.features, ' ')}}"
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -102,4 +102,4 @@ jobs:
      
       - name: Run a rendering test
         if: contains(matrix.features, 'renderer') && runner.os == 'Linux'
-        run: cargo run --release --example renderer --features "${{env.MJRS_FEATURES}} --no-default-features
+        run: cargo run --release --example renderer --features ${{env.MJRS_FEATURES}} --no-default-features
