@@ -41,13 +41,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Install Rust (rustup + stable toolchain)
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          profile: minimal
-
       - name: Set MUJOCO_DOWNLOAD_DIR
         shell: bash
         run: |
