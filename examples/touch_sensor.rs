@@ -41,8 +41,9 @@ fn main() {
     let sensor_data_info = data.sensor("touch").unwrap();
     while viewer.running() {
         /* Step the simulation and sync the viewer */
-        viewer.sync(&mut data);
         data.step();
+        viewer.sync_data(&mut data);
+        viewer.render();
 
         /* Print the touch sensor output, which is the contact force */
         println!("{}", sensor_data_info.view(&data).data[0]);

@@ -16,6 +16,56 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+
+2.2.0 (MuJoCo 3.3.7)
+================================
+- Made :ref:`mj_renderer` use EGL backend by default on Linux for true offscreen rendering (pbuffer).
+  
+  - New feature added for compatibility purposes: ``renderer-winit-fallback``.
+    The feature is enabled by default.
+
+- Info menu (F2) displaying smoothed FPS, simulation time, and used memory.
+- Realtime warning (F4) for showing the realtime factor [%] when the simulation's sync time deviates at least 2 %
+  from the model's configured timestep.
+- Changes to :ref:`mj_rust_viewer`:
+
+  - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` for custom UI widgets.
+    This allows users to create custom windows, panels, and other UI elements using `egui <https://github.com/emilk/egui>`_.
+    See :ref:`custom_ui_widgets` for more information.
+
+
+  - Separate syncing and rendering logic:
+
+    - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`:
+
+      - Deprecates :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync`, which performed
+        both synchronization and rendering.
+      - Rendering must now be done through :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`,
+        which must be called by user code.
+
+    - Added :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState`:
+
+      - Allows synchronization of the viewer and the simulation state in separate threads.
+        Note that the viewer must run in the main thread.
+      - Call :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>state` to obtain it.
+
+
+- New methods:
+
+  - |mj_data|:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`;
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to`;
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_state`;
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>get_state`;
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_state_into`;
+
+- New examples:
+
+  - :gh-example:`rust_viewer_threaded.rs`.
+
+
+
 2.1.0 / 2.1.1 (MuJoCo 3.3.7)
 ================================
 - Option to automatically pull MuJoCo.

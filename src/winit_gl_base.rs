@@ -16,17 +16,12 @@ use winit::dpi::PhysicalSize;
 
 use glutin_winit::{ApiPreference, DisplayBuilder, GlWindow};
 use std::collections::VecDeque;
-use std::ops::Deref;
-use std::io;
-
-use crate::wrappers::mj_visualization::MjvScene;
-use crate::prelude::MjModel;
 
 
 /// Base struct for rendering through Glutin.
 /// This is a proxy since Glutin only allows event processing through callbacks, which this implements.
 #[derive(Debug)]
-pub(crate) struct GlState {
+pub(crate) struct RenderBaseGlState {
     pub(crate) window: Window,
     pub(crate) gl_context: PossiblyCurrentContext,
     pub(crate) gl_surface: Surface<WindowSurface>,
@@ -34,8 +29,7 @@ pub(crate) struct GlState {
 
 #[derive(Debug)]
 pub(crate) struct RenderBase {
-    pub(crate) state: Option<GlState>,
-    pub(crate) running: bool,
+    pub(crate) state: Option<RenderBaseGlState>,
     /* Event related */
     pub(crate) queue: VecDeque<WindowEvent>,
 
@@ -49,7 +43,6 @@ impl RenderBase {
     pub(crate) fn new(width: u32, height: u32, title: String, event_loop: &mut EventLoop<()>, events: bool) -> Self {
         let mut s = Self {
             state: None,
-            running: false,
             queue: VecDeque::new(),
             size: (width, height),
             title,
@@ -72,7 +65,8 @@ impl ApplicationHandler for RenderBase {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attrs = Window::default_attributes()
             .with_title(&self.title)
-            .with_inner_size(PhysicalSize::new(self.size.0, self.size.1));
+            .with_inner_size(PhysicalSize::new(self.size.0, self.size.1))
+            .with_visible(self.events);
 
         let template = ConfigTemplateBuilder::new()
             // Request typical formats; these are hints.
@@ -125,8 +119,7 @@ impl ApplicationHandler for RenderBase {
         let gl_context = not_current.make_current(&gl_surface).expect("make current");
 
         // Save state
-        self.state = Some(GlState { gl_surface, gl_context, window });
-        self.running = true;
+        self.state = Some(RenderBaseGlState { gl_surface, gl_context, window });
     }
 
     fn window_event(
@@ -138,10 +131,10 @@ impl ApplicationHandler for RenderBase {
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
-                self.running = false;
+                self.maybe_forward_event(WindowEvent::CloseRequested);
             }
             WindowEvent::Resized(_) => {
-                if let Some(GlState { window, gl_context, gl_surface }) = &self.state {
+                if let Some(RenderBaseGlState { window, gl_context, gl_surface }) = &self.state {
                     window.resize_surface(gl_surface, gl_context);
                 }
             }
@@ -152,26 +145,3 @@ impl ApplicationHandler for RenderBase {
     }
 }
 
-/// Copies geometry data (geoms only) from the `src` to `dst`.
-/// # Errors
-/// Returns an [`io::Error`] of kind [`io::ErrorKind::StorageFull`] if the destination scene does not have
-/// enough space to accommodate the additional geoms from the source scene.
-pub(crate) fn sync_geoms<M: Deref<Target = MjModel>>(src: &MjvScene<M>, dst: &mut MjvScene<M>) -> io::Result<()> {
-    let ffi_src = src.ffi();
-    let ffi_dst = unsafe { dst.ffi_mut() };
-    let new_len = ffi_dst.ngeom + ffi_src.ngeom;
-
-    if new_len > ffi_dst.maxgeom {
-        return Err(io::Error::new(io::ErrorKind::StorageFull, "not enough space available in the destination scene"))
-    }
-
-    /* Fast copy */
-    unsafe { std::ptr::copy_nonoverlapping(
-        ffi_src.geoms,
-        ffi_dst.geoms.add(ffi_dst.ngeom as usize),
-        ffi_src.ngeom as usize
-    ) };
-
-    ffi_dst.ngeom = new_len;
-    Ok(())
-}

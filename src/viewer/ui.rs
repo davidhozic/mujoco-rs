@@ -20,7 +20,6 @@ use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint};
 use crate::wrappers::mj_data::MjData;
 use crate::viewer::ViewerStatusBit;
 use crate::mujoco_c::mjNGROUP;
-use bitflags::bitflags;
 
 const MAIN_FONT: FontId = FontId::proportional(15.0);
 const HEADING_FONT: FontId = FontId::proportional(20.0);
@@ -115,6 +114,9 @@ const FRAME_TYPE_MAP: [&str; 8] = [
     "World"
 ];
 
+/// Type alias for a user-provided UI callback function.
+pub(crate) type UiCallback<M> = Box<dyn FnMut(&egui::Context, &mut MjData<M>)>;
+
 /// Viewer user interface context.
 pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     egui_ctx: egui::Context,
@@ -126,8 +128,18 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     actuator_names: Vec<String>,
     joint_name_id: Vec<(String, usize)>,
     equality_names: Vec<String>,
-    status: UiStatus,
-    model: M
+    model: M,
+    user_ui_callbacks: Vec<UiCallback<M>>,
+
+    // Window toggles.
+    // Note that these are bool for easier integration with egui.
+    // We assumed they won't take up too much extra space, since
+    // running multiple viewers isn't what most people will do
+    // and even then this is minor.
+    actuator_window: bool,
+    joint_window: bool,
+    equality_window: bool,
+    group_window: bool
 }
 
 impl<M: Deref<Target = MjModel>> ViewerUI<M> {
@@ -186,7 +198,12 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         Self {
             egui_ctx, state, painter, gl, events: VecDeque::new(),
             camera_names, actuator_names, joint_name_id, equality_names,
-            status: UiStatus::empty(), model
+            model,
+            user_ui_callbacks: Vec::new(),
+            actuator_window: false,
+            joint_window: false,
+            equality_window: false,
+            group_window: false
         }
     }
 
@@ -243,6 +260,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             .default_open(true)
                             .show(ui, |ui|
                         {
+                            // Normal toggles
                             ui.horizontal_wrapped(|ui| {
                                 let mut selected = status.contains(ViewerStatusBit::HELP);
                                 ui.toggle_value(&mut selected, RichText::new("Help").font(MAIN_FONT));
@@ -253,25 +271,39 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                     self.events.push_back(UiEvent::Fullscreen);
                                 };
 
-                                selected = self.status.contains(UiStatus::CONTROL_WINDOW);
-                                if ui.toggle_value(&mut selected, RichText::new("Actuator").font(MAIN_FONT)).clicked() {
-                                    self.status.set(UiStatus::CONTROL_WINDOW, selected);
+                                // VSync
+                                let mut selected = status.contains(ViewerStatusBit::VSYNC);
+                                if ui.toggle_value(&mut selected, RichText::new("V-Sync").font(MAIN_FONT)).clicked() {
+                                    self.events.push_back(UiEvent::VSyncToggle);
                                 };
+                                status.set(ViewerStatusBit::VSYNC, selected);
 
-                                selected = self.status.contains(UiStatus::JOINT_WINDOW);
-                                if ui.toggle_value(&mut selected, RichText::new("Joint").font(MAIN_FONT)).clicked() {
-                                    self.status.set(UiStatus::JOINT_WINDOW, selected);
-                                };
+                                // Info menu (FPS, time, etc.)
+                                let mut selected = status.contains(ViewerStatusBit::INFO);
+                                ui.toggle_value(&mut selected, RichText::new("Info").font(MAIN_FONT));
+                                status.set(ViewerStatusBit::INFO, selected);
+                            });
 
-                                selected = self.status.contains(UiStatus::EQUALITY_WINDOW);
-                                if ui.toggle_value(&mut selected, RichText::new("Equality").font(MAIN_FONT)).clicked() {
-                                    self.status.set(UiStatus::EQUALITY_WINDOW, selected);
-                                };
+                            ui.separator();
 
-                                selected = self.status.contains(UiStatus::GROUP_WINDOW);
-                                if ui.toggle_value(&mut selected, RichText::new("Group").font(MAIN_FONT)).clicked() {
-                                    self.status.set(UiStatus::GROUP_WINDOW, selected);
-                                };
+                            // Window toggles
+                            ui.horizontal_wrapped(|ui| {
+                                ui.toggle_value(&mut self.actuator_window, RichText::new("Actuator").font(MAIN_FONT));
+                                ui.toggle_value(&mut self.joint_window, RichText::new("Joint").font(MAIN_FONT));
+                                ui.toggle_value(&mut self.equality_window, RichText::new("Equality").font(MAIN_FONT));
+                                ui.toggle_value(&mut self.group_window, RichText::new("Group").font(MAIN_FONT));
+                            });
+
+                            ui.separator();
+
+                            ui.horizontal_wrapped(|ui| {
+                                // Warnings
+                                ui.collapsing(RichText::new("Warnings").font(MAIN_FONT), |ui| {
+                                    // Non-realtime factor warning
+                                    let mut selected = status.contains(ViewerStatusBit::WARN_REALTIME);
+                                    ui.checkbox(&mut selected, RichText::new("Realtime factor").font(MAIN_FONT));
+                                    status.set(ViewerStatusBit::WARN_REALTIME, selected);
+                                });
                             });
                         });
 
@@ -403,113 +435,106 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
             /* Windows */
             // Controls window
-            if self.status.contains(UiStatus::CONTROL_WINDOW) {
-                egui::Window::new("Actuator")
-                    .fade_in(false)
-                    .fade_out(false)
-                    .scroll(true)
-                    .show(ctx, |ui|
-                {
-                    egui::Grid::new("ctrl_grid").show(ui, |ui| {
-                        for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
-                            .zip(data.ctrl_mut().iter_mut())
-                            .zip(self.model.actuator_ctrlrange())
-                            .zip(self.model.actuator_ctrllimited())
-                        {
-                            ui.label(RichText::new(actuator_name).font(MAIN_FONT));
+            egui::Window::new("Actuator")
+                .scroll(true)
+                .open(&mut self.actuator_window)
+                .show(ctx, |ui|
+            {
+                egui::Grid::new("ctrl_grid").show(ui, |ui| {
+                    for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
+                        .zip(data.ctrl_mut().iter_mut())
+                        .zip(self.model.actuator_ctrlrange())
+                        .zip(self.model.actuator_ctrllimited())
+                    {
+                        ui.label(RichText::new(actuator_name).font(MAIN_FONT));
 
-                            let range_inc = if *limited {
-                                range[0]..=range[1]
-                            } else { -1.0..=1.0 };
+                        let range_inc = if *limited {
+                            range[0]..=range[1]
+                        } else { -1.0..=1.0 };
 
-                            ui.add(
-                                egui::Slider::new(ctrl, range_inc)
-                                .update_while_editing(false)
-                            );
-                            ui.end_row();
-                        }
-                    });
-
-                    // Clear all actuator controls by setting them to 0
-                    if ui.button(RichText::new("Clear").font(MAIN_FONT)).clicked() {
-                        data.ctrl_mut().fill(0.0);
+                        ui.add(
+                            egui::Slider::new(ctrl, range_inc)
+                            .update_while_editing(false)
+                        );
+                        ui.end_row();
                     }
                 });
-            }
+
+                // Clear all actuator controls by setting them to 0
+                if ui.button(RichText::new("Clear").font(MAIN_FONT)).clicked() {
+                    data.ctrl_mut().fill(0.0);
+                }
+            });
 
             // Joints window
-            if self.status.contains(UiStatus::JOINT_WINDOW) {
-                egui::Window::new("Joint")
-                    .fade_in(false)
-                    .fade_out(false)
-                    .scroll(true)
-                    .show(ctx, |ui|
-                {
-                    egui::Grid::new("joint_grid").show(ui, |ui| {
-                        let qpos = data.qpos();
-                        let limiteds = self.model.jnt_limited();
-                        let ranges = self.model.jnt_range();
-                        let qpos_addresses = self.model.jnt_qposadr();
-                        for (name, index) in &self.joint_name_id
-                        {
-                            ui.label(RichText::new(name).font(MAIN_FONT));
-                            let limited = limiteds[*index];
-                            let range = ranges[*index];
-                            let mut value = qpos[qpos_addresses[*index] as usize];
-                            ui.add_enabled(false, egui::DragValue::new(&mut value));
+            egui::Window::new("Joint")
+                .scroll(true)
+                .open(&mut self.joint_window)
+                .show(ctx, |ui|
+            {
+                egui::Grid::new("joint_grid").show(ui, |ui| {
+                    let qpos = data.qpos();
+                    let limiteds = self.model.jnt_limited();
+                    let ranges = self.model.jnt_range();
+                    let qpos_addresses = self.model.jnt_qposadr();
+                    for (name, index) in &self.joint_name_id
+                    {
+                        ui.label(RichText::new(name).font(MAIN_FONT));
+                        let limited = limiteds[*index];
+                        let range = ranges[*index];
+                        let mut value = qpos[qpos_addresses[*index] as usize];
+                        ui.add_enabled(false, egui::DragValue::new(&mut value));
 
-                            if limited {
-                                let [low, high] = range;
-                                let value_scaled = ((value - low) / (high - low)).clamp(0.0, 1.0);
-                                ui.add(egui::ProgressBar::new(value_scaled as f32));
-                            }
-                            else {
-                                ui.label("no limit");
-                            }
-                            
-                            ui.end_row();
+                        if limited {
+                            let [low, high] = range;
+                            let value_scaled = ((value - low) / (high - low)).clamp(0.0, 1.0);
+                            ui.add(egui::ProgressBar::new(value_scaled as f32));
                         }
-                    });
+                        else {
+                            ui.label("no limit");
+                        }
+                        
+                        ui.end_row();
+                    }
                 });
-            }
+            });
 
             // Equalities window
-            if self.status.contains(UiStatus::EQUALITY_WINDOW) {
-                egui::Window::new("Equality")
-                    .fade_in(false)
-                    .fade_out(false)
-                    .scroll(true)
-                    .show(ctx, |ui|
-                {
-                    ui.horizontal_wrapped(|ui| {
-                        for (equality_name, active) in self.equality_names.iter()
-                            .zip(data.eq_active_mut())
-                        {
-                            ui.toggle_value(active, RichText::new(equality_name).font(MAIN_FONT));
-                        }
-                    });
+            egui::Window::new("Equality")
+                .scroll(true)
+                .open(&mut self.equality_window)
+                .show(ctx, |ui|
+            {
+                ui.horizontal_wrapped(|ui| {
+                    for (equality_name, active) in self.equality_names.iter()
+                        .zip(data.eq_active_mut())
+                    {
+                        ui.toggle_value(active, RichText::new(equality_name).font(MAIN_FONT));
+                    }
                 });
-            }
+            });
 
-            if self.status.contains(UiStatus::GROUP_WINDOW) {
-                egui::Window::new("Group")
-                    .fade_in(false)
-                    .fade_out(false)
-                    .show(ctx, |ui|
-                {
-                    egui::Grid::new("group_grid").show(ui, |ui| {
-                        for i in 0..mjNGROUP as usize {
-                            ui.toggle_value(unsafe { std::mem::transmute(&mut options.geomgroup[i]) }, format!("Geom {i}"));
-                            ui.toggle_value(unsafe { std::mem::transmute(&mut options.sitegroup[i]) }, format!("Site {i}"));
-                            ui.toggle_value(unsafe { std::mem::transmute(&mut options.jointgroup[i]) }, format!("Joint {i}"));
-                            ui.toggle_value(unsafe { std::mem::transmute(&mut options.tendongroup[i]) }, format!("Tendon {i}"));
-                            ui.toggle_value(unsafe { std::mem::transmute(&mut options.actuatorgroup[i]) }, format!("Actuator {i}"));
-                            ui.toggle_value(unsafe { std::mem::transmute(&mut options.flexgroup[i]) }, format!("Flex {i}"));
-                            ui.toggle_value(unsafe { std::mem::transmute(&mut options.skingroup[i]) }, format!("Skin {i}"));
-                            ui.end_row();
-                        }
-                    });
+            egui::Window::new("Group")
+                .open(&mut self.group_window)
+                .show(ctx, |ui|
+            {
+                egui::Grid::new("group_grid").show(ui, |ui| {
+                    for i in 0..mjNGROUP as usize {
+                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.geomgroup[i]) }, format!("Geom {i}"));
+                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.sitegroup[i]) }, format!("Site {i}"));
+                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.jointgroup[i]) }, format!("Joint {i}"));
+                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.tendongroup[i]) }, format!("Tendon {i}"));
+                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.actuatorgroup[i]) }, format!("Actuator {i}"));
+                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.flexgroup[i]) }, format!("Flex {i}"));
+                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.skingroup[i]) }, format!("Skin {i}"));
+                        ui.end_row();
+                    }
                 });
+            });
+
+            /* User-defined UI callbacks */
+            for callback in self.user_ui_callbacks.iter_mut() {
+                callback(ctx, data);
             }
         });
 
@@ -560,6 +585,16 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     pub(crate) fn drain_events(&mut self) -> Option<UiEvent> {
         self.events.pop_front()
     }
+
+    /// Adds a user-defined UI callback that will be invoked during UI rendering.
+    /// The callback receives the egui context and can be used to create custom windows,
+    /// panels, or other UI elements.
+    pub(crate) fn add_ui_callback<F>(&mut self, callback: F)
+    where
+        F: FnMut(&egui::Context, &mut MjData<M>) + 'static
+    {
+        self.user_ui_callbacks.push(Box::new(callback));
+    }
 }
 
 /// Implement an empty shell to support use in [`MjViewer`](super::MjViewer).
@@ -573,15 +608,6 @@ pub(crate) enum UiEvent {
     Close,
     Fullscreen,
     ResetSimulation,
-    AlignCamera
-}
-
-bitflags! {
-    pub(crate) struct UiStatus: u8 {
-        // Normal state
-        const CONTROL_WINDOW = 1 << 0;
-        const JOINT_WINDOW = 1 << 1;
-        const EQUALITY_WINDOW = 1 << 2;
-        const GROUP_WINDOW = 1 << 3;
-    }
+    AlignCamera,
+    VSyncToggle
 }

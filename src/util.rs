@@ -605,11 +605,11 @@ macro_rules! getter_setter {
 #[macro_export]
 /// Constructs builder methods.
 macro_rules! builder_setters {
-    ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {
+    ($($name:ident: $type:ty $(where $generic_type:ident: $generic:path)?; $comment:expr);* $(;)?) => {
         $(
             #[doc = concat!("Set ", $comment)]
-            pub fn $name(mut self, value: $type) -> Self {
-                self.$name = value;
+            pub fn $name$(<$generic_type: $generic>)?(mut self, value: $type) -> Self {
+                self.$name = value.into();
                 self
             }
         )*

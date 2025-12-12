@@ -15,8 +15,9 @@ fn main() {
     let mut viewer = MjViewer::launch_passive(&model, 0).expect("could not launch viewer");
     let timestep = model.opt().timestep;
     while viewer.running() {
-        viewer.sync(&mut data);
         data.step();
+        viewer.sync_data(&mut data);
+        viewer.render();
         std::thread::sleep(Duration::from_secs_f64(timestep));
     }
 }

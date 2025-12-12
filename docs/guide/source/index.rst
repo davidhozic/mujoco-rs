@@ -1,5 +1,5 @@
 =======================
-MuJoCo-rs documentation
+MuJoCo-rs
 =======================
 
 
@@ -9,6 +9,10 @@ MuJoCo-rs documentation
 
 .. image:: https://img.shields.io/crates/v/mujoco-rs.svg
     :target: https://crates.io/crates/mujoco-rs
+
+.. image:: https://img.shields.io/badge/license-MIT%20or%20Apache--2.0-blue?logo=github
+   :target: https://github.com/davidhozic/mujoco-rs
+   :alt: License: MIT OR Apache-2.0
 
 
 MuJoCo bindings and wrappers for the Rust programming language.
@@ -57,16 +61,30 @@ Optional Cargo features can be enabled:
 - ``viewer``: enables the Rust-native MuJoCo viewer.
 
   - ``viewer-ui``: enables the (additional) user UI within the viewer.
+    This also allows users to add custom `egui <https://docs.rs/egui/0.33.2/egui/>`_ widgets to the viewer.
 
 - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
   This requires static linking to a modified fork of MuJoCo, as described in :ref:`installation`.
 - ``renderer``: enables offscreen rendering for writing RGB and
   depth data to memory or file.
+
+  - ``renderer-winit-fallback``: enables the invisible window fallback (based on winit) when offscreen
+    rendering fails to initialize. Note that true offscreen rendering is only available on Linux platforms
+    when the video driver supports it. On Windows and MacOS, this feature must always be
+    enabled when the ``renderer`` feature is enabled.
+
 - ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded to the specified path.
 
   - This is only available on Linux and Windows.
+  - The environmental variable ``MUJOCO_DOWNLOAD_DIR`` must be set to the absolute path of the download location.
+  - Downloaded MuJoCo library is still a shared library, see
+    `installation <https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco>`_
+    for information on complete configuration.
 
-By default, ``viewer``, ``viewer-ui`` and ``renderer`` are enabled.
+
+By default, ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are enabled.
+
+
 
 
 Table of contents

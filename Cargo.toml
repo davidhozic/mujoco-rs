@@ -1,6 +1,6 @@
 [package]
 name = "mujoco-rs"
-version = "2.1.1+mj-3.3.7"
+version = "2.2.0+mj-3.3.7"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "A high-level Rust wrapper around the MuJoCo C library, with a native viewer (re-)written in Rust."
@@ -10,8 +10,9 @@ keywords = ["MuJoCo", "Viewer", "Bindings", "Wrapper"]
 categories = ["simulation", "science::robotics", "api-bindings"]
 homepage = "https://crates.io/crates/mujoco-rs"
 documentation = "https://docs.rs/mujoco-rs/"
+rust-version = "1.88"
 
-exclude = ["src/cpp/*", ".gitignore", ".gitmodules", "mujoco/*", "docs/"]
+exclude = [".gitignore", ".gitmodules", "mujoco/*", "docs/"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -20,14 +21,15 @@ all-features = true
 [features]
 viewer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit"]
 viewer-ui = ["viewer", "dep:egui-winit", "dep:egui_glow", "dep:egui"]
-renderer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit", "dep:png"]
+renderer = ["dep:bitflags", "dep:glutin", "dep:png"]
+renderer-winit-fallback = ["renderer", "dep:winit", "dep:glutin-winit"]
 cpp-viewer = []
 
 ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only used for updating the committed ``mujoco_c`` module. 
 
 auto-download-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip", "dep:sha2"]
 
-default = ["viewer", "viewer-ui", "renderer"]
+default = ["viewer", "viewer-ui", "renderer", "renderer-winit-fallback"]
 
 [dependencies]
 bitflags = {version = "2.9.4", optional = true}

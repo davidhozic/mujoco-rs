@@ -18,6 +18,14 @@
 //! ## Documentation
 //! A more guided documentation can be obtained [here](https://mujoco-rs.readthedocs.io/en/latest/).
 //! 
+//! ### Missing library errors
+//! Guided documentation also contains information on how to **configure MuJoCo**.
+//! MuJoCo-rs cannot fully configure it itself due to MuJoCo being a shared C library. As a result you may encounter
+//! **load-time errors** about **missing libraries**.
+//! 
+//! Information on how to configure MuJoCo and resolve these issues is available
+//! [here](https://mujoco-rs.readthedocs.io/en/v2.1.x/installation.html#mujoco).
+//! 
 //! ## 3D viewer
 //! The Rust-native viewer is available ([`viewer::MjViewer`]), as well as the MuJoCo's original C++
 //! one ([`cpp_viewer::MjViewerCpp`]).
@@ -28,12 +36,6 @@
 //! [`MjModel`](wrappers::MjModel) can be procedurally generated through the model editing module.
 //! The specification representing the model is [`wrappers::mj_editing::MjSpec`]
 //! 
-//! ## Features
-//! This crate has the following public features:
-//! - `viewer`, which enables the Rust-native viewer ([`viewer::MjViewer`]),
-//! - `cpp-viewer`, which enables the MuJoCo's original viewer (C++ based) ([`cpp_viewer::MjViewerCpp`]),
-//! - `renderer`, which enables the image renderer ([`renderer::MjRenderer`]).
-//! 
 //! ## Functions
 //! Most functions are wrapped under methods at different structs. Some functions
 //! are available under the [`wrappers::fun`] module.
@@ -41,6 +43,35 @@
 //! If a certain function can't be found, you can use the raw FFI bindings, available under 
 //! the [`mujoco_c`] module. Note that to access the lower-level ffi structs inside of wrappers,
 //! `ffi()` or `ffi_mut()` must be called (e.g., [`MjData::ffi`](wrappers::MjData::ffi) and [`MjModel::ffi`](wrappers::MjModel::ffi)). 
+//! 
+//! # Cargo features
+//! This crate has the following public features:
+//! - `viewer`: enables the Rust-native MuJoCo viewer.
+//!
+//!   - `viewer-ui`: enables the (additional) user UI within the viewer.
+//!     This also allows users to add custom [`egui`](https://docs.rs/egui/0.33.2/egui/) widgets to the viewer.
+//!
+//! - `cpp-viewer`: enables the Rust wrapper around the C++ MuJoCo viewer.
+//!   This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking).
+//! - ``renderer``: enables offscreen rendering for writing RGB and
+//!   depth data to memory or file.
+//!
+//!   - `renderer-winit-fallback`: enables the invisible window fallback (based on winit) when offscreen
+//!     rendering fails to initialize. Note that true offscreen rendering is only available on Linux platforms
+//!     when the video driver supports it. On Windows and MacOS, this feature must always be
+//!     enabled when the ``renderer`` feature is enabled.
+//!
+//! - `auto-download-mujoco`: MuJoCo dependency will be automatically downloaded to the specified path.
+//!
+//!   - This is only available on Linux and Windows.
+//!   - The environmental variable ``MUJOCO_DOWNLOAD_DIR`` must be set to the absolute path of the download location.
+//!   - Downloaded MuJoCo library is still a shared library. See
+//!     [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco)
+//!     for information on complete configuration.
+//! 
+//! By default, `viewer`, `viewer-ui`, `renderer`, and `renderer-winit-fallback` are enabled.
+//! 
+//! 
 use std::ffi::CStr;
 
 pub mod wrappers;
@@ -60,8 +91,11 @@ pub mod cpp_viewer;
 #[allow(warnings)]
 pub mod mujoco_c;  // raw MuJoCo C and C++ bindings
 
+#[cfg(any(feature = "viewer", feature = "renderer-winit-fallback"))]
+mod winit_gl_base;
+
 #[cfg(any(feature = "viewer", feature = "renderer"))]
-mod render_base;
+mod vis_common;
 
 
 /// Returns the version string of the MuJoCo library.
