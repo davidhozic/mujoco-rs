@@ -4,7 +4,11 @@ on:
   pull_request:
   workflow_dispatch:
   release:
-    types: [published]
+    types: [published]  
+  push:
+    branches:
+      - "feature/ci-tests"
+
 
 permissions:
   contents: read
