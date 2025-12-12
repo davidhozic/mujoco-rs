@@ -48,9 +48,16 @@ jobs:
           override: true
           profile: minimal
 
-      - name: Set MuJoCo download location environmental variable
-        run: echo "MUJOCO_DOWNLOAD_DIR=$(realpath .)" >> $GITHUB_ENV
+      - name: Set MUJOCO_DOWNLOAD_DIR
         shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # PowerShell alternative for Windows
+            ABS_PATH=$(powershell -Command "Resolve-Path . | Select-Object -ExpandProperty Path")
+          else
+            ABS_PATH=$(realpath .)
+          fi
+          echo "MUJOCO_DOWNLOAD_DIR=$ABS_PATH" >> $GITHUB_ENV
 
       - name: cargo build (debug)
         run: cargo build --lib --features "${{matrix.features}}"
