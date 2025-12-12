@@ -1,6 +1,7 @@
 # MuJoCo-rs
 [![Guide](https://img.shields.io/badge/Guide-book-white)](https://mujoco-rs.readthedocs.io/en/stable/)
 [![docs.rs](https://img.shields.io/docsrs/mujoco-rs/latest)](https://docs.rs/mujoco-rs)
+[![CI](https://img.shields.io/github/actions/workflow/status/davidhozic/mujoco-rs/tests.yml?label=CI)](https://github.com/davidhozic/mujoco-rs/actions)
 [![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
 
 MuJoCo bindings and high-level wrappers for the Rust programming language. Includes a Rust-native viewer and also
