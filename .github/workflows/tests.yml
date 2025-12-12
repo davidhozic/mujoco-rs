@@ -20,7 +20,10 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-        features: ["renderer renderer-winit-fallback auto-download-mujoco", "auto-download-mujoco"]
+        features: [
+          ["renderer", "renderer-winit-fallback", "auto-download-mujoco"],
+          ["auto-download-mujoco"]
+        ]
       fail-fast: false
 
     env:
@@ -33,6 +36,11 @@ jobs:
       - name: Generate Cargo.lock
         run: cargo generate-lockfile
 
+      - name: Prepare features string
+        run: |
+          echo "MJRS_FEATURES=${{join(matrix.features, ' ')}}" >> GITHUB_ENV
+        shell: bash
+
       - name: Cache cargo (registry/git and target)
         uses: actions/cache@v4
         with:
@@ -40,7 +48,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{join(matrix.features, ' ')}}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install Mesa (OpenGL + EGL) on Ubuntu
         if: runner.os == 'Linux'
@@ -67,10 +75,10 @@ jobs:
           echo "MUJOCO_DOWNLOAD_DIR=$ABS_PATH" >> $GITHUB_ENV
 
       - name: cargo build (debug)
-        run: cargo build --lib --features "${{matrix.features}}" --no-default-features
+        run: cargo build --lib --features $MJRS_FEATURES --no-default-features
 
       - name: cargo release (debug)
-        run: cargo build --release --lib --features "${{matrix.features}}" --no-default-features
+        run: cargo build --release --lib --features $MJRS_FEATURES --no-default-features
 
       - name: Setup LD_LIBRARY_PATH on Linux
         if: runner.os == 'Linux'
@@ -87,11 +95,11 @@ jobs:
         shell: bash
 
       - name: cargo test (debug)
-        run: cargo test --lib --features "${{matrix.features}}" --no-default-features
+        run: cargo test --lib --features $MJRS_FEATURES --no-default-features
 
       - name: cargo test (release)
-        run: cargo test --release --lib --features "${{matrix.features}}" --no-default-features
+        run: cargo test --release --lib --features $MJRS_FEATURES --no-default-features
      
       - name: Run a rendering test
         if: contains(matrix.features, 'renderer') && runner.os == 'Linux'
-        run: cargo run --release --example renderer --features "${{matrix.features}}" --no-default-features
+        run: cargo run --release --example renderer --features "$MJRS_FEATURES --no-default-features
