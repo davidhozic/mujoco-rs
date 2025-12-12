@@ -65,6 +65,13 @@ jobs:
           echo "LD_LIBRARY_PATH=$PWD/$MUJOCO_DIR/lib/:$LD_LIBRARY_PATH" >> $GITHUB_ENV
         shell: bash
 
+      - name: Copy mujoco.dll on Windows
+        if: runner.os == 'Windows'
+        run: |
+          MUJOCO_DIR=$(ls | grep '^mujoco-' | head -n1)
+          cp $PWD/$MUJOCO_DIR/bin/mujoco.dll .
+        shell: bash
+
       - name: cargo test (debug)
         run: cargo test --lib --features "${{matrix.features}}"
 
