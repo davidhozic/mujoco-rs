@@ -77,4 +77,5 @@ jobs:
         run: cargo test --release --lib --features "${{matrix.features}}" --no-default-features
      
       - name: Run a rendering test
-        run: cargo run --release --example renderer
+        if: contains(matrix.features, 'renderer')
+        run: cargo run --release --example renderer --features "${{matrix.features}}" --no-default-features
