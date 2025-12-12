@@ -38,7 +38,7 @@ jobs:
 
       - name: Prepare features string
         run: |
-          echo "MJRS_FEATURES=${{join(matrix.features, ' ')}}" >> GITHUB_ENV
+          echo "MJRS_FEATURES=\"${{join(matrix.features, ' ')}}\"" >> GITHUB_ENV
         shell: bash
 
       - name: Cache cargo (registry/git and target)
@@ -75,10 +75,10 @@ jobs:
           echo "MUJOCO_DOWNLOAD_DIR=$ABS_PATH" >> $GITHUB_ENV
 
       - name: cargo build (debug)
-        run: cargo build --lib --features $MJRS_FEATURES --no-default-features
+        run: cargo build --lib --features ${{env.MJRS_FEATURES}} --no-default-features
 
       - name: cargo release (debug)
-        run: cargo build --release --lib --features $MJRS_FEATURES --no-default-features
+        run: cargo build --release --lib --features ${{env.MJRS_FEATURES}} --no-default-features
 
       - name: Setup LD_LIBRARY_PATH on Linux
         if: runner.os == 'Linux'
@@ -95,11 +95,11 @@ jobs:
         shell: bash
 
       - name: cargo test (debug)
-        run: cargo test --lib --features $MJRS_FEATURES --no-default-features
+        run: cargo test --lib --features ${{env.MJRS_FEATURES}} --no-default-features
 
       - name: cargo test (release)
-        run: cargo test --release --lib --features $MJRS_FEATURES --no-default-features
+        run: cargo test --release --lib --features ${{env.MJRS_FEATURES}} --no-default-features
      
       - name: Run a rendering test
         if: contains(matrix.features, 'renderer') && runner.os == 'Linux'
-        run: cargo run --release --example renderer --features "$MJRS_FEATURES --no-default-features
+        run: cargo run --release --example renderer --features "${{env.MJRS_FEATURES}} --no-default-features
