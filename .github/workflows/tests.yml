@@ -39,6 +39,19 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install Mesa (OpenGL + EGL) on Ubuntu
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+          libgl1-mesa-dev \
+          libegl1-mesa-dev \
+          libgles2-mesa-dev \
+          mesa-utils
+
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+
       - name: Set MUJOCO_DOWNLOAD_DIR
         shell: bash
         run: |
@@ -77,5 +90,5 @@ jobs:
         run: cargo test --release --lib --features "${{matrix.features}}" --no-default-features
      
       - name: Run a rendering test
-        if: contains(matrix.features, 'renderer')
+        if: contains(matrix.features, 'renderer') && runner.os == 'Linux'
         run: cargo run --release --example renderer --features "${{matrix.features}}" --no-default-features
