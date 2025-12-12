@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   test:
-    name: Test (lib-only) on ${{ matrix.os }} with features ${{matrix.features}}.
+    name: Test (lib-only) on ${{ matrix.os }} with features ${{matrix.features}}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
