@@ -34,7 +34,7 @@ jobs:
 
       - name: Prepare features string
         run: |
-          echo "MJRS_FEATURES=\"${{join(matrix.features, ' ')}}\"" >> $GITHUB_ENV
+          echo "MJRS_FEATURES="${{join(matrix.features, ' ')}}" >> $GITHUB_ENV
         shell: bash
 
       - name: Cache cargo (registry/git and target)
