@@ -24,7 +24,6 @@ jobs:
       fail-fast: false
 
     env:
-      MUJOCO_DOWNLOAD_DIR: "$(realpath .)"
       RUST_BACKTRACE: "1"
 
     steps:
@@ -49,13 +48,15 @@ jobs:
           override: true
           profile: minimal
 
+      - name: Set MuJoCo download location environmental variable
+        run: echo "MUJOCO_DOWNLOAD_DIR=$(realpath .)" >> $GITHUB_ENV
+        shell: bash
+
       - name: cargo build (debug)
         run: cargo build --lib --features ${{matrix.features}}
-        shell: bash
 
       - name: cargo release (debug)
         run: cargo build --release --lib --features ${{matrix.features}}
-        shell: bash
 
       - name: Setup LD_LIBRARY_PATH on Linux
         if: runner.os == 'Linux'
@@ -66,8 +67,6 @@ jobs:
 
       - name: cargo test (debug)
         run: cargo test --lib --features ${{matrix.features}}
-        shell: bash
 
       - name: cargo test (release)
         run: cargo test --release --lib --features ${{matrix.features}}
-        shell: bash
