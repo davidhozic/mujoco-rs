@@ -49,39 +49,40 @@ fn main() {
     ball1_joint_info.view_mut(&mut data).qvel[1] = 2.0;
 
     let timestep = model.opt().timestep;
-    let mut scene;
     while viewer.running() {
         /* Step the simulation and sync the viewer */
         data.step();
-        viewer.sync_data(&mut data);
+        viewer.with_state_lock(|mut state_lock| {
+            state_lock.sync_data(&mut data);
+
+            /* Prepare the scene */
+            let scene = state_lock.user_scene_mut();  // obtain a mutable reference to the user scene. The method name mirrors the C++ viewer.
+            scene.clear_geom();  // clear existing geoms
+
+            /* Create a line, that (visually) connects the two balls we have in the example model */
+            let new_geom = scene.create_geom(
+                MjtGeom::mjGEOM_LINE,  // type of geom to draw.
+                None,  // size, ignore here as we set it below.
+                None,   // position: ignore here as we set it below.
+                None,   // rotational matrix: ignore here as we set it below.
+                Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
+            );
+
+            /* Read X, Y and Z coordinates of both balls. */
+            let ball1_position = ball1_joint_info.view(&data).qpos[..3]
+                .try_into().unwrap();
+            let ball2_position = ball2_joint_info.view(&data).qpos[..3]
+                .try_into().unwrap();
+
+            /* Modify the visual geom's position, orientation and length, to connect the balls */
+            new_geom.connect(
+                0.0,            // width
+                ball1_position,  // from
+                ball2_position     //  to
+            );
+        });
+
         viewer.render();
-
-        /* Prepare the scene */
-        scene = viewer.user_scene_mut();  // obtain a mutable reference to the user scene. The method name mirrors the C++ viewer.
-        scene.clear_geom();  // clear existing geoms
-
-        /* Create a line, that (visually) connects the two balls we have in the example model */
-        let new_geom = scene.create_geom(
-            MjtGeom::mjGEOM_LINE,  // type of geom to draw.
-            None,  // size, ignore here as we set it below.
-            None,   // position: ignore here as we set it below.
-            None,   // rotational matrix: ignore here as we set it below.
-            Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
-        );
-
-        /* Read X, Y and Z coordinates of both balls. */
-        let ball1_position = ball1_joint_info.view(&data).qpos[..3]
-            .try_into().unwrap();
-        let ball2_position = ball2_joint_info.view(&data).qpos[..3]
-            .try_into().unwrap();
-
-        /* Modify the visual geom's position, orientation and length, to connect the balls */
-        new_geom.connect(
-            0.0,            // width
-            ball1_position,  // from
-            ball2_position     //  to
-        );
-
         std::thread::sleep(Duration::from_secs_f64(timestep));
     }
 }

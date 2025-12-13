@@ -461,6 +461,9 @@ impl<M: Deref<Target = MjModel>> Drop for MjvScene<M> {
     }
 }
 
+unsafe impl<M: Deref<Target = MjModel>> Send for MjvScene<M> {}
+unsafe impl<M: Deref<Target = MjModel>> Sync for MjvScene<M> {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
