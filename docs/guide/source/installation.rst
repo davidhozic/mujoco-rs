@@ -216,7 +216,7 @@ To build statically linkable libraries, perform the following steps:
         See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/main/Dockerfile.ubuntu>`_ for a reproducible
         build environment which, to our knowledge, matches MuJoCo's official build environment.
         The Dockerfile also installs the Rust toolchain, however our testing showed that static libraries
-        build in the container also work outside of the container, even on the rust-lld linker.
+        built in the container also work outside of the container, even on the rust-lld linker.
 
         The Dockerfile defines a container running Ubuntu 22.04 and uses clang-13/clang++-13 as the compiler.
 
