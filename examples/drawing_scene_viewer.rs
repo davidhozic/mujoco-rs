@@ -1,4 +1,4 @@
-//! This example illustrates how to use the MjViewer::user_scn_mut to draw custom
+//! This example illustrates how to use the user scene to draw custom
 //! visual-only geoms.
 //! 
 //! This example uses the viewer in single-threaded fashion.

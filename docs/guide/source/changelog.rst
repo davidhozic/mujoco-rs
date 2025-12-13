@@ -64,6 +64,14 @@ update of MuJoCo alone can increase the major version.
 
   - :gh-example:`rust_viewer_threaded.rs`.
 
+- Deprecated:
+
+  - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scene` and
+    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scene_mut`.
+    They are replaced with
+    :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>user_scene` and
+    :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>user_scene_mut`.
+
 
 
 2.1.0 / 2.1.1 (MuJoCo 3.3.7)

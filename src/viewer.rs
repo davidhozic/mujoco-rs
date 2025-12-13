@@ -127,7 +127,7 @@ impl Error for MjViewerError {
 /// running in the main thread.
 /// 
 /// The state can be obtained through [`MjViewer::state`], which will return an `Arc<Mutex<ViewerSharedState>>`
-/// instance. For scoped access, you may also use [`MjViewer::with_state_lock`]
+/// instance. For scoped access, you may also use [`MjViewer::with_state_lock`].
 #[derive(Debug)]
 pub struct ViewerSharedState<M: Deref<Target = MjModel>>{
     /// This attribute, [`ViewerSharedState::data_passive`] and [`ViewerSharedState::data_passive_state_old`]
@@ -177,13 +177,13 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
     }
 
     /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
-    /// Geoms in the user scene are preserved between calls to [`MjViewer::sync_data`].
+    /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`].
     pub fn user_scene(&self) -> &MjvScene<M> {
         &self.user_scene
     }
 
     /// Returns a mutable reference to a user scene for drawing custom visual-only geoms.
-    /// Geoms in the user scene are preserved between calls to [`MjViewer::sync_data`].
+    /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`].
     pub fn user_scene_mut(&mut self) -> &mut MjvScene<M> {
         &mut self.user_scene
     }

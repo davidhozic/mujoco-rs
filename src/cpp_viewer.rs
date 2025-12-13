@@ -16,7 +16,7 @@ use crate::wrappers::mj_data::MjData;
 /// syncing the viewer. 
 /// 
 /// Additionally, to allow certain flexibility while still maintaining
-/// compatibility with the C++ code, [`MjViewerCpp`] keeps internals pointers to mjModel and mjData,
+/// compatibility with the C++ code, [`MjViewerCpp`] keeps internal pointers to mjModel and mjData,
 /// which are wrapped inside [`MjModel`] and [`MjData`], respectively.
 /// This technically allows `model` and `data` to be modified
 /// while the viewer keeps a pointer to them (their wrapped pointers).
