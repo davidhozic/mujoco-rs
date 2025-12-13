@@ -684,10 +684,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             // Format values of the overlay.
             let values = format!(
                 concat!(
-                    "{:.3}\n",
-                    "{:.3}\n",
-                    "{:.3} % out of {:.3} {}\n",
-                    "{:.3} %"
+                    "{:.1}\n",
+                    "{:.1}\n",
+                    "{:.1} % out of {:.1} {}\n",
+                    "{:.1} %"
                 ),
                 self.fps_smooth,
                 time,
