@@ -613,9 +613,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         if !new_user_scene.geoms().is_empty() && !old_user_scene.geoms().is_empty() {
             panic!(
                 "Both the new ViewerSharedState::user_scene and the deprecated MjViewer::user_scene are non-empty. \
-                 Please update your code to fully use ViewerSharedState::user_scene. \
-                 If this check would not exist then, when the sum of geoms in both scenes were to become larger than max_user geom, \
-                 other safety would cause a panic."
+                 Please update your code to fully use ViewerSharedState::user_scene."
             );
         }
 
