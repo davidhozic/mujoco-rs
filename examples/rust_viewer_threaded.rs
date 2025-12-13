@@ -25,7 +25,7 @@ const EXAMPLE_MODEL: &str = stringify! {
 fn main() {
     // Create model and data.
     let model = Arc::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
-    let mut data = MjData::new(model.clone());  // or model.make_data()
+    let mut data = MjData::new(model.clone());
 
     // Create the viewer, bound to the model.
     let mut viewer = MjViewer::builder()
