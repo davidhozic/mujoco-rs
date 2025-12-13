@@ -711,7 +711,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     MjtFont::mjFONT_BIG,
                     MjtGridPos::mjGRID_BOTTOMRIGHT,
                     rectangle_full,
-                    &format!("Realtime factor: {:.3} %", realtime_factor * 100.0),
+                    &format!("Realtime factor: {:.1} %", realtime_factor * 100.0),
                     None
                 );
             }
