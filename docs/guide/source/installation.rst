@@ -130,7 +130,7 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
                     4. Set the primary environment variable:
 
-                    - ``export MUJOCO_DYNAMIC_LINK_DIR=./``
+                    - ``export MUJOCO_DYNAMIC_LINK_DIR=$(realpath .)``
 
 
 You should now be able to compile and run your crate.
