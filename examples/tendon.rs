@@ -1,4 +1,6 @@
 //! Example of using using a tendon model.
+//! 
+//! This example uses the viewer in single-threaded fashion.
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;

@@ -1,5 +1,7 @@
 //! This is an example on model editing, which shows how to dynamically
 //! construct a model via code.
+//! 
+//! This example uses the viewer in single-threaded fashion.
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;

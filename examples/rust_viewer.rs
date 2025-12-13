@@ -1,6 +1,8 @@
 //! Example of the native Rust viewer implementation.
 //! This can only be run in passive mode, which means the user program is the one
 //! controlling everything.
+//! 
+//! This example uses the viewer in single-threaded fashion.
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
@@ -25,14 +27,17 @@ const EXAMPLE_MODEL: &str = stringify! {
 fn main() {
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
     let mut data = MjData::new(&model);
-    let mut viewer = MjViewer::launch_passive(&model, 100)
-        .expect("could not launch the viewer");
+    let mut viewer = MjViewer::builder()
+        .max_user_geoms(0)
+        .build_passive(&model).unwrap();
 
     /* Add a custom UI window */
-    viewer.add_ui_callback(|ctx, data| {
+    let mut opened = true;  // gets moved into the callback
+    viewer.add_ui_callback(move |ctx, data| {
         use mujoco_rs::viewer::egui;
         egui::Window::new("Custom controls")
             .scroll(true)
+            .open(&mut opened)
             .show(ctx, |ui| {
                 ui.heading("My Custom Widget");
                 ui.label("This is a custom UI element!");
@@ -42,10 +47,14 @@ fn main() {
             });
     });
 
+    let timestep = model.opt().timestep;
     while viewer.running() {
         data.step();
         viewer.sync_data(&mut data);
         viewer.render();
-        std::thread::sleep(Duration::from_millis(2));
+
+        // Sleep for approximately timestep of seconds.
+        // Use Instant::now() and Instant::elapsed() in a while loop for a more accurate (but less efficient) wait.
+        std::thread::sleep(Duration::from_secs_f64(timestep));
     }
 }

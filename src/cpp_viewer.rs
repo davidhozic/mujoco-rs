@@ -100,3 +100,6 @@ impl<M: Deref<Target = MjModel> + Clone> Drop for MjViewerCpp<M> {
         }
     }
 }
+
+unsafe impl<M: Deref<Target = MjModel> + Clone> Send for MjViewerCpp<M> {}
+unsafe impl<M: Deref<Target = MjModel> + Clone> Sync for MjViewerCpp<M> {}

@@ -1,4 +1,6 @@
 //! Example of using sensor interaction: touch sensor.
+//! 
+//! This example uses the viewer in single-threaded fashion.
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
