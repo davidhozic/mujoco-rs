@@ -82,7 +82,7 @@ fn main() {
                 ball1_position,  // from
                 ball2_position     //  to
             );
-        });
+        }).unwrap();
 
         viewer.render();
         std::thread::sleep(Duration::from_secs_f64(timestep));
