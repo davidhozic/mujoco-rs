@@ -384,9 +384,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// # Errors
     /// Returns [`PoisonError`] if the mutex holding the shared state has panicked, thus poisoning
     /// the lock.
-    /// 
-    /// Otherwise `Ok(())` is returned.
-    /// 
+    ///
     /// # Example
     /// ```no_run
     /// # use mujoco_rs::viewer::MjViewer;
@@ -399,11 +397,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     ///     scene.create_geom(MjtGeom::mjGEOM_BOX, Some([1.0, 1.0, 1.0]), Some([0.0, 0.0, 0.0]), None, None);
     /// }).unwrap();
     /// ```
-    pub fn with_state_lock<F>(&self, fun: F) -> Result<(), PoisonError<MutexGuard<'_, ViewerSharedState<M>>>>
-        where F: FnOnce(MutexGuard<ViewerSharedState<M>>)
+    pub fn with_state_lock<F, R>(&self, fun: F) -> Result<R, PoisonError<MutexGuard<'_, ViewerSharedState<M>>>>
+        where F: FnOnce(MutexGuard<ViewerSharedState<M>>) -> R
     {
-        fun(self.shared_state.lock()?);
-        Ok(())
+        Ok(fun(self.shared_state.lock()?))
     }
 
     /// **DEPRECATED** method for reading the state.
