@@ -2,6 +2,8 @@
 //! It generates a terrain of stair regions.
 //! The example is adapted from the MuJoCo Python's model editing tutorial:
 //! https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb#scrollTo=P2F0ObC2T8w8&line=40&uniqifier=1
+//! 
+//! This example uses the viewer in single-threaded fashion.
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
 use std::time::Instant;

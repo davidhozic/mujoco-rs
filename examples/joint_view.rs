@@ -1,6 +1,8 @@
 //! Example of using views.
 //! The example shows how to obtain a [`MjJointInfo`] struct that can be used
 //! to create a (temporary) [`MjJointView`] to corresponding fields in [`MjData`].
+//! 
+//! This example uses the viewer in single-threaded fashion.
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;

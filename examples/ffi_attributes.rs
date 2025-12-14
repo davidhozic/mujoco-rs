@@ -3,8 +3,8 @@
 //! some have to be wrapped for safety reasons.
 //! The wrapped structs contain a `ffi()` method and a `ffi_mut()` method, which return
 //! a reference to the wrapped FFI struct.
-
-
+//! 
+//! This example uses the viewer in single-threaded fashion.
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;

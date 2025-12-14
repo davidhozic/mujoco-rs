@@ -11,10 +11,10 @@ use winit::event_loop::EventLoop;
 use winit::dpi::PhysicalPosition;
 use winit::window::Fullscreen;
 
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 use std::ops::{Deref, DerefMut};
 use std::marker::PhantomData;
-use std::sync::{Arc, Mutex};
 use std::num::NonZero;
 use std::error::Error;
 use std::fmt::Display;
@@ -125,6 +125,9 @@ impl Error for MjViewerError {
 /// to allow use in multi-threaded programs, where the physics part
 /// runs in another thread and syncs the state with the viewer
 /// running in the main thread.
+/// 
+/// The state can be obtained through [`MjViewer::state`], which will return an `Arc<Mutex<ViewerSharedState>>`
+/// instance. For scoped access, you may also use [`MjViewer::with_state_lock`].
 #[derive(Debug)]
 pub struct ViewerSharedState<M: Deref<Target = MjModel>>{
     /// This attribute, [`ViewerSharedState::data_passive`] and [`ViewerSharedState::data_passive_state_old`]
@@ -135,17 +138,18 @@ pub struct ViewerSharedState<M: Deref<Target = MjModel>>{
     data_passive: MjData<M>,
     pert: MjvPerturb,
     running: bool,
+    user_scene: MjvScene<M>,
 
     /* Internals */
     last_sync_time: Instant,
     /// Time factor representing the ratio of viewer syncs with model's selected timestep.
     realtime_factor_smooth: f64,
     /// Preallocated buffer for storing the state of new [`MjData`] state.
-    data_state_buffer: Box<[MjtNum]>
+    data_state_buffer: Box<[MjtNum]>,
 }
 
 impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
-    pub fn new(model: M) -> Self {
+    fn new(model: M, max_user_geom: usize) -> Self {
         // Tracking of changes made between syncs
         let state_size = model.state_size(MjtState::mjSTATE_INTEGRATION as u32) as usize;
         let data_passive_state = vec![0.0; state_size].into_boxed_slice();
@@ -158,12 +162,30 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
             data_passive,
             pert: MjvPerturb::default(),
             running: true,
+            user_scene: MjvScene::new(model, max_user_geom),
 
             /* Internal */
             last_sync_time: Instant::now(),
             realtime_factor_smooth: 1.0,
             data_state_buffer
         }
+    }
+
+    /// Checks whether the viewer is still running or is supposed to run.
+    pub fn running(&self) -> bool {
+        self.running
+    }
+
+    /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
+    /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`].
+    pub fn user_scene(&self) -> &MjvScene<M> {
+        &self.user_scene
+    }
+
+    /// Returns a mutable reference to a user scene for drawing custom visual-only geoms.
+    /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`].
+    pub fn user_scene_mut(&mut self) -> &mut MjvScene<M> {
+        &mut self.user_scene
     }
 
     /// Same as [`ViewerSharedState::sync_data`], except it copies the entire [`MjData`]
@@ -258,11 +280,6 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
 
         // Apply perturbations
         self.pert.apply(self.data_passive.model(), data);
-    }
-
-    /// Checks whether the viewer is still running or is supposed to run.
-    pub fn running(&self) -> bool {
-        self.running
     }
 }
 
@@ -361,24 +378,71 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         &self.shared_state
     }
 
-    /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
-    /// Geoms in the user scene are preserved between calls to [`MjViewer::sync`].
+    /// Acquires a Mutex lock on the [`MjViewer`]'s shared state ([`MjViewer::state`]).
+    /// The acquired lock is passed to the function/closure `fun`.
+    /// 
+    /// # Errors
+    /// Returns [`PoisonError`] if the mutex holding the shared state has panicked, thus poisoning
+    /// the lock.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use mujoco_rs::viewer::MjViewer;
+    /// # use mujoco_rs::prelude::*;
+    /// # let model = MjModel::from_xml_string("<mujoco/>").unwrap();
+    /// let mut viewer = MjViewer::builder().max_user_geoms(1)
+    ///     .build_passive(&model).unwrap();
+    /// viewer.with_state_lock(|mut lock| {
+    ///     let scene = lock.user_scene_mut();
+    ///     scene.create_geom(MjtGeom::mjGEOM_BOX, Some([1.0, 1.0, 1.0]), Some([0.0, 0.0, 0.0]), None, None);
+    /// }).unwrap();
+    /// ```
+    pub fn with_state_lock<F, R>(&self, fun: F) -> Result<R, PoisonError<MutexGuard<'_, ViewerSharedState<M>>>>
+        where F: FnOnce(MutexGuard<ViewerSharedState<M>>) -> R
+    {
+        Ok(fun(self.shared_state.lock()?))
+    }
+
+    /// **DEPRECATED** method for reading the state.
+    /// This will be removed in 3.0.0, in favor of [`ViewerSharedState::user_scene`],
+    /// which allows usage from multiple threads.
+    /// 
+    /// [`ViewerSharedState`] can be obtained via [`MjViewer::state`], which returns `Arc<Mutex<ViewerSharedState>>`.
+    /// 
+    /// # Note
+    /// There is no way to make a fully compatible proxy method to [`ViewerSharedState::user_scene`]
+    /// through the viewer as a reference to the scene is returned, thus this method currently
+    /// uses a temporary user scene, part of [`MjViewer`]. The viewer then syncs both
+    /// [`MjViewer::user_scene`] and [`ViewerSharedState::user_scene`] to achieve backward compatibility,
+    /// however we strongly urge you to use the latter as the **FORMER** will be **REMOVED IN THE FUTURE**.
+    #[deprecated(since = "2.2.0", note = "use viewer.state().lock().unwrap().user_scene()")]
     pub fn user_scene(&self) -> &MjvScene<M>{
         &self.user_scene
     }
 
-    /// Returns a mutable reference to a user scene for drawing custom visual-only geoms.
-    /// Geoms in the user scene are preserved between calls to [`MjViewer::sync`].
+    /// **DEPRECATED** method for reading the state.
+    /// This will be removed in 3.0.0, in favor of [`ViewerSharedState::user_scene_mut`],
+    /// which allows usage from multiple threads.
+    /// 
+    /// [`ViewerSharedState`] can be obtained via [`MjViewer::state`], which returns `Arc<Mutex<ViewerSharedState>>`.
+    /// 
+    /// # Note
+    /// There is no way to make a fully compatible proxy method to [`ViewerSharedState::user_scene_mut`]
+    /// through the viewer as a reference to the scene is returned, thus this method currently
+    /// uses a temporary user scene, part of [`MjViewer`]. The viewer then syncs both
+    /// [`MjViewer::user_scene_mut`] and [`ViewerSharedState::user_scene_mut`] to achieve backward compatibility,
+    /// however we strongly urge you to use the latter as the **FORMER** will be **REMOVED IN THE FUTURE**.
+    #[deprecated(since = "2.2.0", note = "use viewer.state().lock().unwrap().user_scene_mut()")]
     pub fn user_scene_mut(&mut self) -> &mut MjvScene<M>{
         &mut self.user_scene
     }
 
-    #[deprecated(since = "1.3.0", note = "use user_scene")]
+    #[deprecated(since = "1.3.0", note = "use viewer.state().lock().unwrap().user_scene()")]
     pub fn user_scn(&self) -> &MjvScene<M> {
         self.user_scene()
     }
 
-    #[deprecated(since = "1.3.0", note = "use user_scene_mut")]
+    #[deprecated(since = "1.3.0", note = "use viewer.state().lock().unwrap().user_scene_mut()")]
     pub fn user_scn_mut(&mut self) -> &mut MjvScene<M> {
         self.user_scene_mut()
     }
@@ -463,8 +527,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// 
     /// # Example
     /// ```no_run
-    /// # let model = MjModel::from_xml("/path/scene.xml");
-    /// # let mut viewer = MjViewer::builder().build_passive(&model);
+    /// # use mujoco_rs::prelude::*;
+    /// # use mujoco_rs::viewer::MjViewer;
+    /// # let model = MjModel::from_xml("/path/scene.xml").unwrap();
+    /// # let mut viewer = MjViewer::builder().build_passive(&model).unwrap();
     /// # let mut data = MjData::new(&model);
     /// viewer.sync_data(&mut data);  // sync the data
     /// viewer.render();  // render the scene and process the user interface
@@ -537,8 +603,23 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let ViewerSharedState { data_passive, pert, .. } = lock.deref_mut();
         self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
 
-        /* Draw user scene geoms */
-        sync_geoms(&self.user_scene, &mut self.scene)
+        // Temporary check until 3.0.0. Geom syncing will fail if the target scene is smaller than
+        // the requested number of user scenes.
+        let new_user_scene = lock.user_scene();
+        let old_user_scene = &self.user_scene;
+        if !new_user_scene.geoms().is_empty() && !old_user_scene.geoms().is_empty() {
+            panic!(
+                "Both the new ViewerSharedState::user_scene and the deprecated MjViewer::user_scene are non-empty. \
+                 Please update your code to fully use ViewerSharedState::user_scene."
+            );
+        }
+
+        // Draw geoms drawn through the user scene.
+        sync_geoms(new_user_scene, &mut self.scene)
+            .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
+
+        // Temporary (until MuJoCo-rs 3.0.0) sync. Used only for backward compatibility.
+        sync_geoms(old_user_scene, &mut self.scene)
             .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
 
         self.scene.render(&self.rect_full, &self.context);
@@ -600,10 +681,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             // Format values of the overlay.
             let values = format!(
                 concat!(
-                    "{:.3}\n",
-                    "{:.3}\n",
-                    "{:.3} % out of {:.3} {}\n",
-                    "{:.3} %"
+                    "{:.1}\n",
+                    "{:.1}\n",
+                    "{:.1} % out of {:.1} {}\n",
+                    "{:.1} %"
                 ),
                 self.fps_smooth,
                 time,
@@ -627,7 +708,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     MjtFont::mjFONT_BIG,
                     MjtGridPos::mjGRID_BOTTOMRIGHT,
                     rectangle_full,
-                    &format!("Realtime factor: {:.3} %", realtime_factor * 100.0),
+                    &format!("Realtime factor: {:.1} %", realtime_factor * 100.0),
                     None
                 );
             }
@@ -1160,12 +1241,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
 
         let ngeom = model.ffi().ngeom as usize;
         let scene = MjvScene::new(model.clone(), ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
-        let user_scene = MjvScene::new(model.clone(), self.max_user_geoms);
         let context = MjrContext::new(&model);
         let camera  = MjvCamera::new_free(&model);
 
         // Tracking of changes made between syncs
-        let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(model.clone())));
+        let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(model.clone(), self.max_user_geoms)));
+        let user_scene = MjvScene::new(model.clone(), self.max_user_geoms);
 
         // User interface
         #[cfg(feature = "viewer-ui")]
@@ -1184,7 +1265,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
             context,
             camera,
             opt: MjvOption::default(),
-            user_scene,
+            user_scene,  // TEMPORARY! TODO: Drop in 3.0.0
             shared_state,
             last_x: 0.0,
             last_y: 0.0,

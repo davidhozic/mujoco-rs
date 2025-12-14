@@ -84,9 +84,34 @@ This is optional and can be removed or reduced to run the simulation faster than
     The ``sleep()`` function is not accurate. For accurate timing,
     use `std::time::Instant <https://doc.rust-lang.org/std/time/struct.Instant.html>`_ to poll the elapsed time.
 
-For more, refer to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
-`examples <https://github.com/davidhozic/mujoco-rs/tree/main/examples>`_.
+.. admonition:: Performance tip
 
+    Rust viewer contains the so called shared state (:docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState`),
+    which exists to allow partial multi-threading, without locking the entire viewer.
+
+    Methods that operate on the shared state,
+    such as:
+
+    - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`;
+    - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running`;
+    - etc.;
+
+    internally acquire a mutex lock to the shared state.
+    Sequential calls to more than one of these can consequently
+    hurt performance.
+
+    A more optimized way to use these methods is to call their equivalents on the shared
+    state directly. The shared state can be accessed mainly through:
+
+    - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>state`, which returns
+      an ``Arc<Mutex<ViewerSharedState>>`` --- see :ref:`multithreading-rs-viewer`;
+    - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>with_state_lock`,
+      which accepts a function/closure to call. The function/closure receives a
+      `MutexGuard <https://doc.rust-lang.org/std/sync/struct.MutexGuard.html>`_
+      to the shared state.
+
+
+.. _multithreading-rs-viewer:
 
 Multi-threading
 ----------------

@@ -130,7 +130,7 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
                     4. Set the primary environment variable:
 
-                    - ``export MUJOCO_DYNAMIC_LINK_DIR=./``
+                    - ``export MUJOCO_DYNAMIC_LINK_DIR=$(realpath .)``
 
 
 You should now be able to compile and run your crate.
@@ -210,6 +210,15 @@ To build statically linkable libraries, perform the following steps:
 
    Note that ``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF`` **disables link-time optimization**, thus resulting in slightly
    lower performance. Enabling it causes compatibility problems on the Linux platform. See the attention block below for more info.
+
+   .. seealso::
+
+        See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/main/Dockerfile.ubuntu>`_ for a reproducible
+        build environment which, to our knowledge, matches MuJoCo's official build environment.
+        The Dockerfile also installs the Rust toolchain, however our testing showed that static libraries
+        built in the container also work outside of the container, even on the rust-lld linker.
+
+        The Dockerfile defines a container running Ubuntu 22.04 and uses clang-13/clang++-13 as the compiler.
 
 4. Set the environmental variable ``MUJOCO_STATIC_LINK_DIR`` to the **absolute** path of the ``lib/`` subdirectory
    inside ``mujoco/build/``. Bash example:

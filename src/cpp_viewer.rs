@@ -9,6 +9,19 @@ use crate::wrappers::mj_data::MjData;
 
 /// Wrapper around the C++ implementation of MujoCo viewer.
 /// If you don't need the side UI, we recommend you use the Rust-native viewer [`crate::viewer::MjViewer`] instead.
+/// 
+/// # Safety
+/// Calls to [`MjViewerCpp::render`] must be done only on the **main** thread!
+/// For convenience [`MjViewerCpp`] implements both `Send` and `Sync`, however that is meant only for
+/// syncing the viewer. 
+/// 
+/// Additionally, to allow certain flexibility while still maintaining
+/// compatibility with the C++ code, [`MjViewerCpp`] keeps internal pointers to mjModel and mjData,
+/// which are wrapped inside [`MjModel`] and [`MjData`], respectively.
+/// This technically allows `model` and `data` to be modified
+/// while the viewer keeps a pointer to them (their wrapped pointers).
+/// Undefined behavior should not occur, however caution is advised as this is a violation
+/// of the Rust's borrowing rules.
 pub struct MjViewerCpp<M: Deref<Target = MjModel> + Clone> {
     sim: *mut mujoco_Simulate,
     running: bool,
@@ -40,13 +53,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
     /// as the initialization may fail internally in C++ anyway, which we have no way of checking.
     ///
     /// # Safety
-    /// To allow certain flexibility, while still maintaining
-    /// compatibility with the C++ code, [`MjViewerCpp`] keeps internals pointers to mjModel and mjData,
-    /// which are wrapped inside [`MjModel`] and [`MjData`], respectively.
-    /// This technically allows `model` and `data` to be modified
-    /// while the viewer keeps a pointer to them (their wrapped pointers).
-    /// Undefined behavior should not occur, however caution is advised as this is a violation
-    /// of the Rust's borrowing rules.
+    /// See [`MjViewerCpp`]'s note.
     pub fn launch_passive(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut _cam = Box::new(MjvCamera::default());
@@ -100,3 +107,6 @@ impl<M: Deref<Target = MjModel> + Clone> Drop for MjViewerCpp<M> {
         }
     }
 }
+
+unsafe impl<M: Deref<Target = MjModel> + Clone> Send for MjViewerCpp<M> {}
+unsafe impl<M: Deref<Target = MjModel> + Clone> Sync for MjViewerCpp<M> {}
