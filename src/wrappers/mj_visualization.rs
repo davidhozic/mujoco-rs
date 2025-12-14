@@ -28,6 +28,18 @@ pub type MjtPertBit = mjtPertBit;
 
 /// These are the possible camera types, used in ``mjvCamera.type``.
 pub type MjtCamera = mjtCamera;
+impl TryFrom<i32> for MjtCamera {
+    type Error = ();
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::mjCAMERA_FREE),
+            1 => Ok(Self::mjCAMERA_TRACKING),
+            2 => Ok(Self::mjCAMERA_FIXED),
+            3 => Ok(Self::mjCAMERA_USER),
+            _ => Err(())
+        }
+    }
+}
 
 /// These are the abstract visualization elements that can have text labels. Used in ``mjvOption.label``.
 pub type MjtLabel = mjtLabel;

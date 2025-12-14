@@ -771,3 +771,32 @@ macro_rules! assert_relative_eq {
         assert!((a - b).abs() <= eps, "left={:?} right={:?} eps={:?}", a, b, eps);
     }};
 }
+
+
+/// Tries to cast $value into requested type.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! cast_mut_info {
+    ($value:expr $(, $debug_expr:expr)?) => {
+        {
+            let evaluated = format!("{:?}", $value);
+            bytemuck::checked::try_cast_mut($value)
+                .unwrap_or_else(
+                    |e| {
+                        #[allow(unused)]
+                        let mut debug_info = String::new();
+                        $(
+                            debug_info = format!(" (debug info: '{} = {}')", stringify!($debug_expr), $debug_expr);
+                        )?
+
+                        panic!(
+                            "failed to cast expression '{}', which evaluates to '{}' into requested type (error: {})\
+                             {debug_info} --- \
+                             most likely you have a bug in your program.",
+                            stringify!($value), evaluated, e
+                        );
+                    }
+                )
+        }
+    };
+}
