@@ -773,8 +773,7 @@ macro_rules! assert_relative_eq {
 }
 
 
-/// Tries to cast $value into requested type. On failure prints the
-/// value original value for debugging purposes.
+/// Tries to cast $value into requested type.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! cast_mut_info {
