@@ -780,7 +780,7 @@ macro_rules! assert_relative_eq {
 macro_rules! cast_mut_info {
     ($value:expr $(, $debug_expr:expr)?) => {
         {
-            let evaluated = ($value).clone();
+            let evaluated = format!("{:?}", $value);
             bytemuck::checked::try_cast_mut($value)
                 .unwrap_or_else(
                     |e| {
