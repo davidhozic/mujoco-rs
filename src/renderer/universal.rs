@@ -1,4 +1,4 @@
-//! Universal [`GlState`] dependency, used for controlling the OpenGL context and surface.
+//! Universal dependency, used for controlling the OpenGL context and surface.
 //! This wraps [`RenderBase`] and thus renders to an invisible window.
 //! This is meant as a fallback when true offscreen rendering fails to initialize.
 
