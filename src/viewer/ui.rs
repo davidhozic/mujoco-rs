@@ -7,6 +7,8 @@ use egui::{FontId, RichText};
 use egui_winit::egui;
 use egui_winit;
 
+use crate::cast_mut_info;
+
 use std::collections::VecDeque;
 use std::ffi::CString;
 use std::fmt::Debug;
@@ -337,7 +339,10 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             egui::Grid::new("render_select_grid").show(ui, |ui| {
                                 // Camera
                                 ui.label(RichText::new("Camera").font(MAIN_FONT));
-                                let mut current_cam_name = match unsafe {std::mem::transmute(camera.type_) } {
+                                let enumerated = camera.type_.try_into().unwrap_or_else(|_| {
+                                    panic!("failed to convert {} into MjtCamera", camera.type_)
+                                });
+                                let mut current_cam_name = match enumerated {
                                     MjtCamera::mjCAMERA_FIXED => &self.camera_names[camera.fixedcamid as usize],
                                     MjtCamera::mjCAMERA_TRACKING => "Tracking",
                                     MjtCamera::mjCAMERA_FREE => "Free",
@@ -393,7 +398,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     for (flag, enabled) in &mut options.flags.iter_mut().enumerate() {
-                                        ui.toggle_value(unsafe { std::mem::transmute(enabled) }, VIS_OPT_MAP[flag]);
+                                        ui.toggle_value(cast_mut_info!(enabled, flag), VIS_OPT_MAP[flag]);
                                     }
                                 });
                                 ui.separator();
@@ -410,7 +415,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 ui.horizontal_wrapped(|ui| {
                                     for (flag, enabled) in scene.flags_mut().iter_mut().enumerate() {
                                         ui.toggle_value(
-                                            unsafe { std::mem::transmute(enabled) },
+                                            cast_mut_info!(enabled, flag),
                                             GL_EFFECT_MAP[flag]
                                         );
                                     }
@@ -520,13 +525,13 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             {
                 egui::Grid::new("group_grid").show(ui, |ui| {
                     for i in 0..mjNGROUP as usize {
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.geomgroup[i]) }, format!("Geom {i}"));
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.sitegroup[i]) }, format!("Site {i}"));
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.jointgroup[i]) }, format!("Joint {i}"));
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.tendongroup[i]) }, format!("Tendon {i}"));
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.actuatorgroup[i]) }, format!("Actuator {i}"));
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.flexgroup[i]) }, format!("Flex {i}"));
-                        ui.toggle_value(unsafe { std::mem::transmute(&mut options.skingroup[i]) }, format!("Skin {i}"));
+                        ui.toggle_value(cast_mut_info!(&mut options.geomgroup[i]), format!("Geom {i}"));
+                        ui.toggle_value(cast_mut_info!(&mut options.sitegroup[i]), format!("Site {i}"));
+                        ui.toggle_value(cast_mut_info!(&mut options.jointgroup[i]), format!("Joint {i}"));
+                        ui.toggle_value(cast_mut_info!(&mut options.tendongroup[i]), format!("Tendon {i}"));
+                        ui.toggle_value(cast_mut_info!(&mut options.actuatorgroup[i]), format!("Actuator {i}"));
+                        ui.toggle_value(cast_mut_info!(&mut options.flexgroup[i]), format!("Flex {i}"));
+                        ui.toggle_value(cast_mut_info!(&mut options.skingroup[i]), format!("Skin {i}"));
                         ui.end_row();
                     }
                 });
