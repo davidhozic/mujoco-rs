@@ -183,6 +183,18 @@ The Rust-native viewer supports adding custom UI widgets through the
 This allows you to create custom windows, panels, and other UI elements using
 `egui <https://docs.rs/egui/latest/egui/>`_.
 
+.. note::
+
+    Callbacks added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`
+    receive the passive simulation state (:docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`).
+    This requires locking the mutex to the shared state, which may slow down the program.
+
+    To avoid unnecessary locks when the simulation state is not required in the UI,
+    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback_detached`
+    can be used instead, which only accepts the
+    `egui::Context <https://docs.rs/egui/0.33.0/egui/struct.Context.html>`_ as parameter.
+
+
 The following example demonstrates how to add a custom window to the viewer:
 
 .. code-block:: rust
@@ -195,6 +207,7 @@ The following example demonstrates how to add a custom window to the viewer:
             .expect("could not launch the viewer");
 
         /* Add a custom UI window */
+        // viewer.add_ui_callback_detached(|ctx| {...}) or
         viewer.add_ui_callback(|ctx, data| {
             use mujoco_rs::viewer::egui;
             egui::Window::new("Custom controls")

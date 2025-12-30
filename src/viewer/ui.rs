@@ -119,6 +119,9 @@ const FRAME_TYPE_MAP: [&str; 8] = [
 /// Type alias for a user-provided UI callback function.
 pub(crate) type UiCallback<M> = Box<dyn FnMut(&egui::Context, &mut MjData<M>)>;
 
+/// Type alias for a detached (from state) user-provided UI callback function.
+pub(crate) type UiCallbackDetached = Box<dyn FnMut(&egui::Context)>;
+
 /// Viewer user interface context.
 pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     egui_ctx: egui::Context,
@@ -132,6 +135,7 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     equality_names: Vec<String>,
     model: M,
     user_ui_callbacks: Vec<UiCallback<M>>,
+    user_ui_callbacks_detached: Vec<UiCallbackDetached>,
 
     // Window toggles.
     // Note that these are bool for easier integration with egui.
@@ -202,6 +206,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             camera_names, actuator_names, joint_name_id, equality_names,
             model,
             user_ui_callbacks: Vec::new(),
+            user_ui_callbacks_detached: Vec::new(),
             actuator_window: false,
             joint_window: false,
             equality_window: false,
@@ -538,8 +543,13 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             });
 
             /* User-defined UI callbacks */
+            // Callbacks that receive the egui context and MjData passive instance
             for callback in self.user_ui_callbacks.iter_mut() {
                 callback(ctx, data);
+            }
+            // Callbacks that just receive only the egui context
+            for callback in self.user_ui_callbacks_detached.iter_mut() {
+                callback(ctx);
             }
         });
 
@@ -599,6 +609,16 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         F: FnMut(&egui::Context, &mut MjData<M>) + 'static
     {
         self.user_ui_callbacks.push(Box::new(callback));
+    }
+
+    /// Adds a detached user-defined UI callback that will be invoked during UI rendering.
+    /// Unlike [`ViewerUI::add_ui_callback`], this method does not pass in the passive [`MjData`]
+    /// instance, located in the shared state, thus avoiding Mutex locking when not necessary.
+    pub(crate) fn add_ui_callback_detached<F>(&mut self, callback: F)
+    where
+        F: FnMut(&egui::Context) + 'static
+    {
+        self.user_ui_callbacks_detached.push(Box::new(callback));
     }
 }
 

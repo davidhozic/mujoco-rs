@@ -478,6 +478,18 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.ui.add_ui_callback(callback);
     }
 
+    /// Same as [`MjViewer::add_ui_callback`], except the `callback` does
+    /// not receive the passive [`MjData`] instance of the viewer.
+    /// This allows more efficient use when simulation state does not need
+    /// to be read or is already read somewhere else.
+    #[cfg(feature = "viewer-ui")]
+    pub fn add_ui_callback_detached<F>(&mut self, callback: F)
+    where
+        F: FnMut(&egui::Context) + 'static
+    {
+        self.ui.add_ui_callback_detached(callback);
+    }
+
     /// Deprecated synchronization and rendering method.
     /// Users should use [`MjViewer::sync_data`] instead, which is a proxy
     /// to [`ViewerSharedState::sync_data`], and afterwards call [`MjViewer::render`].
