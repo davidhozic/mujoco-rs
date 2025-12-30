@@ -480,8 +480,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Same as [`MjViewer::add_ui_callback`], except the `callback` does
     /// not receive the passive [`MjData`] instance of the viewer.
-    /// This allows more efficient use when simulation state does not need
-    /// to be read or is already read somewhere else.
+    /// Consequently, the mutex of the viewer's shared state doesn't need to
+    /// be locked, yielding better performance.
     #[cfg(feature = "viewer-ui")]
     pub fn add_ui_callback_detached<F>(&mut self, callback: F)
     where

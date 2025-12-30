@@ -547,7 +547,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             for callback in self.user_ui_callbacks.iter_mut() {
                 callback(ctx, data);
             }
-            // Callbacks that just receive only the egui context
+            // Callbacks that only receive only the egui context
             for callback in self.user_ui_callbacks_detached.iter_mut() {
                 callback(ctx);
             }
@@ -613,7 +613,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
     /// Adds a detached user-defined UI callback that will be invoked during UI rendering.
     /// Unlike [`ViewerUI::add_ui_callback`], this method does not pass in the passive [`MjData`]
-    /// instance, located in the shared state, thus avoiding Mutex locking when not necessary.
+    /// instance, located in the shared state, thus avoiding mutex locking when not necessary.
     pub(crate) fn add_ui_callback_detached<F>(&mut self, callback: F)
     where
         F: FnMut(&egui::Context) + 'static
