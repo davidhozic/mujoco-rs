@@ -547,7 +547,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             for callback in self.user_ui_callbacks.iter_mut() {
                 callback(ctx, data);
             }
-            // Callbacks that only receive only the egui context
+            // Callbacks that only receive the egui context
             for callback in self.user_ui_callbacks_detached.iter_mut() {
                 callback(ctx);
             }
