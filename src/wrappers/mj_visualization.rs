@@ -272,6 +272,20 @@ impl MjvFigure {
 }
 
 
+/// Plot data manipulation
+impl MjvFigure {
+    pub fn push(&mut self, plot_index: usize, x: f32, y: f32) {
+        let plot = &mut self.linedata[plot_index];
+        let point_index = self.linepnt[plot_index] as usize;
+
+        plot[2 * point_index] = x;
+        plot[2 * point_index + 1] = y;
+
+        self.linepnt[plot_index] += 1;
+    }
+}
+
+
 /***********************************************************************************************************************
 ** MjvScene
 ***********************************************************************************************************************/
