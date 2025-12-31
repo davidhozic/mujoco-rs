@@ -253,6 +253,7 @@ impl Default for MjvOption {
 /***********************************************************************************************************************
 ** MjvOption
 ***********************************************************************************************************************/
+/// Abstraction for plotting figures.
 pub type MjvFigure = mjvFigure;
 impl Default for MjvFigure {
     fn default() -> Self {
@@ -265,22 +266,83 @@ impl Default for MjvFigure {
 }
 
 impl MjvFigure {
-    /// Draws the 2D figure.
+    /// Instantiates a new figure with default values.
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Deprecated alias for [`MjvFigure::draw`].
+    #[deprecated(since = "2.3.0", note = "replaced with MjvFigure::draw")]
     pub fn figure(&mut self, viewport: MjrRectangle, context: &MjrContext) {
+        unsafe { mjr_figure(viewport,self, context.ffi()) };
+    }
+
+    /// Draws the 2D figure to the `viewport` on screen.
+    pub fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
         unsafe { mjr_figure(viewport,self, context.ffi()) };
     }
 }
 
+/// Figure options.
+impl MjvFigure {
+    getter_setter! {with, get, set, [
+        flg_legend: bool; "whether to show legend.";
+        flg_extend: bool; "whether to automatically extend axis ranges to fit data.";
+        flg_barplot: bool; "whether to isolate line segments.";
+        flg_selection: bool; "whether to show vertical selection line.";
+        flg_symmetric: bool; "whether to make y-axis symmetric";
+    ]}
+
+    // style settings
+    getter_setter! {with, [
+        gridsize: [i32; 2]; "number of grid points in (x, y).";
+        gridrgb: [f32; 3]; "grid line RGB color.";
+        figurergba: [f32; 4]; "figure RGBA color.";
+        panergba: [f32; 4]; "pane RGBA color.";
+        legendrgba: [f32; 4]; "legend RGBA color.";
+        textrgb: [f32; 3]; "text RGB color.";
+        linergb: [[f32; 3]; mjMAXLINE as usize]; "line colors.";
+        range: [[f32; 2]; 2]; "axis ranges (min >= max means automatic).";
+    ]}
+}
 
 /// Plot data manipulation
 impl MjvFigure {
+
+    /// Checks if the buffer is full for plot with `plot_index`.
+    pub fn full(&self, plot_index: usize) -> bool {
+        self.linepnt[plot_index] >= (self.linedata[plot_index].len() / 2) as i32
+    }
+
+    /// Checks if the buffer is empty for plot with `plot_index`.
+    pub fn empty(&self, plot_index: usize) -> bool {
+        self.linepnt[plot_index] == 0
+    }
+
+    /// Pushes a new data point to buffer for the specific plot with `plot_index`.
+    /// # Panics
+    /// A panic will occur if the buffer is overflown. The buffer can hold a maximum of 1001 elements.
     pub fn push(&mut self, plot_index: usize, x: f32, y: f32) {
         let plot = &mut self.linedata[plot_index];
         let point_index = self.linepnt[plot_index] as usize;
-
         plot[2 * point_index] = x;
         plot[2 * point_index + 1] = y;
 
+        self.linepnt[plot_index] += 1;
+    }
+
+    /// Inserts a new data point to a specific `point_index` for specific plot with `plot_index`.
+    /// # Panics
+    /// The data must already be present at `point_index`, otherwise an assertion panic will occur.
+    pub fn insert(&mut self, plot_index: usize, point_index: usize, x: f32, y: f32) {
+        assert!(
+            point_index < self.linepnt[plot_index] as usize,
+            "data does not yet exist at index {point_index} for plot {plot_index}"
+        );
+
+        let plot = &mut self.linedata[plot_index];
+        plot[2 * point_index] = x;
+        plot[2 * point_index + 1] = y;
         self.linepnt[plot_index] += 1;
     }
 }
