@@ -736,6 +736,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let RenderBaseGlState {window, ..} = &self.adapter.state.as_ref().unwrap();
 
         let inner_size = window.inner_size();
+        self.ui.init_2d();
         let left = self.ui.process(
             window, &mut self.status,
             &mut self.scene, &mut self.opt,

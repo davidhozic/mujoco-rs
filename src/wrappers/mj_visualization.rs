@@ -8,7 +8,7 @@ use super::mj_rendering::{MjrContext, MjrRectangle};
 use super::mj_primitive::{MjtNum, MjtByte};
 use super::mj_model::{MjModel, MjtGeom};
 use super::mj_data::MjData;
-use crate::array_slice_dyn;
+use crate::{array_slice_dyn, c_str_as_str_method};
 use crate::getter_setter;
 use crate::mujoco_c::*;
 
@@ -304,6 +304,14 @@ impl MjvFigure {
         linergb: [[f32; 3]; mjMAXLINE as usize]; "line colors.";
         range: [[f32; 2]; 2]; "axis ranges (min >= max means automatic).";
     ]}
+
+    c_str_as_str_method! {get, set {
+        xlabel; "the x-axis label.";
+        title; "the title.";
+        xformat; " the x-axis C's printf format (e.g., `%.1f`).";
+        yformat; " the y-axis C's printf format (e.g., `%.1f`).";
+        linename [plot_index: usize]; " the line name of plot with `plot_index`.";
+    }}
 }
 
 /// Plot data manipulation
@@ -378,6 +386,15 @@ impl MjvFigure {
         }
 
         self.linedata[plot_index].copy_within(2 * n..(len as usize * 2), 0);
+        self.linepnt[plot_index] -= n as i32;
+    }
+
+    /// Cuts last first `n` elements from the plot data of plot with `plot_index`.
+    pub fn cut_end(&mut self, plot_index: usize, n: usize) {
+        let len = self.linepnt[plot_index];
+        if len < 0 || (len as usize) < n {
+            return;
+        }
         self.linepnt[plot_index] -= n as i32;
     }
 
