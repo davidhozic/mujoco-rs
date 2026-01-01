@@ -1,5 +1,5 @@
 //! Implementation of the interface for use in the viewer.
-use egui_glow::glow::{FILL, FRONT_AND_BACK, HasContext};
+use egui_glow::glow::{self, FILL, FRONT_AND_BACK, HasContext};
 use egui_winit::winit::event::WindowEvent;
 use glutin::display::{Display, GlDisplay};
 use egui_winit::winit::window::Window;
@@ -592,7 +592,23 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     pub(crate) fn reset(&mut self) {
         let gl = &self.gl;
         unsafe {
+            // Disable shaders
             gl.use_program(None);
+
+            // Unbind buffers
+            gl.bind_vertex_array(None);
+            gl.bind_buffer(glow::ARRAY_BUFFER, None);
+            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
+            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+
+            // Reset active texture and unbind 2D texture
+            gl.active_texture(glow::TEXTURE0);
+            gl.bind_texture(glow::TEXTURE_2D, None);
+
+            // Disable tests
+            gl.disable(glow::SCISSOR_TEST);
+            gl.disable(glow::DEPTH_TEST);
+            gl.disable(glow::STENCIL_TEST);
         }
     }
 

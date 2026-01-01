@@ -24,6 +24,13 @@ Unreleased (MuJoCo 3.3.7)
   - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback_detached` for custom UI widgets that
     do not require the simulation state (i.e., the passive |mj_data| instance).
 
+2.2.1 (MuJoCo 3.3.7)
+================================
+- Bug fixes:
+
+  - Fixed `#119 <https://github.com/davidhozic/mujoco-rs/issues/119>`_ where the borrow tracker
+    tracked the wrong lifetime.
+  - Reset more of OpenGL state after drawing the UI with egui (drawing figures doesn't work without this).
 
 2.2.0 (MuJoCo 3.3.7)
 ================================

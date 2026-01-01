@@ -315,12 +315,12 @@ macro_rules! info_with_view {
 
             impl [<Mj $name:camel $info_type Info>] {
                 #[doc = "Returns a mutable view to the correct fields in [`Mj" $info_type "`]"]
-                pub fn view_mut $(<$generics: $bound>)?(&self, [<$info_type:lower>]: &mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'_> {
+                pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
                     view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), $prefix, [$($attr),*], [$($opt_attr),*], crate::util::PointerViewMut::new)
                 }
 
                 #[doc = "Returns a view to the correct fields in [`Mj" $info_type "`]"]
-                pub fn view $(<$generics: $bound>)?(&self, [<$info_type:lower>]: &[<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'_> {
+                pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
                     view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), $prefix, [$($attr),*], [$($opt_attr),*], crate::util::PointerView::new)
                 }
             }
@@ -381,12 +381,12 @@ macro_rules! info_with_view {
 
             impl [<Mj $name:camel $info_type Info>] {
                 #[doc = "Returns a mutable view to the correct fields in [`Mj" $info_type "`]"]
-                pub fn view_mut $(<$generics: $bound>)?(&self, [<$info_type:lower>]: &mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'_> {
+                pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
                     view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($attr),*], [$($opt_attr),*], crate::util::PointerViewMut::new)
                 }
 
                 #[doc = "Returns a view to the correct fields in [`Mj" $info_type "`]"]
-                pub fn view $(<$generics: $bound>)?(&self, [<$info_type:lower>]: &[<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'_> {
+                pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
                     view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($attr),*], [$($opt_attr),*], crate::util::PointerView::new)
                 }
             }
