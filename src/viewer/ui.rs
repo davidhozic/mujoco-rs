@@ -1,5 +1,5 @@
 //! Implementation of the interface for use in the viewer.
-use egui_glow::glow::{self, FILL, FRONT_AND_BACK, HasContext};
+use egui_glow::glow::{self, HasContext};
 use egui_winit::winit::event::WindowEvent;
 use glutin::display::{Display, GlDisplay};
 use egui_winit::winit::window::Window;
