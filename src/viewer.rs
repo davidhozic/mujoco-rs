@@ -408,6 +408,16 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// which allows usage from multiple threads.
     /// 
     /// [`ViewerSharedState`] can be obtained via [`MjViewer::state`], which returns `Arc<Mutex<ViewerSharedState>>`.
+    /// Alternatively, [`MjViewer::with_state_lock`] can be used as follows:
+    /// ```no_run
+    /// # use mujoco_rs::viewer::MjViewer;
+    /// # use mujoco_rs::prelude::*;
+    /// # let model = MjModel::from_xml_string("<mujoco/>").unwrap();
+    /// let mut viewer = MjViewer::builder().build_passive(&model).unwrap();
+    /// viewer.with_state_lock(|lock| {
+    ///     let scene = lock.user_scene();
+    /// });
+    /// ```
     /// 
     /// # Note
     /// There is no way to make a fully compatible proxy method to [`ViewerSharedState::user_scene`]
@@ -415,7 +425,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// uses a temporary user scene, part of [`MjViewer`]. The viewer then syncs both
     /// [`MjViewer::user_scene`] and [`ViewerSharedState::user_scene`] to achieve backward compatibility,
     /// however we strongly urge you to use the latter as the **FORMER** will be **REMOVED IN THE FUTURE**.
-    #[deprecated(since = "2.2.0", note = "use viewer.state().lock().unwrap().user_scene()")]
+    #[deprecated(since = "2.2.0", note = "use viewer.with_state_lock(|lock| { lock.user_scene(); ... } )")]
     pub fn user_scene(&self) -> &MjvScene<M>{
         &self.user_scene
     }
@@ -432,17 +442,17 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// uses a temporary user scene, part of [`MjViewer`]. The viewer then syncs both
     /// [`MjViewer::user_scene_mut`] and [`ViewerSharedState::user_scene_mut`] to achieve backward compatibility,
     /// however we strongly urge you to use the latter as the **FORMER** will be **REMOVED IN THE FUTURE**.
-    #[deprecated(since = "2.2.0", note = "use viewer.state().lock().unwrap().user_scene_mut()")]
+    #[deprecated(since = "2.2.0", note = "use viewer.with_state_lock(|mut lock| { lock.user_scene_mut(); ... } )")]
     pub fn user_scene_mut(&mut self) -> &mut MjvScene<M>{
         &mut self.user_scene
     }
 
-    #[deprecated(since = "1.3.0", note = "use viewer.state().lock().unwrap().user_scene()")]
+    #[deprecated(since = "1.3.0", note = "use viewer.with_state_lock(|lock| { lock.user_scene(); ... } )")]
     pub fn user_scn(&self) -> &MjvScene<M> {
         self.user_scene()
     }
 
-    #[deprecated(since = "1.3.0", note = "use viewer.state().lock().unwrap().user_scene_mut()")]
+    #[deprecated(since = "1.3.0", note = "use viewer.with_state_lock(|mut lock| { lock.user_scene_mut(); ... } )")]
     pub fn user_scn_mut(&mut self) -> &mut MjvScene<M> {
         self.user_scene_mut()
     }
