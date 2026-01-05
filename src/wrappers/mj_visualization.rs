@@ -305,7 +305,7 @@ impl MjvFigure {
         range: [[f32; 2]; 2]; "axis ranges (min >= max means automatic).";
     ]}
 
-    c_str_as_str_method! {get, set {
+    c_str_as_str_method! {with, get, set {
         xlabel; "the x-axis label.";
         title; "the title.";
         xformat; " the x-axis C's printf format (e.g., `%.1f`).";
@@ -354,8 +354,14 @@ impl MjvFigure {
         self.linepnt[plot_index] += 1;
     }
 
-    pub fn clear(&mut self, plot_index: usize) {
-        self.linepnt[plot_index] = 0;
+    /// Clears the plot with `maybe_plot_index`.
+    /// If `maybe_plot_index` is [`None`], all plots will be cleared.
+    pub fn clear(&mut self, maybe_plot_index: Option<usize>) {
+        if let Some(plot_index) = maybe_plot_index {
+            self.linepnt[plot_index] = 0;
+        } else {
+            self.linepnt.fill(0);
+        }
     }
 
     /// Pops the first element from the plot data of plot with `plot_index`.

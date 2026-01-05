@@ -776,7 +776,7 @@ macro_rules! c_str_as_str_method {
     (set {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {paste::paste!{
         $(
             #[doc = concat!("Sets ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII or is too long.")]
-            pub fn [<set_ $name>](&mut self, $name: &str $(, $sub_index_name: $sub_index_type)?) {
+            pub fn [<set_ $name>](&mut self, $($sub_index_name: $sub_index_type,)? $name: &str) {
                 assert!($name.is_ascii(), concat!(stringify!($name), " must be valid ASCII."));
                 let c_string = std::ffi::CString::new($name).unwrap();
                 let bytes = c_string.into_bytes_with_nul();
@@ -787,11 +787,42 @@ macro_rules! c_str_as_str_method {
         )*
     }};
 
+    (with {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {paste::paste!{
+        $(
+            #[doc = concat!("Builder method for setting", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII or is too long.")]
+            pub fn [<with_ $name>](mut self, $($sub_index_name: $sub_index_type,)? $name: &str) -> Self {
+                assert!($name.is_ascii(), concat!(stringify!($name), " must be valid ASCII."));
+                let c_string = std::ffi::CString::new($name).unwrap();
+                let bytes = c_string.into_bytes_with_nul();
+
+                // This transmute is safe as long as converting from u8 (bytes) to i8, which is char.
+                self$(.$ffi())?.$name$([$sub_index_name])?[..bytes.len()].copy_from_slice(unsafe { std::mem::transmute::<&[u8], &[i8]>(&bytes) });
+                self
+            }
+        )*
+    }};
+
     // Mixed patterns
+    (with, get, set {$($other:tt)*}) => {
+        crate::c_str_as_str_method!(get {$($other)*});
+        crate::c_str_as_str_method!(set {$($other)*});
+        crate::c_str_as_str_method!(with {$($other)*});
+    };
+
     (get, set {$($other:tt)*}) => {
         crate::c_str_as_str_method!(get {$($other)*});
         crate::c_str_as_str_method!(set {$($other)*});
-    }
+    };
+
+    (with, set {$($other:tt)*}) => {
+        crate::c_str_as_str_method!(set {$($other)*});
+        crate::c_str_as_str_method!(with {$($other)*});
+    };
+
+    (with, get {$($other:tt)*}) => {
+        crate::c_str_as_str_method!(get {$($other)*});
+        crate::c_str_as_str_method!(with {$($other)*});
+    };
 }
 
 /// assert_eq!, but with tolerance for floating point rounding.
