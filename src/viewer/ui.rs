@@ -1,5 +1,5 @@
 //! Implementation of the interface for use in the viewer.
-use egui_glow::glow::{self, FILL, FRONT_AND_BACK, HasContext};
+use egui_glow::glow::{self, HasContext};
 use egui_winit::winit::event::WindowEvent;
 use glutin::display::{Display, GlDisplay};
 use egui_winit::winit::window::Window;
@@ -562,7 +562,6 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         let clipped_primitives = self.egui_ctx.tessellate(full_output.shapes, pixels_per_point);
 
         // Paint the menu
-        unsafe { self.gl.polygon_mode(FRONT_AND_BACK, FILL) };
         self.painter.paint_and_update_textures(
             window.inner_size().into(),
             pixels_per_point,
@@ -588,6 +587,18 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         self.egui_ctx.dragged_id().is_some()
     }
 
+    /// Prepares OpenGL for drawing 2D overlays.
+    pub(crate) fn init_2d(&self) {
+        let gl = &self.gl;
+        unsafe { 
+            gl.disable(glow::DEPTH_TEST);
+            gl.disable(glow::CULL_FACE);
+            gl.disable(glow::BLEND);
+            gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
+            gl.polygon_mode(glow::FRONT_AND_BACK, glow::FILL);
+        }
+    }
+
     /// Resets OpenGL state. This is needed for MuJoCo's renderer.
     pub(crate) fn reset(&mut self) {
         let gl = &self.gl;
@@ -600,15 +611,6 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             gl.bind_buffer(glow::ARRAY_BUFFER, None);
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
             gl.bind_framebuffer(glow::FRAMEBUFFER, None);
-
-            // Reset active texture and unbind 2D texture
-            gl.active_texture(glow::TEXTURE0);
-            gl.bind_texture(glow::TEXTURE_2D, None);
-
-            // Disable tests
-            gl.disable(glow::SCISSOR_TEST);
-            gl.disable(glow::DEPTH_TEST);
-            gl.disable(glow::STENCIL_TEST);
         }
     }
 
