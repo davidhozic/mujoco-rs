@@ -251,7 +251,7 @@ impl Default for MjvOption {
 }
 
 /***********************************************************************************************************************
-** MjvOption
+** MjvFigure
 ***********************************************************************************************************************/
 /// Abstraction for plotting figures.
 pub type MjvFigure = mjvFigure;
@@ -267,8 +267,12 @@ impl Default for MjvFigure {
 
 impl MjvFigure {
     /// Instantiates a new figure with default values.
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new() -> Box<Self> {
+        let mut opt = Box::new(MaybeUninit::uninit());
+        unsafe {
+            mjv_defaultFigure(opt.as_mut_ptr());
+            opt.assume_init()
+        }
     }
 
     /// Deprecated alias for [`MjvFigure::draw`].
@@ -339,10 +343,10 @@ impl MjvFigure {
         self.linepnt[plot_index] += 1;
     }
 
-    /// Inserts a new data point to a specific `point_index` for specific plot with `plot_index`.
+    /// Overrides existing data with a new data point at a specific `point_index` for specific plot with `plot_index`.
     /// # Panics
     /// The data must already be present at `point_index`, otherwise an assertion panic will occur.
-    pub fn insert(&mut self, plot_index: usize, point_index: usize, x: f32, y: f32) {
+    pub fn set_at(&mut self, plot_index: usize, point_index: usize, x: f32, y: f32) {
         assert!(
             point_index < self.linepnt[plot_index] as usize,
             "data does not yet exist at index {point_index} for plot {plot_index}"
@@ -351,7 +355,6 @@ impl MjvFigure {
         let plot = &mut self.linedata[plot_index];
         plot[2 * point_index] = x;
         plot[2 * point_index + 1] = y;
-        self.linepnt[plot_index] += 1;
     }
 
     /// Clears the plot with `maybe_plot_index`.
@@ -384,6 +387,22 @@ impl MjvFigure {
         Some(first)
     }
 
+    /// Pops the last element from the plot data of plot with `plot_index`.
+    /// # Returns
+    /// Returns [`Some(last element)`](Some) when plot contains any elements, otherwise [`None`] is returned.
+    /// The return format is (x, y).
+    pub fn pop_back(&mut self, plot_index: usize) -> Option<(f32, f32)> {
+        let old_len = self.linepnt[plot_index];
+        if old_len <= 0 {
+            return None;
+        }
+        let plot_data = &mut self.linedata[plot_index];
+        let new_start = ((old_len - 1) * 2) as usize;
+        self.linepnt[plot_index] -= 1;
+
+        Some((plot_data[new_start], plot_data[new_start + 1]))  // new len is the previous last index
+    }
+
     /// Cuts the first `n` elements from the plot data of plot with `plot_index`.
     pub fn cut_front(&mut self, plot_index: usize, n: usize) {
         let len = self.linepnt[plot_index];
@@ -402,22 +421,6 @@ impl MjvFigure {
             return;
         }
         self.linepnt[plot_index] -= n as i32;
-    }
-
-    /// Pops the last element from the plot data of plot with `plot_index`.
-    /// # Returns
-    /// Returns [`Some(last element)`](Some) when plot contains any elements, otherwise [`None`] is returned.
-    /// The return format is (x, y).
-    pub fn pop_back(&mut self, plot_index: usize) -> Option<(f32, f32)> {
-        let old_len = self.linepnt[plot_index];
-        if old_len <= 0 {
-            return None;
-        }
-        let plot_data = &mut self.linedata[plot_index];
-        let new_start = ((old_len - 1) * 2) as usize;
-        self.linepnt[plot_index] -= 1;
-
-        Some((plot_data[new_start], plot_data[new_start + 1]))  // new len is the previous last index
     }
 }
 
@@ -693,5 +696,35 @@ mod tests {
         assert_eq!(scene.lights().len(), scene.ffi().nlight as usize);
         assert_eq!(scene.geomorder().len(), scene.ffi().ngeom as usize);
         assert_eq!(scene.geoms().len(), scene.ffi().ngeom as usize);
+    }
+
+    #[test]
+    fn test_figure() {
+        let mut fig = MjvFigure::new();
+        let plot = 0;
+
+        // Initially empty
+        assert!(fig.empty(plot));
+        assert_eq!(fig.pop_front(plot), None);
+        assert_eq!(fig.pop_back(plot), None);
+
+        // Push two points
+        fig.push(plot, 1.0, 2.0);
+        fig.push(plot, 3.0, 4.0);
+
+        assert!(!fig.empty(plot));
+
+        // Pop from front (FIFO)
+        let first = fig.pop_front(plot);
+        assert_eq!(first, Some((1.0, 2.0)));
+
+        // Pop from back (LIFO on remaining element)
+        let last = fig.pop_back(plot);
+        assert_eq!(last, Some((3.0, 4.0)));
+
+        // Now empty again
+        assert!(fig.empty(plot));
+        assert_eq!(fig.pop_front(plot), None);
+        assert_eq!(fig.pop_back(plot), None);
     }
 }
