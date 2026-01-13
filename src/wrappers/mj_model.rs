@@ -208,7 +208,14 @@ impl MjModel {
                     let cstr_error = String::from_utf8_lossy(
                         // Reinterpret as u8 data. This does not affect the data as it is ASCII
                         // encoded and thus negative values aren't possible.
-                        std::slice::from_raw_parts(error.as_ptr() as *const u8, error.len())
+                        {
+                            let ptr = error.as_ptr() as *const u8;
+                            if ptr.is_null() {
+                                &[]
+                            } else {
+                                std::slice::from_raw_parts(ptr, error.len())
+                            }
+                        }
                     );
                     Err(Error::new(ErrorKind::Other, cstr_error))
                 },
