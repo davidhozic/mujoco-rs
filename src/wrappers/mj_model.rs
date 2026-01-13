@@ -1752,6 +1752,15 @@ mod tests {
         assert_eq!(&view_key.qvel[..model.ffi().nv as usize], QVEL);
         assert_eq!(&view_key.act[..model.ffi().na as usize], ACT);
         assert_eq!(&view_key.ctrl[..model.ffi().nu as usize], CTRL);
+
+        let key_qvel = &model.key_qvel()[model.ffi().nv as usize..];
+        assert_eq!(key_qvel, QVEL);
+
+        let key_act = &model.key_act()[model.ffi().na as usize..];
+        assert_eq!(key_act, ACT);
+
+        let key_ctrl = &model.key_ctrl()[model.ffi().nu as usize..];
+        assert_eq!(key_ctrl, CTRL);
     }
 
     #[test]
