@@ -1,25 +1,25 @@
 //! Module related to implementation of the [`MjRenderer`].
-use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_rendering::MjrContext;
+use crate::wrappers::mj_visualization::MjvScene;
 
 #[cfg(target_os = "linux")]
 use crate::renderer::egl::GlStateEgl;
 
-use crate::vis_common::sync_geoms;
 use crate::builder_setters;
 use crate::prelude::*;
+use crate::vis_common::sync_geoms;
 
 use bitflags::bitflags;
 use png::Encoder;
 
-use std::io::{self, BufWriter, ErrorKind, Write};
-use std::fmt::Display;
 use std::error::Error;
+use std::fmt::Display;
+use std::fs::File;
+use std::io::{self, BufWriter, ErrorKind, Write};
 use std::marker::PhantomData;
 use std::num::NonZero;
 use std::ops::Deref;
 use std::path::Path;
-use std::fs::File;
 
 #[cfg(feature = "renderer-winit-fallback")]
 mod universal;
@@ -30,18 +30,21 @@ use universal::GlStateWinit;
 #[cfg(target_os = "linux")]
 mod egl;
 
-
-const RGB_NOT_FOUND_ERR_STR: &str = "RGB rendering is not enabled (renderer.with_rgb_rendering(true))";
-const DEPTH_NOT_FOUND_ERR_STR: &str = "depth rendering is not enabled (renderer.with_depth_rendering(true))";
-const INVALID_INPUT_SIZE: &str = "the input width and height don't match the renderer's configuration";
+const RGB_NOT_FOUND_ERR_STR: &str =
+    "RGB rendering is not enabled (renderer.with_rgb_rendering(true))";
+const DEPTH_NOT_FOUND_ERR_STR: &str =
+    "depth rendering is not enabled (renderer.with_depth_rendering(true))";
+const INVALID_INPUT_SIZE: &str =
+    "the input width and height don't match the renderer's configuration";
 const EXTRA_INTERNAL_VISUAL_GEOMS: u32 = 100;
-
 
 /// GlState enum wrapper. By default, headless implementation will be used
 /// when supported. Only on failure an invisible winit window will be used.
 pub(crate) enum GlState {
-    #[cfg(feature = "renderer-winit-fallback")] Winit(GlStateWinit),
-    #[cfg(target_os = "linux")] Egl(egl::GlStateEgl),
+    #[cfg(feature = "renderer-winit-fallback")]
+    Winit(GlStateWinit),
+    #[cfg(target_os = "linux")]
+    Egl(egl::GlStateEgl),
 }
 
 impl GlState {
@@ -61,7 +64,7 @@ impl GlState {
             #[cfg(not(target_os = "linux"))]
             Err(e) => {
                 return Err(e);
-            },
+            }
 
             #[cfg(target_os = "linux")]
             _ => {}
@@ -76,11 +79,10 @@ impl GlState {
             #[cfg(target_os = "linux")]
             Self::Egl(egl_state) => egl_state.make_current(),
             #[cfg(feature = "renderer-winit-fallback")]
-            Self::Winit(winit_state) => winit_state.make_current()
+            Self::Winit(winit_state) => winit_state.make_current(),
         }
     }
 }
-
 
 /// A builder for [`MjRenderer`].
 #[derive(Debug)]
@@ -94,7 +96,7 @@ pub struct MjRendererBuilder<M: Deref<Target = MjModel> + Clone> {
     font_scale: MjtFontScale,
     camera: MjvCamera,
     opts: MjvOption,
-    model_type: PhantomData<M>
+    model_type: PhantomData<M>,
 }
 
 impl<M: Deref<Target = MjModel> + Clone> MjRendererBuilder<M> {
@@ -107,11 +109,16 @@ impl<M: Deref<Target = MjModel> + Clone> MjRendererBuilder<M> {
     /// - `depth`: false.
     pub fn new() -> Self {
         Self {
-            width: 0, height: 0,
-            num_visual_internal_geom: EXTRA_INTERNAL_VISUAL_GEOMS, num_visual_user_geom: 0,
-            rgb: true, depth: false, font_scale: MjtFontScale::mjFONTSCALE_100,
-            camera: MjvCamera::default(), opts: MjvOption::default(),
-            model_type: PhantomData
+            width: 0,
+            height: 0,
+            num_visual_internal_geom: EXTRA_INTERNAL_VISUAL_GEOMS,
+            num_visual_user_geom: 0,
+            rgb: true,
+            depth: false,
+            font_scale: MjtFontScale::mjFONTSCALE_100,
+            camera: MjvCamera::default(),
+            opts: MjvOption::default(),
+            model_type: PhantomData,
         }
     }
 
@@ -181,28 +188,34 @@ which can be configured at the top of the model's XML like so:
         // The 3D scene for visualization
         let scene = MjvScene::new(
             model.clone(),
-            model.ffi().ngeom as usize + self.num_visual_internal_geom as usize
-            + self.num_visual_user_geom as usize
+            model.ffi().ngeom as usize
+                + self.num_visual_internal_geom as usize
+                + self.num_visual_user_geom as usize,
         );
 
-        let user_scene = MjvScene::new(
-            model.clone(),
-            self.num_visual_user_geom as usize
-        );
+        let user_scene = MjvScene::new(model.clone(), self.num_visual_user_geom as usize);
 
         // Construct the renderer and create allocated buffers.
         let renderer = MjRenderer {
-            scene, user_scene, context, model, camera: self.camera, option: self.opts,
-            flags: RendererFlags::empty(), rgb: None, depth: None,
-            width: width as usize, height: height as usize, gl_state
-        }   // These require special care
-            .with_rgb_rendering(self.rgb)
-            .with_depth_rendering(self.depth);
+            scene,
+            user_scene,
+            context,
+            model,
+            camera: self.camera,
+            option: self.opts,
+            flags: RendererFlags::empty(),
+            rgb: None,
+            depth: None,
+            width: width as usize,
+            height: height as usize,
+            gl_state,
+        } // These require special care
+        .with_rgb_rendering(self.rgb)
+        .with_depth_rendering(self.depth);
 
         Ok(renderer)
     }
 }
-
 
 impl<M: Deref<Target = MjModel> + Clone> Default for MjRendererBuilder<M> {
     fn default() -> Self {
@@ -245,28 +258,35 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// The renderer uses two scenes:
     /// - the internal scene: used by the renderer to draw the model's state.
     /// - the user scene: used by the user to add additional geoms to the internal scene
-    /// 
+    ///
     /// The **internal scene** allocates the amount of space needed to fit every pre-existing
     /// model geom + user visual-only geoms + additional visual-only geoms that aren't from the user (e.g., tendons).
     /// By default, the renderer reserves 100 extra geom slots for drawing the additional visual-only geoms.
     /// If that is not enough or it is too much, you can construct [`MjRenderer`] via its builder
-    /// ([`MjRenderer::builder`]), which allows more configuration. 
-    /// 
+    /// ([`MjRenderer::builder`]), which allows more configuration.
+    ///
     /// <div class="warning">
-    /// 
+    ///
     /// Parameters `width` and `height` must be less or equal to the offscreen buffer size,
     /// which can be configured at the top of the model's XML like so:
-    /// 
+    ///
     /// ```xml
     /// <visual>
     ///    <global offwidth="1920" offheight="1080"/>
     /// </visual>
     /// ```
-    /// 
+    ///
     /// </div>
-    pub fn new(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
+    pub fn new(
+        model: M,
+        width: usize,
+        height: usize,
+        max_user_geom: usize,
+    ) -> Result<Self, RendererError> {
         let builder = Self::builder()
-            .width(width as u32).height(height as u32).num_visual_user_geom(max_user_geom as u32);
+            .width(width as u32)
+            .height(height as u32)
+            .num_visual_user_geom(max_user_geom as u32);
         builder.build(model)
     }
 
@@ -276,17 +296,17 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     }
 
     /// Return an immutable reference to the internal scene.
-    pub fn scene(&self) -> &MjvScene<M>{
+    pub fn scene(&self) -> &MjvScene<M> {
         &self.scene
     }
 
     /// Return an immutable reference to a user scene for drawing custom visual-only geoms.
-    pub fn user_scene(&self) -> &MjvScene<M>{
+    pub fn user_scene(&self) -> &MjvScene<M> {
         &self.user_scene
     }
 
     /// Return a mutable reference to a user scene for drawing custom visual-only geoms.
-    pub fn user_scene_mut(&mut self) -> &mut MjvScene<M>{
+    pub fn user_scene_mut(&mut self) -> &mut MjvScene<M> {
         &mut self.user_scene
     }
 
@@ -331,20 +351,28 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     }
 
     /// Set the camera used for rendering.
-    pub fn set_camera(&mut self, camera: MjvCamera)  {
+    pub fn set_camera(&mut self, camera: MjvCamera) {
         self.camera = camera;
     }
 
     /// Enables/disables RGB rendering.
     pub fn set_rgb_rendering(&mut self, enable: bool) {
         self.flags.set(RendererFlags::RENDER_RGB, enable);
-        self.rgb = if enable { Some(vec![0; 3 * self.width * self.height].into_boxed_slice()) } else { None } ;
+        self.rgb = if enable {
+            Some(vec![0; 3 * self.width * self.height].into_boxed_slice())
+        } else {
+            None
+        };
     }
 
     /// Enables/disables depth rendering.
     pub fn set_depth_rendering(&mut self, enable: bool) {
         self.flags.set(RendererFlags::RENDER_DEPTH, enable);
-        self.depth = if enable { Some(vec![0.0; self.width * self.height].into_boxed_slice()) } else { None } ;
+        self.depth = if enable {
+            Some(vec![0.0; self.width * self.height].into_boxed_slice())
+        } else {
+            None
+        };
     }
 
     /// Sets the font size. To be used on construction.
@@ -360,7 +388,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     }
 
     /// Set the camera used for rendering. To be used on construction.
-    pub fn with_camera(mut self, camera: MjvCamera) -> Self  {
+    pub fn with_camera(mut self, camera: MjvCamera) -> Self {
         self.set_camera(camera);
         self
     }
@@ -379,9 +407,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Update the scene with new data from data.
     pub fn sync(&mut self, data: &mut MjData<M>) {
-        assert_eq!(data.model().signature(), self.model.signature(), "'data' must be created from the same model as the renderer.");
+        assert_eq!(
+            data.model().signature(),
+            self.model.signature(),
+            "'data' must be created from the same model as the renderer."
+        );
 
-        self.scene.update(data, &self.option, &MjvPerturb::default(), &mut self.camera);
+        self.scene
+            .update(data, &self.option, &MjvPerturb::default(), &mut self.camera);
 
         /* Draw user scene geoms */
         sync_geoms(&self.user_scene, &mut self.scene)
@@ -397,7 +430,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Return an RGB image of the scene. This methods accepts two generic parameters <WIDTH, HEIGHT>
     /// that define the shape of the output slice.
-    pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> io::Result<&[[[u8; 3]; WIDTH]; HEIGHT]> {
+    pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(
+        &self,
+    ) -> io::Result<&[[[u8; 3]; WIDTH]; HEIGHT]> {
         if let Some(flat) = self.rgb_flat() {
             if flat.len() == WIDTH * HEIGHT * 3 {
                 let p_shaped = flat.as_ptr() as *const [[[u8; 3]; WIDTH]; HEIGHT];
@@ -406,13 +441,17 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 // The lifetime also matches  'a in &'a self, which prevents data races.
                 // Length (number of elements) matches the output's.
                 Ok(unsafe { p_shaped.as_ref().unwrap() })
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    INVALID_INPUT_SIZE,
+                ))
             }
-            else {
-                Err(io::Error::new(io::ErrorKind::InvalidInput, INVALID_INPUT_SIZE))
-            }
-        }
-        else {
-            Err(io::Error::new(io::ErrorKind::NotFound, RGB_NOT_FOUND_ERR_STR))
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                RGB_NOT_FOUND_ERR_STR,
+            ))
         }
     }
 
@@ -423,7 +462,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Return a depth image of the scene. This methods accepts two generic parameters <WIDTH, HEIGHT>
     /// that define the shape of the output slice.
-    pub fn depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> io::Result<&[[f32; WIDTH]; HEIGHT]> {
+    pub fn depth<const WIDTH: usize, const HEIGHT: usize>(
+        &self,
+    ) -> io::Result<&[[f32; WIDTH]; HEIGHT]> {
         if let Some(flat) = self.depth_flat() {
             if flat.len() == WIDTH * HEIGHT {
                 let p_shaped = flat.as_ptr() as *const [[f32; WIDTH]; HEIGHT];
@@ -432,13 +473,17 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 // The lifetime matches  'a in &'a self, which prevents data races.
                 // Length (number of elements) matches the output's.
                 Ok(unsafe { p_shaped.as_ref().unwrap() })
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    INVALID_INPUT_SIZE,
+                ))
             }
-            else {
-                Err(io::Error::new(io::ErrorKind::InvalidInput, INVALID_INPUT_SIZE))
-            }
-        }
-        else {
-            Err(io::Error::new(io::ErrorKind::NotFound, DEPTH_NOT_FOUND_ERR_STR))
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                DEPTH_NOT_FOUND_ERR_STR,
+            ))
         }
     }
 
@@ -459,8 +504,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             let mut writer = encoder.write_header()?;
             writer.write_image_data(rgb)?;
             Ok(())
-        }
-        else {
+        } else {
             Err(io::Error::new(ErrorKind::NotFound, RGB_NOT_FOUND_ERR_STR))
         }
     }
@@ -486,21 +530,34 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             encoder.set_depth(png::BitDepth::Sixteen);
             encoder.set_compression(png::Compression::NoCompression);
 
-            let (norm, min, max) =
-            if normalize {
+            let (norm, min, max) = if normalize {
                 let max = depth.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
                 let min = depth.iter().cloned().fold(f32::INFINITY, f32::min);
-                (depth.iter().flat_map(|&x| (((x - min) / (max - min) * 65535.0).min(65535.0) as u16).to_be_bytes()).collect::<Box<_>>(), min, max)
-            }
-            else {
-                (depth.iter().flat_map(|&x| ((x * 65535.0).min(65535.0) as u16).to_be_bytes()).collect::<Box<_>>(), 0.0, 1.0)
+                (
+                    depth
+                        .iter()
+                        .flat_map(|&x| {
+                            (((x - min) / (max - min) * 65535.0).min(65535.0) as u16).to_be_bytes()
+                        })
+                        .collect::<Box<_>>(),
+                    min,
+                    max,
+                )
+            } else {
+                (
+                    depth
+                        .iter()
+                        .flat_map(|&x| ((x * 65535.0).min(65535.0) as u16).to_be_bytes())
+                        .collect::<Box<_>>(),
+                    0.0,
+                    1.0,
+                )
             };
 
             let mut writer = encoder.write_header()?;
             writer.write_image_data(&norm)?;
             Ok((min, max))
-        }
-        else {
+        } else {
             Err(io::Error::new(ErrorKind::NotFound, DEPTH_NOT_FOUND_ERR_STR))
         }
     }
@@ -517,15 +574,16 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             let mut writer = BufWriter::new(file);
 
             /* Fast conversion to a byte slice to prioritize performance */
-            let p = unsafe { std::slice::from_raw_parts(
-                depth.as_ptr() as *const u8,
-                std::mem::size_of::<f32>() * depth.len()
-            ) };
+            let p = unsafe {
+                std::slice::from_raw_parts(
+                    depth.as_ptr() as *const u8,
+                    std::mem::size_of::<f32>() * depth.len(),
+                )
+            };
 
             writer.write_all(p)?;
             Ok(())
-        }
-        else {
+        } else {
             Err(io::Error::new(ErrorKind::NotFound, DEPTH_NOT_FOUND_ERR_STR))
         }
     }
@@ -533,7 +591,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// Draws the scene to internal arrays.
     /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image.
     fn render(&mut self) {
-        self.gl_state.make_current().expect("failed to make OpenGL context current");
+        self.gl_state
+            .make_current()
+            .expect("failed to make OpenGL context current");
         let vp = MjrRectangle::new(0, 0, self.width as i32, self.height as i32);
         self.scene.render(&vp, &self.context);
 
@@ -542,31 +602,27 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
         let flat_depth = self.depth.as_deref_mut();
 
         /* Read to whatever is enabled */
-        self.context.read_pixels(
-            flat_rgb,
-            flat_depth,
-            &vp
-        );
-
+        self.context.read_pixels(flat_rgb, flat_depth, &vp);
         /* Make depth values be the actual distance in meters */
         if let Some(depth) = self.depth.as_deref_mut() {
             let map = &self.model.vis().map;
-            let near = map.znear;
-            let far = map.zfar;
+            let stat = &self.model.stat();
+
+            let extent = stat.extent as f32;
+            let near = map.znear * extent;
+            let far = map.zfar * extent;
             for value in depth {
-                let z_ndc = 2.0 * *value - 1.0;
-                *value = 2.0 * near * far / (far + near - z_ndc * (far - near));
+                *value = near / (1.0 - *value * (1.0 - near / far));
             }
         }
     }
 }
 
-
 #[derive(Debug)]
 pub enum RendererError {
     #[cfg(feature = "renderer-winit-fallback")]
     EventLoopError(winit::error::EventLoopError),
-    GlutinError(glutin::error::Error)
+    GlutinError(glutin::error::Error),
 }
 
 impl Display for RendererError {
@@ -574,7 +630,7 @@ impl Display for RendererError {
         match self {
             #[cfg(feature = "renderer-winit-fallback")]
             Self::EventLoopError(e) => write!(f, "event loop failed to initialize: {}", e),
-            Self::GlutinError(e) => write!(f, "glutin failed to initialize: {}", e)
+            Self::GlutinError(e) => write!(f, "glutin failed to initialize: {}", e),
         }
     }
 }
@@ -584,12 +640,12 @@ impl Error for RendererError {
         match self {
             #[cfg(feature = "renderer-winit-fallback")]
             Self::EventLoopError(e) => Some(e),
-            Self::GlutinError(e) => Some(e)
+            Self::GlutinError(e) => Some(e),
         }
     }
 }
 
-bitflags! { 
+bitflags! {
     /// Flags that enable features of the renderer.
     struct RendererFlags: u8 {
         const RENDER_RGB = 1 << 0;
@@ -597,9 +653,7 @@ bitflags! {
     }
 }
 
-
-
-/* 
+/*
 ** Don't run any tests as OpenGL hates if anything
 ** runs outside the main thread.
 */
@@ -621,9 +675,8 @@ bitflags! {
 //     //     // let model2 = MjModel::from_xml_string(MODEL).unwrap();
 //     //     // let mut data = model.make_data();
 //     //     // let mut renderer = Renderer::new(&model, 720, 1280).unwrap();
-        
+
 //     //     // /* Check if scene updates without errors. */
 //     //     // renderer.update_scene(&mut data);
 //     // }
 // }
-
