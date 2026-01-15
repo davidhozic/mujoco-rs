@@ -16,6 +16,12 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+2.2.2 (MuJoCo 3.3.7)
+================================
+- Bug fixes:
+
+  - Fixed `incorrect calculation of depth values <https://github.com/davidhozic/mujoco-rs/pull/125>`_.
+
 2.2.1 (MuJoCo 3.3.7)
 ================================
 - Bug fixes:
