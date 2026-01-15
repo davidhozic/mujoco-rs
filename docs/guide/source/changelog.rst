@@ -24,6 +24,12 @@ Unreleased (MuJoCo 3.3.7)
   - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback_detached` for custom UI widgets that
     do not require the simulation state (i.e., the passive |mj_data| instance).
 
+2.2.2 (MuJoCo 3.3.7)
+================================
+- Bug fixes:
+
+  - Fixed `incorrect calculation of depth values <https://github.com/davidhozic/mujoco-rs/pull/125>`_.
+
 2.2.1 (MuJoCo 3.3.7)
 ================================
 - Bug fixes:
