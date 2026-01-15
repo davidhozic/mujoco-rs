@@ -606,26 +606,50 @@ bitflags! {
 ** runs outside the main thread.
 */
 
-// #[cfg(test)]
-// mod test {
-//     use super::*;
+#[cfg(test)]
+mod test {
+    use crate::assert_relative_eq;
 
-//     const MODEL: &str = "
-//         <mujoco>
-//             <worldbody>
-//             </worldbody>
-//         </mujoco>
-//     ";
+    use super::*;
 
-//     // #[test]
-//     // fn test_update_normal() {
-//     //     // let model = MjModel::from_xml_string(MODEL).unwrap();
-//     //     // let model2 = MjModel::from_xml_string(MODEL).unwrap();
-//     //     // let mut data = model.make_data();
-//     //     // let mut renderer = Renderer::new(&model, 720, 1280).unwrap();
-        
-//     //     // /* Check if scene updates without errors. */
-//     //     // renderer.update_scene(&mut data);
-//     // }
-// }
+    const MODEL: &str = stringify!(
+        <mujoco>
 
+        <visual>
+            <global offwidth="1280" offheight="720"/>
+        </visual>
+
+        <worldbody>
+            <geom name="floor" type="plane" size="10 10 1" euler="0 0 0"/>
+            <geom type="box" size="1 10 10" pos="-1 0 0" euler="0 0 0"/>
+
+            <camera name="depth_test" euler="90 90 0" pos="2.25 0 1"/>
+
+        </worldbody>
+        </mujoco>
+    );
+
+    /// Depth calculation test.
+    /// This is only run on Linux due to EGL requirements (winit cannot be used on multiple threads).
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_depth() {
+        let model = MjModel::from_xml_string(MODEL).expect("could not load the model");
+        let mut data = MjData::new(&model);
+        data.step();
+
+        let mut renderer = MjRenderer::builder()
+            .rgb(false)
+            .depth(true)
+            .camera(MjvCamera::new_fixed(model.name_to_id(MjtObj::mjOBJ_CAMERA, "depth_test") as u32))
+            .build(&model)
+            .unwrap();
+
+        renderer.sync(&mut data);
+        let min = renderer.depth_flat().unwrap().iter().fold(f32::INFINITY, |a , &b| a.min(b));
+        let max = renderer.depth_flat().unwrap().iter().fold(f32::NEG_INFINITY, |a , &b| a.max(b));
+
+        assert_relative_eq!(min, max, epsilon = 1e-4);
+        assert_relative_eq!(min, 2.25, epsilon = 1e-4);
+    }
+}
