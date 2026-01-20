@@ -695,7 +695,7 @@ macro_rules! array_slice_dyn {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [[$type; $multiplier]] {
                             let length_array_length = self.$($len_array_length)* as usize;
-                            let data_ptr = self.ffi().$name;
+                            let data_ptr = unsafe { self.ffi_mut().$name };
                             let length_ptr = self.$($len_array)*;
                             if data_ptr.is_null() || length_ptr.is_null() || length_array_length == 0 {
                                 return &mut [];
