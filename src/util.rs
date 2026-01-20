@@ -641,10 +641,11 @@ macro_rules! array_slice_dyn {
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake>](&self) -> &[$type] {
                     let length = self.$($len_accessor)* as usize;
-                    if length == 0 {
+                    let ptr = self.ffi().$name$(.$as_ptr())?$(.$cast::<$type>())?;
+                    if ptr.is_null() || length == 0 {
                         return &[];
                     }
-                    unsafe { std::slice::from_raw_parts(self.ffi().$name$(.$as_ptr())?$(.$cast())? as *const _, length) }
+                    unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
                 crate::eval_or_expand! {
@@ -652,10 +653,11 @@ macro_rules! array_slice_dyn {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                             let length = self.$($len_accessor)* as usize;
-                            if length == 0 {
+                            let ptr = unsafe { self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast::<$type>())? };
+                            if ptr.is_null() || length == 0 {
                                 return &mut [];
                             }
-                            unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast())?, length) }
+                            unsafe { std::slice::from_raw_parts_mut(ptr, length) }
                         }
                     }
                 }
@@ -669,22 +671,23 @@ macro_rules! array_slice_dyn {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake>](&self) -> &[[$type; $multiplier]] {
-                    // Obtain a slice to the length array.
                     let length_array_length = self.$($len_array_length)* as usize;
-                    if length_array_length == 0 {
+                    let data_ptr = self.ffi().$name;
+                    let length_ptr = self.$($len_array)*;
+                    if data_ptr.is_null() || length_ptr.is_null() || length_array_length == 0 {
                         return &[];
                     }
 
                     let length = unsafe { std::slice::from_raw_parts(
-                        self.$($len_array)*.cast(),
+                        length_ptr,
                         length_array_length
-                    ).into_iter().sum::<u32>() as usize };
+                    ).into_iter().map(|&x| x as u32).sum::<u32>() as usize };
 
                     if length == 0 {
                         return &[];
                     }
 
-                    unsafe { std::slice::from_raw_parts(self.ffi().$name.cast(), length) }
+                    unsafe { std::slice::from_raw_parts(data_ptr.cast(), length) }
                 }
                 
                 crate::eval_or_expand! {
@@ -692,20 +695,22 @@ macro_rules! array_slice_dyn {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [[$type; $multiplier]] {
                             let length_array_length = self.$($len_array_length)* as usize;
-                            if length_array_length == 0 {
+                            let data_ptr = self.ffi().$name;
+                            let length_ptr = self.$($len_array)*;
+                            if data_ptr.is_null() || length_ptr.is_null() || length_array_length == 0 {
                                 return &mut [];
                             }
 
                             let length = unsafe { std::slice::from_raw_parts(
-                                self.$($len_array)*.cast(),
+                                length_ptr,
                                 length_array_length
-                            ).into_iter().sum::<u32>() as usize };
+                            ).into_iter().map(|&x| x as u32).sum::<u32>() as usize };
 
                             if length == 0 {
                                 return &mut [];
                             }
 
-                            unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name.cast(), length) }
+                            unsafe { std::slice::from_raw_parts_mut(data_ptr.cast(), length) }
                         }
                     }
                 }
@@ -720,12 +725,12 @@ macro_rules! array_slice_dyn {
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake>](&self) -> &[$type] {
                     let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
-                    if length == 0 {
+                    let ptr = self.ffi().$name$(.$as_ptr())?$(.$cast::<$type>())?;
+                    if ptr.is_null() || length == 0 {
                         return &[];
                     }
 
-
-                    unsafe { std::slice::from_raw_parts(self.ffi().$name$(.$as_ptr())?$(.$cast())? as *const _, length) }
+                    unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
                 crate::eval_or_expand! {
@@ -733,10 +738,11 @@ macro_rules! array_slice_dyn {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                             let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
-                            if length == 0 {
+                            let ptr = unsafe { self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast::<$type>())? };
+                            if ptr.is_null() || length == 0 {
                                 return &mut [];
                             }
-                            unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast())?, length) }
+                            unsafe { std::slice::from_raw_parts_mut(ptr, length) }
                         }
                     }
                 }
