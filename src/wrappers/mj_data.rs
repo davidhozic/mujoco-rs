@@ -1555,7 +1555,6 @@ mod test {
         assert_eq!(data.contact().len(), 0);
         data.step();
 
-
         assert!(data.contact().len() != 0);
         assert_eq!(data.contact().len(), data.contacts().len());
     }
