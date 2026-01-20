@@ -208,7 +208,10 @@ impl MjModel {
                     let cstr_error = String::from_utf8_lossy(
                         // Reinterpret as u8 data. This does not affect the data as it is ASCII
                         // encoded and thus negative values aren't possible.
-                        std::slice::from_raw_parts(error.as_ptr() as *const u8, error.len())
+                        std::slice::from_raw_parts(
+                            error.as_ptr() as *const u8,
+                            error.iter().position(|&x| x == 0).unwrap_or(error.len())
+                        )
                     );
                     Err(Error::new(ErrorKind::Other, cstr_error))
                 },
@@ -1461,9 +1464,14 @@ mod tests {
     #[test]
     fn test_model_load_save() {
         const MODEL_SAVE_XML_PATH: &str = "./__TMP_MODEL1.xml";
+        const MODEL_INVALID_SAVE_XML_PATH: &str = "/some/non-existent/path/";
+
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
         model.save_last_xml(MODEL_SAVE_XML_PATH).expect("could not save the model XML.");      
         fs::remove_file(MODEL_SAVE_XML_PATH).unwrap();
+
+        // Try to get an error
+        assert!(model.save_last_xml(MODEL_INVALID_SAVE_XML_PATH).is_err());
     }
 
     #[test]
@@ -1745,6 +1753,15 @@ mod tests {
         assert_eq!(&view_key.qvel[..model.ffi().nv as usize], QVEL);
         assert_eq!(&view_key.act[..model.ffi().na as usize], ACT);
         assert_eq!(&view_key.ctrl[..model.ffi().nu as usize], CTRL);
+
+        let key_qvel = &model.key_qvel()[model.ffi().nv as usize..];
+        assert_eq!(key_qvel, QVEL);
+
+        let key_act = &model.key_act()[model.ffi().na as usize..];
+        assert_eq!(key_act, ACT);
+
+        let key_ctrl = &model.key_ctrl()[model.ffi().nu as usize..];
+        assert_eq!(key_ctrl, CTRL);
     }
 
     #[test]
