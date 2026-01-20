@@ -217,12 +217,7 @@ impl MjvGeom {
     /// Compatibility method to convert the ``label`` attribute into a ``String``.
     pub fn label(&self) -> String {
         let len = self.label.iter().position(|&c| c == 0).unwrap_or(self.label.len());
-        let ptr = self.label.as_ptr();
-        let bytes: &[u8] = if ptr.is_null() {
-            &[]
-        } else {
-            unsafe { std::slice::from_raw_parts(self.label.as_ptr() as *const u8, len) }
-        };
+        let bytes = unsafe { std::slice::from_raw_parts(self.label.as_ptr() as *const u8, len) };
         String::from_utf8_lossy(bytes).to_string()
     }
 

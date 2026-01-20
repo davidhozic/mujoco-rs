@@ -208,14 +208,10 @@ impl MjModel {
                     let cstr_error = String::from_utf8_lossy(
                         // Reinterpret as u8 data. This does not affect the data as it is ASCII
                         // encoded and thus negative values aren't possible.
-                        {
-                            let ptr = error.as_ptr() as *const u8;
-                            if ptr.is_null() {
-                                &[]
-                            } else {
-                                std::slice::from_raw_parts(ptr, error.len())
-                            }
-                        }
+                        std::slice::from_raw_parts(
+                            error.as_ptr() as *const u8,
+                            error.iter().position(|&x| x == 0).unwrap_or(error.len())
+                        )
                     );
                     Err(Error::new(ErrorKind::Other, cstr_error))
                 },
@@ -1468,9 +1464,14 @@ mod tests {
     #[test]
     fn test_model_load_save() {
         const MODEL_SAVE_XML_PATH: &str = "./__TMP_MODEL1.xml";
+        const MODEL_INVALID_SAVE_XML_PATH: &str = "/some/non-existent/path/";
+
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
         model.save_last_xml(MODEL_SAVE_XML_PATH).expect("could not save the model XML.");      
         fs::remove_file(MODEL_SAVE_XML_PATH).unwrap();
+
+        // Try to get an error
+        assert!(model.save_last_xml(MODEL_INVALID_SAVE_XML_PATH).is_err());
     }
 
     #[test]
