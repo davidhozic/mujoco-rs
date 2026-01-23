@@ -23,6 +23,13 @@ Unreleased (MuJoCo 3.3.7)
 
   - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback_detached` for custom UI widgets that
     do not require the simulation state (i.e., the passive |mj_data| instance).
+  - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>with_ui_egui_ctx`, for gaining scoped access
+    to the internal egui's context. This can be used for additional, one-time,
+    initialization (e.g., installing image loaders).
+
+- Other changes:
+
+  - Performance optimizations in the viewer UI.
 
 2.2.2 (MuJoCo 3.3.7)
 ================================

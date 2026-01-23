@@ -219,6 +219,14 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         let _ = self.state.on_window_event(&window, event);  // ignore response as it can be obtained later.
     }
 
+    /// Gains scoped access to [`egui::Context`] for dealing with custom initialization
+    /// (e.g., loading in images).
+    pub(crate) fn with_egui_ctx<F>(&mut self, once_fn: F)
+        where F: FnOnce(&egui::Context)
+    {
+        once_fn(&mut self.egui_ctx)
+    }
+
     /// Draws the UI to the viewport.
     pub(crate) fn process(
         &mut self,

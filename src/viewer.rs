@@ -737,6 +737,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         }
     }
 
+    /// Gains scoped access to [`egui::Context`], which is part of the UI,
+    /// for dealing with custom initialization (e.g., loading in images).
+    #[cfg(feature = "viewer-ui")]
+    pub fn with_ui_egui_ctx<F>(&mut self, once_fn: F)
+        where F: FnOnce(&egui::Context)
+    {
+        self.ui.with_egui_ctx(once_fn);
+    }
+
     /// Draws the user UI
     #[cfg(feature = "viewer-ui")]
     fn process_user_ui(&mut self) {
