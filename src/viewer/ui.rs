@@ -10,17 +10,17 @@ use egui_winit;
 use crate::cast_mut_info;
 
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 use std::ffi::CString;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::sync::Arc;
 
 use crate::wrappers::mj_visualization::{
     MjvOption, MjvCamera, MjtCamera, MjvScene
 };
 use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint};
+use crate::viewer::{ViewerSharedState, ViewerStatusBit};
 use crate::wrappers::mj_data::MjData;
-use crate::viewer::ViewerStatusBit;
 use crate::mujoco_c::mjNGROUP;
 
 const MAIN_FONT: FontId = FontId::proportional(15.0);
@@ -225,7 +225,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         window: &Window, status: &mut ViewerStatusBit,
         scene: &mut MjvScene<M>, options: &mut MjvOption,
         camera: &mut MjvCamera,
-        data: &mut MjData<M>
+        shared_viewer_state: &Arc<Mutex<ViewerSharedState<M>>>
     ) -> f32 {
         // Viewport reservations, which will be excluded from MuJoCo's viewport.
         // This way MuJoCo won't draw over the UI.
@@ -402,8 +402,8 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                             ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    for (flag, enabled) in &mut options.flags.iter_mut().enumerate() {
-                                        ui.toggle_value(cast_mut_info!(enabled, flag), VIS_OPT_MAP[flag]);
+                                    for (flag, (enabled, flag_name)) in &mut options.flags.iter_mut().zip(VIS_OPT_MAP).enumerate() {
+                                        ui.toggle_value(cast_mut_info!(enabled, flag), flag_name);
                                     }
                                 });
                                 ui.separator();
@@ -418,10 +418,10 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                             ui.collapsing(RichText::new("OpenGL effects").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    for (flag, enabled) in scene.flags_mut().iter_mut().enumerate() {
+                                    for (flag, (enabled, flag_name)) in scene.flags_mut().iter_mut().zip(GL_EFFECT_MAP).enumerate() {
                                         ui.toggle_value(
                                             cast_mut_info!(enabled, flag),
-                                            GL_EFFECT_MAP[flag]
+                                            flag_name
                                         );
                                     }
                                 });
@@ -450,9 +450,11 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 .open(&mut self.actuator_window)
                 .show(ctx, |ui|
             {
+                let data = &mut shared_viewer_state.lock().unwrap().data_passive;
+                let ctrl_mut = data.ctrl_mut();
                 egui::Grid::new("ctrl_grid").show(ui, |ui| {
                     for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
-                        .zip(data.ctrl_mut().iter_mut())
+                        .zip(ctrl_mut.iter_mut())
                         .zip(self.model.actuator_ctrlrange())
                         .zip(self.model.actuator_ctrllimited())
                     {
@@ -472,7 +474,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                 // Clear all actuator controls by setting them to 0
                 if ui.button(RichText::new("Clear").font(MAIN_FONT)).clicked() {
-                    data.ctrl_mut().fill(0.0);
+                    ctrl_mut.fill(0.0);
                 }
             });
 
@@ -483,16 +485,17 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 .show(ctx, |ui|
             {
                 egui::Grid::new("joint_grid").show(ui, |ui| {
-                    let qpos = data.qpos();
                     let limiteds = self.model.jnt_limited();
                     let ranges = self.model.jnt_range();
                     let qpos_addresses = self.model.jnt_qposadr();
+                    let data = &mut shared_viewer_state.lock().unwrap().data_passive;
+                    let qpos_mut = data.qpos_mut();
                     for (name, index) in &self.joint_name_id
                     {
                         ui.label(RichText::new(name).font(MAIN_FONT));
                         let limited = limiteds[*index];
                         let range = ranges[*index];
-                        let mut value = qpos[qpos_addresses[*index] as usize];
+                        let mut value = qpos_mut[qpos_addresses[*index] as usize];
                         ui.add_enabled(false, egui::DragValue::new(&mut value));
 
                         if limited {
@@ -516,6 +519,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 .show(ctx, |ui|
             {
                 ui.horizontal_wrapped(|ui| {
+                    let data = &mut shared_viewer_state.lock().unwrap().data_passive;
                     for (equality_name, active) in self.equality_names.iter()
                         .zip(data.eq_active_mut())
                     {
@@ -545,7 +549,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             /* User-defined UI callbacks */
             // Callbacks that receive the egui context and MjData passive instance
             for callback in self.user_ui_callbacks.iter_mut() {
-                callback(ctx, data);
+                callback(ctx, &mut shared_viewer_state.lock().unwrap().data_passive);
             }
             // Callbacks that only receive the egui context
             for callback in self.user_ui_callbacks_detached.iter_mut() {
