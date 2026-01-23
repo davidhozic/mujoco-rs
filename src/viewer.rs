@@ -750,7 +750,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let left = self.ui.process(
             window, &mut self.status,
             &mut self.scene, &mut self.opt,
-            &mut self.camera, &mut self.shared_state.lock().unwrap().data_passive
+            &mut self.camera, &self.shared_state
         );
 
         /* Adjust the viewport so MuJoCo doesn't draw over the UI */
