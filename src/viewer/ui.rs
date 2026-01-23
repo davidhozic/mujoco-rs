@@ -402,7 +402,11 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                             ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    for (flag, (enabled, flag_name)) in &mut options.flags.iter_mut().zip(VIS_OPT_MAP).enumerate() {
+                                    debug_assert_eq!(
+                                        options.flags.len(), VIS_OPT_MAP.len(),
+                                        "visualization names don't match options length. This is a bug!"
+                                    );
+                                    for (flag, (enabled, flag_name)) in options.flags.iter_mut().zip(VIS_OPT_MAP).enumerate() {
                                         ui.toggle_value(cast_mut_info!(enabled, flag), flag_name);
                                     }
                                 });
@@ -418,6 +422,10 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                             ui.collapsing(RichText::new("OpenGL effects").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
+                                    debug_assert_eq!(
+                                        scene.flags_mut().len(), GL_EFFECT_MAP.len(),
+                                        "OpenGL effect flag names don't match scene flags length. This is a bug!"
+                                    );
                                     for (flag, (enabled, flag_name)) in scene.flags_mut().iter_mut().zip(GL_EFFECT_MAP).enumerate() {
                                         ui.toggle_value(
                                             cast_mut_info!(enabled, flag),
@@ -453,6 +461,10 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 let data = &mut shared_viewer_state.lock().unwrap().data_passive;
                 let ctrl_mut = data.ctrl_mut();
                 egui::Grid::new("ctrl_grid").show(ui, |ui| {
+                    debug_assert_eq!(
+                        self.actuator_names.len(), ctrl_mut.len(),
+                        "actuator names don't match num of actuators in model. This is a bug!"
+                    );
                     for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
                         .zip(ctrl_mut.iter_mut())
                         .zip(self.model.actuator_ctrlrange())
@@ -520,6 +532,10 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             {
                 ui.horizontal_wrapped(|ui| {
                     let data = &mut shared_viewer_state.lock().unwrap().data_passive;
+                    debug_assert_eq!(
+                        self.equality_names.len(), data.eq_active_mut().len(),
+                        "equality names length don't match the number of equalities found in model. This is a bug!"
+                    );
                     for (equality_name, active) in self.equality_names.iter()
                         .zip(data.eq_active_mut())
                     {
