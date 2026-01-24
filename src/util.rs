@@ -1,5 +1,6 @@
 //! Utility related data
 use std::{marker::PhantomData, ops::{Deref, DerefMut}};
+use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 
 
 /// Creates a (start, length) tuple based on
@@ -868,4 +869,18 @@ macro_rules! cast_mut_info {
                 )
         }
     };
+}
+
+/// Asserts that the MuJoCo version used matches
+/// the one MuJoCo-rs was compiled with.
+pub fn assert_mujoco_version() {
+    unsafe {
+        let linked_version = mj_version() as u32;
+        let mujoco_rs_version_string = option_env!("CARGO_PKG_VERSION").unwrap_or_else(|| "unknown+mj-unknown");
+        assert_eq!(
+            linked_version, mjVERSION_HEADER,
+            "linked MuJoCo version value ({linked_version}) does not match expected version value ({mjVERSION_HEADER}), \
+            with which MuJoCo-rs {mujoco_rs_version_string} FFI bindings were generated.",
+        );
+    }
 }

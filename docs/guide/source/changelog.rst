@@ -4,6 +4,7 @@ Changelog
 
 .. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
+.. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
 .. |mj_geomview| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomView`
 .. |mj_geomviewmut| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomViewMut`
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
@@ -30,6 +31,11 @@ Unreleased (MuJoCo 3.3.7)
 - Other changes:
 
   - Performance optimizations in the viewer UI.
+
+- |mj_model| and |mj_spec|:
+
+  - When instantiating a model or a spec, a version check will be made between MuJoCo's shared library and
+    the FFI bindings to prevent accidental use of wrong MuJoCo version. The code will panic on mismatch.
 
 2.2.2 (MuJoCo 3.3.7)
 ================================
