@@ -130,11 +130,15 @@ unsafe impl Sync for MjModel {}
 
 impl MjModel {
     /// Loads the model from an XML file. To load from a virtual file system, use [`MjModel::from_xml_vfs`].
+    /// # Panics
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
         Self::from_xml_file(path, None)
     }
 
-    /// Loads the model from an XML file, located in a virtual file system (`vfs`).
+    /// Loads the model from an XML file, located in a virtual file system (`vfs`)
+    /// # Panics
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
         Self::from_xml_file(path, Some(vfs))
     }
@@ -155,6 +159,8 @@ impl MjModel {
     }
 
     /// Loads the model from an XML string.
+    /// # Panics
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_string(data: &str) -> Result<Self, Error> {
         assert_mujoco_version();
 
@@ -177,6 +183,8 @@ impl MjModel {
     }
 
     /// Loads the model from MJB raw data.
+    /// # Panics
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_buffer(data: &[u8]) -> Result<Self, Error> {
         assert_mujoco_version();
 

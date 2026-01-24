@@ -879,7 +879,7 @@ pub fn assert_mujoco_version() {
         let mujoco_rs_version_string = option_env!("CARGO_PKG_VERSION").unwrap_or_else(|| "unknown+mj-unknown");
         assert_eq!(
             linked_version, mjVERSION_HEADER,
-            "linked MuJoCo version value ({linked_version}) does not expected version value ({mjVERSION_HEADER}), \
+            "linked MuJoCo version value ({linked_version}) does not match expected version value ({mjVERSION_HEADER}), \
             with which MuJoCo-rs {mujoco_rs_version_string} FFI bindings were generated.",
         );
     }
