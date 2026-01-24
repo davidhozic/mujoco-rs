@@ -6,6 +6,7 @@ use std::ptr;
 
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
 use crate::wrappers::mj_option::MjOption;
+use crate::util::assert_mujoco_version;
 use crate::wrappers::mj_data::MjData;
 use super::mj_primitive::*;
 use crate::mujoco_c::*;
@@ -139,6 +140,8 @@ impl MjModel {
     }
 
     fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, Error> {
+        assert_mujoco_version();
+
         let mut error_buffer = [0i8; 100];
         unsafe {
             let path = CString::new(path.as_ref().to_str().expect("invalid utf")).unwrap();
@@ -153,6 +156,8 @@ impl MjModel {
 
     /// Loads the model from an XML string.
     pub fn from_xml_string(data: &str) -> Result<Self, Error> {
+        assert_mujoco_version();
+
         let mut vfs = MjVfs::new();
         let filename = "model.xml";
 
@@ -173,6 +178,8 @@ impl MjModel {
 
     /// Loads the model from MJB raw data.
     pub fn from_buffer(data: &[u8]) -> Result<Self, Error> {
+        assert_mujoco_version();
+
         unsafe {
             // Create a virtual FS since we don't have direct access to the load buffer function (or at least it isn't officially exposed).
             // let raw_ptr = mj_loadModelBuffer(data.as_ptr() as *const c_void, data.len() as i32);
