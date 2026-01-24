@@ -152,7 +152,7 @@ impl MjSpec {
 
     /// Creates a [`MjSpec`] from the `path` to a file.
     /// # Panics
-    /// - when the `path` contains invalid utf-8.
+    /// - when the `path` contains invalid utf-8 or '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
         Self::from_xml_file(path, None)
@@ -160,7 +160,7 @@ impl MjSpec {
 
     /// Creates a [`MjSpec`] from the `path` to a file, located in a virtual file system (`vfs`).
     /// # Panics
-    /// - when the `path` contains invalid utf-8.
+    /// - when the `path` contains invalid utf-8 or '\0.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
         Self::from_xml_file(path, Some(vfs))
@@ -183,7 +183,7 @@ impl MjSpec {
 
     /// Creates a [`MjSpec`] from an `xml` string.
     /// # Panics
-    /// - when the `xml` contains invalid utf-8.
+    /// - when the `xml` contains '\0.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_string(xml: &str) -> Result<Self, Error> {
         assert_mujoco_version();
