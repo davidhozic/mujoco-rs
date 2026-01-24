@@ -131,7 +131,7 @@ unsafe impl Sync for MjModel {}
 impl MjModel {
     /// Loads the model from an XML file. To load from a virtual file system, use [`MjModel::from_xml_vfs`].
     /// # Panics
-    /// - when the `path` contains invalid utf-8 or '\0.
+    /// - when the `path` contains invalid utf-8 or '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
         Self::from_xml_file(path, None)
@@ -139,7 +139,7 @@ impl MjModel {
 
     /// Loads the model from an XML file, located in a virtual file system (`vfs`)
     /// # Panics
-    /// - when the `path` contains invalid utf-8 or '\0.
+    /// - when the `path` contains invalid utf-8 or '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
         Self::from_xml_file(path, Some(vfs))
