@@ -30,6 +30,7 @@ use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::vis_common::sync_geoms;
+use crate::util::LockUnpoison;
 
 
 #[cfg(feature = "viewer-ui")]
@@ -368,7 +369,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Checks whether the window is still open.
     pub fn running(&self) -> bool {
-        self.shared_state.lock().unwrap().running()
+        self.shared_state.lock_unpoison().running()
     }
 
     /// Returns a reference to the shared state [`ViewerSharedState`].
@@ -512,7 +513,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// allowing multithreading --- i.e., rendering in main thread and everything else in a separate thread.
     #[deprecated(since = "2.2.0", note = "replaced with calls to sync_data and render")]
     pub fn sync(&mut self, data: &mut MjData<M>) {
-        self.shared_state.lock().unwrap().sync_data(data);
+        self.shared_state.lock_unpoison().sync_data(data);
         self.render();
     }
 
@@ -520,7 +521,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// struct (including large Jacobian and other arrays), not just the state needed for visualization.
     /// This is a proxy to [`ViewerSharedState::sync_data_full`].
     pub fn sync_data_full(&mut self, data: &mut MjData<M>) {
-        self.shared_state.lock().unwrap().sync_data_full(data);
+        self.shared_state.lock_unpoison().sync_data_full(data);
     }
 
     /// Syncs the state of viewer's internal [`MjData`] with `data`.
@@ -558,7 +559,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// viewer.render();  // render the scene and process the user interface
     /// ```
     pub fn sync_data(&mut self, data: &mut MjData<M>) {
-        self.shared_state.lock().unwrap().sync_data(data);
+        self.shared_state.lock_unpoison().sync_data(data);
     }
 
     /// Processes the UI (when enabled), processes events, draws the scene
@@ -621,7 +622,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Updates the scene and draws it to the display.
     fn update_scene(&mut self) {
         /* Update the scene from the MjData state */
-        let lock = &mut self.shared_state.lock().unwrap();
+        let lock = &mut self.shared_state.lock_unpoison();
         let ViewerSharedState { data_passive, pert, .. } = lock.deref_mut();
         self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
 
@@ -669,7 +670,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             mut total_memory,
             realtime_factor
         ) = {
-            let state_lock = self.shared_state.lock().unwrap();
+            let state_lock = self.shared_state.lock_unpoison();
             let data_lock = &state_lock.data_passive;
             let memory_total = data_lock.narena().max(1) as f64;
             (
@@ -773,10 +774,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         while let Some(event) = self.ui.drain_events() {
             use UiEvent::*;
             match event {
-                Close => self.shared_state.lock().unwrap().running = false,
+                Close => self.shared_state.lock_unpoison().running = false,
                 Fullscreen => self.toggle_full_screen(),
                 ResetSimulation => {
-                    let mut lock = self.shared_state.lock().unwrap();
+                    let mut lock = self.shared_state.lock_unpoison();
                     lock.data_passive.reset();
                     lock.data_passive.forward();
                 },
@@ -872,11 +873,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         state: ElementState::Pressed, ..
                     }, ..
                 } if self.modifiers.state().control_key()  => {
-                    self.shared_state.lock().unwrap().running = false;
+                    self.shared_state.lock_unpoison().running = false;
                 }
 
                 // Also set the viewer's state to pending exit if the window no longer exists.
-                WindowEvent::CloseRequested => { self.shared_state.lock().unwrap().running = false }
+                WindowEvent::CloseRequested => { self.shared_state.lock_unpoison().running = false }
 
                 // Free the camera from tracking.
                 WindowEvent::KeyboardInput {
@@ -950,7 +951,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     if self.ui.focused() {
                         continue;
                     }
-                    let mut lock = self.shared_state.lock().unwrap();
+                    let mut lock = self.shared_state.lock_unpoison();
                     lock.data_passive.reset();
                     lock.data_passive.forward();
                 }
@@ -1095,7 +1096,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         let action;
         let height = window.outer_size().height as f64;
 
-        let mut lock = self.shared_state.lock().unwrap();
+        let mut lock = self.shared_state.lock_unpoison();
         let ViewerSharedState {data_passive, pert, ..} = lock.deref_mut();
         if buttons.contains(ButtonsPressed::LEFT) {
             if pert.active == MjtPertBit::mjPERT_TRANSLATE as i32 {
@@ -1127,7 +1128,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Processes left clicks and double left clicks.
     fn process_left_click(&mut self, state: ElementState) {
         let modifier_state = self.modifiers.state();
-        let mut lock = self.shared_state.lock().unwrap();
+        let mut lock = self.shared_state.lock_unpoison();
         let ViewerSharedState {data_passive, pert, ..} = lock.deref_mut();
         match state {
             ElementState::Pressed => {

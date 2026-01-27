@@ -891,12 +891,12 @@ pub fn assert_mujoco_version() {
 /// This is useful on locations that don't need any special handling
 /// after a thread panicked while holding a mutex lock.
 pub trait LockUnpoison<T> {
-    fn lock_unpoison(&mut self) -> MutexGuard<'_, T>;
+    fn lock_unpoison(&self) -> MutexGuard<'_, T>;
 }
 
 /// Implements automatic unpoisoning on the [`Mutex`].
 impl<T> LockUnpoison<T> for Mutex<T> {
-    fn lock_unpoison(&mut self) -> MutexGuard<'_, T> {
+    fn lock_unpoison(&self) -> MutexGuard<'_, T> {
         match self.lock() {
             Ok(lock) => lock,
             Err(e) => {
