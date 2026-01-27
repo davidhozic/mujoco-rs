@@ -1,5 +1,7 @@
 //! Utility related data
 use std::{marker::PhantomData, ops::{Deref, DerefMut}};
+use std::sync::{Mutex, MutexGuard};
+
 use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 
 
@@ -881,4 +883,26 @@ pub fn assert_mujoco_version() {
         "linked MuJoCo version value ({linked_version}) does not match expected version value ({mjVERSION_HEADER}), \
         with which MuJoCo-rs {mujoco_rs_version_string} FFI bindings were generated.",
     );
+}
+
+
+/* Utility traits */
+/// Locks a synchronization primitives and resets its poison status.
+/// This is useful on locations that don't need any special handling
+/// after a thread panicked while holding a mutex lock.
+pub trait LockUnpoison<T> {
+    fn lock_unpoison(&mut self) -> MutexGuard<'_, T>;
+}
+
+/// Implements automatic unpoisoning on the [`Mutex`].
+impl<T> LockUnpoison<T> for Mutex<T> {
+    fn lock_unpoison(&mut self) -> MutexGuard<'_, T> {
+        match self.lock() {
+            Ok(lock) => lock,
+            Err(e) => {
+                self.clear_poison();
+                e.into_inner()
+            }
+        }
+    }
 }
