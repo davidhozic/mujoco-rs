@@ -510,13 +510,13 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                     let ranges = self.model.jnt_range();
                     let qpos_addresses = self.model.jnt_qposadr();
                     let data = &mut shared_viewer_state.lock_unpoison().data_passive;
-                    let qpos_mut = data.qpos_mut();
+                    let qpos = data.qpos();
                     for (name, index) in &self.joint_name_id
                     {
                         ui.label(RichText::new(name).font(MAIN_FONT));
                         let limited = limiteds[*index];
                         let range = ranges[*index];
-                        let mut value = qpos_mut[qpos_addresses[*index] as usize];
+                        let mut value = qpos[qpos_addresses[*index] as usize];
                         ui.add_enabled(false, egui::DragValue::new(&mut value));
 
                         if limited {
