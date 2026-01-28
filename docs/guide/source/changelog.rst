@@ -18,7 +18,7 @@ This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
 
-Unreleased (MuJoCo 3.3.7)
+2.3.0 (MuJoCo 3.3.7)
 =============================
 - Changes to :ref:`mj_rust_viewer`:
 
@@ -27,9 +27,10 @@ Unreleased (MuJoCo 3.3.7)
   - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>with_ui_egui_ctx`, for gaining scoped access
     to the internal egui's context. This can be used for additional, one-time,
     initialization (e.g., installing image loaders).
-
-- Other changes:
-
+  - Replaced code that would panic on poisoned mutexes with code that automatically unpoisions the mutex
+    --- nothing fundamentally bad can happen except for a potential glitch in physics, which is still better
+    than requiring users to wrap their code in
+    `catch_unwrap <https://doc.rust-lang.org/std/panic/fn.catch_unwind.html>`_ calls.
   - Performance optimizations in the viewer UI.
 
 - |mj_model| and |mj_spec|:
