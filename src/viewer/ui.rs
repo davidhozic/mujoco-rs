@@ -7,6 +7,7 @@ use egui::{FontId, RichText};
 use egui_winit::egui;
 use egui_winit;
 
+use crate::util::LockUnpoison;
 use crate::cast_mut_info;
 
 use std::collections::VecDeque;
@@ -466,7 +467,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 .open(&mut self.actuator_window)
                 .show(ctx, |ui|
             {
-                let data = &mut shared_viewer_state.lock().unwrap().data_passive;
+                let data = &mut shared_viewer_state.lock_unpoison().data_passive;
                 let ctrl_mut = data.ctrl_mut();
                 egui::Grid::new("ctrl_grid").show(ui, |ui| {
                     debug_assert_eq!(
@@ -508,7 +509,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                     let limiteds = self.model.jnt_limited();
                     let ranges = self.model.jnt_range();
                     let qpos_addresses = self.model.jnt_qposadr();
-                    let data = &mut shared_viewer_state.lock().unwrap().data_passive;
+                    let data = &mut shared_viewer_state.lock_unpoison().data_passive;
                     let qpos_mut = data.qpos_mut();
                     for (name, index) in &self.joint_name_id
                     {
@@ -539,7 +540,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 .show(ctx, |ui|
             {
                 ui.horizontal_wrapped(|ui| {
-                    let data = &mut shared_viewer_state.lock().unwrap().data_passive;
+                    let data = &mut shared_viewer_state.lock_unpoison().data_passive;
                     debug_assert_eq!(
                         self.equality_names.len(), data.eq_active_mut().len(),
                         "equality names length don't match the number of equalities found in model. This is a bug!"
@@ -573,7 +574,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             /* User-defined UI callbacks */
             // Callbacks that receive the egui context and MjData passive instance
             for callback in self.user_ui_callbacks.iter_mut() {
-                callback(ctx, &mut shared_viewer_state.lock().unwrap().data_passive);
+                callback(ctx, &mut shared_viewer_state.lock_unpoison().data_passive);
             }
             // Callbacks that only receive the egui context
             for callback in self.user_ui_callbacks_detached.iter_mut() {
