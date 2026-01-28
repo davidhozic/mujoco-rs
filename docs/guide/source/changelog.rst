@@ -30,7 +30,7 @@ update of MuJoCo alone can increase the major version.
   - Replaced code that would panic on poisoned mutexes with code that automatically unpoisons the mutex
     --- nothing fundamentally bad can happen except for a potential glitch in physics, which is still better
     than requiring users to wrap their code in
-    `catch_unwrap <https://doc.rust-lang.org/std/panic/fn.catch_unwind.html>`_ calls.
+    `catch_unwind <https://doc.rust-lang.org/std/panic/fn.catch_unwind.html>`_ calls.
   - Performance optimizations in the viewer UI.
 
 - |mj_model| and |mj_spec|:
