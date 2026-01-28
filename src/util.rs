@@ -887,7 +887,7 @@ pub fn assert_mujoco_version() {
 
 
 /* Utility traits */
-/// Locks a synchronization primitives and resets its poison status.
+/// Locks a synchronization primitive and resets its poison status.
 /// This is useful on locations that don't need any special handling
 /// after a thread panicked while holding a mutex lock.
 pub trait LockUnpoison<T> {

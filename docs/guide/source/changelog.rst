@@ -27,7 +27,7 @@ update of MuJoCo alone can increase the major version.
   - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>with_ui_egui_ctx`, for gaining scoped access
     to the internal egui's context. This can be used for additional, one-time,
     initialization (e.g., installing image loaders).
-  - Replaced code that would panic on poisoned mutexes with code that automatically unpoisions the mutex
+  - Replaced code that would panic on poisoned mutexes with code that automatically unpoisons the mutex
     --- nothing fundamentally bad can happen except for a potential glitch in physics, which is still better
     than requiring users to wrap their code in
     `catch_unwrap <https://doc.rust-lang.org/std/panic/fn.catch_unwind.html>`_ calls.
