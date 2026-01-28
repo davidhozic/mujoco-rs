@@ -76,7 +76,12 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// To obtain the contact force, call [`MjData::contact_force`].
     pub fn contacts(&self) -> &[MjContact] {
         unsafe {
-            std::slice::from_raw_parts((*self.data).contact, (*self.data).ncon as usize)
+            let ptr = (*self.data).contact;
+            if ptr.is_null() {
+                &[]
+            } else {
+                std::slice::from_raw_parts(ptr, (*self.data).ncon as usize)
+            }
         }
     }
 
@@ -1538,5 +1543,19 @@ mod test {
         ball2_joint_info.view_mut(&mut data).qpos[DOF_TO_MODIFY] = MODIFIED_VALUE;
 
         assert_eq!(data.qpos()[JOINT_BALL_DOF * BALL_INDEX + DOF_TO_MODIFY], MODIFIED_VALUE);
+    }
+
+    #[test]
+    fn test_contacts() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = MjData::new(&model);
+        let ptr = unsafe { data.ffi_mut().contact };
+        assert!(ptr.is_aligned());
+        assert!(!ptr.is_null());
+        assert_eq!(data.contact().len(), 0);
+        data.step();
+
+        assert!(data.contact().len() != 0);
+        assert_eq!(data.contact().len(), data.contacts().len());
     }
 }

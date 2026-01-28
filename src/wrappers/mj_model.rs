@@ -6,6 +6,7 @@ use std::ptr;
 
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
 use crate::wrappers::mj_option::MjOption;
+use crate::util::assert_mujoco_version;
 use crate::wrappers::mj_data::MjData;
 use super::mj_primitive::*;
 use crate::mujoco_c::*;
@@ -129,16 +130,24 @@ unsafe impl Sync for MjModel {}
 
 impl MjModel {
     /// Loads the model from an XML file. To load from a virtual file system, use [`MjModel::from_xml_vfs`].
+    /// # Panics
+    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
         Self::from_xml_file(path, None)
     }
 
-    /// Loads the model from an XML file, located in a virtual file system (`vfs`).
+    /// Loads the model from an XML file, located in a virtual file system (`vfs`)
+    /// # Panics
+    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
         Self::from_xml_file(path, Some(vfs))
     }
 
     fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, Error> {
+        assert_mujoco_version();
+
         let mut error_buffer = [0i8; 100];
         unsafe {
             let path = CString::new(path.as_ref().to_str().expect("invalid utf")).unwrap();
@@ -152,7 +161,11 @@ impl MjModel {
     }
 
     /// Loads the model from an XML string.
+    /// # Panics
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_string(data: &str) -> Result<Self, Error> {
+        assert_mujoco_version();
+
         let mut vfs = MjVfs::new();
         let filename = "model.xml";
 
@@ -172,7 +185,11 @@ impl MjModel {
     }
 
     /// Loads the model from MJB raw data.
+    /// # Panics
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_buffer(data: &[u8]) -> Result<Self, Error> {
+        assert_mujoco_version();
+
         unsafe {
             // Create a virtual FS since we don't have direct access to the load buffer function (or at least it isn't officially exposed).
             // let raw_ptr = mj_loadModelBuffer(data.as_ptr() as *const c_void, data.len() as i32);
@@ -208,7 +225,10 @@ impl MjModel {
                     let cstr_error = String::from_utf8_lossy(
                         // Reinterpret as u8 data. This does not affect the data as it is ASCII
                         // encoded and thus negative values aren't possible.
-                        std::slice::from_raw_parts(error.as_ptr() as *const u8, error.len())
+                        std::slice::from_raw_parts(
+                            error.as_ptr() as *const u8,
+                            error.iter().position(|&x| x == 0).unwrap_or(error.len())
+                        )
                     );
                     Err(Error::new(ErrorKind::Other, cstr_error))
                 },
@@ -1461,9 +1481,14 @@ mod tests {
     #[test]
     fn test_model_load_save() {
         const MODEL_SAVE_XML_PATH: &str = "./__TMP_MODEL1.xml";
+        const MODEL_INVALID_SAVE_XML_PATH: &str = "/some/non-existent/path/";
+
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
         model.save_last_xml(MODEL_SAVE_XML_PATH).expect("could not save the model XML.");      
         fs::remove_file(MODEL_SAVE_XML_PATH).unwrap();
+
+        // Try to get an error
+        assert!(model.save_last_xml(MODEL_INVALID_SAVE_XML_PATH).is_err());
     }
 
     #[test]
@@ -1745,6 +1770,15 @@ mod tests {
         assert_eq!(&view_key.qvel[..model.ffi().nv as usize], QVEL);
         assert_eq!(&view_key.act[..model.ffi().na as usize], ACT);
         assert_eq!(&view_key.ctrl[..model.ffi().nu as usize], CTRL);
+
+        let key_qvel = &model.key_qvel()[model.ffi().nv as usize..];
+        assert_eq!(key_qvel, QVEL);
+
+        let key_act = &model.key_act()[model.ffi().na as usize..];
+        assert_eq!(key_act, ACT);
+
+        let key_ctrl = &model.key_ctrl()[model.ffi().nu as usize..];
+        assert_eq!(key_ctrl, CTRL);
     }
 
     #[test]

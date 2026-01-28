@@ -1,5 +1,5 @@
 //! Implementation of the interface for use in the viewer.
-use egui_glow::glow::{self, FILL, FRONT_AND_BACK, HasContext};
+use egui_glow::glow::{self, HasContext};
 use egui_winit::winit::event::WindowEvent;
 use glutin::display::{Display, GlDisplay};
 use egui_winit::winit::window::Window;
@@ -7,20 +7,21 @@ use egui::{FontId, RichText};
 use egui_winit::egui;
 use egui_winit;
 
+use crate::util::LockUnpoison;
 use crate::cast_mut_info;
 
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 use std::ffi::CString;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::sync::Arc;
 
 use crate::wrappers::mj_visualization::{
     MjvOption, MjvCamera, MjtCamera, MjvScene
 };
 use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint};
+use crate::viewer::{ViewerSharedState, ViewerStatusBit};
 use crate::wrappers::mj_data::MjData;
-use crate::viewer::ViewerStatusBit;
 use crate::mujoco_c::mjNGROUP;
 
 const MAIN_FONT: FontId = FontId::proportional(15.0);
@@ -119,6 +120,9 @@ const FRAME_TYPE_MAP: [&str; 8] = [
 /// Type alias for a user-provided UI callback function.
 pub(crate) type UiCallback<M> = Box<dyn FnMut(&egui::Context, &mut MjData<M>)>;
 
+/// Type alias for a detached (from state) user-provided UI callback function.
+pub(crate) type UiCallbackDetached = Box<dyn FnMut(&egui::Context)>;
+
 /// Viewer user interface context.
 pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     egui_ctx: egui::Context,
@@ -132,6 +136,7 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     equality_names: Vec<String>,
     model: M,
     user_ui_callbacks: Vec<UiCallback<M>>,
+    user_ui_callbacks_detached: Vec<UiCallbackDetached>,
 
     // Window toggles.
     // Note that these are bool for easier integration with egui.
@@ -202,6 +207,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             camera_names, actuator_names, joint_name_id, equality_names,
             model,
             user_ui_callbacks: Vec::new(),
+            user_ui_callbacks_detached: Vec::new(),
             actuator_window: false,
             joint_window: false,
             equality_window: false,
@@ -214,13 +220,21 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         let _ = self.state.on_window_event(&window, event);  // ignore response as it can be obtained later.
     }
 
+    /// Gains scoped access to [`egui::Context`] for dealing with custom initialization
+    /// (e.g., loading in images).
+    pub(crate) fn with_egui_ctx<F>(&mut self, once_fn: F)
+        where F: FnOnce(&egui::Context)
+    {
+        once_fn(&mut self.egui_ctx)
+    }
+
     /// Draws the UI to the viewport.
     pub(crate) fn process(
         &mut self,
         window: &Window, status: &mut ViewerStatusBit,
         scene: &mut MjvScene<M>, options: &mut MjvOption,
         camera: &mut MjvCamera,
-        data: &mut MjData<M>
+        shared_viewer_state: &Arc<Mutex<ViewerSharedState<M>>>
     ) -> f32 {
         // Viewport reservations, which will be excluded from MuJoCo's viewport.
         // This way MuJoCo won't draw over the UI.
@@ -397,8 +411,12 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                             ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    for (flag, enabled) in &mut options.flags.iter_mut().enumerate() {
-                                        ui.toggle_value(cast_mut_info!(enabled, flag), VIS_OPT_MAP[flag]);
+                                    debug_assert_eq!(
+                                        options.flags.len(), VIS_OPT_MAP.len(),
+                                        "visualization names don't match options length. This is a bug!"
+                                    );
+                                    for (flag, (enabled, flag_name)) in options.flags.iter_mut().zip(VIS_OPT_MAP).enumerate() {
+                                        ui.toggle_value(cast_mut_info!(enabled, flag), flag_name);
                                     }
                                 });
                                 ui.separator();
@@ -413,10 +431,14 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                             ui.collapsing(RichText::new("OpenGL effects").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    for (flag, enabled) in scene.flags_mut().iter_mut().enumerate() {
+                                    debug_assert_eq!(
+                                        scene.flags_mut().len(), GL_EFFECT_MAP.len(),
+                                        "OpenGL effect flag names don't match scene flags length. This is a bug!"
+                                    );
+                                    for (flag, (enabled, flag_name)) in scene.flags_mut().iter_mut().zip(GL_EFFECT_MAP).enumerate() {
                                         ui.toggle_value(
                                             cast_mut_info!(enabled, flag),
-                                            GL_EFFECT_MAP[flag]
+                                            flag_name
                                         );
                                     }
                                 });
@@ -445,9 +467,15 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 .open(&mut self.actuator_window)
                 .show(ctx, |ui|
             {
+                let data = &mut shared_viewer_state.lock_unpoison().data_passive;
+                let ctrl_mut = data.ctrl_mut();
                 egui::Grid::new("ctrl_grid").show(ui, |ui| {
+                    debug_assert_eq!(
+                        self.actuator_names.len(), ctrl_mut.len(),
+                        "actuator names don't match num of actuators in model. This is a bug!"
+                    );
                     for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
-                        .zip(data.ctrl_mut().iter_mut())
+                        .zip(ctrl_mut.iter_mut())
                         .zip(self.model.actuator_ctrlrange())
                         .zip(self.model.actuator_ctrllimited())
                     {
@@ -467,7 +495,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                 // Clear all actuator controls by setting them to 0
                 if ui.button(RichText::new("Clear").font(MAIN_FONT)).clicked() {
-                    data.ctrl_mut().fill(0.0);
+                    ctrl_mut.fill(0.0);
                 }
             });
 
@@ -478,10 +506,11 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 .show(ctx, |ui|
             {
                 egui::Grid::new("joint_grid").show(ui, |ui| {
-                    let qpos = data.qpos();
                     let limiteds = self.model.jnt_limited();
                     let ranges = self.model.jnt_range();
                     let qpos_addresses = self.model.jnt_qposadr();
+                    let data = &mut shared_viewer_state.lock_unpoison().data_passive;
+                    let qpos = data.qpos();
                     for (name, index) in &self.joint_name_id
                     {
                         ui.label(RichText::new(name).font(MAIN_FONT));
@@ -511,6 +540,11 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 .show(ctx, |ui|
             {
                 ui.horizontal_wrapped(|ui| {
+                    let data = &mut shared_viewer_state.lock_unpoison().data_passive;
+                    debug_assert_eq!(
+                        self.equality_names.len(), data.eq_active_mut().len(),
+                        "equality names length don't match the number of equalities found in model. This is a bug!"
+                    );
                     for (equality_name, active) in self.equality_names.iter()
                         .zip(data.eq_active_mut())
                     {
@@ -538,8 +572,13 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             });
 
             /* User-defined UI callbacks */
+            // Callbacks that receive the egui context and MjData passive instance
             for callback in self.user_ui_callbacks.iter_mut() {
-                callback(ctx, data);
+                callback(ctx, &mut shared_viewer_state.lock_unpoison().data_passive);
+            }
+            // Callbacks that only receive the egui context
+            for callback in self.user_ui_callbacks_detached.iter_mut() {
+                callback(ctx);
             }
         });
 
@@ -552,7 +591,6 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         let clipped_primitives = self.egui_ctx.tessellate(full_output.shapes, pixels_per_point);
 
         // Paint the menu
-        unsafe { self.gl.polygon_mode(FRONT_AND_BACK, FILL) };
         self.painter.paint_and_update_textures(
             window.inner_size().into(),
             pixels_per_point,
@@ -578,6 +616,18 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         self.egui_ctx.dragged_id().is_some()
     }
 
+    /// Prepares OpenGL for drawing 2D overlays.
+    pub(crate) fn init_2d(&self) {
+        let gl = &self.gl;
+        unsafe { 
+            gl.disable(glow::DEPTH_TEST);
+            gl.disable(glow::CULL_FACE);
+            gl.disable(glow::BLEND);
+            gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
+            gl.polygon_mode(glow::FRONT_AND_BACK, glow::FILL);
+        }
+    }
+
     /// Resets OpenGL state. This is needed for MuJoCo's renderer.
     pub(crate) fn reset(&mut self) {
         let gl = &self.gl;
@@ -590,15 +640,6 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             gl.bind_buffer(glow::ARRAY_BUFFER, None);
             gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
             gl.bind_framebuffer(glow::FRAMEBUFFER, None);
-
-            // Reset active texture and unbind 2D texture
-            gl.active_texture(glow::TEXTURE0);
-            gl.bind_texture(glow::TEXTURE_2D, None);
-
-            // Disable tests
-            gl.disable(glow::SCISSOR_TEST);
-            gl.disable(glow::DEPTH_TEST);
-            gl.disable(glow::STENCIL_TEST);
         }
     }
 
@@ -615,6 +656,16 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         F: FnMut(&egui::Context, &mut MjData<M>) + 'static
     {
         self.user_ui_callbacks.push(Box::new(callback));
+    }
+
+    /// Adds a detached user-defined UI callback that will be invoked during UI rendering.
+    /// Unlike [`ViewerUI::add_ui_callback`], this method does not pass in the passive [`MjData`]
+    /// instance, located in the shared state, thus avoiding mutex locking when not necessary.
+    pub(crate) fn add_ui_callback_detached<F>(&mut self, callback: F)
+    where
+        F: FnMut(&egui::Context) + 'static
+    {
+        self.user_ui_callbacks_detached.push(Box::new(callback));
     }
 }
 

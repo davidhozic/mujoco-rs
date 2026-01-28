@@ -30,6 +30,7 @@ use crate::getter_setter;
 
 // Re-export with lowercase 'f' to fix method generation
 use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
+use crate::util::assert_mujoco_version;
 
 
 /******************************
@@ -142,25 +143,32 @@ unsafe impl Send for MjSpec {}
 
 impl MjSpec {
     /// Creates an empty [`MjSpec`].
+    /// # Panics
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn new() -> Self {
+        assert_mujoco_version();
         unsafe { Self::check_spec(mj_makeSpec(), &[0]).unwrap() }
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
     /// # Panics
-    /// When the `path` contains '\0' characters, a panic occurs.
+    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
         Self::from_xml_file(path, None)
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file, located in a virtual file system (`vfs`).
     /// # Panics
-    /// When the `path` contains '\0' characters, a panic occurs.
+    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
         Self::from_xml_file(path, Some(vfs))
     }
 
     fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, Error> {
+        assert_mujoco_version();
+
         let mut error_buffer = [0i8; 100];
         unsafe {
             let path = CString::new(path.as_ref().to_str().expect("invalid utf")).unwrap();
@@ -175,8 +183,11 @@ impl MjSpec {
 
     /// Creates a [`MjSpec`] from an `xml` string.
     /// # Panics
-    /// When the `xml` contains '\0' characters, a panic occurs.
+    /// - when the `xml` contains '\0'.
+    /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_string(xml: &str) -> Result<Self, Error> {
+        assert_mujoco_version();
+
         let c_xml = CString::new(xml).unwrap();
         let mut error_buffer = [0i8; 100];
         unsafe {

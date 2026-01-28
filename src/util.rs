@@ -1,5 +1,8 @@
 //! Utility related data
 use std::{marker::PhantomData, ops::{Deref, DerefMut}};
+use std::sync::{Mutex, MutexGuard};
+
+use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 
 
 /// Creates a (start, length) tuple based on
@@ -641,10 +644,11 @@ macro_rules! array_slice_dyn {
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake>](&self) -> &[$type] {
                     let length = self.$($len_accessor)* as usize;
-                    if length == 0 {
+                    let ptr = self.ffi().$name$(.$as_ptr())?$(.$cast::<$type>())?;
+                    if ptr.is_null() || length == 0 {
                         return &[];
                     }
-                    unsafe { std::slice::from_raw_parts(self.ffi().$name$(.$as_ptr())?$(.$cast())? as *const _, length) }
+                    unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
                 crate::eval_or_expand! {
@@ -652,10 +656,11 @@ macro_rules! array_slice_dyn {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                             let length = self.$($len_accessor)* as usize;
-                            if length == 0 {
+                            let ptr = unsafe { self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast::<$type>())? };
+                            if ptr.is_null() || length == 0 {
                                 return &mut [];
                             }
-                            unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast())?, length) }
+                            unsafe { std::slice::from_raw_parts_mut(ptr, length) }
                         }
                     }
                 }
@@ -669,22 +674,23 @@ macro_rules! array_slice_dyn {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake>](&self) -> &[[$type; $multiplier]] {
-                    // Obtain a slice to the length array.
                     let length_array_length = self.$($len_array_length)* as usize;
-                    if length_array_length == 0 {
+                    let data_ptr = self.ffi().$name;
+                    let length_ptr = self.$($len_array)*;
+                    if data_ptr.is_null() || length_ptr.is_null() || length_array_length == 0 {
                         return &[];
                     }
 
                     let length = unsafe { std::slice::from_raw_parts(
-                        self.$($len_array)*.cast(),
+                        length_ptr,
                         length_array_length
-                    ).into_iter().sum::<u32>() as usize };
+                    ).into_iter().map(|&x| x as u32).sum::<u32>() as usize };
 
                     if length == 0 {
                         return &[];
                     }
 
-                    unsafe { std::slice::from_raw_parts(self.ffi().$name.cast(), length) }
+                    unsafe { std::slice::from_raw_parts(data_ptr.cast(), length) }
                 }
                 
                 crate::eval_or_expand! {
@@ -692,20 +698,22 @@ macro_rules! array_slice_dyn {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [[$type; $multiplier]] {
                             let length_array_length = self.$($len_array_length)* as usize;
-                            if length_array_length == 0 {
+                            let data_ptr = unsafe { self.ffi_mut().$name };
+                            let length_ptr = self.$($len_array)*;
+                            if data_ptr.is_null() || length_ptr.is_null() || length_array_length == 0 {
                                 return &mut [];
                             }
 
                             let length = unsafe { std::slice::from_raw_parts(
-                                self.$($len_array)*.cast(),
+                                length_ptr,
                                 length_array_length
-                            ).into_iter().sum::<u32>() as usize };
+                            ).into_iter().map(|&x| x as u32).sum::<u32>() as usize };
 
                             if length == 0 {
                                 return &mut [];
                             }
 
-                            unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name.cast(), length) }
+                            unsafe { std::slice::from_raw_parts_mut(data_ptr.cast(), length) }
                         }
                     }
                 }
@@ -720,12 +728,12 @@ macro_rules! array_slice_dyn {
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake>](&self) -> &[$type] {
                     let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
-                    if length == 0 {
+                    let ptr = self.ffi().$name$(.$as_ptr())?$(.$cast::<$type>())?;
+                    if ptr.is_null() || length == 0 {
                         return &[];
                     }
 
-
-                    unsafe { std::slice::from_raw_parts(self.ffi().$name$(.$as_ptr())?$(.$cast())? as *const _, length) }
+                    unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
                 crate::eval_or_expand! {
@@ -733,10 +741,11 @@ macro_rules! array_slice_dyn {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                             let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
-                            if length == 0 {
+                            let ptr = unsafe { self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast::<$type>())? };
+                            if ptr.is_null() || length == 0 {
                                 return &mut [];
                             }
-                            unsafe { std::slice::from_raw_parts_mut(self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast())?, length) }
+                            unsafe { std::slice::from_raw_parts_mut(ptr, length) }
                         }
                     }
                 }
@@ -745,20 +754,83 @@ macro_rules! array_slice_dyn {
     };
 }
 
-/// View a raw C-string (null terminated) as a Rust string slice.
+/// Generates getter and setter methods for converting between Rust's &str type and C's char arrays.
+/// The macro works by first specifying the methods to create (get = getter, set = setter) --- c_str_as_str_method {get, set, {...}} ---
+/// and then providing the rest of the parameters.
+/// 
+/// The rest of the parameters are recursive and are as follows:
+/// - ffi (optional): name of the method that returns some lower-level struct,
+///                   which contains the actual attributes we want to read;
+/// - name: the attribute name;
+/// - sub_index_name: sub_index_type (optional): creates an additional parameter which indexes a the `name` array
+///                   in order to get a sub-array
+///                   (e.g., `name` could be `[[i8; 100]; 10]` and we wish to get `[i8; 100]`);
+/// - comment: the documentation comment to insert as the methods documentation.
+/// 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! c_str_as_str_method {
-    (raw {$( $name:ident : $comment:literal; )*}) => {
+    (get {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {
         $(
-            #[doc = $comment]
-            pub fn $name(&self) -> &str {
+            #[doc = concat!("Returns ", $comment)]
+            pub fn $name(&self $(, $sub_index_name: $sub_index_type)? ) -> &str {
                 unsafe { 
-                    let c_ptr = self.ffi().$name;
-                    CStr::from_ptr(c_ptr).to_str().unwrap()
+                    let c_ptr = self$(.$ffi())?.$name$([$sub_index_name])?.as_ptr();
+                    std::ffi::CStr::from_ptr(c_ptr).to_str().unwrap()
                 }
             }
         )*
+    };
+
+    (set {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {paste::paste!{
+        $(
+            #[doc = concat!("Sets ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII or is too long.")]
+            pub fn [<set_ $name>](&mut self, $($sub_index_name: $sub_index_type,)? $name: &str) {
+                assert!($name.is_ascii(), concat!(stringify!($name), " must be valid ASCII."));
+                let c_string = std::ffi::CString::new($name).unwrap();
+                let bytes = c_string.into_bytes_with_nul();
+
+                // This transmute is safe as long as converting from u8 (bytes) to i8, which is char.
+                self$(.$ffi())?.$name$([$sub_index_name])?[..bytes.len()].copy_from_slice(unsafe { std::mem::transmute::<&[u8], &[i8]>(&bytes) });
+            }
+        )*
+    }};
+
+    (with {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {paste::paste!{
+        $(
+            #[doc = concat!("Builder method for setting", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII or is too long.")]
+            pub fn [<with_ $name>](mut self, $($sub_index_name: $sub_index_type,)? $name: &str) -> Self {
+                assert!($name.is_ascii(), concat!(stringify!($name), " must be valid ASCII."));
+                let c_string = std::ffi::CString::new($name).unwrap();
+                let bytes = c_string.into_bytes_with_nul();
+
+                // This transmute is safe as long as converting from u8 (bytes) to i8, which is char.
+                self$(.$ffi())?.$name$([$sub_index_name])?[..bytes.len()].copy_from_slice(unsafe { std::mem::transmute::<&[u8], &[i8]>(&bytes) });
+                self
+            }
+        )*
+    }};
+
+    // Mixed patterns
+    (with, get, set {$($other:tt)*}) => {
+        crate::c_str_as_str_method!(get {$($other)*});
+        crate::c_str_as_str_method!(set {$($other)*});
+        crate::c_str_as_str_method!(with {$($other)*});
+    };
+
+    (get, set {$($other:tt)*}) => {
+        crate::c_str_as_str_method!(get {$($other)*});
+        crate::c_str_as_str_method!(set {$($other)*});
+    };
+
+    (with, set {$($other:tt)*}) => {
+        crate::c_str_as_str_method!(set {$($other)*});
+        crate::c_str_as_str_method!(with {$($other)*});
+    };
+
+    (with, get {$($other:tt)*}) => {
+        crate::c_str_as_str_method!(get {$($other)*});
+        crate::c_str_as_str_method!(with {$($other)*});
     };
 }
 
@@ -799,4 +871,38 @@ macro_rules! cast_mut_info {
                 )
         }
     };
+}
+
+/// Asserts that the MuJoCo version used matches
+/// the one MuJoCo-rs was compiled with.
+pub fn assert_mujoco_version() {
+    let linked_version = unsafe { mj_version() as u32 };
+    let mujoco_rs_version_string = option_env!("CARGO_PKG_VERSION").unwrap_or_else(|| "unknown+mj-unknown");
+    assert_eq!(
+        linked_version, mjVERSION_HEADER,
+        "linked MuJoCo version value ({linked_version}) does not match expected version value ({mjVERSION_HEADER}), \
+        with which MuJoCo-rs {mujoco_rs_version_string} FFI bindings were generated.",
+    );
+}
+
+
+/* Utility traits */
+/// Locks a synchronization primitive and resets its poison status.
+/// This is useful on locations that don't need any special handling
+/// after a thread panicked while holding a mutex lock.
+pub trait LockUnpoison<T> {
+    fn lock_unpoison(&self) -> MutexGuard<'_, T>;
+}
+
+/// Implements automatic unpoisoning on the [`Mutex`].
+impl<T> LockUnpoison<T> for Mutex<T> {
+    fn lock_unpoison(&self) -> MutexGuard<'_, T> {
+        match self.lock() {
+            Ok(lock) => lock,
+            Err(e) => {
+                self.clear_poison();
+                e.into_inner()
+            }
+        }
+    }
 }

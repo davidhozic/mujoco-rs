@@ -8,7 +8,7 @@ use super::mj_rendering::{MjrContext, MjrRectangle};
 use super::mj_primitive::{MjtNum, MjtByte};
 use super::mj_model::{MjModel, MjtGeom};
 use super::mj_data::MjData;
-use crate::array_slice_dyn;
+use crate::{array_slice_dyn, c_str_as_str_method};
 use crate::getter_setter;
 use crate::mujoco_c::*;
 
@@ -217,7 +217,7 @@ impl MjvGeom {
     /// Compatibility method to convert the ``label`` attribute into a ``String``.
     pub fn label(&self) -> String {
         let len = self.label.iter().position(|&c| c == 0).unwrap_or(self.label.len());
-        let bytes: &[u8] = unsafe { std::slice::from_raw_parts(self.label.as_ptr() as *const u8, len) };
+        let bytes = unsafe { std::slice::from_raw_parts(self.label.as_ptr() as *const u8, len) };
         String::from_utf8_lossy(bytes).to_string()
     }
 
@@ -251,8 +251,9 @@ impl Default for MjvOption {
 }
 
 /***********************************************************************************************************************
-** MjvOption
+** MjvFigure
 ***********************************************************************************************************************/
+/// Abstraction for plotting figures.
 pub type MjvFigure = mjvFigure;
 impl Default for MjvFigure {
     fn default() -> Self {
@@ -265,9 +266,161 @@ impl Default for MjvFigure {
 }
 
 impl MjvFigure {
-    /// Draws the 2D figure.
+    /// Instantiates a new figure with default values.
+    pub fn new() -> Box<Self> {
+        let mut opt = Box::new(MaybeUninit::uninit());
+        unsafe {
+            mjv_defaultFigure(opt.as_mut_ptr());
+            opt.assume_init()
+        }
+    }
+
+    /// Deprecated alias for [`MjvFigure::draw`].
+    #[deprecated(since = "2.3.0", note = "replaced with MjvFigure::draw")]
     pub fn figure(&mut self, viewport: MjrRectangle, context: &MjrContext) {
         unsafe { mjr_figure(viewport,self, context.ffi()) };
+    }
+
+    /// Draws the 2D figure to the `viewport` on screen.
+    pub fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
+        unsafe { mjr_figure(viewport,self, context.ffi()) };
+    }
+}
+
+/// Figure options.
+impl MjvFigure {
+    getter_setter! {with, get, set, [
+        flg_legend: bool; "whether to show legend.";
+        flg_extend: bool; "whether to automatically extend axis ranges to fit data.";
+        flg_barplot: bool; "whether to isolate line segments.";
+        flg_selection: bool; "whether to show vertical selection line.";
+        flg_symmetric: bool; "whether to make y-axis symmetric";
+    ]}
+
+    // style settings
+    getter_setter! {with, [
+        gridsize: [i32; 2]; "number of grid points in (x, y).";
+        gridrgb: [f32; 3]; "grid line RGB color.";
+        figurergba: [f32; 4]; "figure RGBA color.";
+        panergba: [f32; 4]; "pane RGBA color.";
+        legendrgba: [f32; 4]; "legend RGBA color.";
+        textrgb: [f32; 3]; "text RGB color.";
+        linergb: [[f32; 3]; mjMAXLINE as usize]; "line colors.";
+        range: [[f32; 2]; 2]; "axis ranges (min >= max means automatic).";
+    ]}
+
+    c_str_as_str_method! {with, get, set {
+        xlabel; "the x-axis label.";
+        title; "the title.";
+        xformat; " the x-axis C's printf format (e.g., `%.1f`).";
+        yformat; " the y-axis C's printf format (e.g., `%.1f`).";
+        linename [plot_index: usize]; " the line name of plot with `plot_index`.";
+    }}
+}
+
+/// Plot data manipulation
+impl MjvFigure {
+
+    /// Checks if the buffer is full for plot with `plot_index`.
+    pub fn full(&self, plot_index: usize) -> bool {
+        self.linepnt[plot_index] >= (self.linedata[plot_index].len() / 2) as i32
+    }
+
+    /// Checks if the buffer is empty for plot with `plot_index`.
+    pub fn empty(&self, plot_index: usize) -> bool {
+        self.linepnt[plot_index] == 0
+    }
+
+    /// Pushes a new data point to buffer for the specific plot with `plot_index`.
+    /// # Panics
+    /// A panic will occur if the buffer is overflown. The buffer can hold a maximum of 1001 elements.
+    pub fn push(&mut self, plot_index: usize, x: f32, y: f32) {
+        let plot = &mut self.linedata[plot_index];
+        let point_index = self.linepnt[plot_index] as usize;
+        plot[2 * point_index] = x;
+        plot[2 * point_index + 1] = y;
+
+        self.linepnt[plot_index] += 1;
+    }
+
+    /// Overrides existing data with a new data point at a specific `point_index` for specific plot with `plot_index`.
+    /// # Panics
+    /// The data must already be present at `point_index`, otherwise an assertion panic will occur.
+    pub fn set_at(&mut self, plot_index: usize, point_index: usize, x: f32, y: f32) {
+        assert!(
+            point_index < self.linepnt[plot_index] as usize,
+            "data does not yet exist at index {point_index} for plot {plot_index}"
+        );
+
+        let plot = &mut self.linedata[plot_index];
+        plot[2 * point_index] = x;
+        plot[2 * point_index + 1] = y;
+    }
+
+    /// Clears the plot with `maybe_plot_index`.
+    /// If `maybe_plot_index` is [`None`], all plots will be cleared.
+    pub fn clear(&mut self, maybe_plot_index: Option<usize>) {
+        if let Some(plot_index) = maybe_plot_index {
+            self.linepnt[plot_index] = 0;
+        } else {
+            self.linepnt.fill(0);
+        }
+    }
+
+    /// Pops the first element from the plot data of plot with `plot_index`.
+    /// # Returns
+    /// Returns [`Some(first element)`](Some) when plot contains any elements, otherwise [`None`] is returned.
+    /// The return format is (x, y).
+    pub fn pop_front(&mut self, plot_index: usize) -> Option<(f32, f32)> {
+        let len = self.linepnt[plot_index];
+        if len <= 0 {
+            return None;
+        }
+
+        let plot_data = &mut self.linedata[plot_index];
+        let first = (plot_data[0], plot_data[1]);
+
+        plot_data.copy_within(2..len as usize * 2, 0);
+
+        self.linepnt[plot_index] -= 1;
+
+        Some(first)
+    }
+
+    /// Pops the last element from the plot data of plot with `plot_index`.
+    /// # Returns
+    /// Returns [`Some(last element)`](Some) when plot contains any elements, otherwise [`None`] is returned.
+    /// The return format is (x, y).
+    pub fn pop_back(&mut self, plot_index: usize) -> Option<(f32, f32)> {
+        let old_len = self.linepnt[plot_index];
+        if old_len <= 0 {
+            return None;
+        }
+        let plot_data = &mut self.linedata[plot_index];
+        let new_start = ((old_len - 1) * 2) as usize;
+        self.linepnt[plot_index] -= 1;
+
+        Some((plot_data[new_start], plot_data[new_start + 1]))  // new len is the previous last index
+    }
+
+    /// Cuts the first `n` elements from the plot data of plot with `plot_index`.
+    pub fn cut_front(&mut self, plot_index: usize, n: usize) {
+        let len = self.linepnt[plot_index];
+        if len < 0 || (len as usize) < n {
+            return;
+        }
+
+        self.linedata[plot_index].copy_within(2 * n..(len as usize * 2), 0);
+        self.linepnt[plot_index] -= n as i32;
+    }
+
+    /// Cuts last first `n` elements from the plot data of plot with `plot_index`.
+    pub fn cut_end(&mut self, plot_index: usize, n: usize) {
+        let len = self.linepnt[plot_index];
+        if len < 0 || (len as usize) < n {
+            return;
+        }
+        self.linepnt[plot_index] -= n as i32;
     }
 }
 
@@ -543,5 +696,35 @@ mod tests {
         assert_eq!(scene.lights().len(), scene.ffi().nlight as usize);
         assert_eq!(scene.geomorder().len(), scene.ffi().ngeom as usize);
         assert_eq!(scene.geoms().len(), scene.ffi().ngeom as usize);
+    }
+
+    #[test]
+    fn test_figure() {
+        let mut fig = MjvFigure::new();
+        let plot = 0;
+
+        // Initially empty
+        assert!(fig.empty(plot));
+        assert_eq!(fig.pop_front(plot), None);
+        assert_eq!(fig.pop_back(plot), None);
+
+        // Push two points
+        fig.push(plot, 1.0, 2.0);
+        fig.push(plot, 3.0, 4.0);
+
+        assert!(!fig.empty(plot));
+
+        // Pop from front (FIFO)
+        let first = fig.pop_front(plot);
+        assert_eq!(first, Some((1.0, 2.0)));
+
+        // Pop from back (LIFO on remaining element)
+        let last = fig.pop_back(plot);
+        assert_eq!(last, Some((3.0, 4.0)));
+
+        // Now empty again
+        assert!(fig.empty(plot));
+        assert_eq!(fig.pop_front(plot), None);
+        assert_eq!(fig.pop_back(plot), None);
     }
 }

@@ -4,6 +4,7 @@ Changelog
 
 .. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
+.. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
 .. |mj_geomview| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomView`
 .. |mj_geomviewmut| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomViewMut`
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
@@ -15,6 +16,26 @@ This project uses `semantic versioning <https://semver.org/>`_.
 This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
+
+2.3.0 (MuJoCo 3.3.7)
+=============================
+- Changes to :ref:`mj_rust_viewer`:
+
+  - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback_detached` for custom UI widgets that
+    do not require the simulation state (i.e., the passive |mj_data| instance).
+  - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>with_ui_egui_ctx`, for gaining scoped access
+    to the internal egui's context. This can be used for additional, one-time,
+    initialization (e.g., installing image loaders).
+  - Replaced code that would panic on poisoned mutexes with code that automatically unpoisons the mutex
+    --- nothing fundamentally bad can happen except for a potential glitch in physics, which is still better
+    than requiring users to wrap their code in
+    `catch_unwind <https://doc.rust-lang.org/std/panic/fn.catch_unwind.html>`_ calls.
+  - Performance optimizations in the viewer UI.
+
+- |mj_model| and |mj_spec|:
+
+  - When instantiating a model or a spec, a version check will be made between MuJoCo's shared library and
+    the FFI bindings to prevent accidental use of wrong MuJoCo version. The code will panic on mismatch.
 
 2.2.2 (MuJoCo 3.3.7)
 ================================
@@ -29,7 +50,6 @@ update of MuJoCo alone can increase the major version.
   - Fixed `#119 <https://github.com/davidhozic/mujoco-rs/issues/119>`_ where the borrow tracker
     tracked the wrong lifetime.
   - Reset more of OpenGL state after drawing the UI with egui (drawing figures doesn't work without this).
-
 
 2.2.0 (MuJoCo 3.3.7)
 ================================
