@@ -17,21 +17,6 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
-2.2.2 (MuJoCo 3.3.7)
-================================
-- Bug fixes:
-
-  - Fixed `incorrect calculation of depth values <https://github.com/davidhozic/mujoco-rs/pull/125>`_.
-
-2.2.1 (MuJoCo 3.3.7)
-================================
-- Bug fixes:
-
-  - Fixed `#119 <https://github.com/davidhozic/mujoco-rs/issues/119>`_ where the borrow tracker
-    tracked the wrong lifetime.
-  - Reset more of OpenGL state after drawing the UI with egui (drawing figures doesn't work without this).
-
-
 2.3.0 (MuJoCo 3.3.7)
 =============================
 - Changes to :ref:`mj_rust_viewer`:
