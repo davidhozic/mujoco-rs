@@ -114,7 +114,9 @@ impl MjrContext {
     /// # Panics
     /// Panics if the provided buffers are not large enough to hold the data for the given `viewport`.
     pub fn read_pixels(&self, rgb: Option<&mut [u8]>, depth: Option<&mut [f32]>, viewport: &MjrRectangle) {
-        let size = (viewport.width * viewport.height) as usize;
+        assert!(viewport.width >= 0);
+        assert!(viewport.height >= 0);
+        let size = viewport.width as usize * viewport.height as usize;
         if let Some(buf) = rgb.as_ref() {
             assert!(buf.len() >= size * 3, "rgb buffer is too small");
         }
