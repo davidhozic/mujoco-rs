@@ -24,7 +24,7 @@ update of MuJoCo alone can increase the major version.
   - Add a NULL pointer check to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`.
     When allocation fails, the code will now panic instead of accepting a NULL pointer.
   - Fixed `#139 <https://github.com/davidhozic/mujoco-rs/issues/139>`_.
-    :docs-rs:`mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels`
+    :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels`
     no longer allows buffers that are smaller than requested in the viewport.
 
 2.3.0 (MuJoCo 3.3.7)
