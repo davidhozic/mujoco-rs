@@ -572,7 +572,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         } = self.adapter.state.as_ref().unwrap();
 
         /* Make sure everything is done on the viewer's window */
-        gl_context.make_current(gl_surface).expect("could not make OpenGL context current");
+        if let Err(e) = gl_context.make_current(gl_surface) {
+            eprintln!("could not make OpenGL context current: {e}");
+            return;
+        }
 
         /* Read the screen size */
         self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
@@ -603,7 +606,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         } = self.adapter.state.as_ref().unwrap();
 
         /* Swap OpenGL buffers (render to screen) */
-        gl_surface.swap_buffers(gl_context).expect("buffer swap in OpenGL failed");
+        if let Err(e) = gl_surface.swap_buffers(gl_context) {
+            eprintln!("buffer swap in OpenGL failed: {e}");
+            return;
+        }
     }
 
     fn update_smooth_fps(&mut self) {
@@ -792,19 +798,25 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     }
 
     /// Reads the state of requested vsync setting and makes appropriate calls to [`glutin`].
-    fn update_vsync(&self) {
+    fn update_vsync(&mut self) {
         let RenderBaseGlState {
             gl_surface, gl_context, ..
         } = &self.adapter.state.as_ref().unwrap();
 
         if self.status.contains(ViewerStatusBit::VSYNC) {
-            gl_surface.set_swap_interval(
+            if let Err(e) = gl_surface.set_swap_interval(
                 gl_context, glutin::surface::SwapInterval::Wait(NonZero::new(1).unwrap())
-            ).expect("failed to enable vsync");
+            ) {
+                eprintln!("failed to enable vsync: {e}");
+                self.status.set(ViewerStatusBit::VSYNC, false);
+            }
         } else {
-            gl_surface.set_swap_interval(
+            if let Err(e) = gl_surface.set_swap_interval(
                 gl_context, glutin::surface::SwapInterval::DontWait
-            ).expect("failed to disable vsync");
+            ) {
+                eprintln!("failed to disable vsync: {e}");
+                self.status.set(ViewerStatusBit::VSYNC, true);
+            }
         }
     }
 
