@@ -17,6 +17,19 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+2.3.1 (MuJoCo 3.3.7)
+=============================
+- Bug fixes:
+
+  - Add a NULL pointer check to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`.
+    When allocation fails, the code will now panic instead of accepting a NULL pointer.
+  - Fixed `#139 <https://github.com/davidhozic/mujoco-rs/issues/139>`_.
+    :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels`
+    no longer allows buffers that are smaller than requested in the viewport.
+  - Fixed potential (Rust) viewer crashes when the display is disconnected or reconfigured by
+    ignoring some OpenGL errors. In case of an error at specific places, the errors will be
+    ignored and viewer processing will be skipped.
+
 2.3.0 (MuJoCo 3.3.7)
 =============================
 - Changes to :ref:`mj_rust_viewer`:

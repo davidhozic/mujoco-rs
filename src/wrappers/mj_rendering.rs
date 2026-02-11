@@ -111,7 +111,19 @@ impl MjrContext {
 
     /// Read pixels from current OpenGL framebuffer to client buffer.
     /// The ``rgb`` array is of size [width * height * 3], while ``depth`` is of size [width * height].
+    /// # Panics
+    /// Panics if the provided buffers are not large enough to hold the data for the given `viewport`.
     pub fn read_pixels(&self, rgb: Option<&mut [u8]>, depth: Option<&mut [f32]>, viewport: &MjrRectangle) {
+        assert!(viewport.width >= 0);
+        assert!(viewport.height >= 0);
+        let size = viewport.width as usize * viewport.height as usize;
+        if let Some(buf) = rgb.as_ref() {
+            assert!(buf.len() >= size * 3, "rgb buffer is too small");
+        }
+        if let Some(buf) = depth.as_ref() {
+            assert!(buf.len() >= size, "depth buffer is too small");
+        }
+
         unsafe {
             mjr_readPixels(
                 rgb.map_or(ptr::null_mut(), |x| x.as_mut_ptr()),
