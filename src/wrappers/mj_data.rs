@@ -64,11 +64,11 @@ unsafe impl<M: Deref<Target = MjModel>> Sync for MjData<M> {}
 impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Constructor for a new MjData. This should is called from MjModel.
     pub fn new(model: M) -> Self {
-        unsafe {
-            Self {
-                data: mj_makeData(model.ffi()),
-                model: model,
-            }
+        let data_ptr = unsafe { mj_makeData(model.ffi()) };
+        assert!(!data_ptr.is_null(), "allocation of MjData failed");
+        Self {
+            data: data_ptr,
+            model: model,
         }
     }
 
