@@ -26,8 +26,9 @@ update of MuJoCo alone can increase the major version.
   - Fixed `#139 <https://github.com/davidhozic/mujoco-rs/issues/139>`_.
     :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels`
     no longer allows buffers that are smaller than requested in the viewport.
-  - Fixed potential (Rust) viewer crashes when the display is disconnected or reconfigured by handling
-    OpenGL errors gracefully in the viewer.
+  - Fixed potential (Rust) viewer crashes when the display is disconnected or reconfigured by
+    ignoring some OpenGL errors. In case of an error at specific places, the errors will be
+    ignored and viewer processing will be skipped.
 
 2.3.0 (MuJoCo 3.3.7)
 =============================

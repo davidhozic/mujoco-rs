@@ -572,8 +572,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         } = self.adapter.state.as_ref().unwrap();
 
         /* Make sure everything is done on the viewer's window */
-        if let Err(e) = gl_context.make_current(gl_surface) {
-            eprintln!("could not make OpenGL context current: {e}");
+        if gl_context.make_current(gl_surface).is_err() {
             return;
         }
 
@@ -606,10 +605,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         } = self.adapter.state.as_ref().unwrap();
 
         /* Swap OpenGL buffers (render to screen) */
-        if let Err(e) = gl_surface.swap_buffers(gl_context) {
-            eprintln!("buffer swap in OpenGL failed: {e}");
-            return;
-        }
+        let _ = gl_surface.swap_buffers(gl_context);
     }
 
     fn update_smooth_fps(&mut self) {
