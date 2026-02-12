@@ -623,30 +623,31 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Updates the scene and draws it to the display.
     fn update_scene(&mut self) {
-        /* Update the scene from the MjData state */
-        let lock = &mut self.shared_state.lock_unpoison();
-        let ViewerSharedState { data_passive, pert, .. } = lock.deref_mut();
-        self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
+        {
+            /* Update and render the scene from the MjData state */
+            let mut lock = self.shared_state.lock_unpoison();
+            let ViewerSharedState { data_passive, pert, .. } = lock.deref_mut();
+            self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
 
-        // Temporary check until 3.0.0. Geom syncing will fail if the target scene is smaller than
-        // the requested number of user scenes.
-        let new_user_scene = lock.user_scene();
-        let old_user_scene = &self.user_scene;
-        if !new_user_scene.geoms().is_empty() && !old_user_scene.geoms().is_empty() {
-            panic!(
-                "Both the new ViewerSharedState::user_scene and the deprecated MjViewer::user_scene are non-empty. \
-                 Please update your code to fully use ViewerSharedState::user_scene."
-            );
+            // Temporary check until 3.0.0. Geom syncing will fail if the target scene is smaller than
+            // the requested number of user scenes.
+            let new_user_scene = lock.user_scene();
+            let old_user_scene = &self.user_scene;
+            if !new_user_scene.geoms().is_empty() && !old_user_scene.geoms().is_empty() {
+                panic!(
+                    "Both the new ViewerSharedState::user_scene and the deprecated MjViewer::user_scene are non-empty. \
+                     Please update your code to fully use ViewerSharedState::user_scene."
+                );
+            }
+
+            // Draw geoms drawn through the user scene.
+            sync_geoms(new_user_scene, &mut self.scene)
+                .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
+
+            // Temporary (until MuJoCo-rs 3.0.0) sync. Used only for backward compatibility.
+            sync_geoms(old_user_scene, &mut self.scene)
+                .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
         }
-
-        // Draw geoms drawn through the user scene.
-        sync_geoms(new_user_scene, &mut self.scene)
-            .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
-
-        // Temporary (until MuJoCo-rs 3.0.0) sync. Used only for backward compatibility.
-        sync_geoms(old_user_scene, &mut self.scene)
-            .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
-
         self.scene.render(&self.rect_full, &self.context);
     }
 
