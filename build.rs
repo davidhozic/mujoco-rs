@@ -27,9 +27,9 @@ mod build_dependencies {
         }
 
         fn field_visibility(
-                &self,
-                _info: bindgen::callbacks::FieldInfo<'_>,
-            ) -> Option<bindgen::FieldVisibilityKind> {
+            &self,
+            _info: bindgen::callbacks::FieldInfo<'_>,
+        ) -> Option<bindgen::FieldVisibilityKind> {
             if _info.type_name.starts_with("mjs") {
                 Some(bindgen::FieldVisibilityKind::PublicCrate)
             } else { None }
@@ -53,6 +53,10 @@ mod build_dependencies {
             .derive_default(false)
             .derive_copy(false)
             .rustified_enum(".*")
+            // Respect C API size definitions to enhance type safety.
+            // Instead of ffi function bindings containing raw pointers to a scalar type,
+            // they now contain raw pointers to arrays of fixed size.
+            .array_pointers_in_arguments(true)
             .parse_callbacks(Box::new(CloneCallback))
             /* Generate (C API only) */
             .generate()
@@ -62,7 +66,10 @@ mod build_dependencies {
         let mut fdata = bindings_mujoco.to_string();
 
         /* Extra adjustments */
-        fdata = fdata.replace("pub __lx: std_basic_string_value_type<_CharT>,", "pub __lx: std::mem::ManuallyDrop<std_basic_string_value_type<_CharT>>,");
+        fdata = fdata.replace(
+            "pub __lx: std_basic_string_value_type<_CharT>,",
+            "pub __lx: std::mem::ManuallyDrop<std_basic_string_value_type<_CharT>>,",
+        );
         // Remove extra Clone
         let mut re = regex::Regex::new(r"#\[derive\((.*?Clone.*?), Clone,?(.*?)\)\]").unwrap();
         fdata = re.replace_all(&fdata, "#[derive($1, $2)]").to_string();
@@ -70,6 +77,10 @@ mod build_dependencies {
         // Make mjtSameFrame be MjtByte as used in all fields.
         re = regex::Regex::new(r"#\[repr\(u32\)\]\n(.*\npub enum mjtSameFrame_)").unwrap();
         fdata = re.replace(&fdata, "#[repr(u8)]\n$1").to_string();
+
+        // Replace "zero"-sized and one-sized arrays with raw pointers
+        re = regex::Regex::new(r"\*\s*(const|mut)\s*\[\s*(.+?)\s*;\s*[0-1]+[A-z]+\s*\]").unwrap();
+        fdata = re.replace_all(&fdata, "*$1 $2").to_string();
 
         fs::write(outputfile_dir, fdata).unwrap();
     }
@@ -203,7 +214,7 @@ fn main() {
                 .probe("mujoco")
                 .err();
 
-            #[cfg(not(feature =  "auto-download-mujoco"))]
+            #[cfg(not(feature = "auto-download-mujoco"))]
             if let Some(err) = maybe_err {
                 #[cfg(target_os = "linux")]
                 panic!(
@@ -233,7 +244,7 @@ fn main() {
         #[allow(unused)]
         let allow_download = true;
 
-        #[cfg(not(feature =  "auto-download-mujoco"))]
+        #[cfg(not(feature = "auto-download-mujoco"))]
         #[cfg(target_os = "windows")]
         panic!(
             "Unable to locate MuJoCo because 'auto-download-mujoco' Cargo feature is disabled and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
@@ -243,9 +254,9 @@ fn main() {
         // On Linux and Windows try to automatically download as a fallback.
         // Other platforms will also fall under this condition, but will panic.
         #[cfg(not(target_os = "macos"))]
-        #[cfg(feature =  "auto-download-mujoco")]
+        #[cfg(feature = "auto-download-mujoco")]
         if allow_download {
-            use std::{io::{BufReader, Read}};
+            use std::io::{BufReader, Read};
             use sha2::Digest;
 
             let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_else(|_| {
@@ -355,7 +366,7 @@ fn main() {
                 panic!(
                     "sha256sum of '{}' does not match \
                     the one stored in the official hash file --- stopping due to security concerns!"
-                , &download_path.display());
+                    , &download_path.display());
             }
 
             /* Extraction */
@@ -387,7 +398,7 @@ fn main() {
 #[cfg(target_os = "windows")]
 #[cfg(feature = "auto-download-mujoco")]
 fn extract_windows(filename: &Path, outdirname: &Path) {
-    let file = File::open(filename).unwrap_or_else(|err| 
+    let file = File::open(filename).unwrap_or_else(|err|
         panic!("failed to open archive '{}' ({err}).", filename.display())
     );
     let mut zip = zip::ZipArchive::new(file).unwrap_or_else(|err|

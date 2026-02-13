@@ -2797,21 +2797,21 @@ pub struct mjpPlugin_ {
     >,
     pub sdf_distance: ::std::option::Option<
         unsafe extern "C" fn(
-            point: *const mjtNum,
+            point: *const [mjtNum; 3usize],
             d: *const mjData,
             instance: ::std::os::raw::c_int,
         ) -> mjtNum,
     >,
     pub sdf_gradient: ::std::option::Option<
         unsafe extern "C" fn(
-            gradient: *mut mjtNum,
-            point: *const mjtNum,
+            gradient: *mut [mjtNum; 3usize],
+            point: *const [mjtNum; 3usize],
             d: *const mjData,
             instance: ::std::os::raw::c_int,
         ),
     >,
     pub sdf_staticdistance: ::std::option::Option<
-        unsafe extern "C" fn(point: *const mjtNum, attributes: *const mjtNum) -> mjtNum,
+        unsafe extern "C" fn(point: *const [mjtNum; 3usize], attributes: *const mjtNum) -> mjtNum,
     >,
     pub sdf_attribute: ::std::option::Option<
         unsafe extern "C" fn(
@@ -2820,8 +2820,9 @@ pub struct mjpPlugin_ {
             value: *mut *const ::std::os::raw::c_char,
         ),
     >,
-    pub sdf_aabb:
-        ::std::option::Option<unsafe extern "C" fn(aabb: *mut mjtNum, attributes: *const mjtNum)>,
+    pub sdf_aabb: ::std::option::Option<
+        unsafe extern "C" fn(aabb: *mut [mjtNum; 6usize], attributes: *const mjtNum),
+    >,
 }
 pub type mjpPlugin = mjpPlugin_;
 #[repr(C)]
@@ -3872,7 +3873,7 @@ unsafe extern "C" {
         d: *const mjData,
         jacp: *mut mjtNum,
         jacr: *mut mjtNum,
-        point: *const mjtNum,
+        point: *const [mjtNum; 3usize],
         body: ::std::os::raw::c_int,
     );
 }
@@ -3926,8 +3927,8 @@ unsafe extern "C" {
         d: *mut mjData,
         jacPoint: *mut mjtNum,
         jacAxis: *mut mjtNum,
-        point: *const mjtNum,
-        axis: *const mjtNum,
+        point: *const [mjtNum; 3usize],
+        axis: *const [mjtNum; 3usize],
         body: ::std::os::raw::c_int,
     );
 }
@@ -3937,7 +3938,7 @@ unsafe extern "C" {
         d: *const mjData,
         jacp: *mut mjtNum,
         jacr: *mut mjtNum,
-        point: *const mjtNum,
+        point: *const [mjtNum; 3usize],
         body: ::std::os::raw::c_int,
     );
 }
@@ -3986,9 +3987,9 @@ unsafe extern "C" {
     pub fn mj_applyFT(
         m: *const mjModel,
         d: *mut mjData,
-        force: *const mjtNum,
-        torque: *const mjtNum,
-        point: *const mjtNum,
+        force: *const [mjtNum; 3usize],
+        torque: *const [mjtNum; 3usize],
+        point: *const [mjtNum; 3usize],
         body: ::std::os::raw::c_int,
         qfrc_target: *mut mjtNum,
     );
@@ -3999,7 +4000,7 @@ unsafe extern "C" {
         d: *const mjData,
         objtype: ::std::os::raw::c_int,
         objid: ::std::os::raw::c_int,
-        res: *mut mjtNum,
+        res: *mut [mjtNum; 6usize],
         flg_local: ::std::os::raw::c_int,
     );
 }
@@ -4009,7 +4010,7 @@ unsafe extern "C" {
         d: *const mjData,
         objtype: ::std::os::raw::c_int,
         objid: ::std::os::raw::c_int,
-        res: *mut mjtNum,
+        res: *mut [mjtNum; 6usize],
         flg_local: ::std::os::raw::c_int,
     );
 }
@@ -4020,7 +4021,7 @@ unsafe extern "C" {
         geom1: ::std::os::raw::c_int,
         geom2: ::std::os::raw::c_int,
         distmax: mjtNum,
-        fromto: *mut mjtNum,
+        fromto: *mut [mjtNum; 6usize],
     ) -> mjtNum;
 }
 unsafe extern "C" {
@@ -4028,7 +4029,7 @@ unsafe extern "C" {
         m: *const mjModel,
         d: *const mjData,
         id: ::std::os::raw::c_int,
-        result: *mut mjtNum,
+        result: *mut [mjtNum; 6usize],
     );
 }
 unsafe extern "C" {
@@ -4049,10 +4050,10 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn mj_local2Global(
         d: *mut mjData,
-        xpos: *mut mjtNum,
-        xmat: *mut mjtNum,
-        pos: *const mjtNum,
-        quat: *const mjtNum,
+        xpos: *mut [mjtNum; 3usize],
+        xmat: *mut [mjtNum; 9usize],
+        pos: *const [mjtNum; 3usize],
+        quat: *const [mjtNum; 4usize],
         body: ::std::os::raw::c_int,
         sameframe: mjtByte,
     );
@@ -4089,20 +4090,20 @@ unsafe extern "C" {
     pub fn mj_ray(
         m: *const mjModel,
         d: *const mjData,
-        pnt: *const mjtNum,
-        vec: *const mjtNum,
+        pnt: *const [mjtNum; 3usize],
+        vec: *const [mjtNum; 3usize],
         geomgroup: *const mjtByte,
         flg_static: mjtByte,
         bodyexclude: ::std::os::raw::c_int,
         geomid: *mut ::std::os::raw::c_int,
-        normal: *mut mjtNum,
+        normal: *mut [mjtNum; 3usize],
     ) -> mjtNum;
 }
 unsafe extern "C" {
     pub fn mj_multiRay(
         m: *const mjModel,
         d: *mut mjData,
-        pnt: *const mjtNum,
+        pnt: *const [mjtNum; 3usize],
         vec: *const mjtNum,
         geomgroup: *const mjtByte,
         flg_static: mjtByte,
@@ -4119,9 +4120,9 @@ unsafe extern "C" {
         m: *const mjModel,
         d: *const mjData,
         geomid: ::std::os::raw::c_int,
-        pnt: *const mjtNum,
-        vec: *const mjtNum,
-        normal: *mut mjtNum,
+        pnt: *const [mjtNum; 3usize],
+        vec: *const [mjtNum; 3usize],
+        normal: *mut [mjtNum; 3usize],
     ) -> mjtNum;
 }
 unsafe extern "C" {
@@ -4129,20 +4130,20 @@ unsafe extern "C" {
         m: *const mjModel,
         d: *const mjData,
         geomid: ::std::os::raw::c_int,
-        pnt: *const mjtNum,
-        vec: *const mjtNum,
-        normal: *mut mjtNum,
+        pnt: *const [mjtNum; 3usize],
+        vec: *const [mjtNum; 3usize],
+        normal: *mut [mjtNum; 3usize],
     ) -> mjtNum;
 }
 unsafe extern "C" {
     pub fn mju_rayGeom(
-        pos: *const mjtNum,
-        mat: *const mjtNum,
-        size: *const mjtNum,
-        pnt: *const mjtNum,
-        vec: *const mjtNum,
+        pos: *const [mjtNum; 3usize],
+        mat: *const [mjtNum; 9usize],
+        size: *const [mjtNum; 3usize],
+        pnt: *const [mjtNum; 3usize],
+        vec: *const [mjtNum; 3usize],
         geomtype: ::std::os::raw::c_int,
-        normal: *mut mjtNum,
+        normal: *mut [mjtNum; 3usize],
     ) -> mjtNum;
 }
 unsafe extern "C" {
@@ -4155,10 +4156,10 @@ unsafe extern "C" {
         flg_face: mjtByte,
         flg_skin: mjtByte,
         flexid: ::std::os::raw::c_int,
-        pnt: *const mjtNum,
-        vec: *const mjtNum,
+        pnt: *const [mjtNum; 3usize],
+        vec: *const [mjtNum; 3usize],
         vertid: *mut ::std::os::raw::c_int,
-        normal: *mut mjtNum,
+        normal: *mut [mjtNum; 3usize],
     ) -> mjtNum;
 }
 unsafe extern "C" {
@@ -4167,8 +4168,8 @@ unsafe extern "C" {
         nvert: ::std::os::raw::c_int,
         face: *const ::std::os::raw::c_int,
         vert: *const f32,
-        pnt: *const mjtNum,
-        vec: *const mjtNum,
+        pnt: *const [mjtNum; 3usize],
+        vec: *const [mjtNum; 3usize],
         vertid: *mut ::std::os::raw::c_int,
     ) -> mjtNum;
 }
@@ -4183,35 +4184,35 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mjv_room2model(
-        modelpos: *mut mjtNum,
-        modelquat: *mut mjtNum,
-        roompos: *const mjtNum,
-        roomquat: *const mjtNum,
+        modelpos: *mut [mjtNum; 3usize],
+        modelquat: *mut [mjtNum; 4usize],
+        roompos: *const [mjtNum; 3usize],
+        roomquat: *const [mjtNum; 4usize],
         scn: *const mjvScene,
     );
 }
 unsafe extern "C" {
     pub fn mjv_model2room(
-        roompos: *mut mjtNum,
-        roomquat: *mut mjtNum,
-        modelpos: *const mjtNum,
-        modelquat: *const mjtNum,
+        roompos: *mut [mjtNum; 3usize],
+        roomquat: *mut [mjtNum; 4usize],
+        modelpos: *const [mjtNum; 3usize],
+        modelquat: *const [mjtNum; 4usize],
         scn: *const mjvScene,
     );
 }
 unsafe extern "C" {
     pub fn mjv_cameraInModel(
-        headpos: *mut mjtNum,
-        forward: *mut mjtNum,
-        up: *mut mjtNum,
+        headpos: *mut [mjtNum; 3usize],
+        forward: *mut [mjtNum; 3usize],
+        up: *mut [mjtNum; 3usize],
         scn: *const mjvScene,
     );
 }
 unsafe extern "C" {
     pub fn mjv_cameraInRoom(
-        headpos: *mut mjtNum,
-        forward: *mut mjtNum,
-        up: *mut mjtNum,
+        headpos: *mut [mjtNum; 3usize],
+        forward: *mut [mjtNum; 3usize],
+        up: *mut [mjtNum; 3usize],
         scn: *const mjvScene,
     );
 }
@@ -4219,7 +4220,11 @@ unsafe extern "C" {
     pub fn mjv_frustumHeight(scn: *const mjvScene) -> mjtNum;
 }
 unsafe extern "C" {
-    pub fn mjv_alignToCamera(res: *mut mjtNum, vec: *const mjtNum, forward: *const mjtNum);
+    pub fn mjv_alignToCamera(
+        res: *mut [mjtNum; 3usize],
+        vec: *const [mjtNum; 3usize],
+        forward: *const [mjtNum; 3usize],
+    );
 }
 unsafe extern "C" {
     pub fn mjv_moveCamera(
@@ -4248,7 +4253,7 @@ unsafe extern "C" {
         action: ::std::os::raw::c_int,
         reldx: mjtNum,
         reldy: mjtNum,
-        roomup: *const mjtNum,
+        roomup: *const [mjtNum; 3usize],
         scn: *mut mjvScene,
     );
 }
@@ -4283,7 +4288,7 @@ unsafe extern "C" {
         relx: mjtNum,
         rely: mjtNum,
         scn: *const mjvScene,
-        selpnt: *mut mjtNum,
+        selpnt: *mut [mjtNum; 3usize],
         geomid: *mut ::std::os::raw::c_int,
         flexid: *mut ::std::os::raw::c_int,
         skinid: *mut ::std::os::raw::c_int,
@@ -4299,10 +4304,10 @@ unsafe extern "C" {
     pub fn mjv_initGeom(
         geom: *mut mjvGeom,
         type_: ::std::os::raw::c_int,
-        size: *const mjtNum,
-        pos: *const mjtNum,
-        mat: *const mjtNum,
-        rgba: *const f32,
+        size: *const [mjtNum; 3usize],
+        pos: *const [mjtNum; 3usize],
+        mat: *const [mjtNum; 9usize],
+        rgba: *const [f32; 4usize],
     );
 }
 unsafe extern "C" {
@@ -4310,8 +4315,8 @@ unsafe extern "C" {
         geom: *mut mjvGeom,
         type_: ::std::os::raw::c_int,
         width: mjtNum,
-        from: *const mjtNum,
-        to: *const mjtNum,
+        from: *const [mjtNum; 3usize],
+        to: *const [mjtNum; 3usize],
     );
 }
 unsafe extern "C" {
@@ -4363,19 +4368,19 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mjv_cameraFrame(
-        headpos: *mut mjtNum,
-        forward: *mut mjtNum,
-        up: *mut mjtNum,
-        right: *mut mjtNum,
+        headpos: *mut [mjtNum; 3usize],
+        forward: *mut [mjtNum; 3usize],
+        up: *mut [mjtNum; 3usize],
+        right: *mut [mjtNum; 3usize],
         d: *const mjData,
         cam: *const mjvCamera,
     );
 }
 unsafe extern "C" {
     pub fn mjv_cameraFrustum(
-        zver: *mut f32,
-        zhor: *mut f32,
-        zclip: *mut f32,
+        zver: *mut [f32; 2usize],
+        zhor: *mut [f32; 2usize],
+        zclip: *mut [f32; 2usize],
         m: *const mjModel,
         cam: *const mjvCamera,
     );
@@ -4609,64 +4614,89 @@ unsafe extern "C" {
     pub fn mjs_isWarning(s: *mut mjSpec) -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
-    pub fn mju_zero3(res: *mut mjtNum);
+    pub fn mju_zero3(res: *mut [mjtNum; 3usize]);
 }
 unsafe extern "C" {
-    pub fn mju_copy3(res: *mut mjtNum, data: *const mjtNum);
+    pub fn mju_copy3(res: *mut [mjtNum; 3usize], data: *const [mjtNum; 3usize]);
 }
 unsafe extern "C" {
-    pub fn mju_scl3(res: *mut mjtNum, vec: *const mjtNum, scl: mjtNum);
+    pub fn mju_scl3(res: *mut [mjtNum; 3usize], vec: *const [mjtNum; 3usize], scl: mjtNum);
 }
 unsafe extern "C" {
-    pub fn mju_add3(res: *mut mjtNum, vec1: *const mjtNum, vec2: *const mjtNum);
+    pub fn mju_add3(
+        res: *mut [mjtNum; 3usize],
+        vec1: *const [mjtNum; 3usize],
+        vec2: *const [mjtNum; 3usize],
+    );
 }
 unsafe extern "C" {
-    pub fn mju_sub3(res: *mut mjtNum, vec1: *const mjtNum, vec2: *const mjtNum);
+    pub fn mju_sub3(
+        res: *mut [mjtNum; 3usize],
+        vec1: *const [mjtNum; 3usize],
+        vec2: *const [mjtNum; 3usize],
+    );
 }
 unsafe extern "C" {
-    pub fn mju_addTo3(res: *mut mjtNum, vec: *const mjtNum);
+    pub fn mju_addTo3(res: *mut [mjtNum; 3usize], vec: *const [mjtNum; 3usize]);
 }
 unsafe extern "C" {
-    pub fn mju_subFrom3(res: *mut mjtNum, vec: *const mjtNum);
+    pub fn mju_subFrom3(res: *mut [mjtNum; 3usize], vec: *const [mjtNum; 3usize]);
 }
 unsafe extern "C" {
-    pub fn mju_addToScl3(res: *mut mjtNum, vec: *const mjtNum, scl: mjtNum);
+    pub fn mju_addToScl3(res: *mut [mjtNum; 3usize], vec: *const [mjtNum; 3usize], scl: mjtNum);
 }
 unsafe extern "C" {
-    pub fn mju_addScl3(res: *mut mjtNum, vec1: *const mjtNum, vec2: *const mjtNum, scl: mjtNum);
+    pub fn mju_addScl3(
+        res: *mut [mjtNum; 3usize],
+        vec1: *const [mjtNum; 3usize],
+        vec2: *const [mjtNum; 3usize],
+        scl: mjtNum,
+    );
 }
 unsafe extern "C" {
-    pub fn mju_normalize3(vec: *mut mjtNum) -> mjtNum;
+    pub fn mju_normalize3(vec: *mut [mjtNum; 3usize]) -> mjtNum;
 }
 unsafe extern "C" {
-    pub fn mju_norm3(vec: *const mjtNum) -> mjtNum;
+    pub fn mju_norm3(vec: *const [mjtNum; 3usize]) -> mjtNum;
 }
 unsafe extern "C" {
-    pub fn mju_dot3(vec1: *const mjtNum, vec2: *const mjtNum) -> mjtNum;
+    pub fn mju_dot3(vec1: *const [mjtNum; 3usize], vec2: *const [mjtNum; 3usize]) -> mjtNum;
 }
 unsafe extern "C" {
-    pub fn mju_dist3(pos1: *const mjtNum, pos2: *const mjtNum) -> mjtNum;
+    pub fn mju_dist3(pos1: *const [mjtNum; 3usize], pos2: *const [mjtNum; 3usize]) -> mjtNum;
 }
 unsafe extern "C" {
-    pub fn mju_mulMatVec3(res: *mut mjtNum, mat: *const mjtNum, vec: *const mjtNum);
+    pub fn mju_mulMatVec3(
+        res: *mut [mjtNum; 3usize],
+        mat: *const [mjtNum; 9usize],
+        vec: *const [mjtNum; 3usize],
+    );
 }
 unsafe extern "C" {
-    pub fn mju_mulMatTVec3(res: *mut mjtNum, mat: *const mjtNum, vec: *const mjtNum);
+    pub fn mju_mulMatTVec3(
+        res: *mut [mjtNum; 3usize],
+        mat: *const [mjtNum; 9usize],
+        vec: *const [mjtNum; 3usize],
+    );
 }
 unsafe extern "C" {
-    pub fn mju_cross(res: *mut mjtNum, a: *const mjtNum, b: *const mjtNum);
+    pub fn mju_cross(
+        res: *mut [mjtNum; 3usize],
+        a: *const [mjtNum; 3usize],
+        b: *const [mjtNum; 3usize],
+    );
 }
 unsafe extern "C" {
-    pub fn mju_zero4(res: *mut mjtNum);
+    pub fn mju_zero4(res: *mut [mjtNum; 4usize]);
 }
 unsafe extern "C" {
-    pub fn mju_unit4(res: *mut mjtNum);
+    pub fn mju_unit4(res: *mut [mjtNum; 4usize]);
 }
 unsafe extern "C" {
-    pub fn mju_copy4(res: *mut mjtNum, data: *const mjtNum);
+    pub fn mju_copy4(res: *mut [mjtNum; 4usize], data: *const [mjtNum; 4usize]);
 }
 unsafe extern "C" {
-    pub fn mju_normalize4(vec: *mut mjtNum) -> mjtNum;
+    pub fn mju_normalize4(vec: *mut [mjtNum; 4usize]) -> mjtNum;
 }
 unsafe extern "C" {
     pub fn mju_zero(res: *mut mjtNum, n: ::std::os::raw::c_int);
@@ -4815,12 +4845,12 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mju_transformSpatial(
-        res: *mut mjtNum,
-        vec: *const mjtNum,
+        res: *mut [mjtNum; 6usize],
+        vec: *const [mjtNum; 6usize],
         flg_force: ::std::os::raw::c_int,
-        newpos: *const mjtNum,
-        oldpos: *const mjtNum,
-        rotnew2old: *const mjtNum,
+        newpos: *const [mjtNum; 3usize],
+        oldpos: *const [mjtNum; 3usize],
+        rotnew2old: *const [mjtNum; 9usize],
     );
 }
 unsafe extern "C" {
@@ -4847,75 +4877,106 @@ unsafe extern "C" {
     );
 }
 unsafe extern "C" {
-    pub fn mju_rotVecQuat(res: *mut mjtNum, vec: *const mjtNum, quat: *const mjtNum);
+    pub fn mju_rotVecQuat(
+        res: *mut [mjtNum; 3usize],
+        vec: *const [mjtNum; 3usize],
+        quat: *const [mjtNum; 4usize],
+    );
 }
 unsafe extern "C" {
-    pub fn mju_negQuat(res: *mut mjtNum, quat: *const mjtNum);
+    pub fn mju_negQuat(res: *mut [mjtNum; 4usize], quat: *const [mjtNum; 4usize]);
 }
 unsafe extern "C" {
-    pub fn mju_mulQuat(res: *mut mjtNum, quat1: *const mjtNum, quat2: *const mjtNum);
+    pub fn mju_mulQuat(
+        res: *mut [mjtNum; 4usize],
+        quat1: *const [mjtNum; 4usize],
+        quat2: *const [mjtNum; 4usize],
+    );
 }
 unsafe extern "C" {
-    pub fn mju_mulQuatAxis(res: *mut mjtNum, quat: *const mjtNum, axis: *const mjtNum);
+    pub fn mju_mulQuatAxis(
+        res: *mut [mjtNum; 4usize],
+        quat: *const [mjtNum; 4usize],
+        axis: *const [mjtNum; 3usize],
+    );
 }
 unsafe extern "C" {
-    pub fn mju_axisAngle2Quat(res: *mut mjtNum, axis: *const mjtNum, angle: mjtNum);
+    pub fn mju_axisAngle2Quat(
+        res: *mut [mjtNum; 4usize],
+        axis: *const [mjtNum; 3usize],
+        angle: mjtNum,
+    );
 }
 unsafe extern "C" {
-    pub fn mju_quat2Vel(res: *mut mjtNum, quat: *const mjtNum, dt: mjtNum);
+    pub fn mju_quat2Vel(res: *mut [mjtNum; 3usize], quat: *const [mjtNum; 4usize], dt: mjtNum);
 }
 unsafe extern "C" {
-    pub fn mju_subQuat(res: *mut mjtNum, qa: *const mjtNum, qb: *const mjtNum);
+    pub fn mju_subQuat(
+        res: *mut [mjtNum; 3usize],
+        qa: *const [mjtNum; 4usize],
+        qb: *const [mjtNum; 4usize],
+    );
 }
 unsafe extern "C" {
-    pub fn mju_quat2Mat(res: *mut mjtNum, quat: *const mjtNum);
+    pub fn mju_quat2Mat(res: *mut [mjtNum; 9usize], quat: *const [mjtNum; 4usize]);
 }
 unsafe extern "C" {
-    pub fn mju_mat2Quat(quat: *mut mjtNum, mat: *const mjtNum);
+    pub fn mju_mat2Quat(quat: *mut [mjtNum; 4usize], mat: *const [mjtNum; 9usize]);
 }
 unsafe extern "C" {
-    pub fn mju_derivQuat(res: *mut mjtNum, quat: *const mjtNum, vel: *const mjtNum);
+    pub fn mju_derivQuat(
+        res: *mut [mjtNum; 4usize],
+        quat: *const [mjtNum; 4usize],
+        vel: *const [mjtNum; 3usize],
+    );
 }
 unsafe extern "C" {
-    pub fn mju_quatIntegrate(quat: *mut mjtNum, vel: *const mjtNum, scale: mjtNum);
+    pub fn mju_quatIntegrate(
+        quat: *mut [mjtNum; 4usize],
+        vel: *const [mjtNum; 3usize],
+        scale: mjtNum,
+    );
 }
 unsafe extern "C" {
-    pub fn mju_quatZ2Vec(quat: *mut mjtNum, vec: *const mjtNum);
+    pub fn mju_quatZ2Vec(quat: *mut [mjtNum; 4usize], vec: *const [mjtNum; 3usize]);
 }
 unsafe extern "C" {
-    pub fn mju_mat2Rot(quat: *mut mjtNum, mat: *const mjtNum) -> ::std::os::raw::c_int;
+    pub fn mju_mat2Rot(
+        quat: *mut [mjtNum; 4usize],
+        mat: *const [mjtNum; 9usize],
+    ) -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub fn mju_euler2Quat(
-        quat: *mut mjtNum,
-        euler: *const mjtNum,
+        quat: *mut [mjtNum; 4usize],
+        euler: *const [mjtNum; 3usize],
         seq: *const ::std::os::raw::c_char,
     );
 }
 unsafe extern "C" {
     pub fn mju_mulPose(
-        posres: *mut mjtNum,
-        quatres: *mut mjtNum,
-        pos1: *const mjtNum,
-        quat1: *const mjtNum,
-        pos2: *const mjtNum,
-        quat2: *const mjtNum,
+        posres: *mut [mjtNum; 3usize],
+        quatres: *mut [mjtNum; 4usize],
+        pos1: *const [mjtNum; 3usize],
+        quat1: *const [mjtNum; 4usize],
+        pos2: *const [mjtNum; 3usize],
+        quat2: *const [mjtNum; 4usize],
     );
 }
 unsafe extern "C" {
     pub fn mju_negPose(
-        posres: *mut mjtNum,
-        quatres: *mut mjtNum,
-        pos: *const mjtNum,
-        quat: *const mjtNum,
+        posres: *mut [mjtNum; 3usize],
+        quatres: *mut [mjtNum; 4usize],
+        pos: *const [mjtNum; 3usize],
+        quat: *const [mjtNum; 4usize],
     );
 }
 unsafe extern "C" {
     pub fn mju_trnVecPose(
-        res: *mut mjtNum,
-        pos: *const mjtNum,
-        quat: *const mjtNum,
-        vec: *const mjtNum,
+        res: *mut [mjtNum; 3usize],
+        pos: *const [mjtNum; 3usize],
+        quat: *const [mjtNum; 4usize],
+        vec: *const [mjtNum; 3usize],
     );
 }
 unsafe extern "C" {
@@ -5002,10 +5063,10 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mju_eig3(
-        eigval: *mut mjtNum,
-        eigvec: *mut mjtNum,
-        quat: *mut mjtNum,
-        mat: *const mjtNum,
+        eigval: *mut [mjtNum; 3usize],
+        eigvec: *mut [mjtNum; 9usize],
+        quat: *mut [mjtNum; 4usize],
+        mat: *const [mjtNum; 9usize],
     ) -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
@@ -5036,21 +5097,21 @@ unsafe extern "C" {
     pub fn mju_muscleGain(
         len: mjtNum,
         vel: mjtNum,
-        lengthrange: *const mjtNum,
+        lengthrange: *const [mjtNum; 2usize],
         acc0: mjtNum,
-        prm: *const mjtNum,
+        prm: *const [mjtNum; 9usize],
     ) -> mjtNum;
 }
 unsafe extern "C" {
     pub fn mju_muscleBias(
         len: mjtNum,
-        lengthrange: *const mjtNum,
+        lengthrange: *const [mjtNum; 2usize],
         acc0: mjtNum,
-        prm: *const mjtNum,
+        prm: *const [mjtNum; 9usize],
     ) -> mjtNum;
 }
 unsafe extern "C" {
-    pub fn mju_muscleDynamics(ctrl: mjtNum, act: mjtNum, prm: *const mjtNum) -> mjtNum;
+    pub fn mju_muscleDynamics(ctrl: mjtNum, act: mjtNum, prm: *const [mjtNum; 3usize]) -> mjtNum;
 }
 unsafe extern "C" {
     pub fn mju_encodePyramid(
@@ -5155,7 +5216,7 @@ unsafe extern "C" {
         m: *const mjModel,
         d: *const mjData,
         s: *const mjSDF,
-        x: *const mjtNum,
+        x: *const [mjtNum; 3usize],
     ) -> mjtNum;
 }
 unsafe extern "C" {
@@ -5163,8 +5224,8 @@ unsafe extern "C" {
         m: *const mjModel,
         d: *const mjData,
         s: *const mjSDF,
-        gradient: *mut mjtNum,
-        x: *const mjtNum,
+        gradient: *mut [mjtNum; 3usize],
+        x: *const [mjtNum; 3usize],
     );
 }
 unsafe extern "C" {
@@ -5195,15 +5256,20 @@ unsafe extern "C" {
     );
 }
 unsafe extern "C" {
-    pub fn mjd_subQuat(qa: *const mjtNum, qb: *const mjtNum, Da: *mut mjtNum, Db: *mut mjtNum);
+    pub fn mjd_subQuat(
+        qa: *const [mjtNum; 4usize],
+        qb: *const [mjtNum; 4usize],
+        Da: *mut [mjtNum; 9usize],
+        Db: *mut [mjtNum; 9usize],
+    );
 }
 unsafe extern "C" {
     pub fn mjd_quatIntegrate(
-        vel: *const mjtNum,
+        vel: *const [mjtNum; 3usize],
         scale: mjtNum,
-        Dquat: *mut mjtNum,
-        Dvel: *mut mjtNum,
-        Dscale: *mut mjtNum,
+        Dquat: *mut [mjtNum; 9usize],
+        Dvel: *mut [mjtNum; 9usize],
+        Dscale: *mut [mjtNum; 3usize],
     );
 }
 unsafe extern "C" {
@@ -5454,9 +5520,9 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn mjs_setToMuscle(
         actuator: *mut mjsActuator,
-        timeconst: *mut f64,
+        timeconst: *mut [f64; 2usize],
         tausmooth: f64,
-        range: *mut f64,
+        range: *mut [f64; 2usize],
         force: f64,
         scale: f64,
         lmin: f64,
@@ -5658,7 +5724,7 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mjs_resolveOrientation(
-        quat: *mut f64,
+        quat: *mut [f64; 4usize],
         degree: mjtByte,
         sequence: *const ::std::os::raw::c_char,
         orientation: *const mjsOrientation,
