@@ -15,7 +15,7 @@ More detailed documentation is available at the:
 - [**Guide book**](https://mujoco-rs.readthedocs.io/en/stable/)
 
 ## MuJoCo version
-This library uses FFI bindings to MuJoCo **3.3.7**.
+This library uses FFI bindings to MuJoCo **3.5.0**.
 
 ## Minimum Rust version
 Rust version 1.88 or newer is required.
