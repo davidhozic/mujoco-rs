@@ -1069,7 +1069,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             return;
         }
 
-        self.camera.fix((self.camera.fixedcamid + direction).rem_euclid(n_cam) as u32);
+        self.camera.fix((self.camera.fixedcamid + direction).rem_euclid(n_cam as i32) as u32);
     }
 
     /// Toggles full screen mode.

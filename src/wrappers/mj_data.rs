@@ -780,7 +780,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             "destination buffer is too small: got {destination_len} elements, but need at least {state_size} elements.",
         );
         unsafe {
-            mj_getState(self.model.ffi(), self.ffi(), destination.as_mut_ptr(), spec);
+            mj_getState(self.model.ffi(), self.ffi(), destination.as_mut_ptr(), spec as i32);
         }
 
         state_size
@@ -815,7 +815,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
               length required ({required_len}), commanded by input spec."
         );
         unsafe {
-            mj_setState(self.model.ffi(), self.ffi_mut(), state.as_ptr(), spec);
+            mj_setState(self.model.ffi(), self.ffi_mut(), state.as_ptr(), spec as i32);
         }
     }
 
@@ -964,8 +964,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         cinert: &[[MjtNum; 10] [cast]; "com-based body inertia and mass"; model.ffi().nbody],
         flexvert_xpos: &[[MjtNum; 3] [cast]; "Cartesian flex vertex positions"; model.ffi().nflexvert],
         flexelem_aabb: &[[MjtNum; 6] [cast]; "flex element bounding boxes (center, size)"; model.ffi().nflexelem],
-        flexedge_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; model.ffi().nflexedge],
-        flexedge_J_rowadr: &[i32; "row start address in colind array"; model.ffi().nflexedge],
         flexedge_length: &[MjtNum; "flex edge lengths"; model.ffi().nflexedge],
         bvh_aabb_dyn: &[[MjtNum; 6] [cast]; "global bounding box (center, size)"; model.ffi().nbvhdynamic],
         ten_wrapadr: &[i32; "start address of tendon's path"; model.ffi().ntendon],
@@ -1078,7 +1076,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         sublen_dep {
             ten_J_colind: &[[i32; model.ffi().nv as usize] [cast]; "column indices in sparse Jacobian"; model.ffi().ntendon],
             ten_J: &[[MjtNum; model.ffi().nv as usize] [cast]; "tendon Jacobian"; model.ffi().ntendon],
-            flexedge_J_colind: &[[i32; model.ffi().nv as usize] [cast]; "column indices in sparse Jacobian"; model.ffi().nflexedge],
             flexedge_J: &[[MjtNum; model.ffi().nv as usize] [cast]; "flex edge Jacobian"; model.ffi().nflexedge]
         }
     }

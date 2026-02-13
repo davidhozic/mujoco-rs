@@ -19,7 +19,7 @@ use super::mj_model::{
     MjModel, MjtObj, MjtGeom, MjtJoint, MjtCamLight,
     MjtLightType, MjtSensor, MjtDataType, MjtGain,
     MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace,
-    MjtTrn, MjtStage, MjtFlexSelf
+    MjtTrn, MjtStage, MjtFlexSelf, MjtProjection
 };
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic, MjLROpt};
 use super::mj_option::MjOption;
@@ -530,7 +530,7 @@ impl MjsCamera {
             alt: &MjsOrientation;         "alternative orientation.";
             intrinsic: &[f32; 4];         "intrinsic parameters.";
             sensor_size: &[f32; 2];       "sensor size.";
-            resolution: &[f32; 2];        "resolution.";
+            resolution: &[i32; 2];        "resolution.";
             focal_length: &[f32; 2];      "focal length (length).";
             focal_pixel: &[f32; 2];       "focal length (pixel).";
             principal_length: &[f32; 2];  "principal point (length).";
@@ -545,7 +545,7 @@ impl MjsCamera {
     ]);
 
     getter_setter! {
-        [&] with, get, set, [orthographic: bool; "is camera orthographic."]
+        [&] with, get, set, [proj: MjtProjection; "is camera orthographic."]
     }
 
     userdata_method!(f64);
@@ -1158,7 +1158,7 @@ impl MjsTexture {
             rgb2: &[f64; 3];               "second color for builtin.";
             markrgb: &[f64; 3];            "mark color.";
             gridsize: &[i32; 2];           "size of grid for composite file; (1,1)-repeat.";
-            gridlayout: &[i8; 13];         "row-major: L,R,F,B,U,D for faces; . for unused.";
+            gridlayout: &[i8; 12];         "row-major: L,R,F,B,U,D for faces; . for unused.";
         ]
     }
 
