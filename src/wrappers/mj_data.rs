@@ -671,6 +671,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         mat
     }
 
+    /// Run all kinematics-like computations (kinematics, comPos, camlight, flex, tendon).
+    pub fn forward_kinematics(&mut self) {
+        unsafe { mj_fwdKinematics(self.model.ffi(), self.ffi_mut()) }
+    }
+
     /// Compute object 6D velocity (rot:lin) in object-centered frame, world/local orientation.
     pub fn object_velocity(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> [MjtNum; 6] {
         let mut result: [MjtNum; 6] = [0.0; 6];
@@ -1523,6 +1528,29 @@ mod test {
         let (geomid, dist) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1);
         assert!(dist.is_finite());
         assert!(geomid >= -1);
+    }
+
+    #[test]
+    fn test_fwd_kinematics_and_mul_wrappers() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let joint_info = data.joint("ball").unwrap();
+        {
+            let mut jv = joint_info.view_mut(&mut data);
+            jv.qpos[0] = 0.42;  // set body x
+            jv.qpos[1] = 0.43;  // set body y
+            jv.qpos[2] = 0.44;  // set body z
+            jv.qpos[3] = 1.0;   // unit quaternion
+            jv.qpos[4] = 0.0;
+            jv.qpos[5] = 0.0;
+            jv.qpos[6] = 0.0;
+        }
+        data.forward_kinematics();
+        let body_view = data.body("ball").unwrap().view(&data);
+        assert_relative_eq!(body_view.xpos[0], 0.42, epsilon=1e-9);
+        assert_relative_eq!(body_view.xpos[1], 0.43, epsilon=1e-9);
+        assert_relative_eq!(body_view.xpos[2], 0.44, epsilon=1e-9);
     }
 
     #[test]
