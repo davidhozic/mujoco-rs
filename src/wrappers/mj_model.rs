@@ -118,6 +118,9 @@ pub type MjtFlexSelf = mjtFlexSelf;
 /// Formulas used to combine SDFs when calling mjc_distance and mjc_gradient.
 pub type MjtSDFType = mjtSDFType;
 
+/// Sleep policy associated with a tree.
+pub type MjtSleepPolicy = mjtSleepPolicy;
+
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
@@ -559,6 +562,8 @@ impl MjModel {
         [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
         [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
         [ffi] nflextexcoord: MjtSize; "number of vertices with texture coordinates.";
+        [ffi] nJfe: MjtSize; "number of non-zeros in sparse flexedge Jacobian matrix.";
+        [ffi] nJfv: MjtSize; "number of non-zeros in sparse flexvert Jacobian matrix.";
         [ffi] nmesh: MjtSize; "number of meshes.";
         [ffi] nmeshvert: MjtSize; "number of vertices in all meshes.";
         [ffi] nmeshnormal: MjtSize; "number of normals in all meshes.";
@@ -614,6 +619,7 @@ impl MjModel {
         [ffi] nuserdata: MjtSize; "number of mjtNums reserved for the user.";
         [ffi] nsensordata: MjtSize; "number of mjtNums in sensor data vector.";
         [ffi] npluginstate: MjtSize; "number of mjtNums in plugin state vector.";
+        [ffi] nhistory: MjtSize; "number of mjtNums in history buffer.";
         [ffi] narena: MjtSize; "number of bytes in the mjData arena (inclusive of stack).";
         [ffi] nbuffer: MjtSize; "number of bytes in buffer.";
     ]}
@@ -631,8 +637,8 @@ impl MjModel {
         qpos0: &[MjtNum; "qpos values at default pose"; ffi().nq],
         qpos_spring: &[MjtNum; "reference pose for springs"; ffi().nq],
         body_parentid: &[i32; "id of body's parent"; ffi().nbody],
-        body_rootid: &[i32; "id of root above body"; ffi().nbody],
-        body_weldid: &[i32; "id of body that this body is welded to"; ffi().nbody],
+        body_rootid: &[i32; "ancestor that is direct child of world"; ffi().nbody],
+        body_weldid: &[i32; "top ancestor with no dofs to this body"; ffi().nbody],
         body_mocapid: &[i32; "id of mocap data; -1: none"; ffi().nbody],
         body_jntnum: &[i32; "number of joints for this body"; ffi().nbody],
         body_jntadr: &[i32; "start addr of joints; -1: no joints"; ffi().nbody],
@@ -695,6 +701,12 @@ impl MjModel {
         dof_damping: &[MjtNum; "damping coefficient"; ffi().nv],
         dof_invweight0: &[MjtNum; "diag. inverse inertia in qpos0"; ffi().nv],
         dof_M0: &[MjtNum; "diag. inertia in qpos0"; ffi().nv],
+        dof_length: &[MjtNum; "linear: 1; angular: approx. length scale"; ffi().nv],
+        tree_bodyadr: &[i32; "start addr of bodies"; ffi().ntree],
+        tree_bodynum: &[i32; "number of bodies in tree"; ffi().ntree],
+        tree_dofadr: &[i32; "start addr of dofs"; ffi().ntree],
+        tree_dofnum: &[i32; "number of dofs in tree"; ffi().ntree],
+        tree_sleep_policy: &[MjtSleepPolicy [cast]; "sleep policy"; ffi().ntree],
         geom_type: &[MjtGeom [cast]; "geometric type"; ffi().ngeom],
         geom_contype: &[i32; "geom contact type"; ffi().ngeom],
         geom_conaffinity: &[i32; "geom contact affinity"; ffi().ngeom],
@@ -740,6 +752,7 @@ impl MjModel {
         cam_fovy: &[MjtNum; "y field-of-view (ortho ? len : deg)"; ffi().ncam],
         cam_ipd: &[MjtNum; "inter-pupilary distance"; ffi().ncam],
         cam_resolution: &[[i32; 2] [cast]; "resolution: pixels [width, height]"; ffi().ncam],
+        cam_output: &[i32; "output types (mjtCamOut bit flags)"; ffi().ncam],
         cam_sensorsize: &[[f32; 2] [cast]; "sensor size: length [width, height]"; ffi().ncam],
         cam_intrinsic: &[[f32; 4] [cast]; "[focal length; principal point]"; ffi().ncam],
         light_mode: &[MjtCamLight [cast]; "light tracking mode"; ffi().nlight],
@@ -798,6 +811,9 @@ impl MjModel {
         flex_texcoordadr: &[i32; "address in flex_texcoord; -1: none"; ffi().nflex],
         flex_nodebodyid: &[i32; "node body ids"; ffi().nflexnode],
         flex_vertbodyid: &[i32; "vertex body ids"; ffi().nflexvert],
+        flex_vertedgeadr: &[i32; "first edge address"; ffi().nflexvert],
+        flex_vertedgenum: &[i32; "number of edges"; ffi().nflexvert],
+        flex_vertedge: &[[i32; 2] [cast]; "edge indices"; ffi().nflexedge],
         flex_edge: &[[i32; 2] [cast]; "edge vertex ids (2 per edge)"; ffi().nflexedge],
         flex_edgeflap: &[[i32; 2] [cast]; "adjacent vertex ids (dim=2 only)"; ffi().nflexedge],
         flex_elem: &[i32; "element vertex ids (dim+1 per elem)"; ffi().nflexelemdata],
@@ -808,17 +824,19 @@ impl MjModel {
         flex_evpair: &[[i32; 2] [cast]; "(element, vertex) collision pairs"; ffi().nflexevpair],
         flex_vert: &[[MjtNum; 3] [cast]; "vertex positions in local body frames"; ffi().nflexvert],
         flex_vert0: &[[MjtNum; 3] [cast]; "vertex positions in qpos0 on [0, 1]^d"; ffi().nflexvert],
+        flex_vertmetric: &[[MjtNum; 4] [cast]; "inverse of reference shape matrix"; ffi().nflexvert],
         flex_node: &[[MjtNum; 3] [cast]; "node positions in local body frames"; ffi().nflexnode],
         flex_node0: &[[MjtNum; 3] [cast]; "Cartesian node positions in qpos0"; ffi().nflexnode],
         flexedge_length0: &[MjtNum; "edge lengths in qpos0"; ffi().nflexedge],
         flexedge_invweight0: &[MjtNum; "edge inv. weight in qpos0"; ffi().nflexedge],
         flex_radius: &[MjtNum; "radius around primitive element"; ffi().nflex],
+        flex_size: &[[MjtNum; 3] [cast]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
         flex_stiffness: &[[MjtNum; 21] [cast]; "finite element stiffness matrix"; ffi().nflexelem],
         flex_bending: &[[MjtNum; 17] [cast]; "bending stiffness"; ffi().nflexedge],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
-        flex_edgeequality: &[bool [cast]; "is edge equality constraint defined"; ffi().nflex],
+        flex_edgeequality: &[i32; "0: none, 1: edges, 2: vertices"; ffi().nflex],
         flex_rigid: &[bool [cast]; "are all vertices in the same body"; ffi().nflex],
         flexedge_rigid: &[bool [cast]; "are both edge vertices in same body"; ffi().nflexedge],
         flex_centered: &[bool [cast]; "are all vertex coordinates (0,0,0)"; ffi().nflex],
@@ -827,6 +845,10 @@ impl MjModel {
         flex_bvhnum: &[i32; "number of bounding volumes"; ffi().nflex],
         flexedge_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; ffi().nflexedge],
         flexedge_J_rowadr: &[i32; "row start address in colind array"; ffi().nflexedge],
+        flexedge_J_colind: &[i32; "column indices in sparse Jacobian"; ffi().nJfe],
+        flexvert_J_rownnz: &[[i32; 2] [cast]; "number of non-zeros in Jacobian row"; ffi().nflexvert],
+        flexvert_J_rowadr: &[[i32; 2] [cast]; "row start address in colind array"; ffi().nflexvert],
+        flexvert_J_colind: &[[i32; 2] [cast]; "column indices in sparse Jacobian"; ffi().nJfv],
         flex_rgba: &[[f32; 4] [cast]; "rgba when material is omitted"; ffi().nflex],
         flex_texcoord: &[[f32; 2] [cast]; "vertex texture coordinates"; ffi().nflextexcoord],
         mesh_vertadr: &[i32; "first vertex address"; ffi().nmesh],
@@ -931,6 +953,8 @@ impl MjModel {
         tendon_num: &[i32; "number of objects in tendon's path"; ffi().ntendon],
         tendon_matid: &[i32; "material id for rendering"; ffi().ntendon],
         tendon_group: &[i32; "group for visibility"; ffi().ntendon],
+        tendon_treenum: &[i32; "number of trees along tendon's path"; ffi().ntendon],
+        tendon_treeid: &[[i32; 2] [cast]; "first two trees along tendon's path"; ffi().ntendon],
         tendon_limited: &[bool [cast]; "does tendon have length limits"; ffi().ntendon],
         tendon_actfrclimited: &[bool [cast]; "does tendon have actuator force limits"; ffi().ntendon],
         tendon_width: &[MjtNum; "width for rendering"; ffi().ntendon],
@@ -960,7 +984,11 @@ impl MjModel {
         actuator_actadr: &[i32; "first activation address; -1: stateless"; ffi().nu],
         actuator_actnum: &[i32; "number of activation variables"; ffi().nu],
         actuator_group: &[i32; "group for visibility"; ffi().nu],
+        actuator_history: &[[i32; 2] [cast]; "history buffer: [nsample, interp]"; ffi().nu],
+        actuator_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nu],
+        actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nu],
         actuator_ctrllimited: &[bool [cast]; "is control limited"; ffi().nu],
+        actuator_forcelimited: &[bool [cast]; "is force limited"; ffi().nu],
         actuator_actlimited: &[bool [cast]; "is activation limited"; ffi().nu],
         actuator_dynprm: &[[MjtNum; mjNDYN as usize] [cast]; "dynamics parameters"; ffi().nu],
         actuator_gainprm: &[[MjtNum; mjNGAIN as usize] [cast]; "gain parameters"; ffi().nu],
@@ -987,6 +1015,10 @@ impl MjModel {
         sensor_adr: &[i32; "address in sensor array"; ffi().nsensor],
         sensor_cutoff: &[MjtNum; "cutoff for real and positive; 0: ignore"; ffi().nsensor],
         sensor_noise: &[MjtNum; "noise standard deviation"; ffi().nsensor],
+        sensor_history: &[[i32; 2] [cast]; "history buffer: [nsample, interp]"; ffi().nsensor],
+        sensor_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nsensor],
+        sensor_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nsensor],
+        sensor_interval: &[[MjtNum; 2] [cast]; "interval: [period, phase] in seconds"; ffi().nsensor],
         sensor_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nsensor],
         plugin: &[i32; "globally registered plugin slot number"; ffi().nplugin],
         plugin_stateadr: &[i32; "address in the plugin state array"; ffi().nplugin],
@@ -1060,9 +1092,7 @@ impl MjModel {
             site_user: &[[MjtNum; ffi().nuser_site] [cast]; "user data"; ffi().nsite],
             geom_user: &[[MjtNum; ffi().nuser_geom] [cast]; "user data"; ffi().ngeom],
             jnt_user: &[[MjtNum; ffi().nuser_jnt] [cast]; "user data"; ffi().njnt],
-            body_user: &[[MjtNum; ffi().nuser_body] [cast]; "user data"; ffi().nbody],
-
-            flexedge_J_colind: &[[i32; ffi().nv as usize] [cast]; "column indices in sparse Jacobian"; ffi().nflexedge]
+            body_user: &[[MjtNum; ffi().nuser_body] [cast]; "user data"; ffi().nbody]
         }
     }
 }
