@@ -8,9 +8,9 @@ use std::ptr;
 /// Db = -Da^T
 pub fn mjd_sub_quat(qa: &[MjtNum; 4], qb: &[MjtNum; 4], da: Option<&mut [MjtNum; 9]>, db: Option<&mut [MjtNum; 9]>)  {
     unsafe { mujoco_c::mjd_subQuat(
-        qa.as_ptr(), qb.as_ptr(),
-        da.map_or(ptr::null_mut(), |d| d.as_mut_ptr()),
-        db.map_or(ptr::null_mut(), |d| d.as_mut_ptr())
+        qa, qb,
+        da.map_or(ptr::null_mut(), |d| d),
+        db.map_or(ptr::null_mut(), |d| d)
     ) }
 }
 
@@ -18,10 +18,10 @@ pub fn mjd_sub_quat(qa: &[MjtNum; 4], qb: &[MjtNum; 4], da: Option<&mut [MjtNum;
 /// Nullable: Dquat, Dvel, Dscale.
 pub fn mjd_quat_integrate(vel: &[MjtNum; 3], scale: MjtNum, dquat: Option<&mut [MjtNum; 9]>, dvel: Option<&mut [MjtNum; 9]>, dscale: Option<&mut [MjtNum; 3]>)  {
     unsafe { mujoco_c::mjd_quatIntegrate(
-        vel.as_ptr(), scale,
-        dquat.map_or(ptr::null_mut(), |d| d.as_mut_ptr()),
-        dvel.map_or(ptr::null_mut(), |d| d.as_mut_ptr()),
-        dscale.map_or(ptr::null_mut(), |d| d.as_mut_ptr())
+        vel, scale,
+        dquat.map_or(ptr::null_mut(), |d| d),
+        dvel.map_or(ptr::null_mut(), |d| d),
+        dscale.map_or(ptr::null_mut(), |d| d)
     ) }
 }
 

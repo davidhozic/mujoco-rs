@@ -280,7 +280,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         unsafe {
             mj_contactForce(
                 self.model.ffi(), self.data,
-                contact_id as i32, force.as_mut_ptr()
+                contact_id as i32, &mut force
             );
         }
         force
@@ -553,7 +553,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
                 self.ffi(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
-                point.as_ptr(),
+                point,
                 body_id,
             )
         };
@@ -677,8 +677,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         unsafe { mj_objectVelocity(
             self.model.ffi(), self.ffi(),
             obj_type as i32, obj_id,
-            result.as_mut_ptr(), flg_local as i32
-        ) };
+            &mut result, flg_local as i32
+        ) }; 
         result
     }
 
@@ -688,7 +688,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         unsafe { mj_objectAcceleration(
             self.model.ffi(), self.ffi(),
             obj_type as i32, obj_id,
-            result.as_mut_ptr(), flg_local as i32
+            &mut result, flg_local as i32
         ) };
         result
     }
@@ -698,7 +698,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         unsafe { mj_geomDistance(
             self.model.ffi(), self.ffi(),
             geom1_id, geom2_id, dist_max,
-            fromto.map_or(ptr::null_mut(), |x| x.as_mut_ptr())
+            fromto.map_or(ptr::null_mut(), |x| x)
         ) }
     }
 
@@ -709,7 +709,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         /* Create uninitialized because this gets filled by the function. */
         let mut xpos: [MjtNum; 3] =  [0.0; 3];
         let mut xmat: [MjtNum; 9] = [0.0; 9];
-        unsafe { mj_local2Global(self.ffi_mut(), xpos.as_mut_ptr(), xmat.as_mut_ptr(), pos.as_ptr(), quat.as_ptr(), body_id, sameframe as MjtByte) };
+        unsafe { mj_local2Global(self.ffi_mut(), &mut xpos, &mut xmat, pos, quat, body_id, sameframe as MjtByte) };
         (xpos, xmat)
     }
 
@@ -725,10 +725,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         let mut distance = vec![0.0; nray];
 
         unsafe { mj_multiRay(
-            self.model.ffi(), self.ffi_mut(), pnt.as_ptr(),
+            self.model.ffi(), self.ffi_mut(), pnt,
             vec.as_ptr() as *const MjtNum, geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
             flg_static as u8, bodyexclude, geom_id.as_mut_ptr(),
-            distance.as_mut_ptr(), nray as i32, cutoff
+            distance.as_mut_ptr(), ptr::null_mut(), nray as i32, cutoff
         ) };
 
         (geom_id, distance)
@@ -744,9 +744,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         let mut geom_id = -1;
         let dist = unsafe { mj_ray(
             self.model.ffi(), self.ffi(),
-            pnt.as_ptr(), vec.as_ptr(),
+            pnt, vec,
             geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
-            flg_static as MjtByte, bodyexclude, &mut geom_id
+            flg_static as MjtByte, bodyexclude, &mut geom_id, ptr::null_mut()
         ) };
         (geom_id, dist)
     }
