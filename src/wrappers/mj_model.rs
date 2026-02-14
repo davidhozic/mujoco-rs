@@ -40,7 +40,7 @@ pub type MjtJoint = mjtJoint;
 /// elements. These values are used in ``m->geom_type`` and ``m->site_type``.
 pub type MjtGeom = mjtGeom;
 
-/// Type of camera projection. Used in `m->cam_projection`.
+/// Type of camera projection. Used in ``m->cam_projection``.
 pub type MjtProjection = mjtProjection;
 
 /// Dynamic modes for cameras and lights, specifying how the camera/light position and orientation are computed. These
@@ -112,15 +112,15 @@ pub type MjtConDataField = mjtConDataField;
 /// last argument to `mj_local2global`.
 pub type MjtSameFrame = mjtSameFrame;
 
+/// Sleep policy associated with a tree. The compiler automatically chooses between ``NEVER`` and ``ALLOWED``, but the user
+/// can override this choice. Only the user can set the ``INIT`` policy (initialized as asleep).
+pub type MjtSleepPolicy = mjtSleepPolicy;
+
 /// Types of flex self-collisions midphase.
 pub type MjtFlexSelf = mjtFlexSelf;
 
 /// Formulas used to combine SDFs when calling mjc_distance and mjc_gradient.
 pub type MjtSDFType = mjtSDFType;
-
-/// Sleep policy associated with a tree.
-pub type MjtSleepPolicy = mjtSleepPolicy;
-
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.

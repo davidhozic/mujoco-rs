@@ -32,6 +32,31 @@ use crate::getter_setter;
 use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
 use crate::util::assert_mujoco_version;
 
+/* Types */
+/// Type of inertia inference.
+pub type MjtGeomInertia = mjtGeomInertia;
+
+/// Type of mesh inertia.
+pub type MjtMeshInertia = mjtMeshInertia;
+
+/// Type of built-in procedural texture.
+pub type MjtBuiltin = mjtBuiltin;
+
+/// Mark type for procedural textures.
+pub type MjtMark = mjtMark;
+
+/// Type of limit specification.
+pub type MjtLimited = mjtLimited;
+
+/// Whether to align free joints with the inertial frame.
+pub type MjtAlignFree = mjtAlignFree;
+
+/// Whether to infer body inertias from child geoms.
+pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
+
+/// Type of orientation specifier.
+pub type MjtOrientation = mjtOrientation;
+/*******************************************************/
 
 /******************************
 ** Type aliases
@@ -69,30 +94,6 @@ impl MjsOrientation {
         self.type_ = MjtOrientation::mjORIENTATION_QUAT;
     }
 }
-
-/// Type of inertia inference.
-pub type MjtGeomInertia = mjtGeomInertia;
-
-/// Type of mesh inertia.
-pub type MjtMeshInertia = mjtMeshInertia;
-
-/// Type of built-in procedural texture.
-pub type MjtBuiltin = mjtBuiltin;
-
-/// Mark type for procedural textures.
-pub type MjtMark = mjtMark;
-
-/// Type of limit specification.
-pub type MjtLimited = mjtLimited;
-
-/// Whether to align free joints with the inertial frame.
-pub type MjtAlignFree = mjtAlignFree;
-
-/// Whether to infer body inertias from child geoms.
-pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
-
-/// Type of orientation specifier.
-pub type MjtOrientation = mjtOrientation;
 
 /// Compiler options.
 pub type MjsCompiler = mjsCompiler;

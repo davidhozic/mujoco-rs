@@ -12,7 +12,7 @@ use crate::{array_slice_dyn, c_str_as_str_method};
 use crate::getter_setter;
 use crate::mujoco_c::*;
 
-
+/* Types */
 /// These are the available categories of geoms in the abstract visualizer. The bitmask can be used in the function
 /// `mjr_render` to specify which categories should be rendered.
 pub type MjtCatBit = mjtCatBit;
@@ -56,6 +56,7 @@ pub type MjtRndFlag = mjtRndFlag;
 
 /// These are the possible stereo rendering types. They are used in ``mjvScene.stereo``.
 pub type MjtStereo = mjtStereo;
+/**********************************************************************************************************************/
 
 /***********************************************************************************************************************
 ** MjvPerturb

@@ -27,14 +27,16 @@ pub type MjtConstraint = mjtConstraint;
 /// These values are used by the solver internally to keep track of the constraint states.
 pub type MjtConstraintState = mjtConstraintState;
 
-/// Warning types. The number of warning types is given by `mjNWARNING`
-/// which is also the length of the array `mjData.warning`.
+/// Warning types. The number of warning types is given by ``mjNWARNING`` which is also the length of the array
+/// ``mjData.warning``.
 pub type MjtWarning = mjtWarning;
 
-/// Timer types. The number of timer types is given by `mjNTIMER`
-/// which is also the length of the array `mjData.timer`, as well as the length of
-/// the string array `mjTIMERSTRING` with timer names.
+/// Timer types. The number of timer types is given by ``mjNTIMER`` which is also the length of the array
+/// ``mjData.timer``, as well as the length of the string array `mjTIMERSTRING` with timer names.
 pub type MjtTimer = mjtTimer;
+
+/// Sleep state of an object.
+pub type MjtSleepState = mjtSleepState;
 /*******************************************/
 
 
