@@ -17,6 +17,29 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+Unreleased [3.0.0] (MuJoCo 3.5.0)
+=================================
+
+- **Breaking changes**:
+
+  - Updated the MuJoCo version to 3.5.0.
+  - Regenerated C FFI bindings to match MuJoCo 3.5.0.
+  - Updated Rust API wrappers for compatibility with MuJoCo 3.5.0.
+  - Several constructors and I/O methods now return `Result <https://doc.rust-lang.org/std/result/>`_ for safer error handling.
+
+- New methods:
+
+  - |mj_data|:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward_kinematics`;
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_ctrl_history`, :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_sensor_history`;
+
+- Other changes:
+
+  - Updated enum type aliases.
+  - Improved fixed-size array pointer handling.
+
+
 2.3.2 (MuJoCo 3.3.7)
 =============================
 - Small performance improvement by removing mutex contention during MuJoCo's scene render.
