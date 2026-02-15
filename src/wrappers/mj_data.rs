@@ -521,14 +521,134 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
-    /// If cost is not NULL, set *cost = s(jar) where jar = Jac*qacc-aref.
-    /// Nullable: cost
-    pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) {
+    /// If cost is not `None`, set `*cost = s(jar)` where `jar = Jac*qacc - aref`.
+    /// Returns `Err` on invalid input (e.g. incorrect `jar` length).
+    pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) -> io::Result<()> {
+        // `jar` must have length equal to d->nefc (one entry per effective constraint)
+        let nefc = self.ffi().nefc as usize;
+        if jar.len() != nefc {
+            return Err(Error::new(ErrorKind::InvalidInput, format!(
+                "jar length must be equal to data.nefc (got {}, expected {})",
+                jar.len(), nefc
+            )));
+        }
+
         unsafe { mj_constraintUpdate(
             self.model.ffi(), self.ffi_mut(),
             jar.as_ptr(), cost.map_or(ptr::null_mut(), |x| x as *mut MjtNum),
             flg_cone_hessian as i32
-        ) }
+        ) };
+
+        Ok(())
+    }
+
+    /// Initialize actuator history buffer (wraps `mj_initCtrlHistory`).
+    /// - `times`: optional array of length `nsample` (use NULL to keep existing timestamps)
+    /// - `values`: array of length `nsample` containing control values
+    /// Returns `Err` on invalid inputs.
+    pub fn init_ctrl_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum]) -> io::Result<()> {
+        let nu = self.model.ffi().nu as usize;
+        if id >= nu {
+            return Err(Error::new(ErrorKind::NotFound, format!("invalid actuator id {}", id)));
+        }
+
+        let nsample = self.model.actuator_history()[id][0];
+        if nsample <= 0 {
+            return Err(Error::new(ErrorKind::NotFound, format!("actuator {} has no history buffer", id)));
+        }
+
+        let ns = nsample as usize;
+        if let Some(t) = times {
+            if t.len() != ns {
+                return Err(Error::new(ErrorKind::InvalidInput, format!("times must have length {}", ns)));
+            }
+        }
+        if values.len() != ns {
+            return Err(Error::new(ErrorKind::InvalidInput, format!("values must have length {}", ns)));
+        }
+
+        unsafe {
+            mj_initCtrlHistory(
+                self.model.ffi(), self.ffi_mut(), id as i32,
+                times.map_or(ptr::null(), |x| x.as_ptr()),
+                values.as_ptr()
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Initialize sensor history buffer (wraps `mj_initSensorHistory`).
+    /// - `times`: optional array of length `nsample` (use NULL to keep existing timestamps)
+    /// - `values`: array of length `nsample * dim` containing sensor values
+    /// Returns `Err` on invalid inputs.
+    pub fn init_sensor_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum], phase: MjtNum) -> io::Result<()> {
+        let nsensor = self.model.ffi().nsensor as usize;
+        if id >= nsensor {
+            return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
+        }
+
+        // nsample = model.sensor_history[2*id]
+        let nsample = unsafe { *self.model.ffi().sensor_history.offset((2 * id) as isize) };
+        if nsample <= 0 {
+            return Err(Error::new(ErrorKind::NotFound, format!("sensor {} has no history buffer", id)));
+        }
+
+        let dim = self.model.sensor_dim()[id] as usize;
+        let required = (nsample as usize) * dim;
+
+        if let Some(t) = times {
+            if t.len() != nsample as usize {
+                return Err(Error::new(ErrorKind::InvalidInput, format!("times must have length {}", nsample)));
+            }
+        }
+        if values.len() != required {
+            return Err(Error::new(ErrorKind::InvalidInput, format!("values must have length nsample*dim (= {})", required)));
+        }
+
+        unsafe {
+            mj_initSensorHistory(
+                self.model.ffi(), self.ffi_mut(), id as i32,
+                times.map_or(ptr::null(), |x| x.as_ptr()),
+                values.as_ptr(), phase
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Read control history value for actuator `id` at `time`.
+    /// `interp` is passed through to `mj_readCtrl` (-1=use the actuator’s interp value, 0=no interpolation, 1=piecewise linear , 2=cubic Spline).
+    /// Returns `Err(ErrorKind::NotFound)` when `id` is out of range.
+    pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<MjtNum> {
+        let nu = self.model.ffi().nu as usize;
+        if id >= nu {
+            return Err(Error::new(ErrorKind::NotFound, format!("invalid actuator id {}", id)));
+        }
+        let val = unsafe { mj_readCtrl(self.model.ffi(), self.ffi(), id as i32, time, interp) };
+        Ok(val)
+    }
+
+    /// Read sensor value(s) for sensor `id` at `time`.
+    /// Returns a `Vec<MjtNum>` (copied). `interp` is forwarded to `mj_readSensor` (-1=use the actuator’s interp value, 0=no interpolation, 1=piecewise linear , 2=cubic Spline).
+    /// Returns `Err(ErrorKind::NotFound)` when `id` is out of range.
+    pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<Vec<MjtNum>> {
+        let nsensor = self.model.ffi().nsensor as usize;
+        if id >= nsensor {
+            return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
+        }
+
+        let dim = self.model.sensor_dim()[id] as usize;
+        let mut out = vec![0.0 as MjtNum; dim];
+        let ptr = unsafe { mj_readSensor(self.model.ffi(), self.ffi(), id as i32, time, out.as_mut_ptr(), interp) };
+        if ptr.is_null() {
+            // interpolated value written into `out`
+            Ok(out)
+        } else {
+            // pointer into internal history buffer; copy to Vec and return
+            let slice = unsafe { std::slice::from_raw_parts(ptr, dim) };
+            Ok(slice.to_vec())
+        }
     }
 
     /// Add contact to d->contact list; return 0 if success; 1 if buffer full.
@@ -721,13 +841,21 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Intersect multiple rays emanating from a single point.
-    /// Similar semantics to mj_ray, but vec is an array of (nray x 3) directions.
-    /// Returns (geomids, distances).
+    /// Similar semantics to mj_ray, but `vec` is an array of (nray x 3) directions.
+    /// If `normals_out` is `Some`, it must be a mutable slice of length `nray` and it will be
+    /// filled with surface normals (one `[x,y,z]` per ray). Use `None` to skip normals.
+    /// Returns `(geomids, distances)` or `Err` on invalid input.
     pub fn multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
-        flg_static: bool, bodyexclude: i32, cutoff: MjtNum
-    ) -> (Vec<i32>, Vec<MjtNum>) {
+        flg_static: bool, bodyexclude: i32, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
+    ) -> io::Result<(Vec<i32>, Vec<MjtNum>)> {
         let nray = vec.len();
+        if let Some(buf) = &normals_out {
+            if buf.len() != nray {
+                return Err(Error::new(ErrorKind::InvalidInput, "normals_out must have length equal to number of rays"));
+            }
+        }
+
         let mut geom_id = vec![0; nray];
         let mut distance = vec![0.0; nray];
 
@@ -735,27 +863,33 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             self.model.ffi(), self.ffi_mut(), pnt,
             vec.as_ptr() as *const MjtNum, geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
             flg_static as u8, bodyexclude, geom_id.as_mut_ptr(),
-            distance.as_mut_ptr(), ptr::null_mut(), nray as i32, cutoff
+            distance.as_mut_ptr(), normals_out.map_or(ptr::null_mut(), |x| x.as_mut_ptr() as *mut MjtNum),
+            nray as i32, cutoff
         ) };
 
-        (geom_id, distance)
+        Ok((geom_id, distance))
     }
 
     /// Intersect ray (pnt+x*vec, x>=0) with visible geoms, except geoms in bodyexclude.
     /// Return distance (x) to nearest surface, or -1 if no intersection and output geomid.
-    /// geomgroup, flg_static are as in mjvOption; geomgroup==NULL skips group exclusion.
+    /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
+    /// `geomgroup` and `flg_static` are as in mjvOption; `geomgroup==NULL` skips group exclusion.
+    /// Returns `Err` only on invalid inputs; otherwise `Ok((geomid, distance))`.
     pub fn ray(
         &self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
-        geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: bool, bodyexclude: i32
-    ) -> (i32, MjtNum) {
+        geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: bool, bodyexclude: i32,
+        normal_out: Option<&mut [MjtNum; 3]>
+    ) -> io::Result<(i32, MjtNum)> {
+        // `normal_out` is a fixed-size array; nothing to validate at runtime here.
         let mut geom_id = -1;
         let dist = unsafe { mj_ray(
             self.model.ffi(), self.ffi(),
             pnt, vec,
             geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
-            flg_static as MjtByte, bodyexclude, &mut geom_id, ptr::null_mut()
+            flg_static as MjtByte, bodyexclude, &mut geom_id,
+            normal_out.map_or(ptr::null_mut(), |x| x)
         ) };
-        (geom_id, dist)
+        Ok((geom_id, dist))
     }
 
     /// Reads data's state into `destination`. The `spec` parameter is a bit mask of [`MjtState`] elements,
@@ -1426,10 +1560,10 @@ mod test {
         data.project_constraint();
         data.reference_constraint();
 
-        let jar = vec![0.0; (data.model.ffi().nv) as usize];
+        let jar = vec![0.0; data.nefc() as usize];
         let mut cost = 0.0;
-        data.constraint_update(&jar, None, false);
-        data.constraint_update(&jar, Some(&mut cost), true);
+        data.constraint_update(&jar, None, false).unwrap();
+        data.constraint_update(&jar, Some(&mut cost), true).unwrap();
     }
 
     #[test]
@@ -1523,13 +1657,103 @@ mod test {
         assert_eq!(xmat.len(), 9);
 
         let ray_vecs = [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
-        let rays = data.multi_ray(&pos, &ray_vecs, None, false, -1, 10.0);
+        let rays = data.multi_ray(&pos, &ray_vecs, None, false, -1, 10.0, None).unwrap();
         assert_eq!(rays.0.len(), 3);
         assert_eq!(rays.1.len(), 3);
 
-        let (geomid, dist) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1);
+        let (geomid, dist) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1, None).unwrap();
         assert!(dist.is_finite());
         assert!(geomid >= -1);
+
+        // ray API with normal output (optional parameter)
+        let mut normal = [0.0; 3];
+        let (geomid2, dist2) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1, Some(&mut normal)).unwrap();
+        assert!(dist2.is_finite());
+        assert!(geomid2 >= -1);
+        let norm_len = (normal[0]*normal[0] + normal[1]*normal[1] + normal[2]*normal[2]).sqrt();
+        if dist2 >= 0.0 {
+            // hit — normal should be non-zero
+            assert!(norm_len > 0.0);
+        } else {
+            // no hit — normal buffer is unchanged / zeroed
+            assert_eq!(normal, [0.0; 3]);
+        }
+
+        let mut normals_buf = vec![[0.0; 3]; ray_vecs.len()];
+        let (gids, dists) = data.multi_ray(&pos, &ray_vecs, None, false, -1, 10.0, Some(&mut normals_buf)).unwrap();
+        assert_eq!(gids.len(), normals_buf.len());
+        assert_eq!(dists.len(), normals_buf.len());
+        for (d, n) in dists.iter().zip(normals_buf.iter()) {
+            let l = (n[0]*n[0] + n[1]*n[1] + n[2]*n[2]).sqrt();
+            if *d >= 0.0 {
+                assert!(l > 0.0);
+            } else {
+                assert_eq!(*n, [0.0; 3]);
+            }
+        }
+    }
+
+    #[test]
+    fn test_constraint_update_checks_jar_length() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        // correct length should not panic
+        let jar = vec![0.0; data.ffi().nefc as usize];
+        data.constraint_update(&jar, None, false).unwrap();
+
+        // wrong length should return Err
+        let bad_jar = vec![0.0; 1];
+        let result = data.constraint_update(&bad_jar, None, false);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_init_history_ctrl_and_sensor() {
+        const HIST_MODEL: &str = r#"
+<mujoco>
+  <option timestep="0.01"/>
+  <worldbody>
+    <body name="body">
+      <joint name="slide" type="slide"/>
+      <geom size="0.1"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor name="motor0" joint="slide" delay="0.05" nsample="6"/>
+  </actuator>
+  <sensor>
+    <jointpos name="jointpos0" joint="slide" delay="0.025" interp="linear" nsample="4"/>
+  </sensor>
+</mujoco>
+"#;
+
+        let model = MjModel::from_xml_string(HIST_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let times_ctrl: Vec<MjtNum> = (0..6).map(|i| i as MjtNum * 0.01).collect();
+        let values_ctrl = vec![1.2345; 6];
+        data.init_ctrl_history(0, Some(&times_ctrl), &values_ctrl).unwrap();
+
+        // read back via safe wrapper: exact-match should return provided value
+        let val = data.read_ctrl(0, times_ctrl[2], 0).unwrap();
+        assert_relative_eq!(val, values_ctrl[2], epsilon=1e-12);
+
+        // sensor history via wrapper
+        let times_sens: Vec<MjtNum> = (0..4).map(|i| i as MjtNum * 0.01).collect();
+        // sensor dim for jointpos is 1
+        let values_sens = vec![2.718; 4 * 1];
+        data.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).unwrap();
+
+        let got = data.read_sensor(0, times_sens[1], 0).unwrap();
+        assert_eq!(got.len(), 1);
+        assert_relative_eq!(got[0], values_sens[1], epsilon=1e-12);
+
+        // also test interpolation path (time between samples)
+        let interp_res = data.read_sensor(0, 0.005, 1).unwrap();
+        assert_eq!(interp_res.len(), 1);
+        // values are identical here, but ensure we get a value
+        assert_relative_eq!(interp_res[0], values_sens[0], epsilon=1e-12);
     }
 
     #[test]
@@ -1584,5 +1808,146 @@ mod test {
 
         assert!(data.contact().len() != 0);
         assert_eq!(data.contact().len(), data.contacts().len());
+    }
+
+    #[test]
+    fn test_init_ctrl_history_all_combinations() {
+        const HIST_MODEL: &str = r#"
+<mujoco>
+  <worldbody>
+    <body name="body">
+      <joint name="slide" type="slide"/>
+      <geom size="0.1"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor name="motor0" joint="slide" delay="0.05" nsample="6"/>
+  </actuator>
+</mujoco>
+"#;
+
+        let model = MjModel::from_xml_string(HIST_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let times: Vec<MjtNum> = (0..6).map(|i| i as MjtNum * 0.01).collect();
+        let values = vec![1.2345; 6];
+
+        // success: times Some / None
+        assert!(data.init_ctrl_history(0, Some(&times), &values).is_ok());
+        assert!(data.init_ctrl_history(0, None, &values).is_ok());
+
+        // times length mismatch -> InvalidInput
+        let bad_times = vec![0.0f64];
+        let err = data.init_ctrl_history(0, Some(&bad_times), &values).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+
+        // values length mismatch -> InvalidInput
+        let bad_values = vec![1.0; 5];
+        let err = data.init_ctrl_history(0, Some(&times), &bad_values).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+
+        // invalid actuator id -> NotFound
+        let err = data.init_ctrl_history(99, Some(&times), &values).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+
+        // read_ctrl invalid id -> NotFound
+        let err = data.read_ctrl(99, times[0], 0).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+
+        // actuator exists but has no history buffer -> NotFound
+        const NO_HIST_ACT_MODEL: &str = r#"
+<mujoco>
+  <worldbody>
+    <body>
+      <joint name="slide" type="slide"/>
+      <geom size="0.1"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor name="motor0" joint="slide"/>
+  </actuator>
+</mujoco>
+"#;
+        let model2 = MjModel::from_xml_string(NO_HIST_ACT_MODEL).unwrap();
+        let mut data2 = model2.make_data();
+        let err = data2.init_ctrl_history(0, Some(&times), &values).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn test_init_sensor_history_all_combinations() {
+        const HIST_SENSOR_MODEL: &str = r#"
+<mujoco>
+  <worldbody>
+    <body name="body">
+      <joint name="slide" type="slide"/>
+      <geom size="0.1"/>
+    </body>
+  </worldbody>
+  <sensor>
+    <jointpos name="jointpos0" joint="slide" delay="0.025" interp="linear" nsample="4"/>
+  </sensor>
+</mujoco>
+"#;
+
+        let model = MjModel::from_xml_string(HIST_SENSOR_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let times_sens: Vec<MjtNum> = (0..4).map(|i| i as MjtNum * 0.01).collect();
+        let values_sens = vec![2.718; 4 * 1]; // dim == 1 for jointpos
+
+        // success: times Some / None
+        assert!(data.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).is_ok());
+        assert!(data.init_sensor_history(0, None, &values_sens, 0.0).is_ok());
+
+        // times length mismatch -> InvalidInput
+        let bad_times = vec![0.0f64];
+        let err = data.init_sensor_history(0, Some(&bad_times), &values_sens, 0.0).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+
+        // values length mismatch -> InvalidInput
+        let bad_values = vec![3.14; 3];
+        let err = data.init_sensor_history(0, Some(&times_sens), &bad_values, 0.0).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+
+        // invalid sensor id -> NotFound
+        let err = data.init_sensor_history(99, Some(&times_sens), &values_sens, 0.0).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+
+        // read_sensor invalid id -> NotFound
+        let err = data.read_sensor(99, times_sens[0], 0).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+
+        // sensor exists but has no history buffer -> NotFound
+        const NO_HIST_SENS_MODEL: &str = r#"
+<mujoco>
+  <worldbody>
+    <body>
+      <joint name="slide" type="slide"/>
+      <geom size="0.1"/>
+    </body>
+  </worldbody>
+  <sensor>
+    <jointpos name="jointpos0" joint="slide"/>
+  </sensor>
+</mujoco>
+"#;
+        let model2 = MjModel::from_xml_string(NO_HIST_SENS_MODEL).unwrap();
+        let mut data2 = model2.make_data();
+        let err = data2.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn test_multi_ray_normals_length_mismatch() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+        let pos = [0.0; 3];
+        let ray_vecs = [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
+        let mut bad_normals = vec![[0.0; 3]; 2]; // length 2 != 3
+
+        let res = data.multi_ray(&pos, &ray_vecs, None, false, -1, 10.0, Some(&mut bad_normals));
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
     }
 }
