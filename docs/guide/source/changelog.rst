@@ -26,6 +26,9 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
   - Regenerated C FFI bindings to match MuJoCo 3.5.0.
   - Updated Rust API wrappers for compatibility with MuJoCo 3.5.0.
   - Several constructors and I/O methods now return `Result <https://doc.rust-lang.org/std/result/>`_ for safer error handling.
+  - Removed deprecated methods:
+
+    - |mj_data|: ``warning_stats``, ``timer_stats``, ``maxuse_threadstack``.
 
 - New methods:
 

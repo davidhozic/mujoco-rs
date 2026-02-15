@@ -1013,22 +1013,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         &self.model
     }
 
-    /// Warning statistics.
-    #[deprecated(since = "2.0.0", note = "replaced with warning")]
-    pub fn warning_stats(&self) -> &[MjWarningStat] {
-        &self.ffi().warning
-    }
-
-    #[deprecated(since = "2.0.0", note = "replaced with timer")]
-    pub fn timer_stats(&self) -> &[MjTimerStat] {
-        &self.ffi().timer
-    }
-
-    /// Maximum stack allocation per thread in bytes.
-    pub fn maxuse_threadstack(&self) -> &[MjtSize] {
-        &self.ffi().maxuse_threadstack
-    }
-
     getter_setter! {get, [
         [ffi] narena: MjtSize; "size of the arena in bytes (inclusive of the stack).";
         [ffi] nbuffer: MjtSize; "size of main buffer in bytes.";
@@ -1046,7 +1030,18 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         [ffi] nA: i32; "number of non-zeros in constraint inverse inertia matrix.";
         [ffi] nisland: i32; "number of detected constraint islands.";
         [ffi] nidof: i32; "number of dofs in all islands.";
+        [ffi] ntree_awake: i32; "number of awake trees.";
+        [ffi] nbody_awake: i32; "number of awake dynamic and static bodies.";
+        [ffi] nparent_awake: i32; "number of bodies with awake parents.";
+        [ffi] nv_awake: i32; "number of awake dofs.";
         [ffi] signature: u64; "compilation signature.";
+    ]}
+
+    getter_setter! {get, [
+        [ffi] flg_energypos: bool; "has mj_energyPos been called.";
+        [ffi] flg_energyvel: bool; "has mj_energyVel been called.";
+        [ffi] flg_subtreevel: bool; "has mj_subtreeVel been called.";
+        [ffi] flg_rnepost: bool; "has mj_rnePostConstraint been called.";
     ]}
 
     getter_setter! {with, get, set, [[ffi, ffi_mut] time: MjtNum; "simulation time.";]}
@@ -1057,7 +1052,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     getter_setter! {
         get, [
-            [ffi, ffi_mut] solver: &[MjSolverStat; (mjNISLAND * mjNSOLVER) as usize]; "solver statistics per island, per iteration.";
+            [ffi] (allow_mut = false) maxuse_threadstack: &[MjtSize; mjMAXTHREAD as usize]; "maximum stack allocation per thread in bytes.";
+            [ffi, ffi_mut] solver: &[MjSolverStat; mjNISLAND as usize * mjNSOLVER as usize]; "solver statistics per island, per iteration.";
             [ffi, ffi_mut] solver_niter: &[i32; mjNISLAND as usize]; "number of solver iterations, per island.";
             [ffi, ffi_mut] solver_nnz: &[i32; mjNISLAND as usize]; "number of nonzeros in Hessian or efc_AR, per island.";
             [ffi, ffi_mut] solver_fwdinv: &[MjtNum; 2]; "forward-inverse comparison: qfrc, efc.";
