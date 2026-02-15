@@ -1073,6 +1073,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         qpos: &[MjtNum; "position"; model.ffi().nq],
         qvel: &[MjtNum; "velocity"; model.ffi().nv],
         act: &[MjtNum; "actuator activation"; model.ffi().na],
+        history: &[MjtNum; "history buffer"; model.ffi().nhistory],
         qacc_warmstart: &[MjtNum; "acceleration used for warmstart"; model.ffi().nv],
         plugin_state: &[MjtNum; "plugin state"; model.ffi().npluginstate],
         ctrl: &[MjtNum; "control"; model.ffi().nu],
@@ -1085,6 +1086,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         act_dot: &[MjtNum; "time-derivative of actuator activation"; model.ffi().na],
         userdata: &[MjtNum; "user data, not touched by engine"; model.ffi().nuserdata],
         sensordata: &[MjtNum; "sensor data array"; model.ffi().nsensordata],
+        tree_asleep: &[i32; "<0: awake; >=0: index cycle of sleeping trees"; model.ffi().ntree],
         xpos: &[[MjtNum; 3] [cast]; "Cartesian position of body frame"; model.ffi().nbody],
         xquat: &[[MjtNum; 4] [cast]; "Cartesian orientation of body frame"; model.ffi().nbody],
         xmat: &[[MjtNum; 9] [cast]; "Cartesian orientation of body frame"; model.ffi().nbody],
@@ -1105,7 +1107,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         cinert: &[[MjtNum; 10] [cast]; "com-based body inertia and mass"; model.ffi().nbody],
         flexvert_xpos: &[[MjtNum; 3] [cast]; "Cartesian flex vertex positions"; model.ffi().nflexvert],
         flexelem_aabb: &[[MjtNum; 6] [cast]; "flex element bounding boxes (center, size)"; model.ffi().nflexelem],
+        flexedge_J: &[MjtNum; "flex edge Jacobian"; model.ffi().nJfe],
         flexedge_length: &[MjtNum; "flex edge lengths"; model.ffi().nflexedge],
+        flexvert_J: &[[MjtNum; 2] [cast]; "flex vertex Jacobian"; model.ffi().nJfv],
+        flexvert_length: &[[MjtNum; 2] [cast]; "flex vertex lengths"; model.ffi().nflexvert],
         bvh_aabb_dyn: &[[MjtNum; 6] [cast]; "global bounding box (center, size)"; model.ffi().nbvhdynamic],
         ten_wrapadr: &[i32; "start address of tendon's path"; model.ffi().ntendon],
         ten_wrapnum: &[i32; "number of wrap points in path"; model.ffi().ntendon],
@@ -1125,6 +1130,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         qLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
         qLDiagInv: &[MjtNum; "1/diag(D)"; model.ffi().nv],
         bvh_active: &[bool [cast]; "was bounding volume checked for collision"; model.ffi().nbvh],
+        tree_awake: &[bool [cast]; "is tree awake; 0: asleep; 1: awake"; model.ffi().ntree],
+        body_awake: &[MjtSleepState [cast]; "body sleep state"; model.ffi().nbody],
+        body_awake_ind: &[i32; "indices of awake and static bodies"; model.ffi().nbody],
+        parent_awake_ind: &[i32; "indices of bodies with awake or static parents"; model.ffi().nbody],
+        dof_awake_ind: &[i32; "indices of awake dofs"; model.ffi().nv],
         flexedge_velocity: &[MjtNum; "flex edge velocities"; model.ffi().nflexedge],
         ten_velocity: &[MjtNum; "tendon velocities"; model.ffi().ntendon],
         actuator_velocity: &[MjtNum; "actuator velocities"; model.ffi().nu],
@@ -1166,6 +1176,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         efc_D: &[MjtNum; "constraint mass"; ffi().nefc],
         efc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
         tendon_efcadr: &[i32; "first efc address involving tendon; -1: none"; model.ffi().ntendon],
+        tree_island: &[i32; "island id of this tree; -1: none"; model.ffi().ntree],
+        island_ntree: &[i32; "number of trees in this island"; ffi().nisland],
+        island_itreeadr: &[i32; "island start address in itree vector"; ffi().nisland],
+        map_itree2tree: &[i32; "map from itree to tree"; model.ffi().ntree],
         dof_island: &[i32; "island id of this dof; -1: none"; model.ffi().nv],
         island_nv: &[i32; "number of dofs in this island"; ffi().nisland],
         island_idofadr: &[i32; "island start address in idof vector"; ffi().nisland],
@@ -1216,8 +1230,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     array_slice_dyn! {
         sublen_dep {
             ten_J_colind: &[[i32; model.ffi().nv as usize] [cast]; "column indices in sparse Jacobian"; model.ffi().ntendon],
-            ten_J: &[[MjtNum; model.ffi().nv as usize] [cast]; "tendon Jacobian"; model.ffi().ntendon],
-            flexedge_J: &[[MjtNum; model.ffi().nv as usize] [cast]; "flex edge Jacobian"; model.ffi().nflexedge]
+            ten_J: &[[MjtNum; model.ffi().nv as usize] [cast]; "tendon Jacobian"; model.ffi().ntendon]
         }
     }
 }

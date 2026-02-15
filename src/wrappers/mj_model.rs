@@ -121,6 +121,12 @@ pub type MjtFlexSelf = mjtFlexSelf;
 
 /// Formulas used to combine SDFs when calling mjc_distance and mjc_gradient.
 pub type MjtSDFType = mjtSDFType;
+
+/// Data fields returned by rangefinder sensors.
+pub type MjtRayDataField = mjtRayDataField;
+
+/// Camera output type bitflags.
+pub type MjtCamOutBit = mjtCamOutBit;
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
@@ -752,7 +758,7 @@ impl MjModel {
         cam_fovy: &[MjtNum; "y field-of-view (ortho ? len : deg)"; ffi().ncam],
         cam_ipd: &[MjtNum; "inter-pupilary distance"; ffi().ncam],
         cam_resolution: &[[i32; 2] [cast]; "resolution: pixels [width, height]"; ffi().ncam],
-        cam_output: &[i32; "output types (mjtCamOut bit flags)"; ffi().ncam],
+        cam_output: &[i32; "output types (MjtCamOutBit bit flags)"; ffi().ncam],
         cam_sensorsize: &[[f32; 2] [cast]; "sensor size: length [width, height]"; ffi().ncam],
         cam_intrinsic: &[[f32; 4] [cast]; "[focal length; principal point]"; ffi().ncam],
         light_mode: &[MjtCamLight [cast]; "light tracking mode"; ffi().nlight],
