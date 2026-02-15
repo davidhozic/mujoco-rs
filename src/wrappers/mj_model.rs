@@ -40,6 +40,9 @@ pub type MjtJoint = mjtJoint;
 /// elements. These values are used in ``m->geom_type`` and ``m->site_type``.
 pub type MjtGeom = mjtGeom;
 
+/// Type of camera projection. Used in ``m->cam_projection``.
+pub type MjtProjection = mjtProjection;
+
 /// Dynamic modes for cameras and lights, specifying how the camera/light position and orientation are computed. These
 /// values are used in ``m->cam_mode`` and ``m->light_mode``.
 pub type MjtCamLight = mjtCamLight;
@@ -109,12 +112,15 @@ pub type MjtConDataField = mjtConDataField;
 /// last argument to `mj_local2global`.
 pub type MjtSameFrame = mjtSameFrame;
 
+/// Sleep policy associated with a tree. The compiler automatically chooses between ``NEVER`` and ``ALLOWED``, but the user
+/// can override this choice. Only the user can set the ``INIT`` policy (initialized as asleep).
+pub type MjtSleepPolicy = mjtSleepPolicy;
+
 /// Types of flex self-collisions midphase.
 pub type MjtFlexSelf = mjtFlexSelf;
 
 /// Formulas used to combine SDFs when calling mjc_distance and mjc_gradient.
 pub type MjtSDFType = mjtSDFType;
-
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
@@ -307,7 +313,7 @@ impl MjModel {
 
     info_method! { Model, ffi(), camera, [
         mode: 1, bodyid: 1, targetbodyid: 1, pos: 3, quat: 4,
-        poscom0: 3, pos0: 3, mat0: 9, orthographic: 1, fovy: 1,
+        poscom0: 3, pos0: 3, mat0: 9, projection: 1, fovy: 1,
         ipd: 1, resolution: 2, sensorsize: 2, intrinsic: 4
     ], [], []}
 
@@ -435,7 +441,7 @@ impl MjModel {
     }
 
     /// Return size of buffer needed to hold model.
-    pub fn size(&self) -> i32 {
+    pub fn size(&self) -> MjtSize {
         unsafe { mj_sizeModel(self.ffi()) }
     }
 
@@ -457,7 +463,7 @@ impl MjModel {
 
     /// Return size of state specification. The bits of the integer spec correspond to element fields of [`MjtState`](crate::wrappers::mj_data::MjtState).
     pub fn state_size(&self, spec: u32) -> i32 {
-        unsafe { mj_stateSize(self.ffi(), spec) }
+        unsafe { mj_stateSize(self.ffi(), spec as i32) }
     }
 
     /// Determine type of friction cone.
@@ -527,90 +533,93 @@ impl MjModel {
     }
 
     getter_setter! {get, [
-        [ffi] nq: i32; "number of generalized coordinates = dim(qpos).";
-        [ffi] nv: i32; "number of degrees of freedom = dim(qvel).";
-        [ffi] nu: i32; "number of actuators/controls = dim(ctrl).";
-        [ffi] na: i32; "number of activation states = dim(act).";
-        [ffi] nbody: i32; "number of bodies.";
-        [ffi] nbvh: i32; "number of total bounding volumes in all bodies.";
-        [ffi] nbvhstatic: i32; "number of static bounding volumes (aabb stored in mjModel).";
-        [ffi] nbvhdynamic: i32; "number of dynamic bounding volumes (aabb stored in mjData).";
-        [ffi] noct: i32; "number of total octree cells in all meshes.";
-        [ffi] njnt: i32; "number of joints.";
-        [ffi] ntree: i32; "number of kinematic trees under world body.";
-        [ffi] nM: i32; "number of non-zeros in sparse inertia matrix.";
-        [ffi] nB: i32; "number of non-zeros in sparse body-dof matrix.";
-        [ffi] nC: i32; "number of non-zeros in sparse reduced dof-dof matrix.";
-        [ffi] nD: i32; "number of non-zeros in sparse dof-dof matrix.";
-        [ffi] ngeom: i32; "number of geoms.";
-        [ffi] nsite: i32; "number of sites.";
-        [ffi] ncam: i32; "number of cameras.";
-        [ffi] nlight: i32; "number of lights.";
-        [ffi] nflex: i32; "number of flexes.";
-        [ffi] nflexnode: i32; "number of dofs in all flexes.";
-        [ffi] nflexvert: i32; "number of vertices in all flexes.";
-        [ffi] nflexedge: i32; "number of edges in all flexes.";
-        [ffi] nflexelem: i32; "number of elements in all flexes.";
-        [ffi] nflexelemdata: i32; "number of element vertex ids in all flexes.";
-        [ffi] nflexelemedge: i32; "number of element edge ids in all flexes.";
-        [ffi] nflexshelldata: i32; "number of shell fragment vertex ids in all flexes.";
-        [ffi] nflexevpair: i32; "number of element-vertex pairs in all flexes.";
-        [ffi] nflextexcoord: i32; "number of vertices with texture coordinates.";
-        [ffi] nmesh: i32; "number of meshes.";
-        [ffi] nmeshvert: i32; "number of vertices in all meshes.";
-        [ffi] nmeshnormal: i32; "number of normals in all meshes.";
-        [ffi] nmeshtexcoord: i32; "number of texcoords in all meshes.";
-        [ffi] nmeshface: i32; "number of triangular faces in all meshes.";
-        [ffi] nmeshgraph: i32; "number of ints in mesh auxiliary data.";
-        [ffi] nmeshpoly: i32; "number of polygons in all meshes.";
-        [ffi] nmeshpolyvert: i32; "number of vertices in all polygons.";
-        [ffi] nmeshpolymap: i32; "number of polygons in vertex map.";
-        [ffi] nskin: i32; "number of skins.";
-        [ffi] nskinvert: i32; "number of vertices in all skins.";
-        [ffi] nskintexvert: i32; "number of vertices with texcoords in all skins.";
-        [ffi] nskinface: i32; "number of triangular faces in all skins.";
-        [ffi] nskinbone: i32; "number of bones in all skins.";
-        [ffi] nskinbonevert: i32; "number of vertices in all skin bones.";
-        [ffi] nhfield: i32; "number of heightfields.";
-        [ffi] nhfielddata: i32; "number of data points in all heightfields.";
-        [ffi] ntex: i32; "number of textures.";
-        [ffi] ntexdata: i32; "number of bytes in texture rgb data.";
-        [ffi] nmat: i32; "number of materials.";
-        [ffi] npair: i32; "number of predefined geom pairs.";
-        [ffi] nexclude: i32; "number of excluded geom pairs.";
-        [ffi] neq: i32; "number of equality constraints.";
-        [ffi] ntendon: i32; "number of tendons.";
-        [ffi] nwrap: i32; "number of wrap objects in all tendon paths.";
-        [ffi] nsensor: i32; "number of sensors.";
-        [ffi] nnumeric: i32; "number of numeric custom fields.";
-        [ffi] nnumericdata: i32; "number of mjtNums in all numeric fields.";
-        [ffi] ntext: i32; "number of text custom fields.";
-        [ffi] ntextdata: i32; "number of mjtBytes in all text fields.";
-        [ffi] ntuple: i32; "number of tuple custom fields.";
-        [ffi] ntupledata: i32; "number of objects in all tuple fields.";
-        [ffi] nkey: i32; "number of keyframes.";
-        [ffi] nmocap: i32; "number of mocap bodies.";
-        [ffi] nplugin: i32; "number of plugin instances.";
-        [ffi] npluginattr: i32; "number of chars in all plugin config attributes.";
-        [ffi] nuser_body: i32; "number of mjtNums in body_user.";
-        [ffi] nuser_jnt: i32; "number of mjtNums in jnt_user.";
-        [ffi] nuser_geom: i32; "number of mjtNums in geom_user.";
-        [ffi] nuser_site: i32; "number of mjtNums in site_user.";
-        [ffi] nuser_cam: i32; "number of mjtNums in cam_user.";
-        [ffi] nuser_tendon: i32; "number of mjtNums in tendon_user.";
-        [ffi] nuser_actuator: i32; "number of mjtNums in actuator_user.";
-        [ffi] nuser_sensor: i32; "number of mjtNums in sensor_user.";
-        [ffi] nnames: i32; "number of chars in all names.";
-        [ffi] npaths: i32; "number of chars in all paths.";
-        [ffi] nnames_map: i32; "number of slots in the names hash map.";
-        [ffi] nJmom: i32; "number of non-zeros in sparse actuator_moment matrix.";
-        [ffi] ngravcomp: i32; "number of bodies with nonzero gravcomp.";
-        [ffi] nemax: i32; "number of potential equality-constraint rows.";
-        [ffi] njmax: i32; "number of available rows in constraint Jacobian (legacy).";
-        [ffi] nconmax: i32; "number of potential contacts in contact list (legacy).";
-        [ffi] nuserdata: i32; "number of mjtNums reserved for the user.";
-        [ffi] nsensordata: i32; "number of mjtNums in sensor data vector.";
-        [ffi] npluginstate: i32; "number of mjtNums in plugin state vector.";
+        [ffi] nq: MjtSize; "number of generalized coordinates = dim(qpos).";
+        [ffi] nv: MjtSize; "number of degrees of freedom = dim(qvel).";
+        [ffi] nu: MjtSize; "number of actuators/controls = dim(ctrl).";
+        [ffi] na: MjtSize; "number of activation states = dim(act).";
+        [ffi] nbody: MjtSize; "number of bodies.";
+        [ffi] nbvh: MjtSize; "number of total bounding volumes in all bodies.";
+        [ffi] nbvhstatic: MjtSize; "number of static bounding volumes (aabb stored in mjModel).";
+        [ffi] nbvhdynamic: MjtSize; "number of dynamic bounding volumes (aabb stored in mjData).";
+        [ffi] noct: MjtSize; "number of total octree cells in all meshes.";
+        [ffi] njnt: MjtSize; "number of joints.";
+        [ffi] ntree: MjtSize; "number of kinematic trees under world body.";
+        [ffi] nM: MjtSize; "number of non-zeros in sparse inertia matrix.";
+        [ffi] nB: MjtSize; "number of non-zeros in sparse body-dof matrix.";
+        [ffi] nC: MjtSize; "number of non-zeros in sparse reduced dof-dof matrix.";
+        [ffi] nD: MjtSize; "number of non-zeros in sparse dof-dof matrix.";
+        [ffi] ngeom: MjtSize; "number of geoms.";
+        [ffi] nsite: MjtSize; "number of sites.";
+        [ffi] ncam: MjtSize; "number of cameras.";
+        [ffi] nlight: MjtSize; "number of lights.";
+        [ffi] nflex: MjtSize; "number of flexes.";
+        [ffi] nflexnode: MjtSize; "number of dofs in all flexes.";
+        [ffi] nflexvert: MjtSize; "number of vertices in all flexes.";
+        [ffi] nflexedge: MjtSize; "number of edges in all flexes.";
+        [ffi] nflexelem: MjtSize; "number of elements in all flexes.";
+        [ffi] nflexelemdata: MjtSize; "number of element vertex ids in all flexes.";
+        [ffi] nflexelemedge: MjtSize; "number of element edge ids in all flexes.";
+        [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
+        [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
+        [ffi] nflextexcoord: MjtSize; "number of vertices with texture coordinates.";
+        [ffi] nJfe: MjtSize; "number of non-zeros in sparse flexedge Jacobian matrix.";
+        [ffi] nJfv: MjtSize; "number of non-zeros in sparse flexvert Jacobian matrix.";
+        [ffi] nmesh: MjtSize; "number of meshes.";
+        [ffi] nmeshvert: MjtSize; "number of vertices in all meshes.";
+        [ffi] nmeshnormal: MjtSize; "number of normals in all meshes.";
+        [ffi] nmeshtexcoord: MjtSize; "number of texcoords in all meshes.";
+        [ffi] nmeshface: MjtSize; "number of triangular faces in all meshes.";
+        [ffi] nmeshgraph: MjtSize; "number of ints in mesh auxiliary data.";
+        [ffi] nmeshpoly: MjtSize; "number of polygons in all meshes.";
+        [ffi] nmeshpolyvert: MjtSize; "number of vertices in all polygons.";
+        [ffi] nmeshpolymap: MjtSize; "number of polygons in vertex map.";
+        [ffi] nskin: MjtSize; "number of skins.";
+        [ffi] nskinvert: MjtSize; "number of vertices in all skins.";
+        [ffi] nskintexvert: MjtSize; "number of vertices with texcoords in all skins.";
+        [ffi] nskinface: MjtSize; "number of triangular faces in all skins.";
+        [ffi] nskinbone: MjtSize; "number of bones in all skins.";
+        [ffi] nskinbonevert: MjtSize; "number of vertices in all skin bones.";
+        [ffi] nhfield: MjtSize; "number of heightfields.";
+        [ffi] nhfielddata: MjtSize; "number of data points in all heightfields.";
+        [ffi] ntex: MjtSize; "number of textures.";
+        [ffi] ntexdata: MjtSize; "number of bytes in texture rgb data.";
+        [ffi] nmat: MjtSize; "number of materials.";
+        [ffi] npair: MjtSize; "number of predefined geom pairs.";
+        [ffi] nexclude: MjtSize; "number of excluded geom pairs.";
+        [ffi] neq: MjtSize; "number of equality constraints.";
+        [ffi] ntendon: MjtSize; "number of tendons.";
+        [ffi] nwrap: MjtSize; "number of wrap objects in all tendon paths.";
+        [ffi] nsensor: MjtSize; "number of sensors.";
+        [ffi] nnumeric: MjtSize; "number of numeric custom fields.";
+        [ffi] nnumericdata: MjtSize; "number of mjtNums in all numeric fields.";
+        [ffi] ntext: MjtSize; "number of text custom fields.";
+        [ffi] ntextdata: MjtSize; "number of mjtBytes in all text fields.";
+        [ffi] ntuple: MjtSize; "number of tuple custom fields.";
+        [ffi] ntupledata: MjtSize; "number of objects in all tuple fields.";
+        [ffi] nkey: MjtSize; "number of keyframes.";
+        [ffi] nmocap: MjtSize; "number of mocap bodies.";
+        [ffi] nplugin: MjtSize; "number of plugin instances.";
+        [ffi] npluginattr: MjtSize; "number of chars in all plugin config attributes.";
+        [ffi] nuser_body: MjtSize; "number of mjtNums in body_user.";
+        [ffi] nuser_jnt: MjtSize; "number of mjtNums in jnt_user.";
+        [ffi] nuser_geom: MjtSize; "number of mjtNums in geom_user.";
+        [ffi] nuser_site: MjtSize; "number of mjtNums in site_user.";
+        [ffi] nuser_cam: MjtSize; "number of mjtNums in cam_user.";
+        [ffi] nuser_tendon: MjtSize; "number of mjtNums in tendon_user.";
+        [ffi] nuser_actuator: MjtSize; "number of mjtNums in actuator_user.";
+        [ffi] nuser_sensor: MjtSize; "number of mjtNums in sensor_user.";
+        [ffi] nnames: MjtSize; "number of chars in all names.";
+        [ffi] npaths: MjtSize; "number of chars in all paths.";
+        [ffi] nnames_map: MjtSize; "number of slots in the names hash map.";
+        [ffi] nJmom: MjtSize; "number of non-zeros in sparse actuator_moment matrix.";
+        [ffi] ngravcomp: MjtSize; "number of bodies with nonzero gravcomp.";
+        [ffi] nemax: MjtSize; "number of potential equality-constraint rows.";
+        [ffi] njmax: MjtSize; "number of available rows in constraint Jacobian (legacy).";
+        [ffi] nconmax: MjtSize; "number of potential contacts in contact list (legacy).";
+        [ffi] nuserdata: MjtSize; "number of mjtNums reserved for the user.";
+        [ffi] nsensordata: MjtSize; "number of mjtNums in sensor data vector.";
+        [ffi] npluginstate: MjtSize; "number of mjtNums in plugin state vector.";
+        [ffi] nhistory: MjtSize; "number of mjtNums in history buffer.";
         [ffi] narena: MjtSize; "number of bytes in the mjData arena (inclusive of stack).";
         [ffi] nbuffer: MjtSize; "number of bytes in buffer.";
     ]}
@@ -628,8 +637,8 @@ impl MjModel {
         qpos0: &[MjtNum; "qpos values at default pose"; ffi().nq],
         qpos_spring: &[MjtNum; "reference pose for springs"; ffi().nq],
         body_parentid: &[i32; "id of body's parent"; ffi().nbody],
-        body_rootid: &[i32; "id of root above body"; ffi().nbody],
-        body_weldid: &[i32; "id of body that this body is welded to"; ffi().nbody],
+        body_rootid: &[i32; "ancestor that is direct child of world"; ffi().nbody],
+        body_weldid: &[i32; "top ancestor with no dofs to this body"; ffi().nbody],
         body_mocapid: &[i32; "id of mocap data; -1: none"; ffi().nbody],
         body_jntnum: &[i32; "number of joints for this body"; ffi().nbody],
         body_jntadr: &[i32; "start addr of joints; -1: no joints"; ffi().nbody],
@@ -692,6 +701,12 @@ impl MjModel {
         dof_damping: &[MjtNum; "damping coefficient"; ffi().nv],
         dof_invweight0: &[MjtNum; "diag. inverse inertia in qpos0"; ffi().nv],
         dof_M0: &[MjtNum; "diag. inertia in qpos0"; ffi().nv],
+        dof_length: &[MjtNum; "linear: 1; angular: approx. length scale"; ffi().nv],
+        tree_bodyadr: &[i32; "start addr of bodies"; ffi().ntree],
+        tree_bodynum: &[i32; "number of bodies in tree"; ffi().ntree],
+        tree_dofadr: &[i32; "start addr of dofs"; ffi().ntree],
+        tree_dofnum: &[i32; "number of dofs in tree"; ffi().ntree],
+        tree_sleep_policy: &[MjtSleepPolicy [cast]; "sleep policy"; ffi().ntree],
         geom_type: &[MjtGeom [cast]; "geometric type"; ffi().ngeom],
         geom_contype: &[i32; "geom contact type"; ffi().ngeom],
         geom_conaffinity: &[i32; "geom contact affinity"; ffi().ngeom],
@@ -733,10 +748,11 @@ impl MjModel {
         cam_poscom0: &[[MjtNum; 3] [cast]; "global position rel. to sub-com in qpos0"; ffi().ncam],
         cam_pos0: &[[MjtNum; 3] [cast]; "global position rel. to body in qpos0"; ffi().ncam],
         cam_mat0: &[[MjtNum; 9] [cast]; "global orientation in qpos0"; ffi().ncam],
-        cam_orthographic: &[i32; "orthographic camera; 0: no, 1: yes"; ffi().ncam],
+        cam_projection: &[MjtProjection [cast]; "projection type"; ffi().ncam],
         cam_fovy: &[MjtNum; "y field-of-view (ortho ? len : deg)"; ffi().ncam],
         cam_ipd: &[MjtNum; "inter-pupilary distance"; ffi().ncam],
         cam_resolution: &[[i32; 2] [cast]; "resolution: pixels [width, height]"; ffi().ncam],
+        cam_output: &[i32; "output types (mjtCamOut bit flags)"; ffi().ncam],
         cam_sensorsize: &[[f32; 2] [cast]; "sensor size: length [width, height]"; ffi().ncam],
         cam_intrinsic: &[[f32; 4] [cast]; "[focal length; principal point]"; ffi().ncam],
         light_mode: &[MjtCamLight [cast]; "light tracking mode"; ffi().nlight],
@@ -795,6 +811,9 @@ impl MjModel {
         flex_texcoordadr: &[i32; "address in flex_texcoord; -1: none"; ffi().nflex],
         flex_nodebodyid: &[i32; "node body ids"; ffi().nflexnode],
         flex_vertbodyid: &[i32; "vertex body ids"; ffi().nflexvert],
+        flex_vertedgeadr: &[i32; "first edge address"; ffi().nflexvert],
+        flex_vertedgenum: &[i32; "number of edges"; ffi().nflexvert],
+        flex_vertedge: &[[i32; 2] [cast]; "edge indices"; ffi().nflexedge],
         flex_edge: &[[i32; 2] [cast]; "edge vertex ids (2 per edge)"; ffi().nflexedge],
         flex_edgeflap: &[[i32; 2] [cast]; "adjacent vertex ids (dim=2 only)"; ffi().nflexedge],
         flex_elem: &[i32; "element vertex ids (dim+1 per elem)"; ffi().nflexelemdata],
@@ -805,23 +824,31 @@ impl MjModel {
         flex_evpair: &[[i32; 2] [cast]; "(element, vertex) collision pairs"; ffi().nflexevpair],
         flex_vert: &[[MjtNum; 3] [cast]; "vertex positions in local body frames"; ffi().nflexvert],
         flex_vert0: &[[MjtNum; 3] [cast]; "vertex positions in qpos0 on [0, 1]^d"; ffi().nflexvert],
+        flex_vertmetric: &[[MjtNum; 4] [cast]; "inverse of reference shape matrix"; ffi().nflexvert],
         flex_node: &[[MjtNum; 3] [cast]; "node positions in local body frames"; ffi().nflexnode],
         flex_node0: &[[MjtNum; 3] [cast]; "Cartesian node positions in qpos0"; ffi().nflexnode],
         flexedge_length0: &[MjtNum; "edge lengths in qpos0"; ffi().nflexedge],
         flexedge_invweight0: &[MjtNum; "edge inv. weight in qpos0"; ffi().nflexedge],
         flex_radius: &[MjtNum; "radius around primitive element"; ffi().nflex],
+        flex_size: &[[MjtNum; 3] [cast]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
         flex_stiffness: &[[MjtNum; 21] [cast]; "finite element stiffness matrix"; ffi().nflexelem],
         flex_bending: &[[MjtNum; 17] [cast]; "bending stiffness"; ffi().nflexedge],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
-        flex_edgeequality: &[bool [cast]; "is edge equality constraint defined"; ffi().nflex],
+        flex_edgeequality: &[i32; "0: none, 1: edges, 2: vertices"; ffi().nflex],
         flex_rigid: &[bool [cast]; "are all vertices in the same body"; ffi().nflex],
         flexedge_rigid: &[bool [cast]; "are both edge vertices in same body"; ffi().nflexedge],
         flex_centered: &[bool [cast]; "are all vertex coordinates (0,0,0)"; ffi().nflex],
         flex_flatskin: &[bool [cast]; "render flex skin with flat shading"; ffi().nflex],
         flex_bvhadr: &[i32; "address of bvh root; -1: no bvh"; ffi().nflex],
         flex_bvhnum: &[i32; "number of bounding volumes"; ffi().nflex],
+        flexedge_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; ffi().nflexedge],
+        flexedge_J_rowadr: &[i32; "row start address in colind array"; ffi().nflexedge],
+        flexedge_J_colind: &[i32; "column indices in sparse Jacobian"; ffi().nJfe],
+        flexvert_J_rownnz: &[[i32; 2] [cast]; "number of non-zeros in Jacobian row"; ffi().nflexvert],
+        flexvert_J_rowadr: &[[i32; 2] [cast]; "row start address in colind array"; ffi().nflexvert],
+        flexvert_J_colind: &[[i32; 2] [cast]; "column indices in sparse Jacobian"; ffi().nJfv],
         flex_rgba: &[[f32; 4] [cast]; "rgba when material is omitted"; ffi().nflex],
         flex_texcoord: &[[f32; 2] [cast]; "vertex texture coordinates"; ffi().nflextexcoord],
         mesh_vertadr: &[i32; "first vertex address"; ffi().nmesh],
@@ -890,7 +917,7 @@ impl MjModel {
         tex_height: &[i32; "number of rows in texture image"; ffi().ntex],
         tex_width: &[i32; "number of columns in texture image"; ffi().ntex],
         tex_nchannel: &[i32; "number of channels in texture image"; ffi().ntex],
-        tex_adr: &[i32; "start address in tex_data"; ffi().ntex],
+        tex_adr: &[MjtSize; "start address in tex_data"; ffi().ntex],
         tex_data: &[MjtByte; "pixel values"; ffi().ntexdata],
         tex_pathadr: &[i32; "address of texture asset path; -1: none"; ffi().ntex],
         mat_texid: &[[i32; MjtTextureRole::mjNTEXROLE as usize] [cast]; "indices of textures; -1: none"; ffi().nmat],
@@ -926,6 +953,8 @@ impl MjModel {
         tendon_num: &[i32; "number of objects in tendon's path"; ffi().ntendon],
         tendon_matid: &[i32; "material id for rendering"; ffi().ntendon],
         tendon_group: &[i32; "group for visibility"; ffi().ntendon],
+        tendon_treenum: &[i32; "number of trees along tendon's path"; ffi().ntendon],
+        tendon_treeid: &[[i32; 2] [cast]; "first two trees along tendon's path"; ffi().ntendon],
         tendon_limited: &[bool [cast]; "does tendon have length limits"; ffi().ntendon],
         tendon_actfrclimited: &[bool [cast]; "does tendon have actuator force limits"; ffi().ntendon],
         tendon_width: &[MjtNum; "width for rendering"; ffi().ntendon],
@@ -955,7 +984,11 @@ impl MjModel {
         actuator_actadr: &[i32; "first activation address; -1: stateless"; ffi().nu],
         actuator_actnum: &[i32; "number of activation variables"; ffi().nu],
         actuator_group: &[i32; "group for visibility"; ffi().nu],
+        actuator_history: &[[i32; 2] [cast]; "history buffer: [nsample, interp]"; ffi().nu],
+        actuator_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nu],
+        actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nu],
         actuator_ctrllimited: &[bool [cast]; "is control limited"; ffi().nu],
+        actuator_forcelimited: &[bool [cast]; "is force limited"; ffi().nu],
         actuator_actlimited: &[bool [cast]; "is activation limited"; ffi().nu],
         actuator_dynprm: &[[MjtNum; mjNDYN as usize] [cast]; "dynamics parameters"; ffi().nu],
         actuator_gainprm: &[[MjtNum; mjNGAIN as usize] [cast]; "gain parameters"; ffi().nu],
@@ -982,6 +1015,10 @@ impl MjModel {
         sensor_adr: &[i32; "address in sensor array"; ffi().nsensor],
         sensor_cutoff: &[MjtNum; "cutoff for real and positive; 0: ignore"; ffi().nsensor],
         sensor_noise: &[MjtNum; "noise standard deviation"; ffi().nsensor],
+        sensor_history: &[[i32; 2] [cast]; "history buffer: [nsample, interp]"; ffi().nsensor],
+        sensor_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nsensor],
+        sensor_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nsensor],
+        sensor_interval: &[[MjtNum; 2] [cast]; "interval: [period, phase] in seconds"; ffi().nsensor],
         sensor_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nsensor],
         plugin: &[i32; "globally registered plugin slot number"; ffi().nplugin],
         plugin_stateadr: &[i32; "address in the plugin state array"; ffi().nplugin],
@@ -1156,7 +1193,7 @@ info_with_view!(Model, body, body_,
 info_with_view!(Model, camera, cam_,
     [
         mode: MjtCamLight, bodyid: i32, targetbodyid: i32, pos: MjtNum, quat: MjtNum,
-        poscom0: MjtNum, pos0: MjtNum, mat0: MjtNum, orthographic: bool, fovy: MjtNum,
+        poscom0: MjtNum, pos0: MjtNum, mat0: MjtNum, projection: MjtProjection, fovy: MjtNum,
         ipd: MjtNum, resolution: i32, sensorsize: f32, intrinsic: f32
     ], []
 );

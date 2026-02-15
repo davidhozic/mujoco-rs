@@ -19,7 +19,7 @@ use super::mj_model::{
     MjModel, MjtObj, MjtGeom, MjtJoint, MjtCamLight,
     MjtLightType, MjtSensor, MjtDataType, MjtGain,
     MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace,
-    MjtTrn, MjtStage, MjtFlexSelf
+    MjtTrn, MjtStage, MjtFlexSelf, MjtProjection
 };
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic, MjLROpt};
 use super::mj_option::MjOption;
@@ -32,6 +32,31 @@ use crate::getter_setter;
 use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
 use crate::util::assert_mujoco_version;
 
+/* Types */
+/// Type of inertia inference.
+pub type MjtGeomInertia = mjtGeomInertia;
+
+/// Type of mesh inertia.
+pub type MjtMeshInertia = mjtMeshInertia;
+
+/// Type of built-in procedural texture.
+pub type MjtBuiltin = mjtBuiltin;
+
+/// Mark type for procedural textures.
+pub type MjtMark = mjtMark;
+
+/// Type of limit specification.
+pub type MjtLimited = mjtLimited;
+
+/// Whether to align free joints with the inertial frame.
+pub type MjtAlignFree = mjtAlignFree;
+
+/// Whether to infer body inertias from child geoms.
+pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
+
+/// Type of orientation specifier.
+pub type MjtOrientation = mjtOrientation;
+/*******************************************************/
 
 /******************************
 ** Type aliases
@@ -69,30 +94,6 @@ impl MjsOrientation {
         self.type_ = MjtOrientation::mjORIENTATION_QUAT;
     }
 }
-
-/// Type of inertia inference.
-pub type MjtGeomInertia = mjtGeomInertia;
-
-/// Type of mesh inertia.
-pub type MjtMeshInertia = mjtMeshInertia;
-
-/// Type of built-in procedural texture.
-pub type MjtBuiltin = mjtBuiltin;
-
-/// Mark type for procedural textures.
-pub type MjtMark = mjtMark;
-
-/// Type of limit specification.
-pub type MjtLimited = mjtLimited;
-
-/// Whether to align free joints with the inertial frame.
-pub type MjtAlignFree = mjtAlignFree;
-
-/// Whether to infer body inertias from child geoms.
-pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
-
-/// Type of orientation specifier.
-pub type MjtOrientation = mjtOrientation;
 
 /// Compiler options.
 pub type MjsCompiler = mjsCompiler;
@@ -530,7 +531,7 @@ impl MjsCamera {
             alt: &MjsOrientation;         "alternative orientation.";
             intrinsic: &[f32; 4];         "intrinsic parameters.";
             sensor_size: &[f32; 2];       "sensor size.";
-            resolution: &[f32; 2];        "resolution.";
+            resolution: &[i32; 2];        "resolution.";
             focal_length: &[f32; 2];      "focal length (length).";
             focal_pixel: &[f32; 2];       "focal length (pixel).";
             principal_length: &[f32; 2];  "principal point (length).";
@@ -545,7 +546,7 @@ impl MjsCamera {
     ]);
 
     getter_setter! {
-        [&] with, get, set, [orthographic: bool; "is camera orthographic."]
+        [&] with, get, set, [proj: MjtProjection; "is camera orthographic."]
     }
 
     userdata_method!(f64);
@@ -1158,7 +1159,7 @@ impl MjsTexture {
             rgb2: &[f64; 3];               "second color for builtin.";
             markrgb: &[f64; 3];            "mark color.";
             gridsize: &[i32; 2];           "size of grid for composite file; (1,1)-repeat.";
-            gridlayout: &[i8; 13];         "row-major: L,R,F,B,U,D for faces; . for unused.";
+            gridlayout: &[i8; 12];         "row-major: L,R,F,B,U,D for faces; . for unused.";
         ]
     }
 

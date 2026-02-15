@@ -57,17 +57,16 @@ impl Default for MjLROpt {
 ***********************************************************************************************************************/
 /// Wrapper around the virtual-file system.
 pub struct MjVfs {
-    ffi: mjVFS
+    ffi: Box<mjVFS>
 }
 
 impl MjVfs {
     pub fn new() -> Self {
-        let ffi = unsafe {
-            let mut s = MaybeUninit::uninit();
-            mj_defaultVFS(s.as_mut_ptr());
-            s.assume_init()
-        };
-        Self { ffi }
+        unsafe {
+            let mut maybe_uninit = Box::new_uninit();
+            mj_defaultVFS(maybe_uninit.as_mut_ptr());
+            Self { ffi: maybe_uninit.assume_init() }
+        }
     }
 
     /// Adds a file to the virtual file system.
@@ -141,7 +140,7 @@ impl MjVfs {
 impl Drop for MjVfs {
     fn drop(&mut self) {
         unsafe {
-            mj_deleteVFS(&mut self.ffi);
+            mj_deleteVFS(self.ffi.as_mut());
         }
     }
 }

@@ -166,13 +166,13 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         let gl = unsafe { Arc::new(egui_glow::glow::Context::from_loader_function(get_addr)) };
 
         let camera_names = (0..model.ncam()).map(|i| {
-            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i) {
+            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i as i32) {
                 name.to_string()
             } else { format!("Camera {i}") }
         }).collect();
 
         let actuator_names = (0..model.nu()).map(|i| {
-            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, i) {
+            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, i as i32) {
                 name.to_string()
             } else { format!("Actuator {i}") }
         }).collect();
@@ -180,7 +180,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         let joint_name_id = (0..model.njnt()).filter_map(|i| {
             match model.jnt_type()[i as usize] {
                 MjtJoint::mjJNT_SLIDE | MjtJoint::mjJNT_HINGE => {
-                    let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, i) {
+                    let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, i as i32) {
                         name.to_string()
                     } else { format!("Joint {i}") };
                     Some((name, i as usize))
@@ -190,7 +190,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         }).collect();
 
         let equality_names = (0..model.neq()).map(|i| {
-            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_EQUALITY, i) {
+            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_EQUALITY, i as i32) {
                 name.to_string()
             } else { format!("Equality {i}") }
         }).collect();

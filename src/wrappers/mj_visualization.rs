@@ -12,7 +12,7 @@ use crate::{array_slice_dyn, c_str_as_str_method};
 use crate::getter_setter;
 use crate::mujoco_c::*;
 
-
+/* Types */
 /// These are the available categories of geoms in the abstract visualizer. The bitmask can be used in the function
 /// `mjr_render` to specify which categories should be rendered.
 pub type MjtCatBit = mjtCatBit;
@@ -56,6 +56,7 @@ pub type MjtRndFlag = mjtRndFlag;
 
 /// These are the possible stereo rendering types. They are used in ``mjvScene.stereo``.
 pub type MjtStereo = mjtStereo;
+/**********************************************************************************************************************/
 
 /***********************************************************************************************************************
 ** MjvPerturb
@@ -84,7 +85,7 @@ impl MjvPerturb {
 
     pub fn apply<M: Deref<Target = MjModel>>(&mut self, model: &MjModel, data: &mut MjData<M>) {
         unsafe {
-            mju_zero(data.ffi_mut().xfrc_applied, 6 * model.ffi().nbody);
+            mju_zero(data.ffi_mut().xfrc_applied, 6 * model.ffi().nbody as i32);
             mjv_applyPerturbPose(model.ffi(), data.ffi_mut(), self, 0);
             mjv_applyPerturbForce(model.ffi(), data.ffi_mut(), self);
         }
@@ -94,7 +95,7 @@ impl MjvPerturb {
         let mut tmp = [0.0; 3];
         let data_ffi = data.ffi();
         unsafe { 
-            mju_sub3(tmp.as_mut_ptr(), selection_xyz.as_ptr(), data_ffi.xpos.add(3 * self.select as usize));
+            mju_sub3(&mut tmp, &selection_xyz, data_ffi.xpos.add(3 * self.select as usize) as *const [MjtNum; 3]);
             mju_mulMatTVec(self.localpos.as_mut_ptr(), data_ffi.xmat.add(9 * self.select as usize), tmp.as_ptr(), 3, 3);
         }
     }
@@ -210,7 +211,7 @@ impl MjvGeom {
     /// Calculates the geom attributes so that it points from point `from` to point `to`.
     pub fn connect(&mut self, width: MjtNum, from: [MjtNum; 3], to: [MjtNum; 3]) {
         unsafe {
-            mjv_connector(self, self.type_, width, from.as_ptr(), to.as_ptr());
+            mjv_connector(self, self.type_, width, &from, &to);
         }
     }
 
@@ -473,10 +474,10 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
         assert!(self.ffi.ngeom < self.ffi.maxgeom, "not enough space is allocated, increase 'max_geom'.");
 
         /* Gain raw pointers to data inside the Option enum (which is a C union) */
-        let size_ptr = size.as_ref().map_or(ptr::null(), |x| x.as_ptr());
-        let pos_ptr = pos.as_ref().map_or(ptr::null(), |x| x.as_ptr());
-        let mat_ptr = mat.as_ref().map_or(ptr::null(), |x| x.as_ptr());
-        let rgba_ptr = rgba.as_ref().map_or(ptr::null(), |x| x.as_ptr());
+        let size_ptr = size.as_ref().map_or(ptr::null(), |x| x);
+        let pos_ptr = pos.as_ref().map_or(ptr::null(), |x| x);
+        let mat_ptr = mat.as_ref().map_or(ptr::null(), |x| x);
+        let rgba_ptr = rgba.as_ref().map_or(ptr::null(), |x| x);
 
         let p_geom;
         unsafe {
@@ -522,7 +523,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
         let body_id = unsafe {
             mjv_select(
                 self.model.ffi(), data.ffi(), option,
-                aspect_ratio, relx, rely, self.ffi(), selpnt.as_mut_ptr(),
+                aspect_ratio, relx, rely, self.ffi(), &mut selpnt,
                 &mut geom_id, &mut flex_id, &mut skin_id
             )
         };
