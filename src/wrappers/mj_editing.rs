@@ -19,7 +19,8 @@ use super::mj_model::{
     MjModel, MjtObj, MjtGeom, MjtJoint, MjtCamLight,
     MjtLightType, MjtSensor, MjtDataType, MjtGain,
     MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace,
-    MjtTrn, MjtStage, MjtFlexSelf, MjtProjection
+    MjtTrn, MjtStage, MjtFlexSelf, MjtProjection,
+    MjtSleepPolicy, MjtWrap
 };
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic, MjLROpt};
 use super::mj_option::MjOption;
@@ -540,14 +541,12 @@ impl MjsCamera {
     }
 
     getter_setter!([&] with, get, set, [
-        mode: MjtCamLight;             "camera mode.";
-        fovy: f64;                    "field of view in y direction.";
-        ipd: f64;                     "inter-pupillary distance for stereo.";
+        mode: MjtCamLight;              "camera mode.";
+        fovy: f64;                      "field of view in y direction.";
+        ipd: f64;                       "inter-pupillary distance for stereo.";
+        proj: MjtProjection;            "camera projection type.";
+        output: i32;                    "bit flags for output type.";
     ]);
-
-    getter_setter! {
-        [&] with, get, set, [proj: MjtProjection; "is camera orthographic."]
-    }
 
     userdata_method!(f64);
 
@@ -660,6 +659,9 @@ impl MjsActuator {
         trntype: MjtTrn;               "transmission type.";
         cranklength: f64;              "crank length, for slider-crank.";
         inheritrange: f64;             "automatic range setting for position and intvelocity.";
+        nsample: i32;                  "number of samples in history buffer.";
+        interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
+        delay: f64;                    "delay time in seconds; 0: no delay.";
     ]);
 
     getter_setter! {
@@ -693,6 +695,7 @@ impl MjsSensor {
     getter_setter! {
         [&] with, get, [
             intprm: &[i32; mjNSENS as usize];            "integer parameters.";
+            interval: &[f64; 2];                         "[period, time_prev] in seconds.";
         ]
     }
 
@@ -711,6 +714,9 @@ impl MjsSensor {
         noise: f64;                    "noise stdev.";
         needstage: MjtStage;           "compute stage needed to simulate sensor.";
         dim: i32;                      "number of scalar outputs.";
+        nsample: i32;                  "number of samples in history buffer.";
+        interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
+        delay: f64;                    "delay time in seconds; 0: no delay.";
     ]);
 
     userdata_method!(f64);
@@ -732,6 +738,7 @@ impl MjsFlex {
             friction: &[f64; 3];                            "contact friction vector.";
             solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
             solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
+            size: &[f64; 3];                                "vertex bounding box half sizes in qpos0.";
         ]
     }
 
@@ -945,7 +952,11 @@ impl MjsTendon {
 ***************************/
 mjs_struct!(Wrap);
 impl MjsWrap {
-    /* Auto-implemented */
+    getter_setter! {
+        [&] with, get, set, [
+            type_ + _: MjtWrap; "wrap type.";
+        ]
+    }
 }
 
 /***************************
@@ -1293,6 +1304,7 @@ impl MjsBody {
         [&] with, get, set, [
             mass: f64;                     "mass.";
             gravcomp: f64;                 "gravity compensation.";
+            sleep: MjtSleepPolicy;           "sleep policy.";
         ]
     }
 
