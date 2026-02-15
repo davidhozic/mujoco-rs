@@ -49,7 +49,7 @@ mod build_dependencies {
             .clang_arg(format!("-I{}", include_dir_mujoco.display()))
             .clang_arg(format!("-I{}", include_dir_mujoco.parent().unwrap().display()))
             .allowlist_item("mj.*")
-            .layout_tests(false)
+            .layout_tests(true)
             .derive_default(false)
             .derive_copy(false)
             .rustified_enum(".*")
