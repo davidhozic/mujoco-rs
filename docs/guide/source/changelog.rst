@@ -17,6 +17,11 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+2.3.3 (MuJoCo 3.3.7)
+=============================
+- Fixed `#144 <https://github.com/davidhozic/mujoco-rs/issues/144>`_, where the :ref:`mj_rust_viewer`
+  caused high stack usage. This was potentially problematic on Windows, where the stack limit is 1M.
+
 2.3.2 (MuJoCo 3.3.7)
 =============================
 - Small performance improvement by removing mutex contention during MuJoCo's scene render.
