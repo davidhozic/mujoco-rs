@@ -435,14 +435,14 @@ impl MjvFigure {
 /// a immutable reference is stored inside this struct.
 #[derive(Debug)]
 pub struct MjvScene<M: Deref<Target = MjModel>> {
-    ffi: mjvScene,
+    ffi: Box<mjvScene>,
     model: M,
 }
 
 impl<M: Deref<Target = MjModel>> MjvScene<M> {
     pub fn new(model: M, max_geom: usize) -> Self {
         let scn = unsafe {
-            let mut t = MaybeUninit::uninit();
+            let mut t = Box::new_uninit();
             mjv_defaultScene(t.as_mut_ptr());
             mjv_makeScene(model.ffi(), t.as_mut_ptr(), max_geom as i32);
             t.assume_init()
@@ -457,7 +457,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
         unsafe {
             mjv_updateScene(
                 self.model.ffi(), data.ffi_mut(), opt, pertub,
-                cam, MjtCatBit::mjCAT_ALL as i32, &mut self.ffi
+                cam, MjtCatBit::mjCAT_ALL as i32, self.ffi.as_mut()
             );
         }
     }
@@ -622,7 +622,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
 impl<M: Deref<Target = MjModel>> Drop for MjvScene<M> {
     fn drop(&mut self) {
         unsafe {
-            mjv_freeScene(&mut self.ffi);
+            mjv_freeScene(self.ffi.as_mut());
         }
     }
 }

@@ -55,13 +55,13 @@ impl Default for MjrRectangle {
 ***********************************************************************************************************************/
 #[derive(Debug)]
 pub struct MjrContext {
-    ffi: mjrContext
+    ffi: Box<mjrContext>
 }
 
 impl MjrContext {
     pub fn new(model: &MjModel) -> Self {
         unsafe {
-            let mut c = MaybeUninit::uninit();
+            let mut c = Box::new_uninit();
             mjr_defaultContext(c.as_mut_ptr());
             mjr_makeContext(model.ffi(), c.as_mut_ptr(), MjtFontScale::mjFONTSCALE_100 as i32);
             Self {ffi: c.assume_init()}
@@ -71,7 +71,7 @@ impl MjrContext {
     /// Set OpenGL framebuffer for rendering to mjFB_OFFSCREEN.
     pub fn offscreen(&mut self) -> &mut Self {
         unsafe {
-            mjr_setBuffer(MjtFramebuffer::mjFB_OFFSCREEN as i32, &mut self.ffi);
+            mjr_setBuffer(MjtFramebuffer::mjFB_OFFSCREEN as i32, self.ffi.as_mut());
         }
         self
     }
@@ -79,7 +79,7 @@ impl MjrContext {
     /// Set OpenGL framebuffer for rendering to mjFB_WINDOW.
     pub fn window(&mut self) -> &mut Self {
         unsafe {
-            mjr_setBuffer(MjtFramebuffer::mjFB_WINDOW as i32, &mut self.ffi);
+            mjr_setBuffer(MjtFramebuffer::mjFB_WINDOW as i32, self.ffi.as_mut());
         }
         self
     }
@@ -244,7 +244,7 @@ impl MjrContext {
 impl Drop for MjrContext {
     fn drop(&mut self) {
         unsafe {
-            mjr_freeContext(&mut self.ffi);
+            mjr_freeContext(self.ffi.as_mut());
         }
     }
 }
