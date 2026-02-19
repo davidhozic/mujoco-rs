@@ -1,5 +1,5 @@
 //! MjModel related.
-use std::ffi::{c_int, CStr, CString, NulError};
+use std::ffi::{CStr, CString, NulError, c_int, c_void};
 use std::io::{self, Error, ErrorKind};
 use std::path::Path;
 use std::ptr;
@@ -201,20 +201,8 @@ impl MjModel {
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_buffer(data: &[u8]) -> Result<Self, Error> {
         assert_mujoco_version();
-
         unsafe {
-            // Create a virtual FS since we don't have direct access to the load buffer function (or at least it isn't officially exposed).
-            // let raw_ptr = mj_loadModelBuffer(data.as_ptr() as *const c_void, data.len() as i32);
-            let mut vfs = MjVfs::new();
-            let filename = "model.mjb";
-
-            // Add the file into a virtual file system
-            vfs.add_from_buffer(filename, data)?;
-
-            // Load the model from the virtual file system
-            let filename_c = CString::new(filename).unwrap();
-            let raw_model = mj_loadModel(filename_c.as_ptr(), vfs.ffi());
-            Self::check_raw_model(raw_model, &[0])
+            Self::from_raw(mj_loadModelBuffer(data.as_ptr() as *const c_void, data.len() as i32))
         }
     }
 
@@ -468,8 +456,78 @@ impl MjModel {
     }
 
     /// Return size of state specification. The bits of the integer spec correspond to element fields of [`MjtState`](crate::wrappers::mj_data::MjtState).
-    pub fn state_size(&self, spec: u32) -> i32 {
-        unsafe { mj_stateSize(self.ffi(), spec as i32) }
+    pub fn state_size(&self, spec: u32) -> usize {
+        unsafe { mj_stateSize(self.ffi(), spec as i32) as usize }
+    }
+
+    /// Extract the subset of components specified by `dst_spec` from a state `src`
+    /// previously obtained via [`MjData::read_state_into`] or [`MjData::get_state`]
+    /// with components specified by `src_spec`.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the extracted state.
+    /// # Errors
+    /// - when `src.len()` does not equal the size required by `src_spec`, an error of kind [`ErrorKind::InvalidInput`] is returned.
+    /// - when `dst_spec` is not a subset of `src_spec`, an error of kind [`ErrorKind::InvalidInput`] is returned.
+    pub fn extract_state(&self, src: &[MjtNum], src_spec: u32, dst_spec: u32) -> Result<Box<[MjtNum]>, Error> {
+        let expected = self.state_size(src_spec);
+        if src.len() != expected {
+            return Err(Error::new(ErrorKind::InvalidInput, format!("src slice length must be {} for the provided src_spec (got {})", expected, src.len())));
+        }
+
+        if (dst_spec & src_spec) != dst_spec {
+            return Err(Error::new(ErrorKind::InvalidInput, "dst_spec must be a subset of src_spec."));
+        }
+
+        let required_size = self.state_size(dst_spec);
+        let mut dst = Vec::with_capacity(required_size);
+
+        unsafe {
+            mj_extractState(
+                self.ffi(),
+                src.as_ptr(), src_spec as i32,
+                dst.as_mut_ptr(), dst_spec as i32
+            );
+
+            dst.set_len(required_size);
+            Ok(dst.into_boxed_slice())
+        }
+    }
+
+    /// Extract into dst the subset of components specified by `dst_spec` from a state `src`
+    /// previously obtained via [`MjData::read_state_into`] or [`MjData::get_state`]
+    /// with components specified by `src_spec`.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the number of elements written to `dst`.
+    /// # Errors
+    /// - when `src.len()` does not equal the size required by `src_spec`, an error of kind [`ErrorKind::InvalidInput`] is returned.
+    /// - when `dst_spec` is not a subset of `src_spec`, an error of kind [`ErrorKind::InvalidInput`] is returned.
+    /// - when `dst` is too small to hold the requested components, an error of kind [`ErrorKind::InvalidInput`] is returned.
+    pub fn extract_state_into(&self, src: &[MjtNum], src_spec: u32, dst: &mut [MjtNum], dst_spec: u32) -> Result<usize, Error> {
+        let expected = self.state_size(src_spec);
+        if src.len() != expected {
+            return Err(Error::new(ErrorKind::InvalidInput, format!("src slice length must be {} for the provided src_spec (got {})", expected, src.len())));
+        }
+
+        if (dst_spec & src_spec) != dst_spec {
+            return Err(Error::new(ErrorKind::InvalidInput, "dst_spec must be a subset of src_spec."));
+        }
+
+        let required_size = self.state_size(dst_spec);
+        let available_size = dst.len();
+
+        if available_size < required_size  {
+            return Err(Error::new(ErrorKind::InvalidInput, format!("dst buffer is too small to hold the requested state of size {required_size} (available {available_size})")));
+        }
+
+        unsafe {
+            mj_extractState(
+                self.ffi(),
+                src.as_ptr(), src_spec as i32,
+                dst.as_mut_ptr(), dst_spec as i32
+            );
+        }
+
+        Ok(required_size)
     }
 
     /// Determine type of friction cone.
@@ -1732,7 +1790,9 @@ mod tests {
         fs::remove_file(MODEL_SAVE_PATH).unwrap();
 
         /* Test virtual file system load */
-        assert!(MjModel::from_buffer(&saved_data).is_ok());
+        let model = MjModel::from_buffer(&saved_data).unwrap();
+        assert!(model.light("lamp_light2").is_some());
+        assert!(model.light("lamp_light-xyz").is_none());
     }
 
     #[test]
@@ -2015,5 +2075,159 @@ mod tests {
 
         // Pathadr is -1 (no external file)
         assert_eq!(view_hf.pathadr[0], -1);
+    }
+
+    /// Tests [`MjModel::extract_state_into`] for corectness.
+    #[test]
+    fn test_state_extract() {
+        use crate::wrappers::mj_data::MjtState;
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let data = MjData::new(&model);
+
+        /* Test of extraction into existing buffer */
+        // Physics is subset of full physics.
+        // Extract physics from full physics.
+        let state_full_physics = data.get_state(MjtState::mjSTATE_FULLPHYSICS as u32);
+        let state_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
+
+        let required_size = model.state_size(MjtState::mjSTATE_PHYSICS as u32);
+        let mut dst_buffer = unsafe { Box::new_zeroed_slice(required_size).assume_init() };
+        let _byes_written = model.extract_state_into(
+            &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
+            &mut dst_buffer, MjtState::mjSTATE_PHYSICS as u32
+        ).unwrap();
+
+        assert_eq!(state_physics, dst_buffer);
+
+        /* Test of extraction into new buffer (internally) */
+        // Physics is subset of full physics.
+        // Extract physics from full physics.
+        let state_full_physics = data.get_state(MjtState::mjSTATE_FULLPHYSICS as u32);
+        let state_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
+
+        let dst_buffer = model.extract_state(
+            &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
+            MjtState::mjSTATE_PHYSICS as u32
+        ).unwrap();
+
+        assert_eq!(state_physics, dst_buffer);
+    }
+
+    /// Tests for the expectec panic when giving a source spec that does not match
+    /// the source array in state extraction.
+
+    #[test]
+    fn test_state_extract_state_invalid_src() {
+        use crate::wrappers::mj_data::MjtState;
+        use std::io::ErrorKind;
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let data = MjData::new(&model);
+
+        let state_full_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
+        let res = model.extract_state(
+            &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
+            MjtState::mjSTATE_PHYSICS as u32
+        );
+
+        let err = res.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_state_extract_state_into_invalid_src() {
+        use crate::wrappers::mj_data::MjtState;
+        use std::io::ErrorKind;
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let data = MjData::new(&model);
+
+        let required_size = model.state_size(MjtState::mjSTATE_PHYSICS as u32);
+        let mut dst_buffer = vec![0.0; required_size].into_boxed_slice();
+        let state_full_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
+        let res = model.extract_state_into(
+            &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
+            &mut dst_buffer, MjtState::mjSTATE_PHYSICS as u32
+        );
+
+        let err = res.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_state_extract_dst_spec_not_subset() {
+        use crate::wrappers::mj_data::MjtState;
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let data = MjData::new(&model);
+
+        let state_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
+        let res = model.extract_state(
+            &state_physics, MjtState::mjSTATE_PHYSICS as u32,
+            MjtState::mjSTATE_FULLPHYSICS as u32
+        );
+
+        let err = res.unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_state_extract_into_dst_spec_not_subset() {
+        use crate::wrappers::mj_data::MjtState;
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let data = MjData::new(&model);
+
+        let state_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
+        let mut dst = vec![0.0; model.state_size(MjtState::mjSTATE_PHYSICS as u32)];
+
+        let res = model.extract_state_into(
+            &state_physics, MjtState::mjSTATE_PHYSICS as u32,
+            &mut dst, MjtState::mjSTATE_FULLPHYSICS as u32
+        );
+
+        let err = res.unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_state_extract_into_dst_buffer_too_small() {
+        use crate::wrappers::mj_data::MjtState;
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let data = MjData::new(&model);
+
+        let state_full = data.get_state(MjtState::mjSTATE_FULLPHYSICS as u32);
+        let required = model.state_size(MjtState::mjSTATE_PHYSICS as u32);
+        // make buffer smaller than required
+        let mut dst = vec![0.0; required.saturating_sub(1)];
+
+        let res = model.extract_state_into(
+            &state_full, MjtState::mjSTATE_FULLPHYSICS as u32,
+            &mut dst, MjtState::mjSTATE_PHYSICS as u32
+        );
+
+        let err = res.unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_state_extract_zero_spec() {
+        use crate::wrappers::mj_data::MjtState;
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let data = MjData::new(&model);
+
+        let state_full = data.get_state(MjtState::mjSTATE_FULLPHYSICS as u32);
+
+        // extract zero-sized spec -> empty slice
+        let dst = model.extract_state(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, 0u32).unwrap();
+        assert_eq!(dst.len(), 0);
+
+        // extract_into with zero-sized spec -> writes 0 elements
+        let mut buf: &mut [f64] = &mut [];
+        let written = model.extract_state_into(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, &mut buf, 0u32).unwrap();
+        assert_eq!(written, 0);
     }
 }
