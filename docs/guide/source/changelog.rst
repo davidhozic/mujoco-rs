@@ -38,6 +38,9 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
       :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_parse_vfs`, which
       wrap :docs-rs:`~~mujoco_rs::mujoco_c::<struct>mj_parse`.
 
+  - |mj_data|:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward_kinematics`.
 
 - Other changes:
 
