@@ -42,11 +42,9 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
 
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward_kinematics`.
 
-- New methods:
-
   - |mj_model|:
 
-    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state`
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state` and
       :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state_into`.
 
 - Changed methods:
