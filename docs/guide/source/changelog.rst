@@ -32,10 +32,12 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
 
 - New methods:
 
-  - |mj_data|:
+  - |mj_spec|:
 
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward_kinematics`;
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_ctrl_history`, :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_sensor_history`;
+    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_parse` and 
+      :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_parse_vfs`, which
+      wrap :docs-rs:`~~mujoco_rs::mujoco_c::<struct>mj_parse`.
+
 
 - Other changes:
 

@@ -201,6 +201,42 @@ impl MjSpec {
         }
     }
 
+    /// Parse and create a [`MjSpec`] from `filename`
+    /// The `content_type` controls the decoder to use.
+    /// This is a wrapper around low-level method [`mj_parse`].
+    /// # Panics
+    /// When `filename` or `content_type` contains zero bytes.
+    pub fn from_parse(filename: &str, content_type: &str) -> Result<Self, Error> {
+        Self::from_parse_file(filename, content_type, None)
+    }
+
+    /// Same as [`MjSpec::from_parse`], except `filename` is taken from `vfs`.
+    /// # Panics
+    /// When `filename` or `content_type` contains zero bytes.
+    pub fn from_parse_vfs(filename: &str, content_type: &str, vfs: &MjVfs) -> Result<Self, Error> {
+        Self::from_parse_file(filename, content_type, Some(vfs))
+    }
+
+    /// Parse and create a [`MjSpec`] from `filename`
+    /// The `content_type` controls the decoder to use.
+    /// This is a wrapper around low-level method [`mj_parse`].
+    /// # Panics
+    /// When `filename` or `content_type` contains zero bytes.
+    fn from_parse_file(filename: &str, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, Error> {
+        assert_mujoco_version();
+        let mut error_buffer = [0i8; 100];
+        unsafe {
+            let c_filename = CString::new(filename).unwrap();
+            let c_content_type = CString::new(content_type).unwrap();
+            let ptr = mj_parse(
+                c_filename.as_ptr(), c_content_type.as_ptr(),
+                vfs.map_or(ptr::null(), |v| v.ffi()),
+                error_buffer.as_mut_ptr(), error_buffer.len() as i32
+            );
+            Self::check_spec(ptr, &error_buffer)
+        }
+    }
+
     /// Handles spec pointer input.
     /// # Safety
     /// `error_buffer` must not be empty and the last element must be 0.
@@ -1771,5 +1807,25 @@ mod tests {
         assert_eq!(world.body_iter_mut(true).count(), N_BODY - 1);  // world must now be excluded
         assert_eq!(world.site_iter_mut(true).count(), N_SITE);
         assert_eq!(world.body_iter_mut(false).last().unwrap().name(), LAST_WORLD_BODY_NAME);
+    }
+
+    /// Tests wrapper method of [`mj_parse`] with VFS.
+    #[test]
+    fn test_parse_vfs() {
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer("hello.xml", MODEL.as_bytes()).unwrap();
+        let mut spec = MjSpec::from_parse_vfs("hello.xml", "XML", &vfs).unwrap();
+        let model = spec.compile().unwrap();
+        assert!(model.geom("floor1").is_some());
+    }
+
+    /// Tests wrapper method of [`mj_parse`] without VFS.
+    #[test]
+    fn test_parse_file() {
+        std::fs::write("test_parse_vfs.xml", MODEL).unwrap();
+        let mut spec = MjSpec::from_parse("test_parse_vfs.xml", "XML").unwrap();
+        std::fs::remove_file("test_parse_vfs.xml").unwrap();
+        let model = spec.compile().unwrap();
+        assert!(model.geom("floor1").is_some());
     }
 }
