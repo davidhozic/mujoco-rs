@@ -28,7 +28,7 @@ For example:
     }
 
 
-:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel` represents the compiled moded from an XML
+:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel` represents the compiled model from an XML
 file and contains everything from basic metadata to physics parameters.
 
 For managing actual simulation state, :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`

@@ -91,8 +91,8 @@ Other examples can be found under the ``examples/`` directory.
 
 ```rust
 //! Example of using views.
-//! The example shows how to obtain a [`MjJointInfo`] struct that can be used
-//! to create a (temporary) [`MjJointView`] to corresponding fields in [`MjData`].
+//! The example shows how to obtain a [`MjJointDataInfo`] struct that can be used
+//! to create a (temporary) [`MjJointDataView`] to corresponding fields in [`MjData`].
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
@@ -132,8 +132,9 @@ fn main() {
 
     while viewer.running() {
         /* Step the simulation and sync the viewer */
-        viewer.sync(&mut data);
         data.step();
+        viewer.sync_data(&mut data);  // this method and step() can also be called in other threads to improve performance.
+        viewer.render();
 
         /* Obtain the view and access first three variables of `qpos` (x, y, z) */
         let xyz = &ball_info.view(&data).qpos[..3];

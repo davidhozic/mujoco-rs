@@ -386,12 +386,6 @@ impl MjModel {
         data: nhfielddata
     ]}
 
-    /// Deprecated alias for [`MjModel::name_to_id`].
-    #[deprecated]
-    pub fn name2id(&self, type_: MjtObj, name: &str) -> i32 {
-        self.name_to_id(type_, name)
-    }
-
     /// Translates `name` to the correct id. Wrapper around `mj_name2id`.
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
