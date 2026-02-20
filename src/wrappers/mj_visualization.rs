@@ -160,7 +160,7 @@ impl MjvCamera {
         self.fixedcamid = -1;
         self.trackbodyid = tracking_id as i32;
     }
-    
+
     /// Sets the camera free from tracking.
     pub fn free(&mut self) {
         self.trackbodyid = -1;
@@ -177,6 +177,35 @@ impl MjvCamera {
     /// Move camera with mouse.
     pub fn move_<M: Deref<Target = MjModel>>(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum, scene: &MjvScene<M>) {
         unsafe { mjv_moveCamera(model.ffi(), action as i32, dx, dy, scene.ffi(), self); };
+    }
+
+    /// Get the camera coordinate frame (pos, forward, up, right).
+    pub fn frame<M: Deref<Target = MjModel>>(&self, data: &MjData<M>) -> ([MjtNum; 3], [MjtNum; 3], [MjtNum; 3], [MjtNum; 3]) {
+        let mut headpos = [0.0; 3];
+        let mut forward = [0.0; 3];
+        let mut up = [0.0; 3];
+        let mut right = [0.0; 3];
+        unsafe {
+            mjv_cameraFrame(
+                &mut headpos, &mut forward, &mut up, &mut right,
+                data.ffi(), self
+            );
+        }
+        (headpos, forward, up, right)
+    }
+
+    /// Compute the `frustum` (zver, zhor, zclip) suitable for rendering.
+    pub fn frustum(&self, model: &MjModel) -> ([f32; 2], [f32; 2], [f32; 2]) {
+        let mut zver = [0.0; 2];
+        let mut zhor = [0.0; 2];
+        let mut zclip = [0.0; 2];
+        unsafe {
+            mjv_cameraFrustum(
+                &mut zver, &mut zhor, &mut zclip,
+                model.ffi(), self
+            );
+        }
+        (zver, zhor, zclip)
     }
 }
 

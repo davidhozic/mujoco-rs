@@ -8,6 +8,10 @@ Changelog
 .. |mj_geomview| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomView`
 .. |mj_geomviewmut| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomViewMut`
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
+.. |mj_vfs| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs`
+.. |mjs_tendon| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon`
+.. |mjs_wrap| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsWrap`
+.. |mjv_camera| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvCamera`
 
 
 Versioning
@@ -41,11 +45,35 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
   - |mj_data|:
 
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward_kinematics`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_flex`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_from_data`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>apply_ft`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_mesh`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_hfield`.
 
   - |mj_model|:
 
     - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state` and
       :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state_into`.
+
+  - |mj_vfs|:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>mount`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>unmount`.
+
+  - |mjs_tendon|:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>get_wrap`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>get_wrap_num`.
+
+  - |mjs_wrap|:
+
+    - Added getters for ``coef``, ``divisor``, and ``side_site``.
+
+  - |mjv_camera|:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvCamera::<method>frame` and
+      :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvCamera::<method>frustum`.
 
 - Changed methods:
 

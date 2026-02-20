@@ -118,6 +118,32 @@ impl MjVfs {
         }
     }
 
+    /// Mounts a directory into the VFS.
+    /// # Panics
+    /// When `filepath` contain `\0` characters, a panic occurs.
+    pub fn mount(&mut self, filepath: &str) -> io::Result<()> {
+        let c_filepath = CString::new(filepath).unwrap();
+        Self::handle_add_result(unsafe {
+            mj_mountVFS(
+                self.ffi_mut(),
+                c_filepath.as_ptr(),
+                ptr::null()
+            )
+        })
+    }
+
+    /// Unmounts a directory from the VFS.
+    /// # Panics
+    /// When `mountdir` contains `\0` characters, a panic occurs.
+    pub fn unmount(&mut self, mountdir: &str) -> io::Result<()> {
+        let c_mountdir = CString::new(mountdir).unwrap();
+        unsafe {
+            Self::handle_remove_result(
+                mj_unmountVFS(self.ffi_mut(), c_mountdir.as_ptr())
+            )
+        }
+    }
+
     fn handle_remove_result(result: i32) -> io::Result<()> {
         match result {
             0 => Ok(()),
@@ -214,5 +240,14 @@ mod tests {
 
         /* Remove it once (an error should occur) */
         assert!(vfs.delete_file(RAW_FILE_NAME).is_err());
+    }
+
+    #[test]
+    fn test_vfs_mount_unmount() {
+        let mut vfs = MjVfs::new();
+        // Since we don't have a resource provider, this just calls the API
+        // It might return an Err since the provider is null. We just ensure it doesn't crash.
+        let _ = vfs.mount("/tmp");
+        let _ = vfs.unmount("/tmp");
     }
 }

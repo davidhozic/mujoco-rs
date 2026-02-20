@@ -393,7 +393,7 @@ impl MjSpec {
     /// When the `class_name` or `parent_class_name` contain '\0' characters, a panic occurs.
     pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<&mut MjsDefault, Error> {
         let c_class_name = CString::new(class_name).unwrap();
-        
+
         let parent_ptr = if let Some(name) = parent_class_name {
                 self.default(name).ok_or_else(
                     || Error::new(ErrorKind::NotFound, "invalid parent name")
@@ -981,6 +981,31 @@ impl MjsTendon {
         let wrap_ptr = unsafe { mjs_wrapPulley(self, divisor) };
         unsafe { wrap_ptr.as_mut().unwrap() }
     }
+
+    /// Return the number of wrap objects.
+    pub fn get_wrap_num(&self) -> i32 {
+        unsafe { mjs_getWrapNum(self) }
+    }
+
+    /// Return an indexed wrap object. Returns `None` if index is out of bounds.
+    pub fn get_wrap(&self, i: i32) -> Option<&MjsWrap> {
+        let ptr = unsafe { mjs_getWrap(self, i) };
+        if ptr.is_null() {
+            None
+        } else {
+            Some(unsafe { ptr.as_ref().unwrap() })
+        }
+    }
+
+    /// Return a mutable indexed wrap object. Returns `None` if index is out of bounds.
+    pub fn get_wrap_mut(&mut self, i: i32) -> Option<&mut MjsWrap> {
+        let ptr = unsafe { mjs_getWrap(self, i) };
+        if ptr.is_null() {
+            None
+        } else {
+            Some(unsafe { ptr.as_mut().unwrap() })
+        }
+    }
 }
 
 /***************************
@@ -992,6 +1017,28 @@ impl MjsWrap {
         [&] with, get, set, [
             type_ + _: MjtWrap; "wrap type.";
         ]
+    }
+
+    /// Return the side site element.
+    pub fn side_site(&self) -> Option<&MjsSite> {
+        let ptr = unsafe { mjs_getWrapSideSite(self as *const _ as *mut _) };
+        if ptr.is_null() { None } else { Some(unsafe { ptr.as_ref().unwrap() }) }
+    }
+
+    /// Return the side site element mutably.
+    pub fn side_site_mut(&mut self) -> Option<&mut MjsSite> {
+        let ptr = unsafe { mjs_getWrapSideSite(self) };
+        if ptr.is_null() { None } else { Some(unsafe { ptr.as_mut().unwrap() }) }
+    }
+
+    /// Return the wrap divisor.
+    pub fn divisor(&self) -> f64 {
+        unsafe { mjs_getWrapDivisor(self as *const _ as *mut _) }
+    }
+
+    /// Return the wrap coefficient.
+    pub fn coef(&self) -> f64 {
+        unsafe { mjs_getWrapCoef(self as *const _ as *mut _) }
     }
 }
 
@@ -1827,5 +1874,26 @@ mod tests {
         std::fs::remove_file("test_parse_vfs.xml").unwrap();
         let model = spec.compile().unwrap();
         assert!(model.geom("floor1").is_some());
+    }
+
+    #[test]
+    fn test_tendon_wrap_methods() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_body().with_name("body1");
+        spec.world_body_mut().add_body().with_name("body2");
+        spec.world_body_mut().add_site().with_name("site1");
+
+        let tendon = spec.add_tendon();
+        tendon.wrap_site("site1");
+        tendon.wrap_joint("joint1", 0.5);
+        tendon.wrap_pulley(1.5);
+
+        assert_eq!(tendon.get_wrap_num(), 3);
+
+        let wrap = tendon.get_wrap(1).unwrap();
+        assert_eq!(wrap.coef(), 0.5);
+
+        let wrap_pulley = tendon.get_wrap(2).unwrap();
+        assert_eq!(wrap_pulley.divisor(), 1.5);
     }
 }
