@@ -45,7 +45,8 @@ impl Simulation {
             if self.last_update.elapsed().as_secs_f64() > timestep {
                 self.last_update = Instant::now();
                 self.simulation_state.step();
-                self.viewer.sync(&mut self.simulation_state);
+                self.viewer.sync_data(&mut self.simulation_state);
+                self.viewer.render();
             }
         }
     }

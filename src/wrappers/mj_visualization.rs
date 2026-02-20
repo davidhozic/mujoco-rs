@@ -108,21 +108,6 @@ impl MjvPerturb {
 ***********************************************************************************************************************/
 pub type MjvCamera = mjvCamera;
 impl MjvCamera {
-    /// Deprecated method. Use one of:
-    /// - [`MjvCamera::new_free`],
-    /// - [`MjvCamera::new_fixed`],
-    /// - [`MjvCamera::new_tracking`],
-    /// - [`MjvCamera::new_user`].
-    #[deprecated]
-    pub fn new(camera_id: u32, type_: MjtCamera, model: &MjModel) -> Self {
-        match type_ {
-            MjtCamera::mjCAMERA_FIXED => Self::new_fixed(camera_id),
-            MjtCamera::mjCAMERA_TRACKING => Self::new_tracking(camera_id),
-            MjtCamera::mjCAMERA_FREE => Self::new_free(model),
-            MjtCamera::mjCAMERA_USER => Self::new_user()
-        }
-    }
-
     /// Creates a new free camera.
     /// By default, the camera will look at the center of the model.
     pub fn new_free(model: &MjModel) -> Self {
@@ -303,12 +288,6 @@ impl MjvFigure {
             mjv_defaultFigure(opt.as_mut_ptr());
             opt.assume_init()
         }
-    }
-
-    /// Deprecated alias for [`MjvFigure::draw`].
-    #[deprecated(since = "2.3.0", note = "replaced with MjvFigure::draw")]
-    pub fn figure(&mut self, viewport: MjrRectangle, context: &MjrContext) {
-        unsafe { mjr_figure(viewport,self, context.ffi()) };
     }
 
     /// Draws the 2D figure to the `viewport` on screen.

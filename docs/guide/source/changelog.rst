@@ -32,7 +32,19 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
   - Several constructors and I/O methods now return `Result <https://doc.rust-lang.org/std/result/>`_ for safer error handling.
   - Removed deprecated methods:
 
-    - |mj_data|: ``warning_stats``, ``timer_stats``, ``maxuse_threadstack``.
+    - |mj_data|: ``warning_stats``, ``timer_stats``, ``maxuse_threadstack``,
+      type aliases ``MjJointInfo``, ``MjJointView``, ``MjJointViewMut``,
+      ``MjGeomInfo``, ``MjGeomView``, ``MjGeomViewMut``,
+      ``MjActuatorInfo``, ``MjActuatorView``, ``MjActuatorViewMut``.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjJointDataViewMut`: ``reset``
+      (use ``zero`` instead).
+    - |mj_model|: ``name2id`` (use ``name_to_id`` instead).
+    - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`: ``new``
+      (use ``new_free``, ``new_fixed``, ``new_tracking``, or ``new_user`` instead).
+    - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`: ``figure``
+      (use ``draw`` instead).
+    - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`: ``user_scene``, ``user_scene_mut``,
+      ``user_scn``, ``user_scn_mut``, ``sync``.
 
 - New methods:
 

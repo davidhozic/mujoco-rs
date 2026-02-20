@@ -335,7 +335,6 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     raw_cursor_position: (f64, f64),
 
     /* External interaction */
-    user_scene: MjvScene<M>,
     shared_state: Arc<Mutex<ViewerSharedState<M>>>,
 
     /* User interface */
@@ -404,62 +403,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         Ok(fun(self.shared_state.lock()?))
     }
 
-    /// **DEPRECATED** method for reading the state.
-    /// This will be removed in 3.0.0, in favor of [`ViewerSharedState::user_scene`],
-    /// which allows usage from multiple threads.
-    /// 
-    /// [`ViewerSharedState`] can be obtained via [`MjViewer::state`], which returns `Arc<Mutex<ViewerSharedState>>`.
-    /// Alternatively, [`MjViewer::with_state_lock`] can be used as follows:
-    /// ```no_run
-    /// # use mujoco_rs::viewer::MjViewer;
-    /// # use mujoco_rs::prelude::*;
-    /// # let model = MjModel::from_xml_string("<mujoco/>").unwrap();
-    /// let mut viewer = MjViewer::builder().build_passive(&model).unwrap();
-    /// viewer.with_state_lock(|lock| {
-    ///     let scene = lock.user_scene();
-    /// });
-    /// ```
-    /// 
-    /// # Note
-    /// There is no way to make a fully compatible proxy method to [`ViewerSharedState::user_scene`]
-    /// through the viewer as a reference to the scene is returned, thus this method currently
-    /// uses a temporary user scene, part of [`MjViewer`]. The viewer then syncs both
-    /// [`MjViewer::user_scene`] and [`ViewerSharedState::user_scene`] to achieve backward compatibility,
-    /// however we strongly urge you to use the latter as the **FORMER** will be **REMOVED IN THE FUTURE**.
-    #[deprecated(since = "2.2.0", note = "use viewer.with_state_lock(|lock| { lock.user_scene(); ... } )")]
-    pub fn user_scene(&self) -> &MjvScene<M>{
-        &self.user_scene
-    }
-
-    /// **DEPRECATED** method for reading the state.
-    /// This will be removed in 3.0.0, in favor of [`ViewerSharedState::user_scene_mut`],
-    /// which allows usage from multiple threads.
-    /// 
-    /// [`ViewerSharedState`] can be obtained via [`MjViewer::state`], which returns `Arc<Mutex<ViewerSharedState>>`.
-    /// 
-    /// # Note
-    /// There is no way to make a fully compatible proxy method to [`ViewerSharedState::user_scene_mut`]
-    /// through the viewer as a reference to the scene is returned, thus this method currently
-    /// uses a temporary user scene, part of [`MjViewer`]. The viewer then syncs both
-    /// [`MjViewer::user_scene_mut`] and [`ViewerSharedState::user_scene_mut`] to achieve backward compatibility,
-    /// however we strongly urge you to use the latter as the **FORMER** will be **REMOVED IN THE FUTURE**.
-    #[deprecated(since = "2.2.0", note = "use viewer.with_state_lock(|mut lock| { lock.user_scene_mut(); ... } )")]
-    pub fn user_scene_mut(&mut self) -> &mut MjvScene<M>{
-        &mut self.user_scene
-    }
-
-    #[deprecated(since = "1.3.0", note = "use viewer.with_state_lock(|lock| { lock.user_scene(); ... } )")]
-    pub fn user_scn(&self) -> &MjvScene<M> {
-        #[allow(deprecated)]
-        self.user_scene()
-    }
-
-    #[deprecated(since = "1.3.0", note = "use viewer.with_state_lock(|mut lock| { lock.user_scene_mut(); ... } )")]
-    pub fn user_scn_mut(&mut self) -> &mut MjvScene<M> {
-        #[allow(deprecated)]
-        self.user_scene_mut()
-    }
-
     /// Adds a user-defined UI callback for custom widgets in the viewer's UI.
     /// The callback receives an [`egui::Context`] reference and can be used to create
     /// custom windows, panels, or other UI elements.
@@ -501,22 +444,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         F: FnMut(&egui::Context) + 'static
     {
         self.ui.add_ui_callback_detached(callback);
-    }
-
-    /// Deprecated synchronization and rendering method.
-    /// Users should use [`MjViewer::sync_data`] instead, which is a proxy
-    /// to [`ViewerSharedState::sync_data`], and afterwards call [`MjViewer::render`].
-    /// # Migration to new API
-    /// To achieve identical behavior, replace the call of this method with
-    /// a call to [`MjViewer::sync_data`] and afterwards [`MjViewer::render`].
-    /// 
-    /// [`MjViewer::render`] must be called by the user, because syncing no longer
-    /// processes the UI and renders the scene. This was changed for the purposes of
-    /// allowing multithreading --- i.e., rendering in main thread and everything else in a separate thread.
-    #[deprecated(since = "2.2.0", note = "replaced with calls to sync_data and render")]
-    pub fn sync(&mut self, data: &mut MjData<M>) {
-        self.shared_state.lock_unpoison().sync_data(data);
-        self.render();
     }
 
     /// Same as [`MjViewer::sync_data`], except it copies the entire [`MjData`]
@@ -631,23 +558,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             let ViewerSharedState { data_passive, pert, .. } = lock.deref_mut();
             self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
 
-            // Temporary check until 3.0.0. Geom syncing will fail if the target scene is smaller than
-            // the requested number of user scenes.
-            let new_user_scene = lock.user_scene();
-            let old_user_scene = &self.user_scene;
-            if !new_user_scene.geoms().is_empty() && !old_user_scene.geoms().is_empty() {
-                panic!(
-                    "Both the new ViewerSharedState::user_scene and the deprecated MjViewer::user_scene are non-empty. \
-                     Please update your code to fully use ViewerSharedState::user_scene."
-                );
-            }
-
             // Draw geoms drawn through the user scene.
-            sync_geoms(new_user_scene, &mut self.scene)
-                .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
-
-            // Temporary (until MuJoCo-rs 3.0.0) sync. Used only for backward compatibility.
-            sync_geoms(old_user_scene, &mut self.scene)
+            sync_geoms(lock.user_scene(), &mut self.scene)
                 .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
         }
         self.scene.render(&self.rect_full, &self.context);
@@ -1290,7 +1202,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
 
         // Tracking of changes made between syncs
         let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(model.clone(), self.max_user_geoms)));
-        let user_scene = MjvScene::new(model.clone(), self.max_user_geoms);
 
         // User interface
         #[cfg(feature = "viewer-ui")]
@@ -1309,7 +1220,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
             context,
             camera,
             opt: MjvOption::default(),
-            user_scene,  // TEMPORARY! TODO: Drop in 3.0.0
             shared_state,
             last_x: 0.0,
             last_y: 0.0,

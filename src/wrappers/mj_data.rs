@@ -1315,27 +1315,6 @@ info_with_view!(
     M: Deref<Target = MjModel>
 );
 
-/// Deprecated name for [`MjJointDataInfo`].
-#[deprecated]
-pub type MjJointInfo = MjJointDataInfo;
-
-
-/* Backward compatibility */
-impl MjJointDataViewMut<'_> {
-    /// Deprecated. Use [`MjJointDataViewMut::zero`] instead.
-    #[deprecated]
-    pub fn reset(&mut self) {
-        self.zero();
-    }
-}
-
-/// Deprecated name for [`MjJointDataView`].
-#[deprecated]
-pub type MjJointView<'d> = MjJointDataView<'d>;
-
-/// Deprecated name for [`MjJointDataViewMut`].
-#[deprecated]
-pub type MjJointViewMut<'d> = MjJointDataViewMut<'d>;
 
 /**************************************************************************************************/
 // Sensor view
@@ -1347,34 +1326,12 @@ info_with_view!(Data, sensor, sensor, [data: MjtNum], [], M: Deref<Target = MjMo
 /**************************************************************************************************/
 info_with_view!(Data, geom, geom_, [xpos: MjtNum, xmat: MjtNum], [], M: Deref<Target = MjModel>);
 
-/// Deprecated name for [`MjGeomDataInfo`].
-#[deprecated]
-pub type MjGeomInfo = MjGeomDataInfo;
-
-/// Deprecated name for [`MjGeomDataView`].
-#[deprecated]
-pub type MjGeomView<'d> = MjGeomDataView<'d>;
-
-/// Deprecated name for [`MjGeomDataViewMut`].
-#[deprecated]
-pub type MjGeomViewMut<'d> = MjGeomDataViewMut<'d>;
 
 /**************************************************************************************************/
 // Actuator view
 /**************************************************************************************************/
 info_with_view!(Data, actuator, [ctrl: MjtNum], [act: MjtNum], M: Deref<Target = MjModel>);
 
-/// Deprecated name for [`MjActuatorDataInfo`].
-#[deprecated]
-pub type MjActuatorInfo = MjActuatorDataInfo;
-
-/// Deprecated name for [`MjActuatorDataView`].
-#[deprecated]
-pub type MjActuatorView<'d> = MjActuatorDataView<'d>;
-
-/// Deprecated name for [`MjActuatorDataViewMut`].
-#[deprecated]
-pub type MjActuatorViewMut<'d> = MjActuatorDataViewMut<'d>;
 
 /**************************************************************************************************/
 // Body view
