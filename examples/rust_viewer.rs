@@ -33,7 +33,7 @@ fn main() {
 
     /* Add a custom UI window */
     let mut opened = true;  // gets moved into the callback
-    viewer.add_ui_callback(move |ctx, data| {
+    viewer.add_ui_callback_detached(move |ctx| {
         use mujoco_rs::viewer::egui;
         egui::Window::new("Custom controls")
             .scroll(true)
@@ -46,6 +46,21 @@ fn main() {
                 }
             });
     });
+
+    // OR, to gain access to the internal passive data at the same time:
+    // viewer.add_ui_callback(move |ctx, _data| {
+    //     use mujoco_rs::viewer::egui;
+    //     egui::Window::new("Custom controls")
+    //         .scroll(true)
+    //         .open(&mut opened)
+    //         .show(ctx, |ui| {
+    //             ui.heading("My Custom Widget");
+    //             ui.label("This is a custom UI element!");
+    //             if ui.button("Click me").clicked() {
+    //                 println!("Button clicked!");
+    //             }
+    //         });
+    // });
 
     let timestep = model.opt().timestep;
     while viewer.running() {
