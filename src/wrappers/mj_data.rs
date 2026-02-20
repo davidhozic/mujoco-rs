@@ -153,7 +153,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             let qacc_smooth = nv_range;
             let qfrc_constraint = nv_range;
             let qfrc_inverse = nv_range;
-            
+
             let qfrc_spring = nv_range;
             let qfrc_damper = nv_range;
             let qfrc_gravcomp = nv_range;
@@ -892,6 +892,59 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok((geom_id, dist))
     }
 
+    /// Intersect ray with visible flexes.
+    /// Return distance to nearest surface, or -1 if no intersection.
+    /// If `vertid` is `Some`, it will be filled with the id of the nearest vertex.
+    /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
+    /// `flex_layer`, `flg_vert`, `flg_edge`, `flg_face`, `flg_skin` and `flexid` control what and where to intersect.
+    pub fn ray_flex(
+        &self, flex_layer: i32, flg_vert: bool, flg_edge: bool, flg_face: bool, flg_skin: bool, flexid: i32,
+        pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
+        vertid: Option<&mut i32>, normal_out: Option<&mut [MjtNum; 3]>
+    ) -> mjtNum {
+        unsafe { mj_rayFlex(
+            self.model.ffi(), self.ffi(),
+            flex_layer, flg_vert as MjtByte, flg_edge as MjtByte, flg_face as MjtByte, flg_skin as MjtByte, flexid,
+            pnt, vec,
+            vertid.map_or(ptr::null_mut(), |x| x), normal_out.map_or(ptr::null_mut(), |x| x)
+        ) }
+    }
+
+    /// Copies data state from `src` to `self` based on the specified `spec` combination of `mjtState` flags.
+    pub fn copy_state_from_data(&mut self, src: &MjData<M>, spec: u32) {
+        unsafe {
+            mj_copyState(self.model.ffi(), src.ffi(), self.ffi_mut(), spec as i32);
+        }
+    }
+
+    /// Intersect ray with hfield.
+    /// Returns the distance to the intersection, or -1.0 if no intersection.
+    pub fn ray_hfield(
+        &self, geom_id: i32, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
+    ) -> mjtNum {
+        unsafe {
+            mj_rayHfield(self.model.ffi(), self.ffi(), geom_id, pnt, vec, normal_out.map_or(ptr::null_mut(), |x| x))
+        }
+    }
+
+    /// Intersect ray with mesh.
+    /// Returns the distance to the intersection, or -1.0 if no intersection.
+    pub fn ray_mesh(
+        &self, geom_id: i32, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
+    ) -> mjtNum {
+        unsafe {
+            mj_rayMesh(self.model.ffi(), self.ffi(), geom_id, pnt, vec, normal_out.map_or(ptr::null_mut(), |x| x))
+        }
+    }
+
+    /// Apply Cartesian force and torque to a point on a body, and add the result to `qfrc_target`.
+    pub fn apply_ft(&mut self, force: &[MjtNum; 3], torque: &[MjtNum; 3], point: &[MjtNum; 3], body: i32, qfrc_target: &mut [MjtNum]) {
+        assert!(qfrc_target.len() >= self.model.ffi().nv as usize, "qfrc_target must be at least nv length");
+        unsafe {
+            mj_applyFT(self.model.ffi(), self.ffi_mut(), force, torque, point, body, qfrc_target.as_mut_ptr());
+        }
+    }
+
     /// Reads data's state into `destination`. The `spec` parameter is a bit mask of [`MjtState`] elements,
     /// which controls what state gets copied. The `destination` parameter is a mutable
     /// slice to the location into which the state will be written.
@@ -1013,22 +1066,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         &self.model
     }
 
-    /// Warning statistics.
-    #[deprecated(since = "2.0.0", note = "replaced with warning")]
-    pub fn warning_stats(&self) -> &[MjWarningStat] {
-        &self.ffi().warning
-    }
-
-    #[deprecated(since = "2.0.0", note = "replaced with timer")]
-    pub fn timer_stats(&self) -> &[MjTimerStat] {
-        &self.ffi().timer
-    }
-
-    /// Maximum stack allocation per thread in bytes.
-    pub fn maxuse_threadstack(&self) -> &[MjtSize] {
-        &self.ffi().maxuse_threadstack
-    }
-
     getter_setter! {get, [
         [ffi] narena: MjtSize; "size of the arena in bytes (inclusive of the stack).";
         [ffi] nbuffer: MjtSize; "size of main buffer in bytes.";
@@ -1046,7 +1083,18 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         [ffi] nA: i32; "number of non-zeros in constraint inverse inertia matrix.";
         [ffi] nisland: i32; "number of detected constraint islands.";
         [ffi] nidof: i32; "number of dofs in all islands.";
+        [ffi] ntree_awake: i32; "number of awake trees.";
+        [ffi] nbody_awake: i32; "number of awake dynamic and static bodies.";
+        [ffi] nparent_awake: i32; "number of bodies with awake parents.";
+        [ffi] nv_awake: i32; "number of awake dofs.";
         [ffi] signature: u64; "compilation signature.";
+    ]}
+
+    getter_setter! {get, [
+        [ffi] flg_energypos: bool; "has mj_energyPos been called.";
+        [ffi] flg_energyvel: bool; "has mj_energyVel been called.";
+        [ffi] flg_subtreevel: bool; "has mj_subtreeVel been called.";
+        [ffi] flg_rnepost: bool; "has mj_rnePostConstraint been called.";
     ]}
 
     getter_setter! {with, get, set, [[ffi, ffi_mut] time: MjtNum; "simulation time.";]}
@@ -1057,7 +1105,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     getter_setter! {
         get, [
-            [ffi, ffi_mut] solver: &[MjSolverStat; (mjNISLAND * mjNSOLVER) as usize]; "solver statistics per island, per iteration.";
+            [ffi] (allow_mut = false) maxuse_threadstack: &[MjtSize; mjMAXTHREAD as usize]; "maximum stack allocation per thread in bytes.";
+            [ffi, ffi_mut] solver: &[MjSolverStat; mjNISLAND as usize * mjNSOLVER as usize]; "solver statistics per island, per iteration.";
             [ffi, ffi_mut] solver_niter: &[i32; mjNISLAND as usize]; "number of solver iterations, per island.";
             [ffi, ffi_mut] solver_nnz: &[i32; mjNISLAND as usize]; "number of nonzeros in Hessian or efc_AR, per island.";
             [ffi, ffi_mut] solver_fwdinv: &[MjtNum; 2]; "forward-inverse comparison: qfrc, efc.";
@@ -1073,6 +1122,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         qpos: &[MjtNum; "position"; model.ffi().nq],
         qvel: &[MjtNum; "velocity"; model.ffi().nv],
         act: &[MjtNum; "actuator activation"; model.ffi().na],
+        history: &[MjtNum; "history buffer"; model.ffi().nhistory],
         qacc_warmstart: &[MjtNum; "acceleration used for warmstart"; model.ffi().nv],
         plugin_state: &[MjtNum; "plugin state"; model.ffi().npluginstate],
         ctrl: &[MjtNum; "control"; model.ffi().nu],
@@ -1085,6 +1135,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         act_dot: &[MjtNum; "time-derivative of actuator activation"; model.ffi().na],
         userdata: &[MjtNum; "user data, not touched by engine"; model.ffi().nuserdata],
         sensordata: &[MjtNum; "sensor data array"; model.ffi().nsensordata],
+        tree_asleep: &[i32; "<0: awake; >=0: index cycle of sleeping trees"; model.ffi().ntree],
         xpos: &[[MjtNum; 3] [cast]; "Cartesian position of body frame"; model.ffi().nbody],
         xquat: &[[MjtNum; 4] [cast]; "Cartesian orientation of body frame"; model.ffi().nbody],
         xmat: &[[MjtNum; 9] [cast]; "Cartesian orientation of body frame"; model.ffi().nbody],
@@ -1105,7 +1156,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         cinert: &[[MjtNum; 10] [cast]; "com-based body inertia and mass"; model.ffi().nbody],
         flexvert_xpos: &[[MjtNum; 3] [cast]; "Cartesian flex vertex positions"; model.ffi().nflexvert],
         flexelem_aabb: &[[MjtNum; 6] [cast]; "flex element bounding boxes (center, size)"; model.ffi().nflexelem],
+        flexedge_J: &[MjtNum; "flex edge Jacobian"; model.ffi().nJfe],
         flexedge_length: &[MjtNum; "flex edge lengths"; model.ffi().nflexedge],
+        flexvert_J: &[[MjtNum; 2] [cast]; "flex vertex Jacobian"; model.ffi().nJfv],
+        flexvert_length: &[[MjtNum; 2] [cast]; "flex vertex lengths"; model.ffi().nflexvert],
         bvh_aabb_dyn: &[[MjtNum; 6] [cast]; "global bounding box (center, size)"; model.ffi().nbvhdynamic],
         ten_wrapadr: &[i32; "start address of tendon's path"; model.ffi().ntendon],
         ten_wrapnum: &[i32; "number of wrap points in path"; model.ffi().ntendon],
@@ -1125,6 +1179,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         qLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
         qLDiagInv: &[MjtNum; "1/diag(D)"; model.ffi().nv],
         bvh_active: &[bool [cast]; "was bounding volume checked for collision"; model.ffi().nbvh],
+        tree_awake: &[bool [cast]; "is tree awake; 0: asleep; 1: awake"; model.ffi().ntree],
+        body_awake: &[MjtSleepState [cast]; "body sleep state"; model.ffi().nbody],
+        body_awake_ind: &[i32; "indices of awake and static bodies"; model.ffi().nbody],
+        parent_awake_ind: &[i32; "indices of bodies with awake or static parents"; model.ffi().nbody],
+        dof_awake_ind: &[i32; "indices of awake dofs"; model.ffi().nv],
         flexedge_velocity: &[MjtNum; "flex edge velocities"; model.ffi().nflexedge],
         ten_velocity: &[MjtNum; "tendon velocities"; model.ffi().ntendon],
         actuator_velocity: &[MjtNum; "actuator velocities"; model.ffi().nu],
@@ -1166,6 +1225,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         efc_D: &[MjtNum; "constraint mass"; ffi().nefc],
         efc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
         tendon_efcadr: &[i32; "first efc address involving tendon; -1: none"; model.ffi().ntendon],
+        tree_island: &[i32; "island id of this tree; -1: none"; model.ffi().ntree],
+        island_ntree: &[i32; "number of trees in this island"; ffi().nisland],
+        island_itreeadr: &[i32; "island start address in itree vector"; ffi().nisland],
+        map_itree2tree: &[i32; "map from itree to tree"; model.ffi().ntree],
         dof_island: &[i32; "island id of this dof; -1: none"; model.ffi().nv],
         island_nv: &[i32; "number of dofs in this island"; ffi().nisland],
         island_idofadr: &[i32; "island start address in idof vector"; ffi().nisland],
@@ -1216,8 +1279,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     array_slice_dyn! {
         sublen_dep {
             ten_J_colind: &[[i32; model.ffi().nv as usize] [cast]; "column indices in sparse Jacobian"; model.ffi().ntendon],
-            ten_J: &[[MjtNum; model.ffi().nv as usize] [cast]; "tendon Jacobian"; model.ffi().ntendon],
-            flexedge_J: &[[MjtNum; model.ffi().nv as usize] [cast]; "flex edge Jacobian"; model.ffi().nflexedge]
+            ten_J: &[[MjtNum; model.ffi().nv as usize] [cast]; "tendon Jacobian"; model.ffi().ntendon]
         }
     }
 }
@@ -1329,7 +1391,7 @@ info_with_view!(
 // Camera view
 /**************************************************************************************************/
 info_with_view!(Data, camera, cam_, [xpos: MjtNum, xmat: MjtNum], [], M: Deref<Target = MjModel>);
-    
+
 /**************************************************************************************************/
 // Site view
 /**************************************************************************************************/
@@ -1357,6 +1419,10 @@ mod test {
 
     const MODEL: &str = "
 <mujoco>
+  <asset>
+    <mesh name=\"cube\" vertex=\"-0.5 -0.5 -0.5  0.5 -0.5 -0.5  -0.5  0.5 -0.5  0.5  0.5 -0.5  -0.5 -0.5  0.5  0.5 -0.5  0.5  -0.5  0.5  0.5  0.5  0.5  0.5\"/>
+    <hfield name=\"terrain\" nrow=\"10\" ncol=\"10\" size=\"10 10 .1 .1\"/>
+  </asset>
   <worldbody>
     <light ambient=\"0.2 0.2 0.2\"/>
     <body name=\"ball\" pos=\".2 .2 .1\">
@@ -1370,6 +1436,8 @@ mod test {
     </body>
 
     <geom name=\"floor1\" type=\"plane\" size=\"10 10 1\" solref=\"0.004 1.0\"/>
+    <geom name=\"mesh_cube\" type=\"mesh\" mesh=\"cube\" pos=\"2 2 0.5\"/>
+    <geom name=\"hfield_terrain\" type=\"hfield\" hfield=\"terrain\" pos=\"-2 -2 0\"/>
   </worldbody>
 </mujoco>";
 
@@ -1949,5 +2017,83 @@ mod test {
         let res = data.multi_ray(&pos, &ray_vecs, None, false, -1, 10.0, Some(&mut bad_normals));
         assert!(res.is_err());
         assert_eq!(res.unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_copy_state_from_data() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data1 = model.make_data();
+        let mut data2 = model.make_data();
+
+        data1.set_time(1.23);
+        data2.copy_state_from_data(&data1, MjtState::mjSTATE_TIME as u32);
+
+        assert_eq!(data2.time(), 1.23);
+    }
+
+    #[test]
+    fn test_ray_flex() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let data = model.make_data();
+        let pos = [0.0; 3];
+        let vec = [1.0, 0.0, 0.0];
+
+        // Just checking that it runs without crashing, since we have no flex in MODEL
+        let dist = data.ray_flex(0, false, false, false, false, -1, &pos, &vec, None, None);
+        assert_eq!(dist, -1.0);
+    }
+
+    #[test]
+    fn test_ray_mesh_hfield() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let mesh_id = model.geom("mesh_cube").unwrap().id as i32;
+        let hfield_id = model.geom("hfield_terrain").unwrap().id as i32;
+
+        data.forward_kinematics();
+
+        // Ray should hit mesh (centered at 2,2,0.5, size 1x1x1)
+        // Top surface of the mesh is at z=0.5 + 0.5 = 1.0. 
+        // Ray starts at z=5.0 and goes straight down [0, 0, -1].
+        // Intersection should be at exactly distance 4.0.
+        let mesh_dist = data.ray_mesh(mesh_id, &[2.0, 2.0, 5.0], &[0.0, 0.0, -1.0], None);
+        assert_relative_eq!(mesh_dist, 4.0, epsilon=1e-5);
+
+        // Ray should hit hfield (centered at -2,-2,0)
+        // Default hfield with no data acts as a plane at z=0.
+        // Intersection should be at exactly distance 5.0.
+        let hfield_dist = data.ray_hfield(hfield_id, &[-2.0, -2.0, 5.0], &[0.0, 0.0, -1.0], None);
+        assert_relative_eq!(hfield_dist, 5.0, epsilon=1e-5);
+    }
+
+    #[test]
+    fn test_apply_ft() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+        let nv = model.nv() as usize;
+        let body_id = model.body("ball").unwrap().id as i32;
+        let mut qfrc = vec![0.0; nv];
+
+        data.forward();
+
+        // Apply force/torque at the ball's center of mass (pos = [0.2, 0.2, 0.1]) in global frame
+        let force = [1.5, 2.5, 3.5];
+        let torque = [0.1, 0.2, 0.3];
+        let point = [0.2, 0.2, 0.1]; 
+
+        data.apply_ft(&force, &torque, &point, body_id, &mut qfrc);
+
+        // The "ball" has a free joint.
+        // In MuJoCo, for a free joint, the first 3 DOFs are translation (linear),
+        // and the next 3 are the rotational DOFs.
+        // Since we applied it exactly at the COM, there should be no induced torque from the force position.
+        let dof_adr = model.body_dofadr()[body_id as usize] as usize;
+        assert!((qfrc[dof_adr] - 1.5).abs() < 1e-5);
+        assert!((qfrc[dof_adr + 1] - 2.5).abs() < 1e-5);
+        assert!((qfrc[dof_adr + 2] - 3.5).abs() < 1e-5);
+        assert!((qfrc[dof_adr + 3] - 0.1).abs() < 1e-5);
+        assert!((qfrc[dof_adr + 4] - 0.2).abs() < 1e-5);
+        assert!((qfrc[dof_adr + 5] - 0.3).abs() < 1e-5);
     }
 }

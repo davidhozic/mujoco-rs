@@ -450,11 +450,13 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     #[deprecated(since = "1.3.0", note = "use viewer.with_state_lock(|lock| { lock.user_scene(); ... } )")]
     pub fn user_scn(&self) -> &MjvScene<M> {
+        #[allow(deprecated)]
         self.user_scene()
     }
 
     #[deprecated(since = "1.3.0", note = "use viewer.with_state_lock(|mut lock| { lock.user_scene_mut(); ... } )")]
     pub fn user_scn_mut(&mut self) -> &mut MjvScene<M> {
+        #[allow(deprecated)]
         self.user_scene_mut()
     }
 

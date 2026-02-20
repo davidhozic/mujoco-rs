@@ -19,7 +19,8 @@ use super::mj_model::{
     MjModel, MjtObj, MjtGeom, MjtJoint, MjtCamLight,
     MjtLightType, MjtSensor, MjtDataType, MjtGain,
     MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace,
-    MjtTrn, MjtStage, MjtFlexSelf, MjtProjection
+    MjtTrn, MjtStage, MjtFlexSelf, MjtProjection,
+    MjtSleepPolicy, MjtWrap
 };
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic, MjLROpt};
 use super::mj_option::MjOption;
@@ -200,6 +201,42 @@ impl MjSpec {
         }
     }
 
+    /// Parse and create a [`MjSpec`] from `filename`
+    /// The `content_type` controls the decoder to use.
+    /// This is a wrapper around low-level method [`mj_parse`].
+    /// # Panics
+    /// When `filename` or `content_type` contains zero bytes.
+    pub fn from_parse(filename: &str, content_type: &str) -> Result<Self, Error> {
+        Self::from_parse_file(filename, content_type, None)
+    }
+
+    /// Same as [`MjSpec::from_parse`], except `filename` is taken from `vfs`.
+    /// # Panics
+    /// When `filename` or `content_type` contains zero bytes.
+    pub fn from_parse_vfs(filename: &str, content_type: &str, vfs: &MjVfs) -> Result<Self, Error> {
+        Self::from_parse_file(filename, content_type, Some(vfs))
+    }
+
+    /// Parse and create a [`MjSpec`] from `filename`
+    /// The `content_type` controls the decoder to use.
+    /// This is a wrapper around low-level method [`mj_parse`].
+    /// # Panics
+    /// When `filename` or `content_type` contains zero bytes.
+    fn from_parse_file(filename: &str, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, Error> {
+        assert_mujoco_version();
+        let mut error_buffer = [0i8; 100];
+        unsafe {
+            let c_filename = CString::new(filename).unwrap();
+            let c_content_type = CString::new(content_type).unwrap();
+            let ptr = mj_parse(
+                c_filename.as_ptr(), c_content_type.as_ptr(),
+                vfs.map_or(ptr::null(), |v| v.ffi()),
+                error_buffer.as_mut_ptr(), error_buffer.len() as i32
+            );
+            Self::check_spec(ptr, &error_buffer)
+        }
+    }
+
     /// Handles spec pointer input.
     /// # Safety
     /// `error_buffer` must not be empty and the last element must be 0.
@@ -356,7 +393,7 @@ impl MjSpec {
     /// When the `class_name` or `parent_class_name` contain '\0' characters, a panic occurs.
     pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<&mut MjsDefault, Error> {
         let c_class_name = CString::new(class_name).unwrap();
-        
+
         let parent_ptr = if let Some(name) = parent_class_name {
                 self.default(name).ok_or_else(
                     || Error::new(ErrorKind::NotFound, "invalid parent name")
@@ -540,14 +577,12 @@ impl MjsCamera {
     }
 
     getter_setter!([&] with, get, set, [
-        mode: MjtCamLight;             "camera mode.";
-        fovy: f64;                    "field of view in y direction.";
-        ipd: f64;                     "inter-pupillary distance for stereo.";
+        mode: MjtCamLight;              "camera mode.";
+        fovy: f64;                      "field of view in y direction.";
+        ipd: f64;                       "inter-pupillary distance for stereo.";
+        proj: MjtProjection;            "camera projection type.";
+        output: i32;                    "bit flags for output type.";
     ]);
-
-    getter_setter! {
-        [&] with, get, set, [proj: MjtProjection; "is camera orthographic."]
-    }
 
     userdata_method!(f64);
 
@@ -660,6 +695,9 @@ impl MjsActuator {
         trntype: MjtTrn;               "transmission type.";
         cranklength: f64;              "crank length, for slider-crank.";
         inheritrange: f64;             "automatic range setting for position and intvelocity.";
+        nsample: i32;                  "number of samples in history buffer.";
+        interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
+        delay: f64;                    "delay time in seconds; 0: no delay.";
     ]);
 
     getter_setter! {
@@ -693,6 +731,7 @@ impl MjsSensor {
     getter_setter! {
         [&] with, get, [
             intprm: &[i32; mjNSENS as usize];            "integer parameters.";
+            interval: &[f64; 2];                         "[period, time_prev] in seconds.";
         ]
     }
 
@@ -711,6 +750,9 @@ impl MjsSensor {
         noise: f64;                    "noise stdev.";
         needstage: MjtStage;           "compute stage needed to simulate sensor.";
         dim: i32;                      "number of scalar outputs.";
+        nsample: i32;                  "number of samples in history buffer.";
+        interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
+        delay: f64;                    "delay time in seconds; 0: no delay.";
     ]);
 
     userdata_method!(f64);
@@ -732,6 +774,7 @@ impl MjsFlex {
             friction: &[f64; 3];                            "contact friction vector.";
             solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
             solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
+            size: &[f64; 3];                                "vertex bounding box half sizes in qpos0.";
         ]
     }
 
@@ -938,6 +981,31 @@ impl MjsTendon {
         let wrap_ptr = unsafe { mjs_wrapPulley(self, divisor) };
         unsafe { wrap_ptr.as_mut().unwrap() }
     }
+
+    /// Return the number of wrap objects.
+    pub fn get_wrap_num(&self) -> i32 {
+        unsafe { mjs_getWrapNum(self) }
+    }
+
+    /// Return an indexed wrap object. Returns `None` if index is out of bounds.
+    pub fn get_wrap(&self, i: i32) -> Option<&MjsWrap> {
+        let ptr = unsafe { mjs_getWrap(self, i) };
+        if ptr.is_null() {
+            None
+        } else {
+            Some(unsafe { ptr.as_ref().unwrap() })
+        }
+    }
+
+    /// Return a mutable indexed wrap object. Returns `None` if index is out of bounds.
+    pub fn get_wrap_mut(&mut self, i: i32) -> Option<&mut MjsWrap> {
+        let ptr = unsafe { mjs_getWrap(self, i) };
+        if ptr.is_null() {
+            None
+        } else {
+            Some(unsafe { ptr.as_mut().unwrap() })
+        }
+    }
 }
 
 /***************************
@@ -945,7 +1013,33 @@ impl MjsTendon {
 ***************************/
 mjs_struct!(Wrap);
 impl MjsWrap {
-    /* Auto-implemented */
+    getter_setter! {
+        [&] with, get, set, [
+            type_ + _: MjtWrap; "wrap type.";
+        ]
+    }
+
+    /// Return the side site element.
+    pub fn side_site(&self) -> Option<&MjsSite> {
+        let ptr = unsafe { mjs_getWrapSideSite(self as *const _ as *mut _) };
+        if ptr.is_null() { None } else { Some(unsafe { ptr.as_ref().unwrap() }) }
+    }
+
+    /// Return the side site element mutably.
+    pub fn side_site_mut(&mut self) -> Option<&mut MjsSite> {
+        let ptr = unsafe { mjs_getWrapSideSite(self) };
+        if ptr.is_null() { None } else { Some(unsafe { ptr.as_mut().unwrap() }) }
+    }
+
+    /// Return the wrap divisor.
+    pub fn divisor(&self) -> f64 {
+        unsafe { mjs_getWrapDivisor(self as *const _ as *mut _) }
+    }
+
+    /// Return the wrap coefficient.
+    pub fn coef(&self) -> f64 {
+        unsafe { mjs_getWrapCoef(self as *const _ as *mut _) }
+    }
 }
 
 /***************************
@@ -1293,6 +1387,7 @@ impl MjsBody {
         [&] with, get, set, [
             mass: f64;                     "mass.";
             gravcomp: f64;                 "gravity compensation.";
+            sleep: MjtSleepPolicy;           "sleep policy.";
         ]
     }
 
@@ -1759,5 +1854,46 @@ mod tests {
         assert_eq!(world.body_iter_mut(true).count(), N_BODY - 1);  // world must now be excluded
         assert_eq!(world.site_iter_mut(true).count(), N_SITE);
         assert_eq!(world.body_iter_mut(false).last().unwrap().name(), LAST_WORLD_BODY_NAME);
+    }
+
+    /// Tests wrapper method of [`mj_parse`] with VFS.
+    #[test]
+    fn test_parse_vfs() {
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer("hello.xml", MODEL.as_bytes()).unwrap();
+        let mut spec = MjSpec::from_parse_vfs("hello.xml", "XML", &vfs).unwrap();
+        let model = spec.compile().unwrap();
+        assert!(model.geom("floor1").is_some());
+    }
+
+    /// Tests wrapper method of [`mj_parse`] without VFS.
+    #[test]
+    fn test_parse_file() {
+        std::fs::write("test_parse_vfs.xml", MODEL).unwrap();
+        let mut spec = MjSpec::from_parse("test_parse_vfs.xml", "XML").unwrap();
+        std::fs::remove_file("test_parse_vfs.xml").unwrap();
+        let model = spec.compile().unwrap();
+        assert!(model.geom("floor1").is_some());
+    }
+
+    #[test]
+    fn test_tendon_wrap_methods() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_body().with_name("body1");
+        spec.world_body_mut().add_body().with_name("body2");
+        spec.world_body_mut().add_site().with_name("site1");
+
+        let tendon = spec.add_tendon();
+        tendon.wrap_site("site1");
+        tendon.wrap_joint("joint1", 0.5);
+        tendon.wrap_pulley(1.5);
+
+        assert_eq!(tendon.get_wrap_num(), 3);
+
+        let wrap = tendon.get_wrap(1).unwrap();
+        assert_eq!(wrap.coef(), 0.5);
+
+        let wrap_pulley = tendon.get_wrap(2).unwrap();
+        assert_eq!(wrap_pulley.divisor(), 1.5);
     }
 }

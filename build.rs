@@ -1,4 +1,6 @@
+#[allow(unused_imports)]
 use std::path::{Path, PathBuf};
+#[allow(unused_imports)]
 use std::fs::File;
 use std::env;
 
@@ -49,7 +51,7 @@ mod build_dependencies {
             .clang_arg(format!("-I{}", include_dir_mujoco.display()))
             .clang_arg(format!("-I{}", include_dir_mujoco.parent().unwrap().display()))
             .allowlist_item("mj.*")
-            .layout_tests(false)
+            .layout_tests(true)
             .derive_default(false)
             .derive_copy(false)
             .rustified_enum(".*")
@@ -103,6 +105,7 @@ fn main() {
     const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_DIR";
     const MUJOCO_DYN_LIB_PATH_VAR: &str = "MUJOCO_DYNAMIC_LINK_DIR";
     const MUJOCO_DOWNLOAD_PATH_VAR: &str = "MUJOCO_DOWNLOAD_DIR";
+    #[allow(dead_code)]
     const MUJOCO_BASE_DOWNLOAD_LINK: &str = "https://github.com/google-deepmind/mujoco/releases/download";
 
     println!("cargo:rerun-if-env-changed={MUJOCO_STATIC_LIB_PATH_VAR}");

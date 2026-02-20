@@ -8,6 +8,10 @@ Changelog
 .. |mj_geomview| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomView`
 .. |mj_geomviewmut| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomViewMut`
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
+.. |mj_vfs| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs`
+.. |mjs_tendon| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon`
+.. |mjs_wrap| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsWrap`
+.. |mjv_camera| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvCamera`
 
 
 Versioning
@@ -26,13 +30,58 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
   - Regenerated C FFI bindings to match MuJoCo 3.5.0.
   - Updated Rust API wrappers for compatibility with MuJoCo 3.5.0.
   - Several constructors and I/O methods now return `Result <https://doc.rust-lang.org/std/result/>`_ for safer error handling.
+  - Removed deprecated methods:
+
+    - |mj_data|: ``warning_stats``, ``timer_stats``, ``maxuse_threadstack``.
 
 - New methods:
 
+  - |mj_spec|:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_parse` and 
+      :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_parse_vfs`, which
+      wrap :docs-rs:`~~mujoco_rs::mujoco_c::<struct>mj_parse`.
+
   - |mj_data|:
 
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward_kinematics`;
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_ctrl_history`, :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_sensor_history`;
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward_kinematics`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_flex`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_from_data`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>apply_ft`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_mesh`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_hfield`.
+
+  - |mj_model|:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state` and
+      :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state_into`.
+
+  - |mj_vfs|:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>mount`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>unmount`.
+
+  - |mjs_tendon|:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>get_wrap`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>get_wrap_num`.
+
+  - |mjs_wrap|:
+
+    - Added getters for ``coef``, ``divisor``, and ``side_site``.
+
+  - |mjv_camera|:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvCamera::<method>frame` and
+      :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvCamera::<method>frustum`.
+
+- Changed methods:
+
+  - |mj_spec|:
+
+    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_buffer`
+      now calls :docs-rs:`~~mujoco_rs::mujoco_c::<struct>mj_loadModelBuffer` directly.
+      A virtual file-system was previously used to support this.
 
 - Other changes:
 
