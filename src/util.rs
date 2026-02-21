@@ -193,32 +193,16 @@ macro_rules! eval_or_expand {
 #[macro_export]
 #[doc(hidden)]
 macro_rules! view_creator {
-    /* Pointer view */
-    ($self:expr, $view:ident, $data:expr, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
-        unsafe {
-            $view {
-                $(
-                    $field: $ptr_view($data.$field.add($self.$field.0).cast(), $self.$field.1),
-                )*
-                $(
-                    $opt_field: if $self.$opt_field.1 > 0 {
-                        Some($ptr_view($data.$opt_field.add($self.$opt_field.0).cast(), $self.$opt_field.1))
-                    } else {None},
-                )*
-            }
-        }
-    };
-
-    ($self:expr, $view:ident, $data:expr, $prefix:ident, [$($field:ident),*], [$($opt_field:ident),*], $ptr_view:expr) => {
+    ($self:expr, $view:ident, $data:expr, [$($([$prefix_field:ident])? $field:ident $([$cast:ident])? ),*], [$($([$prefix_opt_field:ident])? $opt_field:ident $([$cast_opt:ident])?),*], $ptr_view:expr) => {
         paste::paste! {
             unsafe {
                 $view {
                     $(
-                        $field: $ptr_view($data.[<$prefix $field>].add($self.$field.0).cast(), $self.$field.1),
+                        $field: $ptr_view($data.[<$($prefix_field)? $field>].add($self.$field.0) $(.$cast())?, $self.$field.1),
                     )*
                     $(
                         $opt_field: if $self.$opt_field.1 > 0 {
-                            Some($ptr_view($data.[<$prefix $opt_field>].add($self.$opt_field.0).cast(), $self.$opt_field.1))
+                            Some($ptr_view($data.[<$($prefix_opt_field)? $opt_field>].add($self.$opt_field.0) $(.$cast_opt())?, $self.$opt_field.1))
                         } else {None},
                     )*
                 }
@@ -301,7 +285,7 @@ macro_rules! info_with_view {
     /* PointerView */
 
     /* name of the view/info, attribute prefix in MjData/MjModel, [attributes always present], [attributes that can be None] */
-    ($info_type:ident, $name:ident, $prefix:ident, [$($attr:ident: $type_:ty),*], [$($opt_attr:ident: $type_opt:ty),*]$(,$generics:ty: $bound:ty)?) => {
+    ($info_type:ident, $name:ident, [$($([$prefix_attr:ident])? $attr:ident: $type_:ty $([$cast:ident])? ),*], [$($([$prefix_opt_attr:ident])? $opt_attr:ident: $type_opt:ty $([$cast_opt:ident])? ),*]$(,$generics:ty: $bound:ty)?) => {
         paste::paste! {
             #[doc = "Stores information required to create views to [`Mj" $info_type "`] arrays corresponding to a " $name "."]
             #[allow(non_snake_case)]
@@ -319,78 +303,12 @@ macro_rules! info_with_view {
             impl [<Mj $name:camel $info_type Info>] {
                 #[doc = "Returns a mutable view to the correct fields in [`Mj" $info_type "`]"]
                 pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
-                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), $prefix, [$($attr),*], [$($opt_attr),*], crate::util::PointerViewMut::new)
+                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr $([$cast])?),*], [$($([$prefix_opt_attr])? $opt_attr $([$cast_opt])?),*], crate::util::PointerViewMut::new)
                 }
 
                 #[doc = "Returns a view to the correct fields in [`Mj" $info_type "`]"]
                 pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
-                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), $prefix, [$($attr),*], [$($opt_attr),*], crate::util::PointerView::new)
-                }
-            }
-
-            #[doc = "A mutable view to " $name " variables of [`Mj" $info_type "`]."]
-            #[allow(non_snake_case)]
-            pub struct [<Mj $name:camel $info_type ViewMut>]<'d> {
-                $(
-                    pub $attr: crate::util::PointerViewMut<'d, $type_>,
-                )*
-                $(
-                    pub $opt_attr: Option<crate::util::PointerViewMut<'d, $type_opt>>,
-                )*
-            }
-
-            impl [<Mj $name:camel $info_type ViewMut>]<'_> {
-                /// Resets the internal variables to 0.0.
-                pub fn zero(&mut self) {
-                    $(
-                        self.$attr.fill(unsafe { std::mem::zeroed() });
-                    )*
-                    $(
-                        if let Some(x) = &mut self.$opt_attr {
-                            x.fill(unsafe { std::mem::zeroed() });
-                        }
-                    )*
-                }
-            }
-
-            #[doc = "An immutable view to " $name " variables of [`Mj" $info_type "`]."]
-            #[allow(non_snake_case)]
-            pub struct [<Mj $name:camel $info_type View>]<'d> {
-                $(
-                    pub $attr: crate::util::PointerView<'d, $type_>,
-                )*
-                $(
-                    pub $opt_attr: Option<crate::util::PointerView<'d, $type_opt>>,
-                )*
-            }
-        }
-    };
-
-    /* name of the view/info, [attributes always present], [attributes that can be None] */
-    ($info_type:ident, $name:ident, [$($attr:ident: $type_:ty),*], [$($opt_attr:ident: $type_opt:ty),*]$(,$generics:ty: $bound:ty)?) => {
-        paste::paste! {
-            #[doc = "Stores information required to create views to [`Mj" $info_type "`] arrays corresponding to a " $name "."]
-            #[allow(non_snake_case)]
-            pub struct [<Mj $name:camel $info_type Info>] {
-                pub name: String,
-                pub id: usize,
-                $(
-                    $attr: (usize, usize),
-                )*
-                $(
-                    $opt_attr: (usize, usize),
-                )*
-            }
-
-            impl [<Mj $name:camel $info_type Info>] {
-                #[doc = "Returns a mutable view to the correct fields in [`Mj" $info_type "`]"]
-                pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
-                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($attr),*], [$($opt_attr),*], crate::util::PointerViewMut::new)
-                }
-
-                #[doc = "Returns a view to the correct fields in [`Mj" $info_type "`]"]
-                pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
-                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($attr),*], [$($opt_attr),*], crate::util::PointerView::new)
+                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr $([$cast])?),*], [$($([$prefix_opt_attr])? $opt_attr $([$cast_opt])?),*], crate::util::PointerView::new)
                 }
             }
 
