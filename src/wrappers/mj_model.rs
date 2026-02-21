@@ -1169,10 +1169,10 @@ impl Drop for MjModel {
 /**************************************************************************************************/
 info_with_view!(Model, actuator,
     [
-        [actuator_] trntype: MjtTrn, [actuator_] dyntype: MjtDyn, [actuator_] gaintype: MjtGain, [actuator_] biastype: MjtBias, [actuator_] trnid: i32,
-        [actuator_] actadr: i32, [actuator_] actnum: i32, [actuator_] group: i32, [actuator_] ctrllimited: bool,
-        [actuator_] forcelimited: bool, [actuator_] actlimited: bool, [actuator_] dynprm: MjtNum, [actuator_] gainprm: MjtNum, [actuator_] biasprm: MjtNum,
-        [actuator_] actearly: bool, [actuator_] ctrlrange: MjtNum, [actuator_] forcerange: MjtNum, [actuator_] actrange: MjtNum,
+        [actuator_] trntype: MjtTrn [cast], [actuator_] dyntype: MjtDyn [cast], [actuator_] gaintype: MjtGain [cast], [actuator_] biastype: MjtBias [cast], [actuator_] trnid: i32,
+        [actuator_] actadr: i32, [actuator_] actnum: i32, [actuator_] group: i32, [actuator_] ctrllimited: bool [cast],
+        [actuator_] forcelimited: bool [cast], [actuator_] actlimited: bool [cast], [actuator_] dynprm: MjtNum, [actuator_] gainprm: MjtNum, [actuator_] biasprm: MjtNum,
+        [actuator_] actearly: bool [cast], [actuator_] ctrlrange: MjtNum, [actuator_] forcerange: MjtNum, [actuator_] actrange: MjtNum,
         [actuator_] gear: MjtNum, [actuator_] cranklength: MjtNum, [actuator_] acc0: MjtNum, [actuator_] length0: MjtNum, [actuator_] lengthrange: MjtNum
     ], []
 );
@@ -1183,8 +1183,8 @@ info_with_view!(Model, actuator,
 /**************************************************************************************************/
 info_with_view!(Model, sensor,
     [
-        [sensor_] r#type: MjtSensor, [sensor_] datatype: MjtDataType, [sensor_] needstage: MjtStage,
-        [sensor_] objtype: MjtObj, [sensor_] objid: i32, [sensor_] reftype: MjtObj, [sensor_] refid: i32, [sensor_] intprm: i32,
+        [sensor_] r#type: MjtSensor [cast], [sensor_] datatype: MjtDataType [cast], [sensor_] needstage: MjtStage [cast],
+        [sensor_] objtype: MjtObj [cast], [sensor_] objid: i32, [sensor_] reftype: MjtObj [cast], [sensor_] refid: i32, [sensor_] intprm: i32,
         [sensor_] dim: i32, [sensor_] adr: i32, [sensor_] cutoff: MjtNum, [sensor_] noise: MjtNum
     ], []
 );
@@ -1195,8 +1195,8 @@ info_with_view!(Model, sensor,
 /**************************************************************************************************/
 info_with_view!(Model, tendon,
     [
-        [tendon_] adr: i32, [tendon_] num: i32, [tendon_] matid: i32, [tendon_] group: i32, [tendon_] limited: bool,
-        [tendon_] actfrclimited: bool, [tendon_] width: MjtNum, [tendon_] solref_lim: MjtNum,
+        [tendon_] adr: i32, [tendon_] num: i32, [tendon_] matid: i32, [tendon_] group: i32, [tendon_] limited: bool [cast],
+        [tendon_] actfrclimited: bool [cast], [tendon_] width: MjtNum, [tendon_] solref_lim: MjtNum,
         [tendon_] solimp_lim: MjtNum, [tendon_] solref_fri: MjtNum, [tendon_] solimp_fri: MjtNum,
         [tendon_] range: MjtNum, [tendon_] actfrcrange: MjtNum, [tendon_] margin: MjtNum, [tendon_] stiffness: MjtNum,
         [tendon_] damping: MjtNum, [tendon_] armature: MjtNum, [tendon_] frictionloss: MjtNum, [tendon_] lengthspring: MjtNum,
@@ -1210,8 +1210,8 @@ info_with_view!(Model, tendon,
 /**************************************************************************************************/
 info_with_view!(Model, joint,
     [
-        [jnt_] r#type: MjtJoint, [jnt_] qposadr: i32, [jnt_] dofadr: i32, [jnt_] bodyid: i32, [jnt_] group: i32,
-        [jnt_] limited: bool, [jnt_] actfrclimited: bool, [jnt_] actgravcomp: bool, [jnt_] solref: MjtNum,
+        [jnt_] r#type: MjtJoint [cast], [jnt_] qposadr: i32, [jnt_] dofadr: i32, [jnt_] bodyid: i32, [jnt_] group: i32,
+        [jnt_] limited: bool [cast], [jnt_] actfrclimited: bool [cast], [jnt_] actgravcomp: bool [cast], [jnt_] solref: MjtNum,
         [jnt_] solimp: MjtNum, [jnt_] pos: MjtNum, [jnt_] axis: MjtNum, [jnt_] stiffness: MjtNum,
         [jnt_] range: MjtNum, [jnt_] actfrcrange: MjtNum, [jnt_] margin: MjtNum
     ], []
@@ -1222,8 +1222,8 @@ info_with_view!(Model, joint,
 /**************************************************************************************************/
 info_with_view!(Model, geom,
     [
-        [geom_] r#type: MjtGeom, [geom_] contype: i32, [geom_] conaffinity: i32, [geom_] condim: i32, [geom_] bodyid: i32, [geom_] dataid: i32, [geom_] matid: i32,
-        [geom_] group: i32, [geom_] priority: i32, [geom_] plugin: i32, [geom_] sameframe: MjtSameFrame, [geom_] solmix: MjtNum, [geom_] solref: MjtNum, [geom_] solimp: MjtNum,
+        [geom_] r#type: MjtGeom [cast], [geom_] contype: i32, [geom_] conaffinity: i32, [geom_] condim: i32, [geom_] bodyid: i32, [geom_] dataid: i32, [geom_] matid: i32,
+        [geom_] group: i32, [geom_] priority: i32, [geom_] plugin: i32, [geom_] sameframe: MjtSameFrame [cast], [geom_] solmix: MjtNum, [geom_] solref: MjtNum, [geom_] solimp: MjtNum,
         [geom_] size: MjtNum, [geom_] aabb: MjtNum, [geom_] rbound: MjtNum, [geom_] pos: MjtNum, [geom_] quat: MjtNum, [geom_] friction: MjtNum, [geom_] margin: MjtNum, [geom_] gap: MjtNum,
         [geom_] fluid: MjtNum, [geom_] rgba: f32
     ], []
@@ -1237,7 +1237,7 @@ info_with_view!(Model, body,
         [body_] parentid: i32, [body_] rootid: i32, [body_] weldid: i32, [body_] mocapid: i32,
         [body_] jntnum: i32, [body_] jntadr: i32, [body_] dofnum: i32, [body_] dofadr: i32,
         [body_] treeid: i32, [body_] geomnum: i32, [body_] geomadr: i32, [body_] simple: MjtByte,
-        [body_] sameframe: MjtSameFrame, [body_] pos: MjtNum, [body_] quat: MjtNum, [body_] ipos: MjtNum, [body_] iquat: MjtNum,
+        [body_] sameframe: MjtSameFrame [cast], [body_] pos: MjtNum, [body_] quat: MjtNum, [body_] ipos: MjtNum, [body_] iquat: MjtNum,
         [body_] mass: MjtNum, [body_] subtreemass: MjtNum, [body_] inertia: MjtNum, [body_] invweight0: MjtNum,
         [body_] gravcomp: MjtNum, [body_] margin: MjtNum, [body_] plugin: i32,
         [body_] contype: i32, [body_] conaffinity: i32, [body_] bvhadr: i32, [body_] bvhnum: i32
@@ -1250,8 +1250,8 @@ info_with_view!(Model, body,
 /**************************************************************************************************/
 info_with_view!(Model, camera,
     [
-        [cam_] mode: MjtCamLight, [cam_] bodyid: i32, [cam_] targetbodyid: i32, [cam_] pos: MjtNum, [cam_] quat: MjtNum,
-        [cam_] poscom0: MjtNum, [cam_] pos0: MjtNum, [cam_] mat0: MjtNum, [cam_] projection: MjtProjection, [cam_] fovy: MjtNum,
+        [cam_] mode: MjtCamLight [cast], [cam_] bodyid: i32, [cam_] targetbodyid: i32, [cam_] pos: MjtNum, [cam_] quat: MjtNum,
+        [cam_] poscom0: MjtNum, [cam_] pos0: MjtNum, [cam_] mat0: MjtNum, [cam_] projection: MjtProjection [cast], [cam_] fovy: MjtNum,
         [cam_] ipd: MjtNum, [cam_] resolution: i32, [cam_] sensorsize: f32, [cam_] intrinsic: f32
     ], []
 );
@@ -1271,7 +1271,7 @@ info_with_view!(Model, key,
 /**************************************************************************************************/
 info_with_view!(Model, tuple,
     [
-        [tuple_] size: i32, [tuple_] objtype: MjtObj, [tuple_] objid: i32, [tuple_] objprm: MjtNum
+        [tuple_] size: i32, [tuple_] objtype: MjtObj [cast], [tuple_] objid: i32, [tuple_] objprm: MjtNum
     ], []
 );
 
@@ -1281,7 +1281,7 @@ info_with_view!(Model, tuple,
 /**************************************************************************************************/
 info_with_view!(Model, texture,
     [
-        [tex_] r#type: MjtTexture, [tex_] colorspace: MjtColorSpace, [tex_] height: i32, [tex_] width: i32, [tex_] nchannel: i32,
+        [tex_] r#type: MjtTexture [cast], [tex_] colorspace: MjtColorSpace [cast], [tex_] height: i32, [tex_] width: i32, [tex_] nchannel: i32,
         [tex_] data: MjtByte
     ], [[tex_] pathadr: i32]
 );
@@ -1291,7 +1291,7 @@ info_with_view!(Model, texture,
 /**************************************************************************************************/
 info_with_view!(Model, site,
     [
-        [site_] r#type: MjtGeom, [site_] bodyid: i32, [site_] group: i32, [site_] sameframe: MjtSameFrame, [site_] size: MjtNum,
+        [site_] r#type: MjtGeom [cast], [site_] bodyid: i32, [site_] group: i32, [site_] sameframe: MjtSameFrame [cast], [site_] size: MjtNum,
         [site_] pos: MjtNum, [site_] quat: MjtNum, [site_] user: MjtNum, [site_] rgba: f32
     ], [[site_] matid: i32]
 );
@@ -1321,7 +1321,7 @@ info_with_view!(Model, numeric,
 /**************************************************************************************************/
 info_with_view!(Model, material,
     [
-        [mat_] texuniform: bool,
+        [mat_] texuniform: bool [cast],
         [mat_] texrepeat: f32,
         [mat_] emission: f32,
         [mat_] specular: f32,
@@ -1339,8 +1339,8 @@ info_with_view!(Model, material,
 /**************************************************************************************************/
 info_with_view!(Model, light,
     [
-        [light_] mode: MjtCamLight, [light_] bodyid: i32, [light_] targetbodyid: i32, [light_] r#type: MjtLightType, [light_] texid: i32, [light_] castshadow: bool,
-        [light_] bulbradius: f32, [light_] intensity: f32, [light_] range: f32, [light_] active: bool, [light_] pos: MjtNum, [light_] dir: MjtNum,
+        [light_] mode: MjtCamLight [cast], [light_] bodyid: i32, [light_] targetbodyid: i32, [light_] r#type: MjtLightType [cast], [light_] texid: i32, [light_] castshadow: bool [cast],
+        [light_] bulbradius: f32, [light_] intensity: f32, [light_] range: f32, [light_] active: bool [cast], [light_] pos: MjtNum, [light_] dir: MjtNum,
         [light_] poscom0: MjtNum, [light_] pos0: MjtNum, [light_] dir0: MjtNum, [light_] attenuation: f32, [light_] cutoff: f32, [light_] exponent: f32,
         [light_] ambient: f32, [light_] diffuse: f32, [light_] specular: f32
     ], []
@@ -1351,11 +1351,11 @@ info_with_view!(Model, light,
 /**************************************************************************************************/
 info_with_view!(Model, equality,
     [
-        [eq_] r#type: MjtEq,
+        [eq_] r#type: MjtEq [cast],
         [eq_] obj1id: i32,
         [eq_] obj2id: i32,
-        [eq_] objtype: MjtObj,
-        [eq_] active0: bool,
+        [eq_] objtype: MjtObj [cast],
+        [eq_] active0: bool [cast],
         [eq_] solref: MjtNum,
         [eq_] solimp: MjtNum,
         [eq_] data: MjtNum
