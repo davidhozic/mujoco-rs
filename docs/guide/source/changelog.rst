@@ -95,6 +95,15 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
       now calls :docs-rs:`~~mujoco_rs::mujoco_c::<struct>mj_loadModelBuffer` directly.
       A virtual file-system was previously used to support this.
 
+- Internal / Safety changes:
+
+  - Views now use more strict type checks. Specifically, instead of casting all the C types to
+    declared Rust type, only a strict subset of fields are now cast (enums and bools).
+    Other fields must match the C type exactly.
+
+  - Module :docs-rs:`~mujoco_rs::mujoco_c` now uses compile-time layout tests to ensure
+    declarations match the platform ABI of the linked MuJoCo library.
+
 - Other changes:
 
   - Updated enum type aliases.

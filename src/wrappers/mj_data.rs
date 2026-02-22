@@ -1319,12 +1319,12 @@ info_with_view!(
 /**************************************************************************************************/
 // Sensor view
 /**************************************************************************************************/
-info_with_view!(Data, sensor, sensor, [data: MjtNum], [], M: Deref<Target = MjModel>);
+info_with_view!(Data, sensor, [[sensor] data: MjtNum], [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
 // Geom view
 /**************************************************************************************************/
-info_with_view!(Data, geom, geom_, [xpos: MjtNum, xmat: MjtNum], [], M: Deref<Target = MjModel>);
+info_with_view!(Data, geom, [[geom_] xpos: MjtNum, [geom_] xmat: MjtNum], [], M: Deref<Target = MjModel>);
 
 
 /**************************************************************************************************/
@@ -1347,22 +1347,22 @@ info_with_view!(
 /**************************************************************************************************/
 // Camera view
 /**************************************************************************************************/
-info_with_view!(Data, camera, cam_, [xpos: MjtNum, xmat: MjtNum], [], M: Deref<Target = MjModel>);
+info_with_view!(Data, camera, [[cam_] xpos: MjtNum, [cam_] xmat: MjtNum], [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
 // Site view
 /**************************************************************************************************/
-info_with_view!(Data, site, site_, [xpos: MjtNum, xmat: MjtNum], [], M: Deref<Target = MjModel>);
+info_with_view!(Data, site, [[site_] xpos: MjtNum, [site_] xmat: MjtNum], [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
 // Tendon view
 /**************************************************************************************************/
-info_with_view!(Data, tendon, ten_, [wrapadr: i32, wrapnum: i32, J_rownnz: i32, J_rowadr: i32, J_colind: i32, length: MjtNum, J: MjtNum, velocity: MjtNum], [], M: Deref<Target = MjModel>);
+info_with_view!(Data, tendon, [[ten_] wrapadr: i32, [ten_] wrapnum: i32, [ten_] J_rownnz: i32, [ten_] J_rowadr: i32, [ten_] J_colind: i32, [ten_] length: MjtNum, [ten_] J: MjtNum, [ten_] velocity: MjtNum], [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
 // Light view
 /**************************************************************************************************/
-info_with_view!(Data, light, light_, [xpos: MjtNum, xdir: MjtNum], [], M: Deref<Target = MjModel>);
+info_with_view!(Data, light, [[light_] xpos: MjtNum, [light_] xdir: MjtNum], [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
 // Unit tests
