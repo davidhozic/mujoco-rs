@@ -96,27 +96,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     info_method! { Data, model.ffi(), site, [xpos: 3, xmat: 9], [], []}
     info_method! { Data, model.ffi(), light, [xpos: 3, xdir: 3], [], []}
 
-    /// Obtains a [`MjActuatorDataInfo`] struct containing information about the name, id, and
-    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
-    /// The actual view can be obtained via [`MjActuatorDataInfo::view`].
-    /// # Panics
-    /// When the `name` contains '\0' characters, a panic occurs.
-    pub fn actuator(&self, name: &str) -> Option<MjActuatorDataInfo> {
-        let c_name = CString::new(name).unwrap();
-        let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_ACTUATOR as i32, c_name.as_ptr())};
-        if id == -1 {  // not found
-            return None;
-        }
-
-        let ctrl;
-        let act;
-        let model_ffi = self.model.ffi();
-        unsafe {
-            ctrl = (id as usize, 1);
-            act = mj_view_indices!(id as usize, model_ffi.actuator_actadr, model_ffi.nu as usize, model_ffi.na as usize);
-        }
-
-        Some(MjActuatorDataInfo { name: name.to_string(), id: id as usize, ctrl, act})
+    info_method! { Data, model.ffi(), actuator,
+        [ctrl: 1, length: 1, velocity: 1, force: 1],
+        [],
+        [act: na]
     }
 
     /// Obtains a [`MjJointDataInfo`] struct containing information about the name, id, and
@@ -170,53 +153,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
     }
 
-    /// Obtains a [`MjSensorDataInfo`] struct containing information about the name, id, and
-    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
-    /// The actual view can be obtained via [`MjSensorDataInfo::view`].
-    /// # Panics
-    /// When the `name` contains '\0' characters, a panic occurs.
-    pub fn sensor(&self, name: &str) -> Option<MjSensorDataInfo> {
-        let c_name = CString::new(name).unwrap();
-        let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_SENSOR as i32, c_name.as_ptr())};
-        if id == -1 {  // not found
-            return None;
-        }
-        let model_ffi = self.model.ffi();
-        let id = id as usize;
-
-        unsafe {
-            let data = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nsensordata), mj_model_nx_to_nitem!(model_ffi, nsensordata), model_ffi.nsensordata);
-            Some(MjSensorDataInfo { id, name: name.to_string(), data })
-        }
-    }
+    info_method! { Data, model.ffi(), sensor, [], [], [data: nsensordata] }
 
 
-    /// Obtains a [`MjTendonDataInfo`] struct containing information about the name, id, and
-    /// indices required for obtaining a slice view to the correct locations in [`MjData`].
-    /// The actual view can be obtained via [`MjTendonDataInfo::view`].
-    /// # Panics
-    /// When the `name` contains '\0' characters, a panic occurs.
-    #[allow(non_snake_case)]
-    pub fn tendon(&self, name: &str) -> Option<MjTendonDataInfo> {
-        let c_name = CString::new(name).unwrap();
-        let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_TENDON as i32, c_name.as_ptr())};
-        if id == -1 {  // not found
-            return None;
-        }
-
-        let model_ffi = self.model.ffi();
-        let id = id as usize;
-        let nv = model_ffi.nv as usize;
-        let wrapadr = (id, 1);
-        let wrapnum = (id, 1);
-        let J_rownnz = (id, 1);
-        let J_rowadr = (id, 1);
-        let J_colind = (id * nv, nv);
-        let length = (id, 1);
-        let J = (id * nv, nv);
-        let velocity = (id, 1);
-
-        Some(MjTendonDataInfo { id, name: name.to_string(), wrapadr, wrapnum, J_rownnz, J_rowadr, J_colind, length, J, velocity })
+    info_method! { Data, model.ffi(), tendon,
+        [wrapadr: 1, wrapnum: 1, J_rownnz: 1, J_rowadr: 1, length: 1, velocity: 1],
+        [J: nv, J_colind: nv],
+        []
     }
 
     /// Steps the MuJoCo simulation.
@@ -1300,69 +1243,87 @@ impl<M: Deref<Target = MjModel> + Clone> Clone for MjData<M> {
     }
 }
 
-/**************************************************************************************************/
-// Joint view
-/**************************************************************************************************/
-info_with_view!(
-    Data,
-    joint,
-    [
-        qpos: MjtNum, qvel: MjtNum, qacc_warmstart: MjtNum, qfrc_applied: MjtNum, qacc: MjtNum, xanchor: MjtNum, xaxis: MjtNum, qLDiagInv: MjtNum,
-        qfrc_bias: MjtNum, qfrc_spring: MjtNum, qfrc_damper: MjtNum, qfrc_gravcomp: MjtNum, qfrc_fluid: MjtNum, qfrc_passive: MjtNum,
-        qfrc_actuator: MjtNum, qfrc_smooth: MjtNum, qacc_smooth: MjtNum, qfrc_constraint: MjtNum, qfrc_inverse: MjtNum
-    ],
-    [],
-    M: Deref<Target = MjModel>
-);
+info_with_view!(Data, actuator,
+    [ctrl: MjtNum,
+     [actuator_] length: MjtNum,
+     [actuator_] velocity: MjtNum,
+     [actuator_] force: MjtNum],
+    [act: MjtNum], M: Deref<Target = MjModel>);
 
+info_with_view!(Data, body,
+    [xfrc_applied: MjtNum,
+     xpos: MjtNum,
+     xquat: MjtNum,
+     xmat: MjtNum,
+     xipos: MjtNum,
+     ximat: MjtNum,
+     subtree_com: MjtNum,
+     cinert: MjtNum,
+     crb: MjtNum,
+     cvel: MjtNum,
+     subtree_linvel: MjtNum,
+     subtree_angmom: MjtNum,
+     cacc: MjtNum,
+     cfrc_int: MjtNum,
+     cfrc_ext: MjtNum],
+    [], M: Deref<Target = MjModel>);
 
-/**************************************************************************************************/
-// Sensor view
-/**************************************************************************************************/
-info_with_view!(Data, sensor, [[sensor] data: MjtNum], [], M: Deref<Target = MjModel>);
+info_with_view!(Data, camera,
+    [[cam_] xpos: MjtNum,
+     [cam_] xmat: MjtNum],
+    [], M: Deref<Target = MjModel>);
 
-/**************************************************************************************************/
-// Geom view
-/**************************************************************************************************/
-info_with_view!(Data, geom, [[geom_] xpos: MjtNum, [geom_] xmat: MjtNum], [], M: Deref<Target = MjModel>);
+info_with_view!(Data, geom,
+    [[geom_] xpos: MjtNum,
+     [geom_] xmat: MjtNum],
+    [], M: Deref<Target = MjModel>);
 
+info_with_view!(Data, joint,
+    [qpos: MjtNum,
+     qvel: MjtNum,
+     qacc_warmstart: MjtNum,
+     qfrc_applied: MjtNum,
+     qacc: MjtNum,
+     xanchor: MjtNum,
+     xaxis: MjtNum,
+     qLDiagInv: MjtNum,
+     qfrc_bias: MjtNum,
+     qfrc_spring: MjtNum,
+     qfrc_damper: MjtNum,
+     qfrc_gravcomp: MjtNum,
+     qfrc_fluid: MjtNum,
+     qfrc_passive: MjtNum,
+     qfrc_actuator: MjtNum,
+     qfrc_smooth: MjtNum,
+     qacc_smooth: MjtNum,
+     qfrc_constraint: MjtNum,
+     qfrc_inverse: MjtNum],
+    [], M: Deref<Target = MjModel>);
 
-/**************************************************************************************************/
-// Actuator view
-/**************************************************************************************************/
-info_with_view!(Data, actuator, [ctrl: MjtNum], [act: MjtNum], M: Deref<Target = MjModel>);
+info_with_view!(Data, light,
+    [[light_] xpos: MjtNum,
+     [light_] xdir: MjtNum],
+    [], M: Deref<Target = MjModel>);
 
+info_with_view!(Data, sensor,
+    [[sensor] data: MjtNum],
+    [], M: Deref<Target = MjModel>);
 
-/**************************************************************************************************/
-// Body view
-/**************************************************************************************************/
-info_with_view!(
-    Data, body, [
-        xfrc_applied: MjtNum, xpos: MjtNum, xquat: MjtNum, xmat: MjtNum, xipos: MjtNum, ximat: MjtNum,
-        subtree_com: MjtNum, cinert: MjtNum, crb: MjtNum, cvel: MjtNum, subtree_linvel: MjtNum,
-        subtree_angmom: MjtNum, cacc: MjtNum, cfrc_int: MjtNum, cfrc_ext: MjtNum
-    ], [], M: Deref<Target = MjModel>
-);
+info_with_view!(Data, site,
+    [[site_] xpos: MjtNum,
+     [site_] xmat: MjtNum],
+    [], M: Deref<Target = MjModel>);
 
-/**************************************************************************************************/
-// Camera view
-/**************************************************************************************************/
-info_with_view!(Data, camera, [[cam_] xpos: MjtNum, [cam_] xmat: MjtNum], [], M: Deref<Target = MjModel>);
-
-/**************************************************************************************************/
-// Site view
-/**************************************************************************************************/
-info_with_view!(Data, site, [[site_] xpos: MjtNum, [site_] xmat: MjtNum], [], M: Deref<Target = MjModel>);
-
-/**************************************************************************************************/
-// Tendon view
-/**************************************************************************************************/
-info_with_view!(Data, tendon, [[ten_] wrapadr: i32, [ten_] wrapnum: i32, [ten_] J_rownnz: i32, [ten_] J_rowadr: i32, [ten_] J_colind: i32, [ten_] length: MjtNum, [ten_] J: MjtNum, [ten_] velocity: MjtNum], [], M: Deref<Target = MjModel>);
-
-/**************************************************************************************************/
-// Light view
-/**************************************************************************************************/
-info_with_view!(Data, light, [[light_] xpos: MjtNum, [light_] xdir: MjtNum], [], M: Deref<Target = MjModel>);
+info_with_view!(Data, tendon,
+    [[ten_] wrapadr: i32,
+     [ten_] wrapnum: i32,
+     [ten_] J_rownnz: i32,
+     [ten_] J_rowadr: i32,
+     [ten_] J_colind: i32,
+     [ten_] length: MjtNum,
+     [ten_] J: MjtNum,
+     [ten_] velocity: MjtNum],
+    [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
 // Unit tests
@@ -1396,6 +1357,9 @@ mod test {
     <geom name=\"mesh_cube\" type=\"mesh\" mesh=\"cube\" pos=\"2 2 0.5\"/>
     <geom name=\"hfield_terrain\" type=\"hfield\" hfield=\"terrain\" pos=\"-2 -2 0\"/>
   </worldbody>
+  <actuator>
+    <motor name=\"motor_ball\" joint=\"ball\"/>
+  </actuator>
 </mujoco>";
 
 
@@ -1428,6 +1392,11 @@ mod test {
         data.step();
 
         /* Test if the ball is moving in the x direction and rotating around y. */
+        joint_view = joint_info.view(&data);
+        assert_eq!(joint_view.qfrc_spring.len(), joint_view.qvel.len());
+        assert_eq!(joint_view.qfrc_damper.len(), joint_view.qvel.len());
+        assert_eq!(joint_view.qfrc_gravcomp.len(), joint_view.qvel.len());
+        assert_eq!(joint_view.qfrc_fluid.len(), joint_view.qvel.len());
         joint_view = joint_info.view(&data);
         assert_relative_eq!(joint_view.qvel[0], 0.5, epsilon=1e-3);  // vx
         assert_relative_eq!(joint_view.qvel[4], 0.5 / 0.1, epsilon=1e-3);  // wy
@@ -1462,6 +1431,26 @@ mod test {
         assert_relative_eq!(joint_view.qvel[3], body_view.cvel[0], epsilon=1e-9);  // same rotational velocity.
         assert_relative_eq!(joint_view.qvel[4], body_view.cvel[1], epsilon=1e-9);
         assert_relative_eq!(joint_view.qvel[5], body_view.cvel[2], epsilon=1e-9);
+    }
+
+    #[test]
+    fn test_actuator_view() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let data = model.make_data();
+        let actuator_info = data.actuator("motor_ball").unwrap();
+
+        let actuator_view = actuator_info.view(&data);
+        assert_eq!(actuator_view.length.len(), 1);
+        assert_eq!(actuator_view.velocity.len(), 1);
+        assert_eq!(actuator_view.force.len(), 1);
+        assert!(actuator_view.act.is_none());
+
+        // Test if indexing corresponds to exact data structure mapping
+        unsafe {
+            assert_relative_eq!(actuator_view.length[0], *data.ffi().actuator_length.add(actuator_info.id), epsilon=1e-9);
+            assert_relative_eq!(actuator_view.velocity[0], *data.ffi().actuator_velocity.add(actuator_info.id), epsilon=1e-9);
+            assert_relative_eq!(actuator_view.force[0], *data.ffi().actuator_force.add(actuator_info.id), epsilon=1e-9);
+        }
     }
 
     #[test]

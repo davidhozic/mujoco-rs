@@ -56,6 +56,9 @@ macro_rules! mj_model_nx_to_mapping {
     ($model_ffi:ident, nhfielddata) => {
         $model_ffi.hfield_adr
     };
+    ($ffi:ident, na) => {
+        $ffi.actuator_actadr
+    };
 }
 
 
@@ -85,6 +88,9 @@ macro_rules! mj_model_nx_to_nitem {
     };
     ($model_ffi:ident, nhfielddata) => {
         $model_ffi.nhfield
+    };
+    ($ffi:ident, na) => {
+        $ffi.nu
     };
 }
 
