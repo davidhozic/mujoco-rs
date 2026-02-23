@@ -239,7 +239,7 @@ impl MjvGeom {
     /// Compatibility method to convert the ``s`` parameter into an array that is copied to the ``label`` attribute.
     pub fn set_label(&mut self, s: &str) {
         assert!(s.len() < self.label.len());
-        for (i, b) in s.chars().enumerate() {
+        for (i, &b) in s.as_bytes().iter().enumerate() {
             self.label[i] = b as i8;
         }
         self.label[s.len()] = 0;
@@ -344,6 +344,7 @@ impl MjvFigure {
     /// # Panics
     /// A panic will occur if the buffer is overflown. The buffer can hold a maximum of 1001 elements.
     pub fn push(&mut self, plot_index: usize, x: f32, y: f32) {
+        // If the buffer is full, the indexing below will trigger a Rust bounds-check panic.
         let plot = &mut self.linedata[plot_index];
         let point_index = self.linepnt[plot_index] as usize;
         plot[2 * point_index] = x;

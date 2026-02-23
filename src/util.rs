@@ -240,6 +240,7 @@ macro_rules! info_method {
                 "# Panics\n",
                 "A panic will occur if `name` contains `\\0` characters."
             )]
+            #[allow(non_snake_case)]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let c_name = CString::new(name).unwrap();
                 let ffi = self.$ffi;

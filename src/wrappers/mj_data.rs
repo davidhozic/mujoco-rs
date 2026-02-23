@@ -1659,10 +1659,21 @@ mod test {
         let mut data = model.make_data();
         data.step();
 
+        // Test actual distance between two different geoms (green_sphere and green_sphere2).
+        // green_sphere is at (.2, .2, .1) and green_sphere2 is at (.7, .2, .1), both with radius 0.1.
+        // Expected distance ≈ 0.5 - 2*0.1 = 0.3 (center distance minus both radii).
+        let geom0_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere");
+        let geom1_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere2");
+        assert!(geom0_id >= 0 && geom1_id >= 0);
+
         let mut ft = [0.0; 6];
-        let dist = data.geom_distance(0, 0, 1.0, Some(&mut ft));
-        assert_eq!(ft, [0.0; 6]);
-        assert_eq!(dist, 1.0);
+        let dist = data.geom_distance(geom0_id, geom1_id, 1.0, Some(&mut ft));
+        assert!(dist > 0.0, "distance between separate geoms should be positive, got {dist}");
+        assert!(dist < 1.0, "distance should be less than distmax, got {dist}");
+        assert_relative_eq!(dist, 0.3, epsilon=1e-3);
+        // fromto should be populated: first 3 = nearest point on geom0, last 3 = nearest point on geom1
+        let ft_norm = ft.iter().map(|x| x * x).sum::<MjtNum>().sqrt();
+        assert!(ft_norm > 0.0, "fromto should be non-zero for non-overlapping geoms");
 
         let pos = [0.0; 3];
         let quat = [1.0, 0.0, 0.0, 0.0];
