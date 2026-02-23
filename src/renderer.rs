@@ -162,6 +162,10 @@ which can be configured at the top of the model's XML like so:
     }
 
     /// Builds a [`MjRenderer`].
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the [`MjRenderer`].
+    /// # Errors
+    /// Returns an error if the OpenGL state or window creation fails.
     pub fn build(self, model: M) -> Result<MjRenderer<M>, RendererError> {
         // Assume model's maximum should be used
         let mut height = self.height;
@@ -264,6 +268,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// ```
     /// 
     /// </div>
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the [`MjRenderer`].
+    /// # Errors
+    /// Returns an error if the OpenGL state or window creation fails.
     pub fn new(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
         let builder = Self::builder()
             .width(width as u32).height(height as u32).num_visual_user_geom(max_user_geom as u32);
@@ -378,6 +386,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     }
 
     /// Update the scene with new data from data.
+    /// # Panics
+    /// Panics if `data` comes from a different model than the renderer, or on user scene sync failure.
     pub fn sync(&mut self, data: &mut MjData<M>) {
         assert_eq!(data.model().signature(), self.model.signature(), "'data' must be created from the same model as the renderer.");
 
@@ -397,6 +407,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Return an RGB image of the scene. This methods accepts two generic parameters <WIDTH, HEIGHT>
     /// that define the shape of the output slice.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the rendered RGB image.
+    /// # Errors
+    /// Returns an error of kind `InvalidInput` if the image size doesn't match the required dimensions.
+    /// Returns an error of kind `NotFound` if RGB rendering is disabled.
     pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> io::Result<&[[[u8; 3]; WIDTH]; HEIGHT]> {
         if let Some(flat) = self.rgb_flat() {
             if flat.len() == WIDTH * HEIGHT * 3 {
@@ -423,6 +438,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Return a depth image of the scene. This methods accepts two generic parameters <WIDTH, HEIGHT>
     /// that define the shape of the output slice.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the rendered depth image.
+    /// # Errors
+    /// Returns an error of kind `InvalidInput` if the image size doesn't match the required dimensions.
+    /// Returns an error of kind `NotFound` if depth rendering is disabled.
     pub fn depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> io::Result<&[[f32; WIDTH]; HEIGHT]> {
         if let Some(flat) = self.depth_flat() {
             if flat.len() == WIDTH * HEIGHT {
@@ -443,6 +463,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     }
 
     /// Save an RGB image of the scene to a path.
+    /// # Returns
+    /// `Ok(())` on success.
     /// # Errors
     /// - [`ErrorKind::NotFound`] when RGB rendering is disabled,
     /// - other errors related to write.
@@ -508,6 +530,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// Save the raw depth data to the `path`. The data is encoded
     /// as a sequence of bytes, where groups of four represent a single f32 value.
     /// The lower bytes of individual f32 appear first (low-endianness).
+    /// # Returns
+    /// `Ok(())` on success.
     /// # Errors
     /// - [`ErrorKind::NotFound`] when depth rendering is disabled,
     /// - other errors related to write.

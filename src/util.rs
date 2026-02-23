@@ -703,7 +703,7 @@ macro_rules! array_slice_dyn {
 macro_rules! c_str_as_str_method {
     (get {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {
         $(
-            #[doc = concat!("Returns ", $comment)]
+            #[doc = concat!("Returns ", $comment, "\n\n# Panics", "\nPanics if the string contains invalid UTF-8.")]
             pub fn $name(&self $(, $sub_index_name: $sub_index_type)? ) -> &str {
                 unsafe { 
                     let c_ptr = self$(.$ffi())?.$name$([$sub_index_name])?.as_ptr();
@@ -777,6 +777,8 @@ macro_rules! assert_relative_eq {
 
 
 /// Tries to cast $value into requested type.
+/// # Panics
+/// Panics if the cast fails.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! cast_mut_info {

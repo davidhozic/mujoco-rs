@@ -8,6 +8,8 @@ use crate::mujoco_c::*;
 ** Utility functions
 ***************************/
 /// Reads MJS string (C++) as a `&str`.
+/// # Panics
+/// Panics if the string contains invalid UTF-8.
 pub(crate) fn read_mjs_string(string: &mjString) -> &str {
     unsafe {
         let ptr = mjs_getString(string);
@@ -110,7 +112,7 @@ macro_rules! add_x_method {
     ($($name:ident),*) => {paste::paste! {
         $(
             /* With default */
-            #[doc = concat!("Add and return a child ", stringify!($name), ".")]
+            #[doc = concat!("Add and return a child ", stringify!($name), ".\n# Panics\nPanics if MuJoCo fails to allocate the element.")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.ffi_mut(), ptr::null()) };
                 unsafe { ptr.as_mut().unwrap() }
@@ -124,7 +126,7 @@ macro_rules! add_x_method_by_frame {
     ($($name:ident),*) => {paste::paste! {
         $(
             /* With default */
-            #[doc = concat!("Add and return a child ", stringify!($name), ".")]
+            #[doc = concat!("Add and return a child ", stringify!($name), ".\n# Panics\nPanics if MuJoCo fails to allocate the element.")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 unsafe {
                     let ep = self.element_mut_pointer();
@@ -144,7 +146,7 @@ macro_rules! add_x_method_no_default {
     ($($name:ident),*) => {paste::paste! {
         $(
             /* Without default */
-            #[doc = concat!("Add and return a child ", stringify!($name), ".")]
+            #[doc = concat!("Add and return a child ", stringify!($name), ".\n# Panics\nPanics if MuJoCo fails to allocate the element.")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.0) };
                 unsafe { ptr.as_mut().unwrap() }
@@ -251,6 +253,8 @@ macro_rules! mjs_struct {
 
         impl [<Mjs $ffi_name>] {
             /// Return the message appended to compiler errors.
+            /// # Panics
+            /// Panics if it contains invalid UTF-8.
             pub fn info(&self) -> &str {
                 read_mjs_string(unsafe { self.info.as_ref().unwrap() })
             }

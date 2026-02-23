@@ -465,7 +465,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
     /// If cost is not `None`, set `*cost = s(jar)` where `jar = Jac*qacc - aref`.
-    /// Returns `Err` on invalid input (e.g. incorrect `jar` length).
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error of kind [`ErrorKind::InvalidInput`] if the `jar` length is incorrect.
     pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) -> io::Result<()> {
         // `jar` must have length equal to d->nefc (one entry per effective constraint)
         let nefc = self.ffi().nefc as usize;
@@ -488,7 +491,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Initialize actuator history buffer (wraps `mj_initCtrlHistory`).
     /// - `times`: optional array of length `nsample` (use NULL to keep existing timestamps)
     /// - `values`: array of length `nsample` containing control values
-    /// Returns `Err` on invalid inputs.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error if the `id` is invalid, the actuator has no history buffer, or slice lengths mismatch `nsample`.
     pub fn init_ctrl_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum]) -> io::Result<()> {
         let nu = self.model.ffi().nu as usize;
         if id >= nu {
@@ -524,7 +530,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Initialize sensor history buffer (wraps `mj_initSensorHistory`).
     /// - `times`: optional array of length `nsample` (use NULL to keep existing timestamps)
     /// - `values`: array of length `nsample * dim` containing sensor values
-    /// Returns `Err` on invalid inputs.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error if the `id` is invalid, the sensor has no history buffer, or slice lengths mismatch.
     pub fn init_sensor_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum], phase: MjtNum) -> io::Result<()> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
@@ -562,6 +571,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Read control history value for actuator `id` at `time`.
     /// `interp` is passed through to `mj_readCtrl` (-1=use the actuator’s interp value, 0=no interpolation, 1=piecewise linear , 2=cubic Spline).
+    /// # Returns
+    /// On success, returns the interpolated control value.
+    /// # Errors
     /// Returns `Err(ErrorKind::NotFound)` when `id` is out of range.
     pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<MjtNum> {
         let nu = self.model.ffi().nu as usize;
@@ -573,7 +585,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Read sensor value(s) for sensor `id` at `time`.
-    /// Returns a `Vec<MjtNum>` (copied). `interp` is forwarded to `mj_readSensor` (-1=use the actuator’s interp value, 0=no interpolation, 1=piecewise linear , 2=cubic Spline).
+    /// `interp` is forwarded to `mj_readSensor` (-1=use the actuator’s interp value, 0=no interpolation, 1=piecewise linear , 2=cubic Spline).
+    /// # Returns
+    /// On success, returns a `Vec<MjtNum>` containing the sensor values.
+    /// # Errors
     /// Returns `Err(ErrorKind::NotFound)` when `id` is out of range.
     pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<Vec<MjtNum>> {
         let nsensor = self.model.ffi().nsensor as usize;
@@ -595,6 +610,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Add contact to d->contact list; return 0 if success; 1 if buffer full.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error of kind [`ErrorKind::StorageFull`] if the contact buffer is full.
     pub fn add_contact(&mut self, con: &MjContact) -> io::Result<()> {
         match unsafe { mj_addContact(self.model.ffi(), self.ffi_mut(), con) } {
             0 => Ok(()),
@@ -787,7 +806,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Similar semantics to mj_ray, but `vec` is an array of (nray x 3) directions.
     /// If `normals_out` is `Some`, it must be a mutable slice of length `nray` and it will be
     /// filled with surface normals (one `[x,y,z]` per ray). Use `None` to skip normals.
-    /// Returns `(geomids, distances)` or `Err` on invalid input.
+    /// # Returns
+    /// On success, returns `(geomids, distances)`.
+    /// # Errors
+    /// Returns an error of kind [`ErrorKind::InvalidInput`] if `normals_out` length does not match the number of rays.
     pub fn multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
         flg_static: bool, bodyexclude: i32, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
@@ -817,7 +839,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Return distance (x) to nearest surface, or -1 if no intersection and output geomid.
     /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
     /// `geomgroup` and `flg_static` are as in mjvOption; `geomgroup==NULL` skips group exclusion.
-    /// Returns `Err` only on invalid inputs; otherwise `Ok((geomid, distance))`.
+    /// # Returns
+    /// On success, returns `(geomid, distance)`.
+    /// # Errors
+    /// Returns `Err` only on invalid inputs.
     pub fn ray(
         &self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: bool, bodyexclude: i32,
@@ -1961,6 +1986,19 @@ mod test {
         let mut data2 = model2.make_data();
         let err = data2.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn test_multi_ray_zero_rays() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+        let pos = [0.0; 3];
+        let ray_vecs: Vec<[MjtNum; 3]> = Vec::new();
+
+        // ensure calling with zero rays returns empty vectors and does not crash
+        let (gids, dists) = data.multi_ray(&pos, &ray_vecs, None, false, -1, 10.0, None).unwrap();
+        assert!(gids.is_empty());
+        assert!(dists.is_empty());
     }
 
     #[test]
