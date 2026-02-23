@@ -158,8 +158,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     info_method! { Data, model.ffi(), tendon,
         [wrapadr: 1, wrapnum: 1, J_rownnz: 1, J_rowadr: 1, length: 1, velocity: 1],
-        [J: nv, J_colind: nv],
-        []
+        [],
+        [J: nJten, J_colind: nJten]
     }
 
     /// Steps the MuJoCo simulation.
