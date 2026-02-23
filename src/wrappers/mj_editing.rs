@@ -153,6 +153,10 @@ impl MjSpec {
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
+    /// # Errors
+    /// Returns an error if the path cannot be parsed or MuJoCo encounters an error.
     /// # Panics
     /// - when the `path` contains invalid utf-8 or '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
@@ -161,6 +165,10 @@ impl MjSpec {
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file, located in a virtual file system (`vfs`).
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
+    /// # Errors
+    /// Returns an error if the path cannot be parsed or MuJoCo encounters an error.
     /// # Panics
     /// - when the `path` contains invalid utf-8 or '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
@@ -184,6 +192,10 @@ impl MjSpec {
     }
 
     /// Creates a [`MjSpec`] from an `xml` string.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
+    /// # Errors
+    /// Returns an error if MuJoCo encounters an error parsing the string.
     /// # Panics
     /// - when the `xml` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
@@ -204,6 +216,10 @@ impl MjSpec {
     /// Parse and create a [`MjSpec`] from `filename`
     /// The `content_type` controls the decoder to use.
     /// This is a wrapper around low-level method [`mj_parse`].
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
+    /// # Errors
+    /// Returns an error if MuJoCo fails to parse the file.
     /// # Panics
     /// When `filename` or `content_type` contains zero bytes.
     pub fn from_parse(filename: &str, content_type: &str) -> Result<Self, Error> {
@@ -211,6 +227,10 @@ impl MjSpec {
     }
 
     /// Same as [`MjSpec::from_parse`], except `filename` is taken from `vfs`.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
+    /// # Errors
+    /// Returns an error if MuJoCo fails to parse the file.
     /// # Panics
     /// When `filename` or `content_type` contains zero bytes.
     pub fn from_parse_vfs(filename: &str, content_type: &str, vfs: &MjVfs) -> Result<Self, Error> {
@@ -259,6 +279,10 @@ impl MjSpec {
     }
 
     /// A mutable reference to the internal FFI struct.
+    ///
+    /// # Safety
+    /// Modifying the underlying FFI struct directly can break the invariants
+    /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjSpec {
         unsafe { self.0.as_mut().unwrap() }
     }
@@ -266,6 +290,10 @@ impl MjSpec {
     /// Compile [`MjSpec`] to [`MjModel`].
     /// A spec can be edited and compiled multiple times,
     /// returning a new mjModel instance that takes the edits into account.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
+    /// # Errors
+    /// Returns an error if the model fails to compile, containing the MuJoCo error details.
     pub fn compile(&mut self) -> Result<MjModel, Error> {
         let result = unsafe { MjModel::from_raw( mj_compile(self.0, ptr::null()) ) };
         result.map_err(|_| {
@@ -275,6 +303,10 @@ impl MjSpec {
     }
 
     /// Save spec to an XML file.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error if there are issues writing to the file.
     /// # Panics
     /// When the `filename` contains '\0' characters, a panic occurs.
     pub fn save_xml(&self, filename: &str) -> Result<(), Error> {
@@ -296,6 +328,10 @@ impl MjSpec {
 
     /// Save spec to an XML string. The `buffer_size` controls
     /// how much space is allocated for conversion.
+    /// # Returns
+    /// On success, returns the generated XML string.
+    /// # Errors
+    /// Returns an error if the conversion fails or the string contains invalid data.
     pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, Error> {
         let mut error_buff = [0; 100];
         let mut result_buff = vec![0u8; buffer_size];
@@ -324,11 +360,15 @@ impl MjSpec {
     find_x_method_direct! { default }
 
     /// Returns an immutable reference to the world body.
+    /// # Panics
+    /// Panics if the "world" body is not found.
     pub fn world_body(&self) -> &MjsBody {
         self.body("world").unwrap()
     }
 
     /// Returns a mutable reference to the world body.
+    /// # Panics
+    /// Panics if the "world" body is not found.
     pub fn world_body_mut(&mut self) -> &mut MjsBody {
         self.body_mut("world").unwrap()
     }
@@ -386,9 +426,11 @@ impl MjSpec {
     }
 
     /// Adds a new `<default>` element.
+    /// # Returns
+    /// On success, returns a mutable reference to the newly created [`MjsDefault`].
     /// # Errors
-    /// Errors a [`ErrorKind::AlreadyExists`] error when `class_name` already exists.
-    /// Errors a [`ErrorKind::NotFound`] when `parent_class_name` doesn't exist.
+    /// Returns a [`ErrorKind::AlreadyExists`] error when `class_name` already exists.
+    /// Returns a [`ErrorKind::NotFound`] when `parent_class_name` doesn't exist.
     /// # Panics
     /// When the `class_name` or `parent_class_name` contain '\0' characters, a panic occurs.
     pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<&mut MjsDefault, Error> {

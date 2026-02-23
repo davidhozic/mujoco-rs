@@ -142,6 +142,10 @@ unsafe impl Sync for MjModel {}
 
 impl MjModel {
     /// Loads the model from an XML file. To load from a virtual file system, use [`MjModel::from_xml_vfs`].
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
+    /// # Errors
+    /// Returns an error if the model could not be loaded, containing the MuJoCo error message.
     /// # Panics
     /// - when the `path` contains invalid utf-8 or '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
@@ -150,6 +154,10 @@ impl MjModel {
     }
 
     /// Loads the model from an XML file, located in a virtual file system (`vfs`)
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
+    /// # Errors
+    /// Returns an error if the model could not be loaded, containing the MuJoCo error message.
     /// # Panics
     /// - when the `path` contains invalid utf-8 or '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
@@ -173,6 +181,10 @@ impl MjModel {
     }
 
     /// Loads the model from an XML string.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
+    /// # Errors
+    /// Returns an error if the underlying VFS cannot handle the data or if MuJoCo fails to load it.
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_string(data: &str) -> Result<Self, Error> {
@@ -197,6 +209,10 @@ impl MjModel {
     }
 
     /// Loads the model from MJB raw data.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
+    /// # Errors
+    /// Returns an error if MuJoCo fails to parse the MJB buffer.
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_buffer(data: &[u8]) -> Result<Self, Error> {
@@ -212,6 +228,10 @@ impl MjModel {
     }
 
     /// Saves the last XML loaded.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an IO error if there are issues saving the file, or if the filename contains invalid characters.
     pub fn save_last_xml(&self, filename: &str) -> io::Result<()> {
         let mut error = [0i8; 100];
         unsafe {
@@ -481,6 +501,10 @@ impl MjModel {
 
     /// Print mjModel to text file, specifying format.
     /// float_format must be a valid printf-style format string for a single float value.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error of kind [`NulError`] if either strings contain interior null bytes.
     pub fn print_formatted(&self, filename: &str, float_format: &str) -> Result<(), NulError> {
         let c_filename = CString::new(filename)?;
         let c_float_format = CString::new(float_format)?;
@@ -489,6 +513,10 @@ impl MjModel {
     }
 
     /// Print model to text file.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error of kind [`NulError`] if the string contains interior null bytes.
     pub fn print(&self, filename: &str) -> Result<(), NulError> {
         let c_filename = CString::new(filename)?;
         unsafe { mj_printModel(self.ffi(), c_filename.as_ptr()) }
@@ -587,6 +615,8 @@ impl MjModel {
 
     /// Get name of object with the specified [`MjtObj`] type and id, returns NULL if name not found.
     /// Wraps ``mj_id2name``.
+    /// # Panics
+    /// Panics if MuJoCo internally returns a C string that is not valid UTF-8.
     pub fn id_to_name(&self, type_: MjtObj, id: i32) -> Option<&str> {
         let ptr = unsafe { mj_id2name(self.ffi(), type_ as i32, id) };
         if ptr.is_null() {
@@ -615,6 +645,10 @@ impl MjModel {
     }
 
     /// Returns a mutable reference to the wrapped FFI struct.
+    ///
+    /// # Safety
+    /// Modifying the underlying FFI struct directly can break the invariants
+    /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjModel {
         unsafe { self.0.as_mut().unwrap() }
     }

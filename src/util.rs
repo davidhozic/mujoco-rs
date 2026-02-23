@@ -56,6 +56,12 @@ macro_rules! mj_model_nx_to_mapping {
     ($model_ffi:ident, nhfielddata) => {
         $model_ffi.hfield_adr
     };
+    ($model_ffi:ident, na) => {
+        $model_ffi.actuator_actadr
+    };
+    ($model_ffi:ident, nJten) => {
+        $model_ffi.ten_J_rowadr
+    };
 }
 
 
@@ -85,6 +91,12 @@ macro_rules! mj_model_nx_to_nitem {
     };
     ($model_ffi:ident, nhfielddata) => {
         $model_ffi.nhfield
+    };
+    ($model_ffi:ident, na) => {
+        $model_ffi.nu
+    };
+    ($model_ffi:ident, nJten) => {
+        $model_ffi.ntendon
     };
 }
 
@@ -228,6 +240,7 @@ macro_rules! info_method {
                 "# Panics\n",
                 "A panic will occur if `name` contains `\\0` characters."
             )]
+            #[allow(non_snake_case)]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let c_name = CString::new(name).unwrap();
                 let ffi = self.$ffi;
@@ -690,7 +703,7 @@ macro_rules! array_slice_dyn {
 macro_rules! c_str_as_str_method {
     (get {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {
         $(
-            #[doc = concat!("Returns ", $comment)]
+            #[doc = concat!("Returns ", $comment, "\n\n# Panics", "\nPanics if the string contains invalid UTF-8.")]
             pub fn $name(&self $(, $sub_index_name: $sub_index_type)? ) -> &str {
                 unsafe { 
                     let c_ptr = self$(.$ffi())?.$name$([$sub_index_name])?.as_ptr();
@@ -764,6 +777,8 @@ macro_rules! assert_relative_eq {
 
 
 /// Tries to cast $value into requested type.
+/// # Panics
+/// Panics if the cast fails.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! cast_mut_info {

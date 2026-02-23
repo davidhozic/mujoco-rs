@@ -23,6 +23,9 @@ pub trait SpecItem: Sized {
     unsafe fn element_pointer(&self) -> *mut mjsElement;
 
     /// Same as [`SpecItem::element_pointer`], but with a mutable borrow.
+    ///
+    /// # Safety
+    /// See [`SpecItem::element_pointer`].
     unsafe fn element_mut_pointer(&mut self) -> *mut mjsElement {
         unsafe { self.element_pointer() }
     }

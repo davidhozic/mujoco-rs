@@ -70,6 +70,10 @@ impl MjVfs {
     }
 
     /// Adds a file to the virtual file system.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error if the file already exists or fails to load.
     /// # Panics
     /// A panic will occur if `directory` or `filename` contain `\0` characters.
     pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> io::Result<()> {
@@ -85,6 +89,10 @@ impl MjVfs {
     }
 
     /// Adds a file to the virtual file system from a buffer.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error if the file already exists or fails to load.
     /// # Panics
     /// When the `filename` contains '\0' characters, a panic occurs.
     pub fn add_from_buffer(&mut self, filename: &str, buffer: &[u8]) -> io::Result<()> {
@@ -98,6 +106,10 @@ impl MjVfs {
     }
 
     /// Removes a file from the virtual file system.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error of kind `NotFound` if the file doesn't exist.
     /// # Panics
     /// When the `filename` contains '\0' characters, a panic occurs.
     pub fn delete_file(&mut self, filename: &str) -> io::Result<()> {
@@ -119,6 +131,10 @@ impl MjVfs {
     }
 
     /// Mounts a directory into the VFS.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error if the mount fails.
     /// # Panics
     /// When `filepath` contain `\0` characters, a panic occurs.
     pub fn mount(&mut self, filepath: &str) -> io::Result<()> {
@@ -133,6 +149,10 @@ impl MjVfs {
     }
 
     /// Unmounts a directory from the VFS.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error if the directory is not mounted.
     /// # Panics
     /// When `mountdir` contains `\0` characters, a panic occurs.
     pub fn unmount(&mut self, mountdir: &str) -> io::Result<()> {
@@ -158,6 +178,10 @@ impl MjVfs {
     }
 
     /// Mutable reference to the wrapped FFI struct.
+    ///
+    /// # Safety
+    /// Modifying the underlying FFI struct directly can break the invariants
+    /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjVFS {
         &mut self.ffi
     }

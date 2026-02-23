@@ -289,7 +289,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
 /// the viewer doesn't store a mutable reference to the [`MjData`] struct, but it instead
 /// accepts it as a parameter at its methods.
 /// 
-/// The [`MjViewer::sync`] method must be called to sync the state of [`MjViewer`] and [`MjData`].
+/// The [`MjViewer::sync_data`] method must be called to sync the state of [`MjViewer`] and [`MjData`].
 /// 
 /// # Shortcuts
 /// Main keyboard and mouse shortcuts can be viewed by pressing ``F1``.
@@ -352,6 +352,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// 
     /// Note that the use of [`MjViewerBuilder`] is preferred, because it is more flexible.
     /// Call [`MjViewer::builder`] to create a [`MjViewerBuilder`] instance.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the [`MjViewer`].
+    /// # Errors
+    /// Returns an error if the OpenGL state or window creation fails.
     pub fn launch_passive(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
         MjViewerBuilder::new()
             .max_user_geoms(max_user_geom)
@@ -493,6 +497,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Processes the UI (when enabled), processes events, draws the scene
     /// and swaps buffers in OpenGL.
+    /// # Panics
+    /// Panics if the OpenGL context cannot be made current.
     pub fn render(&mut self) {
         let RenderBaseGlState {
             gl_context,
@@ -1162,6 +1168,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
         }
     }
 
+    /// Builds a [`MjViewer`] with the configured options.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the [`MjViewer`].
+    /// # Errors
+    /// Returns an error if the OpenGL state or window creation fails.
     pub fn build_passive(&self, model: M) -> Result<MjViewer<M>, MjViewerError> {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
         let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
