@@ -645,6 +645,10 @@ impl MjModel {
     }
 
     /// Returns a mutable reference to the wrapped FFI struct.
+    ///
+    /// # Safety
+    /// Modifying the underlying FFI struct directly can break the invariants
+    /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjModel {
         unsafe { self.0.as_mut().unwrap() }
     }

@@ -161,6 +161,11 @@ impl MjrContext {
         &self.ffi
     }
 
+    /// Mutable reference to the wrapped FFI struct.
+    ///
+    /// # Safety
+    /// Modifying the underlying FFI struct directly can break the invariants
+    /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjrContext {
         &mut self.ffi
     }

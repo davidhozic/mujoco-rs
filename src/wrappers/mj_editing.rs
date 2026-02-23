@@ -279,6 +279,10 @@ impl MjSpec {
     }
 
     /// A mutable reference to the internal FFI struct.
+    ///
+    /// # Safety
+    /// Modifying the underlying FFI struct directly can break the invariants
+    /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjSpec {
         unsafe { self.0.as_mut().unwrap() }
     }
