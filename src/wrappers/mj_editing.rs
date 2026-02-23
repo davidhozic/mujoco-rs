@@ -1938,4 +1938,63 @@ mod tests {
         let wrap_pulley = tendon.get_wrap(2).unwrap();
         assert_eq!(wrap_pulley.divisor(), 1.5);
     }
+
+    #[test]
+    fn test_numeric_vec() {
+        let mut spec = MjSpec::new();
+        let numeric = spec.add_numeric();
+        let name = "test_numeric";
+        numeric.set_name(name);
+        assert_eq!(numeric.name(), name);
+
+        let data = [1.5, 2.5, 3.5, 4.5];
+        numeric.set_data(&data);
+        assert_eq!(numeric.data(), &data);
+
+        spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_text_string() {
+        let mut spec = MjSpec::new();
+        let text = spec.add_text();
+        let name = "test_text";
+        text.set_name(name);
+        assert_eq!(text.name(), name);
+
+        let content = "Hello MuJoCo!";
+        text.set_data(content);
+        assert_eq!(text.data(), content);
+
+        spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_tuple_names_and_params() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_body().with_name("body1");
+        spec.world_body_mut().add_body().with_name("body2");
+
+        let tuple_name = "test_tuple";
+        let obj_param = [1.0, 2.0];
+
+        let tuple = spec.add_tuple();
+        tuple.set_name(tuple_name);
+        assert_eq!(tuple.name(), tuple_name);
+
+        tuple.set_objname("body1 body2");
+        tuple.set_objprm(&obj_param);
+        tuple.set_objtype(&[MjtObj::mjOBJ_BODY as i32, MjtObj::mjOBJ_BODY as i32]);
+
+        assert_eq!(tuple.objprm(), &obj_param);
+
+        spec.compile().unwrap();
+
+        // Verify via XML as objname has no spec getter
+        let xml = spec.save_xml_string(2000).unwrap();
+        assert!(xml.contains("objname=\"body1\""));
+        assert!(xml.contains("objname=\"body2\""));
+        assert!(xml.contains("prm=\"1\""));
+        assert!(xml.contains("prm=\"2\""));
+    }
 }
