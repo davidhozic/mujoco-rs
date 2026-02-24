@@ -6,6 +6,23 @@ use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
 
+#[repr(C)]
+struct mujoco_Simulate { _unused: [u8; 0] }
+
+unsafe extern "C" {
+    fn mujoco_cSimulate_create(
+        cam: *mut mjvCamera,
+        opt: *mut mjvOption,
+        pert: *mut mjvPerturb,
+        user_scn: *mut mjvScene,
+    ) -> *mut mujoco_Simulate;
+    fn mujoco_cSimulate_RenderInit(sim: *mut mujoco_Simulate);
+    fn mujoco_cSimulate_Load(sim: *mut mujoco_Simulate, m: *mut mjModel_, d: *mut mjData_, displayed_filename: *const std::os::raw::c_char);
+    fn mujoco_cSimulate_RenderStep(sim: *mut mujoco_Simulate, update_timer: bool) -> std::os::raw::c_int;
+    fn mujoco_cSimulate_Sync(sim: *mut mujoco_Simulate, state_only: bool);
+    fn mujoco_cSimulate_destroy(sim: *mut mujoco_Simulate);
+}
+
 
 /// Wrapper around the C++ implementation of MujoCo viewer.
 /// If you don't need the side UI, we recommend you use the Rust-native viewer [`crate::viewer::MjViewer`] instead.
@@ -63,9 +80,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
         let sim;
         let c_filename = CString::new("file.xml").unwrap();
         unsafe {
-            sim = mujoco_cSimulate_create(&mut *_cam, &mut *_opt, &mut *_pert, _user_scn.ffi_mut(), true);
+            sim = mujoco_cSimulate_create(&mut *_cam, &mut *_opt, &mut *_pert, _user_scn.ffi_mut());
             mujoco_cSimulate_RenderInit(sim);
             mujoco_cSimulate_Load(sim, model.__raw(), data.__raw(), c_filename.as_ptr());
+            // Initial render step
             mujoco_cSimulate_RenderStep(sim, true);
         }
 
@@ -102,7 +120,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
 impl<M: Deref<Target = MjModel> + Clone> Drop for MjViewerCpp<M> {
     fn drop(&mut self) {
         unsafe {
-            mujoco_cSimulate_RenderCleanup(self.sim);
             mujoco_cSimulate_destroy(self.sim);
         }
     }
