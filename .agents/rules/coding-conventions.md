@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # Coding Conventions
 
 ## Hard rules

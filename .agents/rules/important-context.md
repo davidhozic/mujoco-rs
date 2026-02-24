@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # Important Context
 
 ## Where to look first
