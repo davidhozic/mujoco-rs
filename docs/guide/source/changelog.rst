@@ -109,6 +109,8 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
   - Updated enum type aliases.
   - Improved fixed-size array pointer handling.
   - Added support for ``Depth`` rendering flag (``mjRND_DEPTH``) to ``MjViewer``.
+  - Added a "Print camera" button to the viewer UI that prints the current camera's position and
+    orientation as an MJCF ``<camera>`` XML element to the console.
   - |mj_data| and |mj_model| views now contain extra fields.
 
 2.3.3 (MuJoCo 3.3.7)

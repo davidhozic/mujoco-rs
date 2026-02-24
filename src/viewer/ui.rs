@@ -410,6 +410,45 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 ui.end_row();
                             });
 
+                            ui.add_space(5.0);
+
+                            // Copy camera state to clipboard as XML
+                            if ui.add(egui::Button::new(
+                                RichText::new("Print camera").font(MAIN_FONT)
+                            ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                                let gl_cams = scene.camera();
+                                let fwd = gl_cams[0].forward;
+                                let up = gl_cams[0].up;
+
+                                // right = forward × up
+                                let right = [
+                                    fwd[1] * up[2] - fwd[2] * up[1],
+                                    fwd[2] * up[0] - fwd[0] * up[2],
+                                    fwd[0] * up[1] - fwd[1] * up[0],
+                                ];
+
+                                // Average position of left and right eye cameras
+                                let pos = [
+                                    (gl_cams[0].pos[0] + gl_cams[1].pos[0]) / 2.0,
+                                    (gl_cams[0].pos[1] + gl_cams[1].pos[1]) / 2.0,
+                                    (gl_cams[0].pos[2] + gl_cams[1].pos[2]) / 2.0,
+                                ];
+
+                                println!(
+                                    "<camera pos=\"{:.3} {:.3} {:.3}\" \
+                                    xyaxes=\"{:.3} {:.3} {:.3} {:.3} {:.3} {:.3}\"/>",
+                                    pos[0], pos[1], pos[2],
+                                    right[0], right[1], right[2],
+                                    up[0], up[1], up[2]
+                                );
+                                // TODO in the future, when
+                                // clipboard copying feature doesn't crash:
+                                // ctx.copy_text(xml);
+                                // Until then ^^^.
+                            }
+
+                            ui.add_space(5.0);
+
                             ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     debug_assert_eq!(
