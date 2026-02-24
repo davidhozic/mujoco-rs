@@ -10,7 +10,7 @@ use crate::mujoco_c::*;
 /// Reads MJS string (C++) as a `&str`.
 /// # Panics
 /// Panics if the string contains invalid UTF-8.
-pub(crate) fn read_mjs_string(string: &mjString) -> &str {
+pub(crate) fn read_mjs_string<'a>(string: *const mjString) -> &'a str {
     unsafe {
         let ptr = mjs_getString(string);
         CStr::from_ptr(ptr).to_str().unwrap()
@@ -20,7 +20,7 @@ pub(crate) fn read_mjs_string(string: &mjString) -> &str {
 /// Writes to a `destination` MJS string (C++) from a `source` `&str`.
 /// # Panics
 /// When the `source` contains '\0' characters, a panic occurs.
-pub(crate) fn write_mjs_string(source: &str, destination: &mut mjString) {
+pub(crate) fn write_mjs_string(source: &str, destination: *mut mjString) {
     unsafe {
         let c_source = CString::new(source).unwrap();
         mjs_setString(destination, c_source.as_ptr());
@@ -28,7 +28,7 @@ pub(crate) fn write_mjs_string(source: &str, destination: &mut mjString) {
 }
 
 /// Reads MJS double vector (C++) as a `&\[f64\]`.
-pub(crate) fn read_mjs_vec_f64(array: &mjDoubleVec) -> &[f64] {
+pub(crate) fn read_mjs_vec_f64<'a>(array: *const mjDoubleVec) -> &'a [f64] {
     let mut userdata_length = 0;
     unsafe {
         let ptr_arr = mjs_getDouble(array, &mut userdata_length);
@@ -41,35 +41,35 @@ pub(crate) fn read_mjs_vec_f64(array: &mjDoubleVec) -> &[f64] {
 }
 
 /// Writes MJS double vector (C++) from a `source` to `destination`.
-pub(crate) fn write_mjs_vec_f64(source: &[f64], destination: &mut mjDoubleVec) {
+pub(crate) fn write_mjs_vec_f64(source: &[f64], destination: *mut mjDoubleVec) {
     unsafe {
         mjs_setDouble(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
 /// Writes MJS float vector (C++) from a `source` to `destination`.
-pub(crate) fn write_mjs_vec_f32(source: &[f32], destination: &mut mjFloatVec) {
+pub(crate) fn write_mjs_vec_f32(source: &[f32], destination: *mut mjFloatVec) {
     unsafe {
         mjs_setFloat(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
 /// Appends MJS float vector (C++) from a `source` to `destination`.
-pub(crate) fn append_mjs_vec_vec_f32(source: &[f32], destination: &mut mjFloatVecVec) {
+pub(crate) fn append_mjs_vec_vec_f32(source: &[f32], destination: *mut mjFloatVecVec) {
     unsafe {
         mjs_appendFloatVec(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
 /// Writes MJS int vector (C++) from a `source` to `destination`.
-pub(crate) fn write_mjs_vec_i32(source: &[i32], destination: &mut mjIntVec) {
+pub(crate) fn write_mjs_vec_i32(source: &[i32], destination: *mut mjIntVec) {
     unsafe {
         mjs_setInt(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
 /// Appends MJS int vector (C++) from a `source` to `destination`.
-pub(crate) fn append_mjs_vec_vec_i32(source: &[i32], destination: &mut mjIntVecVec) {
+pub(crate) fn append_mjs_vec_vec_i32(source: &[i32], destination: *mut mjIntVecVec) {
     unsafe {
         mjs_appendIntVec(destination, source.as_ptr(), source.len() as i32);
     }
@@ -78,7 +78,7 @@ pub(crate) fn append_mjs_vec_vec_i32(source: &[i32], destination: &mut mjIntVecV
 /// Split `source` to entries and copy to `destination` (C++).
 /// # Panics
 /// When the `source` contains '\0' characters, a panic occurs.
-pub(crate) fn write_mjs_vec_string(source: &str, destination: &mut mjStringVec) {
+pub(crate) fn write_mjs_vec_string(source: &str, destination: *mut mjStringVec) {
     let c_source = CString::new(source).unwrap();
     unsafe {
         mjs_setStringVec(destination, c_source.as_ptr());
@@ -88,7 +88,7 @@ pub(crate) fn write_mjs_vec_string(source: &str, destination: &mut mjStringVec) 
 /// Split `source` to entries and append to `destination` (C++).
 /// # Panics
 /// When the `source` contains '\0' characters, a panic occurs.
-pub(crate) fn append_mjs_vec_string(source: &str, destination: &mut mjStringVec) {
+pub(crate) fn append_mjs_vec_string(source: &str, destination: *mut mjStringVec) {
     let c_source = CString::new(source).unwrap();
     unsafe {
         mjs_appendString(destination, c_source.as_ptr());
@@ -96,7 +96,7 @@ pub(crate) fn append_mjs_vec_string(source: &str, destination: &mut mjStringVec)
 }
 
 /// Writes MJS byte vector (C++) from a `source` to `destination`.
-pub(crate) fn write_mjs_vec_byte<T>(source: &[T], destination: &mut mjByteVec) {
+pub(crate) fn write_mjs_vec_byte<T>(source: &[T], destination: *mut mjByteVec) {
     unsafe {
         mjs_setBuffer(destination, source.as_ptr().cast(), (size_of::<T>() * source.len()) as i32);
     }
@@ -256,14 +256,14 @@ macro_rules! mjs_struct {
             /// # Panics
             /// Panics if it contains invalid UTF-8.
             pub fn info(&self) -> &str {
-                read_mjs_string(unsafe { self.info.as_ref().unwrap() })
+                read_mjs_string(self.info)
             }
 
             /// Set the message appended to compiler errors.
             /// # Panics
             /// When the `info` contains '\0' characters, a panic occurs.
             pub fn set_info(&mut self, info: &str) {
-                write_mjs_string(info, unsafe { self.info.as_mut().unwrap() });
+                write_mjs_string(info, self.info);
             }
         }
 
@@ -290,17 +290,17 @@ macro_rules! userdata_method {
     ($type:ty) => {paste::paste!{
         /// Return an immutable slice to userdata.
         pub fn userdata(&self) -> &[$type] {
-            [<read_mjs_vec_ $type>](unsafe { self.userdata.as_ref().unwrap() })
+            [<read_mjs_vec_ $type>](self.userdata)
         }
         
         /// Set `userdata`.
         pub fn set_userdata<T: AsRef<[$type]>>(&mut self, value: T) {
-            [<write_mjs_vec_ $type>](value.as_ref(), unsafe {self.userdata.as_mut().unwrap() })
+            [<write_mjs_vec_ $type>](value.as_ref(), self.userdata)
         }
 
         /// Builder method for setting `userdata`.
         pub fn with_userdata<T: AsRef<[$type]>>(&mut self, value: T) -> &mut Self {
-            [<write_mjs_vec_ $type>](value.as_ref(), unsafe {self.userdata.as_mut().unwrap() });
+            [<write_mjs_vec_ $type>](value.as_ref(), self.userdata);
             self
         }
     }};
@@ -317,7 +317,7 @@ macro_rules! vec_string_set_append {
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<set_ $name>](&mut self, value: &str) {
-                write_mjs_vec_string(value, unsafe { self.$name.as_mut().unwrap() });
+                write_mjs_vec_string(value, self.$name);
             }
 
             #[doc = concat!(
@@ -327,7 +327,7 @@ macro_rules! vec_string_set_append {
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<append_ $name>](&mut self, value: &str) {
-                append_mjs_vec_string(value, unsafe { self.$name.as_mut().unwrap() });
+                append_mjs_vec_string(value, self.$name);
             }
         )*
     }};
@@ -336,11 +336,13 @@ macro_rules! vec_string_set_append {
 /// Implements string methods for given attribute $name.
 macro_rules! string_set_get_with {
     (@impl common $([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;) => {paste::paste!{
+        #[allow(unused_unsafe)]
         #[doc = concat!("Return ", $comment)]
         pub fn $name(&self) -> &str {
-            read_mjs_string(unsafe { self$(.$ffi())?.$name.as_ref().unwrap() })
+                read_mjs_string(unsafe { self$(.$ffi())?.$name })
         }
 
+        #[allow(unused_unsafe)]
         #[doc = concat!(
             "Set ", $comment,
             "\n",
@@ -348,13 +350,14 @@ macro_rules! string_set_get_with {
             "When the `value` contains '\\0' characters, a panic occurs."
         )]
         pub fn [<set_ $name>](&mut self, value: &str) {
-            write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name.as_mut().unwrap() })
+            write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name })
         }
     }};
 
     ( $($([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;)* ) => {paste::paste!{
         $(
             string_set_get_with!(@impl common $([$ffi, $ffi_mut])? $name; $comment;);
+            #[allow(unused_unsafe)]
             #[doc = concat!(
                 "Builder method for setting ", $comment,
                 "\n",
@@ -362,7 +365,7 @@ macro_rules! string_set_get_with {
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<with_ $name>](mut self, value: &str) -> Self {
-                write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name.as_mut().unwrap() });
+                write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name });
                 self
             }
         )*
@@ -371,6 +374,7 @@ macro_rules! string_set_get_with {
     ([&] $($([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;)* ) => {paste::paste!{
         $(
             string_set_get_with!(@impl common $([$ffi, $ffi_mut])? $name; $comment;);
+            #[allow(unused_unsafe)]
             #[doc = concat!(
                 "Builder method for setting ", $comment,
                 "\n",
@@ -378,7 +382,7 @@ macro_rules! string_set_get_with {
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<with_ $name>](&mut self, value: &str) -> &mut Self {
-                write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name.as_mut().unwrap() });
+                write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name });
                 self
             }
         )*
@@ -391,7 +395,7 @@ macro_rules! vec_set_get {
         $(
             #[doc = concat!("Return ", $comment)]
             pub fn $name(&self) -> &[$type] {
-                [<read_mjs_vec_ $type>](unsafe { self.$name.as_ref().unwrap() })
+                [<read_mjs_vec_ $type>](self.$name)
             }
         )*
 
@@ -405,7 +409,7 @@ macro_rules! vec_set {
         $(
             #[doc = concat!("Set ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
-                [<write_mjs_vec_ $type>](value, unsafe { self.$name.as_mut().unwrap() })
+                [<write_mjs_vec_ $type>](value, self.$name)
             }
         )*
     }};
@@ -417,7 +421,7 @@ macro_rules! vec_vec_append {
         $(
             #[doc = concat!("Set ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
-                [<append_mjs_vec_vec_ $type>](value, unsafe { self.$name.as_mut().unwrap() })
+                [<append_mjs_vec_vec_ $type>](value, self.$name)
             }
         )*
     }};
