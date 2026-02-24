@@ -36,7 +36,7 @@ const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
 const SIDE_PANEL_PAD: f32 = 10.0;
 
 /// Maps [`MjtRndFlag`](crate::wrappers::mj_visualization::MjtRndFlag) to their string
-const GL_EFFECT_MAP: [&str; 10] = [
+const GL_EFFECT_MAP: [&str; 11] = [
     "Shadow",
     "Wireframe",
     "Reflection",
@@ -44,6 +44,7 @@ const GL_EFFECT_MAP: [&str; 10] = [
     "Skybox",
     "Fog",
     "Haze",
+    "Depth",
     "Segment",
     "ID color",
     "Cull face"
