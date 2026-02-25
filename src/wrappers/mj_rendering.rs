@@ -3,6 +3,8 @@ use crate::{array_slice_dyn, getter_setter, mujoco_c::*};
 use std::{ffi::CString, mem::zeroed};
 
 use super::mj_model::{MjModel, MjtTexture, MjtTextureRole};
+
+use std::{ffi::CString, mem::zeroed};
 use std::ptr;
 
 /* Types */

@@ -113,6 +113,17 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
     orientation as an MJCF ``<camera>`` XML element to the console.
   - |mj_data| and |mj_model| views now contain extra fields.
 
+2.3.4 (MuJoCo 3.3.7)
+=============================
+- :ref:`mj_rust_viewer` bug fixes and usability improvements:
+
+  - Keyboard events are now ignored whenever an egui input widget has focus.
+  - Fixed a logic error where pressing an unhandled mouse button would return from the
+    event-processing loop and drop subsequent events; the handler now continues.
+  - Combination of Ctrl+C will now not toggle camera visualization.
+    This combination is reserved for copying.
+
+
 2.3.3 (MuJoCo 3.3.7)
 =============================
 - Fixed `#144 <https://github.com/davidhozic/mujoco-rs/issues/144>`_, where the :ref:`mj_rust_viewer`
