@@ -836,6 +836,13 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             {
                 let window: &winit::window::Window = &self.adapter.state.as_ref().unwrap().window;
                 self.ui.handle_events(window, &window_event);
+
+                // if the UI has an active input focus, ignore all keyboard events
+                if let WindowEvent::KeyboardInput { .. } = &window_event {
+                    if self.ui.focused() {
+                        continue;
+                    }
+                }
             }
 
             match window_event {
@@ -855,7 +862,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         },
                         MouseButton::Middle => ButtonsPressed::MIDDLE,
                         MouseButton::Right => ButtonsPressed::RIGHT,
-                        _ => return
+                        _ => continue
                     };
 
                     self.buttons_pressed.set(index, is_pressed);
@@ -895,10 +902,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         state: ElementState::Pressed, ..
                     }, ..
                 } => {
-                    #[cfg(feature = "viewer-ui")]
-                    if self.ui.focused() {
-                        continue;
-                    }
                     self.camera.free();
                 }
 
@@ -956,10 +959,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         state: ElementState::Pressed, ..
                     }, ..
                 } => {
-                    #[cfg(feature = "viewer-ui")]
-                    if self.ui.focused() {
-                        continue;
-                    }
                     let mut lock = self.shared_state.lock_unpoison();
                     lock.data_passive.reset();
                     lock.data_passive.forward();
@@ -989,7 +988,13 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 WindowEvent::KeyboardInput {
                     event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyC), state: ElementState::Pressed, ..},
                     ..
-                } => self.toggle_opt_flag(MjtVisFlag::mjVIS_CAMERA),
+                } => {
+                    if self.modifiers.state().control_key() {  // Control + C is reserved for copy
+                        continue;
+                    }
+
+                    self.toggle_opt_flag(MjtVisFlag::mjVIS_CAMERA);
+                }
 
                 WindowEvent::KeyboardInput {
                     event: KeyEvent {physical_key: PhysicalKey::Code(KeyCode::KeyU), state: ElementState::Pressed, ..},
