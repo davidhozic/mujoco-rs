@@ -16,9 +16,9 @@ trigger: always_on
 
 ## Feature flags
 - Read `Cargo.toml` to discover available features and their default state.
-- When building on headless systems (servers, CI), disable defaults: `--no-default-features`.
+- When building on headless systems (servers, CI), disable defaults: `--no-default-features`. NOTE: The current agentic test environment handles rendering gracefully, so defaults are fine here.
 - The `cpp-viewer` feature requires static linking — do not enable it unless the static build has been set up.
-- The `ffi-regenerate` feature rebuilds `src/mujoco_c.rs` from headers. Only use this when updating MuJoCo version.
+- The `ffi-regenerate` feature rebuilds `src/mujoco_c.rs` from headers. **Never trigger this feature as an agent.**
 
 ## Code style
 - Read existing code in the file you're modifying to understand naming, safety, and documentation conventions.

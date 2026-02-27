@@ -48,6 +48,7 @@ All linking env vars must be **absolute paths**. Use `realpath` to convert relat
 
 ## Common pitfalls
 - MuJoCo C arrays can be dense or sparse (via address arrays). Read the C API docs to determine which applies.
-- Address array fields documented as `-1: none` in MuJoCo should map to `Option` in the Rust wrappers for item to which they map to (e.g, "actuator_actadr;      // first activation address; -1: stateless  (nu x 1)" is the field actuator_actadr, which maps to the "act" field. The "act" field should be Option.
+- Address array fields documented as `-1: none` in MuJoCo should map to `Option` in the Rust wrappers for the item they point to. If the addressing value is -1, the resulting field MUST be `None`.
+- The test environment handles rendering features gracefully; default features (including viewer) can be used.
 - When in doubt, run `/expand-macros` and inspect the generated code.
 - Multiple MuJoCo versions may be present on disk — always check `Cargo.toml` for the correct version.
