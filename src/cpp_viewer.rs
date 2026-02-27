@@ -20,6 +20,7 @@ unsafe extern "C" {
     fn mujoco_cSimulate_Load(sim: *mut mujoco_Simulate, m: *mut mjModel_, d: *mut mjData_, displayed_filename: *const std::os::raw::c_char);
     fn mujoco_cSimulate_RenderStep(sim: *mut mujoco_Simulate) -> std::os::raw::c_int;
     fn mujoco_cSimulate_Sync(sim: *mut mujoco_Simulate, state_only: bool);
+    fn mujoco_cSimulate_ExitRequest(sim: *mut mujoco_Simulate);
     fn mujoco_cSimulate_destroy(sim: *mut mujoco_Simulate);
 }
 
@@ -73,28 +74,31 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
         let mut opt: Box<MjvOption> = Box::new(MjvOption::default());
         let mut pert = Box::new(MjvPerturb::default());
         let mut user_scn = Box::new(MjvScene::new(model.clone(), max_user_geom));
-        let sim;
-        unsafe {
-            sim = mujoco_cSimulate_create(&mut *cam, &mut *opt, &mut *pert, user_scn.ffi_mut());
-            mujoco_cSimulate_RenderInit(sim);
 
-            let sim_usize = sim as usize;
-            let model_raw = model.__raw();
-            let data_raw = data.__raw();
-            let model_usize = model_raw as usize;
-            let data_usize = data_raw as usize;
+        let sim = unsafe { mujoco_cSimulate_create(&mut *cam, &mut *opt, &mut *pert, user_scn.ffi_mut()) };
+        let sim_usize = sim as usize;
 
-            // Load on another thread, since the viewer internally blocks until loaded.
-            // This is intentional and is the intended way of using the C++ viewer.
-            std::thread::spawn(move || {
-                let sim = sim_usize as *mut mujoco_Simulate;
-                let m = model_usize as *mut mjModel_;
-                let d = data_usize as *mut mjData_;
-                let c_filename = CString::new("file.xml").unwrap();
-                mujoco_cSimulate_Load(sim, m, d, c_filename.as_ptr());
-            });
-            mujoco_cSimulate_RenderStep(sim);
+        let model_raw = unsafe { model.__raw() };
+        let data_raw = unsafe { data.__raw() };
+        let model_usize = model_raw as usize;
+        let data_usize = data_raw as usize;
+
+        unsafe { mujoco_cSimulate_RenderInit(sim) };
+
+        // Load on another thread, since the viewer internally blocks until loaded.
+        // This is intentional and is the intended way of using the C++ viewer.
+        let load_thread = std::thread::spawn(move || {
+            let sim = sim_usize as *mut mujoco_Simulate;
+            let m = model_usize as *mut mjModel_;
+            let d = data_usize as *mut mjData_;
+            let c_filename = CString::new("file.xml").unwrap();
+            unsafe { mujoco_cSimulate_Load(sim, m, d, c_filename.as_ptr()) };
+        });
+
+        while !load_thread.is_finished() {
+            unsafe { mujoco_cSimulate_RenderStep(sim) };
         }
+        load_thread.join().unwrap();
 
         Self {sim, running: true, user_scn, _cam: cam, _opt: opt, _pert: pert}
     }
@@ -122,7 +126,8 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
 
 impl<M: Deref<Target = MjModel> + Clone + Send + Sync> Drop for MjViewerCpp<M> {
     fn drop(&mut self) {
-        unsafe {
+        unsafe { 
+            mujoco_cSimulate_ExitRequest(self.sim);
             mujoco_cSimulate_destroy(self.sim);
         }
     }

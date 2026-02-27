@@ -108,10 +108,10 @@ fn main() {
     #[allow(dead_code)]
     const MUJOCO_BASE_DOWNLOAD_LINK: &str = "https://github.com/google-deepmind/mujoco/releases/download";
 
-    println!("cargo:rerun-if-env-changed={MUJOCO_STATIC_LIB_PATH_VAR}");
-    println!("cargo:rerun-if-env-changed={MUJOCO_DYN_LIB_PATH_VAR}");
-    println!("cargo:rerun-if-env-changed={MUJOCO_DOWNLOAD_PATH_VAR}");
-    println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
+    println!("cargo::rerun-if-env-changed={MUJOCO_STATIC_LIB_PATH_VAR}");
+    println!("cargo::rerun-if-env-changed={MUJOCO_DYN_LIB_PATH_VAR}");
+    println!("cargo::rerun-if-env-changed={MUJOCO_DOWNLOAD_PATH_VAR}");
+    println!("cargo::rerun-if-env-changed=PKG_CONFIG_PATH");
 
     let mujoco_static_link_dir = env::var(MUJOCO_STATIC_LIB_PATH_VAR).ok();
     let mujoco_dyn_link_dir = env::var(MUJOCO_DYN_LIB_PATH_VAR).ok();
@@ -140,26 +140,26 @@ fn main() {
             );
         }
 
-        println!("cargo:rerun-if-changed={}", path_lib_file.display());
-        println!("cargo:rustc-link-search={}", path_lib_dir_display);
+        println!("cargo::rerun-if-changed={}", path_lib_file.display());
+        println!("cargo::rustc-link-search={}", path_lib_dir_display);
 
         #[cfg(feature = "cpp-viewer")]
         {
-            println!("cargo:rustc-link-lib=simulate");
-            println!("cargo:rustc-link-lib=glfw3");
+            println!("cargo::rustc-link-lib=static=simulate");
+            println!("cargo::rustc-link-lib=static=glfw3");
         }
 
-        println!("cargo:rustc-link-lib=mujoco");
-        println!("cargo:rustc-link-lib=lodepng");
-        println!("cargo:rustc-link-lib=tinyxml2");
-        println!("cargo:rustc-link-lib=qhullstatic_r");
-        println!("cargo:rustc-link-lib=ccd");
+        println!("cargo::rustc-link-lib=static=mujoco");
+        println!("cargo::rustc-link-lib=static=lodepng");
+        println!("cargo::rustc-link-lib=static=tinyxml2");
+        println!("cargo::rustc-link-lib=static=qhullstatic_r");
+        println!("cargo::rustc-link-lib=static=ccd");
 
         #[cfg(target_os = "linux")]
-        println!("cargo:rustc-link-lib=stdc++");
+        println!("cargo::rustc-link-lib=stdc++");
 
         #[cfg(target_os = "macos")]
-        println!("cargo:rustc-link-lib=c++");
+        println!("cargo::rustc-link-lib=c++");
     }
 
     /* Dynamic linking */
@@ -188,8 +188,8 @@ fn main() {
             );
         }
 
-        println!("cargo:rustc-link-search={}", path_lib_dir_display);
-        println!("cargo:rustc-link-lib=mujoco");
+        println!("cargo::rustc-link-search={}", path_lib_dir_display);
+        println!("cargo::rustc-link-lib=dylib=mujoco");
 
         // Copy the DLL on Windows, if a relative path is given.
         // Otherwise assume the DLL is discoverable through PATH.
@@ -389,8 +389,8 @@ fn main() {
             );
 
             let libdir_path = outdirname.join("lib");
-            println!("cargo:rustc-link-search={}", libdir_path.display());
-            println!("cargo:rustc-link-lib=mujoco");
+            println!("cargo::rustc-link-search={}", libdir_path.display());
+            println!("cargo::rustc-link-lib=mujoco");
         }
     }
 

@@ -32,7 +32,10 @@ fn main() {
         .build_passive(&model).unwrap();
 
     /* Add a custom UI window */
+    #[cfg(feature = "viewer-ui")]
     let mut opened = true;  // gets moved into the callback
+
+    #[cfg(feature = "viewer-ui")]
     viewer.add_ui_callback_detached(move |ctx| {
         use mujoco_rs::viewer::egui;
         egui::Window::new("Custom controls")
