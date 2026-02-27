@@ -29,7 +29,7 @@ fn main() {
     let step = model.opt().timestep;
     while viewer.running() {
         viewer.sync();
-        viewer.render(true);
+        viewer.render();
         data.step();
         std::thread::sleep(Duration::from_secs_f64(step));
     }
