@@ -10,35 +10,47 @@
 //! cargo +nightly miri run --example miri_test
 //! ```
 
-use mujoco_rs::wrappers::{MjModel, MjtObj};
+use mujoco_rs::prelude::{MjSpec, SpecItem};
+use mujoco_rs::wrappers::{MjModel, MjtObj, MjtGeom, MjtJoint, MjtTrn, MjtSensor};
+use mujoco_rs::wrappers::mj_editing::MjtLimited;
 
-const EXAMPLE_MODEL: &str = r#"
-<mujoco>
-  <option timestep="0.005" gravity="0 0 -9.81"/>
-  
-  <worldbody>
-    <light pos="0 0 1"/>
-    <geom name="floor" type="plane" size="10 10 1" rgba="0.8 0.9 0.8 1"/>
-    <body name="box1" pos="0 0 0.5">
-      <joint name="box1_joint" type="free"/>
-      <geom name="box1_geom" type="box" size="0.2 0.2 0.2" rgba="1 0 0 1" mass="1.0"/>
-      <site name="box1_site" pos="0 0 0.2"/>
-    </body>
-    <body name="box2" pos="0 0 1.5">
-      <joint name="box2_joint" type="slide" axis="0 0 1"/>
-      <geom name="box2_geom" type="box" size="0.1 0.1 0.1" rgba="0 1 0 1" mass="0.5"/>
-    </body>
-  </worldbody>
-  
-  <actuator>
-    <motor name="box2_motor" joint="box2_joint" ctrlrange="-10 10"/>
-  </actuator>
-  
-  <sensor>
-    <jointpos name="box2_pos_sensor" joint="box2_joint"/>
-  </sensor>
-</mujoco>
-"#;
+fn build_model() -> MjModel {
+    let mut spec = MjSpec::new();
+    spec.option_mut().timestep = 0.005;
+    spec.option_mut().gravity = [0.0, 0.0, -9.81];
+    
+    let mut world = spec.world_body_mut();
+    world.add_light().with_pos([0.0, 0.0, 1.0]);
+    world.add_geom()
+        .with_name("floor")
+        .with_type(MjtGeom::mjGEOM_PLANE)
+        .with_size([10.0, 10.0, 1.0])
+        .with_rgba([0.8, 0.9, 0.8, 1.0]);
+        
+    let body1 = world.add_body().with_name("box1").with_pos([0.0, 0.0, 0.5]);
+    body1.add_joint().with_name("box1_joint").with_type(MjtJoint::mjJNT_FREE);
+    body1.add_geom().with_name("box1_geom").with_type(MjtGeom::mjGEOM_BOX).with_size([0.2, 0.2, 0.2]).with_rgba([1.0, 0.0, 0.0, 1.0]).with_mass(1.0);
+    body1.add_site().with_name("box1_site").with_pos([0.0, 0.0, 0.2]);
+
+    let body2 = world.add_body().with_name("box2").with_pos([0.0, 0.0, 1.5]);
+    body2.add_joint().with_name("box2_joint").with_type(MjtJoint::mjJNT_SLIDE).with_axis([0.0, 0.0, 1.0]);
+    body2.add_geom().with_name("box2_geom").with_type(MjtGeom::mjGEOM_BOX).with_size([0.1, 0.1, 0.1]).with_rgba([0.0, 1.0, 0.0, 1.0]).with_mass(0.5);
+
+    spec.add_actuator()
+        .with_name("box2_motor")
+        .with_trntype(MjtTrn::mjTRN_JOINT)
+        .with_target("box2_joint")
+        .with_ctrllimited(MjtLimited::mjLIMITED_TRUE)
+        .with_ctrlrange([-10.0, 10.0]);
+    
+    spec.add_sensor()
+        .with_name("box2_pos_sensor")
+        .with_type(MjtSensor::mjSENS_JOINTPOS)
+        .with_objtype(MjtObj::mjOBJ_JOINT)
+        .with_objname("box2_joint");
+
+    spec.compile().expect("Failed to procedurally compile the model")
+}
 
 fn main() {
     // ---------------------------------------------------------------------------
@@ -58,12 +70,14 @@ fn main() {
     let bump_layout = std::alloc::Layout::from_size_align(bump_size, 64).unwrap();
     let bump_buffer = unsafe { std::alloc::alloc_zeroed(bump_layout) };
     
+    println!("RUST_LOG: bump_buffer = {:p}", bump_buffer);
+
     unsafe {
         setup_miri_bump_allocator(bump_buffer, bump_size);
     }
 
-    println!("Loading model...");
-    let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("Failed to load model");
+    println!("Loading procedurally generated model...");
+    let model = build_model();
     
     // Quick model getters that read native-allocated memory fields.
     assert_eq!(model.nq(), 8); // Free joint (7) + Slide joint (1)
