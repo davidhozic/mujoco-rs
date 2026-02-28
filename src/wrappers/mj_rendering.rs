@@ -15,9 +15,9 @@ pub type MjtGridPos = mjtGridPos;
 /// These are the possible framebuffers. They are used as an argument to the function `mjr_setBuffer`.
 pub type MjtFramebuffer = mjtFramebuffer;
 
-/// These are the depth mapping options. They are used as a value for the ``readPixelDepth`` attribute of the
+/// These are the depth mapping options. They are used as a value for the `readPixelDepth` attribute of the
 /// `mjrContext` struct, to control how the depth returned by `mjr_readPixels` is mapped from
-/// ``znear`` to ``zfar``.
+/// `znear` to `zfar`.
 pub type MjtDepthMap = mjtDepthMap;
 
 /// These are the possible font sizes. The fonts are predefined bitmaps stored in the dynamic library at three different
@@ -34,6 +34,8 @@ pub type MjtFont = mjtFont;
 ***********************************************************************************************************************/
 pub type MjrRectangle = mjrRect;
 impl MjrRectangle {
+    /// Creates a new rectangle defined by its bottom-left corner (`left`, `bottom`) and
+    /// its `width` and `height` in pixels.
     pub fn new(left: i32, bottom: i32, width: i32, height: i32) -> Self {
         Self {
             left,
@@ -60,6 +62,8 @@ pub struct MjrContext {
 }
 
 impl MjrContext {
+    /// Creates and initializes a new rendering context for `model`.
+    /// The font scale defaults to 100 %.
     pub fn new(model: &MjModel) -> Self {
         unsafe {
             let mut c = Box::new_uninit();
@@ -110,12 +114,14 @@ impl MjrContext {
         unsafe { mjr_restoreBuffer(self.ffi_mut()); }
     }
 
+    /// Sets the active OpenGL framebuffer to the given raw `framebuffer` id.
+    /// Prefer [`MjrContext::offscreen`] or [`MjrContext::window`] for the common cases.
     pub fn mjr_set_buffer(&mut self, framebuffer: i32) {
         unsafe { mjr_setBuffer(framebuffer, self.ffi_mut()); }
     }
 
     /// Read pixels from current OpenGL framebuffer to client buffer.
-    /// The ``rgb`` array is of size [width * height * 3], while ``depth`` is of size [width * height].
+    /// The `rgb` array is of size `[width * height * 3]`, while `depth` is of size `[width * height]`.
     /// # Panics
     /// Panics if the provided buffers are not large enough to hold the data for the given `viewport`.
     pub fn read_pixels(&self, rgb: Option<&mut [u8]>, depth: Option<&mut [f32]>, viewport: &MjrRectangle) {
@@ -158,6 +164,7 @@ impl MjrContext {
         ); }
     }
 
+    /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjrContext {
         &self.ffi
     }

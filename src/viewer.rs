@@ -96,6 +96,7 @@ const HELP_MENU_VALUES: &str = concat!(
     "See MjViewer docs"
 );
 
+/// Errors that can occur when initializing the MuJoCo viewer.
 #[derive(Debug)]
 pub enum MjViewerError {
     EventLoopError(winit::error::EventLoopError),
@@ -285,16 +286,16 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
 }
 
 
-/// A Rust-native implementation of the MuJoCo viewer. To confirm to rust safety rules,
+/// A Rust-native implementation of the MuJoCo viewer. To conform to Rust's safety rules,
 /// the viewer doesn't store a mutable reference to the [`MjData`] struct, but it instead
 /// accepts it as a parameter at its methods.
 /// 
 /// The [`MjViewer::sync_data`] method must be called to sync the state of [`MjViewer`] and [`MjData`].
 /// 
 /// # Shortcuts
-/// Main keyboard and mouse shortcuts can be viewed by pressing ``F1``.
+/// Main keyboard and mouse shortcuts can be viewed by pressing `F1`.
 /// Additionally, some visualization toggles are included, but not displayed
-/// in the ``F1`` help menu:
+/// in the `F1` help menu:
 /// - C: camera,
 /// - U: actuator,
 /// - J: joint,
@@ -1107,7 +1108,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                             pert.flexselect = flex_id;
                             pert.skinselect = skin_id;
                             pert.active = 0;
-                            pert.update_local_pos(xyz, data_passive);
+                            pert.update_local_pos(&xyz, data_passive);
                         }
                         else {
                             pert.select = 0;
@@ -1165,6 +1166,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
 }
 
 impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
+    /// Creates a [`MjViewerBuilder`] with default settings.
     pub fn new() -> Self {
         Self { 
             window_name: Cow::Owned(format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version())),
@@ -1262,6 +1264,7 @@ impl<M: Deref<Target = MjModel> + Clone> Default for MjViewerBuilder<M> {
 }
 
 bitflags! {
+    /// Internal bit-flags that track the visibility state of various on-screen overlays.
     #[derive(Debug)]
     struct ViewerStatusBit: u8 {
         const HELP = 1 << 0;

@@ -20,19 +20,19 @@ use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
 /// `mj_getState`, `mj_setState` and `mj_stateSize`.
 pub type MjtState = mjtState;
 
-/// Constraint types. These values are not used in mjModel, but are used in the mjData field ``d->efc_type`` when the list
+/// Constraint types. These values are not used in mjModel, but are used in the mjData field `d->efc_type` when the list
 /// of active constraints is constructed at each simulation time step.
 pub type MjtConstraint = mjtConstraint;
 
 /// These values are used by the solver internally to keep track of the constraint states.
 pub type MjtConstraintState = mjtConstraintState;
 
-/// Warning types. The number of warning types is given by ``mjNWARNING`` which is also the length of the array
-/// ``mjData.warning``.
+/// Warning types. The number of warning types is given by `mjNWARNING` which is also the length of the array
+/// `mjData.warning`.
 pub type MjtWarning = mjtWarning;
 
-/// Timer types. The number of timer types is given by ``mjNTIMER`` which is also the length of the array
-/// ``mjData.timer``, as well as the length of the string array `mjTIMERSTRING` with timer names.
+/// Timer types. The number of timer types is given by `mjNTIMER` which is also the length of the array
+/// `mjData.timer`, as well as the length of the string array `mjTIMERSTRING` with timer names.
 pub type MjtTimer = mjtTimer;
 
 /// Sleep state of an object.
@@ -44,7 +44,7 @@ pub type MjtSleepState = mjtSleepState;
 // MjData
 /**************************************************************************************************/
 
-/// Wrapper around the ``mjData`` struct.
+/// Wrapper around the `mjData` struct.
 /// Provides lifetime guarantees as well as automatic cleanup.
 pub struct MjData<M: Deref<Target = MjModel>> {
     data: *mut mjData,
@@ -64,7 +64,7 @@ unsafe impl<M: Deref<Target = MjModel>> Sync for MjData<M> {}
 
 
 impl<M: Deref<Target = MjModel>> MjData<M> {
-    /// Constructor for a new MjData. This should is called from MjModel.
+    /// Creates a new [`MjData`] linked to `model`.
     pub fn new(model: M) -> Self {
         let data_ptr = unsafe { mj_makeData(model.ffi()) };
         assert!(!data_ptr.is_null(), "allocation of MjData failed");
@@ -106,7 +106,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjJointDataInfo::view`].
     /// # Panics
-    /// When the `name` contains \0' characters, a panic occurs.
+    /// When the `name` contains '\0' characters, a panic occurs.
     pub fn joint(&self, name: &str) -> Option<MjJointDataInfo> {
         let c_name = CString::new(name).unwrap();
         let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_JOINT as i32, c_name.as_ptr())};
@@ -489,13 +489,14 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Initialize actuator history buffer (wraps `mj_initCtrlHistory`).
-    /// - `times`: optional array of length `nsample` (use NULL to keep existing timestamps)
-    /// - `values`: array of length `nsample` containing control values
+    /// Initializes the actuator history buffer for actuator `id` (wraps `mj_initCtrlHistory`).
+    /// - `times`: optional slice of length `nsample` containing timestamps; pass `None` to keep existing timestamps.
+    /// - `values`: slice of length `nsample` containing control values.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error if the `id` is invalid, the actuator has no history buffer, or slice lengths mismatch `nsample`.
+    /// - [`ErrorKind::NotFound`] if `id >= nu` (actuator not found) or the actuator has no history buffer.
+    /// - [`ErrorKind::InvalidInput`] if `times` or `values` have the wrong length.
     pub fn init_ctrl_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum]) -> io::Result<()> {
         let nu = self.model.ffi().nu as usize;
         if id >= nu {
@@ -528,13 +529,15 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Initialize sensor history buffer (wraps `mj_initSensorHistory`).
-    /// - `times`: optional array of length `nsample` (use NULL to keep existing timestamps)
-    /// - `values`: array of length `nsample * dim` containing sensor values
+    /// Initializes the sensor history buffer for sensor `id` (wraps `mj_initSensorHistory`).
+    /// - `times`: optional slice of length `nsample` containing timestamps; pass `None` to keep existing timestamps.
+    /// - `values`: slice of length `nsample * dim` containing sensor values.
+    /// - `phase`: time phase offset.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error if the `id` is invalid, the sensor has no history buffer, or slice lengths mismatch.
+    /// - [`ErrorKind::NotFound`] if `id >= nsensor` or the sensor has no history buffer.
+    /// - [`ErrorKind::InvalidInput`] if `times` or `values` have the wrong length.
     pub fn init_sensor_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum], phase: MjtNum) -> io::Result<()> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
@@ -570,12 +573,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Read control history value for actuator `id` at `time`.
-    /// `interp` is passed through to `mj_readCtrl` (-1=use the actuator’s interp value, 0=no interpolation, 1=piecewise linear , 2=cubic Spline).
+    /// Reads the control history value for actuator `id` at `time`.
+    /// `interp` controls interpolation: `-1` = use the actuator's stored interp setting,
+    /// `0` = zero-order hold, `1` = piecewise linear, `2` = cubic spline.
     /// # Returns
     /// On success, returns the interpolated control value.
     /// # Errors
-    /// Returns `Err(ErrorKind::NotFound)` when `id` is out of range.
+    /// Returns [`ErrorKind::NotFound`] when `id >= nu`.
     pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<MjtNum> {
         let nu = self.model.ffi().nu as usize;
         if id >= nu {
@@ -585,12 +589,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(val)
     }
 
-    /// Read sensor value(s) for sensor `id` at `time`.
-    /// `interp` is forwarded to `mj_readSensor` (-1=use the actuator’s interp value, 0=no interpolation, 1=piecewise linear , 2=cubic Spline).
+    /// Reads the sensor value(s) for sensor `id` at `time`.
+    /// `interp` controls interpolation: `-1` = use the sensor's stored interp setting,
+    /// `0` = zero-order hold, `1` = piecewise linear, `2` = cubic spline.
     /// # Returns
-    /// On success, returns a `Vec<MjtNum>` containing the sensor values.
+    /// On success, returns a `Vec<MjtNum>` of length `sensor_dim[id]` containing the sensor values.
     /// # Errors
-    /// Returns `Err(ErrorKind::NotFound)` when `id` is out of range.
+    /// Returns [`ErrorKind::NotFound`] when `id >= nsensor`.
     pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<Vec<MjtNum>> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
@@ -610,7 +615,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
     }
 
-    /// Add contact to d->contact list; return 0 if success; 1 if buffer full.
+    /// Adds a contact to the contact list.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
@@ -794,7 +799,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Map from body local to global Cartesian coordinates, sameframe takes values from [`MjtSameFrame`].
     /// Returns (global position, global orientation matrix).
-    /// Wraps ``mj_local2Global``.
+    /// Wraps `mj_local2Global`.
     pub fn local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: i32, sameframe: MjtSameFrame) -> ([MjtNum; 3], [MjtNum; 9]) {
         /* Create uninitialized because this gets filled by the function. */
         let mut xpos: [MjtNum; 3] =  [0.0; 3];

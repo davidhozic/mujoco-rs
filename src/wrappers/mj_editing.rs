@@ -213,7 +213,7 @@ impl MjSpec {
         }
     }
 
-    /// Parse and create a [`MjSpec`] from `filename`
+    /// Parse and create a [`MjSpec`] from `filename`.
     /// The `content_type` controls the decoder to use.
     /// This is a wrapper around low-level method [`mj_parse`].
     /// # Returns
@@ -237,7 +237,7 @@ impl MjSpec {
         Self::from_parse_file(filename, content_type, Some(vfs))
     }
 
-    /// Parse and create a [`MjSpec`] from `filename`
+    /// Parse and create a [`MjSpec`] from `filename`.
     /// The `content_type` controls the decoder to use.
     /// This is a wrapper around low-level method [`mj_parse`].
     /// # Panics
@@ -302,13 +302,13 @@ impl MjSpec {
         })
     }
 
-    /// Save spec to an XML file.
+    /// Saves the spec to an XML file.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error if there are issues writing to the file.
+    /// Returns [`ErrorKind::Other`] with MuJoCo's error message if saving fails.
     /// # Panics
-    /// When the `filename` contains '\0' characters, a panic occurs.
+    /// When `filename` contains '\0' characters, a panic occurs.
     pub fn save_xml(&self, filename: &str) -> Result<(), Error> {
         let mut error_buff = [0; 100];
         let cname = CString::new(filename).unwrap();  // filename is always UTF-8
@@ -326,12 +326,13 @@ impl MjSpec {
         }
     }
 
-    /// Save spec to an XML string. The `buffer_size` controls
-    /// how much space is allocated for conversion.
+    /// Saves the spec to an XML string.
+    /// `buffer_size` controls how many bytes are allocated for the output.
     /// # Returns
     /// On success, returns the generated XML string.
     /// # Errors
-    /// Returns an error if the conversion fails or the string contains invalid data.
+    /// Returns [`ErrorKind::Other`] with MuJoCo's error message if the conversion fails.
+    /// If `buffer_size` is too small, the output will be truncated.
     pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, Error> {
         let mut error_buff = [0; 100];
         let mut result_buff = vec![0u8; buffer_size];
@@ -468,6 +469,7 @@ pub struct MjsSpecItemIterMut<'a, T> {
     item_type: PhantomData<T>
 }
 
+/// Immutable iterator over items in [`MjSpec`].
 pub struct MjsSpecItemIter<'a, T> {
     root: &'a MjSpec,
     last: *mut mjsElement,

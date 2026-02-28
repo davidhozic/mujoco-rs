@@ -4,7 +4,7 @@
 //! mainly encapsulate some C structs or just rename them to match the Rust's PascalCase style.
 //! 
 //! The main structs are [`wrappers::mj_model::MjModel`] and [`wrappers::mj_data::MjData`].
-//! These two structs (and some other) wrap the C structure in order to achieve memory safety.
+//! These two structs (and some others) wrap the C structure in order to achieve memory safety.
 //! 
 //! Their fields aren't publicly exposed and can instead be manipulated through views
 //! (e.g., [`MjData::joint`](wrappers::mj_data::MjData::joint) and then [`wrappers::mj_data::MjJointDataInfo::view`]).
@@ -24,7 +24,7 @@
 //! **load-time errors** about **missing libraries**.
 //! 
 //! Information on how to configure MuJoCo and resolve these issues is available
-//! [here](https://mujoco-rs.readthedocs.io/en/v2.1.x/installation.html#mujoco).
+//! [here](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco).
 //! 
 //! ## 3D viewer
 //! The Rust-native viewer is available ([`viewer::MjViewer`]), as well as the MuJoCo's original C++
@@ -53,18 +53,18 @@
 //!
 //! - `cpp-viewer`: enables the Rust wrapper around the C++ MuJoCo viewer.
 //!   This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking).
-//! - ``renderer``: enables offscreen rendering for writing RGB and
+//! - `renderer`: enables offscreen rendering for writing RGB and
 //!   depth data to memory or file.
 //!
 //!   - `renderer-winit-fallback`: enables the invisible window fallback (based on winit) when offscreen
 //!     rendering fails to initialize. Note that true offscreen rendering is only available on Linux platforms
 //!     when the video driver supports it. On Windows and MacOS, this feature must always be
-//!     enabled when the ``renderer`` feature is enabled.
+//!     enabled when the `renderer` feature is enabled.
 //!
 //! - `auto-download-mujoco`: MuJoCo dependency will be automatically downloaded to the specified path.
 //!
 //!   - This is only available on Linux and Windows.
-//!   - The environmental variable ``MUJOCO_DOWNLOAD_DIR`` must be set to the absolute path of the download location.
+//!   - The environmental variable `MUJOCO_DOWNLOAD_DIR` must be set to the absolute path of the download location.
 //!   - Downloaded MuJoCo library is still a shared library. See
 //!     [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco)
 //!     for information on complete configuration.

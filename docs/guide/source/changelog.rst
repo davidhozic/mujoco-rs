@@ -30,6 +30,8 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
   - Regenerated C FFI bindings to match MuJoCo 3.5.0.
   - Updated Rust API wrappers for compatibility with MuJoCo 3.5.0.
   - Several constructors and I/O methods now return `Result <https://doc.rust-lang.org/std/result/>`_ for safer error handling.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>update_local_pos`
+    now takes ``selection_xyz`` by reference (``&[MjtNum; 3]``) instead of by value.
   - Removed deprecated methods:
 
     - |mj_data|: ``warning_stats``, ``timer_stats``, ``maxuse_threadstack``,
@@ -107,6 +109,12 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
 
   - Module :docs-rs:`~mujoco_rs::mujoco_c` now uses compile-time layout tests to ensure
     declarations match the platform ABI of the linked MuJoCo library.
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>update_local_pos`
+    now uses bounds-checked slice indexing into |mj_data| for ``xpos`` and ``xmat`` instead of
+    raw pointer arithmetic. An invalid ``select`` index now triggers a ``debug_assert!`` and
+    panics via Rust's bounds checker instead of causing undefined behavior.
+    In release mode, slice index will panic instead of the ``debug_assert!``.
 
 - Other changes:
 

@@ -23,10 +23,10 @@ pub type MjtMouse = mjtMouse;
 
 /// These bitmasks enable the translational and rotational components of the mouse perturbation. For the regular mouse,
 /// only one can be enabled at a time. For the 3D mouse (SpaceNavigator) both can be enabled simultaneously. They are used
-/// in ``mjvPerturb.active``.
+/// in `mjvPerturb.active`.
 pub type MjtPertBit = mjtPertBit;
 
-/// These are the possible camera types, used in ``mjvCamera.type``.
+/// These are the possible camera types, used in `mjvCamera.type`.
 pub type MjtCamera = mjtCamera;
 impl TryFrom<i32> for MjtCamera {
     type Error = ();
@@ -41,20 +41,20 @@ impl TryFrom<i32> for MjtCamera {
     }
 }
 
-/// These are the abstract visualization elements that can have text labels. Used in ``mjvOption.label``.
+/// These are the abstract visualization elements that can have text labels. Used in `mjvOption.label`.
 pub type MjtLabel = mjtLabel;
 
-/// These are the MuJoCo objects whose spatial frames can be rendered. Used in ``mjvOption.frame``.
+/// These are the MuJoCo objects whose spatial frames can be rendered. Used in `mjvOption.frame`.
 pub type MjtFrame = mjtFrame;
 
-/// These are indices in the array ``mjvOption.flags``, whose elements enable/disable the visualization of the
+/// These are indices in the array `mjvOption.flags`, whose elements enable/disable the visualization of the
 /// corresponding model or decoration element.
 pub type MjtVisFlag = mjtVisFlag;
 
-/// These are indices in the array ``mjvScene.flags``, whose elements enable/disable OpenGL rendering effects.
+/// These are indices in the array `mjvScene.flags`, whose elements enable/disable OpenGL rendering effects.
 pub type MjtRndFlag = mjtRndFlag;
 
-/// These are the possible stereo rendering types. They are used in ``mjvScene.stereo``.
+/// These are the possible stereo rendering types. They are used in `mjvScene.stereo`.
 pub type MjtStereo = mjtStereo;
 /**********************************************************************************************************************/
 
@@ -73,6 +73,8 @@ impl Default for MjvPerturb {
 }
 
 impl MjvPerturb {
+    /// Initializes the perturbation state for mouse interaction of the given `type_`.
+    /// Must be called before [`MjvPerturb::move_`].
     pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, model: &MjModel, data: &mut MjData<M>, scene: &MjvScene<M>) {
         unsafe { mjv_initPerturb(model.ffi(), data.ffi_mut(), scene.ffi(), self); }
         self.active = type_ as i32;
@@ -83,6 +85,12 @@ impl MjvPerturb {
         unsafe { mjv_movePerturb(model.ffi(), data.ffi(), action as i32, dx, dy, scene.ffi(), self); }
     }
 
+    /// Apply perturbation pose and force.
+    ///
+    /// # Note
+    /// This method **zeroes `xfrc_applied`** for all bodies before applying the perturbation
+    /// force. Any external forces set on `data` before calling this method will be cleared.
+    /// If you need to preserve external forces, apply them *after* calling this method.
     pub fn apply<M: Deref<Target = MjModel>>(&mut self, model: &MjModel, data: &mut MjData<M>) {
         unsafe {
             mju_zero(data.ffi_mut().xfrc_applied, 6 * model.ffi().nbody as i32);
@@ -91,12 +99,17 @@ impl MjvPerturb {
         }
     }
 
-    pub fn update_local_pos<M: Deref<Target = MjModel>>(&mut self, selection_xyz: [MjtNum; 3], data: &MjData<M>) {
+    /// Updates the body-local position of the selection point.
+    pub fn update_local_pos<M: Deref<Target = MjModel>>(&mut self, selection_xyz: &[MjtNum; 3], data: &MjData<M>) {
         let mut tmp = [0.0; 3];
-        let data_ffi = data.ffi();
-        unsafe { 
-            mju_sub3(&mut tmp, &selection_xyz, data_ffi.xpos.add(3 * self.select as usize) as *const [MjtNum; 3]);
-            mju_mulMatTVec(self.localpos.as_mut_ptr(), data_ffi.xmat.add(9 * self.select as usize), tmp.as_ptr(), 3, 3);
+        debug_assert!(self.select >= 0, "invalid selecting when calling update_local_pos");
+        let select = self.select as usize;
+        let body_xpos = &data.xpos()[select];
+        let body_xmat = &data.xmat()[select];
+        // Inverse transform into the local frame of the body.
+        unsafe {
+            mju_sub3(&mut tmp, selection_xyz, body_xpos);
+            mju_mulMatTVec3(&mut self.localpos, body_xmat, &tmp);
         }
     }
 }
@@ -229,14 +242,14 @@ impl MjvGeom {
         }
     }
 
-    /// Compatibility method to convert the ``label`` attribute into a ``String``.
+    /// Compatibility method to convert the `label` attribute into a `String`.
     pub fn label(&self) -> String {
         let len = self.label.iter().position(|&c| c == 0).unwrap_or(self.label.len());
         let bytes = unsafe { std::slice::from_raw_parts(self.label.as_ptr() as *const u8, len) };
         String::from_utf8_lossy(bytes).to_string()
     }
 
-    /// Compatibility method to convert the ``s`` parameter into an array that is copied to the ``label`` attribute.
+    /// Compatibility method to convert the `s` parameter into an array that is copied to the `label` attribute.
     pub fn set_label(&mut self, s: &str) {
         assert!(s.len() < self.label.len());
         for (i, &b) in s.as_bytes().iter().enumerate() {
@@ -303,7 +316,7 @@ impl MjvFigure {
         flg_extend: bool; "whether to automatically extend axis ranges to fit data.";
         flg_barplot: bool; "whether to isolate line segments.";
         flg_selection: bool; "whether to show vertical selection line.";
-        flg_symmetric: bool; "whether to make y-axis symmetric";
+        flg_symmetric: bool; "whether to make y-axis symmetric.";
     ]}
 
     // style settings
@@ -321,9 +334,9 @@ impl MjvFigure {
     c_str_as_str_method! {with, get, set {
         xlabel; "the x-axis label.";
         title; "the title.";
-        xformat; " the x-axis C's printf format (e.g., `%.1f`).";
-        yformat; " the y-axis C's printf format (e.g., `%.1f`).";
-        linename [plot_index: usize]; " the line name of plot with `plot_index`.";
+        xformat; "the x-axis C's printf format (e.g., `%.1f`).";
+        yformat; "the y-axis C's printf format (e.g., `%.1f`).";
+        linename [plot_index: usize]; "the line name of plot with `plot_index`.";
     }}
 }
 
@@ -424,7 +437,7 @@ impl MjvFigure {
         self.linepnt[plot_index] -= n as i32;
     }
 
-    /// Cuts last first `n` elements from the plot data of plot with `plot_index`.
+    /// Cuts the last `n` elements from the plot data of plot with `plot_index`.
     pub fn cut_end(&mut self, plot_index: usize, n: usize) {
         let len = self.linepnt[plot_index];
         if len < 0 || (len as usize) < n {
@@ -441,7 +454,7 @@ impl MjvFigure {
 /// 3D scene visualization.
 /// This struct provides a way to render visual-only geometry.
 /// To prevent changes of array sizes in [`MjModel`], which can lead to overflows,
-/// a immutable reference is stored inside this struct.
+/// an immutable reference is stored inside this struct.
 #[derive(Debug)]
 pub struct MjvScene<M: Deref<Target = MjModel>> {
     ffi: Box<mjvScene>,
@@ -449,6 +462,7 @@ pub struct MjvScene<M: Deref<Target = MjModel>> {
 }
 
 impl<M: Deref<Target = MjModel>> MjvScene<M> {
+    /// Creates a new scene for `model`, allocating space for up to `max_geom` geoms.
     pub fn new(model: M, max_geom: usize) -> Self {
         let scn = unsafe {
             let mut t = Box::new_uninit();
@@ -462,6 +476,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
         }
     }
 
+    /// Updates the scene from the current simulation state in `data`.
     pub fn update(&mut self, data: &mut MjData<M>, opt: &MjvOption, pertub: &MjvPerturb, cam: &mut MjvCamera) {
         unsafe {
             mjv_updateScene(
@@ -539,6 +554,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
         (body_id, geom_id, flex_id, skin_id, selpnt)
     }
 
+    /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjvScene {
         &self.ffi
     }
