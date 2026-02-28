@@ -227,11 +227,12 @@ impl MjModel {
         unsafe { Self::check_raw_model(ptr, &[0]) }
     }
 
-    /// Saves the last XML loaded.
+    /// Saves the last loaded XML to `filename`.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an IO error if there are issues saving the file, or if the filename contains invalid characters.
+    /// - Returns [`std::ffi::NulError`] if `filename` contains an interior `'\0'` character.
+    /// - Returns [`io::ErrorKind::Other`] with MuJoCo's error message if saving fails.
     pub fn save_last_xml(&self, filename: &str) -> io::Result<()> {
         let mut error = [0i8; 100];
         unsafe {
@@ -257,7 +258,7 @@ impl MjModel {
         }
     }
 
-    /// Creates a new [`MjData`] instances linked to this model.
+    /// Creates a new [`MjData`] instance linked to this model.
     pub fn make_data(&self) -> MjData<&Self> {
         MjData::new(self)
     }

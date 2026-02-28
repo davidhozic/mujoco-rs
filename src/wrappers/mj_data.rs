@@ -489,13 +489,14 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Initialize actuator history buffer (wraps `mj_initCtrlHistory`).
-    /// - `times`: optional array of length `nsample` (use NULL to keep existing timestamps)
-    /// - `values`: array of length `nsample` containing control values
+    /// Initializes the actuator history buffer for actuator `id` (wraps `mj_initCtrlHistory`).
+    /// - `times`: optional slice of length `nsample` containing timestamps; pass `None` to keep existing timestamps.
+    /// - `values`: slice of length `nsample` containing control values.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error if the `id` is invalid, the actuator has no history buffer, or slice lengths mismatch `nsample`.
+    /// - [`ErrorKind::NotFound`] if `id >= nu` (actuator not found) or the actuator has no history buffer.
+    /// - [`ErrorKind::InvalidInput`] if `times` or `values` have the wrong length.
     pub fn init_ctrl_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum]) -> io::Result<()> {
         let nu = self.model.ffi().nu as usize;
         if id >= nu {
@@ -528,13 +529,15 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Initialize sensor history buffer (wraps `mj_initSensorHistory`).
-    /// - `times`: optional array of length `nsample` (use NULL to keep existing timestamps)
-    /// - `values`: array of length `nsample * dim` containing sensor values
+    /// Initializes the sensor history buffer for sensor `id` (wraps `mj_initSensorHistory`).
+    /// - `times`: optional slice of length `nsample` containing timestamps; pass `None` to keep existing timestamps.
+    /// - `values`: slice of length `nsample * dim` containing sensor values.
+    /// - `phase`: time phase offset.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error if the `id` is invalid, the sensor has no history buffer, or slice lengths mismatch.
+    /// - [`ErrorKind::NotFound`] if `id >= nsensor` or the sensor has no history buffer.
+    /// - [`ErrorKind::InvalidInput`] if `times` or `values` have the wrong length.
     pub fn init_sensor_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum], phase: MjtNum) -> io::Result<()> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
@@ -570,12 +573,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Read control history value for actuator `id` at `time`.
-    /// `interp` is passed through to `mj_readCtrl` (-1=use the actuator’s interp value, 0=no interpolation, 1=piecewise linear , 2=cubic Spline).
+    /// Reads the control history value for actuator `id` at `time`.
+    /// `interp` controls interpolation: `-1` = use the actuator's stored interp setting,
+    /// `0` = zero-order hold, `1` = piecewise linear, `2` = cubic spline.
     /// # Returns
     /// On success, returns the interpolated control value.
     /// # Errors
-    /// Returns `Err(ErrorKind::NotFound)` when `id` is out of range.
+    /// Returns [`ErrorKind::NotFound`] when `id >= nu`.
     pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<MjtNum> {
         let nu = self.model.ffi().nu as usize;
         if id >= nu {
@@ -585,12 +589,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(val)
     }
 
-    /// Read sensor value(s) for sensor `id` at `time`.
-    /// `interp` is forwarded to `mj_readSensor` (-1=use the actuator’s interp value, 0=no interpolation, 1=piecewise linear , 2=cubic Spline).
+    /// Reads the sensor value(s) for sensor `id` at `time`.
+    /// `interp` controls interpolation: `-1` = use the sensor's stored interp setting,
+    /// `0` = zero-order hold, `1` = piecewise linear, `2` = cubic spline.
     /// # Returns
-    /// On success, returns a `Vec<MjtNum>` containing the sensor values.
+    /// On success, returns a `Vec<MjtNum>` of length `sensor_dim[id]` containing the sensor values.
     /// # Errors
-    /// Returns `Err(ErrorKind::NotFound)` when `id` is out of range.
+    /// Returns [`ErrorKind::NotFound`] when `id >= nsensor`.
     pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<Vec<MjtNum>> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
@@ -610,7 +615,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
     }
 
-    /// Add contact to d->contact list; return 0 if success; 1 if buffer full.
+    /// Adds a contact to the contact list.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors

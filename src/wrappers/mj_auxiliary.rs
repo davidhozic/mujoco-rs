@@ -70,11 +70,13 @@ impl MjVfs {
         }
     }
 
-    /// Adds a file to the virtual file system.
+    /// Adds a file from disk to the virtual file system.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error if the file already exists or fails to load.
+    /// - [`ErrorKind::StorageFull`] if the VFS has no more room.
+    /// - [`ErrorKind::AlreadyExists`] if a file with the same name already exists in the VFS.
+    /// - [`ErrorKind::InvalidData`] if the file could not be loaded.
     /// # Panics
     /// A panic will occur if `directory` or `filename` contain `\0` characters.
     pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> io::Result<()> {
@@ -89,11 +91,14 @@ impl MjVfs {
         })
     }
 
-    /// Adds a file to the virtual file system from a buffer.
+    /// Adds a file to the virtual file system from a byte buffer.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error if the file already exists or fails to load.
+    /// - [`ErrorKind::StorageFull`] if the VFS has no more room.
+    /// - [`ErrorKind::AlreadyExists`] if a file with the same name already exists in the VFS.
+    /// - [`ErrorKind::InvalidData`] if MuJoCo fails to register the buffer.
+    /// - [`ErrorKind::Other`] other unknown errors.
     /// # Panics
     /// When the `filename` contains '\0' characters, a panic occurs.
     pub fn add_from_buffer(&mut self, filename: &str, buffer: &[u8]) -> io::Result<()> {
@@ -132,13 +137,16 @@ impl MjVfs {
         }
     }
 
-    /// Mounts a directory into the VFS.
+    /// Mounts a directory into the VFS so its files become accessible by name.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error if the mount fails.
+    /// - [`ErrorKind::StorageFull`] if the VFS has no more room.
+    /// - [`ErrorKind::AlreadyExists`] if the directory is already mounted under the same name.
+    /// - [`ErrorKind::InvalidData`] if the mount operation fails for another reason.
+    /// - [`ErrorKind::Other`] other unknown errors.
     /// # Panics
-    /// When `filepath` contain `\0` characters, a panic occurs.
+    /// When `filepath` contains `\0` characters, a panic occurs.
     pub fn mount(&mut self, filepath: &str) -> io::Result<()> {
         let c_filepath = CString::new(filepath).unwrap();
         Self::handle_add_result(unsafe {
@@ -150,11 +158,12 @@ impl MjVfs {
         })
     }
 
-    /// Unmounts a directory from the VFS.
+    /// Unmounts a previously mounted directory from the VFS.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error if the directory is not mounted.
+    /// - [`ErrorKind::NotFound`] if the directory is not currently mounted.
+    /// - [`ErrorKind::Other`] other unknown errors.
     /// # Panics
     /// When `mountdir` contains `\0` characters, a panic occurs.
     pub fn unmount(&mut self, mountdir: &str) -> io::Result<()> {
