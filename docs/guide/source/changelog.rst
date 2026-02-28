@@ -112,6 +112,10 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
   - Added a "Print camera" button to the viewer UI that prints the current camera's position and
     orientation as an MJCF ``<camera>`` XML element to the console.
   - |mj_data| and |mj_model| views now contain extra fields.
+  - Fixed a bug where :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` methods like 
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb` and 
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` would output 
+    vertically flipped (upside down) images.
 
 - :ref:`mj_cpp_viewer`:
 
