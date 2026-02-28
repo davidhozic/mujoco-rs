@@ -316,13 +316,17 @@ macro_rules! info_with_view {
             }
 
             impl [<Mj $name:camel $info_type Info>] {
-                #[doc = "Returns a mutable view to the correct fields in [`Mj" $info_type "`]"]
+                #[doc = concat!("Returns a mutable view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
+                                "\n# Panics\n",
+                                "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
                 pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
                     assert_eq!(self.model_signature, [<$info_type:lower>].signature(), "model signature mismatch");
                     view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr $([$cast])?),*], [$($([$prefix_opt_attr])? $opt_attr $([$cast_opt])?),*], crate::util::PointerViewMut::new)
                 }
 
-                #[doc = "Returns a view to the correct fields in [`Mj" $info_type "`]"]
+                #[doc = concat!("Returns a view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
+                                "\n# Panics\n",
+                                "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
                 pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
                     assert_eq!(self.model_signature, [<$info_type:lower>].signature(), "model signature mismatch");
                     view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr $([$cast])?),*], [$($([$prefix_opt_attr])? $opt_attr $([$cast_opt])?),*], crate::util::PointerView::new)
