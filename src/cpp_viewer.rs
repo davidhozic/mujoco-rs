@@ -6,6 +6,24 @@ use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
 
+#[repr(C)]
+struct mujoco_Simulate { _unused: [u8; 0] }
+
+unsafe extern "C" {
+    fn mujoco_cSimulate_create(
+        cam: *mut mjvCamera,
+        opt: *mut mjvOption,
+        pert: *mut mjvPerturb,
+        user_scn: *mut mjvScene,
+    ) -> *mut mujoco_Simulate;
+    fn mujoco_cSimulate_RenderInit(sim: *mut mujoco_Simulate);
+    fn mujoco_cSimulate_Load(sim: *mut mujoco_Simulate, m: *mut mjModel_, d: *mut mjData_, displayed_filename: *const std::os::raw::c_char);
+    fn mujoco_cSimulate_RenderStep(sim: *mut mujoco_Simulate) -> std::os::raw::c_int;
+    fn mujoco_cSimulate_Sync(sim: *mut mujoco_Simulate, state_only: bool);
+    fn mujoco_cSimulate_ExitRequest(sim: *mut mujoco_Simulate);
+    fn mujoco_cSimulate_destroy(sim: *mut mujoco_Simulate);
+}
+
 
 /// Wrapper around the C++ implementation of MujoCo viewer.
 /// If you don't need the side UI, we recommend you use the Rust-native viewer [`crate::viewer::MjViewer`] instead.
@@ -22,27 +40,23 @@ use crate::wrappers::mj_data::MjData;
 /// while the viewer keeps a pointer to them (their wrapped pointers).
 /// Undefined behavior should not occur, however caution is advised as this is a violation
 /// of the Rust's borrowing rules.
-pub struct MjViewerCpp<M: Deref<Target = MjModel> + Clone> {
+pub struct MjViewerCpp<M: Deref<Target = MjModel> + Clone + Send + Sync> {
     sim: *mut mujoco_Simulate,
     running: bool,
 
-    // Store these here since the C++ bindings save references to them.
-    // We don't actually need them ourselves, at least not here.
+    user_scn: Box<MjvScene<M>>,
     _cam: Box<MjvCamera>,
     _opt: Box<MjvOption>,
     _pert: Box<MjvPerturb>,
-    _user_scn: Box<MjvScene<M>>,
 }
 
-impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
-    #[inline]
+impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
     pub fn running(&self) -> bool {
         self.running
     }
 
-    #[inline]
     pub fn user_scn_mut(&mut self) -> &mut MjvScene<M> {
-        &mut self._user_scn
+        &mut self.user_scn
     }
 
     /// Launches a wrapper around MuJoCo's C++ viewer. The `max_user_geom` parameter
@@ -56,37 +70,48 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
     /// See [`MjViewerCpp`]'s note.
     pub fn launch_passive(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
         // Allocate on the heap as the data must not be moved due to C++ bindings
-        let mut _cam = Box::new(MjvCamera::default());
-        let mut _opt: Box<MjvOption> = Box::new(MjvOption::default());
-        let mut _pert = Box::new(MjvPerturb::default());
-        let mut _user_scn = Box::new(MjvScene::new(model.clone(), max_user_geom));
-        let sim;
-        let c_filename = CString::new("file.xml").unwrap();
-        unsafe {
-            sim = mujoco_cSimulate_create(&mut *_cam, &mut *_opt, &mut *_pert, _user_scn.ffi_mut(), true);
-            mujoco_cSimulate_RenderInit(sim);
-            mujoco_cSimulate_Load(sim, model.__raw(), data.__raw(), c_filename.as_ptr());
-            mujoco_cSimulate_RenderStep(sim, true);
+        let mut cam = Box::new(MjvCamera::default());
+        let mut opt: Box<MjvOption> = Box::new(MjvOption::default());
+        let mut pert = Box::new(MjvPerturb::default());
+        let mut user_scn = Box::new(MjvScene::new(model.clone(), max_user_geom));
+
+        let sim = unsafe { mujoco_cSimulate_create(&mut *cam, &mut *opt, &mut *pert, user_scn.ffi_mut()) };
+        let sim_usize = sim as usize;
+
+        let model_raw = unsafe { model.__raw() };
+        let data_raw = unsafe { data.__raw() };
+        let model_usize = model_raw as usize;
+        let data_usize = data_raw as usize;
+
+        unsafe { mujoco_cSimulate_RenderInit(sim) };
+
+        // Load on another thread, since the viewer internally blocks until loaded.
+        // This is intentional and is the intended way of using the C++ viewer.
+        let load_thread = std::thread::spawn(move || {
+            let sim = sim_usize as *mut mujoco_Simulate;
+            let m = model_usize as *mut mjModel_;
+            let d = data_usize as *mut mjData_;
+            let c_filename = CString::new("file.xml").unwrap();
+            unsafe { mujoco_cSimulate_Load(sim, m, d, c_filename.as_ptr()) };
+        });
+
+        while !load_thread.is_finished() {
+            unsafe { mujoco_cSimulate_RenderStep(sim) };
         }
+        load_thread.join().unwrap();
 
-        Self {sim, running: true, _cam, _opt, _pert, _user_scn}
-    }
-
-    /// Returns the underlying C++ binding object of the viewer.
-    pub fn __raw(&self) -> *mut mujoco_Simulate {
-        self.sim
+        Self {sim, running: true, user_scn, _cam: cam, _opt: opt, _pert: pert}
     }
 
     /// Renders the simulation.
-    /// `update_timer` flag specifies whether the time should be updated
-    /// inside the viewer (for FPS calculation).
+    ///
     /// # SAFETY
     /// This needs to be called periodically from the MAIN thread, otherwise
     /// GLFW stops working.
-    pub fn render(&mut self, update_timer: bool) {
+    pub fn render(&mut self) {
         unsafe {
             assert!(self.running, "render called after viewer has been closed!");
-            self.running = mujoco_cSimulate_RenderStep(self.sim, update_timer) == 1;
+            self.running = mujoco_cSimulate_RenderStep(self.sim) == 1;
         }
     }
 
@@ -99,14 +124,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerCpp<M> {
     }
 }
 
-impl<M: Deref<Target = MjModel> + Clone> Drop for MjViewerCpp<M> {
+impl<M: Deref<Target = MjModel> + Clone + Send + Sync> Drop for MjViewerCpp<M> {
     fn drop(&mut self) {
-        unsafe {
-            mujoco_cSimulate_RenderCleanup(self.sim);
+        unsafe { 
+            mujoco_cSimulate_ExitRequest(self.sim);
             mujoco_cSimulate_destroy(self.sim);
         }
     }
 }
 
-unsafe impl<M: Deref<Target = MjModel> + Clone> Send for MjViewerCpp<M> {}
-unsafe impl<M: Deref<Target = MjModel> + Clone> Sync for MjViewerCpp<M> {}
+unsafe impl<M: Deref<Target = MjModel> + Clone + Send + Sync> Send for MjViewerCpp<M> {}
+unsafe impl<M: Deref<Target = MjModel> + Clone + Send + Sync> Sync for MjViewerCpp<M> {}

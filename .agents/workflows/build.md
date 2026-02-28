@@ -1,28 +1,26 @@
 ---
-description: How to build, check, or test the mujoco-rs crate
+description: How to build the mujoco-rs library
 ---
 
-# Building / Checking / Testing mujoco-rs
+# Building MuJoCo-rs
 
-Before running any `cargo build`, `cargo check`, `cargo test`, `cargo expand`, or similar build commands, **always** export the MuJoCo library environment variables first in the same command.
+Compile the library using a pre-downloaded MuJoCo shared library in the repository.
 
 // turbo-all
 
-1. Run the build/check/test command with the required environment variables:
+1. Check `Cargo.toml` for the current MuJoCo version (look for `+mj-X.Y.Z` in the package version). Then find the matching `mujoco-X.Y.Z/` directory at the repository root.
+
+2. Build the library (replace `X.Y.Z` with the version found in step 1):
 ```bash
-export MUJOCO_DYNAMIC_LINK_DIR=$(realpath mujoco-3.5.0/lib) && export LD_LIBRARY_PATH=$(realpath mujoco-3.5.0/lib/) && <your cargo command here> > /tmp/cargo_output.txt 2>&1; echo "EXIT=$?" >> /tmp/cargo_output.txt
+export MUJOCO_DYNAMIC_LINK_DIR=$(realpath mujoco-X.Y.Z/lib) && export LD_LIBRARY_PATH=$(realpath mujoco-X.Y.Z/lib/) && cargo build --lib
 
 ```
 
-2. Read the output file to see the results:
-```
-view_file /tmp/cargo_output.txt
-```
+3. Verify that the exit code is 0 (success) — check the terminal output for errors.
 
-> [!IMPORTANT]
-> - Always prepend the two exports before any cargo command (build, check, test, expand, run, etc.).
-> - Always redirect output to a file (e.g., `> /tmp/cargo_output.txt 2>&1`) because the terminal may not capture output reliably.
-> - Always append a trailing newline **after** each command (leave an empty line after the command in the code block) to ensure the process completes.
-> - Use `--lib` when running `cargo test` to avoid compiling examples that require optional features (e.g., `cargo test --lib`).
-> - The working directory must be `/home/davidhozic/repo/mujoco-rs`.
-> - The MuJoCo version directory is `mujoco-3.5.0`. Do **not** use a glob like `mujoco-*/lib` — multiple versions may be present.
+> [!NOTE]
+> - If `.so` files are not found, read `build.rs` and `docs/guide/source/installation.rst` to understand the linking options.
+> - Read `Cargo.toml` `[features]` section to discover available features.
+> - To build with specific features: `cargo build --lib --no-default-features --features "feature1 feature2"`.
+> - To build in release mode add `--release`.
+> - `MUJOCO_DYNAMIC_LINK_DIR` must be an **absolute path** (hence `realpath`).
