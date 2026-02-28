@@ -14,18 +14,20 @@ const EXAMPLE_MODEL: &str = stringify!(
 
     <worldbody>
         <light ambient="0.2 0.2 0.2"/>
-        <body name="ball">
+        <body name="ball" pos = "0 0 1">
             <geom name="green_sphere" size=".1" rgba="0 1 0 1" mass="1"/>
             <joint name="ball" type="free"/>
             <site name="touch" size=".1 .1 .1" pos="0 0 0" rgba="0 0 0 0.0" type="box"/>
         </body>
 
         <body pos="2 0 2">
-            <geom type="box" size="1 1 1" rgba="0 1 1 1"/>
+            <geom type="box" size="1 1 1" rgba="1 0 0 1"/>
+            <geom type="box" size="0.5 0.5 0.5" rgba="0 1 0 1" pos="0 0 1"/>
+            <geom type="box" size="0.25 0.25 0.25" rgba="0 0 1 1" pos="0 0 1.5"/>
             <joint name="box" type="free"/>
         </body>
 
-        <geom name="floor" type="plane" size="10 10 1" euler="20 0 0"/>
+        <geom name="floor" type="plane" size="10 10 1" euler="10 0 0"/>
     </worldbody>
 
     <sensor>
