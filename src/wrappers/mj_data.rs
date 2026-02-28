@@ -145,7 +145,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             // cdof
             // cdof_dot
 
-            Some(MjJointDataInfo {name: name.to_string(), id: id as usize,
+            let model_signature = self.model.signature();
+            Some(MjJointDataInfo {name: name.to_string(), id: id as usize, model_signature,
                 qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
                 qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_passive,
                 qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
@@ -2094,5 +2095,19 @@ mod test {
         assert!((qfrc[dof_adr + 3] - 0.1).abs() < 1e-5);
         assert!((qfrc[dof_adr + 4] - 0.2).abs() < 1e-5);
         assert!((qfrc[dof_adr + 5] - 0.3).abs() < 1e-5);
+    }
+
+    #[test]
+    #[should_panic(expected = "model signature mismatch")]
+    fn test_signature_mismatch_panics() {
+        let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
+        let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();
+        
+        let data1 = model1.make_data();
+        let joint_info1 = data1.joint("j1").unwrap();
+        
+        // This should panic because joint_info1 was created from model1, but we are viewing it with model2/data2
+        let data2 = model2.make_data();
+        let _view = joint_info1.view(&data2);
     }
 }
