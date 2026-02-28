@@ -93,7 +93,7 @@ impl MjvPerturb {
     /// If you need to preserve external forces, apply them *after* calling this method.
     pub fn apply<M: Deref<Target = MjModel>>(&mut self, model: &MjModel, data: &mut MjData<M>) {
         unsafe {
-            mju_zero(data.ffi_mut().xfrc_applied, 6 * model.ffi().nbody as i32);
+            data.xfrc_applied_mut().fill([0.0; 6]);
             mjv_applyPerturbPose(model.ffi(), data.ffi_mut(), self, 0);
             mjv_applyPerturbForce(model.ffi(), data.ffi_mut(), self);
         }

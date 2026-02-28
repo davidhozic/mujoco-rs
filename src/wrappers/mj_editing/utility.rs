@@ -510,7 +510,7 @@ macro_rules! item_body_iterator {
                 fn new(root: &'a MjsBody, recurse: bool) -> Self {
                     // we cast to *mut MjsBody because mjs_firstChild requires a mutable pointer, but it doesn't
                     // actually mutate anything, so it's safe.
-                    let last = unsafe { mjs_firstChild(root as *const MjsBody as *mut MjsBody, MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
+                    let last = unsafe { mjs_firstChild($crate::util::force_cast(root), MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
                     Self { root, last, recurse, item_type: PhantomData }
                 }
             }
@@ -542,7 +542,7 @@ macro_rules! item_body_iterator {
                     unsafe {
                         let out = [<mjs_as $iter_over>](self.last).as_ref();
                         // mjs_nextChild doesn't actually modify, but still demands a mutable pointer
-                        self.last = mjs_nextChild(self.root as *const MjsBody as *mut MjsBody, self.last, self.recurse.into());
+                        self.last = mjs_nextChild($crate::util::force_cast(self.root), self.last, self.recurse.into());
                         out
                     }
                 }
