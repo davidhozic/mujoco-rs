@@ -1,4 +1,4 @@
-//! Utility related data
+//! Utility types and macros used throughout the crate.
 use std::{marker::PhantomData, ops::{Deref, DerefMut}};
 use std::sync::{Mutex, MutexGuard};
 

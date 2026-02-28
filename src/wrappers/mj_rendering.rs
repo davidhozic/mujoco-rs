@@ -34,6 +34,8 @@ pub type MjtFont = mjtFont;
 ***********************************************************************************************************************/
 pub type MjrRectangle = mjrRect;
 impl MjrRectangle {
+    /// Creates a new rectangle defined by its bottom-left corner (`left`, `bottom`) and
+    /// its `width` and `height` in pixels.
     pub fn new(left: i32, bottom: i32, width: i32, height: i32) -> Self {
         Self {
             left,
@@ -60,6 +62,8 @@ pub struct MjrContext {
 }
 
 impl MjrContext {
+    /// Creates and initializes a new rendering context for `model`.
+    /// The font scale defaults to 100 %.
     pub fn new(model: &MjModel) -> Self {
         unsafe {
             let mut c = Box::new_uninit();
@@ -110,6 +114,8 @@ impl MjrContext {
         unsafe { mjr_restoreBuffer(self.ffi_mut()); }
     }
 
+    /// Sets the active OpenGL framebuffer to the given raw `framebuffer` id.
+    /// Prefer [`MjrContext::offscreen`] or [`MjrContext::window`] for the common cases.
     pub fn mjr_set_buffer(&mut self, framebuffer: i32) {
         unsafe { mjr_setBuffer(framebuffer, self.ffi_mut()); }
     }
@@ -158,6 +164,7 @@ impl MjrContext {
         ); }
     }
 
+    /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjrContext {
         &self.ffi
     }

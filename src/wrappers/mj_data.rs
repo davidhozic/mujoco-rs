@@ -64,7 +64,7 @@ unsafe impl<M: Deref<Target = MjModel>> Sync for MjData<M> {}
 
 
 impl<M: Deref<Target = MjModel>> MjData<M> {
-    /// Constructor for a new MjData. This should is called from MjModel.
+    /// Creates a new [`MjData`] linked to `model`.
     pub fn new(model: M) -> Self {
         let data_ptr = unsafe { mj_makeData(model.ffi()) };
         assert!(!data_ptr.is_null(), "allocation of MjData failed");
@@ -106,7 +106,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// indices required for obtaining a slice view to the correct locations in [`MjData`].
     /// The actual view can be obtained via [`MjJointDataInfo::view`].
     /// # Panics
-    /// When the `name` contains \0' characters, a panic occurs.
+    /// When the `name` contains '\0' characters, a panic occurs.
     pub fn joint(&self, name: &str) -> Option<MjJointDataInfo> {
         let c_name = CString::new(name).unwrap();
         let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_JOINT as i32, c_name.as_ptr())};

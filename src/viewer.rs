@@ -96,6 +96,7 @@ const HELP_MENU_VALUES: &str = concat!(
     "See MjViewer docs"
 );
 
+/// Errors that can occur when initializing the MuJoCo viewer.
 #[derive(Debug)]
 pub enum MjViewerError {
     EventLoopError(winit::error::EventLoopError),
@@ -1165,6 +1166,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
 }
 
 impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
+    /// Creates a [`MjViewerBuilder`] with default settings.
     pub fn new() -> Self {
         Self { 
             window_name: Cow::Owned(format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version())),
@@ -1262,6 +1264,7 @@ impl<M: Deref<Target = MjModel> + Clone> Default for MjViewerBuilder<M> {
 }
 
 bitflags! {
+    /// Internal bit-flags that track the visibility state of various on-screen overlays.
     #[derive(Debug)]
     struct ViewerStatusBit: u8 {
         const HELP = 1 << 0;

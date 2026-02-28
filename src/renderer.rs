@@ -71,6 +71,7 @@ impl GlState {
         Err(RendererError::GlutinError(egl_err))
     }
 
+    /// Makes the internal OpenGL context current for the calling thread.
     pub(crate) fn make_current(&self) -> glutin::error::Result<()> {
         match self {
             #[cfg(target_os = "linux")]
@@ -604,6 +605,7 @@ fn flip_image_vertically<T>(buffer: &mut [T], height: usize, row_len: usize) {
     }
 }
 
+/// Errors that can occur during renderer initialization.
 #[derive(Debug)]
 pub enum RendererError {
     #[cfg(feature = "renderer-winit-fallback")]

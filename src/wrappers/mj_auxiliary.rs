@@ -61,6 +61,7 @@ pub struct MjVfs {
 }
 
 impl MjVfs {
+    /// Creates a new, empty virtual file system.
     pub fn new() -> Self {
         unsafe {
             let mut maybe_uninit = Box::new_uninit();
@@ -124,6 +125,7 @@ impl MjVfs {
     fn handle_add_result(result: i32) -> io::Result<()> {
         match result {
             0 => Ok(()),
+            1 => Err(Error::new(ErrorKind::StorageFull, "VFS is full")),
             2 => Err(Error::new(ErrorKind::AlreadyExists, "repeated name")),
             -1 => Err(Error::new(ErrorKind::InvalidData, "failed to load")),
             _ => Err(Error::new(ErrorKind::Other, "unknown MuJoCo error"))

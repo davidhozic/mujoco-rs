@@ -73,6 +73,8 @@ impl Default for MjvPerturb {
 }
 
 impl MjvPerturb {
+    /// Initializes the perturbation state for mouse interaction of the given `type_`.
+    /// Must be called before [`MjvPerturb::move_`].
     pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, model: &MjModel, data: &mut MjData<M>, scene: &MjvScene<M>) {
         unsafe { mjv_initPerturb(model.ffi(), data.ffi_mut(), scene.ffi(), self); }
         self.active = type_ as i32;
@@ -84,6 +86,11 @@ impl MjvPerturb {
     }
 
     /// Apply perturbation pose and force.
+    ///
+    /// # Note
+    /// This method **zeroes `xfrc_applied`** for all bodies before applying the perturbation
+    /// force. Any external forces set on `data` before calling this method will be cleared.
+    /// If you need to preserve external forces, apply them *after* calling this method.
     pub fn apply<M: Deref<Target = MjModel>>(&mut self, model: &MjModel, data: &mut MjData<M>) {
         unsafe {
             mju_zero(data.ffi_mut().xfrc_applied, 6 * model.ffi().nbody as i32);
@@ -430,7 +437,7 @@ impl MjvFigure {
         self.linepnt[plot_index] -= n as i32;
     }
 
-    /// Cuts last first `n` elements from the plot data of plot with `plot_index`.
+    /// Cuts the last `n` elements from the plot data of plot with `plot_index`.
     pub fn cut_end(&mut self, plot_index: usize, n: usize) {
         let len = self.linepnt[plot_index];
         if len < 0 || (len as usize) < n {
@@ -455,6 +462,7 @@ pub struct MjvScene<M: Deref<Target = MjModel>> {
 }
 
 impl<M: Deref<Target = MjModel>> MjvScene<M> {
+    /// Creates a new scene for `model`, allocating space for up to `max_geom` geoms.
     pub fn new(model: M, max_geom: usize) -> Self {
         let scn = unsafe {
             let mut t = Box::new_uninit();
@@ -468,6 +476,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
         }
     }
 
+    /// Updates the scene from the current simulation state in `data`.
     pub fn update(&mut self, data: &mut MjData<M>, opt: &MjvOption, pertub: &MjvPerturb, cam: &mut MjvCamera) {
         unsafe {
             mjv_updateScene(
@@ -545,6 +554,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
         (body_id, geom_id, flex_id, skin_id, selpnt)
     }
 
+    /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjvScene {
         &self.ffi
     }
