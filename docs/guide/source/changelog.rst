@@ -97,6 +97,10 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
 
 - Internal / Safety changes:
 
+  - Added a strict runtime signature check to view creation methods
+    (e.g. :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>view`)
+    which will now panic if the |mj_data| was not created from an |mj_model| with the exact same
+    kinematic tree structure.
   - Views now use more strict type checks. Specifically, instead of casting all the C types to
     declared Rust type, only a strict subset of fields are now cast (enums and bools).
     Other fields must match the C type exactly.
