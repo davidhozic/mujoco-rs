@@ -737,7 +737,7 @@ macro_rules! c_str_as_str_method {
 
     (with {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {paste::paste!{
         $(
-            #[doc = concat!("Builder method for setting", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII or is too long.")]
+            #[doc = concat!("Builder method for setting ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII or is too long.")]
             pub fn [<with_ $name>](mut self, $($sub_index_name: $sub_index_type,)? $name: &str) -> Self {
                 assert!($name.is_ascii(), concat!(stringify!($name), " must be valid ASCII."));
                 let c_string = std::ffi::CString::new($name).unwrap();

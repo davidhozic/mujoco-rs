@@ -316,7 +316,7 @@ impl MjvFigure {
         flg_extend: bool; "whether to automatically extend axis ranges to fit data.";
         flg_barplot: bool; "whether to isolate line segments.";
         flg_selection: bool; "whether to show vertical selection line.";
-        flg_symmetric: bool; "whether to make y-axis symmetric";
+        flg_symmetric: bool; "whether to make y-axis symmetric.";
     ]}
 
     // style settings
@@ -334,9 +334,9 @@ impl MjvFigure {
     c_str_as_str_method! {with, get, set {
         xlabel; "the x-axis label.";
         title; "the title.";
-        xformat; " the x-axis C's printf format (e.g., `%.1f`).";
-        yformat; " the y-axis C's printf format (e.g., `%.1f`).";
-        linename [plot_index: usize]; " the line name of plot with `plot_index`.";
+        xformat; "the x-axis C's printf format (e.g., `%.1f`).";
+        yformat; "the y-axis C's printf format (e.g., `%.1f`).";
+        linename [plot_index: usize]; "the line name of plot with `plot_index`.";
     }}
 }
 
