@@ -572,8 +572,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             &vp
         );
 
-        /* Make depth values be the actual distance in meters */
+        /* Flip the read pixels vertically, as OpenGL reads bottom-up */
+        if let Some(rgb) = self.rgb.as_deref_mut() {
+            flip_image_vertically(rgb, self.height, self.width * 3);
+        }
+
+        /* Make depth values be the actual distance in meters and flip them vertically */
         if let Some(depth) = self.depth.as_deref_mut() {
+            flip_image_vertically(depth, self.height, self.width);
+
             let map = &self.model.vis().map;
             let stat = &self.model.stat();
 
@@ -587,6 +594,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     }
 }
 
+/// Flips an image buffer vertically in-place.
+fn flip_image_vertically<T>(buffer: &mut [T], height: usize, row_len: usize) {
+    for i in 0..(height / 2) {
+        let top_idx = i * row_len;
+        let bottom_idx = (height - 1 - i) * row_len;
+        let (top_split, bottom_split) = buffer.split_at_mut(bottom_idx);
+        top_split[top_idx..top_idx + row_len].swap_with_slice(&mut bottom_split[0..row_len]);
+    }
+}
 
 #[derive(Debug)]
 pub enum RendererError {
