@@ -2102,11 +2102,38 @@ mod test {
     fn test_signature_mismatch_panics() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
         let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();
-        
+
         let data1 = model1.make_data();
         let joint_info1 = data1.joint("j1").unwrap();
-        
+
         // This should panic because joint_info1 was created from model1, but we are viewing it with model2/data2
+        let data2 = model2.make_data();
+        let _view = joint_info1.view(&data2);
+    }
+
+    #[test]
+    #[should_panic(expected = "model signature mismatch")]
+    fn test_signature_mismatch_reversed_joints() {
+        let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='b2'><joint name='j2' type='ball'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
+        let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j2' type='ball'/><geom size='0.1' mass='1'/></body><body name='b2'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
+
+        let data1 = model1.make_data();
+        let joint_info1 = data1.joint("j1").unwrap();
+
+        // This should panic because the kinematic tree is structurally different
+        let data2 = model2.make_data();
+        let _view = joint_info1.view(&data2);
+    }
+
+    #[test]
+    fn test_signature_match_physics_param_change() {
+        let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
+        let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='2'/></body></worldbody></mujoco>").unwrap();
+
+        let data1 = model1.make_data();
+        let joint_info1 = data1.joint("j1").unwrap();
+
+        // This should NOT panic because only physics parameters changed, the tree is the same
         let data2 = model2.make_data();
         let _view = joint_info1.view(&data2);
     }
