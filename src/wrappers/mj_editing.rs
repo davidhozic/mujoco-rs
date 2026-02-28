@@ -213,7 +213,7 @@ impl MjSpec {
         }
     }
 
-    /// Parse and create a [`MjSpec`] from `filename`
+    /// Parse and create a [`MjSpec`] from `filename`.
     /// The `content_type` controls the decoder to use.
     /// This is a wrapper around low-level method [`mj_parse`].
     /// # Returns
@@ -237,7 +237,7 @@ impl MjSpec {
         Self::from_parse_file(filename, content_type, Some(vfs))
     }
 
-    /// Parse and create a [`MjSpec`] from `filename`
+    /// Parse and create a [`MjSpec`] from `filename`.
     /// The `content_type` controls the decoder to use.
     /// This is a wrapper around low-level method [`mj_parse`].
     /// # Panics

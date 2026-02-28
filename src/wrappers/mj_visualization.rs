@@ -23,10 +23,10 @@ pub type MjtMouse = mjtMouse;
 
 /// These bitmasks enable the translational and rotational components of the mouse perturbation. For the regular mouse,
 /// only one can be enabled at a time. For the 3D mouse (SpaceNavigator) both can be enabled simultaneously. They are used
-/// in ``mjvPerturb.active``.
+/// in `mjvPerturb.active`.
 pub type MjtPertBit = mjtPertBit;
 
-/// These are the possible camera types, used in ``mjvCamera.type``.
+/// These are the possible camera types, used in `mjvCamera.type`.
 pub type MjtCamera = mjtCamera;
 impl TryFrom<i32> for MjtCamera {
     type Error = ();
@@ -41,20 +41,20 @@ impl TryFrom<i32> for MjtCamera {
     }
 }
 
-/// These are the abstract visualization elements that can have text labels. Used in ``mjvOption.label``.
+/// These are the abstract visualization elements that can have text labels. Used in `mjvOption.label`.
 pub type MjtLabel = mjtLabel;
 
-/// These are the MuJoCo objects whose spatial frames can be rendered. Used in ``mjvOption.frame``.
+/// These are the MuJoCo objects whose spatial frames can be rendered. Used in `mjvOption.frame`.
 pub type MjtFrame = mjtFrame;
 
-/// These are indices in the array ``mjvOption.flags``, whose elements enable/disable the visualization of the
+/// These are indices in the array `mjvOption.flags`, whose elements enable/disable the visualization of the
 /// corresponding model or decoration element.
 pub type MjtVisFlag = mjtVisFlag;
 
-/// These are indices in the array ``mjvScene.flags``, whose elements enable/disable OpenGL rendering effects.
+/// These are indices in the array `mjvScene.flags`, whose elements enable/disable OpenGL rendering effects.
 pub type MjtRndFlag = mjtRndFlag;
 
-/// These are the possible stereo rendering types. They are used in ``mjvScene.stereo``.
+/// These are the possible stereo rendering types. They are used in `mjvScene.stereo`.
 pub type MjtStereo = mjtStereo;
 /**********************************************************************************************************************/
 
@@ -242,14 +242,14 @@ impl MjvGeom {
         }
     }
 
-    /// Compatibility method to convert the ``label`` attribute into a ``String``.
+    /// Compatibility method to convert the `label` attribute into a `String`.
     pub fn label(&self) -> String {
         let len = self.label.iter().position(|&c| c == 0).unwrap_or(self.label.len());
         let bytes = unsafe { std::slice::from_raw_parts(self.label.as_ptr() as *const u8, len) };
         String::from_utf8_lossy(bytes).to_string()
     }
 
-    /// Compatibility method to convert the ``s`` parameter into an array that is copied to the ``label`` attribute.
+    /// Compatibility method to convert the `s` parameter into an array that is copied to the `label` attribute.
     pub fn set_label(&mut self, s: &str) {
         assert!(s.len() < self.label.len());
         for (i, &b) in s.as_bytes().iter().enumerate() {
@@ -454,7 +454,7 @@ impl MjvFigure {
 /// 3D scene visualization.
 /// This struct provides a way to render visual-only geometry.
 /// To prevent changes of array sizes in [`MjModel`], which can lead to overflows,
-/// a immutable reference is stored inside this struct.
+/// an immutable reference is stored inside this struct.
 #[derive(Debug)]
 pub struct MjvScene<M: Deref<Target = MjModel>> {
     ffi: Box<mjvScene>,

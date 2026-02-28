@@ -15,9 +15,9 @@ pub type MjtGridPos = mjtGridPos;
 /// These are the possible framebuffers. They are used as an argument to the function `mjr_setBuffer`.
 pub type MjtFramebuffer = mjtFramebuffer;
 
-/// These are the depth mapping options. They are used as a value for the ``readPixelDepth`` attribute of the
+/// These are the depth mapping options. They are used as a value for the `readPixelDepth` attribute of the
 /// `mjrContext` struct, to control how the depth returned by `mjr_readPixels` is mapped from
-/// ``znear`` to ``zfar``.
+/// `znear` to `zfar`.
 pub type MjtDepthMap = mjtDepthMap;
 
 /// These are the possible font sizes. The fonts are predefined bitmaps stored in the dynamic library at three different
@@ -121,7 +121,7 @@ impl MjrContext {
     }
 
     /// Read pixels from current OpenGL framebuffer to client buffer.
-    /// The ``rgb`` array is of size [width * height * 3], while ``depth`` is of size [width * height].
+    /// The `rgb` array is of size `[width * height * 3]`, while `depth` is of size `[width * height]`.
     /// # Panics
     /// Panics if the provided buffers are not large enough to hold the data for the given `viewport`.
     pub fn read_pixels(&self, rgb: Option<&mut [u8]>, depth: Option<&mut [f32]>, viewport: &MjrRectangle) {

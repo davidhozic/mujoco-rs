@@ -286,16 +286,16 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
 }
 
 
-/// A Rust-native implementation of the MuJoCo viewer. To confirm to rust safety rules,
+/// A Rust-native implementation of the MuJoCo viewer. To conform to Rust's safety rules,
 /// the viewer doesn't store a mutable reference to the [`MjData`] struct, but it instead
 /// accepts it as a parameter at its methods.
 /// 
 /// The [`MjViewer::sync_data`] method must be called to sync the state of [`MjViewer`] and [`MjData`].
 /// 
 /// # Shortcuts
-/// Main keyboard and mouse shortcuts can be viewed by pressing ``F1``.
+/// Main keyboard and mouse shortcuts can be viewed by pressing `F1`.
 /// Additionally, some visualization toggles are included, but not displayed
-/// in the ``F1`` help menu:
+/// in the `F1` help menu:
 /// - C: camera,
 /// - U: actuator,
 /// - J: joint,

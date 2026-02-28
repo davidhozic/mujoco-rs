@@ -20,19 +20,19 @@ use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
 /// `mj_getState`, `mj_setState` and `mj_stateSize`.
 pub type MjtState = mjtState;
 
-/// Constraint types. These values are not used in mjModel, but are used in the mjData field ``d->efc_type`` when the list
+/// Constraint types. These values are not used in mjModel, but are used in the mjData field `d->efc_type` when the list
 /// of active constraints is constructed at each simulation time step.
 pub type MjtConstraint = mjtConstraint;
 
 /// These values are used by the solver internally to keep track of the constraint states.
 pub type MjtConstraintState = mjtConstraintState;
 
-/// Warning types. The number of warning types is given by ``mjNWARNING`` which is also the length of the array
-/// ``mjData.warning``.
+/// Warning types. The number of warning types is given by `mjNWARNING` which is also the length of the array
+/// `mjData.warning`.
 pub type MjtWarning = mjtWarning;
 
-/// Timer types. The number of timer types is given by ``mjNTIMER`` which is also the length of the array
-/// ``mjData.timer``, as well as the length of the string array `mjTIMERSTRING` with timer names.
+/// Timer types. The number of timer types is given by `mjNTIMER` which is also the length of the array
+/// `mjData.timer`, as well as the length of the string array `mjTIMERSTRING` with timer names.
 pub type MjtTimer = mjtTimer;
 
 /// Sleep state of an object.
@@ -44,7 +44,7 @@ pub type MjtSleepState = mjtSleepState;
 // MjData
 /**************************************************************************************************/
 
-/// Wrapper around the ``mjData`` struct.
+/// Wrapper around the `mjData` struct.
 /// Provides lifetime guarantees as well as automatic cleanup.
 pub struct MjData<M: Deref<Target = MjModel>> {
     data: *mut mjData,
@@ -799,7 +799,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Map from body local to global Cartesian coordinates, sameframe takes values from [`MjtSameFrame`].
     /// Returns (global position, global orientation matrix).
-    /// Wraps ``mj_local2Global``.
+    /// Wraps `mj_local2Global`.
     pub fn local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: i32, sameframe: MjtSameFrame) -> ([MjtNum; 3], [MjtNum; 9]) {
         /* Create uninitialized because this gets filled by the function. */
         let mut xpos: [MjtNum; 3] =  [0.0; 3];
