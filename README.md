@@ -121,7 +121,11 @@ fn main() {
     let mut data = model.make_data();  // or MjData::new(&model);
 
     /* Launch a passive Rust-native viewer */
-    let mut viewer = MjViewer::launch_passive(&model, 0)
+    let mut viewer = MjViewer::builder()
+        .max_user_geoms(0)
+        .vsync(false)
+        .warn_non_realtime(false)
+        .build_passive(&model)
         .expect("could not launch the viewer");
 
     /* Create the joint info */

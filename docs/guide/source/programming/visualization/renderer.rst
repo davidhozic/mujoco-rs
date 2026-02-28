@@ -64,14 +64,73 @@ using :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`.
 
 After syncing, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb` and
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth` can be used to obtain
-a reference of the rendered image in correct shape, which needs to be specified via method's const generic parameters,
-or :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` and
+a reference to the rendered image in the correct 2D shape. The shape must be specified via
+the method's const generic parameters (``WIDTH`` and ``HEIGHT``), and the methods return
+``io::Result`` — an error is returned if the requested dimensions don't match the renderer's
+actual resolution.
+
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` and
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth_flat` can be used to obtain
-a flattened images.
+a flat 1-D slice of the rendered data instead, returning ``Option<&[u8]>`` and ``Option<&[f32]>``
+respectively. These return ``None`` when the corresponding rendering mode (``rgb`` or ``depth``)
+was not enabled during construction.
 
 To save rendered images to a file, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb`
 and :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth` can be used.
-These will encode the image into a uncompressed PNG format, where the RGB image will be 8 bits and
-the depth will be 16 bits. These are meant **for visualization**.
-To save depth data in 32 bit float format, which represents **actual distance values** from the camera,
-:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw` can be used.
+These encode the image as an uncompressed PNG, where the RGB image is 8 bits per channel and
+the depth image is 16 bits. These are meant **for visualization**.
+
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth` accepts a ``normalize: bool``
+argument. When ``true``, depth values are linearly normalized from their raw range to the full
+16-bit range (0-65535) before saving. When ``false``, raw values are clamped and directly
+encoded, which is only meaningful when the depth range happens to fall within 0-1.
+
+To save depth data as raw 32-bit float values representing **actual metric distances** from the
+camera, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw` can be used.
+
+
+
+End-to-end example
+------------------
+The following is a complete example that loads a model, runs one step, renders it,
+and saves both an RGB and a depth image:
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+    use mujoco_rs::renderer::MjRenderer;
+
+    const MODEL: &str = r#"
+    <mujoco>
+      <visual>
+        <global offwidth="1920" offheight="1080"/>
+      </visual>
+      <worldbody>
+        <light pos="0 0 3"/>
+        <body name="ball" pos="0 0 1">
+            <geom type="sphere" size=".1" rgba="0 1 0 1"/>
+            <joint type="free"/>
+        </body>
+        <geom name="floor" type="plane" size="5 5 1"/>
+      </worldbody>
+    </mujoco>
+    "#;
+
+    fn main() {
+        let model = MjModel::from_xml_string(MODEL).expect("could not load model");
+        let mut data = MjData::new(&model);
+
+        let mut renderer = MjRenderer::builder()
+            .width(0).height(0)          // automatically sized from <global offwidth/offheight>
+            .rgb(true)
+            .depth(true)
+            .camera(MjvCamera::default())
+            .build(&model).expect("failed to initialize renderer");
+
+        data.step();
+        renderer.sync(&mut data);
+
+        renderer.save_rgb("frame.png").expect("failed to save RGB");
+        renderer.save_depth("depth.png", true).expect("failed to save depth");  // true = normalize to 0-65535 range.
+    }
+
