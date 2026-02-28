@@ -1107,7 +1107,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                             pert.flexselect = flex_id;
                             pert.skinselect = skin_id;
                             pert.active = 0;
-                            pert.update_local_pos(xyz, data_passive);
+                            pert.update_local_pos(&xyz, data_passive);
                         }
                         else {
                             pert.select = 0;

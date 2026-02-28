@@ -83,6 +83,7 @@ impl MjvPerturb {
         unsafe { mjv_movePerturb(model.ffi(), data.ffi(), action as i32, dx, dy, scene.ffi(), self); }
     }
 
+    /// Apply perturbation pose and force.
     pub fn apply<M: Deref<Target = MjModel>>(&mut self, model: &MjModel, data: &mut MjData<M>) {
         unsafe {
             mju_zero(data.ffi_mut().xfrc_applied, 6 * model.ffi().nbody as i32);
@@ -91,12 +92,17 @@ impl MjvPerturb {
         }
     }
 
-    pub fn update_local_pos<M: Deref<Target = MjModel>>(&mut self, selection_xyz: [MjtNum; 3], data: &MjData<M>) {
+    /// Updates the body-local position of the selection point.
+    pub fn update_local_pos<M: Deref<Target = MjModel>>(&mut self, selection_xyz: &[MjtNum; 3], data: &MjData<M>) {
         let mut tmp = [0.0; 3];
-        let data_ffi = data.ffi();
-        unsafe { 
-            mju_sub3(&mut tmp, &selection_xyz, data_ffi.xpos.add(3 * self.select as usize) as *const [MjtNum; 3]);
-            mju_mulMatTVec(self.localpos.as_mut_ptr(), data_ffi.xmat.add(9 * self.select as usize), tmp.as_ptr(), 3, 3);
+        debug_assert!(self.select >= 0, "invalid selecting when calling update_local_pos");
+        let select = self.select as usize;
+        let body_xpos = &data.xpos()[select];
+        let body_xmat = &data.xmat()[select];
+        // Inverse transform into the local frame of the body.
+        unsafe {
+            mju_sub3(&mut tmp, selection_xyz, body_xpos);
+            mju_mulMatTVec3(&mut self.localpos, body_xmat, &tmp);
         }
     }
 }
