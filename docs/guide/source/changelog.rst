@@ -113,6 +113,11 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
     orientation as an MJCF ``<camera>`` XML element to the console.
   - |mj_data| and |mj_model| views now contain extra fields.
 
+- :ref:`mj_cpp_viewer`:
+
+  - **Breaking**: :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` no longer
+    accepts the boolean parameter ``update_timer``. The FPS timer is now always updated.
+
 2.3.4 (MuJoCo 3.3.7)
 =============================
 - :ref:`mj_rust_viewer` bug fixes and usability improvements:

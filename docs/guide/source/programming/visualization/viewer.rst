@@ -32,30 +32,62 @@ and needs to be periodically "synced" by the user application.
 The user application is the one that needs to run the actual physics simulation, like shown in
 :ref:`basic_sim` and also below.
 
-The viewer can be launched with :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive`,
-like shown in the following (single-threaded) example:
+The viewer can be launched in two ways:
 
-.. code-block:: rust
-    :emphasize-lines: 8
+- Via its **builder** (:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>builder`), which allows
+  full control over the viewer's settings:
 
-    fn main() {
-        /* Initiate the physics simulation */
-        let model = MjModel::from_xml("path/to/model.xml").expect("could not load the model");
-        let mut data = MjData::new(&model);
-        let timestep = model.opt().timestep;
+  .. code-block:: rust
+      :emphasize-lines: 9-14
 
-        /* Launch the viewer  */
-        let mut viewer = MjViewer::launch_passive(&model, 100).expect("could not launch the viewer");
-        while viewer.running() {
-            /* Sync the simulation state with the viewer */
-            viewer.sync_data(&mut data);
-            viewer.render();
+      use std::time::Duration;
 
-            /* Update the simulation state */
-            data.step();
-            std::thread::sleep(Duration::from_secs_f64(timestep));  // wait approximately timestep seconds
-        }
-    }
+      fn main() {
+          /* Initiate the physics simulation */
+          let model = MjModel::from_xml("path/to/model.xml").expect("could not load the model");
+          let mut data = MjData::new(&model);
+          let timestep = model.opt().timestep;
+
+          /* Launch the viewer  */
+          let mut viewer = MjViewer::builder()
+              .window_name("My Simulation")    // text shown in the window title bar.
+              .max_user_geoms(0)               // maximum additional geoms drawn by the user.
+              .vsync(false)                    // vertical synchronization (use true when rendering in a separate thread).
+              .warn_non_realtime(false)        // show an overlay when the simulation lags behind realtime.
+              .build_passive(&model).expect("could not launch the viewer");
+          while viewer.running() {
+              /* Sync the simulation state with the viewer */
+              viewer.sync_data(&mut data);
+              viewer.render();
+
+              /* Update the simulation state */
+              data.step();
+              std::thread::sleep(Duration::from_secs_f64(timestep));  // wait approximately timestep seconds
+          }
+      }
+
+- Via the :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive` method, a
+  convenient shorthand for users who want the **default settings**:
+
+  .. code-block:: rust
+      :emphasize-lines: 9
+
+      use std::time::Duration;
+
+      fn main() {
+          let model = MjModel::from_xml("path/to/model.xml").expect("could not load the model");
+          let mut data = MjData::new(&model);
+          let timestep = model.opt().timestep;
+
+          let mut viewer = MjViewer::launch_passive(&model, 0).expect("could not launch the viewer");
+          while viewer.running() {
+              viewer.sync_data(&mut data);
+              viewer.render();
+              data.step();
+              std::thread::sleep(Duration::from_secs_f64(timestep));
+          }
+      }
+
 
 
 The above example runs until the viewer is closed (:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running`)
@@ -74,6 +106,7 @@ After or parallel to synchronization, the viewer must also be rendered using the
         ...
     }
 
+
 At the beginning, we also obtained the simulation timestep (time passed in simulation per each call to
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>step`), which is used to
 sleep after the step with ``std::thread::sleep(Duration::from_secs_f64(timestep));``.
@@ -83,6 +116,16 @@ This is optional and can be removed or reduced to run the simulation faster than
 
     The ``sleep()`` function is not accurate. For accurate timing,
     use `std::time::Instant <https://doc.rust-lang.org/std/time/struct.Instant.html>`_ to poll the elapsed time.
+
+.. note::
+
+    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` copies only the subset of
+    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` needed for rendering (positions, velocities, contacts,
+    etc.), which is faster.
+    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full` copies the **entire**
+    ``MjData`` struct — including large Jacobian arrays — and should only be used when those arrays
+    are needed inside the viewer (for example, when using
+    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` to access them).
 
 .. admonition:: Performance tip
 
@@ -110,6 +153,17 @@ This is optional and can be removed or reduced to run the simulation faster than
       `MutexGuard <https://doc.rust-lang.org/std/sync/struct.MutexGuard.html>`_
       to the shared state.
 
+    Using ``with_state_lock`` groups multiple shared-state operations under a **single** lock
+    acquisition, which avoids repeated lock/unlock overhead:
+
+    .. code-block:: rust
+
+        viewer.with_state_lock(|mut lock| {
+            lock.sync_data(&mut data);  // both calls share one lock
+            viewer_running = lock.running();
+        }).unwrap();
+
+
 
 .. _multithreading-rs-viewer:
 
@@ -133,6 +187,7 @@ Here's a cutout from the :gh-example:`example <rust_viewer_threaded.rs>` on how 
 
     // Create the viewer, bound to the model.
     let mut viewer = MjViewer::builder()
+        .window_name("My Threaded Simulation")  // text shown in the window title bar.
         .max_user_geoms(100)
         .vsync(true)  // let the viewer select the appropriate refresh rate.
         .build_passive(model.clone())
@@ -163,6 +218,7 @@ Here's a cutout from the :gh-example:`example <rust_viewer_threaded.rs>` on how 
 
     physics_thread.join().unwrap();
 
+
 The example mainly differs from the synchronous one in the highlighted lines:
 
 - :docs-rs:`mujoco_rs::wrappers::mj_model::<struct>MjModel` is wrapped into
@@ -171,7 +227,10 @@ The example mainly differs from the synchronous one in the highlighted lines:
   
   - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState` is obtained through
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>state`, which returns
-    ``Arc<Mutex<ViewerSharedState>>``;
+    ``Arc<Mutex<ViewerSharedState>>``,
+  - both calls to ``sync_data`` and ``running`` are grouped inside a single ``lock()`` to
+    avoid two separate mutex acquisitions (see the performance tip above).
+
 
 
 .. _custom_ui_widgets:
@@ -203,12 +262,13 @@ The following example demonstrates how to add a custom window to the viewer:
     fn main() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
         let mut data = MjData::new(&model);
-        let mut viewer = MjViewer::launch_passive(&model, 100)
-            .expect("could not launch the viewer");
+        let mut viewer = MjViewer::builder()
+            .max_user_geoms(0)
+            .build_passive(&model).expect("could not launch the viewer");
 
         /* Add a custom UI window */
-        // viewer.add_ui_callback_detached(|ctx| {...}) or
-        viewer.add_ui_callback(|ctx, data| {
+        // viewer.add_ui_callback(|ctx, data| {...}) or
+        viewer.add_ui_callback_detached(|ctx| {
             use mujoco_rs::viewer::egui;
             egui::Window::new("Custom controls")
                 .scroll(true)
@@ -295,7 +355,7 @@ Here is an example of using the C++ wrapper:
         let step = model.opt().timestep;
         while viewer.running() {
             viewer.sync();
-            viewer.render(true);  // render on screen   and update the fps timer
+            viewer.render();
             data.step();
             std::thread::sleep(Duration::from_secs_f64(step));
         }
