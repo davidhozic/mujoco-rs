@@ -544,8 +544,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
         }
 
-        // nsample = model.sensor_history[2*id]
-        let nsample = unsafe { *self.model.ffi().sensor_history.offset((2 * id) as isize) };
+        let nsample = self.model.sensor_history()[id][0];
         if nsample <= 0 {
             return Err(Error::new(ErrorKind::NotFound, format!("sensor {} has no history buffer", id)));
         }
@@ -1582,7 +1581,7 @@ mod test {
         data.flex_comp();
         data.tendon_comp();
         data.transmission();
-        data.crb();
+        data.crb_comp();
         data.make_m();
         data.factor_m();
         data.com_vel();
