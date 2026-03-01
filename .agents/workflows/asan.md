@@ -60,6 +60,8 @@ export RUSTFLAGS="-Zsanitizer=address"
 cargo +nightly run --example basic --target x86_64-unknown-linux-gnu "--no-default-features" --features "<required features here>"
 ```
 
+**IMPORTANT:** Always run the `examples/miri_test.rs` example with address sanitizer as well (in addition to other tests).
+
 > [!TIP]
 > **Why `--target x86_64-unknown-linux-gnu`?**
 > Cargo requires the target triple to be explicitly provided when using `-Zsanitizer=address`, even if compiling for the host system.
