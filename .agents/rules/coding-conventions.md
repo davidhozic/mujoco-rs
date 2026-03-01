@@ -25,3 +25,9 @@ trigger: always_on
 - Follow the existing error handling patterns used in the same file.
 - Use `/// Safety` doc comments on all `unsafe` blocks.
 - Public items should have `///` doc comments.
+
+## Documentation
+- Always verify any changes made to MuJoCo's official documentation to verify everything is correct.
+- Any changes made should be reflected in the changelog: `docs/guide/changelog.rst`.
+  Make sure to follow the conventions and style of previous changelog entries.
+- Always make sure MuJoCo-rs's documentation in `docs/guide` stays up to date with the changes.
