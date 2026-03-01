@@ -1065,7 +1065,7 @@ impl MjsWrap {
 
     /// Return the side site element.
     pub fn side_site(&self) -> Option<&MjsSite> {
-        let ptr = unsafe { mjs_getWrapSideSite(self as *const _ as *mut _) };
+        let ptr = unsafe { mjs_getWrapSideSite(crate::util::force_cast(self)) };
         if ptr.is_null() { None } else { Some(unsafe { ptr.as_ref().unwrap() }) }
     }
 
@@ -1077,12 +1077,12 @@ impl MjsWrap {
 
     /// Return the wrap divisor.
     pub fn divisor(&self) -> f64 {
-        unsafe { mjs_getWrapDivisor(self as *const _ as *mut _) }
+        unsafe { mjs_getWrapDivisor(crate::util::force_cast(self)) }
     }
 
     /// Return the wrap coefficient.
     pub fn coef(&self) -> f64 {
-        unsafe { mjs_getWrapCoef(self as *const _ as *mut _) }
+        unsafe { mjs_getWrapCoef(crate::util::force_cast(self)) }
     }
 }
 

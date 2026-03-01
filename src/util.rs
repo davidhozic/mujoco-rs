@@ -115,13 +115,8 @@ pub struct PointerViewMut<'d, T> {
 }
 
 impl<'d, T> PointerViewMut<'d, T> {
-    pub(crate) fn new(ptr: *mut T, len: usize) -> Self {
-        Self {ptr, len, phantom: PhantomData}
-    }
-
-    #[allow(unused)]
-    pub(crate) unsafe fn set_len(&mut self, len: usize) {
-        self.len = len;
+    pub(crate) fn new(ptr: *mut T, len: usize, phantom: PhantomData<&'d mut ()>) -> Self {
+        Self {ptr, len, phantom}
     }
 }
 
@@ -160,8 +155,8 @@ pub struct PointerView<'d, T> {
 }
 
 impl<'d, T> PointerView<'d, T> {
-    pub(crate) fn new(ptr: *const T, len: usize) -> Self {
-        Self {ptr, len, phantom: PhantomData}
+    pub(crate) fn new(ptr: *const T, len: usize, phantom: PhantomData<&'d ()>) -> Self {
+        Self {ptr, len, phantom}
     }
     
     #[allow(unused)]
@@ -210,11 +205,11 @@ macro_rules! view_creator {
             unsafe {
                 $view {
                     $(
-                        $field: $ptr_view($data.[<$($prefix_field)? $field>].add($self.$field.0) $(.$cast())?, $self.$field.1),
+                        $field: $ptr_view($data.[<$($prefix_field)? $field>].add($self.$field.0) $(.$cast())?, $self.$field.1, std::marker::PhantomData),
                     )*
                     $(
                         $opt_field: if $self.$opt_field.1 > 0 {
-                            Some($ptr_view($data.[<$($prefix_opt_field)? $opt_field>].add($self.$opt_field.0) $(.$cast_opt())?, $self.$opt_field.1))
+                            Some($ptr_view($data.[<$($prefix_opt_field)? $opt_field>].add($self.$opt_field.0) $(.$cast_opt())?, $self.$opt_field.1, std::marker::PhantomData))
                         } else {None},
                     )*
                 }
@@ -430,7 +425,7 @@ macro_rules! getter_setter {
         $(
             #[doc = concat!("Return value of ", $comment)]
             pub fn [<$name:camel:snake $($symbol)?>](&self) -> $type {
-                unsafe { std::mem::transmute(self$(.$ffi())?.$name) }
+                unsafe { $crate::util::force_cast(self$(.$ffi())?.$name) }
             }
         )*
     }};
@@ -440,8 +435,8 @@ macro_rules! getter_setter {
             $(
                 #[doc = concat!("Set ", $comment)]
                 pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
-                    #[allow(unnecessary_transmutes)]
-                    unsafe { self$(.$ffi_mut())?.$name = std::mem::transmute(value) };
+                    #[allow(unused_unsafe)]
+                    unsafe { self$(.$ffi_mut())?.$name = $crate::util::force_cast(value) };
                 }
             )*
         }
@@ -453,8 +448,8 @@ macro_rules! getter_setter {
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
                 pub fn [<with_ $name:camel:snake>](mut self, value: $type) -> Self {
-                    #[allow(unnecessary_transmutes)]
-                    unsafe { self$(.$ffi_mut())?.$name = std::mem::transmute(value) };
+                    #[allow(unused_unsafe)]
+                    unsafe { self$(.$ffi_mut())?.$name = $crate::util::force_cast(value) };
                     self
                 }
             )*
@@ -466,8 +461,8 @@ macro_rules! getter_setter {
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
                 pub fn [<with_ $name:camel:snake>](&mut self, value: $type) -> &mut Self {
-                    #[allow(unnecessary_transmutes)]
-                    unsafe { self$(.$ffi_mut())?.$name = std::mem::transmute(value) };
+                    #[allow(unused_unsafe)]
+                    unsafe { self$(.$ffi_mut())?.$name = $crate::util::force_cast(value) };
                     self
                 }
             )*
@@ -715,7 +710,7 @@ macro_rules! c_str_as_str_method {
             pub fn $name(&self $(, $sub_index_name: $sub_index_type)? ) -> &str {
                 unsafe { 
                     let c_ptr = self$(.$ffi())?.$name$([$sub_index_name])?.as_ptr();
-                    std::ffi::CStr::from_ptr(c_ptr).to_str().unwrap()
+                    std::ffi::CStr::from_ptr(c_ptr as *const _).to_str().unwrap()
                 }
             }
         )*
@@ -729,8 +724,7 @@ macro_rules! c_str_as_str_method {
                 let c_string = std::ffi::CString::new($name).unwrap();
                 let bytes = c_string.into_bytes_with_nul();
 
-                // This transmute is safe as long as converting from u8 (bytes) to i8, which is char.
-                self$(.$ffi())?.$name$([$sub_index_name])?[..bytes.len()].copy_from_slice(unsafe { std::mem::transmute::<&[u8], &[i8]>(&bytes) });
+                self$(.$ffi())?.$name$([$sub_index_name])?[..bytes.len()].copy_from_slice(bytemuck::cast_slice(&bytes));
             }
         )*
     }};
@@ -743,8 +737,7 @@ macro_rules! c_str_as_str_method {
                 let c_string = std::ffi::CString::new($name).unwrap();
                 let bytes = c_string.into_bytes_with_nul();
 
-                // This transmute is safe as long as converting from u8 (bytes) to i8, which is char.
-                self$(.$ffi())?.$name$([$sub_index_name])?[..bytes.len()].copy_from_slice(unsafe { std::mem::transmute::<&[u8], &[i8]>(&bytes) });
+                self$(.$ffi())?.$name$([$sub_index_name])?[..bytes.len()].copy_from_slice(bytemuck::cast_slice(&bytes));
                 self
             }
         )*
@@ -824,6 +817,26 @@ pub fn assert_mujoco_version() {
         "linked MuJoCo version value ({linked_version}) does not match expected version value ({mjVERSION_HEADER}), \
         with which MuJoCo-rs {mujoco_rs_version_string} FFI bindings were generated.",
     );
+}
+
+
+/// Forcefully casts a value of type `T` to type `U`.
+/// # Safety
+/// This is a safe alternative to `std::mem::transmute` that performs a compile-time
+/// size check to ensure that the source and destination types have the same size.
+/// However, it does not guarantee that the bit patterns are compatible.
+#[inline(always)]
+pub unsafe fn force_cast<T, U>(val: T) -> U {
+    const {
+        assert!(std::mem::size_of::<T>() == std::mem::size_of::<U>());
+        assert!(std::mem::align_of::<U>().is_multiple_of(std::mem::align_of::<T>()));
+    }
+    #[repr(C)]
+    union Transmuter<T, U> {
+        from: std::mem::ManuallyDrop<T>,
+        to: std::mem::ManuallyDrop<U>,
+    }
+    unsafe { std::mem::ManuallyDrop::into_inner(Transmuter { from: std::mem::ManuallyDrop::new(val) }.to) }
 }
 
 
