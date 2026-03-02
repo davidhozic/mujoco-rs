@@ -130,13 +130,13 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
     vertically flipped (upside down) images.
   - Added new examples based on the `MuJoCo Python tutorial <https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/tutorial.ipynb>`_:
 
-    - ``tippe_top``: Simulates the self-inverting tippe-top using the RK4 integrator and
+    - :gh-example:`Self-inverting tippe-top <tippe_top.rs>`: Simulates the self-inverting tippe-top using the RK4 integrator and
       keyframe initialisation; displays the inversion in an interactive :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
-    - ``chaotic_pendulum``: Demonstrates the butterfly effect in a four-body pendulum,
+    - :gh-example:`Chaotic pendulum <chaotic_pendulum.rs>`: Demonstrates the butterfly effect in a four-body pendulum,
       energy tracking via :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy_pos`
       and :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy_vel`, and
       interactive visualisation.
-    - ``contact_forces``: Shows contact-point and contact-force visualisation using
+    - :gh-example:`Contact forces <contact_forces.rs>`: Shows contact-point and contact-force visualisation using
       :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::<method>opts_mut` to enable
       ``mjVIS_CONTACTPOINT``, ``mjVIS_CONTACTFORCE``, and ``mjVIS_TRANSPARENT`` flags;
       saves rendered frames as PNG images.
