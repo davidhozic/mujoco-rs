@@ -102,7 +102,14 @@ pub trait SpecItem: Sized {
         let result = unsafe { mjs_delete(spec, element) };
         match result {
             0 => Ok(()),
-            _ => Err(Error::new(ErrorKind::Other, unsafe { CStr::from_ptr(mjs_getError(spec)).to_string_lossy().into_owned() }))
+            _ => Err(Error::new(ErrorKind::Other, unsafe {
+                let ptr = mjs_getError(spec);
+                if ptr.is_null() {
+                    "Unknown error"
+                } else {
+                    CStr::from_ptr(ptr).to_string_lossy().as_str()
+                }
+            }))
         }
     }
 }

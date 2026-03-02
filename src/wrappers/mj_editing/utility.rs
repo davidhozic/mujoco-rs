@@ -13,7 +13,11 @@ use crate::mujoco_c::*;
 pub(crate) fn read_mjs_string<'a>(string: *const mjString) -> &'a str {
     unsafe {
         let ptr = mjs_getString(string);
-        CStr::from_ptr(ptr).to_str().unwrap()
+        if ptr.is_null() {
+            ""
+        } else {
+            CStr::from_ptr(ptr).to_string_lossy().as_str()
+        }
     }
 }
 
