@@ -158,11 +158,6 @@ impl<'d, T> PointerView<'d, T> {
     pub(crate) fn new(ptr: *const T, len: usize, phantom: PhantomData<&'d ()>) -> Self {
         Self {ptr, len, phantom}
     }
-    
-    #[allow(unused)]
-    pub(crate) unsafe fn set_len(&mut self, len: usize) {
-        self.len = len;
-    }
 }
 
 /// Compares if the two views point to the same data.
@@ -689,6 +684,13 @@ macro_rules! array_slice_dyn {
 }
 
 /// Generates getter and setter methods for converting between Rust's &str type and C's char arrays.
+///
+/// # Safety
+/// The generated getters blindly interpret a `char` array as a C string; the
+/// array must be NUL-terminated and its contents valid ASCII.  Setters ensure
+/// ASCII and length bounds but the caller must still guarantee the destination
+/// buffer is large enough.  The macro itself simply emits the unsafe code
+/// without additional checks.
 /// The macro works by first specifying the methods to create (get = getter, set = setter) --- c_str_as_str_method {get, set, {...}} ---
 /// and then providing the rest of the parameters.
 /// 

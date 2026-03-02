@@ -99,6 +99,8 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
 
 - Internal / Safety changes:
 
+  - Fixed potential UB when parsing string pointers returned from MuJoCo's model editing C++ wrappers
+    via `CStr::from_ptr` by properly checking for NULL pointers.
   - Added a strict runtime signature check to view creation methods
     (e.g. :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>view`)
     which will now panic if the |mj_data| was not created from an |mj_model| with the exact same

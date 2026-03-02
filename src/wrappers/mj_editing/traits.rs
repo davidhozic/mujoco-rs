@@ -102,7 +102,21 @@ pub trait SpecItem: Sized {
         let result = unsafe { mjs_delete(spec, element) };
         match result {
             0 => Ok(()),
-            _ => Err(Error::new(ErrorKind::Other, unsafe { CStr::from_ptr(mjs_getError(spec)).to_string_lossy().into_owned() }))
+            _ => {
+                // SAFETY: `spec` is still valid after mjs_delete returns an error.
+                // `mjs_getError` returns a pointer into the inline `char[500]` buffer of
+                // `mjCModel::errInfo`. We copy the bytes into an owned String immediately
+                // so that no borrow of the C buffer outlives this statement.
+                let error_msg: String = unsafe {
+                    let ptr = mjs_getError(spec);
+                    if ptr.is_null() {
+                        "Unknown error".to_owned()
+                    } else {
+                        CStr::from_ptr(ptr).to_str().unwrap().to_owned()
+                    }
+                };
+                Err(Error::new(ErrorKind::Other, error_msg))
+            }
         }
     }
 }

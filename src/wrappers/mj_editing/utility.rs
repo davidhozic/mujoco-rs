@@ -8,12 +8,27 @@ use crate::mujoco_c::*;
 ** Utility functions
 ***************************/
 /// Reads MJS string (C++) as a `&str`.
+///
+/// The returned `&str` borrows from the `mjString` object pointed to by `string`.
+/// It remains valid as long as that object is alive and the string is not mutated
+/// (which would reallocate the internal C++ `std::string` buffer).
+///
+/// # Safety
+/// `string` must point to a valid `mjString` object for the duration `'a`.
+///
 /// # Panics
 /// Panics if the string contains invalid UTF-8.
 pub(crate) fn read_mjs_string<'a>(string: *const mjString) -> &'a str {
     unsafe {
         let ptr = mjs_getString(string);
-        CStr::from_ptr(ptr).to_str().unwrap()
+        if ptr.is_null() {
+            ""
+        } else {
+            // SAFETY: `ptr` points into the internal buffer of the C++ std::string
+            // referenced by `string`, which is valid for lifetime 'a.  MuJoCo
+            // strings are always valid UTF-8 (ASCII), so to_str() cannot fail.
+            CStr::from_ptr(ptr).to_str().unwrap()
+        }
     }
 }
 
