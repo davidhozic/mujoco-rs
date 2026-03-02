@@ -104,13 +104,15 @@ pub trait SpecItem: Sized {
             0 => Ok(()),
             _ => {
                 // SAFETY: `spec` is still valid after mjs_delete returns an error.
-                // The returned pointer is valid until the next MuJoCo call on this spec.
-                let error_msg = unsafe {
+                // `mjs_getError` returns a pointer into the inline `char[500]` buffer of
+                // `mjCModel::errInfo`. We copy the bytes into an owned String immediately
+                // so that no borrow of the C buffer outlives this statement.
+                let error_msg: String = unsafe {
                     let ptr = mjs_getError(spec);
                     if ptr.is_null() {
-                        "Unknown error"
+                        "Unknown error".to_owned()
                     } else {
-                        CStr::from_ptr(ptr).to_str().unwrap()
+                        CStr::from_ptr(ptr).to_str().unwrap().to_owned()
                     }
                 };
                 Err(Error::new(ErrorKind::Other, error_msg))

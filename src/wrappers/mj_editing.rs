@@ -299,12 +299,12 @@ impl MjSpec {
         result.map_err(|_| {
             // SAFETY: The spec is still valid after failed compilation.
             // The error pointer is valid until the next MuJoCo call on this spec.
-            let error_msg = unsafe {
+            let error_msg: String = unsafe {
                 let ptr = mjs_getError(self.ffi_mut());
                 if ptr.is_null() {
-                    "Compilation failed (unknown error)"
+                    "Compilation failed (unknown error)".to_owned()
                 } else {
-                    CStr::from_ptr(ptr).to_str().unwrap()
+                    CStr::from_ptr(ptr).to_string_lossy().into_owned()
                 }
             };
             Error::new(ErrorKind::InvalidData, error_msg)
