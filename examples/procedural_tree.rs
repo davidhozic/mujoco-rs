@@ -2,8 +2,6 @@
 //!
 //! Builds a branching tree programmatically via MjSpec's body/joint/geom API.
 //! Ball joints with spring-stiffness make branches sway under an animated wind gust.
-//! Gravity is disabled so the very weak spring stiffness (tuned for wind sway only)
-//! doesn't need to support the branches' weight.
 //!
 //! Adapted from the MuJoCo mjspec tutorial:
 //! https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb
@@ -22,8 +20,8 @@ const NUM_BRANCHES: usize = 5;
 const BROWN: [f32; 4] = [0.4, 0.24, 0.0, 1.0];
 const GREEN: [f32; 4] = [0.0, 0.7,  0.2, 1.0];
 
-// Five branch directions on a ~45° cone (phi = π/4), evenly spaced in theta.
-// sin(π/4) ≈ 0.7071;  theta = k × 72°.
+// Five branch directions on a ~45 degree cone (phi = pi/4), evenly spaced in theta.
+// sin(pi/4) approx 0.7071;  theta = k * 72 degree.
 const DIRS: [[f64; 3]; NUM_BRANCHES] = [
     [ 0.7071, 0.0000, 0.7071],
     [ 0.2190, 0.6756, 0.7071],
@@ -35,15 +33,6 @@ const DIRS: [[f64; 3]; NUM_BRANCHES] = [
 fn normalize(v: [f64; 3]) -> [f64; 3] {
     let m = (v[0]*v[0] + v[1]*v[1] + v[2]*v[2]).sqrt();
     [v[0]/m, v[1]/m, v[2]/m]
-}
-
-// Smooth C∞ bump function: 0 outside [t_start, t_end], peaks at 1 in the middle.
-// Uses exp(n²/(n²−1)), the standard analysis bump with infinite-order contact at
-// the boundary points — matching the Python mjspec tutorial implementation exactly.
-fn unit_bump(t: f64, t_start: f64, t_end: f64) -> f64 {
-    if t <= t_start || t >= t_end { return 0.0; }
-    let n = 2.0 * (t - t_start) / (t_end - t_start) - 1.0;
-    (n * n / (n * n - 1.0)).exp()
 }
 
 // Grow a branch as a child of `parent`, attached at height `attach_z` along the
@@ -64,7 +53,7 @@ fn grow(parent: &mut MjsBody, depth: usize, len: f64, r: f64, dir: [f64; 3], att
         .with_rgba(BROWN);
 
     if depth >= MAX_DEPTH {
-        // Three flat ellipsoid leaves fanned out at 120° intervals around the tip.
+        // Three flat ellipsoid leaves fanned out at 120 degree intervals around the tip.
         for k in 0..3usize {
             let angle_deg = k as f64 * 120.0;
             let angle_rad = angle_deg.to_radians();
@@ -100,12 +89,8 @@ fn build_tree() -> MjModel {
 
     let opt = spec.option_mut();
     opt.timestep      = 0.002;
-    opt.density       = 1.294;  // air density — required for aerodynamic drag
+    opt.density       = 1.294;  // air density - required for aerodynamic drag
     opt.wind[0]       = 0.0;    // wind in +x
-    // Disable the constraint solver (contacts, limits) exactly as the Python example does.
-    // Gravity remains active but the joint spring (stiffness=0.003) combined with the high
-    // damping (0.7) gives a fall time-constant of ~233 s — branches barely droop during
-    // normal interactive use while still swaying visibly under the 40 m/s wind gust.
     opt.disableflags |= mjtDisableBit_::mjDSBL_CONSTRAINT as i32;
 
     // Give the viewer a sensible default camera framing.
@@ -133,7 +118,7 @@ fn build_tree() -> MjModel {
         .with_size([trunk_r, 0.0, 0.0])
         .with_rgba(BROWN);
 
-    // First level of branches: distributed along 60–100% of trunk length.
+    // First level of branches: distributed along 60-100% of trunk length.
     for (i, &dir) in DIRS.iter().enumerate() {
         let h = (0.6 + 0.4 * i as f64 / (NUM_BRANCHES - 1) as f64) * trunk_len;
         grow(trunk, 1, trunk_len * SCALE, trunk_r * SCALE, dir, h);

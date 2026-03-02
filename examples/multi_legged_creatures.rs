@@ -30,7 +30,7 @@ const CREATURES: [(usize, usize, f64, f64); 6] = [
     (5, 8,  0.5, 0.5),
 ];
 
-// One distinct torso colour per creature — legs share the same colour.
+// One distinct torso colour per creature - legs share the same colour.
 const COLOURS: [[f32; 4]; 6] = [
     [0.8, 0.2, 0.2, 1.0],
     [0.2, 0.8, 0.2, 1.0],
@@ -49,7 +49,7 @@ fn add_leg(torso: &mut MjsBody, n: usize, l: usize, angle: f64, rgba: [f32; 4]) 
     let hy = TORSO_R * angle.sin();
 
     // The thigh body is rotated about the world Z-axis by `angle`, so its local
-    // +X axis points radially outward — matching the Python attach-site approach.
+    // +X axis points radially outward - matching the Python attach-site approach.
     let thigh = torso
         .add_body()
         .with_name(&format!("c{n}_l{l}_thigh"))
@@ -74,7 +74,7 @@ fn add_leg(torso: &mut MjsBody, n: usize, l: usize, angle: f64, rgba: [f32; 4]) 
         .with_name(&format!("c{n}_l{l}_shin"))
         .with_pos([LEG_LEN, 0.0, 0.0]);
 
-    // Knee: hinge about child-body Y (= world tangent direction — same as Python).
+    // Knee: hinge about child-body Y (= world tangent direction - same as Python).
     shin.add_joint()
         .with_name(&knee_name(n, l))
         .with_type(MjtJoint::mjJNT_HINGE)
@@ -144,7 +144,7 @@ fn build_scene() -> MjModel {
 
     spec.option_mut().timestep = 0.002;
 
-    // Checker floor — matching the Python example.
+    // Checker floor - matching the Python example.
     spec.add_texture()
         .with_name("floor")
         .with_builtin(MjtBuiltin::mjBUILTIN_CHECKER)
@@ -181,7 +181,7 @@ fn build_scene() -> MjModel {
 }
 
 // Open-loop sinusoidal gait: uniform amplitude for all actuators, per Python.
-// Python uses `freq * t` (angular frequency in rad/s, not Hz), so freq=5 → 5 rad/s.
+// Python uses `freq * t` (angular frequency in rad/s, not Hz), so freq=5 -> 5 rad/s.
 fn apply_ctrl(data: &mut MjData<&MjModel>, phases: &[f64], freq: f64) {
     let t   = data.time();
     let amp = 0.9;
@@ -199,7 +199,7 @@ fn main() {
         model.ffi().nbody, model.ffi().nv, n_ctrl);
 
     // Systematic phase spread: legs within each creature are evenly spaced;
-    // hip and knee of the same leg are offset by 90°.
+    // hip and knee of the same leg are offset by 90 deg.
     let mut phases = Vec::with_capacity(n_ctrl);
     for &(_, n_legs, _, _) in &CREATURES {
         for l in 0..n_legs {

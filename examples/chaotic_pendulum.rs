@@ -97,7 +97,7 @@ fn main() {
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
 
     // ------------------------------------------------------------------
-    // Phase 1 – Butterfly Effect
+    // Phase 1 - Butterfly Effect
     // Run two simulations that start with nearly identical initial
     // conditions and find the step at which their root angles diverge.
     // ------------------------------------------------------------------
@@ -119,7 +119,7 @@ fn main() {
         root_info.view(&data_a).qvel[0]
     );
     println!(
-        "Trajectory B: root_vel = {:.6} rad/s  (Δ = {:+e})",
+        "Trajectory B: root_vel = {:.6} rad/s  (delta = {:+e})",
         root_info.view(&data_b).qvel[0],
         PERTURBATION
     );
@@ -136,7 +136,7 @@ fn main() {
         if (angle_a - angle_b).abs() > DIVERGE_THRESHOLD && diverge_step.is_none() {
             diverge_step = Some(step);
             println!(
-                "Trajectories diverged at step {} (t = {:.3} s), |Δangle| = {:.3} rad",
+                "Trajectories diverged at step {} (t = {:.3} s), |dangle| = {:.3} rad",
                 step,
                 data_a.time(),
                 (angle_a - angle_b).abs()
@@ -148,13 +148,13 @@ fn main() {
     if diverge_step.is_none() {
         println!(
             "Trajectories did NOT diverge within {CHAOS_STEPS} steps \
-             (final |Δangle| = {:.3e} rad).",
+             (final |dangle| = {:.3e} rad).",
             (root_info.view(&data_a).qpos[0] - root_info.view(&data_b).qpos[0]).abs()
         );
     }
 
     // ------------------------------------------------------------------
-    // Phase 2 – Energy Tracking + Viewer
+    // Phase 2 - Energy Tracking + Viewer
     // Run a fresh simulation, printing total mechanical energy every
     // ENERGY_PRINT_INTERVAL steps to confirm near-conservation.
     // ------------------------------------------------------------------
@@ -175,8 +175,8 @@ fn main() {
 
         // Compute and print energy at regular intervals.
         if step_count % ENERGY_PRINT_INTERVAL == 0 {
-            data.energy_pos();  // compute potential energy → data.energy()[0]
-            data.energy_vel();  // compute kinetic energy   → data.energy()[1]
+            data.energy_pos();  // compute potential energy -> data.energy()[0]
+            data.energy_vel();  // compute kinetic energy   -> data.energy()[1]
             let e_pot = data.energy()[0];
             let e_kin = data.energy()[1];
             println!(
@@ -192,7 +192,7 @@ fn main() {
         viewer.sync_data(&mut data);
         viewer.render();
 
-        // The timestep is 0.001 s → no sleep needed to remain near real-time here;
+        // The timestep is 0.001 s -> no sleep needed to remain near real-time here;
         // rendering itself takes longer than 1 ms per frame.
         std::thread::sleep(Duration::from_secs_f64(model.opt().timestep));
     }

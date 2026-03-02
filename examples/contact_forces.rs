@@ -54,7 +54,7 @@ const EXAMPLE_MODEL: &str = r#"
     <geom name="floor" type="plane" size="0 0 .05" material="grid"/>
 
     <!--
-      The body is rotated 30° around z so the box lands on a corner,
+      The body is rotated 30 deg around z so the box lands on a corner,
       producing multiple simultaneous contact points and making
       the force visualisation more interesting.
     -->
@@ -85,7 +85,7 @@ fn main() {
     // initialised before the first render.
     data.forward();
 
-    // Build an off-screen renderer at 1280×720.
+    // Build an off-screen renderer at 1280x720.
     // Width/height 0 picks up the values from `<global offwidth/offheight>`.
     let mut renderer = MjRenderer::builder()
         .width(0)
@@ -154,7 +154,7 @@ fn main() {
             renderer.sync(&mut data);
             let path = format!("{OUTPUT_DIR}/frame_{step:04}.png");
             renderer.save_rgb(&path).expect("failed to save RGB image");
-            println!("  → saved {path}");
+            println!("  -> saved {path}");
         }
     }
 

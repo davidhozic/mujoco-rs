@@ -9,7 +9,7 @@
 //! The tippe-top is a classic toy that spontaneously inverts while spinning
 //! due to gyroscopic precession combined with frictional dissipation.
 //! When the simulation starts the stem points upward; after several seconds
-//! it flips 180 ° so that the stem points downward.
+//! it flips 180 degrees so that the stem points downward.
 //!
 //! Press `[` / `]` inside the viewer to cycle cameras (the "closeup" camera
 //! built into the model gives a better view of the inversion).
@@ -28,9 +28,9 @@ use mujoco_rs::viewer::MjViewer;
 // The model contains:
 //   - A flat plane (the ground) with a checker-board texture.
 //   - A "top" body with three geoms:
-//       * ball  – the main sphere at the bottom of the top.
-//       * stem  – a thin cylinder sticking upward from the ball.
-//       * ballast – a flat box just below the ball centre that lowers the
+//       * ball  - the main sphere at the bottom of the top.
+//       * stem  - a thin cylinder sticking upward from the ball.
+//       * ballast - a flat box just below the ball centre that lowers the
 //                   centre of mass below the geometric centre, which is
 //                   required for the self-inversion to occur.
 //         (contype/conaffinity = 0 means the ballast never collides.)
@@ -63,8 +63,8 @@ const EXAMPLE_MODEL: &str = r#"
 
   <!--
     Keyframe that gives the top a high spin rate.
-    qpos: x y z qw qx qy qz  (freejoint – position + quaternion)
-    qvel: vx vy vz wx wy wz  (freejoint – linear velocity + angular velocity)
+    qpos: x y z qw qx qy qz  (freejoint - position + quaternion)
+    qvel: vx vy vz wx wy wz  (freejoint - linear velocity + angular velocity)
     The spin is 200 rad/s around z and a small 1 rad/s wobble around y.
   -->
   <keyframe>
@@ -98,7 +98,7 @@ fn main() {
         }
     );
     println!("Press [ / ] to cycle cameras (try the 'closeup' camera).");
-    println!("Running for {DURATION_SECS} seconds of simulation time …");
+    println!("Running for {DURATION_SECS} seconds of simulation time ...");
 
     while viewer.running() && data.time() < DURATION_SECS {
         data.step();
