@@ -140,16 +140,6 @@ Unreleased [3.0.0] (MuJoCo 3.5.0)
       :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::<method>opts_mut` to enable
       ``mjVIS_CONTACTPOINT``, ``mjVIS_CONTACTFORCE``, and ``mjVIS_TRANSPARENT`` flags;
       saves rendered frames as PNG images.
-  - Added new examples based on the `MuJoCo mjspec tutorial <https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb>`_:
-
-    - :gh-example:`Procedural tree <procedural_tree.rs>`: Builds a recursive tree model using the MjSpec model
-      editing API (``add_body``, ``add_geom``, ``add_joint``). Ball joints with
-      spring-stiffness defaults make branches sway under wind set via
-      ``spec.option_mut().wind``.
-    - :gh-example:`Multi-legged creatures <multi_legged_creatures.rs>`: Procedurally generates six creatures (3-8 legs
-      each) in a shared arena using the MjSpec model editing API.
-      Position actuators are wired to hinge joints and driven by an
-      open-loop sinusoidal controller with per-leg phase offsets.
 
 - :ref:`mj_cpp_viewer`:
 
