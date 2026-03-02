@@ -297,15 +297,17 @@ impl MjSpec {
     pub fn compile(&mut self) -> Result<MjModel, Error> {
         let result = unsafe { MjModel::from_raw( mj_compile(self.0, ptr::null()) ) };
         result.map_err(|_| {
-            let error = unsafe {
+            // SAFETY: The spec is still valid after failed compilation.
+            // The error pointer is valid until the next MuJoCo call on this spec.
+            let error_msg = unsafe {
                 let ptr = mjs_getError(self.ffi_mut());
                 if ptr.is_null() {
                     "Compilation failed (unknown error)"
                 } else {
-                    CStr::from_ptr(ptr).to_string_lossy().as_str()
+                    CStr::from_ptr(ptr).to_str().unwrap()
                 }
             };
-            Error::new(ErrorKind::InvalidData, error)
+            Error::new(ErrorKind::InvalidData, error_msg)
         })
     }
 

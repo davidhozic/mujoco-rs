@@ -102,14 +102,19 @@ pub trait SpecItem: Sized {
         let result = unsafe { mjs_delete(spec, element) };
         match result {
             0 => Ok(()),
-            _ => Err(Error::new(ErrorKind::Other, unsafe {
-                let ptr = mjs_getError(spec);
-                if ptr.is_null() {
-                    "Unknown error"
-                } else {
-                    CStr::from_ptr(ptr).to_string_lossy().as_str()
-                }
-            }))
+            _ => {
+                // SAFETY: `spec` is still valid after mjs_delete returns an error.
+                // The returned pointer is valid until the next MuJoCo call on this spec.
+                let error_msg = unsafe {
+                    let ptr = mjs_getError(spec);
+                    if ptr.is_null() {
+                        "Unknown error"
+                    } else {
+                        CStr::from_ptr(ptr).to_str().unwrap()
+                    }
+                };
+                Err(Error::new(ErrorKind::Other, error_msg))
+            }
         }
     }
 }
