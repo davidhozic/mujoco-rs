@@ -19,7 +19,17 @@ pub(crate) fn sync_geoms<M: Deref<Target = MjModel>>(src: &MjvScene<M>, dst: &mu
         return Err(io::Error::new(io::ErrorKind::StorageFull, "not enough space available in the destination scene"))
     }
 
-    /* Fast copy */
+    // Early-exit when there is nothing to copy so that we never
+    // pass a potentially-null `geoms` pointer to copy_nonoverlapping, which
+    // would be UB even with a count of 0 (malloc(0) may return null).
+    if ffi_src.ngeom == 0 {
+        return Ok(());
+    }
+
+    // SAFETY: ffi_src.ngeom > 0 guarantees that geoms was allocated by
+    // mjv_makeScene (non-null). The overflow guard above ensures that
+    // ffi_dst has enough room for ngeom additional elements. The two
+    // scenes are distinct allocations so the ranges cannot overlap.
     unsafe { std::ptr::copy_nonoverlapping(
         ffi_src.geoms,
         ffi_dst.geoms.add(ffi_dst.ngeom as usize),

@@ -17,6 +17,14 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+2.3.5 (MuJoCo 3.3.7)
+=============================
+- Fixed `#164 <https://github.com/davidhozic/mujoco-rs/issues/161>`_, where
+  actuator views could crash due to a non-muscle actuator appearing after
+  the muscle actuator.
+- Internal: Syncing user geoms is now slightly faster when no geoms are added,
+  due to an early exit.
+
 2.3.4 (MuJoCo 3.3.7)
 =============================
 - :ref:`mj_rust_viewer` bug fixes and usability improvements:
