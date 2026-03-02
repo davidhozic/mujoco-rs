@@ -237,3 +237,5 @@ available in repository's examples:
 
 - :gh-example:`Basic model editing <model_editing.rs>`
 - :gh-example:`Terrain generation <terrain_generation.rs>`
+- :gh-example:`Procedural tree <procedural_tree.rs>`
+- :gh-example:`Multi-legged creatures <multi_legged_creatures.rs>`
