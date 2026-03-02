@@ -29,7 +29,7 @@ MuJoCo-rs cannot fully configure it itself due to MuJoCo being a shared C librar
 **load-time errors** about **missing libraries**.
 
 Information on how to configure MuJoCo and resolve these issues is available
-[here](https://mujoco-rs.readthedocs.io/en/v2.1.x/installation.html#mujoco).
+[here](https://mujoco-rs.readthedocs.io/en/stable/installation.html#mujoco).
 
 ## Main features
 MuJoCo-rs tries to stay close to the MuJoCo's C API, with a few additional features for ease of use.

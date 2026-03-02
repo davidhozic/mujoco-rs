@@ -657,8 +657,11 @@ impl<M: Deref<Target = MjModel>> Drop for MjvScene<M> {
     }
 }
 
-unsafe impl<M: Deref<Target = MjModel>> Send for MjvScene<M> {}
-unsafe impl<M: Deref<Target = MjModel>> Sync for MjvScene<M> {}
+// SAFETY: MjvScene<M> owns the FFI scene data exclusively. It is safe to send across
+// threads as long as M itself is Send (e.g. Arc<MjModel>). Non-Send M types such as
+// Rc<MjModel> are correctly excluded by the M: Send / M: Sync bounds.
+unsafe impl<M: Deref<Target = MjModel> + Send> Send for MjvScene<M> {}
+unsafe impl<M: Deref<Target = MjModel> + Sync> Sync for MjvScene<M> {}
 
 #[cfg(test)]
 mod tests {
