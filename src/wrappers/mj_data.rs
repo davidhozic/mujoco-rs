@@ -469,16 +469,18 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         unsafe { mj_referenceConstraint(self.model.ffi(), self.ffi_mut()) }
     }
 
-    /// Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
-    /// If cost is not NULL, set *cost = s(jar) where jar = Jac*qacc-aref.
-    /// Nullable: cost
-    pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) {
+    // Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
+    /// If cost is not `None`, set `*cost = s(jar)` where `jar = Jac*qacc - aref`.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// Returns an error of kind [`ErrorKind::InvalidInput`] if the `jar` length is incorrect.
+    pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) -> io::Result<()> {
         let nefc = unsafe { (*self.data).nefc as usize };
-        assert!(
-            jar.len() >= nefc,
-            "jar slice must contain at least nefc ({nefc}) elements, got {}",
-            jar.len()
-        );
+        if jar.len() < nefc {
+            return Err(Error::new(ErrorKind::InvalidInput, format!("jar slice must contain at least nefc ({nefc}) elements, got {}", jar.len())));
+        }
+
         unsafe { mj_constraintUpdate(
             self.model.ffi(), self.ffi_mut(),
             jar.as_ptr(), cost.map_or(ptr::null_mut(), |x| x as *mut MjtNum),
@@ -1827,8 +1829,18 @@ mod test {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let mut data = model.make_data();
 
+        // Need to step to generate contact constraints
+        // Multiple steps ensure collisions are properly detected and compiled
+        for _ in 0..5 {
+            data.step();
+        }
+
+        // After stepping with a contact-rich model, nefc should be > 0
+        let nefc = data.ffi().nefc as usize;
+        assert!(nefc > 0, "Expected nefc > 0 after stepping with contact model, got {}", nefc);
+
         // correct length should not panic
-        let jar = vec![0.0; data.ffi().nefc as usize];
+        let jar = vec![0.0; nefc];
         data.constraint_update(&jar, None, false).unwrap();
 
         // wrong length should return Err
@@ -2212,6 +2224,7 @@ mod test {
         let _view = joint_info1.view(&data2);
     }
 
+    #[test]
     fn test_act_mixed_stateful_stateless() {
         // muscle at id=0 (stateful, actnum=1), motor at id=1 (stateless, actnum=0)
         // This tests mj_view_indices! with na path: actadr[0]=0, actadr[1]=-1
