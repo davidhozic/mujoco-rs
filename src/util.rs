@@ -21,7 +21,20 @@ macro_rules! mj_view_indices {
             }
             else
             {
-                let end_addr = if $id + 1 < $njnt as usize {*$addr_map.add($id as usize + 1) as usize} else {$max_n as usize};
+                // Some addr maps (e.g. actuator_actadr) contain -1 for items with no
+                // allocated data (stateless actuators).  Skip over those sentinels when
+                // looking for the end boundary of the current range.
+                let mut _next = $id + 1;
+                let end_addr: usize = loop {
+                    if _next >= $njnt as usize {
+                        break $max_n as usize;
+                    }
+                    let _next_addr = *$addr_map.add(_next) as isize;
+                    if _next_addr != -1 {
+                        break _next_addr as usize;
+                    }
+                    _next += 1;
+                };
                 let n = end_addr - start_addr as usize;
                 (start_addr as usize, n)
             }
@@ -130,12 +143,18 @@ impl<T> PartialEq for PointerViewMut<'_, T> {
 impl<T> Deref for PointerViewMut<'_, T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
+        if self.ptr.is_null() {
+            return &[];
+        }
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
 impl<T> DerefMut for PointerViewMut<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
+        if self.ptr.is_null() {
+            return &mut [];
+        }
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
@@ -170,6 +189,9 @@ impl<T> PartialEq for PointerView<'_, T> {
 impl<T> Deref for PointerView<'_, T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
+        if self.ptr.is_null() {
+            return &[];
+        }
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 }

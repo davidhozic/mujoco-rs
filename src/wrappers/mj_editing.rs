@@ -1610,18 +1610,16 @@ mod tests {
 
     #[test]
     fn test_hfield_remove() {
-        const NEW_NAME: &str = "Test model";
+        const NEW_NAME: &str = "Test hfield";
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
-        let world = spec.world_body_mut();
-        let joint = world.add_joint();
+        let hfield = spec.add_hfield();
+        hfield.set_name(NEW_NAME);
 
-        joint.set_name(NEW_NAME);
-
-        /* Test normal body deletion */
-        let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
-        assert!(unsafe { joint.delete() }.is_ok(), "failed to delete model");
-        assert!(spec.joint(NEW_NAME).is_none(), "body was not removed from spec");
+        /* Test normal hfield deletion */
+        let hfield = spec.hfield_mut(NEW_NAME).expect("failed to obtain the hfield");
+        assert!(unsafe { hfield.delete() }.is_ok(), "failed to delete hfield");
+        assert!(spec.hfield(NEW_NAME).is_none(), "hfield was not removed from spec");
 
         spec.compile().unwrap();
     }

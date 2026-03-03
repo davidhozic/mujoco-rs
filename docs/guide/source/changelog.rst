@@ -148,6 +148,14 @@ update of MuJoCo alone can increase the major version.
   - **Breaking**: :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` no longer
     accepts the boolean parameter ``update_timer``. The FPS timer is now always updated.
 
+2.3.5 (MuJoCo 3.3.7)
+=============================
+- Fixed `#161 <https://github.com/davidhozic/mujoco-rs/issues/161>`_, where
+  actuator views could crash due to a non-muscle actuator appearing after
+  the muscle actuator.
+- Internal: Syncing user geoms is now slightly faster when no geoms are added,
+  due to an early exit.
+
 2.3.4 (MuJoCo 3.3.7)
 =============================
 - :ref:`mj_rust_viewer` bug fixes and usability improvements:
