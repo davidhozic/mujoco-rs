@@ -136,12 +136,18 @@ impl<T> PartialEq for PointerViewMut<'_, T> {
 impl<T> Deref for PointerViewMut<'_, T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
+        if self.ptr.is_null() {
+            return &[];
+        }
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
 impl<T> DerefMut for PointerViewMut<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
+        if self.ptr.is_null() {
+            return &mut [];
+        }
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
@@ -181,6 +187,9 @@ impl<T> PartialEq for PointerView<'_, T> {
 impl<T> Deref for PointerView<'_, T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
+        if self.ptr.is_null() {
+            return &[];
+        }
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
