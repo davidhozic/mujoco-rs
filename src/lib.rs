@@ -24,7 +24,7 @@
 //! **load-time errors** about **missing libraries**.
 //! 
 //! Information on how to configure MuJoCo and resolve these issues is available
-//! [here](https://mujoco-rs.readthedocs.io/en/v2.1.x/installation.html#mujoco).
+//! [here](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco).
 //! 
 //! ## 3D viewer
 //! The Rust-native viewer is available ([`viewer::MjViewer`]), as well as the MuJoCo's original C++
