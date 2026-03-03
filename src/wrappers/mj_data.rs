@@ -522,6 +522,12 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// If cost is not NULL, set *cost = s(jar) where jar = Jac*qacc-aref.
     /// Nullable: cost
     pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) {
+        let nefc = unsafe { (*self.data).nefc as usize };
+        assert!(
+            jar.len() >= nefc,
+            "jar slice must contain at least nefc ({nefc}) elements, got {}",
+            jar.len()
+        );
         unsafe { mj_constraintUpdate(
             self.model.ffi(), self.ffi_mut(),
             jar.as_ptr(), cost.map_or(ptr::null_mut(), |x| x as *mut MjtNum),
@@ -1557,5 +1563,32 @@ mod test {
 
         assert!(data.contact().len() != 0);
         assert_eq!(data.contact().len(), data.contacts().len());
+    }
+
+    #[test]
+    fn test_act_mixed_stateful_stateless() {
+        // muscle at id=0 (stateful, actnum=1), motor at id=1 (stateless, actnum=0)
+        // This tests mj_view_indices! with na path: actadr[0]=0, actadr[1]=-1
+        // If bug exists: end_addr = (-1i32) as usize = usize::MAX → overflow
+        let xml = "<mujoco><option timestep=\"0.002\"/>\
+<worldbody><body name=\"b\"><joint name=\"j1\" type=\"slide\" range=\"-1 1\" limited=\"true\"/>\
+<joint name=\"j2\" type=\"slide\"/><geom size=\"0.1\" mass=\"1\"/></body></worldbody>\
+<actuator><muscle name=\"m1\" joint=\"j1\" lengthrange=\"0 1\"/><motor name=\"m2\" joint=\"j2\"/></actuator></mujoco>";
+        let model = MjModel::from_xml_string(xml).unwrap();
+        let data = model.make_data();
+        let actadr = model.actuator_actadr();
+        let actnum = model.actuator_actnum();
+        eprintln!("actadr[0]={} actadr[1]={}", actadr[0], actadr[1]);
+        eprintln!("actnum[0]={} actnum[1]={}", actnum[0], actnum[1]);
+        // muscle (m1) should have an act view with exactly actnum[0] elements
+        let info_m1 = data.actuator("m1").unwrap();
+        let view_m1 = info_m1.view(&data);
+        let act_m1 = view_m1.act.as_ref().expect("muscle must have an act view (bug: overflow sets it to None/garbage)");
+        assert_eq!(act_m1.len(), actnum[0] as usize,
+            "muscle act len wrong: expected {} got {} (overflow bug?)", actnum[0], act_m1.len());
+        // motor (m2) should have no act view
+        let info_m2 = data.actuator("m2").unwrap();
+        let view_m2 = info_m2.view(&data);
+        assert!(view_m2.act.is_none(), "motor must have no act view");
     }
 }
