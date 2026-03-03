@@ -522,6 +522,12 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// If cost is not NULL, set *cost = s(jar) where jar = Jac*qacc-aref.
     /// Nullable: cost
     pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) {
+        let nefc = unsafe { (*self.data).nefc as usize };
+        assert!(
+            jar.len() >= nefc,
+            "jar slice must contain at least nefc ({nefc}) elements, got {}",
+            jar.len()
+        );
         unsafe { mj_constraintUpdate(
             self.model.ffi(), self.ffi_mut(),
             jar.as_ptr(), cost.map_or(ptr::null_mut(), |x| x as *mut MjtNum),
