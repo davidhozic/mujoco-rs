@@ -35,7 +35,7 @@ mod tests {
     #[test]
     fn test_sub_quat() {
         let qa: [MjtNum; 4] = [1.0, 0.0, 0.0, 0.0]; // identity quaternion
-        let qb: [MjtNum; 4] = [0.0, 1.0, 0.0, 0.0]; // 180° rotation about x
+        let qb: [MjtNum; 4] = [0.0, 1.0, 0.0, 0.0]; // 180 degree rotation about x
 
         // Case 1: No derivatives (just check it doesn't crash)
         mjd_sub_quat(&qa, &qb, None, None);
@@ -69,7 +69,7 @@ mod tests {
         let mut dscale = [0.0; 3];
         mjd_quat_integrate(&vel, scale, Some(&mut dquat), Some(&mut dvel), Some(&mut dscale));
 
-        // Sanity: Dquat should be close to identity when vel ≈ 0
+        // Sanity: Dquat should be close to identity when vel ~= 0
         let vel_zero = [0.0, 0.0, 0.0];
         let mut dquat_zero = [0.0; 9];
         mjd_quat_integrate(&vel_zero, 0.0, Some(&mut dquat_zero), None, None);
