@@ -8,7 +8,7 @@ Compile and run one of the example programs.
 
 // turbo-all
 
-1. List available examples by exploring the `examples/` directory. The example name is the file stem (e.g., `basic.rs` → `basic`).
+1. List available examples by exploring the `examples/` directory. The example name is the file stem (e.g., `basic.rs` -> `basic`).
 
 2. Check `Cargo.toml` for the current MuJoCo version (look for `+mj-X.Y.Z` in the package version). Then find the matching `mujoco-X.Y.Z/` directory at the repository root.
 
@@ -22,5 +22,5 @@ export MUJOCO_DYNAMIC_LINK_DIR=$(realpath mujoco-X.Y.Z/lib) && export LD_LIBRARY
 
 > [!NOTE]
 > - Most examples open a GUI window and require a display + OpenGL.
-> - Some examples may require specific Cargo features — read the example source file to check.
+> - Some examples may require specific Cargo features - read the example source file to check.
 > - To run in release mode add `--release`.
