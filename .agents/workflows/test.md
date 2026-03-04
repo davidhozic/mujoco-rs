@@ -16,7 +16,7 @@ export MUJOCO_DYNAMIC_LINK_DIR=$(realpath mujoco-X.Y.Z/lib) && export LD_LIBRARY
 
 ```
 
-3. Verify that the exit code is 0 (success) — check the terminal output for errors.
+3. Verify that the exit code is 0 (success) - check the terminal output for errors.
 
 > [!NOTE]
 > - To run a single test: `cargo test --lib <test_name>`.

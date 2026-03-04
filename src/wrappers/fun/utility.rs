@@ -171,8 +171,9 @@ pub fn mju_sqr_mat_td(res: &mut [MjtNum], mat: &[MjtNum], diag: Option<&[MjtNum]
 /* Auto generated */
 /*******************************/
 /// Intersect ray with pure geom, return nearest distance or -1 if no intersection.
-pub fn mju_ray_geom(pos: &[MjtNum; 3], mat: &[MjtNum; 9], size: &[MjtNum; 3], pnt: &[MjtNum; 3], vec: &[MjtNum; 3], geomtype: MjtGeom) -> MjtNum  {
-    unsafe { mujoco_c::mju_rayGeom(pos, mat, size, pnt, vec, geomtype as i32, ptr::null_mut()) }
+/// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
+pub fn mju_ray_geom(pos: &[MjtNum; 3], mat: &[MjtNum; 9], size: &[MjtNum; 3], pnt: &[MjtNum; 3], vec: &[MjtNum; 3], geomtype: MjtGeom, normal_out: Option<&mut [MjtNum; 3]>) -> MjtNum  {
+    unsafe { mujoco_c::mju_rayGeom(pos, mat, size, pnt, vec, geomtype as i32, normal_out.map_or(ptr::null_mut(), |x| x)) }
 }
 
 /// Set res = 0.

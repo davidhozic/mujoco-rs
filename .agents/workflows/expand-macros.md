@@ -29,4 +29,4 @@ view_file expanded.rs (or search it with grep_search)
 
 > [!NOTE]
 > - After expanding, search `expanded.rs` for the generated methods to verify correctness.
-> - The `expanded.rs` file is a local artifact — do NOT commit it.
+> - The `expanded.rs` file is a local artifact - do NOT commit it.

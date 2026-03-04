@@ -605,14 +605,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         let dim = self.model.sensor_dim()[id] as usize;
         let mut out = vec![0.0 as MjtNum; dim];
         let ptr = unsafe { mj_readSensor(self.model.ffi(), self.ffi(), id as i32, time, out.as_mut_ptr(), interp) };
-        if ptr.is_null() {
-            // interpolated value written into `out`
-            Ok(out)
-        } else {
-            // pointer into internal history buffer; copy to Vec and return
-            let slice = unsafe { std::slice::from_raw_parts(ptr, dim) };
-            Ok(slice.to_vec())
+        if !ptr.is_null() {
+            // Exact match: data lives at the returned pointer, not in `out`.
+            out.copy_from_slice(unsafe { std::slice::from_raw_parts(ptr, dim) });
         }
+        Ok(out)
     }
 
     /// Adds a contact to the contact list.
@@ -708,7 +705,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Compute subtree center-of-mass end-effector Jacobian (translational only).
     /// Set `jacp` to `true` to calculate the translational component. Returns a `Vec`.
     /// Empty `Vec` indicates that the Jacobian was not computed.
+    /// # Panics
+    /// Panics if `body_id` is not a valid body index.
     pub fn jac_subtree_com(&mut self, jacp: bool, body_id: i32) -> Vec<MjtNum> {
+        assert!(body_id >= 0 && (body_id as usize) < self.model.ffi().nbody as usize, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
 
@@ -979,7 +979,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Apply Cartesian force and torque to a point on a body, and add the result to `qfrc_target`.
+    /// # Panics
+    /// Panics if `body` is not a valid body index or `qfrc_target` length is less than `nv`.
     pub fn apply_ft(&mut self, force: &[MjtNum; 3], torque: &[MjtNum; 3], point: &[MjtNum; 3], body: i32, qfrc_target: &mut [MjtNum]) {
+        assert!(body >= 0 && (body as usize) < self.model.ffi().nbody as usize, "body {} out of bounds [0, {})", body, self.model.ffi().nbody);
         assert!(qfrc_target.len() >= self.model.ffi().nv as usize, "qfrc_target must be at least nv length");
         unsafe {
             mj_applyFT(self.model.ffi(), self.ffi_mut(), force, torque, point, body, qfrc_target.as_mut_ptr());
@@ -1251,6 +1254,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         qfrc_smooth: &[MjtNum; "net unconstrained force"; model.ffi().nv],
         qacc_smooth: &[MjtNum; "unconstrained acceleration"; model.ffi().nv],
         qfrc_constraint: &[MjtNum; "constraint force"; model.ffi().nv],
+        qfrc_inverse: &[MjtNum; "net external force; should equal qfrc_applied + J'*xfrc_applied + qfrc_actuator"; model.ffi().nv],
         cacc: &[[MjtNum; 6] [cast]; "com-based acceleration"; model.ffi().nbody],
         cfrc_int: &[[MjtNum; 6] [cast]; "com-based interaction force with parent"; model.ffi().nbody],
         cfrc_ext: &[[MjtNum; 6] [cast]; "com-based external force on body"; model.ffi().nbody],
