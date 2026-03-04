@@ -60,7 +60,7 @@ update of MuJoCo alone can increase the major version.
 
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward_kinematics`.
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_flex`.
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_from_data`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_state_from_data`.
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>apply_ft`.
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_mesh`.
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_hfield`.
@@ -93,7 +93,7 @@ update of MuJoCo alone can increase the major version.
 
   - |mj_spec|:
 
-    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_buffer`
+    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`
       now calls :docs-rs:`~~mujoco_rs::mujoco_c::<struct>mj_loadModelBuffer` directly.
       A virtual file-system was previously used to support this.
 

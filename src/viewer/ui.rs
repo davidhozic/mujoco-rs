@@ -420,7 +420,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 let fwd = gl_cams[0].forward;
                                 let up = gl_cams[0].up;
 
-                                // right = forward × up
+                                // right = forward x up
                                 let right = [
                                     fwd[1] * up[2] - fwd[2] * up[1],
                                     fwd[2] * up[0] - fwd[0] * up[2],

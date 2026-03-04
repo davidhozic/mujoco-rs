@@ -7,6 +7,7 @@ use crate::{getter_setter, mujoco_c::*};
 
 use std::io::{self, Error, ErrorKind};
 use std::ffi::CString;
+use std::borrow::Cow;
 use std::ops::Deref;
 use std::fmt::Debug;
 use std::ptr;
@@ -471,8 +472,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     // Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
     /// If cost is not `None`, set `*cost = s(jar)` where `jar = Jac*qacc - aref`.
-    /// # Returns
-    /// `Ok(())` on success.
     /// # Errors
     /// Returns an error of kind [`ErrorKind::InvalidInput`] if the `jar` length is incorrect.
     pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) -> io::Result<()> {
@@ -491,12 +490,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Initializes the actuator history buffer for actuator `id` (wraps `mj_initCtrlHistory`).
-    /// - `times`: optional slice of length `nsample` containing timestamps; pass `None` to keep existing timestamps.
-    /// - `values`: slice of length `nsample` containing control values.
-    /// # Returns
-    /// `Ok(())` on success.
+    /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
+    /// `values`: control values slice of length `nsample`.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] if `id >= nu` (actuator not found) or the actuator has no history buffer.
+    /// - [`ErrorKind::NotFound`] if `id >= nu` or the actuator has no history buffer.
     /// - [`ErrorKind::InvalidInput`] if `times` or `values` have the wrong length.
     pub fn init_ctrl_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum]) -> io::Result<()> {
         let nu = self.model.ffi().nu as usize;
@@ -531,11 +528,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Initializes the sensor history buffer for sensor `id` (wraps `mj_initSensorHistory`).
-    /// - `times`: optional slice of length `nsample` containing timestamps; pass `None` to keep existing timestamps.
-    /// - `values`: slice of length `nsample * dim` containing sensor values.
-    /// - `phase`: time phase offset.
-    /// # Returns
-    /// `Ok(())` on success.
+    /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
+    /// `values`: sensor values slice of length `nsample * dim`.
+    /// `phase`: time phase offset.
     /// # Errors
     /// - [`ErrorKind::NotFound`] if `id >= nsensor` or the sensor has no history buffer.
     /// - [`ErrorKind::InvalidInput`] if `times` or `values` have the wrong length.
@@ -573,11 +568,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Reads the control history value for actuator `id` at `time`.
-    /// `interp` controls interpolation: `-1` = use the actuator's stored interp setting,
-    /// `0` = zero-order hold, `1` = piecewise linear, `2` = cubic spline.
-    /// # Returns
-    /// On success, returns the interpolated control value.
+    /// Reads the control history value for actuator `id` at `time`
+    /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
     /// # Errors
     /// Returns [`ErrorKind::NotFound`] when `id >= nu`.
     pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<MjtNum> {
@@ -589,14 +581,62 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(val)
     }
 
-    /// Reads the sensor value(s) for sensor `id` at `time`.
-    /// `interp` controls interpolation: `-1` = use the sensor's stored interp setting,
-    /// `0` = zero-order hold, `1` = piecewise linear, `2` = cubic spline.
-    /// # Returns
-    /// On success, returns a `Vec<MjtNum>` of length `sensor_dim[id]` containing the sensor values.
+    /// Reads sensor `id` at `time` into `dst` (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
+    /// `dst` must be exactly `sensor_dim[id]` elements long.
     /// # Errors
     /// Returns [`ErrorKind::NotFound`] when `id >= nsensor`.
-    pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<Vec<MjtNum>> {
+    /// Returns [`ErrorKind::InvalidInput`] when `dst.len() != sensor_dim[id]`.
+    pub fn read_sensor_into(&self, id: usize, time: MjtNum, interp: i32, dst: &mut [MjtNum]) -> io::Result<()> {
+        let nsensor = self.model.ffi().nsensor as usize;
+        if id >= nsensor {
+            return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
+        }
+
+        let dim = self.model.sensor_dim()[id] as usize;
+        if dst.len() != dim {
+            return Err(Error::new(ErrorKind::InvalidInput, format!("dst buffer wrong size: expected {}, got {}", dim, dst.len())));
+        }
+        let ptr = unsafe { mj_readSensor(self.model.ffi(), self.ffi(), id as i32, time, dst.as_mut_ptr(), interp) };
+        if !ptr.is_null() {
+            // C returned a pointer (no interpolation) - copy into dst.
+            dst.copy_from_slice(unsafe { std::slice::from_raw_parts(ptr, dim) });
+        }
+        Ok(())
+    }
+
+    /// Reads sensor `id` at `time` into a stack-allocated `[MjtNum; N]`
+    /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic). `N` must match `sensor_dim[id]`.
+    /// See also [`read_sensor`](Self::read_sensor), [`read_sensor_into`](Self::read_sensor_into).
+    /// # Errors
+    /// Returns [`ErrorKind::NotFound`] when `id >= nsensor`.
+    /// Returns [`ErrorKind::InvalidInput`] when `N != sensor_dim[id]`.
+    pub fn read_sensor_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<[MjtNum; N]> {
+        let nsensor = self.model.ffi().nsensor as usize;
+        if id >= nsensor {
+            return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
+        }
+
+        let dim = self.model.sensor_dim()[id] as usize;
+        if N != dim {
+            return Err(Error::new(ErrorKind::InvalidInput, format!("N={} does not match sensor dim={}", N, dim)));
+        }
+        let mut out = [0.0 as MjtNum; N];
+        let ptr = unsafe { mj_readSensor(self.model.ffi(), self.ffi(), id as i32, time, out.as_mut_ptr(), interp) };
+        if !ptr.is_null() {
+            // C returned a pointer (no interpolation) - copy into out.
+            out.copy_from_slice(unsafe { std::slice::from_raw_parts(ptr, N) });
+        }
+        Ok(out)
+    }
+
+    /// Reads sensor `id` at `time` (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
+    ///
+    /// Returns [`Cow::Borrowed`] (zero-copy) for exact matches, ZOH, and extrapolation.
+    /// Returns [`Cow::Owned`] for linear/cubic interpolation.
+    /// See also [`read_sensor_fixed`](Self::read_sensor_fixed), [`read_sensor_into`](Self::read_sensor_into).
+    /// # Errors
+    /// Returns [`ErrorKind::NotFound`] when `id >= nsensor`.
+    pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<Cow<'_, [MjtNum]>> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
             return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
@@ -606,10 +646,12 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         let mut out = vec![0.0 as MjtNum; dim];
         let ptr = unsafe { mj_readSensor(self.model.ffi(), self.ffi(), id as i32, time, out.as_mut_ptr(), interp) };
         if !ptr.is_null() {
-            // Exact match: data lives at the returned pointer, not in `out`.
-            out.copy_from_slice(unsafe { std::slice::from_raw_parts(ptr, dim) });
+            // C returned a pointer (no interpolation) - borrow it directly.
+            Ok(Cow::Borrowed(unsafe { std::slice::from_raw_parts(ptr, dim) }))
+        } else {
+            // C wrote result into out.
+            Ok(Cow::Owned(out))
         }
-        Ok(out)
     }
 
     /// Adds a contact to the contact list.
@@ -877,12 +919,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Intersect multiple rays emanating from a single point.
     /// Similar semantics to mj_ray, but `vec` is an array of (nray x 3) directions.
-    /// If `normals_out` is `Some`, it must be a mutable slice of length `nray` and it will be
-    /// filled with surface normals (one `[x,y,z]` per ray). Use `None` to skip normals.
-    /// # Returns
-    /// On success, returns `(geomids, distances)`.
+    /// If `normals_out` is `Some`, it must be a slice of `nray` elements filled with surface normals. Use `None` to skip normals.
     /// # Errors
-    /// Returns an error of kind [`ErrorKind::InvalidInput`] if `normals_out` length does not match the number of rays.
+    /// Returns [`ErrorKind::InvalidInput`] if `normals_out` length does not match `vec.len()`.
     pub fn multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
         flg_static: bool, bodyexclude: i32, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
@@ -909,13 +948,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Intersect ray (pnt+x*vec, x>=0) with visible geoms, except geoms in bodyexclude.
-    /// Return distance (x) to nearest surface, or -1 if no intersection and output geomid.
+    /// Returns `(geomid, distance)` where distance is -1 if no intersection.
     /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
-    /// `geomgroup` and `flg_static` are as in mjvOption; `geomgroup==NULL` skips group exclusion.
-    /// # Returns
-    /// On success, returns `(geomid, distance)`.
-    /// # Errors
-    /// Returns `Err` only on invalid inputs.
+    /// `geomgroup` and `flg_static` are as in mjvOption; pass `None` for `geomgroup` to skip group exclusion.
     pub fn ray(
         &self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: bool, bodyexclude: i32,
@@ -1227,7 +1262,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         qLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
         qLDiagInv: &[MjtNum; "1/diag(D)"; model.ffi().nv],
         bvh_active: &[bool [cast]; "was bounding volume checked for collision"; model.ffi().nbvh],
-        tree_awake: &[bool [cast]; "is tree awake; 0: asleep; 1: awake"; model.ffi().ntree],
+        tree_awake: &[i32; "is tree awake; 0: asleep; 1: awake"; model.ffi().ntree],
         body_awake: &[MjtSleepState [cast]; "body sleep state"; model.ffi().nbody],
         body_awake_ind: &[i32; "indices of awake and static bodies"; model.ffi().nbody],
         parent_awake_ind: &[i32; "indices of bodies with awake or static parents"; model.ffi().nbody],
@@ -1771,7 +1806,7 @@ mod test {
 
         // Test actual distance between two different geoms (green_sphere and green_sphere2).
         // green_sphere is at (.2, .2, .1) and green_sphere2 is at (.7, .2, .1), both with radius 0.1.
-        // Expected distance ≈ 0.5 - 2*0.1 = 0.3 (center distance minus both radii).
+        // Expected distance ~= 0.5 - 2*0.1 = 0.3 (center distance minus both radii).
         let geom0_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere");
         let geom1_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere2");
         assert!(geom0_id >= 0 && geom1_id >= 0);
@@ -1807,10 +1842,10 @@ mod test {
         assert!(geomid2 >= -1);
         let norm_len = (normal[0]*normal[0] + normal[1]*normal[1] + normal[2]*normal[2]).sqrt();
         if dist2 >= 0.0 {
-            // hit — normal should be non-zero
+            // hit - normal should be non-zero
             assert!(norm_len > 0.0);
         } else {
-            // no hit — normal buffer is unchanged / zeroed
+            // no hit - normal buffer is unchanged / zeroed
             assert_eq!(normal, [0.0; 3]);
         }
 
@@ -1890,12 +1925,12 @@ mod test {
         let values_sens = vec![2.718; 4 * 1];
         data.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).unwrap();
 
-        let got = data.read_sensor(0, times_sens[1], 0).unwrap();
+        let got = data.read_sensor_fixed::<1>(0, times_sens[1], 0).unwrap();
         assert_eq!(got.len(), 1);
         assert_relative_eq!(got[0], values_sens[1], epsilon=1e-12);
 
         // also test interpolation path (time between samples)
-        let interp_res = data.read_sensor(0, 0.005, 1).unwrap();
+        let interp_res = data.read_sensor_fixed::<1>(0, 0.005, 1).unwrap();
         assert_eq!(interp_res.len(), 1);
         // values are identical here, but ensure we get a value
         assert_relative_eq!(interp_res[0], values_sens[0], epsilon=1e-12);
@@ -2060,8 +2095,8 @@ mod test {
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
 
         // read_sensor invalid id -> NotFound
-        let err = data.read_sensor(99, times_sens[0], 0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        let err: io::Result<[MjtNum; 1]> = data.read_sensor_fixed::<1>(99, times_sens[0], 0);
+        assert_eq!(err.unwrap_err().kind(), std::io::ErrorKind::NotFound);
 
         // sensor exists but has no history buffer -> NotFound
         const NO_HIST_SENS_MODEL: &str = r#"
@@ -2081,6 +2116,105 @@ mod test {
         let mut data2 = model2.make_data();
         let err = data2.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn test_read_sensor_variants() {
+        // Model with a delayed sensor (history enabled) so we can test both
+        // Cow::Borrowed (exact time match) and Cow::Owned (interpolation) paths.
+        const HIST_MODEL: &str = r#"
+<mujoco>
+  <option timestep="0.01"/>
+  <worldbody>
+    <body>
+      <joint name="slide" type="slide"/>
+      <geom size="0.1"/>
+    </body>
+  </worldbody>
+  <sensor>
+    <jointpos name="jp" joint="slide" delay="0.03" interp="linear" nsample="4"/>
+  </sensor>
+</mujoco>
+"#;
+        let model = MjModel::from_xml_string(HIST_MODEL).unwrap();
+        let mut data = model.make_data();
+        let delay = 0.03;
+
+        // Seed the history buffer with known distinct values.
+        let hist_times: Vec<_> = (0..4).map(|i| i as MjtNum * 0.01).collect();
+        let values = vec![10.0, 20.0, 30.0, 40.0]; // dim==1 for jointpos
+        data.init_sensor_history(0, Some(&hist_times), &values, 0.0).unwrap();
+
+        // mj_readSensor internally reads at (time - delay), so to read history
+        // entry at hist_times[i] we must pass time = hist_times[i] + delay.
+
+        // exact match -> Cow::Borrowed
+        let query_time = hist_times[2] + delay; // 0.02 + 0.03 = 0.05
+        let cow = data.read_sensor(0, query_time, 0).unwrap();
+        assert_eq!(cow.len(), 1);
+        assert_relative_eq!(cow[0], 30.0, epsilon = 1e-12);
+        assert!(matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "exact match should yield Cow::Borrowed");
+
+        // interpolation -> Cow::Owned
+        // midpoint between hist_times[1]=0.01 and hist_times[2]=0.02 -> internal time 0.015
+        let interp_query = (hist_times[1] + hist_times[2]) / 2.0 + delay; // 0.045
+        let cow_interp = data.read_sensor(0, interp_query, 1).unwrap();
+        assert_eq!(cow_interp.len(), 1);
+        assert_relative_eq!(cow_interp[0], 25.0, epsilon = 1e-6); // linear interp of 20 and 30
+        assert!(matches!(cow_interp, std::borrow::Cow::Owned(_)),
+                "interpolation should yield Cow::Owned");
+
+        // read_sensor_fixed<N>: exact match (stack array)
+        let arr_exact: [f64; 1] = data.read_sensor_fixed(0, query_time, 0).unwrap();
+        assert_relative_eq!(arr_exact[0], 30.0, epsilon = 1e-12);
+
+        // read_sensor_fixed<N>: interpolation (stack array)
+        let arr_interp: [f64; 1] = data.read_sensor_fixed(0, interp_query, 1).unwrap();
+        assert_relative_eq!(arr_interp[0], 25.0, epsilon = 1e-6);
+
+        // read_sensor_fixed<N>: wrong N -> Err(InvalidInput)
+        let err: io::Result<[MjtNum; 3]> = data.read_sensor_fixed::<3>(0, query_time, 0);
+        assert_eq!(err.unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
+
+        // read_sensor_into: exact match
+        let mut buf = [0.0; 1];
+        data.read_sensor_into(0, hist_times[0] + delay, 0, &mut buf).unwrap();
+        assert_relative_eq!(buf[0], 10.0, epsilon = 1e-12);
+
+        // read_sensor_into: interpolation
+        let mut buf2 = [0.0; 1];
+        data.read_sensor_into(0, interp_query, 1, &mut buf2).unwrap();
+        assert_relative_eq!(buf2[0], 25.0, epsilon = 1e-6);
+
+        // read_sensor_into: buffer too small -> Err(InvalidInput)
+        let mut tiny: [MjtNum; 0] = [];
+        let err = data.read_sensor_into(0, hist_times[0] + delay, 0, &mut tiny).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+
+        // read_sensor_into: buffer too large -> Err(InvalidInput)
+        let mut big = [0.0; 4];
+        let err = data.read_sensor_into(0, hist_times[3] + delay, 0, &mut big).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+
+        // invalid sensor id -> NotFound for all methods
+        let err: io::Result<[MjtNum; 1]> = data.read_sensor_fixed::<1>(99, 0.0, 0);
+        assert_eq!(err.unwrap_err().kind(), std::io::ErrorKind::NotFound);
+        let err = data.read_sensor(99, 0.0, 0).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        let err = data.read_sensor_into(99, 0.0, 0, &mut buf).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+
+        // read_sensor_fixed<N>, read_sensor, and read_sensor_into agree for all history times
+        for &t in &hist_times {
+            let query = t + delay;
+            let arr = data.read_sensor_fixed::<1>(0, query, 0).unwrap();
+            let cow_val = data.read_sensor(0, query, 0).unwrap();
+            let mut into_val = [0.0; 1];
+            data.read_sensor_into(0, query, 0, &mut into_val).unwrap();
+            assert_relative_eq!(arr[0], cow_val[0], epsilon = 1e-12);
+            assert_relative_eq!(arr[0], into_val[0], epsilon = 1e-12);
+        }
     }
 
     #[test]
@@ -2232,7 +2366,7 @@ mod test {
     fn test_act_mixed_stateful_stateless() {
         // muscle at id=0 (stateful, actnum=1), motor at id=1 (stateless, actnum=0)
         // This tests mj_view_indices! with na path: actadr[0]=0, actadr[1]=-1
-        // If bug exists: end_addr = (-1i32) as usize = usize::MAX → overflow
+        // If bug exists: end_addr = (-1i32) as usize = usize::MAX -> overflow
         let xml = "<mujoco><option timestep=\"0.002\"/>\
 <worldbody><body name=\"b\"><joint name=\"j1\" type=\"slide\" range=\"-1 1\" limited=\"true\"/>\
 <joint name=\"j2\" type=\"slide\"/><geom size=\"0.1\" mass=\"1\"/></body></worldbody>\

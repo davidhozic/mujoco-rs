@@ -103,7 +103,8 @@ fn test_simulation_and_sensors<'a>(model: &'a MjModel, data: &mut MjData<&'a MjM
     
     data.sensor_pos();
     let sensor_id = model.name_to_id(MjtObj::mjOBJ_SENSOR, "box2_pos_sensor") as usize;
-    let sensor_data = data.read_sensor(sensor_id, 0.0, 0).expect("Failed to read sensor");
+    // box2_pos_sensor is mjSENS_JOINTPOS (dim=1)
+    let sensor_data: [f64; 1] = data.read_sensor_fixed(sensor_id, 0.0, 0).expect("Failed to read sensor");
     assert!(!sensor_data.is_empty());
 }
 
