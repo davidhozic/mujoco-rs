@@ -197,7 +197,7 @@ macro_rules! add_x_method_by_frame {
                     if ptr.is_null() {
                         return Err(MjEditError::AllocationFailed);
                     }
-                    let set_result = mjs_setFrame(ptr.cast(), self as *mut Self);
+                    let set_result = mjs_setFrame((*ptr).element, self);
                     debug_assert_eq!(set_result, 0, "mjs_setFrame failed; element or frame is invalid");
                     Ok(&mut *ptr)
                 }
