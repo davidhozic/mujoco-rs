@@ -4,6 +4,7 @@ use super::mj_model::{MjModel, MjtSameFrame, MjtObj, MjtStage};
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
 use crate::{getter_setter, mujoco_c::*};
+use crate::error::MjDataError;
 
 use std::io::{self, Error, ErrorKind};
 use std::ffi::CString;
@@ -73,6 +74,24 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             data: data_ptr,
             model: model,
         }
+    }
+
+    /// Fallible version of [`MjData::new`].
+    ///
+    /// Returns `Ok(MjData)` on success, or [`MjDataError::AllocationFailed`] if
+    /// MuJoCo returns a null pointer from `mj_makeData`.
+    ///
+    /// Prefer this method over [`MjData::new`] when you want to handle
+    /// allocation failures without a panic.
+    pub fn try_new(model: M) -> Result<Self, MjDataError> {
+        let data_ptr = unsafe { mj_makeData(model.ffi()) };
+        if data_ptr.is_null() {
+            return Err(MjDataError::AllocationFailed);
+        }
+        Ok(Self {
+            data: data_ptr,
+            model,
+        })
     }
 
     /// Returns a slice of detected contacts.
@@ -671,162 +690,156 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Set `jacp` to `true` to calculate the translational Jacobian and `jacr` to `true` for
     /// the rotational Jacobian. Returns a `(Vec, Vec)` for translation and rotation. Empty `Vec`s
     /// indicate that the corresponding Jacobian was not computed.
-    /// # Panics
-    /// Panics if `body_id` is not a valid body index.
-    pub fn jac(&self, jacp: bool, jacr: bool, point: &[MjtNum; 3], body_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        assert!(body_id >= 0 && (body_id as usize) < self.model.ffi().nbody as usize, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is negative or `>= nbody`.
+    pub fn jac(&self, jacp: bool, jacr: bool, point: &[MjtNum; 3], body_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+        let nbody = self.model.ffi().nbody as i64;
+        if body_id < 0 || (body_id as i64) >= nbody {
+            return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
+        }
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
         let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
-
         unsafe {
-            // Safety: body_id validated above; mj_jac requires valid body index
             mj_jac(
-                self.model.ffi(),
-                self.ffi(),
+                self.model.ffi(), self.ffi(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
-                point,
-                body_id,
+                point, body_id,
             )
         };
-
-        (jacp_vec, jacr_vec)
+        Ok((jacp_vec, jacr_vec))
     }
 
     /// Compute body frame end-effector Jacobian.
     /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
     /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
-    /// # Panics
-    /// Panics if `body_id` is not a valid body index.
-    pub fn jac_body(&self, jacp: bool, jacr: bool, body_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        assert!(body_id >= 0 && (body_id as usize) < self.model.ffi().nbody as usize, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
+    pub fn jac_body(&self, jacp: bool, jacr: bool, body_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+        let nbody = self.model.ffi().nbody as i64;
+        if body_id < 0 || (body_id as i64) >= nbody {
+            return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
+        }
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
         let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
-
         unsafe {
-            // Safety: body_id validated above; mj_jacBody requires valid body index
             mj_jacBody(
-                self.model.ffi(),
-                self.ffi(),
+                self.model.ffi(), self.ffi(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
                 body_id,
             )
         };
-
-        (jacp_vec, jacr_vec)
+        Ok((jacp_vec, jacr_vec))
     }
 
     /// Compute body center-of-mass end-effector Jacobian.
     /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
     /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
-    /// # Panics
-    /// Panics if `body_id` is not a valid body index.
-    pub fn jac_body_com(&self, jacp: bool, jacr: bool, body_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        assert!(body_id >= 0 && (body_id as usize) < self.model.ffi().nbody as usize, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
+    pub fn jac_body_com(&self, jacp: bool, jacr: bool, body_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+        let nbody = self.model.ffi().nbody as i64;
+        if body_id < 0 || (body_id as i64) >= nbody {
+            return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
+        }
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
         let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
-
         unsafe {
-            // Safety: body_id validated above; mj_jacBodyCom requires valid body index
             mj_jacBodyCom(
-                self.model.ffi(),
-                self.ffi(),
+                self.model.ffi(), self.ffi(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
                 body_id,
             )
         };
-
-        (jacp_vec, jacr_vec)
+        Ok((jacp_vec, jacr_vec))
     }
 
     /// Compute subtree center-of-mass end-effector Jacobian (translational only).
     /// Set `jacp` to `true` to calculate the translational component. Returns a `Vec`.
     /// Empty `Vec` indicates that the Jacobian was not computed.
-    /// # Panics
-    /// Panics if `body_id` is not a valid body index.
-    pub fn jac_subtree_com(&mut self, jacp: bool, body_id: i32) -> Vec<MjtNum> {
-        assert!(body_id >= 0 && (body_id as usize) < self.model.ffi().nbody as usize, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
+    pub fn jac_subtree_com(&mut self, jacp: bool, body_id: i32) -> Result<Vec<MjtNum>, MjDataError> {
+        let nbody = self.model.ffi().nbody as i64;
+        if body_id < 0 || (body_id as i64) >= nbody {
+            return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
+        }
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
-
         unsafe {
             mj_jacSubtreeCom(
-                self.model.ffi(),
-                self.ffi_mut(),
+                self.model.ffi(), self.ffi_mut(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 body_id,
             )
         };
-
-        jacp_vec
+        Ok(jacp_vec)
     }
 
     /// Compute geom end-effector Jacobian.
     /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
     /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
-    /// # Panics
-    /// Panics if `geom_id` is not a valid geom index.
-    pub fn jac_geom(&self, jacp: bool, jacr: bool, geom_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        assert!(geom_id >= 0 && (geom_id as usize) < self.model.ffi().ngeom as usize, "geom_id {} out of bounds [0, {})", geom_id, self.model.ffi().ngeom);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `geom_id` is out of range.
+    pub fn jac_geom(&self, jacp: bool, jacr: bool, geom_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+        let ngeom = self.model.ffi().ngeom as i64;
+        if geom_id < 0 || (geom_id as i64) >= ngeom {
+            return Err(MjDataError::IndexOutOfBounds { kind: "geom_id", id: geom_id as i64, upper: ngeom });
+        }
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
         let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
-
         unsafe {
-            // Safety: geom_id validated above; mj_jacGeom requires valid geom index
             mj_jacGeom(
-                self.model.ffi(),
-                self.ffi(),
+                self.model.ffi(), self.ffi(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
                 geom_id,
             )
         };
-
-        (jacp_vec, jacr_vec)
+        Ok((jacp_vec, jacr_vec))
     }
 
     /// Compute site end-effector Jacobian.
     /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
     /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
-    /// # Panics
-    /// Panics if `site_id` is not a valid site index.
-    pub fn jac_site(&self, jacp: bool, jacr: bool, site_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        assert!(site_id >= 0 && (site_id as usize) < self.model.ffi().nsite as usize, "site_id {} out of bounds [0, {})", site_id, self.model.ffi().nsite);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `site_id` is out of range.
+    pub fn jac_site(&self, jacp: bool, jacr: bool, site_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+        let nsite = self.model.ffi().nsite as i64;
+        if site_id < 0 || (site_id as i64) >= nsite {
+            return Err(MjDataError::IndexOutOfBounds { kind: "site_id", id: site_id as i64, upper: nsite });
+        }
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
         let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
-
         unsafe {
-            // Safety: site_id validated above; mj_jacSite requires valid site index
             mj_jacSite(
-                self.model.ffi(),
-                self.ffi(),
+                self.model.ffi(), self.ffi(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
                 site_id,
             )
         };
-
-        (jacp_vec, jacr_vec)
+        Ok((jacp_vec, jacr_vec))
     }
 
     /// Compute subtree angular momentum matrix.
-    /// # Panics
-    /// Panics if `body_id` is not a valid body index.
-    pub fn angmom_mat(&mut self, body_id: i32) -> Vec<MjtNum> {
-        assert!(body_id >= 0 && (body_id as usize) < self.model.ffi().nbody as usize, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
+    pub fn angmom_mat(&mut self, body_id: i32) -> Result<Vec<MjtNum>, MjDataError> {
+        let nbody = self.model.ffi().nbody as i64;
+        if body_id < 0 || (body_id as i64) >= nbody {
+            return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
+        }
         let mut mat = vec![0.0; 3 * self.model.ffi().nv as usize];
-        unsafe {
-            // Safety: body_id validated above; mj_angmomMat requires valid body index
-            mj_angmomMat(self.model.ffi(), self.ffi_mut(), mat.as_mut_ptr(), body_id)
-        };
-        mat
+        unsafe { mj_angmomMat(self.model.ffi(), self.ffi_mut(), mat.as_mut_ptr(), body_id) };
+        Ok(mat)
     }
 
     /// Run all kinematics-like computations (kinematics, comPos, camlight, flex, tendon).
@@ -835,86 +848,87 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Compute object 6D velocity (rot:lin) in object-centered frame, world/local orientation.
-    /// # Panics
-    /// Panics if `obj_id` is not a valid index for the given object type
-    /// or the obj_type is not one of: [`MjtObj::mjOBJ_BODY`], [`MjtObj::mjOBJ_XBODY`], [`MjtObj::mjOBJ_GEOM`], [`MjtObj::mjOBJ_SITE`], [`MjtObj::mjOBJ_CAMERA`].
-    pub fn object_velocity(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> [MjtNum; 6] {
+    /// # Errors
+    /// Returns:
+    /// - [`MjDataError::UnsupportedObjectType`] when `obj_type` is not one of
+    ///   `mjOBJ_BODY`, `mjOBJ_XBODY`, `mjOBJ_GEOM`, `mjOBJ_SITE`, `mjOBJ_CAMERA`.
+    /// - [`MjDataError::IndexOutOfBounds`] when `obj_id` is out of range for the given type.
+    pub fn object_velocity(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
         let max_id = match obj_type {
             MjtObj::mjOBJ_BODY | MjtObj::mjOBJ_XBODY => self.model.ffi().nbody,
             MjtObj::mjOBJ_GEOM => self.model.ffi().ngeom,
             MjtObj::mjOBJ_SITE => self.model.ffi().nsite,
             MjtObj::mjOBJ_CAMERA => self.model.ffi().ncam,
-            _ => panic!("unsupported 'obj_type' ({obj_type:?}) was given."),
+            _ => return Err(MjDataError::UnsupportedObjectType(obj_type as i32)),
         };
-        assert!(obj_id >= 0 && (obj_id as i64) < max_id, "obj_id {} out of bounds [0, {}) for type {:?}", obj_id, max_id, obj_type);
+        if obj_id < 0 || (obj_id as i64) >= max_id {
+            return Err(MjDataError::IndexOutOfBounds { kind: "obj_id", id: obj_id as i64, upper: max_id });
+        }
         let mut result: [MjtNum; 6] = [0.0; 6];
         unsafe {
-            // Safety: obj_id validated above for valid object types; mj_objectVelocity requires valid ID
-            mj_objectVelocity(
-                self.model.ffi(), self.ffi(),
-                obj_type as i32, obj_id,
-                &mut result, flg_local as i32
-            )
-        }; 
-        result
+            mj_objectVelocity(self.model.ffi(), self.ffi(), obj_type as i32, obj_id, &mut result, flg_local as i32)
+        };
+        Ok(result)
     }
 
     /// Compute object 6D acceleration (rot:lin) in object-centered frame, world/local orientation.
-    /// # Panics
-    /// Panics if `obj_id` is not a valid index for the given object type
-    /// or the obj_type is not one of: [`MjtObj::mjOBJ_BODY`], [`MjtObj::mjOBJ_XBODY`], [`MjtObj::mjOBJ_GEOM`], [`MjtObj::mjOBJ_SITE`], [`MjtObj::mjOBJ_CAMERA`].
-    pub fn object_acceleration(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> [MjtNum; 6] {
+    /// # Errors
+    /// Returns:
+    /// - [`MjDataError::UnsupportedObjectType`] when `obj_type` is not supported.
+    /// - [`MjDataError::IndexOutOfBounds`] when `obj_id` is out of range for the given type.
+    pub fn object_acceleration(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
         let max_id = match obj_type {
             MjtObj::mjOBJ_BODY | MjtObj::mjOBJ_XBODY => self.model.ffi().nbody,
             MjtObj::mjOBJ_GEOM => self.model.ffi().ngeom,
             MjtObj::mjOBJ_SITE => self.model.ffi().nsite,
             MjtObj::mjOBJ_CAMERA => self.model.ffi().ncam,
-            _ => panic!("unsupported 'obj_type' ({obj_type:?}) was given."),
+            _ => return Err(MjDataError::UnsupportedObjectType(obj_type as i32)),
         };
-        assert!(obj_id >= 0 && (obj_id as i64) < max_id, "obj_id {} out of bounds [0, {}) for type {:?}", obj_id, max_id, obj_type);
+        if obj_id < 0 || (obj_id as i64) >= max_id {
+            return Err(MjDataError::IndexOutOfBounds { kind: "obj_id", id: obj_id as i64, upper: max_id });
+        }
         let mut result: [MjtNum; 6] = [0.0; 6];
         unsafe {
-            // Safety: obj_id validated above for valid object types; mj_objectAcceleration requires valid ID
-            mj_objectAcceleration(
-                self.model.ffi(), self.ffi(),
-                obj_type as i32, obj_id,
-                &mut result, flg_local as i32
-            )
+            mj_objectAcceleration(self.model.ffi(), self.ffi(), obj_type as i32, obj_id, &mut result, flg_local as i32)
         };
-        result
+        Ok(result)
     }
 
-    /// Returns smallest signed distance between two geoms and optionally segment from geom1 to geom2.
-    /// # Panics
-    /// Panics if `geom1_id` or `geom2_id` are not valid geom indices.
-    pub fn geom_distance(&self, geom1_id: i32, geom2_id: i32, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
+    /// Returns smallest signed distance between two geoms and optionally the contact segment.
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when either geom id is negative or `>= ngeom`.
+    pub fn geom_distance(&self, geom1_id: i32, geom2_id: i32, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> Result<MjtNum, MjDataError> {
         let ngeom = self.model.ffi().ngeom as i64;
-        assert!(geom1_id >= 0 && (geom1_id as i64) < ngeom, "geom1_id {} out of bounds [0, {})", geom1_id, ngeom);
-        assert!(geom2_id >= 0 && (geom2_id as i64) < ngeom, "geom2_id {} out of bounds [0, {})", geom2_id, ngeom);
-        unsafe {
+        if geom1_id < 0 || (geom1_id as i64) >= ngeom {
+            return Err(MjDataError::IndexOutOfBounds { kind: "geom1_id", id: geom1_id as i64, upper: ngeom });
+        }
+        if geom2_id < 0 || (geom2_id as i64) >= ngeom {
+            return Err(MjDataError::IndexOutOfBounds { kind: "geom2_id", id: geom2_id as i64, upper: ngeom });
+        }
+        Ok(unsafe {
             mj_geomDistance(
                 self.model.ffi(), self.ffi(),
                 geom1_id, geom2_id, dist_max,
-                fromto.map_or(ptr::null_mut(), |x| x)
+                fromto.map_or(ptr::null_mut(), |x| x),
             )
-        }
+        })
     }
 
-    /// Map from body local to global Cartesian coordinates, sameframe takes values from [`MjtSameFrame`].
-    /// Returns (global position, global orientation matrix).
-    /// Wraps `mj_local2Global`.
-    /// # Panics
-    /// Panics if `body_id` is not a valid body index.
-    pub fn local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: i32, sameframe: MjtSameFrame) -> ([MjtNum; 3], [MjtNum; 9]) {
-        assert!(body_id >= 0 && (body_id as i64) < self.model.ffi().nbody, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
-        /* Create uninitialized because this gets filled by the function. */
-        let mut xpos: [MjtNum; 3] =  [0.0; 3];
+    /// Map from body local to global Cartesian coordinates. Returns (global position, global orientation matrix).
+    /// `sameframe` takes values from [`MjtSameFrame`]. Wraps `mj_local2Global`.
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
+    pub fn local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: i32, sameframe: MjtSameFrame) -> Result<([MjtNum; 3], [MjtNum; 9]), MjDataError> {
+        let nbody = self.model.ffi().nbody;
+        if body_id < 0 || (body_id as i64) >= nbody {
+            return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
+        }
+        let mut xpos: [MjtNum; 3] = [0.0; 3];
         let mut xmat: [MjtNum; 9] = [0.0; 9];
         unsafe {
-            // Safety: body_id validated above; mj_local2Global requires valid body index
             mj_local2Global(self.ffi_mut(), &mut xpos, &mut xmat, pos, quat, body_id, sameframe as MjtByte)
         };
-        (xpos, xmat)
+        Ok((xpos, xmat))
     }
 
     /// Intersect multiple rays emanating from a single point.
@@ -1745,40 +1759,40 @@ mod test {
         let ball_body_id = model.body("ball").unwrap().id as i32;
 
         // Test global point Jacobian
-        let (jacp, jacr) = data.jac(true, true, &point, ball_body_id);
+        let (jacp, jacr) = data.jac(true, true, &point, ball_body_id).unwrap();
         assert_eq!(jacp.len(), expected_len);
         assert_eq!(jacr.len(), expected_len);
 
         // Test body frame Jacobian
-        let (jacp_body, jacr_body) = data.jac_body(true, true, ball_body_id);
+        let (jacp_body, jacr_body) = data.jac_body(true, true, ball_body_id).unwrap();
         assert_eq!(jacp_body.len(), expected_len);
         assert_eq!(jacr_body.len(), expected_len);
 
         // Test body COM Jacobian
-        let (jacp_com, jacr_com) = data.jac_body_com(true, true, ball_body_id);
+        let (jacp_com, jacr_com) = data.jac_body_com(true, true, ball_body_id).unwrap();
         assert_eq!(jacp_com.len(), expected_len);
         assert_eq!(jacr_com.len(), expected_len);
 
         // Test subtree COM Jacobian (translational only)
-        let jac_subtree = data.jac_subtree_com(true, 0);
+        let jac_subtree = data.jac_subtree_com(true, 0).unwrap();
         assert_eq!(jac_subtree.len(), expected_len);
 
         // Test geom Jacobian
         let green_geom_id = model.geom("green_sphere").unwrap().id as i32;
-        let (jacp_geom, jacr_geom) = data.jac_geom(true, true, green_geom_id);
+        let (jacp_geom, jacr_geom) = data.jac_geom(true, true, green_geom_id).unwrap();
         assert_eq!(jacp_geom.len(), expected_len);
         assert_eq!(jacr_geom.len(), expected_len);
 
         // Test site Jacobian - only if sites exist
         if model.ffi().nsite > 0 {
             let site_id = 0i32;
-            let (jacp_site, jacr_site) = data.jac_site(true, true, site_id);
+            let (jacp_site, jacr_site) = data.jac_site(true, true, site_id).unwrap();
             assert_eq!(jacp_site.len(), expected_len);
             assert_eq!(jacr_site.len(), expected_len);
         }
 
         // Test flags set to false produce empty Vec
-        let (jacp_none, jacr_none) = data.jac(false, false, &[0.0; 3], ball_body_id);
+        let (jacp_none, jacr_none) = data.jac(false, false, &[0.0; 3], ball_body_id).unwrap();
         assert!(jacp_none.is_empty());
         assert!(jacr_none.is_empty());
     }
@@ -1788,13 +1802,13 @@ mod test {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let mut data = model.make_data();
 
-        let mat = data.angmom_mat(0);
+        let mat = data.angmom_mat(0).unwrap();
         assert_eq!(mat.len(), (3 * data.model.ffi().nv as usize));
 
-        let vel = data.object_velocity(MjtObj::mjOBJ_BODY, 0, true);
+        let vel = data.object_velocity(MjtObj::mjOBJ_BODY, 0, true).unwrap();
         assert_eq!(vel, vel); // just ensure it returns 6-length
 
-        let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, 0, false);
+        let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, 0, false).unwrap();
         assert_eq!(acc, acc);
     }
 
@@ -1812,7 +1826,7 @@ mod test {
         assert!(geom0_id >= 0 && geom1_id >= 0);
 
         let mut ft = [0.0; 6];
-        let dist = data.geom_distance(geom0_id, geom1_id, 1.0, Some(&mut ft));
+        let dist = data.geom_distance(geom0_id, geom1_id, 1.0, Some(&mut ft)).unwrap();
         assert!(dist > 0.0, "distance between separate geoms should be positive, got {dist}");
         assert!(dist < 1.0, "distance should be less than distmax, got {dist}");
         assert_relative_eq!(dist, 0.3, epsilon=1e-3);
@@ -1822,7 +1836,7 @@ mod test {
 
         let pos = [0.0; 3];
         let quat = [1.0, 0.0, 0.0, 0.0];
-        let (xpos, xmat) = data.local_to_global(&pos, &quat, 0, MjtSameFrame::mjSAMEFRAME_NONE);
+        let (xpos, xmat) = data.local_to_global(&pos, &quat, 0, MjtSameFrame::mjSAMEFRAME_NONE).unwrap();
         assert_eq!(xpos.len(), 3);
         assert_eq!(xmat.len(), 9);
 

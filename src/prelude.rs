@@ -5,3 +5,4 @@ pub use crate::wrappers::mj_rendering::*;
 pub use crate::wrappers::mj_option::*;
 pub use crate::wrappers::mj_model::*;
 pub use crate::wrappers::mj_data::*;
+pub use crate::error::{MjDataError, MjSceneError, MjEditError};

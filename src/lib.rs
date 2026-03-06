@@ -77,6 +77,7 @@ use std::ffi::CStr;
 pub mod wrappers;
 pub mod prelude;
 pub mod util;
+pub mod error;
 
 
 #[cfg(feature = "renderer")]

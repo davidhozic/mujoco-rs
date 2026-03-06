@@ -121,50 +121,101 @@ pub(crate) fn write_mjs_vec_byte<T>(source: &[T], destination: *mut mjByteVec) {
 /***************************
 ** Helper macros
 ***************************/
-/// Creates an `add_ $name` method for adding new elements of $name into the body / spec.
-/// Also sets the default to null();
+/// Generates both an `add_$name` method (panics on OOM, delegates to `try_add_$name`) and a
+/// `try_add_$name` method (returns `Result`) for adding child elements that accept a default.
 macro_rules! add_x_method {
     ($($name:ident),*) => {paste::paste! {
         $(
-            /* With default */
-            #[doc = concat!("Add and return a child ", stringify!($name), ".\n# Panics\nPanics if MuJoCo fails to allocate the element.")]
+            #[doc = concat!(
+                "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
+                "Delegates to [`Self::try_add_", stringify!($name), "`] and panics if allocation fails.\n",
+                "# Panics\n",
+                "Panics if MuJoCo fails to allocate the element."
+            )]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
+                self.[<try_add_ $name>]()
+                    .expect(concat!("mjs_add", stringify!($name:camel), " returned null; allocation failed"))
+            }
+
+            #[doc = concat!(
+                "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate ",
+                "the element, instead of panicking."
+            )]
+            pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.ffi_mut(), ptr::null()) };
-                unsafe { ptr.as_mut().unwrap() }
+                // Safety: if ptr is non-null, MuJoCo guarantees it is properly initialised.
+                unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
             }
         )*
     }};
 }
 
-/// Creates an `add_$name` method for adding new elements into a frame.
+/// Generates both `add_$name` (panics, delegates to `try_`) and `try_add_$name` (returns
+/// `Result`) for elements parented by a frame.
 macro_rules! add_x_method_by_frame {
     ($($name:ident),*) => {paste::paste! {
         $(
-            /* With default */
-            #[doc = concat!("Add and return a child ", stringify!($name), ".\n# Panics\nPanics if MuJoCo fails to allocate the element.")]
+            #[doc = concat!(
+                "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
+                "Delegates to [`Self::try_add_", stringify!($name), "`] and panics on failure.\n",
+                "# Panics\n",
+                "Panics if the parent body pointer is null or if MuJoCo fails to allocate the element."
+            )]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
+                self.[<try_add_ $name>]()
+                    .expect(concat!("add_", stringify!($name), " failed; parent is null or allocation failed"))
+            }
+
+            #[doc = concat!(
+                "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "Returns [`MjEditError::NullParentElement`] when the parent body pointer is null ",
+                "(which would otherwise trigger a C-level `mju_error` abort), or ",
+                "[`MjEditError::AllocationFailed`] when MuJoCo fails to allocate the element."
+            )]
+            pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 unsafe {
                     let ep = self.element_mut_pointer();
                     let body_ptr = mjs_getParent(ep);
+                    if body_ptr.is_null() {
+                        return Err(MjEditError::NullParentElement);
+                    }
                     let ptr = [<mjs_add $name:camel>](body_ptr, ptr::null());
+                    if ptr.is_null() {
+                        return Err(MjEditError::AllocationFailed);
+                    }
                     mjs_attach(ep, ptr.cast(), ptr::null(), ptr::null());
-                    ptr.as_mut().unwrap()
+                    Ok(ptr.as_mut().expect("non-null ptr returned None; this is a bug"))
                 }
             }
         )*
     }};
 }
 
-/// Creates an `add_ $name` method for adding new elements of $name into the body / spec.
-/// This is for methods that don't accept a default.
+/// Generates both `add_$name` (panics, delegates to `try_`) and `try_add_$name` (returns
+/// `Result`) for elements whose `mjs_addXxx` function takes no default argument.
 macro_rules! add_x_method_no_default {
     ($($name:ident),*) => {paste::paste! {
         $(
-            /* Without default */
-            #[doc = concat!("Add and return a child ", stringify!($name), ".\n# Panics\nPanics if MuJoCo fails to allocate the element.")]
+            #[doc = concat!(
+                "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
+                "Delegates to [`Self::try_add_", stringify!($name), "`] and panics if allocation fails.\n",
+                "# Panics\n",
+                "Panics if MuJoCo fails to allocate the element."
+            )]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
+                self.[<try_add_ $name>]()
+                    .expect(concat!("mjs_add", stringify!($name:camel), " returned null; allocation failed"))
+            }
+
+            #[doc = concat!(
+                "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate ",
+                "the element, instead of panicking."
+            )]
+            pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.0) };
-                unsafe { ptr.as_mut().unwrap() }
+                unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
             }
         )*
     }};

@@ -54,7 +54,7 @@ fn main() {
     });
 
     while viewer.running() {
-        viewer.render();
+        viewer.render().unwrap();
     }
 
     physics_thread.join().unwrap();

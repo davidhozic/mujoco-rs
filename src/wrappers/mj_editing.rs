@@ -4,6 +4,7 @@ use std::io::{Error, ErrorKind};
 use std::marker::PhantomData;
 use std::path::Path;
 use std::ptr;
+use crate::error::MjEditError;
 
 #[macro_use]
 mod utility;

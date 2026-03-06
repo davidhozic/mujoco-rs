@@ -177,7 +177,10 @@ which can be configured at the top of the model's XML like so:
             width = global.offwidth as u32;
         }
 
-        let gl_state = GlState::new(width.try_into().unwrap(), height.try_into().unwrap())?;
+        let gl_state = GlState::new(
+            NonZero::new(width).ok_or(RendererError::ZeroDimension)?,
+            NonZero::new(height).ok_or(RendererError::ZeroDimension)?,
+        )?;
 
         // Initialize the rendering context to render to the offscreen buffer.
         let mut context = MjrContext::new(&model);
@@ -610,7 +613,9 @@ fn flip_image_vertically<T>(buffer: &mut [T], height: usize, row_len: usize) {
 pub enum RendererError {
     #[cfg(feature = "renderer-winit-fallback")]
     EventLoopError(winit::error::EventLoopError),
-    GlutinError(glutin::error::Error)
+    GlutinError(glutin::error::Error),
+    /// The supplied width or height was zero; MuJoCo requires positive dimensions.
+    ZeroDimension,
 }
 
 impl Display for RendererError {
@@ -618,7 +623,8 @@ impl Display for RendererError {
         match self {
             #[cfg(feature = "renderer-winit-fallback")]
             Self::EventLoopError(e) => write!(f, "event loop failed to initialize: {}", e),
-            Self::GlutinError(e) => write!(f, "glutin failed to initialize: {}", e)
+            Self::GlutinError(e) => write!(f, "glutin failed to initialize: {}", e),
+            Self::ZeroDimension => write!(f, "renderer width and height must both be greater than zero"),
         }
     }
 }
@@ -628,7 +634,8 @@ impl Error for RendererError {
         match self {
             #[cfg(feature = "renderer-winit-fallback")]
             Self::EventLoopError(e) => Some(e),
-            Self::GlutinError(e) => Some(e)
+            Self::GlutinError(e) => Some(e),
+            Self::ZeroDimension => None,
         }
     }
 }

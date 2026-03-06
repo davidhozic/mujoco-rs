@@ -1,5 +1,6 @@
 //! Definitions related to rendering.
 use crate::{array_slice_dyn, getter_setter, mujoco_c::*};
+use crate::error::MjSceneError;
 
 use super::mj_model::{MjModel, MjtTexture, MjtTextureRole};
 
@@ -95,8 +96,14 @@ impl MjrContext {
     }
 
     /// Add Aux buffer with given index to context; free previous Aux buffer.
-    pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) {
+    /// # Errors
+    /// Returns [`MjSceneError::InvalidAuxBufferIndex`] when `index >= mjNAUX` (10).
+    pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) -> Result<(), MjSceneError> {
+        if index >= mjNAUX as usize {
+            return Err(MjSceneError::InvalidAuxBufferIndex { index });
+        }
         unsafe { mjr_addAux(index as i32, width as i32, height as i32, samples as i32, self.ffi_mut()); }
+        Ok(())
     }
 
     /// Resize offscreen buffers.
@@ -145,8 +152,14 @@ impl MjrContext {
     }
 
     /// Set Aux buffer for custom OpenGL rendering (call restoreBuffer when done).
-    pub fn set_aux(&mut self, index: usize) {
+    /// # Errors
+    /// Returns [`MjSceneError::InvalidAuxBufferIndex`] when `index >= mjNAUX` (10).
+    pub fn set_aux(&mut self, index: usize) -> Result<(), MjSceneError> {
+        if index >= 10 {
+            return Err(MjSceneError::InvalidAuxBufferIndex { index });
+        }
         unsafe { mjr_setAux(index as i32, self.ffi_mut()); }
+        Ok(())
     }
 
     /// Draws a text overlay. The optional `overlay2` parameter displays additional overlay, next to `overlay`.

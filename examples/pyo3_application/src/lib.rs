@@ -46,7 +46,7 @@ impl Simulation {
                 self.last_update = Instant::now();
                 self.simulation_state.step();
                 self.viewer.sync_data(&mut self.simulation_state);
-                self.viewer.render();
+                self.viewer.render().unwrap();
             }
         }
     }
