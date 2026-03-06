@@ -9,9 +9,9 @@ use super::mj_primitive::{MjtNum, MjtByte};
 use super::mj_model::{MjModel, MjtGeom};
 use super::mj_data::MjData;
 use crate::{array_slice_dyn, c_str_as_str_method};
+use crate::error::MjSceneError;
 use crate::getter_setter;
 use crate::mujoco_c::*;
-use crate::error::MjSceneError;
 
 /* Types */
 /// These are the available categories of geoms in the abstract visualizer. The bitmask can be used in the function
@@ -362,30 +362,67 @@ impl MjvFigure {
     }
 
     /// Pushes a new data point to buffer for the specific plot with `plot_index`.
+    ///
     /// # Panics
-    /// A panic will occur if the buffer is overflown. The buffer can hold a maximum of 1001 elements.
+    /// A panic will occur if the buffer is full.
+    /// Use [`MjvFigure::try_push`] for a fallible alternative.
     pub fn push(&mut self, plot_index: usize, x: f32, y: f32) {
-        // If the buffer is full, the indexing below will trigger a Rust bounds-check panic.
+        self.try_push(plot_index, x, y)
+            .expect("figure push failed")
+    }
+
+    /// Fallible version of [`MjvFigure::push`].
+    ///
+    /// # Errors
+    /// Returns [`MjSceneError::FigureBufferFull`] if the buffer for
+    /// `plot_index` is already at capacity.
+    pub fn try_push(&mut self, plot_index: usize, x: f32, y: f32) -> Result<(), MjSceneError> {
         let plot = &mut self.linedata[plot_index];
+        let capacity = plot.len() / 2;
         let point_index = self.linepnt[plot_index] as usize;
+        if point_index >= capacity {
+            return Err(MjSceneError::FigureBufferFull { plot_index, capacity });
+        }
         plot[2 * point_index] = x;
         plot[2 * point_index + 1] = y;
-
         self.linepnt[plot_index] += 1;
+        Ok(())
     }
 
     /// Overrides existing data with a new data point at a specific `point_index` for specific plot with `plot_index`.
+    ///
     /// # Panics
     /// The data must already be present at `point_index`, otherwise an assertion panic will occur.
+    /// Use [`MjvFigure::try_set_at`] for a fallible alternative.
     pub fn set_at(&mut self, plot_index: usize, point_index: usize, x: f32, y: f32) {
-        assert!(
-            point_index < self.linepnt[plot_index] as usize,
-            "data does not yet exist at index {point_index} for plot {plot_index}"
-        );
+        self.try_set_at(plot_index, point_index, x, y)
+            .expect("figure set_at failed")
+    }
 
+    /// Fallible version of [`MjvFigure::set_at`].
+    ///
+    /// # Errors
+    /// Returns [`MjSceneError::FigureIndexOutOfBounds`] if `point_index` is
+    /// not within the current data range for the given plot.
+    pub fn try_set_at(
+        &mut self,
+        plot_index: usize,
+        point_index: usize,
+        x: f32,
+        y: f32,
+    ) -> Result<(), MjSceneError> {
+        let current_len = self.linepnt[plot_index] as usize;
+        if point_index >= current_len {
+            return Err(MjSceneError::FigureIndexOutOfBounds {
+                plot_index,
+                point_index,
+                current_len,
+            });
+        }
         let plot = &mut self.linedata[plot_index];
         plot[2 * point_index] = x;
         plot[2 * point_index + 1] = y;
+        Ok(())
     }
 
     /// Clears the plot with `maybe_plot_index`.

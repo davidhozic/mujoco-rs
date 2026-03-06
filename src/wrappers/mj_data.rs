@@ -67,17 +67,17 @@ unsafe impl<M: Deref<Target = MjModel>> Sync for MjData<M> {}
 
 impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Creates a new [`MjData`] linked to `model`.
+    ///
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the data structure.
+    /// Use [`MjData::try_new`] for a fallible alternative.
     pub fn new(model: M) -> Self {
-        let data_ptr = unsafe { mj_makeData(model.ffi()) };
-        assert!(!data_ptr.is_null(), "allocation of MjData failed");
-        Self {
-            data: data_ptr,
-            model: model,
-        }
+        Self::try_new(model).expect("allocation of MjData failed")
     }
 
     /// Fallible version of [`MjData::new`].
     ///
+    /// # Errors
     /// Returns `Ok(MjData)` on success, or [`MjDataError::AllocationFailed`] if
     /// MuJoCo returns a null pointer from `mj_makeData`.
     ///
@@ -1001,10 +1001,33 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Copies data state from `src` to `self` based on the specified `spec` combination of `mjtState` flags.
+    ///
+    /// # Panics
+    /// Panics if `src` was created from a different model.
+    /// Use [`MjData::try_copy_state_from_data`] for a fallible alternative.
     pub fn copy_state_from_data(&mut self, src: &MjData<M>, spec: u32) {
+        self.try_copy_state_from_data(src, spec)
+            .expect("copy_state_from_data failed")
+    }
+
+    /// Fallible version of [`MjData::copy_state_from_data`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::SignatureMismatch`] if `src` was created from
+    /// a different model.
+    pub fn try_copy_state_from_data(&mut self, src: &MjData<M>, spec: u32) -> Result<(), MjDataError> {
+        let src_sig = src.model.signature();
+        let dst_sig = self.model.signature();
+        if src_sig != dst_sig {
+            return Err(MjDataError::SignatureMismatch {
+                source: src_sig,
+                destination: dst_sig,
+            });
+        }
         unsafe {
             mj_copyState(self.model.ffi(), src.ffi(), self.ffi_mut(), spec as i32);
         }
+        Ok(())
     }
 
     /// Intersect ray with hfield.
@@ -1028,14 +1051,49 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Apply Cartesian force and torque to a point on a body, and add the result to `qfrc_target`.
+    ///
     /// # Panics
     /// Panics if `body` is not a valid body index or `qfrc_target` length is less than `nv`.
+    /// Use [`MjData::try_apply_ft`] for a fallible alternative.
     pub fn apply_ft(&mut self, force: &[MjtNum; 3], torque: &[MjtNum; 3], point: &[MjtNum; 3], body: i32, qfrc_target: &mut [MjtNum]) {
-        assert!(body >= 0 && (body as usize) < self.model.ffi().nbody as usize, "body {} out of bounds [0, {})", body, self.model.ffi().nbody);
-        assert!(qfrc_target.len() >= self.model.ffi().nv as usize, "qfrc_target must be at least nv length");
+        self.try_apply_ft(force, torque, point, body, qfrc_target)
+            .expect("apply_ft failed")
+    }
+
+    /// Fallible version of [`MjData::apply_ft`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] if `body` is not a valid body
+    /// index, or [`MjDataError::BufferTooSmall`] if `qfrc_target` is shorter
+    /// than `nv`.
+    pub fn try_apply_ft(
+        &mut self,
+        force: &[MjtNum; 3],
+        torque: &[MjtNum; 3],
+        point: &[MjtNum; 3],
+        body: i32,
+        qfrc_target: &mut [MjtNum],
+    ) -> Result<(), MjDataError> {
+        let nbody = self.model.ffi().nbody as i64;
+        if body < 0 || body as i64 >= nbody {
+            return Err(MjDataError::IndexOutOfBounds {
+                kind: "body",
+                id: body as i64,
+                upper: nbody,
+            });
+        }
+        let nv = self.model.ffi().nv as usize;
+        if qfrc_target.len() < nv {
+            return Err(MjDataError::BufferTooSmall {
+                name: "qfrc_target",
+                got: qfrc_target.len(),
+                needed: nv,
+            });
+        }
         unsafe {
             mj_applyFT(self.model.ffi(), self.ffi_mut(), force, torque, point, body, qfrc_target.as_mut_ptr());
         }
+        Ok(())
     }
 
     /// Reads data's state into `destination`. The `spec` parameter is a bit mask of [`MjtState`] elements,
@@ -1059,18 +1117,32 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// 
     /// # Panics
     /// A panic will occur if `destination` is smaller than [`MjModel::state_size`] with `spec` passed as parameter.
+    /// Use [`MjData::try_read_state_into`] for a fallible alternative.
     pub fn read_state_into(&self, spec: u32, destination: &mut [MjtNum]) -> usize {
+        self.try_read_state_into(spec, destination)
+            .expect("read_state_into failed")
+    }
+
+    /// Fallible version of [`MjData::read_state_into`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::BufferTooSmall`] if `destination` is smaller than
+    /// the state size required by `spec`.
+    ///
+    /// On success, returns the number of [`MjtNum`] elements written.
+    pub fn try_read_state_into(&self, spec: u32, destination: &mut [MjtNum]) -> Result<usize, MjDataError> {
         let state_size = self.model.state_size(spec) as usize;
-        let destination_len = destination.len();
-        assert!(
-            destination_len >= state_size,
-            "destination buffer is too small: got {destination_len} elements, but need at least {state_size} elements.",
-        );
+        if destination.len() < state_size {
+            return Err(MjDataError::BufferTooSmall {
+                name: "destination",
+                got: destination.len(),
+                needed: state_size,
+            });
+        }
         unsafe {
             mj_getState(self.model.ffi(), self.ffi(), destination.as_mut_ptr(), spec as i32);
         }
-
-        state_size
+        Ok(state_size)
     }
 
     /// Same as [`MjData::read_state_into`], except it allocates
@@ -1093,42 +1165,93 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// A panic will occur if `state`'s length is less than would be copied
     /// based on `spec`.
+    /// Use [`MjData::try_set_state`] for a fallible alternative.
     pub fn set_state(&mut self, state: &[MjtNum], spec: u32) {
-        let state_len = state.len();
+        self.try_set_state(state, spec)
+            .expect("set_state failed")
+    }
+
+    /// Fallible version of [`MjData::set_state`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::BufferTooSmall`] if `state` is smaller than the
+    /// length required by `spec`.
+    pub fn try_set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
         let required_len = self.model.state_size(spec) as usize;
-        assert!(
-             state_len >= required_len,
-             "input state array's length ({state_len}) is smaller than the\
-              length required ({required_len}), commanded by input spec."
-        );
+        if state.len() < required_len {
+            return Err(MjDataError::BufferTooSmall {
+                name: "state",
+                got: state.len(),
+                needed: required_len,
+            });
+        }
         unsafe {
             mj_setState(self.model.ffi(), self.ffi_mut(), state.as_ptr(), spec as i32);
         }
+        Ok(())
     }
 
 
     /// Copy [`MjData`] to `destination`, skipping large arrays not required for visualization.
     /// This is a wrapper for [`mjv_copyData`].
+    ///
+    /// # Panics
+    /// Panics if `destination` was created from a different model.
+    /// Use [`MjData::try_copy_visual_to`] for a fallible alternative.
     pub fn copy_visual_to(&self, destination: &mut MjData<M>) {
+        self.try_copy_visual_to(destination)
+            .expect("copy_visual_to failed")
+    }
+
+    /// Fallible version of [`MjData::copy_visual_to`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
+    /// from a different model.
+    pub fn try_copy_visual_to(&self, destination: &mut MjData<M>) -> Result<(), MjDataError> {
+        let src_sig = self.model.signature();
+        let dst_sig = destination.model.signature();
+        if src_sig != dst_sig {
+            return Err(MjDataError::SignatureMismatch {
+                source: src_sig,
+                destination: dst_sig,
+            });
+        }
         unsafe {
-            assert_eq!(
-                self.model.signature(), destination.model.signature(),
-                "destination MjData must be created from the same model as the source MjData."
-            );
             mjv_copyData(destination.ffi_mut(), self.model.ffi(), self.ffi());
         }
+        Ok(())
     }
 
     /// Copy [`MjData`] to `destination` in full.
     /// This is a wrapper for [`mj_copyData`].
+    ///
+    /// # Panics
+    /// Panics if `destination` was created from a different model.
+    /// Use [`MjData::try_copy_to`] for a fallible alternative.
     pub fn copy_to(&self, destination: &mut MjData<M>) {
+        self.try_copy_to(destination)
+            .expect("copy_to failed")
+    }
+
+    /// Fallible version of [`MjData::copy_to`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
+    /// from a different model.
+    pub fn try_copy_to(&self, destination: &mut MjData<M>) -> Result<(), MjDataError> {
+        let src_sig = self.model.signature();
+        let dst_sig = destination.model.signature();
+        if src_sig != dst_sig {
+            return Err(MjDataError::SignatureMismatch {
+                source: src_sig,
+                destination: dst_sig,
+            });
+        }
         unsafe {
-            assert_eq!(
-                self.model.signature(), destination.model.signature(),
-                "destination MjData must be created from the same model as the source MjData."
-            );
             mj_copyData(destination.ffi_mut(), self.model.ffi(), self.ffi());
         }
+        Ok(())
     }
 
     /// Returns a direct pointer to the underlying model.
@@ -1391,10 +1514,26 @@ impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
 }
 
 impl<M: Deref<Target = MjModel> + Clone> Clone for MjData<M> {
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the cloned data.
+    /// Use [`MjData::try_clone`] for a fallible alternative.
     fn clone(&self) -> Self {
+        self.try_clone().expect("not enough space to clone data")
+    }
+}
+
+impl<M: Deref<Target = MjModel> + Clone> MjData<M> {
+    /// Fallible version of [`Clone::clone`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
+    /// the copy.
+    pub fn try_clone(&self) -> Result<Self, MjDataError> {
         let raw = unsafe { mj_copyData(ptr::null_mut(), self.model.ffi(), self.ffi()) };
-        assert!(!raw.is_null(), "not enough space to clone data");
-        Self { data: raw, model: self.model.clone() }
+        if raw.is_null() {
+            return Err(MjDataError::AllocationFailed);
+        }
+        Ok(Self { data: raw, model: self.model.clone() })
     }
 }
 

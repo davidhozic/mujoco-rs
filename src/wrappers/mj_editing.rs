@@ -146,20 +146,40 @@ unsafe impl Send for MjSpec {}
 
 impl MjSpec {
     /// Creates an empty [`MjSpec`].
+    ///
     /// # Panics
-    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    /// - When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    /// - When MuJoCo fails to allocate the specification.
+    ///   Use [`MjSpec::try_new`] for a fallible alternative.
     pub fn new() -> Self {
         assert_mujoco_version();
-        unsafe { Self::check_spec(mj_makeSpec(), &[0]).unwrap() }
+        Self::try_new().expect("MuJoCo failed to allocate MjSpec")
+    }
+
+    /// Fallible version of [`MjSpec::new`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
+    /// the specification.
+    ///
+    /// # Panics
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    pub fn try_new() -> Result<Self, MjEditError> {
+        assert_mujoco_version();
+        let ptr = unsafe { mj_makeSpec() };
+        if ptr.is_null() {
+            return Err(MjEditError::AllocationFailed);
+        }
+        Ok(MjSpec(ptr))
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns an error if the path cannot be parsed or MuJoCo encounters an error.
+    /// Returns an error if the path contains invalid utf-8 or MuJoCo encounters an error.
     /// # Panics
-    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
         Self::from_xml_file(path, None)
@@ -169,9 +189,9 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns an error if the path cannot be parsed or MuJoCo encounters an error.
+    /// Returns an error if the path contains invalid utf-8 or MuJoCo encounters an error.
     /// # Panics
-    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
         Self::from_xml_file(path, Some(vfs))
@@ -182,7 +202,9 @@ impl MjSpec {
 
         let mut error_buffer = [0i8; 100];
         unsafe {
-            let path = CString::new(path.as_ref().to_str().expect("invalid utf")).unwrap();
+            let path_str = path.as_ref().to_str()
+                .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "path contains invalid UTF-8"))?;
+            let path = CString::new(path_str).unwrap();
             let raw_ptr = mj_parseXML(
                 path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
                 &mut error_buffer as *mut i8, error_buffer.len() as c_int
@@ -714,6 +736,7 @@ impl MjsFrame {
 
     /// Fallible version of [`Self::add_frame`].
     ///
+    /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
     /// the frame, instead of panicking.
     pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
@@ -1016,40 +1039,98 @@ impl MjsTendon {
     }
 
     /// Wrap a site corresponding to `name`, using the tendon.
+    ///
     /// # Panics
-    /// When the `name` contains '\0' characters, a panic occurs.
+    /// - When the `name` contains '\0' characters, a panic occurs.
+    /// - When MuJoCo fails to allocate the wrap element.
+    ///   Use [`MjsTendon::try_wrap_site`] for a fallible alternative.
     pub fn wrap_site(&mut self, name: &str) -> &mut MjsWrap {
+        self.try_wrap_site(name).expect("failed to wrap site")
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_site`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
+    /// pointer.
+    ///
+    /// # Panics
+    /// When the `name` contains '\0' characters.
+    pub fn try_wrap_site(&mut self, name: &str) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let wrap_ptr = unsafe { mjs_wrapSite(self, cname.as_ptr()) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Wrap a geom corresponding to `name`, using the tendon.
+    ///
     /// # Panics
-    /// When the `name` or `sidesite` contain '\0' characters, a panic occurs.
+    /// - When the `name` or `sidesite` contain '\0' characters, a panic occurs.
+    /// - When MuJoCo fails to allocate the wrap element.
+    ///   Use [`MjsTendon::try_wrap_geom`] for a fallible alternative.
     pub fn wrap_geom(&mut self, name: &str, sidesite: &str) -> &mut MjsWrap {
+        self.try_wrap_geom(name, sidesite).expect("failed to wrap geom")
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_geom`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
+    /// pointer.
+    ///
+    /// # Panics
+    /// When `name` or `sidesite` contain '\0' characters.
+    pub fn try_wrap_geom(&mut self, name: &str, sidesite: &str) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let csidesite = CString::new(sidesite).unwrap();
         let wrap_ptr = unsafe { mjs_wrapGeom(
             self,
             cname.as_ptr(), csidesite.as_ptr()
         ) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Wrap a joint corresponding to `name`, using the tendon.
+    ///
     /// # Panics
-    /// When the `name` contains '\0' characters, a panic occurs.
+    /// - When the `name` contains '\0' characters, a panic occurs.
+    /// - When MuJoCo fails to allocate the wrap element.
+    ///   Use [`MjsTendon::try_wrap_joint`] for a fallible alternative.
     pub fn wrap_joint(&mut self, name: &str, coef: f64) -> &mut MjsWrap {
+        self.try_wrap_joint(name, coef).expect("failed to wrap joint")
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_joint`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
+    /// pointer.
+    ///
+    /// # Panics
+    /// When `name` contains '\0' characters.
+    pub fn try_wrap_joint(&mut self, name: &str, coef: f64) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let wrap_ptr = unsafe { mjs_wrapJoint(self, cname.as_ptr(), coef) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Wrap a pulley using the tendon.
+    ///
+    /// # Panics
+    /// When MuJoCo fails to allocate the wrap element.
+    /// Use [`MjsTendon::try_wrap_pulley`] for a fallible alternative.
     pub fn wrap_pulley(&mut self, divisor: f64) -> &mut MjsWrap {
+        self.try_wrap_pulley(divisor).expect("failed to wrap pulley")
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_pulley`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
+    /// pointer.
+    pub fn try_wrap_pulley(&mut self, divisor: f64) -> Result<&mut MjsWrap, MjEditError> {
         let wrap_ptr = unsafe { mjs_wrapPulley(self, divisor) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Return the number of wrap objects.
@@ -1432,6 +1513,7 @@ impl MjsBody {
 
     /// Fallible version of [`Self::add_frame`].
     ///
+    /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
     /// the frame, instead of panicking.
     pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {

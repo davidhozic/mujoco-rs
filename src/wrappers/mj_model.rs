@@ -5,10 +5,12 @@ use std::path::Path;
 use std::ptr;
 
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
+use super::mj_primitive::*;
+
 use crate::wrappers::mj_option::MjOption;
 use crate::util::assert_mujoco_version;
 use crate::wrappers::mj_data::MjData;
-use super::mj_primitive::*;
+use crate::error::MjDataError;
 use crate::mujoco_c::*;
 
 use crate::{
@@ -146,8 +148,10 @@ impl MjModel {
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
     /// Returns an error if the model could not be loaded, containing the MuJoCo error message.
+    /// # Errors
+    /// Returns an error if the path contains invalid utf-8 or MuJoCo encounters an error.
     /// # Panics
-    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
         Self::from_xml_file(path, None)
@@ -158,8 +162,10 @@ impl MjModel {
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
     /// Returns an error if the model could not be loaded, containing the MuJoCo error message.
+    /// # Errors
+    /// Returns an error if the path contains invalid utf-8 or MuJoCo encounters an error.
     /// # Panics
-    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
         Self::from_xml_file(path, Some(vfs))
@@ -170,7 +176,9 @@ impl MjModel {
 
         let mut error_buffer = [0i8; 100];
         unsafe {
-            let path = CString::new(path.as_ref().to_str().expect("invalid utf")).unwrap();
+            let path_str = path.as_ref().to_str()
+                .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "path contains invalid UTF-8"))?;
+            let path = CString::new(path_str).unwrap();
             let raw_ptr = mj_loadXML(
                 path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
                 &mut error_buffer as *mut i8, error_buffer.len() as c_int
@@ -259,8 +267,21 @@ impl MjModel {
     }
 
     /// Creates a new [`MjData`] instance linked to this model.
+    ///
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the data structure.
+    /// Use [`MjModel::try_make_data`] for a fallible alternative.
     pub fn make_data(&self) -> MjData<&Self> {
         MjData::new(self)
+    }
+
+    /// Fallible version of [`MjModel::make_data`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
+    /// the data structure.
+    pub fn try_make_data(&self) -> Result<MjData<&Self>, MjDataError> {
+        MjData::try_new(self)
     }
 
     /// Handles the pointer to the model.

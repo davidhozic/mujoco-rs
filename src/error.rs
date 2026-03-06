@@ -25,6 +25,23 @@ pub enum MjDataError {
     UnsupportedObjectType(i32),
     /// MuJoCo failed to allocate the [`MjData`](crate::wrappers::MjData) structure.
     AllocationFailed,
+    /// A buffer passed to the operation is too small for the required data.
+    BufferTooSmall {
+        /// Descriptive name of the buffer (e.g. `"destination"`, `"rgb"`).
+        name: &'static str,
+        /// Actual length of the buffer that was provided.
+        got: usize,
+        /// Minimum length the buffer must have.
+        needed: usize,
+    },
+    /// Two [`MjData`](crate::wrappers::MjData) instances (or an `MjData` and a
+    /// renderer) were created from different models.
+    SignatureMismatch {
+        /// Model signature of the source object.
+        source: u64,
+        /// Model signature of the destination object.
+        destination: u64,
+    },
 }
 
 impl fmt::Display for MjDataError {
@@ -38,6 +55,20 @@ impl fmt::Display for MjDataError {
             }
             Self::AllocationFailed => {
                 write!(f, "MuJoCo failed to allocate MjData")
+            }
+            Self::BufferTooSmall { name, got, needed } => {
+                write!(
+                    f,
+                    "{name} buffer is too small: got {got} elements, \
+                     but need at least {needed}"
+                )
+            }
+            Self::SignatureMismatch { source, destination } => {
+                write!(
+                    f,
+                    "model signature mismatch: source {source:#X}, \
+                     destination {destination:#X}"
+                )
             }
         }
     }
@@ -71,6 +102,38 @@ pub enum MjSceneError {
         /// The out-of-range index that was provided.
         index: usize,
     },
+    /// A viewport has invalid (negative) dimensions.
+    InvalidViewport {
+        /// The viewport width that was provided.
+        width: i32,
+        /// The viewport height that was provided.
+        height: i32,
+    },
+    /// A pixel buffer passed to a rendering operation is too small.
+    BufferTooSmall {
+        /// Descriptive name of the buffer (e.g. `"rgb"`, `"depth"`).
+        name: &'static str,
+        /// Actual length of the buffer that was provided.
+        got: usize,
+        /// Minimum length the buffer must have.
+        needed: usize,
+    },
+    /// The figure's line-data buffer for a given plot is full.
+    FigureBufferFull {
+        /// Index of the plot whose buffer is full.
+        plot_index: usize,
+        /// Maximum number of data points the buffer can hold.
+        capacity: usize,
+    },
+    /// A point index is out of range for the current data in a figure plot.
+    FigureIndexOutOfBounds {
+        /// Index of the plot.
+        plot_index: usize,
+        /// The point index that was provided.
+        point_index: usize,
+        /// Current number of data points in the plot.
+        current_len: usize,
+    },
 }
 
 impl fmt::Display for MjSceneError {
@@ -91,6 +154,33 @@ impl fmt::Display for MjSceneError {
             }
             Self::InvalidAuxBufferIndex { index } => {
                 write!(f, "aux buffer index {index} is out of range [0, mjNAUX)")
+            }
+            Self::InvalidViewport { width, height } => {
+                write!(
+                    f,
+                    "viewport dimensions must be non-negative, got {width}x{height}"
+                )
+            }
+            Self::BufferTooSmall { name, got, needed } => {
+                write!(
+                    f,
+                    "{name} buffer is too small: got {got} elements, \
+                     but need at least {needed}"
+                )
+            }
+            Self::FigureBufferFull { plot_index, capacity } => {
+                write!(
+                    f,
+                    "figure plot {plot_index} buffer is full \
+                     (capacity = {capacity} data points)"
+                )
+            }
+            Self::FigureIndexOutOfBounds { plot_index, point_index, current_len } => {
+                write!(
+                    f,
+                    "point index {point_index} is out of bounds for plot {plot_index} \
+                     (current length = {current_len})"
+                )
             }
         }
     }

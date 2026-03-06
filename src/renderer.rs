@@ -6,6 +6,7 @@ use crate::wrappers::mj_rendering::MjrContext;
 use crate::renderer::egl::GlStateEgl;
 
 use crate::vis_common::sync_geoms;
+use crate::error::MjDataError;
 use crate::builder_setters;
 use crate::prelude::*;
 
@@ -390,10 +391,28 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     }
 
     /// Update the scene with new data from data.
+    ///
     /// # Panics
-    /// Panics if `data` comes from a different model than the renderer, or on user scene sync failure.
+    /// Panics if `data` comes from a different model than the renderer.
+    /// Use [`MjRenderer::try_sync`] for a fallible alternative.
     pub fn sync(&mut self, data: &mut MjData<M>) {
-        assert_eq!(data.model().signature(), self.model.signature(), "'data' must be created from the same model as the renderer.");
+        self.try_sync(data).expect("sync failed")
+    }
+
+    /// Fallible version of [`MjRenderer::sync`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::SignatureMismatch`] if `data` was created from a
+    /// different model than the renderer.
+    pub fn try_sync(&mut self, data: &mut MjData<M>) -> Result<(), MjDataError> {
+        let src_sig = data.model().signature();
+        let dst_sig = self.model.signature();
+        if src_sig != dst_sig {
+            return Err(MjDataError::SignatureMismatch {
+                source: src_sig,
+                destination: dst_sig,
+            });
+        }
 
         self.scene.update(data, &self.option, &MjvPerturb::default(), &mut self.camera);
 
@@ -402,6 +421,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
 
         self.render();
+        Ok(())
     }
 
     /// Return a flattened RGB image of the scene.

@@ -139,6 +139,7 @@ macro_rules! add_x_method {
 
             #[doc = concat!(
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "# Errors\n",
                 "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate ",
                 "the element, instead of panicking."
             )]
@@ -170,6 +171,7 @@ macro_rules! add_x_method_by_frame {
 
             #[doc = concat!(
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "# Errors\n",
                 "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate the element."
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
@@ -222,6 +224,7 @@ macro_rules! add_x_method_no_default {
 
             #[doc = concat!(
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "# Errors\n",
                 "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate ",
                 "the element, instead of panicking."
             )]
@@ -531,9 +534,11 @@ macro_rules! item_spec_iterator {
                         return None;
                     }
 
-                    let out = unsafe { [<mjs_as $iter_over>](self.last).as_mut().unwrap() };
-                    self.last = unsafe { mjs_nextElement(self.root.ffi_mut(), self.last) };
-                    Some(out)
+                    unsafe {
+                        let out = [<mjs_as $iter_over>](self.last).as_mut();
+                        self.last = mjs_nextElement(self.root.ffi_mut(), self.last);
+                        out
+                    }
                 }
             }
 
@@ -545,9 +550,11 @@ macro_rules! item_spec_iterator {
                         return None;
                     }
 
-                    let out = unsafe { [<mjs_as $iter_over>](self.last).as_ref().unwrap() };
-                    self.last = unsafe { mjs_nextElement(self.root.0, self.last) };
-                    Some(out)
+                    unsafe {
+                        let out = [<mjs_as $iter_over>](self.last).as_ref();
+                        self.last = mjs_nextElement(self.root.0, self.last);
+                        out
+                    }
                 }
             }
         )*
