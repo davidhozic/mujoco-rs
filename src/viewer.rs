@@ -733,7 +733,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
         if self.status.contains(ViewerStatusBit::VSYNC) {
             if let Err(e) = gl_surface.set_swap_interval(
-                gl_context, glutin::surface::SwapInterval::Wait(NonZero::new(1).unwrap())
+                gl_context, glutin::surface::SwapInterval::Wait(NonZero::<u32>::MIN)
             ) {
                 eprintln!("failed to enable vsync: {e}");
                 self.status.set(ViewerStatusBit::VSYNC, false);
@@ -1213,7 +1213,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
         if self.vsync {
             gl_surface.set_swap_interval(
                 gl_context,
-                glutin::surface::SwapInterval::Wait(NonZero::new(1).unwrap())
+                glutin::surface::SwapInterval::Wait(NonZero::<u32>::MIN)
             ).map_err(|e| MjViewerError::GlutinError(e))?;
         } else {
             gl_surface.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait).map_err(

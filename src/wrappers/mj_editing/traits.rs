@@ -32,7 +32,7 @@ pub trait SpecItem: Sized {
 
     /// Returns the item's name.
     fn name(&self) -> &str {
-        read_mjs_string( unsafe { mjs_getName(self.element_pointer()).as_ref().unwrap() } )
+        read_mjs_string(unsafe { mjs_getName(self.element_pointer()) })
     }
 
     /// Set a new name.
@@ -51,7 +51,7 @@ pub trait SpecItem: Sized {
 
     /// Returns the used default.
     fn default(&self) -> &MjsDefault {
-        unsafe { mjs_getDefault(self.element_pointer()).as_ref().unwrap() }
+        unsafe { &*mjs_getDefault(self.element_pointer()) }
     }
 
     /// Make the item inherit properties from a default class.

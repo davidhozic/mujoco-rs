@@ -556,7 +556,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
             mjv_initGeom(p_geom, geom_type as i32, size_ptr, pos_ptr, mat_ptr, rgba_ptr);
             self.ffi.ngeom += 1;
             // Safety: p_geom is guaranteed non-null (allocated by mjv_makeScene).
-            Ok(p_geom.as_mut().expect("mjvScene geom pointer was null; this is a bug"))
+            Ok(&mut *p_geom)
         }
     }
 

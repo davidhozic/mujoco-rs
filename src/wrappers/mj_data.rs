@@ -1269,7 +1269,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjData {
-        unsafe { self.data.as_ref().unwrap() }
+        unsafe { &*self.data }
     }
 
     /// Mutable reference to the wrapped FFI struct.
@@ -1278,7 +1278,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Modifying the underlying FFI struct directly can break the invariants
     /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjData {
-        unsafe { self.data.as_mut().unwrap() }
+        unsafe { &mut *self.data }
     }
 
     /// Returns a reference to data's [`MjModel`].

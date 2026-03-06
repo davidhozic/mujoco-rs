@@ -15,12 +15,12 @@ macro_rules! default_accessor_wrapper {
         $(
             #[doc = concat!("Returns an immutable reference to ", stringify!($name), "'s defaults.")]
             pub fn $name(&self) -> &[<Mjs $name:camel>] {
-                unsafe { self.$name.as_ref().unwrap() }
+                unsafe { &*self.$name }
             }
 
             #[doc = concat!("Returns a mutable reference to ", stringify!($name), "'s defaults.")]
             pub fn [<$name _mut>](&mut self) -> &mut [<Mjs $name:camel>] {
-                unsafe { self.$name.as_mut().unwrap() }
+                unsafe { &mut *self.$name }
             }
         )*
     }};

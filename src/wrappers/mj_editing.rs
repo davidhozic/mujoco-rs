@@ -298,7 +298,7 @@ impl MjSpec {
 
     /// An immutable reference to the internal FFI struct.
     pub fn ffi(&self) -> &mjSpec {
-        unsafe { self.0.as_ref().unwrap() }
+        unsafe { &*self.0 }
     }
 
     /// A mutable reference to the internal FFI struct.
@@ -307,7 +307,7 @@ impl MjSpec {
     /// Modifying the underlying FFI struct directly can break the invariants
     /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjSpec {
-        unsafe { self.0.as_mut().unwrap() }
+        unsafe { &mut *self.0 }
     }
 
     /// Compile [`MjSpec`] to [`MjModel`].
@@ -487,7 +487,7 @@ impl MjSpec {
                 Err(Error::new(ErrorKind::AlreadyExists, "duplicated name"))
             }
             else {
-                Ok(ptr_default.as_mut().unwrap())
+                Ok(&mut *ptr_default)
             }
         }
     }
@@ -1141,21 +1141,13 @@ impl MjsTendon {
     /// Return an indexed wrap object. Returns `None` if index is out of bounds.
     pub fn get_wrap(&self, i: i32) -> Option<&MjsWrap> {
         let ptr = unsafe { mjs_getWrap(self, i) };
-        if ptr.is_null() {
-            None
-        } else {
-            Some(unsafe { ptr.as_ref().unwrap() })
-        }
+        unsafe { ptr.as_ref() }
     }
 
     /// Return a mutable indexed wrap object. Returns `None` if index is out of bounds.
     pub fn get_wrap_mut(&mut self, i: i32) -> Option<&mut MjsWrap> {
         let ptr = unsafe { mjs_getWrap(self, i) };
-        if ptr.is_null() {
-            None
-        } else {
-            Some(unsafe { ptr.as_mut().unwrap() })
-        }
+        unsafe { ptr.as_mut() }
     }
 }
 
@@ -1173,13 +1165,13 @@ impl MjsWrap {
     /// Return the side site element.
     pub fn side_site(&self) -> Option<&MjsSite> {
         let ptr = unsafe { mjs_getWrapSideSite(crate::util::force_cast(self)) };
-        if ptr.is_null() { None } else { Some(unsafe { ptr.as_ref().unwrap() }) }
+        if ptr.is_null() { None } else { Some(unsafe { &*ptr }) }
     }
 
     /// Return the side site element mutably.
     pub fn side_site_mut(&mut self) -> Option<&mut MjsSite> {
         let ptr = unsafe { mjs_getWrapSideSite(self) };
-        if ptr.is_null() { None } else { Some(unsafe { ptr.as_mut().unwrap() }) }
+        if ptr.is_null() { None } else { Some(unsafe { &mut *ptr }) }
     }
 
     /// Return the wrap divisor.
@@ -1348,7 +1340,7 @@ impl MjsHfield {
 
     /// Sets `userdata`.
     pub fn set_userdata<T: AsRef<[f32]>>(&mut self, userdata: T) {
-        write_mjs_vec_f32(userdata.as_ref(), unsafe {self.userdata.as_mut().unwrap() })
+        write_mjs_vec_f32(userdata.as_ref(), unsafe { &mut *self.userdata })
     }
 }
 
@@ -1437,7 +1429,7 @@ impl MjsTexture {
 
     /// Sets texture `data`.
     pub fn set_data<T>(&mut self, data: &[T]) {
-        write_mjs_vec_byte(data, unsafe { self.data.as_mut().unwrap() });
+        write_mjs_vec_byte(data, unsafe { &mut *self.data });
     }
 
     string_set_get_with! {[&]

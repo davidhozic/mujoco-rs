@@ -444,7 +444,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 // SAFETY: The alignment of the output is the same as the original.
                 // The lifetime also matches  'a in &'a self, which prevents data races.
                 // Length (number of elements) matches the output's.
-                Ok(unsafe { p_shaped.as_ref().unwrap() })
+                Ok(unsafe { &*p_shaped })
             }
             else {
                 Err(io::Error::new(io::ErrorKind::InvalidInput, INVALID_INPUT_SIZE))
@@ -475,7 +475,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 // SAFETY: The alignment of the output is the same as the original.
                 // The lifetime matches  'a in &'a self, which prevents data races.
                 // Length (number of elements) matches the output's.
-                Ok(unsafe { p_shaped.as_ref().unwrap() })
+                Ok(unsafe { &*p_shaped })
             }
             else {
                 Err(io::Error::new(io::ErrorKind::InvalidInput, INVALID_INPUT_SIZE))

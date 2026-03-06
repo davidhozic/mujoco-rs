@@ -105,14 +105,18 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
 
     /// Renders the simulation.
     ///
+    /// # Errors
+    /// Returns `Err` when the viewer has been closed by the user.
+    ///
     /// # SAFETY
     /// This needs to be called periodically from the MAIN thread, otherwise
     /// GLFW stops working.
-    pub fn render(&mut self) {
-        unsafe {
-            assert!(self.running, "render called after viewer has been closed!");
-            self.running = mujoco_cSimulate_RenderStep(self.sim) == 1;
+    pub fn render(&mut self) -> Result<(), &'static str> {
+        if !self.running {
+            return Err("render called after viewer has been closed!");
         }
+        unsafe { self.running = mujoco_cSimulate_RenderStep(self.sim) == 1; }
+        Ok(())
     }
 
     /// Syncs the simulation state with the viewer as well as perform
