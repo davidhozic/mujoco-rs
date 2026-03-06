@@ -144,7 +144,8 @@ macro_rules! add_x_method {
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.ffi_mut(), ptr::null()) };
-                // Safety: if ptr is non-null, MuJoCo guarantees it is properly initialised.
+                // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null
+                // the pointee is properly aligned and initialised by C++ operator new.
                 unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
             }
         )*
@@ -160,32 +161,43 @@ macro_rules! add_x_method_by_frame {
                 "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
                 "Delegates to [`Self::try_add_", stringify!($name), "`] and panics on failure.\n",
                 "# Panics\n",
-                "Panics if the parent body pointer is null or if MuJoCo fails to allocate the element."
+                "Panics if MuJoCo fails to allocate the element."
             )]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 self.[<try_add_ $name>]()
-                    .expect(concat!("add_", stringify!($name), " failed; parent is null or allocation failed"))
+                    .expect(concat!("mjs_add", stringify!($name:camel), " returned null; allocation failed"))
             }
 
             #[doc = concat!(
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
-                "Returns [`MjEditError::NullParentElement`] when the parent body pointer is null ",
-                "(which would otherwise trigger a C-level `mju_error` abort), or ",
-                "[`MjEditError::AllocationFailed`] when MuJoCo fails to allocate the element."
+                "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate the element."
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
+                // SAFETY:
+                // - element_mut_pointer() reads `self.element`, a field always valid after construction.
+                // - body_ptr is non-null for any MjsFrame reachable through the Rust API because
+                //   mjs_addFrame always calls SetParent(body); the debug_assert catches violations.
+                // - The is_null() guard is defensive; mjs_addXxx functions do not perform
+                //   null-check error handling internally, so under current MuJoCo the
+                //   pointer is always non-null.
+                // - ptr.cast() is safe: mjs structs embed mjsElement as their first field, so
+                //   *mut mjsXxx and *mut mjsElement share the same address.
+                // - mjs_setFrame: both dest and frame are non-null and valid; failure for a
+                //   freshly-created element is treated as a bug via debug_assert.
+                // - `&mut *ptr`: ptr is confirmed non-null by the guard above, properly aligned
+                //   and initialised by C++ operator new, and freshly allocated so no Rust
+                //   reference can alias it for the returned lifetime.
                 unsafe {
                     let ep = self.element_mut_pointer();
                     let body_ptr = mjs_getParent(ep);
-                    if body_ptr.is_null() {
-                        return Err(MjEditError::NullParentElement);
-                    }
+                    debug_assert!(!body_ptr.is_null(), "mjs_getParent returned null; frame has no parent body");
                     let ptr = [<mjs_add $name:camel>](body_ptr, ptr::null());
                     if ptr.is_null() {
                         return Err(MjEditError::AllocationFailed);
                     }
-                    mjs_attach(ep, ptr.cast(), ptr::null(), ptr::null());
-                    Ok(ptr.as_mut().expect("non-null ptr returned None; this is a bug"))
+                    let set_result = mjs_setFrame(ptr.cast(), self as *mut Self);
+                    debug_assert_eq!(set_result, 0, "mjs_setFrame failed; element or frame is invalid");
+                    Ok(&mut *ptr)
                 }
             }
         )*

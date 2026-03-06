@@ -355,7 +355,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 // Camera
                                 ui.label(RichText::new("Camera").font(MAIN_FONT));
                                 let Ok(enumerated) = camera.type_.try_into() else {
-                                    // Unknown camera type — skip the camera row rather than panic.
+                                    // Unknown camera type - skip the camera row rather than panic.
                                     ui.label(format!("Unknown camera type {}", camera.type_));
                                     ui.end_row();
                                     return;

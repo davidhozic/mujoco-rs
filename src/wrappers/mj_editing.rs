@@ -703,14 +703,30 @@ impl MjsFrame {
         childclass; "childclass name.";
     }
 
-    /// Adds a child frame.
+    /// Add and return a child frame.
+    ///
+    /// Delegates to [`Self::try_add_frame`] and panics if allocation fails.
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the frame.
     pub fn add_frame(&mut self) -> &mut MjsFrame {
-        unsafe {
-            let parent_body = mjs_getParent(self.element_mut_pointer());
-            let parent_frame = self.element_mut_pointer();
-            let frame_ptr = mjs_addFrame(parent_body, parent_frame.cast());
-            frame_ptr.as_mut().unwrap()
-        }
+        self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
+    }
+
+    /// Fallible version of [`Self::add_frame`].
+    ///
+    /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
+    /// the frame, instead of panicking.
+    pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
+        // SAFETY: element_mut_pointer() reads `self.element`, valid for any live MjsFrame.
+        // mjs_getParent returns non-null because every Rust-API MjsFrame was created via
+        // mjs_addFrame, which always calls SetParent(body).
+        let parent_body = unsafe { mjs_getParent(self.element_mut_pointer()) };
+        debug_assert!(!parent_body.is_null(), "mjs_getParent returned null; frame has no parent body");
+        let ptr = unsafe { mjs_addFrame(parent_body, self as *mut MjsFrame) };
+        // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
+        // pointee is properly aligned and initialised by C++ operator new, and freshly
+        // allocated so no existing Rust reference aliases it for the returned lifetime.
+        unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 }
 
@@ -1406,9 +1422,27 @@ impl MjsBody {
 
     // Special case
     /// Add and return a child frame.
+    ///
+    /// Delegates to [`Self::try_add_frame`] and panics if allocation fails.
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the frame.
     pub fn add_frame(&mut self) -> &mut MjsFrame {
-        let ptr = unsafe { mjs_addFrame(self, ptr::null_mut()) };
-        unsafe { ptr.as_mut().unwrap() }
+        self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
+    }
+
+    /// Fallible version of [`Self::add_frame`].
+    ///
+    /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
+    /// the frame, instead of panicking.
+    pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
+        // SAFETY: ffi_mut() returns self unchanged; the coercion to *mut mjsBody is safe.
+        // ptr::null_mut() for parentframe is valid: the MuJoCo API accepts null to mean
+        // "attach directly to the body with no parent frame".
+        let ptr = unsafe { mjs_addFrame(self.ffi_mut(), ptr::null_mut()) };
+        // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
+        // pointee is properly aligned and initialised by C++ operator new, and freshly
+        // allocated so no existing Rust reference aliases it for the returned lifetime.
+        unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 }
 
