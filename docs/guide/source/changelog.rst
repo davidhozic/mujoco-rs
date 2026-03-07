@@ -104,6 +104,12 @@ update of MuJoCo alone can increase the major version.
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>apply_ft`.
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_mesh`.
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_hfield`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_ctrl_history`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_sensor_history`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_ctrl`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_sensor_into`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_sensor_fixed`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_sensor`.
 
   - |mj_model|:
 
@@ -174,7 +180,8 @@ update of MuJoCo alone can increase the major version.
 
   - |mj_spec|:
 
-    - ``add_default`` now returns ``MjEditError`` instead of ``io::Error``.
+    - ``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``compile``, ``save_xml``,
+      ``save_xml_string``, ``add_default`` now return ``MjEditError`` instead of ``io::Error``.
 
   - |mjv_scene| / :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`:
 
