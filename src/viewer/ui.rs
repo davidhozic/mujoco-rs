@@ -151,7 +151,9 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     actuator_window: bool,
     joint_window: bool,
     equality_window: bool,
-    group_window: bool
+    group_window: bool,
+    screenshot_viewport_only: bool,
+    screenshot_depth: bool
 }
 
 impl<M: Deref<Target = MjModel>> ViewerUI<M> {
@@ -216,7 +218,9 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             actuator_window: false,
             joint_window: false,
             equality_window: false,
-            group_window: false
+            group_window: false,
+            screenshot_viewport_only: false,
+            screenshot_depth: false
         })
     }
 
@@ -269,13 +273,15 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             .default_open(true)
                             .show(ui, |ui|
                         {
-                            if ui.add(egui::Button::new(
-                                RichText::new("Quit").font(MAIN_FONT)
-                            ).corner_radius(BUTTON_ROUNDING)).clicked() {
-                                self.events.push_back(UiEvent::Close);
-                            }
+                            ui.horizontal_wrapped(|ui| {
+                                if ui.add(egui::Button::new(
+                                    RichText::new("Quit").font(MAIN_FONT)
+                                ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                                    self.events.push_back(UiEvent::Close);
+                                }
+                            });
                         });
-                        
+
                         /* UI toggles */
                         egui::CollapsingHeader::new(RichText::new("UI").font(HEADING_FONT))
                             .default_open(true)
@@ -352,7 +358,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                         /* Visualization options */
                         egui::CollapsingHeader::new(RichText::new("Rendering").font(HEADING_FONT))
-                            .default_open(false)
+                            .default_open(true)
                             .show(ui, |ui|
                         {
                             egui::Grid::new("render_select_grid").show(ui, |ui| {
@@ -455,7 +461,25 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 // Until then ^^^.
                             }
 
-                            ui.add_space(5.0);
+                            // Screenshot
+                            ui.collapsing(RichText::new("Screenshot").font(MAIN_FONT), |ui| {
+                                if ui.add(egui::Button::new(
+                                    RichText::new("Screenshot").font(MAIN_FONT)
+                                ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                                    self.events.push_back(UiEvent::Screenshot {
+                                        viewport_only: self.screenshot_viewport_only,
+                                        depth: self.screenshot_depth
+                                    });
+                                }
+                                ui.checkbox(
+                                    &mut self.screenshot_viewport_only,
+                                    RichText::new("Viewport only").font(MAIN_FONT)
+                                );
+                                ui.checkbox(
+                                    &mut self.screenshot_depth,
+                                    RichText::new("Depth").font(MAIN_FONT)
+                                );
+                            });
 
                             ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
@@ -721,5 +745,6 @@ pub(crate) enum UiEvent {
     Fullscreen,
     ResetSimulation,
     AlignCamera,
-    VSyncToggle
+    VSyncToggle,
+    Screenshot { viewport_only: bool, depth: bool }
 }

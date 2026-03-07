@@ -26,6 +26,19 @@ update of MuJoCo alone can increase the major version.
 3.0.0 (MuJoCo 3.5.0)
 ======================
 
+- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
+
+  - Added support for the ``Depth`` rendering flag (``mjRND_DEPTH``).
+  - Added a "Print camera" button to the viewer UI that prints the current camera's position and
+    orientation as an MJCF ``<camera>`` XML element to the console.
+  - Added a "Screenshot" collapsible sub-section inside the "Rendering" panel with:
+
+    - A **Screenshot** button that saves the current frame as a timestamped PNG file.
+    - A **Viewport only** checkbox: when enabled, the screenshot is taken before the UI panel
+      is drawn, so the MuJoCo scene fills the entire window and is centered.
+    - A **Depth** checkbox: when enabled, the screenshot captures the linearized depth buffer
+      and saves it as a 16-bit grayscale PNG instead of an RGB image.
+
 - **Breaking changes**:
 
   - Updated the MuJoCo version to 3.5.0.
@@ -392,10 +405,6 @@ update of MuJoCo alone can increase the major version.
 
   - Updated enum type aliases.
   - Improved fixed-size array pointer handling.
-  - Added support for ``Depth`` rendering flag (``mjRND_DEPTH``) to
-    :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
-  - Added a "Print camera" button to the viewer UI that prints the current camera's position and
-    orientation as an MJCF ``<camera>`` XML element to the console.
   - |mj_data| and |mj_model| views now contain extra fields.
   - Fixed a bug where :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` methods like
     :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb` and

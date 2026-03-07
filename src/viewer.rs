@@ -23,13 +23,13 @@ use std::borrow::Cow;
 use bitflags::bitflags;
 
 use crate::prelude::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
+use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_data::{MjData, MjtState};
 use crate::{builder_setters, get_mujoco_version};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
-use crate::vis_common::sync_geoms;
 use crate::util::LockUnpoison;
 
 
@@ -392,7 +392,11 @@ pub struct MjViewer<M: Deref<Target = MjModel> + Clone> {
     #[cfg(feature = "viewer-ui")]
     ui: ui::ViewerUI<M>,
 
-    status: ViewerStatusBit
+    status: ViewerStatusBit,
+
+    /// Pending screenshot request. [`Some`] with `(viewport_only, depth)` flags when a
+    /// screenshot is queued; [`None`] otherwise.
+    screenshot_pending: Option<(bool, bool)>
 }
 
 impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
@@ -576,12 +580,26 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         /* Update the scene from data and render */
         self.update_scene()?;
 
+        /* Viewport-only screenshot: capture the centered scene before the UI
+         * panel is drawn on top (the scene is rendered to rect_full, so it
+         * fills the entire window). */
+        if matches!(self.screenshot_pending, Some((true, _))) {
+            let (_, depth) = self.screenshot_pending.take().unwrap();
+            self.capture_screenshot(depth);
+        }
+
         /* Draw the user menu on top */
         #[cfg(feature = "viewer-ui")]
         self.process_user_ui();
 
         /* Update the user menu state and overlays */
         self.update_menus();
+
+        /* Full-window screenshot: capture after all rendering (UI + overlays). */
+        if matches!(self.screenshot_pending, Some((false, _))) {
+            let (_, depth) = self.screenshot_pending.take().unwrap();
+            self.capture_screenshot(depth);
+        }
 
         /* Flush to the GPU */
         self.swap_buffers()
@@ -598,6 +616,84 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         /* Swap OpenGL buffers (render to screen) */
         gl_surface.swap_buffers(gl_context)
             .map_err(MjViewerError::SwapBuffersError)
+    }
+
+    /// Captures the current framebuffer contents as a PNG screenshot.
+    /// Always reads from [`rect_full`](Self::rect_full) (the entire window).
+    /// The caller controls what is visible by choosing *when* to call this
+    /// method in the render pipeline. When `depth` is `true`, a 16-bit
+    /// grayscale depth image is saved instead of an RGB image.
+    fn capture_screenshot(&self, depth: bool) {
+        let rect = &self.rect_full;
+
+        let w = rect.width as usize;
+        let h = rect.height as usize;
+        if w == 0 || h == 0 {
+            return;
+        }
+
+        // Generate a timestamped filename.
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        if depth {
+            let mut depth_buf = vec![0.0f32; w * h];
+            self.context.read_pixels(None, Some(&mut depth_buf), rect);
+
+            // OpenGL reads bottom-up; flip for top-down PNG row order.
+            flip_image_vertically(&mut depth_buf, h, w);
+
+            // Linearize raw OpenGL depth into metric distance.
+            let map = &self.model.vis().map;
+            let stat = &self.model.stat();
+            let extent = stat.extent as f32;
+            let near = map.znear * extent;
+            let far = map.zfar * extent;
+            for value in &mut depth_buf {
+                *value = near / (1.0 - *value * (1.0 - near / far));
+            }
+
+            // Normalize to 16-bit range.
+            let max = depth_buf.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+            let min = depth_buf.iter().cloned().fold(f32::INFINITY, f32::min);
+            let scale = u16::MAX as f32;
+            let range = max - min;
+            let encoded: Box<[u8]> = depth_buf
+                .iter()
+                .flat_map(|&x| {
+                    let norm = if range > 0.0 { (x - min) / range } else { 0.0 };
+                    ((norm * scale).clamp(0.0, scale) as u16).to_be_bytes()
+                })
+                .collect();
+
+            let path = format!("screenshot_{timestamp}_depth.png");
+            if let Err(e) = write_png(
+                &path, &encoded, w as u32, h as u32,
+                png::ColorType::Grayscale, png::BitDepth::Sixteen
+            ) {
+                eprintln!("depth screenshot failed: {e}");
+            } else {
+                eprintln!("depth screenshot saved to {path} (min={min:.4}, max={max:.4})");
+            }
+        } else {
+            let mut rgb = vec![0u8; w * h * 3];
+            self.context.read_pixels(Some(&mut rgb), None, rect);
+
+            // OpenGL reads bottom-up; flip for top-down PNG row order.
+            flip_image_vertically(&mut rgb, h, w * 3);
+
+            let path = format!("screenshot_{timestamp}.png");
+            if let Err(e) = write_png(
+                &path, &rgb, w as u32, h as u32,
+                png::ColorType::Rgb, png::BitDepth::Eight
+            ) {
+                eprintln!("screenshot failed: {e}");
+            } else {
+                eprintln!("screenshot saved to {path}");
+            }
+        }
     }
 
     fn update_smooth_fps(&mut self) {
@@ -766,6 +862,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 },
                 VSyncToggle => {
                     self.update_vsync();
+                },
+                Screenshot { viewport_only, depth } => {
+                    self.screenshot_pending = Some((viewport_only, depth));
                 }
             }
         }
@@ -1312,7 +1411,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
             buttons_pressed: ButtonsPressed::empty(),
             raw_cursor_position: (0.0, 0.0),
             #[cfg(feature = "viewer-ui")] ui,
-            status
+            status,
+            screenshot_pending: None
         })
     }
 }

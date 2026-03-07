@@ -5,12 +5,11 @@ use crate::wrappers::mj_rendering::MjrContext;
 #[cfg(target_os = "linux")]
 use crate::renderer::egl::GlStateEgl;
 
-use crate::vis_common::sync_geoms;
+use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
 use crate::builder_setters;
 use crate::prelude::*;
 
 use bitflags::bitflags;
-use png::Encoder;
 
 use std::io::{self, BufWriter, Write};
 use std::fmt::Display;
@@ -483,16 +482,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// - [`RendererError::IoError`] if a file I/O operation fails.
     pub fn save_rgb<T: AsRef<Path>>(&self, path: T) -> Result<(), RendererError> {
         if let Some(rgb) = &self.rgb {
-            let file = File::create(path.as_ref())?;
-            let w = BufWriter::new(file);
-
-            let mut encoder = Encoder::new(w, self.width as u32, self.height as u32);
-            encoder.set_color(png::ColorType::Rgb);
-            encoder.set_depth(png::BitDepth::Eight);
-            encoder.set_compression(png::Compression::NoCompression);
-
-            let mut writer = encoder.write_header()?;
-            writer.write_image_data(rgb)?;
+            write_png(
+                path,
+                rgb,
+                self.width as u32,
+                self.height as u32,
+                png::ColorType::Rgb,
+                png::BitDepth::Eight,
+            )?;
             Ok(())
         }
         else {
@@ -513,14 +510,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// - [`RendererError::IoError`] if a file I/O operation fails.
     pub fn save_depth<T: AsRef<Path>>(&self, path: T, normalize: bool) -> Result<(f32, f32), RendererError> {
         if let Some(depth) = &self.depth {
-            let file = File::create(path.as_ref())?;
-            let w = BufWriter::new(file);
-
-            let mut encoder = Encoder::new(w, self.width as u32, self.height as u32);
-            encoder.set_color(png::ColorType::Grayscale);
-            encoder.set_depth(png::BitDepth::Sixteen);
-            encoder.set_compression(png::Compression::NoCompression);
-
             let (norm, min, max) =
             if normalize {
                 let max = depth.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
@@ -531,8 +520,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 (depth.iter().flat_map(|&x| ((x * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), 0.0, 1.0)
             };
 
-            let mut writer = encoder.write_header()?;
-            writer.write_image_data(&norm)?;
+            write_png(
+                path,
+                &norm,
+                self.width as u32,
+                self.height as u32,
+                png::ColorType::Grayscale,
+                png::BitDepth::Sixteen,
+            )?;
             Ok((min, max))
         }
         else {
@@ -601,16 +596,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
         }
 
         Ok(())
-    }
-}
-
-/// Flips an image buffer vertically in-place.
-fn flip_image_vertically<T>(buffer: &mut [T], height: usize, row_len: usize) {
-    for i in 0..(height / 2) {
-        let top_idx = i * row_len;
-        let bottom_idx = (height - 1 - i) * row_len;
-        let (top_split, bottom_split) = buffer.split_at_mut(bottom_idx);
-        top_split[top_idx..top_idx + row_len].swap_with_slice(&mut bottom_split[0..row_len]);
     }
 }
 
