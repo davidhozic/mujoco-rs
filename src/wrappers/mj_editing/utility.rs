@@ -18,16 +18,14 @@ use crate::mujoco_c::*;
 /// # Panics
 /// Panics if the string contains invalid UTF-8.
 pub(crate) fn read_mjs_string<'a>(string: *const mjString) -> &'a str {
-    unsafe {
-        let ptr = mjs_getString(string);
-        if ptr.is_null() {
-            ""
-        } else {
-            // SAFETY: `ptr` points into the internal buffer of the C++ std::string
-            // referenced by `string`, which is valid for lifetime 'a. MuJoCo
-            // strings are always valid UTF-8 (ASCII), so to_str() cannot fail.
-            CStr::from_ptr(ptr).to_str().unwrap()
-        }
+    let ptr = unsafe { mjs_getString(string) };
+    if ptr.is_null() {
+        ""
+    } else {
+        // SAFETY: `ptr` points into the internal buffer of the C++ std::string
+        // referenced by `string`, which is valid for lifetime 'a. MuJoCo
+        // strings are always valid UTF-8 (ASCII), so to_str() cannot fail.
+        unsafe { CStr::from_ptr(ptr) }.to_str().unwrap()
     }
 }
 
@@ -35,23 +33,18 @@ pub(crate) fn read_mjs_string<'a>(string: *const mjString) -> &'a str {
 /// # Panics
 /// When the `source` contains '\0' characters, a panic occurs.
 pub(crate) fn write_mjs_string(source: &str, destination: *mut mjString) {
-    unsafe {
-        let c_source = CString::new(source).unwrap();
-        mjs_setString(destination, c_source.as_ptr());
-    }
+    let c_source = CString::new(source).unwrap();
+    unsafe { mjs_setString(destination, c_source.as_ptr()) };
 }
 
 /// Reads MJS double vector (C++) as a `&\[f64\]`.
 pub(crate) fn read_mjs_vec_f64<'a>(array: *const mjDoubleVec) -> &'a [f64] {
     let mut userdata_length = 0;
-    unsafe {
-        let ptr_arr = mjs_getDouble(array, &mut userdata_length);
-        if ptr_arr.is_null() {
-            return &[];
-        }
-
-        std::slice::from_raw_parts(ptr_arr, userdata_length as usize)
+    let ptr_arr = unsafe { mjs_getDouble(array, &mut userdata_length) };
+    if ptr_arr.is_null() {
+        return &[];
     }
+    unsafe { std::slice::from_raw_parts(ptr_arr, userdata_length as usize) }
 }
 
 /// Writes MJS double vector (C++) from a `source` to `destination`.

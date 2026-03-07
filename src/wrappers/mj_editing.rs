@@ -31,7 +31,7 @@ use crate::getter_setter;
 
 // Re-export with lowercase 'f' to fix method generation
 use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
-use crate::util::assert_mujoco_version;
+use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
 
 /* Types */
 /// Type of inertia inference.
@@ -201,7 +201,7 @@ impl MjSpec {
     fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
 
-        let mut error_buffer = [0u8; 100];
+        let mut error_buffer = [0u8; ERROR_BUF_LEN];
         unsafe {
             let path_str = path.as_ref().to_str()
                 .ok_or(MjEditError::InvalidUtf8Path)?;
@@ -227,7 +227,7 @@ impl MjSpec {
         assert_mujoco_version();
 
         let c_xml = CString::new(xml).unwrap();
-        let mut error_buffer = [0u8; 100];
+        let mut error_buffer = [0u8; ERROR_BUF_LEN];
         unsafe {
             let spec_ptr = mj_parseXMLString(
                 c_xml.as_ptr(), ptr::null(),
@@ -268,7 +268,7 @@ impl MjSpec {
     /// When `filename` or `content_type` contains zero bytes.
     fn from_parse_file(filename: &str, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
-        let mut error_buffer = [0u8; 100];
+        let mut error_buffer = [0u8; ERROR_BUF_LEN];
         unsafe {
             let c_filename = CString::new(filename).unwrap();
             let c_content_type = CString::new(content_type).unwrap();
@@ -341,7 +341,7 @@ impl MjSpec {
     /// # Panics
     /// When `filename` contains '\0' characters, a panic occurs.
     pub fn save_xml(&self, filename: &str) -> Result<(), MjEditError> {
-        let mut error_buff = [0u8; 100];
+        let mut error_buff = [0u8; ERROR_BUF_LEN];
         let cname = CString::new(filename).unwrap();  // filename is always UTF-8
         let result = unsafe { mj_saveXML(
             self.ffi(), cname.as_ptr(),
@@ -365,7 +365,7 @@ impl MjSpec {
     /// Returns [`MjEditError::SaveFailed`] with MuJoCo's error message if the conversion fails.
     /// If `buffer_size` is too small, the output will be truncated.
     pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, MjEditError> {
-        let mut error_buff = [0u8; 100];
+        let mut error_buff = [0u8; ERROR_BUF_LEN];
         let mut result_buff = vec![0u8; buffer_size];
         let result = unsafe { mj_saveXMLString(
             self.ffi(), result_buff.as_mut_ptr().cast(), result_buff.len() as i32,

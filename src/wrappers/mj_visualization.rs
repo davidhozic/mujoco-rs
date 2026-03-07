@@ -111,16 +111,23 @@ impl MjvPerturb {
 
     /// Updates the body-local position of the selection point.
     pub fn update_local_pos<M: Deref<Target = MjModel>>(&mut self, selection_xyz: &[MjtNum; 3], data: &MjData<M>) {
-        let mut tmp = [0.0; 3];
         debug_assert!(self.select >= 0, "invalid selecting when calling update_local_pos");
         let select = self.select as usize;
         let body_xpos = &data.xpos()[select];
         let body_xmat = &data.xmat()[select];
         // Inverse transform into the local frame of the body.
-        unsafe {
-            mju_sub3(&mut tmp, selection_xyz, body_xpos);
-            mju_mulMatTVec3(&mut self.localpos, body_xmat, &tmp);
-        }
+        // mju_sub3 equivalent
+        let tmp = [
+            selection_xyz[0] - body_xpos[0],
+            selection_xyz[1] - body_xpos[1],
+            selection_xyz[2] - body_xpos[2],
+        ];
+        // mju_mulMatTVec3 equivalent (mat is row-major 3x3)
+        self.localpos = [
+            body_xmat[0] * tmp[0] + body_xmat[3] * tmp[1] + body_xmat[6] * tmp[2],
+            body_xmat[1] * tmp[0] + body_xmat[4] * tmp[1] + body_xmat[7] * tmp[2],
+            body_xmat[2] * tmp[0] + body_xmat[5] * tmp[1] + body_xmat[8] * tmp[2],
+        ];
     }
 }
 
@@ -629,10 +636,10 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
 impl<M: Deref<Target = MjModel>> MjvScene<M> {
     // Scalar length arrays
     array_slice_dyn! {
-        flexedge: &[[i32; 2] [cast]; "flex edge data"; model.ffi().nflexedge],
-        flexvert: &[[f32; 3] [cast]; "flex vertices"; model.ffi().nflexvert],
-        skinvert: &[[f32; 3] [cast]; "skin vertex data"; model.ffi().nskinvert],
-        skinnormal: &[[f32; 3] [cast]; "skin normal data"; model.ffi().nskinvert],
+        flexedge: &[[i32; 2] [force]; "flex edge data"; model.ffi().nflexedge],
+        flexvert: &[[f32; 3] [force]; "flex vertices"; model.ffi().nflexvert],
+        skinvert: &[[f32; 3] [force]; "skin vertex data"; model.ffi().nskinvert],
+        skinnormal: &[[f32; 3] [force]; "skin normal data"; model.ffi().nskinvert],
         geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
         geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
         flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],

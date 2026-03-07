@@ -4,6 +4,11 @@ use std::sync::{Mutex, MutexGuard};
 
 use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 
+/// Standard size of temporary error buffers passed to MuJoCo C functions.
+/// MuJoCo NUL-terminates within this size, so the effective maximum
+/// message length is `ERROR_BUF_LEN - 1` characters.
+pub const ERROR_BUF_LEN: usize = 100;
+
 
 /// Creates a (start, length) tuple based on
 /// lookup variables that define the mapping in MuJoCo's mjModel struct.
@@ -217,16 +222,16 @@ macro_rules! eval_or_expand {
 #[macro_export]
 #[doc(hidden)]
 macro_rules! view_creator {
-    ($self:expr, $view:ident, $data:expr, [$($([$prefix_field:ident])? $field:ident $([$cast:ident])? ),*], [$($([$prefix_opt_field:ident])? $opt_field:ident $([$cast_opt:ident])?),*], $ptr_view:expr) => {
+    ($self:expr, $view:ident, $data:expr, [$($([$prefix_field:ident])? $field:ident : $type_:ty $([$force:ident])? ),*], [$($([$prefix_opt_field:ident])? $opt_field:ident : $type_opt:ty $([$force_opt:ident])?),*], $ptr_view:expr) => {
         paste::paste! {
             unsafe {
                 $view {
                     $(
-                        $field: $ptr_view($data.[<$($prefix_field)? $field>].add($self.$field.0) $(.$cast())?, $self.$field.1, std::marker::PhantomData),
+                        $field: $ptr_view($crate::maybe_force_cast!($data.[<$($prefix_field)? $field>].add($self.$field.0), $type_ $(, $force)?), $self.$field.1, std::marker::PhantomData),
                     )*
                     $(
                         $opt_field: if $self.$opt_field.1 > 0 {
-                            Some($ptr_view($data.[<$($prefix_opt_field)? $opt_field>].add($self.$opt_field.0) $(.$cast_opt())?, $self.$opt_field.1, std::marker::PhantomData))
+                            Some($ptr_view($crate::maybe_force_cast!($data.[<$($prefix_opt_field)? $opt_field>].add($self.$opt_field.0), $type_opt $(, $force_opt)?), $self.$opt_field.1, std::marker::PhantomData))
                         } else {None},
                     )*
                 }
@@ -311,7 +316,7 @@ macro_rules! info_with_view {
     /* PointerView */
 
     /* name of the view/info, attribute prefix in MjData/MjModel, [attributes always present], [attributes that can be None] */
-    ($info_type:ident, $name:ident, [$($([$prefix_attr:ident])? $attr:ident: $type_:ty $([$cast:ident])? ),*], [$($([$prefix_opt_attr:ident])? $opt_attr:ident: $type_opt:ty $([$cast_opt:ident])? ),*]$(,$generics:ty: $bound:ty)?) => {
+    ($info_type:ident, $name:ident, [$($([$prefix_attr:ident])? $attr:ident: $type_:ty $([$force:ident])? ),*], [$($([$prefix_opt_attr:ident])? $opt_attr:ident: $type_opt:ty $([$force_opt:ident])? ),*]$(,$generics:ty: $bound:ty)?) => {
         paste::paste! {
             #[doc = "Stores information required to create views to [`Mj" $info_type "`] arrays corresponding to a " $name "."]
             #[allow(non_snake_case)]
@@ -333,7 +338,7 @@ macro_rules! info_with_view {
                                 "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
                 pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
                     assert_eq!(self.model_signature, [<$info_type:lower>].signature(), "model signature mismatch");
-                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr $([$cast])?),*], [$($([$prefix_opt_attr])? $opt_attr $([$cast_opt])?),*], crate::util::PointerViewMut::new)
+                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], crate::util::PointerViewMut::new)
                 }
 
                 #[doc = concat!("Returns a view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
@@ -341,7 +346,7 @@ macro_rules! info_with_view {
                                 "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
                 pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
                     assert_eq!(self.model_signature, [<$info_type:lower>].signature(), "model signature mismatch");
-                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr $([$cast])?),*], [$($([$prefix_opt_attr])? $opt_attr $([$cast_opt])?),*], crate::util::PointerView::new)
+                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], crate::util::PointerView::new)
                 }
             }
 
@@ -589,13 +594,13 @@ macro_rules! builder_setters {
 #[macro_export]
 macro_rules! array_slice_dyn {
     // Arrays that are of scalar variable size
-    ($($((allow_mut = $cfg_mut:literal))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$cast:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
+    ($($((allow_mut = $cfg_mut:literal))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake>](&self) -> &[$type] {
                     let length = self.$($len_accessor)* as usize;
-                    let ptr = self.ffi().$name$(.$as_ptr())?$(.$cast::<$type>())?;
+                    let ptr = $crate::maybe_force_cast!(self.ffi().$name$(.$as_ptr())?, $type $(, $force)?);
                     if ptr.is_null() || length == 0 {
                         return &[];
                     }
@@ -607,7 +612,7 @@ macro_rules! array_slice_dyn {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                             let length = self.$($len_accessor)* as usize;
-                            let ptr = unsafe { self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast::<$type>())? };
+                            let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
                             if ptr.is_null() || length == 0 {
                                 return &mut [];
                             }
@@ -641,7 +646,7 @@ macro_rules! array_slice_dyn {
                         return &[];
                     }
 
-                    unsafe { std::slice::from_raw_parts(data_ptr.cast(), length) }
+                    unsafe { std::slice::from_raw_parts($crate::maybe_force_cast!(data_ptr, [$type; $multiplier], force), length) }
                 }
                 
                 crate::eval_or_expand! {
@@ -664,7 +669,7 @@ macro_rules! array_slice_dyn {
                                 return &mut [];
                             }
 
-                            unsafe { std::slice::from_raw_parts_mut(data_ptr.cast(), length) }
+                            unsafe { std::slice::from_raw_parts_mut($crate::maybe_force_cast!(data_ptr, [$type; $multiplier], force), length) }
                         }
                     }
                 }
@@ -673,13 +678,13 @@ macro_rules! array_slice_dyn {
     };
 
     // Arrays whose second dimension is dependent on some variable
-    (sublen_dep {$( $(allow_mut = $cfg_mut:literal)? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[[$type:ty; $($inner_len_accessor:tt)*] $([$cast:ident])?; $doc:literal; $($len_accessor:tt)*]),*}) => {
+    (sublen_dep {$( $(allow_mut = $cfg_mut:literal)? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[[$type:ty; $($inner_len_accessor:tt)*] $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*}) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake>](&self) -> &[$type] {
                     let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
-                    let ptr = self.ffi().$name$(.$as_ptr())?$(.$cast::<$type>())?;
+                    let ptr = $crate::maybe_force_cast!(self.ffi().$name$(.$as_ptr())?, $type $(, $force)?);
                     if ptr.is_null() || length == 0 {
                         return &[];
                     }
@@ -692,7 +697,7 @@ macro_rules! array_slice_dyn {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                             let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
-                            let ptr = unsafe { self.ffi_mut().$name$(.$as_mut_ptr())?$(.$cast::<$type>())? };
+                            let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
                             if ptr.is_null() || length == 0 {
                                 return &mut [];
                             }
@@ -748,7 +753,9 @@ macro_rules! c_str_as_str_method {
                 let c_string = std::ffi::CString::new($name).unwrap();
                 let bytes = c_string.into_bytes_with_nul();
 
-                self$(.$ffi())?.$name$([$sub_index_name])?[..bytes.len()].copy_from_slice(bytemuck::cast_slice(&bytes));
+                let buf = &mut self$(.$ffi())?.$name$([$sub_index_name])?;
+                buf[..bytes.len()].copy_from_slice(bytemuck::cast_slice(&bytes));
+                buf[bytes.len()..].fill(0);
             }
         )*
     }};
@@ -761,7 +768,9 @@ macro_rules! c_str_as_str_method {
                 let c_string = std::ffi::CString::new($name).unwrap();
                 let bytes = c_string.into_bytes_with_nul();
 
-                self$(.$ffi())?.$name$([$sub_index_name])?[..bytes.len()].copy_from_slice(bytemuck::cast_slice(&bytes));
+                let buf = &mut self$(.$ffi())?.$name$([$sub_index_name])?;
+                buf[..bytes.len()].copy_from_slice(bytemuck::cast_slice(&bytes));
+                buf[bytes.len()..].fill(0);
                 self
             }
         )*
@@ -809,24 +818,24 @@ macro_rules! assert_relative_eq {
 macro_rules! cast_mut_info {
     ($value:expr $(, $debug_expr:expr)?) => {
         {
-            let evaluated = format!("{:?}", $value);
-            bytemuck::checked::try_cast_mut($value)
-                .unwrap_or_else(
-                    |e| {
-                        #[allow(unused)]
-                        let mut debug_info = String::new();
-                        $(
-                            debug_info = format!(" (debug info: '{} = {}')", stringify!($debug_expr), $debug_expr);
-                        )?
+            match bytemuck::checked::try_cast_mut($value) {
+                Ok(v) => v,
+                Err(e) => {
+                    let evaluated = format!("{:?}", $value);
+                    #[allow(unused)]
+                    let mut debug_info = String::new();
+                    $(
+                        debug_info = format!(" (debug info: '{} = {}')", stringify!($debug_expr), $debug_expr);
+                    )?
 
-                        panic!(
-                            "failed to cast expression '{}', which evaluates to '{}' into requested type (error: {})\
-                             {debug_info} --- \
-                             most likely you have a bug in your program.",
-                            stringify!($value), evaluated, e
-                        );
-                    }
-                )
+                    panic!(
+                        "failed to cast expression '{}', which evaluates to '{}' into requested type (error: {})\
+                         {debug_info} --- \
+                         most likely you have a bug in your program.",
+                        stringify!($value), evaluated, e
+                    );
+                }
+            }
         }
     };
 }
@@ -846,9 +855,9 @@ pub fn assert_mujoco_version() {
 
 /// Forcefully casts a value of type `T` to type `U`.
 /// # Safety
-/// This is a safe alternative to `std::mem::transmute` that performs a compile-time
-/// size check to ensure that the source and destination types have the same size.
-/// However, it does not guarantee that the bit patterns are compatible.
+/// This is a safer alternative to `std::mem::transmute` that performs compile-time
+/// size and alignment checks.  It does **not** guarantee that the bit patterns
+/// are compatible -- the caller must still ensure semantic validity.
 #[inline(always)]
 pub unsafe fn force_cast<T, U>(val: T) -> U {
     const {
@@ -861,6 +870,42 @@ pub unsafe fn force_cast<T, U>(val: T) -> U {
         to: std::mem::ManuallyDrop<U>,
     }
     unsafe { std::mem::ManuallyDrop::into_inner(Transmuter { from: std::mem::ManuallyDrop::new(val) }.to) }
+}
+
+
+/// Asserts at compile time that casting from `Src` to `Dst` is
+/// size-and-alignment compatible.
+///
+/// The target element size must be a multiple of the source element size
+/// (covers both same-size type conversions and array-grouping casts like
+/// `*const f64` to `*const [f64; 3]`), and the source alignment must be at
+/// least as strict as the target alignment.
+///
+/// The pointer argument is only used for type inference of `Src`; it is
+/// never dereferenced.
+#[inline(always)]
+pub fn assert_ptr_cast_valid<Src, Dst>(_ptr: *const Src) {
+    const {
+        assert!(std::mem::size_of::<Dst>() % std::mem::size_of::<Src>() == 0,
+            "ptr cast: target size must be a multiple of source size");
+        assert!(std::mem::align_of::<Src>() >= std::mem::align_of::<Dst>(),
+            "ptr cast: source alignment must be >= target alignment");
+    }
+}
+
+
+/// Conditionally casts a raw pointer to `$type` with compile-time
+/// size and alignment checks.  When the `force` token is absent the
+/// pointer is returned as-is.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! maybe_force_cast {
+    ($ptr:expr, $type:ty) => { $ptr };
+    ($ptr:expr, $type:ty, force) => {{
+        let ptr = $ptr;
+        $crate::util::assert_ptr_cast_valid::<_, $type>(ptr as *const _);
+        ptr.cast::<$type>()
+    }};
 }
 
 

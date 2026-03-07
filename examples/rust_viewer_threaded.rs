@@ -24,7 +24,7 @@ const EXAMPLE_MODEL: &str = stringify! {
 
 fn main() {
     // Create model and data.
-    let model = Arc::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
+    let model = Arc::new(MjModel::from_xml("/home/davidhozic/repo/fuzbai-simulation/models/miza.xml").expect("could not load the model"));
     let mut data = MjData::new(model.clone());
 
     // Create the viewer, bound to the model.
