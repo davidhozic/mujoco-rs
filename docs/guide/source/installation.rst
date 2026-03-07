@@ -60,7 +60,7 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
             cargo add mujoco-rs --no-default-features --features "auto-download-mujoco"
 
-        Then, set the environmental variable ``MUJOCO_DOWNLOAD_DIR`` to the **absolute path**
+        Then, set the environment variable ``MUJOCO_DOWNLOAD_DIR`` to the **absolute path**
         into which the MuJoCo library will be extracted. Note that a subdirectory will
         be created automatically in the format ``mujoco-x.y.z``, where ``x.y.z`` is the MuJoCo version.
 
@@ -137,7 +137,7 @@ You should now be able to compile and run your crate.
 
 Regardless of whether MuJoCo is downloaded by MuJoCo-rs or you provided it manually, you may encounter
 **runtime errors** about the library not being found. This can happen if the library is not
-located in a **standard location** nor added to the OS-dependent **path environmental variable**.
+located in a **standard location** nor added to the OS-dependent **path environment variable**.
 You can fix these kind of errors like so:
 
 .. tabs::
@@ -157,7 +157,7 @@ You can fix these kind of errors like so:
     .. tab:: Windows
 
         Place the ``mujoco.dll`` file in the **current working directory** (next to the EXE).
-        Alternatively, the path to the DLL file's directory can be added to the PATH environmental variable.
+        Alternatively, the path to the DLL file's directory can be added to the PATH environment variable.
         See `here <https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/>`_
         for a tutorial on configuring PATH.
 
@@ -177,7 +177,6 @@ You can fix these kind of errors like so:
         ::
 
             export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/path/to/mujoco/lib/
-
 
 
 .. _static_linking:
@@ -220,7 +219,7 @@ To build statically linkable libraries, perform the following steps:
 
         The Dockerfile defines a container running Ubuntu 22.04 and uses clang-13/clang++-13 as the compiler.
 
-4. Set the environmental variable ``MUJOCO_STATIC_LINK_DIR`` to the **absolute** path of the ``lib/`` subdirectory
+4. Set the environment variable ``MUJOCO_STATIC_LINK_DIR`` to the **absolute** path of the ``lib/`` subdirectory
    inside ``mujoco/build/``. Bash example:
 
    ::

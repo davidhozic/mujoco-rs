@@ -120,9 +120,8 @@ The table below maps the breaking error-type changes:
      - ``MjDataError``
      - ``RendererError``
    * - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` / :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError`
-       ``GlutinError`` variant
-     - ``glutin::error::Error``
-     - Replaced by ``GlInitFailed(GlInitError)``
+     - (new variant)
+     - ``GlInitFailed(GlInitError)`` added alongside existing ``GlutinError``
 
 
 ``MjModel::clone()``
@@ -168,7 +167,7 @@ for example by appending ``.unwrap()`` or using ``?``.
   ``jac_geom``, ``jac_site``, ``angmom_mat``, ``object_velocity``, ``object_acceleration``,
   ``geom_distance``, ``local_to_global``, ``multi_ray``.
 
-|mjv_scene| / rendering methods now returning ``Result<_, MjSceneError>``:
+|mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext` methods now returning ``Result<_, MjSceneError>``:
   ``create_geom``, ``set_label``, ``add_aux``, ``set_aux``.
 
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` now returns

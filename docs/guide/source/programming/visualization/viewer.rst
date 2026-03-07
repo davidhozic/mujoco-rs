@@ -38,7 +38,7 @@ The viewer can be launched in two ways:
   full control over the viewer's settings:
 
   .. code-block:: rust
-      :emphasize-lines: 9-14
+      :emphasize-lines: 9-15
 
       use std::time::Duration;
 
@@ -87,7 +87,6 @@ The viewer can be launched in two ways:
               std::thread::sleep(Duration::from_secs_f64(timestep));
           }
       }
-
 
 
 The above example runs until the viewer is closed (:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running`)
@@ -164,7 +163,6 @@ This is optional and can be removed or reduced to run the simulation faster than
         }).unwrap();
 
 
-
 .. _multithreading-rs-viewer:
 
 Multi-threading
@@ -180,7 +178,7 @@ the actual physics simulation runs in another.
 Here's a cutout from the :gh-example:`example <rust_viewer_threaded.rs>` on how to use the viewer in a multi-threaded way:
 
 .. code-block:: rust
-    :emphasize-lines: 1, 11-13, 18-20, 30-34
+    :emphasize-lines: 1, 12-13, 18-22, 30-34
 
     let model = Arc::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
     let mut data = MjData::new(model.clone());
@@ -230,7 +228,6 @@ The example mainly differs from the synchronous one in the highlighted lines:
     ``Arc<Mutex<ViewerSharedState>>``,
   - both calls to ``sync_data`` and ``running`` are grouped inside a single ``lock()`` to
     avoid two separate mutex acquisitions (see the performance tip above).
-
 
 
 .. _custom_ui_widgets:
@@ -329,7 +326,7 @@ Wrapper of MuJoCo's C++ 3D viewer
 =====================================
 MuJoCo-rs also provides a wrapper around a modified MuJoCo's C++ 3D viewer.
 Modifications to the C++ viewer are minor with the purpose of preserving future compatibility.
-The changes to the viewer are made to allow viewer rendering in a user-controller loop.
+The changes to the viewer are made to allow viewer rendering in a user-controlled loop.
 
 .. attention::
 

@@ -94,7 +94,7 @@ update of MuJoCo alone can increase the major version.
 
     - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_parse` and 
       :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_parse_vfs`, which
-      wrap :docs-rs:`~~mujoco_rs::mujoco_c::<struct>mj_parse`.
+      wrap :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_parse`.
 
   - |mj_data|:
 
@@ -124,11 +124,12 @@ update of MuJoCo alone can increase the major version.
   - |mjs_tendon|:
 
     - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>get_wrap`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>get_wrap_mut`.
     - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>get_wrap_num`.
 
   - |mjs_wrap|:
 
-    - Added getters for ``coef``, ``divisor``, and ``side_site``.
+    - Added getters for ``coef``, ``divisor``, ``side_site``, and ``side_site_mut``.
 
   - |mjv_camera|:
 
@@ -145,7 +146,7 @@ update of MuJoCo alone can increase the major version.
   - |mj_model|:
 
     - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`
-      now calls :docs-rs:`~~mujoco_rs::mujoco_c::<struct>mj_loadModelBuffer` directly.
+      now calls :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_loadModelBuffer` directly.
       A virtual file-system was previously used to support this.
 
 - Error handling:
@@ -196,7 +197,7 @@ update of MuJoCo alone can increase the major version.
   - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`:
 
     - Gained new variants: ``RgbDisabled``, ``DepthDisabled``, ``DimensionMismatch``,
-      ``ZeroDimension``, ``IoError``, ``SceneError``, ``GlInitFailed``.
+      ``ZeroDimension``, ``IoError``, ``SceneError``, ``GlInitFailed``, ``SignatureMismatch``.
     - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` now propagates
       scene-full errors as ``RendererError::SceneError`` instead of panicking.
 
@@ -217,7 +218,8 @@ update of MuJoCo alone can increase the major version.
     - |mj_spec| and editing types: ``try_new``, ``try_add_frame``, ``try_wrap_site``,
       ``try_wrap_geom``, ``try_wrap_joint``, ``try_wrap_pulley``, and macro-generated
       ``try_add_*`` methods.
-    - |mjv_scene| / rendering types: ``try_push``, ``try_set_at``, ``try_read_pixels``.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`: ``try_push``, ``try_set_at``.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`: ``try_read_pixels``.
 
   - Infallible counterparts now delegate to their ``try_`` variants via ``.expect()``,
     preserving backward compatibility.

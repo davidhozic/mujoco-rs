@@ -1,5 +1,3 @@
-
-
 .. _mj_renderer:
 
 3D renderer
@@ -87,7 +85,6 @@ encoded, which is only meaningful when the depth range happens to fall within 0-
 
 To save depth data as raw 32-bit float values representing **actual metric distances** from the
 camera, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw` can be used.
-
 
 
 End-to-end example

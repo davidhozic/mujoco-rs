@@ -15,7 +15,7 @@ Due to |mj_model| only allowing (some) changes to parameters and not to the actu
 geometry, MuJoCo introduced `Model Editing <https://mujoco.readthedocs.io/en/stable/programming/modeledit.html>`_.
 
 In MuJoCo-rs, we created a high-level wrapper around MuJoCo's C API, which provides
-safe wrappers around C structs, as well as methods. Aside to that, we try to stay faithful
+safe wrappers around C structs, as well as methods. Aside from that, we try to stay faithful
 to MuJoCo's implementation.
 
 A procedurally generated, not yet compiled, model is represented by its **specification** (|mj_spec|).
@@ -126,7 +126,7 @@ We can now compile it to a model, which can then be saved to either an MJCF (XML
 to an MJB (binary) file:
 
 .. code-block:: rust
-    :emphasize-lines: 23-25
+    :emphasize-lines: 23-26
 
     fn main() {
         let mut spec = MjSpec::new();

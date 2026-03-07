@@ -85,8 +85,6 @@ Optional Cargo features can be enabled:
 By default, ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are enabled.
 
 
-
-
 Table of contents
 ===================
 

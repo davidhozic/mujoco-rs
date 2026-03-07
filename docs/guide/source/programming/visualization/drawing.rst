@@ -1,4 +1,3 @@
-
 .. _scene_drawing:
 
 =====================
@@ -8,14 +7,14 @@ Custom visualization
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
 
 
-Aside to the true simulation state, MuJoCo provides ways to draw additional 3D geometries (geoms)
+Aside from the true simulation state, MuJoCo provides ways to draw additional 3D geometries (geoms)
 onto an existing 3D scene.
 
 In MuJoCo-rs drawing is done through |mjv_scene|.
 There are two things that expose a scene for drawing custom visual-only geoms:
 
-- :ref:`mj_rust_viewer` (:docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>user_scene`).
-- :ref:`mj_renderer` (:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>user_scene`).
+- :ref:`mj_rust_viewer` (:docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>user_scene_mut`).
+- :ref:`mj_renderer` (:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>user_scene_mut`).
 
 
 Drawing to a scene
@@ -46,7 +45,7 @@ at this stage.
 
 
 .. code-block:: rust
-    :emphasize-lines: 4-10
+    :emphasize-lines: 5-11
 
     viewer.with_state_lock(|mut state_lock| {
         let scene = state_lock.user_scene_mut();  // obtain a mutable reference to the user scene.
@@ -69,7 +68,7 @@ which calculates the values to result in the geom pointing from one point to ano
 
 
 .. code-block:: rust
-    :emphasize-lines: 19-23
+    :emphasize-lines: 19-24
 
     viewer.with_state_lock(|mut state_lock| {
         let scene = state_lock.user_scene_mut();  // obtain a mutable reference to the user scene.
@@ -96,7 +95,6 @@ which calculates the values to result in the geom pointing from one point to ano
             ball2_position  //  to
         );
     }).unwrap();
-
 
 
 The following image shows the result of the above :gh-example:`example <drawing_scene_viewer.rs>`.
