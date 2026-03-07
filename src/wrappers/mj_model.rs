@@ -195,18 +195,16 @@ impl MjModel {
     fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, MjModelError> {
         assert_mujoco_version();
 
-        let mut error_buffer = [0i8; 100];
-        unsafe {
-            let path_str = path.as_ref().to_str()
-                .ok_or(MjModelError::InvalidUtf8Path)?;
-            let path = CString::new(path_str).unwrap();
-            let raw_ptr = mj_loadXML(
-                path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
-                &mut error_buffer as *mut i8, error_buffer.len() as c_int
-            );
+        let mut error_buffer = [0u8; 100];
+        let path_str = path.as_ref().to_str()
+            .ok_or(MjModelError::InvalidUtf8Path)?;
+        let path = CString::new(path_str).unwrap();
+        let raw_ptr = unsafe { mj_loadXML(
+            path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
+            error_buffer.as_mut_ptr().cast::<i8>(), error_buffer.len() as c_int
+        ) };
 
-            Self::check_raw_model(raw_ptr, &error_buffer)
-        }
+        Self::check_raw_model(raw_ptr, &error_buffer)
     }
 
     /// Loads the model from an XML string.
@@ -226,16 +224,14 @@ impl MjModel {
         // Add the file into a virtual file system
         vfs.add_from_buffer(filename, data.as_bytes())?;
 
-        let mut error_buffer = [0i8; 100];
-        unsafe {
-            let filename_c = CString::new(filename).unwrap();
-            let raw_ptr = mj_loadXML(
-                filename_c.as_ptr(), vfs.ffi(),
-                &mut error_buffer as *mut i8, error_buffer.len() as c_int
-            );
+        let mut error_buffer = [0u8; 100];
+        let filename_c = CString::new(filename).unwrap();
+        let raw_ptr = unsafe { mj_loadXML(
+            filename_c.as_ptr(), vfs.ffi(),
+            error_buffer.as_mut_ptr().cast::<i8>(), error_buffer.len() as c_int
+        ) };
 
-            Self::check_raw_model(raw_ptr, &error_buffer)
-        }
+        Self::check_raw_model(raw_ptr, &error_buffer)
     }
 
     /// Loads the model from MJB raw data.
@@ -254,7 +250,7 @@ impl MjModel {
 
     /// Creates a [`MjModel`] from a raw pointer.
     pub(crate) fn from_raw(ptr: *mut mjModel) -> Result<Self, MjModelError> {
-        unsafe { Self::check_raw_model(ptr, &[0]) }
+        Self::check_raw_model(ptr, &[0])
     }
 
     /// Saves the last loaded XML to `filename`.
@@ -265,24 +261,21 @@ impl MjModel {
     /// # Panics
     /// When `filename` contains '\0' characters, a panic occurs.
     pub fn save_last_xml(&self, filename: &str) -> Result<(), MjModelError> {
-        let mut error = [0i8; 100];
-        unsafe {
-            let cstring = CString::new(filename).unwrap();
-            match mj_saveLastXML(
-                cstring.as_ptr(), self.ffi(),
-                error.as_mut_ptr(), (error.len() - 1) as i32
-            ) {
-                1 => Ok(()),
-                0 => {
-                    let pos = error.iter().position(|&x| x == 0).unwrap_or(error.len());
-                    // SAFETY: i8 and u8 have identical size (1) and alignment (1).
-                    let bytes: &[u8] =
-                        std::slice::from_raw_parts(error.as_ptr() as *const u8, pos);
-                    let cstr_error = String::from_utf8_lossy(bytes);
-                    Err(MjModelError::SaveFailed(cstr_error.into_owned()))
-                },
-                _ => unreachable!()
-            }
+        let mut error = [0u8; 100];
+        let cstring = CString::new(filename).unwrap();
+        let result = unsafe { mj_saveLastXML(
+            cstring.as_ptr(), self.ffi(),
+            error.as_mut_ptr().cast::<i8>(), (error.len() - 1) as i32
+        ) };
+        match result {
+            1 => Ok(()),
+            0 => {
+                let cstr_error = CStr::from_bytes_until_nul(&error)
+                    .map(|c| c.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                Err(MjModelError::SaveFailed(cstr_error))
+            },
+            _ => unreachable!()
         }
     }
 
@@ -305,13 +298,13 @@ impl MjModel {
     }
 
     /// Handles the pointer to the model.
-    /// # Safety
-    /// `error_buffer` must have at least one element, where the last element must be 0.
-    unsafe fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[i8]) -> Result<Self, MjModelError> {
+    fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[u8]) -> Result<Self, MjModelError> {
         match NonNull::new(ptr_model) {
             Some(nn) => Ok(Self(nn)),
             None => Err(MjModelError::LoadFailed(
-                unsafe { CStr::from_ptr(error_buffer.as_ptr().cast()).to_string_lossy().into_owned() }
+                CStr::from_bytes_until_nul(error_buffer)
+                    .map(|c| c.to_string_lossy().into_owned())
+                    .unwrap_or_default()
             )),
         }
     }

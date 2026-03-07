@@ -288,6 +288,11 @@ update of MuJoCo alone can increase the major version.
     ``set_label`` now use ``bytemuck::cast_slice`` / ``bytemuck::cast_slice_mut`` for safe
     ``i8``-to-``u8`` conversion instead of raw pointer casts, eliminating ``unsafe`` blocks.
 
+  - Replaced ``unsafe { CStr::from_ptr(...) }`` with safe ``CStr::from_bytes_until_nul``
+    across error-buffer handling in ``MjModel``, ``MjSpec``, and the ``c_str_as_str_method!``
+    macro. This eliminates unbounded NUL scans and removes several ``unsafe`` blocks.
+    ``check_raw_model`` and ``check_spec`` are now safe functions.
+
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>update_local_pos`
     now uses bounds-checked slice indexing into |mj_data| for ``xpos`` and ``xmat`` instead of
     raw pointer arithmetic. An invalid ``select`` index now triggers a ``debug_assert!`` and

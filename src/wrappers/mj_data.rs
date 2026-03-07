@@ -92,13 +92,12 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Returns a slice of detected contacts.
     /// To obtain the contact force, call [`MjData::contact_force`].
     pub fn contacts(&self) -> &[MjContact] {
-        unsafe {
-            let ptr = (*self.data.as_ptr()).contact;
-            if ptr.is_null() {
-                &[]
-            } else {
-                std::slice::from_raw_parts(ptr, (*self.data.as_ptr()).ncon as usize)
-            }
+        let ffi = self.ffi();
+        let ptr = ffi.contact;
+        if ptr.is_null() {
+            &[]
+        } else {
+            unsafe { std::slice::from_raw_parts(ptr, ffi.ncon as usize) }
         }
     }
 
@@ -489,7 +488,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::LengthMismatch`] if the `jar` length is incorrect.
     pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) -> Result<(), MjDataError> {
-        let nefc = unsafe { (*self.data.as_ptr()).nefc as usize };
+        let nefc = self.ffi().nefc as usize;
         if jar.len() < nefc {
             return Err(MjDataError::LengthMismatch { name: "jar", expected: nefc, got: jar.len() });
         }

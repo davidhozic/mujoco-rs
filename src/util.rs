@@ -732,10 +732,10 @@ macro_rules! c_str_as_str_method {
         $(
             #[doc = concat!("Returns ", $comment, "\n\n# Panics", "\nPanics if the string contains invalid UTF-8.")]
             pub fn $name(&self $(, $sub_index_name: $sub_index_type)? ) -> &str {
-                unsafe { 
-                    let c_ptr = self$(.$ffi())?.$name$([$sub_index_name])?.as_ptr();
-                    std::ffi::CStr::from_ptr(c_ptr as *const _).to_str().unwrap()
-                }
+                let bytes: &[u8] = bytemuck::cast_slice(&self$(.$ffi())?.$name$([$sub_index_name])?[..]);
+                std::ffi::CStr::from_bytes_until_nul(bytes)
+                    .expect("no NUL terminator in C string buffer")
+                    .to_str().unwrap()
             }
         )*
     };
