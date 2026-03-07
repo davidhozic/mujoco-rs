@@ -12,7 +12,7 @@ use crate::prelude::*;
 use bitflags::bitflags;
 use png::Encoder;
 
-use std::io::{self, BufWriter, ErrorKind, Write};
+use std::io::{self, BufWriter, Write};
 use std::fmt::Display;
 use std::error::Error;
 use std::marker::PhantomData;
@@ -31,14 +31,11 @@ use universal::GlStateWinit;
 mod egl;
 
 
-const RGB_NOT_FOUND_ERR_STR: &str = "RGB rendering is not enabled (renderer.with_rgb_rendering(true))";
-const DEPTH_NOT_FOUND_ERR_STR: &str = "depth rendering is not enabled (renderer.with_depth_rendering(true))";
-const INVALID_INPUT_SIZE: &str = "the input width and height don't match the renderer's configuration";
 const EXTRA_INTERNAL_VISUAL_GEOMS: u32 = 100;
 
 
 /// GlState enum wrapper. By default, headless implementation will be used
-/// when supported. Only on failure an invisible winit window will be used.
+/// when supported. Only on failure will an invisible winit window be used.
 pub(crate) enum GlState {
     #[cfg(feature = "renderer-winit-fallback")] Winit(GlStateWinit),
     #[cfg(target_os = "linux")] Egl(egl::GlStateEgl),
@@ -166,7 +163,10 @@ which can be configured at the top of the model's XML like so:
     /// # Returns
     /// On success, returns [`Ok`] variant containing the [`MjRenderer`].
     /// # Errors
-    /// Returns an error if the OpenGL state or window creation fails.
+    /// - [`RendererError::ZeroDimension`] if the width or height is zero.
+    /// - [`RendererError::GlutinError`] if OpenGL initialization fails.
+    /// - [`RendererError::EventLoopError`] if the event loop fails to initialize.
+    /// - [`RendererError::GlInitFailed`] if the fallback window initialization fails.
     pub fn build(self, model: M) -> Result<MjRenderer<M>, RendererError> {
         // Assume model's maximum should be used
         let mut height = self.height;
@@ -177,7 +177,10 @@ which can be configured at the top of the model's XML like so:
             width = global.offwidth as u32;
         }
 
-        let gl_state = GlState::new(width.try_into().unwrap(), height.try_into().unwrap())?;
+        let gl_state = GlState::new(
+            NonZero::new(width).ok_or(RendererError::ZeroDimension)?,
+            NonZero::new(height).ok_or(RendererError::ZeroDimension)?,
+        )?;
 
         // Initialize the rendering context to render to the offscreen buffer.
         let mut context = MjrContext::new(&model);
@@ -250,29 +253,32 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// The renderer uses two scenes:
     /// - the internal scene: used by the renderer to draw the model's state.
     /// - the user scene: used by the user to add additional geoms to the internal scene
-    /// 
+    ///
     /// The **internal scene** allocates the amount of space needed to fit every pre-existing
     /// model geom + user visual-only geoms + additional visual-only geoms that aren't from the user (e.g., tendons).
     /// By default, the renderer reserves 100 extra geom slots for drawing the additional visual-only geoms.
     /// If that is not enough or it is too much, you can construct [`MjRenderer`] via its builder
-    /// ([`MjRenderer::builder`]), which allows more configuration. 
-    /// 
+    /// ([`MjRenderer::builder`]), which allows more configuration.
+    ///
     /// <div class="warning">
-    /// 
+    ///
     /// Parameters `width` and `height` must be less or equal to the offscreen buffer size,
     /// which can be configured at the top of the model's XML like so:
-    /// 
+    ///
     /// ```xml
     /// <visual>
     ///    <global offwidth="1920" offheight="1080"/>
     /// </visual>
     /// ```
-    /// 
+    ///
     /// </div>
     /// # Returns
     /// On success, returns [`Ok`] variant containing the [`MjRenderer`].
     /// # Errors
-    /// Returns an error if the OpenGL state or window creation fails.
+    /// - [`RendererError::ZeroDimension`] if the width or height is zero.
+    /// - [`RendererError::GlutinError`] if OpenGL initialization fails.
+    /// - [`RendererError::EventLoopError`] if the event loop fails to initialize.
+    /// - [`RendererError::GlInitFailed`] if the fallback window initialization fails.
     pub fn new(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
         let builder = Self::builder()
             .width(width as u32).height(height as u32).num_visual_user_geom(max_user_geom as u32);
@@ -387,18 +393,38 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     }
 
     /// Update the scene with new data from data.
+    ///
     /// # Panics
-    /// Panics if `data` comes from a different model than the renderer, or on user scene sync failure.
+    /// Panics if `data` comes from a different model than the renderer.
+    /// Use [`MjRenderer::try_sync`] for a fallible alternative.
     pub fn sync(&mut self, data: &mut MjData<M>) {
-        assert_eq!(data.model().signature(), self.model.signature(), "'data' must be created from the same model as the renderer.");
+        self.try_sync(data).expect("sync failed")
+    }
+
+    /// Fallible version of [`MjRenderer::sync`].
+    ///
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `data` was created from a
+    ///   different model than the renderer.
+    /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current.
+    /// - [`RendererError::SceneError`] if the user-scene sync overflows the geom buffer.
+    pub fn try_sync(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
+        let src_sig = data.model().signature();
+        let dst_sig = self.model.signature();
+        if src_sig != dst_sig {
+            return Err(RendererError::SignatureMismatch {
+                source: src_sig,
+                destination: dst_sig,
+            });
+        }
 
         self.scene.update(data, &self.option, &MjvPerturb::default(), &mut self.camera);
 
         /* Draw user scene geoms */
-        sync_geoms(&self.user_scene, &mut self.scene)
-            .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
+        sync_geoms(&self.user_scene, &mut self.scene)?;
 
-        self.render();
+        self.render()?;
+        Ok(())
     }
 
     /// Return a flattened RGB image of the scene.
@@ -406,29 +432,29 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
         self.rgb.as_deref()
     }
 
-    /// Return an RGB image of the scene. This methods accepts two generic parameters <WIDTH, HEIGHT>
+    /// Return an RGB image of the scene. This method accepts two generic parameters <WIDTH, HEIGHT>
     /// that define the shape of the output slice.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the rendered RGB image.
     /// # Errors
-    /// Returns an error of kind `InvalidInput` if the image size doesn't match the required dimensions.
-    /// Returns an error of kind `NotFound` if RGB rendering is disabled.
-    pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> io::Result<&[[[u8; 3]; WIDTH]; HEIGHT]> {
+    /// - [`RendererError::DimensionMismatch`] if the image size doesn't match the required dimensions.
+    /// - [`RendererError::RgbDisabled`] if RGB rendering is disabled.
+    pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[[u8; 3]; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.rgb_flat() {
             if flat.len() == WIDTH * HEIGHT * 3 {
                 let p_shaped = flat.as_ptr() as *const [[[u8; 3]; WIDTH]; HEIGHT];
 
                 // SAFETY: The alignment of the output is the same as the original.
-                // The lifetime also matches  'a in &'a self, which prevents data races.
+                // The lifetime also matches 'a in &'a self, which prevents data races.
                 // Length (number of elements) matches the output's.
-                Ok(unsafe { p_shaped.as_ref().unwrap() })
+                Ok(unsafe { &*p_shaped })
             }
             else {
-                Err(io::Error::new(io::ErrorKind::InvalidInput, INVALID_INPUT_SIZE))
+                Err(RendererError::DimensionMismatch)
             }
         }
         else {
-            Err(io::Error::new(io::ErrorKind::NotFound, RGB_NOT_FOUND_ERR_STR))
+            Err(RendererError::RgbDisabled)
         }
     }
 
@@ -437,29 +463,29 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
         self.depth.as_deref()
     }
 
-    /// Return a depth image of the scene. This methods accepts two generic parameters <WIDTH, HEIGHT>
+    /// Return a depth image of the scene. This method accepts two generic parameters <WIDTH, HEIGHT>
     /// that define the shape of the output slice.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the rendered depth image.
     /// # Errors
-    /// Returns an error of kind `InvalidInput` if the image size doesn't match the required dimensions.
-    /// Returns an error of kind `NotFound` if depth rendering is disabled.
-    pub fn depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> io::Result<&[[f32; WIDTH]; HEIGHT]> {
+    /// - [`RendererError::DimensionMismatch`] if the image size doesn't match the required dimensions.
+    /// - [`RendererError::DepthDisabled`] if depth rendering is disabled.
+    pub fn depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[f32; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.depth_flat() {
             if flat.len() == WIDTH * HEIGHT {
                 let p_shaped = flat.as_ptr() as *const [[f32; WIDTH]; HEIGHT];
 
                 // SAFETY: The alignment of the output is the same as the original.
-                // The lifetime matches  'a in &'a self, which prevents data races.
+                // The lifetime matches 'a in &'a self, which prevents data races.
                 // Length (number of elements) matches the output's.
-                Ok(unsafe { p_shaped.as_ref().unwrap() })
+                Ok(unsafe { &*p_shaped })
             }
             else {
-                Err(io::Error::new(io::ErrorKind::InvalidInput, INVALID_INPUT_SIZE))
+                Err(RendererError::DimensionMismatch)
             }
         }
         else {
-            Err(io::Error::new(io::ErrorKind::NotFound, DEPTH_NOT_FOUND_ERR_STR))
+            Err(RendererError::DepthDisabled)
         }
     }
 
@@ -467,9 +493,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] when RGB rendering is disabled,
-    /// - other errors related to write.
-    pub fn save_rgb<T: AsRef<Path>>(&self, path: T) -> io::Result<()> {
+    /// - [`RendererError::RgbDisabled`] when RGB rendering is disabled.
+    /// - [`RendererError::IoError`] if a file I/O operation fails.
+    pub fn save_rgb<T: AsRef<Path>>(&self, path: T) -> Result<(), RendererError> {
         if let Some(rgb) = &self.rgb {
             let file = File::create(path.as_ref())?;
             let w = BufWriter::new(file);
@@ -484,7 +510,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             Ok(())
         }
         else {
-            Err(io::Error::new(ErrorKind::NotFound, RGB_NOT_FOUND_ERR_STR))
+            Err(RendererError::RgbDisabled)
         }
     }
 
@@ -497,9 +523,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// # Returns
     /// An [`Ok`]`((min, max))` is returned, where min and max represent the normalization parameters.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] when depth rendering is disabled,
-    /// - other errors related to write.
-    pub fn save_depth<T: AsRef<Path>>(&self, path: T, normalize: bool) -> io::Result<(f32, f32)> {
+    /// - [`RendererError::DepthDisabled`] when depth rendering is disabled.
+    /// - [`RendererError::IoError`] if a file I/O operation fails.
+    pub fn save_depth<T: AsRef<Path>>(&self, path: T, normalize: bool) -> Result<(f32, f32), RendererError> {
         if let Some(depth) = &self.depth {
             let file = File::create(path.as_ref())?;
             let w = BufWriter::new(file);
@@ -524,19 +550,19 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             Ok((min, max))
         }
         else {
-            Err(io::Error::new(ErrorKind::NotFound, DEPTH_NOT_FOUND_ERR_STR))
+            Err(RendererError::DepthDisabled)
         }
     }
 
     /// Save the raw depth data to the `path`. The data is encoded
     /// as a sequence of bytes, where groups of four represent a single f32 value.
-    /// The lower bytes of individual f32 appear first (low-endianness).
+    /// The lower bytes of individual f32 appear first (little-endianness).
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] when depth rendering is disabled,
-    /// - other errors related to write.
-    pub fn save_depth_raw<T: AsRef<Path>>(&self, path: T) -> io::Result<()> {
+    /// - [`RendererError::DepthDisabled`] when depth rendering is disabled.
+    /// - [`RendererError::IoError`] if a file I/O operation fails.
+    pub fn save_depth_raw<T: AsRef<Path>>(&self, path: T) -> Result<(), RendererError> {
         if let Some(depth) = &self.depth {
             let file = File::create(path.as_ref())?;
             let mut writer = BufWriter::new(file);
@@ -551,14 +577,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             Ok(())
         }
         else {
-            Err(io::Error::new(ErrorKind::NotFound, DEPTH_NOT_FOUND_ERR_STR))
+            Err(RendererError::DepthDisabled)
         }
     }
 
     /// Draws the scene to internal arrays.
     /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image.
-    fn render(&mut self) {
-        self.gl_state.make_current().expect("failed to make OpenGL context current");
+    fn render(&mut self) -> Result<(), RendererError> {
+        self.gl_state.make_current().map_err(RendererError::GlutinError)?;
         let vp = MjrRectangle::new(0, 0, self.width as i32, self.height as i32);
         self.scene.render(&vp, &self.context);
 
@@ -592,6 +618,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 *value = near / (1.0 - *value * (1.0 - near / far));
             }
         }
+
+        Ok(())
     }
 }
 
@@ -605,20 +633,56 @@ fn flip_image_vertically<T>(buffer: &mut [T], height: usize, row_len: usize) {
     }
 }
 
-/// Errors that can occur during renderer initialization.
+/// Errors that can occur during renderer operations.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum RendererError {
+    /// The event loop failed to initialize.
     #[cfg(feature = "renderer-winit-fallback")]
     EventLoopError(winit::error::EventLoopError),
-    GlutinError(glutin::error::Error)
+    /// A glutin operation failed.
+    GlutinError(glutin::error::Error),
+    /// The supplied width or height was zero; MuJoCo requires positive dimensions.
+    ZeroDimension,
+    /// OpenGL / window initialization failed.
+    #[cfg(feature = "renderer-winit-fallback")]
+    GlInitFailed(crate::error::GlInitError),
+    /// The data and renderer were created from different models.
+    SignatureMismatch {
+        /// Model signature of the source object.
+        source: u64,
+        /// Model signature of the destination object.
+        destination: u64,
+    },
+    /// RGB rendering was not enabled.
+    RgbDisabled,
+    /// Depth rendering was not enabled.
+    DepthDisabled,
+    /// The requested `WIDTH`/`HEIGHT` do not match the renderer's dimensions.
+    DimensionMismatch,
+    /// An I/O error occurred (e.g. while saving to a file).
+    IoError(io::Error),
+    /// A scene operation failed (e.g. user-scene sync overflowed the geom buffer).
+    SceneError(crate::error::MjSceneError),
 }
 
 impl Display for RendererError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             #[cfg(feature = "renderer-winit-fallback")]
-            Self::EventLoopError(e) => write!(f, "event loop failed to initialize: {}", e),
-            Self::GlutinError(e) => write!(f, "glutin failed to initialize: {}", e)
+            Self::EventLoopError(_) => write!(f, "event loop failed to initialize"),
+            Self::GlutinError(_) => write!(f, "glutin error"),
+            Self::ZeroDimension => write!(f, "renderer width and height must both be greater than zero"),
+            #[cfg(feature = "renderer-winit-fallback")]
+            Self::GlInitFailed(_) => write!(f, "GL initialization failed"),
+            Self::SignatureMismatch { source, destination } => {
+                write!(f, "model signature mismatch: source {source:#X}, destination {destination:#X}")
+            }
+            Self::RgbDisabled => write!(f, "RGB rendering is not enabled (renderer.with_rgb_rendering(true))"),
+            Self::DepthDisabled => write!(f, "depth rendering is not enabled (renderer.with_depth_rendering(true))"),
+            Self::DimensionMismatch => write!(f, "the input width and height don't match the renderer's configuration"),
+            Self::IoError(_) => write!(f, "I/O error"),
+            Self::SceneError(_) => write!(f, "scene error"),
         }
     }
 }
@@ -628,12 +692,42 @@ impl Error for RendererError {
         match self {
             #[cfg(feature = "renderer-winit-fallback")]
             Self::EventLoopError(e) => Some(e),
-            Self::GlutinError(e) => Some(e)
+            #[cfg(feature = "renderer-winit-fallback")]
+            Self::GlInitFailed(e) => Some(e),
+            Self::GlutinError(e) => Some(e),
+            Self::IoError(e) => Some(e),
+            Self::SceneError(e) => Some(e),
+            _ => None,
         }
     }
 }
 
-bitflags! { 
+impl From<io::Error> for RendererError {
+    fn from(e: io::Error) -> Self {
+        Self::IoError(e)
+    }
+}
+
+impl From<png::EncodingError> for RendererError {
+    fn from(e: png::EncodingError) -> Self {
+        Self::IoError(io::Error::from(e))
+    }
+}
+
+impl From<crate::error::MjSceneError> for RendererError {
+    fn from(e: crate::error::MjSceneError) -> Self {
+        Self::SceneError(e)
+    }
+}
+
+#[cfg(feature = "renderer-winit-fallback")]
+impl From<crate::error::GlInitError> for RendererError {
+    fn from(e: crate::error::GlInitError) -> Self {
+        Self::GlInitFailed(e)
+    }
+}
+
+bitflags! {
     /// Flags that enable features of the renderer.
     struct RendererFlags: u8 {
         const RENDER_RGB = 1 << 0;
@@ -643,7 +737,7 @@ bitflags! {
 
 
 
-/* 
+/*
 ** Don't run any tests as OpenGL hates if anything
 ** runs outside the main thread.
 */

@@ -6,7 +6,7 @@ Attribute views
 
 The MuJoCo library stores data about joints, bodies, and other elements in contiguous arrays.
 These can be challenging to work with, particularly when the array's length varies between elements.
-For example, different types of joints may have different number of degrees of freedom.
+For example, different types of joints may have a different number of degrees of freedom.
 `MuJoCo's Python bindings <https://mujoco.readthedocs.io/en/stable/python.html>`_ solve
 this issue by providing views to specific ranges in the corresponding arrays.
 
@@ -36,7 +36,7 @@ like so:
         let joint_info = data.joint("football-ball").expect("name not found");
         loop {
             data.step();
-            ...
+            // ...
         }
     }
 
@@ -60,13 +60,13 @@ a reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so
 All the attributes inside views, like :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qpos`,
 are instances of :docs-rs:`mujoco_rs::util::<struct>PointerView`, which implements the
 `Deref <https://doc.rust-lang.org/std/ops/trait.Deref.html>`_ trait and on deref
-acts like a slice. While some fields might be scalers, we still treat those as arrays
+acts like a slice. While some fields might be scalars, we still treat those as arrays
 for implementation simplicity reasons.
 
 
 Writing
 ==================
-The above example shows a read-only view. For mutability, 
+The above example shows a read-only view. For mutability,
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>view_mut` must be called
 and passed a mutable reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so:
 

@@ -4,8 +4,8 @@ use super::mj_model::{MjModel, MjtSameFrame, MjtObj, MjtStage};
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
 use crate::{getter_setter, mujoco_c::*};
+use crate::error::MjDataError;
 
-use std::io::{self, Error, ErrorKind};
 use std::ffi::CString;
 use std::borrow::Cow;
 use std::ops::Deref;
@@ -66,13 +66,31 @@ unsafe impl<M: Deref<Target = MjModel>> Sync for MjData<M> {}
 
 impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Creates a new [`MjData`] linked to `model`.
+    ///
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the data structure.
+    /// Use [`MjData::try_new`] for a fallible alternative.
     pub fn new(model: M) -> Self {
+        Self::try_new(model).expect("allocation of MjData failed")
+    }
+
+    /// Fallible version of [`MjData::new`].
+    ///
+    /// # Errors
+    /// Returns `Ok(MjData)` on success, or [`MjDataError::AllocationFailed`] if
+    /// MuJoCo returns a null pointer from `mj_makeData`.
+    ///
+    /// Prefer this method over [`MjData::new`] when you want to handle
+    /// allocation failures without a panic.
+    pub fn try_new(model: M) -> Result<Self, MjDataError> {
         let data_ptr = unsafe { mj_makeData(model.ffi()) };
-        assert!(!data_ptr.is_null(), "allocation of MjData failed");
-        Self {
-            data: data_ptr,
-            model: model,
+        if data_ptr.is_null() {
+            return Err(MjDataError::AllocationFailed);
         }
+        Ok(Self {
+            data: data_ptr,
+            model,
+        })
     }
 
     /// Returns a slice of detected contacts.
@@ -189,7 +207,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Forward dynamics: same as mj_step but do not integrate in time.
     /// This is a wrapper around `mj_forward`.
     pub fn forward(&mut self) {
-        unsafe { 
+        unsafe {
             mj_forward(self.model.ffi(), self.ffi_mut());
         }
     }
@@ -197,7 +215,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// [`MjData::forward`] dynamics with skip.
     /// This is a wrapper around `mj_forwardSkip`.
     pub fn forward_skip(&mut self, skipstage: MjtStage, skipsensor: bool) {
-        unsafe { 
+        unsafe {
             mj_forwardSkip(self.model.ffi(), self.ffi_mut(), skipstage as i32, skipsensor as i32);
         }
     }
@@ -256,7 +274,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Print mjData to text file, specifying format.
-    /// float_format must be a valid printf-style format string for a single float value
+    /// float_format must be a valid printf-style format string for a single float value.
     /// # Panics
     /// When the `filename` or `float_format` contain '\0' characters, a panic occurs.
     pub fn print_formatted(&self, filename: &str, float_format: &str) {
@@ -413,7 +431,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         unsafe { mj_makeM(self.model.ffi(), self.ffi_mut()) }
     }
 
-    /// Compute sparse L'*D*L factorizaton of inertia matrix.
+    /// Compute sparse L'*D*L factorization of inertia matrix.
     pub fn factor_m(&mut self) {
         unsafe { mj_factorM(self.model.ffi(), self.ffi_mut()) }
     }
@@ -470,14 +488,14 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         unsafe { mj_referenceConstraint(self.model.ffi(), self.ffi_mut()) }
     }
 
-    // Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
+    /// Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
     /// If cost is not `None`, set `*cost = s(jar)` where `jar = Jac*qacc - aref`.
     /// # Errors
-    /// Returns an error of kind [`ErrorKind::InvalidInput`] if the `jar` length is incorrect.
-    pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) -> io::Result<()> {
+    /// Returns [`MjDataError::LengthMismatch`] if the `jar` length is incorrect.
+    pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) -> Result<(), MjDataError> {
         let nefc = unsafe { (*self.data).nefc as usize };
         if jar.len() < nefc {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("jar slice must contain at least nefc ({nefc}) elements, got {}", jar.len())));
+            return Err(MjDataError::LengthMismatch { name: "jar", expected: nefc, got: jar.len() });
         }
 
         unsafe { mj_constraintUpdate(
@@ -493,27 +511,28 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
     /// `values`: control values slice of length `nsample`.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] if `id >= nu` or the actuator has no history buffer.
-    /// - [`ErrorKind::InvalidInput`] if `times` or `values` have the wrong length.
-    pub fn init_ctrl_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum]) -> io::Result<()> {
+    /// - [`MjDataError::IndexOutOfBounds`] if `id >= nu`.
+    /// - [`MjDataError::NoHistoryBuffer`] if the actuator has no history buffer.
+    /// - [`MjDataError::LengthMismatch`] if `times` or `values` have the wrong length.
+    pub fn init_ctrl_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum]) -> Result<(), MjDataError> {
         let nu = self.model.ffi().nu as usize;
         if id >= nu {
-            return Err(Error::new(ErrorKind::NotFound, format!("invalid actuator id {}", id)));
+            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id: id as i64, upper: nu as i64 });
         }
 
         let nsample = self.model.actuator_history()[id][0];
         if nsample <= 0 {
-            return Err(Error::new(ErrorKind::NotFound, format!("actuator {} has no history buffer", id)));
+            return Err(MjDataError::NoHistoryBuffer { kind: "actuator", id });
         }
 
         let ns = nsample as usize;
         if let Some(t) = times {
             if t.len() != ns {
-                return Err(Error::new(ErrorKind::InvalidInput, format!("times must have length {}", ns)));
+                return Err(MjDataError::LengthMismatch { name: "times", expected: ns, got: t.len() });
             }
         }
         if values.len() != ns {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("values must have length {}", ns)));
+            return Err(MjDataError::LengthMismatch { name: "values", expected: ns, got: values.len() });
         }
 
         unsafe {
@@ -532,17 +551,18 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// `values`: sensor values slice of length `nsample * dim`.
     /// `phase`: time phase offset.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] if `id >= nsensor` or the sensor has no history buffer.
-    /// - [`ErrorKind::InvalidInput`] if `times` or `values` have the wrong length.
-    pub fn init_sensor_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum], phase: MjtNum) -> io::Result<()> {
+    /// - [`MjDataError::IndexOutOfBounds`] if `id >= nsensor`.
+    /// - [`MjDataError::NoHistoryBuffer`] if the sensor has no history buffer.
+    /// - [`MjDataError::LengthMismatch`] if `times` or `values` have the wrong length.
+    pub fn init_sensor_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum], phase: MjtNum) -> Result<(), MjDataError> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
-            return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
+            return Err(MjDataError::IndexOutOfBounds { kind: "sensor_id", id: id as i64, upper: nsensor as i64 });
         }
 
         let nsample = self.model.sensor_history()[id][0];
         if nsample <= 0 {
-            return Err(Error::new(ErrorKind::NotFound, format!("sensor {} has no history buffer", id)));
+            return Err(MjDataError::NoHistoryBuffer { kind: "sensor", id });
         }
 
         let dim = self.model.sensor_dim()[id] as usize;
@@ -550,11 +570,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
         if let Some(t) = times {
             if t.len() != nsample as usize {
-                return Err(Error::new(ErrorKind::InvalidInput, format!("times must have length {}", nsample)));
+                return Err(MjDataError::LengthMismatch { name: "times", expected: nsample as usize, got: t.len() });
             }
         }
         if values.len() != required {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("values must have length nsample*dim (= {})", required)));
+            return Err(MjDataError::LengthMismatch { name: "values", expected: required, got: values.len() });
         }
 
         unsafe {
@@ -571,11 +591,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reads the control history value for actuator `id` at `time`
     /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
     /// # Errors
-    /// Returns [`ErrorKind::NotFound`] when `id >= nu`.
-    pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<MjtNum> {
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nu`.
+    pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> Result<MjtNum, MjDataError> {
         let nu = self.model.ffi().nu as usize;
         if id >= nu {
-            return Err(Error::new(ErrorKind::NotFound, format!("invalid actuator id {}", id)));
+            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id: id as i64, upper: nu as i64 });
         }
         let val = unsafe { mj_readCtrl(self.model.ffi(), self.ffi(), id as i32, time, interp) };
         Ok(val)
@@ -584,17 +604,17 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reads sensor `id` at `time` into `dst` (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
     /// `dst` must be exactly `sensor_dim[id]` elements long.
     /// # Errors
-    /// Returns [`ErrorKind::NotFound`] when `id >= nsensor`.
-    /// Returns [`ErrorKind::InvalidInput`] when `dst.len() != sensor_dim[id]`.
-    pub fn read_sensor_into(&self, id: usize, time: MjtNum, interp: i32, dst: &mut [MjtNum]) -> io::Result<()> {
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
+    /// Returns [`MjDataError::LengthMismatch`] when `dst.len() != sensor_dim[id]`.
+    pub fn read_sensor_into(&self, id: usize, time: MjtNum, interp: i32, dst: &mut [MjtNum]) -> Result<(), MjDataError> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
-            return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
+            return Err(MjDataError::IndexOutOfBounds { kind: "sensor_id", id: id as i64, upper: nsensor as i64 });
         }
 
         let dim = self.model.sensor_dim()[id] as usize;
         if dst.len() != dim {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("dst buffer wrong size: expected {}, got {}", dim, dst.len())));
+            return Err(MjDataError::LengthMismatch { name: "dst", expected: dim, got: dst.len() });
         }
         let ptr = unsafe { mj_readSensor(self.model.ffi(), self.ffi(), id as i32, time, dst.as_mut_ptr(), interp) };
         if !ptr.is_null() {
@@ -608,17 +628,17 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic). `N` must match `sensor_dim[id]`.
     /// See also [`read_sensor`](Self::read_sensor), [`read_sensor_into`](Self::read_sensor_into).
     /// # Errors
-    /// Returns [`ErrorKind::NotFound`] when `id >= nsensor`.
-    /// Returns [`ErrorKind::InvalidInput`] when `N != sensor_dim[id]`.
-    pub fn read_sensor_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<[MjtNum; N]> {
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
+    /// Returns [`MjDataError::LengthMismatch`] when `N != sensor_dim[id]`.
+    pub fn read_sensor_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> Result<[MjtNum; N], MjDataError> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
-            return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
+            return Err(MjDataError::IndexOutOfBounds { kind: "sensor_id", id: id as i64, upper: nsensor as i64 });
         }
 
         let dim = self.model.sensor_dim()[id] as usize;
         if N != dim {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("N={} does not match sensor dim={}", N, dim)));
+            return Err(MjDataError::LengthMismatch { name: "N", expected: dim, got: N });
         }
         let mut out = [0.0 as MjtNum; N];
         let ptr = unsafe { mj_readSensor(self.model.ffi(), self.ffi(), id as i32, time, out.as_mut_ptr(), interp) };
@@ -635,11 +655,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Returns [`Cow::Owned`] for linear/cubic interpolation.
     /// See also [`read_sensor_fixed`](Self::read_sensor_fixed), [`read_sensor_into`](Self::read_sensor_into).
     /// # Errors
-    /// Returns [`ErrorKind::NotFound`] when `id >= nsensor`.
-    pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<Cow<'_, [MjtNum]>> {
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
+    pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> Result<Cow<'_, [MjtNum]>, MjDataError> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
-            return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
+            return Err(MjDataError::IndexOutOfBounds { kind: "sensor_id", id: id as i64, upper: nsensor as i64 });
         }
 
         let dim = self.model.sensor_dim()[id] as usize;
@@ -658,12 +678,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error of kind [`ErrorKind::StorageFull`] if the contact buffer is full.
-    pub fn add_contact(&mut self, con: &MjContact) -> io::Result<()> {
+    /// Returns [`MjDataError::ContactBufferFull`] if the contact buffer is full.
+    pub fn add_contact(&mut self, con: &MjContact) -> Result<(), MjDataError> {
         match unsafe { mj_addContact(self.model.ffi(), self.ffi_mut(), con) } {
             0 => Ok(()),
-            1 => Err(Error::new(ErrorKind::StorageFull, "buffer full")),
-            _ => Err(Error::new(ErrorKind::Other, "unknown error"))
+            _ => Err(MjDataError::ContactBufferFull),
         }
     }
 
@@ -671,162 +690,156 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Set `jacp` to `true` to calculate the translational Jacobian and `jacr` to `true` for
     /// the rotational Jacobian. Returns a `(Vec, Vec)` for translation and rotation. Empty `Vec`s
     /// indicate that the corresponding Jacobian was not computed.
-    /// # Panics
-    /// Panics if `body_id` is not a valid body index.
-    pub fn jac(&self, jacp: bool, jacr: bool, point: &[MjtNum; 3], body_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        assert!(body_id >= 0 && (body_id as usize) < self.model.ffi().nbody as usize, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is negative or `>= nbody`.
+    pub fn jac(&self, jacp: bool, jacr: bool, point: &[MjtNum; 3], body_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+        let nbody = self.model.ffi().nbody as i64;
+        if body_id < 0 || (body_id as i64) >= nbody {
+            return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
+        }
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
         let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
-
         unsafe {
-            // Safety: body_id validated above; mj_jac requires valid body index
             mj_jac(
-                self.model.ffi(),
-                self.ffi(),
+                self.model.ffi(), self.ffi(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
-                point,
-                body_id,
+                point, body_id,
             )
         };
-
-        (jacp_vec, jacr_vec)
+        Ok((jacp_vec, jacr_vec))
     }
 
     /// Compute body frame end-effector Jacobian.
     /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
     /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
-    /// # Panics
-    /// Panics if `body_id` is not a valid body index.
-    pub fn jac_body(&self, jacp: bool, jacr: bool, body_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        assert!(body_id >= 0 && (body_id as usize) < self.model.ffi().nbody as usize, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
+    pub fn jac_body(&self, jacp: bool, jacr: bool, body_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+        let nbody = self.model.ffi().nbody as i64;
+        if body_id < 0 || (body_id as i64) >= nbody {
+            return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
+        }
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
         let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
-
         unsafe {
-            // Safety: body_id validated above; mj_jacBody requires valid body index
             mj_jacBody(
-                self.model.ffi(),
-                self.ffi(),
+                self.model.ffi(), self.ffi(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
                 body_id,
             )
         };
-
-        (jacp_vec, jacr_vec)
+        Ok((jacp_vec, jacr_vec))
     }
 
     /// Compute body center-of-mass end-effector Jacobian.
     /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
     /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
-    /// # Panics
-    /// Panics if `body_id` is not a valid body index.
-    pub fn jac_body_com(&self, jacp: bool, jacr: bool, body_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        assert!(body_id >= 0 && (body_id as usize) < self.model.ffi().nbody as usize, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
+    pub fn jac_body_com(&self, jacp: bool, jacr: bool, body_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+        let nbody = self.model.ffi().nbody as i64;
+        if body_id < 0 || (body_id as i64) >= nbody {
+            return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
+        }
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
         let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
-
         unsafe {
-            // Safety: body_id validated above; mj_jacBodyCom requires valid body index
             mj_jacBodyCom(
-                self.model.ffi(),
-                self.ffi(),
+                self.model.ffi(), self.ffi(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
                 body_id,
             )
         };
-
-        (jacp_vec, jacr_vec)
+        Ok((jacp_vec, jacr_vec))
     }
 
     /// Compute subtree center-of-mass end-effector Jacobian (translational only).
     /// Set `jacp` to `true` to calculate the translational component. Returns a `Vec`.
     /// Empty `Vec` indicates that the Jacobian was not computed.
-    /// # Panics
-    /// Panics if `body_id` is not a valid body index.
-    pub fn jac_subtree_com(&mut self, jacp: bool, body_id: i32) -> Vec<MjtNum> {
-        assert!(body_id >= 0 && (body_id as usize) < self.model.ffi().nbody as usize, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
+    pub fn jac_subtree_com(&mut self, jacp: bool, body_id: i32) -> Result<Vec<MjtNum>, MjDataError> {
+        let nbody = self.model.ffi().nbody as i64;
+        if body_id < 0 || (body_id as i64) >= nbody {
+            return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
+        }
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
-
         unsafe {
             mj_jacSubtreeCom(
-                self.model.ffi(),
-                self.ffi_mut(),
+                self.model.ffi(), self.ffi_mut(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 body_id,
             )
         };
-
-        jacp_vec
+        Ok(jacp_vec)
     }
 
     /// Compute geom end-effector Jacobian.
     /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
     /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
-    /// # Panics
-    /// Panics if `geom_id` is not a valid geom index.
-    pub fn jac_geom(&self, jacp: bool, jacr: bool, geom_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        assert!(geom_id >= 0 && (geom_id as usize) < self.model.ffi().ngeom as usize, "geom_id {} out of bounds [0, {})", geom_id, self.model.ffi().ngeom);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `geom_id` is out of range.
+    pub fn jac_geom(&self, jacp: bool, jacr: bool, geom_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+        let ngeom = self.model.ffi().ngeom as i64;
+        if geom_id < 0 || (geom_id as i64) >= ngeom {
+            return Err(MjDataError::IndexOutOfBounds { kind: "geom_id", id: geom_id as i64, upper: ngeom });
+        }
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
         let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
-
         unsafe {
-            // Safety: geom_id validated above; mj_jacGeom requires valid geom index
             mj_jacGeom(
-                self.model.ffi(),
-                self.ffi(),
+                self.model.ffi(), self.ffi(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
                 geom_id,
             )
         };
-
-        (jacp_vec, jacr_vec)
+        Ok((jacp_vec, jacr_vec))
     }
 
     /// Compute site end-effector Jacobian.
     /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
     /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
-    /// # Panics
-    /// Panics if `site_id` is not a valid site index.
-    pub fn jac_site(&self, jacp: bool, jacr: bool, site_id: i32) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        assert!(site_id >= 0 && (site_id as usize) < self.model.ffi().nsite as usize, "site_id {} out of bounds [0, {})", site_id, self.model.ffi().nsite);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `site_id` is out of range.
+    pub fn jac_site(&self, jacp: bool, jacr: bool, site_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+        let nsite = self.model.ffi().nsite as i64;
+        if site_id < 0 || (site_id as i64) >= nsite {
+            return Err(MjDataError::IndexOutOfBounds { kind: "site_id", id: site_id as i64, upper: nsite });
+        }
         let required_len = 3 * self.model.ffi().nv as usize;
         let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
         let mut jacr_vec = if jacr { vec![0 as MjtNum; required_len] } else { vec![] };
-
         unsafe {
-            // Safety: site_id validated above; mj_jacSite requires valid site index
             mj_jacSite(
-                self.model.ffi(),
-                self.ffi(),
+                self.model.ffi(), self.ffi(),
                 if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
                 if jacr { jacr_vec.as_mut_ptr() } else { ptr::null_mut() },
                 site_id,
             )
         };
-
-        (jacp_vec, jacr_vec)
+        Ok((jacp_vec, jacr_vec))
     }
 
     /// Compute subtree angular momentum matrix.
-    /// # Panics
-    /// Panics if `body_id` is not a valid body index.
-    pub fn angmom_mat(&mut self, body_id: i32) -> Vec<MjtNum> {
-        assert!(body_id >= 0 && (body_id as usize) < self.model.ffi().nbody as usize, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
+    pub fn angmom_mat(&mut self, body_id: i32) -> Result<Vec<MjtNum>, MjDataError> {
+        let nbody = self.model.ffi().nbody as i64;
+        if body_id < 0 || (body_id as i64) >= nbody {
+            return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
+        }
         let mut mat = vec![0.0; 3 * self.model.ffi().nv as usize];
-        unsafe {
-            // Safety: body_id validated above; mj_angmomMat requires valid body index
-            mj_angmomMat(self.model.ffi(), self.ffi_mut(), mat.as_mut_ptr(), body_id)
-        };
-        mat
+        unsafe { mj_angmomMat(self.model.ffi(), self.ffi_mut(), mat.as_mut_ptr(), body_id) };
+        Ok(mat)
     }
 
     /// Run all kinematics-like computations (kinematics, comPos, camlight, flex, tendon).
@@ -835,101 +848,102 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Compute object 6D velocity (rot:lin) in object-centered frame, world/local orientation.
-    /// # Panics
-    /// Panics if `obj_id` is not a valid index for the given object type
-    /// or the obj_type is not one of: [`MjtObj::mjOBJ_BODY`], [`MjtObj::mjOBJ_XBODY`], [`MjtObj::mjOBJ_GEOM`], [`MjtObj::mjOBJ_SITE`], [`MjtObj::mjOBJ_CAMERA`].
-    pub fn object_velocity(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> [MjtNum; 6] {
+    /// # Errors
+    /// Returns:
+    /// - [`MjDataError::UnsupportedObjectType`] when `obj_type` is not one of
+    ///   `mjOBJ_BODY`, `mjOBJ_XBODY`, `mjOBJ_GEOM`, `mjOBJ_SITE`, `mjOBJ_CAMERA`.
+    /// - [`MjDataError::IndexOutOfBounds`] when `obj_id` is out of range for the given type.
+    pub fn object_velocity(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
         let max_id = match obj_type {
             MjtObj::mjOBJ_BODY | MjtObj::mjOBJ_XBODY => self.model.ffi().nbody,
             MjtObj::mjOBJ_GEOM => self.model.ffi().ngeom,
             MjtObj::mjOBJ_SITE => self.model.ffi().nsite,
             MjtObj::mjOBJ_CAMERA => self.model.ffi().ncam,
-            _ => panic!("unsupported 'obj_type' ({obj_type:?}) was given."),
+            _ => return Err(MjDataError::UnsupportedObjectType(obj_type as i32)),
         };
-        assert!(obj_id >= 0 && (obj_id as i64) < max_id, "obj_id {} out of bounds [0, {}) for type {:?}", obj_id, max_id, obj_type);
+        if obj_id < 0 || (obj_id as i64) >= max_id {
+            return Err(MjDataError::IndexOutOfBounds { kind: "obj_id", id: obj_id as i64, upper: max_id });
+        }
         let mut result: [MjtNum; 6] = [0.0; 6];
         unsafe {
-            // Safety: obj_id validated above for valid object types; mj_objectVelocity requires valid ID
-            mj_objectVelocity(
-                self.model.ffi(), self.ffi(),
-                obj_type as i32, obj_id,
-                &mut result, flg_local as i32
-            )
-        }; 
-        result
+            mj_objectVelocity(self.model.ffi(), self.ffi(), obj_type as i32, obj_id, &mut result, flg_local as i32)
+        };
+        Ok(result)
     }
 
     /// Compute object 6D acceleration (rot:lin) in object-centered frame, world/local orientation.
-    /// # Panics
-    /// Panics if `obj_id` is not a valid index for the given object type
-    /// or the obj_type is not one of: [`MjtObj::mjOBJ_BODY`], [`MjtObj::mjOBJ_XBODY`], [`MjtObj::mjOBJ_GEOM`], [`MjtObj::mjOBJ_SITE`], [`MjtObj::mjOBJ_CAMERA`].
-    pub fn object_acceleration(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> [MjtNum; 6] {
+    /// # Errors
+    /// Returns:
+    /// - [`MjDataError::UnsupportedObjectType`] when `obj_type` is not supported.
+    /// - [`MjDataError::IndexOutOfBounds`] when `obj_id` is out of range for the given type.
+    pub fn object_acceleration(&self, obj_type: MjtObj, obj_id: i32, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
         let max_id = match obj_type {
             MjtObj::mjOBJ_BODY | MjtObj::mjOBJ_XBODY => self.model.ffi().nbody,
             MjtObj::mjOBJ_GEOM => self.model.ffi().ngeom,
             MjtObj::mjOBJ_SITE => self.model.ffi().nsite,
             MjtObj::mjOBJ_CAMERA => self.model.ffi().ncam,
-            _ => panic!("unsupported 'obj_type' ({obj_type:?}) was given."),
+            _ => return Err(MjDataError::UnsupportedObjectType(obj_type as i32)),
         };
-        assert!(obj_id >= 0 && (obj_id as i64) < max_id, "obj_id {} out of bounds [0, {}) for type {:?}", obj_id, max_id, obj_type);
+        if obj_id < 0 || (obj_id as i64) >= max_id {
+            return Err(MjDataError::IndexOutOfBounds { kind: "obj_id", id: obj_id as i64, upper: max_id });
+        }
         let mut result: [MjtNum; 6] = [0.0; 6];
         unsafe {
-            // Safety: obj_id validated above for valid object types; mj_objectAcceleration requires valid ID
-            mj_objectAcceleration(
-                self.model.ffi(), self.ffi(),
-                obj_type as i32, obj_id,
-                &mut result, flg_local as i32
-            )
+            mj_objectAcceleration(self.model.ffi(), self.ffi(), obj_type as i32, obj_id, &mut result, flg_local as i32)
         };
-        result
+        Ok(result)
     }
 
-    /// Returns smallest signed distance between two geoms and optionally segment from geom1 to geom2.
-    /// # Panics
-    /// Panics if `geom1_id` or `geom2_id` are not valid geom indices.
-    pub fn geom_distance(&self, geom1_id: i32, geom2_id: i32, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
+    /// Returns smallest signed distance between two geoms and optionally the contact segment.
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when either geom id is negative or `>= ngeom`.
+    pub fn geom_distance(&self, geom1_id: i32, geom2_id: i32, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> Result<MjtNum, MjDataError> {
         let ngeom = self.model.ffi().ngeom as i64;
-        assert!(geom1_id >= 0 && (geom1_id as i64) < ngeom, "geom1_id {} out of bounds [0, {})", geom1_id, ngeom);
-        assert!(geom2_id >= 0 && (geom2_id as i64) < ngeom, "geom2_id {} out of bounds [0, {})", geom2_id, ngeom);
-        unsafe {
+        if geom1_id < 0 || (geom1_id as i64) >= ngeom {
+            return Err(MjDataError::IndexOutOfBounds { kind: "geom1_id", id: geom1_id as i64, upper: ngeom });
+        }
+        if geom2_id < 0 || (geom2_id as i64) >= ngeom {
+            return Err(MjDataError::IndexOutOfBounds { kind: "geom2_id", id: geom2_id as i64, upper: ngeom });
+        }
+        Ok(unsafe {
             mj_geomDistance(
                 self.model.ffi(), self.ffi(),
                 geom1_id, geom2_id, dist_max,
-                fromto.map_or(ptr::null_mut(), |x| x)
+                fromto.map_or(ptr::null_mut(), |x| x),
             )
-        }
+        })
     }
 
-    /// Map from body local to global Cartesian coordinates, sameframe takes values from [`MjtSameFrame`].
-    /// Returns (global position, global orientation matrix).
-    /// Wraps `mj_local2Global`.
-    /// # Panics
-    /// Panics if `body_id` is not a valid body index.
-    pub fn local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: i32, sameframe: MjtSameFrame) -> ([MjtNum; 3], [MjtNum; 9]) {
-        assert!(body_id >= 0 && (body_id as i64) < self.model.ffi().nbody, "body_id {} out of bounds [0, {})", body_id, self.model.ffi().nbody);
-        /* Create uninitialized because this gets filled by the function. */
-        let mut xpos: [MjtNum; 3] =  [0.0; 3];
+    /// Map from body local to global Cartesian coordinates. Returns (global position, global orientation matrix).
+    /// `sameframe` takes values from [`MjtSameFrame`]. Wraps `mj_local2Global`.
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
+    pub fn local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: i32, sameframe: MjtSameFrame) -> Result<([MjtNum; 3], [MjtNum; 9]), MjDataError> {
+        let nbody = self.model.ffi().nbody;
+        if body_id < 0 || (body_id as i64) >= nbody {
+            return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
+        }
+        let mut xpos: [MjtNum; 3] = [0.0; 3];
         let mut xmat: [MjtNum; 9] = [0.0; 9];
         unsafe {
-            // Safety: body_id validated above; mj_local2Global requires valid body index
             mj_local2Global(self.ffi_mut(), &mut xpos, &mut xmat, pos, quat, body_id, sameframe as MjtByte)
         };
-        (xpos, xmat)
+        Ok((xpos, xmat))
     }
 
     /// Intersect multiple rays emanating from a single point.
     /// Similar semantics to mj_ray, but `vec` is an array of (nray x 3) directions.
     /// If `normals_out` is `Some`, it must be a slice of `nray` elements filled with surface normals. Use `None` to skip normals.
     /// # Errors
-    /// Returns [`ErrorKind::InvalidInput`] if `normals_out` length does not match `vec.len()`.
+    /// Returns [`MjDataError::LengthMismatch`] if `normals_out` length does not match `vec.len()`.
     pub fn multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
         flg_static: bool, bodyexclude: i32, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
-    ) -> io::Result<(Vec<i32>, Vec<MjtNum>)> {
+    ) -> Result<(Vec<i32>, Vec<MjtNum>), MjDataError> {
         let nray = vec.len();
         if let Some(buf) = &normals_out {
             if buf.len() != nray {
-                return Err(Error::new(ErrorKind::InvalidInput, "normals_out must have length equal to number of rays"));
+                return Err(MjDataError::LengthMismatch { name: "normals_out", expected: nray, got: buf.len() });
             }
         }
 
@@ -955,7 +969,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         &self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: bool, bodyexclude: i32,
         normal_out: Option<&mut [MjtNum; 3]>
-    ) -> io::Result<(i32, MjtNum)> {
+    ) -> (i32, MjtNum) {
         // `normal_out` is a fixed-size array; nothing to validate at runtime here.
         let mut geom_id = -1;
         let dist = unsafe { mj_ray(
@@ -965,7 +979,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             flg_static as MjtByte, bodyexclude, &mut geom_id,
             normal_out.map_or(ptr::null_mut(), |x| x)
         ) };
-        Ok((geom_id, dist))
+        (geom_id, dist)
     }
 
     /// Intersect ray with visible flexes.
@@ -987,10 +1001,33 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Copies data state from `src` to `self` based on the specified `spec` combination of `mjtState` flags.
+    ///
+    /// # Panics
+    /// Panics if `src` was created from a different model.
+    /// Use [`MjData::try_copy_state_from_data`] for a fallible alternative.
     pub fn copy_state_from_data(&mut self, src: &MjData<M>, spec: u32) {
+        self.try_copy_state_from_data(src, spec)
+            .expect("copy_state_from_data failed")
+    }
+
+    /// Fallible version of [`MjData::copy_state_from_data`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::SignatureMismatch`] if `src` was created from
+    /// a different model.
+    pub fn try_copy_state_from_data(&mut self, src: &MjData<M>, spec: u32) -> Result<(), MjDataError> {
+        let src_sig = src.model.signature();
+        let dst_sig = self.model.signature();
+        if src_sig != dst_sig {
+            return Err(MjDataError::SignatureMismatch {
+                source: src_sig,
+                destination: dst_sig,
+            });
+        }
         unsafe {
             mj_copyState(self.model.ffi(), src.ffi(), self.ffi_mut(), spec as i32);
         }
+        Ok(())
     }
 
     /// Intersect ray with hfield.
@@ -1014,21 +1051,56 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Apply Cartesian force and torque to a point on a body, and add the result to `qfrc_target`.
+    ///
     /// # Panics
     /// Panics if `body` is not a valid body index or `qfrc_target` length is less than `nv`.
+    /// Use [`MjData::try_apply_ft`] for a fallible alternative.
     pub fn apply_ft(&mut self, force: &[MjtNum; 3], torque: &[MjtNum; 3], point: &[MjtNum; 3], body: i32, qfrc_target: &mut [MjtNum]) {
-        assert!(body >= 0 && (body as usize) < self.model.ffi().nbody as usize, "body {} out of bounds [0, {})", body, self.model.ffi().nbody);
-        assert!(qfrc_target.len() >= self.model.ffi().nv as usize, "qfrc_target must be at least nv length");
+        self.try_apply_ft(force, torque, point, body, qfrc_target)
+            .expect("apply_ft failed")
+    }
+
+    /// Fallible version of [`MjData::apply_ft`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] if `body` is not a valid body
+    /// index, or [`MjDataError::BufferTooSmall`] if `qfrc_target` is shorter
+    /// than `nv`.
+    pub fn try_apply_ft(
+        &mut self,
+        force: &[MjtNum; 3],
+        torque: &[MjtNum; 3],
+        point: &[MjtNum; 3],
+        body: i32,
+        qfrc_target: &mut [MjtNum],
+    ) -> Result<(), MjDataError> {
+        let nbody = self.model.ffi().nbody as i64;
+        if body < 0 || body as i64 >= nbody {
+            return Err(MjDataError::IndexOutOfBounds {
+                kind: "body",
+                id: body as i64,
+                upper: nbody,
+            });
+        }
+        let nv = self.model.ffi().nv as usize;
+        if qfrc_target.len() < nv {
+            return Err(MjDataError::BufferTooSmall {
+                name: "qfrc_target",
+                got: qfrc_target.len(),
+                needed: nv,
+            });
+        }
         unsafe {
             mj_applyFT(self.model.ffi(), self.ffi_mut(), force, torque, point, body, qfrc_target.as_mut_ptr());
         }
+        Ok(())
     }
 
     /// Reads data's state into `destination`. The `spec` parameter is a bit mask of [`MjtState`] elements,
     /// which controls what state gets copied. The `destination` parameter is a mutable
     /// slice to the location into which the state will be written.
     /// This is a wrapper around [`mj_getState`].
-    /// 
+    ///
     /// # Note
     /// The `destination` buffer is allowed to be larger than the
     /// actual state length, and may thus contain old information.
@@ -1036,27 +1108,41 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// any remaining elements in the buffer are left unchanged. This was done for possible
     /// performance improvements, where one array may hold different parts of simulation state
     /// at different times.
-    /// 
+    ///
     /// You can use the returned number of [`MjtNum`] elements written to `destination`
     /// to create a subslice containing only the updated information.
-    /// 
+    ///
     /// # Returns
     /// Number of [`MjtNum`] elements written to `destination`.
-    /// 
+    ///
     /// # Panics
     /// A panic will occur if `destination` is smaller than [`MjModel::state_size`] with `spec` passed as parameter.
+    /// Use [`MjData::try_read_state_into`] for a fallible alternative.
     pub fn read_state_into(&self, spec: u32, destination: &mut [MjtNum]) -> usize {
+        self.try_read_state_into(spec, destination)
+            .expect("read_state_into failed")
+    }
+
+    /// Fallible version of [`MjData::read_state_into`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::BufferTooSmall`] if `destination` is smaller than
+    /// the state size required by `spec`.
+    ///
+    /// On success, returns the number of [`MjtNum`] elements written.
+    pub fn try_read_state_into(&self, spec: u32, destination: &mut [MjtNum]) -> Result<usize, MjDataError> {
         let state_size = self.model.state_size(spec) as usize;
-        let destination_len = destination.len();
-        assert!(
-            destination_len >= state_size,
-            "destination buffer is too small: got {destination_len} elements, but need at least {state_size} elements.",
-        );
+        if destination.len() < state_size {
+            return Err(MjDataError::BufferTooSmall {
+                name: "destination",
+                got: destination.len(),
+                needed: state_size,
+            });
+        }
         unsafe {
             mj_getState(self.model.ffi(), self.ffi(), destination.as_mut_ptr(), spec as i32);
         }
-
-        state_size
+        Ok(state_size)
     }
 
     /// Same as [`MjData::read_state_into`], except it allocates
@@ -1070,51 +1156,102 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Sets the `state` to [`MjData`]. This is a wrapper around [`mj_setState`].
     /// The `state` is an array containing the state to write, based on the `spec`
     /// bitmask of elements [`MjtState`].
-    /// 
+    ///
     /// # Note
     /// The size of `state` is allowed to be larger. This was done to allow a preallocated
     /// buffer to store any possible state based on `spec`, without having to query the size
     /// every time. This benefits performance in some cases.
-    /// 
+    ///
     /// # Panics
     /// A panic will occur if `state`'s length is less than would be copied
     /// based on `spec`.
+    /// Use [`MjData::try_set_state`] for a fallible alternative.
     pub fn set_state(&mut self, state: &[MjtNum], spec: u32) {
-        let state_len = state.len();
+        self.try_set_state(state, spec)
+            .expect("set_state failed")
+    }
+
+    /// Fallible version of [`MjData::set_state`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::BufferTooSmall`] if `state` is smaller than the
+    /// length required by `spec`.
+    pub fn try_set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
         let required_len = self.model.state_size(spec) as usize;
-        assert!(
-             state_len >= required_len,
-             "input state array's length ({state_len}) is smaller than the\
-              length required ({required_len}), commanded by input spec."
-        );
+        if state.len() < required_len {
+            return Err(MjDataError::BufferTooSmall {
+                name: "state",
+                got: state.len(),
+                needed: required_len,
+            });
+        }
         unsafe {
             mj_setState(self.model.ffi(), self.ffi_mut(), state.as_ptr(), spec as i32);
         }
+        Ok(())
     }
 
 
     /// Copy [`MjData`] to `destination`, skipping large arrays not required for visualization.
     /// This is a wrapper for [`mjv_copyData`].
+    ///
+    /// # Panics
+    /// Panics if `destination` was created from a different model.
+    /// Use [`MjData::try_copy_visual_to`] for a fallible alternative.
     pub fn copy_visual_to(&self, destination: &mut MjData<M>) {
+        self.try_copy_visual_to(destination)
+            .expect("copy_visual_to failed")
+    }
+
+    /// Fallible version of [`MjData::copy_visual_to`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
+    /// from a different model.
+    pub fn try_copy_visual_to(&self, destination: &mut MjData<M>) -> Result<(), MjDataError> {
+        let src_sig = self.model.signature();
+        let dst_sig = destination.model.signature();
+        if src_sig != dst_sig {
+            return Err(MjDataError::SignatureMismatch {
+                source: src_sig,
+                destination: dst_sig,
+            });
+        }
         unsafe {
-            assert_eq!(
-                self.model.signature(), destination.model.signature(),
-                "destination MjData must be created from the same model as the source MjData."
-            );
             mjv_copyData(destination.ffi_mut(), self.model.ffi(), self.ffi());
         }
+        Ok(())
     }
 
     /// Copy [`MjData`] to `destination` in full.
     /// This is a wrapper for [`mj_copyData`].
+    ///
+    /// # Panics
+    /// Panics if `destination` was created from a different model.
+    /// Use [`MjData::try_copy_to`] for a fallible alternative.
     pub fn copy_to(&self, destination: &mut MjData<M>) {
+        self.try_copy_to(destination)
+            .expect("copy_to failed")
+    }
+
+    /// Fallible version of [`MjData::copy_to`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
+    /// from a different model.
+    pub fn try_copy_to(&self, destination: &mut MjData<M>) -> Result<(), MjDataError> {
+        let src_sig = self.model.signature();
+        let dst_sig = destination.model.signature();
+        if src_sig != dst_sig {
+            return Err(MjDataError::SignatureMismatch {
+                source: src_sig,
+                destination: dst_sig,
+            });
+        }
         unsafe {
-            assert_eq!(
-                self.model.signature(), destination.model.signature(),
-                "destination MjData must be created from the same model as the source MjData."
-            );
             mj_copyData(destination.ffi_mut(), self.model.ffi(), self.ffi());
         }
+        Ok(())
     }
 
     /// Returns a direct pointer to the underlying model.
@@ -1132,7 +1269,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjData {
-        unsafe { self.data.as_ref().unwrap() }
+        unsafe { &*self.data }
     }
 
     /// Mutable reference to the wrapped FFI struct.
@@ -1141,7 +1278,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Modifying the underlying FFI struct directly can break the invariants
     /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjData {
-        unsafe { self.data.as_mut().unwrap() }
+        unsafe { &mut *self.data }
     }
 
     /// Returns a reference to data's [`MjModel`].
@@ -1377,10 +1514,26 @@ impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
 }
 
 impl<M: Deref<Target = MjModel> + Clone> Clone for MjData<M> {
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the cloned data.
+    /// Use [`MjData::try_clone`] for a fallible alternative.
     fn clone(&self) -> Self {
+        self.try_clone().expect("not enough space to clone data")
+    }
+}
+
+impl<M: Deref<Target = MjModel> + Clone> MjData<M> {
+    /// Fallible version of [`Clone::clone`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
+    /// the copy.
+    pub fn try_clone(&self) -> Result<Self, MjDataError> {
         let raw = unsafe { mj_copyData(ptr::null_mut(), self.model.ffi(), self.ffi()) };
-        assert!(!raw.is_null(), "not enough space to clone data");
-        Self { data: raw, model: self.model.clone() }
+        if raw.is_null() {
+            return Err(MjDataError::AllocationFailed);
+        }
+        Ok(Self { data: raw, model: self.model.clone() })
     }
 }
 
@@ -1551,7 +1704,6 @@ mod test {
         /* Test consistency with the body */
         data.step1();  // update derived variables.
 
-        
         joint_view = joint_info.view(&data);
         let body_view = body_info.view(&data);
         /* Consistency in position */
@@ -1745,40 +1897,40 @@ mod test {
         let ball_body_id = model.body("ball").unwrap().id as i32;
 
         // Test global point Jacobian
-        let (jacp, jacr) = data.jac(true, true, &point, ball_body_id);
+        let (jacp, jacr) = data.jac(true, true, &point, ball_body_id).unwrap();
         assert_eq!(jacp.len(), expected_len);
         assert_eq!(jacr.len(), expected_len);
 
         // Test body frame Jacobian
-        let (jacp_body, jacr_body) = data.jac_body(true, true, ball_body_id);
+        let (jacp_body, jacr_body) = data.jac_body(true, true, ball_body_id).unwrap();
         assert_eq!(jacp_body.len(), expected_len);
         assert_eq!(jacr_body.len(), expected_len);
 
         // Test body COM Jacobian
-        let (jacp_com, jacr_com) = data.jac_body_com(true, true, ball_body_id);
+        let (jacp_com, jacr_com) = data.jac_body_com(true, true, ball_body_id).unwrap();
         assert_eq!(jacp_com.len(), expected_len);
         assert_eq!(jacr_com.len(), expected_len);
 
         // Test subtree COM Jacobian (translational only)
-        let jac_subtree = data.jac_subtree_com(true, 0);
+        let jac_subtree = data.jac_subtree_com(true, 0).unwrap();
         assert_eq!(jac_subtree.len(), expected_len);
 
         // Test geom Jacobian
         let green_geom_id = model.geom("green_sphere").unwrap().id as i32;
-        let (jacp_geom, jacr_geom) = data.jac_geom(true, true, green_geom_id);
+        let (jacp_geom, jacr_geom) = data.jac_geom(true, true, green_geom_id).unwrap();
         assert_eq!(jacp_geom.len(), expected_len);
         assert_eq!(jacr_geom.len(), expected_len);
 
         // Test site Jacobian - only if sites exist
         if model.ffi().nsite > 0 {
             let site_id = 0i32;
-            let (jacp_site, jacr_site) = data.jac_site(true, true, site_id);
+            let (jacp_site, jacr_site) = data.jac_site(true, true, site_id).unwrap();
             assert_eq!(jacp_site.len(), expected_len);
             assert_eq!(jacr_site.len(), expected_len);
         }
 
         // Test flags set to false produce empty Vec
-        let (jacp_none, jacr_none) = data.jac(false, false, &[0.0; 3], ball_body_id);
+        let (jacp_none, jacr_none) = data.jac(false, false, &[0.0; 3], ball_body_id).unwrap();
         assert!(jacp_none.is_empty());
         assert!(jacr_none.is_empty());
     }
@@ -1788,13 +1940,13 @@ mod test {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let mut data = model.make_data();
 
-        let mat = data.angmom_mat(0);
+        let mat = data.angmom_mat(0).unwrap();
         assert_eq!(mat.len(), (3 * data.model.ffi().nv as usize));
 
-        let vel = data.object_velocity(MjtObj::mjOBJ_BODY, 0, true);
+        let vel = data.object_velocity(MjtObj::mjOBJ_BODY, 0, true).unwrap();
         assert_eq!(vel, vel); // just ensure it returns 6-length
 
-        let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, 0, false);
+        let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, 0, false).unwrap();
         assert_eq!(acc, acc);
     }
 
@@ -1812,7 +1964,7 @@ mod test {
         assert!(geom0_id >= 0 && geom1_id >= 0);
 
         let mut ft = [0.0; 6];
-        let dist = data.geom_distance(geom0_id, geom1_id, 1.0, Some(&mut ft));
+        let dist = data.geom_distance(geom0_id, geom1_id, 1.0, Some(&mut ft)).unwrap();
         assert!(dist > 0.0, "distance between separate geoms should be positive, got {dist}");
         assert!(dist < 1.0, "distance should be less than distmax, got {dist}");
         assert_relative_eq!(dist, 0.3, epsilon=1e-3);
@@ -1822,7 +1974,7 @@ mod test {
 
         let pos = [0.0; 3];
         let quat = [1.0, 0.0, 0.0, 0.0];
-        let (xpos, xmat) = data.local_to_global(&pos, &quat, 0, MjtSameFrame::mjSAMEFRAME_NONE);
+        let (xpos, xmat) = data.local_to_global(&pos, &quat, 0, MjtSameFrame::mjSAMEFRAME_NONE).unwrap();
         assert_eq!(xpos.len(), 3);
         assert_eq!(xmat.len(), 9);
 
@@ -1831,13 +1983,13 @@ mod test {
         assert_eq!(rays.0.len(), 3);
         assert_eq!(rays.1.len(), 3);
 
-        let (geomid, dist) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1, None).unwrap();
+        let (geomid, dist) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1, None);
         assert!(dist.is_finite());
         assert!(geomid >= -1);
 
         // ray API with normal output (optional parameter)
         let mut normal = [0.0; 3];
-        let (geomid2, dist2) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1, Some(&mut normal)).unwrap();
+        let (geomid2, dist2) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1, Some(&mut normal));
         assert!(dist2.is_finite());
         assert!(geomid2 >= -1);
         let norm_len = (normal[0]*normal[0] + normal[1]*normal[1] + normal[2]*normal[2]).sqrt();
@@ -2016,25 +2168,25 @@ mod test {
         assert!(data.init_ctrl_history(0, Some(&times), &values).is_ok());
         assert!(data.init_ctrl_history(0, None, &values).is_ok());
 
-        // times length mismatch -> InvalidInput
+        // times length mismatch -> LengthMismatch
         let bad_times = vec![0.0f64];
         let err = data.init_ctrl_history(0, Some(&bad_times), &values).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjDataError::LengthMismatch { name: "times", .. }));
 
-        // values length mismatch -> InvalidInput
+        // values length mismatch -> LengthMismatch
         let bad_values = vec![1.0; 5];
         let err = data.init_ctrl_history(0, Some(&times), &bad_values).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjDataError::LengthMismatch { name: "values", .. }));
 
-        // invalid actuator id -> NotFound
+        // invalid actuator id -> IndexOutOfBounds
         let err = data.init_ctrl_history(99, Some(&times), &values).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "actuator_id", .. }));
 
-        // read_ctrl invalid id -> NotFound
+        // read_ctrl invalid id -> IndexOutOfBounds
         let err = data.read_ctrl(99, times[0], 0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "actuator_id", .. }));
 
-        // actuator exists but has no history buffer -> NotFound
+        // actuator exists but has no history buffer -> NoHistoryBuffer
         const NO_HIST_ACT_MODEL: &str = r#"
 <mujoco>
   <worldbody>
@@ -2051,7 +2203,7 @@ mod test {
         let model2 = MjModel::from_xml_string(NO_HIST_ACT_MODEL).unwrap();
         let mut data2 = model2.make_data();
         let err = data2.init_ctrl_history(0, Some(&times), &values).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::NoHistoryBuffer { kind: "actuator", id: 0 }));
     }
 
     #[test]
@@ -2080,25 +2232,25 @@ mod test {
         assert!(data.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).is_ok());
         assert!(data.init_sensor_history(0, None, &values_sens, 0.0).is_ok());
 
-        // times length mismatch -> InvalidInput
+        // times length mismatch -> LengthMismatch
         let bad_times = vec![0.0f64];
         let err = data.init_sensor_history(0, Some(&bad_times), &values_sens, 0.0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjDataError::LengthMismatch { name: "times", .. }));
 
-        // values length mismatch -> InvalidInput
+        // values length mismatch -> LengthMismatch
         let bad_values = vec![3.14; 3];
         let err = data.init_sensor_history(0, Some(&times_sens), &bad_values, 0.0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjDataError::LengthMismatch { name: "values", .. }));
 
-        // invalid sensor id -> NotFound
+        // invalid sensor id -> IndexOutOfBounds
         let err = data.init_sensor_history(99, Some(&times_sens), &values_sens, 0.0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
 
-        // read_sensor invalid id -> NotFound
-        let err: io::Result<[MjtNum; 1]> = data.read_sensor_fixed::<1>(99, times_sens[0], 0);
-        assert_eq!(err.unwrap_err().kind(), std::io::ErrorKind::NotFound);
+        // read_sensor invalid id -> IndexOutOfBounds
+        let err: Result<[MjtNum; 1], MjDataError> = data.read_sensor_fixed::<1>(99, times_sens[0], 0);
+        assert!(matches!(err.unwrap_err(), MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
 
-        // sensor exists but has no history buffer -> NotFound
+        // sensor exists but has no history buffer -> NoHistoryBuffer
         const NO_HIST_SENS_MODEL: &str = r#"
 <mujoco>
   <worldbody>
@@ -2115,7 +2267,7 @@ mod test {
         let model2 = MjModel::from_xml_string(NO_HIST_SENS_MODEL).unwrap();
         let mut data2 = model2.make_data();
         let err = data2.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::NoHistoryBuffer { kind: "sensor", id: 0 }));
     }
 
     #[test]
@@ -2173,9 +2325,9 @@ mod test {
         let arr_interp: [f64; 1] = data.read_sensor_fixed(0, interp_query, 1).unwrap();
         assert_relative_eq!(arr_interp[0], 25.0, epsilon = 1e-6);
 
-        // read_sensor_fixed<N>: wrong N -> Err(InvalidInput)
-        let err: io::Result<[MjtNum; 3]> = data.read_sensor_fixed::<3>(0, query_time, 0);
-        assert_eq!(err.unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
+        // read_sensor_fixed<N>: wrong N -> Err(LengthMismatch)
+        let err: Result<[MjtNum; 3], MjDataError> = data.read_sensor_fixed::<3>(0, query_time, 0);
+        assert!(matches!(err.unwrap_err(), MjDataError::LengthMismatch { name: "N", .. }));
 
         // read_sensor_into: exact match
         let mut buf = [0.0; 1];
@@ -2187,23 +2339,23 @@ mod test {
         data.read_sensor_into(0, interp_query, 1, &mut buf2).unwrap();
         assert_relative_eq!(buf2[0], 25.0, epsilon = 1e-6);
 
-        // read_sensor_into: buffer too small -> Err(InvalidInput)
+        // read_sensor_into: buffer too small -> Err(LengthMismatch)
         let mut tiny: [MjtNum; 0] = [];
         let err = data.read_sensor_into(0, hist_times[0] + delay, 0, &mut tiny).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjDataError::LengthMismatch { name: "dst", .. }));
 
-        // read_sensor_into: buffer too large -> Err(InvalidInput)
+        // read_sensor_into: buffer too large -> Err(LengthMismatch)
         let mut big = [0.0; 4];
         let err = data.read_sensor_into(0, hist_times[3] + delay, 0, &mut big).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjDataError::LengthMismatch { name: "dst", .. }));
 
-        // invalid sensor id -> NotFound for all methods
-        let err: io::Result<[MjtNum; 1]> = data.read_sensor_fixed::<1>(99, 0.0, 0);
-        assert_eq!(err.unwrap_err().kind(), std::io::ErrorKind::NotFound);
+        // invalid sensor id -> IndexOutOfBounds for all methods
+        let err: Result<[MjtNum; 1], MjDataError> = data.read_sensor_fixed::<1>(99, 0.0, 0);
+        assert!(matches!(err.unwrap_err(), MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
         let err = data.read_sensor(99, 0.0, 0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
         let err = data.read_sensor_into(99, 0.0, 0, &mut buf).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
 
         // read_sensor_fixed<N>, read_sensor, and read_sensor_into agree for all history times
         for &t in &hist_times {
@@ -2240,7 +2392,7 @@ mod test {
 
         let res = data.multi_ray(&pos, &ray_vecs, None, false, -1, 10.0, Some(&mut bad_normals));
         assert!(res.is_err());
-        assert_eq!(res.unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(res.unwrap_err(), MjDataError::LengthMismatch { name: "normals_out", .. }));
     }
 
     #[test]
@@ -2278,7 +2430,7 @@ mod test {
         data.forward_kinematics();
 
         // Ray should hit mesh (centered at 2,2,0.5, size 1x1x1)
-        // Top surface of the mesh is at z=0.5 + 0.5 = 1.0. 
+        // Top surface of the mesh is at z=0.5 + 0.5 = 1.0.
         // Ray starts at z=5.0 and goes straight down [0, 0, -1].
         // Intersection should be at exactly distance 4.0.
         let mesh_dist = data.ray_mesh(mesh_id, &[2.0, 2.0, 5.0], &[0.0, 0.0, -1.0], None);
@@ -2304,7 +2456,7 @@ mod test {
         // Apply force/torque at the ball's center of mass (pos = [0.2, 0.2, 0.1]) in global frame
         let force = [1.5, 2.5, 3.5];
         let torque = [0.1, 0.2, 0.3];
-        let point = [0.2, 0.2, 0.1]; 
+        let point = [0.2, 0.2, 0.1];
 
         data.apply_ft(&force, &torque, &point, body_id, &mut qfrc);
 

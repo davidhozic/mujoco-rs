@@ -190,7 +190,7 @@ fn main() {
 
         step_count += 1;
         viewer.sync_data(&mut data);
-        viewer.render();
+        viewer.render().unwrap();
 
         // The timestep is 0.001 s -> no sleep needed to remain near real-time here;
         // rendering itself takes longer than 1 ms per frame.

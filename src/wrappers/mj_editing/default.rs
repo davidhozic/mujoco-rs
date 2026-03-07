@@ -1,6 +1,6 @@
 //! Module implements [`MjsDefault`], which is a special type of [`SpecItem`].
 
-use std::io::{Error, ErrorKind};
+use crate::error::MjEditError;
 
 use super::traits::SpecItem;
 use crate::mujoco_c::*;
@@ -15,12 +15,12 @@ macro_rules! default_accessor_wrapper {
         $(
             #[doc = concat!("Returns an immutable reference to ", stringify!($name), "'s defaults.")]
             pub fn $name(&self) -> &[<Mjs $name:camel>] {
-                unsafe { self.$name.as_ref().unwrap() }
+                unsafe { &*self.$name }
             }
 
             #[doc = concat!("Returns a mutable reference to ", stringify!($name), "'s defaults.")]
             pub fn [<$name _mut>](&mut self) -> &mut [<Mjs $name:camel>] {
-                unsafe { self.$name.as_mut().unwrap() }
+                unsafe { &mut *self.$name }
             }
         )*
     }};
@@ -46,9 +46,9 @@ impl SpecItem for MjsDefault {
 
     /// Defaults can't be deleted.
     /// # Errors
-    /// This will always error with [`ErrorKind::Unsupported`].
-    unsafe fn delete(&mut self) -> Result<(), Error> {
-        Err(Error::new(ErrorKind::Unsupported, "defaults can't be deleted"))
+    /// This will always error with [`MjEditError::UnsupportedDeletion`].
+    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
+        Err(MjEditError::UnsupportedDeletion)
     }
 }
 

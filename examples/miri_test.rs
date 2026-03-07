@@ -116,25 +116,25 @@ fn test_kinematics_and_jacobians<'a>(model: &'a MjModel, data: &mut MjData<&'a M
     let site_id = model.name_to_id(MjtObj::mjOBJ_SITE, "box1_site");
     let box1_body_id = model.name_to_id(MjtObj::mjOBJ_BODY, "box1");
     
-    let (jacp, jacr) = data.jac_site(true, true, site_id);
+    let (jacp, jacr) = data.jac_site(true, true, site_id).unwrap();
     assert_eq!(jacp.len(), 3 * model.ffi().nv as usize);
     assert_eq!(jacr.len(), 3 * model.ffi().nv as usize);
     
-    let (jacp_body, _) = data.jac_body_com(true, false, box1_body_id);
+    let (jacp_body, _) = data.jac_body_com(true, false, box1_body_id).unwrap();
     assert_eq!(jacp_body.len(), 3 * model.ffi().nv as usize);
 
     println!("Testing object velocity/acceleration...");
-    let vel = data.object_velocity(MjtObj::mjOBJ_BODY, box1_body_id, false);
+    let vel = data.object_velocity(MjtObj::mjOBJ_BODY, box1_body_id, false).unwrap();
     assert_eq!(vel.len(), 6);
     
     data.fwd_position();
     data.fwd_velocity();
     data.fwd_actuation();
     data.fwd_acceleration();
-    let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, box1_body_id, false);
+    let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, box1_body_id, false).unwrap();
     assert_eq!(acc.len(), 6);
     
-    let am_mat = data.angmom_mat(box1_body_id);
+    let am_mat = data.angmom_mat(box1_body_id).unwrap();
     assert_eq!(am_mat.len(), 3 * model.ffi().nv as usize);
 }
 

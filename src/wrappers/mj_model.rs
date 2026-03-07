@@ -1,14 +1,15 @@
 //! MjModel related.
 use std::ffi::{CStr, CString, NulError, c_int, c_void};
-use std::io::{self, Error, ErrorKind};
 use std::path::Path;
 use std::ptr;
 
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
+use super::mj_primitive::*;
+
 use crate::wrappers::mj_option::MjOption;
 use crate::util::assert_mujoco_version;
 use crate::wrappers::mj_data::MjData;
-use super::mj_primitive::*;
+use crate::error::{MjDataError, MjModelError};
 use crate::mujoco_c::*;
 
 use crate::{
@@ -145,11 +146,12 @@ impl MjModel {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
-    /// Returns an error if the model could not be loaded, containing the MuJoCo error message.
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::LoadFailed`] if MuJoCo fails to load the model.
     /// # Panics
-    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
+    pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, MjModelError> {
         Self::from_xml_file(path, None)
     }
 
@@ -157,20 +159,23 @@ impl MjModel {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
-    /// Returns an error if the model could not be loaded, containing the MuJoCo error message.
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::LoadFailed`] if MuJoCo fails to load the model.
     /// # Panics
-    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
+    pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, MjModelError> {
         Self::from_xml_file(path, Some(vfs))
     }
 
-    fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, Error> {
+    fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, MjModelError> {
         assert_mujoco_version();
 
         let mut error_buffer = [0i8; 100];
         unsafe {
-            let path = CString::new(path.as_ref().to_str().expect("invalid utf")).unwrap();
+            let path_str = path.as_ref().to_str()
+                .ok_or(MjModelError::InvalidUtf8Path)?;
+            let path = CString::new(path_str).unwrap();
             let raw_ptr = mj_loadXML(
                 path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
                 &mut error_buffer as *mut i8, error_buffer.len() as c_int
@@ -184,10 +189,11 @@ impl MjModel {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
-    /// Returns an error if the underlying VFS cannot handle the data or if MuJoCo fails to load it.
+    /// - [`MjModelError::VfsError`] if the internal VFS operation fails.
+    /// - [`MjModelError::LoadFailed`] if MuJoCo fails to load the model.
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_xml_string(data: &str) -> Result<Self, Error> {
+    pub fn from_xml_string(data: &str) -> Result<Self, MjModelError> {
         assert_mujoco_version();
 
         let mut vfs = MjVfs::new();
@@ -212,10 +218,10 @@ impl MjModel {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
-    /// Returns an error if MuJoCo fails to parse the MJB buffer.
+    /// Returns [`MjModelError::LoadFailed`] if MuJoCo fails to parse the MJB buffer.
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_buffer(data: &[u8]) -> Result<Self, Error> {
+    pub fn from_buffer(data: &[u8]) -> Result<Self, MjModelError> {
         assert_mujoco_version();
         unsafe {
             Self::from_raw(mj_loadModelBuffer(data.as_ptr() as *const c_void, data.len() as i32))
@@ -223,7 +229,7 @@ impl MjModel {
     }
 
     /// Creates a [`MjModel`] from a raw pointer.
-    pub(crate) fn from_raw(ptr: *mut mjModel) -> Result<Self, Error> {
+    pub(crate) fn from_raw(ptr: *mut mjModel) -> Result<Self, MjModelError> {
         unsafe { Self::check_raw_model(ptr, &[0]) }
     }
 
@@ -231,12 +237,13 @@ impl MjModel {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// - Returns [`std::ffi::NulError`] if `filename` contains an interior `'\0'` character.
-    /// - Returns [`io::ErrorKind::Other`] with MuJoCo's error message if saving fails.
-    pub fn save_last_xml(&self, filename: &str) -> io::Result<()> {
+    /// Returns [`MjModelError::SaveFailed`] with MuJoCo's error message if saving fails.
+    /// # Panics
+    /// When `filename` contains '\0' characters, a panic occurs.
+    pub fn save_last_xml(&self, filename: &str) -> Result<(), MjModelError> {
         let mut error = [0i8; 100];
         unsafe {
-            let cstring = CString::new(filename)?;
+            let cstring = CString::new(filename).unwrap();
             match mj_saveLastXML(
                 cstring.as_ptr(), self.ffi(),
                 error.as_mut_ptr(), (error.len() - 1) as i32
@@ -251,7 +258,7 @@ impl MjModel {
                             error.iter().position(|&x| x == 0).unwrap_or(error.len())
                         )
                     );
-                    Err(Error::new(ErrorKind::Other, cstr_error))
+                    Err(MjModelError::SaveFailed(cstr_error.into_owned()))
                 },
                 _ => unreachable!()
             }
@@ -259,17 +266,29 @@ impl MjModel {
     }
 
     /// Creates a new [`MjData`] instance linked to this model.
+    ///
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the data structure.
+    /// Use [`MjModel::try_make_data`] for a fallible alternative.
     pub fn make_data(&self) -> MjData<&Self> {
         MjData::new(self)
     }
 
+    /// Fallible version of [`MjModel::make_data`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
+    /// the data structure.
+    pub fn try_make_data(&self) -> Result<MjData<&Self>, MjDataError> {
+        MjData::try_new(self)
+    }
+
     /// Handles the pointer to the model.
     /// # Safety
-    /// `error_buffer` must have at least on element, where the last element must be 0.
-    unsafe fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[i8]) -> Result<Self, Error> {
+    /// `error_buffer` must have at least one element, where the last element must be 0.
+    unsafe fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[i8]) -> Result<Self, MjModelError> {
         if ptr_model.is_null() {
-            Err(Error::new(
-                ErrorKind::UnexpectedEof,
+            Err(MjModelError::LoadFailed(
                 unsafe { CStr::from_ptr(error_buffer.as_ptr().cast()).to_string_lossy().into_owned() }
             ))
         }
@@ -465,14 +484,18 @@ impl MjModel {
 
     /* Partially auto-generated */
 
-    /// Clones the model.
-    pub fn clone(&self) -> Option<MjModel> {
+    /// Fallible version of [`Clone::clone`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
+    /// the copy.
+    pub fn try_clone(&self) -> Result<MjModel, MjDataError> {
         let ptr = unsafe { mj_copyModel(ptr::null_mut(), self.ffi()) };
         if ptr.is_null() {
-            None
+            Err(MjDataError::AllocationFailed)
         }
         else {
-            Some(MjModel(ptr))
+            Ok(MjModel(ptr))
         }
     }
 
@@ -535,16 +558,16 @@ impl MjModel {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the extracted state.
     /// # Errors
-    /// - when `src.len()` does not equal the size required by `src_spec`, an error of kind [`ErrorKind::InvalidInput`] is returned.
-    /// - when `dst_spec` is not a subset of `src_spec`, an error of kind [`ErrorKind::InvalidInput`] is returned.
-    pub fn extract_state(&self, src: &[MjtNum], src_spec: u32, dst_spec: u32) -> Result<Box<[MjtNum]>, Error> {
+    /// - When `src.len()` does not equal the size required by `src_spec`, [`MjModelError::StateSliceLengthMismatch`] is returned.
+    /// - When `dst_spec` is not a subset of `src_spec`, [`MjModelError::SpecNotSubset`] is returned.
+    pub fn extract_state(&self, src: &[MjtNum], src_spec: u32, dst_spec: u32) -> Result<Box<[MjtNum]>, MjModelError> {
         let expected = self.state_size(src_spec);
         if src.len() != expected {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("src slice length must be {} for the provided src_spec (got {})", expected, src.len())));
+            return Err(MjModelError::StateSliceLengthMismatch { expected, got: src.len() });
         }
 
         if (dst_spec & src_spec) != dst_spec {
-            return Err(Error::new(ErrorKind::InvalidInput, "dst_spec must be a subset of src_spec."));
+            return Err(MjModelError::SpecNotSubset);
         }
 
         let required_size = self.state_size(dst_spec);
@@ -568,24 +591,24 @@ impl MjModel {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the number of elements written to `dst`.
     /// # Errors
-    /// - when `src.len()` does not equal the size required by `src_spec`, an error of kind [`ErrorKind::InvalidInput`] is returned.
-    /// - when `dst_spec` is not a subset of `src_spec`, an error of kind [`ErrorKind::InvalidInput`] is returned.
-    /// - when `dst` is too small to hold the requested components, an error of kind [`ErrorKind::InvalidInput`] is returned.
-    pub fn extract_state_into(&self, src: &[MjtNum], src_spec: u32, dst: &mut [MjtNum], dst_spec: u32) -> Result<usize, Error> {
+    /// - When `src.len()` does not equal the size required by `src_spec`, [`MjModelError::StateSliceLengthMismatch`] is returned.
+    /// - When `dst_spec` is not a subset of `src_spec`, [`MjModelError::SpecNotSubset`] is returned.
+    /// - When `dst` is too small to hold the requested components, [`MjModelError::BufferTooSmall`] is returned.
+    pub fn extract_state_into(&self, src: &[MjtNum], src_spec: u32, dst: &mut [MjtNum], dst_spec: u32) -> Result<usize, MjModelError> {
         let expected = self.state_size(src_spec);
         if src.len() != expected {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("src slice length must be {} for the provided src_spec (got {})", expected, src.len())));
+            return Err(MjModelError::StateSliceLengthMismatch { expected, got: src.len() });
         }
 
         if (dst_spec & src_spec) != dst_spec {
-            return Err(Error::new(ErrorKind::InvalidInput, "dst_spec must be a subset of src_spec."));
+            return Err(MjModelError::SpecNotSubset);
         }
 
         let required_size = self.state_size(dst_spec);
         let available_size = dst.len();
 
         if available_size < required_size  {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("dst buffer is too small to hold the requested state of size {required_size} (available {available_size})")));
+            return Err(MjModelError::BufferTooSmall { needed: required_size, available: available_size });
         }
 
         unsafe {
@@ -642,7 +665,7 @@ impl MjModel {
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
-        unsafe { self.0.as_ref().unwrap() }
+        unsafe { &*self.0 }
     }
 
     /// Returns a mutable reference to the wrapped FFI struct.
@@ -651,7 +674,7 @@ impl MjModel {
     /// Modifying the underlying FFI struct directly can break the invariants
     /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjModel {
-        unsafe { self.0.as_mut().unwrap() }
+        unsafe { &mut *self.0 }
     }
 
     /// Returns a direct pointer to the underlying model.
@@ -889,7 +912,7 @@ impl MjModel {
         cam_mat0: &[[MjtNum; 9] [cast]; "global orientation in qpos0"; ffi().ncam],
         cam_projection: &[MjtProjection [cast]; "projection type"; ffi().ncam],
         cam_fovy: &[MjtNum; "y field-of-view (ortho ? len : deg)"; ffi().ncam],
-        cam_ipd: &[MjtNum; "inter-pupilary distance"; ffi().ncam],
+        cam_ipd: &[MjtNum; "inter-pupillary distance"; ffi().ncam],
         cam_resolution: &[[i32; 2] [cast]; "resolution: pixels [width, height]"; ffi().ncam],
         cam_output: &[i32; "output types (MjtCamOutBit bit flags)"; ffi().ncam],
         cam_sensorsize: &[[f32; 2] [cast]; "sensor size: length [width, height]"; ffi().ncam],
@@ -1233,6 +1256,15 @@ impl MjModel {
             jnt_user: &[[MjtNum; ffi().nuser_jnt] [cast]; "user data"; ffi().njnt],
             body_user: &[[MjtNum; ffi().nuser_body] [cast]; "user data"; ffi().nbody]
         }
+    }
+}
+
+impl Clone for MjModel {
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the cloned model.
+    /// Use [`MjModel::try_clone`] for a fallible alternative.
+    fn clone(&self) -> Self {
+        self.try_clone().expect("failed to clone model")
     }
 }
 
@@ -1897,7 +1929,7 @@ mod tests {
     #[test]
     fn test_copy_model() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
-        assert!(model.clone().is_some());
+        let _cloned = model.clone();
     }
 
     #[test]
@@ -2193,7 +2225,7 @@ mod tests {
         assert_eq!(view_hf.pathadr[0], -1);
     }
 
-    /// Tests [`MjModel::extract_state_into`] for corectness.
+    /// Tests [`MjModel::extract_state_into`] for correctness.
     #[test]
     fn test_state_extract() {
         use crate::wrappers::mj_data::MjtState;
@@ -2230,13 +2262,12 @@ mod tests {
         assert_eq!(state_physics, dst_buffer);
     }
 
-    /// Tests for the expectec panic when giving a source spec that does not match
+    /// Tests for the expected panic when giving a source spec that does not match
     /// the source array in state extraction.
 
     #[test]
     fn test_state_extract_state_invalid_src() {
         use crate::wrappers::mj_data::MjtState;
-        use std::io::ErrorKind;
 
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
         let data = MjData::new(&model);
@@ -2248,13 +2279,12 @@ mod tests {
         );
 
         let err = res.unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::InvalidInput);
+        assert!(matches!(err, MjModelError::StateSliceLengthMismatch { .. }));
     }
 
     #[test]
     fn test_state_extract_state_into_invalid_src() {
         use crate::wrappers::mj_data::MjtState;
-        use std::io::ErrorKind;
 
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
         let data = MjData::new(&model);
@@ -2268,7 +2298,7 @@ mod tests {
         );
 
         let err = res.unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::InvalidInput);
+        assert!(matches!(err, MjModelError::StateSliceLengthMismatch { .. }));
     }
 
     #[test]
@@ -2285,7 +2315,7 @@ mod tests {
         );
 
         let err = res.unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjModelError::SpecNotSubset));
     }
 
     #[test]
@@ -2304,7 +2334,7 @@ mod tests {
         );
 
         let err = res.unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjModelError::SpecNotSubset));
     }
 
     #[test]
@@ -2325,7 +2355,7 @@ mod tests {
         );
 
         let err = res.unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjModelError::BufferTooSmall { .. }));
     }
 
     #[test]

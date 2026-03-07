@@ -32,11 +32,11 @@ Information on how to configure MuJoCo and resolve these issues is available
 [here](https://mujoco-rs.readthedocs.io/en/stable/installation.html#mujoco).
 
 ## Main features
-MuJoCo-rs tries to stay close to the MuJoCo's C API, with a few additional features for ease of use.
-The main features on top of MuJoCo include
+MuJoCo-rs tries to stay close to MuJoCo's C API, with a few additional features for ease of use.
+The main features on top of MuJoCo include:
 
 - Safe wrappers around structs:
-  
+
   - Automatic allocation and cleanup.
   - Lifetime guarantees.
 
@@ -50,7 +50,7 @@ The main features on top of MuJoCo include
 
 
 ## Rust-native viewer
-Screenshot of the built-in Rust viewer. Showing scene from [MuJoCo's menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot).
+Screenshot of the built-in Rust viewer. Showing a scene from [MuJoCo's menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot).
 ![](docs/img_common/viewer_spot.png)
 
 
@@ -69,13 +69,13 @@ Optional Cargo features can be enabled:
 
   - ``renderer-winit-fallback``: enables the invisible window fallback (based on winit) when offscreen
     rendering fails to initialize. Note that true offscreen rendering is only available on Linux platforms
-    when the video driver supports it. On Windows and MacOS, this feature must always be
+    when the video driver supports it. On Windows and macOS, this feature must always be
     enabled when the ``renderer`` feature is enabled.
 
 - ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded to the specified path.
 
   - This is only available on Linux and Windows.
-  - The environmental variable ``MUJOCO_DOWNLOAD_DIR`` must be
+  - The environment variable ``MUJOCO_DOWNLOAD_DIR`` must be
     set to the absolute path of the download location.
   - Downloaded MuJoCo library is still a shared library. See
     [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco)
@@ -138,7 +138,7 @@ fn main() {
         /* Step the simulation and sync the viewer */
         data.step();
         viewer.sync_data(&mut data);  // this method and step() can also be called in other threads to improve performance.
-        viewer.render();
+        viewer.render().unwrap();
 
         /* Obtain the view and access first three variables of `qpos` (x, y, z) */
         let xyz = &ball_info.view(&data).qpos[..3];

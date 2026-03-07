@@ -40,7 +40,7 @@ fn main() {
         /* Step the simulation and sync the viewer */
         data.step();
         viewer.sync_data(&mut data);
-        viewer.render();
+        viewer.render().unwrap();
 
         /* Obtain the view and access first three variables of `qpos` (x, y, z) */
         let xyz = &ball_info.view(&data).qpos[..3];

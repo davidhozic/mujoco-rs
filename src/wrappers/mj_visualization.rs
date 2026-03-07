@@ -9,6 +9,7 @@ use super::mj_primitive::{MjtNum, MjtByte};
 use super::mj_model::{MjModel, MjtGeom};
 use super::mj_data::MjData;
 use crate::{array_slice_dyn, c_str_as_str_method};
+use crate::error::MjSceneError;
 use crate::getter_setter;
 use crate::mujoco_c::*;
 
@@ -249,13 +250,20 @@ impl MjvGeom {
         String::from_utf8_lossy(bytes).to_string()
     }
 
-    /// Compatibility method to convert the `s` parameter into an array that is copied to the `label` attribute.
-    pub fn set_label(&mut self, s: &str) {
-        assert!(s.len() < self.label.len());
+    /// Writes `s` into the fixed-size label buffer, NUL-terminating it.
+    /// # Errors
+    /// Returns [`MjSceneError::LabelTooLong`] when `s` exceeds the buffer capacity
+    /// (`self.label.len() - 1` bytes).
+    pub fn set_label(&mut self, s: &str) -> Result<(), MjSceneError> {
+        let capacity = self.label.len() - 1;
+        if s.len() > capacity {
+            return Err(MjSceneError::LabelTooLong { len: s.len(), capacity });
+        }
         for (i, &b) in s.as_bytes().iter().enumerate() {
             self.label[i] = b as i8;
         }
         self.label[s.len()] = 0;
+        Ok(())
     }
 }
 
@@ -354,30 +362,67 @@ impl MjvFigure {
     }
 
     /// Pushes a new data point to buffer for the specific plot with `plot_index`.
+    ///
     /// # Panics
-    /// A panic will occur if the buffer is overflown. The buffer can hold a maximum of 1001 elements.
+    /// A panic will occur if the buffer is full.
+    /// Use [`MjvFigure::try_push`] for a fallible alternative.
     pub fn push(&mut self, plot_index: usize, x: f32, y: f32) {
-        // If the buffer is full, the indexing below will trigger a Rust bounds-check panic.
+        self.try_push(plot_index, x, y)
+            .expect("figure push failed")
+    }
+
+    /// Fallible version of [`MjvFigure::push`].
+    ///
+    /// # Errors
+    /// Returns [`MjSceneError::FigureBufferFull`] if the buffer for
+    /// `plot_index` is already at capacity.
+    pub fn try_push(&mut self, plot_index: usize, x: f32, y: f32) -> Result<(), MjSceneError> {
         let plot = &mut self.linedata[plot_index];
+        let capacity = plot.len() / 2;
         let point_index = self.linepnt[plot_index] as usize;
+        if point_index >= capacity {
+            return Err(MjSceneError::FigureBufferFull { plot_index, capacity });
+        }
         plot[2 * point_index] = x;
         plot[2 * point_index + 1] = y;
-
         self.linepnt[plot_index] += 1;
+        Ok(())
     }
 
     /// Overrides existing data with a new data point at a specific `point_index` for specific plot with `plot_index`.
+    ///
     /// # Panics
     /// The data must already be present at `point_index`, otherwise an assertion panic will occur.
+    /// Use [`MjvFigure::try_set_at`] for a fallible alternative.
     pub fn set_at(&mut self, plot_index: usize, point_index: usize, x: f32, y: f32) {
-        assert!(
-            point_index < self.linepnt[plot_index] as usize,
-            "data does not yet exist at index {point_index} for plot {plot_index}"
-        );
+        self.try_set_at(plot_index, point_index, x, y)
+            .expect("figure set_at failed")
+    }
 
+    /// Fallible version of [`MjvFigure::set_at`].
+    ///
+    /// # Errors
+    /// Returns [`MjSceneError::FigureIndexOutOfBounds`] if `point_index` is
+    /// not within the current data range for the given plot.
+    pub fn try_set_at(
+        &mut self,
+        plot_index: usize,
+        point_index: usize,
+        x: f32,
+        y: f32,
+    ) -> Result<(), MjSceneError> {
+        let current_len = self.linepnt[plot_index] as usize;
+        if point_index >= current_len {
+            return Err(MjSceneError::FigureIndexOutOfBounds {
+                plot_index,
+                point_index,
+                current_len,
+            });
+        }
         let plot = &mut self.linedata[plot_index];
         plot[2 * point_index] = x;
         plot[2 * point_index + 1] = y;
+        Ok(())
     }
 
     /// Clears the plot with `maybe_plot_index`.
@@ -486,29 +531,31 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
         }
     }
 
-    /// Creates a new [`MjvGeom`] inside the scene. A reference is returned for additional modification,
-    /// however it must be dropped before any additional calls to this method or any other methods.
-    /// The return reference's lifetime is bound to the lifetime of self.
-    /// # Panics
-    /// When the allocated space for geoms is full.
+    /// Creates a new [`MjvGeom`] in this scene, returning a mutable reference to it.
+    /// The geom reference is bound to the scene's lifetime; it is invalidated when
+    /// any code that might reallocate the geoms buffer runs.
+    /// # Errors
+    /// Returns [`MjSceneError::SceneFull`] when `ngeom >= maxgeom`.
     pub fn create_geom<'s>(
         &'s mut self, geom_type: MjtGeom, size: Option<[MjtNum; 3]>,
         pos: Option<[MjtNum; 3]>, mat: Option<[MjtNum; 9]>, rgba: Option<[f32; 4]>
-    ) -> &'s mut MjvGeom {
-        assert!(self.ffi.ngeom < self.ffi.maxgeom, "not enough space is allocated, increase 'max_geom'.");
+    ) -> Result<&'s mut MjvGeom, MjSceneError> {
+        if self.ffi.ngeom >= self.ffi.maxgeom {
+            return Err(MjSceneError::SceneFull { capacity: self.ffi.maxgeom });
+        }
 
-        /* Gain raw pointers to data inside the Option enum (which is a C union) */
         let size_ptr = size.as_ref().map_or(ptr::null(), |x| x);
-        let pos_ptr = pos.as_ref().map_or(ptr::null(), |x| x);
-        let mat_ptr = mat.as_ref().map_or(ptr::null(), |x| x);
+        let pos_ptr  = pos.as_ref().map_or(ptr::null(), |x| x);
+        let mat_ptr  = mat.as_ref().map_or(ptr::null(), |x| x);
         let rgba_ptr = rgba.as_ref().map_or(ptr::null(), |x| x);
 
-        let p_geom;
+        // SAFETY: ngeom < maxgeom guarantees we are within the allocated buffer.
         unsafe {
-            p_geom = self.ffi.geoms.add(self.ffi.ngeom as usize);
+            let p_geom = self.ffi.geoms.add(self.ffi.ngeom as usize);
             mjv_initGeom(p_geom, geom_type as i32, size_ptr, pos_ptr, mat_ptr, rgba_ptr);
             self.ffi.ngeom += 1;
-            p_geom.as_mut().unwrap()
+            // Safety: p_geom is guaranteed non-null (allocated by mjv_makeScene).
+            Ok(&mut *p_geom)
         }
     }
 
@@ -695,9 +742,9 @@ mod tests {
         let mut scene = MjvScene::new(&model, 1000);
         
         /* Test label handling. Other things are trivial one-liners. */
-        let geom = scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
+        let geom = scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None).unwrap();
         let label = "Hello World";
-        geom.set_label(label);
+        geom.set_label(label).unwrap();
         assert_eq!(geom.label(), label);
     }
 
@@ -710,7 +757,7 @@ mod tests {
         let mut scene = MjvScene::new(&model, 1000);
 
         for _ in 0..N_GEOM {
-            scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
+            scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None).unwrap();
         }
 
         assert_eq!(scene.geoms().len(), N_GEOM);

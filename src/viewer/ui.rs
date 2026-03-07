@@ -20,7 +20,7 @@ use crate::wrappers::mj_visualization::{
     MjvOption, MjvCamera, MjtCamera, MjvScene
 };
 use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint};
-use crate::viewer::{ViewerSharedState, ViewerStatusBit};
+use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_data::MjData;
 use crate::mujoco_c::mjNGROUP;
 
@@ -152,7 +152,7 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
 
 impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     /// Create a new [`ViewerUI`] instance for the specific winit window.
-    pub(crate) fn new(model: M, window: &Window, display: &Display) -> Self {
+    pub(crate) fn new(model: M, window: &Window, display: &Display) -> Result<Self, MjViewerError> {
         let egui_ctx = egui::Context::default();
         let viewport_id = egui_ctx.viewport_id();
 
@@ -201,9 +201,9 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             "",
             None,
             false
-        ).unwrap();
+        ).map_err(|e| MjViewerError::PainterInitError(e.to_string()))?;
 
-        Self {
+        Ok(Self {
             egui_ctx, state, painter, gl, events: VecDeque::new(),
             camera_names, actuator_names, joint_name_id, equality_names,
             model,
@@ -213,7 +213,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             joint_window: false,
             equality_window: false,
             group_window: false
-        }
+        })
     }
 
     /// Handles winit input events.
@@ -354,9 +354,13 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             egui::Grid::new("render_select_grid").show(ui, |ui| {
                                 // Camera
                                 ui.label(RichText::new("Camera").font(MAIN_FONT));
-                                let enumerated = camera.type_.try_into().unwrap_or_else(|_| {
-                                    panic!("failed to convert {} into MjtCamera", camera.type_)
-                                });
+                                let Ok(enumerated) = camera.type_.try_into() else {
+                                    // Unknown camera type - skip the camera row rather than panic.
+                                    ui.label(format!("Unknown camera type {}", camera.type_));
+                                    ui.end_row();
+                                    return;
+                                };
+                                let enumerated: MjtCamera = enumerated;
                                 let mut current_cam_name = match enumerated {
                                     MjtCamera::mjCAMERA_FIXED => &self.camera_names[camera.fixedcamid as usize],
                                     MjtCamera::mjCAMERA_TRACKING => "Tracking",

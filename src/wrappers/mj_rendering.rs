@@ -1,5 +1,6 @@
 //! Definitions related to rendering.
 use crate::{array_slice_dyn, getter_setter, mujoco_c::*};
+use crate::error::MjSceneError;
 
 use super::mj_model::{MjModel, MjtTexture, MjtTextureRole};
 
@@ -95,8 +96,14 @@ impl MjrContext {
     }
 
     /// Add Aux buffer with given index to context; free previous Aux buffer.
-    pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) {
+    /// # Errors
+    /// Returns [`MjSceneError::InvalidAuxBufferIndex`] when `index >= mjNAUX` (10).
+    pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) -> Result<(), MjSceneError> {
+        if index >= mjNAUX as usize {
+            return Err(MjSceneError::InvalidAuxBufferIndex { index });
+        }
         unsafe { mjr_addAux(index as i32, width as i32, height as i32, samples as i32, self.ffi_mut()); }
+        Ok(())
     }
 
     /// Resize offscreen buffers.
@@ -122,17 +129,53 @@ impl MjrContext {
 
     /// Read pixels from current OpenGL framebuffer to client buffer.
     /// The `rgb` array is of size `[width * height * 3]`, while `depth` is of size `[width * height]`.
+    ///
     /// # Panics
-    /// Panics if the provided buffers are not large enough to hold the data for the given `viewport`.
+    /// Panics if the viewport dimensions are negative or the provided buffers
+    /// are not large enough for the given `viewport`.
+    /// Use [`MjrContext::try_read_pixels`] for a fallible alternative.
     pub fn read_pixels(&self, rgb: Option<&mut [u8]>, depth: Option<&mut [f32]>, viewport: &MjrRectangle) {
-        assert!(viewport.width >= 0);
-        assert!(viewport.height >= 0);
+        self.try_read_pixels(rgb, depth, viewport)
+            .expect("read_pixels failed")
+    }
+
+    /// Fallible version of [`MjrContext::read_pixels`].
+    ///
+    /// # Errors
+    /// Returns [`MjSceneError::InvalidViewport`] if the viewport has negative
+    /// dimensions, or [`MjSceneError::BufferTooSmall`] if `rgb` or `depth`
+    /// buffers are too small.
+    pub fn try_read_pixels(
+        &self,
+        rgb: Option<&mut [u8]>,
+        depth: Option<&mut [f32]>,
+        viewport: &MjrRectangle,
+    ) -> Result<(), MjSceneError> {
+        if viewport.width < 0 || viewport.height < 0 {
+            return Err(MjSceneError::InvalidViewport {
+                width: viewport.width,
+                height: viewport.height,
+            });
+        }
         let size = viewport.width as usize * viewport.height as usize;
         if let Some(buf) = rgb.as_ref() {
-            assert!(buf.len() >= size * 3, "rgb buffer is too small");
+            let needed = size * 3;
+            if buf.len() < needed {
+                return Err(MjSceneError::BufferTooSmall {
+                    name: "rgb",
+                    got: buf.len(),
+                    needed,
+                });
+            }
         }
         if let Some(buf) = depth.as_ref() {
-            assert!(buf.len() >= size, "depth buffer is too small");
+            if buf.len() < size {
+                return Err(MjSceneError::BufferTooSmall {
+                    name: "depth",
+                    got: buf.len(),
+                    needed: size,
+                });
+            }
         }
 
         unsafe {
@@ -142,11 +185,18 @@ impl MjrContext {
                 viewport.clone(), self.ffi()
             )
         }
+        Ok(())
     }
 
     /// Set Aux buffer for custom OpenGL rendering (call restoreBuffer when done).
-    pub fn set_aux(&mut self, index: usize) {
+    /// # Errors
+    /// Returns [`MjSceneError::InvalidAuxBufferIndex`] when `index >= mjNAUX` (10).
+    pub fn set_aux(&mut self, index: usize) -> Result<(), MjSceneError> {
+        if index >= 10 {
+            return Err(MjSceneError::InvalidAuxBufferIndex { index });
+        }
         unsafe { mjr_setAux(index as i32, self.ffi_mut()); }
+        Ok(())
     }
 
     /// Draws a text overlay. The optional `overlay2` parameter displays additional overlay, next to `overlay`.

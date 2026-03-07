@@ -5,3 +5,11 @@ pub use crate::wrappers::mj_rendering::*;
 pub use crate::wrappers::mj_option::*;
 pub use crate::wrappers::mj_model::*;
 pub use crate::wrappers::mj_data::*;
+pub use crate::error::{MjDataError, MjSceneError, MjEditError, MjModelError, MjVfsError};
+#[cfg(any(feature = "viewer", feature = "renderer-winit-fallback"))]
+pub use crate::error::GlInitError;
+
+#[cfg(feature = "renderer")]
+pub use crate::renderer::RendererError;
+#[cfg(feature = "viewer")]
+pub use crate::viewer::MjViewerError;

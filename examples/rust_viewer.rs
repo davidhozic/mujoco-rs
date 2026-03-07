@@ -69,7 +69,7 @@ fn main() {
     while viewer.running() {
         data.step();
         viewer.sync_data(&mut data);
-        viewer.render();
+        viewer.render().unwrap();
 
         // Sleep for approximately timestep of seconds.
         // Use Instant::now() and Instant::elapsed() in a while loop for a more accurate (but less efficient) wait.

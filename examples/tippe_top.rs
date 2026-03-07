@@ -103,7 +103,7 @@ fn main() {
     while viewer.running() && data.time() < DURATION_SECS {
         data.step();
         viewer.sync_data(&mut data);
-        viewer.render();
+        viewer.render().unwrap();
 
         // Sleep for roughly one timestep to run near real-time.
         std::thread::sleep(Duration::from_secs_f64(model.opt().timestep));

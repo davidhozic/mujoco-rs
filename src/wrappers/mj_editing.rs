@@ -1,9 +1,9 @@
 //! Definitions related to model editing.
 use std::ffi::{c_int, CStr, CString};
-use std::io::{Error, ErrorKind};
 use std::marker::PhantomData;
 use std::path::Path;
 use std::ptr;
+use crate::error::MjEditError;
 
 #[macro_use]
 mod utility;
@@ -145,22 +145,43 @@ unsafe impl Send for MjSpec {}
 
 impl MjSpec {
     /// Creates an empty [`MjSpec`].
+    ///
     /// # Panics
-    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    /// - When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    /// - When MuJoCo fails to allocate the specification.
+    ///   Use [`MjSpec::try_new`] for a fallible alternative.
     pub fn new() -> Self {
         assert_mujoco_version();
-        unsafe { Self::check_spec(mj_makeSpec(), &[0]).unwrap() }
+        Self::try_new().expect("MuJoCo failed to allocate MjSpec")
+    }
+
+    /// Fallible version of [`MjSpec::new`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
+    /// the specification.
+    ///
+    /// # Panics
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    pub fn try_new() -> Result<Self, MjEditError> {
+        assert_mujoco_version();
+        let ptr = unsafe { mj_makeSpec() };
+        if ptr.is_null() {
+            return Err(MjEditError::AllocationFailed);
+        }
+        Ok(MjSpec(ptr))
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns an error if the path cannot be parsed or MuJoCo encounters an error.
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the XML.
     /// # Panics
-    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
+    pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, MjEditError> {
         Self::from_xml_file(path, None)
     }
 
@@ -168,20 +189,23 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns an error if the path cannot be parsed or MuJoCo encounters an error.
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the XML.
     /// # Panics
-    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
+    pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, MjEditError> {
         Self::from_xml_file(path, Some(vfs))
     }
 
-    fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, Error> {
+    fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
 
         let mut error_buffer = [0i8; 100];
         unsafe {
-            let path = CString::new(path.as_ref().to_str().expect("invalid utf")).unwrap();
+            let path_str = path.as_ref().to_str()
+                .ok_or(MjEditError::InvalidUtf8Path)?;
+            let path = CString::new(path_str).unwrap();
             let raw_ptr = mj_parseXML(
                 path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
                 &mut error_buffer as *mut i8, error_buffer.len() as c_int
@@ -195,11 +219,11 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns an error if MuJoCo encounters an error parsing the string.
+    /// Returns [`MjEditError::ParseFailed`] if MuJoCo encounters an error parsing the string.
     /// # Panics
     /// - when the `xml` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_xml_string(xml: &str) -> Result<Self, Error> {
+    pub fn from_xml_string(xml: &str) -> Result<Self, MjEditError> {
         assert_mujoco_version();
 
         let c_xml = CString::new(xml).unwrap();
@@ -219,10 +243,10 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns an error if MuJoCo fails to parse the file.
+    /// Returns [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
     /// # Panics
     /// When `filename` or `content_type` contains zero bytes.
-    pub fn from_parse(filename: &str, content_type: &str) -> Result<Self, Error> {
+    pub fn from_parse(filename: &str, content_type: &str) -> Result<Self, MjEditError> {
         Self::from_parse_file(filename, content_type, None)
     }
 
@@ -230,10 +254,10 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns an error if MuJoCo fails to parse the file.
+    /// Returns [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
     /// # Panics
     /// When `filename` or `content_type` contains zero bytes.
-    pub fn from_parse_vfs(filename: &str, content_type: &str, vfs: &MjVfs) -> Result<Self, Error> {
+    pub fn from_parse_vfs(filename: &str, content_type: &str, vfs: &MjVfs) -> Result<Self, MjEditError> {
         Self::from_parse_file(filename, content_type, Some(vfs))
     }
 
@@ -242,7 +266,7 @@ impl MjSpec {
     /// This is a wrapper around low-level method [`mj_parse`].
     /// # Panics
     /// When `filename` or `content_type` contains zero bytes.
-    fn from_parse_file(filename: &str, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, Error> {
+    fn from_parse_file(filename: &str, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
         let mut error_buffer = [0i8; 100];
         unsafe {
@@ -260,11 +284,10 @@ impl MjSpec {
     /// Handles spec pointer input.
     /// # Safety
     /// `error_buffer` must not be empty and the last element must be 0.
-    unsafe fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[i8]) -> Result<Self, Error> {
+    unsafe fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[i8]) -> Result<Self, MjEditError> {
         if spec_ptr.is_null() {
             // SAFETY: i8 and u8 have the same size, and no negative values can appear in the error_buffer.
-            Err(Error::new(
-                ErrorKind::UnexpectedEof, 
+            Err(MjEditError::ParseFailed(
                 unsafe { CStr::from_ptr(error_buffer.as_ptr().cast()).to_string_lossy().into_owned() }
             ))
         }
@@ -275,7 +298,7 @@ impl MjSpec {
 
     /// An immutable reference to the internal FFI struct.
     pub fn ffi(&self) -> &mjSpec {
-        unsafe { self.0.as_ref().unwrap() }
+        unsafe { &*self.0 }
     }
 
     /// A mutable reference to the internal FFI struct.
@@ -284,7 +307,7 @@ impl MjSpec {
     /// Modifying the underlying FFI struct directly can break the invariants
     /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjSpec {
-        unsafe { self.0.as_mut().unwrap() }
+        unsafe { &mut *self.0 }
     }
 
     /// Compile [`MjSpec`] to [`MjModel`].
@@ -293,8 +316,8 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
-    /// Returns an error if the model fails to compile, containing the MuJoCo error details.
-    pub fn compile(&mut self) -> Result<MjModel, Error> {
+    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile.
+    pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
         let result = unsafe { MjModel::from_raw( mj_compile(self.0, ptr::null()) ) };
         result.map_err(|_| {
             // SAFETY: The spec is still valid after failed compilation.
@@ -307,7 +330,7 @@ impl MjSpec {
                     CStr::from_ptr(ptr).to_string_lossy().into_owned()
                 }
             };
-            Error::new(ErrorKind::InvalidData, error_msg)
+            MjEditError::CompileFailed(error_msg)
         })
     }
 
@@ -315,10 +338,10 @@ impl MjSpec {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns [`ErrorKind::Other`] with MuJoCo's error message if saving fails.
+    /// Returns [`MjEditError::SaveFailed`] with MuJoCo's error message if saving fails.
     /// # Panics
     /// When `filename` contains '\0' characters, a panic occurs.
-    pub fn save_xml(&self, filename: &str) -> Result<(), Error> {
+    pub fn save_xml(&self, filename: &str) -> Result<(), MjEditError> {
         let mut error_buff = [0; 100];
         let cname = CString::new(filename).unwrap();  // filename is always UTF-8
         let result = unsafe { mj_saveXML(
@@ -327,11 +350,9 @@ impl MjSpec {
         ) };
         match result {
             0 => Ok(()),
-            _ => Err(
-                Error::new(
-                    ErrorKind::Other,
-                    unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().into_owned() }
-                ))
+            _ => Err(MjEditError::SaveFailed(
+                unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().into_owned() }
+            ))
         }
     }
 
@@ -340,9 +361,9 @@ impl MjSpec {
     /// # Returns
     /// On success, returns the generated XML string.
     /// # Errors
-    /// Returns [`ErrorKind::Other`] with MuJoCo's error message if the conversion fails.
+    /// Returns [`MjEditError::SaveFailed`] with MuJoCo's error message if the conversion fails.
     /// If `buffer_size` is too small, the output will be truncated.
-    pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, Error> {
+    pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, MjEditError> {
         let mut error_buff = [0; 100];
         let mut result_buff = vec![0u8; buffer_size];
         let result = unsafe { mj_saveXMLString(
@@ -351,11 +372,9 @@ impl MjSpec {
         ) };
         match result {
             0 => Ok(CStr::from_bytes_until_nul(&result_buff).unwrap().to_string_lossy().into_owned()),
-            _ => Err(
-                Error::new(
-                    ErrorKind::Other,
-                    unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().to_string() }
-                ))
+            _ => Err(MjEditError::SaveFailed(
+                unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().to_string() }
+            ))
         }
     }
 }
@@ -439,17 +458,15 @@ impl MjSpec {
     /// # Returns
     /// On success, returns a mutable reference to the newly created [`MjsDefault`].
     /// # Errors
-    /// Returns a [`ErrorKind::AlreadyExists`] error when `class_name` already exists.
-    /// Returns a [`ErrorKind::NotFound`] when `parent_class_name` doesn't exist.
+    /// Returns [`MjEditError::AlreadyExists`] when `class_name` already exists.
+    /// Returns [`MjEditError::NotFound`] when `parent_class_name` doesn't exist.
     /// # Panics
     /// When the `class_name` or `parent_class_name` contain '\0' characters, a panic occurs.
-    pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<&mut MjsDefault, Error> {
+    pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<&mut MjsDefault, MjEditError> {
         let c_class_name = CString::new(class_name).unwrap();
 
         let parent_ptr = if let Some(name) = parent_class_name {
-                self.default(name).ok_or_else(
-                    || Error::new(ErrorKind::NotFound, "invalid parent name")
-                )?
+                self.default(name).ok_or(MjEditError::NotFound)?
         } else {
             ptr::null()
         };
@@ -461,10 +478,10 @@ impl MjSpec {
                 parent_ptr
             );
             if ptr_default.is_null() {
-                Err(Error::new(ErrorKind::AlreadyExists, "duplicated name"))
+                Err(MjEditError::AlreadyExists)
             }
             else {
-                Ok(ptr_default.as_mut().unwrap())
+                Ok(&mut *ptr_default)
             }
         }
     }
@@ -702,14 +719,31 @@ impl MjsFrame {
         childclass; "childclass name.";
     }
 
-    /// Adds a child frame.
+    /// Add and return a child frame.
+    ///
+    /// Delegates to [`Self::try_add_frame`] and panics if allocation fails.
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the frame.
     pub fn add_frame(&mut self) -> &mut MjsFrame {
-        unsafe {
-            let parent_body = mjs_getParent(self.element_mut_pointer());
-            let parent_frame = self.element_mut_pointer();
-            let frame_ptr = mjs_addFrame(parent_body, parent_frame.cast());
-            frame_ptr.as_mut().unwrap()
-        }
+        self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
+    }
+
+    /// Fallible version of [`Self::add_frame`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
+    /// the frame, instead of panicking.
+    pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
+        // SAFETY: element_mut_pointer() reads `self.element`, valid for any live MjsFrame.
+        // mjs_getParent returns non-null because every Rust-API MjsFrame was created via
+        // mjs_addFrame, which always calls SetParent(body).
+        let parent_body = unsafe { mjs_getParent(self.element_mut_pointer()) };
+        debug_assert!(!parent_body.is_null(), "mjs_getParent returned null; frame has no parent body");
+        let ptr = unsafe { mjs_addFrame(parent_body, self as *mut MjsFrame) };
+        // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
+        // pointee is properly aligned and initialized by C++ operator new, and freshly
+        // allocated so no existing Rust reference aliases it for the returned lifetime.
+        unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 }
 
@@ -999,40 +1033,98 @@ impl MjsTendon {
     }
 
     /// Wrap a site corresponding to `name`, using the tendon.
+    ///
     /// # Panics
-    /// When the `name` contains '\0' characters, a panic occurs.
+    /// - When the `name` contains '\0' characters, a panic occurs.
+    /// - When MuJoCo fails to allocate the wrap element.
+    ///   Use [`MjsTendon::try_wrap_site`] for a fallible alternative.
     pub fn wrap_site(&mut self, name: &str) -> &mut MjsWrap {
+        self.try_wrap_site(name).expect("failed to wrap site")
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_site`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
+    /// pointer.
+    ///
+    /// # Panics
+    /// When the `name` contains '\0' characters.
+    pub fn try_wrap_site(&mut self, name: &str) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let wrap_ptr = unsafe { mjs_wrapSite(self, cname.as_ptr()) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Wrap a geom corresponding to `name`, using the tendon.
+    ///
     /// # Panics
-    /// When the `name` or `sidesite` contain '\0' characters, a panic occurs.
+    /// - When the `name` or `sidesite` contain '\0' characters, a panic occurs.
+    /// - When MuJoCo fails to allocate the wrap element.
+    ///   Use [`MjsTendon::try_wrap_geom`] for a fallible alternative.
     pub fn wrap_geom(&mut self, name: &str, sidesite: &str) -> &mut MjsWrap {
+        self.try_wrap_geom(name, sidesite).expect("failed to wrap geom")
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_geom`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
+    /// pointer.
+    ///
+    /// # Panics
+    /// When `name` or `sidesite` contain '\0' characters.
+    pub fn try_wrap_geom(&mut self, name: &str, sidesite: &str) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let csidesite = CString::new(sidesite).unwrap();
         let wrap_ptr = unsafe { mjs_wrapGeom(
             self,
             cname.as_ptr(), csidesite.as_ptr()
         ) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Wrap a joint corresponding to `name`, using the tendon.
+    ///
     /// # Panics
-    /// When the `name` contains '\0' characters, a panic occurs.
+    /// - When the `name` contains '\0' characters, a panic occurs.
+    /// - When MuJoCo fails to allocate the wrap element.
+    ///   Use [`MjsTendon::try_wrap_joint`] for a fallible alternative.
     pub fn wrap_joint(&mut self, name: &str, coef: f64) -> &mut MjsWrap {
+        self.try_wrap_joint(name, coef).expect("failed to wrap joint")
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_joint`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
+    /// pointer.
+    ///
+    /// # Panics
+    /// When `name` contains '\0' characters.
+    pub fn try_wrap_joint(&mut self, name: &str, coef: f64) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let wrap_ptr = unsafe { mjs_wrapJoint(self, cname.as_ptr(), coef) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Wrap a pulley using the tendon.
+    ///
+    /// # Panics
+    /// When MuJoCo fails to allocate the wrap element.
+    /// Use [`MjsTendon::try_wrap_pulley`] for a fallible alternative.
     pub fn wrap_pulley(&mut self, divisor: f64) -> &mut MjsWrap {
+        self.try_wrap_pulley(divisor).expect("failed to wrap pulley")
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_pulley`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
+    /// pointer.
+    pub fn try_wrap_pulley(&mut self, divisor: f64) -> Result<&mut MjsWrap, MjEditError> {
         let wrap_ptr = unsafe { mjs_wrapPulley(self, divisor) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Return the number of wrap objects.
@@ -1043,21 +1135,13 @@ impl MjsTendon {
     /// Return an indexed wrap object. Returns `None` if index is out of bounds.
     pub fn get_wrap(&self, i: i32) -> Option<&MjsWrap> {
         let ptr = unsafe { mjs_getWrap(self, i) };
-        if ptr.is_null() {
-            None
-        } else {
-            Some(unsafe { ptr.as_ref().unwrap() })
-        }
+        unsafe { ptr.as_ref() }
     }
 
     /// Return a mutable indexed wrap object. Returns `None` if index is out of bounds.
     pub fn get_wrap_mut(&mut self, i: i32) -> Option<&mut MjsWrap> {
         let ptr = unsafe { mjs_getWrap(self, i) };
-        if ptr.is_null() {
-            None
-        } else {
-            Some(unsafe { ptr.as_mut().unwrap() })
-        }
+        unsafe { ptr.as_mut() }
     }
 }
 
@@ -1075,13 +1159,13 @@ impl MjsWrap {
     /// Return the side site element.
     pub fn side_site(&self) -> Option<&MjsSite> {
         let ptr = unsafe { mjs_getWrapSideSite(crate::util::force_cast(self)) };
-        if ptr.is_null() { None } else { Some(unsafe { ptr.as_ref().unwrap() }) }
+        if ptr.is_null() { None } else { Some(unsafe { &*ptr }) }
     }
 
     /// Return the side site element mutably.
     pub fn side_site_mut(&mut self) -> Option<&mut MjsSite> {
         let ptr = unsafe { mjs_getWrapSideSite(self) };
-        if ptr.is_null() { None } else { Some(unsafe { ptr.as_mut().unwrap() }) }
+        if ptr.is_null() { None } else { Some(unsafe { &mut *ptr }) }
     }
 
     /// Return the wrap divisor.
@@ -1250,7 +1334,7 @@ impl MjsHfield {
 
     /// Sets `userdata`.
     pub fn set_userdata<T: AsRef<[f32]>>(&mut self, userdata: T) {
-        write_mjs_vec_f32(userdata.as_ref(), unsafe {self.userdata.as_mut().unwrap() })
+        write_mjs_vec_f32(userdata.as_ref(), unsafe { &mut *self.userdata })
     }
 }
 
@@ -1339,7 +1423,7 @@ impl MjsTexture {
 
     /// Sets texture `data`.
     pub fn set_data<T>(&mut self, data: &[T]) {
-        write_mjs_vec_byte(data, unsafe { self.data.as_mut().unwrap() });
+        write_mjs_vec_byte(data, unsafe { &mut *self.data });
     }
 
     string_set_get_with! {[&]
@@ -1386,9 +1470,9 @@ impl MjsMaterial {
 ***************************/
 mjs_struct!(Body {
     // Override the delete method to prevent deletion of world.
-    unsafe fn delete(&mut self) -> Result<(), Error> {
+    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         if self.name() == "world" {
-            return Err(Error::new(ErrorKind::Unsupported, "world body can't be deleted"));
+            return Err(MjEditError::UnsupportedDeletion);
         }
         unsafe { SpecItem::__delete_default__(self) }
     }
@@ -1405,9 +1489,28 @@ impl MjsBody {
 
     // Special case
     /// Add and return a child frame.
+    ///
+    /// Delegates to [`Self::try_add_frame`] and panics if allocation fails.
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the frame.
     pub fn add_frame(&mut self) -> &mut MjsFrame {
-        let ptr = unsafe { mjs_addFrame(self, ptr::null_mut()) };
-        unsafe { ptr.as_mut().unwrap() }
+        self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
+    }
+
+    /// Fallible version of [`Self::add_frame`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
+    /// the frame, instead of panicking.
+    pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
+        // SAFETY: ffi_mut() returns self unchanged; the coercion to *mut mjsBody is safe.
+        // ptr::null_mut() for parentframe is valid: the MuJoCo API accepts null to mean
+        // "attach directly to the body with no parent frame".
+        let ptr = unsafe { mjs_addFrame(self.ffi_mut(), ptr::null_mut()) };
+        // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
+        // pointee is properly aligned and initialized by C++ operator new, and freshly
+        // allocated so no existing Rust reference aliases it for the returned lifetime.
+        unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 }
 

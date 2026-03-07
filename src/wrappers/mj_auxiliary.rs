@@ -1,10 +1,9 @@
 //! MuJoCo's auxiliary structs.
-use std::io::{self, Error, ErrorKind};
 use std::ffi::{c_void, CString};
 use std::mem::MaybeUninit;
 use std::ptr;
 
-
+use crate::error::MjVfsError;
 use crate::mujoco_c::*;
 
 
@@ -74,12 +73,13 @@ impl MjVfs {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// - [`ErrorKind::StorageFull`] if the VFS has no more room.
-    /// - [`ErrorKind::AlreadyExists`] if a file with the same name already exists in the VFS.
-    /// - [`ErrorKind::InvalidData`] if the file could not be loaded.
+    /// - [`MjVfsError::Full`] if the VFS has no more room.
+    /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
+    /// - [`MjVfsError::LoadFailed`] if the file could not be loaded.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// A panic will occur if `directory` or `filename` contain `\0` characters.
-    pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> io::Result<()> {
+    pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> Result<(), MjVfsError> {
         let c_directory = directory.map(|d| CString::new(d).unwrap());
         let c_filename = CString::new(filename).unwrap();
         Self::handle_add_result(unsafe {
@@ -95,13 +95,13 @@ impl MjVfs {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// - [`ErrorKind::StorageFull`] if the VFS has no more room.
-    /// - [`ErrorKind::AlreadyExists`] if a file with the same name already exists in the VFS.
-    /// - [`ErrorKind::InvalidData`] if MuJoCo fails to register the buffer.
-    /// - [`ErrorKind::Other`] other unknown errors.
+    /// - [`MjVfsError::Full`] if the VFS has no more room.
+    /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
+    /// - [`MjVfsError::LoadFailed`] if MuJoCo fails to register the buffer.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// When the `filename` contains '\0' characters, a panic occurs.
-    pub fn add_from_buffer(&mut self, filename: &str, buffer: &[u8]) -> io::Result<()> {
+    pub fn add_from_buffer(&mut self, filename: &str, buffer: &[u8]) -> Result<(), MjVfsError> {
         let c_filename = CString::new(filename).unwrap();
         Self::handle_add_result(unsafe {
             mj_addBufferVFS(
@@ -115,10 +115,11 @@ impl MjVfs {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error of kind `NotFound` if the file doesn't exist.
+    /// - [`MjVfsError::NotFound`] if the file doesn't exist.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// When the `filename` contains '\0' characters, a panic occurs.
-    pub fn delete_file(&mut self, filename: &str) -> io::Result<()> {
+    pub fn delete_file(&mut self, filename: &str) -> Result<(), MjVfsError> {
         let c_filename = CString::new(filename).unwrap();
         unsafe {
             Self::handle_remove_result(
@@ -127,13 +128,13 @@ impl MjVfs {
         }
     }
 
-    fn handle_add_result(result: i32) -> io::Result<()> {
+    fn handle_add_result(result: i32) -> Result<(), MjVfsError> {
         match result {
             0 => Ok(()),
-            1 => Err(Error::new(ErrorKind::StorageFull, "VFS is full")),
-            2 => Err(Error::new(ErrorKind::AlreadyExists, "repeated name")),
-            -1 => Err(Error::new(ErrorKind::InvalidData, "failed to load")),
-            _ => Err(Error::new(ErrorKind::Other, "unknown MuJoCo error"))
+            1 => Err(MjVfsError::Full),
+            2 => Err(MjVfsError::AlreadyExists),
+            -1 => Err(MjVfsError::LoadFailed),
+            code => Err(MjVfsError::Unknown(code))
         }
     }
 
@@ -141,13 +142,13 @@ impl MjVfs {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// - [`ErrorKind::StorageFull`] if the VFS has no more room.
-    /// - [`ErrorKind::AlreadyExists`] if the directory is already mounted under the same name.
-    /// - [`ErrorKind::InvalidData`] if the mount operation fails for another reason.
-    /// - [`ErrorKind::Other`] other unknown errors.
+    /// - [`MjVfsError::Full`] if the VFS has no more room.
+    /// - [`MjVfsError::AlreadyExists`] if the directory is already mounted under the same name.
+    /// - [`MjVfsError::LoadFailed`] if the mount operation fails for another reason.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// When `filepath` contains `\0` characters, a panic occurs.
-    pub fn mount(&mut self, filepath: &str) -> io::Result<()> {
+    pub fn mount(&mut self, filepath: &str) -> Result<(), MjVfsError> {
         let c_filepath = CString::new(filepath).unwrap();
         Self::handle_add_result(unsafe {
             mj_mountVFS(
@@ -162,11 +163,11 @@ impl MjVfs {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] if the directory is not currently mounted.
-    /// - [`ErrorKind::Other`] other unknown errors.
+    /// - [`MjVfsError::NotFound`] if the directory is not currently mounted.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// When `mountdir` contains `\0` characters, a panic occurs.
-    pub fn unmount(&mut self, mountdir: &str) -> io::Result<()> {
+    pub fn unmount(&mut self, mountdir: &str) -> Result<(), MjVfsError> {
         let c_mountdir = CString::new(mountdir).unwrap();
         unsafe {
             Self::handle_remove_result(
@@ -175,11 +176,11 @@ impl MjVfs {
         }
     }
 
-    fn handle_remove_result(result: i32) -> io::Result<()> {
+    fn handle_remove_result(result: i32) -> Result<(), MjVfsError> {
         match result {
             0 => Ok(()),
-            -1 => Err(Error::new(ErrorKind::NotFound, "file not found in the VFS")),
-            _ => Err(Error::new(ErrorKind::Other, "unknown MuJoCo error"))
+            -1 => Err(MjVfsError::NotFound),
+            code => Err(MjVfsError::Unknown(code))
         }
     }
 

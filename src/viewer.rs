@@ -1,5 +1,5 @@
 //! Module related to implementation of the [`MjViewer`]. For implementation of the C++ wrapper,
-//! see `cpp_viewer::MjViewerCpp` (enabled by the `cpp-viewer` cargo feature).
+//! see [`cpp_viewer::MjViewerCpp`] (enabled by the `cpp-viewer` cargo feature).
 #[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
 use glutin::prelude::PossiblyCurrentGlContext;
 use glutin::surface::GlSurface;
@@ -96,18 +96,33 @@ const HELP_MENU_VALUES: &str = concat!(
     "See MjViewer docs"
 );
 
-/// Errors that can occur when initializing the MuJoCo viewer.
+/// Errors that can occur when initializing or running the MuJoCo viewer.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum MjViewerError {
+    /// The event loop failed to initialize.
     EventLoopError(winit::error::EventLoopError),
-    GlutinError(glutin::error::Error)
+    /// A glutin operation failed.
+    GlutinError(glutin::error::Error),
+    /// Returned when the egui painter (OpenGL UI renderer) fails to initialize.
+    PainterInitError(String),
+    /// Returned when OpenGL buffer swap fails during rendering.
+    SwapBuffersError(glutin::error::Error),
+    /// OpenGL / window initialization failed.
+    GlInitFailed(crate::error::GlInitError),
+    /// A scene operation failed (e.g. user-scene sync overflowed the geom buffer).
+    SceneError(crate::error::MjSceneError),
 }
 
 impl Display for MjViewerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EventLoopError(e) => write!(f, "failed to initialize event_loop: {}", e),
-            Self::GlutinError(e) => write!(f, "glutin raised an error: {}", e)
+            Self::EventLoopError(_) => write!(f, "event loop failed to initialize"),
+            Self::GlutinError(_) => write!(f, "glutin error"),
+            Self::PainterInitError(e) => write!(f, "failed to initialize egui painter: {}", e),
+            Self::SwapBuffersError(_) => write!(f, "OpenGL buffer swap failed"),
+            Self::GlInitFailed(_) => write!(f, "GL initialization failed"),
+            Self::SceneError(_) => write!(f, "scene error"),
         }
     }
 }
@@ -116,8 +131,24 @@ impl Error for MjViewerError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::EventLoopError(e) => Some(e),
-            Self::GlutinError(e) => Some(e)
+            Self::GlutinError(e) => Some(e),
+            Self::PainterInitError(_) => None,
+            Self::SwapBuffersError(e) => Some(e),
+            Self::GlInitFailed(e) => Some(e),
+            Self::SceneError(e) => Some(e),
         }
+    }
+}
+
+impl From<crate::error::MjSceneError> for MjViewerError {
+    fn from(e: crate::error::MjSceneError) -> Self {
+        Self::SceneError(e)
+    }
+}
+
+impl From<crate::error::GlInitError> for MjViewerError {
+    fn from(e: crate::error::GlInitError) -> Self {
+        Self::GlInitFailed(e)
     }
 }
 
@@ -146,7 +177,7 @@ pub struct ViewerSharedState<M: Deref<Target = MjModel>>{
     last_sync_time: Instant,
     /// Time factor representing the ratio of viewer syncs with model's selected timestep.
     realtime_factor_smooth: f64,
-    /// Preallocated buffer for storing the state of new [`MjData`] state.
+    /// Preallocated buffer for storing the new [`MjData`] state.
     data_state_buffer: Box<[MjtNum]>,
 }
 
@@ -212,7 +243,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
     /// 
     /// If you require everything to be synced for use in a UI callback,
     /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).
-    /// Alternatively, you can opt-in into syncing the entire [`MjData`] struct by calling
+    /// Alternatively, you can opt into syncing the entire [`MjData`] struct by calling
     /// [`ViewerSharedState::sync_data_full`] instead.
     /// 
     /// The following are **NOT SYNCHRONIZED**:
@@ -288,7 +319,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
 
 /// A Rust-native implementation of the MuJoCo viewer. To conform to Rust's safety rules,
 /// the viewer doesn't store a mutable reference to the [`MjData`] struct, but it instead
-/// accepts it as a parameter at its methods.
+/// accepts it as a parameter in its methods.
 /// 
 /// The [`MjViewer::sync_data`] method must be called to sync the state of [`MjViewer`] and [`MjData`].
 /// 
@@ -356,7 +387,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the [`MjViewer`].
     /// # Errors
-    /// Returns an error if the OpenGL state or window creation fails.
+    /// - [`MjViewerError::EventLoopError`] if the event loop fails to initialize.
+    /// - [`MjViewerError::GlInitFailed`] if OpenGL / window initialization fails.
+    /// - [`MjViewerError::GlutinError`] if a glutin operation fails.
+    /// - [`MjViewerError::PainterInitError`] if the UI painter fails to initialize
+    ///   (feature `viewer-ui`).
     pub fn launch_passive(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
         MjViewerBuilder::new()
             .max_user_geoms(max_user_geom)
@@ -399,7 +434,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     ///     .build_passive(&model).unwrap();
     /// viewer.with_state_lock(|mut lock| {
     ///     let scene = lock.user_scene_mut();
-    ///     scene.create_geom(MjtGeom::mjGEOM_BOX, Some([1.0, 1.0, 1.0]), Some([0.0, 0.0, 0.0]), None, None);
+    ///     scene.create_geom(MjtGeom::mjGEOM_BOX, Some([1.0, 1.0, 1.0]), Some([0.0, 0.0, 0.0]), None, None).unwrap();
     /// }).unwrap();
     /// ```
     pub fn with_state_lock<F, R>(&self, fun: F) -> Result<R, PoisonError<MutexGuard<'_, ViewerSharedState<M>>>>
@@ -461,7 +496,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Syncs the state of viewer's internal [`MjData`] with `data`.
     /// This is a proxy to [`ViewerSharedState::sync_data`].
     /// 
-    /// Additionally, any changes made to the internal [`MjData`] in between syncs,
+    /// Additionally, any changes made to the internal [`MjData`] in between syncs
     /// get copied back to `data` before the actual sync.
     /// This includes object perturbations.
     /// 
@@ -474,7 +509,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// 
     /// If you require everything to be synced for use in a UI callback,
     /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).
-    /// Alternatively, you can opt-in into syncing the entire [`MjData`] struct by calling
+    /// Alternatively, you can opt into syncing the entire [`MjData`] struct by calling
     /// [`MjViewer::sync_data_full`] instead.
     /// 
     /// The following are **NOT SYNCHRONIZED**:
@@ -490,7 +525,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// # let mut viewer = MjViewer::builder().build_passive(&model).unwrap();
     /// # let mut data = MjData::new(&model);
     /// viewer.sync_data(&mut data);  // sync the data
-    /// viewer.render();  // render the scene and process the user interface
+    /// viewer.render().unwrap();  // render the scene and process the user interface
     /// ```
     pub fn sync_data(&mut self, data: &mut MjData<M>) {
         self.shared_state.lock_unpoison().sync_data(data);
@@ -498,9 +533,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
     /// Processes the UI (when enabled), processes events, draws the scene
     /// and swaps buffers in OpenGL.
-    /// # Panics
-    /// Panics if the OpenGL context cannot be made current.
-    pub fn render(&mut self) {
+    /// # Errors
+    /// - [`MjViewerError::SwapBuffersError`] if the OpenGL buffer swap fails.
+    /// - [`MjViewerError::SceneError`] if synchronizing user scene geoms fails (e.g. the scene is full).
+    pub fn render(&mut self) -> Result<(), MjViewerError> {
         let RenderBaseGlState {
             gl_context,
             gl_surface,
@@ -509,7 +545,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
         /* Make sure everything is done on the viewer's window */
         if gl_context.make_current(gl_surface).is_err() {
-            return;
+            return Ok(());
         }
 
         /* Read the screen size */
@@ -519,7 +555,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.process_events();
 
         /* Update the scene from data and render */
-        self.update_scene();
+        self.update_scene()?;
 
         /* Draw the user menu on top */
         #[cfg(feature = "viewer-ui")]
@@ -529,11 +565,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.update_menus();
 
         /* Flush to the GPU */
-        self.swap_buffers();
+        self.swap_buffers()
     }
 
     /// Perform OpenGL buffer swap.
-    fn swap_buffers(&self) {
+    fn swap_buffers(&self) -> Result<(), MjViewerError> {
         let RenderBaseGlState {
             gl_context,
             gl_surface,
@@ -541,7 +577,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         } = self.adapter.state.as_ref().unwrap();
 
         /* Swap OpenGL buffers (render to screen) */
-        let _ = gl_surface.swap_buffers(gl_context);
+        gl_surface.swap_buffers(gl_context)
+            .map_err(MjViewerError::SwapBuffersError)
     }
 
     fn update_smooth_fps(&mut self) {
@@ -558,7 +595,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     }
 
     /// Updates the scene and draws it to the display.
-    fn update_scene(&mut self) {
+    fn update_scene(&mut self) -> Result<(), MjViewerError> {
         {
             /* Update and render the scene from the MjData state */
             let mut lock = self.shared_state.lock_unpoison();
@@ -566,10 +603,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
 
             // Draw geoms drawn through the user scene.
-            sync_geoms(lock.user_scene(), &mut self.scene)
-                .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
+            sync_geoms(lock.user_scene(), &mut self.scene)?;
         }
         self.scene.render(&self.rect_full, &self.context);
+        Ok(())
     }
 
     /// Draws the user menu
@@ -723,7 +760,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
         if self.status.contains(ViewerStatusBit::VSYNC) {
             if let Err(e) = gl_surface.set_swap_interval(
-                gl_context, glutin::surface::SwapInterval::Wait(NonZero::new(1).unwrap())
+                gl_context, glutin::surface::SwapInterval::Wait(NonZero::<u32>::MIN)
             ) {
                 eprintln!("failed to enable vsync: {e}");
                 self.status.set(ViewerStatusBit::VSYNC, false);
@@ -1179,7 +1216,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the [`MjViewer`].
     /// # Errors
-    /// Returns an error if the OpenGL state or window creation fails.
+    /// - [`MjViewerError::EventLoopError`] if the event loop fails to initialize.
+    /// - [`MjViewerError::GlInitFailed`] if OpenGL / window initialization fails.
+    /// - [`MjViewerError::GlutinError`] if a glutin operation fails.
+    /// - [`MjViewerError::PainterInitError`] if the UI painter fails to initialize
+    ///   (feature `viewer-ui`).
     pub fn build_passive(&self, model: M) -> Result<MjViewer<M>, MjViewerError> {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
         let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
@@ -1188,7 +1229,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
             self.window_name.to_string(),
             &mut event_loop,
             true  // process events
-        );
+        )?;
 
         /* Initialize the OpenGL related things */
         let RenderBaseGlState {
@@ -1203,11 +1244,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
         if self.vsync {
             gl_surface.set_swap_interval(
                 gl_context,
-                glutin::surface::SwapInterval::Wait(NonZero::new(1).unwrap())
-            ).map_err(|e| MjViewerError::GlutinError(e))?;
+                glutin::surface::SwapInterval::Wait(NonZero::<u32>::MIN)
+            ).map_err(MjViewerError::GlutinError)?;
         } else {
             gl_surface.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait).map_err(
-                |e| MjViewerError::GlutinError(e)
+                MjViewerError::GlutinError
             )?;
         }
 
@@ -1223,7 +1264,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
 
         // User interface
         #[cfg(feature = "viewer-ui")]
-        let ui = ui::ViewerUI::new(model.clone(), &window, &gl_surface.display());
+        let ui = ui::ViewerUI::new(model.clone(), &window, &gl_surface.display())?;
         #[cfg(feature = "viewer-ui")]
         let mut status = ViewerStatusBit::UI;
         #[cfg(not(feature = "viewer-ui"))]

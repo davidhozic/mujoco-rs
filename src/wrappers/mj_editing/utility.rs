@@ -25,7 +25,7 @@ pub(crate) fn read_mjs_string<'a>(string: *const mjString) -> &'a str {
             ""
         } else {
             // SAFETY: `ptr` points into the internal buffer of the C++ std::string
-            // referenced by `string`, which is valid for lifetime 'a.  MuJoCo
+            // referenced by `string`, which is valid for lifetime 'a. MuJoCo
             // strings are always valid UTF-8 (ASCII), so to_str() cannot fail.
             CStr::from_ptr(ptr).to_str().unwrap()
         }
@@ -121,57 +121,123 @@ pub(crate) fn write_mjs_vec_byte<T>(source: &[T], destination: *mut mjByteVec) {
 /***************************
 ** Helper macros
 ***************************/
-/// Creates an `add_ $name` method for adding new elements of $name into the body / spec.
-/// Also sets the default to null();
+/// Generates both an `add_$name` method (panics on OOM, delegates to `try_add_$name`) and a
+/// `try_add_$name` method (returns `Result`) for adding child elements that accept a default.
 macro_rules! add_x_method {
     ($($name:ident),*) => {paste::paste! {
         $(
-            /* With default */
-            #[doc = concat!("Add and return a child ", stringify!($name), ".\n# Panics\nPanics if MuJoCo fails to allocate the element.")]
+            #[doc = concat!(
+                "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
+                "Delegates to [`Self::try_add_", stringify!($name), "`] and panics if allocation fails.\n",
+                "# Panics\n",
+                "Panics if MuJoCo fails to allocate the element."
+            )]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
+                self.[<try_add_ $name>]()
+                    .expect(concat!("mjs_add", stringify!($name:camel), " returned null; allocation failed"))
+            }
+
+            #[doc = concat!(
+                "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "# Errors\n",
+                "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate ",
+                "the element, instead of panicking."
+            )]
+            pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.ffi_mut(), ptr::null()) };
-                unsafe { ptr.as_mut().unwrap() }
+                // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null
+                // the pointee is properly aligned and initialized by C++ operator new.
+                unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
             }
         )*
     }};
 }
 
-/// Creates an `add_$name` method for adding new elements into a frame.
+/// Generates both `add_$name` (panics, delegates to `try_`) and `try_add_$name` (returns
+/// `Result`) for elements parented by a frame.
 macro_rules! add_x_method_by_frame {
     ($($name:ident),*) => {paste::paste! {
         $(
-            /* With default */
-            #[doc = concat!("Add and return a child ", stringify!($name), ".\n# Panics\nPanics if MuJoCo fails to allocate the element.")]
+            #[doc = concat!(
+                "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
+                "Delegates to [`Self::try_add_", stringify!($name), "`] and panics on failure.\n",
+                "# Panics\n",
+                "Panics if MuJoCo fails to allocate the element."
+            )]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
+                self.[<try_add_ $name>]()
+                    .expect(concat!("mjs_add", stringify!($name:camel), " returned null; allocation failed"))
+            }
+
+            #[doc = concat!(
+                "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "# Errors\n",
+                "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate the element."
+            )]
+            pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
+                // SAFETY:
+                // - element_mut_pointer() reads `self.element`, a field always valid after construction.
+                // - body_ptr is non-null for any MjsFrame reachable through the Rust API because
+                //   mjs_addFrame always calls SetParent(body); the debug_assert catches violations.
+                // - The is_null() guard is defensive; mjs_addXxx functions do not perform
+                //   null-check error handling internally, so under current MuJoCo the
+                //   pointer is always non-null.
+                // - ptr.cast() is safe: mjs structs embed mjsElement as their first field, so
+                //   *mut mjsXxx and *mut mjsElement share the same address.
+                // - mjs_setFrame: both dest and frame are non-null and valid; failure for a
+                //   freshly-created element is treated as a bug via debug_assert.
+                // - `&mut *ptr`: ptr is confirmed non-null by the guard above, properly aligned
+                //   and initialized by C++ operator new, and freshly allocated so no Rust
+                //   reference can alias it for the returned lifetime.
                 unsafe {
                     let ep = self.element_mut_pointer();
                     let body_ptr = mjs_getParent(ep);
+                    debug_assert!(!body_ptr.is_null(), "mjs_getParent returned null; frame has no parent body");
                     let ptr = [<mjs_add $name:camel>](body_ptr, ptr::null());
-                    mjs_attach(ep, ptr.cast(), ptr::null(), ptr::null());
-                    ptr.as_mut().unwrap()
+                    if ptr.is_null() {
+                        return Err(MjEditError::AllocationFailed);
+                    }
+                    let set_result = mjs_setFrame((*ptr).element, self);
+                    debug_assert_eq!(set_result, 0, "mjs_setFrame failed; element or frame is invalid");
+                    Ok(&mut *ptr)
                 }
             }
         )*
     }};
 }
 
-/// Creates an `add_ $name` method for adding new elements of $name into the body / spec.
-/// This is for methods that don't accept a default.
+/// Generates both `add_$name` (panics, delegates to `try_`) and `try_add_$name` (returns
+/// `Result`) for elements whose `mjs_addXxx` function takes no default argument.
 macro_rules! add_x_method_no_default {
     ($($name:ident),*) => {paste::paste! {
         $(
-            /* Without default */
-            #[doc = concat!("Add and return a child ", stringify!($name), ".\n# Panics\nPanics if MuJoCo fails to allocate the element.")]
+            #[doc = concat!(
+                "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
+                "Delegates to [`Self::try_add_", stringify!($name), "`] and panics if allocation fails.\n",
+                "# Panics\n",
+                "Panics if MuJoCo fails to allocate the element."
+            )]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
+                self.[<try_add_ $name>]()
+                    .expect(concat!("mjs_add", stringify!($name:camel), " returned null; allocation failed"))
+            }
+
+            #[doc = concat!(
+                "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "# Errors\n",
+                "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate ",
+                "the element, instead of panicking."
+            )]
+            pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.0) };
-                unsafe { ptr.as_mut().unwrap() }
+                unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
             }
         )*
     }};
 }
 
 
-/// Creates an `get_ $name` method for finding items in spec / body.
+/// Creates a `get_$name` method for finding items in spec / body.
 /// Also sets the default to null();
 macro_rules! find_x_method {
     ($($item:ident),*) => {paste::paste! {
@@ -404,7 +470,7 @@ macro_rules! string_set_get_with {
     }};
 }
 
-/// Implements getters and setters for floating point  (f32 or f64) attributes.
+/// Implements getters and setters for floating point (f32 or f64) attributes.
 macro_rules! vec_set_get {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
@@ -430,7 +496,7 @@ macro_rules! vec_set {
     }};
 }
 
-/// Implements appenders for non-string attributes  of a double vec.
+/// Implements appenders for non-string attributes of a double vec.
 macro_rules! vec_vec_append {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
@@ -468,9 +534,11 @@ macro_rules! item_spec_iterator {
                         return None;
                     }
 
-                    let out = unsafe { [<mjs_as $iter_over>](self.last).as_mut().unwrap() };
-                    self.last = unsafe { mjs_nextElement(self.root.ffi_mut(), self.last) };
-                    Some(out)
+                    unsafe {
+                        let out = [<mjs_as $iter_over>](self.last).as_mut();
+                        self.last = mjs_nextElement(self.root.ffi_mut(), self.last);
+                        out
+                    }
                 }
             }
 
@@ -482,9 +550,11 @@ macro_rules! item_spec_iterator {
                         return None;
                     }
 
-                    let out = unsafe { [<mjs_as $iter_over>](self.last).as_ref().unwrap() };
-                    self.last = unsafe { mjs_nextElement(self.root.0, self.last) };
-                    Some(out)
+                    unsafe {
+                        let out = [<mjs_as $iter_over>](self.last).as_ref();
+                        self.last = mjs_nextElement(self.root.0, self.last);
+                        out
+                    }
                 }
             }
         )*

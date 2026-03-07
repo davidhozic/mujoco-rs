@@ -25,14 +25,14 @@ unsafe extern "C" {
 }
 
 
-/// Wrapper around the C++ implementation of MujoCo viewer.
+/// Wrapper around the C++ implementation of MuJoCo viewer.
 /// If you don't need the side UI, we recommend you use the Rust-native viewer [`crate::viewer::MjViewer`] instead.
-/// 
+///
 /// # Safety
 /// Calls to [`MjViewerCpp::render`] must be done only on the **main** thread!
 /// For convenience [`MjViewerCpp`] implements both `Send` and `Sync`, however that is meant only for
-/// syncing the viewer. 
-/// 
+/// syncing the viewer.
+///
 /// Additionally, to allow certain flexibility while still maintaining
 /// compatibility with the C++ code, [`MjViewerCpp`] keeps internal pointers to mjModel and mjData,
 /// which are wrapped inside [`MjModel`] and [`MjData`], respectively.
@@ -105,17 +105,21 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
 
     /// Renders the simulation.
     ///
-    /// # SAFETY
+    /// # Errors
+    /// Returns `Err` when the viewer has been closed by the user.
+    ///
+    /// # Safety
     /// This needs to be called periodically from the MAIN thread, otherwise
     /// GLFW stops working.
-    pub fn render(&mut self) {
-        unsafe {
-            assert!(self.running, "render called after viewer has been closed!");
-            self.running = mujoco_cSimulate_RenderStep(self.sim) == 1;
+    pub fn render(&mut self) -> Result<(), &'static str> {
+        if !self.running {
+            return Err("render called after viewer has been closed!");
         }
+        unsafe { self.running = mujoco_cSimulate_RenderStep(self.sim) == 1; }
+        Ok(())
     }
 
-    /// Syncs the simulation state with the viewer as well as perform
+    /// Syncs the simulation state with the viewer as well as performs
     /// rendering on the viewer.
     pub fn sync(&mut self) {
         unsafe {
@@ -126,7 +130,7 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
 
 impl<M: Deref<Target = MjModel> + Clone + Send + Sync> Drop for MjViewerCpp<M> {
     fn drop(&mut self) {
-        unsafe { 
+        unsafe {
             mujoco_cSimulate_ExitRequest(self.sim);
             mujoco_cSimulate_destroy(self.sim);
         }
