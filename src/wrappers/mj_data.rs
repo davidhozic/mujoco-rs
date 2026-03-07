@@ -6,7 +6,6 @@ use super::mj_primitive::*;
 use crate::{getter_setter, mujoco_c::*};
 use crate::error::MjDataError;
 
-use std::io::{self, Error, ErrorKind};
 use std::ffi::CString;
 use std::borrow::Cow;
 use std::ops::Deref;
@@ -492,11 +491,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     // Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
     /// If cost is not `None`, set `*cost = s(jar)` where `jar = Jac*qacc - aref`.
     /// # Errors
-    /// Returns an error of kind [`ErrorKind::InvalidInput`] if the `jar` length is incorrect.
-    pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) -> io::Result<()> {
+    /// Returns [`MjDataError::LengthMismatch`] if the `jar` length is incorrect.
+    pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) -> Result<(), MjDataError> {
         let nefc = unsafe { (*self.data).nefc as usize };
         if jar.len() < nefc {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("jar slice must contain at least nefc ({nefc}) elements, got {}", jar.len())));
+            return Err(MjDataError::LengthMismatch { name: "jar", expected: nefc, got: jar.len() });
         }
 
         unsafe { mj_constraintUpdate(
@@ -512,27 +511,28 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
     /// `values`: control values slice of length `nsample`.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] if `id >= nu` or the actuator has no history buffer.
-    /// - [`ErrorKind::InvalidInput`] if `times` or `values` have the wrong length.
-    pub fn init_ctrl_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum]) -> io::Result<()> {
+    /// - [`MjDataError::IndexOutOfBounds`] if `id >= nu`.
+    /// - [`MjDataError::NoHistoryBuffer`] if the actuator has no history buffer.
+    /// - [`MjDataError::LengthMismatch`] if `times` or `values` have the wrong length.
+    pub fn init_ctrl_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum]) -> Result<(), MjDataError> {
         let nu = self.model.ffi().nu as usize;
         if id >= nu {
-            return Err(Error::new(ErrorKind::NotFound, format!("invalid actuator id {}", id)));
+            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id: id as i64, upper: nu as i64 });
         }
 
         let nsample = self.model.actuator_history()[id][0];
         if nsample <= 0 {
-            return Err(Error::new(ErrorKind::NotFound, format!("actuator {} has no history buffer", id)));
+            return Err(MjDataError::NoHistoryBuffer { kind: "actuator", id });
         }
 
         let ns = nsample as usize;
         if let Some(t) = times {
             if t.len() != ns {
-                return Err(Error::new(ErrorKind::InvalidInput, format!("times must have length {}", ns)));
+                return Err(MjDataError::LengthMismatch { name: "times", expected: ns, got: t.len() });
             }
         }
         if values.len() != ns {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("values must have length {}", ns)));
+            return Err(MjDataError::LengthMismatch { name: "values", expected: ns, got: values.len() });
         }
 
         unsafe {
@@ -551,17 +551,18 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// `values`: sensor values slice of length `nsample * dim`.
     /// `phase`: time phase offset.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] if `id >= nsensor` or the sensor has no history buffer.
-    /// - [`ErrorKind::InvalidInput`] if `times` or `values` have the wrong length.
-    pub fn init_sensor_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum], phase: MjtNum) -> io::Result<()> {
+    /// - [`MjDataError::IndexOutOfBounds`] if `id >= nsensor`.
+    /// - [`MjDataError::NoHistoryBuffer`] if the sensor has no history buffer.
+    /// - [`MjDataError::LengthMismatch`] if `times` or `values` have the wrong length.
+    pub fn init_sensor_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum], phase: MjtNum) -> Result<(), MjDataError> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
-            return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
+            return Err(MjDataError::IndexOutOfBounds { kind: "sensor_id", id: id as i64, upper: nsensor as i64 });
         }
 
         let nsample = self.model.sensor_history()[id][0];
         if nsample <= 0 {
-            return Err(Error::new(ErrorKind::NotFound, format!("sensor {} has no history buffer", id)));
+            return Err(MjDataError::NoHistoryBuffer { kind: "sensor", id });
         }
 
         let dim = self.model.sensor_dim()[id] as usize;
@@ -569,11 +570,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
         if let Some(t) = times {
             if t.len() != nsample as usize {
-                return Err(Error::new(ErrorKind::InvalidInput, format!("times must have length {}", nsample)));
+                return Err(MjDataError::LengthMismatch { name: "times", expected: nsample as usize, got: t.len() });
             }
         }
         if values.len() != required {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("values must have length nsample*dim (= {})", required)));
+            return Err(MjDataError::LengthMismatch { name: "values", expected: required, got: values.len() });
         }
 
         unsafe {
@@ -590,11 +591,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reads the control history value for actuator `id` at `time`
     /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
     /// # Errors
-    /// Returns [`ErrorKind::NotFound`] when `id >= nu`.
-    pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<MjtNum> {
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nu`.
+    pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> Result<MjtNum, MjDataError> {
         let nu = self.model.ffi().nu as usize;
         if id >= nu {
-            return Err(Error::new(ErrorKind::NotFound, format!("invalid actuator id {}", id)));
+            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id: id as i64, upper: nu as i64 });
         }
         let val = unsafe { mj_readCtrl(self.model.ffi(), self.ffi(), id as i32, time, interp) };
         Ok(val)
@@ -603,17 +604,17 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reads sensor `id` at `time` into `dst` (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
     /// `dst` must be exactly `sensor_dim[id]` elements long.
     /// # Errors
-    /// Returns [`ErrorKind::NotFound`] when `id >= nsensor`.
-    /// Returns [`ErrorKind::InvalidInput`] when `dst.len() != sensor_dim[id]`.
-    pub fn read_sensor_into(&self, id: usize, time: MjtNum, interp: i32, dst: &mut [MjtNum]) -> io::Result<()> {
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
+    /// Returns [`MjDataError::LengthMismatch`] when `dst.len() != sensor_dim[id]`.
+    pub fn read_sensor_into(&self, id: usize, time: MjtNum, interp: i32, dst: &mut [MjtNum]) -> Result<(), MjDataError> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
-            return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
+            return Err(MjDataError::IndexOutOfBounds { kind: "sensor_id", id: id as i64, upper: nsensor as i64 });
         }
 
         let dim = self.model.sensor_dim()[id] as usize;
         if dst.len() != dim {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("dst buffer wrong size: expected {}, got {}", dim, dst.len())));
+            return Err(MjDataError::LengthMismatch { name: "dst", expected: dim, got: dst.len() });
         }
         let ptr = unsafe { mj_readSensor(self.model.ffi(), self.ffi(), id as i32, time, dst.as_mut_ptr(), interp) };
         if !ptr.is_null() {
@@ -627,17 +628,17 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic). `N` must match `sensor_dim[id]`.
     /// See also [`read_sensor`](Self::read_sensor), [`read_sensor_into`](Self::read_sensor_into).
     /// # Errors
-    /// Returns [`ErrorKind::NotFound`] when `id >= nsensor`.
-    /// Returns [`ErrorKind::InvalidInput`] when `N != sensor_dim[id]`.
-    pub fn read_sensor_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<[MjtNum; N]> {
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
+    /// Returns [`MjDataError::LengthMismatch`] when `N != sensor_dim[id]`.
+    pub fn read_sensor_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> Result<[MjtNum; N], MjDataError> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
-            return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
+            return Err(MjDataError::IndexOutOfBounds { kind: "sensor_id", id: id as i64, upper: nsensor as i64 });
         }
 
         let dim = self.model.sensor_dim()[id] as usize;
         if N != dim {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("N={} does not match sensor dim={}", N, dim)));
+            return Err(MjDataError::LengthMismatch { name: "N", expected: dim, got: N });
         }
         let mut out = [0.0 as MjtNum; N];
         let ptr = unsafe { mj_readSensor(self.model.ffi(), self.ffi(), id as i32, time, out.as_mut_ptr(), interp) };
@@ -654,11 +655,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Returns [`Cow::Owned`] for linear/cubic interpolation.
     /// See also [`read_sensor_fixed`](Self::read_sensor_fixed), [`read_sensor_into`](Self::read_sensor_into).
     /// # Errors
-    /// Returns [`ErrorKind::NotFound`] when `id >= nsensor`.
-    pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> io::Result<Cow<'_, [MjtNum]>> {
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
+    pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> Result<Cow<'_, [MjtNum]>, MjDataError> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
-            return Err(Error::new(ErrorKind::NotFound, format!("invalid sensor id {}", id)));
+            return Err(MjDataError::IndexOutOfBounds { kind: "sensor_id", id: id as i64, upper: nsensor as i64 });
         }
 
         let dim = self.model.sensor_dim()[id] as usize;
@@ -677,12 +678,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error of kind [`ErrorKind::StorageFull`] if the contact buffer is full.
-    pub fn add_contact(&mut self, con: &MjContact) -> io::Result<()> {
+    /// Returns [`MjDataError::ContactBufferFull`] if the contact buffer is full.
+    pub fn add_contact(&mut self, con: &MjContact) -> Result<(), MjDataError> {
         match unsafe { mj_addContact(self.model.ffi(), self.ffi_mut(), con) } {
             0 => Ok(()),
-            1 => Err(Error::new(ErrorKind::StorageFull, "buffer full")),
-            _ => Err(Error::new(ErrorKind::Other, "unknown error"))
+            _ => Err(MjDataError::ContactBufferFull),
         }
     }
 
@@ -935,15 +935,15 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Similar semantics to mj_ray, but `vec` is an array of (nray x 3) directions.
     /// If `normals_out` is `Some`, it must be a slice of `nray` elements filled with surface normals. Use `None` to skip normals.
     /// # Errors
-    /// Returns [`ErrorKind::InvalidInput`] if `normals_out` length does not match `vec.len()`.
+    /// Returns [`MjDataError::LengthMismatch`] if `normals_out` length does not match `vec.len()`.
     pub fn multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
         flg_static: bool, bodyexclude: i32, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
-    ) -> io::Result<(Vec<i32>, Vec<MjtNum>)> {
+    ) -> Result<(Vec<i32>, Vec<MjtNum>), MjDataError> {
         let nray = vec.len();
         if let Some(buf) = &normals_out {
             if buf.len() != nray {
-                return Err(Error::new(ErrorKind::InvalidInput, "normals_out must have length equal to number of rays"));
+                return Err(MjDataError::LengthMismatch { name: "normals_out", expected: nray, got: buf.len() });
             }
         }
 
@@ -969,7 +969,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         &self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: bool, bodyexclude: i32,
         normal_out: Option<&mut [MjtNum; 3]>
-    ) -> io::Result<(i32, MjtNum)> {
+    ) -> (i32, MjtNum) {
         // `normal_out` is a fixed-size array; nothing to validate at runtime here.
         let mut geom_id = -1;
         let dist = unsafe { mj_ray(
@@ -979,7 +979,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             flg_static as MjtByte, bodyexclude, &mut geom_id,
             normal_out.map_or(ptr::null_mut(), |x| x)
         ) };
-        Ok((geom_id, dist))
+        (geom_id, dist)
     }
 
     /// Intersect ray with visible flexes.
@@ -1984,13 +1984,13 @@ mod test {
         assert_eq!(rays.0.len(), 3);
         assert_eq!(rays.1.len(), 3);
 
-        let (geomid, dist) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1, None).unwrap();
+        let (geomid, dist) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1, None);
         assert!(dist.is_finite());
         assert!(geomid >= -1);
 
         // ray API with normal output (optional parameter)
         let mut normal = [0.0; 3];
-        let (geomid2, dist2) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1, Some(&mut normal)).unwrap();
+        let (geomid2, dist2) = data.ray(&pos, &[1.0, 0.0, 0.0], None, true, -1, Some(&mut normal));
         assert!(dist2.is_finite());
         assert!(geomid2 >= -1);
         let norm_len = (normal[0]*normal[0] + normal[1]*normal[1] + normal[2]*normal[2]).sqrt();
@@ -2169,25 +2169,25 @@ mod test {
         assert!(data.init_ctrl_history(0, Some(&times), &values).is_ok());
         assert!(data.init_ctrl_history(0, None, &values).is_ok());
 
-        // times length mismatch -> InvalidInput
+        // times length mismatch -> LengthMismatch
         let bad_times = vec![0.0f64];
         let err = data.init_ctrl_history(0, Some(&bad_times), &values).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjDataError::LengthMismatch { name: "times", .. }));
 
-        // values length mismatch -> InvalidInput
+        // values length mismatch -> LengthMismatch
         let bad_values = vec![1.0; 5];
         let err = data.init_ctrl_history(0, Some(&times), &bad_values).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjDataError::LengthMismatch { name: "values", .. }));
 
-        // invalid actuator id -> NotFound
+        // invalid actuator id -> IndexOutOfBounds
         let err = data.init_ctrl_history(99, Some(&times), &values).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "actuator_id", .. }));
 
-        // read_ctrl invalid id -> NotFound
+        // read_ctrl invalid id -> IndexOutOfBounds
         let err = data.read_ctrl(99, times[0], 0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "actuator_id", .. }));
 
-        // actuator exists but has no history buffer -> NotFound
+        // actuator exists but has no history buffer -> NoHistoryBuffer
         const NO_HIST_ACT_MODEL: &str = r#"
 <mujoco>
   <worldbody>
@@ -2204,7 +2204,7 @@ mod test {
         let model2 = MjModel::from_xml_string(NO_HIST_ACT_MODEL).unwrap();
         let mut data2 = model2.make_data();
         let err = data2.init_ctrl_history(0, Some(&times), &values).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::NoHistoryBuffer { kind: "actuator", id: 0 }));
     }
 
     #[test]
@@ -2233,25 +2233,25 @@ mod test {
         assert!(data.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).is_ok());
         assert!(data.init_sensor_history(0, None, &values_sens, 0.0).is_ok());
 
-        // times length mismatch -> InvalidInput
+        // times length mismatch -> LengthMismatch
         let bad_times = vec![0.0f64];
         let err = data.init_sensor_history(0, Some(&bad_times), &values_sens, 0.0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjDataError::LengthMismatch { name: "times", .. }));
 
-        // values length mismatch -> InvalidInput
+        // values length mismatch -> LengthMismatch
         let bad_values = vec![3.14; 3];
         let err = data.init_sensor_history(0, Some(&times_sens), &bad_values, 0.0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjDataError::LengthMismatch { name: "values", .. }));
 
-        // invalid sensor id -> NotFound
+        // invalid sensor id -> IndexOutOfBounds
         let err = data.init_sensor_history(99, Some(&times_sens), &values_sens, 0.0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
 
-        // read_sensor invalid id -> NotFound
-        let err: io::Result<[MjtNum; 1]> = data.read_sensor_fixed::<1>(99, times_sens[0], 0);
-        assert_eq!(err.unwrap_err().kind(), std::io::ErrorKind::NotFound);
+        // read_sensor invalid id -> IndexOutOfBounds
+        let err: Result<[MjtNum; 1], MjDataError> = data.read_sensor_fixed::<1>(99, times_sens[0], 0);
+        assert!(matches!(err.unwrap_err(), MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
 
-        // sensor exists but has no history buffer -> NotFound
+        // sensor exists but has no history buffer -> NoHistoryBuffer
         const NO_HIST_SENS_MODEL: &str = r#"
 <mujoco>
   <worldbody>
@@ -2268,7 +2268,7 @@ mod test {
         let model2 = MjModel::from_xml_string(NO_HIST_SENS_MODEL).unwrap();
         let mut data2 = model2.make_data();
         let err = data2.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::NoHistoryBuffer { kind: "sensor", id: 0 }));
     }
 
     #[test]
@@ -2326,9 +2326,9 @@ mod test {
         let arr_interp: [f64; 1] = data.read_sensor_fixed(0, interp_query, 1).unwrap();
         assert_relative_eq!(arr_interp[0], 25.0, epsilon = 1e-6);
 
-        // read_sensor_fixed<N>: wrong N -> Err(InvalidInput)
-        let err: io::Result<[MjtNum; 3]> = data.read_sensor_fixed::<3>(0, query_time, 0);
-        assert_eq!(err.unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
+        // read_sensor_fixed<N>: wrong N -> Err(LengthMismatch)
+        let err: Result<[MjtNum; 3], MjDataError> = data.read_sensor_fixed::<3>(0, query_time, 0);
+        assert!(matches!(err.unwrap_err(), MjDataError::LengthMismatch { name: "N", .. }));
 
         // read_sensor_into: exact match
         let mut buf = [0.0; 1];
@@ -2340,23 +2340,23 @@ mod test {
         data.read_sensor_into(0, interp_query, 1, &mut buf2).unwrap();
         assert_relative_eq!(buf2[0], 25.0, epsilon = 1e-6);
 
-        // read_sensor_into: buffer too small -> Err(InvalidInput)
+        // read_sensor_into: buffer too small -> Err(LengthMismatch)
         let mut tiny: [MjtNum; 0] = [];
         let err = data.read_sensor_into(0, hist_times[0] + delay, 0, &mut tiny).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjDataError::LengthMismatch { name: "dst", .. }));
 
-        // read_sensor_into: buffer too large -> Err(InvalidInput)
+        // read_sensor_into: buffer too large -> Err(LengthMismatch)
         let mut big = [0.0; 4];
         let err = data.read_sensor_into(0, hist_times[3] + delay, 0, &mut big).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, MjDataError::LengthMismatch { name: "dst", .. }));
 
-        // invalid sensor id -> NotFound for all methods
-        let err: io::Result<[MjtNum; 1]> = data.read_sensor_fixed::<1>(99, 0.0, 0);
-        assert_eq!(err.unwrap_err().kind(), std::io::ErrorKind::NotFound);
+        // invalid sensor id -> IndexOutOfBounds for all methods
+        let err: Result<[MjtNum; 1], MjDataError> = data.read_sensor_fixed::<1>(99, 0.0, 0);
+        assert!(matches!(err.unwrap_err(), MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
         let err = data.read_sensor(99, 0.0, 0).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
         let err = data.read_sensor_into(99, 0.0, 0, &mut buf).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
 
         // read_sensor_fixed<N>, read_sensor, and read_sensor_into agree for all history times
         for &t in &hist_times {
@@ -2393,7 +2393,7 @@ mod test {
 
         let res = data.multi_ray(&pos, &ray_vecs, None, false, -1, 10.0, Some(&mut bad_normals));
         assert!(res.is_err());
-        assert_eq!(res.unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(res.unwrap_err(), MjDataError::LengthMismatch { name: "normals_out", .. }));
     }
 
     #[test]

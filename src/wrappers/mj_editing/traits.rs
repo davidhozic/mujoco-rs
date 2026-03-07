@@ -1,7 +1,7 @@
 //! Trait definitions for model editing.
-use std::io::{Error, ErrorKind};
 use std::ffi::{CStr, CString};
 
+use crate::error::MjEditError;
 use crate::mujoco_c::*;
 
 use super::default::MjsDefault;
@@ -56,17 +56,17 @@ pub trait SpecItem: Sized {
 
     /// Make the item inherit properties from a default class.
     /// # Errors
-    /// Returns a [`ErrorKind::NotFound`] when the default with the `class_name` doesn't exist.
+    /// Returns [`MjEditError::ClassNotFound`] when the default with the `class_name` doesn't exist.
     /// # Panics
     /// When the `class_name` contains '\0' characters, a panic occurs.
-    fn set_default(&mut self, class_name: &str) -> Result<(), Error> {
+    fn set_default(&mut self, class_name: &str) -> Result<(), MjEditError> {
         /* Workaround to pass the borrow checker (we use the existing borrow) */
         let cname = CString::new(class_name).unwrap();  // class_name is always valid UTF-8.
         let element = unsafe { self.element_mut_pointer() };
         let spec = unsafe { mjs_getSpec(element) };
         let default = unsafe { mjs_findDefault(spec, cname.as_ptr()) };
         if default.is_null() {
-            return Err(Error::new(ErrorKind::NotFound, "class doesn't exist"));
+            return Err(MjEditError::ClassNotFound);
         }
 
         unsafe { mjs_setDefault(self.element_mut_pointer(), default); }
@@ -74,7 +74,7 @@ pub trait SpecItem: Sized {
     }
 
     /// Builder style make the item inherit from a default class.
-    fn with_default(&mut self, class_name: &str) -> Result<&mut Self, Error> {
+    fn with_default(&mut self, class_name: &str) -> Result<&mut Self, MjEditError> {
         self.set_default(class_name)?;
         Ok(self)
     }
@@ -85,7 +85,7 @@ pub trait SpecItem: Sized {
     /// actual struct, this accepts a mutable reference to the item.
     /// Consequently, the compiler still allows the original reference to be used, which
     /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!
-    unsafe fn delete(&mut self) -> Result<(), Error> {
+    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         unsafe { self.__delete_default__() }
     }
 
@@ -96,17 +96,13 @@ pub trait SpecItem: Sized {
     /// actual struct, this accepts a mutable reference to the item.
     /// Consequently, the compiler still allows the original reference to be used, which
     /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!
-    unsafe fn __delete_default__(&mut self) -> Result<(), Error> {
+    unsafe fn __delete_default__(&mut self) -> Result<(), MjEditError> {
         let element = unsafe { self.element_mut_pointer() };
         let spec = unsafe { mjs_getSpec(element) };
         let result = unsafe { mjs_delete(spec, element) };
         match result {
             0 => Ok(()),
             _ => {
-                // SAFETY: `spec` is still valid after mjs_delete returns an error.
-                // `mjs_getError` returns a pointer into the inline `char[500]` buffer of
-                // `mjCModel::errInfo`. We copy the bytes into an owned String immediately
-                // so that no borrow of the C buffer outlives this statement.
                 let error_msg: String = unsafe {
                     let ptr = mjs_getError(spec);
                     if ptr.is_null() {
@@ -115,7 +111,7 @@ pub trait SpecItem: Sized {
                         CStr::from_ptr(ptr).to_str().unwrap().to_owned()
                     }
                 };
-                Err(Error::new(ErrorKind::Other, error_msg))
+                Err(MjEditError::DeleteFailed(error_msg))
             }
         }
     }

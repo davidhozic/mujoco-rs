@@ -1,16 +1,16 @@
 //! Common visualization utilities.
 use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_model::MjModel;
+use crate::error::MjSceneError;
 
 use std::ops::Deref;
-use std::io;
 
 
 /// Copies geometry data (geoms only) from the `src` to `dst`.
 /// # Errors
-/// Returns an [`io::Error`] of kind [`io::ErrorKind::StorageFull`] if the destination scene does not have
+/// Returns [`MjSceneError::SceneFull`] if the destination scene does not have
 /// enough space to accommodate the additional geoms from the source scene.
-pub(crate) fn sync_geoms<M: Deref<Target = MjModel>>(src: &MjvScene<M>, dst: &mut MjvScene<M>) -> io::Result<()> {
+pub(crate) fn sync_geoms<M: Deref<Target = MjModel>>(src: &MjvScene<M>, dst: &mut MjvScene<M>) -> Result<(), MjSceneError> {
     let ffi_src = src.ffi();
     let ffi_dst = unsafe { dst.ffi_mut() };
 
@@ -20,7 +20,7 @@ pub(crate) fn sync_geoms<M: Deref<Target = MjModel>>(src: &MjvScene<M>, dst: &mu
     let new_len_i64 = (ffi_dst.ngeom as i64) + (ffi_src.ngeom as i64);
 
     if new_len_i64 > ffi_dst.maxgeom as i64 {
-        return Err(io::Error::new(io::ErrorKind::StorageFull, "not enough space available in the destination scene"))
+        return Err(MjSceneError::SceneFull { capacity: ffi_dst.maxgeom })
     }
 
     // new_len_i64 <= maxgeom which is an i32, so the cast is safe.

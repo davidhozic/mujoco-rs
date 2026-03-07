@@ -3,6 +3,8 @@
 //! - [`MjDataError`] - physics data and Jacobian operations (`MjData`).
 //! - [`MjSceneError`] - 3-D scene and visualization operations (`MjvScene`, `MjrContext`).
 //! - [`MjEditError`] - model-specification editing operations (`MjSpec`).
+//! - [`MjModelError`] - model loading, saving, and state operations (`MjModel`).
+//! - [`MjVfsError`] - virtual file system operations (`MjVfs`).
 use std::fmt;
 
 /// Errors that can occur in [`MjData`](crate::wrappers::MjData) physics data
@@ -23,7 +25,7 @@ pub enum MjDataError {
     ///
     /// Contains the raw MuJoCo C object-type code (`mjOBJ_*`) that was not recognized.
     UnsupportedObjectType(i32),
-    /// MuJoCo failed to allocate the [`MjData`](crate::wrappers::MjData) structure.
+    /// MuJoCo failed to allocate the requested structure.
     AllocationFailed,
     /// A buffer passed to the operation is too small for the required data.
     BufferTooSmall {
@@ -34,6 +36,15 @@ pub enum MjDataError {
         /// Minimum length the buffer must have.
         needed: usize,
     },
+    /// A slice or array parameter has the wrong length for the operation.
+    LengthMismatch {
+        /// Descriptive name of the parameter.
+        name: &'static str,
+        /// Expected length.
+        expected: usize,
+        /// Actual length that was provided.
+        got: usize,
+    },
     /// Two [`MjData`](crate::wrappers::MjData) instances (or an `MjData` and a
     /// renderer) were created from different models.
     SignatureMismatch {
@@ -42,6 +53,15 @@ pub enum MjDataError {
         /// Model signature of the destination object.
         destination: u64,
     },
+    /// The specified actuator or sensor has no associated history buffer.
+    NoHistoryBuffer {
+        /// `"actuator"` or `"sensor"`.
+        kind: &'static str,
+        /// The zero-based index of the actuator or sensor.
+        id: usize,
+    },
+    /// The contact buffer is full; no more contacts can be added.
+    ContactBufferFull,
 }
 
 impl fmt::Display for MjDataError {
@@ -69,6 +89,18 @@ impl fmt::Display for MjDataError {
                     "model signature mismatch: source {source:#X}, \
                      destination {destination:#X}"
                 )
+            }
+            Self::LengthMismatch { name, expected, got } => {
+                write!(
+                    f,
+                    "{name} has wrong length: expected {expected}, got {got}"
+                )
+            }
+            Self::NoHistoryBuffer { kind, id } => {
+                write!(f, "{kind} {id} has no history buffer")
+            }
+            Self::ContactBufferFull => {
+                write!(f, "contact buffer is full")
             }
         }
     }
@@ -196,14 +228,182 @@ impl std::error::Error for MjSceneError {}
 pub enum MjEditError {
     /// MuJoCo failed to allocate the requested model element.
     AllocationFailed,
+    /// A filesystem path argument contains invalid UTF-8.
+    InvalidUtf8Path,
+    /// MuJoCo failed to parse the XML (or other format) input.
+    ParseFailed(String),
+    /// MuJoCo failed to compile the spec into a model.
+    CompileFailed(String),
+    /// MuJoCo failed to save the spec to XML.
+    SaveFailed(String),
+    /// A referenced element (e.g. parent default class) was not found.
+    NotFound,
+    /// An element with the same name already exists.
+    AlreadyExists,
+    /// This element cannot be deleted (e.g. the world body or defaults).
+    UnsupportedDeletion,
+    /// MuJoCo returned an error while attempting to delete the element.
+    DeleteFailed(String),
+    /// The referenced default class was not found.
+    ClassNotFound,
 }
 
 impl fmt::Display for MjEditError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::AllocationFailed => write!(f, "MuJoCo failed to allocate the model element"),
+            Self::InvalidUtf8Path => write!(f, "path contains invalid UTF-8"),
+            Self::ParseFailed(msg) => write!(f, "parse failed: {msg}"),
+            Self::CompileFailed(msg) => write!(f, "compilation failed: {msg}"),
+            Self::SaveFailed(msg) => write!(f, "save failed: {msg}"),
+            Self::NotFound => write!(f, "referenced element not found"),
+            Self::AlreadyExists => write!(f, "element with the same name already exists"),
+            Self::UnsupportedDeletion => write!(f, "this element cannot be deleted"),
+            Self::DeleteFailed(msg) => write!(f, "delete failed: {msg}"),
+            Self::ClassNotFound => write!(f, "default class not found"),
         }
     }
 }
 
 impl std::error::Error for MjEditError {}
+
+
+/// Errors that can occur in [`MjModel`](crate::wrappers::MjModel) operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum MjModelError {
+    /// A filesystem path argument contains invalid UTF-8.
+    InvalidUtf8Path,
+    /// MuJoCo failed to load the model from a file, string, or buffer.
+    LoadFailed(String),
+    /// MuJoCo failed to save the model XML.
+    SaveFailed(String),
+    /// The state source slice has the wrong length for the given spec.
+    StateSliceLengthMismatch {
+        /// Expected length.
+        expected: usize,
+        /// Actual length.
+        got: usize,
+    },
+    /// The destination spec is not a subset of the source spec.
+    SpecNotSubset,
+    /// A destination buffer is too small for the operation.
+    BufferTooSmall {
+        /// Minimum number of elements required.
+        needed: usize,
+        /// Actual number of elements available.
+        available: usize,
+    },
+    /// A virtual-file-system operation failed while loading a model from a string.
+    VfsError(MjVfsError),
+}
+
+impl fmt::Display for MjModelError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidUtf8Path => write!(f, "path contains invalid UTF-8"),
+            Self::LoadFailed(msg) => write!(f, "model load failed: {msg}"),
+            Self::SaveFailed(msg) => write!(f, "model save failed: {msg}"),
+            Self::StateSliceLengthMismatch { expected, got } => {
+                write!(f, "state slice length mismatch: expected {expected}, got {got}")
+            }
+            Self::SpecNotSubset => {
+                write!(f, "dst_spec must be a subset of src_spec")
+            }
+            Self::BufferTooSmall { needed, available } => {
+                write!(f, "buffer too small: need {needed} elements, got {available}")
+            }
+            Self::VfsError(e) => write!(f, "VFS error: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for MjModelError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::VfsError(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+
+/// Errors that can occur in virtual file system ([`MjVfs`](crate::wrappers::MjVfs)) operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum MjVfsError {
+    /// The VFS has no more room for additional files.
+    Full,
+    /// A file or mount with the same name already exists.
+    AlreadyExists,
+    /// MuJoCo failed to load the file or register the buffer.
+    LoadFailed,
+    /// The specified file or directory was not found in the VFS.
+    NotFound,
+    /// An unrecognized MuJoCo return code.
+    Unknown(i32),
+}
+
+impl fmt::Display for MjVfsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Full => write!(f, "VFS is full"),
+            Self::AlreadyExists => write!(f, "file already exists in VFS"),
+            Self::LoadFailed => write!(f, "failed to load file into VFS"),
+            Self::NotFound => write!(f, "file not found in VFS"),
+            Self::Unknown(code) => write!(f, "unknown VFS error (code {code})"),
+        }
+    }
+}
+
+impl std::error::Error for MjVfsError {}
+
+/// Errors that can occur during OpenGL / window initialization.
+///
+/// Each variant represents a distinct step in the initialization pipeline.
+#[cfg(any(feature = "viewer", feature = "renderer-winit-fallback"))]
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum GlInitError {
+    /// The windowing / display builder failed to initialize.
+    DisplayBuild(String),
+    /// The display builder succeeded but did not produce a window.
+    NoWindow,
+    /// Failed to obtain the native window handle.
+    WindowHandle(String),
+    /// OpenGL context creation failed.
+    ContextCreation(glutin::error::Error),
+    /// Window surface attributes could not be constructed.
+    SurfaceAttributes(String),
+    /// Rendering surface creation failed.
+    SurfaceCreation(glutin::error::Error),
+    /// Making the GL context current on the surface failed.
+    MakeCurrent(glutin::error::Error),
+}
+
+#[cfg(any(feature = "viewer", feature = "renderer-winit-fallback"))]
+impl fmt::Display for GlInitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DisplayBuild(e) => write!(f, "display build failed: {e}"),
+            Self::NoWindow => write!(f, "display builder did not create a window"),
+            Self::WindowHandle(e) => write!(f, "failed to obtain window handle: {e}"),
+            Self::ContextCreation(e) => write!(f, "failed to create GL context: {e}"),
+            Self::SurfaceAttributes(e) => write!(f, "failed to build surface attributes: {e}"),
+            Self::SurfaceCreation(e) => write!(f, "failed to create window surface: {e}"),
+            Self::MakeCurrent(e) => write!(f, "failed to make GL context current: {e}"),
+        }
+    }
+}
+
+#[cfg(any(feature = "viewer", feature = "renderer-winit-fallback"))]
+impl std::error::Error for GlInitError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::ContextCreation(e) |
+            Self::SurfaceCreation(e) |
+            Self::MakeCurrent(e) => Some(e),
+            _ => None,
+        }
+    }
+}

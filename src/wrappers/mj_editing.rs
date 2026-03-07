@@ -1,6 +1,5 @@
 //! Definitions related to model editing.
 use std::ffi::{c_int, CStr, CString};
-use std::io::{Error, ErrorKind};
 use std::marker::PhantomData;
 use std::path::Path;
 use std::ptr;
@@ -181,7 +180,7 @@ impl MjSpec {
     /// # Panics
     /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
+    pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, MjEditError> {
         Self::from_xml_file(path, None)
     }
 
@@ -193,17 +192,17 @@ impl MjSpec {
     /// # Panics
     /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
+    pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, MjEditError> {
         Self::from_xml_file(path, Some(vfs))
     }
 
-    fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, Error> {
+    fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
 
         let mut error_buffer = [0i8; 100];
         unsafe {
             let path_str = path.as_ref().to_str()
-                .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "path contains invalid UTF-8"))?;
+                .ok_or(MjEditError::InvalidUtf8Path)?;
             let path = CString::new(path_str).unwrap();
             let raw_ptr = mj_parseXML(
                 path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
@@ -222,7 +221,7 @@ impl MjSpec {
     /// # Panics
     /// - when the `xml` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_xml_string(xml: &str) -> Result<Self, Error> {
+    pub fn from_xml_string(xml: &str) -> Result<Self, MjEditError> {
         assert_mujoco_version();
 
         let c_xml = CString::new(xml).unwrap();
@@ -245,7 +244,7 @@ impl MjSpec {
     /// Returns an error if MuJoCo fails to parse the file.
     /// # Panics
     /// When `filename` or `content_type` contains zero bytes.
-    pub fn from_parse(filename: &str, content_type: &str) -> Result<Self, Error> {
+    pub fn from_parse(filename: &str, content_type: &str) -> Result<Self, MjEditError> {
         Self::from_parse_file(filename, content_type, None)
     }
 
@@ -256,7 +255,7 @@ impl MjSpec {
     /// Returns an error if MuJoCo fails to parse the file.
     /// # Panics
     /// When `filename` or `content_type` contains zero bytes.
-    pub fn from_parse_vfs(filename: &str, content_type: &str, vfs: &MjVfs) -> Result<Self, Error> {
+    pub fn from_parse_vfs(filename: &str, content_type: &str, vfs: &MjVfs) -> Result<Self, MjEditError> {
         Self::from_parse_file(filename, content_type, Some(vfs))
     }
 
@@ -265,7 +264,7 @@ impl MjSpec {
     /// This is a wrapper around low-level method [`mj_parse`].
     /// # Panics
     /// When `filename` or `content_type` contains zero bytes.
-    fn from_parse_file(filename: &str, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, Error> {
+    fn from_parse_file(filename: &str, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
         let mut error_buffer = [0i8; 100];
         unsafe {
@@ -283,11 +282,10 @@ impl MjSpec {
     /// Handles spec pointer input.
     /// # Safety
     /// `error_buffer` must not be empty and the last element must be 0.
-    unsafe fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[i8]) -> Result<Self, Error> {
+    unsafe fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[i8]) -> Result<Self, MjEditError> {
         if spec_ptr.is_null() {
             // SAFETY: i8 and u8 have the same size, and no negative values can appear in the error_buffer.
-            Err(Error::new(
-                ErrorKind::UnexpectedEof, 
+            Err(MjEditError::ParseFailed(
                 unsafe { CStr::from_ptr(error_buffer.as_ptr().cast()).to_string_lossy().into_owned() }
             ))
         }
@@ -317,7 +315,7 @@ impl MjSpec {
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
     /// Returns an error if the model fails to compile, containing the MuJoCo error details.
-    pub fn compile(&mut self) -> Result<MjModel, Error> {
+    pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
         let result = unsafe { MjModel::from_raw( mj_compile(self.0, ptr::null()) ) };
         result.map_err(|_| {
             // SAFETY: The spec is still valid after failed compilation.
@@ -330,7 +328,7 @@ impl MjSpec {
                     CStr::from_ptr(ptr).to_string_lossy().into_owned()
                 }
             };
-            Error::new(ErrorKind::InvalidData, error_msg)
+            MjEditError::CompileFailed(error_msg)
         })
     }
 
@@ -338,10 +336,10 @@ impl MjSpec {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns [`ErrorKind::Other`] with MuJoCo's error message if saving fails.
+    /// Returns [`MjEditError::SaveFailed`] with MuJoCo's error message if saving fails.
     /// # Panics
     /// When `filename` contains '\0' characters, a panic occurs.
-    pub fn save_xml(&self, filename: &str) -> Result<(), Error> {
+    pub fn save_xml(&self, filename: &str) -> Result<(), MjEditError> {
         let mut error_buff = [0; 100];
         let cname = CString::new(filename).unwrap();  // filename is always UTF-8
         let result = unsafe { mj_saveXML(
@@ -350,11 +348,9 @@ impl MjSpec {
         ) };
         match result {
             0 => Ok(()),
-            _ => Err(
-                Error::new(
-                    ErrorKind::Other,
-                    unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().into_owned() }
-                ))
+            _ => Err(MjEditError::SaveFailed(
+                unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().into_owned() }
+            ))
         }
     }
 
@@ -363,9 +359,9 @@ impl MjSpec {
     /// # Returns
     /// On success, returns the generated XML string.
     /// # Errors
-    /// Returns [`ErrorKind::Other`] with MuJoCo's error message if the conversion fails.
+    /// Returns [`MjEditError::SaveFailed`] with MuJoCo's error message if the conversion fails.
     /// If `buffer_size` is too small, the output will be truncated.
-    pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, Error> {
+    pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, MjEditError> {
         let mut error_buff = [0; 100];
         let mut result_buff = vec![0u8; buffer_size];
         let result = unsafe { mj_saveXMLString(
@@ -374,11 +370,9 @@ impl MjSpec {
         ) };
         match result {
             0 => Ok(CStr::from_bytes_until_nul(&result_buff).unwrap().to_string_lossy().into_owned()),
-            _ => Err(
-                Error::new(
-                    ErrorKind::Other,
-                    unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().to_string() }
-                ))
+            _ => Err(MjEditError::SaveFailed(
+                unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().to_string() }
+            ))
         }
     }
 }
@@ -462,17 +456,15 @@ impl MjSpec {
     /// # Returns
     /// On success, returns a mutable reference to the newly created [`MjsDefault`].
     /// # Errors
-    /// Returns a [`ErrorKind::AlreadyExists`] error when `class_name` already exists.
-    /// Returns a [`ErrorKind::NotFound`] when `parent_class_name` doesn't exist.
+    /// Returns [`MjEditError::AlreadyExists`] when `class_name` already exists.
+    /// Returns [`MjEditError::NotFound`] when `parent_class_name` doesn't exist.
     /// # Panics
     /// When the `class_name` or `parent_class_name` contain '\0' characters, a panic occurs.
-    pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<&mut MjsDefault, Error> {
+    pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<&mut MjsDefault, MjEditError> {
         let c_class_name = CString::new(class_name).unwrap();
 
         let parent_ptr = if let Some(name) = parent_class_name {
-                self.default(name).ok_or_else(
-                    || Error::new(ErrorKind::NotFound, "invalid parent name")
-                )?
+                self.default(name).ok_or(MjEditError::NotFound)?
         } else {
             ptr::null()
         };
@@ -484,7 +476,7 @@ impl MjSpec {
                 parent_ptr
             );
             if ptr_default.is_null() {
-                Err(Error::new(ErrorKind::AlreadyExists, "duplicated name"))
+                Err(MjEditError::AlreadyExists)
             }
             else {
                 Ok(&mut *ptr_default)
@@ -1476,9 +1468,9 @@ impl MjsMaterial {
 ***************************/
 mjs_struct!(Body {
     // Override the delete method to prevent deletion of world.
-    unsafe fn delete(&mut self) -> Result<(), Error> {
+    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         if self.name() == "world" {
-            return Err(Error::new(ErrorKind::Unsupported, "world body can't be deleted"));
+            return Err(MjEditError::UnsupportedDeletion);
         }
         unsafe { SpecItem::__delete_default__(self) }
     }

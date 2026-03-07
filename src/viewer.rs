@@ -107,7 +107,9 @@ pub enum MjViewerError {
     /// Returned when OpenGL buffer swap fails during rendering.
     SwapBuffersError(glutin::error::Error),
     /// OpenGL / window initialization failed.
-    GlInitFailed(String),
+    GlInitFailed(crate::error::GlInitError),
+    /// A scene operation failed (e.g. user-scene sync overflowed the geom buffer).
+    SceneError(crate::error::MjSceneError),
 }
 
 impl Display for MjViewerError {
@@ -117,7 +119,8 @@ impl Display for MjViewerError {
             Self::GlutinError(e) => write!(f, "glutin raised an error: {}", e),
             Self::PainterInitError(e) => write!(f, "failed to initialize egui painter: {}", e),
             Self::SwapBuffersError(e) => write!(f, "failed to swap OpenGL buffers: {}", e),
-            Self::GlInitFailed(msg) => write!(f, "GL initialization failed: {}", msg),
+            Self::GlInitFailed(e) => write!(f, "GL initialization failed: {}", e),
+            Self::SceneError(e) => write!(f, "scene error: {}", e),
         }
     }
 }
@@ -129,7 +132,8 @@ impl Error for MjViewerError {
             Self::GlutinError(e) => Some(e),
             Self::PainterInitError(_) => None,
             Self::SwapBuffersError(e) => Some(e),
-            Self::GlInitFailed(_) => None,
+            Self::GlInitFailed(e) => Some(e),
+            Self::SceneError(e) => Some(e),
         }
     }
 }
@@ -512,7 +516,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Processes the UI (when enabled), processes events, draws the scene
     /// and swaps buffers in OpenGL.
     /// # Errors
-    /// Returns [`MjViewerError::SwapBuffersError`] if the OpenGL buffer swap fails.
+    /// - [`MjViewerError::SwapBuffersError`] if the OpenGL buffer swap fails.
+    /// - [`MjViewerError::SceneError`] if synchronizing user scene geoms fails (e.g. the scene is full).
     pub fn render(&mut self) -> Result<(), MjViewerError> {
         let RenderBaseGlState {
             gl_context,
@@ -532,7 +537,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         self.process_events();
 
         /* Update the scene from data and render */
-        self.update_scene();
+        self.update_scene()?;
 
         /* Draw the user menu on top */
         #[cfg(feature = "viewer-ui")]
@@ -572,7 +577,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     }
 
     /// Updates the scene and draws it to the display.
-    fn update_scene(&mut self) {
+    fn update_scene(&mut self) -> Result<(), MjViewerError> {
         {
             /* Update and render the scene from the MjData state */
             let mut lock = self.shared_state.lock_unpoison();
@@ -581,9 +586,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
             // Draw geoms drawn through the user scene.
             sync_geoms(lock.user_scene(), &mut self.scene)
-                .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
+                .map_err(MjViewerError::SceneError)?;
         }
         self.scene.render(&self.rect_full, &self.context);
+        Ok(())
     }
 
     /// Draws the user menu

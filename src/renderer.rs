@@ -12,7 +12,7 @@ use crate::prelude::*;
 use bitflags::bitflags;
 use png::Encoder;
 
-use std::io::{self, BufWriter, ErrorKind, Write};
+use std::io::{self, BufWriter, Write};
 use std::fmt::Display;
 use std::error::Error;
 use std::marker::PhantomData;
@@ -31,9 +31,6 @@ use universal::GlStateWinit;
 mod egl;
 
 
-const RGB_NOT_FOUND_ERR_STR: &str = "RGB rendering is not enabled (renderer.with_rgb_rendering(true))";
-const DEPTH_NOT_FOUND_ERR_STR: &str = "depth rendering is not enabled (renderer.with_depth_rendering(true))";
-const INVALID_INPUT_SIZE: &str = "the input width and height don't match the renderer's configuration";
 const EXTRA_INTERNAL_VISUAL_GEOMS: u32 = 100;
 
 
@@ -418,7 +415,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
         /* Draw user scene geoms */
         sync_geoms(&self.user_scene, &mut self.scene)
-            .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
+            .map_err(RendererError::SceneError)?;
 
         self.render()?;
         Ok(())
@@ -434,9 +431,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the rendered RGB image.
     /// # Errors
-    /// Returns an error of kind `InvalidInput` if the image size doesn't match the required dimensions.
-    /// Returns an error of kind `NotFound` if RGB rendering is disabled.
-    pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> io::Result<&[[[u8; 3]; WIDTH]; HEIGHT]> {
+    /// - [`RendererError::DimensionMismatch`] if the image size doesn't match the required dimensions.
+    /// - [`RendererError::RgbDisabled`] if RGB rendering is disabled.
+    pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[[u8; 3]; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.rgb_flat() {
             if flat.len() == WIDTH * HEIGHT * 3 {
                 let p_shaped = flat.as_ptr() as *const [[[u8; 3]; WIDTH]; HEIGHT];
@@ -447,11 +444,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 Ok(unsafe { &*p_shaped })
             }
             else {
-                Err(io::Error::new(io::ErrorKind::InvalidInput, INVALID_INPUT_SIZE))
+                Err(RendererError::DimensionMismatch)
             }
         }
         else {
-            Err(io::Error::new(io::ErrorKind::NotFound, RGB_NOT_FOUND_ERR_STR))
+            Err(RendererError::RgbDisabled)
         }
     }
 
@@ -465,9 +462,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the rendered depth image.
     /// # Errors
-    /// Returns an error of kind `InvalidInput` if the image size doesn't match the required dimensions.
-    /// Returns an error of kind `NotFound` if depth rendering is disabled.
-    pub fn depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> io::Result<&[[f32; WIDTH]; HEIGHT]> {
+    /// - [`RendererError::DimensionMismatch`] if the image size doesn't match the required dimensions.
+    /// - [`RendererError::DepthDisabled`] if depth rendering is disabled.
+    pub fn depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[f32; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.depth_flat() {
             if flat.len() == WIDTH * HEIGHT {
                 let p_shaped = flat.as_ptr() as *const [[f32; WIDTH]; HEIGHT];
@@ -478,11 +475,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 Ok(unsafe { &*p_shaped })
             }
             else {
-                Err(io::Error::new(io::ErrorKind::InvalidInput, INVALID_INPUT_SIZE))
+                Err(RendererError::DimensionMismatch)
             }
         }
         else {
-            Err(io::Error::new(io::ErrorKind::NotFound, DEPTH_NOT_FOUND_ERR_STR))
+            Err(RendererError::DepthDisabled)
         }
     }
 
@@ -490,9 +487,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] when RGB rendering is disabled,
+    /// - [`RendererError::RgbDisabled`] when RGB rendering is disabled,
     /// - other errors related to write.
-    pub fn save_rgb<T: AsRef<Path>>(&self, path: T) -> io::Result<()> {
+    pub fn save_rgb<T: AsRef<Path>>(&self, path: T) -> Result<(), RendererError> {
         if let Some(rgb) = &self.rgb {
             let file = File::create(path.as_ref())?;
             let w = BufWriter::new(file);
@@ -507,7 +504,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             Ok(())
         }
         else {
-            Err(io::Error::new(ErrorKind::NotFound, RGB_NOT_FOUND_ERR_STR))
+            Err(RendererError::RgbDisabled)
         }
     }
 
@@ -520,9 +517,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// # Returns
     /// An [`Ok`]`((min, max))` is returned, where min and max represent the normalization parameters.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] when depth rendering is disabled,
+    /// - [`RendererError::DepthDisabled`] when depth rendering is disabled,
     /// - other errors related to write.
-    pub fn save_depth<T: AsRef<Path>>(&self, path: T, normalize: bool) -> io::Result<(f32, f32)> {
+    pub fn save_depth<T: AsRef<Path>>(&self, path: T, normalize: bool) -> Result<(f32, f32), RendererError> {
         if let Some(depth) = &self.depth {
             let file = File::create(path.as_ref())?;
             let w = BufWriter::new(file);
@@ -547,7 +544,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             Ok((min, max))
         }
         else {
-            Err(io::Error::new(ErrorKind::NotFound, DEPTH_NOT_FOUND_ERR_STR))
+            Err(RendererError::DepthDisabled)
         }
     }
 
@@ -557,9 +554,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// - [`ErrorKind::NotFound`] when depth rendering is disabled,
+    /// - [`RendererError::DepthDisabled`] when depth rendering is disabled,
     /// - other errors related to write.
-    pub fn save_depth_raw<T: AsRef<Path>>(&self, path: T) -> io::Result<()> {
+    pub fn save_depth_raw<T: AsRef<Path>>(&self, path: T) -> Result<(), RendererError> {
         if let Some(depth) = &self.depth {
             let file = File::create(path.as_ref())?;
             let mut writer = BufWriter::new(file);
@@ -574,7 +571,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             Ok(())
         }
         else {
-            Err(io::Error::new(ErrorKind::NotFound, DEPTH_NOT_FOUND_ERR_STR))
+            Err(RendererError::DepthDisabled)
         }
     }
 
@@ -641,7 +638,7 @@ pub enum RendererError {
     ZeroDimension,
     /// OpenGL / window initialization failed.
     #[cfg(feature = "renderer-winit-fallback")]
-    GlInitFailed(String),
+    GlInitFailed(crate::error::GlInitError),
     /// The data and renderer were created from different models.
     SignatureMismatch {
         /// Model signature of the source object.
@@ -649,6 +646,16 @@ pub enum RendererError {
         /// Model signature of the destination object.
         destination: u64,
     },
+    /// RGB rendering was not enabled.
+    RgbDisabled,
+    /// Depth rendering was not enabled.
+    DepthDisabled,
+    /// The requested `WIDTH`/`HEIGHT` do not match the renderer's dimensions.
+    DimensionMismatch,
+    /// An I/O error occurred (e.g. while saving to a file).
+    IoError(io::Error),
+    /// A scene operation failed (e.g. user-scene sync overflowed the geom buffer).
+    SceneError(crate::error::MjSceneError),
 }
 
 impl Display for RendererError {
@@ -659,10 +666,15 @@ impl Display for RendererError {
             Self::GlutinError(e) => write!(f, "glutin error: {}", e),
             Self::ZeroDimension => write!(f, "renderer width and height must both be greater than zero"),
             #[cfg(feature = "renderer-winit-fallback")]
-            Self::GlInitFailed(msg) => write!(f, "GL initialization failed: {}", msg),
+            Self::GlInitFailed(e) => write!(f, "GL initialization failed: {}", e),
             Self::SignatureMismatch { source, destination } => {
                 write!(f, "model signature mismatch: source {source:#X}, destination {destination:#X}")
             }
+            Self::RgbDisabled => write!(f, "RGB rendering is not enabled (renderer.with_rgb_rendering(true))"),
+            Self::DepthDisabled => write!(f, "depth rendering is not enabled (renderer.with_depth_rendering(true))"),
+            Self::DimensionMismatch => write!(f, "the input width and height don't match the renderer's configuration"),
+            Self::IoError(e) => write!(f, "I/O error: {}", e),
+            Self::SceneError(e) => write!(f, "scene error: {}", e),
         }
     }
 }
@@ -672,12 +684,25 @@ impl Error for RendererError {
         match self {
             #[cfg(feature = "renderer-winit-fallback")]
             Self::EventLoopError(e) => Some(e),
-            Self::GlutinError(e) => Some(e),
-            Self::ZeroDimension => None,
             #[cfg(feature = "renderer-winit-fallback")]
-            Self::GlInitFailed(_) => None,
-            Self::SignatureMismatch { .. } => None,
+            Self::GlInitFailed(e) => Some(e),
+            Self::GlutinError(e) => Some(e),
+            Self::IoError(e) => Some(e),
+            Self::SceneError(e) => Some(e),
+            _ => None,
         }
+    }
+}
+
+impl From<io::Error> for RendererError {
+    fn from(e: io::Error) -> Self {
+        Self::IoError(e)
+    }
+}
+
+impl From<png::EncodingError> for RendererError {
+    fn from(e: png::EncodingError) -> Self {
+        Self::IoError(io::Error::from(e))
     }
 }
 

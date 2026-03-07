@@ -110,8 +110,27 @@ update of MuJoCo alone can increase the major version.
   - New error types in the :docs-rs:`~mujoco_rs::error` module:
     :docs-rs:`~mujoco_rs::error::<enum>MjDataError`,
     :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`,
-    :docs-rs:`~mujoco_rs::error::<enum>MjEditError`.
-    All are re-exported from the prelude.
+    :docs-rs:`~mujoco_rs::error::<enum>MjEditError`,
+    :docs-rs:`~mujoco_rs::error::<enum>MjModelError`,
+    :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`,
+    :docs-rs:`~mujoco_rs::error::<enum>GlInitError`.
+    All are ``#[non_exhaustive]`` and re-exported from the prelude.
+  - |mj_model| methods (``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``from_buffer``,
+    ``save_last_xml``, ``extract_state``, ``extract_state_into``) now return typed
+    ``MjModelError`` variants instead of ``io::Error``.
+  - |mj_vfs| methods (``add_from_file``, ``add_from_buffer``, ``delete_file``, ``mount``,
+    ``unmount``) now return typed ``MjVfsError`` variants instead of ``io::Error``.
+  - :docs-rs:`~mujoco_rs::error::<enum>GlInitError` replaces opaque ``String`` errors
+    for OpenGL context initialization failures in the renderer and viewer.
+  - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` gained new variants:
+    ``RgbDisabled``, ``DepthDisabled``, ``DimensionMismatch``, ``ZeroDimension``,
+    ``IoError``, ``SceneError``, ``GlInitFailed``.
+  - :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError` gained new variants:
+    ``PainterInitError``, ``SwapBuffersError``, ``GlInitFailed``, ``SceneError``.
+  - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` now propagates
+    scene-full errors as ``RendererError::SceneError`` instead of panicking.
+  - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` ``render()`` now propagates
+    scene-full errors as ``MjViewerError::SceneError`` instead of panicking.
   - New fallible ``try_`` methods on |mj_data|: ``try_new``, ``try_clone``,
     ``try_copy_state_from_data``, ``try_apply_ft``, ``try_read_state_into``,
     ``try_set_state``, ``try_copy_visual_to``, ``try_copy_to``.

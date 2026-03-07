@@ -15,6 +15,7 @@ use winit::event::WindowEvent;
 use winit::dpi::PhysicalSize;
 
 use glutin_winit::{ApiPreference, DisplayBuilder, GlWindow};
+use crate::error::GlInitError;
 use std::collections::VecDeque;
 
 
@@ -37,11 +38,11 @@ pub(crate) struct RenderBase {
     size: (u32, u32),
     title: String,
     events: bool,
-    init_error: Option<String>,
+    init_error: Option<GlInitError>,
 }
 
 impl RenderBase {
-    pub(crate) fn new(width: u32, height: u32, title: String, event_loop: &mut EventLoop<()>, events: bool) -> Result<Self, String> {
+    pub(crate) fn new(width: u32, height: u32, title: String, event_loop: &mut EventLoop<()>, events: bool) -> Result<Self, GlInitError> {
         let mut s = Self {
             state: None,
             queue: VecDeque::new(),
@@ -69,7 +70,7 @@ impl RenderBase {
 
 impl ApplicationHandler for RenderBase {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let result = (|| -> Result<RenderBaseGlState, String> {
+        let result = (|| -> Result<RenderBaseGlState, GlInitError> {
             let window_attrs = Window::default_attributes()
                 .with_title(&self.title)
                 .with_inner_size(PhysicalSize::new(self.size.0, self.size.1))
@@ -94,16 +95,16 @@ impl ApplicationHandler for RenderBase {
                         if cfg.num_samples() > current.num_samples() {cfg} else { current }
                     ).expect("display produced no GL configs")
                 })
-                .map_err(|e| format!("display build failed: {e}"))?;
+                .map_err(|e| GlInitError::DisplayBuild(e.to_string()))?;
 
             // Finalize the Window from the config's requirements
             let window = maybe_window
-                .ok_or_else(|| "display builder did not create a window".to_string())?;
+                .ok_or(GlInitError::NoWindow)?;
 
             // Create the GL context + window surface
             let raw_window_handle = Some(window.window_handle()
                 .map(|x| x.as_raw())
-                .map_err(|e| format!("failed to obtain window handle: {e}"))?);
+                .map_err(|e| GlInitError::WindowHandle(e.to_string()))?);
             let context_attrs = ContextAttributesBuilder::new()
                 .with_profile(GlProfile::Compatibility)
                 .with_context_api(ContextApi::OpenGl(Some(Version::new(2, 0))))
@@ -113,22 +114,22 @@ impl ApplicationHandler for RenderBase {
             let not_current = unsafe {
                 gl_display
                     .create_context(&gl_config, &context_attrs)
-                    .map_err(|e| format!("failed to create GL context: {e}"))?
+                    .map_err(GlInitError::ContextCreation)?
             };
 
             // Build surface attributes
             let attrs = window
                 .build_surface_attributes(SurfaceAttributesBuilder::<WindowSurface>::new())
-                .map_err(|e| format!("failed to build surface attributes: {e}"))?;
+                .map_err(|e| GlInitError::SurfaceAttributes(e.to_string()))?;
 
             let gl_surface = unsafe {
                 gl_display
                     .create_window_surface(&gl_config, &attrs)
-                    .map_err(|e| format!("failed to create window surface: {e}"))?
+                    .map_err(GlInitError::SurfaceCreation)?
             };
 
             let gl_context = not_current.make_current(&gl_surface)
-                .map_err(|e| format!("failed to make GL context current: {e}"))?;
+                .map_err(GlInitError::MakeCurrent)?;
 
             Ok(RenderBaseGlState { gl_surface, gl_context, window })
         })();

@@ -1,6 +1,6 @@
 //! Module implements [`MjsDefault`], which is a special type of [`SpecItem`].
 
-use std::io::{Error, ErrorKind};
+use crate::error::MjEditError;
 
 use super::traits::SpecItem;
 use crate::mujoco_c::*;
@@ -46,9 +46,9 @@ impl SpecItem for MjsDefault {
 
     /// Defaults can't be deleted.
     /// # Errors
-    /// This will always error with [`ErrorKind::Unsupported`].
-    unsafe fn delete(&mut self) -> Result<(), Error> {
-        Err(Error::new(ErrorKind::Unsupported, "defaults can't be deleted"))
+    /// This will always error with [`MjEditError::UnsupportedDeletion`].
+    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
+        Err(MjEditError::UnsupportedDeletion)
     }
 }
 
