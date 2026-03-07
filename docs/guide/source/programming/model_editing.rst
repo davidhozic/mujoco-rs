@@ -60,7 +60,7 @@ To mutable access the specification's world body, we can use the
 
     fn main() {
         let mut spec = MjSpec::new();
-        let world = spec.world_body_mut();       // or spec.body("world").unwrap();
+        let world = spec.world_body_mut();       // or spec.body_mut("world").unwrap();
     }
 
 We can now add our ball's body, geom and joint like so:
@@ -70,7 +70,7 @@ We can now add our ball's body, geom and joint like so:
 
     fn main() {
         let mut spec = MjSpec::new();
-        let world = spec.world_body_mut();       // or spec.body("world").unwrap();
+        let world = spec.world_body_mut();       // or spec.body_mut("world").unwrap();
         
         // Add the ball
         let ball_body = world.add_body()
@@ -100,7 +100,7 @@ Finally, we can now add the base plane, like so:
 
     fn main() {
         let mut spec = MjSpec::new();
-        let world = spec.world_body_mut();       // or spec.body("world").unwrap();
+        let world = spec.world_body_mut();       // or spec.body_mut("world").unwrap();
 
         // Add the ball
         let ball_body = world.add_body()
@@ -130,7 +130,7 @@ to an MJB (binary) file:
 
     fn main() {
         let mut spec = MjSpec::new();
-        let world = spec.world_body_mut();       // or spec.body("world").unwrap();
+        let world = spec.world_body_mut();       // or spec.body_mut("world").unwrap();
 
         // Add the ball
         let ball_body = world.add_body()

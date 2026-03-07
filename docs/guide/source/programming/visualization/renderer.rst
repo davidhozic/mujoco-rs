@@ -56,7 +56,7 @@ using :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`.
 
 .. note::
 
-    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync` is similar to the MuJoco
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync` is similar to the MuJoCo
     Python's ``Renderer.update_scene`` method. Unlike the MuJoCo Python's method,
     MuJoCo-rs's implementation also performs
     rendering. This was done to make :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` behave

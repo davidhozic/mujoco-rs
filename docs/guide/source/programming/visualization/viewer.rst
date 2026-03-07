@@ -58,7 +58,7 @@ The viewer can be launched in two ways:
           while viewer.running() {
               /* Sync the simulation state with the viewer */
               viewer.sync_data(&mut data);
-              viewer.render();
+              viewer.render().unwrap();
 
               /* Update the simulation state */
               data.step();
@@ -70,7 +70,7 @@ The viewer can be launched in two ways:
   convenient shorthand for users who want the **default settings**:
 
   .. code-block:: rust
-      :emphasize-lines: 9
+      :emphasize-lines: 8
 
       use std::time::Duration;
 
@@ -82,7 +82,7 @@ The viewer can be launched in two ways:
           let mut viewer = MjViewer::launch_passive(&model, 0).expect("could not launch the viewer");
           while viewer.running() {
               viewer.sync_data(&mut data);
-              viewer.render();
+              viewer.render().unwrap();
               data.step();
               std::thread::sleep(Duration::from_secs_f64(timestep));
           }
@@ -102,7 +102,7 @@ After or parallel to synchronization, the viewer must also be rendered using the
     while viewer.running() {
         /* Sync the simulation state with the viewer */
         viewer.sync_data(&mut data);
-        viewer.render();
+        viewer.render().unwrap();
         ...
     }
 
@@ -213,7 +213,7 @@ Here's a cutout from the :gh-example:`example <rust_viewer_threaded.rs>` on how 
     });
 
     while viewer.running() {
-        viewer.render();
+        viewer.render().unwrap();
     }
 
     physics_thread.join().unwrap();
@@ -283,7 +283,7 @@ The following example demonstrates how to add a custom window to the viewer:
 
         while viewer.running() {
             viewer.sync_data(&mut data);
-            viewer.render();
+            viewer.render().unwrap();
             data.step();
             std::thread::sleep(Duration::from_millis(2));
         }
@@ -355,7 +355,7 @@ Here is an example of using the C++ wrapper:
         let step = model.opt().timestep;
         while viewer.running() {
             viewer.sync();
-            viewer.render();
+            viewer.render().unwrap();
             data.step();
             std::thread::sleep(Duration::from_secs_f64(step));
         }

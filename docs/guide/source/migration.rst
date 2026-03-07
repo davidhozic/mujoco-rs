@@ -107,16 +107,22 @@ The table below maps the breaking error-type changes:
    * - |mj_vfs| (``add_from_file``, ``add_from_buffer``, ``delete_file``)
      - ``io::Error``
      - ``MjVfsError``
-   * - |mj_spec| (``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``compile``, ``save_xml``, ``save_xml_string``)
+   * - |mj_spec| (``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``compile``, ``save_xml``, ``save_xml_string``, ``add_default``)
      - ``io::Error``
      - ``MjEditError``
+   * - |mj_data| (``add_contact``)
+     - ``io::Error``
+     - ``MjDataError``
+   * - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` (``rgb``, ``depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw``)
+     - ``io::Error``
+     - ``RendererError``
    * - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` (``try_sync``)
      - ``MjDataError``
      - ``RendererError``
    * - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` / :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError`
-       ``GlInitFailed`` variant
-     - ``String``
-     - ``GlInitError``
+       ``GlutinError`` variant
+     - ``glutin::error::Error``
+     - Replaced by ``GlInitFailed(GlInitError)``
 
 
 ``MjModel::clone()``
@@ -150,25 +156,74 @@ that returned ``Option<MjModel>`` has been replaced:
 If your code handled ``MjDataError`` from ``try_sync``, update the match to use
 ``RendererError`` variants instead.
 
+Newly fallible methods
+-----------------------------
 
-``MjvPerturb::update_local_pos``
-------------------------------------
+Several methods that previously returned bare types now return ``Result``.
+Code that called these methods directly must now handle the ``Result``,
+for example by appending ``.unwrap()`` or using ``?``.
 
-:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>update_local_pos`
-now takes ``selection_xyz`` by reference (``&[MjtNum; 3]``) instead of by value,
-and the ``model`` parameter has been removed.
+|mj_data| methods now returning ``Result<_, MjDataError>``:
+  ``constraint_update``, ``jac``, ``jac_body``, ``jac_body_com``, ``jac_subtree_com``,
+  ``jac_geom``, ``jac_site``, ``angmom_mat``, ``object_velocity``, ``object_acceleration``,
+  ``geom_distance``, ``local_to_global``, ``multi_ray``.
+
+|mjv_scene| / rendering methods now returning ``Result<_, MjSceneError>``:
+  ``create_geom``, ``set_label``, ``add_aux``, ``set_aux``.
+
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` now returns
+``Result<(), MjViewerError>`` instead of ``()``.
+
+
+``MjData::ray()`` parameter change
+----------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` gained a new
+``normal_out`` parameter. Pass ``None`` to preserve the previous behavior.
 
 **Before (2.x):**
 
 .. code-block:: rust
 
-    perturb.update_local_pos(&model, &data, xyz);
+    let (geom_id, dist) = data.ray(&pnt, &vec, None, true, -1);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    let (geom_id, dist) = data.ray(&pnt, &vec, None, true, -1, None);
+
+
+Similarly, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray` gained a
+new ``normals_out`` parameter and now returns ``Result``. Pass ``None`` to preserve the
+previous behavior.
+
+
+``MjvPerturb::update_local_pos``
+------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>update_local_pos`
+now takes ``selection_xyz`` by reference (``&[MjtNum; 3]``) instead of by value.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    perturb.update_local_pos(xyz, &data);
 
 **After (3.0.0):**
 
 .. code-block:: rust
 
     perturb.update_local_pos(&xyz, &data);
+
+
+Type changes
+-----------------------------
+
+- |mj_model|: ``size()`` now returns ``MjtSize`` instead of ``i32``.
+- |mj_model|: ``state_size()`` now returns ``usize`` instead of ``i32``.
+- |mj_data|: ``contact_force()`` now takes ``contact_id: u32`` instead of ``usize``.
 
 
 Removed deprecated methods
@@ -212,6 +267,7 @@ C++ viewer changes
 
 :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` no longer accepts the
 ``update_timer`` boolean parameter. The FPS timer is now always updated.
+The return type also changed from ``()`` to ``Result<(), &'static str>``.
 
 **Before (2.x):**
 
@@ -223,4 +279,4 @@ C++ viewer changes
 
 .. code-block:: rust
 
-    viewer.render();
+    viewer.render().unwrap();

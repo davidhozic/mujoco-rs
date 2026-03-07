@@ -58,7 +58,7 @@ at this stage.
             None,   // position: ignore here as we set it below.
             None,   // rotational matrix: ignore here as we set it below.
             Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
-        );
+        ).unwrap();
     }).unwrap();
 
 
@@ -81,7 +81,7 @@ which calculates the values to result in the geom pointing from one point to ano
             None,  // position: ignore here as we set it below.
             None,  // rotational matrix: ignore here as we set it below.
             Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
-        );
+        ).unwrap();
 
         /* Read X, Y and Z coordinates of both balls. */
         let ball1_position = ball1_joint_info.view(&data).qpos[..3]

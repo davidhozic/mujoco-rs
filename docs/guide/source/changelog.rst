@@ -31,7 +31,37 @@ update of MuJoCo alone can increase the major version.
   - Updated the MuJoCo version to 3.5.0.
   - Regenerated C FFI bindings to match MuJoCo 3.5.0.
   - Updated Rust API wrappers for compatibility with MuJoCo 3.5.0.
-  - Several constructors and I/O methods now return `Result <https://doc.rust-lang.org/std/result/>`_ for safer error handling.
+  - Many methods that previously returned bare types or ``io::Result`` now return typed
+    ``Result`` variants for safer error handling. See the *Error handling* section below
+    for the full list.
+  - |mj_data|: ``constraint_update``, ``jac``, ``jac_body``, ``jac_body_com``,
+    ``jac_subtree_com``, ``jac_geom``, ``jac_site``, ``angmom_mat``, ``object_velocity``,
+    ``object_acceleration``, ``geom_distance``, ``local_to_global`` now return
+    ``Result<_, MjDataError>`` instead of bare types.
+    ``add_contact`` now returns ``Result<(), MjDataError>`` instead of ``io::Result<()>``.
+  - |mj_data|: :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` gained
+    a new ``normal_out`` parameter (``Option<&mut [MjtNum; 3]>``).
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray` gained a new
+    ``normals_out`` parameter and now returns ``Result<_, MjDataError>``
+    instead of a bare tuple.
+  - |mj_data|: ``contact_force`` now takes ``contact_id: u32`` instead of ``usize``.
+  - |mj_model|:
+    :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>size` now
+    returns ``MjtSize`` instead of ``i32``.
+    :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>state_size` now
+    returns ``usize`` instead of ``i32``.
+  - |mjv_scene|:
+    :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>create_geom`
+    now returns ``Result<&mut MjvGeom, MjSceneError>`` instead of ``&mut MjvGeom``.
+    :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>set_label`
+    now returns ``Result<(), MjSceneError>``.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`:
+    ``add_aux`` and ``set_aux`` now return ``Result<(), MjSceneError>``.
+  - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer`:
+    ``rgb``, ``depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw`` now return
+    ``Result<_, RendererError>`` instead of ``io::Result``.
+  - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` now returns
+    ``Result<(), MjViewerError>`` instead of ``()``.
   - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` now returns
     ``Result<(), RendererError>`` instead of ``Result<(), MjDataError>``.
     :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` has a new ``SignatureMismatch`` variant
@@ -134,6 +164,28 @@ update of MuJoCo alone can increase the major version.
     - Methods ``add_from_file``, ``add_from_buffer``, ``delete_file``, ``mount``,
       ``unmount`` now return typed ``MjVfsError`` variants instead of ``io::Error``.
 
+  - |mj_data|:
+
+    - ``add_contact`` now returns ``MjDataError`` instead of ``io::Error``.
+    - Methods ``constraint_update``, ``jac``, ``jac_body``, ``jac_body_com``,
+      ``jac_subtree_com``, ``jac_geom``, ``jac_site``, ``angmom_mat``, ``object_velocity``,
+      ``object_acceleration``, ``geom_distance``, ``local_to_global``, ``multi_ray`` now return typed
+      ``MjDataError`` variants instead of bare (panicking) types.
+
+  - |mj_spec|:
+
+    - ``add_default`` now returns ``MjEditError`` instead of ``io::Error``.
+
+  - |mjv_scene| / :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`:
+
+    - ``create_geom``, ``set_label``, ``add_aux``, ``set_aux`` now return typed
+      ``MjSceneError`` variants instead of panicking.
+
+  - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer`:
+
+    - Methods ``rgb``, ``depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw`` now
+      return typed ``RendererError`` variants instead of ``io::Error``.
+
   - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`:
 
     - Gained new variants: ``RgbDisabled``, ``DepthDisabled``, ``DimensionMismatch``,
@@ -213,6 +265,7 @@ update of MuJoCo alone can increase the major version.
 
   - **Breaking**: :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` no longer
     accepts the boolean parameter ``update_timer``. The FPS timer is now always updated.
+    It also now returns ``Result<(), &'static str>`` instead of ``()``.
 
 2.3.5 (MuJoCo 3.3.7)
 =============================
