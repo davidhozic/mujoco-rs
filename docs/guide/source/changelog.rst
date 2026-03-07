@@ -44,7 +44,7 @@ update of MuJoCo alone can increase the major version.
     now takes ``selection_xyz`` by reference (``&[MjtNum; 3]``) instead of by value.
   - Removed deprecated methods:
 
-    - |mj_data|: ``warning_stats``, ``timer_stats``, ``maxuse_threadstack``,
+    - |mj_data|: ``warning_stats`` (use ``warning`` instead), ``timer_stats`` (use ``timer`` instead),
       type aliases ``MjJointInfo``, ``MjJointView``, ``MjJointViewMut``,
       ``MjGeomInfo``, ``MjGeomView``, ``MjGeomViewMut``,
       ``MjActuatorInfo``, ``MjActuatorView``, ``MjActuatorViewMut``.
@@ -100,6 +100,11 @@ update of MuJoCo alone can increase the major version.
       :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvCamera::<method>frustum`.
 
 - Changed methods:
+
+  - |mj_data|:
+
+    - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>maxuse_threadstack`
+      now returns ``&[MjtSize; mjMAXTHREAD]`` instead of ``&[MjtSize]``.
 
   - |mj_model|:
 

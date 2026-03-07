@@ -182,11 +182,9 @@ The following APIs have been removed. Use the listed replacements:
    * - Removed
      - Replacement
    * - ``MjData::warning_stats``
-     - (removed, no direct replacement)
+     - ``MjData::warning``
    * - ``MjData::timer_stats``
-     - (removed, no direct replacement)
-   * - ``MjData::maxuse_threadstack``
-     - (removed, no direct replacement)
+     - ``MjData::timer``
    * - Type aliases: ``MjJointInfo``, ``MjJointView``, ``MjJointViewMut``, ``MjGeomInfo``,
        ``MjGeomView``, ``MjGeomViewMut``, ``MjActuatorInfo``, ``MjActuatorView``, ``MjActuatorViewMut``
      - Use the ``MjJointData*``, ``MjGeomData*``, ``MjActuatorData*`` types
@@ -204,6 +202,9 @@ The following APIs have been removed. Use the listed replacements:
    * - ``MjViewer::sync``
      - Use :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` followed by
        :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`
+
+Additionally, ``MjData::maxuse_threadstack`` is still available but its return type changed from
+``&[MjtSize]`` to ``&[MjtSize; mjMAXTHREAD]``.
 
 
 C++ viewer changes

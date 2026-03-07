@@ -11,7 +11,7 @@ rendering RGB and depth images to either an array or to a file.
 
 The renderer can be constructed by its builder (:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>builder`)
 or directly with :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`, however the latter offers less control.
-method. By default, RGB rendering is enabled, while depth rendering is disabled.
+By default, RGB rendering is enabled, while depth rendering is disabled.
 
 .. code-block:: rust
     

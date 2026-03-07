@@ -165,6 +165,7 @@ which can be configured at the top of the model's XML like so:
     /// # Errors
     /// - [`RendererError::ZeroDimension`] if the width or height is zero.
     /// - [`RendererError::GlutinError`] if OpenGL initialization fails.
+    /// - [`RendererError::EventLoopError`] if the event loop fails to initialize.
     /// - [`RendererError::GlInitFailed`] if the fallback window initialization fails.
     pub fn build(self, model: M) -> Result<MjRenderer<M>, RendererError> {
         // Assume model's maximum should be used
@@ -276,6 +277,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// # Errors
     /// - [`RendererError::ZeroDimension`] if the width or height is zero.
     /// - [`RendererError::GlutinError`] if OpenGL initialization fails.
+    /// - [`RendererError::EventLoopError`] if the event loop fails to initialize.
     /// - [`RendererError::GlInitFailed`] if the fallback window initialization fails.
     pub fn new(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
         let builder = Self::builder()
