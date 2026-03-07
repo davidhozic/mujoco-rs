@@ -34,17 +34,29 @@ update of MuJoCo alone can increase the major version.
   - Many methods that previously returned bare types or ``io::Result`` now return typed
     ``Result`` variants for safer error handling. See the *Error handling* section below
     for the full list.
-  - |mj_data|: ``constraint_update``, ``jac``, ``jac_body``, ``jac_body_com``,
-    ``jac_subtree_com``, ``jac_geom``, ``jac_site``, ``angmom_mat``, ``object_velocity``,
-    ``object_acceleration``, ``geom_distance``, ``local_to_global`` now return
-    ``Result<_, MjDataError>`` instead of bare types.
-    ``add_contact`` now returns ``Result<(), MjDataError>`` instead of ``io::Result<()>``.
+  - |mj_data|:
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>constraint_update`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_body`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_body_com`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_subtree_com`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_geom`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_site`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>angmom_mat`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>object_velocity`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>object_acceleration`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>geom_distance`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>local_to_global`
+    now return ``Result<_, MjDataError>`` instead of bare types.
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>add_contact`
+    now returns ``Result<(), MjDataError>`` instead of ``io::Result<()>``.
   - |mj_data|: :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` gained
     a new ``normal_out`` parameter (``Option<&mut [MjtNum; 3]>``).
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray` gained a new
     ``normals_out`` parameter and now returns ``Result<_, MjDataError>``
     instead of a bare tuple.
-  - |mj_data|: ``contact_force`` now takes ``contact_id: u32`` instead of ``usize``.
+  - |mj_data|: :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force`
+    now takes ``contact_id: u32`` instead of ``usize``.
   - |mj_model|:
     :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>size` now
     returns ``MjtSize`` instead of ``i32``.
@@ -56,14 +68,21 @@ update of MuJoCo alone can increase the major version.
     :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>set_label`
     now returns ``Result<(), MjSceneError>``.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`:
-    ``add_aux`` and ``set_aux`` now return ``Result<(), MjSceneError>``.
+    :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>add_aux` and
+    :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_aux`
+    now return ``Result<(), MjSceneError>``.
   - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer`:
-    ``rgb``, ``depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw`` now return
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb`,
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth`,
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb`,
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth`,
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw` now return
     ``Result<_, RendererError>`` instead of ``io::Result``.
   - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` now returns
     ``Result<(), MjViewerError>`` instead of ``()``.
   - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` is a new fallible
-    alternative to ``sync()``, returning ``Result<(), RendererError>``.
+    alternative to :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`,
+    returning ``Result<(), RendererError>``.
     :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` has a new ``SignatureMismatch`` variant
     and now also propagates OpenGL context errors from the internal ``render()`` call.
   - |mj_model| now implements the ``Clone`` trait (panics on failure).
@@ -74,17 +93,24 @@ update of MuJoCo alone can increase the major version.
     now takes ``selection_xyz`` by reference (``&[MjtNum; 3]``) instead of by value.
   - Removed deprecated methods:
 
-    - |mj_data|: ``warning_stats`` (use ``warning`` instead), ``timer_stats`` (use ``timer`` instead),
+    - |mj_data|: ``warning_stats``
+      (use :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>warning` instead),
+      ``timer_stats``
+      (use :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>timer` instead),
       type aliases ``MjJointInfo``, ``MjJointView``, ``MjJointViewMut``,
       ``MjGeomInfo``, ``MjGeomView``, ``MjGeomViewMut``,
       ``MjActuatorInfo``, ``MjActuatorView``, ``MjActuatorViewMut``.
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjJointDataViewMut`: ``reset``
-      (use ``zero`` instead).
-    - |mj_model|: ``name2id`` (use ``name_to_id`` instead).
+      (use :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataViewMut::<method>zero` instead).
+    - |mj_model|: ``name2id``
+      (use :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>name_to_id` instead).
     - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`: ``new``
-      (use ``new_free``, ``new_fixed``, ``new_tracking``, or ``new_user`` instead).
+      (use :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new_free`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new_fixed`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new_tracking`,
+      or :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new_user` instead).
     - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`: ``figure``
-      (use ``draw`` instead).
+      (use :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>draw` instead).
     - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`: ``user_scene``, ``user_scene_mut``,
       ``user_scn``, ``user_scn_mut``, ``sync``.
 
@@ -129,7 +155,11 @@ update of MuJoCo alone can increase the major version.
 
   - |mjs_wrap|:
 
-    - Added getters for ``coef``, ``divisor``, ``side_site``, and ``side_site_mut``.
+    - Added getters for
+      :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsWrap::<method>coef`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsWrap::<method>divisor`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsWrap::<method>side_site`, and
+      :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsWrap::<method>side_site_mut`.
 
   - |mjv_camera|:
 
@@ -162,37 +192,75 @@ update of MuJoCo alone can increase the major version.
 
   - |mj_model|:
 
-    - Methods ``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``from_buffer``,
-      ``save_last_xml``, ``extract_state``, ``extract_state_into`` now return typed
-      ``MjModelError`` variants instead of ``io::Error``.
+    - Methods
+      :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml_vfs`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml_string`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state_into`
+      now return typed :docs-rs:`~mujoco_rs::error::<enum>MjModelError` variants instead of ``io::Error``.
 
   - |mj_vfs|:
 
-    - Methods ``add_from_file``, ``add_from_buffer``, ``delete_file``, ``mount``,
-      ``unmount`` now return typed ``MjVfsError`` variants instead of ``io::Error``.
+    - Methods
+      :docs-rs:`~~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>add_from_file`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>add_from_buffer`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>delete_file`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>mount`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>unmount`
+      now return typed :docs-rs:`~mujoco_rs::error::<enum>MjVfsError` variants instead of ``io::Error``.
 
   - |mj_data|:
 
-    - ``add_contact`` now returns ``MjDataError`` instead of ``io::Error``.
-    - Methods ``constraint_update``, ``jac``, ``jac_body``, ``jac_body_com``,
-      ``jac_subtree_com``, ``jac_geom``, ``jac_site``, ``angmom_mat``, ``object_velocity``,
-      ``object_acceleration``, ``geom_distance``, ``local_to_global``, ``multi_ray`` now return typed
-      ``MjDataError`` variants instead of bare (panicking) types.
+    - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>add_contact`
+      now returns :docs-rs:`~mujoco_rs::error::<enum>MjDataError` instead of ``io::Error``.
+    - Methods
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>constraint_update`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_body`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_body_com`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_subtree_com`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_geom`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_site`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>angmom_mat`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>object_velocity`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>object_acceleration`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>geom_distance`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>local_to_global`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray`
+      now return typed :docs-rs:`~mujoco_rs::error::<enum>MjDataError` variants instead of
+      bare (panicking) types.
 
   - |mj_spec|:
 
-    - ``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``compile``, ``save_xml``,
-      ``save_xml_string``, ``add_default`` now return ``MjEditError`` instead of ``io::Error``.
+    - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_xml`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_xml_vfs`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_xml_string`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>save_xml`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>save_xml_string`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>add_default`
+      now return :docs-rs:`~mujoco_rs::error::<enum>MjEditError` instead of ``io::Error``.
 
   - |mjv_scene| / :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`:
 
-    - ``create_geom``, ``set_label``, ``add_aux``, ``set_aux`` now return typed
-      ``MjSceneError`` variants instead of panicking.
+    - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>create_geom`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>set_label`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>add_aux`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_aux`
+      now return typed :docs-rs:`~mujoco_rs::error::<enum>MjSceneError` variants instead of panicking.
 
   - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer`:
 
-    - Methods ``rgb``, ``depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw`` now
-      return typed ``RendererError`` variants instead of ``io::Error``.
+    - Methods
+      :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb`,
+      :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth`,
+      :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb`,
+      :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth`,
+      :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw`
+      now return typed :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` variants instead of ``io::Error``.
 
   - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`:
 
@@ -212,14 +280,28 @@ update of MuJoCo alone can increase the major version.
     for OpenGL context initialization failures in the renderer and viewer.
   - New fallible ``try_`` methods:
 
-    - |mj_data|: ``try_new``, ``try_clone``, ``try_copy_state_from_data``, ``try_apply_ft``,
-      ``try_read_state_into``, ``try_set_state``, ``try_copy_visual_to``, ``try_copy_to``.
-    - |mj_model|: ``try_clone``, ``try_make_data``.
-    - |mj_spec| and editing types: ``try_new``, ``try_add_frame``, ``try_wrap_site``,
+    - |mj_data|:
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_new`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_clone`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_copy_state_from_data`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_apply_ft`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_read_state_into`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_set_state`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_copy_visual_to`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_copy_to`.
+    - |mj_model|:
+      :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_clone`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_make_data`.
+    - |mj_spec| and editing types:
+      :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>try_new`,
+      ``try_add_frame``, ``try_wrap_site``,
       ``try_wrap_geom``, ``try_wrap_joint``, ``try_wrap_pulley``, and macro-generated
       ``try_add_*`` methods.
-    - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`: ``try_push``, ``try_set_at``.
-    - :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`: ``try_read_pixels``.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`:
+      :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>try_push`,
+      :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>try_set_at`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`:
+      :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>try_read_pixels`.
 
   - Infallible counterparts now delegate to their ``try_`` variants via ``.expect()``,
     preserving backward compatibility.
@@ -239,6 +321,67 @@ update of MuJoCo alone can increase the major version.
   - Module :docs-rs:`~mujoco_rs::mujoco_c` now uses compile-time layout tests to ensure
     declarations match the platform ABI of the linked MuJoCo library.
 
+  - Replaced several ``unsafe`` type-punning blocks with direct pointer casts
+    where type compatibility is trivially provable:
+
+    - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer`:
+      :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb`,
+      :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth`, and
+      :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw`
+      now use direct pointer casts with a runtime length check, replacing the previous
+      unsafe casts that lacked length validation.
+    - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml` and
+      :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>label` now use
+      direct ``i8`` to ``u8`` pointer casts (identical layout) instead of unsafe
+      ``from_raw_parts`` without documented invariants.
+    - ``write_mjs_vec_byte`` and
+      :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`
+      now require ``T: bytemuck::NoUninit``
+      for compile-time verified byte reinterpretation instead of unsafe pointer casts.
+
+  - Replaced ``force_cast`` union transmutes with ``as *const _ as *mut _`` for
+    ``&T`` to ``*mut T`` pointer casts in :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsWrap`
+    methods and body-item iterators, making
+    the const-to-mut intent explicit without a union-based transmute.
+
+  - Added compile-time ``const`` assertions in the viewer UI to verify that
+    ``GL_EFFECT_MAP``, ``VIS_OPT_MAP``, ``LABEL_TYPE_MAP``, and ``FRAME_TYPE_MAP``
+    lengths match the corresponding MuJoCo sentinel values (``mjNRNDFLAG``,
+    ``mjNVISFLAG``, ``mjNLABEL``, ``mjNFRAME``). Previously these were only
+    checked at runtime via ``debug_assert_eq!``.
+
+  - Replaced hardcoded index bound ``10`` with ``mjNAUX as usize`` in
+    :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_aux`
+    so the check stays correct if MuJoCo changes the constant.
+
+  - Added a compile-time assertion that ``HELP_MENU_TITLES`` and ``HELP_MENU_VALUES``
+    have the same number of newline-delimited entries, preventing silent misalignment
+    of the viewer help overlay.
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel` now uses
+    ``NonNull<mjModel>`` instead of ``*mut mjModel`` internally, and
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData` uses ``NonNull<mjData>``.
+    This encodes the non-null invariant at the type level, eliminating a class of possible
+    null-pointer dereferences and enabling niche optimization for ``Option<MjModel>`` etc.
+
+  - Added ``unsafe impl bytemuck::Zeroable`` for all MuJoCo C enum types used in view structs.
+    The ``zero()`` method in ``info_with_view!`` now calls ``bytemuck::Zeroable::zeroed()``
+    (safe) instead of ``std::mem::zeroed()`` (unsafe). Any future type used in views without
+    a ``Zeroable`` impl will produce a compile error.
+
+  - Added a compile-time assertion that ``MjtCamera``'s ``TryFrom<i32>`` discriminant values
+    match the actual enum variant values, catching silent drift if MuJoCo renumbers them.
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>label` and
+    :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>set_label`
+    now use ``bytemuck::cast_slice`` / ``bytemuck::cast_slice_mut`` for safe
+    ``i8``-to-``u8`` conversion instead of raw pointer casts, eliminating ``unsafe`` blocks.
+
+  - Replaced ``unsafe { CStr::from_ptr(...) }`` with safe ``CStr::from_bytes_until_nul``
+    across error-buffer handling in |mj_model|, |mj_spec|, and the ``c_str_as_str_method!``
+    macro. This eliminates unbounded NUL scans and removes several ``unsafe`` blocks.
+    ``check_raw_model`` and ``check_spec`` are now safe functions.
+
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>update_local_pos`
     now uses bounds-checked slice indexing into |mj_data| for ``xpos`` and ``xmat`` instead of
     raw pointer arithmetic. An invalid ``select`` index now triggers a ``debug_assert!`` and
@@ -249,7 +392,8 @@ update of MuJoCo alone can increase the major version.
 
   - Updated enum type aliases.
   - Improved fixed-size array pointer handling.
-  - Added support for ``Depth`` rendering flag (``mjRND_DEPTH``) to ``MjViewer``.
+  - Added support for ``Depth`` rendering flag (``mjRND_DEPTH``) to
+    :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
   - Added a "Print camera" button to the viewer UI that prints the current camera's position and
     orientation as an MJCF ``<camera>`` XML element to the console.
   - |mj_data| and |mj_model| views now contain extra fields.
@@ -372,7 +516,7 @@ update of MuJoCo alone can increase the major version.
 
     - Added :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`:
 
-      - Deprecates :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync`, which performed
+      - Deprecates ``sync()``, which performed
         both synchronization and rendering.
       - Rendering must now be done through :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`,
         which must be called by user code.
@@ -400,8 +544,8 @@ update of MuJoCo alone can increase the major version.
 
 - Deprecated:
 
-  - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scene` and
-    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scene_mut`.
+  - ``user_scene()`` and
+    ``user_scene_mut()``.
     They are replaced with
     :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>user_scene` and
     :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>user_scene_mut`.
@@ -607,17 +751,17 @@ Bug fixes:
 
   - Added :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` for actual offscreen rendering of the simulation state.
 
-- Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new` and replaced it with:
+- Deprecated ``MjvCamera::new()`` and replaced it with:
 
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new_free`,
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new_fixed`,
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new_tracking` and
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new_user`.
 
-- Deprecated :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn` and
-  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn_mut`. They are replaced with
-  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scene` and
-  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scene_mut`.
+- Deprecated ``user_scn()`` and
+  ``user_scn_mut()``. They are replaced with
+  ``user_scene()`` and
+  ``user_scene_mut()``.
 
 - Added new methods for obtaining public attributes:
 
@@ -625,8 +769,8 @@ Bug fixes:
 
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>maxuse_stack`,
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>maxuse_threadstack`,
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>warning_stats`,
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>timer_stats`,
+    - ``warning_stats()``,
+    - ``timer_stats()``,
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>time`,
     - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy`.
 
@@ -699,8 +843,8 @@ Bug fixes:
 Viewer:
 
 - Help overlay (F1)
-- User scene via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn` and
-  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>user_scn_mut` for drawing custom visual-only geoms.
+- User scene via ``user_scn()`` and
+  ``user_scn_mut()`` for drawing custom visual-only geoms.
 - Mouse perturbation of objects:
 
   - Rotate via Control

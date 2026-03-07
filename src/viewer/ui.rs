@@ -49,6 +49,7 @@ const GL_EFFECT_MAP: [&str; 11] = [
     "ID color",
     "Cull face"
 ];
+const _: () = assert!(GL_EFFECT_MAP.len() == crate::mujoco_c::mjtRndFlag_::mjNRNDFLAG as usize);
 
 /// Maps [`MjtVisFlag`](crate::wrappers::mj_visualization::MjtVisFlag) to their string
 const VIS_OPT_MAP: [&str; 31] = [
@@ -84,6 +85,7 @@ const VIS_OPT_MAP: [&str; 31] = [
     "Mesh BVH",
     "SDF iteration"
 ];
+const _: () = assert!(VIS_OPT_MAP.len() == crate::mujoco_c::mjtVisFlag_::mjNVISFLAG as usize);
 
 /// Maps [`MjtLabel`](crate::wrappers::mj_visualization::MjtLabel) to their string
 const LABEL_TYPE_MAP: [&str; 17] = [
@@ -105,6 +107,7 @@ const LABEL_TYPE_MAP: [&str; 17] = [
     "Contact force",
     "Island"
 ];
+const _: () = assert!(LABEL_TYPE_MAP.len() == crate::mujoco_c::mjtLabel_::mjNLABEL as usize);
 
 /// Maps [`MjtFrame`](crate::wrappers::mj_visualization::MjtFrame) to their string
 const FRAME_TYPE_MAP: [&str; 8] = [
@@ -117,6 +120,7 @@ const FRAME_TYPE_MAP: [&str; 8] = [
     "Contact",
     "World"
 ];
+const _: () = assert!(FRAME_TYPE_MAP.len() == crate::mujoco_c::mjtFrame_::mjNFRAME as usize);
 
 /// Type alias for a user-provided UI callback function.
 pub(crate) type UiCallback<M> = Box<dyn FnMut(&egui::Context, &mut MjData<M>)>;
@@ -455,10 +459,6 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                             ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    debug_assert_eq!(
-                                        options.flags.len(), VIS_OPT_MAP.len(),
-                                        "visualization names don't match options length. This is a bug!"
-                                    );
                                     for (flag, (enabled, flag_name)) in options.flags.iter_mut().zip(VIS_OPT_MAP).enumerate() {
                                         ui.toggle_value(cast_mut_info!(enabled, flag), flag_name);
                                     }
@@ -475,10 +475,6 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                             ui.collapsing(RichText::new("OpenGL effects").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    debug_assert_eq!(
-                                        scene.flags_mut().len(), GL_EFFECT_MAP.len(),
-                                        "OpenGL effect flag names don't match scene flags length. This is a bug!"
-                                    );
                                     for (flag, (enabled, flag_name)) in scene.flags_mut().iter_mut().zip(GL_EFFECT_MAP).enumerate() {
                                         ui.toggle_value(
                                             cast_mut_info!(enabled, flag),

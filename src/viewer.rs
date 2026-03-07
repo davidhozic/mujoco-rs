@@ -96,6 +96,25 @@ const HELP_MENU_VALUES: &str = concat!(
     "See MjViewer docs"
 );
 
+// Compile-time check: HELP_MENU_TITLES and HELP_MENU_VALUES must have the same
+// number of newline-delimited entries, otherwise the help overlay misaligns.
+const fn count_byte(s: &[u8], target: u8) -> usize {
+    let mut count = 0;
+    let mut i = 0;
+    while i < s.len() {
+        if s[i] == target {
+            count += 1;
+        }
+        i += 1;
+    }
+    count
+}
+const _: () = assert!(
+    count_byte(HELP_MENU_TITLES.as_bytes(), b'\n')
+        == count_byte(HELP_MENU_VALUES.as_bytes(), b'\n'),
+    "HELP_MENU_TITLES and HELP_MENU_VALUES must have the same number of lines"
+);
+
 /// Errors that can occur when initializing or running the MuJoCo viewer.
 #[derive(Debug)]
 #[non_exhaustive]

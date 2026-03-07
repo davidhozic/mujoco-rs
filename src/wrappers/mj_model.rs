@@ -1,13 +1,13 @@
 //! MjModel related.
 use std::ffi::{CStr, CString, NulError, c_int, c_void};
 use std::path::Path;
-use std::ptr;
+use std::ptr::{self, NonNull};
 
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
 use super::mj_primitive::*;
 
 use crate::wrappers::mj_option::MjOption;
-use crate::util::assert_mujoco_version;
+use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
 use crate::wrappers::mj_data::MjData;
 use crate::error::{MjDataError, MjModelError};
 use crate::mujoco_c::*;
@@ -128,12 +128,36 @@ pub type MjtRayDataField = mjtRayDataField;
 
 /// Camera output type bitflags.
 pub type MjtCamOutBit = mjtCamOutBit;
+
+// SAFETY: All MuJoCo C enums below are `#[repr(u32)]` (or `#[repr(u8)]`) and each
+// has a variant with discriminant 0, so the all-zeros bit pattern is a valid value.
+// This lets `info_with_view!`'s `zero()` method use the safe `Zeroable::zeroed()`
+// instead of `unsafe { std::mem::zeroed() }`, providing a compile-time guarantee
+// that only safe-to-zero types are used in views.
+unsafe impl bytemuck::Zeroable for mjtTrn_ {}
+unsafe impl bytemuck::Zeroable for mjtDyn_ {}
+unsafe impl bytemuck::Zeroable for mjtGain_ {}
+unsafe impl bytemuck::Zeroable for mjtBias_ {}
+unsafe impl bytemuck::Zeroable for mjtObj_ {}
+unsafe impl bytemuck::Zeroable for mjtSameFrame_ {}
+unsafe impl bytemuck::Zeroable for mjtCamLight_ {}
+unsafe impl bytemuck::Zeroable for mjtProjection_ {}
+unsafe impl bytemuck::Zeroable for mjtEq_ {}
+unsafe impl bytemuck::Zeroable for mjtGeom_ {}
+unsafe impl bytemuck::Zeroable for mjtJoint_ {}
+unsafe impl bytemuck::Zeroable for mjtLightType_ {}
+unsafe impl bytemuck::Zeroable for mjtSensor_ {}
+unsafe impl bytemuck::Zeroable for mjtDataType_ {}
+unsafe impl bytemuck::Zeroable for mjtStage_ {}
+unsafe impl bytemuck::Zeroable for mjtTexture_ {}
+unsafe impl bytemuck::Zeroable for mjtColorSpace_ {}
+
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
 /// Automatically clean after itself on destruction.
 #[derive(Debug)]
-pub struct MjModel(*mut mjModel);
+pub struct MjModel(NonNull<mjModel>);
 
 // Allow usage in threaded contexts as the data won't be shared anywhere outside Rust,
 // except in the C++ code.
@@ -171,18 +195,16 @@ impl MjModel {
     fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, MjModelError> {
         assert_mujoco_version();
 
-        let mut error_buffer = [0i8; 100];
-        unsafe {
-            let path_str = path.as_ref().to_str()
-                .ok_or(MjModelError::InvalidUtf8Path)?;
-            let path = CString::new(path_str).unwrap();
-            let raw_ptr = mj_loadXML(
-                path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
-                &mut error_buffer as *mut i8, error_buffer.len() as c_int
-            );
+        let mut error_buffer = [0u8; ERROR_BUF_LEN];
+        let path_str = path.as_ref().to_str()
+            .ok_or(MjModelError::InvalidUtf8Path)?;
+        let path = CString::new(path_str).unwrap();
+        let raw_ptr = unsafe { mj_loadXML(
+            path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
+            error_buffer.as_mut_ptr().cast::<i8>(), error_buffer.len() as c_int
+        ) };
 
-            Self::check_raw_model(raw_ptr, &error_buffer)
-        }
+        Self::check_raw_model(raw_ptr, &error_buffer)
     }
 
     /// Loads the model from an XML string.
@@ -202,16 +224,14 @@ impl MjModel {
         // Add the file into a virtual file system
         vfs.add_from_buffer(filename, data.as_bytes())?;
 
-        let mut error_buffer = [0i8; 100];
-        unsafe {
-            let filename_c = CString::new(filename).unwrap();
-            let raw_ptr = mj_loadXML(
-                filename_c.as_ptr(), vfs.ffi(),
-                &mut error_buffer as *mut i8, error_buffer.len() as c_int
-            );
+        let mut error_buffer = [0u8; ERROR_BUF_LEN];
+        let filename_c = CString::new(filename).unwrap();
+        let raw_ptr = unsafe { mj_loadXML(
+            filename_c.as_ptr(), vfs.ffi(),
+            error_buffer.as_mut_ptr().cast::<i8>(), error_buffer.len() as c_int
+        ) };
 
-            Self::check_raw_model(raw_ptr, &error_buffer)
-        }
+        Self::check_raw_model(raw_ptr, &error_buffer)
     }
 
     /// Loads the model from MJB raw data.
@@ -230,7 +250,7 @@ impl MjModel {
 
     /// Creates a [`MjModel`] from a raw pointer.
     pub(crate) fn from_raw(ptr: *mut mjModel) -> Result<Self, MjModelError> {
-        unsafe { Self::check_raw_model(ptr, &[0]) }
+        Self::check_raw_model(ptr, &[0])
     }
 
     /// Saves the last loaded XML to `filename`.
@@ -241,27 +261,21 @@ impl MjModel {
     /// # Panics
     /// When `filename` contains '\0' characters, a panic occurs.
     pub fn save_last_xml(&self, filename: &str) -> Result<(), MjModelError> {
-        let mut error = [0i8; 100];
-        unsafe {
-            let cstring = CString::new(filename).unwrap();
-            match mj_saveLastXML(
-                cstring.as_ptr(), self.ffi(),
-                error.as_mut_ptr(), (error.len() - 1) as i32
-            ) {
-                1 => Ok(()),
-                0 => {
-                    let cstr_error = String::from_utf8_lossy(
-                        // Reinterpret as u8 data. This does not affect the data as it is ASCII
-                        // encoded and thus negative values aren't possible.
-                        std::slice::from_raw_parts(
-                            error.as_ptr() as *const u8,
-                            error.iter().position(|&x| x == 0).unwrap_or(error.len())
-                        )
-                    );
-                    Err(MjModelError::SaveFailed(cstr_error.into_owned()))
-                },
-                _ => unreachable!()
-            }
+        let mut error = [0u8; ERROR_BUF_LEN];
+        let cstring = CString::new(filename).unwrap();
+        let result = unsafe { mj_saveLastXML(
+            cstring.as_ptr(), self.ffi(),
+            error.as_mut_ptr().cast::<i8>(), error.len() as i32
+        ) };
+        match result {
+            1 => Ok(()),
+            0 => {
+                let cstr_error = CStr::from_bytes_until_nul(&error)
+                    .map(|c| c.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                Err(MjModelError::SaveFailed(cstr_error))
+            },
+            _ => unreachable!()
         }
     }
 
@@ -284,16 +298,14 @@ impl MjModel {
     }
 
     /// Handles the pointer to the model.
-    /// # Safety
-    /// `error_buffer` must have at least one element, where the last element must be 0.
-    unsafe fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[i8]) -> Result<Self, MjModelError> {
-        if ptr_model.is_null() {
-            Err(MjModelError::LoadFailed(
-                unsafe { CStr::from_ptr(error_buffer.as_ptr().cast()).to_string_lossy().into_owned() }
-            ))
-        }
-        else {
-            Ok(Self(ptr_model))
+    fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[u8]) -> Result<Self, MjModelError> {
+        match NonNull::new(ptr_model) {
+            Some(nn) => Ok(Self(nn)),
+            None => Err(MjModelError::LoadFailed(
+                CStr::from_bytes_until_nul(error_buffer)
+                    .map(|c| c.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            )),
         }
     }
 
@@ -478,7 +490,7 @@ impl MjModel {
     pub fn name_to_id(&self, type_: MjtObj, name: &str) -> i32 {
         let c_string = CString::new(name).unwrap();
         unsafe {
-            mj_name2id(self.0, type_ as i32, c_string.as_ptr())
+            mj_name2id(self.ffi(), type_ as i32, c_string.as_ptr())
         }
     }
 
@@ -491,12 +503,9 @@ impl MjModel {
     /// the copy.
     pub fn try_clone(&self) -> Result<MjModel, MjDataError> {
         let ptr = unsafe { mj_copyModel(ptr::null_mut(), self.ffi()) };
-        if ptr.is_null() {
-            Err(MjDataError::AllocationFailed)
-        }
-        else {
-            Ok(MjModel(ptr))
-        }
+        NonNull::new(ptr)
+            .map(MjModel)
+            .ok_or(MjDataError::AllocationFailed)
     }
 
     /// Save model to binary MJB file or memory buffer; buffer has precedence when given.
@@ -665,7 +674,7 @@ impl MjModel {
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
-        unsafe { &*self.0 }
+        unsafe { self.0.as_ref() }
     }
 
     /// Returns a mutable reference to the wrapped FFI struct.
@@ -674,7 +683,7 @@ impl MjModel {
     /// Modifying the underlying FFI struct directly can break the invariants
     /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjModel {
-        unsafe { &mut *self.0 }
+        unsafe { self.0.as_mut() }
     }
 
     /// Returns a direct pointer to the underlying model.
@@ -682,7 +691,7 @@ impl MjModel {
     /// It is only meant for the viewer code, which currently still depends
     /// on mutable pointers to model and data. This will be removed in the future.
     pub(crate) unsafe fn __raw(&self) -> *mut mjModel {
-        self.0
+        self.0.as_ptr()
     }
 }
 
@@ -810,15 +819,15 @@ impl MjModel {
         body_geomnum: &[i32; "number of geoms"; ffi().nbody],
         body_geomadr: &[i32; "start addr of geoms; -1: no geoms"; ffi().nbody],
         body_simple: &[MjtByte; "1: diag M; 2: diag M, sliders only"; ffi().nbody],
-        body_sameframe: &[MjtSameFrame [cast]; "same frame as inertia"; ffi().nbody],
-        body_pos: &[[MjtNum; 3] [cast]; "position offset rel. to parent body"; ffi().nbody],
-        body_quat: &[[MjtNum; 4] [cast]; "orientation offset rel. to parent body"; ffi().nbody],
-        body_ipos: &[[MjtNum; 3] [cast]; "local position of center of mass"; ffi().nbody],
-        body_iquat: &[[MjtNum; 4] [cast]; "local orientation of inertia ellipsoid"; ffi().nbody],
+        body_sameframe: &[MjtSameFrame [force]; "same frame as inertia"; ffi().nbody],
+        body_pos: &[[MjtNum; 3] [force]; "position offset rel. to parent body"; ffi().nbody],
+        body_quat: &[[MjtNum; 4] [force]; "orientation offset rel. to parent body"; ffi().nbody],
+        body_ipos: &[[MjtNum; 3] [force]; "local position of center of mass"; ffi().nbody],
+        body_iquat: &[[MjtNum; 4] [force]; "local orientation of inertia ellipsoid"; ffi().nbody],
         body_mass: &[MjtNum; "mass"; ffi().nbody],
         body_subtreemass: &[MjtNum; "mass of subtree starting at this body"; ffi().nbody],
-        body_inertia: &[[MjtNum; 3] [cast]; "diagonal inertia in ipos/iquat frame"; ffi().nbody],
-        body_invweight0: &[[MjtNum; 2] [cast]; "mean inv inert in qpos0 (trn, rot)"; ffi().nbody],
+        body_inertia: &[[MjtNum; 3] [force]; "diagonal inertia in ipos/iquat frame"; ffi().nbody],
+        body_invweight0: &[[MjtNum; 2] [force]; "mean inv inert in qpos0 (trn, rot)"; ffi().nbody],
         body_gravcomp: &[MjtNum; "antigravity force, units of body weight"; ffi().nbody],
         body_margin: &[MjtNum; "MAX over all geom margins"; ffi().nbody],
         body_plugin: &[i32; "plugin instance id; -1: not in use"; ffi().nbody],
@@ -827,28 +836,28 @@ impl MjModel {
         body_bvhadr: &[i32; "address of bvh root"; ffi().nbody],
         body_bvhnum: &[i32; "number of bounding volumes"; ffi().nbody],
         bvh_depth: &[i32; "depth in the bounding volume hierarchy"; ffi().nbvh],
-        bvh_child: &[[i32; 2] [cast]; "left and right children in tree"; ffi().nbvh],
+        bvh_child: &[[i32; 2] [force]; "left and right children in tree"; ffi().nbvh],
         bvh_nodeid: &[i32; "geom or elem id of node; -1: non-leaf"; ffi().nbvh],
-        bvh_aabb: &[[MjtNum; 6] [cast]; "local bounding box (center, size)"; ffi().nbvhstatic],
+        bvh_aabb: &[[MjtNum; 6] [force]; "local bounding box (center, size)"; ffi().nbvhstatic],
         oct_depth: &[i32; "depth in the octree"; ffi().noct],
-        oct_child: &[[i32; 8] [cast]; "children of octree node"; ffi().noct],
-        oct_aabb: &[[MjtNum; 6] [cast]; "octree node bounding box (center, size)"; ffi().noct],
-        oct_coeff: &[[MjtNum; 8] [cast]; "octree interpolation coefficients"; ffi().noct],
-        jnt_type: &[MjtJoint [cast]; "type of joint"; ffi().njnt],
+        oct_child: &[[i32; 8] [force]; "children of octree node"; ffi().noct],
+        oct_aabb: &[[MjtNum; 6] [force]; "octree node bounding box (center, size)"; ffi().noct],
+        oct_coeff: &[[MjtNum; 8] [force]; "octree interpolation coefficients"; ffi().noct],
+        jnt_type: &[MjtJoint [force]; "type of joint"; ffi().njnt],
         jnt_qposadr: &[i32; "start addr in 'qpos' for joint's data"; ffi().njnt],
         jnt_dofadr: &[i32; "start addr in 'qvel' for joint's data"; ffi().njnt],
         jnt_bodyid: &[i32; "id of joint's body"; ffi().njnt],
         jnt_group: &[i32; "group for visibility"; ffi().njnt],
-        jnt_limited: &[bool [cast]; "does joint have limits"; ffi().njnt],
-        jnt_actfrclimited: &[bool [cast]; "does joint have actuator force limits"; ffi().njnt],
-        jnt_actgravcomp: &[bool [cast]; "is gravcomp force applied via actuators"; ffi().njnt],
-        jnt_solref: &[[MjtNum; mjNREF as usize] [cast]; "constraint solver reference: limit"; ffi().njnt],
-        jnt_solimp: &[[MjtNum; mjNIMP as usize] [cast]; "constraint solver impedance: limit"; ffi().njnt],
-        jnt_pos: &[[MjtNum; 3] [cast]; "local anchor position"; ffi().njnt],
-        jnt_axis: &[[MjtNum; 3] [cast]; "local joint axis"; ffi().njnt],
+        jnt_limited: &[bool [force]; "does joint have limits"; ffi().njnt],
+        jnt_actfrclimited: &[bool [force]; "does joint have actuator force limits"; ffi().njnt],
+        jnt_actgravcomp: &[bool [force]; "is gravcomp force applied via actuators"; ffi().njnt],
+        jnt_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference: limit"; ffi().njnt],
+        jnt_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance: limit"; ffi().njnt],
+        jnt_pos: &[[MjtNum; 3] [force]; "local anchor position"; ffi().njnt],
+        jnt_axis: &[[MjtNum; 3] [force]; "local joint axis"; ffi().njnt],
         jnt_stiffness: &[MjtNum; "stiffness coefficient"; ffi().njnt],
-        jnt_range: &[[MjtNum; 2] [cast]; "joint limits"; ffi().njnt],
-        jnt_actfrcrange: &[[MjtNum; 2] [cast]; "range of total actuator force"; ffi().njnt],
+        jnt_range: &[[MjtNum; 2] [force]; "joint limits"; ffi().njnt],
+        jnt_actfrcrange: &[[MjtNum; 2] [force]; "range of total actuator force"; ffi().njnt],
         jnt_margin: &[MjtNum; "min distance for limit detection"; ffi().njnt],
         dof_bodyid: &[i32; "id of dof's body"; ffi().nv],
         dof_jntid: &[i32; "id of dof's joint"; ffi().nv],
@@ -856,8 +865,8 @@ impl MjModel {
         dof_treeid: &[i32; "id of dof's kinematic tree"; ffi().nv],
         dof_Madr: &[i32; "dof address in M-diagonal"; ffi().nv],
         dof_simplenum: &[i32; "number of consecutive simple dofs"; ffi().nv],
-        dof_solref: &[[MjtNum; mjNREF as usize] [cast]; "constraint solver reference:frictionloss"; ffi().nv],
-        dof_solimp: &[[MjtNum; mjNIMP as usize] [cast]; "constraint solver impedance:frictionloss"; ffi().nv],
+        dof_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference:frictionloss"; ffi().nv],
+        dof_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance:frictionloss"; ffi().nv],
         dof_frictionloss: &[MjtNum; "dof friction loss"; ffi().nv],
         dof_armature: &[MjtNum; "dof armature inertia/mass"; ffi().nv],
         dof_damping: &[MjtNum; "damping coefficient"; ffi().nv],
@@ -868,8 +877,8 @@ impl MjModel {
         tree_bodynum: &[i32; "number of bodies in tree"; ffi().ntree],
         tree_dofadr: &[i32; "start addr of dofs"; ffi().ntree],
         tree_dofnum: &[i32; "number of dofs in tree"; ffi().ntree],
-        tree_sleep_policy: &[MjtSleepPolicy [cast]; "sleep policy"; ffi().ntree],
-        geom_type: &[MjtGeom [cast]; "geometric type"; ffi().ngeom],
+        tree_sleep_policy: &[MjtSleepPolicy [force]; "sleep policy"; ffi().ntree],
+        geom_type: &[MjtGeom [force]; "geometric type"; ffi().ngeom],
         geom_contype: &[i32; "geom contact type"; ffi().ngeom],
         geom_conaffinity: &[i32; "geom contact affinity"; ffi().ngeom],
         geom_condim: &[i32; "contact dimensionality (1, 3, 4, 6)"; ffi().ngeom],
@@ -879,77 +888,77 @@ impl MjModel {
         geom_group: &[i32; "group for visibility"; ffi().ngeom],
         geom_priority: &[i32; "geom contact priority"; ffi().ngeom],
         geom_plugin: &[i32; "plugin instance id; -1: not in use"; ffi().ngeom],
-        geom_sameframe: &[MjtSameFrame [cast]; "same frame as body"; ffi().ngeom],
+        geom_sameframe: &[MjtSameFrame [force]; "same frame as body"; ffi().ngeom],
         geom_solmix: &[MjtNum; "mixing coef for solref/imp in geom pair"; ffi().ngeom],
-        geom_solref: &[[MjtNum; mjNREF as usize] [cast]; "constraint solver reference: contact"; ffi().ngeom],
-        geom_solimp: &[[MjtNum; mjNIMP as usize] [cast]; "constraint solver impedance: contact"; ffi().ngeom],
-        geom_size: &[[MjtNum; 3] [cast]; "geom-specific size parameters"; ffi().ngeom],
-        geom_aabb: &[[MjtNum; 6] [cast]; "bounding box, (center, size)"; ffi().ngeom],
+        geom_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference: contact"; ffi().ngeom],
+        geom_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance: contact"; ffi().ngeom],
+        geom_size: &[[MjtNum; 3] [force]; "geom-specific size parameters"; ffi().ngeom],
+        geom_aabb: &[[MjtNum; 6] [force]; "bounding box, (center, size)"; ffi().ngeom],
         geom_rbound: &[MjtNum; "radius of bounding sphere"; ffi().ngeom],
-        geom_pos: &[[MjtNum; 3] [cast]; "local position offset rel. to body"; ffi().ngeom],
-        geom_quat: &[[MjtNum; 4] [cast]; "local orientation offset rel. to body"; ffi().ngeom],
-        geom_friction: &[[MjtNum; 3] [cast]; "friction for (slide, spin, roll)"; ffi().ngeom],
+        geom_pos: &[[MjtNum; 3] [force]; "local position offset rel. to body"; ffi().ngeom],
+        geom_quat: &[[MjtNum; 4] [force]; "local orientation offset rel. to body"; ffi().ngeom],
+        geom_friction: &[[MjtNum; 3] [force]; "friction for (slide, spin, roll)"; ffi().ngeom],
         geom_margin: &[MjtNum; "detect contact if dist<margin"; ffi().ngeom],
         geom_gap: &[MjtNum; "include in solver if dist<margin-gap"; ffi().ngeom],
-        geom_fluid: &[[MjtNum; mjNFLUID as usize] [cast]; "fluid interaction parameters"; ffi().ngeom],
-        geom_rgba: &[[f32; 4] [cast]; "rgba when material is omitted"; ffi().ngeom],
-        site_type: &[MjtGeom [cast]; "geom type for rendering"; ffi().nsite],
+        geom_fluid: &[[MjtNum; mjNFLUID as usize] [force]; "fluid interaction parameters"; ffi().ngeom],
+        geom_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().ngeom],
+        site_type: &[MjtGeom [force]; "geom type for rendering"; ffi().nsite],
         site_bodyid: &[i32; "id of site's body"; ffi().nsite],
         site_matid: &[i32; "material id for rendering; -1: none"; ffi().nsite],
         site_group: &[i32; "group for visibility"; ffi().nsite],
-        site_sameframe: &[MjtSameFrame [cast]; "same frame as body"; ffi().nsite],
-        site_size: &[[MjtNum; 3] [cast]; "geom size for rendering"; ffi().nsite],
-        site_pos: &[[MjtNum; 3] [cast]; "local position offset rel. to body"; ffi().nsite],
-        site_quat: &[[MjtNum; 4] [cast]; "local orientation offset rel. to body"; ffi().nsite],
-        site_rgba: &[[f32; 4] [cast]; "rgba when material is omitted"; ffi().nsite],
-        cam_mode: &[MjtCamLight [cast]; "camera tracking mode"; ffi().ncam],
+        site_sameframe: &[MjtSameFrame [force]; "same frame as body"; ffi().nsite],
+        site_size: &[[MjtNum; 3] [force]; "geom size for rendering"; ffi().nsite],
+        site_pos: &[[MjtNum; 3] [force]; "local position offset rel. to body"; ffi().nsite],
+        site_quat: &[[MjtNum; 4] [force]; "local orientation offset rel. to body"; ffi().nsite],
+        site_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().nsite],
+        cam_mode: &[MjtCamLight [force]; "camera tracking mode"; ffi().ncam],
         cam_bodyid: &[i32; "id of camera's body"; ffi().ncam],
         cam_targetbodyid: &[i32; "id of targeted body; -1: none"; ffi().ncam],
-        cam_pos: &[[MjtNum; 3] [cast]; "position rel. to body frame"; ffi().ncam],
-        cam_quat: &[[MjtNum; 4] [cast]; "orientation rel. to body frame"; ffi().ncam],
-        cam_poscom0: &[[MjtNum; 3] [cast]; "global position rel. to sub-com in qpos0"; ffi().ncam],
-        cam_pos0: &[[MjtNum; 3] [cast]; "global position rel. to body in qpos0"; ffi().ncam],
-        cam_mat0: &[[MjtNum; 9] [cast]; "global orientation in qpos0"; ffi().ncam],
-        cam_projection: &[MjtProjection [cast]; "projection type"; ffi().ncam],
+        cam_pos: &[[MjtNum; 3] [force]; "position rel. to body frame"; ffi().ncam],
+        cam_quat: &[[MjtNum; 4] [force]; "orientation rel. to body frame"; ffi().ncam],
+        cam_poscom0: &[[MjtNum; 3] [force]; "global position rel. to sub-com in qpos0"; ffi().ncam],
+        cam_pos0: &[[MjtNum; 3] [force]; "global position rel. to body in qpos0"; ffi().ncam],
+        cam_mat0: &[[MjtNum; 9] [force]; "global orientation in qpos0"; ffi().ncam],
+        cam_projection: &[MjtProjection [force]; "projection type"; ffi().ncam],
         cam_fovy: &[MjtNum; "y field-of-view (ortho ? len : deg)"; ffi().ncam],
         cam_ipd: &[MjtNum; "inter-pupillary distance"; ffi().ncam],
-        cam_resolution: &[[i32; 2] [cast]; "resolution: pixels [width, height]"; ffi().ncam],
+        cam_resolution: &[[i32; 2] [force]; "resolution: pixels [width, height]"; ffi().ncam],
         cam_output: &[i32; "output types (MjtCamOutBit bit flags)"; ffi().ncam],
-        cam_sensorsize: &[[f32; 2] [cast]; "sensor size: length [width, height]"; ffi().ncam],
-        cam_intrinsic: &[[f32; 4] [cast]; "[focal length; principal point]"; ffi().ncam],
-        light_mode: &[MjtCamLight [cast]; "light tracking mode"; ffi().nlight],
+        cam_sensorsize: &[[f32; 2] [force]; "sensor size: length [width, height]"; ffi().ncam],
+        cam_intrinsic: &[[f32; 4] [force]; "[focal length; principal point]"; ffi().ncam],
+        light_mode: &[MjtCamLight [force]; "light tracking mode"; ffi().nlight],
         light_bodyid: &[i32; "id of light's body"; ffi().nlight],
         light_targetbodyid: &[i32; "id of targeted body; -1: none"; ffi().nlight],
-        light_type: &[MjtLightType [cast]; "spot, directional, etc."; ffi().nlight],
+        light_type: &[MjtLightType [force]; "spot, directional, etc."; ffi().nlight],
         light_texid: &[i32; "texture id for image lights"; ffi().nlight],
-        light_castshadow: &[bool [cast]; "does light cast shadows"; ffi().nlight],
+        light_castshadow: &[bool [force]; "does light cast shadows"; ffi().nlight],
         light_bulbradius: &[f32; "light radius for soft shadows"; ffi().nlight],
         light_intensity: &[f32; "intensity, in candela"; ffi().nlight],
         light_range: &[f32; "range of effectiveness"; ffi().nlight],
-        light_active: &[bool [cast]; "is light on"; ffi().nlight],
-        light_pos: &[[MjtNum; 3] [cast]; "position rel. to body frame"; ffi().nlight],
-        light_dir: &[[MjtNum; 3] [cast]; "direction rel. to body frame"; ffi().nlight],
-        light_poscom0: &[[MjtNum; 3] [cast]; "global position rel. to sub-com in qpos0"; ffi().nlight],
-        light_pos0: &[[MjtNum; 3] [cast]; "global position rel. to body in qpos0"; ffi().nlight],
-        light_dir0: &[[MjtNum; 3] [cast]; "global direction in qpos0"; ffi().nlight],
-        light_attenuation: &[[f32; 3] [cast]; "OpenGL attenuation (quadratic model)"; ffi().nlight],
+        light_active: &[bool [force]; "is light on"; ffi().nlight],
+        light_pos: &[[MjtNum; 3] [force]; "position rel. to body frame"; ffi().nlight],
+        light_dir: &[[MjtNum; 3] [force]; "direction rel. to body frame"; ffi().nlight],
+        light_poscom0: &[[MjtNum; 3] [force]; "global position rel. to sub-com in qpos0"; ffi().nlight],
+        light_pos0: &[[MjtNum; 3] [force]; "global position rel. to body in qpos0"; ffi().nlight],
+        light_dir0: &[[MjtNum; 3] [force]; "global direction in qpos0"; ffi().nlight],
+        light_attenuation: &[[f32; 3] [force]; "OpenGL attenuation (quadratic model)"; ffi().nlight],
         light_cutoff: &[f32; "OpenGL cutoff"; ffi().nlight],
         light_exponent: &[f32; "OpenGL exponent"; ffi().nlight],
-        light_ambient: &[[f32; 3] [cast]; "ambient rgb (alpha=1)"; ffi().nlight],
-        light_diffuse: &[[f32; 3] [cast]; "diffuse rgb (alpha=1)"; ffi().nlight],
-        light_specular: &[[f32; 3] [cast]; "specular rgb (alpha=1)"; ffi().nlight],
+        light_ambient: &[[f32; 3] [force]; "ambient rgb (alpha=1)"; ffi().nlight],
+        light_diffuse: &[[f32; 3] [force]; "diffuse rgb (alpha=1)"; ffi().nlight],
+        light_specular: &[[f32; 3] [force]; "specular rgb (alpha=1)"; ffi().nlight],
         flex_contype: &[i32; "flex contact type"; ffi().nflex],
         flex_conaffinity: &[i32; "flex contact affinity"; ffi().nflex],
         flex_condim: &[i32; "contact dimensionality (1, 3, 4, 6)"; ffi().nflex],
         flex_priority: &[i32; "flex contact priority"; ffi().nflex],
         flex_solmix: &[MjtNum; "mix coef for solref/imp in contact pair"; ffi().nflex],
-        flex_solref: &[[MjtNum; mjNREF as usize] [cast]; "constraint solver reference: contact"; ffi().nflex],
-        flex_solimp: &[[MjtNum; mjNIMP as usize] [cast]; "constraint solver impedance: contact"; ffi().nflex],
-        flex_friction: &[[MjtNum; 3] [cast]; "friction for (slide, spin, roll)"; ffi().nflex],
+        flex_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference: contact"; ffi().nflex],
+        flex_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance: contact"; ffi().nflex],
+        flex_friction: &[[MjtNum; 3] [force]; "friction for (slide, spin, roll)"; ffi().nflex],
         flex_margin: &[MjtNum; "detect contact if dist<margin"; ffi().nflex],
         flex_gap: &[MjtNum; "include in solver if dist<margin-gap"; ffi().nflex],
-        flex_internal: &[bool [cast]; "internal flex collision enabled"; ffi().nflex],
-        flex_selfcollide: &[MjtFlexSelf [cast]; "self collision mode"; ffi().nflex],
+        flex_internal: &[bool [force]; "internal flex collision enabled"; ffi().nflex],
+        flex_selfcollide: &[MjtFlexSelf [force]; "self collision mode"; ffi().nflex],
         flex_activelayers: &[i32; "number of active element layers, 3D only"; ffi().nflex],
         flex_passive: &[i32; "passive collisions enabled"; ffi().nflex],
         flex_dim: &[i32; "1: lines, 2: triangles, 3: tetrahedra"; ffi().nflex],
@@ -975,44 +984,44 @@ impl MjModel {
         flex_vertbodyid: &[i32; "vertex body ids"; ffi().nflexvert],
         flex_vertedgeadr: &[i32; "first edge address"; ffi().nflexvert],
         flex_vertedgenum: &[i32; "number of edges"; ffi().nflexvert],
-        flex_vertedge: &[[i32; 2] [cast]; "edge indices"; ffi().nflexedge],
-        flex_edge: &[[i32; 2] [cast]; "edge vertex ids (2 per edge)"; ffi().nflexedge],
-        flex_edgeflap: &[[i32; 2] [cast]; "adjacent vertex ids (dim=2 only)"; ffi().nflexedge],
+        flex_vertedge: &[[i32; 2] [force]; "edge indices"; ffi().nflexedge],
+        flex_edge: &[[i32; 2] [force]; "edge vertex ids (2 per edge)"; ffi().nflexedge],
+        flex_edgeflap: &[[i32; 2] [force]; "adjacent vertex ids (dim=2 only)"; ffi().nflexedge],
         flex_elem: &[i32; "element vertex ids (dim+1 per elem)"; ffi().nflexelemdata],
         flex_elemtexcoord: &[i32; "element texture coordinates (dim+1)"; ffi().nflexelemdata],
         flex_elemedge: &[i32; "element edge ids"; ffi().nflexelemedge],
         flex_elemlayer: &[i32; "element distance from surface, 3D only"; ffi().nflexelem],
         flex_shell: &[i32; "shell fragment vertex ids (dim per frag)"; ffi().nflexshelldata],
-        flex_evpair: &[[i32; 2] [cast]; "(element, vertex) collision pairs"; ffi().nflexevpair],
-        flex_vert: &[[MjtNum; 3] [cast]; "vertex positions in local body frames"; ffi().nflexvert],
-        flex_vert0: &[[MjtNum; 3] [cast]; "vertex positions in qpos0 on [0, 1]^d"; ffi().nflexvert],
-        flex_vertmetric: &[[MjtNum; 4] [cast]; "inverse of reference shape matrix"; ffi().nflexvert],
-        flex_node: &[[MjtNum; 3] [cast]; "node positions in local body frames"; ffi().nflexnode],
-        flex_node0: &[[MjtNum; 3] [cast]; "Cartesian node positions in qpos0"; ffi().nflexnode],
+        flex_evpair: &[[i32; 2] [force]; "(element, vertex) collision pairs"; ffi().nflexevpair],
+        flex_vert: &[[MjtNum; 3] [force]; "vertex positions in local body frames"; ffi().nflexvert],
+        flex_vert0: &[[MjtNum; 3] [force]; "vertex positions in qpos0 on [0, 1]^d"; ffi().nflexvert],
+        flex_vertmetric: &[[MjtNum; 4] [force]; "inverse of reference shape matrix"; ffi().nflexvert],
+        flex_node: &[[MjtNum; 3] [force]; "node positions in local body frames"; ffi().nflexnode],
+        flex_node0: &[[MjtNum; 3] [force]; "Cartesian node positions in qpos0"; ffi().nflexnode],
         flexedge_length0: &[MjtNum; "edge lengths in qpos0"; ffi().nflexedge],
         flexedge_invweight0: &[MjtNum; "edge inv. weight in qpos0"; ffi().nflexedge],
         flex_radius: &[MjtNum; "radius around primitive element"; ffi().nflex],
-        flex_size: &[[MjtNum; 3] [cast]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
-        flex_stiffness: &[[MjtNum; 21] [cast]; "finite element stiffness matrix"; ffi().nflexelem],
-        flex_bending: &[[MjtNum; 17] [cast]; "bending stiffness"; ffi().nflexedge],
+        flex_size: &[[MjtNum; 3] [force]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
+        flex_stiffness: &[[MjtNum; 21] [force]; "finite element stiffness matrix"; ffi().nflexelem],
+        flex_bending: &[[MjtNum; 17] [force]; "bending stiffness"; ffi().nflexedge],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
         flex_edgeequality: &[i32; "0: none, 1: edges, 2: vertices"; ffi().nflex],
-        flex_rigid: &[bool [cast]; "are all vertices in the same body"; ffi().nflex],
-        flexedge_rigid: &[bool [cast]; "are both edge vertices in same body"; ffi().nflexedge],
-        flex_centered: &[bool [cast]; "are all vertex coordinates (0,0,0)"; ffi().nflex],
-        flex_flatskin: &[bool [cast]; "render flex skin with flat shading"; ffi().nflex],
+        flex_rigid: &[bool [force]; "are all vertices in the same body"; ffi().nflex],
+        flexedge_rigid: &[bool [force]; "are both edge vertices in same body"; ffi().nflexedge],
+        flex_centered: &[bool [force]; "are all vertex coordinates (0,0,0)"; ffi().nflex],
+        flex_flatskin: &[bool [force]; "render flex skin with flat shading"; ffi().nflex],
         flex_bvhadr: &[i32; "address of bvh root; -1: no bvh"; ffi().nflex],
         flex_bvhnum: &[i32; "number of bounding volumes"; ffi().nflex],
         flexedge_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; ffi().nflexedge],
         flexedge_J_rowadr: &[i32; "row start address in colind array"; ffi().nflexedge],
         flexedge_J_colind: &[i32; "column indices in sparse Jacobian"; ffi().nJfe],
-        flexvert_J_rownnz: &[[i32; 2] [cast]; "number of non-zeros in Jacobian row"; ffi().nflexvert],
-        flexvert_J_rowadr: &[[i32; 2] [cast]; "row start address in colind array"; ffi().nflexvert],
-        flexvert_J_colind: &[[i32; 2] [cast]; "column indices in sparse Jacobian"; ffi().nJfv],
-        flex_rgba: &[[f32; 4] [cast]; "rgba when material is omitted"; ffi().nflex],
-        flex_texcoord: &[[f32; 2] [cast]; "vertex texture coordinates"; ffi().nflextexcoord],
+        flexvert_J_rownnz: &[[i32; 2] [force]; "number of non-zeros in Jacobian row"; ffi().nflexvert],
+        flexvert_J_rowadr: &[[i32; 2] [force]; "row start address in colind array"; ffi().nflexvert],
+        flexvert_J_colind: &[[i32; 2] [force]; "column indices in sparse Jacobian"; ffi().nJfv],
+        flex_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().nflex],
+        flex_texcoord: &[[f32; 2] [force]; "vertex texture coordinates"; ffi().nflextexcoord],
         mesh_vertadr: &[i32; "first vertex address"; ffi().nmesh],
         mesh_vertnum: &[i32; "number of vertices"; ffi().nmesh],
         mesh_faceadr: &[i32; "first face address"; ffi().nmesh],
@@ -1026,20 +1035,20 @@ impl MjModel {
         mesh_texcoordadr: &[i32; "texcoord data address; -1: no texcoord"; ffi().nmesh],
         mesh_texcoordnum: &[i32; "number of texcoord"; ffi().nmesh],
         mesh_graphadr: &[i32; "graph data address; -1: no graph"; ffi().nmesh],
-        mesh_vert: &[[f32; 3] [cast]; "vertex positions for all meshes"; ffi().nmeshvert],
-        mesh_normal: &[[f32; 3] [cast]; "normals for all meshes"; ffi().nmeshnormal],
-        mesh_texcoord: &[[f32; 2] [cast]; "vertex texcoords for all meshes"; ffi().nmeshtexcoord],
-        mesh_face: &[[i32; 3] [cast]; "vertex face data"; ffi().nmeshface],
-        mesh_facenormal: &[[i32; 3] [cast]; "normal face data"; ffi().nmeshface],
-        mesh_facetexcoord: &[[i32; 3] [cast]; "texture face data"; ffi().nmeshface],
+        mesh_vert: &[[f32; 3] [force]; "vertex positions for all meshes"; ffi().nmeshvert],
+        mesh_normal: &[[f32; 3] [force]; "normals for all meshes"; ffi().nmeshnormal],
+        mesh_texcoord: &[[f32; 2] [force]; "vertex texcoords for all meshes"; ffi().nmeshtexcoord],
+        mesh_face: &[[i32; 3] [force]; "vertex face data"; ffi().nmeshface],
+        mesh_facenormal: &[[i32; 3] [force]; "normal face data"; ffi().nmeshface],
+        mesh_facetexcoord: &[[i32; 3] [force]; "texture face data"; ffi().nmeshface],
         mesh_graph: &[i32; "convex graph data"; ffi().nmeshgraph],
-        mesh_scale: &[[MjtNum; 3] [cast]; "scaling applied to asset vertices"; ffi().nmesh],
-        mesh_pos: &[[MjtNum; 3] [cast]; "translation applied to asset vertices"; ffi().nmesh],
-        mesh_quat: &[[MjtNum; 4] [cast]; "rotation applied to asset vertices"; ffi().nmesh],
+        mesh_scale: &[[MjtNum; 3] [force]; "scaling applied to asset vertices"; ffi().nmesh],
+        mesh_pos: &[[MjtNum; 3] [force]; "translation applied to asset vertices"; ffi().nmesh],
+        mesh_quat: &[[MjtNum; 4] [force]; "rotation applied to asset vertices"; ffi().nmesh],
         mesh_pathadr: &[i32; "address of asset path for mesh; -1: none"; ffi().nmesh],
         mesh_polynum: &[i32; "number of polygons per mesh"; ffi().nmesh],
         mesh_polyadr: &[i32; "first polygon address per mesh"; ffi().nmesh],
-        mesh_polynormal: &[[MjtNum; 3] [cast]; "all polygon normals"; ffi().nmeshpoly],
+        mesh_polynormal: &[[MjtNum; 3] [force]; "all polygon normals"; ffi().nmeshpoly],
         mesh_polyvertadr: &[i32; "polygon vertex start address"; ffi().nmeshpoly],
         mesh_polyvertnum: &[i32; "number of vertices per polygon"; ffi().nmeshpoly],
         mesh_polyvert: &[i32; "all polygon vertices"; ffi().nmeshpolyvert],
@@ -1048,7 +1057,7 @@ impl MjModel {
         mesh_polymap: &[i32; "vertex to polygon map"; ffi().nmeshpolymap],
         skin_matid: &[i32; "skin material id; -1: none"; ffi().nskin],
         skin_group: &[i32; "group for visibility"; ffi().nskin],
-        skin_rgba: &[[f32; 4] [cast]; "skin rgba"; ffi().nskin],
+        skin_rgba: &[[f32; 4] [force]; "skin rgba"; ffi().nskin],
         skin_inflate: &[f32; "inflate skin in normal direction"; ffi().nskin],
         skin_vertadr: &[i32; "first vertex address"; ffi().nskin],
         skin_vertnum: &[i32; "number of vertices"; ffi().nskin],
@@ -1057,130 +1066,130 @@ impl MjModel {
         skin_facenum: &[i32; "number of faces"; ffi().nskin],
         skin_boneadr: &[i32; "first bone in skin"; ffi().nskin],
         skin_bonenum: &[i32; "number of bones in skin"; ffi().nskin],
-        skin_vert: &[[f32; 3] [cast]; "vertex positions for all skin meshes"; ffi().nskinvert],
-        skin_texcoord: &[[f32; 2] [cast]; "vertex texcoords for all skin meshes"; ffi().nskintexvert],
-        skin_face: &[[i32; 3] [cast]; "triangle faces for all skin meshes"; ffi().nskinface],
+        skin_vert: &[[f32; 3] [force]; "vertex positions for all skin meshes"; ffi().nskinvert],
+        skin_texcoord: &[[f32; 2] [force]; "vertex texcoords for all skin meshes"; ffi().nskintexvert],
+        skin_face: &[[i32; 3] [force]; "triangle faces for all skin meshes"; ffi().nskinface],
         skin_bonevertadr: &[i32; "first vertex in each bone"; ffi().nskinbone],
         skin_bonevertnum: &[i32; "number of vertices in each bone"; ffi().nskinbone],
-        skin_bonebindpos: &[[f32; 3] [cast]; "bind pos of each bone"; ffi().nskinbone],
-        skin_bonebindquat: &[[f32; 4] [cast]; "bind quat of each bone"; ffi().nskinbone],
+        skin_bonebindpos: &[[f32; 3] [force]; "bind pos of each bone"; ffi().nskinbone],
+        skin_bonebindquat: &[[f32; 4] [force]; "bind quat of each bone"; ffi().nskinbone],
         skin_bonebodyid: &[i32; "body id of each bone"; ffi().nskinbone],
         skin_bonevertid: &[i32; "mesh ids of vertices in each bone"; ffi().nskinbonevert],
         skin_bonevertweight: &[f32; "weights of vertices in each bone"; ffi().nskinbonevert],
         skin_pathadr: &[i32; "address of asset path for skin; -1: none"; ffi().nskin],
-        hfield_size: &[[MjtNum; 4] [cast]; "(x, y, z_top, z_bottom)"; ffi().nhfield],
+        hfield_size: &[[MjtNum; 4] [force]; "(x, y, z_top, z_bottom)"; ffi().nhfield],
         hfield_nrow: &[i32; "number of rows in grid"; ffi().nhfield],
         hfield_ncol: &[i32; "number of columns in grid"; ffi().nhfield],
         hfield_adr: &[i32; "address in hfield_data"; ffi().nhfield],
         hfield_data: &[f32; "elevation data"; ffi().nhfielddata],
         hfield_pathadr: &[i32; "address of hfield asset path; -1: none"; ffi().nhfield],
-        tex_type: &[MjtTexture [cast]; "texture type"; ffi().ntex],
-        tex_colorspace: &[MjtColorSpace [cast]; "texture colorspace"; ffi().ntex],
+        tex_type: &[MjtTexture [force]; "texture type"; ffi().ntex],
+        tex_colorspace: &[MjtColorSpace [force]; "texture colorspace"; ffi().ntex],
         tex_height: &[i32; "number of rows in texture image"; ffi().ntex],
         tex_width: &[i32; "number of columns in texture image"; ffi().ntex],
         tex_nchannel: &[i32; "number of channels in texture image"; ffi().ntex],
         tex_adr: &[MjtSize; "start address in tex_data"; ffi().ntex],
         tex_data: &[MjtByte; "pixel values"; ffi().ntexdata],
         tex_pathadr: &[i32; "address of texture asset path; -1: none"; ffi().ntex],
-        mat_texid: &[[i32; MjtTextureRole::mjNTEXROLE as usize] [cast]; "indices of textures; -1: none"; ffi().nmat],
-        mat_texuniform: &[bool [cast]; "make texture cube uniform"; ffi().nmat],
-        mat_texrepeat: &[[f32; 2] [cast]; "texture repetition for 2d mapping"; ffi().nmat],
+        mat_texid: &[[i32; MjtTextureRole::mjNTEXROLE as usize] [force]; "indices of textures; -1: none"; ffi().nmat],
+        mat_texuniform: &[bool [force]; "make texture cube uniform"; ffi().nmat],
+        mat_texrepeat: &[[f32; 2] [force]; "texture repetition for 2d mapping"; ffi().nmat],
         mat_emission: &[f32; "emission (x rgb)"; ffi().nmat],
         mat_specular: &[f32; "specular (x white)"; ffi().nmat],
         mat_shininess: &[f32; "shininess coef"; ffi().nmat],
         mat_reflectance: &[f32; "reflectance (0: disable)"; ffi().nmat],
         mat_metallic: &[f32; "metallic coef"; ffi().nmat],
         mat_roughness: &[f32; "roughness coef"; ffi().nmat],
-        mat_rgba: &[[f32; 4] [cast]; "rgba"; ffi().nmat],
+        mat_rgba: &[[f32; 4] [force]; "rgba"; ffi().nmat],
         pair_dim: &[i32; "contact dimensionality"; ffi().npair],
         pair_geom1: &[i32; "id of geom1"; ffi().npair],
         pair_geom2: &[i32; "id of geom2"; ffi().npair],
         pair_signature: &[i32; "body1 << 16 + body2"; ffi().npair],
-        pair_solref: &[[MjtNum; mjNREF as usize] [cast]; "solver reference: contact normal"; ffi().npair],
-        pair_solreffriction: &[[MjtNum; mjNREF as usize] [cast]; "solver reference: contact friction"; ffi().npair],
-        pair_solimp: &[[MjtNum; mjNIMP as usize] [cast]; "solver impedance: contact"; ffi().npair],
+        pair_solref: &[[MjtNum; mjNREF as usize] [force]; "solver reference: contact normal"; ffi().npair],
+        pair_solreffriction: &[[MjtNum; mjNREF as usize] [force]; "solver reference: contact friction"; ffi().npair],
+        pair_solimp: &[[MjtNum; mjNIMP as usize] [force]; "solver impedance: contact"; ffi().npair],
         pair_margin: &[MjtNum; "detect contact if dist<margin"; ffi().npair],
         pair_gap: &[MjtNum; "include in solver if dist<margin-gap"; ffi().npair],
-        pair_friction: &[[MjtNum; 5] [cast]; "tangent1, 2, spin, roll1, 2"; ffi().npair],
+        pair_friction: &[[MjtNum; 5] [force]; "tangent1, 2, spin, roll1, 2"; ffi().npair],
         exclude_signature: &[i32; "body1 << 16 + body2"; ffi().nexclude],
-        eq_type: &[MjtEq [cast]; "constraint type"; ffi().neq],
+        eq_type: &[MjtEq [force]; "constraint type"; ffi().neq],
         eq_obj1id: &[i32; "id of object 1"; ffi().neq],
         eq_obj2id: &[i32; "id of object 2"; ffi().neq],
-        eq_objtype: &[MjtObj [cast]; "type of both objects"; ffi().neq],
-        eq_active0: &[bool [cast]; "initial enable/disable constraint state"; ffi().neq],
-        eq_solref: &[[MjtNum; mjNREF as usize] [cast]; "constraint solver reference"; ffi().neq],
-        eq_solimp: &[[MjtNum; mjNIMP as usize] [cast]; "constraint solver impedance"; ffi().neq],
-        eq_data: &[[MjtNum; mjNEQDATA as usize] [cast]; "numeric data for constraint"; ffi().neq],
+        eq_objtype: &[MjtObj [force]; "type of both objects"; ffi().neq],
+        eq_active0: &[bool [force]; "initial enable/disable constraint state"; ffi().neq],
+        eq_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference"; ffi().neq],
+        eq_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance"; ffi().neq],
+        eq_data: &[[MjtNum; mjNEQDATA as usize] [force]; "numeric data for constraint"; ffi().neq],
         tendon_adr: &[i32; "address of first object in tendon's path"; ffi().ntendon],
         tendon_num: &[i32; "number of objects in tendon's path"; ffi().ntendon],
         tendon_matid: &[i32; "material id for rendering"; ffi().ntendon],
         tendon_group: &[i32; "group for visibility"; ffi().ntendon],
         tendon_treenum: &[i32; "number of trees along tendon's path"; ffi().ntendon],
-        tendon_treeid: &[[i32; 2] [cast]; "first two trees along tendon's path"; ffi().ntendon],
-        tendon_limited: &[bool [cast]; "does tendon have length limits"; ffi().ntendon],
-        tendon_actfrclimited: &[bool [cast]; "does tendon have actuator force limits"; ffi().ntendon],
+        tendon_treeid: &[[i32; 2] [force]; "first two trees along tendon's path"; ffi().ntendon],
+        tendon_limited: &[bool [force]; "does tendon have length limits"; ffi().ntendon],
+        tendon_actfrclimited: &[bool [force]; "does tendon have actuator force limits"; ffi().ntendon],
         tendon_width: &[MjtNum; "width for rendering"; ffi().ntendon],
-        tendon_solref_lim: &[[MjtNum; mjNREF as usize] [cast]; "constraint solver reference: limit"; ffi().ntendon],
-        tendon_solimp_lim: &[[MjtNum; mjNIMP as usize] [cast]; "constraint solver impedance: limit"; ffi().ntendon],
-        tendon_solref_fri: &[[MjtNum; mjNREF as usize] [cast]; "constraint solver reference: friction"; ffi().ntendon],
-        tendon_solimp_fri: &[[MjtNum; mjNIMP as usize] [cast]; "constraint solver impedance: friction"; ffi().ntendon],
-        tendon_range: &[[MjtNum; 2] [cast]; "tendon length limits"; ffi().ntendon],
-        tendon_actfrcrange: &[[MjtNum; 2] [cast]; "range of total actuator force"; ffi().ntendon],
+        tendon_solref_lim: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference: limit"; ffi().ntendon],
+        tendon_solimp_lim: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance: limit"; ffi().ntendon],
+        tendon_solref_fri: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference: friction"; ffi().ntendon],
+        tendon_solimp_fri: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance: friction"; ffi().ntendon],
+        tendon_range: &[[MjtNum; 2] [force]; "tendon length limits"; ffi().ntendon],
+        tendon_actfrcrange: &[[MjtNum; 2] [force]; "range of total actuator force"; ffi().ntendon],
         tendon_margin: &[MjtNum; "min distance for limit detection"; ffi().ntendon],
         tendon_stiffness: &[MjtNum; "stiffness coefficient"; ffi().ntendon],
         tendon_damping: &[MjtNum; "damping coefficient"; ffi().ntendon],
         tendon_armature: &[MjtNum; "inertia associated with tendon velocity"; ffi().ntendon],
         tendon_frictionloss: &[MjtNum; "loss due to friction"; ffi().ntendon],
-        tendon_lengthspring: &[[MjtNum; 2] [cast]; "spring resting length range"; ffi().ntendon],
+        tendon_lengthspring: &[[MjtNum; 2] [force]; "spring resting length range"; ffi().ntendon],
         tendon_length0: &[MjtNum; "tendon length in qpos0"; ffi().ntendon],
         tendon_invweight0: &[MjtNum; "inv. weight in qpos0"; ffi().ntendon],
-        tendon_rgba: &[[f32; 4] [cast]; "rgba when material is omitted"; ffi().ntendon],
-        wrap_type: &[MjtWrap [cast]; "wrap object type"; ffi().nwrap],
+        tendon_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().ntendon],
+        wrap_type: &[MjtWrap [force]; "wrap object type"; ffi().nwrap],
         wrap_objid: &[i32; "object id: geom, site, joint"; ffi().nwrap],
         wrap_prm: &[MjtNum; "divisor, joint coef, or site id"; ffi().nwrap],
-        actuator_trntype: &[MjtTrn [cast]; "transmission type"; ffi().nu],
-        actuator_dyntype: &[MjtDyn [cast]; "dynamics type"; ffi().nu],
-        actuator_gaintype: &[MjtGain [cast]; "gain type"; ffi().nu],
-        actuator_biastype: &[MjtBias [cast]; "bias type"; ffi().nu],
-        actuator_trnid: &[[i32; 2] [cast]; "transmission id: joint, tendon, site"; ffi().nu],
+        actuator_trntype: &[MjtTrn [force]; "transmission type"; ffi().nu],
+        actuator_dyntype: &[MjtDyn [force]; "dynamics type"; ffi().nu],
+        actuator_gaintype: &[MjtGain [force]; "gain type"; ffi().nu],
+        actuator_biastype: &[MjtBias [force]; "bias type"; ffi().nu],
+        actuator_trnid: &[[i32; 2] [force]; "transmission id: joint, tendon, site"; ffi().nu],
         actuator_actadr: &[i32; "first activation address; -1: stateless"; ffi().nu],
         actuator_actnum: &[i32; "number of activation variables"; ffi().nu],
         actuator_group: &[i32; "group for visibility"; ffi().nu],
-        actuator_history: &[[i32; 2] [cast]; "history buffer: [nsample, interp]"; ffi().nu],
+        actuator_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nu],
         actuator_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nu],
         actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nu],
-        actuator_ctrllimited: &[bool [cast]; "is control limited"; ffi().nu],
-        actuator_forcelimited: &[bool [cast]; "is force limited"; ffi().nu],
-        actuator_actlimited: &[bool [cast]; "is activation limited"; ffi().nu],
-        actuator_dynprm: &[[MjtNum; mjNDYN as usize] [cast]; "dynamics parameters"; ffi().nu],
-        actuator_gainprm: &[[MjtNum; mjNGAIN as usize] [cast]; "gain parameters"; ffi().nu],
-        actuator_biasprm: &[[MjtNum; mjNBIAS as usize] [cast]; "bias parameters"; ffi().nu],
-        actuator_actearly: &[bool [cast]; "step activation before force"; ffi().nu],
-        actuator_ctrlrange: &[[MjtNum; 2] [cast]; "range of controls"; ffi().nu],
-        actuator_forcerange: &[[MjtNum; 2] [cast]; "range of forces"; ffi().nu],
-        actuator_actrange: &[[MjtNum; 2] [cast]; "range of activations"; ffi().nu],
-        actuator_gear: &[[MjtNum; 6] [cast]; "scale length and transmitted force"; ffi().nu],
+        actuator_ctrllimited: &[bool [force]; "is control limited"; ffi().nu],
+        actuator_forcelimited: &[bool [force]; "is force limited"; ffi().nu],
+        actuator_actlimited: &[bool [force]; "is activation limited"; ffi().nu],
+        actuator_dynprm: &[[MjtNum; mjNDYN as usize] [force]; "dynamics parameters"; ffi().nu],
+        actuator_gainprm: &[[MjtNum; mjNGAIN as usize] [force]; "gain parameters"; ffi().nu],
+        actuator_biasprm: &[[MjtNum; mjNBIAS as usize] [force]; "bias parameters"; ffi().nu],
+        actuator_actearly: &[bool [force]; "step activation before force"; ffi().nu],
+        actuator_ctrlrange: &[[MjtNum; 2] [force]; "range of controls"; ffi().nu],
+        actuator_forcerange: &[[MjtNum; 2] [force]; "range of forces"; ffi().nu],
+        actuator_actrange: &[[MjtNum; 2] [force]; "range of activations"; ffi().nu],
+        actuator_gear: &[[MjtNum; 6] [force]; "scale length and transmitted force"; ffi().nu],
         actuator_cranklength: &[MjtNum; "crank length for slider-crank"; ffi().nu],
         actuator_acc0: &[MjtNum; "acceleration from unit force in qpos0"; ffi().nu],
         actuator_length0: &[MjtNum; "actuator length in qpos0"; ffi().nu],
-        actuator_lengthrange: &[[MjtNum; 2] [cast]; "feasible actuator length range"; ffi().nu],
+        actuator_lengthrange: &[[MjtNum; 2] [force]; "feasible actuator length range"; ffi().nu],
         actuator_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nu],
-        sensor_type: &[MjtSensor [cast]; "sensor type"; ffi().nsensor],
-        sensor_datatype: &[MjtDataType [cast]; "numeric data type"; ffi().nsensor],
-        sensor_needstage: &[MjtStage [cast]; "required compute stage"; ffi().nsensor],
-        sensor_objtype: &[MjtObj [cast]; "type of sensorized object"; ffi().nsensor],
+        sensor_type: &[MjtSensor [force]; "sensor type"; ffi().nsensor],
+        sensor_datatype: &[MjtDataType [force]; "numeric data type"; ffi().nsensor],
+        sensor_needstage: &[MjtStage [force]; "required compute stage"; ffi().nsensor],
+        sensor_objtype: &[MjtObj [force]; "type of sensorized object"; ffi().nsensor],
         sensor_objid: &[i32; "id of sensorized object"; ffi().nsensor],
-        sensor_reftype: &[MjtObj [cast]; "type of reference frame"; ffi().nsensor],
+        sensor_reftype: &[MjtObj [force]; "type of reference frame"; ffi().nsensor],
         sensor_refid: &[i32; "id of reference frame; -1: global frame"; ffi().nsensor],
-        sensor_intprm: &[[i32; mjNSENS as usize] [cast]; "sensor parameters"; ffi().nsensor],
+        sensor_intprm: &[[i32; mjNSENS as usize] [force]; "sensor parameters"; ffi().nsensor],
         sensor_dim: &[i32; "number of scalar outputs"; ffi().nsensor],
         sensor_adr: &[i32; "address in sensor array"; ffi().nsensor],
         sensor_cutoff: &[MjtNum; "cutoff for real and positive; 0: ignore"; ffi().nsensor],
         sensor_noise: &[MjtNum; "noise standard deviation"; ffi().nsensor],
-        sensor_history: &[[i32; 2] [cast]; "history buffer: [nsample, interp]"; ffi().nsensor],
+        sensor_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nsensor],
         sensor_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nsensor],
         sensor_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nsensor],
-        sensor_interval: &[[MjtNum; 2] [cast]; "interval: [period, phase] in seconds"; ffi().nsensor],
+        sensor_interval: &[[MjtNum; 2] [force]; "interval: [period, phase] in seconds"; ffi().nsensor],
         sensor_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nsensor],
         plugin: &[i32; "globally registered plugin slot number"; ffi().nplugin],
         plugin_stateadr: &[i32; "address in the plugin state array"; ffi().nplugin],
@@ -1242,19 +1251,19 @@ impl MjModel {
 
     array_slice_dyn! {
         sublen_dep {
-            key_qpos: &[[MjtNum; ffi().nq] [cast]; "key position"; ffi().nkey],
-            key_qvel: &[[MjtNum; ffi().nv] [cast]; "key velocity"; ffi().nkey],
-            key_act: &[[MjtNum; ffi().na] [cast]; "key activation"; ffi().nkey],
-            key_ctrl: &[[MjtNum; ffi().nu] [cast]; "key control"; ffi().nkey],
+            key_qpos: &[[MjtNum; ffi().nq] [force]; "key position"; ffi().nkey],
+            key_qvel: &[[MjtNum; ffi().nv] [force]; "key velocity"; ffi().nkey],
+            key_act: &[[MjtNum; ffi().na] [force]; "key activation"; ffi().nkey],
+            key_ctrl: &[[MjtNum; ffi().nu] [force]; "key control"; ffi().nkey],
 
-            sensor_user: &[[MjtNum; ffi().nuser_sensor] [cast]; "user data"; ffi().nsensor],
-            actuator_user: &[[MjtNum; ffi().nuser_actuator] [cast]; "user data"; ffi().nu],
-            tendon_user: &[[MjtNum; ffi().nuser_tendon] [cast]; "user data"; ffi().ntendon],
-            cam_user: &[[MjtNum; ffi().nuser_cam] [cast]; "user data"; ffi().ncam],
-            site_user: &[[MjtNum; ffi().nuser_site] [cast]; "user data"; ffi().nsite],
-            geom_user: &[[MjtNum; ffi().nuser_geom] [cast]; "user data"; ffi().ngeom],
-            jnt_user: &[[MjtNum; ffi().nuser_jnt] [cast]; "user data"; ffi().njnt],
-            body_user: &[[MjtNum; ffi().nuser_body] [cast]; "user data"; ffi().nbody]
+            sensor_user: &[[MjtNum; ffi().nuser_sensor] [force]; "user data"; ffi().nsensor],
+            actuator_user: &[[MjtNum; ffi().nuser_actuator] [force]; "user data"; ffi().nu],
+            tendon_user: &[[MjtNum; ffi().nuser_tendon] [force]; "user data"; ffi().ntendon],
+            cam_user: &[[MjtNum; ffi().nuser_cam] [force]; "user data"; ffi().ncam],
+            site_user: &[[MjtNum; ffi().nuser_site] [force]; "user data"; ffi().nsite],
+            geom_user: &[[MjtNum; ffi().nuser_geom] [force]; "user data"; ffi().ngeom],
+            jnt_user: &[[MjtNum; ffi().nuser_jnt] [force]; "user data"; ffi().njnt],
+            body_user: &[[MjtNum; ffi().nuser_body] [force]; "user data"; ffi().nbody]
         }
     }
 }
@@ -1271,21 +1280,21 @@ impl Clone for MjModel {
 impl Drop for MjModel {
     fn drop(&mut self) {
         unsafe {
-            mj_deleteModel(self.0);
+            mj_deleteModel(self.0.as_ptr());
         }
     }
 }
 
 info_with_view!(Model, actuator,
-	[[actuator_] trntype: MjtTrn [cast], [actuator_] dyntype: MjtDyn [cast],
-	 [actuator_] gaintype: MjtGain [cast], [actuator_] biastype: MjtBias [cast],
+	[[actuator_] trntype: MjtTrn [force], [actuator_] dyntype: MjtDyn [force],
+	 [actuator_] gaintype: MjtGain [force], [actuator_] biastype: MjtBias [force],
 	 [actuator_] trnid: i32, [actuator_] actadr: i32,
 	 [actuator_] actnum: i32, [actuator_] group: i32,
 	 [actuator_] history: i32, [actuator_] historyadr: i32,
-	 [actuator_] delay: MjtNum, [actuator_] ctrllimited: bool [cast],
-	 [actuator_] forcelimited: bool [cast], [actuator_] actlimited: bool [cast],
+	 [actuator_] delay: MjtNum, [actuator_] ctrllimited: bool [force],
+	 [actuator_] forcelimited: bool [force], [actuator_] actlimited: bool [force],
 	 [actuator_] dynprm: MjtNum, [actuator_] gainprm: MjtNum,
-	 [actuator_] biasprm: MjtNum, [actuator_] actearly: bool [cast],
+	 [actuator_] biasprm: MjtNum, [actuator_] actearly: bool [force],
 	 [actuator_] ctrlrange: MjtNum, [actuator_] forcerange: MjtNum,
 	 [actuator_] actrange: MjtNum, [actuator_] gear: MjtNum,
 	 [actuator_] cranklength: MjtNum, [actuator_] acc0: MjtNum,
@@ -1300,7 +1309,7 @@ info_with_view!(Model, body,
 	 [body_] dofnum: i32, [body_] dofadr: i32,
 	 [body_] treeid: i32, [body_] geomnum: i32,
 	 [body_] geomadr: i32, [body_] simple: MjtByte,
-	 [body_] sameframe: MjtSameFrame [cast], [body_] pos: MjtNum,
+	 [body_] sameframe: MjtSameFrame [force], [body_] pos: MjtNum,
 	 [body_] quat: MjtNum, [body_] ipos: MjtNum,
 	 [body_] iquat: MjtNum, [body_] mass: MjtNum,
 	 [body_] subtreemass: MjtNum, [body_] inertia: MjtNum,
@@ -1311,7 +1320,7 @@ info_with_view!(Model, body,
 	[]);
 
 info_with_view!(Model, camera,
-	[[cam_] mode: MjtCamLight [cast],
+	[[cam_] mode: MjtCamLight [force],
 	 [cam_] bodyid: i32,
 	 [cam_] targetbodyid: i32,
 	 [cam_] pos: MjtNum,
@@ -1319,7 +1328,7 @@ info_with_view!(Model, camera,
 	 [cam_] poscom0: MjtNum,
 	 [cam_] pos0: MjtNum,
 	 [cam_] mat0: MjtNum,
-	 [cam_] projection: MjtProjection [cast],
+	 [cam_] projection: MjtProjection [force],
 	 [cam_] fovy: MjtNum,
 	 [cam_] ipd: MjtNum,
 	 [cam_] resolution: i32,
@@ -1330,14 +1339,14 @@ info_with_view!(Model, camera,
 	[]);
 
 info_with_view!(Model, equality,
-	[[eq_] r#type: MjtEq [cast],
+	[[eq_] r#type: MjtEq [force],
 	 [eq_] obj1id: i32,
 	 [eq_] obj2id: i32,
-	 [eq_] active0: bool [cast],
+	 [eq_] active0: bool [force],
 	 [eq_] solref: MjtNum,
 	 [eq_] solimp: MjtNum,
 	 [eq_] data: MjtNum,
-     [eq_] objtype: MjtObj [cast]],
+     [eq_] objtype: MjtObj [force]],
 	[]);
 
 info_with_view!(Model, exclude,
@@ -1345,11 +1354,11 @@ info_with_view!(Model, exclude,
 	[]);
 
 info_with_view!(Model, geom,
-	[[geom_] r#type: MjtGeom [cast], [geom_] contype: i32,
+	[[geom_] r#type: MjtGeom [force], [geom_] contype: i32,
 	 [geom_] conaffinity: i32, [geom_] condim: i32,
 	 [geom_] bodyid: i32, [geom_] dataid: i32,
 	 [geom_] matid: i32, [geom_] group: i32,
-	 [geom_] priority: i32, [geom_] plugin: i32, [geom_] sameframe: MjtSameFrame [cast],
+	 [geom_] priority: i32, [geom_] plugin: i32, [geom_] sameframe: MjtSameFrame [force],
 	 [geom_] solmix: MjtNum, [geom_] solref: MjtNum,
 	 [geom_] solimp: MjtNum, [geom_] size: MjtNum,
 	 [geom_] aabb: MjtNum,
@@ -1369,9 +1378,9 @@ info_with_view!(Model, hfield,
 
 info_with_view!(Model, joint,
 	[qpos0: MjtNum, qpos_spring: MjtNum,
-     [jnt_] r#type: MjtJoint [cast], [jnt_] qposadr: i32,
+     [jnt_] r#type: MjtJoint [force], [jnt_] qposadr: i32,
      [jnt_] dofadr: i32, [jnt_] group: i32,
-     [jnt_] limited: bool [cast], [jnt_] actfrclimited: bool [cast], [jnt_] actgravcomp: bool [cast],
+     [jnt_] limited: bool [force], [jnt_] actfrclimited: bool [force], [jnt_] actgravcomp: bool [force],
 	 [jnt_] solref: MjtNum, [jnt_] solimp: MjtNum,
 	 [jnt_] pos: MjtNum,
      [jnt_] axis: MjtNum, [jnt_] stiffness: MjtNum,
@@ -1385,10 +1394,10 @@ info_with_view!(Model, joint,
 	[]);
 
 info_with_view!(Model, light,
-	[[light_] mode: MjtCamLight [cast],
+	[[light_] mode: MjtCamLight [force],
 	 [light_] bodyid: i32,
 	 [light_] targetbodyid: i32,
-	 [light_] r#type: MjtLightType [cast],
+	 [light_] r#type: MjtLightType [force],
 	 [light_] texid: i32,
 	 [light_] castshadow: MjtByte,
 	 [light_] bulbradius: f32,
@@ -1410,7 +1419,7 @@ info_with_view!(Model, light,
 
 info_with_view!(Model, material,
 	[[mat_] texid: i32,
-	 [mat_] texuniform: bool [cast],
+	 [mat_] texuniform: bool [force],
 	 [mat_] texrepeat: f32,
 	 [mat_] emission: f32,
 	 [mat_] specular: f32,
@@ -1449,12 +1458,12 @@ info_with_view!(Model, pair,
 	[]);
 
 info_with_view!(Model, sensor,
-	[[sensor_] r#type: MjtSensor [cast],
-	 [sensor_] datatype: MjtDataType [cast],
-	 [sensor_] needstage: MjtStage [cast],
-	 [sensor_] objtype: MjtObj [cast],
+	[[sensor_] r#type: MjtSensor [force],
+	 [sensor_] datatype: MjtDataType [force],
+	 [sensor_] needstage: MjtStage [force],
+	 [sensor_] objtype: MjtObj [force],
 	 [sensor_] objid: i32,
-	 [sensor_] reftype: MjtObj [cast],
+	 [sensor_] reftype: MjtObj [force],
 	 [sensor_] refid: i32,
 	 [sensor_] intprm: i32,
 	 [sensor_] dim: i32,
@@ -1470,11 +1479,11 @@ info_with_view!(Model, sensor,
 	[]);
 
 info_with_view!(Model, site,
-	[[site_] r#type: MjtGeom [cast],
+	[[site_] r#type: MjtGeom [force],
 	 [site_] bodyid: i32,
 	 [site_] matid: i32,
 	 [site_] group: i32,
-	 [site_] sameframe: MjtSameFrame [cast],
+	 [site_] sameframe: MjtSameFrame [force],
 	 [site_] size: MjtNum,
 	 [site_] pos: MjtNum,
 	 [site_] quat: MjtNum,
@@ -1500,7 +1509,7 @@ info_with_view!(Model, tendon,
 	[[tendon_] adr: i32, [tendon_] num: i32,
 	 [tendon_] matid: i32, [tendon_] group: i32,
 	 [tendon_] treenum: i32, [tendon_] treeid: i32,
-	 [tendon_] limited: bool [cast], [tendon_] actfrclimited: bool [cast], [tendon_] width: MjtNum,
+	 [tendon_] limited: bool [force], [tendon_] actfrclimited: bool [force], [tendon_] width: MjtNum,
 	 [tendon_] solref_lim: MjtNum, [tendon_] solimp_lim: MjtNum,
 	 [tendon_] solref_fri: MjtNum, [tendon_] solimp_fri: MjtNum,
 	 [tendon_] range: MjtNum, [tendon_] actfrcrange: MjtNum, [tendon_] margin: MjtNum,
@@ -1511,8 +1520,8 @@ info_with_view!(Model, tendon,
 	[]);
 
 info_with_view!(Model, texture,
-	[[tex_] r#type: MjtTexture [cast],
-     [tex_] colorspace: MjtColorSpace [cast],
+	[[tex_] r#type: MjtTexture [force],
+     [tex_] colorspace: MjtColorSpace [force],
 	 [tex_] height: i32,
 	 [tex_] width: i32,
 	 [tex_] nchannel: i32,
@@ -1523,7 +1532,7 @@ info_with_view!(Model, texture,
 info_with_view!(Model, tuple,
 	[[tuple_] adr: i32,
 	 [tuple_] size: i32,
-	 [tuple_] objtype: MjtObj [cast],
+	 [tuple_] objtype: MjtObj [force],
 	 [tuple_] objid: i32,
 	 [tuple_] objprm: MjtNum],
 	[]);
@@ -2240,7 +2249,7 @@ mod tests {
         let state_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
 
         let required_size = model.state_size(MjtState::mjSTATE_PHYSICS as u32);
-        let mut dst_buffer = unsafe { Box::new_zeroed_slice(required_size).assume_init() };
+        let mut dst_buffer = vec![0.0; required_size].into_boxed_slice();
         let _byes_written = model.extract_state_into(
             &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
             &mut dst_buffer, MjtState::mjSTATE_PHYSICS as u32

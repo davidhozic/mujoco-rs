@@ -10,7 +10,7 @@ use std::ffi::CString;
 use std::borrow::Cow;
 use std::ops::Deref;
 use std::fmt::Debug;
-use std::ptr;
+use std::ptr::{self, NonNull};
 
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
@@ -48,7 +48,7 @@ pub type MjtSleepState = mjtSleepState;
 /// Wrapper around the `mjData` struct.
 /// Provides lifetime guarantees as well as automatic cleanup.
 pub struct MjData<M: Deref<Target = MjModel>> {
-    data: *mut mjData,
+    data: NonNull<mjData>,
     model: M
 }
 
@@ -84,25 +84,20 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// allocation failures without a panic.
     pub fn try_new(model: M) -> Result<Self, MjDataError> {
         let data_ptr = unsafe { mj_makeData(model.ffi()) };
-        if data_ptr.is_null() {
-            return Err(MjDataError::AllocationFailed);
-        }
-        Ok(Self {
-            data: data_ptr,
-            model,
-        })
+        NonNull::new(data_ptr)
+            .map(|data| Self { data, model })
+            .ok_or(MjDataError::AllocationFailed)
     }
 
     /// Returns a slice of detected contacts.
     /// To obtain the contact force, call [`MjData::contact_force`].
     pub fn contacts(&self) -> &[MjContact] {
-        unsafe {
-            let ptr = (*self.data).contact;
-            if ptr.is_null() {
-                &[]
-            } else {
-                std::slice::from_raw_parts(ptr, (*self.data).ncon as usize)
-            }
+        let ffi = self.ffi();
+        let ptr = ffi.contact;
+        if ptr.is_null() {
+            &[]
+        } else {
+            unsafe { std::slice::from_raw_parts(ptr, ffi.ncon as usize) }
         }
     }
 
@@ -249,7 +244,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             // When contact_id is outside valid range of i32,
             // it overflows to value below 0, which is also checked internally.
             mj_contactForce(
-                self.model.ffi(), self.data,
+                self.model.ffi(), self.data.as_ptr(),
                 contact_id as i32, &mut force
             );
         }
@@ -493,7 +488,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::LengthMismatch`] if the `jar` length is incorrect.
     pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) -> Result<(), MjDataError> {
-        let nefc = unsafe { (*self.data).nefc as usize };
+        let nefc = self.ffi().nefc as usize;
         if jar.len() < nefc {
             return Err(MjDataError::LengthMismatch { name: "jar", expected: nefc, got: jar.len() });
         }
@@ -952,9 +947,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
         unsafe { mj_multiRay(
             self.model.ffi(), self.ffi_mut(), pnt,
-            vec.as_ptr() as *const MjtNum, geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
+            bytemuck::cast_slice::<[MjtNum; 3], MjtNum>(vec).as_ptr(),
+            geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
             flg_static as u8, bodyexclude, geom_id.as_mut_ptr(),
-            distance.as_mut_ptr(), normals_out.map_or(ptr::null_mut(), |x| x.as_mut_ptr() as *mut MjtNum),
+            distance.as_mut_ptr(),
+            normals_out.map_or(ptr::null_mut(), |x| bytemuck::cast_slice_mut::<[MjtNum; 3], MjtNum>(x).as_mut_ptr()),
             nray as i32, cutoff
         ) };
 
@@ -1259,7 +1256,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// It is only meant for the viewer code, which currently still depends
     /// on mutable pointers to model and data. This will be removed in the future.
     pub(crate) unsafe fn __raw(&self) -> *mut mjData {
-        self.data
+        self.data.as_ptr()
     }
 
 }
@@ -1269,7 +1266,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjData {
-        unsafe { &*self.data }
+        unsafe { self.data.as_ref() }
     }
 
     /// Mutable reference to the wrapped FFI struct.
@@ -1278,7 +1275,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Modifying the underlying FFI struct directly can break the invariants
     /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjData {
-        unsafe { &mut *self.data }
+        unsafe { self.data.as_mut() }
     }
 
     /// Returns a reference to data's [`MjModel`].
@@ -1347,76 +1344,76 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         plugin_state: &[MjtNum; "plugin state"; model.ffi().npluginstate],
         ctrl: &[MjtNum; "control"; model.ffi().nu],
         qfrc_applied: &[MjtNum; "applied generalized force"; model.ffi().nv],
-        xfrc_applied: &[[MjtNum; 6] [cast]; "applied Cartesian force/torque"; model.ffi().nbody],
-        eq_active: &[bool [cast]; "enable/disable constraints"; model.ffi().neq],
-        mocap_pos: &[[MjtNum; 3] [cast]; "positions of mocap bodies"; model.ffi().nmocap],
-        mocap_quat: &[[MjtNum; 4] [cast]; "orientations of mocap bodies"; model.ffi().nmocap],
+        xfrc_applied: &[[MjtNum; 6] [force]; "applied Cartesian force/torque"; model.ffi().nbody],
+        eq_active: &[bool [force]; "enable/disable constraints"; model.ffi().neq],
+        mocap_pos: &[[MjtNum; 3] [force]; "positions of mocap bodies"; model.ffi().nmocap],
+        mocap_quat: &[[MjtNum; 4] [force]; "orientations of mocap bodies"; model.ffi().nmocap],
         qacc: &[MjtNum; "acceleration"; model.ffi().nv],
         act_dot: &[MjtNum; "time-derivative of actuator activation"; model.ffi().na],
         userdata: &[MjtNum; "user data, not touched by engine"; model.ffi().nuserdata],
         sensordata: &[MjtNum; "sensor data array"; model.ffi().nsensordata],
         tree_asleep: &[i32; "<0: awake; >=0: index cycle of sleeping trees"; model.ffi().ntree],
-        xpos: &[[MjtNum; 3] [cast]; "Cartesian position of body frame"; model.ffi().nbody],
-        xquat: &[[MjtNum; 4] [cast]; "Cartesian orientation of body frame"; model.ffi().nbody],
-        xmat: &[[MjtNum; 9] [cast]; "Cartesian orientation of body frame"; model.ffi().nbody],
-        xipos: &[[MjtNum; 3] [cast]; "Cartesian position of body com"; model.ffi().nbody],
-        ximat: &[[MjtNum; 9] [cast]; "Cartesian orientation of body inertia"; model.ffi().nbody],
-        xanchor: &[[MjtNum; 3] [cast]; "Cartesian position of joint anchor"; model.ffi().njnt],
-        xaxis: &[[MjtNum; 3] [cast]; "Cartesian joint axis"; model.ffi().njnt],
-        geom_xpos: &[[MjtNum; 3] [cast]; "Cartesian geom position"; model.ffi().ngeom],
-        geom_xmat: &[[MjtNum; 9] [cast]; "Cartesian geom orientation"; model.ffi().ngeom],
-        site_xpos: &[[MjtNum; 3] [cast]; "Cartesian site position"; model.ffi().nsite],
-        site_xmat: &[[MjtNum; 9] [cast]; "Cartesian site orientation"; model.ffi().nsite],
-        cam_xpos: &[[MjtNum; 3] [cast]; "Cartesian camera position"; model.ffi().ncam],
-        cam_xmat: &[[MjtNum; 9] [cast]; "Cartesian camera orientation"; model.ffi().ncam],
-        light_xpos: &[[MjtNum; 3] [cast]; "Cartesian light position"; model.ffi().nlight],
-        light_xdir: &[[MjtNum; 3] [cast]; "Cartesian light direction"; model.ffi().nlight],
-        subtree_com: &[[MjtNum; 3] [cast]; "center of mass of each subtree"; model.ffi().nbody],
-        cdof: &[[MjtNum; 6] [cast]; "com-based motion axis of each dof (rot:lin)"; model.ffi().nv],
-        cinert: &[[MjtNum; 10] [cast]; "com-based body inertia and mass"; model.ffi().nbody],
-        flexvert_xpos: &[[MjtNum; 3] [cast]; "Cartesian flex vertex positions"; model.ffi().nflexvert],
-        flexelem_aabb: &[[MjtNum; 6] [cast]; "flex element bounding boxes (center, size)"; model.ffi().nflexelem],
+        xpos: &[[MjtNum; 3] [force]; "Cartesian position of body frame"; model.ffi().nbody],
+        xquat: &[[MjtNum; 4] [force]; "Cartesian orientation of body frame"; model.ffi().nbody],
+        xmat: &[[MjtNum; 9] [force]; "Cartesian orientation of body frame"; model.ffi().nbody],
+        xipos: &[[MjtNum; 3] [force]; "Cartesian position of body com"; model.ffi().nbody],
+        ximat: &[[MjtNum; 9] [force]; "Cartesian orientation of body inertia"; model.ffi().nbody],
+        xanchor: &[[MjtNum; 3] [force]; "Cartesian position of joint anchor"; model.ffi().njnt],
+        xaxis: &[[MjtNum; 3] [force]; "Cartesian joint axis"; model.ffi().njnt],
+        geom_xpos: &[[MjtNum; 3] [force]; "Cartesian geom position"; model.ffi().ngeom],
+        geom_xmat: &[[MjtNum; 9] [force]; "Cartesian geom orientation"; model.ffi().ngeom],
+        site_xpos: &[[MjtNum; 3] [force]; "Cartesian site position"; model.ffi().nsite],
+        site_xmat: &[[MjtNum; 9] [force]; "Cartesian site orientation"; model.ffi().nsite],
+        cam_xpos: &[[MjtNum; 3] [force]; "Cartesian camera position"; model.ffi().ncam],
+        cam_xmat: &[[MjtNum; 9] [force]; "Cartesian camera orientation"; model.ffi().ncam],
+        light_xpos: &[[MjtNum; 3] [force]; "Cartesian light position"; model.ffi().nlight],
+        light_xdir: &[[MjtNum; 3] [force]; "Cartesian light direction"; model.ffi().nlight],
+        subtree_com: &[[MjtNum; 3] [force]; "center of mass of each subtree"; model.ffi().nbody],
+        cdof: &[[MjtNum; 6] [force]; "com-based motion axis of each dof (rot:lin)"; model.ffi().nv],
+        cinert: &[[MjtNum; 10] [force]; "com-based body inertia and mass"; model.ffi().nbody],
+        flexvert_xpos: &[[MjtNum; 3] [force]; "Cartesian flex vertex positions"; model.ffi().nflexvert],
+        flexelem_aabb: &[[MjtNum; 6] [force]; "flex element bounding boxes (center, size)"; model.ffi().nflexelem],
         flexedge_J: &[MjtNum; "flex edge Jacobian"; model.ffi().nJfe],
         flexedge_length: &[MjtNum; "flex edge lengths"; model.ffi().nflexedge],
-        flexvert_J: &[[MjtNum; 2] [cast]; "flex vertex Jacobian"; model.ffi().nJfv],
-        flexvert_length: &[[MjtNum; 2] [cast]; "flex vertex lengths"; model.ffi().nflexvert],
-        bvh_aabb_dyn: &[[MjtNum; 6] [cast]; "global bounding box (center, size)"; model.ffi().nbvhdynamic],
+        flexvert_J: &[[MjtNum; 2] [force]; "flex vertex Jacobian"; model.ffi().nJfv],
+        flexvert_length: &[[MjtNum; 2] [force]; "flex vertex lengths"; model.ffi().nflexvert],
+        bvh_aabb_dyn: &[[MjtNum; 6] [force]; "global bounding box (center, size)"; model.ffi().nbvhdynamic],
         ten_wrapadr: &[i32; "start address of tendon's path"; model.ffi().ntendon],
         ten_wrapnum: &[i32; "number of wrap points in path"; model.ffi().ntendon],
         ten_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; model.ffi().ntendon],
         ten_J_rowadr: &[i32; "row start address in colind array"; model.ffi().ntendon],
         ten_length: &[MjtNum; "tendon lengths"; model.ffi().ntendon],
-        wrap_obj: &[[i32; 2] [cast]; "geom id; -1: site; -2: pulley"; model.ffi().nwrap],
-        wrap_xpos: &[[MjtNum; 6] [cast]; "Cartesian 3D points in all paths"; model.ffi().nwrap],
+        wrap_obj: &[[i32; 2] [force]; "geom id; -1: site; -2: pulley"; model.ffi().nwrap],
+        wrap_xpos: &[[MjtNum; 6] [force]; "Cartesian 3D points in all paths"; model.ffi().nwrap],
         actuator_length: &[MjtNum; "actuator lengths"; model.ffi().nu],
         moment_rownnz: &[i32; "number of non-zeros in actuator_moment row"; model.ffi().nu],
         moment_rowadr: &[i32; "row start address in colind array"; model.ffi().nu],
         moment_colind: &[i32; "column indices in sparse Jacobian"; model.ffi().nJmom],
         actuator_moment: &[MjtNum; "actuator moments"; model.ffi().nJmom],
-        crb: &[[MjtNum; 10] [cast]; "com-based composite inertia and mass"; model.ffi().nbody],
+        crb: &[[MjtNum; 10] [force]; "com-based composite inertia and mass"; model.ffi().nbody],
         qM: &[MjtNum; "inertia (sparse)"; model.ffi().nM],
         M: &[MjtNum; "reduced inertia (compressed sparse row)"; model.ffi().nC],
         qLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
         qLDiagInv: &[MjtNum; "1/diag(D)"; model.ffi().nv],
-        bvh_active: &[bool [cast]; "was bounding volume checked for collision"; model.ffi().nbvh],
+        bvh_active: &[bool [force]; "was bounding volume checked for collision"; model.ffi().nbvh],
         tree_awake: &[i32; "is tree awake; 0: asleep; 1: awake"; model.ffi().ntree],
-        body_awake: &[MjtSleepState [cast]; "body sleep state"; model.ffi().nbody],
+        body_awake: &[MjtSleepState [force]; "body sleep state"; model.ffi().nbody],
         body_awake_ind: &[i32; "indices of awake and static bodies"; model.ffi().nbody],
         parent_awake_ind: &[i32; "indices of bodies with awake or static parents"; model.ffi().nbody],
         dof_awake_ind: &[i32; "indices of awake dofs"; model.ffi().nv],
         flexedge_velocity: &[MjtNum; "flex edge velocities"; model.ffi().nflexedge],
         ten_velocity: &[MjtNum; "tendon velocities"; model.ffi().ntendon],
         actuator_velocity: &[MjtNum; "actuator velocities"; model.ffi().nu],
-        cvel: &[[MjtNum; 6] [cast]; "com-based velocity (rot:lin)"; model.ffi().nbody],
-        cdof_dot: &[[MjtNum; 6] [cast]; "time-derivative of cdof (rot:lin)"; model.ffi().nv],
+        cvel: &[[MjtNum; 6] [force]; "com-based velocity (rot:lin)"; model.ffi().nbody],
+        cdof_dot: &[[MjtNum; 6] [force]; "time-derivative of cdof (rot:lin)"; model.ffi().nv],
         qfrc_bias: &[MjtNum; "C(qpos,qvel)"; model.ffi().nv],
         qfrc_spring: &[MjtNum; "passive spring force"; model.ffi().nv],
         qfrc_damper: &[MjtNum; "passive damper force"; model.ffi().nv],
         qfrc_gravcomp: &[MjtNum; "passive gravity compensation force"; model.ffi().nv],
         qfrc_fluid: &[MjtNum; "passive fluid force"; model.ffi().nv],
         qfrc_passive: &[MjtNum; "total passive force"; model.ffi().nv],
-        subtree_linvel: &[[MjtNum; 3] [cast]; "linear velocity of subtree com"; model.ffi().nbody],
-        subtree_angmom: &[[MjtNum; 3] [cast]; "angular momentum about subtree com"; model.ffi().nbody],
+        subtree_linvel: &[[MjtNum; 3] [force]; "linear velocity of subtree com"; model.ffi().nbody],
+        subtree_angmom: &[[MjtNum; 3] [force]; "angular momentum about subtree com"; model.ffi().nbody],
         qH: &[MjtNum; "L'*D*L factorization of modified M"; model.ffi().nC],
         qHDiagInv: &[MjtNum; "1/diag(D) of modified M"; model.ffi().nv],
         qDeriv: &[MjtNum; "d (passive + actuator - bias) / d qvel"; model.ffi().nD],
@@ -1427,11 +1424,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         qacc_smooth: &[MjtNum; "unconstrained acceleration"; model.ffi().nv],
         qfrc_constraint: &[MjtNum; "constraint force"; model.ffi().nv],
         qfrc_inverse: &[MjtNum; "net external force; should equal qfrc_applied + J'*xfrc_applied + qfrc_actuator"; model.ffi().nv],
-        cacc: &[[MjtNum; 6] [cast]; "com-based acceleration"; model.ffi().nbody],
-        cfrc_int: &[[MjtNum; 6] [cast]; "com-based interaction force with parent"; model.ffi().nbody],
-        cfrc_ext: &[[MjtNum; 6] [cast]; "com-based external force on body"; model.ffi().nbody],
+        cacc: &[[MjtNum; 6] [force]; "com-based acceleration"; model.ffi().nbody],
+        cfrc_int: &[[MjtNum; 6] [force]; "com-based interaction force with parent"; model.ffi().nbody],
+        cfrc_ext: &[[MjtNum; 6] [force]; "com-based external force on body"; model.ffi().nbody],
         contact: &[MjContact; "array of all detected contacts"; ffi().ncon],
-        efc_type: &[MjtConstraint [cast]; "constraint type"; ffi().nefc],
+        efc_type: &[MjtConstraint [force]; "constraint type"; ffi().nefc],
         efc_id: &[i32; "id of object of specified type"; ffi().nefc],
         efc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
         efc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
@@ -1442,7 +1439,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         efc_margin: &[MjtNum; "inclusion margin (contact)"; ffi().nefc],
         efc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],
         efc_diagApprox: &[MjtNum; "approximation to diagonal of A"; ffi().nefc],
-        efc_KBIP: &[[MjtNum; 4] [cast]; "stiffness, damping, impedance, imp'"; ffi().nefc],
+        efc_KBIP: &[[MjtNum; 4] [force]; "stiffness, damping, impedance, imp'"; ffi().nefc],
         efc_D: &[MjtNum; "constraint mass"; ffi().nefc],
         efc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
         tendon_efcadr: &[i32; "first efc address involving tendon; -1: none"; model.ffi().ntendon],
@@ -1472,7 +1469,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         island_iefcadr: &[i32; "start address in iefc vector"; ffi().nisland],
         map_efc2iefc: &[i32; "map from efc to iefc"; ffi().nefc],
         map_iefc2efc: &[i32; "map from iefc to efc"; ffi().nefc],
-        iefc_type: &[MjtConstraint [cast]; "constraint type"; ffi().nefc],
+        iefc_type: &[MjtConstraint [force]; "constraint type"; ffi().nefc],
         iefc_id: &[i32; "id of object of specified type"; ffi().nefc],
         iefc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
         iefc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
@@ -1490,17 +1487,17 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         efc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
         efc_b: &[MjtNum; "linear cost term: J*qacc_smooth - aref"; ffi().nefc],
         iefc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
-        iefc_state: &[MjtConstraintState [cast]; "constraint state"; ffi().nefc],
+        iefc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
         iefc_force: &[MjtNum; "constraint force in constraint space"; ffi().nefc],
-        efc_state: &[MjtConstraintState [cast]; "constraint state"; ffi().nefc],
+        efc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
         efc_force: &[MjtNum; "constraint force in constraint space"; ffi().nefc],
         ifrc_constraint: &[MjtNum; "constraint force"; ffi().nidof]
     }
 
     array_slice_dyn! {
         sublen_dep {
-            ten_J_colind: &[[i32; model.ffi().nv as usize] [cast]; "column indices in sparse Jacobian"; model.ffi().ntendon],
-            ten_J: &[[MjtNum; model.ffi().nv as usize] [cast]; "tendon Jacobian"; model.ffi().ntendon]
+            ten_J_colind: &[[i32; model.ffi().nv as usize] [force]; "column indices in sparse Jacobian"; model.ffi().ntendon],
+            ten_J: &[[MjtNum; model.ffi().nv as usize] [force]; "tendon Jacobian"; model.ffi().ntendon]
         }
     }
 }
@@ -1508,7 +1505,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
     fn drop(&mut self) {
         unsafe {
-            mj_deleteData(self.data);
+            mj_deleteData(self.data.as_ptr());
         }
     }
 }
@@ -1530,10 +1527,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjData<M> {
     /// the copy.
     pub fn try_clone(&self) -> Result<Self, MjDataError> {
         let raw = unsafe { mj_copyData(ptr::null_mut(), self.model.ffi(), self.ffi()) };
-        if raw.is_null() {
-            return Err(MjDataError::AllocationFailed);
-        }
-        Ok(Self { data: raw, model: self.model.clone() })
+        NonNull::new(raw)
+            .map(|data| Self { data, model: self.model.clone() })
+            .ok_or(MjDataError::AllocationFailed)
     }
 }
 
@@ -1879,7 +1875,7 @@ mod test {
         let mut data = model.make_data();
 
         // Add a dummy contact
-        let dummy_contact = unsafe { std::mem::zeroed() };
+        let dummy_contact = bytemuck::Zeroable::zeroed();
         data.add_contact(&dummy_contact).unwrap();
     }
 

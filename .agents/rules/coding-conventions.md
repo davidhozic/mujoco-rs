@@ -23,6 +23,7 @@ trigger: always_on
 - Follow the existing error handling patterns used in the same file.
 - Use `/// Safety` doc comments on all `unsafe` blocks.
 - Public items should have `///` doc comments.
+- Always use ASCII characters only. Never use UTF-8 (e.g., em dashes, arrows, etc.).
 
 ## Documentation
 - Always verify any changes made to MuJoCo's official documentation to verify everything is correct.

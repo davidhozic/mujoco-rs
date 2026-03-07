@@ -31,7 +31,7 @@ use crate::getter_setter;
 
 // Re-export with lowercase 'f' to fix method generation
 use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
-use crate::util::assert_mujoco_version;
+use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
 
 /* Types */
 /// Type of inertia inference.
@@ -201,14 +201,14 @@ impl MjSpec {
     fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
 
-        let mut error_buffer = [0i8; 100];
+        let mut error_buffer = [0u8; ERROR_BUF_LEN];
         unsafe {
             let path_str = path.as_ref().to_str()
                 .ok_or(MjEditError::InvalidUtf8Path)?;
             let path = CString::new(path_str).unwrap();
             let raw_ptr = mj_parseXML(
                 path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
-                &mut error_buffer as *mut i8, error_buffer.len() as c_int
+                error_buffer.as_mut_ptr().cast::<i8>(), error_buffer.len() as c_int
             );
 
             Self::check_spec(raw_ptr, &error_buffer)
@@ -227,11 +227,11 @@ impl MjSpec {
         assert_mujoco_version();
 
         let c_xml = CString::new(xml).unwrap();
-        let mut error_buffer = [0i8; 100];
+        let mut error_buffer = [0u8; ERROR_BUF_LEN];
         unsafe {
             let spec_ptr = mj_parseXMLString(
                 c_xml.as_ptr(), ptr::null(),
-                &mut error_buffer as *mut i8, error_buffer.len() as c_int
+                error_buffer.as_mut_ptr().cast::<i8>(), error_buffer.len() as c_int
             );
             Self::check_spec(spec_ptr, &error_buffer)
         }
@@ -268,27 +268,26 @@ impl MjSpec {
     /// When `filename` or `content_type` contains zero bytes.
     fn from_parse_file(filename: &str, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
-        let mut error_buffer = [0i8; 100];
+        let mut error_buffer = [0u8; ERROR_BUF_LEN];
         unsafe {
             let c_filename = CString::new(filename).unwrap();
             let c_content_type = CString::new(content_type).unwrap();
             let ptr = mj_parse(
                 c_filename.as_ptr(), c_content_type.as_ptr(),
                 vfs.map_or(ptr::null(), |v| v.ffi()),
-                error_buffer.as_mut_ptr(), error_buffer.len() as i32
+                error_buffer.as_mut_ptr().cast::<i8>(), error_buffer.len() as i32
             );
             Self::check_spec(ptr, &error_buffer)
         }
     }
 
     /// Handles spec pointer input.
-    /// # Safety
-    /// `error_buffer` must not be empty and the last element must be 0.
-    unsafe fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[i8]) -> Result<Self, MjEditError> {
+    fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[u8]) -> Result<Self, MjEditError> {
         if spec_ptr.is_null() {
-            // SAFETY: i8 and u8 have the same size, and no negative values can appear in the error_buffer.
             Err(MjEditError::ParseFailed(
-                unsafe { CStr::from_ptr(error_buffer.as_ptr().cast()).to_string_lossy().into_owned() }
+                CStr::from_bytes_until_nul(error_buffer)
+                    .map(|c| c.to_string_lossy().into_owned())
+                    .unwrap_or_default()
             ))
         }
         else {
@@ -342,16 +341,18 @@ impl MjSpec {
     /// # Panics
     /// When `filename` contains '\0' characters, a panic occurs.
     pub fn save_xml(&self, filename: &str) -> Result<(), MjEditError> {
-        let mut error_buff = [0; 100];
+        let mut error_buff = [0u8; ERROR_BUF_LEN];
         let cname = CString::new(filename).unwrap();  // filename is always UTF-8
         let result = unsafe { mj_saveXML(
             self.ffi(), cname.as_ptr(),
-            error_buff.as_mut_ptr(), error_buff.len() as i32
+            error_buff.as_mut_ptr().cast::<i8>(), error_buff.len() as i32
         ) };
         match result {
             0 => Ok(()),
             _ => Err(MjEditError::SaveFailed(
-                unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().into_owned() }
+                CStr::from_bytes_until_nul(&error_buff)
+                    .map(|c| c.to_string_lossy().into_owned())
+                    .unwrap_or_default()
             ))
         }
     }
@@ -364,16 +365,18 @@ impl MjSpec {
     /// Returns [`MjEditError::SaveFailed`] with MuJoCo's error message if the conversion fails.
     /// If `buffer_size` is too small, the output will be truncated.
     pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, MjEditError> {
-        let mut error_buff = [0; 100];
+        let mut error_buff = [0u8; ERROR_BUF_LEN];
         let mut result_buff = vec![0u8; buffer_size];
         let result = unsafe { mj_saveXMLString(
             self.ffi(), result_buff.as_mut_ptr().cast(), result_buff.len() as i32,
-            error_buff.as_mut_ptr(), error_buff.len() as i32
+            error_buff.as_mut_ptr().cast::<i8>(), error_buff.len() as i32
         ) };
         match result {
             0 => Ok(CStr::from_bytes_until_nul(&result_buff).unwrap().to_string_lossy().into_owned()),
             _ => Err(MjEditError::SaveFailed(
-                unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().to_string() }
+                CStr::from_bytes_until_nul(&error_buff)
+                    .map(|c| c.to_string_lossy().into_owned())
+                    .unwrap_or_default()
             ))
         }
     }
@@ -1158,7 +1161,7 @@ impl MjsWrap {
 
     /// Return the side site element.
     pub fn side_site(&self) -> Option<&MjsSite> {
-        let ptr = unsafe { mjs_getWrapSideSite(crate::util::force_cast(self)) };
+        let ptr = unsafe { mjs_getWrapSideSite(self as *const _ as *mut _) };
         if ptr.is_null() { None } else { Some(unsafe { &*ptr }) }
     }
 
@@ -1170,12 +1173,12 @@ impl MjsWrap {
 
     /// Return the wrap divisor.
     pub fn divisor(&self) -> f64 {
-        unsafe { mjs_getWrapDivisor(crate::util::force_cast(self)) }
+        unsafe { mjs_getWrapDivisor(self as *const _ as *mut _) }
     }
 
     /// Return the wrap coefficient.
     pub fn coef(&self) -> f64 {
-        unsafe { mjs_getWrapCoef(crate::util::force_cast(self)) }
+        unsafe { mjs_getWrapCoef(self as *const _ as *mut _) }
     }
 }
 
@@ -1422,7 +1425,7 @@ impl MjsTexture {
     ]}
 
     /// Sets texture `data`.
-    pub fn set_data<T>(&mut self, data: &[T]) {
+    pub fn set_data<T: bytemuck::NoUninit>(&mut self, data: &[T]) {
         write_mjs_vec_byte(data, unsafe { &mut *self.data });
     }
 

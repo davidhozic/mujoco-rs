@@ -21,6 +21,9 @@ use std::ops::Deref;
 use std::path::Path;
 use std::fs::File;
 
+/// Scale factor for converting normalized [0..1] depth to u16.
+const DEPTH_U16_SCALE: f32 = u16::MAX as f32;
+
 #[cfg(feature = "renderer-winit-fallback")]
 mod universal;
 
@@ -441,17 +444,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// - [`RendererError::RgbDisabled`] if RGB rendering is disabled.
     pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[[u8; 3]; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.rgb_flat() {
-            if flat.len() == WIDTH * HEIGHT * 3 {
-                let p_shaped = flat.as_ptr() as *const [[[u8; 3]; WIDTH]; HEIGHT];
-
-                // SAFETY: The alignment of the output is the same as the original.
-                // The lifetime also matches 'a in &'a self, which prevents data races.
-                // Length (number of elements) matches the output's.
-                Ok(unsafe { &*p_shaped })
-            }
-            else {
-                Err(RendererError::DimensionMismatch)
-            }
+            bytemuck::try_from_bytes(flat)
+                .map_err(|_| RendererError::DimensionMismatch)
         }
         else {
             Err(RendererError::RgbDisabled)
@@ -472,17 +466,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// - [`RendererError::DepthDisabled`] if depth rendering is disabled.
     pub fn depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[f32; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.depth_flat() {
-            if flat.len() == WIDTH * HEIGHT {
-                let p_shaped = flat.as_ptr() as *const [[f32; WIDTH]; HEIGHT];
-
-                // SAFETY: The alignment of the output is the same as the original.
-                // The lifetime matches 'a in &'a self, which prevents data races.
-                // Length (number of elements) matches the output's.
-                Ok(unsafe { &*p_shaped })
-            }
-            else {
-                Err(RendererError::DimensionMismatch)
-            }
+            let bytes: &[u8] = bytemuck::cast_slice(flat);
+            bytemuck::try_from_bytes(bytes)
+                .map_err(|_| RendererError::DimensionMismatch)
         }
         else {
             Err(RendererError::DepthDisabled)
@@ -539,10 +525,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             if normalize {
                 let max = depth.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
                 let min = depth.iter().cloned().fold(f32::INFINITY, f32::min);
-                (depth.iter().flat_map(|&x| (((x - min) / (max - min) * 65535.0).min(65535.0) as u16).to_be_bytes()).collect::<Box<_>>(), min, max)
+                (depth.iter().flat_map(|&x| (((x - min) / (max - min) * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), min, max)
             }
             else {
-                (depth.iter().flat_map(|&x| ((x * 65535.0).min(65535.0) as u16).to_be_bytes()).collect::<Box<_>>(), 0.0, 1.0)
+                (depth.iter().flat_map(|&x| ((x * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), 0.0, 1.0)
             };
 
             let mut writer = encoder.write_header()?;
@@ -567,13 +553,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             let file = File::create(path.as_ref())?;
             let mut writer = BufWriter::new(file);
 
-            /* Fast conversion to a byte slice to prioritize performance */
-            let p = unsafe { std::slice::from_raw_parts(
-                depth.as_ptr() as *const u8,
-                std::mem::size_of::<f32>() * depth.len()
-            ) };
-
-            writer.write_all(p)?;
+            let bytes: &[u8] = bytemuck::cast_slice(depth);
+            writer.write_all(bytes)?;
             Ok(())
         }
         else {
