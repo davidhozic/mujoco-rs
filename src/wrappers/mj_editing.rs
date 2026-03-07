@@ -1158,7 +1158,7 @@ impl MjsWrap {
 
     /// Return the side site element.
     pub fn side_site(&self) -> Option<&MjsSite> {
-        let ptr = unsafe { mjs_getWrapSideSite(crate::util::force_cast(self)) };
+        let ptr = unsafe { mjs_getWrapSideSite(self as *const _ as *mut _) };
         if ptr.is_null() { None } else { Some(unsafe { &*ptr }) }
     }
 
@@ -1170,12 +1170,12 @@ impl MjsWrap {
 
     /// Return the wrap divisor.
     pub fn divisor(&self) -> f64 {
-        unsafe { mjs_getWrapDivisor(crate::util::force_cast(self)) }
+        unsafe { mjs_getWrapDivisor(self as *const _ as *mut _) }
     }
 
     /// Return the wrap coefficient.
     pub fn coef(&self) -> f64 {
-        unsafe { mjs_getWrapCoef(crate::util::force_cast(self)) }
+        unsafe { mjs_getWrapCoef(self as *const _ as *mut _) }
     }
 }
 
@@ -1422,7 +1422,7 @@ impl MjsTexture {
     ]}
 
     /// Sets texture `data`.
-    pub fn set_data<T>(&mut self, data: &[T]) {
+    pub fn set_data<T: bytemuck::NoUninit>(&mut self, data: &[T]) {
         write_mjs_vec_byte(data, unsafe { &mut *self.data });
     }
 

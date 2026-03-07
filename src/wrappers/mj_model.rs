@@ -1,7 +1,7 @@
 //! MjModel related.
 use std::ffi::{CStr, CString, NulError, c_int, c_void};
 use std::path::Path;
-use std::ptr;
+use std::ptr::{self, NonNull};
 
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
 use super::mj_primitive::*;
@@ -128,12 +128,36 @@ pub type MjtRayDataField = mjtRayDataField;
 
 /// Camera output type bitflags.
 pub type MjtCamOutBit = mjtCamOutBit;
+
+// SAFETY: All MuJoCo C enums below are `#[repr(u32)]` (or `#[repr(u8)]`) and each
+// has a variant with discriminant 0, so the all-zeros bit pattern is a valid value.
+// This lets `info_with_view!`'s `zero()` method use the safe `Zeroable::zeroed()`
+// instead of `unsafe { std::mem::zeroed() }`, providing a compile-time guarantee
+// that only safe-to-zero types are used in views.
+unsafe impl bytemuck::Zeroable for mjtTrn_ {}
+unsafe impl bytemuck::Zeroable for mjtDyn_ {}
+unsafe impl bytemuck::Zeroable for mjtGain_ {}
+unsafe impl bytemuck::Zeroable for mjtBias_ {}
+unsafe impl bytemuck::Zeroable for mjtObj_ {}
+unsafe impl bytemuck::Zeroable for mjtSameFrame_ {}
+unsafe impl bytemuck::Zeroable for mjtCamLight_ {}
+unsafe impl bytemuck::Zeroable for mjtProjection_ {}
+unsafe impl bytemuck::Zeroable for mjtEq_ {}
+unsafe impl bytemuck::Zeroable for mjtGeom_ {}
+unsafe impl bytemuck::Zeroable for mjtJoint_ {}
+unsafe impl bytemuck::Zeroable for mjtLightType_ {}
+unsafe impl bytemuck::Zeroable for mjtSensor_ {}
+unsafe impl bytemuck::Zeroable for mjtDataType_ {}
+unsafe impl bytemuck::Zeroable for mjtStage_ {}
+unsafe impl bytemuck::Zeroable for mjtTexture_ {}
+unsafe impl bytemuck::Zeroable for mjtColorSpace_ {}
+
 /*******************************************/
 
 /// A Rust-safe wrapper around mjModel.
 /// Automatically clean after itself on destruction.
 #[derive(Debug)]
-pub struct MjModel(*mut mjModel);
+pub struct MjModel(NonNull<mjModel>);
 
 // Allow usage in threaded contexts as the data won't be shared anywhere outside Rust,
 // except in the C++ code.
@@ -250,14 +274,11 @@ impl MjModel {
             ) {
                 1 => Ok(()),
                 0 => {
-                    let cstr_error = String::from_utf8_lossy(
-                        // Reinterpret as u8 data. This does not affect the data as it is ASCII
-                        // encoded and thus negative values aren't possible.
-                        std::slice::from_raw_parts(
-                            error.as_ptr() as *const u8,
-                            error.iter().position(|&x| x == 0).unwrap_or(error.len())
-                        )
-                    );
+                    let pos = error.iter().position(|&x| x == 0).unwrap_or(error.len());
+                    // SAFETY: i8 and u8 have identical size (1) and alignment (1).
+                    let bytes: &[u8] =
+                        std::slice::from_raw_parts(error.as_ptr() as *const u8, pos);
+                    let cstr_error = String::from_utf8_lossy(bytes);
                     Err(MjModelError::SaveFailed(cstr_error.into_owned()))
                 },
                 _ => unreachable!()
@@ -287,13 +308,11 @@ impl MjModel {
     /// # Safety
     /// `error_buffer` must have at least one element, where the last element must be 0.
     unsafe fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[i8]) -> Result<Self, MjModelError> {
-        if ptr_model.is_null() {
-            Err(MjModelError::LoadFailed(
+        match NonNull::new(ptr_model) {
+            Some(nn) => Ok(Self(nn)),
+            None => Err(MjModelError::LoadFailed(
                 unsafe { CStr::from_ptr(error_buffer.as_ptr().cast()).to_string_lossy().into_owned() }
-            ))
-        }
-        else {
-            Ok(Self(ptr_model))
+            )),
         }
     }
 
@@ -478,7 +497,7 @@ impl MjModel {
     pub fn name_to_id(&self, type_: MjtObj, name: &str) -> i32 {
         let c_string = CString::new(name).unwrap();
         unsafe {
-            mj_name2id(self.0, type_ as i32, c_string.as_ptr())
+            mj_name2id(self.ffi(), type_ as i32, c_string.as_ptr())
         }
     }
 
@@ -491,12 +510,9 @@ impl MjModel {
     /// the copy.
     pub fn try_clone(&self) -> Result<MjModel, MjDataError> {
         let ptr = unsafe { mj_copyModel(ptr::null_mut(), self.ffi()) };
-        if ptr.is_null() {
-            Err(MjDataError::AllocationFailed)
-        }
-        else {
-            Ok(MjModel(ptr))
-        }
+        NonNull::new(ptr)
+            .map(MjModel)
+            .ok_or(MjDataError::AllocationFailed)
     }
 
     /// Save model to binary MJB file or memory buffer; buffer has precedence when given.
@@ -665,7 +681,7 @@ impl MjModel {
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
-        unsafe { &*self.0 }
+        unsafe { self.0.as_ref() }
     }
 
     /// Returns a mutable reference to the wrapped FFI struct.
@@ -674,7 +690,7 @@ impl MjModel {
     /// Modifying the underlying FFI struct directly can break the invariants
     /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjModel {
-        unsafe { &mut *self.0 }
+        unsafe { self.0.as_mut() }
     }
 
     /// Returns a direct pointer to the underlying model.
@@ -682,7 +698,7 @@ impl MjModel {
     /// It is only meant for the viewer code, which currently still depends
     /// on mutable pointers to model and data. This will be removed in the future.
     pub(crate) unsafe fn __raw(&self) -> *mut mjModel {
-        self.0
+        self.0.as_ptr()
     }
 }
 
@@ -1271,7 +1287,7 @@ impl Clone for MjModel {
 impl Drop for MjModel {
     fn drop(&mut self) {
         unsafe {
-            mj_deleteModel(self.0);
+            mj_deleteModel(self.0.as_ptr());
         }
     }
 }

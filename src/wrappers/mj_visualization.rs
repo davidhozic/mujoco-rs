@@ -29,6 +29,15 @@ pub type MjtPertBit = mjtPertBit;
 
 /// These are the possible camera types, used in `mjvCamera.type`.
 pub type MjtCamera = mjtCamera;
+
+// Compile-time verification that TryFrom discriminant values match the actual enum variants.
+const _: () = {
+    assert!(MjtCamera::mjCAMERA_FREE as i32 == 0);
+    assert!(MjtCamera::mjCAMERA_TRACKING as i32 == 1);
+    assert!(MjtCamera::mjCAMERA_FIXED as i32 == 2);
+    assert!(MjtCamera::mjCAMERA_USER as i32 == 3);
+};
+
 impl TryFrom<i32> for MjtCamera {
     type Error = ();
     fn try_from(value: i32) -> Result<Self, Self::Error> {
@@ -246,7 +255,8 @@ impl MjvGeom {
     /// Compatibility method to convert the `label` attribute into a `String`.
     pub fn label(&self) -> String {
         let len = self.label.iter().position(|&c| c == 0).unwrap_or(self.label.len());
-        let bytes = unsafe { std::slice::from_raw_parts(self.label.as_ptr() as *const u8, len) };
+        // SAFETY: i8 and u8 have identical size (1) and alignment (1).
+        let bytes: &[u8] = bytemuck::cast_slice(&self.label[..len]);
         String::from_utf8_lossy(bytes).to_string()
     }
 
@@ -259,9 +269,8 @@ impl MjvGeom {
         if s.len() > capacity {
             return Err(MjSceneError::LabelTooLong { len: s.len(), capacity });
         }
-        for (i, &b) in s.as_bytes().iter().enumerate() {
-            self.label[i] = b as i8;
-        }
+        let target: &mut [u8] = bytemuck::cast_slice_mut(&mut self.label[..s.len()]);
+        target.copy_from_slice(s.as_bytes());
         self.label[s.len()] = 0;
         Ok(())
     }

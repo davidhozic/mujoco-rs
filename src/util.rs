@@ -360,11 +360,11 @@ macro_rules! info_with_view {
                 /// Resets the internal variables to 0.0.
                 pub fn zero(&mut self) {
                     $(
-                        self.$attr.fill(unsafe { std::mem::zeroed() });
+                        self.$attr.fill(bytemuck::Zeroable::zeroed());
                     )*
                     $(
                         if let Some(x) = &mut self.$opt_attr {
-                            x.fill(unsafe { std::mem::zeroed() });
+                            x.fill(bytemuck::Zeroable::zeroed());
                         }
                     )*
                 }

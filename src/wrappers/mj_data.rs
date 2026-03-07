@@ -10,7 +10,7 @@ use std::ffi::CString;
 use std::borrow::Cow;
 use std::ops::Deref;
 use std::fmt::Debug;
-use std::ptr;
+use std::ptr::{self, NonNull};
 
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
@@ -48,7 +48,7 @@ pub type MjtSleepState = mjtSleepState;
 /// Wrapper around the `mjData` struct.
 /// Provides lifetime guarantees as well as automatic cleanup.
 pub struct MjData<M: Deref<Target = MjModel>> {
-    data: *mut mjData,
+    data: NonNull<mjData>,
     model: M
 }
 
@@ -84,24 +84,20 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// allocation failures without a panic.
     pub fn try_new(model: M) -> Result<Self, MjDataError> {
         let data_ptr = unsafe { mj_makeData(model.ffi()) };
-        if data_ptr.is_null() {
-            return Err(MjDataError::AllocationFailed);
-        }
-        Ok(Self {
-            data: data_ptr,
-            model,
-        })
+        NonNull::new(data_ptr)
+            .map(|data| Self { data, model })
+            .ok_or(MjDataError::AllocationFailed)
     }
 
     /// Returns a slice of detected contacts.
     /// To obtain the contact force, call [`MjData::contact_force`].
     pub fn contacts(&self) -> &[MjContact] {
         unsafe {
-            let ptr = (*self.data).contact;
+            let ptr = (*self.data.as_ptr()).contact;
             if ptr.is_null() {
                 &[]
             } else {
-                std::slice::from_raw_parts(ptr, (*self.data).ncon as usize)
+                std::slice::from_raw_parts(ptr, (*self.data.as_ptr()).ncon as usize)
             }
         }
     }
@@ -249,7 +245,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             // When contact_id is outside valid range of i32,
             // it overflows to value below 0, which is also checked internally.
             mj_contactForce(
-                self.model.ffi(), self.data,
+                self.model.ffi(), self.data.as_ptr(),
                 contact_id as i32, &mut force
             );
         }
@@ -493,7 +489,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::LengthMismatch`] if the `jar` length is incorrect.
     pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) -> Result<(), MjDataError> {
-        let nefc = unsafe { (*self.data).nefc as usize };
+        let nefc = unsafe { (*self.data.as_ptr()).nefc as usize };
         if jar.len() < nefc {
             return Err(MjDataError::LengthMismatch { name: "jar", expected: nefc, got: jar.len() });
         }
@@ -1259,7 +1255,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// It is only meant for the viewer code, which currently still depends
     /// on mutable pointers to model and data. This will be removed in the future.
     pub(crate) unsafe fn __raw(&self) -> *mut mjData {
-        self.data
+        self.data.as_ptr()
     }
 
 }
@@ -1269,7 +1265,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjData {
-        unsafe { &*self.data }
+        unsafe { self.data.as_ref() }
     }
 
     /// Mutable reference to the wrapped FFI struct.
@@ -1278,7 +1274,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Modifying the underlying FFI struct directly can break the invariants
     /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjData {
-        unsafe { &mut *self.data }
+        unsafe { self.data.as_mut() }
     }
 
     /// Returns a reference to data's [`MjModel`].
@@ -1508,7 +1504,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
     fn drop(&mut self) {
         unsafe {
-            mj_deleteData(self.data);
+            mj_deleteData(self.data.as_ptr());
         }
     }
 }
@@ -1530,10 +1526,9 @@ impl<M: Deref<Target = MjModel> + Clone> MjData<M> {
     /// the copy.
     pub fn try_clone(&self) -> Result<Self, MjDataError> {
         let raw = unsafe { mj_copyData(ptr::null_mut(), self.model.ffi(), self.ffi()) };
-        if raw.is_null() {
-            return Err(MjDataError::AllocationFailed);
-        }
-        Ok(Self { data: raw, model: self.model.clone() })
+        NonNull::new(raw)
+            .map(|data| Self { data, model: self.model.clone() })
+            .ok_or(MjDataError::AllocationFailed)
     }
 }
 

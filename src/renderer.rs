@@ -441,17 +441,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// - [`RendererError::RgbDisabled`] if RGB rendering is disabled.
     pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[[u8; 3]; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.rgb_flat() {
-            if flat.len() == WIDTH * HEIGHT * 3 {
-                let p_shaped = flat.as_ptr() as *const [[[u8; 3]; WIDTH]; HEIGHT];
-
-                // SAFETY: The alignment of the output is the same as the original.
-                // The lifetime also matches 'a in &'a self, which prevents data races.
-                // Length (number of elements) matches the output's.
-                Ok(unsafe { &*p_shaped })
+            if flat.len() != WIDTH * HEIGHT * 3 {
+                return Err(RendererError::DimensionMismatch);
             }
-            else {
-                Err(RendererError::DimensionMismatch)
-            }
+            // SAFETY: [u8; 3] arrays have alignment 1 (same as the source u8 slice).
+            Ok(unsafe { &*(flat.as_ptr() as *const [[[u8; 3]; WIDTH]; HEIGHT]) })
         }
         else {
             Err(RendererError::RgbDisabled)
@@ -472,17 +466,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// - [`RendererError::DepthDisabled`] if depth rendering is disabled.
     pub fn depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[f32; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.depth_flat() {
-            if flat.len() == WIDTH * HEIGHT {
-                let p_shaped = flat.as_ptr() as *const [[f32; WIDTH]; HEIGHT];
-
-                // SAFETY: The alignment of the output is the same as the original.
-                // The lifetime matches 'a in &'a self, which prevents data races.
-                // Length (number of elements) matches the output's.
-                Ok(unsafe { &*p_shaped })
+            if flat.len() != WIDTH * HEIGHT {
+                return Err(RendererError::DimensionMismatch);
             }
-            else {
-                Err(RendererError::DimensionMismatch)
-            }
+            // SAFETY: [f32; WIDTH] has the same alignment as f32, matching flat.as_ptr().
+            Ok(unsafe { &*(flat.as_ptr() as *const [[f32; WIDTH]; HEIGHT]) })
         }
         else {
             Err(RendererError::DepthDisabled)
@@ -567,13 +555,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             let file = File::create(path.as_ref())?;
             let mut writer = BufWriter::new(file);
 
-            /* Fast conversion to a byte slice to prioritize performance */
-            let p = unsafe { std::slice::from_raw_parts(
-                depth.as_ptr() as *const u8,
-                std::mem::size_of::<f32>() * depth.len()
-            ) };
-
-            writer.write_all(p)?;
+            let bytes: &[u8] = bytemuck::cast_slice(depth);
+            writer.write_all(bytes)?;
             Ok(())
         }
         else {

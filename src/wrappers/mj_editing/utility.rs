@@ -1,6 +1,5 @@
 //! Utilities for model editing purposes.
 use std::ffi::{CStr, CString};
-use std::mem::size_of;
 use crate::mujoco_c::*;
 
 
@@ -111,9 +110,10 @@ pub(crate) fn append_mjs_vec_string(source: &str, destination: *mut mjStringVec)
 }
 
 /// Writes MJS byte vector (C++) from a `source` to `destination`.
-pub(crate) fn write_mjs_vec_byte<T>(source: &[T], destination: *mut mjByteVec) {
+pub(crate) fn write_mjs_vec_byte<T: bytemuck::NoUninit>(source: &[T], destination: *mut mjByteVec) {
+    let bytes: &[u8] = bytemuck::cast_slice(source);
     unsafe {
-        mjs_setBuffer(destination, source.as_ptr().cast(), (size_of::<T>() * source.len()) as i32);
+        mjs_setBuffer(destination, bytes.as_ptr().cast(), bytes.len() as i32);
     }
 }
 
@@ -595,7 +595,7 @@ macro_rules! item_body_iterator {
                 fn new(root: &'a MjsBody, recurse: bool) -> Self {
                     // we cast to *mut MjsBody because mjs_firstChild requires a mutable pointer, but it doesn't
                     // actually mutate anything, so it's safe.
-                    let last = unsafe { mjs_firstChild($crate::util::force_cast(root), MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
+                    let last = unsafe { mjs_firstChild(root as *const _ as *mut _, MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
                     Self { root, last, recurse, item_type: PhantomData }
                 }
             }
@@ -627,7 +627,7 @@ macro_rules! item_body_iterator {
                     unsafe {
                         let out = [<mjs_as $iter_over>](self.last).as_ref();
                         // mjs_nextChild doesn't actually modify, but still demands a mutable pointer
-                        self.last = mjs_nextChild($crate::util::force_cast(self.root), self.last, self.recurse.into());
+                        self.last = mjs_nextChild(self.root as *const _ as *mut _, self.last, self.recurse.into());
                         out
                     }
                 }

@@ -4,7 +4,7 @@ use crate::error::MjSceneError;
 
 use super::mj_model::{MjModel, MjtTexture, MjtTextureRole};
 
-use std::{ffi::CString, mem::zeroed};
+use std::ffi::CString;
 use std::ptr;
 
 /* Types */
@@ -49,7 +49,12 @@ impl MjrRectangle {
 
 impl Default for MjrRectangle {
     fn default() -> Self {
-        unsafe { zeroed() }
+        Self {
+            left: 0,
+            bottom: 0,
+            width: 0,
+            height: 0,
+        }
     }
 }
 
@@ -192,7 +197,7 @@ impl MjrContext {
     /// # Errors
     /// Returns [`MjSceneError::InvalidAuxBufferIndex`] when `index >= mjNAUX` (10).
     pub fn set_aux(&mut self, index: usize) -> Result<(), MjSceneError> {
-        if index >= 10 {
+        if index >= mjNAUX as usize {
             return Err(MjSceneError::InvalidAuxBufferIndex { index });
         }
         unsafe { mjr_setAux(index as i32, self.ffi_mut()); }

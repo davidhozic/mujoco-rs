@@ -239,6 +239,55 @@ update of MuJoCo alone can increase the major version.
   - Module :docs-rs:`~mujoco_rs::mujoco_c` now uses compile-time layout tests to ensure
     declarations match the platform ABI of the linked MuJoCo library.
 
+  - Replaced several ``unsafe`` type-punning blocks with direct pointer casts
+    where type compatibility is trivially provable:
+
+    - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer`: ``rgb()``, ``depth()``, and ``save_depth_raw()``
+      now use direct pointer casts with a runtime length check, replacing the previous
+      unsafe casts that lacked length validation.
+    - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml` and
+      :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>label` now use
+      direct ``i8`` to ``u8`` pointer casts (identical layout) instead of unsafe
+      ``from_raw_parts`` without documented invariants.
+    - ``write_mjs_vec_byte`` and ``MjsTexture::set_data`` now require ``T: bytemuck::NoUninit``
+      for compile-time verified byte reinterpretation instead of unsafe pointer casts.
+
+  - Replaced ``force_cast`` union transmutes with ``as *const _ as *mut _`` for
+    ``&T`` to ``*mut T`` pointer casts in ``MjsWrap`` methods and body-item iterators, making
+    the const-to-mut intent explicit without a union-based transmute.
+
+  - Added compile-time ``const`` assertions in the viewer UI to verify that
+    ``GL_EFFECT_MAP``, ``VIS_OPT_MAP``, ``LABEL_TYPE_MAP``, and ``FRAME_TYPE_MAP``
+    lengths match the corresponding MuJoCo sentinel values (``mjNRNDFLAG``,
+    ``mjNVISFLAG``, ``mjNLABEL``, ``mjNFRAME``). Previously these were only
+    checked at runtime via ``debug_assert_eq!``.
+
+  - Replaced hardcoded index bound ``10`` with ``mjNAUX as usize`` in
+    :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_aux`
+    so the check stays correct if MuJoCo changes the constant.
+
+  - Added a compile-time assertion that ``HELP_MENU_TITLES`` and ``HELP_MENU_VALUES``
+    have the same number of newline-delimited entries, preventing silent misalignment
+    of the viewer help overlay.
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel` now uses
+    ``NonNull<mjModel>`` instead of ``*mut mjModel`` internally, and
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData` uses ``NonNull<mjData>``.
+    This encodes the non-null invariant at the type level, eliminating a class of possible
+    null-pointer dereferences and enabling niche optimization for ``Option<MjModel>`` etc.
+
+  - Added ``unsafe impl bytemuck::Zeroable`` for all MuJoCo C enum types used in view structs.
+    The ``zero()`` method in ``info_with_view!`` now calls ``bytemuck::Zeroable::zeroed()``
+    (safe) instead of ``std::mem::zeroed()`` (unsafe). Any future type used in views without
+    a ``Zeroable`` impl will produce a compile error.
+
+  - Added a compile-time assertion that ``MjtCamera``'s ``TryFrom<i32>`` discriminant values
+    match the actual enum variant values, catching silent drift if MuJoCo renumbers them.
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>label` and
+    ``set_label`` now use ``bytemuck::cast_slice`` / ``bytemuck::cast_slice_mut`` for safe
+    ``i8``-to-``u8`` conversion instead of raw pointer casts, eliminating ``unsafe`` blocks.
+
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>update_local_pos`
     now uses bounds-checked slice indexing into |mj_data| for ``xpos`` and ``xmat`` instead of
     raw pointer arithmetic. An invalid ``select`` index now triggers a ``debug_assert!`` and
