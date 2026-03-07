@@ -10,7 +10,7 @@ Custom visualization
 Aside from the true simulation state, MuJoCo provides ways to draw additional 3D geometries (geoms)
 onto an existing 3D scene.
 
-In MuJoCo-rs drawing is done through |mjv_scene|.
+In MuJoCo-rs, drawing is done through |mjv_scene|.
 There are two things that expose a scene for drawing custom visual-only geoms:
 
 - :ref:`mj_rust_viewer` (:docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>user_scene_mut`).
@@ -54,14 +54,14 @@ at this stage.
         let new_geom = scene.create_geom(
             MjtGeom::mjGEOM_LINE,  // type of geom to draw.
             None,  // size, ignore here as we set it below.
-            None,   // position: ignore here as we set it below.
-            None,   // rotational matrix: ignore here as we set it below.
+            None,  // position: ignore here as we set it below.
+            None,  // rotational matrix: ignore here as we set it below.
             Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
         ).unwrap();
     }).unwrap();
 
 
-In the above snippet, defining the fields that we've set to None would work, making this the final step.
+In the above snippet, defining the fields that we've set to ``None`` would work, making this the final step.
 However, we would need to know their correct values.
 We obtain the needed values using :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>connect`,
 which calculates the values to result in the geom pointing from one point to another.
@@ -92,7 +92,7 @@ which calculates the values to result in the geom pointing from one point to ano
         new_geom.connect(
             0.0,            // width
             ball1_position, // from
-            ball2_position  //  to
+            ball2_position  // to
         );
     }).unwrap();
 

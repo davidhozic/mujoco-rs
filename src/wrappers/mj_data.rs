@@ -207,7 +207,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Forward dynamics: same as mj_step but do not integrate in time.
     /// This is a wrapper around `mj_forward`.
     pub fn forward(&mut self) {
-        unsafe { 
+        unsafe {
             mj_forward(self.model.ffi(), self.ffi_mut());
         }
     }
@@ -215,7 +215,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// [`MjData::forward`] dynamics with skip.
     /// This is a wrapper around `mj_forwardSkip`.
     pub fn forward_skip(&mut self, skipstage: MjtStage, skipsensor: bool) {
-        unsafe { 
+        unsafe {
             mj_forwardSkip(self.model.ffi(), self.ffi_mut(), skipstage as i32, skipsensor as i32);
         }
     }
@@ -274,7 +274,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Print mjData to text file, specifying format.
-    /// float_format must be a valid printf-style format string for a single float value
+    /// float_format must be a valid printf-style format string for a single float value.
     /// # Panics
     /// When the `filename` or `float_format` contain '\0' characters, a panic occurs.
     pub fn print_formatted(&self, filename: &str, float_format: &str) {
@@ -431,7 +431,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         unsafe { mj_makeM(self.model.ffi(), self.ffi_mut()) }
     }
 
-    /// Compute sparse L'*D*L factorizaton of inertia matrix.
+    /// Compute sparse L'*D*L factorization of inertia matrix.
     pub fn factor_m(&mut self) {
         unsafe { mj_factorM(self.model.ffi(), self.ffi_mut()) }
     }
@@ -488,7 +488,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         unsafe { mj_referenceConstraint(self.model.ffi(), self.ffi_mut()) }
     }
 
-    // Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
+    /// Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
     /// If cost is not `None`, set `*cost = s(jar)` where `jar = Jac*qacc - aref`.
     /// # Errors
     /// Returns [`MjDataError::LengthMismatch`] if the `jar` length is incorrect.
@@ -1100,7 +1100,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// which controls what state gets copied. The `destination` parameter is a mutable
     /// slice to the location into which the state will be written.
     /// This is a wrapper around [`mj_getState`].
-    /// 
+    ///
     /// # Note
     /// The `destination` buffer is allowed to be larger than the
     /// actual state length, and may thus contain old information.
@@ -1108,13 +1108,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// any remaining elements in the buffer are left unchanged. This was done for possible
     /// performance improvements, where one array may hold different parts of simulation state
     /// at different times.
-    /// 
+    ///
     /// You can use the returned number of [`MjtNum`] elements written to `destination`
     /// to create a subslice containing only the updated information.
-    /// 
+    ///
     /// # Returns
     /// Number of [`MjtNum`] elements written to `destination`.
-    /// 
+    ///
     /// # Panics
     /// A panic will occur if `destination` is smaller than [`MjModel::state_size`] with `spec` passed as parameter.
     /// Use [`MjData::try_read_state_into`] for a fallible alternative.
@@ -1156,12 +1156,12 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Sets the `state` to [`MjData`]. This is a wrapper around [`mj_setState`].
     /// The `state` is an array containing the state to write, based on the `spec`
     /// bitmask of elements [`MjtState`].
-    /// 
+    ///
     /// # Note
     /// The size of `state` is allowed to be larger. This was done to allow a preallocated
     /// buffer to store any possible state based on `spec`, without having to query the size
     /// every time. This benefits performance in some cases.
-    /// 
+    ///
     /// # Panics
     /// A panic will occur if `state`'s length is less than would be copied
     /// based on `spec`.
@@ -1704,7 +1704,6 @@ mod test {
         /* Test consistency with the body */
         data.step1();  // update derived variables.
 
-        
         joint_view = joint_info.view(&data);
         let body_view = body_info.view(&data);
         /* Consistency in position */
@@ -2431,7 +2430,7 @@ mod test {
         data.forward_kinematics();
 
         // Ray should hit mesh (centered at 2,2,0.5, size 1x1x1)
-        // Top surface of the mesh is at z=0.5 + 0.5 = 1.0. 
+        // Top surface of the mesh is at z=0.5 + 0.5 = 1.0.
         // Ray starts at z=5.0 and goes straight down [0, 0, -1].
         // Intersection should be at exactly distance 4.0.
         let mesh_dist = data.ray_mesh(mesh_id, &[2.0, 2.0, 5.0], &[0.0, 0.0, -1.0], None);
@@ -2457,7 +2456,7 @@ mod test {
         // Apply force/torque at the ball's center of mass (pos = [0.2, 0.2, 0.1]) in global frame
         let force = [1.5, 2.5, 3.5];
         let torque = [0.1, 0.2, 0.3];
-        let point = [0.2, 0.2, 0.1]; 
+        let point = [0.2, 0.2, 0.1];
 
         data.apply_ft(&force, &torque, &point, body_id, &mut qfrc);
 

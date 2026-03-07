@@ -119,7 +119,7 @@ macro_rules! mj_model_nx_to_nitem {
 /// the correct data is given and that it doesn't get dropped before this struct.
 /// This does not break Rust's checks as we create the view each
 /// time from the saved pointers.
-/// This should ONLY be used within a wrapper who fully encapsulates the underlying data.
+/// This should ONLY be used within a wrapper that fully encapsulates the underlying data.
 #[derive(Debug)]
 pub struct PointerViewMut<'d, T> {
     ptr: *mut T,
@@ -165,7 +165,7 @@ impl<T> DerefMut for PointerViewMut<'_, T> {
 /// the correct data is given and that it doesn't get dropped before this struct.
 /// This does not break Rust's checks as we create the view each
 /// time from the saved pointers.
-/// This should ONLY be used within a wrapper who fully encapsulates the underlying data.
+/// This should ONLY be used within a wrapper that fully encapsulates the underlying data.
 #[derive(Debug)]
 pub struct PointerView<'d, T> {
     ptr: *const T,
@@ -720,7 +720,7 @@ macro_rules! array_slice_dyn {
 /// - ffi (optional): name of the method that returns some lower-level struct,
 ///                   which contains the actual attributes we want to read;
 /// - name: the attribute name;
-/// - sub_index_name: sub_index_type (optional): creates an additional parameter which indexes a the `name` array
+/// - sub_index_name: sub_index_type (optional): creates an additional parameter which indexes the `name` array
 ///                   in order to get a sub-array
 ///                   (e.g., `name` could be `[[i8; 100]; 10]` and we wish to get `[i8; 100]`);
 /// - comment: the documentation comment to insert as the methods documentation.

@@ -12,7 +12,7 @@ Migration guide
 
 
 This page documents the migration steps for upgrading between major versions of MuJoCo-rs.
-For a full list of changes see the :ref:`changelog`.
+For a full list of changes, see the :ref:`changelog`.
 
 
 .. _migrate_3_0_0:
@@ -82,9 +82,6 @@ If your code previously matched on ``io::ErrorKind``, you now match on the speci
 
     match model.save_last_xml("out.xml") {
         Ok(()) => { /* ... */ }
-        Err(MjModelError::InvalidUtf8Path) => {
-            eprintln!("Path is not valid UTF-8");
-        }
         Err(MjModelError::SaveFailed(msg)) => {
             eprintln!("Save failed: {msg}");
         }
@@ -117,8 +114,8 @@ The table below maps the breaking error-type changes:
      - ``io::Error``
      - ``RendererError``
    * - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` (``try_sync``)
-     - ``MjDataError``
-     - ``RendererError``
+     - ``()`` (infallible ``sync``)
+     - ``Result<(), RendererError>``
    * - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` / :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError`
      - (new variant)
      - ``GlInitFailed(GlInitError)`` added alongside existing ``GlutinError``
@@ -150,10 +147,10 @@ that returned ``Option<MjModel>`` has been replaced:
 ``try_sync()`` return type
 -----------------------------
 
-:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` now returns
-``Result<(), RendererError>`` instead of ``Result<(), MjDataError>``.
-If your code handled ``MjDataError`` from ``try_sync``, update the match to use
-``RendererError`` variants instead.
+The infallible ``sync()`` method on :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` has been
+replaced by :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync`, which returns
+``Result<(), RendererError>``.
+If your code called ``sync()``, replace it with ``try_sync()`` and handle the ``Result``.
 
 Newly fallible methods
 -----------------------------

@@ -62,12 +62,12 @@ For example:
         }
 
     Note that `Box\<MjModel\> <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_ can't be used in contexts
-    that require explicit borrowing. One of such examples is :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
+    that require explicit borrowing. One such example is :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
     In such cases, `Rc\<MjModel\> <https://doc.rust-lang.org/std/rc/struct.Rc.html>`_ can be used instead.
 
     Using ``Box`` or ``Rc`` (instead of direct references) allows usage in environments with lifetime restrictions.
-    One such example are **Python bindings** created with **PyO3**.
-    The :gh-example:`pyo3_application` example shows how create a simple MuJoCo-rs based application
+    One such example is **Python bindings** created with **PyO3**.
+    The :gh-example:`pyo3_application` example shows how to create a simple MuJoCo-rs based application
     for use from the Python programming language.
 
 
@@ -97,7 +97,7 @@ Similarly, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ste
 For more information about specific MuJoCo functions, see the
 `MuJoCo documentation <https://mujoco.readthedocs.io/en/stable/APIreference/APIfunctions.html#mj-step>`_.
 
-Realtime
+Real-time
 ----------------------
 The example above runs the simulation as fast as possible.
 To slow it down, you can either add a call to

@@ -14,10 +14,10 @@ use super::utility::*;
 pub trait SpecItem: Sized {
     /// Returns the internal element struct.
     /// The element struct is the C++ implementation of the
-    /// actual item, which is hidden to the user, but is needed
+    /// actual item, which is hidden from the user, but is needed
     /// in some functions.
     /// 
-    /// # SAFETY
+    /// # Safety
     /// This borrows immutably, but returns a mutable pointer. This is done to overcome MJS's wrong
     /// use of mutable pointers in functions, such as [`mjs_getName`].
     unsafe fn element_pointer(&self) -> *mut mjsElement;

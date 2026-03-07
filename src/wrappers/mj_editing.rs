@@ -741,7 +741,7 @@ impl MjsFrame {
         debug_assert!(!parent_body.is_null(), "mjs_getParent returned null; frame has no parent body");
         let ptr = unsafe { mjs_addFrame(parent_body, self as *mut MjsFrame) };
         // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
-        // pointee is properly aligned and initialised by C++ operator new, and freshly
+        // pointee is properly aligned and initialized by C++ operator new, and freshly
         // allocated so no existing Rust reference aliases it for the returned lifetime.
         unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
@@ -1508,7 +1508,7 @@ impl MjsBody {
         // "attach directly to the body with no parent frame".
         let ptr = unsafe { mjs_addFrame(self.ffi_mut(), ptr::null_mut()) };
         // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
-        // pointee is properly aligned and initialised by C++ operator new, and freshly
+        // pointee is properly aligned and initialized by C++ operator new, and freshly
         // allocated so no existing Rust reference aliases it for the returned lifetime.
         unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }

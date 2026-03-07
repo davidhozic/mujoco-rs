@@ -285,7 +285,7 @@ impl MjModel {
 
     /// Handles the pointer to the model.
     /// # Safety
-    /// `error_buffer` must have at least on element, where the last element must be 0.
+    /// `error_buffer` must have at least one element, where the last element must be 0.
     unsafe fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[i8]) -> Result<Self, MjModelError> {
         if ptr_model.is_null() {
             Err(MjModelError::LoadFailed(
@@ -912,7 +912,7 @@ impl MjModel {
         cam_mat0: &[[MjtNum; 9] [cast]; "global orientation in qpos0"; ffi().ncam],
         cam_projection: &[MjtProjection [cast]; "projection type"; ffi().ncam],
         cam_fovy: &[MjtNum; "y field-of-view (ortho ? len : deg)"; ffi().ncam],
-        cam_ipd: &[MjtNum; "inter-pupilary distance"; ffi().ncam],
+        cam_ipd: &[MjtNum; "inter-pupillary distance"; ffi().ncam],
         cam_resolution: &[[i32; 2] [cast]; "resolution: pixels [width, height]"; ffi().ncam],
         cam_output: &[i32; "output types (MjtCamOutBit bit flags)"; ffi().ncam],
         cam_sensorsize: &[[f32; 2] [cast]; "sensor size: length [width, height]"; ffi().ncam],
@@ -2225,7 +2225,7 @@ mod tests {
         assert_eq!(view_hf.pathadr[0], -1);
     }
 
-    /// Tests [`MjModel::extract_state_into`] for corectness.
+    /// Tests [`MjModel::extract_state_into`] for correctness.
     #[test]
     fn test_state_extract() {
         use crate::wrappers::mj_data::MjtState;
@@ -2262,7 +2262,7 @@ mod tests {
         assert_eq!(state_physics, dst_buffer);
     }
 
-    /// Tests for the expectec panic when giving a source spec that does not match
+    /// Tests for the expected panic when giving a source spec that does not match
     /// the source array in state extraction.
 
     #[test]

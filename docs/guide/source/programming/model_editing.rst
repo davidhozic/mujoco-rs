@@ -52,7 +52,7 @@ This also includes adding a spherical geom and a free joint.
 Since bodies are structured elements, we can't add them to |mj_spec|.
 Instead, we will add them to the **world body** (the ``worldbody`` element in a model's XML).
 
-To mutable access the specification's world body, we can use the
+To mutably access the specification's world body, we can use the
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>world_body_mut` method.
 
 .. code-block:: rust
@@ -71,7 +71,7 @@ We can now add our ball's body, geom and joint like so:
     fn main() {
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();       // or spec.body_mut("world").unwrap();
-        
+
         // Add the ball
         let ball_body = world.add_body()
             .with_name("ball")                   // name
@@ -90,7 +90,7 @@ We can now add our ball's body, geom and joint like so:
     In the above block, we used methods that have the ``with_`` prefix.
     These allow method chaining.
     Alternatively, methods that have the ``set_`` prefix can be used, which don't return anything.
-    Setter (``set_``) methods exists only for simple types. Anything more complex can be modified
+    Setter (``set_``) methods exist only for simple types. Anything more complex can be modified
     through getters, which end with the ``_mut`` suffix.
 
 Finally, we can now add the base plane, like so:
@@ -121,7 +121,7 @@ Finally, we can now add the base plane, like so:
     }
 
 
-This concludes specification's definition.
+This concludes the specification's definition.
 We can now compile it to a model, which can then be saved to either an MJCF (XML) file or
 to an MJB (binary) file:
 
@@ -189,7 +189,6 @@ Elements can then reference the class via their ``childclass`` or ``class`` (``d
 in the model XML, or by setting the ``childclass`` string on the relevant ``Mjs*`` struct.
 
 
-    
 Iterators
 ================
 Since MuJoCo-rs 1.5.0, it is possible to also iterate existing :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
@@ -202,38 +201,38 @@ with ``[item_type]`` replaced by geom, body, etc.
 
 .. code-block:: rust
 
-    ...
+    // ...
     for body in spec.body_iter() {  // spec is MjSpec.
         println!("{}", body.name());
     }
-    ...
+    // ...
 
 Iteration over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody` items can be used in a similar way.
 The only difference is an additional boolean parameter, which enables recursive iteration when ``true``.
 
 .. code-block:: rust
 
-    ...
+    // ...
     // Iterate top level bodies of body.
     for body in body.body_iter(false) {  // body is MjsBody.
         println!("{}", body.name());
     }
-    ...
+    // ...
 
 .. code-block:: rust
 
-    ...
+    // ...
     // Iterate top level bodies of body + their sub-bodies recursively.
     for body in body.body_iter(true) {  // body is MjsBody.
         println!("{}", body.name());
     }
-    ...
+    // ...
 
 
 Examples
 ================
 Additional examples on model editing are
-available in repository's examples:
+available in the repository's examples:
 
 - :gh-example:`Basic model editing <model_editing.rs>`
 - :gh-example:`Terrain generation <terrain_generation.rs>`

@@ -3,21 +3,21 @@
 3D renderer
 ============
 
-Unlike the :ref:`mj_rust_viewer`, which displays the simulation's 3D scene onto a window,
-the renderer exists to provide users the ability to render offscreen. This includes
+Unlike the :ref:`mj_rust_viewer`, which displays the simulation's 3D scene in a window,
+the renderer exists to provide users with the ability to render offscreen. This includes
 rendering RGB and depth images to either an array or to a file.
 
 The renderer can be constructed by its builder (:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>builder`)
-or directly with :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`, however the latter offers less control.
+or directly with :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`; however, the latter offers less control.
 By default, RGB rendering is enabled, while depth rendering is disabled.
 
 .. code-block:: rust
-    
+
     /* Build the renderer */
     let mut renderer = MjRenderer::builder()
         .width(0).height(0)  // set to width(0) and height(0) to set automatically based on <global offwidth="1920" offheight="1080"/>
-        .num_visual_user_geom(5)  // maximum number of visual-only geoms as result of the user
-        .num_visual_internal_geom(0)  // maximum number of visual-only geoms not as result of the user
+        .num_visual_user_geom(5)  // maximum number of visual-only geoms as a result of the user
+        .num_visual_internal_geom(0)  // maximum number of visual-only geoms not as a result of the user
         .font_scale(MjtFontScale::mjFONTSCALE_100)  // scale of the font drawn by OpenGL
         .rgb(true)  // rgb rendering
         .depth(true)  // depth rendering
@@ -27,7 +27,7 @@ By default, RGB rendering is enabled, while depth rendering is disabled.
 
 .. attention::
 
-    Renderer's *width* and *height* must be equal to or less than the offscreen buffer size,
+    The renderer's *width* and *height* must be equal to or less than the offscreen buffer size,
     configured during MuJoCo's model definition:
 
     .. code-block:: xml
@@ -55,7 +55,7 @@ using :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`.
 .. note::
 
     :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync` is similar to the MuJoCo
-    Python's ``Renderer.update_scene`` method. Unlike the MuJoCo Python's method,
+    Python ``Renderer.update_scene`` method. Unlike the MuJoCo Python method,
     MuJoCo-rs's implementation also performs
     rendering. This was done to make :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` behave
     closer to the :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.

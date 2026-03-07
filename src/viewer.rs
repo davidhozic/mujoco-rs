@@ -1,5 +1,5 @@
 //! Module related to implementation of the [`MjViewer`]. For implementation of the C++ wrapper,
-//! see `cpp_viewer::MjViewerCpp` (enabled by the `cpp-viewer` cargo feature).
+//! see [`cpp_viewer::MjViewerCpp`] (enabled by the `cpp-viewer` cargo feature).
 #[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
 use glutin::prelude::PossiblyCurrentGlContext;
 use glutin::surface::GlSurface;
@@ -177,7 +177,7 @@ pub struct ViewerSharedState<M: Deref<Target = MjModel>>{
     last_sync_time: Instant,
     /// Time factor representing the ratio of viewer syncs with model's selected timestep.
     realtime_factor_smooth: f64,
-    /// Preallocated buffer for storing the state of new [`MjData`] state.
+    /// Preallocated buffer for storing the new [`MjData`] state.
     data_state_buffer: Box<[MjtNum]>,
 }
 
@@ -243,7 +243,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
     /// 
     /// If you require everything to be synced for use in a UI callback,
     /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).
-    /// Alternatively, you can opt-in into syncing the entire [`MjData`] struct by calling
+    /// Alternatively, you can opt into syncing the entire [`MjData`] struct by calling
     /// [`ViewerSharedState::sync_data_full`] instead.
     /// 
     /// The following are **NOT SYNCHRONIZED**:
@@ -319,7 +319,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
 
 /// A Rust-native implementation of the MuJoCo viewer. To conform to Rust's safety rules,
 /// the viewer doesn't store a mutable reference to the [`MjData`] struct, but it instead
-/// accepts it as a parameter at its methods.
+/// accepts it as a parameter in its methods.
 /// 
 /// The [`MjViewer::sync_data`] method must be called to sync the state of [`MjViewer`] and [`MjData`].
 /// 
@@ -496,7 +496,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Syncs the state of viewer's internal [`MjData`] with `data`.
     /// This is a proxy to [`ViewerSharedState::sync_data`].
     /// 
-    /// Additionally, any changes made to the internal [`MjData`] in between syncs,
+    /// Additionally, any changes made to the internal [`MjData`] in between syncs
     /// get copied back to `data` before the actual sync.
     /// This includes object perturbations.
     /// 
@@ -509,7 +509,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// 
     /// If you require everything to be synced for use in a UI callback,
     /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).
-    /// Alternatively, you can opt-in into syncing the entire [`MjData`] struct by calling
+    /// Alternatively, you can opt into syncing the entire [`MjData`] struct by calling
     /// [`MjViewer::sync_data_full`] instead.
     /// 
     /// The following are **NOT SYNCHRONIZED**:

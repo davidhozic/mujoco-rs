@@ -35,7 +35,7 @@ const EXTRA_INTERNAL_VISUAL_GEOMS: u32 = 100;
 
 
 /// GlState enum wrapper. By default, headless implementation will be used
-/// when supported. Only on failure an invisible winit window will be used.
+/// when supported. Only on failure will an invisible winit window be used.
 pub(crate) enum GlState {
     #[cfg(feature = "renderer-winit-fallback")] Winit(GlStateWinit),
     #[cfg(target_os = "linux")] Egl(egl::GlStateEgl),
@@ -253,24 +253,24 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// The renderer uses two scenes:
     /// - the internal scene: used by the renderer to draw the model's state.
     /// - the user scene: used by the user to add additional geoms to the internal scene
-    /// 
+    ///
     /// The **internal scene** allocates the amount of space needed to fit every pre-existing
     /// model geom + user visual-only geoms + additional visual-only geoms that aren't from the user (e.g., tendons).
     /// By default, the renderer reserves 100 extra geom slots for drawing the additional visual-only geoms.
     /// If that is not enough or it is too much, you can construct [`MjRenderer`] via its builder
-    /// ([`MjRenderer::builder`]), which allows more configuration. 
-    /// 
+    /// ([`MjRenderer::builder`]), which allows more configuration.
+    ///
     /// <div class="warning">
-    /// 
+    ///
     /// Parameters `width` and `height` must be less or equal to the offscreen buffer size,
     /// which can be configured at the top of the model's XML like so:
-    /// 
+    ///
     /// ```xml
     /// <visual>
     ///    <global offwidth="1920" offheight="1080"/>
     /// </visual>
     /// ```
-    /// 
+    ///
     /// </div>
     /// # Returns
     /// On success, returns [`Ok`] variant containing the [`MjRenderer`].
@@ -432,7 +432,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
         self.rgb.as_deref()
     }
 
-    /// Return an RGB image of the scene. This methods accepts two generic parameters <WIDTH, HEIGHT>
+    /// Return an RGB image of the scene. This method accepts two generic parameters <WIDTH, HEIGHT>
     /// that define the shape of the output slice.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the rendered RGB image.
@@ -445,7 +445,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 let p_shaped = flat.as_ptr() as *const [[[u8; 3]; WIDTH]; HEIGHT];
 
                 // SAFETY: The alignment of the output is the same as the original.
-                // The lifetime also matches  'a in &'a self, which prevents data races.
+                // The lifetime also matches 'a in &'a self, which prevents data races.
                 // Length (number of elements) matches the output's.
                 Ok(unsafe { &*p_shaped })
             }
@@ -463,7 +463,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
         self.depth.as_deref()
     }
 
-    /// Return a depth image of the scene. This methods accepts two generic parameters <WIDTH, HEIGHT>
+    /// Return a depth image of the scene. This method accepts two generic parameters <WIDTH, HEIGHT>
     /// that define the shape of the output slice.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the rendered depth image.
@@ -476,7 +476,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 let p_shaped = flat.as_ptr() as *const [[f32; WIDTH]; HEIGHT];
 
                 // SAFETY: The alignment of the output is the same as the original.
-                // The lifetime matches  'a in &'a self, which prevents data races.
+                // The lifetime matches 'a in &'a self, which prevents data races.
                 // Length (number of elements) matches the output's.
                 Ok(unsafe { &*p_shaped })
             }
@@ -556,7 +556,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Save the raw depth data to the `path`. The data is encoded
     /// as a sequence of bytes, where groups of four represent a single f32 value.
-    /// The lower bytes of individual f32 appear first (low-endianness).
+    /// The lower bytes of individual f32 appear first (little-endianness).
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
@@ -727,7 +727,7 @@ impl From<crate::error::GlInitError> for RendererError {
     }
 }
 
-bitflags! { 
+bitflags! {
     /// Flags that enable features of the renderer.
     struct RendererFlags: u8 {
         const RENDER_RGB = 1 << 0;
@@ -737,7 +737,7 @@ bitflags! {
 
 
 
-/* 
+/*
 ** Don't run any tests as OpenGL hates if anything
 ** runs outside the main thread.
 */

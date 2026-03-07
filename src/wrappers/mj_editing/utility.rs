@@ -25,7 +25,7 @@ pub(crate) fn read_mjs_string<'a>(string: *const mjString) -> &'a str {
             ""
         } else {
             // SAFETY: `ptr` points into the internal buffer of the C++ std::string
-            // referenced by `string`, which is valid for lifetime 'a.  MuJoCo
+            // referenced by `string`, which is valid for lifetime 'a. MuJoCo
             // strings are always valid UTF-8 (ASCII), so to_str() cannot fail.
             CStr::from_ptr(ptr).to_str().unwrap()
         }
@@ -146,7 +146,7 @@ macro_rules! add_x_method {
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.ffi_mut(), ptr::null()) };
                 // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null
-                // the pointee is properly aligned and initialised by C++ operator new.
+                // the pointee is properly aligned and initialized by C++ operator new.
                 unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
             }
         )*
@@ -187,7 +187,7 @@ macro_rules! add_x_method_by_frame {
                 // - mjs_setFrame: both dest and frame are non-null and valid; failure for a
                 //   freshly-created element is treated as a bug via debug_assert.
                 // - `&mut *ptr`: ptr is confirmed non-null by the guard above, properly aligned
-                //   and initialised by C++ operator new, and freshly allocated so no Rust
+                //   and initialized by C++ operator new, and freshly allocated so no Rust
                 //   reference can alias it for the returned lifetime.
                 unsafe {
                     let ep = self.element_mut_pointer();
@@ -237,7 +237,7 @@ macro_rules! add_x_method_no_default {
 }
 
 
-/// Creates an `get_ $name` method for finding items in spec / body.
+/// Creates a `get_$name` method for finding items in spec / body.
 /// Also sets the default to null();
 macro_rules! find_x_method {
     ($($item:ident),*) => {paste::paste! {
@@ -470,7 +470,7 @@ macro_rules! string_set_get_with {
     }};
 }
 
-/// Implements getters and setters for floating point  (f32 or f64) attributes.
+/// Implements getters and setters for floating point (f32 or f64) attributes.
 macro_rules! vec_set_get {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
@@ -496,7 +496,7 @@ macro_rules! vec_set {
     }};
 }
 
-/// Implements appenders for non-string attributes  of a double vec.
+/// Implements appenders for non-string attributes of a double vec.
 macro_rules! vec_vec_append {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(

@@ -27,11 +27,11 @@ MuJoCo-rs uses FFI bindings to MuJoCo |MUJOCO_VERSION_BOLD|.
 
 Main features
 =======================
-MuJoCo-rs tries to stay close to the MuJoCo's C API, with a few additional features for ease of use.
+MuJoCo-rs tries to stay close to MuJoCo's C API, with a few additional features for ease of use.
 The main features on top of MuJoCo include:
 
 - Safe wrappers around structs:
-  
+
   - Automatic allocation and cleanup.
   - Lifetime checks.
 
@@ -70,13 +70,13 @@ Optional Cargo features can be enabled:
 
   - ``renderer-winit-fallback``: enables the invisible window fallback (based on winit) when offscreen
     rendering fails to initialize. Note that true offscreen rendering is only available on Linux platforms
-    when the video driver supports it. On Windows and MacOS, this feature must always be
+    when the video driver supports it. On Windows and macOS, this feature must always be
     enabled when the ``renderer`` feature is enabled.
 
 - ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded to the specified path.
 
   - This is only available on Linux and Windows.
-  - The environmental variable ``MUJOCO_DOWNLOAD_DIR`` must be set to the absolute path of the download location.
+  - The environment variable ``MUJOCO_DOWNLOAD_DIR`` must be set to the absolute path of the download location.
   - Downloaded MuJoCo library is still a shared library, see
     `installation <https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco>`_
     for information on complete configuration.

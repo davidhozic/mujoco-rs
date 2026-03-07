@@ -6,7 +6,7 @@
 MuJoCo provides an official viewer application, written in C++, which can also be used in MuJoCo's
 Python package. To avoid C++ dependencies, MuJoCo-rs provides **its own 3D viewer, written in Rust**.
 
-We also provide the ability to use the official C++ based viewer, however this requires
+We also provide the ability to use the official C++-based viewer; however, this requires
 static linking to modified MuJoCo code, as described in :ref:`static_linking`.
 
 .. _rust_native_viewer:
@@ -14,7 +14,7 @@ static linking to modified MuJoCo code, as described in :ref:`static_linking`.
 Rust-native 3D viewer
 =======================
 
-Rust-native 3D viewer supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
+The Rust-native 3D viewer supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
 This also includes object perturbations. Optionally, enabled by the ``viewer-ui`` feature (default), the viewer
 also provides a user interface, which tries to replicate the original C++ viewer as best as possible
 and thus allows control of constraints, joints, actuators, etc.
@@ -29,7 +29,7 @@ A screenshot of the Rust 3D viewer is shown below.
 
 The viewer can be launched only in **passive mode**, i.e. it won't run as a separate application,
 and needs to be periodically "synced" by the user application.
-The user application is the one that needs to run the actual physics simulation, like shown in
+The user application is the one that needs to run the actual physics simulation, as shown in
 :ref:`basic_sim` and also below.
 
 The viewer can be launched in two ways:
@@ -91,7 +91,7 @@ The viewer can be launched in two ways:
 
 The above example runs until the viewer is closed (:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running`)
 and mirrors/syncs the simulation state with :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`.
-After or parallel to synchronization, the viewer must also be rendered using the
+After synchronization, or in parallel with it, the viewer must also be rendered using the
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` method.
 
 .. code-block:: rust
@@ -106,7 +106,7 @@ After or parallel to synchronization, the viewer must also be rendered using the
     }
 
 
-At the beginning, we also obtained the simulation timestep (time passed in simulation per each call to
+At the beginning, we also obtained the simulation timestep (time passed in simulation for each call to
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>step`), which is used to
 sleep after the step with ``std::thread::sleep(Duration::from_secs_f64(timestep));``.
 This is optional and can be removed or reduced to run the simulation faster than realtime.
@@ -128,7 +128,7 @@ This is optional and can be removed or reduced to run the simulation faster than
 
 .. admonition:: Performance tip
 
-    Rust viewer contains the so called shared state (:docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState`),
+    The Rust viewer contains the so-called shared state (:docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState`),
     which exists to allow partial multi-threading, without locking the entire viewer.
 
     Methods that operate on the shared state,
@@ -167,15 +167,15 @@ This is optional and can be removed or reduced to run the simulation faster than
 
 Multi-threading
 ----------------
-Above example shows how to use the viewer synchronously to the simulation loop.
+The above example shows how to use the viewer synchronously with the simulation loop.
 This can slow down the simulation as :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`
-is relatively expensive to call. Additionally, usage synchronous to simulation causes
-the refresh rate to be equal to the simulation stepping frequency, which puts strain to the GPU.
+is relatively expensive to call. Additionally, synchronous usage with the simulation causes
+the refresh rate to be equal to the simulation stepping frequency, which puts strain on the GPU.
 
-To prevent slowdowns and allow V-Sync, the viewer can run in the **main thread**, whilst
+To prevent slowdowns and allow V-Sync, the viewer can run in the **main thread**, while
 the actual physics simulation runs in another.
 
-Here's a cutout from the :gh-example:`example <rust_viewer_threaded.rs>` on how to use the viewer in a multi-threaded way:
+Here's an excerpt from the :gh-example:`example <rust_viewer_threaded.rs>` on how to use the viewer in a multi-threaded way:
 
 .. code-block:: rust
     :emphasize-lines: 1, 12-13, 18-22, 30-34
@@ -222,7 +222,7 @@ The example mainly differs from the synchronous one in the highlighted lines:
 - :docs-rs:`mujoco_rs::wrappers::mj_model::<struct>MjModel` is wrapped into
   `Arc <https://doc.rust-lang.org/std/sync/struct.Arc.html>`_,
 - Data is synced through :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_data`;
-  
+
   - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState` is obtained through
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>state`, which returns
     ``Arc<Mutex<ViewerSharedState>>``,
@@ -248,7 +248,7 @@ This allows you to create custom windows, panels, and other UI elements using
     To avoid unnecessary locks when the simulation state is not required in the UI,
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback_detached`
     can be used instead, which only accepts the
-    `egui::Context <https://docs.rs/egui/0.33.0/egui/struct.Context.html>`_ as parameter.
+    `egui::Context <https://docs.rs/egui/0.33.0/egui/struct.Context.html>`_ as a parameter.
 
 
 The following example demonstrates how to add a custom window to the viewer:
@@ -324,21 +324,21 @@ which demonstrates various types of UI elements including windows, side panels, 
 
 Wrapper of MuJoCo's C++ 3D viewer
 =====================================
-MuJoCo-rs also provides a wrapper around a modified MuJoCo's C++ 3D viewer.
+MuJoCo-rs also provides a wrapper around a modified version of MuJoCo's C++ 3D viewer.
 Modifications to the C++ viewer are minor with the purpose of preserving future compatibility.
 The changes to the viewer are made to allow viewer rendering in a user-controlled loop.
 
 .. attention::
 
-    To avoid a major rewrite of the C++ viewer,  
-    the latter is given raw, mutable pointers to both :docs-rs:`mujoco_rs::mujoco_c::<type>mjModel`  
-    and :docs-rs:`mujoco_rs::mujoco_c::<type>mjData`, which are wrapped inside  
+    To avoid a major rewrite of the C++ viewer,
+    the latter is given raw, mutable pointers to both :docs-rs:`mujoco_rs::mujoco_c::<type>mjModel`
+    and :docs-rs:`mujoco_rs::mujoco_c::<type>mjData`, which are wrapped inside
     :docs-rs:`mujoco_rs::wrappers::mj_model::<struct>MjModel`
-    and :docs-rs:`mujoco_rs::wrappers::mj_data::<struct>MjData`, respectively.  
-    As a result, Rust's borrow-checker rules are violated. Although incorrect behavior is unlikely,  
+    and :docs-rs:`mujoco_rs::wrappers::mj_data::<struct>MjData`, respectively.
+    As a result, Rust's borrow-checker rules are violated. Although incorrect behavior is unlikely,
     caution is advised.
 
-    It is strongly **recommended** to use the :ref:`rust_native_viewer` when none of the  
+    It is strongly **recommended** to use the :ref:`rust_native_viewer` when none of the
     C++ viewer's features are required.
 
 Here is an example of using the C++ wrapper:

@@ -531,7 +531,6 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
         }
     }
 
-    /// Creates a new [`MjvGeom`] inside the scene. A reference is returned for additional modification,
     /// Creates a new [`MjvGeom`] in this scene, returning a mutable reference to it.
     /// The geom reference is bound to the scene's lifetime; it is invalidated when
     /// any code that might reallocate the geoms buffer runs.

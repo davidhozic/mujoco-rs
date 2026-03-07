@@ -7,13 +7,13 @@ Changelog
 .. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
 .. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
-.. |mj_geomview| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomView`
-.. |mj_geomviewmut| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjGeomViewMut`
+.. |mj_geomview| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjGeomDataView`
+.. |mj_geomviewmut| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjGeomDataViewMut`
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
 .. |mj_vfs| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs`
-.. |mjs_tendon| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon`
-.. |mjs_wrap| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsWrap`
-.. |mjv_camera| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvCamera`
+.. |mjs_tendon| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsTendon`
+.. |mjs_wrap| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsWrap`
+.. |mjv_camera| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`
 
 
 Versioning
@@ -62,11 +62,11 @@ update of MuJoCo alone can increase the major version.
     ``Result<_, RendererError>`` instead of ``io::Result``.
   - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` now returns
     ``Result<(), MjViewerError>`` instead of ``()``.
-  - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` now returns
-    ``Result<(), RendererError>`` instead of ``Result<(), MjDataError>``.
+  - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` is a new fallible
+    alternative to ``sync()``, returning ``Result<(), RendererError>``.
     :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` has a new ``SignatureMismatch`` variant
     and now also propagates OpenGL context errors from the internal ``render()`` call.
-  - |mj_model|: ``clone()`` now implements the ``Clone`` trait (panics on failure).
+  - |mj_model| now implements the ``Clone`` trait (panics on failure).
     The previous ``clone()`` that returned ``Option<MjModel>`` is replaced by
     :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_clone`
     returning ``Result<MjModel, MjDataError>``.
@@ -92,7 +92,7 @@ update of MuJoCo alone can increase the major version.
 
   - |mj_spec|:
 
-    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_parse` and 
+    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_parse` and
       :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_parse_vfs`, which
       wrap :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_parse`.
 
@@ -123,9 +123,9 @@ update of MuJoCo alone can increase the major version.
 
   - |mjs_tendon|:
 
-    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>get_wrap`.
-    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>get_wrap_mut`.
-    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>get_wrap_num`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>get_wrap`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>get_wrap_mut`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>get_wrap_num`.
 
   - |mjs_wrap|:
 
@@ -133,8 +133,8 @@ update of MuJoCo alone can increase the major version.
 
   - |mjv_camera|:
 
-    - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvCamera::<method>frame` and
-      :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvCamera::<method>frustum`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>frame` and
+      :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>frustum`.
 
 - Changed methods:
 
@@ -226,14 +226,14 @@ update of MuJoCo alone can increase the major version.
 
 - Internal / Safety changes:
 
-  - Fixed potential UB when parsing string pointers returned from MuJoCo's model editing C++ wrappers
-    via `CStr::from_ptr` by properly checking for NULL pointers.
+  - Fixed potential undefined behavior when parsing string pointers returned from MuJoCo's model editing C++ wrappers
+    via ``CStr::from_ptr`` by properly checking for NULL pointers.
   - Added a strict runtime signature check to view creation methods
-    (e.g. :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>view`)
+    (e.g., :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>view`)
     which will now panic if the |mj_data| was not created from an |mj_model| with the exact same
     kinematic tree structure.
   - Views now use more strict type checks. Specifically, instead of casting all the C types to
-    declared Rust type, only a strict subset of fields are now cast (enums and bools).
+    the declared Rust type, only a strict subset of fields are now cast (enums and bools).
     Other fields must match the C type exactly.
 
   - Module :docs-rs:`~mujoco_rs::mujoco_c` now uses compile-time layout tests to ensure
@@ -243,7 +243,7 @@ update of MuJoCo alone can increase the major version.
     now uses bounds-checked slice indexing into |mj_data| for ``xpos`` and ``xmat`` instead of
     raw pointer arithmetic. An invalid ``select`` index now triggers a ``debug_assert!`` and
     panics via Rust's bounds checker instead of causing undefined behavior.
-    In release mode, slice index will panic instead of the ``debug_assert!``.
+    In release mode, the slice index will panic instead of the ``debug_assert!``.
 
 - Other changes:
 
@@ -253,19 +253,19 @@ update of MuJoCo alone can increase the major version.
   - Added a "Print camera" button to the viewer UI that prints the current camera's position and
     orientation as an MJCF ``<camera>`` XML element to the console.
   - |mj_data| and |mj_model| views now contain extra fields.
-  - Fixed a bug where :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` methods like 
-    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb` and 
-    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` would output 
+  - Fixed a bug where :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` methods like
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb` and
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` would output
     vertically flipped (upside down) images.
   - Added new examples based on the `MuJoCo Python tutorial <https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/tutorial.ipynb>`_:
 
     - :gh-example:`Self-inverting tippe-top <tippe_top.rs>`: Simulates the self-inverting tippe-top using the RK4 integrator and
-      keyframe initialisation; displays the inversion in an interactive :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
+      keyframe initialization; displays the inversion in an interactive :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
     - :gh-example:`Chaotic pendulum <chaotic_pendulum.rs>`: Demonstrates the butterfly effect in a four-body pendulum,
       energy tracking via :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy_pos`
       and :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy_vel`, and
-      interactive visualisation.
-    - :gh-example:`Contact forces <contact_forces.rs>`: Shows contact-point and contact-force visualisation using
+      interactive visualization.
+    - :gh-example:`Contact forces <contact_forces.rs>`: Shows contact-point and contact-force visualization using
       :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>opts_mut` to enable
       ``mjVIS_CONTACTPOINT``, ``mjVIS_CONTACTFORCE``, and ``mjVIS_TRANSPARENT`` flags;
       saves rendered frames as PNG images.
@@ -291,7 +291,7 @@ update of MuJoCo alone can increase the major version.
   - Keyboard events are now ignored whenever an egui input widget has focus.
   - Fixed a logic error where pressing an unhandled mouse button would return from the
     event-processing loop and drop subsequent events; the handler now continues.
-  - Combination of Ctrl+C will now not toggle camera visualization.
+  - The combination of Ctrl+C will no longer toggle camera visualization.
     This combination is reserved for copying.
 
 
@@ -308,7 +308,7 @@ update of MuJoCo alone can increase the major version.
 =============================
 - Bug fixes:
 
-  - Add a NULL pointer check to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`.
+  - Added a NULL pointer check to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`.
     When allocation fails, the code will now panic instead of accepting a NULL pointer.
   - Fixed `#139 <https://github.com/davidhozic/mujoco-rs/issues/139>`_.
     :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels`
@@ -335,7 +335,7 @@ update of MuJoCo alone can increase the major version.
 - |mj_model| and |mj_spec|:
 
   - When instantiating a model or a spec, a version check will be made between MuJoCo's shared library and
-    the FFI bindings to prevent accidental use of wrong MuJoCo version. The code will panic on mismatch.
+    the FFI bindings to prevent accidental use of the wrong MuJoCo version. The code will panic on a mismatch.
 
 2.2.2 (MuJoCo 3.3.7)
 ================================
@@ -349,12 +349,12 @@ update of MuJoCo alone can increase the major version.
 
   - Fixed `#119 <https://github.com/davidhozic/mujoco-rs/issues/119>`_ where the borrow tracker
     tracked the wrong lifetime.
-  - Reset more of OpenGL state after drawing the UI with egui (drawing figures doesn't work without this).
+  - Reset more of the OpenGL state after drawing the UI with egui (drawing figures doesn't work without this).
 
 2.2.0 (MuJoCo 3.3.7)
 ================================
-- Made :ref:`mj_renderer` use EGL backend by default on Linux for true offscreen rendering (pbuffer).
-  
+- Made :ref:`mj_renderer` use the EGL backend by default on Linux for true offscreen rendering (pbuffer).
+
   - New feature added for compatibility purposes: ``renderer-winit-fallback``.
     The feature is enabled by default.
 
@@ -365,7 +365,7 @@ update of MuJoCo alone can increase the major version.
     See :ref:`custom_ui_widgets` for more information.
 
   - Info menu (F2) displaying smoothed FPS, simulation time, and used memory.
-  - Realtime warning (F4) for showing the realtime factor [%] when the simulation's sync time deviates at least 2 %
+  - Realtime warning (F4) for showing the realtime factor [%] when the simulation's sync time deviates by at least 2 %
     from the model's configured timestep.
 
   - Separate syncing and rendering logic:
@@ -388,11 +388,11 @@ update of MuJoCo alone can increase the major version.
 
   - |mj_data|:
 
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`;
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to`;
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_state`;
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>get_state`;
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_state_into`;
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_state`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>get_state`.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_state_into`.
 
 - New examples:
 
@@ -407,11 +407,10 @@ update of MuJoCo alone can increase the major version.
     :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>user_scene_mut`.
 
 
-
 2.1.0 / 2.1.1 (MuJoCo 3.3.7)
 ================================
 - Option to automatically pull MuJoCo.
-- pkg-config support for Linux and MacOS. Note that this is not officially supported by MuJoCo.
+- pkg-config support for Linux and macOS. Note that this is not officially supported by MuJoCo.
 - Changes to :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`:
 
   - Added an optional (enabled by default) user interface, made with `egui <https://github.com/emilk/egui>`_.
@@ -422,7 +421,7 @@ update of MuJoCo alone can increase the major version.
 
 2.0.1 (MuJoCo 3.3.7)
 ================================
-- Fix the ``renderer`` feature not enabling all the needed crates.
+- Fixed the ``renderer`` feature not enabling all the needed crates.
 
 2.0.0 (MuJoCo 3.3.7)
 ================================
@@ -447,24 +446,24 @@ update of MuJoCo alone can increase the major version.
     - Changed the backend windowing library to Winit (+ Glutin). This is a **potentially** breaking
       change because of possible direct GLFW uses in the user code, which will probably still work
       as expected, but we can't be sure as we did not test GLFW and Winit being used at the same time.
-      Change to Winit also means we don't need any C dependencies, unless the C++ viewer wrapper
+      The change to Winit also means we don't need any C dependencies, unless the C++ viewer wrapper
       is needed, which also contains breaking changes. The latter is described in the next bullet.
-    
-    - Added and removed variants in :docs-rs:`mujoco_rs::viewer::<enum>MjViewerError` and
-      :docs-rs:`mujoco_rs::renderer::<enum>RendererError`.
+
+    - Added and removed variants in :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError` and
+      :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`.
 
   - :ref:`mj_cpp_viewer`:
 
-    - Since MuJoCo's build systems downloads GLFW sources anyway, we decided to remove the GLFW
+    - Since MuJoCo's build system downloads GLFW sources anyway, we decided to remove the GLFW
       requirement from the Rust level and instead made it so that the user needs to compile the GLFW
-      code during the MuJoCo's viewer (simulate) compilation.
+      code during MuJoCo's viewer (simulate) compilation.
       No change is needed in the user Rust code, users just need to build MuJoCo a bit differently:
 
       ``cmake --build build --parallel --target glfw libmujoco_simulate --config=Release``.
 
       The above command, besides the added ``glfw`` part, also contains the ``libmujoco_simulate``
-      part in place of the previously ``libsimulate`` part. This change is a consequence
-      of MuJoCo upgrade to version 3.3.7.
+      part in place of the previous ``libsimulate`` part. This change is a consequence
+      of the MuJoCo upgrade to version 3.3.7.
 
     - Moved the struct definition from ``mujoco_rs::viewer`` to ``mujoco_rs::cpp_viewer``.
 
@@ -475,20 +474,20 @@ update of MuJoCo alone can increase the major version.
   - |mj_data| methods:
 
     - Renamed ``crb`` to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>crb_comp` due to ``crb``
-      now being a method that returns an immutable slice to the ``crb`` attribute of the ffi type,
-    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy` now returns a reference to a 2-element array instead of a slice,
+      now being a method that returns an immutable slice to the ``crb`` attribute of the FFI type.
+    - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy` now returns a reference to a 2-element array instead of a slice.
 
   - |mj_model| methods:
 
     - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>id_to_name` now accepts ``i32`` instead of ``c_int``,
     - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>size` now returns ``i32`` instead of ``c_int``,
     - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>state_size` now accepts ``u32`` instead of ``c_uint``
-      and returns ``i32`` instead of ``c_int``,
+      and returns ``i32`` instead of ``c_int``.
 
   - :docs-rs:`mujoco_rs::mujoco_c`:
 
     - :docs-rs:`~mujoco_rs::mujoco_c::<enum>mjtSameFrame_` is now ``repr(u8)`` instead of ``repr(u32)``
-      to fix alignment issues with MuJoCo's structs,
+      to fix alignment issues with MuJoCo's structs.
 
   - :docs-rs:`mujoco_rs::wrappers::fun::utility`:
 
@@ -499,7 +498,7 @@ update of MuJoCo alone can increase the major version.
     - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_mat_2_rot`: replaced ``c_int`` types with ``i32``,
     - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom`: replaced ``c_int`` types with :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtGeom`,
     - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_round`: replaced ``c_int`` types with ``i32``,
-    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_transform_spatial`: replaced ``c_int`` types with ``bool``,
+    - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_transform_spatial`: replaced ``c_int`` types with ``bool``.
 
   - Removed modules:
 
@@ -508,7 +507,7 @@ update of MuJoCo alone can increase the major version.
 
 - Other changes:
 
-  - Any changes to MuJoCo made in MuJoCo 3.3.6 and MuJoCo 3.3.7 (see https://mujoco.readthedocs.io/en/3.3.7/changelog.html).
+  - Any changes made in MuJoCo 3.3.6 and MuJoCo 3.3.7 (see https://mujoco.readthedocs.io/en/3.3.7/changelog.html).
   - Added additional getters / setters / array slice methods to:
 
     - |mj_data|,
@@ -564,7 +563,7 @@ Bug fixes:
 - Added extra renames of enum types from the C API.
 
 - :ref:`model_editing` support, which can be used to procedurally generate |mj_model|. It can be used
-  for terrain generation, parameter randomization, etc. 
+  for terrain generation, parameter randomization, etc.
 
   - Added module :docs-rs:`mujoco_rs::wrappers::mj_editing`.
   - Added two examples. One on basic model editing and one on terrain generation.
@@ -593,13 +592,13 @@ Bug fixes:
       - ``T``: transparent,
       - ``I``: inertia.
 
-    - Increased the headroom for visual-only geoms, which aren't drawn by the user, from 100 to 2000.
+  - Increased the headroom for visual-only geoms, which aren't drawn by the user, from 100 to 2000.
 
 - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`:
 
   - Added methods:
 
-    - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::fix`:
+    - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>fix`:
       changes the camera struct parameters to display a fixed camera.
 
 1.3.0 (MuJoCo 3.3.5)
@@ -643,10 +642,10 @@ Bug fixes:
 
 - Added extra attributes to the :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`'s joint view:
 
-  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qfrc_spring`;
-  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qfrc_damper`;
-  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qfrc_gravcomp`;
-  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qfrc_fluid`;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qfrc_spring`.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qfrc_damper`.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qfrc_gravcomp`.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qfrc_fluid`.
 
 
 1.2.0 (MuJoCo 3.3.5)
@@ -665,7 +664,7 @@ Bug fixes:
 **Potentially breaking changes:**
 
 - Fixed bug `#18 <https://github.com/davidhozic/mujoco-rs/issues/18>`_ where data races could occur
-  under incorrect usage. The major version of MuJoCo-rs is not increased as this safety bugs
+  under incorrect usage. The major version of MuJoCo-rs is not increased as these safety bugs
   should not be something to rely on.
 
 Other bug fixes:
@@ -679,9 +678,9 @@ Other bug fixes:
 Other changes:
 
 - Added new module: :docs-rs:`mujoco_rs::wrappers::mj_primitive`.
-- Added more attributes to the view to :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjJointView`
-  and :docs-rs:`~mujoco_rs::wrappers::mj_data::<type>MjJointViewMut`.
-- Added more views. All the views available now:
+- Added more attributes to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView`
+  and :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjJointDataViewMut`.
+- Added more views. All views now available:
     - |mj_data|: actuator, body, camera, geom, joint, light, sensor, site, tendon.
     - |mj_model|: actuator, body, camera, geom, joint, sensor, tendon.
 
@@ -689,7 +688,7 @@ Other changes:
 =====================
 Bug fixes:
 
-- Smaller changes inside Drop implementations to make sure there is no undefined behaviors.
+- Smaller changes inside Drop implementations to make sure there is no undefined behavior.
 
 1.0.0 (MuJoCo 3.3.5)
 =====================
@@ -717,20 +716,20 @@ Build system:
 =====================
 Build system:
 
-- Improved clarity of environmental variables:
+- Improved clarity of environment variables:
 
   - ``MUJOCO_DYNAMIC_LINK_LIB`` -> ``MUJOCO_DYNAMIC_LINK_DIR``
   - ``MUJOCO_STATIC_LINK_LIB`` -> ``MUJOCO_STATIC_LINK_DIR``
 
-- Added some internal cargo features .
+- Added some internal cargo features.
 
 0.4.1 (MuJoCo 3.3.5)
 =====================
-- Fix event handling.
+- Fixed event handling.
 
 0.4.0 (MuJoCo 3.3.5)
 =====================
-- Change the package name to `mujoco-rs`.
+- Changed the package name to ``mujoco-rs``.
 
 0.3.0 (MuJoCo 3.3.5)
 =====================
