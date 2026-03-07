@@ -106,6 +106,8 @@ pub enum MjViewerError {
     PainterInitError(String),
     /// Returned when OpenGL buffer swap fails during rendering.
     SwapBuffersError(glutin::error::Error),
+    /// OpenGL / window initialization failed.
+    GlInitFailed(String),
 }
 
 impl Display for MjViewerError {
@@ -115,6 +117,7 @@ impl Display for MjViewerError {
             Self::GlutinError(e) => write!(f, "glutin raised an error: {}", e),
             Self::PainterInitError(e) => write!(f, "failed to initialize egui painter: {}", e),
             Self::SwapBuffersError(e) => write!(f, "failed to swap OpenGL buffers: {}", e),
+            Self::GlInitFailed(msg) => write!(f, "GL initialization failed: {}", msg),
         }
     }
 }
@@ -126,6 +129,7 @@ impl Error for MjViewerError {
             Self::GlutinError(e) => Some(e),
             Self::PainterInitError(_) => None,
             Self::SwapBuffersError(e) => Some(e),
+            Self::GlInitFailed(_) => None,
         }
     }
 }
@@ -1198,7 +1202,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
             self.window_name.to_string(),
             &mut event_loop,
             true  // process events
-        );
+        ).map_err(MjViewerError::GlInitFailed)?;
 
         /* Initialize the OpenGL related things */
         let RenderBaseGlState {

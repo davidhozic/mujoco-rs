@@ -30,6 +30,14 @@ update of MuJoCo alone can increase the major version.
   - Regenerated C FFI bindings to match MuJoCo 3.5.0.
   - Updated Rust API wrappers for compatibility with MuJoCo 3.5.0.
   - Several constructors and I/O methods now return `Result <https://doc.rust-lang.org/std/result/>`_ for safer error handling.
+  - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` now returns
+    ``Result<(), RendererError>`` instead of ``Result<(), MjDataError>``.
+    :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` has a new ``SignatureMismatch`` variant
+    and now also propagates OpenGL context errors from the internal ``render()`` call.
+  - |mj_model|: ``clone()`` now implements the ``Clone`` trait (panics on failure).
+    The previous ``clone()`` that returned ``Option<MjModel>`` is replaced by
+    :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_clone`
+    returning ``Result<MjModel, MjDataError>``.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>update_local_pos`
     now takes ``selection_xyz`` by reference (``&[MjtNum; 3]``) instead of by value.
   - Removed deprecated methods:
@@ -96,6 +104,25 @@ update of MuJoCo alone can increase the major version.
     - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`
       now calls :docs-rs:`~~mujoco_rs::mujoco_c::<struct>mj_loadModelBuffer` directly.
       A virtual file-system was previously used to support this.
+
+- Error handling:
+
+  - New error types in the :docs-rs:`~mujoco_rs::error` module:
+    :docs-rs:`~mujoco_rs::error::<enum>MjDataError`,
+    :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`,
+    :docs-rs:`~mujoco_rs::error::<enum>MjEditError`.
+    All are re-exported from the prelude.
+  - New fallible ``try_`` methods on |mj_data|: ``try_new``, ``try_clone``,
+    ``try_copy_state_from_data``, ``try_apply_ft``, ``try_read_state_into``,
+    ``try_set_state``, ``try_copy_visual_to``, ``try_copy_to``.
+  - New fallible ``try_`` methods on |mj_model|: ``try_clone``, ``try_make_data``.
+  - New fallible ``try_`` methods on |mj_spec| and editing types:
+    ``try_new``, ``try_add_frame``, ``try_wrap_site``, ``try_wrap_geom``,
+    ``try_wrap_joint``, ``try_wrap_pulley``, and macro-generated ``try_add_*`` methods.
+  - New fallible ``try_`` methods on |mjv_scene| / rendering types:
+    ``try_push``, ``try_set_at``, ``try_read_pixels``.
+  - Infallible counterparts now delegate to their ``try_`` variants via ``.expect()``,
+    preserving backward compatibility.
 
 - Internal / Safety changes:
 

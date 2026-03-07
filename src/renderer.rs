@@ -6,7 +6,6 @@ use crate::wrappers::mj_rendering::MjrContext;
 use crate::renderer::egl::GlStateEgl;
 
 use crate::vis_common::sync_geoms;
-use crate::error::MjDataError;
 use crate::builder_setters;
 use crate::prelude::*;
 
@@ -402,13 +401,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// Fallible version of [`MjRenderer::sync`].
     ///
     /// # Errors
-    /// Returns [`MjDataError::SignatureMismatch`] if `data` was created from a
+    /// Returns [`RendererError::SignatureMismatch`] if `data` was created from a
     /// different model than the renderer.
-    pub fn try_sync(&mut self, data: &mut MjData<M>) -> Result<(), MjDataError> {
+    /// Returns [`RendererError::GlutinError`] if the OpenGL context could not be made current.
+    pub fn try_sync(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
         let src_sig = data.model().signature();
         let dst_sig = self.model.signature();
         if src_sig != dst_sig {
-            return Err(MjDataError::SignatureMismatch {
+            return Err(RendererError::SignatureMismatch {
                 source: src_sig,
                 destination: dst_sig,
             });
@@ -420,7 +420,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
         sync_geoms(&self.user_scene, &mut self.scene)
             .expect("could not sync the user scene with the internal scene; this is a bug, please report it.");
 
-        self.render();
+        self.render()?;
         Ok(())
     }
 
@@ -580,8 +580,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Draws the scene to internal arrays.
     /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image.
-    fn render(&mut self) {
-        self.gl_state.make_current().expect("failed to make OpenGL context current");
+    fn render(&mut self) -> Result<(), RendererError> {
+        self.gl_state.make_current().map_err(RendererError::GlutinError)?;
         let vp = MjrRectangle::new(0, 0, self.width as i32, self.height as i32);
         self.scene.render(&vp, &self.context);
 
@@ -615,6 +615,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 *value = near / (1.0 - *value * (1.0 - near / far));
             }
         }
+
+        Ok(())
     }
 }
 
@@ -628,14 +630,25 @@ fn flip_image_vertically<T>(buffer: &mut [T], height: usize, row_len: usize) {
     }
 }
 
-/// Errors that can occur during renderer initialization.
+/// Errors that can occur during renderer operations.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum RendererError {
     #[cfg(feature = "renderer-winit-fallback")]
     EventLoopError(winit::error::EventLoopError),
     GlutinError(glutin::error::Error),
     /// The supplied width or height was zero; MuJoCo requires positive dimensions.
     ZeroDimension,
+    /// OpenGL / window initialization failed.
+    #[cfg(feature = "renderer-winit-fallback")]
+    GlInitFailed(String),
+    /// The data and renderer were created from different models.
+    SignatureMismatch {
+        /// Model signature of the source object.
+        source: u64,
+        /// Model signature of the destination object.
+        destination: u64,
+    },
 }
 
 impl Display for RendererError {
@@ -643,8 +656,13 @@ impl Display for RendererError {
         match self {
             #[cfg(feature = "renderer-winit-fallback")]
             Self::EventLoopError(e) => write!(f, "event loop failed to initialize: {}", e),
-            Self::GlutinError(e) => write!(f, "glutin failed to initialize: {}", e),
+            Self::GlutinError(e) => write!(f, "glutin error: {}", e),
             Self::ZeroDimension => write!(f, "renderer width and height must both be greater than zero"),
+            #[cfg(feature = "renderer-winit-fallback")]
+            Self::GlInitFailed(msg) => write!(f, "GL initialization failed: {}", msg),
+            Self::SignatureMismatch { source, destination } => {
+                write!(f, "model signature mismatch: source {source:#X}, destination {destination:#X}")
+            }
         }
     }
 }
@@ -656,6 +674,9 @@ impl Error for RendererError {
             Self::EventLoopError(e) => Some(e),
             Self::GlutinError(e) => Some(e),
             Self::ZeroDimension => None,
+            #[cfg(feature = "renderer-winit-fallback")]
+            Self::GlInitFailed(_) => None,
+            Self::SignatureMismatch { .. } => None,
         }
     }
 }

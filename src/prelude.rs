@@ -6,3 +6,8 @@ pub use crate::wrappers::mj_option::*;
 pub use crate::wrappers::mj_model::*;
 pub use crate::wrappers::mj_data::*;
 pub use crate::error::{MjDataError, MjSceneError, MjEditError};
+
+#[cfg(feature = "renderer")]
+pub use crate::renderer::RendererError;
+#[cfg(feature = "viewer")]
+pub use crate::viewer::MjViewerError;

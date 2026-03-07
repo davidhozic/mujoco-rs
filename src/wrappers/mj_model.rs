@@ -486,14 +486,18 @@ impl MjModel {
 
     /* Partially auto-generated */
 
-    /// Clones the model.
-    pub fn clone(&self) -> Option<MjModel> {
+    /// Fallible version of [`Clone::clone`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
+    /// the copy.
+    pub fn try_clone(&self) -> Result<MjModel, MjDataError> {
         let ptr = unsafe { mj_copyModel(ptr::null_mut(), self.ffi()) };
         if ptr.is_null() {
-            None
+            Err(MjDataError::AllocationFailed)
         }
         else {
-            Some(MjModel(ptr))
+            Ok(MjModel(ptr))
         }
     }
 
@@ -1257,6 +1261,15 @@ impl MjModel {
     }
 }
 
+impl Clone for MjModel {
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the cloned model.
+    /// Use [`MjModel::try_clone`] for a fallible alternative.
+    fn clone(&self) -> Self {
+        self.try_clone().expect("failed to clone model")
+    }
+}
+
 impl Drop for MjModel {
     fn drop(&mut self) {
         unsafe {
@@ -1918,7 +1931,7 @@ mod tests {
     #[test]
     fn test_copy_model() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
-        assert!(model.clone().is_some());
+        let _cloned = model.clone();
     }
 
     #[test]

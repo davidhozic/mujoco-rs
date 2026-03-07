@@ -54,7 +54,7 @@ impl fmt::Display for MjDataError {
                 write!(f, "object type {raw} is not supported by this operation")
             }
             Self::AllocationFailed => {
-                write!(f, "MuJoCo failed to allocate MjData")
+                write!(f, "MuJoCo allocation failed")
             }
             Self::BufferTooSmall { name, got, needed } => {
                 write!(

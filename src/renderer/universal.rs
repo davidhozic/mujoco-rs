@@ -25,7 +25,7 @@ impl GlStateWinit {
             width.into(), height.into(), "".to_string(),
             &mut event_loop,
             false
-        );
+        ).map_err(RendererError::GlInitFailed)?;
 
         Ok(Self {inner})
     }
