@@ -30,7 +30,7 @@ update of MuJoCo alone can increase the major version.
   - Regenerated C FFI bindings to match MuJoCo 3.5.0.
   - Updated Rust API wrappers for compatibility with MuJoCo 3.5.0.
   - Several constructors and I/O methods now return `Result <https://doc.rust-lang.org/std/result/>`_ for safer error handling.
-  - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` now returns
+  - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` now returns
     ``Result<(), RendererError>`` instead of ``Result<(), MjDataError>``.
     :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` has a new ``SignatureMismatch`` variant
     and now also propagates OpenGL context errors from the internal ``render()`` call.
@@ -101,7 +101,7 @@ update of MuJoCo alone can increase the major version.
 
   - |mj_spec|:
 
-    - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`
+    - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`
       now calls :docs-rs:`~~mujoco_rs::mujoco_c::<struct>mj_loadModelBuffer` directly.
       A virtual file-system was previously used to support this.
 
@@ -115,31 +115,44 @@ update of MuJoCo alone can increase the major version.
     :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`,
     :docs-rs:`~mujoco_rs::error::<enum>GlInitError`.
     All are ``#[non_exhaustive]`` and re-exported from the prelude.
-  - |mj_model| methods (``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``from_buffer``,
-    ``save_last_xml``, ``extract_state``, ``extract_state_into``) now return typed
-    ``MjModelError`` variants instead of ``io::Error``.
-  - |mj_vfs| methods (``add_from_file``, ``add_from_buffer``, ``delete_file``, ``mount``,
-    ``unmount``) now return typed ``MjVfsError`` variants instead of ``io::Error``.
+
+  - |mj_model|:
+
+    - Methods ``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``from_buffer``,
+      ``save_last_xml``, ``extract_state``, ``extract_state_into`` now return typed
+      ``MjModelError`` variants instead of ``io::Error``.
+
+  - |mj_vfs|:
+
+    - Methods ``add_from_file``, ``add_from_buffer``, ``delete_file``, ``mount``,
+      ``unmount`` now return typed ``MjVfsError`` variants instead of ``io::Error``.
+
+  - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`:
+
+    - Gained new variants: ``RgbDisabled``, ``DepthDisabled``, ``DimensionMismatch``,
+      ``ZeroDimension``, ``IoError``, ``SceneError``, ``GlInitFailed``.
+    - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` now propagates
+      scene-full errors as ``RendererError::SceneError`` instead of panicking.
+
+  - :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError`:
+
+    - Gained new variants: ``PainterInitError``, ``SwapBuffersError``, ``GlInitFailed``,
+      ``SceneError``.
+    - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` now propagates
+      scene-full errors as ``MjViewerError::SceneError`` instead of panicking.
+
   - :docs-rs:`~mujoco_rs::error::<enum>GlInitError` replaces opaque ``String`` errors
     for OpenGL context initialization failures in the renderer and viewer.
-  - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` gained new variants:
-    ``RgbDisabled``, ``DepthDisabled``, ``DimensionMismatch``, ``ZeroDimension``,
-    ``IoError``, ``SceneError``, ``GlInitFailed``.
-  - :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError` gained new variants:
-    ``PainterInitError``, ``SwapBuffersError``, ``GlInitFailed``, ``SceneError``.
-  - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` now propagates
-    scene-full errors as ``RendererError::SceneError`` instead of panicking.
-  - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` ``render()`` now propagates
-    scene-full errors as ``MjViewerError::SceneError`` instead of panicking.
-  - New fallible ``try_`` methods on |mj_data|: ``try_new``, ``try_clone``,
-    ``try_copy_state_from_data``, ``try_apply_ft``, ``try_read_state_into``,
-    ``try_set_state``, ``try_copy_visual_to``, ``try_copy_to``.
-  - New fallible ``try_`` methods on |mj_model|: ``try_clone``, ``try_make_data``.
-  - New fallible ``try_`` methods on |mj_spec| and editing types:
-    ``try_new``, ``try_add_frame``, ``try_wrap_site``, ``try_wrap_geom``,
-    ``try_wrap_joint``, ``try_wrap_pulley``, and macro-generated ``try_add_*`` methods.
-  - New fallible ``try_`` methods on |mjv_scene| / rendering types:
-    ``try_push``, ``try_set_at``, ``try_read_pixels``.
+  - New fallible ``try_`` methods:
+
+    - |mj_data|: ``try_new``, ``try_clone``, ``try_copy_state_from_data``, ``try_apply_ft``,
+      ``try_read_state_into``, ``try_set_state``, ``try_copy_visual_to``, ``try_copy_to``.
+    - |mj_model|: ``try_clone``, ``try_make_data``.
+    - |mj_spec| and editing types: ``try_new``, ``try_add_frame``, ``try_wrap_site``,
+      ``try_wrap_geom``, ``try_wrap_joint``, ``try_wrap_pulley``, and macro-generated
+      ``try_add_*`` methods.
+    - |mjv_scene| / rendering types: ``try_push``, ``try_set_at``, ``try_read_pixels``.
+
   - Infallible counterparts now delegate to their ``try_`` variants via ``.expect()``,
     preserving backward compatibility.
 
@@ -148,7 +161,7 @@ update of MuJoCo alone can increase the major version.
   - Fixed potential UB when parsing string pointers returned from MuJoCo's model editing C++ wrappers
     via `CStr::from_ptr` by properly checking for NULL pointers.
   - Added a strict runtime signature check to view creation methods
-    (e.g. :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>view`)
+    (e.g. :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>view`)
     which will now panic if the |mj_data| was not created from an |mj_model| with the exact same
     kinematic tree structure.
   - Views now use more strict type checks. Specifically, instead of casting all the C types to
@@ -181,11 +194,11 @@ update of MuJoCo alone can increase the major version.
     - :gh-example:`Self-inverting tippe-top <tippe_top.rs>`: Simulates the self-inverting tippe-top using the RK4 integrator and
       keyframe initialisation; displays the inversion in an interactive :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
     - :gh-example:`Chaotic pendulum <chaotic_pendulum.rs>`: Demonstrates the butterfly effect in a four-body pendulum,
-      energy tracking via :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy_pos`
-      and :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy_vel`, and
+      energy tracking via :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy_pos`
+      and :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>energy_vel`, and
       interactive visualisation.
     - :gh-example:`Contact forces <contact_forces.rs>`: Shows contact-point and contact-force visualisation using
-      :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::<method>opts_mut` to enable
+      :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>opts_mut` to enable
       ``mjVIS_CONTACTPOINT``, ``mjVIS_CONTACTFORCE``, and ``mjVIS_TRANSPARENT`` flags;
       saves rendered frames as PNG images.
 
