@@ -66,7 +66,7 @@ After syncing, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb`
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth` can be used to obtain
 a reference to the rendered image in the correct 2D shape. The shape must be specified via
 the method's const generic parameters (``WIDTH`` and ``HEIGHT``), and the methods return
-``io::Result`` — an error is returned if the requested dimensions don't match the renderer's
+``Result<_, RendererError>`` — an error is returned if the requested dimensions don't match the renderer's
 actual resolution.
 
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` and

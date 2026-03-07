@@ -76,6 +76,7 @@ impl MjVfs {
     /// - [`MjVfsError::Full`] if the VFS has no more room.
     /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
     /// - [`MjVfsError::LoadFailed`] if the file could not be loaded.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// A panic will occur if `directory` or `filename` contain `\0` characters.
     pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> Result<(), MjVfsError> {
@@ -97,6 +98,7 @@ impl MjVfs {
     /// - [`MjVfsError::Full`] if the VFS has no more room.
     /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
     /// - [`MjVfsError::LoadFailed`] if MuJoCo fails to register the buffer.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// When the `filename` contains '\0' characters, a panic occurs.
     pub fn add_from_buffer(&mut self, filename: &str, buffer: &[u8]) -> Result<(), MjVfsError> {
@@ -113,7 +115,8 @@ impl MjVfs {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns [`MjVfsError::NotFound`] if the file doesn't exist.
+    /// - [`MjVfsError::NotFound`] if the file doesn't exist.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// When the `filename` contains '\0' characters, a panic occurs.
     pub fn delete_file(&mut self, filename: &str) -> Result<(), MjVfsError> {
@@ -142,6 +145,7 @@ impl MjVfs {
     /// - [`MjVfsError::Full`] if the VFS has no more room.
     /// - [`MjVfsError::AlreadyExists`] if the directory is already mounted under the same name.
     /// - [`MjVfsError::LoadFailed`] if the mount operation fails for another reason.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// When `filepath` contains `\0` characters, a panic occurs.
     pub fn mount(&mut self, filepath: &str) -> Result<(), MjVfsError> {
@@ -160,6 +164,7 @@ impl MjVfs {
     /// `Ok(())` on success.
     /// # Errors
     /// - [`MjVfsError::NotFound`] if the directory is not currently mounted.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// When `mountdir` contains `\0` characters, a panic occurs.
     pub fn unmount(&mut self, mountdir: &str) -> Result<(), MjVfsError> {

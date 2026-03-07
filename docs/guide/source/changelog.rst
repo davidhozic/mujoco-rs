@@ -101,7 +101,7 @@ update of MuJoCo alone can increase the major version.
 
 - Changed methods:
 
-  - |mj_spec|:
+  - |mj_model|:
 
     - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`
       now calls :docs-rs:`~~mujoco_rs::mujoco_c::<struct>mj_loadModelBuffer` directly.

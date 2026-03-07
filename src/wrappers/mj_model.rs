@@ -146,9 +146,8 @@ impl MjModel {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
-    /// Returns an error if the model could not be loaded, containing the MuJoCo error message.
-    /// # Errors
-    /// Returns an error if the path contains invalid utf-8 or MuJoCo encounters an error.
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::LoadFailed`] if MuJoCo fails to load the model.
     /// # Panics
     /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
@@ -160,9 +159,8 @@ impl MjModel {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
-    /// Returns an error if the model could not be loaded, containing the MuJoCo error message.
-    /// # Errors
-    /// Returns an error if the path contains invalid utf-8 or MuJoCo encounters an error.
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::LoadFailed`] if MuJoCo fails to load the model.
     /// # Panics
     /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
@@ -191,7 +189,8 @@ impl MjModel {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
-    /// Returns an error if the underlying VFS cannot handle the data or if MuJoCo fails to load it.
+    /// - [`MjModelError::VfsError`] if the internal VFS operation fails.
+    /// - [`MjModelError::LoadFailed`] if MuJoCo fails to load the model.
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_xml_string(data: &str) -> Result<Self, MjModelError> {
@@ -201,8 +200,7 @@ impl MjModel {
         let filename = "model.xml";
 
         // Add the file into a virtual file system
-        vfs.add_from_buffer(filename, data.as_bytes())
-            .map_err(MjModelError::VfsError)?;
+        vfs.add_from_buffer(filename, data.as_bytes())?;
 
         let mut error_buffer = [0i8; 100];
         unsafe {
@@ -220,7 +218,7 @@ impl MjModel {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
-    /// Returns an error if MuJoCo fails to parse the MJB buffer.
+    /// Returns [`MjModelError::LoadFailed`] if MuJoCo fails to parse the MJB buffer.
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_buffer(data: &[u8]) -> Result<Self, MjModelError> {

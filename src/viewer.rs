@@ -100,7 +100,9 @@ const HELP_MENU_VALUES: &str = concat!(
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum MjViewerError {
+    /// The event loop failed to initialize.
     EventLoopError(winit::error::EventLoopError),
+    /// A glutin operation failed.
     GlutinError(glutin::error::Error),
     /// Returned when the egui painter (OpenGL UI renderer) fails to initialize.
     PainterInitError(String),
@@ -115,12 +117,12 @@ pub enum MjViewerError {
 impl Display for MjViewerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EventLoopError(e) => write!(f, "failed to initialize event_loop: {}", e),
-            Self::GlutinError(e) => write!(f, "glutin raised an error: {}", e),
+            Self::EventLoopError(_) => write!(f, "event loop failed to initialize"),
+            Self::GlutinError(_) => write!(f, "glutin error"),
             Self::PainterInitError(e) => write!(f, "failed to initialize egui painter: {}", e),
-            Self::SwapBuffersError(e) => write!(f, "failed to swap OpenGL buffers: {}", e),
-            Self::GlInitFailed(e) => write!(f, "GL initialization failed: {}", e),
-            Self::SceneError(e) => write!(f, "scene error: {}", e),
+            Self::SwapBuffersError(_) => write!(f, "OpenGL buffer swap failed"),
+            Self::GlInitFailed(_) => write!(f, "GL initialization failed"),
+            Self::SceneError(_) => write!(f, "scene error"),
         }
     }
 }
@@ -135,6 +137,18 @@ impl Error for MjViewerError {
             Self::GlInitFailed(e) => Some(e),
             Self::SceneError(e) => Some(e),
         }
+    }
+}
+
+impl From<crate::error::MjSceneError> for MjViewerError {
+    fn from(e: crate::error::MjSceneError) -> Self {
+        Self::SceneError(e)
+    }
+}
+
+impl From<crate::error::GlInitError> for MjViewerError {
+    fn from(e: crate::error::GlInitError) -> Self {
+        Self::GlInitFailed(e)
     }
 }
 
@@ -373,7 +387,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the [`MjViewer`].
     /// # Errors
-    /// Returns an error if the OpenGL state or window creation fails.
+    /// - [`MjViewerError::EventLoopError`] if the event loop fails to initialize.
+    /// - [`MjViewerError::GlInitFailed`] if OpenGL / window initialization fails.
+    /// - [`MjViewerError::GlutinError`] if a glutin operation fails.
+    /// - [`MjViewerError::PainterInitError`] if the UI painter fails to initialize
+    ///   (feature `viewer-ui`).
     pub fn launch_passive(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
         MjViewerBuilder::new()
             .max_user_geoms(max_user_geom)
@@ -585,8 +603,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
 
             // Draw geoms drawn through the user scene.
-            sync_geoms(lock.user_scene(), &mut self.scene)
-                .map_err(MjViewerError::SceneError)?;
+            sync_geoms(lock.user_scene(), &mut self.scene)?;
         }
         self.scene.render(&self.rect_full, &self.context);
         Ok(())
@@ -1199,7 +1216,11 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the [`MjViewer`].
     /// # Errors
-    /// Returns an error if the OpenGL state or window creation fails.
+    /// - [`MjViewerError::EventLoopError`] if the event loop fails to initialize.
+    /// - [`MjViewerError::GlInitFailed`] if OpenGL / window initialization fails.
+    /// - [`MjViewerError::GlutinError`] if a glutin operation fails.
+    /// - [`MjViewerError::PainterInitError`] if the UI painter fails to initialize
+    ///   (feature `viewer-ui`).
     pub fn build_passive(&self, model: M) -> Result<MjViewer<M>, MjViewerError> {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
         let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
@@ -1208,7 +1229,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
             self.window_name.to_string(),
             &mut event_loop,
             true  // process events
-        ).map_err(MjViewerError::GlInitFailed)?;
+        )?;
 
         /* Initialize the OpenGL related things */
         let RenderBaseGlState {
@@ -1224,10 +1245,10 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
             gl_surface.set_swap_interval(
                 gl_context,
                 glutin::surface::SwapInterval::Wait(NonZero::<u32>::MIN)
-            ).map_err(|e| MjViewerError::GlutinError(e))?;
+            ).map_err(MjViewerError::GlutinError)?;
         } else {
             gl_surface.set_swap_interval(gl_context, glutin::surface::SwapInterval::DontWait).map_err(
-                |e| MjViewerError::GlutinError(e)
+                MjViewerError::GlutinError
             )?;
         }
 

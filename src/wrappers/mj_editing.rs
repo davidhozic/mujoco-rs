@@ -176,7 +176,8 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns an error if the path contains invalid utf-8 or MuJoCo encounters an error.
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the XML.
     /// # Panics
     /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
@@ -188,7 +189,8 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns an error if the path contains invalid utf-8 or MuJoCo encounters an error.
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the XML.
     /// # Panics
     /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
@@ -217,7 +219,7 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns an error if MuJoCo encounters an error parsing the string.
+    /// Returns [`MjEditError::ParseFailed`] if MuJoCo encounters an error parsing the string.
     /// # Panics
     /// - when the `xml` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
@@ -241,7 +243,7 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns an error if MuJoCo fails to parse the file.
+    /// Returns [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
     /// # Panics
     /// When `filename` or `content_type` contains zero bytes.
     pub fn from_parse(filename: &str, content_type: &str) -> Result<Self, MjEditError> {
@@ -252,7 +254,7 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns an error if MuJoCo fails to parse the file.
+    /// Returns [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
     /// # Panics
     /// When `filename` or `content_type` contains zero bytes.
     pub fn from_parse_vfs(filename: &str, content_type: &str, vfs: &MjVfs) -> Result<Self, MjEditError> {
@@ -314,7 +316,7 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
-    /// Returns an error if the model fails to compile, containing the MuJoCo error details.
+    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile.
     pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
         let result = unsafe { MjModel::from_raw( mj_compile(self.0, ptr::null()) ) };
         result.map_err(|_| {

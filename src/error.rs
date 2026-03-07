@@ -5,6 +5,7 @@
 //! - [`MjEditError`] - model-specification editing operations (`MjSpec`).
 //! - [`MjModelError`] - model loading, saving, and state operations (`MjModel`).
 //! - [`MjVfsError`] - virtual file system operations (`MjVfs`).
+//! - [`GlInitError`] - OpenGL / window initialization (feature-gated).
 use std::fmt;
 
 /// Errors that can occur in [`MjData`](crate::wrappers::MjData) physics data
@@ -311,9 +312,13 @@ impl fmt::Display for MjModelError {
                 write!(f, "dst_spec must be a subset of src_spec")
             }
             Self::BufferTooSmall { needed, available } => {
-                write!(f, "buffer too small: need {needed} elements, got {available}")
+                write!(
+                    f,
+                    "buffer is too small: got {available} elements, \
+                     but need at least {needed}"
+                )
             }
-            Self::VfsError(e) => write!(f, "VFS error: {e}"),
+            Self::VfsError(_) => write!(f, "VFS error"),
         }
     }
 }
@@ -324,6 +329,12 @@ impl std::error::Error for MjModelError {
             Self::VfsError(e) => Some(e),
             _ => None,
         }
+    }
+}
+
+impl From<MjVfsError> for MjModelError {
+    fn from(e: MjVfsError) -> Self {
+        Self::VfsError(e)
     }
 }
 
@@ -388,10 +399,10 @@ impl fmt::Display for GlInitError {
             Self::DisplayBuild(e) => write!(f, "display build failed: {e}"),
             Self::NoWindow => write!(f, "display builder did not create a window"),
             Self::WindowHandle(e) => write!(f, "failed to obtain window handle: {e}"),
-            Self::ContextCreation(e) => write!(f, "failed to create GL context: {e}"),
+            Self::ContextCreation(_) => write!(f, "GL context creation failed"),
             Self::SurfaceAttributes(e) => write!(f, "failed to build surface attributes: {e}"),
-            Self::SurfaceCreation(e) => write!(f, "failed to create window surface: {e}"),
-            Self::MakeCurrent(e) => write!(f, "failed to make GL context current: {e}"),
+            Self::SurfaceCreation(_) => write!(f, "window surface creation failed"),
+            Self::MakeCurrent(_) => write!(f, "failed to make GL context current"),
         }
     }
 }
