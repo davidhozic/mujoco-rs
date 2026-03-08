@@ -388,6 +388,11 @@ Pre-existing types :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` and
   ``FALSE`` / ``TRUE`` / ``AUTO``), matching the C ``mjtAlignFree`` semantics.
 - |mj_model|: Added missing ``key_mpos`` and ``key_mquat`` array accessors for keyframe
   mocap body positions and quaternions.
+- |mj_model|: ``tuple_objtype`` array accessor now returns ``MjtObj`` instead of ``i32``,
+  matching the ``info_with_view`` representation.
+- |mj_model|: ``light_castshadow`` and ``light_active`` views (``info_with_view``) now
+  return ``bool`` instead of ``MjtByte``, consistent with their ``array_slice_dyn``
+  accessors.
 
 .. rubric:: Other changes
 

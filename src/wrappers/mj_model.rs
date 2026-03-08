@@ -1204,7 +1204,7 @@ impl MjModel {
         text_data: &[i8; "array of all text fields (0-terminated)"; ffi().ntextdata],
         tuple_adr: &[i32; "address of text in text_data"; ffi().ntuple],
         tuple_size: &[i32; "number of objects in tuple"; ffi().ntuple],
-        tuple_objtype: &[i32; "array of object types in all tuples"; ffi().ntupledata],
+        tuple_objtype: &[MjtObj [force]; "array of object types in all tuples"; ffi().ntupledata],
         tuple_objid: &[i32; "array of object ids in all tuples"; ffi().ntupledata],
         tuple_objprm: &[MjtNum; "array of object params in all tuples"; ffi().ntupledata],
         key_time: &[MjtNum; "key time"; ffi().nkey],
@@ -1401,11 +1401,11 @@ info_with_view!(Model, light,
 	 [light_] targetbodyid: i32,
 	 [light_] r#type: MjtLightType [force],
 	 [light_] texid: i32,
-	 [light_] castshadow: MjtByte,
+	 [light_] castshadow: bool [force],
 	 [light_] bulbradius: f32,
 	 [light_] intensity: f32,
 	 [light_] range: f32,
-	 [light_] active: MjtByte,
+	 [light_] active: bool [force],
 	 [light_] pos: MjtNum,
 	 [light_] dir: MjtNum,
 	 [light_] poscom0: MjtNum,
@@ -2168,8 +2168,8 @@ mod tests {
         assert_eq!(view_light.bodyid[0] as usize, BODYID);
         assert_eq!(view_light.targetbodyid[0], -1);
         assert_eq!(view_light.r#type[0], TYPE);
-        assert_eq!(view_light.castshadow[0], CASTSHADOW as u8);
-        assert_eq!(view_light.active[0], ACTIVE as u8);
+        assert_eq!(view_light.castshadow[0], CASTSHADOW);
+        assert_eq!(view_light.active[0], ACTIVE);
 
         assert_eq!(view_light.pos[..], POS);
         assert_eq!(view_light.dir[..], DIR);
