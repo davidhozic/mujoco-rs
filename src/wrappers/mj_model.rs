@@ -2385,4 +2385,907 @@ mod tests {
         let written = model.extract_state_into(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, &mut buf, 0u32).unwrap();
         assert_eq!(written, 0);
     }
+
+    /**************************************************************************/
+    // Force-cast macro correctness tests for MjModel
+    /**************************************************************************/
+
+    /// Verifies [force]-cast array grouping for body_pos (&[[MjtNum; 3]]),
+    /// body_quat (&[[MjtNum; 4]]), body_inertia (&[[MjtNum; 3]]), body_invweight0 (&[[MjtNum; 2]]).
+    #[test]
+    fn test_force_cast_body_model_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nbody = model.ffi().nbody as usize;
+
+        let body_pos = model.body_pos();
+        let body_quat = model.body_quat();
+        let body_inertia = model.body_inertia();
+        let body_invweight0 = model.body_invweight0();
+        let body_ipos = model.body_ipos();
+        let body_iquat = model.body_iquat();
+
+        assert_eq!(body_pos.len(), nbody);
+        assert_eq!(body_quat.len(), nbody);
+        assert_eq!(body_inertia.len(), nbody);
+        assert_eq!(body_invweight0.len(), nbody);
+        assert_eq!(body_ipos.len(), nbody);
+        assert_eq!(body_iquat.len(), nbody);
+
+        // Cross-validate against raw FFI
+        for i in 0..nbody {
+            for j in 0..3 {
+                assert_eq!(body_pos[i][j], unsafe { *model.ffi().body_pos.add(i * 3 + j) },
+                    "body_pos[{}][{}] mismatch", i, j);
+            }
+            for j in 0..4 {
+                assert_eq!(body_quat[i][j], unsafe { *model.ffi().body_quat.add(i * 4 + j) },
+                    "body_quat[{}][{}] mismatch", i, j);
+            }
+            for j in 0..3 {
+                assert_eq!(body_inertia[i][j], unsafe { *model.ffi().body_inertia.add(i * 3 + j) },
+                    "body_inertia[{}][{}] mismatch", i, j);
+            }
+            for j in 0..2 {
+                assert_eq!(body_invweight0[i][j], unsafe { *model.ffi().body_invweight0.add(i * 2 + j) },
+                    "body_invweight0[{}][{}] mismatch", i, j);
+            }
+        }
+    }
+
+    /// Verifies [force]-cast enum for jnt_type (*mut i32 -> *mut MjtJoint).
+    #[test]
+    fn test_force_cast_jnt_type_enum() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let njnt = model.ffi().njnt as usize;
+        let jnt_type = model.jnt_type();
+
+        assert_eq!(jnt_type.len(), njnt);
+
+        // Cross-validate with raw FFI
+        for i in 0..njnt {
+            let raw_i32 = unsafe { *model.ffi().jnt_type.add(i) };
+            let expected: MjtJoint = unsafe { crate::util::force_cast(raw_i32) };
+            assert_eq!(jnt_type[i], expected,
+                "jnt_type[{}]: got {:?}, expected {:?} (raw={})", i, jnt_type[i], expected, raw_i32);
+        }
+
+        // Verify known joints: "ball" is free, "rod" is slide
+        let ball_jnt = model.joint("ball").unwrap();
+        assert_eq!(jnt_type[ball_jnt.id], MjtJoint::mjJNT_FREE);
+
+        let rod_jnt = model.joint("rod").unwrap();
+        assert_eq!(jnt_type[rod_jnt.id], MjtJoint::mjJNT_SLIDE);
+    }
+
+    /// Verifies [force]-cast bool for jnt_limited (*mut u8 -> *mut bool).
+    #[test]
+    fn test_force_cast_jnt_limited_bool() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let njnt = model.ffi().njnt as usize;
+        let jnt_limited = model.jnt_limited();
+
+        assert_eq!(jnt_limited.len(), njnt);
+
+        // Cross-validate with raw FFI
+        for i in 0..njnt {
+            let raw_u8 = unsafe { *model.ffi().jnt_limited.add(i) };
+            assert!(raw_u8 == 0 || raw_u8 == 1,
+                "raw jnt_limited[{}]={} must be 0 or 1", i, raw_u8);
+            assert_eq!(jnt_limited[i], raw_u8 != 0,
+                "jnt_limited[{}] mismatch: bool={}, raw={}", i, jnt_limited[i], raw_u8);
+        }
+
+        // "rod" joint has range="0 1" -> limited=true; "ball" is free -> limited=false
+        let rod_jnt = model.joint("rod").unwrap();
+        assert_eq!(jnt_limited[rod_jnt.id], true);
+
+        let ball_jnt = model.joint("ball").unwrap();
+        assert_eq!(jnt_limited[ball_jnt.id], false);
+    }
+
+    /// Verifies [force]-cast enum for geom_type (*mut i32 -> *mut MjtGeom).
+    #[test]
+    fn test_force_cast_geom_type_enum() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let ngeom = model.ffi().ngeom as usize;
+        let geom_type = model.geom_type();
+
+        assert_eq!(geom_type.len(), ngeom);
+
+        // Cross-validate
+        for i in 0..ngeom {
+            let raw_i32 = unsafe { *model.ffi().geom_type.add(i) };
+            let expected: MjtGeom = unsafe { crate::util::force_cast(raw_i32) };
+            assert_eq!(geom_type[i], expected);
+        }
+
+        // Verify known geoms
+        let sphere_geom = model.geom("green_sphere").unwrap();
+        assert_eq!(geom_type[sphere_geom.id], MjtGeom::mjGEOM_SPHERE);
+
+        let floor_geom = model.geom("floor").unwrap();
+        assert_eq!(geom_type[floor_geom.id], MjtGeom::mjGEOM_PLANE);
+
+        let rod_geom = model.geom("rod").unwrap();
+        assert_eq!(geom_type[rod_geom.id], MjtGeom::mjGEOM_CYLINDER);
+    }
+
+    /// Verifies [force]-cast for geom_size (&[[MjtNum; 3]]), geom_pos (&[[MjtNum; 3]]),
+    /// geom_quat (&[[MjtNum; 4]]), geom_rgba (&[[f32; 4]]), geom_friction (&[[MjtNum; 3]]),
+    /// geom_aabb (&[[MjtNum; 6]]).
+    #[test]
+    fn test_force_cast_geom_model_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let ngeom = model.ffi().ngeom as usize;
+
+        let geom_size = model.geom_size();
+        let geom_pos = model.geom_pos();
+        let geom_quat = model.geom_quat();
+        let geom_rgba = model.geom_rgba();
+        let geom_friction = model.geom_friction();
+        let geom_aabb = model.geom_aabb();
+
+        assert_eq!(geom_size.len(), ngeom);
+        assert_eq!(geom_pos.len(), ngeom);
+        assert_eq!(geom_quat.len(), ngeom);
+        assert_eq!(geom_rgba.len(), ngeom);
+        assert_eq!(geom_friction.len(), ngeom);
+        assert_eq!(geom_aabb.len(), ngeom);
+
+        // Cross-validate all against FFI
+        for i in 0..ngeom {
+            for j in 0..3 {
+                assert_eq!(geom_size[i][j], unsafe { *model.ffi().geom_size.add(i * 3 + j) });
+                assert_eq!(geom_pos[i][j], unsafe { *model.ffi().geom_pos.add(i * 3 + j) });
+                assert_eq!(geom_friction[i][j], unsafe { *model.ffi().geom_friction.add(i * 3 + j) });
+            }
+            for j in 0..4 {
+                assert_eq!(geom_quat[i][j], unsafe { *model.ffi().geom_quat.add(i * 4 + j) });
+                assert_eq!(geom_rgba[i][j], unsafe { *model.ffi().geom_rgba.add(i * 4 + j) });
+            }
+            for j in 0..6 {
+                assert_eq!(geom_aabb[i][j], unsafe { *model.ffi().geom_aabb.add(i * 6 + j) });
+            }
+        }
+
+        // Verify a known geom: "green_sphere" has rgba="0 1 0 1" and size="0.1"
+        let gs = model.geom("green_sphere").unwrap();
+        assert_eq!(geom_rgba[gs.id], [0.0f32, 1.0, 0.0, 1.0]);
+        assert_relative_eq!(geom_size[gs.id][0], 0.1, epsilon = 1e-9);
+    }
+
+    /// Verifies [force]-cast for camera arrays: cam_mode (MjtCamLight), cam_projection (MjtProjection),
+    /// cam_resolution (&[[i32; 2]]), cam_sensorsize (&[[f32; 2]]), cam_intrinsic (&[[f32; 4]]),
+    /// cam_mat0 (&[[MjtNum; 9]]).
+    #[test]
+    fn test_force_cast_camera_model_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let ncam = model.ffi().ncam as usize;
+
+        if ncam == 0 {
+            // The EXAMPLE_MODEL has a camera, but guard just in case
+            return;
+        }
+
+        let cam_mode = model.cam_mode();
+        let cam_projection = model.cam_projection();
+        let cam_resolution = model.cam_resolution();
+        let cam_sensorsize = model.cam_sensorsize();
+        let cam_intrinsic = model.cam_intrinsic();
+        let cam_mat0 = model.cam_mat0();
+
+        assert_eq!(cam_mode.len(), ncam);
+        assert_eq!(cam_projection.len(), ncam);
+        assert_eq!(cam_resolution.len(), ncam);
+        assert_eq!(cam_sensorsize.len(), ncam);
+        assert_eq!(cam_intrinsic.len(), ncam);
+        assert_eq!(cam_mat0.len(), ncam);
+
+        // Cross-validate enum casts against raw FFI
+        for i in 0..ncam {
+            let raw_mode = unsafe { *model.ffi().cam_mode.add(i) };
+            let expected_mode: MjtCamLight = unsafe { crate::util::force_cast(raw_mode) };
+            assert_eq!(cam_mode[i], expected_mode);
+
+            let raw_proj = unsafe { *model.ffi().cam_projection.add(i) };
+            let expected_proj: MjtProjection = unsafe { crate::util::force_cast(raw_proj) };
+            assert_eq!(cam_projection[i], expected_proj);
+
+            for j in 0..2 {
+                assert_eq!(cam_resolution[i][j], unsafe { *model.ffi().cam_resolution.add(i * 2 + j) });
+                assert_eq!(cam_sensorsize[i][j], unsafe { *model.ffi().cam_sensorsize.add(i * 2 + j) });
+            }
+            for j in 0..4 {
+                assert_eq!(cam_intrinsic[i][j], unsafe { *model.ffi().cam_intrinsic.add(i * 4 + j) });
+            }
+            for j in 0..9 {
+                assert_eq!(cam_mat0[i][j], unsafe { *model.ffi().cam_mat0.add(i * 9 + j) });
+            }
+        }
+
+        // Verify known camera: "cam1" has resolution="100 200"
+        let cam1 = model.camera("cam1").unwrap();
+        assert_eq!(cam_resolution[cam1.id], [100, 200]);
+    }
+
+    /// Verifies [force]-cast for bvh_child (&[[i32; 2]]) and bvh_aabb (&[[MjtNum; 6]]).
+    #[test]
+    fn test_force_cast_bvh_model_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nbvh = model.ffi().nbvh as usize;
+
+        let bvh_child = model.bvh_child();
+        assert_eq!(bvh_child.len(), nbvh);
+
+        for i in 0..nbvh {
+            for j in 0..2 {
+                assert_eq!(bvh_child[i][j], unsafe { *model.ffi().bvh_child.add(i * 2 + j) });
+            }
+        }
+
+        let nbvhstatic = model.ffi().nbvhstatic as usize;
+        let bvh_aabb = model.bvh_aabb();
+        assert_eq!(bvh_aabb.len(), nbvhstatic);
+
+        for i in 0..nbvhstatic {
+            for j in 0..6 {
+                assert_eq!(bvh_aabb[i][j], unsafe { *model.ffi().bvh_aabb.add(i * 6 + j) });
+            }
+        }
+    }
+
+    /// Verifies [force]-cast enum: body_sameframe and geom_sameframe (MjtSameFrame).
+    #[test]
+    fn test_force_cast_sameframe_enum() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nbody = model.ffi().nbody as usize;
+        let ngeom = model.ffi().ngeom as usize;
+
+        let body_sameframe = model.body_sameframe();
+        let geom_sameframe = model.geom_sameframe();
+
+        assert_eq!(body_sameframe.len(), nbody);
+        assert_eq!(geom_sameframe.len(), ngeom);
+
+        for i in 0..nbody {
+            let raw = unsafe { *model.ffi().body_sameframe.add(i) };
+            let expected: MjtSameFrame = unsafe { crate::util::force_cast(raw) };
+            assert_eq!(body_sameframe[i], expected, "body_sameframe[{}] mismatch", i);
+        }
+
+        for i in 0..ngeom {
+            let raw = unsafe { *model.ffi().geom_sameframe.add(i) };
+            let expected: MjtSameFrame = unsafe { crate::util::force_cast(raw) };
+            assert_eq!(geom_sameframe[i], expected, "geom_sameframe[{}] mismatch", i);
+        }
+    }
+
+    /// Verifies [force]-cast for equality constraint arrays: eq_type (MjtEq),
+    /// eq_objtype (MjtObj), eq_active0 (bool), eq_data (&[[MjtNum; mjNEQDATA]]).
+    #[test]
+    fn test_force_cast_equality_model_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let neq = model.ffi().neq as usize;
+
+        if neq == 0 {
+            return;
+        }
+
+        let eq_type = model.eq_type();
+        let eq_objtype = model.eq_objtype();
+        let eq_active0 = model.eq_active0();
+
+        assert_eq!(eq_type.len(), neq);
+        assert_eq!(eq_objtype.len(), neq);
+        assert_eq!(eq_active0.len(), neq);
+
+        // Cross-validate enum casts
+        for i in 0..neq {
+            let raw_type = unsafe { *model.ffi().eq_type.add(i) };
+            let expected_type: MjtEq = unsafe { crate::util::force_cast(raw_type) };
+            assert_eq!(eq_type[i], expected_type);
+
+            let raw_objtype = unsafe { *model.ffi().eq_objtype.add(i) };
+            let expected_objtype: MjtObj = unsafe { crate::util::force_cast(raw_objtype) };
+            assert_eq!(eq_objtype[i], expected_objtype);
+
+            let raw_active = unsafe { *model.ffi().eq_active0.add(i) };
+            assert_eq!(eq_active0[i], raw_active != 0);
+        }
+
+        // Verify known equality: "eq1" is a connect constraint
+        let eq1 = model.equality("eq1").unwrap();
+        assert_eq!(eq_type[eq1.id], MjtEq::mjEQ_CONNECT);
+        assert_eq!(eq_objtype[eq1.id], MjtObj::mjOBJ_BODY);
+        assert_eq!(eq_active0[eq1.id], true);
+    }
+
+    /// Verifies [force]-cast for sensor arrays: sensor_type (MjtSensor), sensor_datatype (MjtDataType),
+    /// sensor_needstage (MjtStage), sensor_objtype (MjtObj), sensor_reftype (MjtObj).
+    #[test]
+    fn test_force_cast_sensor_model_enums() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nsensor = model.ffi().nsensor as usize;
+
+        if nsensor == 0 {
+            return;
+        }
+
+        let sensor_type = model.sensor_type();
+        let sensor_datatype = model.sensor_datatype();
+        let sensor_needstage = model.sensor_needstage();
+        let sensor_objtype = model.sensor_objtype();
+        let sensor_reftype = model.sensor_reftype();
+
+        assert_eq!(sensor_type.len(), nsensor);
+        assert_eq!(sensor_datatype.len(), nsensor);
+        assert_eq!(sensor_needstage.len(), nsensor);
+        assert_eq!(sensor_objtype.len(), nsensor);
+        assert_eq!(sensor_reftype.len(), nsensor);
+
+        for i in 0..nsensor {
+            let raw_type = unsafe { *model.ffi().sensor_type.add(i) };
+            let raw_datatype = unsafe { *model.ffi().sensor_datatype.add(i) };
+            let raw_needstage = unsafe { *model.ffi().sensor_needstage.add(i) };
+            let raw_objtype = unsafe { *model.ffi().sensor_objtype.add(i) };
+            let raw_reftype = unsafe { *model.ffi().sensor_reftype.add(i) };
+
+            assert_eq!(sensor_type[i], unsafe { crate::util::force_cast::<_, MjtSensor>(raw_type) });
+            assert_eq!(sensor_datatype[i], unsafe { crate::util::force_cast::<_, MjtDataType>(raw_datatype) });
+            assert_eq!(sensor_needstage[i], unsafe { crate::util::force_cast::<_, MjtStage>(raw_needstage) });
+            assert_eq!(sensor_objtype[i], unsafe { crate::util::force_cast::<_, MjtObj>(raw_objtype) });
+            assert_eq!(sensor_reftype[i], unsafe { crate::util::force_cast::<_, MjtObj>(raw_reftype) });
+        }
+
+        // Verify known sensor: "touch" is a touch sensor on a site
+        let touch = model.sensor("touch").unwrap();
+        assert_eq!(sensor_type[touch.id], MjtSensor::mjSENS_TOUCH);
+        assert_eq!(sensor_objtype[touch.id], MjtObj::mjOBJ_SITE);
+    }
+
+    /// Verifies [force]-cast for actuator enum arrays: trntype (MjtTrn), dyntype (MjtDyn),
+    /// gaintype (MjtGain), biastype (MjtBias), and bool ctrllimited, forcelimited, actlimited.
+    #[test]
+    fn test_force_cast_actuator_model_enums_and_bools() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nu = model.ffi().nu as usize;
+
+        if nu == 0 {
+            return;
+        }
+
+        let trntype = model.actuator_trntype();
+        let dyntype = model.actuator_dyntype();
+        let gaintype = model.actuator_gaintype();
+        let biastype = model.actuator_biastype();
+        let ctrllimited = model.actuator_ctrllimited();
+        let forcelimited = model.actuator_forcelimited();
+        let actlimited = model.actuator_actlimited();
+        let actearly = model.actuator_actearly();
+
+        assert_eq!(trntype.len(), nu);
+        assert_eq!(dyntype.len(), nu);
+        assert_eq!(gaintype.len(), nu);
+        assert_eq!(biastype.len(), nu);
+        assert_eq!(ctrllimited.len(), nu);
+        assert_eq!(forcelimited.len(), nu);
+        assert_eq!(actlimited.len(), nu);
+        assert_eq!(actearly.len(), nu);
+
+        for i in 0..nu {
+            // Enum cross-validation
+            assert_eq!(trntype[i], unsafe { crate::util::force_cast::<_, MjtTrn>(*model.ffi().actuator_trntype.add(i)) });
+            assert_eq!(dyntype[i], unsafe { crate::util::force_cast::<_, MjtDyn>(*model.ffi().actuator_dyntype.add(i)) });
+            assert_eq!(gaintype[i], unsafe { crate::util::force_cast::<_, MjtGain>(*model.ffi().actuator_gaintype.add(i)) });
+            assert_eq!(biastype[i], unsafe { crate::util::force_cast::<_, MjtBias>(*model.ffi().actuator_biastype.add(i)) });
+
+            // Bool cross-validation
+            let raw_ctrllimited = unsafe { *model.ffi().actuator_ctrllimited.add(i) };
+            assert_eq!(ctrllimited[i], raw_ctrllimited != 0);
+            let raw_forcelimited = unsafe { *model.ffi().actuator_forcelimited.add(i) };
+            assert_eq!(forcelimited[i], raw_forcelimited != 0);
+            let raw_actlimited = unsafe { *model.ffi().actuator_actlimited.add(i) };
+            assert_eq!(actlimited[i], raw_actlimited != 0);
+            let raw_actearly = unsafe { *model.ffi().actuator_actearly.add(i) };
+            assert_eq!(actearly[i], raw_actearly != 0);
+        }
+
+        // Verify known actuator: "slider" has biastype=affine, gaintype=fixed, ctrllimited=true
+        let slider = model.actuator("slider").unwrap();
+        assert_eq!(biastype[slider.id], MjtBias::mjBIAS_AFFINE);
+        assert_eq!(gaintype[slider.id], MjtGain::mjGAIN_FIXED);
+        assert_eq!(ctrllimited[slider.id], true);
+    }
+
+    /// Verifies [force]-cast for actuator parameter arrays: dynprm, gainprm, biasprm, ctrlrange,
+    /// gear (&[[MjtNum; 6]]).
+    #[test]
+    fn test_force_cast_actuator_param_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nu = model.ffi().nu as usize;
+
+        let dynprm = model.actuator_dynprm();
+        let ctrlrange = model.actuator_ctrlrange();
+        let gear = model.actuator_gear();
+        let trnid = model.actuator_trnid();
+
+        assert_eq!(dynprm.len(), nu);
+        assert_eq!(ctrlrange.len(), nu);
+        assert_eq!(gear.len(), nu);
+        assert_eq!(trnid.len(), nu);
+
+        // Verify "slider" dynprm and ctrlrange
+        let slider = model.actuator("slider").unwrap();
+        assert_eq!(dynprm[slider.id][0..10], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]);
+        assert_eq!(ctrlrange[slider.id], [0.0, 1.0]);
+
+        // Verify "slider2" has reversed dynprm
+        let slider2 = model.actuator("slider2").unwrap();
+        assert_eq!(dynprm[slider2.id][0..10], [10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]);
+
+        // Cross-validate FFI for gear (stride 6)
+        for i in 0..nu {
+            for j in 0..6 {
+                assert_eq!(gear[i][j], unsafe { *model.ffi().actuator_gear.add(i * 6 + j) });
+            }
+            for j in 0..2 {
+                assert_eq!(trnid[i][j], unsafe { *model.ffi().actuator_trnid.add(i * 2 + j) });
+                assert_eq!(ctrlrange[i][j], unsafe { *model.ffi().actuator_ctrlrange.add(i * 2 + j) });
+            }
+        }
+    }
+
+    /// Verifies [force]-cast for tendon bools and arrays: tendon_limited (bool),
+    /// tendon_range (&[[MjtNum; 2]]), tendon_rgba (&[[f32; 4]]), tendon_treeid (&[[i32; 2]]).
+    #[test]
+    fn test_force_cast_tendon_model_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let ntendon = model.ffi().ntendon as usize;
+
+        if ntendon == 0 {
+            return;
+        }
+
+        let tendon_limited = model.tendon_limited();
+        let tendon_range = model.tendon_range();
+        let tendon_rgba = model.tendon_rgba();
+        let tendon_treeid = model.tendon_treeid();
+        let tendon_lengthspring = model.tendon_lengthspring();
+
+        assert_eq!(tendon_limited.len(), ntendon);
+        assert_eq!(tendon_range.len(), ntendon);
+        assert_eq!(tendon_rgba.len(), ntendon);
+        assert_eq!(tendon_treeid.len(), ntendon);
+        assert_eq!(tendon_lengthspring.len(), ntendon);
+
+        for i in 0..ntendon {
+            let raw_limited = unsafe { *model.ffi().tendon_limited.add(i) };
+            assert_eq!(tendon_limited[i], raw_limited != 0);
+
+            for j in 0..2 {
+                assert_eq!(tendon_range[i][j], unsafe { *model.ffi().tendon_range.add(i * 2 + j) });
+                assert_eq!(tendon_treeid[i][j], unsafe { *model.ffi().tendon_treeid.add(i * 2 + j) });
+                assert_eq!(tendon_lengthspring[i][j], unsafe { *model.ffi().tendon_lengthspring.add(i * 2 + j) });
+            }
+
+            for j in 0..4 {
+                assert_eq!(tendon_rgba[i][j], unsafe { *model.ffi().tendon_rgba.add(i * 4 + j) });
+            }
+        }
+
+        // Verify known tendon: "tendon2" limited=true, range=(0,1), rgba=(0, 0.1, 1, 1)
+        let ten2 = model.tendon("tendon2").unwrap();
+        assert_eq!(tendon_limited[ten2.id], true);
+        assert_eq!(tendon_range[ten2.id], [0.0, 1.0]);
+        assert_relative_eq!(tendon_rgba[ten2.id][0], 0.0f32, epsilon = 1e-6);
+        assert_relative_eq!(tendon_rgba[ten2.id][1], 0.1f32, epsilon = 1e-6);
+    }
+
+    /// Verifies [force]-cast for texture enum: tex_type (MjtTexture), tex_colorspace (MjtColorSpace).
+    #[test]
+    fn test_force_cast_texture_model_enums() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let ntex = model.ffi().ntex as usize;
+
+        if ntex == 0 {
+            return;
+        }
+
+        let tex_type = model.tex_type();
+        let tex_colorspace = model.tex_colorspace();
+
+        assert_eq!(tex_type.len(), ntex);
+        assert_eq!(tex_colorspace.len(), ntex);
+
+        for i in 0..ntex {
+            let raw_type = unsafe { *model.ffi().tex_type.add(i) };
+            let expected_type: MjtTexture = unsafe { crate::util::force_cast(raw_type) };
+            assert_eq!(tex_type[i], expected_type);
+
+            let raw_cs = unsafe { *model.ffi().tex_colorspace.add(i) };
+            let expected_cs: MjtColorSpace = unsafe { crate::util::force_cast(raw_cs) };
+            assert_eq!(tex_colorspace[i], expected_cs);
+        }
+
+        // "wall_tex" is 2D, sRGB
+        let wall_tex = model.texture("wall_tex").unwrap();
+        assert_eq!(tex_type[wall_tex.id], MjtTexture::mjTEXTURE_2D);
+        assert_eq!(tex_colorspace[wall_tex.id], MjtColorSpace::mjCOLORSPACE_SRGB);
+    }
+
+    /// Verifies [force]-cast for material bools and f32 arrays: mat_texuniform (bool),
+    /// mat_texrepeat (&[[f32; 2]]), mat_rgba (&[[f32; 4]]).
+    #[test]
+    fn test_force_cast_material_model_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nmat = model.ffi().nmat as usize;
+
+        if nmat == 0 {
+            return;
+        }
+
+        let mat_texuniform = model.mat_texuniform();
+        let mat_texrepeat = model.mat_texrepeat();
+        let mat_rgba = model.mat_rgba();
+
+        assert_eq!(mat_texuniform.len(), nmat);
+        assert_eq!(mat_texrepeat.len(), nmat);
+        assert_eq!(mat_rgba.len(), nmat);
+
+        for i in 0..nmat {
+            let raw_uniform = unsafe { *model.ffi().mat_texuniform.add(i) };
+            assert_eq!(mat_texuniform[i], raw_uniform != 0);
+
+            for j in 0..2 {
+                assert_eq!(mat_texrepeat[i][j], unsafe { *model.ffi().mat_texrepeat.add(i * 2 + j) });
+            }
+            for j in 0..4 {
+                assert_eq!(mat_rgba[i][j], unsafe { *model.ffi().mat_rgba.add(i * 4 + j) });
+            }
+        }
+
+        // "also_wood_material" has texuniform=false, texrepeat=[2,2], rgba=[0.8,0.5,0.3,1.0]
+        let mat = model.material("also_wood_material").unwrap();
+        assert_eq!(mat_texuniform[mat.id], false);
+        assert_eq!(mat_texrepeat[mat.id], [2.0f32, 2.0]);
+        assert_eq!(mat_rgba[mat.id], [0.8f32, 0.5, 0.3, 1.0]);
+    }
+
+    /// Verifies [force]-cast for light arrays: light mode/type enums, light_castshadow/active bools,
+    /// light_attenuation (&[[f32; 3]]), light_ambient/diffuse/specular (&[[f32; 3]]),
+    /// light_pos/dir (&[[MjtNum; 3]]).
+    #[test]
+    fn test_force_cast_light_model_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nlight = model.ffi().nlight as usize;
+
+        if nlight == 0 {
+            return;
+        }
+
+        let light_mode = model.light_mode();
+        let light_type = model.light_type();
+        let light_castshadow = model.light_castshadow();
+        let light_active = model.light_active();
+        let light_attenuation = model.light_attenuation();
+        let light_ambient = model.light_ambient();
+        let light_diffuse = model.light_diffuse();
+        let light_specular = model.light_specular();
+        let light_pos = model.light_pos();
+        let light_dir = model.light_dir();
+
+        assert_eq!(light_mode.len(), nlight);
+        assert_eq!(light_type.len(), nlight);
+        assert_eq!(light_castshadow.len(), nlight);
+        assert_eq!(light_active.len(), nlight);
+
+        for i in 0..nlight {
+            assert_eq!(light_mode[i], unsafe { crate::util::force_cast::<_, MjtCamLight>(*model.ffi().light_mode.add(i)) });
+            assert_eq!(light_type[i], unsafe { crate::util::force_cast::<_, MjtLightType>(*model.ffi().light_type.add(i)) });
+
+            let raw_shadow = unsafe { *model.ffi().light_castshadow.add(i) };
+            assert_eq!(light_castshadow[i], raw_shadow != 0);
+            let raw_active = unsafe { *model.ffi().light_active.add(i) };
+            assert_eq!(light_active[i], raw_active != 0);
+
+            for j in 0..3 {
+                assert_eq!(light_attenuation[i][j], unsafe { *model.ffi().light_attenuation.add(i * 3 + j) });
+                assert_eq!(light_ambient[i][j], unsafe { *model.ffi().light_ambient.add(i * 3 + j) });
+                assert_eq!(light_diffuse[i][j], unsafe { *model.ffi().light_diffuse.add(i * 3 + j) });
+                assert_eq!(light_specular[i][j], unsafe { *model.ffi().light_specular.add(i * 3 + j) });
+                assert_eq!(light_pos[i][j], unsafe { *model.ffi().light_pos.add(i * 3 + j) });
+                assert_eq!(light_dir[i][j], unsafe { *model.ffi().light_dir.add(i * 3 + j) });
+            }
+        }
+
+        // Verify known: "lamp_light2" is spot, mode=fixed, castshadow=true
+        let l2 = model.light("lamp_light2").unwrap();
+        assert_eq!(light_mode[l2.id], MjtCamLight::mjCAMLIGHT_FIXED);
+        assert_eq!(light_type[l2.id], MjtLightType::mjLIGHT_SPOT);
+        assert_eq!(light_castshadow[l2.id], true);
+    }
+
+    /// Verifies [force]-cast for the site arrays: site_type (MjtGeom), site_sameframe (MjtSameFrame),
+    /// site_size (&[[MjtNum; 3]]), site_pos (&[[MjtNum; 3]]), site_quat (&[[MjtNum; 4]]),
+    /// site_rgba (&[[f32; 4]]).
+    #[test]
+    fn test_force_cast_site_model_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nsite = model.ffi().nsite as usize;
+
+        let site_type = model.site_type();
+        let site_sameframe = model.site_sameframe();
+        let site_size = model.site_size();
+        let site_pos = model.site_pos();
+        let site_quat = model.site_quat();
+        let site_rgba = model.site_rgba();
+
+        assert_eq!(site_type.len(), nsite);
+        assert_eq!(site_sameframe.len(), nsite);
+        assert_eq!(site_size.len(), nsite);
+        assert_eq!(site_pos.len(), nsite);
+        assert_eq!(site_quat.len(), nsite);
+        assert_eq!(site_rgba.len(), nsite);
+
+        for i in 0..nsite {
+            assert_eq!(site_type[i], unsafe { crate::util::force_cast::<_, MjtGeom>(*model.ffi().site_type.add(i)) });
+            assert_eq!(site_sameframe[i], unsafe { crate::util::force_cast::<_, MjtSameFrame>(*model.ffi().site_sameframe.add(i)) });
+
+            for j in 0..3 {
+                assert_eq!(site_size[i][j], unsafe { *model.ffi().site_size.add(i * 3 + j) });
+                assert_eq!(site_pos[i][j], unsafe { *model.ffi().site_pos.add(i * 3 + j) });
+            }
+            for j in 0..4 {
+                assert_eq!(site_quat[i][j], unsafe { *model.ffi().site_quat.add(i * 4 + j) });
+                assert_eq!(site_rgba[i][j], unsafe { *model.ffi().site_rgba.add(i * 4 + j) });
+            }
+        }
+    }
+
+    /// Verifies [force]-cast for joint solver arrays: jnt_solref (&[[MjtNum; mjNREF]]),
+    /// jnt_solimp (&[[MjtNum; mjNIMP]]), jnt_pos (&[[MjtNum; 3]]), jnt_axis (&[[MjtNum; 3]]),
+    /// jnt_range (&[[MjtNum; 2]]).
+    #[test]
+    fn test_force_cast_joint_model_solver_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let njnt = model.ffi().njnt as usize;
+
+        let jnt_solref = model.jnt_solref();
+        let jnt_solimp = model.jnt_solimp();
+        let jnt_pos = model.jnt_pos();
+        let jnt_axis = model.jnt_axis();
+        let jnt_range = model.jnt_range();
+
+        assert_eq!(jnt_solref.len(), njnt);
+        assert_eq!(jnt_solimp.len(), njnt);
+        assert_eq!(jnt_pos.len(), njnt);
+        assert_eq!(jnt_axis.len(), njnt);
+        assert_eq!(jnt_range.len(), njnt);
+
+        let nref = mjNREF as usize;
+        let nimp = mjNIMP as usize;
+
+        for i in 0..njnt {
+            for j in 0..nref {
+                assert_eq!(jnt_solref[i][j], unsafe { *model.ffi().jnt_solref.add(i * nref + j) });
+            }
+            for j in 0..nimp {
+                assert_eq!(jnt_solimp[i][j], unsafe { *model.ffi().jnt_solimp.add(i * nimp + j) });
+            }
+            for j in 0..3 {
+                assert_eq!(jnt_pos[i][j], unsafe { *model.ffi().jnt_pos.add(i * 3 + j) });
+                assert_eq!(jnt_axis[i][j], unsafe { *model.ffi().jnt_axis.add(i * 3 + j) });
+            }
+            for j in 0..2 {
+                assert_eq!(jnt_range[i][j], unsafe { *model.ffi().jnt_range.add(i * 2 + j) });
+            }
+        }
+
+        // "rod" has axis="0 1 0", range="0 1"
+        let rod = model.joint("rod").unwrap();
+        assert_eq!(&jnt_axis[rod.id][..], &[0.0, 1.0, 0.0]);
+        assert_eq!(&jnt_range[rod.id][..], &[0.0, 1.0]);
+    }
+
+    /// Verifies [force]-cast for view fields with enum types: joint view r#type,
+    /// geom view r#type, sensor view r#type + objtype, actuator view trntype + biastype.
+    /// Tests that the view_creator! macro correctly passes [force] tokens through.
+    #[test]
+    fn test_force_cast_view_enum_fields() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+
+        // Joint type via view
+        let rod_info = model.joint("rod").unwrap();
+        let rod_view = rod_info.view(&model);
+        assert_eq!(rod_view.r#type[0], MjtJoint::mjJNT_SLIDE);
+        assert_eq!(rod_view.limited[0], true);
+
+        // Geom type via view
+        let ball2_info = model.geom("ball2").unwrap();
+        let ball2_view = ball2_info.view(&model);
+        assert_eq!(ball2_view.r#type[0], MjtGeom::mjGEOM_SPHERE);
+
+        // Sensor type via view
+        let touch_info = model.sensor("touch").unwrap();
+        let touch_view = touch_info.view(&model);
+        assert_eq!(touch_view.r#type[0], MjtSensor::mjSENS_TOUCH);
+        assert_eq!(touch_view.objtype[0], MjtObj::mjOBJ_SITE);
+
+        // Actuator types via view
+        let slider_info = model.actuator("slider").unwrap();
+        let slider_view = slider_info.view(&model);
+        assert_eq!(slider_view.trntype[0], MjtTrn::mjTRN_JOINT);
+        assert_eq!(slider_view.biastype[0], MjtBias::mjBIAS_AFFINE);
+        assert_eq!(slider_view.gaintype[0], MjtGain::mjGAIN_FIXED);
+        assert_eq!(slider_view.ctrllimited[0], true);
+
+        // Mutable enum roundtrip via view
+        let mut slider_view_mut = slider_info.view_mut(&mut model);
+        slider_view_mut.gaintype[0] = MjtGain::mjGAIN_AFFINE;
+        let slider_view2 = slider_info.view(&model);
+        assert_eq!(slider_view2.gaintype[0], MjtGain::mjGAIN_AFFINE);
+    }
+
+    /// Verifies [force]-cast for mutable flat slice roundtrip on model arrays.
+    /// Tests that mutations through force-cast mutable slices are reflected in FFI.
+    #[test]
+    fn test_force_cast_model_mut_roundtrip() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+
+        // Mutate body_pos via force-cast mutable slice
+        let ball2_id = model.body("ball2").unwrap().id;
+        let orig_pos = model.body_pos()[ball2_id];
+        assert_eq!(orig_pos, [0.5, 0.0, 0.0]);
+
+        model.body_pos_mut()[ball2_id] = [99.0, 88.0, 77.0];
+        assert_eq!(model.body_pos()[ball2_id], [99.0, 88.0, 77.0]);
+
+        // Verify FFI side
+        for j in 0..3 {
+            let ffi_val = unsafe { *model.ffi().body_pos.add(ball2_id * 3 + j) };
+            assert_eq!(ffi_val, [99.0, 88.0, 77.0][j]);
+        }
+
+        // Mutate geom_rgba via force-cast mutable slice ([f32; 4])
+        let gs_id = model.geom("green_sphere").unwrap().id;
+        model.geom_rgba_mut()[gs_id] = [1.0f32, 0.0, 0.0, 0.5];
+        assert_eq!(model.geom_rgba()[gs_id], [1.0f32, 0.0, 0.0, 0.5]);
+        for j in 0..4 {
+            assert_eq!(unsafe { *model.ffi().geom_rgba.add(gs_id * 4 + j) }, [1.0f32, 0.0, 0.0, 0.5][j]);
+        }
+    }
+
+    /// Verifies [force]-cast sublen_dep variant in model: key_qpos, key_qvel, key_act, key_ctrl.
+    /// These have variable inner dimensions dependent on nq, nv, na, nu.
+    #[test]
+    fn test_force_cast_sublen_dep_key_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nkey = model.ffi().nkey as usize;
+        let nq = model.ffi().nq as usize;
+        let nv = model.ffi().nv as usize;
+        let na = model.ffi().na as usize;
+        let nu = model.ffi().nu as usize;
+
+        assert!(nkey >= 2, "EXAMPLE_MODEL must have at least 2 keyframes");
+
+        let key_qpos = model.key_qpos();
+        let key_qvel = model.key_qvel();
+        let key_act = model.key_act();
+        let key_ctrl = model.key_ctrl();
+
+        // Total flat length must be nkey * inner_dim
+        assert_eq!(key_qpos.len(), nkey * nq);
+        assert_eq!(key_qvel.len(), nkey * nv);
+        assert_eq!(key_act.len(), nkey * na);
+        assert_eq!(key_ctrl.len(), nkey * nu);
+
+        // Cross-validate with FFI
+        for i in 0..(nkey * nq) {
+            assert_eq!(key_qpos[i], unsafe { *model.ffi().key_qpos.add(i) });
+        }
+        for i in 0..(nkey * nv) {
+            assert_eq!(key_qvel[i], unsafe { *model.ffi().key_qvel.add(i) });
+        }
+        for i in 0..(nkey * nu) {
+            assert_eq!(key_ctrl[i], unsafe { *model.ffi().key_ctrl.add(i) });
+        }
+    }
+
+    /// Tests empty model edge case: model with no optional objects should return
+    /// empty slices for all force-cast enum/bool/array fields.
+    #[test]
+    fn test_force_cast_minimal_model_edge_case() {
+        let xml = "<mujoco><worldbody><body><joint type='free'/><geom size='0.1'/></body></worldbody></mujoco>";
+        let model = MjModel::from_xml_string(xml).unwrap();
+
+        // No equalities, no tendons, no actuators, no sensors, no cameras, no lights, no textures, no materials
+        assert_eq!(model.ffi().neq, 0);
+        assert_eq!(model.ffi().ntendon, 0);
+        assert_eq!(model.ffi().nu, 0);
+        assert_eq!(model.ffi().nsensor, 0);
+        assert_eq!(model.ffi().ncam, 0);
+        assert_eq!(model.ffi().ntex, 0);
+        assert_eq!(model.ffi().nmat, 0);
+
+        // All force-cast slices should be empty
+        assert!(model.eq_type().is_empty());
+        assert!(model.eq_active0().is_empty());
+        assert!(model.tendon_limited().is_empty());
+        assert!(model.tendon_rgba().is_empty());
+        assert!(model.actuator_trntype().is_empty());
+        assert!(model.actuator_ctrllimited().is_empty());
+        assert!(model.sensor_type().is_empty());
+        assert!(model.cam_mode().is_empty());
+        assert!(model.cam_resolution().is_empty());
+        assert!(model.tex_type().is_empty());
+        assert!(model.mat_texuniform().is_empty());
+        assert!(model.mat_rgba().is_empty());
+
+        // But body/geom/joint arrays should work (always have at least world body)
+        let nbody = model.ffi().nbody as usize;
+        assert!(nbody >= 2);
+        assert_eq!(model.body_pos().len(), nbody);
+        assert_eq!(model.body_sameframe().len(), nbody);
+        assert_eq!(model.jnt_type().len(), model.ffi().njnt as usize);
+        assert_eq!(model.geom_type().len(), model.ffi().ngeom as usize);
+    }
+
+    /// Verifies [force]-cast pair arrays: pair_solref (&[[MjtNum; mjNREF]]),
+    /// pair_friction (&[[MjtNum; 5]]).
+    #[test]
+    fn test_force_cast_pair_model_arrays() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let npair = model.ffi().npair as usize;
+
+        if npair == 0 {
+            return;
+        }
+
+        let pair_solref = model.pair_solref();
+        let pair_friction = model.pair_friction();
+        let pair_solimp = model.pair_solimp();
+
+        assert_eq!(pair_solref.len(), npair);
+        assert_eq!(pair_friction.len(), npair);
+        assert_eq!(pair_solimp.len(), npair);
+
+        let nref = mjNREF as usize;
+        let nimp = mjNIMP as usize;
+
+        for i in 0..npair {
+            for j in 0..nref {
+                assert_eq!(pair_solref[i][j], unsafe { *model.ffi().pair_solref.add(i * nref + j) });
+            }
+            for j in 0..5 {
+                assert_eq!(pair_friction[i][j], unsafe { *model.ffi().pair_friction.add(i * 5 + j) });
+            }
+            for j in 0..nimp {
+                assert_eq!(pair_solimp[i][j], unsafe { *model.ffi().pair_solimp.add(i * nimp + j) });
+            }
+        }
+    }
+
+    /// Verifies [force]-cast non-aliasing: adjacent joints' solver ref slices
+    /// point to different memory.
+    #[test]
+    fn test_force_cast_model_non_aliasing() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let njnt = model.ffi().njnt as usize;
+
+        if njnt < 2 {
+            return;
+        }
+
+        let jnt_solref = model.jnt_solref();
+        let jnt_type = model.jnt_type();
+
+        // Adjacent elements must not alias
+        assert_ne!(jnt_solref[0].as_ptr(), jnt_solref[1].as_ptr());
+        assert_ne!(std::ptr::addr_of!(jnt_type[0]), std::ptr::addr_of!(jnt_type[1]));
+
+        // Pointer stride should be exactly mjNREF elements apart
+        let ptr_diff = unsafe { jnt_solref[1].as_ptr().offset_from(jnt_solref[0].as_ptr()) };
+        assert_eq!(ptr_diff, mjNREF as isize,
+            "jnt_solref stride must be mjNREF={}", mjNREF);
+    }
 }

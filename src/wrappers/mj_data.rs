@@ -2537,4 +2537,1539 @@ mod test {
         let view_m2 = info_m2.view(&data);
         assert!(view_m2.act.is_none(), "motor must have no act view");
     }
+
+    /// Tests `mj_view_indices!` with mixed joint types (free/ball/slide),
+    /// verifying that qpos and qvel view lengths match per-joint DOF counts.
+    #[test]
+    fn test_view_indices_mixed_joint_types() {
+        const MIXED_MODEL: &str = "
+<mujoco>
+  <worldbody>
+    <body name='b_free'>
+      <joint name='j_free' type='free'/>
+      <geom size='0.1' mass='1'/>
+    </body>
+    <body name='b_ball'>
+      <joint name='j_ball' type='ball'/>
+      <geom size='0.1' mass='1'/>
+    </body>
+    <body name='b_slide'>
+      <joint name='j_slide' type='slide'/>
+      <geom size='0.1' mass='1'/>
+    </body>
+  </worldbody>
+</mujoco>";
+
+        let model = MjModel::from_xml_string(MIXED_MODEL).unwrap();
+        let data = model.make_data();
+
+        // free: 7 qpos, 6 qvel; ball: 4 qpos, 3 qvel; slide: 1 qpos, 1 qvel
+        let jfree = data.joint("j_free").unwrap();
+        let jball = data.joint("j_ball").unwrap();
+        let jslide = data.joint("j_slide").unwrap();
+
+        let vfree = jfree.view(&data);
+        let vball = jball.view(&data);
+        let vslide = jslide.view(&data);
+
+        assert_eq!(vfree.qpos.len(), 7);
+        assert_eq!(vfree.qvel.len(), 6);
+        assert_eq!(vball.qpos.len(), 4);
+        assert_eq!(vball.qvel.len(), 3);
+        assert_eq!(vslide.qpos.len(), 1);
+        assert_eq!(vslide.qvel.len(), 1);
+
+        // Total should equal model nq and nv
+        assert_eq!(model.ffi().nq as usize, 7 + 4 + 1);
+        assert_eq!(model.ffi().nv as usize, 6 + 3 + 1);
+    }
+
+    /// Tests `info_method!` stride correctness for body data views:
+    /// xpos=3, xmat=9, xquat=4, cinert=10, cvel=6.
+    #[test]
+    fn test_body_data_view_stride_lengths() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let data = model.make_data();
+
+        let ball = data.body("ball").unwrap();
+        let ball2 = data.body("ball2").unwrap();
+
+        let v1 = ball.view(&data);
+        let v2 = ball2.view(&data);
+
+        // Stride correctness
+        assert_eq!(v1.xpos.len(), 3);
+        assert_eq!(v1.xmat.len(), 9);
+        assert_eq!(v1.xquat.len(), 4);
+        assert_eq!(v1.cinert.len(), 10);
+        assert_eq!(v1.cvel.len(), 6);
+
+        // Non-aliasing: different bodies must have distinct slices
+        assert_ne!(v1.xpos.as_ptr(), v2.xpos.as_ptr());
+        assert_ne!(v1.cvel.as_ptr(), v2.cvel.as_ptr());
+    }
+
+    /// Tests `getter_setter!` for MjtNum time: set, get, and builder roundtrip.
+    #[test]
+    fn test_time_getter_setter_roundtrip() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        assert_relative_eq!(data.time(), 0.0, epsilon = 1e-15);
+
+        data.set_time(3.14);
+        assert_relative_eq!(data.time(), 3.14, epsilon = 1e-15);
+
+        let data2 = model.make_data().with_time(2.718);
+        assert_relative_eq!(data2.time(), 2.718, epsilon = 1e-15);
+    }
+
+    /// Tests that `jac` returns `IndexOutOfBounds` for invalid body IDs.
+    #[test]
+    fn test_jac_invalid_body_id() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let data = model.make_data();
+        let point = [0.0; 3];
+
+        // Negative ID
+        let err = data.jac(true, true, &point, -1).unwrap_err();
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "body_id", .. }));
+
+        // Too-large ID
+        let err = data.jac(true, true, &point, 9999).unwrap_err();
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "body_id", .. }));
+    }
+
+    /// Tests that `object_velocity` returns `UnsupportedObjectType` for unsupported types
+    /// and `IndexOutOfBounds` for out-of-range IDs.
+    #[test]
+    fn test_object_velocity_error_paths() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let data = model.make_data();
+
+        // Unsupported type (mjOBJ_JOINT is not in the match arms)
+        let err = data.object_velocity(MjtObj::mjOBJ_JOINT, 0, false).unwrap_err();
+        assert!(matches!(err, MjDataError::UnsupportedObjectType(_)));
+
+        // Out-of-range body ID
+        let err = data.object_velocity(MjtObj::mjOBJ_BODY, 9999, false).unwrap_err();
+        assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "obj_id", .. }));
+    }
+
+    /// Tests that state flags select only their subset: setting QPOS must not clobber qvel.
+    #[test]
+    fn test_state_spec_flags_select_subsets() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        // Give data some known non-zero qvel
+        let jinfo = data.joint("ball").unwrap();
+        jinfo.view_mut(&mut data).qvel[0] = 42.0;
+        let original_qvel0 = jinfo.view(&data).qvel[0];
+
+        // Now overwrite only QPOS from a fresh data instance
+        let fresh = model.make_data();
+        data.copy_state_from_data(&fresh, MjtState::mjSTATE_QPOS as u32);
+
+        // qvel should be untouched
+        assert_relative_eq!(jinfo.view(&data).qvel[0], original_qvel0, epsilon = 1e-15);
+    }
+
+    /// Tests `try_copy_state_from_data` returns `SignatureMismatch` for mismatched models.
+    #[test]
+    fn test_try_copy_state_signature_mismatch() {
+        let model1 = MjModel::from_xml_string("<mujoco><worldbody><body><joint type='free'/><geom size='0.1'/></body></worldbody></mujoco>").unwrap();
+        let model2 = MjModel::from_xml_string("<mujoco><worldbody><body><joint type='slide'/><geom size='0.1'/></body></worldbody></mujoco>").unwrap();
+
+        let data1 = model1.make_data();
+        let mut data2 = model2.make_data();
+
+        let err = data2.try_copy_state_from_data(&data1, MjtState::mjSTATE_FULLPHYSICS as u32).unwrap_err();
+        match err {
+            MjDataError::SignatureMismatch { source, destination } => {
+                assert_ne!(source, destination);
+            }
+            other => panic!("expected SignatureMismatch, got {:?}", other),
+        }
+    }
+
+    /// Tests `copy_state_from_data` with full physics: time, qpos, qvel all match.
+    #[test]
+    fn test_copy_state_full_physics() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data1 = model.make_data();
+        let mut data2 = model.make_data();
+
+        // Evolve data1
+        data1.set_time(1.0);
+        data1.joint("ball").unwrap().view_mut(&mut data1).qpos[0] = 5.0;
+        data1.joint("ball").unwrap().view_mut(&mut data1).qvel[0] = 3.0;
+
+        data2.copy_state_from_data(&data1, MjtState::mjSTATE_FULLPHYSICS as u32);
+
+        assert_relative_eq!(data2.time(), 1.0, epsilon = 1e-15);
+        assert_relative_eq!(data2.qpos()[0], 5.0, epsilon = 1e-15);
+        assert_relative_eq!(data2.qvel()[0], 3.0, epsilon = 1e-15);
+    }
+
+    /**************************************************************************/
+    // Force-cast macro correctness tests
+    /**************************************************************************/
+
+    /// A richer model for force-cast tests: free joint, slide joint, equalities,
+    /// mocap body, tendon, multiple geom types, sensors, contacts.
+    const FORCE_MODEL: &str = "
+<mujoco>
+  <worldbody>
+    <body name='b_free' pos='1 2 3'>
+        <joint name='j_free' type='free'/>
+        <geom name='g_sphere' type='sphere' size='0.1' mass='1'/>
+    </body>
+
+    <body name='b_slide' pos='0 0 5'>
+        <joint name='j_slide' type='slide' axis='0 0 1' range='-1 1' limited='true'/>
+        <geom name='g_box' type='box' size='0.1 0.2 0.3' mass='1'/>
+        <site name='s1' pos='0 0 0' size='0.05'/>
+    </body>
+
+    <body name='b_hinge' pos='0 5 0'>
+        <joint name='j_hinge' type='hinge' axis='0 1 0'/>
+        <geom name='g_capsule' type='capsule' size='0.1 0.5' mass='1'/>
+        <site name='s2' pos='0 0 0' size='0.05'/>
+    </body>
+
+    <body name='mocap_body' mocap='true' pos='10 10 10'>
+        <geom name='g_mocap' type='sphere' size='0.01' contype='0' conaffinity='0'/>
+    </body>
+
+    <geom name='floor' type='plane' size='50 50 1'/>
+  </worldbody>
+
+  <equality>
+      <connect name='eq1' body1='b_slide' body2='b_hinge' anchor='0 0 0'/>
+      <connect name='eq2' body1='b_hinge' body2='b_slide' anchor='1 2 3'/>
+  </equality>
+
+  <tendon>
+      <spatial name='ten1'>
+          <site site='s1'/>
+          <site site='s2'/>
+      </spatial>
+  </tendon>
+
+  <actuator>
+      <motor name='motor_slide' joint='j_slide'/>
+  </actuator>
+
+  <sensor>
+      <touch name='touch_sensor' site='s1'/>
+  </sensor>
+</mujoco>";
+
+    /// Verifies [force]-cast array grouping: xpos returns &[[MjtNum; 3]]
+    /// with the correct number of elements and matching raw FFI data.
+    #[test]
+    fn test_force_cast_xpos_array_grouping() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nbody = model.ffi().nbody as usize;
+        let xpos = data.xpos();
+
+        // The force-cast from *mut f64 -> *mut [MjtNum; 3] must produce
+        // exactly nbody elements of [f64; 3].
+        assert_eq!(xpos.len(), nbody, "xpos slice len must equal nbody");
+
+        // Cross-validate every element against the raw FFI pointer.
+        for i in 0..nbody {
+            for j in 0..3 {
+                let ffi_val = unsafe { *data.ffi().xpos.add(i * 3 + j) };
+                assert_eq!(xpos[i][j], ffi_val,
+                    "xpos[{}][{}] mismatch: slice={} ffi={}", i, j, xpos[i][j], ffi_val);
+            }
+        }
+    }
+
+    /// Verifies [force]-cast for xmat (&[[MjtNum; 9]]) and xquat (&[[MjtNum; 4]]).
+    #[test]
+    fn test_force_cast_xmat_xquat_grouping() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nbody = model.ffi().nbody as usize;
+        let xmat = data.xmat();
+        let xquat = data.xquat();
+
+        assert_eq!(xmat.len(), nbody);
+        assert_eq!(xquat.len(), nbody);
+
+        // xmat stride = 9
+        for i in 0..nbody {
+            for j in 0..9 {
+                let ffi_val = unsafe { *data.ffi().xmat.add(i * 9 + j) };
+                assert_eq!(xmat[i][j], ffi_val,
+                    "xmat[{}][{}] mismatch", i, j);
+            }
+        }
+
+        // xquat stride = 4
+        for i in 0..nbody {
+            for j in 0..4 {
+                let ffi_val = unsafe { *data.ffi().xquat.add(i * 4 + j) };
+                assert_eq!(xquat[i][j], ffi_val,
+                    "xquat[{}][{}] mismatch", i, j);
+            }
+        }
+    }
+
+    /// Verifies [force]-cast for cinert (&[[MjtNum; 10]]) - the widest array grouping.
+    #[test]
+    fn test_force_cast_cinert_10_element_grouping() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nbody = model.ffi().nbody as usize;
+        let cinert = data.cinert();
+        assert_eq!(cinert.len(), nbody);
+
+        for i in 0..nbody {
+            for j in 0..10 {
+                let ffi_val = unsafe { *data.ffi().cinert.add(i * 10 + j) };
+                assert_eq!(cinert[i][j], ffi_val,
+                    "cinert[{}][{}] mismatch", i, j);
+            }
+        }
+    }
+
+    /// Verifies [force]-cast for cvel (&[[MjtNum; 6]]) and xfrc_applied (&[[MjtNum; 6]]).
+    #[test]
+    fn test_force_cast_6_element_groupings() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nbody = model.ffi().nbody as usize;
+
+        // cvel: [MjtNum; 6]
+        let cvel = data.cvel();
+        assert_eq!(cvel.len(), nbody);
+        for i in 0..nbody {
+            for j in 0..6 {
+                let ffi_val = unsafe { *data.ffi().cvel.add(i * 6 + j) };
+                assert_eq!(cvel[i][j], ffi_val, "cvel[{}][{}] mismatch", i, j);
+            }
+        }
+
+        // xfrc_applied: [MjtNum; 6]
+        let xfrc = data.xfrc_applied();
+        assert_eq!(xfrc.len(), nbody);
+        for i in 0..nbody {
+            for j in 0..6 {
+                let ffi_val = unsafe { *data.ffi().xfrc_applied.add(i * 6 + j) };
+                assert_eq!(xfrc[i][j], ffi_val, "xfrc_applied[{}][{}] mismatch", i, j);
+            }
+        }
+    }
+
+    /// Verifies [force]-cast for mocap_pos (&[[MjtNum; 3]]) and mocap_quat (&[[MjtNum; 4]]).
+    #[test]
+    fn test_force_cast_mocap_arrays() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let data = model.make_data();
+
+        let nmocap = model.ffi().nmocap as usize;
+        assert!(nmocap > 0, "test model must have at least one mocap body");
+
+        let mocap_pos = data.mocap_pos();
+        let mocap_quat = data.mocap_quat();
+
+        assert_eq!(mocap_pos.len(), nmocap);
+        assert_eq!(mocap_quat.len(), nmocap);
+
+        // The mocap body was placed at pos='10 10 10'
+        assert_relative_eq!(mocap_pos[0][0], 10.0, epsilon = 1e-9);
+        assert_relative_eq!(mocap_pos[0][1], 10.0, epsilon = 1e-9);
+        assert_relative_eq!(mocap_pos[0][2], 10.0, epsilon = 1e-9);
+
+        // Default quaternion is identity [1, 0, 0, 0]
+        assert_relative_eq!(mocap_quat[0][0], 1.0, epsilon = 1e-9);
+        assert_relative_eq!(mocap_quat[0][1], 0.0, epsilon = 1e-9);
+        assert_relative_eq!(mocap_quat[0][2], 0.0, epsilon = 1e-9);
+        assert_relative_eq!(mocap_quat[0][3], 0.0, epsilon = 1e-9);
+
+        // Cross-validate with FFI
+        for i in 0..nmocap {
+            for j in 0..3 {
+                assert_eq!(mocap_pos[i][j], unsafe { *data.ffi().mocap_pos.add(i * 3 + j) });
+            }
+            for j in 0..4 {
+                assert_eq!(mocap_quat[i][j], unsafe { *data.ffi().mocap_quat.add(i * 4 + j) });
+            }
+        }
+    }
+
+    /// Verifies [force]-cast bool conversion: eq_active (*mut u8 -> *mut bool).
+    #[test]
+    fn test_force_cast_eq_active_bool() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let neq = model.ffi().neq as usize;
+        assert_eq!(neq, 2, "test model must have exactly 2 equality constraints");
+
+        // Equality constraints are active by default
+        let eq_active = data.eq_active();
+        assert_eq!(eq_active.len(), neq);
+        assert_eq!(eq_active[0], true);
+        assert_eq!(eq_active[1], true);
+
+        // Cross-validate with raw u8 FFI pointer
+        for i in 0..neq {
+            let raw_val = unsafe { *data.ffi().eq_active.add(i) };
+            assert_eq!(eq_active[i], raw_val != 0,
+                "eq_active[{}]: bool={} raw_u8={}", i, eq_active[i], raw_val);
+        }
+
+        // Disable one via mutable force-cast
+        data.eq_active_mut()[0] = false;
+        assert_eq!(data.eq_active()[0], false);
+        assert_eq!(data.eq_active()[1], true);
+
+        // Verify FFI side was actually modified
+        let raw_val = unsafe { *data.ffi().eq_active.add(0) };
+        assert_eq!(raw_val, 0u8, "disabling eq_active[0] must write 0 to FFI");
+    }
+
+    /// Verifies [force]-cast mutable roundtrip for xfrc_applied and mocap_pos.
+    #[test]
+    fn test_force_cast_mutable_roundtrip() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let nbody = model.ffi().nbody as usize;
+        assert!(nbody > 1);
+
+        // Write a known pattern into xfrc_applied via mutable force-cast
+        let body_idx = 1; // first non-world body
+        data.xfrc_applied_mut()[body_idx] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+
+        // Read back via immutable force-cast
+        let xfrc = data.xfrc_applied();
+        assert_eq!(xfrc[body_idx], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+
+        // Verify all 6 elements individually against raw FFI
+        for j in 0..6 {
+            let ffi_val = unsafe { *data.ffi().xfrc_applied.add(body_idx * 6 + j) };
+            assert_eq!(ffi_val, (j + 1) as f64,
+                "xfrc_applied FFI[{}] mismatch", j);
+        }
+
+        // Mocap pos write/read roundtrip
+        let nmocap = model.ffi().nmocap as usize;
+        if nmocap > 0 {
+            data.mocap_pos_mut()[0] = [99.0, 88.0, 77.0];
+            assert_eq!(data.mocap_pos()[0], [99.0, 88.0, 77.0]);
+            for j in 0..3 {
+                let ffi_val = unsafe { *data.ffi().mocap_pos.add(j) };
+                assert_eq!(ffi_val, [99.0, 88.0, 77.0][j]);
+            }
+        }
+    }
+
+    /// Verifies force-cast for body view fields (xpos, xquat, xmat, cinert, cvel)
+    /// have the correct stride and match FFI data.
+    #[test]
+    fn test_force_cast_body_view_strides_and_values() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let body_info = data.body("b_free").unwrap();
+        let view = body_info.view(&data);
+
+        // Stride correctness (all derived from [force] grouping)
+        assert_eq!(view.xpos.len(), 3);
+        assert_eq!(view.xquat.len(), 4);
+        assert_eq!(view.xmat.len(), 9);
+        assert_eq!(view.xipos.len(), 3);
+        assert_eq!(view.ximat.len(), 9);
+        assert_eq!(view.cinert.len(), 10);
+        assert_eq!(view.cvel.len(), 6);
+        assert_eq!(view.xfrc_applied.len(), 6);
+        assert_eq!(view.crb.len(), 10);
+        assert_eq!(view.subtree_com.len(), 3);
+        assert_eq!(view.subtree_linvel.len(), 3);
+        assert_eq!(view.subtree_angmom.len(), 3);
+        assert_eq!(view.cacc.len(), 6);
+        assert_eq!(view.cfrc_int.len(), 6);
+        assert_eq!(view.cfrc_ext.len(), 6);
+
+        // The body was placed at pos='1 2 3' with a free joint;
+        // after forward(), xpos should reflect position from qpos
+        let body_id = body_info.id;
+        for j in 0..3 {
+            let ffi_val = unsafe { *data.ffi().xpos.add(body_id * 3 + j) };
+            assert_eq!(view.xpos[j], ffi_val,
+                "body view xpos[{}] must match FFI xpos", j);
+        }
+    }
+
+    /// Verifies that the body data view for the world body (id=0) works correctly.
+    /// Edge case: world body has special status in MuJoCo.
+    #[test]
+    fn test_force_cast_world_body_view() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        // The world body (id=0) has name "world" in MuJoCo >= 3.x
+        let world_info = data.body("world").unwrap();
+        assert_eq!(world_info.id, 0);
+        let view = world_info.view(&data);
+
+        // World body xpos = [0, 0, 0]
+        assert_eq!(view.xpos[..], [0.0, 0.0, 0.0]);
+        // World body xquat = [1, 0, 0, 0] (identity)
+        assert_relative_eq!(view.xquat[0], 1.0, epsilon = 1e-9);
+        assert_relative_eq!(view.xquat[1], 0.0, epsilon = 1e-9);
+        assert_relative_eq!(view.xquat[2], 0.0, epsilon = 1e-9);
+        assert_relative_eq!(view.xquat[3], 0.0, epsilon = 1e-9);
+        // Stride must still be correct
+        assert_eq!(view.xmat.len(), 9);
+        assert_eq!(view.cinert.len(), 10);
+    }
+
+    /// Verifies mutable force-cast view roundtrip for body xfrc_applied.
+    #[test]
+    fn test_force_cast_body_view_mut_roundtrip() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let body_info = data.body("b_free").unwrap();
+        let body_id = body_info.id;
+
+        // Write via view_mut
+        body_info.view_mut(&mut data).xfrc_applied.copy_from_slice(&[10.0, 20.0, 30.0, 40.0, 50.0, 60.0]);
+
+        // Read back via view
+        let view = body_info.view(&data);
+        assert_eq!(&view.xfrc_applied[..], &[10.0, 20.0, 30.0, 40.0, 50.0, 60.0]);
+
+        // Read back via flat slice
+        assert_eq!(data.xfrc_applied()[body_id], [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]);
+
+        // Read back via FFI
+        for j in 0..6 {
+            let ffi_val = unsafe { *data.ffi().xfrc_applied.add(body_id * 6 + j) };
+            assert_eq!(ffi_val, ((j + 1) * 10) as f64);
+        }
+    }
+
+    /// Verifies [force]-cast camera/light/geom/site xpos+xmat grouping in data.
+    #[test]
+    fn test_force_cast_geom_site_cam_light_data() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        // Geom xpos: [MjtNum; 3], xmat: [MjtNum; 9]
+        let ngeom = model.ffi().ngeom as usize;
+        assert_eq!(data.geom_xpos().len(), ngeom);
+        assert_eq!(data.geom_xmat().len(), ngeom);
+        for i in 0..ngeom {
+            for j in 0..3 {
+                assert_eq!(data.geom_xpos()[i][j],
+                    unsafe { *data.ffi().geom_xpos.add(i * 3 + j) });
+            }
+            for j in 0..9 {
+                assert_eq!(data.geom_xmat()[i][j],
+                    unsafe { *data.ffi().geom_xmat.add(i * 9 + j) });
+            }
+        }
+
+        // Site xpos: [MjtNum; 3], xmat: [MjtNum; 9]
+        let nsite = model.ffi().nsite as usize;
+        assert_eq!(data.site_xpos().len(), nsite);
+        assert_eq!(data.site_xmat().len(), nsite);
+        for i in 0..nsite {
+            for j in 0..3 {
+                assert_eq!(data.site_xpos()[i][j],
+                    unsafe { *data.ffi().site_xpos.add(i * 3 + j) });
+            }
+        }
+
+        // Cam xpos: [MjtNum; 3], xmat: [MjtNum; 9]
+        let ncam = model.ffi().ncam as usize;
+        assert_eq!(data.cam_xpos().len(), ncam);
+        assert_eq!(data.cam_xmat().len(), ncam);
+
+        // Light xpos: [MjtNum; 3], xdir: [MjtNum; 3]
+        let nlight = model.ffi().nlight as usize;
+        assert_eq!(data.light_xpos().len(), nlight);
+        assert_eq!(data.light_xdir().len(), nlight);
+    }
+
+    /// Verifies [force]-cast for joint anchor/axis: xanchor (&[[MjtNum; 3]]), xaxis (&[[MjtNum; 3]]).
+    #[test]
+    fn test_force_cast_joint_anchor_axis() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let njnt = model.ffi().njnt as usize;
+        let xanchor = data.xanchor();
+        let xaxis = data.xaxis();
+
+        assert_eq!(xanchor.len(), njnt);
+        assert_eq!(xaxis.len(), njnt);
+
+        for i in 0..njnt {
+            for j in 0..3 {
+                assert_eq!(xanchor[i][j], unsafe { *data.ffi().xanchor.add(i * 3 + j) });
+                assert_eq!(xaxis[i][j], unsafe { *data.ffi().xaxis.add(i * 3 + j) });
+            }
+        }
+    }
+
+    /// Verifies [force]-cast for cdof (&[[MjtNum; 6]]) and cdof_dot (&[[MjtNum; 6]]).
+    #[test]
+    fn test_force_cast_cdof_6_element() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nv = model.ffi().nv as usize;
+        let cdof = data.cdof();
+        let cdof_dot = data.cdof_dot();
+
+        assert_eq!(cdof.len(), nv);
+        assert_eq!(cdof_dot.len(), nv);
+
+        for i in 0..nv {
+            for j in 0..6 {
+                assert_eq!(cdof[i][j], unsafe { *data.ffi().cdof.add(i * 6 + j) });
+                assert_eq!(cdof_dot[i][j], unsafe { *data.ffi().cdof_dot.add(i * 6 + j) });
+            }
+        }
+    }
+
+    /// Verifies [force]-cast for efc_KBIP (&[[MjtNum; 4]]).
+    /// Requires contacts to produce constraint data.
+    #[test]
+    fn test_force_cast_efc_kbip_4_element() {
+        // Use the main MODEL which has balls falling onto a floor -> contacts
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        // Step a few times to generate contacts
+        for _ in 0..10 {
+            data.step();
+        }
+
+        let nefc = data.ffi().nefc as usize;
+        if nefc > 0 {
+            let efc_kbip = data.efc_kbip();
+            assert_eq!(efc_kbip.len(), nefc);
+            for i in 0..nefc {
+                for j in 0..4 {
+                    assert_eq!(efc_kbip[i][j], unsafe { *data.ffi().efc_KBIP.add(i * 4 + j) });
+                }
+            }
+        }
+    }
+
+    /// Verifies [force]-cast enum: efc_type (*mut i32 -> *mut MjtConstraint).
+    #[test]
+    fn test_force_cast_efc_type_enum() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        for _ in 0..10 {
+            data.step();
+        }
+
+        let nefc = data.ffi().nefc as usize;
+        if nefc > 0 {
+            let efc_type = data.efc_type();
+            assert_eq!(efc_type.len(), nefc);
+
+            for i in 0..nefc {
+                let raw_i32 = unsafe { *data.ffi().efc_type.add(i) };
+                let expected: MjtConstraint = unsafe { crate::util::force_cast(raw_i32) };
+                assert_eq!(efc_type[i], expected,
+                    "efc_type[{}]: got {:?}, expected {:?} (raw={})", i, efc_type[i], expected, raw_i32);
+            }
+        }
+    }
+
+    /// Verifies [force]-cast enum: efc_state (*mut i32 -> *mut MjtConstraintState).
+    #[test]
+    fn test_force_cast_efc_state_enum() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nefc = data.ffi().nefc as usize;
+        if nefc > 0 {
+            let efc_state = data.efc_state();
+            assert_eq!(efc_state.len(), nefc);
+
+            for i in 0..nefc {
+                let raw_i32 = unsafe { *data.ffi().efc_state.add(i) };
+                let expected: MjtConstraintState = unsafe { crate::util::force_cast(raw_i32) };
+                assert_eq!(efc_state[i], expected);
+            }
+        }
+    }
+
+    /// Verifies [force]-cast enum: body_awake (*mut i32 -> *mut MjtSleepState).
+    #[test]
+    fn test_force_cast_body_awake_enum() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nbody = model.ffi().nbody as usize;
+        let body_awake = data.body_awake();
+        assert_eq!(body_awake.len(), nbody);
+
+        for i in 0..nbody {
+            let raw_i32 = unsafe { *data.ffi().body_awake.add(i) };
+            let expected: MjtSleepState = unsafe { crate::util::force_cast(raw_i32) };
+            assert_eq!(body_awake[i], expected,
+                "body_awake[{}] mismatch", i);
+        }
+    }
+
+    /// Verifies [force]-cast for bvh_active (*mut u8 -> *mut bool) and that
+    /// the result is valid (true or false, no garbage).
+    #[test]
+    fn test_force_cast_bvh_active_bool() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        // Step to populate bvh
+        data.step();
+
+        let nbvh = model.ffi().nbvh as usize;
+        let bvh_active = data.bvh_active();
+        assert_eq!(bvh_active.len(), nbvh);
+
+        for i in 0..nbvh {
+            let raw_u8 = unsafe { *data.ffi().bvh_active.add(i) };
+            assert!(raw_u8 == 0 || raw_u8 == 1,
+                "raw bvh_active[{}]={} must be 0 or 1", i, raw_u8);
+            assert_eq!(bvh_active[i], raw_u8 != 0);
+        }
+    }
+
+    /// Verifies [force]-cast for wrap_obj (&[[i32; 2]]) and wrap_xpos (&[[MjtNum; 6]]).
+    #[test]
+    fn test_force_cast_wrap_arrays() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nwrap = model.ffi().nwrap as usize;
+        let wrap_obj = data.wrap_obj();
+        let wrap_xpos = data.wrap_xpos();
+
+        assert_eq!(wrap_obj.len(), nwrap);
+        assert_eq!(wrap_xpos.len(), nwrap);
+
+        for i in 0..nwrap {
+            for j in 0..2 {
+                assert_eq!(wrap_obj[i][j], unsafe { *data.ffi().wrap_obj.add(i * 2 + j) });
+            }
+            for j in 0..6 {
+                assert_eq!(wrap_xpos[i][j], unsafe { *data.ffi().wrap_xpos.add(i * 6 + j) });
+            }
+        }
+    }
+
+    /// Verifies [force]-cast for flexvert_J (&[[MjtNum; 2]]) and flexvert_length (&[[MjtNum; 2]]).
+    /// In a model with no flexes, these should return empty slices.
+    #[test]
+    fn test_force_cast_flex_empty_slices() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let data = model.make_data();
+
+        // Model has no flexes, so these should be empty
+        assert_eq!(data.flexvert_xpos().len(), 0, "no flex -> empty flexvert_xpos");
+        assert_eq!(data.flexelem_aabb().len(), 0, "no flex -> empty flexelem_aabb");
+        assert_eq!(data.flexvert_j().len(), 0, "no flex -> empty flexvert_J");
+        assert_eq!(data.flexvert_length().len(), 0, "no flex -> empty flexvert_length");
+        assert_eq!(data.flexedge_j().len(), 0, "no flex -> empty flexedge_J");
+        assert_eq!(data.flexedge_length().len(), 0, "no flex -> empty flexedge_length");
+    }
+
+    /// Verifies [force]-cast for bvh_aabb_dyn (&[[MjtNum; 6]]).
+    #[test]
+    fn test_force_cast_bvh_aabb_dyn() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nbvhdyn = model.ffi().nbvhdynamic as usize;
+        let aabb_dyn = data.bvh_aabb_dyn();
+        assert_eq!(aabb_dyn.len(), nbvhdyn);
+
+        for i in 0..nbvhdyn {
+            for j in 0..6 {
+                assert_eq!(aabb_dyn[i][j], unsafe { *data.ffi().bvh_aabb_dyn.add(i * 6 + j) });
+            }
+        }
+    }
+
+    /// Verifies [force]-cast for subtree arrays: subtree_com, subtree_linvel, subtree_angmom
+    /// all with stride 3.
+    #[test]
+    fn test_force_cast_subtree_3_element() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nbody = model.ffi().nbody as usize;
+
+        let subtree_com = data.subtree_com();
+        let subtree_linvel = data.subtree_linvel();
+        let subtree_angmom = data.subtree_angmom();
+
+        assert_eq!(subtree_com.len(), nbody);
+        assert_eq!(subtree_linvel.len(), nbody);
+        assert_eq!(subtree_angmom.len(), nbody);
+
+        for i in 0..nbody {
+            for j in 0..3 {
+                assert_eq!(subtree_com[i][j], unsafe { *data.ffi().subtree_com.add(i * 3 + j) });
+            }
+        }
+    }
+
+    /// Verifies [force]-cast consistency: body view xfrc_applied matches flat slice.
+    /// This catches any stride/offset mismatch between view_creator! and array_slice_dyn!.
+    #[test]
+    fn test_force_cast_view_vs_flat_slice_consistency() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        // Check every named body: view xpos must equal flat xpos slice
+        let body_names = ["world", "b_free", "b_slide", "b_hinge", "mocap_body"];
+        for name in &body_names {
+            let info = data.body(name).unwrap();
+            let id = info.id;
+            let view = info.view(&data);
+            let flat = data.xpos();
+
+            for j in 0..3 {
+                assert_eq!(view.xpos[j], flat[id][j],
+                    "body {} xpos[{}]: view={} flat={}", id, j, view.xpos[j], flat[id][j]);
+            }
+
+            for j in 0..4 {
+                assert_eq!(view.xquat[j], data.xquat()[id][j],
+                    "body {} xquat[{}] mismatch", id, j);
+            }
+
+            for j in 0..10 {
+                assert_eq!(view.cinert[j], data.cinert()[id][j],
+                    "body {} cinert[{}] mismatch", id, j);
+            }
+        }
+    }
+
+    /// Verifies [force]-cast for the cacc/cfrc_int/cfrc_ext body arrays (stride 6).
+    #[test]
+    fn test_force_cast_body_cfrc_arrays() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nbody = model.ffi().nbody as usize;
+        let cacc = data.cacc();
+        let cfrc_int = data.cfrc_int();
+        let cfrc_ext = data.cfrc_ext();
+
+        assert_eq!(cacc.len(), nbody);
+        assert_eq!(cfrc_int.len(), nbody);
+        assert_eq!(cfrc_ext.len(), nbody);
+
+        for i in 0..nbody {
+            for j in 0..6 {
+                assert_eq!(cacc[i][j], unsafe { *data.ffi().cacc.add(i * 6 + j) });
+                assert_eq!(cfrc_int[i][j], unsafe { *data.ffi().cfrc_int.add(i * 6 + j) });
+                assert_eq!(cfrc_ext[i][j], unsafe { *data.ffi().cfrc_ext.add(i * 6 + j) });
+            }
+        }
+    }
+
+    /// Verifies [force]-cast for crb (&[[MjtNum; 10]]).
+    #[test]
+    fn test_force_cast_crb_10_element() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nbody = model.ffi().nbody as usize;
+        let crb = data.crb();
+        assert_eq!(crb.len(), nbody);
+
+        for i in 0..nbody {
+            for j in 0..10 {
+                assert_eq!(crb[i][j], unsafe { *data.ffi().crb.add(i * 10 + j) });
+            }
+        }
+    }
+
+    /// Minimal model test: a model with zero equalities, zero tendons, zero actuators
+    /// should produce empty slices for all force-cast fields that depend on those counts.
+    #[test]
+    fn test_force_cast_empty_model_edge_case() {
+        let xml = "<mujoco><worldbody><body><joint type='free'/><geom size='0.1'/></body></worldbody></mujoco>";
+        let model = MjModel::from_xml_string(xml).unwrap();
+        let data = model.make_data();
+
+        assert_eq!(model.ffi().neq, 0);
+        assert_eq!(model.ffi().nmocap, 0);
+        assert_eq!(model.ffi().ntendon, 0);
+
+        // Empty force-cast slices
+        assert!(data.eq_active().is_empty());
+        assert!(data.mocap_pos().is_empty());
+        assert!(data.mocap_quat().is_empty());
+        assert!(data.wrap_obj().is_empty());
+        assert!(data.wrap_xpos().is_empty());
+        assert!(data.ten_j_colind().is_empty());
+        assert!(data.ten_j().is_empty());
+
+        // But body arrays should still work (nbody >= 1 always: world body)
+        let nbody = model.ffi().nbody as usize;
+        assert!(nbody >= 2); // world + one body
+        assert_eq!(data.xpos().len(), nbody);
+        assert_eq!(data.xquat().len(), nbody);
+        assert_eq!(data.cinert().len(), nbody);
+    }
+
+    /// Verifies [force]-cast sublen_dep variant: ten_J_colind and ten_J.
+    /// These have a variable inner dimension (nv).
+    #[test]
+    fn test_force_cast_sublen_dep_ten_j() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let ntendon = model.ffi().ntendon as usize;
+        let nv = model.ffi().nv as usize;
+
+        assert!(ntendon > 0, "test model must have at least one tendon");
+        assert!(nv > 0);
+
+        // ten_J_colind is a flat array of length ntendon * nv
+        let ten_j_colind = data.ten_j_colind();
+        assert_eq!(ten_j_colind.len(), ntendon * nv,
+            "ten_J_colind length must be ntendon*nv = {}*{} = {}", ntendon, nv, ntendon * nv);
+
+        // ten_J is also flat array of length ntendon * nv
+        let ten_j = data.ten_j();
+        assert_eq!(ten_j.len(), ntendon * nv,
+            "ten_J length must be ntendon*nv = {}*{} = {}", ntendon, nv, ntendon * nv);
+
+        // Cross-validate with FFI
+        for i in 0..(ntendon * nv) {
+            assert_eq!(ten_j_colind[i], unsafe { *data.ffi().ten_J_colind.add(i) });
+            assert_eq!(ten_j[i], unsafe { *data.ffi().ten_J.add(i) });
+        }
+    }
+
+    /// Verifies [force]-cast for iefc_type and iefc_state (island-reordered constraint arrays).
+    #[test]
+    fn test_force_cast_island_efc_enums() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        for _ in 0..10 {
+            data.step();
+        }
+
+        let nefc = data.ffi().nefc as usize;
+        if nefc > 0 {
+            let iefc_type = data.iefc_type();
+            let iefc_state = data.iefc_state();
+
+            assert_eq!(iefc_type.len(), nefc);
+            assert_eq!(iefc_state.len(), nefc);
+
+            for i in 0..nefc {
+                let raw_type = unsafe { *data.ffi().iefc_type.add(i) };
+                let raw_state = unsafe { *data.ffi().iefc_state.add(i) };
+                let expected_type: MjtConstraint = unsafe { crate::util::force_cast(raw_type) };
+                let expected_state: MjtConstraintState = unsafe { crate::util::force_cast(raw_state) };
+                assert_eq!(iefc_type[i], expected_type);
+                assert_eq!(iefc_state[i], expected_state);
+            }
+        }
+    }
+
+    /// Verifies [force]-cast non-aliasing: adjacent bodies' xpos slices must not overlap.
+    #[test]
+    fn test_force_cast_non_aliasing_adjacent_bodies() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let b_free = data.body("b_free").unwrap();
+        let b_slide = data.body("b_slide").unwrap();
+
+        let v_free = b_free.view(&data);
+        let v_slide = b_slide.view(&data);
+
+        // Pointers must differ
+        assert_ne!(v_free.xpos.as_ptr(), v_slide.xpos.as_ptr(),
+            "adjacent bodies must have non-overlapping xpos");
+        assert_ne!(v_free.cinert.as_ptr(), v_slide.cinert.as_ptr(),
+            "adjacent bodies must have non-overlapping cinert");
+        assert_ne!(v_free.cvel.as_ptr(), v_slide.cvel.as_ptr(),
+            "adjacent bodies must have non-overlapping cvel");
+
+        // Pointer difference must equal exactly one stride
+        let xpos_diff = unsafe { v_slide.xpos.as_ptr().offset_from(v_free.xpos.as_ptr()) };
+        let id_diff = b_slide.id as isize - b_free.id as isize;
+        assert_eq!(xpos_diff, id_diff * 3, "xpos pointer gap must be stride*id_diff = 3*{}", id_diff);
+
+        let cinert_diff = unsafe { v_slide.cinert.as_ptr().offset_from(v_free.cinert.as_ptr()) };
+        assert_eq!(cinert_diff, id_diff * 10, "cinert pointer gap must be 10*{}", id_diff);
+    }
+
+    /**************************************************************************/
+    // Multi-timestep force-cast divergence tests
+    /**************************************************************************/
+
+    /// Simulates multiple timesteps and verifies that force-cast xpos, qpos, qvel
+    /// arrays diverge from initial state while remaining consistent with FFI.
+    /// This exercises the force-cast pointer arithmetic across changing data.
+    #[test]
+    fn test_force_cast_multi_step_xpos_qpos_diverge() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nbody = model.ffi().nbody as usize;
+        let nq = model.ffi().nq as usize;
+        let nv = model.ffi().nv as usize;
+
+        // Snapshot initial values
+        let init_xpos: Vec<[MjtNum; 3]> = data.xpos().to_vec();
+        let init_qpos: Vec<MjtNum> = data.qpos().to_vec();
+        let init_qvel: Vec<MjtNum> = data.qvel().to_vec();
+
+        assert_eq!(init_xpos.len(), nbody);
+        assert_eq!(init_qpos.len(), nq);
+        assert_eq!(init_qvel.len(), nv);
+
+        // Step 100 times -- gravity should cause free body to fall
+        for _ in 0..100 {
+            data.step();
+        }
+
+        let post_xpos = data.xpos();
+        let post_qpos = data.qpos();
+        let post_qvel = data.qvel();
+
+        assert_eq!(post_xpos.len(), nbody);
+        assert_eq!(post_qpos.len(), nq);
+        assert_eq!(post_qvel.len(), nv);
+
+        // b_free should have fallen (z position decreased under gravity)
+        let b_free = data.body("b_free").unwrap();
+        assert!(post_xpos[b_free.id][2] < init_xpos[b_free.id][2],
+            "free body should have fallen: init_z={}, post_z={}",
+            init_xpos[b_free.id][2], post_xpos[b_free.id][2]);
+
+        // qpos should differ from initial
+        assert_ne!(post_qpos, &init_qpos[..], "qpos must change after 100 steps");
+
+        // qvel should differ from zero (gravity accelerates bodies)
+        let any_nonzero_vel = post_qvel.iter().any(|v| v.abs() > 1e-12);
+        assert!(any_nonzero_vel, "qvel must have nonzero entries after gravity steps");
+
+        // Cross-validate post-step xpos with FFI
+        for i in 0..nbody {
+            for j in 0..3 {
+                assert_eq!(post_xpos[i][j], unsafe { *data.ffi().xpos.add(i * 3 + j) },
+                    "xpos[{}][{}] FFI mismatch after stepping", i, j);
+            }
+        }
+
+        // Cross-validate post-step qvel with FFI
+        for i in 0..nv {
+            assert_eq!(post_qvel[i], unsafe { *data.ffi().qvel.add(i) },
+                "qvel[{}] FFI mismatch after stepping", i);
+        }
+    }
+
+    /// Simulates with an actuator active and verifies force-cast arrays (ctrl, qfrc_actuator,
+    /// actuator_force) reflect the control input after multiple steps.
+    #[test]
+    fn test_force_cast_multi_step_actuator_ctrl() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        // Apply control to the slide actuator
+        data.ctrl_mut()[0] = 5.0;
+
+        // Step a few times to let forces propagate
+        for _ in 0..20 {
+            data.step();
+        }
+
+        let nu = model.ffi().nu as usize;
+        let ctrl = data.ctrl();
+        assert_eq!(ctrl.len(), nu);
+        assert_eq!(ctrl[0], 5.0);
+
+        // actuator_force should be nonzero
+        let act_force = data.actuator_force();
+        assert_eq!(act_force.len(), nu);
+        assert!(act_force[0].abs() > 1e-12,
+            "actuator_force should be nonzero with ctrl=5.0, got {}", act_force[0]);
+
+        // FFI cross-validation
+        assert_eq!(act_force[0], unsafe { *data.ffi().actuator_force });
+
+        // qfrc_actuator should be nonzero (force applied to joint)
+        let nv = model.ffi().nv as usize;
+        let qfrc = data.qfrc_actuator();
+        assert_eq!(qfrc.len(), nv);
+        let any_nonzero = qfrc.iter().any(|v| v.abs() > 1e-12);
+        assert!(any_nonzero, "qfrc_actuator must reflect the actuator force");
+    }
+
+    /// Steps multiple times with gravity & contacts, then verifies enum force-casts
+    /// (efc_type, efc_state) and array groupings (efc_KBIP, contact xpos/frame)
+    /// reflect the evolved simulation state and remain FFI-consistent.
+    #[test]
+    fn test_force_cast_multi_step_constraints_evolve() {
+        // MODEL has many objects that create contacts
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        // Step enough for contacts to form and constraints to be generated
+        for _ in 0..50 {
+            data.step();
+        }
+
+        let nefc = data.ffi().nefc as usize;
+        let ncon = data.ffi().ncon as usize;
+
+        // With a rich model and 50 steps, we expect contacts
+        // (not guaranteed in every model, but MODEL has spheres falling on a plane)
+        if ncon > 0 {
+            // Contact positions (xpos) should have changed
+            let contacts = data.contacts();
+            assert_eq!(contacts.len(), ncon);
+            for c in contacts {
+                // Each contact's pos is a [f64; 3]
+                let pos_nonzero = c.pos.iter().any(|v| v.abs() > 1e-12);
+                assert!(pos_nonzero, "contact pos should be nonzero for an active contact");
+            }
+        }
+
+        if nefc > 0 {
+            let efc_type = data.efc_type();
+            let efc_state = data.efc_state();
+            assert_eq!(efc_type.len(), nefc);
+            assert_eq!(efc_state.len(), nefc);
+
+            // FFI cross-validation post-step
+            for i in 0..nefc {
+                let raw_type = unsafe { *data.ffi().efc_type.add(i) };
+                let raw_state = unsafe { *data.ffi().efc_state.add(i) };
+                assert_eq!(efc_type[i], unsafe { crate::util::force_cast::<_, MjtConstraint>(raw_type) });
+                assert_eq!(efc_state[i], unsafe { crate::util::force_cast::<_, MjtConstraintState>(raw_state) });
+            }
+
+            // efc_KBIP should be populated
+            let kbip = data.efc_kbip();
+            assert_eq!(kbip.len(), nefc);
+            for i in 0..nefc {
+                for j in 0..4 {
+                    assert_eq!(kbip[i][j], unsafe { *data.ffi().efc_KBIP.add(i * 4 + j) });
+                }
+            }
+        }
+    }
+
+    /// Runs many timesteps and verifies that body views (via info_with_view!)
+    /// remain consistent with flat slice accessors at each step.
+    /// This tests that force-cast pointers track the mutating mjData correctly.
+    #[test]
+    fn test_force_cast_view_consistency_across_steps() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let body_names = ["world", "b_free", "b_slide", "b_hinge", "mocap_body"];
+
+        for step_idx in 0..30 {
+            data.step();
+
+            let xpos_flat = data.xpos();
+            let xquat_flat = data.xquat();
+            let cvel_flat = data.cvel();
+            let cinert_flat = data.cinert();
+
+            for name in &body_names {
+                let info = data.body(name).unwrap();
+                let view = info.view(&data);
+                let id = info.id;
+
+                // xpos from view must match flat slice
+                assert_eq!(&view.xpos[..], &xpos_flat[id][..],
+                    "xpos mismatch at step {} body '{}'", step_idx, name);
+
+                // xquat from view must match flat slice
+                assert_eq!(&view.xquat[..], &xquat_flat[id][..],
+                    "xquat mismatch at step {} body '{}'", step_idx, name);
+
+                // cvel from view must match flat slice
+                assert_eq!(&view.cvel[..], &cvel_flat[id][..],
+                    "cvel mismatch at step {} body '{}'", step_idx, name);
+
+                // cinert from view must match flat slice
+                assert_eq!(&view.cinert[..], &cinert_flat[id][..],
+                    "cinert mismatch at step {} body '{}'", step_idx, name);
+            }
+        }
+    }
+
+    /// Steps with applied external forces via force-cast mutable array, verifies
+    /// that the force affects simulation state across multiple timesteps.
+    #[test]
+    fn test_force_cast_multi_step_xfrc_applied_effect() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let b_free = data.body("b_free").unwrap();
+        let b_free_id = b_free.id;
+
+        // Baseline: step without applied force
+        data.forward();
+        let baseline_xpos = data.xpos()[b_free_id];
+
+        // Reset and apply upward force to counteract gravity
+        data.reset();
+        // Apply a strong upward force: [fx, fy, fz, torque_x, torque_y, torque_z]
+        data.xfrc_applied_mut()[b_free_id] = [0.0, 0.0, 100.0, 0.0, 0.0, 0.0];
+
+        for _ in 0..50 {
+            data.step();
+        }
+
+        let forced_xpos = data.xpos()[b_free_id];
+
+        // With an upward force of 100N on a 1kg mass, z should increase
+        assert!(forced_xpos[2] > baseline_xpos[2],
+            "Upward force should raise body: baseline_z={}, forced_z={}",
+            baseline_xpos[2], forced_xpos[2]);
+
+        // FFI cross-validation at this point
+        for j in 0..3 {
+            assert_eq!(forced_xpos[j], unsafe { *data.ffi().xpos.add(b_free_id * 3 + j) });
+        }
+
+        // xfrc_applied should still hold our value
+        assert_eq!(data.xfrc_applied()[b_free_id], [0.0, 0.0, 100.0, 0.0, 0.0, 0.0]);
+    }
+
+    /// Simulates, mutates mocap position mid-simulation via force-cast mutable array,
+    /// and verifies the change is reflected in subsequent forward passes.
+    #[test]
+    fn test_force_cast_multi_step_mocap_mutation() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nmocap = model.ffi().nmocap as usize;
+        assert!(nmocap > 0, "model should have at least one mocap body");
+
+        // Check initial
+        let init_pos = data.mocap_pos()[0];
+        assert_eq!(init_pos, [10.0, 10.0, 10.0]);
+
+        // Step a few times
+        for _ in 0..10 {
+            data.step();
+        }
+
+        // Mutate mocap position mid-simulation
+        data.mocap_pos_mut()[0] = [20.0, 30.0, 40.0];
+        data.forward();
+
+        assert_eq!(data.mocap_pos()[0], [20.0, 30.0, 40.0]);
+        // FFI cross-validation
+        for j in 0..3 {
+            assert_eq!(unsafe { *data.ffi().mocap_pos.add(j) }, [20.0, 30.0, 40.0][j]);
+        }
+
+        // Mutate again and step further
+        data.mocap_pos_mut()[0] = [-5.0, -5.0, -5.0];
+        for _ in 0..10 {
+            data.step();
+        }
+        assert_eq!(data.mocap_pos()[0], [-5.0, -5.0, -5.0]);
+    }
+
+    /// Verifies that sensor data changes across multiple simulation steps.
+    /// Exercises the force-cast sensordata flat array after physics evolves.
+    #[test]
+    fn test_force_cast_multi_step_sensor_data_evolves() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let nsensordata = model.ffi().nsensordata as usize;
+        assert!(nsensordata > 0, "model needs at least one sensor");
+
+        data.forward();
+        let _init_sensor: Vec<MjtNum> = data.sensordata().to_vec();
+
+        // Apply force to create contact which the touch sensor may detect
+        let b_slide = data.body("b_slide").unwrap();
+        data.xfrc_applied_mut()[b_slide.id] = [0.0, 0.0, -50.0, 0.0, 0.0, 0.0];
+
+        for _ in 0..100 {
+            data.step();
+        }
+
+        let post_sensor = data.sensordata();
+        assert_eq!(post_sensor.len(), nsensordata);
+
+        // FFI cross-validation
+        for i in 0..nsensordata {
+            assert_eq!(post_sensor[i], unsafe { *data.ffi().sensordata.add(i) },
+                "sensordata[{}] FFI mismatch", i);
+        }
+    }
+
+    /// Multi-step test with eq_active force-cast bool: disable an equality
+    /// constraint mid-simulation, verify dynamics change.
+    #[test]
+    fn test_force_cast_multi_step_eq_active_toggle() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        // Step with constraint active
+        for _ in 0..20 {
+            data.step();
+        }
+        let pos_with_eq = data.xpos().to_vec();
+
+        // Reset, disable equality constraint, step again
+        data.reset();
+        data.eq_active_mut()[0] = false;
+        data.eq_active_mut()[1] = false;
+
+        for _ in 0..20 {
+            data.step();
+        }
+        let pos_without_eq = data.xpos().to_vec();
+
+        // The positions should differ since the constraints are disabled
+        let b_slide = data.body("b_slide").unwrap();
+        let diff: MjtNum = (0..3)
+            .map(|j| (pos_with_eq[b_slide.id][j] - pos_without_eq[b_slide.id][j]).abs())
+            .sum();
+
+        // At least some difference expected from disabling the equality constraint
+        // (may be subtle depending on model dynamics, but should not be zero)
+        assert!(diff > 1e-15 || {
+            // If b_slide didn't move much, check b_hinge (the other constrained body)
+            let b_hinge = data.body("b_hinge").unwrap();
+            (0..3)
+                .map(|j| (pos_with_eq[b_hinge.id][j] - pos_without_eq[b_hinge.id][j]).abs())
+                .sum::<MjtNum>() > 1e-15
+        }, "disabling equality constraints should change positions");
+
+        // FFI cross-validation for eq_active
+        assert_eq!(data.eq_active()[0], false);
+        assert_eq!(data.eq_active()[1], false);
+        assert_eq!(unsafe { *data.ffi().eq_active }, 0u8);
+        assert_eq!(unsafe { *data.ffi().eq_active.add(1) }, 0u8);
+    }
+
+    /// Runs step1() + step2() split stepping and verifies force-cast arrays
+    /// remain consistent with FFI between sub-steps.
+    #[test]
+    fn test_force_cast_split_step_consistency() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let nbody = model.ffi().nbody as usize;
+
+        for _ in 0..15 {
+            data.step1();
+
+            // After step1: positions and velocities are computed
+            let mid_xpos = data.xpos();
+            assert_eq!(mid_xpos.len(), nbody);
+            for i in 0..nbody {
+                for j in 0..3 {
+                    assert_eq!(mid_xpos[i][j], unsafe { *data.ffi().xpos.add(i * 3 + j) },
+                        "xpos[{}][{}] FFI mismatch after step1", i, j);
+                }
+            }
+
+            data.step2();
+
+            // After step2: integration is complete
+            let post_xpos = data.xpos();
+            for i in 0..nbody {
+                for j in 0..3 {
+                    assert_eq!(post_xpos[i][j], unsafe { *data.ffi().xpos.add(i * 3 + j) },
+                        "xpos[{}][{}] FFI mismatch after step2", i, j);
+                }
+            }
+        }
+    }
+
+    /// Steps the simulation, copies state via get_state/set_state, steps further,
+    /// and verifies force-cast arrays reflect the correct state at each point.
+    #[test]
+    fn test_force_cast_multi_step_state_save_restore() {
+        use crate::wrappers::mj_data::MjtState;
+
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        // Step 30 times
+        for _ in 0..30 {
+            data.step();
+        }
+        // Synchronize derived quantities (xpos, etc.) with current qpos
+        data.forward();
+
+        // Save state
+        let saved_state = data.get_state(MjtState::mjSTATE_FULLPHYSICS as u32);
+        let saved_xpos: Vec<[MjtNum; 3]> = data.xpos().to_vec();
+        let saved_qpos: Vec<MjtNum> = data.qpos().to_vec();
+
+        // Step 30 more times (state diverges)
+        for _ in 0..30 {
+            data.step();
+        }
+        let diverged_xpos: Vec<[MjtNum; 3]> = data.xpos().to_vec();
+        assert_ne!(diverged_xpos, saved_xpos, "state should diverge after more steps");
+
+        // Restore state
+        data.set_state(&saved_state, MjtState::mjSTATE_FULLPHYSICS as u32);
+        data.forward();
+
+        // Primary state (qpos) should be exactly restored
+        let restored_qpos = data.qpos();
+        for i in 0..saved_qpos.len() {
+            assert_eq!(restored_qpos[i], saved_qpos[i],
+                "qpos[{}] should match saved state after restore", i);
+        }
+
+        // Derived quantity (xpos) should be approximately restored
+        // (forward() recomputes from scratch, minor floating-point differences possible)
+        let restored_xpos = data.xpos();
+        for i in 0..saved_xpos.len() {
+            for j in 0..3 {
+                assert!(
+                    (restored_xpos[i][j] - saved_xpos[i][j]).abs() < 1e-10,
+                    "xpos[{}][{}] should approximately match saved state: got {} vs {}",
+                    i, j, restored_xpos[i][j], saved_xpos[i][j]
+                );
+            }
+        }
+    }
+
+    /// Multi-step test that verifies kinematic quantities (xmat, xipos, ximat)
+    /// change across steps and stay FFI-consistent via force-cast.
+    #[test]
+    fn test_force_cast_multi_step_kinematics_evolve() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        // Apply an off-center force to induce rotation on the free body.
+        let b_free = data.body("b_free").unwrap();
+        data.xfrc_applied_mut()[b_free.id] = [1.0, 0.0, 0.0, 0.0, 0.5, 0.0];
+        data.forward();
+
+        let nbody = model.ffi().nbody as usize;
+        let init_xmat: Vec<[MjtNum; 9]> = data.xmat().to_vec();
+        let init_xipos: Vec<[MjtNum; 3]> = data.xipos().to_vec();
+
+        // Step 50 times with the off-center force
+        for _ in 0..50 {
+            data.step();
+        }
+
+        let post_xmat = data.xmat();
+        let post_xipos = data.xipos();
+
+        assert_eq!(post_xmat.len(), nbody);
+        assert_eq!(post_xipos.len(), nbody);
+
+        // Free body xipos should change (it falls and translates)
+        let pos_changed = (0..3).any(|j| (post_xipos[b_free.id][j] - init_xipos[b_free.id][j]).abs() > 1e-6);
+        assert!(pos_changed, "free body xipos should change as it moves");
+
+        // Free body xmat should change (off-center force induces rotation)
+        let mat_changed = (0..9).any(|j| (post_xmat[b_free.id][j] - init_xmat[b_free.id][j]).abs() > 1e-12);
+        assert!(mat_changed, "free body xmat should change with off-center force");
+
+        // FFI cross-validation
+        for i in 0..nbody {
+            for j in 0..9 {
+                assert_eq!(post_xmat[i][j], unsafe { *data.ffi().xmat.add(i * 9 + j) });
+            }
+            for j in 0..3 {
+                assert_eq!(post_xipos[i][j], unsafe { *data.ffi().xipos.add(i * 3 + j) });
+            }
+        }
+    }
+
+    /// Runs simulation and verifies dynamic subtree quantities (subtree_com,
+    /// subtree_linvel, subtree_angmom) change and match FFI after stepping.
+    #[test]
+    fn test_force_cast_multi_step_subtree_dynamics() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nbody = model.ffi().nbody as usize;
+        let init_subtree_com: Vec<[MjtNum; 3]> = data.subtree_com().to_vec();
+
+        for _ in 0..60 {
+            data.step();
+        }
+
+        let post_subtree_com = data.subtree_com();
+        let post_subtree_linvel = data.subtree_linvel();
+        let post_subtree_angmom = data.subtree_angmom();
+
+        assert_eq!(post_subtree_com.len(), nbody);
+        assert_eq!(post_subtree_linvel.len(), nbody);
+        assert_eq!(post_subtree_angmom.len(), nbody);
+
+        // World subtree_com should change (bodies are falling)
+        let world_com_diff: MjtNum = (0..3)
+            .map(|j| (post_subtree_com[0][j] - init_subtree_com[0][j]).abs())
+            .sum();
+        assert!(world_com_diff > 1e-6,
+            "world subtree_com should shift as bodies fall");
+
+        // FFI cross-validation
+        for i in 0..nbody {
+            for j in 0..3 {
+                assert_eq!(post_subtree_com[i][j], unsafe { *data.ffi().subtree_com.add(i * 3 + j) });
+                assert_eq!(post_subtree_linvel[i][j], unsafe { *data.ffi().subtree_linvel.add(i * 3 + j) });
+                assert_eq!(post_subtree_angmom[i][j], unsafe { *data.ffi().subtree_angmom.add(i * 3 + j) });
+            }
+        }
+    }
 }

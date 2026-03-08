@@ -289,4 +289,34 @@ mod tests {
         let _ = vfs.mount("/tmp");
         let _ = vfs.unmount("/tmp");
     }
+
+    /// Tests that deleting a nonexistent file from VFS returns the `NotFound` error variant.
+    #[test]
+    fn test_vfs_delete_nonexistent() {
+        let mut vfs = MjVfs::new();
+        let err = vfs.delete_file("does_not_exist.xml").unwrap_err();
+        assert!(matches!(err, MjVfsError::NotFound));
+    }
+
+    /// Tests adding a model buffer to VFS and loading it back: verifies the model is
+    /// parsed correctly and has the expected body count.
+    #[test]
+    fn test_vfs_buffer_round_trip() {
+        const CUSTOM_MODEL: &str = "
+<mujoco>
+  <worldbody>
+    <body name='extra_body'>
+      <geom size='0.1'/>
+    </body>
+  </worldbody>
+</mujoco>";
+
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer("round_trip.xml", CUSTOM_MODEL.as_bytes()).unwrap();
+
+        let model = MjModel::from_xml_vfs("round_trip.xml", &vfs).unwrap();
+        // 2 bodies: worldbody + extra_body
+        assert_eq!(model.ffi().nbody, 2);
+        assert!(model.body("extra_body").is_some());
+    }
 }
