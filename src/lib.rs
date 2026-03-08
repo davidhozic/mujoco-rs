@@ -96,7 +96,7 @@ pub mod mujoco_c;  // raw MuJoCo C and C++ bindings
 mod winit_gl_base;
 
 #[cfg(any(feature = "viewer", feature = "renderer"))]
-mod vis_common;
+pub mod vis_common;
 
 
 /// Returns the version string of the MuJoCo library.
