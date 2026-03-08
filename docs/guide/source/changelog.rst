@@ -401,6 +401,10 @@ update of MuJoCo alone can increase the major version.
     panics via Rust's bounds checker instead of causing undefined behavior.
     In release mode, the slice index will panic instead of the ``debug_assert!``.
 
+  - The ``unsafe impl Send`` and ``unsafe impl Sync`` for |mj_data| now require the inner
+    model handle ``M`` to itself be ``Send`` / ``Sync``, matching the bounds already present on
+    |mjv_scene|. Previously, ``MjData<Rc<MjModel>>`` was incorrectly ``Send + Sync``.
+
 - Other changes:
 
   - Updated enum type aliases.

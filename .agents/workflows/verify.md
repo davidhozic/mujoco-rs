@@ -58,7 +58,7 @@ Build a numbered list covering all verification items. Organize by concern group
 ### F. Lifecycle and concurrency
 - Visualization struct lifecycle (Drop impl correctness)
 - Box<MaybeUninit> initialization patterns (fully written before use)
-- Send/Sync impl safety for MjModel, MjData
+- Send/Sync impl safety: verify that all `unsafe impl Send/Sync` for generic wrapper types require the generic parameter to also be `Send` / `Sync`
 - MjData model signature check in view methods
 
 ### G. Edge cases and misc

@@ -27,7 +27,7 @@ trigger: always_on
 
 ## Documentation
 - Always verify any changes made to MuJoCo's official documentation to verify everything is correct.
-- Any changes made should be reflected in the changelog: `docs/guide/changelog.rst`.
+- Any changes made should be reflected in the changelog: `docs/guide/source/changelog.rst`.
   Make sure to follow the conventions and style of previous changelog entries.
 - Always make sure MuJoCo-rs's documentation in `docs/guide` stays up to date with the changes.
 

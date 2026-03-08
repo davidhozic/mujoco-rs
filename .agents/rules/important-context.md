@@ -66,6 +66,7 @@ All linking env vars must be **absolute paths**. Use `realpath` to convert relat
 - **Boolean flag inversion**: `flg_local as i32` is correct when the C function expects 1=local/0=world. Watch for accidental `!flg_local as i32` which silently inverts the meaning with no crash.
 - **`mj_view_indices!` last-joint edge case**: for the final joint in a model there is no next address entry, so the macro falls back to `$max_n` (e.g. `nq` for qpos-addressed fields) as the exclusive end. Double-check this path when adding new fields that use `mj_view_indices!`.
 - **Free/ball joints and nq vs njnt**: `nq != njnt` for models with free joints (7 qpos each) or ball joints (4 qpos each). `mj_model_nx_to_nitem!(model, nq)` returns `njnt` not `nq`. The `mj_view_indices!` macro computes the correct per-joint slice within the total array.
+- **Send/Sync bounds for generic wrapper types**: When a wrapper is generic over a type parameter, any `unsafe impl Send/Sync` MUST require the generic parameter to also be `Send` / `Sync` respectively. Without these bounds, non-thread-safe inner types would be incorrectly marked as `Send + Sync`.
 
 ## Comprehensive code verification
 When doing a deep audit for type mismatches, stride errors, UB, or memory safety issues:
