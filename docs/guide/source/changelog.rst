@@ -377,6 +377,18 @@ Pre-existing types :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` and
   model handle ``M`` to itself be ``Send`` / ``Sync``, matching the bounds already present on
   |mjv_scene|. Previously, ``MjData<Rc<MjModel>>`` was incorrectly ``Send + Sync``.
 
+.. rubric:: Bug fixes
+
+- |mjs_tendon|: ``limited`` and ``actfrclimited`` were incorrectly exposed as ``bool``,
+  losing the ``AUTO`` state. Both fields are now ``MjtLimited`` (tri-state:
+  ``FALSE`` / ``TRUE`` / ``AUTO``), matching the C ``mjtLimited`` semantics and the
+  existing actuator convention.
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsJoint`: ``align`` was incorrectly
+  exposed as ``i32``, losing the ``AUTO`` state. It is now ``MjtAlignFree`` (tri-state:
+  ``FALSE`` / ``TRUE`` / ``AUTO``), matching the C ``mjtAlignFree`` semantics.
+- |mj_model|: Added missing ``key_mpos`` and ``key_mquat`` array accessors for keyframe
+  mocap body positions and quaternions.
+
 .. rubric:: Other changes
 
 - Updated enum type aliases to match MuJoCo 3.5.0 header definitions.

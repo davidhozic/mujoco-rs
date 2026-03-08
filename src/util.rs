@@ -683,7 +683,7 @@ macro_rules! array_slice_dyn {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake>](&self) -> &[$type] {
-                    let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
+                    let length = self.$($len_accessor)* as usize * (self.$($inner_len_accessor)*) as usize;
                     let ptr = $crate::maybe_force_cast!(self.ffi().$name$(.$as_ptr())?, $type $(, $force)?);
                     if ptr.is_null() || length == 0 {
                         return &[];
@@ -696,7 +696,7 @@ macro_rules! array_slice_dyn {
                     @eval $($cfg_mut)? {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
-                            let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
+                            let length = self.$($len_accessor)* as usize * (self.$($inner_len_accessor)*) as usize;
                             let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
                             if ptr.is_null() || length == 0 {
                                 return &mut [];

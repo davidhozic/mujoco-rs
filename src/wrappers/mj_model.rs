@@ -1254,6 +1254,8 @@ impl MjModel {
             key_qpos: &[[MjtNum; ffi().nq] [force]; "key position"; ffi().nkey],
             key_qvel: &[[MjtNum; ffi().nv] [force]; "key velocity"; ffi().nkey],
             key_act: &[[MjtNum; ffi().na] [force]; "key activation"; ffi().nkey],
+            key_mpos: &[[MjtNum; ffi().nmocap * 3] [force]; "key mocap position"; ffi().nkey],
+            key_mquat: &[[MjtNum; ffi().nmocap * 4] [force]; "key mocap quaternion"; ffi().nkey],
             key_ctrl: &[[MjtNum; ffi().nu] [force]; "key control"; ffi().nkey],
 
             sensor_user: &[[MjtNum; ffi().nuser_sensor] [force]; "user data"; ffi().nsensor],
@@ -3287,5 +3289,133 @@ mod tests {
         let ptr_diff = unsafe { jnt_solref[1].as_ptr().offset_from(jnt_solref[0].as_ptr()) };
         assert_eq!(ptr_diff, mjNREF as isize,
             "jnt_solref stride must be mjNREF={}", mjNREF);
+    }
+
+    /// Model with 2 mocap bodies and 2 keyframes carrying specific mocap data.
+    /// This lets us verify key_mpos and key_mquat array-slice strides and values.
+    const MOCAP_MODEL: &str = stringify!(
+        <mujoco>
+            <worldbody>
+                <body name="mocap1" mocap="true" pos="0 0 0">
+                    <geom type="sphere" size="0.05" contype="0" conaffinity="0"/>
+                </body>
+                <body name="mocap2" mocap="true" pos="1 0 0">
+                    <geom type="sphere" size="0.05" contype="0" conaffinity="0"/>
+                </body>
+                <geom type="plane" size="5 5 0.1"/>
+            </worldbody>
+            <keyframe>
+                <key name="k0"
+                     mpos="1.0 2.0 3.0  4.0 5.0 6.0"
+                     mquat="0.5 0.5 0.5 0.5  1.0 0.0 0.0 0.0"/>
+                <key name="k1"
+                     mpos="10.0 20.0 30.0  40.0 50.0 60.0"
+                     mquat="0.0 0.0 0.0 1.0  0.0 1.0 0.0 0.0"/>
+            </keyframe>
+        </mujoco>
+    );
+
+    /// Test that `key_mpos` returns the correct slice length and exact values
+    /// for a model with 2 mocap bodies and 2 keyframes.
+    #[test]
+    fn test_key_mpos() {
+        let model = MjModel::from_xml_string(MOCAP_MODEL).unwrap();
+        let nkey = model.ffi().nkey as usize;
+        let nmocap = model.ffi().nmocap as usize;
+
+        assert_eq!(nkey, 2, "expected 2 keyframes");
+        assert_eq!(nmocap, 2, "expected 2 mocap bodies");
+
+        let mpos = model.key_mpos();
+        assert_eq!(mpos.len(), nkey * nmocap * 3,
+            "key_mpos length must be nkey * nmocap * 3 = {}", nkey * nmocap * 3);
+
+        // Keyframe 0: mocap1 at (1,2,3), mocap2 at (4,5,6)
+        let k0 = &mpos[..nmocap * 3];
+        let expected_k0: &[f64] = &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        assert_eq!(k0.len(), expected_k0.len());
+        for (&a, &b) in k0.iter().zip(expected_k0.iter()) {
+            assert_relative_eq!(a, b, epsilon = 1e-10);
+        }
+
+        // Keyframe 1: mocap1 at (10,20,30), mocap2 at (40,50,60)
+        let k1 = &mpos[nmocap * 3..];
+        let expected_k1: &[f64] = &[10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
+        assert_eq!(k1.len(), expected_k1.len());
+        for (&a, &b) in k1.iter().zip(expected_k1.iter()) {
+            assert_relative_eq!(a, b, epsilon = 1e-10);
+        }
+    }
+
+    /// Test that `key_mquat` returns the correct slice length and exact values
+    /// for a model with 2 mocap bodies and 2 keyframes.
+    #[test]
+    fn test_key_mquat() {
+        let model = MjModel::from_xml_string(MOCAP_MODEL).unwrap();
+        let nkey = model.ffi().nkey as usize;
+        let nmocap = model.ffi().nmocap as usize;
+
+        assert_eq!(nkey, 2, "expected 2 keyframes");
+        assert_eq!(nmocap, 2, "expected 2 mocap bodies");
+
+        let mquat = model.key_mquat();
+        assert_eq!(mquat.len(), nkey * nmocap * 4,
+            "key_mquat length must be nkey * nmocap * 4 = {}", nkey * nmocap * 4);
+
+        // Keyframe 0: mocap1 quat (0.5,0.5,0.5,0.5), mocap2 quat (1,0,0,0)
+        let k0 = &mquat[..nmocap * 4];
+        let expected_k0: &[f64] = &[0.5, 0.5, 0.5, 0.5, 1.0, 0.0, 0.0, 0.0];
+        assert_eq!(k0.len(), expected_k0.len());
+        for (&a, &b) in k0.iter().zip(expected_k0.iter()) {
+            assert_relative_eq!(a, b, epsilon = 1e-10);
+        }
+
+        // Keyframe 1: mocap1 quat (0,0,0,1), mocap2 quat (0,1,0,0)
+        let k1 = &mquat[nmocap * 4..];
+        let expected_k1: &[f64] = &[0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0];
+        assert_eq!(k1.len(), expected_k1.len());
+        for (&a, &b) in k1.iter().zip(expected_k1.iter()) {
+            assert_relative_eq!(a, b, epsilon = 1e-10);
+        }
+    }
+
+    /// Test that key_mpos is accessible through the key view as well,
+    /// and that both paths yield the same data.
+    #[test]
+    fn test_key_mpos_view_consistency() {
+        let model = MjModel::from_xml_string(MOCAP_MODEL).unwrap();
+        let nmocap = model.ffi().nmocap as usize;
+
+        let info_k0 = model.key("k0").unwrap();
+        let view_k0 = info_k0.view(&model);
+
+        // key view mpos slice should equal array accessor key_mpos[0..nmocap*3]
+        let array_k0 = &model.key_mpos()[..nmocap * 3];
+        assert_eq!(
+            &view_k0.mpos[..nmocap * 3], array_k0,
+            "key view mpos and key_mpos array accessor must return identical data"
+        );
+
+        let info_k1 = model.key("k1").unwrap();
+        let view_k1 = info_k1.view(&model);
+        let array_k1 = &model.key_mpos()[nmocap * 3..];
+        assert_eq!(
+            &view_k1.mpos[..nmocap * 3], array_k1,
+            "key view mpos and key_mpos array accessor must return identical data for key 1"
+        );
+    }
+
+    /// Test that key_mpos/key_mquat return empty slices for models with no mocap bodies.
+    #[test]
+    fn test_key_mpos_mquat_no_mocap() {
+        // EXAMPLE_MODEL has keyframes but no mocap bodies
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        assert_eq!(model.ffi().nmocap, 0, "EXAMPLE_MODEL should have no mocap bodies");
+        assert!(model.ffi().nkey > 0, "EXAMPLE_MODEL should have keyframes");
+
+        assert_eq!(model.key_mpos().len(), 0,
+            "key_mpos must be empty when nmocap == 0");
+        assert_eq!(model.key_mquat().len(), 0,
+            "key_mquat must be empty when nmocap == 0");
     }
 }

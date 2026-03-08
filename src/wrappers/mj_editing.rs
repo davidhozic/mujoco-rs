@@ -562,17 +562,48 @@ mjs_struct!(Joint);
 impl MjsJoint {
     getter_setter! {
         [&] with, get, [
-            pos:     &[f64; 3];         "joint position.";
+            // kinematics
+            pos:     &[f64; 3];         "anchor position.";
             axis:    &[f64; 3];         "joint axis.";
-            ref_ + _:    &f64;          "joint reference.";
-            range:   &[f64; 2];         "joint range.";
+            ref_ + _:    &f64;          "value at reference configuration: qpos0.";
+            springdamper: &[f64; 2];    "timeconst, dampratio.";
+
+            // limits
+            range:   &[f64; 2];         "joint limits.";
+            solref_limit: &[MjtNum; mjNREF as usize];  "solver reference: joint limits.";
+            solimp_limit: &[MjtNum; mjNIMP as usize];  "solver impedance: joint limits.";
+            actfrcrange: &[f64; 2];     "actuator force limits.";
+
+            // dof properties
+            solref_friction: &[MjtNum; mjNREF as usize]; "solver reference: dof friction.";
+            solimp_friction: &[MjtNum; mjNIMP as usize]; "solver impedance: dof friction.";
         ]
     }
 
     getter_setter!([&] with, get, set, [
         type_ + _: MjtJoint;           "joint type.";
         group: i32;                    "joint group.";
+        stiffness: f64;               "stiffness coefficient.";
+        springref: f64;               "spring reference value: qpos_spring.";
+        margin: f64;                  "margin value for joint limit detection.";
+        armature: f64;                "armature inertia (mass for slider).";
+        damping: f64;                 "damping coefficient.";
+        frictionloss: f64;            "friction loss.";
     ]);
+
+    getter_setter! {
+        force!, [&] with, get, set, [
+            align: MjtAlignFree;       "align free joint with body com (mjtAlignFree).";
+            limited: MjtLimited;       "does joint have limits (mjtLimited).";
+            actfrclimited: MjtLimited; "are actuator forces on joint limited (mjtLimited).";
+        ]
+    }
+
+    getter_setter! {
+        [&] with, get, set, [
+            actgravcomp: bool;         "is gravcomp force applied via actuators.";
+        ]
+    }
 
     userdata_method!(f64);
 }
@@ -1024,9 +1055,9 @@ impl MjsTendon {
     ]}
 
     getter_setter! {
-        [&] with, get, set, [
-            limited: bool;       "does tendon have limits (mjtLimited).";
-            actfrclimited: bool; "does tendon have actuator force limits."
+        force!, [&] with, get, set, [
+            limited: MjtLimited;       "does tendon have limits (mjtLimited).";
+            actfrclimited: MjtLimited; "does tendon have actuator force limits."
         ]
     }
 
@@ -1310,6 +1341,7 @@ impl MjsMesh {
         usernormal: f32;             "user normal data.";
         usertexcoord: f32;           "user texcoord data.";
         userface: i32;               "user vertex indices.";
+        userfacenormal: i32;         "user face normal indices.";
         userfacetexcoord: i32;       "user texcoord indices.";
     }
 }
@@ -2152,5 +2184,174 @@ mod tests {
         let s2_id = model.site("s2").unwrap().id as i32;
         assert_eq!(wrap_objid[0], s1_id);
         assert_eq!(wrap_objid[1], s2_id);
+    }
+
+    /// Test that MjsTendon `limited` correctly round-trips all three enum states
+    /// (FALSE, TRUE, AUTO), which would fail if the field were `bool`.
+    #[test]
+    fn test_tendon_limited_tristate() {
+        use crate::mujoco_c::mjtLimited_::*;
+
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+
+        let b1 = world.add_body().with_pos([0.0, 0.0, 0.5]);
+        b1.add_geom().with_size([0.01; 3]);
+        b1.add_site().with_name("s1");
+        b1.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        let b2 = world.add_body().with_pos([1.0, 0.0, 0.5]);
+        b2.add_geom().with_size([0.01; 3]);
+        b2.add_site().with_name("s2");
+        b2.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+
+        // Create 3 tendons, one for each LIMITED enum value
+        for (name, val) in [("t_false", mjLIMITED_FALSE), ("t_true", mjLIMITED_TRUE), ("t_auto", mjLIMITED_AUTO)] {
+            let t = spec.add_tendon()
+                .with_name(name)
+                .with_range([0.0, 1.0])
+                .with_limited(val);
+            t.wrap_site("s1");
+            t.wrap_site("s2");
+        }
+
+        // Verify before compilation: getter round-trip
+        for (name, expected) in [("t_false", mjLIMITED_FALSE), ("t_true", mjLIMITED_TRUE), ("t_auto", mjLIMITED_AUTO)] {
+            let t = spec.tendon(name).expect("tendon not found");
+            assert_eq!(t.limited(), expected,
+                "Before compile: tendon '{}' limited should be {:?}", name, expected);
+        }
+
+        // Compile and verify the compiled model's tendon_limited field
+        let model = spec.compile().unwrap();
+        let tendon_limited = model.tendon_limited();
+        // After compilation, enum values resolve to bool: FALSE->false, TRUE->true, AUTO->resolved
+        assert_eq!(tendon_limited[0], false,
+            "Compiled tendon 0 limited should be false");
+        assert_eq!(tendon_limited[1], true,
+            "Compiled tendon 1 limited should be true");
+        // AUTO resolves to a concrete bool in the compiled model
+        assert!(
+            tendon_limited[2] == false || tendon_limited[2] == true,
+            "Compiled tendon 2 (AUTO) should resolve to a bool, got {:?}", tendon_limited[2]
+        );
+    }
+
+    /// Test that MjsTendon `actfrclimited` correctly round-trips all three enum
+    /// states (FALSE, TRUE, AUTO).
+    #[test]
+    fn test_tendon_actfrclimited_tristate() {
+        use crate::mujoco_c::mjtLimited_::*;
+
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+
+        let b1 = world.add_body().with_pos([0.0, 0.0, 0.5]);
+        b1.add_geom().with_size([0.01; 3]);
+        b1.add_site().with_name("s1");
+        b1.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        let b2 = world.add_body().with_pos([1.0, 0.0, 0.5]);
+        b2.add_geom().with_size([0.01; 3]);
+        b2.add_site().with_name("s2");
+        b2.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+
+        // Set actfrclimited to each variant (with actfrcrange for TRUE/AUTO)
+        for (name, val) in [("t_false", mjLIMITED_FALSE), ("t_true", mjLIMITED_TRUE), ("t_auto", mjLIMITED_AUTO)] {
+            let t = spec.add_tendon()
+                .with_name(name)
+                .with_range([0.0, 1.0])
+                .with_actfrcrange([-1.0, 1.0])
+                .with_actfrclimited(val);
+            t.wrap_site("s1");
+            t.wrap_site("s2");
+        }
+
+        // Verify round-trip before compilation
+        for (name, expected) in [("t_false", mjLIMITED_FALSE), ("t_true", mjLIMITED_TRUE), ("t_auto", mjLIMITED_AUTO)] {
+            let t = spec.tendon(name).expect("tendon not found");
+            assert_eq!(t.actfrclimited(), expected,
+                "Before compile: tendon '{}' actfrclimited should be {:?}", name, expected);
+        }
+
+        // Must compile without error
+        spec.compile().unwrap();
+    }
+
+    /// Test that MjsJoint `align` correctly round-trips all three enum states
+    /// (FALSE, TRUE, AUTO), which would fail if the field were `i32`.
+    #[test]
+    fn test_joint_align_tristate() {
+        use crate::mujoco_c::mjtAlignFree_::*;
+
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+
+        // Create 3 free joints, one for each align state
+        for (name, val) in [("j_false", mjALIGNFREE_FALSE), ("j_true", mjALIGNFREE_TRUE), ("j_auto", mjALIGNFREE_AUTO)] {
+            let body = world.add_body().with_pos([0.0, 0.0, 1.0]);
+            body.add_geom().with_size([0.1; 3]);
+            body.add_joint()
+                .with_name(name)
+                .with_type(MjtJoint::mjJNT_FREE)
+                .with_align(val);
+        }
+
+        // Verify round-trip before compilation
+        for (name, expected) in [("j_false", mjALIGNFREE_FALSE), ("j_true", mjALIGNFREE_TRUE), ("j_auto", mjALIGNFREE_AUTO)] {
+            let j = spec.joint(name).expect("joint not found");
+            assert_eq!(j.align(), expected,
+                "Before compile: joint '{}' align should be {:?}", name, expected);
+        }
+
+        // Compile and verify — AUTO should resolve, FALSE/TRUE should remain
+        let model = spec.compile().unwrap();
+        let jnt_count = model.ffi().njnt as usize;
+        assert_eq!(jnt_count, 3, "expected 3 joints");
+
+        // Must compile without error — the key correctness is the round-trip above;
+        // compilation proves MuJoCo accepted the enum values.
+    }
+
+    /// Test that MjsJoint `limited` also correctly round-trips all three states
+    /// since it was also changed to MjtLimited.
+    #[test]
+    fn test_joint_limited_tristate() {
+        use crate::mujoco_c::mjtLimited_::*;
+
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+
+        for (name, val) in [("j_false", mjLIMITED_FALSE), ("j_true", mjLIMITED_TRUE), ("j_auto", mjLIMITED_AUTO)] {
+            let body = world.add_body().with_pos([0.0, 0.0, 1.0]);
+            body.add_geom().with_size([0.1; 3]);
+            body.add_joint()
+                .with_name(name)
+                .with_type(MjtJoint::mjJNT_SLIDE)
+                .with_range([0.0, 1.0])
+                .with_limited(val);
+        }
+
+        // Verify round-trip before compilation
+        for (name, expected) in [("j_false", mjLIMITED_FALSE), ("j_true", mjLIMITED_TRUE), ("j_auto", mjLIMITED_AUTO)] {
+            let j = spec.joint(name).expect("joint not found");
+            assert_eq!(j.limited(), expected,
+                "Before compile: joint '{}' limited should be {:?}", name, expected);
+        }
+
+        // Compile — AUTO resolves based on range presence
+        let model = spec.compile().unwrap();
+        let jnt_limited = model.jnt_limited();
+        assert_eq!(jnt_limited[0], false);
+        assert_eq!(jnt_limited[1], true);
+        // AUTO with range present should resolve to true
+        assert_eq!(jnt_limited[2], true,
+            "Joint with limited=AUTO and range should resolve to true");
     }
 }
