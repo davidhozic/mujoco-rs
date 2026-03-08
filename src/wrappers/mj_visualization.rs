@@ -824,4 +824,103 @@ mod tests {
         assert_eq!(fig.pop_front(plot), None);
         assert_eq!(fig.pop_back(plot), None);
     }
+
+    /// Tests `getter_setter!` bool roundtrip for `enabletransform` on MjvScene.
+    #[test]
+    fn test_bool_getter_setter_roundtrip() {
+        let model = load_model();
+        let mut scene = MjvScene::new(&model, 100);
+
+        // Default should be false
+        assert!(!scene.enabletransform());
+
+        scene.set_enabletransform(true);
+        assert!(scene.enabletransform());
+
+        scene.set_enabletransform(false);
+        assert!(!scene.enabletransform());
+    }
+
+    /// Tests `getter_setter! force!` enum roundtrip for stereo (MjtStereo) on MjvScene.
+    #[test]
+    fn test_force_enum_getter_setter_roundtrip() {
+        let model = load_model();
+        let mut scene = MjvScene::new(&model, 100);
+
+        // Default stereo mode
+        let original = scene.stereo();
+        assert_eq!(original, MjtStereo::mjSTEREO_NONE);
+
+        scene.set_stereo(MjtStereo::mjSTEREO_QUADBUFFERED);
+        assert_eq!(scene.stereo(), MjtStereo::mjSTEREO_QUADBUFFERED);
+
+        scene.set_stereo(MjtStereo::mjSTEREO_SIDEBYSIDE);
+        assert_eq!(scene.stereo(), MjtStereo::mjSTEREO_SIDEBYSIDE);
+    }
+
+    /// Tests that `create_geom` returns `SceneFull` when the scene capacity is exhausted.
+    #[test]
+    fn test_scene_full_error() {
+        let model = load_model();
+        let mut scene = MjvScene::new(&model, 2);
+
+        // Fill to capacity
+        scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None).unwrap();
+        scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None).unwrap();
+
+        // Next should fail
+        let err = scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None).unwrap_err();
+        assert!(matches!(err, MjSceneError::SceneFull { capacity: 2 }));
+    }
+
+    /// Tests `set_label` boundary: too-long label returns `LabelTooLong`,
+    /// max-length label succeeds with roundtrip.
+    #[test]
+    fn test_geom_label_boundary() {
+        let model = load_model();
+        let mut scene = MjvScene::new(&model, 10);
+        let geom = scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None).unwrap();
+
+        // Determine capacity (buffer len - 1 for NUL)
+        let capacity = geom.label.len() - 1;
+
+        // Max-length label should succeed
+        let max_label: String = "A".repeat(capacity);
+        geom.set_label(&max_label).unwrap();
+        assert_eq!(geom.label(), max_label);
+
+        // One byte too long should fail
+        let too_long: String = "B".repeat(capacity + 1);
+        let err = geom.set_label(&too_long).unwrap_err();
+        assert!(matches!(err, MjSceneError::LabelTooLong { .. }));
+
+        // Empty label should work
+        geom.set_label("").unwrap();
+        assert_eq!(geom.label(), "");
+    }
+
+    /// Tests `try_push` returns `FigureBufferFull` at capacity,
+    /// and push succeeds after `pop_back` frees a slot.
+    #[test]
+    fn test_figure_try_push_overflow() {
+        let mut fig = MjvFigure::new();
+        let plot = 0;
+        let capacity = fig.linedata[plot].len() / 2;
+
+        // Fill to capacity
+        for i in 0..capacity {
+            fig.try_push(plot, i as f32, i as f32).unwrap();
+        }
+        assert!(fig.full(plot));
+
+        // Next push should fail
+        let err = fig.try_push(plot, 0.0, 0.0).unwrap_err();
+        assert!(matches!(err, MjSceneError::FigureBufferFull { plot_index: 0, .. }));
+
+        // Pop one element, then push should succeed again
+        fig.pop_back(plot);
+        assert!(!fig.full(plot));
+        fig.try_push(plot, 99.0, 99.0).unwrap();
+        assert!(fig.full(plot));
+    }
 }

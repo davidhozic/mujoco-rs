@@ -2112,4 +2112,45 @@ mod tests {
         assert!(xml.contains("prm=\"1\""));
         assert!(xml.contains("prm=\"2\""));
     }
+
+    /// Tests that wrapping sites on a tendon produces a compiled model
+    /// with correct ntendon, nwrap, wrap types, and wrap object IDs.
+    #[test]
+    fn test_tendon_wrap_site_compiled_model() {
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+
+        let b1 = world.add_body().with_pos([0.0, 0.0, 0.5]);
+        b1.add_geom().with_size([0.01; 3]);
+        b1.add_site().with_name("s1");
+        b1.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        let b2 = world.add_body().with_pos([1.0, 0.0, 0.5]);
+        b2.add_geom().with_size([0.01; 3]);
+        b2.add_site().with_name("s2");
+        b2.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+
+        let tendon = spec.add_tendon().with_range([0.0, 1.0]);
+        tendon.wrap_site("s1");
+        tendon.wrap_site("s2");
+
+        let model = spec.compile().unwrap();
+
+        assert_eq!(model.ffi().ntendon, 1, "expected one tendon");
+        assert_eq!(model.ffi().nwrap, 2, "expected two wrap elements");
+
+        // Verify wrap types are mjWRAP_SITE (= 1)
+        let wrap_types = model.wrap_type();
+        assert_eq!(wrap_types[0], MjtWrap::mjWRAP_SITE);
+        assert_eq!(wrap_types[1], MjtWrap::mjWRAP_SITE);
+
+        // Verify wrap object IDs point to the correct sites
+        let wrap_objid = model.wrap_objid();
+        let s1_id = model.site("s1").unwrap().id as i32;
+        let s2_id = model.site("s2").unwrap().id as i32;
+        assert_eq!(wrap_objid[0], s1_id);
+        assert_eq!(wrap_objid[1], s2_id);
+    }
 }
