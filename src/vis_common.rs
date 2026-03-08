@@ -3,7 +3,10 @@ use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_model::MjModel;
 use crate::error::MjSceneError;
 
+use std::fs::File;
+use std::io::{self, BufWriter};
 use std::ops::Deref;
+use std::path::Path;
 
 
 /// Copies geometry data (geoms only) from the `src` to `dst`.
@@ -46,5 +49,43 @@ pub(crate) fn sync_geoms<M: Deref<Target = MjModel>>(src: &MjvScene<M>, dst: &mu
     ) };
 
     ffi_dst.ngeom = new_len;
+    Ok(())
+}
+
+/// Flips an image buffer vertically in-place.
+pub(crate) fn flip_image_vertically<T>(buffer: &mut [T], height: usize, row_len: usize) {
+    for i in 0..(height / 2) {
+        let top_idx = i * row_len;
+        let bottom_idx = (height - 1 - i) * row_len;
+        let (top_split, bottom_split) = buffer.split_at_mut(bottom_idx);
+        top_split[top_idx..top_idx + row_len].swap_with_slice(&mut bottom_split[0..row_len]);
+    }
+}
+
+/// Writes pixel data to a PNG file.
+///
+/// # Errors
+/// Returns [`io::Error`] if file creation or PNG encoding fails.
+pub(crate) fn write_png<P: AsRef<Path>>(
+    path: P,
+    data: &[u8],
+    width: u32,
+    height: u32,
+    color_type: png::ColorType,
+    bit_depth: png::BitDepth,
+) -> io::Result<()> {
+    let file = File::create(path)?;
+    let w = BufWriter::new(file);
+
+    let mut encoder = png::Encoder::new(w, width, height);
+    encoder.set_color(color_type);
+    encoder.set_depth(bit_depth);
+
+    let mut writer = encoder
+        .write_header()
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    writer
+        .write_image_data(data)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     Ok(())
 }
