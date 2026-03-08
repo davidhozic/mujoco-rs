@@ -58,10 +58,11 @@ impl<M: Deref<Target = MjModel> + Debug> Debug for MjData<M> {
     }
 }
 
-// Allow usage in threaded contexts as the data won't be shared anywhere outside Rust,
-// except in the C++ code.
-unsafe impl<M: Deref<Target = MjModel>> Send for MjData<M> {}
-unsafe impl<M: Deref<Target = MjModel>> Sync for MjData<M> {}
+// Allow usage in threaded contexts as long as M itself is Send / Sync
+// (e.g. Arc<MjModel>). Non-Send M types such as Rc<MjModel> are correctly
+// excluded by the M: Send / M: Sync bounds.
+unsafe impl<M: Deref<Target = MjModel> + Send> Send for MjData<M> {}
+unsafe impl<M: Deref<Target = MjModel> + Sync> Sync for MjData<M> {}
 
 
 impl<M: Deref<Target = MjModel>> MjData<M> {
