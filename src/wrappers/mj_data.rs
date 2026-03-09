@@ -980,11 +980,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// If `vertid` is `Some`, it will be filled with the id of the nearest vertex.
     /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
     /// `flex_layer`, `flg_vert`, `flg_edge`, `flg_face`, `flg_skin` and `flexid` control what and where to intersect.
+    ///
+    /// # Panics
+    /// Panics if `flexid` is out of bounds (must be `0 <= flexid < nflex`).
     pub fn ray_flex(
         &self, flex_layer: i32, flg_vert: bool, flg_edge: bool, flg_face: bool, flg_skin: bool, flexid: i32,
         pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         vertid: Option<&mut i32>, normal_out: Option<&mut [MjtNum; 3]>
     ) -> mjtNum {
+        let nflex = self.model.ffi().nflex as i32;
+        assert!(flexid >= 0 && flexid < nflex, "ray_flex: flexid {flexid} out of bounds (nflex = {nflex})");
         unsafe { mj_rayFlex(
             self.model.ffi(), self.ffi(),
             flex_layer, flg_vert as MjtByte, flg_edge as MjtByte, flg_face as MjtByte, flg_skin as MjtByte, flexid,
@@ -1025,9 +1030,14 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Intersect ray with hfield.
     /// Returns the distance to the intersection, or -1.0 if no intersection.
+    ///
+    /// # Panics
+    /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
     pub fn ray_hfield(
         &self, geom_id: i32, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
     ) -> mjtNum {
+        let ngeom = self.model.ffi().ngeom as i32;
+        assert!(geom_id >= 0 && geom_id < ngeom, "ray_hfield: geom_id {geom_id} out of bounds (ngeom = {ngeom})");
         unsafe {
             mj_rayHfield(self.model.ffi(), self.ffi(), geom_id, pnt, vec, normal_out.map_or(ptr::null_mut(), |x| x))
         }
@@ -1035,9 +1045,14 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Intersect ray with mesh.
     /// Returns the distance to the intersection, or -1.0 if no intersection.
+    ///
+    /// # Panics
+    /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
     pub fn ray_mesh(
         &self, geom_id: i32, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
     ) -> mjtNum {
+        let ngeom = self.model.ffi().ngeom as i32;
+        assert!(geom_id >= 0 && geom_id < ngeom, "ray_mesh: geom_id {geom_id} out of bounds (ngeom = {ngeom})");
         unsafe {
             mj_rayMesh(self.model.ffi(), self.ffi(), geom_id, pnt, vec, normal_out.map_or(ptr::null_mut(), |x| x))
         }
@@ -2400,15 +2415,15 @@ mod test {
     }
 
     #[test]
+    #[should_panic(expected = "ray_flex: flexid")]
     fn test_ray_flex() {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let data = model.make_data();
         let pos = [0.0; 3];
         let vec = [1.0, 0.0, 0.0];
 
-        // Just checking that it runs without crashing, since we have no flex in MODEL
-        let dist = data.ray_flex(0, false, false, false, false, -1, &pos, &vec, None, None);
-        assert_eq!(dist, -1.0);
+        // Model has no flexes, so any flexid is out of bounds.
+        data.ray_flex(0, false, false, false, false, 0, &pos, &vec, None, None);
     }
 
     #[test]

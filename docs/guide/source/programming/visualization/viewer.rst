@@ -175,7 +175,7 @@ the refresh rate to be equal to the simulation stepping frequency, which puts st
 To prevent slowdowns and allow V-Sync, the viewer can run in the **main thread**, while
 the actual physics simulation runs in another.
 
-Here's an excerpt from the :gh-example:`example <rust_viewer_threaded.rs>` on how to use the viewer in a multi-threaded way:
+Here's an adapted excerpt from the :gh-example:`example <rust_viewer_threaded.rs>` on how to use the viewer in a multi-threaded way:
 
 .. code-block:: rust
     :emphasize-lines: 1, 12-13, 18-22, 30-34

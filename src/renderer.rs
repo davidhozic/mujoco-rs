@@ -501,8 +501,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Save a depth image of the scene to a path. The image is 16-bit PNG, which
     /// can be converted into depth (distance) data by dividing the grayscale values by
-    /// 65535.0 and applying inverse normalization (if it was enabled with `normalize`): `depth = min + (grayscale / 65535.0) * (max - min)`.
-    /// If `normalize` is `true`, then the data is normalized with min-max normalization.
+    /// 65535.0 and applying inverse normalization: `depth = min + (grayscale / 65535.0) * (max - min)`.
+    ///
+    /// If `normalize` is `true`, then the data is normalized with per-frame min-max normalization.
+    /// When `normalize` is `false`, the depth values are mapped using the model's camera
+    /// near/far clip planes as the range, providing a fixed (frame-independent) mapping.
+    ///
     /// Use of [`MjRenderer::save_depth_raw`] is recommended if performance is critical, as
     /// it skips PNG encoding and also saves the true depth values directly.
     /// # Returns
@@ -519,7 +523,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 (depth.iter().flat_map(|&x| (((x - min) / (max - min) * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), min, max)
             }
             else {
-                (depth.iter().flat_map(|&x| ((x * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), 0.0, 1.0)
+                // Use model's camera near/far clip planes as the fixed normalization range.
+                // After linearization (in render()), depth values are in meters within [near, far].
+                let map = &self.model.vis().map;
+                let stat = &self.model.stat();
+                let extent = stat.extent as f32;
+                let near = map.znear * extent;
+                let far = map.zfar * extent;
+                (depth.iter().flat_map(|&x| (((x - near) / (far - near) * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), near, far)
             };
 
             write_png(

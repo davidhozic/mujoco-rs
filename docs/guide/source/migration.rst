@@ -351,6 +351,9 @@ passing a non-``Send``/``Sync`` wrapper (e.g., ``Rc<MjModel>``), switch to ``Arc
 ``update_timer`` boolean parameter. The FPS timer is now always updated.
 The return type also changed from ``()`` to ``Result<(), &'static str>``.
 
+``MjViewerCpp::__raw()`` has been removed. There is no direct replacement; the method
+exposed internal C++ binding pointers that are no longer part of the public API.
+
 **Before (2.x):**
 
 .. code-block:: rust

@@ -87,6 +87,8 @@ update of MuJoCo alone can increase the major version.
   - :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` no longer
     accepts the ``update_timer`` boolean parameter (the FPS timer is now always updated)
     and now returns ``Result<(), &'static str>`` instead of ``()``.
+  - ``MjViewerCpp::__raw()`` has been removed. There is no direct replacement; the method
+    exposed internal C++ binding pointers that are no longer part of the public API.
 
 - Removed deprecated methods:
 
@@ -366,9 +368,12 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
     :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth`, and
     :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw`
     now use ``bytemuck`` safe byte-reinterpretation APIs with a runtime length check.
-  - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml` and
-    :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>label` now use
-    direct ``i8``-to-``u8`` pointer casts (identical layout).
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml`
+    now declares its error buffer as ``[u8]`` and uses ``.cast::<i8>()`` for the C call,
+    then reads back safely via ``CStr::from_bytes_until_nul`` -- eliminating the previous
+    ``from_raw_parts`` + ``CStr::from_ptr`` pattern.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>label` now uses
+    a direct ``i8``-to-``u8`` pointer cast via ``bytemuck::cast_slice`` (identical layout).
   - ``write_mjs_vec_byte`` and
     :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`
     now require ``T: bytemuck::NoUninit`` for compile-time verified byte reinterpretation.

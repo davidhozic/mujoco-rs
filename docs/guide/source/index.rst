@@ -93,6 +93,6 @@ Table of contents
 
    installation
    programming/programming
-   migration
    api
    changelog
+   migration
