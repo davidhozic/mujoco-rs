@@ -38,6 +38,7 @@ const EXTRA_INTERNAL_VISUAL_GEOMS: u32 = 100;
 
 /// GlState enum wrapper. By default, headless implementation will be used
 /// when supported. Only on failure will an invisible winit window be used.
+#[derive(Debug)]
 pub(crate) enum GlState {
     #[cfg(feature = "renderer-winit-fallback")] Winit(GlStateWinit),
     #[cfg(target_os = "linux")] Egl(egl::GlStateEgl),
@@ -222,6 +223,7 @@ impl<M: Deref<Target = MjModel> + Clone> Default for MjRendererBuilder<M> {
 
 /// A renderer for rendering 3D scenes.
 /// By default, RGB rendering is enabled and depth rendering is disabled.
+#[derive(Debug)]
 pub struct MjRenderer<M: Deref<Target = MjModel> + Clone> {
     scene: MjvScene<M>,
     user_scene: MjvScene<M>,
@@ -695,6 +697,7 @@ impl From<crate::error::GlInitError> for RendererError {
 
 bitflags! {
     /// Flags that enable features of the renderer.
+    #[derive(Debug)]
     struct RendererFlags: u8 {
         const RENDER_RGB = 1 << 0;
         const RENDER_DEPTH = 1 << 1;
@@ -702,6 +705,14 @@ bitflags! {
 }
 
 
+
+impl<M: Deref<Target = MjModel> + Clone> Drop for MjRenderer<M> {
+    fn drop(&mut self) {
+        // Ensure the GL context is current before the implicit field drops
+        // (MjrContext's Drop calls mjr_freeContext which requires an active GL context).
+        let _ = self.gl_state.make_current();
+    }
+}
 
 /*
 ** Don't run any tests as OpenGL hates if anything

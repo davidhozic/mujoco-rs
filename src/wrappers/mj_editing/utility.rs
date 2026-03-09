@@ -222,7 +222,7 @@ macro_rules! add_x_method_no_default {
                 "the element, instead of panicking."
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
-                let ptr = unsafe { [<mjs_add $name:camel>](self.0) };
+                let ptr = unsafe { [<mjs_add $name:camel>](self.0.as_ptr()) };
                 unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
             }
         )*
@@ -243,7 +243,7 @@ macro_rules! find_x_method {
             pub fn $item(&self, name: &str) -> Option<&[<Mjs $item:camel>]> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
-                    let ptr = mjs_findElement(self.0, MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
+                    let ptr = mjs_findElement(self.0.as_ptr(), MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
                     if ptr.is_null() {
                         None
                     }
@@ -261,7 +261,7 @@ macro_rules! find_x_method {
             pub fn [<$item _mut>](&mut self, name: &str) -> Option<&mut [<Mjs $item:camel>]> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
-                    let ptr = mjs_findElement(self.0, MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
+                    let ptr = mjs_findElement(self.0.as_ptr(), MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
                     if ptr.is_null() {
                         None
                     }
@@ -286,7 +286,7 @@ macro_rules! find_x_method_direct {
             pub fn $item(&self, name: &str) -> Option<&[<Mjs $item:camel>]> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
-                    let ptr = [<mjs_find $item:camel>](self.0, c_name.as_ptr());
+                    let ptr = [<mjs_find $item:camel>](self.0.as_ptr(), c_name.as_ptr());
                     if ptr.is_null() {
                         None
                     }
@@ -304,7 +304,7 @@ macro_rules! find_x_method_direct {
             pub fn [<$item _mut>](&mut self, name: &str) -> Option<&mut [<Mjs $item:camel>]> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
-                    let ptr = [<mjs_find $item:camel>](self.0, c_name.as_ptr());
+                    let ptr = [<mjs_find $item:camel>](self.0.as_ptr(), c_name.as_ptr());
                     if ptr.is_null() {
                         None
                     }
@@ -507,14 +507,14 @@ macro_rules! item_spec_iterator {
         $(
             impl<'a> MjsSpecItemIterMut<'a, [<Mjs $iter_over>]> {
                 fn new(root: &'a mut MjSpec) -> Self {
-                    let last = unsafe { mjs_firstElement(root.0, MjtObj::[<mjOBJ_ $iter_over:upper>]) };
+                    let last = unsafe { mjs_firstElement(root.0.as_ptr(), MjtObj::[<mjOBJ_ $iter_over:upper>]) };
                     Self { root, last, item_type: PhantomData }
                 }
             }
 
             impl<'a> MjsSpecItemIter<'a, [<Mjs $iter_over>]> {
                 fn new(root: &'a MjSpec) -> Self {
-                    let last = unsafe { mjs_firstElement(root.0, MjtObj::[<mjOBJ_ $iter_over:upper>]) };
+                    let last = unsafe { mjs_firstElement(root.0.as_ptr(), MjtObj::[<mjOBJ_ $iter_over:upper>]) };
                     Self { root, last, item_type: PhantomData }
                 }
             }
@@ -545,7 +545,7 @@ macro_rules! item_spec_iterator {
 
                     unsafe {
                         let out = [<mjs_as $iter_over>](self.last).as_ref();
-                        self.last = mjs_nextElement(self.root.0, self.last);
+                        self.last = mjs_nextElement(self.root.0.as_ptr(), self.last);
                         out
                     }
                 }

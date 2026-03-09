@@ -1,5 +1,5 @@
 //! Module related to implementation of the [`MjViewer`]. For implementation of the C++ wrapper,
-//! see [`cpp_viewer::MjViewerCpp`] (enabled by the `cpp-viewer` cargo feature).
+//! see [`crate::cpp_viewer::MjViewerCpp`] (enabled by the `cpp-viewer` cargo feature).
 #[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
 use glutin::prelude::PossiblyCurrentGlContext;
 use glutin::surface::GlSurface;
@@ -1290,6 +1290,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 /// - `vsync`: false
 /// - `warn_non_realtime`: false
 /// 
+#[derive(Debug)]
 pub struct MjViewerBuilder<M: Deref<Target = MjModel> + Clone> {
     /// The name shown on the window decoration.
     window_name: Cow<'static, str>,

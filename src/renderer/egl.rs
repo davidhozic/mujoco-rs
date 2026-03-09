@@ -9,6 +9,7 @@ use std::num::NonZero;
 
 
 /// GlState implementation, based on EGL for GNU Linux platforms.
+#[derive(Debug)]
 pub(crate) struct GlStateEgl {
     pub(crate) context: PossiblyCurrentContext,
     pub(crate) surface: Surface<PbufferSurface>,

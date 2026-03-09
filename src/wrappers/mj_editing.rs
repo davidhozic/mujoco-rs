@@ -2,7 +2,7 @@
 use std::ffi::{c_int, CStr, CString};
 use std::marker::PhantomData;
 use std::path::Path;
-use std::ptr;
+use std::ptr::{self, NonNull};
 use crate::error::MjEditError;
 
 #[macro_use]
@@ -137,7 +137,8 @@ impl MjsCompiler {
 ** Model Specification
 ***************************/
 /// Model specification. This wraps the FFI type [`mjSpec`] internally.
-pub struct MjSpec(*mut mjSpec);
+#[derive(Debug)]
+pub struct MjSpec(NonNull<mjSpec>);
 
 // SAFETY: The pointer cannot be accessed without borrowing the wrapper.
 unsafe impl Sync for MjSpec {}
@@ -166,10 +167,7 @@ impl MjSpec {
     pub fn try_new() -> Result<Self, MjEditError> {
         assert_mujoco_version();
         let ptr = unsafe { mj_makeSpec() };
-        if ptr.is_null() {
-            return Err(MjEditError::AllocationFailed);
-        }
-        Ok(MjSpec(ptr))
+        Ok(MjSpec(NonNull::new(ptr).ok_or(MjEditError::AllocationFailed)?))
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
@@ -291,13 +289,14 @@ impl MjSpec {
             ))
         }
         else {
-            Ok(MjSpec(spec_ptr))
+            // SAFETY: spec_ptr is confirmed non-null by the guard above.
+            Ok(MjSpec(unsafe { NonNull::new_unchecked(spec_ptr) }))
         }
     }
 
     /// An immutable reference to the internal FFI struct.
     pub fn ffi(&self) -> &mjSpec {
-        unsafe { &*self.0 }
+        unsafe { self.0.as_ref() }
     }
 
     /// A mutable reference to the internal FFI struct.
@@ -306,7 +305,7 @@ impl MjSpec {
     /// Modifying the underlying FFI struct directly can break the invariants
     /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjSpec {
-        unsafe { &mut *self.0 }
+        unsafe { self.0.as_mut() }
     }
 
     /// Compile [`MjSpec`] to [`MjModel`].
@@ -317,7 +316,7 @@ impl MjSpec {
     /// # Errors
     /// Returns [`MjEditError::CompileFailed`] if the model fails to compile.
     pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
-        let result = unsafe { MjModel::from_raw( mj_compile(self.0, ptr::null()) ) };
+        let result = unsafe { MjModel::from_raw( mj_compile(self.0.as_ptr(), ptr::null()) ) };
         result.map_err(|_| {
             // SAFETY: The spec is still valid after failed compilation.
             // The error pointer is valid until the next MuJoCo call on this spec.
@@ -491,6 +490,7 @@ impl MjSpec {
 }
 
 /// Mutable iterator over items in [`MjSpec`].
+#[derive(Debug)]
 pub struct MjsSpecItemIterMut<'a, T> {
     root: &'a mut MjSpec,
     last: *mut mjsElement,
@@ -499,6 +499,7 @@ pub struct MjsSpecItemIterMut<'a, T> {
 }
 
 /// Immutable iterator over items in [`MjSpec`].
+#[derive(Debug)]
 pub struct MjsSpecItemIter<'a, T> {
     root: &'a MjSpec,
     last: *mut mjsElement,
@@ -521,7 +522,7 @@ impl MjSpec {
 
 impl Drop for MjSpec {
     fn drop(&mut self) {
-        unsafe { mj_deleteSpec(self.0); }
+        unsafe { mj_deleteSpec(self.0.as_ptr()); }
     }
 }
 
@@ -1369,7 +1370,7 @@ impl MjsHfield {
 
     /// Sets `userdata`.
     pub fn set_userdata<T: AsRef<[f32]>>(&mut self, userdata: T) {
-        write_mjs_vec_f32(userdata.as_ref(), unsafe { &mut *self.userdata })
+        write_mjs_vec_f32(userdata.as_ref(), self.userdata)
     }
 }
 
@@ -1458,7 +1459,7 @@ impl MjsTexture {
 
     /// Sets texture `data`.
     pub fn set_data<T: bytemuck::NoUninit>(&mut self, data: &[T]) {
-        write_mjs_vec_byte(data, unsafe { &mut *self.data });
+        write_mjs_vec_byte(data, self.data);
     }
 
     string_set_get_with! {[&]
@@ -1593,6 +1594,7 @@ impl MjsBody {
 }
 
 /// Mutable iterator over items in [`MjsBody`].
+#[derive(Debug)]
 pub struct MjsBodyItemIterMut<'a, T> {
     root: &'a mut MjsBody,
     last: *mut mjsElement,
@@ -1602,6 +1604,7 @@ pub struct MjsBodyItemIterMut<'a, T> {
 }
 
 /// Immutable iterator over items in [`MjsBody`].
+#[derive(Debug)]
 pub struct MjsBodyItemIter<'a, T> {
     root: &'a MjsBody,
     last: *mut mjsElement,

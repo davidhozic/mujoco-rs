@@ -58,6 +58,7 @@ impl Default for MjLROpt {
 ** MjVfs
 ***********************************************************************************************************************/
 /// Wrapper around the virtual-file system.
+#[derive(Debug)]
 pub struct MjVfs {
     ffi: Box<mjVFS>
 }

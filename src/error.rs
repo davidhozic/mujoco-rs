@@ -223,7 +223,7 @@ impl std::error::Error for MjSceneError {}
 
 
 /// Errors that can occur in model-specification editing operations
-/// ([`MjSpec`](crate::wrappers::MjSpec) and related types).
+/// ([`MjSpec`](crate::wrappers::mj_editing::MjSpec) and related types).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MjEditError {

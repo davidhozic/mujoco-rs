@@ -40,6 +40,7 @@ unsafe extern "C" {
 /// while the viewer keeps a pointer to them (their wrapped pointers).
 /// Undefined behavior should not occur, however caution is advised as this is a violation
 /// of the Rust's borrowing rules.
+#[derive(Debug)]
 pub struct MjViewerCpp<M: Deref<Target = MjModel> + Clone + Send + Sync> {
     sim: *mut mujoco_Simulate,
     running: bool,

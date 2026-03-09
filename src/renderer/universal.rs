@@ -11,6 +11,7 @@ use winit::event_loop::EventLoop;
 use std::num::NonZero;
 
 
+#[derive(Debug)]
 pub(crate) struct GlStateWinit {
     inner: RenderBase,
 }

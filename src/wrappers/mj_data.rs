@@ -47,15 +47,10 @@ pub type MjtSleepState = mjtSleepState;
 
 /// Wrapper around the `mjData` struct.
 /// Provides lifetime guarantees as well as automatic cleanup.
+#[derive(Debug)]
 pub struct MjData<M: Deref<Target = MjModel>> {
     data: NonNull<mjData>,
     model: M
-}
-
-impl<M: Deref<Target = MjModel> + Debug> Debug for MjData<M> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MjData {:?}", self.model)
-    }
 }
 
 // Allow usage in threaded contexts as long as M itself is Send / Sync

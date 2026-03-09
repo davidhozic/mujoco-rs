@@ -320,6 +320,7 @@ macro_rules! info_with_view {
         paste::paste! {
             #[doc = "Stores information required to create views to [`Mj" $info_type "`] arrays corresponding to a " $name "."]
             #[allow(non_snake_case)]
+            #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type Info>] {
                 pub name: String,
                 pub id: usize,
@@ -338,7 +339,7 @@ macro_rules! info_with_view {
                                 "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
                 pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
                     assert_eq!(self.model_signature, [<$info_type:lower>].signature(), "model signature mismatch");
-                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], crate::util::PointerViewMut::new)
+                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], $crate::util::PointerViewMut::new)
                 }
 
                 #[doc = concat!("Returns a view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
@@ -346,18 +347,19 @@ macro_rules! info_with_view {
                                 "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
                 pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
                     assert_eq!(self.model_signature, [<$info_type:lower>].signature(), "model signature mismatch");
-                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], crate::util::PointerView::new)
+                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], $crate::util::PointerView::new)
                 }
             }
 
             #[doc = "A mutable view to " $name " variables of [`Mj" $info_type "`]."]
             #[allow(non_snake_case)]
+            #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type ViewMut>]<'d> {
                 $(
-                    pub $attr: crate::util::PointerViewMut<'d, $type_>,
+                    pub $attr: $crate::util::PointerViewMut<'d, $type_>,
                 )*
                 $(
-                    pub $opt_attr: Option<crate::util::PointerViewMut<'d, $type_opt>>,
+                    pub $opt_attr: Option<$crate::util::PointerViewMut<'d, $type_opt>>,
                 )*
             }
 
@@ -377,12 +379,13 @@ macro_rules! info_with_view {
 
             #[doc = "An immutable view to " $name " variables of [`Mj" $info_type "`]."]
             #[allow(non_snake_case)]
+            #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type View>]<'d> {
                 $(
-                    pub $attr: crate::util::PointerView<'d, $type_>,
+                    pub $attr: $crate::util::PointerView<'d, $type_>,
                 )*
                 $(
-                    pub $opt_attr: Option<crate::util::PointerView<'d, $type_opt>>,
+                    pub $opt_attr: Option<$crate::util::PointerView<'d, $type_opt>>,
                 )*
             }
         }
@@ -409,7 +412,7 @@ macro_rules! getter_setter {
                 &self$(.$ffi())?.$name
             }
 
-            crate::eval_or_expand! {
+            $crate::eval_or_expand! {
                 @eval $($cfg_mut)? {
                     #[doc = concat!("Return a mutable reference to ", $comment)]
                     pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
@@ -607,7 +610,7 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
-                crate::eval_or_expand! {
+                $crate::eval_or_expand! {
                     @eval $($cfg_mut)? {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
@@ -649,7 +652,7 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts($crate::maybe_force_cast!(data_ptr, [$type; $multiplier], force), length) }
                 }
                 
-                crate::eval_or_expand! {
+                $crate::eval_or_expand! {
                     @eval $($cfg_mut)? {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [[$type; $multiplier]] {
@@ -692,7 +695,7 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
-                crate::eval_or_expand! {
+                $crate::eval_or_expand! {
                     @eval $($cfg_mut)? {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
@@ -778,24 +781,24 @@ macro_rules! c_str_as_str_method {
 
     // Mixed patterns
     (with, get, set {$($other:tt)*}) => {
-        crate::c_str_as_str_method!(get {$($other)*});
-        crate::c_str_as_str_method!(set {$($other)*});
-        crate::c_str_as_str_method!(with {$($other)*});
+        $crate::c_str_as_str_method!(get {$($other)*});
+        $crate::c_str_as_str_method!(set {$($other)*});
+        $crate::c_str_as_str_method!(with {$($other)*});
     };
 
     (get, set {$($other:tt)*}) => {
-        crate::c_str_as_str_method!(get {$($other)*});
-        crate::c_str_as_str_method!(set {$($other)*});
+        $crate::c_str_as_str_method!(get {$($other)*});
+        $crate::c_str_as_str_method!(set {$($other)*});
     };
 
     (with, set {$($other:tt)*}) => {
-        crate::c_str_as_str_method!(set {$($other)*});
-        crate::c_str_as_str_method!(with {$($other)*});
+        $crate::c_str_as_str_method!(set {$($other)*});
+        $crate::c_str_as_str_method!(with {$($other)*});
     };
 
     (with, get {$($other:tt)*}) => {
-        crate::c_str_as_str_method!(get {$($other)*});
-        crate::c_str_as_str_method!(with {$($other)*});
+        $crate::c_str_as_str_method!(get {$($other)*});
+        $crate::c_str_as_str_method!(with {$($other)*});
     };
 }
 
