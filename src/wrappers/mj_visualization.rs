@@ -204,7 +204,7 @@ impl MjvCamera {
     }
 
     /// Sets the camera free from tracking.
-    pub fn set_free(&mut self) {
+    pub fn free(&mut self) {
         self.trackbodyid = -1;
         self.type_ = MjtCamera::mjCAMERA_FREE as i32;
     }

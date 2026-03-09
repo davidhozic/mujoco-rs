@@ -978,7 +978,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         state: ElementState::Pressed, ..
                     }, ..
                 } => {
-                    self.camera.set_free();
+                    self.camera.free();
                 }
 
                 // Toggle help menu

@@ -380,7 +380,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                                 ui.menu_button(current_cam_name, |ui| {
                                     if ui.selectable_value(&mut current_cam_name, "Free", "Free").clicked() {
-                                        camera.set_free();
+                                        camera.free();
                                     }
 
                                     for (id, name) in self.camera_names.iter().enumerate() {

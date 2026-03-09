@@ -115,7 +115,7 @@ The table below maps the breaking error-type changes:
      - ``io::Error``
      - ``RendererError``
    * - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` (``try_sync``)
-     - ``()`` (infallible ``sync``)
+     - (new method)
      - ``Result<(), RendererError>``
    * - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` / :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError`
      - (new variant)
@@ -145,13 +145,13 @@ that returned ``Option<MjModel>`` has been replaced:
     let model_copy = model.try_clone()?;
 
 
-``try_sync()`` return type
+``try_sync()``
 -----------------------------
 
-The infallible ``sync()`` method on :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` has been
-replaced by :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync`, which returns
-``Result<(), RendererError>``.
-If your code called ``sync()``, replace it with ``try_sync()`` and handle the ``Result``.
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` has been added as a
+fallible alternative to :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`.
+The existing ``sync()`` method still works but now delegates to ``try_sync().expect()``.
+If your code needs to handle scene-full errors gracefully, use ``try_sync()`` instead.
 
 Newly fallible methods
 -----------------------------
@@ -196,6 +196,25 @@ new ``normals_out`` parameter and now returns ``Result``. Pass ``None`` to prese
 previous behavior.
 
 
+``mju_ray_geom()`` parameter change
+------------------------------------------
+
+:docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom` gained a new ``normal_out``
+parameter (``Option<&mut [MjtNum; 3]>``). Pass ``None`` to preserve the previous behavior.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    let dist = mju_ray_geom(&pos, &mat, &size, &pnt, &vec, geomtype);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    let dist = mju_ray_geom(&pos, &mat, &size, &pnt, &vec, geomtype, None);
+
+
 ``MjvPerturb::update_local_pos``
 ------------------------------------
 
@@ -229,9 +248,6 @@ Several methods have been renamed for consistency with Rust conventions:
    * - |mj_model|
      - ``get_totalmass()``
      - ``totalmass()``
-   * - |mjv_camera|
-     - ``free()``
-     - ``set_free()``
    * - :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`
      - ``mjr_set_buffer()``
      - ``set_buffer()``
@@ -259,14 +275,6 @@ returned ``-1``).
     // or use if let / match for fallible lookups
 
 
-``try_clone()`` error type
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-|mj_model|'s :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_clone` now
-returns ``Result<MjModel, MjModelError>`` (with the ``AllocationFailed`` variant) instead of
-``Result<MjModel, MjDataError>``.
-
-
 ``find_selection()`` return type
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -278,14 +286,14 @@ instead of a 5-tuple.
 
 .. code-block:: rust
 
-    let (body_id, geom_id, flex_id, point, normal) = scene.find_selection(&model, ...);
+    let (body_id, geom_id, flex_id, skin_id, point) = scene.find_selection(&data, ...);
 
 **After (3.0.0):**
 
 .. code-block:: rust
 
-    let sel = scene.find_selection(&model, ...);
-    println!("{} {} {} {:?}", sel.body_id, sel.geom_id, sel.flex_id, sel.point);
+    let sel = scene.find_selection(&data, ...);
+    println!("{} {} {} {} {:?}", sel.body_id, sel.geom_id, sel.flex_id, sel.skin_id, sel.point);
 
 
 Type changes
@@ -334,6 +342,10 @@ Additionally, ``MjData::maxuse_threadstack`` is still available but its return t
 
 C++ viewer changes
 -----------------------
+
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp` now requires the model handle ``M``
+to implement ``Send + Sync`` (in addition to ``Deref<Target = MjModel> + Clone``). If you were
+passing a non-``Send``/``Sync`` wrapper (e.g., ``Rc<MjModel>``), switch to ``Arc<MjModel>``.
 
 :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` no longer accepts the
 ``update_timer`` boolean parameter. The FPS timer is now always updated.
