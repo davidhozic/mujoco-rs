@@ -17,7 +17,7 @@ use crate::mujoco_c::*;
 ///
 /// # Panics
 /// Panics if the string contains invalid UTF-8.
-pub(crate) fn read_mjs_string<'a>(string: *const mjString) -> &'a str {
+pub(crate) unsafe fn read_mjs_string<'a>(string: *const mjString) -> &'a str {
     let ptr = unsafe { mjs_getString(string) };
     if ptr.is_null() {
         ""
@@ -30,15 +30,21 @@ pub(crate) fn read_mjs_string<'a>(string: *const mjString) -> &'a str {
 }
 
 /// Writes to a `destination` MJS string (C++) from a `source` `&str`.
+///
+/// # Safety
+/// `destination` must point to a valid `mjString` object.
+///
 /// # Panics
 /// When the `source` contains '\0' characters, a panic occurs.
-pub(crate) fn write_mjs_string(source: &str, destination: *mut mjString) {
+pub(crate) unsafe fn write_mjs_string(source: &str, destination: *mut mjString) {
     let c_source = CString::new(source).unwrap();
     unsafe { mjs_setString(destination, c_source.as_ptr()) };
 }
 
 /// Reads MJS double vector (C++) as a `&\[f64\]`.
-pub(crate) fn read_mjs_vec_f64<'a>(array: *const mjDoubleVec) -> &'a [f64] {
+/// # Safety
+/// `array` must point to a valid `mjDoubleVec` object for the duration `'a`.
+pub(crate) unsafe fn read_mjs_vec_f64<'a>(array: *const mjDoubleVec) -> &'a [f64] {
     let mut userdata_length = 0;
     let ptr_arr = unsafe { mjs_getDouble(array, &mut userdata_length) };
     if ptr_arr.is_null() {
@@ -48,44 +54,63 @@ pub(crate) fn read_mjs_vec_f64<'a>(array: *const mjDoubleVec) -> &'a [f64] {
 }
 
 /// Writes MJS double vector (C++) from a `source` to `destination`.
-pub(crate) fn write_mjs_vec_f64(source: &[f64], destination: *mut mjDoubleVec) {
+///
+/// # Safety
+/// `destination` must point to a valid `mjDoubleVec` object.
+pub(crate) unsafe fn write_mjs_vec_f64(source: &[f64], destination: *mut mjDoubleVec) {
     unsafe {
         mjs_setDouble(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
 /// Writes MJS float vector (C++) from a `source` to `destination`.
-pub(crate) fn write_mjs_vec_f32(source: &[f32], destination: *mut mjFloatVec) {
+///
+/// # Safety
+/// `destination` must point to a valid `mjFloatVec` object.
+pub(crate) unsafe fn write_mjs_vec_f32(source: &[f32], destination: *mut mjFloatVec) {
     unsafe {
         mjs_setFloat(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
 /// Appends MJS float vector (C++) from a `source` to `destination`.
-pub(crate) fn append_mjs_vec_vec_f32(source: &[f32], destination: *mut mjFloatVecVec) {
+///
+/// # Safety
+/// `destination` must point to a valid `mjFloatVecVec` object.
+pub(crate) unsafe fn append_mjs_vec_vec_f32(source: &[f32], destination: *mut mjFloatVecVec) {
     unsafe {
         mjs_appendFloatVec(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
 /// Writes MJS int vector (C++) from a `source` to `destination`.
-pub(crate) fn write_mjs_vec_i32(source: &[i32], destination: *mut mjIntVec) {
+///
+/// # Safety
+/// `destination` must point to a valid `mjIntVec` object.
+pub(crate) unsafe fn write_mjs_vec_i32(source: &[i32], destination: *mut mjIntVec) {
     unsafe {
         mjs_setInt(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
 /// Appends MJS int vector (C++) from a `source` to `destination`.
-pub(crate) fn append_mjs_vec_vec_i32(source: &[i32], destination: *mut mjIntVecVec) {
+///
+/// # Safety
+/// `destination` must point to a valid `mjIntVecVec` object.
+pub(crate) unsafe fn append_mjs_vec_vec_i32(source: &[i32], destination: *mut mjIntVecVec) {
     unsafe {
         mjs_appendIntVec(destination, source.as_ptr(), source.len() as i32);
     }
 }
 
 /// Split `source` to entries and copy to `destination` (C++).
+///
+/// # Safety
+/// `destination` must point to a valid `mjStringVec` object.
+///
 /// # Panics
 /// When the `source` contains '\0' characters, a panic occurs.
-pub(crate) fn write_mjs_vec_string(source: &str, destination: *mut mjStringVec) {
+pub(crate) unsafe fn write_mjs_vec_string(source: &str, destination: *mut mjStringVec) {
     let c_source = CString::new(source).unwrap();
     unsafe {
         mjs_setStringVec(destination, c_source.as_ptr());
@@ -93,9 +118,13 @@ pub(crate) fn write_mjs_vec_string(source: &str, destination: *mut mjStringVec) 
 }
 
 /// Split `source` to entries and append to `destination` (C++).
+///
+/// # Safety
+/// `destination` must point to a valid `mjStringVec` object.
+///
 /// # Panics
 /// When the `source` contains '\0' characters, a panic occurs.
-pub(crate) fn append_mjs_vec_string(source: &str, destination: *mut mjStringVec) {
+pub(crate) unsafe fn append_mjs_vec_string(source: &str, destination: *mut mjStringVec) {
     let c_source = CString::new(source).unwrap();
     unsafe {
         mjs_appendString(destination, c_source.as_ptr());
@@ -103,7 +132,10 @@ pub(crate) fn append_mjs_vec_string(source: &str, destination: *mut mjStringVec)
 }
 
 /// Writes MJS byte vector (C++) from a `source` to `destination`.
-pub(crate) fn write_mjs_vec_byte<T: bytemuck::NoUninit>(source: &[T], destination: *mut mjByteVec) {
+///
+/// # Safety
+/// `destination` must point to a valid `mjByteVec` object.
+pub(crate) unsafe fn write_mjs_vec_byte<T: bytemuck::NoUninit>(source: &[T], destination: *mut mjByteVec) {
     let bytes: &[u8] = bytemuck::cast_slice(source);
     unsafe {
         mjs_setBuffer(destination, bytes.as_ptr().cast(), bytes.len() as i32);
@@ -330,14 +362,16 @@ macro_rules! mjs_struct {
             /// # Panics
             /// Panics if it contains invalid UTF-8.
             pub fn info(&self) -> &str {
-                read_mjs_string(self.info)
+                // SAFETY: self.info is a valid mjString pointer for the lifetime of self.
+                unsafe { read_mjs_string(self.info) }
             }
 
             /// Set the message appended to compiler errors.
             /// # Panics
             /// When the `info` contains '\0' characters, a panic occurs.
             pub fn set_info(&mut self, info: &str) {
-                write_mjs_string(info, self.info);
+                // SAFETY: self.info is a valid mjString pointer for the lifetime of self.
+                unsafe { write_mjs_string(info, self.info) };
             }
         }
 
@@ -364,17 +398,20 @@ macro_rules! userdata_method {
     ($type:ty) => {paste::paste!{
         /// Return an immutable slice to userdata.
         pub fn userdata(&self) -> &[$type] {
-            [<read_mjs_vec_ $type>](self.userdata)
+            // SAFETY: self.userdata is a valid mjDoubleVec pointer for the lifetime of self.
+            unsafe { [<read_mjs_vec_ $type>](self.userdata) }
         }
         
         /// Set `userdata`.
         pub fn set_userdata<T: AsRef<[$type]>>(&mut self, value: T) {
-            [<write_mjs_vec_ $type>](value.as_ref(), self.userdata)
+            // SAFETY: self.userdata is a valid pointer for the lifetime of self.
+            unsafe { [<write_mjs_vec_ $type>](value.as_ref(), self.userdata) };
         }
 
         /// Builder method for setting `userdata`.
         pub fn with_userdata<T: AsRef<[$type]>>(&mut self, value: T) -> &mut Self {
-            [<write_mjs_vec_ $type>](value.as_ref(), self.userdata);
+            // SAFETY: self.userdata is a valid pointer for the lifetime of self.
+            unsafe { [<write_mjs_vec_ $type>](value.as_ref(), self.userdata) };
             self
         }
     }};
@@ -391,7 +428,8 @@ macro_rules! vec_string_set_append {
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<set_ $name>](&mut self, value: &str) {
-                write_mjs_vec_string(value, self.$name);
+                // SAFETY: self.$name is a valid mjStringVec pointer for the lifetime of self.
+                unsafe { write_mjs_vec_string(value, self.$name) };
             }
 
             #[doc = concat!(
@@ -401,7 +439,8 @@ macro_rules! vec_string_set_append {
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<append_ $name>](&mut self, value: &str) {
-                append_mjs_vec_string(value, self.$name);
+                // SAFETY: self.$name is a valid mjStringVec pointer for the lifetime of self.
+                unsafe { append_mjs_vec_string(value, self.$name) };
             }
         )*
     }};
@@ -413,7 +452,8 @@ macro_rules! string_set_get_with {
         #[allow(unused_unsafe)]
         #[doc = concat!("Return ", $comment)]
         pub fn $name(&self) -> &str {
-                read_mjs_string(unsafe { self$(.$ffi())?.$name })
+                // SAFETY: the mjString field is valid for the lifetime of self.
+                unsafe { read_mjs_string(self$(.$ffi())?.$name) }
         }
 
         #[allow(unused_unsafe)]
@@ -424,7 +464,8 @@ macro_rules! string_set_get_with {
             "When the `value` contains '\\0' characters, a panic occurs."
         )]
         pub fn [<set_ $name>](&mut self, value: &str) {
-            write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name })
+            // SAFETY: the mjString field is valid for the lifetime of self.
+            unsafe { write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name }) };
         }
     }};
 
@@ -439,7 +480,8 @@ macro_rules! string_set_get_with {
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<with_ $name>](mut self, value: &str) -> Self {
-                write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name });
+                // SAFETY: the mjString field is valid for the lifetime of self.
+                unsafe { write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name }) };
                 self
             }
         )*
@@ -456,7 +498,8 @@ macro_rules! string_set_get_with {
                 "When the `value` contains '\\0' characters, a panic occurs."
             )]
             pub fn [<with_ $name>](&mut self, value: &str) -> &mut Self {
-                write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name });
+                // SAFETY: the mjString field is valid for the lifetime of self.
+                unsafe { write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name }) };
                 self
             }
         )*
@@ -469,7 +512,8 @@ macro_rules! vec_set_get {
         $(
             #[doc = concat!("Return ", $comment)]
             pub fn $name(&self) -> &[$type] {
-                [<read_mjs_vec_ $type>](self.$name)
+                // SAFETY: self.$name is a valid mjDoubleVec/mjFloatVec pointer for the lifetime of self.
+                unsafe { [<read_mjs_vec_ $type>](self.$name) }
             }
         )*
 
@@ -483,7 +527,8 @@ macro_rules! vec_set {
         $(
             #[doc = concat!("Set ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
-                [<write_mjs_vec_ $type>](value, self.$name)
+                // SAFETY: self.$name is a valid pointer for the lifetime of self.
+                unsafe { [<write_mjs_vec_ $type>](value, self.$name) };
             }
         )*
     }};
@@ -495,7 +540,8 @@ macro_rules! vec_vec_append {
         $(
             #[doc = concat!("Set ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
-                [<append_mjs_vec_vec_ $type>](value, self.$name)
+                // SAFETY: self.$name is a valid pointer for the lifetime of self.
+                unsafe { [<append_mjs_vec_vec_ $type>](value, self.$name) };
             }
         )*
     }};
@@ -529,7 +575,9 @@ macro_rules! item_spec_iterator {
 
                     unsafe {
                         let out = [<mjs_as $iter_over>](self.last).as_mut();
-                        self.last = mjs_nextElement(self.root.ffi_mut(), self.last);
+                        // Use as_ptr() instead of ffi_mut() to avoid creating &mut mjSpec,
+                        // which would alias with previously yielded &mut items.
+                        self.last = mjs_nextElement(self.root.0.as_ptr(), self.last);
                         out
                     }
                 }
@@ -550,6 +598,10 @@ macro_rules! item_spec_iterator {
                     }
                 }
             }
+
+            // Once self.last is null, next() always returns None.
+            impl<'a> std::iter::FusedIterator for MjsSpecItemIterMut<'a, [<Mjs $iter_over>]> {}
+            impl<'a> std::iter::FusedIterator for MjsSpecItemIter<'a, [<Mjs $iter_over>]> {}
         )*
     }};
 }
@@ -586,8 +638,8 @@ macro_rules! item_body_iterator {
 
             impl<'a> MjsBodyItemIter<'a, [<Mjs $iter_over>]> {
                 fn new(root: &'a MjsBody, recurse: bool) -> Self {
-                    // we cast to *mut MjsBody because mjs_firstChild requires a mutable pointer, but it doesn't
-                    // actually mutate anything, so it's safe.
+                    // SAFETY: mjs_firstChild requires a *mut pointer but does not mutate
+                    // the body. The const-to-mut cast is sound because no mutation occurs.
                     let last = unsafe { mjs_firstChild(root as *const _ as *mut _, MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
                     Self { root, last, recurse, item_type: PhantomData }
                 }
@@ -619,12 +671,16 @@ macro_rules! item_body_iterator {
 
                     unsafe {
                         let out = [<mjs_as $iter_over>](self.last).as_ref();
-                        // mjs_nextChild doesn't actually modify, but still demands a mutable pointer
+                        // SAFETY: mjs_nextChild requires *mut but does not mutate. Cast is sound.
                         self.last = mjs_nextChild(self.root as *const _ as *mut _, self.last, self.recurse.into());
                         out
                     }
                 }
             }
+
+            // Once self.last is null, next() always returns None.
+            impl<'a> std::iter::FusedIterator for MjsBodyItemIterMut<'a, [<Mjs $iter_over>]> {}
+            impl<'a> std::iter::FusedIterator for MjsBodyItemIter<'a, [<Mjs $iter_over>]> {}
         )*
     }};
 }

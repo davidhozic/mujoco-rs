@@ -83,7 +83,7 @@ fn test_basic_getters(model: &MjModel) {
     assert_eq!(model.ffi().nbody, 3);
     assert_eq!(model.ffi().ngeom, 3);
 
-    let motor_id = model.name_to_id(MjtObj::mjOBJ_ACTUATOR, "box2_motor");
+    let motor_id = model.name_to_id(MjtObj::mjOBJ_ACTUATOR, "box2_motor").unwrap();
     assert!(motor_id >= 0);
     
     let motor_name = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, motor_id).unwrap();
@@ -95,14 +95,14 @@ fn test_basic_getters(model: &MjModel) {
 
 fn test_simulation_and_sensors<'a>(model: &'a MjModel, data: &mut MjData<&'a MjModel>) {
     println!("Stepping simulation and testing sensors...");
-    let motor_id = model.name_to_id(MjtObj::mjOBJ_ACTUATOR, "box2_motor");
+    let motor_id = model.name_to_id(MjtObj::mjOBJ_ACTUATOR, "box2_motor").unwrap();
     for _ in 0..10 {
         data.ctrl_mut()[motor_id as usize] = 1.0;
         data.step();
     }
     
     data.sensor_pos();
-    let sensor_id = model.name_to_id(MjtObj::mjOBJ_SENSOR, "box2_pos_sensor") as usize;
+    let sensor_id = model.name_to_id(MjtObj::mjOBJ_SENSOR, "box2_pos_sensor").unwrap() as usize;
     // box2_pos_sensor is mjSENS_JOINTPOS (dim=1)
     let sensor_data: [f64; 1] = data.read_sensor_fixed(sensor_id, 0.0, 0).expect("Failed to read sensor");
     assert!(!sensor_data.is_empty());
@@ -113,8 +113,8 @@ fn test_kinematics_and_jacobians<'a>(model: &'a MjModel, data: &mut MjData<&'a M
     data.kinematics();
     data.com_pos();
     
-    let site_id = model.name_to_id(MjtObj::mjOBJ_SITE, "box1_site");
-    let box1_body_id = model.name_to_id(MjtObj::mjOBJ_BODY, "box1");
+    let site_id = model.name_to_id(MjtObj::mjOBJ_SITE, "box1_site").unwrap();
+    let box1_body_id = model.name_to_id(MjtObj::mjOBJ_BODY, "box1").unwrap();
     
     let (jacp, jacr) = data.jac_site(true, true, site_id).unwrap();
     assert_eq!(jacp.len(), 3 * model.ffi().nv as usize);

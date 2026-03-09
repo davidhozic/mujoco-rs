@@ -279,6 +279,8 @@ pub enum MjModelError {
     LoadFailed(String),
     /// MuJoCo failed to save the model XML.
     SaveFailed(String),
+    /// MuJoCo failed to allocate the requested structure.
+    AllocationFailed,
     /// The state source slice has the wrong length for the given spec.
     StateSliceLengthMismatch {
         /// Expected length.
@@ -305,6 +307,7 @@ impl fmt::Display for MjModelError {
             Self::InvalidUtf8Path => write!(f, "path contains invalid UTF-8"),
             Self::LoadFailed(msg) => write!(f, "model load failed: {msg}"),
             Self::SaveFailed(msg) => write!(f, "model save failed: {msg}"),
+            Self::AllocationFailed => write!(f, "MuJoCo failed to allocate the requested structure"),
             Self::StateSliceLengthMismatch { expected, got } => {
                 write!(f, "state slice length mismatch: expected {expected}, got {got}")
             }

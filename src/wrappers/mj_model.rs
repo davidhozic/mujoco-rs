@@ -485,13 +485,15 @@ impl MjModel {
     }
 
     /// Translates `name` to the correct id. Wrapper around `mj_name2id`.
+    /// Returns `None` if the name is not found.
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
-    pub fn name_to_id(&self, type_: MjtObj, name: &str) -> i32 {
+    pub fn name_to_id(&self, type_: MjtObj, name: &str) -> Option<i32> {
         let c_string = CString::new(name).unwrap();
-        unsafe {
+        let id = unsafe {
             mj_name2id(self.ffi(), type_ as i32, c_string.as_ptr())
-        }
+        };
+        if id == -1 { None } else { Some(id) }
     }
 
     /* Partially auto-generated */
@@ -499,13 +501,13 @@ impl MjModel {
     /// Fallible version of [`Clone::clone`].
     ///
     /// # Errors
-    /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
+    /// Returns [`MjModelError::AllocationFailed`] if MuJoCo fails to allocate
     /// the copy.
-    pub fn try_clone(&self) -> Result<MjModel, MjDataError> {
+    pub fn try_clone(&self) -> Result<MjModel, MjModelError> {
         let ptr = unsafe { mj_copyModel(ptr::null_mut(), self.ffi()) };
         NonNull::new(ptr)
             .map(MjModel)
-            .ok_or(MjDataError::AllocationFailed)
+            .ok_or(MjModelError::AllocationFailed)
     }
 
     /// Save model to binary MJB file or memory buffer; buffer has precedence when given.
@@ -662,7 +664,7 @@ impl MjModel {
     }
 
     /// Sum all body masses.
-    pub fn get_totalmass(&self) -> MjtNum {
+    pub fn totalmass(&self) -> MjtNum {
         unsafe { mj_getTotalmass(self.ffi()) }
     }
 
@@ -1928,9 +1930,9 @@ mod tests {
     fn test_totalmass_set_and_get() {
         let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
 
-        let mass_before = model.get_totalmass();
+        let mass_before = model.totalmass();
         model.set_totalmass(5.0);
-        let mass_after = model.get_totalmass();
+        let mass_after = model.totalmass();
 
         assert_relative_eq!(mass_after, 5.0, epsilon = 1e-9);
         assert_ne!(mass_before, mass_after);
@@ -2195,8 +2197,8 @@ mod tests {
         assert_eq!(view_eq.r#type[0], MjtEq::mjEQ_CONNECT);
 
         // Check connected bodies
-        assert_eq!(view_eq.obj1id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body3"));
-        assert_eq!(view_eq.obj2id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body4"));
+        assert_eq!(view_eq.obj1id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body3").unwrap());
+        assert_eq!(view_eq.obj2id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body4").unwrap());
         assert_eq!(view_eq.objtype[0], MjtObj::mjOBJ_BODY);
 
         // Check active

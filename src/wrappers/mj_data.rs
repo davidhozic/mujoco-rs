@@ -1951,8 +1951,8 @@ mod test {
         // Test actual distance between two different geoms (green_sphere and green_sphere2).
         // green_sphere is at (.2, .2, .1) and green_sphere2 is at (.7, .2, .1), both with radius 0.1.
         // Expected distance ~= 0.5 - 2*0.1 = 0.3 (center distance minus both radii).
-        let geom0_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere");
-        let geom1_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere2");
+        let geom0_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere").unwrap();
+        let geom1_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere2").unwrap();
         assert!(geom0_id >= 0 && geom1_id >= 0);
 
         let mut ft = [0.0; 6];

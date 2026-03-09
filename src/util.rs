@@ -133,7 +133,7 @@ pub struct PointerViewMut<'d, T> {
 }
 
 impl<'d, T> PointerViewMut<'d, T> {
-    pub(crate) fn new(ptr: *mut T, len: usize, phantom: PhantomData<&'d mut ()>) -> Self {
+    pub(crate) const fn new(ptr: *mut T, len: usize, phantom: PhantomData<&'d mut ()>) -> Self {
         Self {ptr, len, phantom}
     }
 }
@@ -179,7 +179,7 @@ pub struct PointerView<'d, T> {
 }
 
 impl<'d, T> PointerView<'d, T> {
-    pub(crate) fn new(ptr: *const T, len: usize, phantom: PhantomData<&'d ()>) -> Self {
+    pub(crate) const fn new(ptr: *const T, len: usize, phantom: PhantomData<&'d ()>) -> Self {
         Self {ptr, len, phantom}
     }
 }

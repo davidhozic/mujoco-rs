@@ -978,7 +978,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                         state: ElementState::Pressed, ..
                     }, ..
                 } => {
-                    self.camera.free();
+                    self.camera.set_free();
                 }
 
                 // Toggle help menu
@@ -1240,7 +1240,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                     /* Obtain the selection */ 
                     let rect = &self.rect_full;
-                    let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
+                    let sel = self.scene.find_selection(
                         data_passive, &self.opt,
                         rect.width as MjtNum / rect.height as MjtNum,
                         (x - rect.left as MjtNum) / rect.width as MjtNum,
@@ -1249,21 +1249,21 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                     /* Set tracking camera */
                     if modifier_state.alt_key() {
-                        if body_id >= 0 {
-                            self.camera.lookat = xyz;
+                        if sel.body_id >= 0 {
+                            self.camera.lookat = sel.point;
                             if modifier_state.control_key() {
-                                self.camera.track(body_id as u32);
+                                self.camera.track(sel.body_id as u32);
                             }
                         }
                     }
                     else {
                         /* Mark selection */
-                        if body_id >= 0 {
-                            pert.select = body_id;
-                            pert.flexselect = flex_id;
-                            pert.skinselect = skin_id;
+                        if sel.body_id >= 0 {
+                            pert.select = sel.body_id;
+                            pert.flexselect = sel.flex_id;
+                            pert.skinselect = sel.skin_id;
                             pert.active = 0;
-                            pert.update_local_pos(&xyz, data_passive);
+                            pert.update_local_pos(&sel.point, data_passive);
                         }
                         else {
                             pert.select = 0;
@@ -1279,6 +1279,16 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                 pert.active = 0;
             },
         };
+    }
+}
+
+impl<M: Deref<Target = MjModel> + Clone> Drop for MjViewer<M> {
+    fn drop(&mut self) {
+        // Ensure the GL context is current before the implicit field drops so that
+        // MjrContext::drop (which calls mjr_freeContext) can properly free OpenGL resources.
+        if let Some(ref state) = self.adapter.state {
+            let _ = state.gl_context.make_current(&state.gl_surface);
+        }
     }
 }
 

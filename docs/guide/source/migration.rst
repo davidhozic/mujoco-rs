@@ -9,6 +9,7 @@ Migration guide
 .. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
 .. |mj_vfs| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs`
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
+.. |mjv_camera| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`
 
 
 This page documents the migration steps for upgrading between major versions of MuJoCo-rs.
@@ -212,6 +213,79 @@ now takes ``selection_xyz`` by reference (``&[MjtNum; 3]``) instead of by value.
 .. code-block:: rust
 
     perturb.update_local_pos(&xyz, &data);
+
+
+API renames
+-----------------------------
+
+Several methods have been renamed for consistency with Rust conventions:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Type
+     - Old name
+     - New name
+   * - |mj_model|
+     - ``get_totalmass()``
+     - ``totalmass()``
+   * - |mjv_camera|
+     - ``free()``
+     - ``set_free()``
+   * - :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`
+     - ``mjr_set_buffer()``
+     - ``set_buffer()``
+
+
+``name_to_id()`` return type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>name_to_id` now returns
+``Option<i32>`` instead of ``i32``. It returns ``None`` when the name is not found (the C API
+returned ``-1``).
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    let id = model.name_to_id(MjtObj::mjOBJ_BODY, "my_body");
+    if id >= 0 { /* found */ }
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    let id = model.name_to_id(MjtObj::mjOBJ_BODY, "my_body").unwrap();
+    // or use if let / match for fallible lookups
+
+
+``try_clone()`` error type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+|mj_model|'s :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_clone` now
+returns ``Result<MjModel, MjModelError>`` (with the ``AllocationFailed`` variant) instead of
+``Result<MjModel, MjDataError>``.
+
+
+``find_selection()`` return type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+|mjv_scene|'s :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>find_selection`
+now returns an :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjSelection` named struct
+instead of a 5-tuple.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    let (body_id, geom_id, flex_id, point, normal) = scene.find_selection(&model, ...);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    let sel = scene.find_selection(&model, ...);
+    println!("{} {} {} {:?}", sel.body_id, sel.geom_id, sel.flex_id, sel.point);
 
 
 Type changes

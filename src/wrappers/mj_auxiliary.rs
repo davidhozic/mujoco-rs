@@ -203,6 +203,17 @@ impl MjVfs {
     }
 }
 
+impl Default for MjVfs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// SAFETY: MjVfs owns its data exclusively (no shared mutable aliasing)
+// and the underlying mjVFS does not use thread-local state.
+unsafe impl Send for MjVfs {}
+unsafe impl Sync for MjVfs {}
+
 impl Drop for MjVfs {
     fn drop(&mut self) {
         unsafe {

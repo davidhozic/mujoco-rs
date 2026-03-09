@@ -37,7 +37,7 @@ pub type MjrRectangle = mjrRect;
 impl MjrRectangle {
     /// Creates a new rectangle defined by its bottom-left corner (`left`, `bottom`) and
     /// its `width` and `height` in pixels.
-    pub fn new(left: i32, bottom: i32, width: i32, height: i32) -> Self {
+    pub const fn new(left: i32, bottom: i32, width: i32, height: i32) -> Self {
         Self {
             left,
             bottom,
@@ -128,7 +128,7 @@ impl MjrContext {
 
     /// Sets the active OpenGL framebuffer to the given raw `framebuffer` id.
     /// Prefer [`MjrContext::offscreen`] or [`MjrContext::window`] for the common cases.
-    pub fn mjr_set_buffer(&mut self, framebuffer: i32) {
+    pub fn set_buffer(&mut self, framebuffer: i32) {
         unsafe { mjr_setBuffer(framebuffer, self.ffi_mut()); }
     }
 

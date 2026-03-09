@@ -520,6 +520,12 @@ impl MjSpec {
     }
 }
 
+impl Default for MjSpec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Drop for MjSpec {
     fn drop(&mut self) {
         unsafe { mj_deleteSpec(self.0.as_ptr()); }
@@ -1370,7 +1376,8 @@ impl MjsHfield {
 
     /// Sets `userdata`.
     pub fn set_userdata<T: AsRef<[f32]>>(&mut self, userdata: T) {
-        write_mjs_vec_f32(userdata.as_ref(), self.userdata)
+        // SAFETY: self.userdata is a valid mjFloatVec pointer for the lifetime of self.
+        unsafe { write_mjs_vec_f32(userdata.as_ref(), self.userdata) };
     }
 }
 
@@ -1459,7 +1466,8 @@ impl MjsTexture {
 
     /// Sets texture `data`.
     pub fn set_data<T: bytemuck::NoUninit>(&mut self, data: &[T]) {
-        write_mjs_vec_byte(data, self.data);
+        // SAFETY: self.data is a valid mjByteVec pointer for the lifetime of self.
+        unsafe { write_mjs_vec_byte(data, self.data) };
     }
 
     string_set_get_with! {[&]

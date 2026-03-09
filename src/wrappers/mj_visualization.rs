@@ -13,6 +13,33 @@ use crate::error::MjSceneError;
 use crate::getter_setter;
 use crate::mujoco_c::*;
 
+/// Result of a mouse-based selection query via [`MjvScene::find_selection`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct MjSelection {
+    /// Selected body id (-1 if none).
+    pub body_id: i32,
+    /// Selected geom id (-1 if none).
+    pub geom_id: i32,
+    /// Selected flex id (-1 if none).
+    pub flex_id: i32,
+    /// Selected skin id (-1 if none).
+    pub skin_id: i32,
+    /// 3D world coordinates of the selection point.
+    pub point: [MjtNum; 3],
+}
+
+impl Default for MjSelection {
+    fn default() -> Self {
+        Self {
+            body_id: -1,
+            geom_id: -1,
+            flex_id: -1,
+            skin_id: -1,
+            point: [0.0; 3],
+        }
+    }
+}
+
 /* Types */
 /// These are the available categories of geoms in the abstract visualizer. The bitmask can be used in the function
 /// `mjr_render` to specify which categories should be rendered.
@@ -177,7 +204,7 @@ impl MjvCamera {
     }
 
     /// Sets the camera free from tracking.
-    pub fn free(&mut self) {
+    pub fn set_free(&mut self) {
         self.trackbodyid = -1;
         self.type_ = MjtCamera::mjCAMERA_FREE as i32;
     }
@@ -533,18 +560,33 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
         };
 
         Self {
-            ffi: scn, model: model,
+            ffi: scn, model,
         }
     }
 
     /// Updates the scene from the current simulation state in `data`.
-    pub fn update(&mut self, data: &mut MjData<M>, opt: &MjvOption, pertub: &MjvPerturb, cam: &mut MjvCamera) {
+    ///
+    /// The `catmask` parameter controls which geom categories are included
+    /// (e.g., [`MjtCatBit::mjCAT_ALL`] for everything, or a bitwise OR of
+    /// [`MjtCatBit::mjCAT_STATIC`], [`MjtCatBit::mjCAT_DYNAMIC`], [`MjtCatBit::mjCAT_DECOR`]).
+    pub fn update_with_catmask(
+        &mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb,
+        cam: &mut MjvCamera, catmask: i32,
+    ) {
         unsafe {
             mjv_updateScene(
-                self.model.ffi(), data.ffi_mut(), opt, pertub,
-                cam, MjtCatBit::mjCAT_ALL as i32, self.ffi.as_mut()
+                self.model.ffi(), data.ffi_mut(), opt, perturb,
+                cam, catmask, self.ffi.as_mut()
             );
         }
+    }
+
+    /// Updates the scene from the current simulation state in `data`, including all geom categories.
+    ///
+    /// This is equivalent to calling [`update_with_catmask`](Self::update_with_catmask) with
+    /// [`MjtCatBit::mjCAT_ALL`].
+    pub fn update(&mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb, cam: &mut MjvCamera) {
+        self.update_with_catmask(data, opt, perturb, cam, MjtCatBit::mjCAT_ALL as i32);
     }
 
     /// Creates a new [`MjvGeom`] in this scene, returning a mutable reference to it.
@@ -600,11 +642,10 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
 
     /// Returns the selection point based on a mouse click.
     /// This is a wrapper around `mjv_select()`.
-    /// The method returns a tuple: (body_id, geom_id, flex_id, skin_id, xyz coordinates of the point)
     pub fn find_selection(
         &self, data: &MjData<M>, option: &MjvOption,
         aspect_ratio: MjtNum, relx: MjtNum, rely: MjtNum,
-    ) -> (i32, i32, i32, i32, [MjtNum; 3]) {
+    ) -> MjSelection {
         let (mut geom_id, mut flex_id, mut skin_id) = (-1 , -1, -1);
         let mut selpnt = [0.0; 3];
         let body_id = unsafe {
@@ -614,7 +655,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
                 &mut geom_id, &mut flex_id, &mut skin_id
             )
         };
-        (body_id, geom_id, flex_id, skin_id, selpnt)
+        MjSelection { body_id, geom_id, flex_id, skin_id, point: selpnt }
     }
 
     /// Reference to the wrapped FFI struct.
