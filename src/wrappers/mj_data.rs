@@ -1262,7 +1262,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Returns a direct pointer to the underlying model.
+    /// Returns a direct pointer to the underlying data.
     /// THIS IS NOT TO BE USED.
     /// It is only meant for the viewer code, which currently still depends
     /// on mutable pointers to model and data. This will be removed in the future.

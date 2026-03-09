@@ -146,7 +146,7 @@ This is optional and can be removed or reduced to run the simulation faster than
     state directly. The shared state can be accessed mainly through:
 
     - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>state`, which returns
-      an ``Arc<Mutex<ViewerSharedState>>`` --- see :ref:`multithreading-rs-viewer`;
+      an ``&Arc<Mutex<ViewerSharedState>>`` --- see :ref:`multithreading-rs-viewer`;
     - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>with_state_lock`,
       which accepts a function/closure to call. The function/closure receives a
       `MutexGuard <https://doc.rust-lang.org/std/sync/struct.MutexGuard.html>`_
@@ -225,7 +225,7 @@ The example mainly differs from the synchronous one in the highlighted lines:
 
   - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState` is obtained through
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>state`, which returns
-    ``Arc<Mutex<ViewerSharedState>>``,
+    ``&Arc<Mutex<ViewerSharedState>>``,
   - both calls to ``sync_data`` and ``running`` are grouped inside a single ``lock()`` to
     avoid two separate mutex acquisitions (see the performance tip above).
 
@@ -360,5 +360,5 @@ Here is an example of using the C++ wrapper:
 
 
 Compared to the Rust-native viewer, the C++ wrapper doesn't take a ``data`` parameter to the :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync`
-method. Additionally, a call to :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render`
-is required.
+method and has an additional :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render`
+method that must be called each frame.

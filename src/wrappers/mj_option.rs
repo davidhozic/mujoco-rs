@@ -1,5 +1,6 @@
 //! Definition of MjOption.
 use crate::mujoco_c::{mjOption, mj_defaultOption};
+
 pub type MjOption = mjOption;
 
 impl Default for MjOption {

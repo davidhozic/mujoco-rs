@@ -2254,7 +2254,7 @@ mod tests {
 
         let required_size = model.state_size(MjtState::mjSTATE_PHYSICS as u32);
         let mut dst_buffer = vec![0.0; required_size].into_boxed_slice();
-        let _byes_written = model.extract_state_into(
+        let _bytes_written = model.extract_state_into(
             &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
             &mut dst_buffer, MjtState::mjSTATE_PHYSICS as u32
         ).unwrap();

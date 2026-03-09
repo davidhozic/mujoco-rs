@@ -223,7 +223,8 @@ To build statically linkable libraries, perform the following steps:
         compiler flags.
 
 4. Set the environment variable ``MUJOCO_STATIC_LINK_DIR`` to the **absolute** path of the ``lib/`` subdirectory
-   inside ``mujoco/build/``. Bash example:
+   inside ``mujoco/build/`` (on some distributions, e.g. Fedora/RHEL/Arch, the directory may be ``lib64/``).
+   Bash example:
 
    ::
 

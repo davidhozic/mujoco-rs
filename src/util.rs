@@ -9,6 +9,21 @@ use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 /// message length is `ERROR_BUF_LEN - 1` characters.
 pub const ERROR_BUF_LEN: usize = 100;
 
+/// Copies an ASCII `&str` into a fixed-size `i8` buffer, NUL-terminating and
+/// zero-filling the remainder.
+///
+/// # Panics
+/// Panics if `value` is not valid ASCII or if `value` (plus NUL) does not fit
+/// in `buf`.
+pub(crate) fn write_ascii_to_buf(buf: &mut [i8], value: &str) {
+    assert!(value.is_ascii(), "value must be valid ASCII");
+    let c_string = std::ffi::CString::new(value).unwrap();
+    let bytes = c_string.into_bytes_with_nul();
+    let dest: &mut [u8] = bytemuck::cast_slice_mut(buf);
+    dest[..bytes.len()].copy_from_slice(&bytes);
+    dest[bytes.len()..].fill(0);
+}
+
 
 /// Creates a (start, length) tuple based on
 /// lookup variables that define the mapping in MuJoCo's mjModel struct.
@@ -29,16 +44,16 @@ macro_rules! mj_view_indices {
                 // Some addr maps (e.g. actuator_actadr) contain -1 for items with no
                 // allocated data (stateless actuators).  Skip over those sentinels when
                 // looking for the end boundary of the current range.
-                let mut _next = $id + 1;
+                let mut next_idx = $id + 1;
                 let end_addr: usize = loop {
-                    if _next >= $njnt as usize {
+                    if next_idx >= $njnt as usize {
                         break $max_n as usize;
                     }
-                    let _next_addr = *$addr_map.add(_next) as isize;
-                    if _next_addr != -1 {
-                        break _next_addr as usize;
+                    let next_addr = *$addr_map.add(next_idx) as isize;
+                    if next_addr != -1 {
+                        break next_addr as usize;
                     }
-                    _next += 1;
+                    next_idx += 1;
                 };
                 let n = end_addr - start_addr as usize;
                 (start_addr as usize, n)
@@ -138,12 +153,14 @@ impl<'d, T> PointerViewMut<'d, T> {
     }
 }
 
-/// Compares if the two views point to the same data.
+/// Compares if the two views point to the same data with the same length.
 impl<T> PartialEq for PointerViewMut<'_, T> {
     fn eq(&self, other: &Self) -> bool {
-        self.ptr == other.ptr  // if the pointer differs, this isn't a view to the same data
+        self.ptr == other.ptr && self.len == other.len
     }
 }
+
+impl<T> Eq for PointerViewMut<'_, T> {}
 
 impl<T> Deref for PointerViewMut<'_, T> {
     type Target = [T];
@@ -184,12 +201,14 @@ impl<'d, T> PointerView<'d, T> {
     }
 }
 
-/// Compares if the two views point to the same data.
+/// Compares if the two views point to the same data with the same length.
 impl<T> PartialEq for PointerView<'_, T> {
     fn eq(&self, other: &Self) -> bool {
-        self.ptr == other.ptr  // if the pointer differs, this isn't a view to the same data
+        self.ptr == other.ptr && self.len == other.len
     }
 }
+
+impl<T> Eq for PointerView<'_, T> {}
 
 impl<T> Deref for PointerView<'_, T> {
     type Target = [T];
@@ -643,7 +662,7 @@ macro_rules! array_slice_dyn {
                     let length = unsafe { std::slice::from_raw_parts(
                         length_ptr,
                         length_array_length
-                    ).into_iter().map(|&x| x as u32).sum::<u32>() as usize };
+                    ).iter().map(|&x| x as u32).sum::<u32>() as usize };
 
                     if length == 0 {
                         return &[];
@@ -666,7 +685,7 @@ macro_rules! array_slice_dyn {
                             let length = unsafe { std::slice::from_raw_parts(
                                 length_ptr,
                                 length_array_length
-                            ).into_iter().map(|&x| x as u32).sum::<u32>() as usize };
+                            ).iter().map(|&x| x as u32).sum::<u32>() as usize };
 
                             if length == 0 {
                                 return &mut [];
@@ -752,13 +771,10 @@ macro_rules! c_str_as_str_method {
         $(
             #[doc = concat!("Sets ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII or is too long.")]
             pub fn [<set_ $name>](&mut self, $($sub_index_name: $sub_index_type,)? $name: &str) {
-                assert!($name.is_ascii(), concat!(stringify!($name), " must be valid ASCII."));
-                let c_string = std::ffi::CString::new($name).unwrap();
-                let bytes = c_string.into_bytes_with_nul();
-
-                let buf = &mut self$(.$ffi())?.$name$([$sub_index_name])?;
-                buf[..bytes.len()].copy_from_slice(bytemuck::cast_slice(&bytes));
-                buf[bytes.len()..].fill(0);
+                $crate::util::write_ascii_to_buf(
+                    &mut self$(.$ffi())?.$name$([$sub_index_name])?,
+                    $name,
+                );
             }
         )*
     }};
@@ -767,13 +783,10 @@ macro_rules! c_str_as_str_method {
         $(
             #[doc = concat!("Builder method for setting ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII or is too long.")]
             pub fn [<with_ $name>](mut self, $($sub_index_name: $sub_index_type,)? $name: &str) -> Self {
-                assert!($name.is_ascii(), concat!(stringify!($name), " must be valid ASCII."));
-                let c_string = std::ffi::CString::new($name).unwrap();
-                let bytes = c_string.into_bytes_with_nul();
-
-                let buf = &mut self$(.$ffi())?.$name$([$sub_index_name])?;
-                buf[..bytes.len()].copy_from_slice(bytemuck::cast_slice(&bytes));
-                buf[bytes.len()..].fill(0);
+                $crate::util::write_ascii_to_buf(
+                    &mut self$(.$ffi())?.$name$([$sub_index_name])?,
+                    $name,
+                );
                 self
             }
         )*

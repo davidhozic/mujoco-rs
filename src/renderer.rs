@@ -520,7 +520,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             if normalize {
                 let max = depth.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
                 let min = depth.iter().cloned().fold(f32::INFINITY, f32::min);
-                (depth.iter().flat_map(|&x| (((x - min) / (max - min) * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), min, max)
+                let range = max - min;
+                if range == 0.0 {
+                    (vec![0u8; depth.len() * 2].into_boxed_slice(), min, max)
+                } else {
+                    (depth.iter().flat_map(|&x| (((x - min) / range * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), min, max)
+                }
             }
             else {
                 // Use model's camera near/far clip planes as the fixed normalization range.

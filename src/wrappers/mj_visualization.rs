@@ -277,9 +277,16 @@ impl MjvGLCamera {
 ** MjvGeom
 ***********************************************************************************************************************/
 pub type MjvGeom = mjvGeom;
+
 impl MjvGeom {
-    /// Wrapper around the MuJoCo's mjv_connector function.
-    /// Calculates the geom attributes so that it points from point `from` to point `to`.
+    /// Sets the geom so that it acts as a connector (line, arrow, etc.) between
+    /// two 3D points.
+    ///
+    /// This is a wrapper around MuJoCo's `mjv_connector`. The connector type
+    /// is taken from the geom's current [`type_`](MjvGeom::type_) field, so
+    /// set it to the desired connector type (e.g. `mjGEOM_LINE`, `mjGEOM_ARROW`)
+    /// **before** calling this method, or initialize the geom
+    /// with that type via [`MjvScene::create_geom`].
     pub fn connect(&mut self, width: MjtNum, from: [MjtNum; 3], to: [MjtNum; 3]) {
         unsafe {
             mjv_connector(self, self.type_, width, &from, &to);
@@ -356,7 +363,7 @@ impl MjvFigure {
 
     /// Draws the 2D figure to the `viewport` on screen.
     pub fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
-        unsafe { mjr_figure(viewport,self, context.ffi()) };
+        unsafe { mjr_figure(viewport, self, context.ffi()) };
     }
 }
 

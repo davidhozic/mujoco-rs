@@ -1184,7 +1184,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
         /* Check mouse presses and move the camera if any of them is pressed */
         let action;
-        let height = window.outer_size().height as f64;
+        let height = window.inner_size().height as f64;
 
         let mut lock = self.shared_state.lock_unpoison();
         let ViewerSharedState {data_passive, pert, ..} = lock.deref_mut();
