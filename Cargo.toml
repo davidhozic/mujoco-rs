@@ -12,10 +12,25 @@ homepage = "https://crates.io/crates/mujoco-rs"
 documentation = "https://docs.rs/mujoco-rs/"
 rust-version = "1.88"
 
-exclude = [".gitignore", ".gitmodules", "mujoco/*", "docs/"]
+exclude = [
+    ".agents/",
+    ".github/",
+    ".gitignore",
+    ".gitmodules",
+    ".readthedocs.yaml",
+    ".vscode/",
+    "__pycache__/",
+    "docs/",
+    "Dockerfile.ubuntu",
+    "mujoco/*",
+]
 
 [package.metadata.docs.rs]
 all-features = true
+
+[[example]]
+name = "cpp_viewer"
+required-features = ["cpp-viewer"]
 
 
 [features]

@@ -75,13 +75,15 @@ was not enabled during construction.
 
 To save rendered images to a file, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb`
 and :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth` can be used.
-These encode the image as an uncompressed PNG, where the RGB image is 8 bits per channel and
+These encode the image as a PNG, where the RGB image is 8 bits per channel and
 the depth image is 16 bits. These are meant **for visualization**.
 
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth` accepts a ``normalize: bool``
-argument. When ``true``, depth values are linearly normalized from their raw range to the full
-16-bit range (0-65535) before saving. When ``false``, raw values are clamped and directly
-encoded, which is only meaningful when the depth range happens to fall within 0-1.
+argument. When ``true``, depth values are linearly normalized using per-frame min-max
+normalization to the full 16-bit range (0-65535) before saving. When ``false``, depth values are
+linearly mapped using the model's camera near/far clip planes as a fixed range, providing a
+frame-independent mapping to 0-65535. In both cases, the method returns the ``(min, max)`` pair
+used for normalization, allowing the original depth values to be recovered.
 
 To save depth data as raw 32-bit float values representing **actual metric distances** from the
 camera, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw` can be used.

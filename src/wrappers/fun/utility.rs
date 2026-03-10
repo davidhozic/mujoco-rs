@@ -424,7 +424,7 @@ pub fn mju_round(x: MjtNum) -> i32  {
 
 /// Return true if nan or abs(x)>mjMAXVAL, false otherwise. Used by check functions.
 pub fn mju_is_bad(x: MjtNum) -> bool  {
-    unsafe { mujoco_c::mju_isBad(x) == 1 }
+    unsafe { mujoco_c::mju_isBad(x) != 0 }
 }
 
 /// Generate Halton sequence.

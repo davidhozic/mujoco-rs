@@ -121,6 +121,7 @@ pub fn write_png<P: AsRef<Path>>(
     height: u32,
     color_type: png::ColorType,
     bit_depth: png::BitDepth,
+    compression: png::Compression
 ) -> io::Result<()> {
     let file = File::create(path)?;
     let w = BufWriter::new(file);
@@ -128,6 +129,7 @@ pub fn write_png<P: AsRef<Path>>(
     let mut encoder = png::Encoder::new(w, width, height);
     encoder.set_color(color_type);
     encoder.set_depth(bit_depth);
+    encoder.set_compression(compression);
 
     let mut writer = encoder
         .write_header()

@@ -40,6 +40,7 @@ unsafe extern "C" {
 /// while the viewer keeps a pointer to them (their wrapped pointers).
 /// Undefined behavior should not occur, however caution is advised as this is a violation
 /// of the Rust's borrowing rules.
+#[derive(Debug)]
 pub struct MjViewerCpp<M: Deref<Target = MjModel> + Clone + Send + Sync> {
     sim: *mut mujoco_Simulate,
     running: bool,
@@ -76,6 +77,7 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
         let mut user_scn = Box::new(MjvScene::new(model.clone(), max_user_geom));
 
         let sim = unsafe { mujoco_cSimulate_create(&mut *cam, &mut *opt, &mut *pert, user_scn.ffi_mut()) };
+        assert!(!sim.is_null(), "mujoco_cSimulate_create returned a null pointer");
         let sim_usize = sim as usize;
 
         let model_raw = unsafe { model.__raw() };

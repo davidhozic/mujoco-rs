@@ -9,6 +9,21 @@ use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 /// message length is `ERROR_BUF_LEN - 1` characters.
 pub const ERROR_BUF_LEN: usize = 100;
 
+/// Copies an ASCII `&str` into a fixed-size `i8` buffer, NUL-terminating and
+/// zero-filling the remainder.
+///
+/// # Panics
+/// Panics if `value` is not valid ASCII or if `value` (plus NUL) does not fit
+/// in `buf`.
+pub(crate) fn write_ascii_to_buf(buf: &mut [i8], value: &str) {
+    assert!(value.is_ascii(), "value must be valid ASCII");
+    let c_string = std::ffi::CString::new(value).unwrap();
+    let bytes = c_string.into_bytes_with_nul();
+    let dest: &mut [u8] = bytemuck::cast_slice_mut(buf);
+    dest[..bytes.len()].copy_from_slice(&bytes);
+    dest[bytes.len()..].fill(0);
+}
+
 
 /// Creates a (start, length) tuple based on
 /// lookup variables that define the mapping in MuJoCo's mjModel struct.
@@ -29,16 +44,16 @@ macro_rules! mj_view_indices {
                 // Some addr maps (e.g. actuator_actadr) contain -1 for items with no
                 // allocated data (stateless actuators).  Skip over those sentinels when
                 // looking for the end boundary of the current range.
-                let mut _next = $id + 1;
+                let mut next_idx = $id + 1;
                 let end_addr: usize = loop {
-                    if _next >= $njnt as usize {
+                    if next_idx >= $njnt as usize {
                         break $max_n as usize;
                     }
-                    let _next_addr = *$addr_map.add(_next) as isize;
-                    if _next_addr != -1 {
-                        break _next_addr as usize;
+                    let next_addr = *$addr_map.add(next_idx) as isize;
+                    if next_addr != -1 {
+                        break next_addr as usize;
                     }
-                    _next += 1;
+                    next_idx += 1;
                 };
                 let n = end_addr - start_addr as usize;
                 (start_addr as usize, n)
@@ -133,17 +148,19 @@ pub struct PointerViewMut<'d, T> {
 }
 
 impl<'d, T> PointerViewMut<'d, T> {
-    pub(crate) fn new(ptr: *mut T, len: usize, phantom: PhantomData<&'d mut ()>) -> Self {
+    pub(crate) const fn new(ptr: *mut T, len: usize, phantom: PhantomData<&'d mut ()>) -> Self {
         Self {ptr, len, phantom}
     }
 }
 
-/// Compares if the two views point to the same data.
+/// Compares if the two views point to the same data with the same length.
 impl<T> PartialEq for PointerViewMut<'_, T> {
     fn eq(&self, other: &Self) -> bool {
-        self.ptr == other.ptr  // if the pointer differs, this isn't a view to the same data
+        self.ptr == other.ptr && self.len == other.len
     }
 }
+
+impl<T> Eq for PointerViewMut<'_, T> {}
 
 impl<T> Deref for PointerViewMut<'_, T> {
     type Target = [T];
@@ -179,17 +196,19 @@ pub struct PointerView<'d, T> {
 }
 
 impl<'d, T> PointerView<'d, T> {
-    pub(crate) fn new(ptr: *const T, len: usize, phantom: PhantomData<&'d ()>) -> Self {
+    pub(crate) const fn new(ptr: *const T, len: usize, phantom: PhantomData<&'d ()>) -> Self {
         Self {ptr, len, phantom}
     }
 }
 
-/// Compares if the two views point to the same data.
+/// Compares if the two views point to the same data with the same length.
 impl<T> PartialEq for PointerView<'_, T> {
     fn eq(&self, other: &Self) -> bool {
-        self.ptr == other.ptr  // if the pointer differs, this isn't a view to the same data
+        self.ptr == other.ptr && self.len == other.len
     }
 }
+
+impl<T> Eq for PointerView<'_, T> {}
 
 impl<T> Deref for PointerView<'_, T> {
     type Target = [T];
@@ -320,6 +339,7 @@ macro_rules! info_with_view {
         paste::paste! {
             #[doc = "Stores information required to create views to [`Mj" $info_type "`] arrays corresponding to a " $name "."]
             #[allow(non_snake_case)]
+            #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type Info>] {
                 pub name: String,
                 pub id: usize,
@@ -338,7 +358,7 @@ macro_rules! info_with_view {
                                 "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
                 pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
                     assert_eq!(self.model_signature, [<$info_type:lower>].signature(), "model signature mismatch");
-                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], crate::util::PointerViewMut::new)
+                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], $crate::util::PointerViewMut::new)
                 }
 
                 #[doc = concat!("Returns a view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
@@ -346,18 +366,19 @@ macro_rules! info_with_view {
                                 "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
                 pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
                     assert_eq!(self.model_signature, [<$info_type:lower>].signature(), "model signature mismatch");
-                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], crate::util::PointerView::new)
+                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], $crate::util::PointerView::new)
                 }
             }
 
             #[doc = "A mutable view to " $name " variables of [`Mj" $info_type "`]."]
             #[allow(non_snake_case)]
+            #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type ViewMut>]<'d> {
                 $(
-                    pub $attr: crate::util::PointerViewMut<'d, $type_>,
+                    pub $attr: $crate::util::PointerViewMut<'d, $type_>,
                 )*
                 $(
-                    pub $opt_attr: Option<crate::util::PointerViewMut<'d, $type_opt>>,
+                    pub $opt_attr: Option<$crate::util::PointerViewMut<'d, $type_opt>>,
                 )*
             }
 
@@ -377,12 +398,13 @@ macro_rules! info_with_view {
 
             #[doc = "An immutable view to " $name " variables of [`Mj" $info_type "`]."]
             #[allow(non_snake_case)]
+            #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type View>]<'d> {
                 $(
-                    pub $attr: crate::util::PointerView<'d, $type_>,
+                    pub $attr: $crate::util::PointerView<'d, $type_>,
                 )*
                 $(
-                    pub $opt_attr: Option<crate::util::PointerView<'d, $type_opt>>,
+                    pub $opt_attr: Option<$crate::util::PointerView<'d, $type_opt>>,
                 )*
             }
         }
@@ -409,7 +431,7 @@ macro_rules! getter_setter {
                 &self$(.$ffi())?.$name
             }
 
-            crate::eval_or_expand! {
+            $crate::eval_or_expand! {
                 @eval $($cfg_mut)? {
                     #[doc = concat!("Return a mutable reference to ", $comment)]
                     pub fn [<$name:camel:snake _mut>](&mut self) -> &mut $type {
@@ -607,7 +629,7 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
-                crate::eval_or_expand! {
+                $crate::eval_or_expand! {
                     @eval $($cfg_mut)? {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
@@ -640,7 +662,7 @@ macro_rules! array_slice_dyn {
                     let length = unsafe { std::slice::from_raw_parts(
                         length_ptr,
                         length_array_length
-                    ).into_iter().map(|&x| x as u32).sum::<u32>() as usize };
+                    ).iter().map(|&x| x as u32).sum::<u32>() as usize };
 
                     if length == 0 {
                         return &[];
@@ -649,7 +671,7 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts($crate::maybe_force_cast!(data_ptr, [$type; $multiplier], force), length) }
                 }
                 
-                crate::eval_or_expand! {
+                $crate::eval_or_expand! {
                     @eval $($cfg_mut)? {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [[$type; $multiplier]] {
@@ -663,7 +685,7 @@ macro_rules! array_slice_dyn {
                             let length = unsafe { std::slice::from_raw_parts(
                                 length_ptr,
                                 length_array_length
-                            ).into_iter().map(|&x| x as u32).sum::<u32>() as usize };
+                            ).iter().map(|&x| x as u32).sum::<u32>() as usize };
 
                             if length == 0 {
                                 return &mut [];
@@ -683,7 +705,7 @@ macro_rules! array_slice_dyn {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake>](&self) -> &[$type] {
-                    let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
+                    let length = self.$($len_accessor)* as usize * (self.$($inner_len_accessor)*) as usize;
                     let ptr = $crate::maybe_force_cast!(self.ffi().$name$(.$as_ptr())?, $type $(, $force)?);
                     if ptr.is_null() || length == 0 {
                         return &[];
@@ -692,11 +714,11 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
-                crate::eval_or_expand! {
+                $crate::eval_or_expand! {
                     @eval $($cfg_mut)? {
                         #[doc = concat!("Mutable slice of the ", $doc," array.")]
                         pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
-                            let length = self.$($len_accessor)* as usize * self.$($inner_len_accessor)* as usize;
+                            let length = self.$($len_accessor)* as usize * (self.$($inner_len_accessor)*) as usize;
                             let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
                             if ptr.is_null() || length == 0 {
                                 return &mut [];
@@ -749,13 +771,10 @@ macro_rules! c_str_as_str_method {
         $(
             #[doc = concat!("Sets ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII or is too long.")]
             pub fn [<set_ $name>](&mut self, $($sub_index_name: $sub_index_type,)? $name: &str) {
-                assert!($name.is_ascii(), concat!(stringify!($name), " must be valid ASCII."));
-                let c_string = std::ffi::CString::new($name).unwrap();
-                let bytes = c_string.into_bytes_with_nul();
-
-                let buf = &mut self$(.$ffi())?.$name$([$sub_index_name])?;
-                buf[..bytes.len()].copy_from_slice(bytemuck::cast_slice(&bytes));
-                buf[bytes.len()..].fill(0);
+                $crate::util::write_ascii_to_buf(
+                    &mut self$(.$ffi())?.$name$([$sub_index_name])?,
+                    $name,
+                );
             }
         )*
     }};
@@ -764,13 +783,10 @@ macro_rules! c_str_as_str_method {
         $(
             #[doc = concat!("Builder method for setting ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII or is too long.")]
             pub fn [<with_ $name>](mut self, $($sub_index_name: $sub_index_type,)? $name: &str) -> Self {
-                assert!($name.is_ascii(), concat!(stringify!($name), " must be valid ASCII."));
-                let c_string = std::ffi::CString::new($name).unwrap();
-                let bytes = c_string.into_bytes_with_nul();
-
-                let buf = &mut self$(.$ffi())?.$name$([$sub_index_name])?;
-                buf[..bytes.len()].copy_from_slice(bytemuck::cast_slice(&bytes));
-                buf[bytes.len()..].fill(0);
+                $crate::util::write_ascii_to_buf(
+                    &mut self$(.$ffi())?.$name$([$sub_index_name])?,
+                    $name,
+                );
                 self
             }
         )*
@@ -778,24 +794,24 @@ macro_rules! c_str_as_str_method {
 
     // Mixed patterns
     (with, get, set {$($other:tt)*}) => {
-        crate::c_str_as_str_method!(get {$($other)*});
-        crate::c_str_as_str_method!(set {$($other)*});
-        crate::c_str_as_str_method!(with {$($other)*});
+        $crate::c_str_as_str_method!(get {$($other)*});
+        $crate::c_str_as_str_method!(set {$($other)*});
+        $crate::c_str_as_str_method!(with {$($other)*});
     };
 
     (get, set {$($other:tt)*}) => {
-        crate::c_str_as_str_method!(get {$($other)*});
-        crate::c_str_as_str_method!(set {$($other)*});
+        $crate::c_str_as_str_method!(get {$($other)*});
+        $crate::c_str_as_str_method!(set {$($other)*});
     };
 
     (with, set {$($other:tt)*}) => {
-        crate::c_str_as_str_method!(set {$($other)*});
-        crate::c_str_as_str_method!(with {$($other)*});
+        $crate::c_str_as_str_method!(set {$($other)*});
+        $crate::c_str_as_str_method!(with {$($other)*});
     };
 
     (with, get {$($other:tt)*}) => {
-        crate::c_str_as_str_method!(get {$($other)*});
-        crate::c_str_as_str_method!(with {$($other)*});
+        $crate::c_str_as_str_method!(get {$($other)*});
+        $crate::c_str_as_str_method!(with {$($other)*});
     };
 }
 

@@ -32,7 +32,7 @@ pub trait SpecItem: Sized {
 
     /// Returns the item's name.
     fn name(&self) -> &str {
-        read_mjs_string(unsafe { mjs_getName(self.element_pointer()) })
+        unsafe { read_mjs_string(mjs_getName(self.element_pointer())) }
     }
 
     /// Set a new name.
@@ -51,6 +51,9 @@ pub trait SpecItem: Sized {
 
     /// Returns the used default.
     fn default(&self) -> &MjsDefault {
+        // SAFETY: mjs_getDefault indexes into mjCModel::def_map which always
+        // contains the element's classname (inserted at construction), so the
+        // returned pointer is never null.
         unsafe { &*mjs_getDefault(self.element_pointer()) }
     }
 

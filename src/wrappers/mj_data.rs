@@ -7,6 +7,7 @@ use crate::{getter_setter, mujoco_c::*};
 use crate::error::MjDataError;
 
 use std::ffi::CString;
+use std::path::Path;
 use std::borrow::Cow;
 use std::ops::Deref;
 use std::fmt::Debug;
@@ -47,15 +48,10 @@ pub type MjtSleepState = mjtSleepState;
 
 /// Wrapper around the `mjData` struct.
 /// Provides lifetime guarantees as well as automatic cleanup.
+#[derive(Debug)]
 pub struct MjData<M: Deref<Target = MjModel>> {
     data: NonNull<mjData>,
     model: M
-}
-
-impl<M: Deref<Target = MjModel> + Debug> Debug for MjData<M> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MjData {:?}", self.model)
-    }
 }
 
 // Allow usage in threaded contexts as long as M itself is Send / Sync
@@ -271,20 +267,34 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Print mjData to text file, specifying format.
     /// float_format must be a valid printf-style format string for a single float value.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjDataError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// # Panics
-    /// When the `filename` or `float_format` contain '\0' characters, a panic occurs.
-    pub fn print_formatted(&self, filename: &str, float_format: &str) {
-        let c_filename = CString::new(filename).unwrap();
+    /// When either string contains '\0' characters, a panic occurs.
+    pub fn print_formatted<T: AsRef<Path>>(&self, filename: T, float_format: &str) -> Result<(), MjDataError> {
+        let path_str = filename.as_ref().to_str()
+            .ok_or(MjDataError::InvalidUtf8Path)?;
+        let c_filename = CString::new(path_str).unwrap();
         let c_float_format = CString::new(float_format).unwrap();
         unsafe { mj_printFormattedData(self.model.ffi(), self.ffi(), c_filename.as_ptr(), c_float_format.as_ptr()) }
+        Ok(())
     }
 
     /// Print data to text file.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjDataError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// # Panics
-    /// When the `filename` contains '\0' characters, a panic occurs.
-    pub fn print(&self, filename: &str) {
-        let c_filename = CString::new(filename).unwrap();
+    /// When the filename contains '\0' characters, a panic occurs.
+    pub fn print<T: AsRef<Path>>(&self, filename: T) -> Result<(), MjDataError> {
+        let path_str = filename.as_ref().to_str()
+            .ok_or(MjDataError::InvalidUtf8Path)?;
+        let c_filename = CString::new(path_str).unwrap();
         unsafe { mj_printData(self.model.ffi(), self.ffi(), c_filename.as_ptr()) }
+        Ok(())
     }
 
     /// Run position-dependent computations.
@@ -985,11 +995,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// If `vertid` is `Some`, it will be filled with the id of the nearest vertex.
     /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
     /// `flex_layer`, `flg_vert`, `flg_edge`, `flg_face`, `flg_skin` and `flexid` control what and where to intersect.
+    ///
+    /// # Panics
+    /// Panics if `flexid` is out of bounds (must be `0 <= flexid < nflex`).
     pub fn ray_flex(
         &self, flex_layer: i32, flg_vert: bool, flg_edge: bool, flg_face: bool, flg_skin: bool, flexid: i32,
         pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         vertid: Option<&mut i32>, normal_out: Option<&mut [MjtNum; 3]>
     ) -> mjtNum {
+        let nflex = self.model.ffi().nflex as i32;
+        assert!(flexid >= 0 && flexid < nflex, "ray_flex: flexid {flexid} out of bounds (nflex = {nflex})");
         unsafe { mj_rayFlex(
             self.model.ffi(), self.ffi(),
             flex_layer, flg_vert as MjtByte, flg_edge as MjtByte, flg_face as MjtByte, flg_skin as MjtByte, flexid,
@@ -1030,9 +1045,14 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Intersect ray with hfield.
     /// Returns the distance to the intersection, or -1.0 if no intersection.
+    ///
+    /// # Panics
+    /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
     pub fn ray_hfield(
         &self, geom_id: i32, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
     ) -> mjtNum {
+        let ngeom = self.model.ffi().ngeom as i32;
+        assert!(geom_id >= 0 && geom_id < ngeom, "ray_hfield: geom_id {geom_id} out of bounds (ngeom = {ngeom})");
         unsafe {
             mj_rayHfield(self.model.ffi(), self.ffi(), geom_id, pnt, vec, normal_out.map_or(ptr::null_mut(), |x| x))
         }
@@ -1040,9 +1060,14 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Intersect ray with mesh.
     /// Returns the distance to the intersection, or -1.0 if no intersection.
+    ///
+    /// # Panics
+    /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
     pub fn ray_mesh(
         &self, geom_id: i32, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
     ) -> mjtNum {
+        let ngeom = self.model.ffi().ngeom as i32;
+        assert!(geom_id >= 0 && geom_id < ngeom, "ray_mesh: geom_id {geom_id} out of bounds (ngeom = {ngeom})");
         unsafe {
             mj_rayMesh(self.model.ffi(), self.ffi(), geom_id, pnt, vec, normal_out.map_or(ptr::null_mut(), |x| x))
         }
@@ -1252,7 +1277,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Returns a direct pointer to the underlying model.
+    /// Returns a direct pointer to the underlying data.
     /// THIS IS NOT TO BE USED.
     /// It is only meant for the viewer code, which currently still depends
     /// on mutable pointers to model and data. This will be removed in the future.
@@ -1956,8 +1981,8 @@ mod test {
         // Test actual distance between two different geoms (green_sphere and green_sphere2).
         // green_sphere is at (.2, .2, .1) and green_sphere2 is at (.7, .2, .1), both with radius 0.1.
         // Expected distance ~= 0.5 - 2*0.1 = 0.3 (center distance minus both radii).
-        let geom0_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere");
-        let geom1_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere2");
+        let geom0_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere").unwrap();
+        let geom1_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere2").unwrap();
         assert!(geom0_id >= 0 && geom1_id >= 0);
 
         let mut ft = [0.0; 6];
@@ -2405,15 +2430,15 @@ mod test {
     }
 
     #[test]
+    #[should_panic(expected = "ray_flex: flexid")]
     fn test_ray_flex() {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let data = model.make_data();
         let pos = [0.0; 3];
         let vec = [1.0, 0.0, 0.0];
 
-        // Just checking that it runs without crashing, since we have no flex in MODEL
-        let dist = data.ray_flex(0, false, false, false, false, -1, &pos, &vec, None, None);
-        assert_eq!(dist, -1.0);
+        // Model has no flexes, so any flexid is out of bounds.
+        data.ray_flex(0, false, false, false, false, 0, &pos, &vec, None, None);
     }
 
     #[test]

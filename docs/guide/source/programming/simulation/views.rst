@@ -14,9 +14,9 @@ Like MuJoCo's Python bindings, MuJoCo-rs also provides views. Specifically, we p
 attributes of :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` and
 :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`.
 
-A view cannot be created directly, as that would require recreating the view after each simulation
-step. Allowing preservation of views between simulation steps would violate Rust's borrow checker rules.
-To overcome this, "info" structs exist, which store required information for fast view
+Views borrow data and cannot be preserved across simulation steps, as that would violate
+Rust's borrow checker rules. Re-looking up names each step would also be expensive.
+To overcome this, "info" structs exist, which cache the required information for fast view
 creation after each step.
 
 

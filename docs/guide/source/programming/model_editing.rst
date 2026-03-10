@@ -122,8 +122,8 @@ Finally, we can now add the base plane, like so:
 
 
 This concludes the specification's definition.
-We can now compile it to a model, which can then be saved to either an MJCF (XML) file or
-to an MJB (binary) file:
+We can now compile it to a model and save it to an MJB (binary) file.
+The specification can also be saved directly to an MJCF (XML) file:
 
 .. code-block:: rust
     :emphasize-lines: 23-26
@@ -153,7 +153,7 @@ to an MJB (binary) file:
         let model = spec.compile().expect("failed to compile");
         spec.save_xml("model.xml").expect("failed to save");     // save XML to a file.
         let xml_str = spec.save_xml_string(8192).expect("failed to save");  // save XML to a string.
-        model.save(Some("model.mjb"), None);                      // save binary.
+        model.save_to_file("model.mjb").expect("failed to save"); // save binary.
     }
 
 

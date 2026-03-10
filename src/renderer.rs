@@ -38,6 +38,7 @@ const EXTRA_INTERNAL_VISUAL_GEOMS: u32 = 100;
 
 /// GlState enum wrapper. By default, headless implementation will be used
 /// when supported. Only on failure will an invisible winit window be used.
+#[derive(Debug)]
 pub(crate) enum GlState {
     #[cfg(feature = "renderer-winit-fallback")] Winit(GlStateWinit),
     #[cfg(target_os = "linux")] Egl(egl::GlStateEgl),
@@ -222,6 +223,7 @@ impl<M: Deref<Target = MjModel> + Clone> Default for MjRendererBuilder<M> {
 
 /// A renderer for rendering 3D scenes.
 /// By default, RGB rendering is enabled and depth rendering is disabled.
+#[derive(Debug)]
 pub struct MjRenderer<M: Deref<Target = MjModel> + Clone> {
     scene: MjvScene<M>,
     user_scene: MjvScene<M>,
@@ -489,6 +491,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 self.height as u32,
                 png::ColorType::Rgb,
                 png::BitDepth::Eight,
+                png::Compression::NoCompression
             )?;
             Ok(())
         }
@@ -499,8 +502,12 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Save a depth image of the scene to a path. The image is 16-bit PNG, which
     /// can be converted into depth (distance) data by dividing the grayscale values by
-    /// 65535.0 and applying inverse normalization (if it was enabled with `normalize`): `depth = min + (grayscale / 65535.0) * (max - min)`.
-    /// If `normalize` is `true`, then the data is normalized with min-max normalization.
+    /// 65535.0 and applying inverse normalization: `depth = min + (grayscale / 65535.0) * (max - min)`.
+    ///
+    /// If `normalize` is `true`, then the data is normalized with per-frame min-max normalization.
+    /// When `normalize` is `false`, the depth values are mapped using the model's camera
+    /// near/far clip planes as the range, providing a fixed (frame-independent) mapping.
+    ///
     /// Use of [`MjRenderer::save_depth_raw`] is recommended if performance is critical, as
     /// it skips PNG encoding and also saves the true depth values directly.
     /// # Returns
@@ -514,10 +521,22 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             if normalize {
                 let max = depth.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
                 let min = depth.iter().cloned().fold(f32::INFINITY, f32::min);
-                (depth.iter().flat_map(|&x| (((x - min) / (max - min) * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), min, max)
+                let range = max - min;
+                if range == 0.0 {
+                    (vec![0u8; depth.len() * 2].into_boxed_slice(), min, max)
+                } else {
+                    (depth.iter().flat_map(|&x| (((x - min) / range * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), min, max)
+                }
             }
             else {
-                (depth.iter().flat_map(|&x| ((x * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), 0.0, 1.0)
+                // Use model's camera near/far clip planes as the fixed normalization range.
+                // After linearization (in render()), depth values are in meters within [near, far].
+                let map = &self.model.vis().map;
+                let stat = &self.model.stat();
+                let extent = stat.extent as f32;
+                let near = map.znear * extent;
+                let far = map.zfar * extent;
+                (depth.iter().flat_map(|&x| (((x - near) / (far - near) * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), near, far)
             };
 
             write_png(
@@ -527,6 +546,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 self.height as u32,
                 png::ColorType::Grayscale,
                 png::BitDepth::Sixteen,
+                png::Compression::NoCompression
             )?;
             Ok((min, max))
         }
@@ -695,6 +715,7 @@ impl From<crate::error::GlInitError> for RendererError {
 
 bitflags! {
     /// Flags that enable features of the renderer.
+    #[derive(Debug)]
     struct RendererFlags: u8 {
         const RENDER_RGB = 1 << 0;
         const RENDER_DEPTH = 1 << 1;
@@ -702,6 +723,14 @@ bitflags! {
 }
 
 
+
+impl<M: Deref<Target = MjModel> + Clone> Drop for MjRenderer<M> {
+    fn drop(&mut self) {
+        // Ensure the GL context is current before the implicit field drops
+        // (MjrContext's Drop calls mjr_freeContext which requires an active GL context).
+        let _ = self.gl_state.make_current();
+    }
+}
 
 /*
 ** Don't run any tests as OpenGL hates if anything
@@ -743,7 +772,7 @@ mod test {
         let mut renderer = MjRenderer::builder()
             .rgb(false)
             .depth(true)
-            .camera(MjvCamera::new_fixed(model.name_to_id(MjtObj::mjOBJ_CAMERA, "depth_test") as u32))
+            .camera(MjvCamera::new_fixed(model.name_to_id(MjtObj::mjOBJ_CAMERA, "depth_test").unwrap() as u32))
             .build(&model)
             .unwrap();
 

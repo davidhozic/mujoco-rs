@@ -15,11 +15,14 @@ macro_rules! default_accessor_wrapper {
         $(
             #[doc = concat!("Returns an immutable reference to ", stringify!($name), "'s defaults.")]
             pub fn $name(&self) -> &[<Mjs $name:camel>] {
+                // SAFETY: MuJoCo's mjCDef::PointToLocal() always initializes these
+                // pointers to non-null addresses of the owning mjCDef's local members.
                 unsafe { &*self.$name }
             }
 
             #[doc = concat!("Returns a mutable reference to ", stringify!($name), "'s defaults.")]
             pub fn [<$name _mut>](&mut self) -> &mut [<Mjs $name:camel>] {
+                // SAFETY: see above.
                 unsafe { &mut *self.$name }
             }
         )*

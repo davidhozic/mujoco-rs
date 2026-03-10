@@ -1,5 +1,5 @@
 //! Module related to implementation of the [`MjViewer`]. For implementation of the C++ wrapper,
-//! see [`cpp_viewer::MjViewerCpp`] (enabled by the `cpp-viewer` cargo feature).
+//! see [`crate::cpp_viewer::MjViewerCpp`] (enabled by the `cpp-viewer` cargo feature).
 #[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
 use glutin::prelude::PossiblyCurrentGlContext;
 use glutin::surface::GlSurface;
@@ -125,8 +125,6 @@ pub enum MjViewerError {
     GlutinError(glutin::error::Error),
     /// Returned when the egui painter (OpenGL UI renderer) fails to initialize.
     PainterInitError(String),
-    /// Returned when OpenGL buffer swap fails during rendering.
-    SwapBuffersError(glutin::error::Error),
     /// OpenGL / window initialization failed.
     GlInitFailed(crate::error::GlInitError),
     /// A scene operation failed (e.g. user-scene sync overflowed the geom buffer).
@@ -139,7 +137,6 @@ impl Display for MjViewerError {
             Self::EventLoopError(_) => write!(f, "event loop failed to initialize"),
             Self::GlutinError(_) => write!(f, "glutin error"),
             Self::PainterInitError(e) => write!(f, "failed to initialize egui painter: {}", e),
-            Self::SwapBuffersError(_) => write!(f, "OpenGL buffer swap failed"),
             Self::GlInitFailed(_) => write!(f, "GL initialization failed"),
             Self::SceneError(_) => write!(f, "scene error"),
         }
@@ -152,7 +149,6 @@ impl Error for MjViewerError {
             Self::EventLoopError(e) => Some(e),
             Self::GlutinError(e) => Some(e),
             Self::PainterInitError(_) => None,
-            Self::SwapBuffersError(e) => Some(e),
             Self::GlInitFailed(e) => Some(e),
             Self::SceneError(e) => Some(e),
         }
@@ -171,6 +167,11 @@ impl From<crate::error::GlInitError> for MjViewerError {
     }
 }
 
+impl From<glutin::error::Error> for MjViewerError {
+    fn from(e: glutin::error::Error) -> Self {
+        Self::GlutinError(e)
+    }
+}
 
 /// Internal state that is used by [`MjViewer`] to store
 /// [`MjData`]-related state. This is separate from [`MjViewer`]
@@ -557,7 +558,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Processes the UI (when enabled), processes events, draws the scene
     /// and swaps buffers in OpenGL.
     /// # Errors
-    /// - [`MjViewerError::SwapBuffersError`] if the OpenGL buffer swap fails.
+    /// - [`MjViewerError::GlutinError`] if the OpenGL buffer swap fails.
     /// - [`MjViewerError::SceneError`] if synchronizing user scene geoms fails (e.g. the scene is full).
     pub fn render(&mut self) -> Result<(), MjViewerError> {
         let RenderBaseGlState {
@@ -567,9 +568,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         } = self.adapter.state.as_ref().unwrap();
 
         /* Make sure everything is done on the viewer's window */
-        if gl_context.make_current(gl_surface).is_err() {
-            return Ok(());
-        }
+        gl_context.make_current(gl_surface)?;
 
         /* Read the screen size */
         self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
@@ -614,8 +613,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         } = self.adapter.state.as_ref().unwrap();
 
         /* Swap OpenGL buffers (render to screen) */
-        gl_surface.swap_buffers(gl_context)
-            .map_err(MjViewerError::SwapBuffersError)
+        gl_surface.swap_buffers(gl_context).map_err(MjViewerError::GlutinError)
     }
 
     /// Captures the current framebuffer contents as a PNG screenshot.
@@ -671,7 +669,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             let path = format!("screenshot_{timestamp}_depth.png");
             if let Err(e) = write_png(
                 &path, &encoded, w as u32, h as u32,
-                png::ColorType::Grayscale, png::BitDepth::Sixteen
+                png::ColorType::Grayscale, png::BitDepth::Sixteen, png::Compression::High
             ) {
                 eprintln!("depth screenshot failed: {e}");
             } else {
@@ -687,7 +685,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             let path = format!("screenshot_{timestamp}.png");
             if let Err(e) = write_png(
                 &path, &rgb, w as u32, h as u32,
-                png::ColorType::Rgb, png::BitDepth::Eight
+                png::ColorType::Rgb, png::BitDepth::Eight, png::Compression::High
             ) {
                 eprintln!("screenshot failed: {e}");
             } else {
@@ -1184,7 +1182,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
         /* Check mouse presses and move the camera if any of them is pressed */
         let action;
-        let height = window.outer_size().height as f64;
+        let height = window.inner_size().height as f64;
 
         let mut lock = self.shared_state.lock_unpoison();
         let ViewerSharedState {data_passive, pert, ..} = lock.deref_mut();
@@ -1240,7 +1238,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                     /* Obtain the selection */ 
                     let rect = &self.rect_full;
-                    let (body_id, _, flex_id, skin_id, xyz) = self.scene.find_selection(
+                    let sel = self.scene.find_selection(
                         data_passive, &self.opt,
                         rect.width as MjtNum / rect.height as MjtNum,
                         (x - rect.left as MjtNum) / rect.width as MjtNum,
@@ -1249,21 +1247,21 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 
                     /* Set tracking camera */
                     if modifier_state.alt_key() {
-                        if body_id >= 0 {
-                            self.camera.lookat = xyz;
+                        if sel.body_id >= 0 {
+                            self.camera.lookat = sel.point;
                             if modifier_state.control_key() {
-                                self.camera.track(body_id as u32);
+                                self.camera.track(sel.body_id as u32);
                             }
                         }
                     }
                     else {
                         /* Mark selection */
-                        if body_id >= 0 {
-                            pert.select = body_id;
-                            pert.flexselect = flex_id;
-                            pert.skinselect = skin_id;
+                        if sel.body_id >= 0 {
+                            pert.select = sel.body_id;
+                            pert.flexselect = sel.flex_id;
+                            pert.skinselect = sel.skin_id;
                             pert.active = 0;
-                            pert.update_local_pos(&xyz, data_passive);
+                            pert.update_local_pos(&sel.point, data_passive);
                         }
                         else {
                             pert.select = 0;
@@ -1282,6 +1280,16 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     }
 }
 
+impl<M: Deref<Target = MjModel> + Clone> Drop for MjViewer<M> {
+    fn drop(&mut self) {
+        // Ensure the GL context is current before the implicit field drops so that
+        // MjrContext::drop (which calls mjr_freeContext) can properly free OpenGL resources.
+        if let Some(ref state) = self.adapter.state {
+            let _ = state.gl_context.make_current(&state.gl_surface);
+        }
+    }
+}
+
 
 /// Builder for [`MjViewer`].
 /// ### Default settings:
@@ -1290,6 +1298,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
 /// - `vsync`: false
 /// - `warn_non_realtime`: false
 /// 
+#[derive(Debug)]
 pub struct MjViewerBuilder<M: Deref<Target = MjModel> + Clone> {
     /// The name shown on the window decoration.
     window_name: Cow<'static, str>,

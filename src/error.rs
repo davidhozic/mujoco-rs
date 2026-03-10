@@ -63,6 +63,8 @@ pub enum MjDataError {
     },
     /// The contact buffer is full; no more contacts can be added.
     ContactBufferFull,
+    /// A filesystem path argument contains invalid UTF-8.
+    InvalidUtf8Path,
 }
 
 impl fmt::Display for MjDataError {
@@ -102,6 +104,9 @@ impl fmt::Display for MjDataError {
             }
             Self::ContactBufferFull => {
                 write!(f, "contact buffer is full")
+            }
+            Self::InvalidUtf8Path => {
+                write!(f, "path contains invalid UTF-8")
             }
         }
     }
@@ -223,7 +228,7 @@ impl std::error::Error for MjSceneError {}
 
 
 /// Errors that can occur in model-specification editing operations
-/// ([`MjSpec`](crate::wrappers::MjSpec) and related types).
+/// ([`MjSpec`](crate::wrappers::mj_editing::MjSpec) and related types).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MjEditError {
@@ -279,6 +284,8 @@ pub enum MjModelError {
     LoadFailed(String),
     /// MuJoCo failed to save the model XML.
     SaveFailed(String),
+    /// MuJoCo failed to allocate the requested structure.
+    AllocationFailed,
     /// The state source slice has the wrong length for the given spec.
     StateSliceLengthMismatch {
         /// Expected length.
@@ -305,6 +312,7 @@ impl fmt::Display for MjModelError {
             Self::InvalidUtf8Path => write!(f, "path contains invalid UTF-8"),
             Self::LoadFailed(msg) => write!(f, "model load failed: {msg}"),
             Self::SaveFailed(msg) => write!(f, "model save failed: {msg}"),
+            Self::AllocationFailed => write!(f, "MuJoCo failed to allocate the requested structure"),
             Self::StateSliceLengthMismatch { expected, got } => {
                 write!(f, "state slice length mismatch: expected {expected}, got {got}")
             }
@@ -382,13 +390,13 @@ pub enum GlInitError {
     NoWindow,
     /// Failed to obtain the native window handle.
     WindowHandle(String),
-    /// OpenGL context creation failed.
+    /// OpenGL context creation failed. Wraps [`glutin::error::Error`].
     ContextCreation(glutin::error::Error),
     /// Window surface attributes could not be constructed.
     SurfaceAttributes(String),
-    /// Rendering surface creation failed.
+    /// Rendering surface creation failed. Wraps [`glutin::error::Error`].
     SurfaceCreation(glutin::error::Error),
-    /// Making the GL context current on the surface failed.
+    /// Making the GL context current on the surface failed. Wraps [`glutin::error::Error`].
     MakeCurrent(glutin::error::Error),
 }
 

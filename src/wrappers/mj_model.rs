@@ -1,5 +1,5 @@
 //! MjModel related.
-use std::ffi::{CStr, CString, NulError, c_int, c_void};
+use std::ffi::{CStr, CString, c_int, c_void};
 use std::path::Path;
 use std::ptr::{self, NonNull};
 
@@ -485,13 +485,15 @@ impl MjModel {
     }
 
     /// Translates `name` to the correct id. Wrapper around `mj_name2id`.
+    /// Returns `None` if the name is not found.
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
-    pub fn name_to_id(&self, type_: MjtObj, name: &str) -> i32 {
+    pub fn name_to_id(&self, type_: MjtObj, name: &str) -> Option<i32> {
         let c_string = CString::new(name).unwrap();
-        unsafe {
+        let id = unsafe {
             mj_name2id(self.ffi(), type_ as i32, c_string.as_ptr())
-        }
+        };
+        if id == -1 { None } else { Some(id) }
     }
 
     /* Partially auto-generated */
@@ -499,32 +501,51 @@ impl MjModel {
     /// Fallible version of [`Clone::clone`].
     ///
     /// # Errors
-    /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
+    /// Returns [`MjModelError::AllocationFailed`] if MuJoCo fails to allocate
     /// the copy.
-    pub fn try_clone(&self) -> Result<MjModel, MjDataError> {
+    pub fn try_clone(&self) -> Result<MjModel, MjModelError> {
         let ptr = unsafe { mj_copyModel(ptr::null_mut(), self.ffi()) };
         NonNull::new(ptr)
             .map(MjModel)
-            .ok_or(MjDataError::AllocationFailed)
+            .ok_or(MjModelError::AllocationFailed)
     }
 
-    /// Save model to binary MJB file or memory buffer; buffer has precedence when given.
+    /// Save model to binary MJB file.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// # Panics
-    /// When the `filename` contains '\0' characters, a panic occurs.
-    pub fn save(&self, filename: Option<&str>, buffer: Option<&mut [u8]>) {
-        let c_filename = filename.map(|f| CString::new(f).unwrap());
-        let (buffer_ptr, buffer_len) = if let Some(b) = buffer {
-            (b.as_mut_ptr(), b.len())
-        }
-        else {
-            (ptr::null_mut(), 0)
-        };
-        let c_filename_ptr = c_filename.as_ref().map_or(ptr::null(), |f| f.as_ptr());
-
+    /// When the filename contains '\0' characters, a panic occurs.
+    pub fn save_to_file<T: AsRef<Path>>(&self, filename: T) -> Result<(), MjModelError> {
+        let path_str = filename.as_ref().to_str()
+            .ok_or(MjModelError::InvalidUtf8Path)?;
+        let c_filename = CString::new(path_str).unwrap();
         unsafe { mj_saveModel(
-            self.ffi(), c_filename_ptr,
-            buffer_ptr as *mut std::ffi::c_void, buffer_len as i32
+            self.ffi(), c_filename.as_ptr(),
+            ptr::null_mut(), 0
         ) };
+        Ok(())
+    }
+
+    /// Save model to memory buffer.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjModelError::BufferTooSmall`] if the buffer is smaller than [`size()`](Self::size).
+    pub fn save_to_buffer(&self, buffer: &mut [u8]) -> Result<(), MjModelError> {
+        let needed = self.size() as usize;
+        if buffer.len() < needed {
+            return Err(MjModelError::BufferTooSmall {
+                needed,
+                available: buffer.len(),
+            });
+        }
+        unsafe { mj_saveModel(
+            self.ffi(), ptr::null(),
+            buffer.as_mut_ptr() as *mut c_void, buffer.len() as i32
+        ) };
+        Ok(())
     }
 
     /// Return size of buffer needed to hold model.
@@ -537,10 +558,14 @@ impl MjModel {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error of kind [`NulError`] if either strings contain interior null bytes.
-    pub fn print_formatted(&self, filename: &str, float_format: &str) -> Result<(), NulError> {
-        let c_filename = CString::new(filename)?;
-        let c_float_format = CString::new(float_format)?;
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// # Panics
+    /// When either string contains '\0' characters, a panic occurs.
+    pub fn print_formatted<T: AsRef<Path>>(&self, filename: T, float_format: &str) -> Result<(), MjModelError> {
+        let path_str = filename.as_ref().to_str()
+            .ok_or(MjModelError::InvalidUtf8Path)?;
+        let c_filename = CString::new(path_str).unwrap();
+        let c_float_format = CString::new(float_format).unwrap();
         unsafe { mj_printFormattedModel(self.ffi(), c_filename.as_ptr(), c_float_format.as_ptr()) }
         Ok(())
     }
@@ -549,9 +574,13 @@ impl MjModel {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error of kind [`NulError`] if the string contains interior null bytes.
-    pub fn print(&self, filename: &str) -> Result<(), NulError> {
-        let c_filename = CString::new(filename)?;
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// # Panics
+    /// When the filename contains '\0' characters, a panic occurs.
+    pub fn print<T: AsRef<Path>>(&self, filename: T) -> Result<(), MjModelError> {
+        let path_str = filename.as_ref().to_str()
+            .ok_or(MjModelError::InvalidUtf8Path)?;
+        let c_filename = CString::new(path_str).unwrap();
         unsafe { mj_printModel(self.ffi(), c_filename.as_ptr()) }
         Ok(())
     }
@@ -662,7 +691,7 @@ impl MjModel {
     }
 
     /// Sum all body masses.
-    pub fn get_totalmass(&self) -> MjtNum {
+    pub fn totalmass(&self) -> MjtNum {
         unsafe { mj_getTotalmass(self.ffi()) }
     }
 
@@ -1204,7 +1233,7 @@ impl MjModel {
         text_data: &[i8; "array of all text fields (0-terminated)"; ffi().ntextdata],
         tuple_adr: &[i32; "address of text in text_data"; ffi().ntuple],
         tuple_size: &[i32; "number of objects in tuple"; ffi().ntuple],
-        tuple_objtype: &[i32; "array of object types in all tuples"; ffi().ntupledata],
+        tuple_objtype: &[MjtObj [force]; "array of object types in all tuples"; ffi().ntupledata],
         tuple_objid: &[i32; "array of object ids in all tuples"; ffi().ntupledata],
         tuple_objprm: &[MjtNum; "array of object params in all tuples"; ffi().ntupledata],
         key_time: &[MjtNum; "key time"; ffi().nkey],
@@ -1254,6 +1283,8 @@ impl MjModel {
             key_qpos: &[[MjtNum; ffi().nq] [force]; "key position"; ffi().nkey],
             key_qvel: &[[MjtNum; ffi().nv] [force]; "key velocity"; ffi().nkey],
             key_act: &[[MjtNum; ffi().na] [force]; "key activation"; ffi().nkey],
+            key_mpos: &[[MjtNum; ffi().nmocap * 3] [force]; "key mocap position"; ffi().nkey],
+            key_mquat: &[[MjtNum; ffi().nmocap * 4] [force]; "key mocap quaternion"; ffi().nkey],
             key_ctrl: &[[MjtNum; ffi().nu] [force]; "key control"; ffi().nkey],
 
             sensor_user: &[[MjtNum; ffi().nuser_sensor] [force]; "user data"; ffi().nsensor],
@@ -1399,11 +1430,11 @@ info_with_view!(Model, light,
 	 [light_] targetbodyid: i32,
 	 [light_] r#type: MjtLightType [force],
 	 [light_] texid: i32,
-	 [light_] castshadow: MjtByte,
+	 [light_] castshadow: bool [force],
 	 [light_] bulbradius: f32,
 	 [light_] intensity: f32,
 	 [light_] range: f32,
-	 [light_] active: MjtByte,
+	 [light_] active: bool [force],
 	 [light_] pos: MjtNum,
 	 [light_] dir: MjtNum,
 	 [light_] poscom0: MjtNum,
@@ -1926,9 +1957,9 @@ mod tests {
     fn test_totalmass_set_and_get() {
         let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
 
-        let mass_before = model.get_totalmass();
+        let mass_before = model.totalmass();
         model.set_totalmass(5.0);
-        let mass_after = model.get_totalmass();
+        let mass_after = model.totalmass();
 
         assert_relative_eq!(mass_after, 5.0, epsilon = 1e-9);
         assert_ne!(mass_before, mass_after);
@@ -1945,11 +1976,11 @@ mod tests {
     fn test_model_save() {
         const MODEL_SAVE_PATH: &str = "./__TMP_MODEL2.mjb";
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
-        model.save(Some(MODEL_SAVE_PATH), None);
+        model.save_to_file(MODEL_SAVE_PATH).unwrap();
 
         let saved_data = fs::read(MODEL_SAVE_PATH).unwrap();
         let mut data = vec![0; saved_data.len()];
-        model.save(None, Some(&mut data));
+        model.save_to_buffer(&mut data).unwrap();
 
         assert_eq!(saved_data, data);
         fs::remove_file(MODEL_SAVE_PATH).unwrap();
@@ -2166,8 +2197,8 @@ mod tests {
         assert_eq!(view_light.bodyid[0] as usize, BODYID);
         assert_eq!(view_light.targetbodyid[0], -1);
         assert_eq!(view_light.r#type[0], TYPE);
-        assert_eq!(view_light.castshadow[0], CASTSHADOW as u8);
-        assert_eq!(view_light.active[0], ACTIVE as u8);
+        assert_eq!(view_light.castshadow[0], CASTSHADOW);
+        assert_eq!(view_light.active[0], ACTIVE);
 
         assert_eq!(view_light.pos[..], POS);
         assert_eq!(view_light.dir[..], DIR);
@@ -2193,8 +2224,8 @@ mod tests {
         assert_eq!(view_eq.r#type[0], MjtEq::mjEQ_CONNECT);
 
         // Check connected bodies
-        assert_eq!(view_eq.obj1id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body3"));
-        assert_eq!(view_eq.obj2id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body4"));
+        assert_eq!(view_eq.obj1id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body3").unwrap());
+        assert_eq!(view_eq.obj2id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body4").unwrap());
         assert_eq!(view_eq.objtype[0], MjtObj::mjOBJ_BODY);
 
         // Check active
@@ -2250,7 +2281,7 @@ mod tests {
 
         let required_size = model.state_size(MjtState::mjSTATE_PHYSICS as u32);
         let mut dst_buffer = vec![0.0; required_size].into_boxed_slice();
-        let _byes_written = model.extract_state_into(
+        let _bytes_written = model.extract_state_into(
             &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
             &mut dst_buffer, MjtState::mjSTATE_PHYSICS as u32
         ).unwrap();
@@ -3287,5 +3318,133 @@ mod tests {
         let ptr_diff = unsafe { jnt_solref[1].as_ptr().offset_from(jnt_solref[0].as_ptr()) };
         assert_eq!(ptr_diff, mjNREF as isize,
             "jnt_solref stride must be mjNREF={}", mjNREF);
+    }
+
+    /// Model with 2 mocap bodies and 2 keyframes carrying specific mocap data.
+    /// This lets us verify key_mpos and key_mquat array-slice strides and values.
+    const MOCAP_MODEL: &str = stringify!(
+        <mujoco>
+            <worldbody>
+                <body name="mocap1" mocap="true" pos="0 0 0">
+                    <geom type="sphere" size="0.05" contype="0" conaffinity="0"/>
+                </body>
+                <body name="mocap2" mocap="true" pos="1 0 0">
+                    <geom type="sphere" size="0.05" contype="0" conaffinity="0"/>
+                </body>
+                <geom type="plane" size="5 5 0.1"/>
+            </worldbody>
+            <keyframe>
+                <key name="k0"
+                     mpos="1.0 2.0 3.0  4.0 5.0 6.0"
+                     mquat="0.5 0.5 0.5 0.5  1.0 0.0 0.0 0.0"/>
+                <key name="k1"
+                     mpos="10.0 20.0 30.0  40.0 50.0 60.0"
+                     mquat="0.0 0.0 0.0 1.0  0.0 1.0 0.0 0.0"/>
+            </keyframe>
+        </mujoco>
+    );
+
+    /// Test that `key_mpos` returns the correct slice length and exact values
+    /// for a model with 2 mocap bodies and 2 keyframes.
+    #[test]
+    fn test_key_mpos() {
+        let model = MjModel::from_xml_string(MOCAP_MODEL).unwrap();
+        let nkey = model.ffi().nkey as usize;
+        let nmocap = model.ffi().nmocap as usize;
+
+        assert_eq!(nkey, 2, "expected 2 keyframes");
+        assert_eq!(nmocap, 2, "expected 2 mocap bodies");
+
+        let mpos = model.key_mpos();
+        assert_eq!(mpos.len(), nkey * nmocap * 3,
+            "key_mpos length must be nkey * nmocap * 3 = {}", nkey * nmocap * 3);
+
+        // Keyframe 0: mocap1 at (1,2,3), mocap2 at (4,5,6)
+        let k0 = &mpos[..nmocap * 3];
+        let expected_k0: &[f64] = &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        assert_eq!(k0.len(), expected_k0.len());
+        for (&a, &b) in k0.iter().zip(expected_k0.iter()) {
+            assert_relative_eq!(a, b, epsilon = 1e-10);
+        }
+
+        // Keyframe 1: mocap1 at (10,20,30), mocap2 at (40,50,60)
+        let k1 = &mpos[nmocap * 3..];
+        let expected_k1: &[f64] = &[10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
+        assert_eq!(k1.len(), expected_k1.len());
+        for (&a, &b) in k1.iter().zip(expected_k1.iter()) {
+            assert_relative_eq!(a, b, epsilon = 1e-10);
+        }
+    }
+
+    /// Test that `key_mquat` returns the correct slice length and exact values
+    /// for a model with 2 mocap bodies and 2 keyframes.
+    #[test]
+    fn test_key_mquat() {
+        let model = MjModel::from_xml_string(MOCAP_MODEL).unwrap();
+        let nkey = model.ffi().nkey as usize;
+        let nmocap = model.ffi().nmocap as usize;
+
+        assert_eq!(nkey, 2, "expected 2 keyframes");
+        assert_eq!(nmocap, 2, "expected 2 mocap bodies");
+
+        let mquat = model.key_mquat();
+        assert_eq!(mquat.len(), nkey * nmocap * 4,
+            "key_mquat length must be nkey * nmocap * 4 = {}", nkey * nmocap * 4);
+
+        // Keyframe 0: mocap1 quat (0.5,0.5,0.5,0.5), mocap2 quat (1,0,0,0)
+        let k0 = &mquat[..nmocap * 4];
+        let expected_k0: &[f64] = &[0.5, 0.5, 0.5, 0.5, 1.0, 0.0, 0.0, 0.0];
+        assert_eq!(k0.len(), expected_k0.len());
+        for (&a, &b) in k0.iter().zip(expected_k0.iter()) {
+            assert_relative_eq!(a, b, epsilon = 1e-10);
+        }
+
+        // Keyframe 1: mocap1 quat (0,0,0,1), mocap2 quat (0,1,0,0)
+        let k1 = &mquat[nmocap * 4..];
+        let expected_k1: &[f64] = &[0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0];
+        assert_eq!(k1.len(), expected_k1.len());
+        for (&a, &b) in k1.iter().zip(expected_k1.iter()) {
+            assert_relative_eq!(a, b, epsilon = 1e-10);
+        }
+    }
+
+    /// Test that key_mpos is accessible through the key view as well,
+    /// and that both paths yield the same data.
+    #[test]
+    fn test_key_mpos_view_consistency() {
+        let model = MjModel::from_xml_string(MOCAP_MODEL).unwrap();
+        let nmocap = model.ffi().nmocap as usize;
+
+        let info_k0 = model.key("k0").unwrap();
+        let view_k0 = info_k0.view(&model);
+
+        // key view mpos slice should equal array accessor key_mpos[0..nmocap*3]
+        let array_k0 = &model.key_mpos()[..nmocap * 3];
+        assert_eq!(
+            &view_k0.mpos[..nmocap * 3], array_k0,
+            "key view mpos and key_mpos array accessor must return identical data"
+        );
+
+        let info_k1 = model.key("k1").unwrap();
+        let view_k1 = info_k1.view(&model);
+        let array_k1 = &model.key_mpos()[nmocap * 3..];
+        assert_eq!(
+            &view_k1.mpos[..nmocap * 3], array_k1,
+            "key view mpos and key_mpos array accessor must return identical data for key 1"
+        );
+    }
+
+    /// Test that key_mpos/key_mquat return empty slices for models with no mocap bodies.
+    #[test]
+    fn test_key_mpos_mquat_no_mocap() {
+        // EXAMPLE_MODEL has keyframes but no mocap bodies
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        assert_eq!(model.ffi().nmocap, 0, "EXAMPLE_MODEL should have no mocap bodies");
+        assert!(model.ffi().nkey > 0, "EXAMPLE_MODEL should have keyframes");
+
+        assert_eq!(model.key_mpos().len(), 0,
+            "key_mpos must be empty when nmocap == 0");
+        assert_eq!(model.key_mquat().len(), 0,
+            "key_mquat must be empty when nmocap == 0");
     }
 }

@@ -58,6 +58,7 @@ impl Default for MjLROpt {
 ** MjVfs
 ***********************************************************************************************************************/
 /// Wrapper around the virtual-file system.
+#[derive(Debug)]
 pub struct MjVfs {
     ffi: Box<mjVFS>
 }
@@ -201,6 +202,17 @@ impl MjVfs {
         &mut self.ffi
     }
 }
+
+impl Default for MjVfs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// SAFETY: MjVfs owns its data exclusively (no shared mutable aliasing)
+// and the underlying mjVFS does not use thread-local state.
+unsafe impl Send for MjVfs {}
+unsafe impl Sync for MjVfs {}
 
 impl Drop for MjVfs {
     fn drop(&mut self) {

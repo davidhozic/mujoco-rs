@@ -61,7 +61,7 @@ Optional Cargo features can be enabled:
 - ``viewer``: enables the Rust-native MuJoCo viewer.
 
   - ``viewer-ui``: enables the (additional) user UI within the viewer.
-    This also allows users to add custom `egui <https://docs.rs/egui/0.33.2/egui/>`_ widgets to the viewer.
+    This also allows users to add custom `egui <https://docs.rs/egui/0.33.0/egui/>`_ widgets to the viewer.
 
 - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
   This requires static linking to a modified fork of MuJoCo, as described in :ref:`installation`.
@@ -93,6 +93,6 @@ Table of contents
 
    installation
    programming/programming
-   migration
    api
    changelog
+   migration

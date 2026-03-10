@@ -19,7 +19,7 @@ There are two things that expose a scene for drawing custom visual-only geoms:
 
 Drawing to a scene
 ===================
-To draw custom geoms to a scene inside a viewer or a renderer, applications need to alternate between calls to two methods:
+To draw custom geoms to a scene inside a viewer or a renderer, applications call two methods each frame:
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>clear_geom`, which will
   clear all the existing geoms.
