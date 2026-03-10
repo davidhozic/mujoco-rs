@@ -491,6 +491,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 self.height as u32,
                 png::ColorType::Rgb,
                 png::BitDepth::Eight,
+                png::Compression::NoCompression
             )?;
             Ok(())
         }
@@ -545,6 +546,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 self.height as u32,
                 png::ColorType::Grayscale,
                 png::BitDepth::Sixteen,
+                png::Compression::NoCompression
             )?;
             Ok((min, max))
         }

@@ -85,7 +85,7 @@ update of MuJoCo alone can increase the major version.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update`:
     the ``pertub`` parameter has been renamed to ``perturb`` (typo fix).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>find_selection`
-    now returns an :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjSelection` named struct
+    now returns an :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>SceneSelection` named struct
     instead of a 5-tuple ``(i32, i32, i32, i32, [MjtNum; 3])``.
 
 - :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`:
@@ -253,7 +253,7 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
   that propagates scene-full errors as ``RendererError::SceneError`` instead of panicking.
 
 - :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError` gained variants: ``PainterInitError``,
-  ``SwapBuffersError``, ``GlInitFailed``, ``SceneError``.
+  ``GlInitFailed``, ``SceneError``.
 
 - :docs-rs:`~mujoco_rs::error::<enum>GlInitError` replaces opaque ``String`` errors
   for OpenGL context initialization failures in the renderer and viewer.
@@ -387,7 +387,7 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
 - |mj_vfs| now implements ``Send`` and ``Sync``.
 - :docs-rs:`~mujoco_rs::wrappers::mj_option::<type>MjOption` now implements ``Default``
   (delegates to ``mj_defaultOption``).
-- :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjSelection` now implements
+- :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>SceneSelection` now implements
   ``Default`` (body/geom/flex/skin IDs default to ``-1``, point defaults to ``[0.0; 3]``).
 - All model-editing iterators (``MjsSpecItemIter``, ``MjsSpecItemIterMut``,
   ``MjsBodyItemIter``, ``MjsBodyItemIterMut``) now implement ``FusedIterator``.

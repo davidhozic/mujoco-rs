@@ -390,13 +390,13 @@ pub enum GlInitError {
     NoWindow,
     /// Failed to obtain the native window handle.
     WindowHandle(String),
-    /// OpenGL context creation failed.
+    /// OpenGL context creation failed. Wraps [`glutin::error::Error`].
     ContextCreation(glutin::error::Error),
     /// Window surface attributes could not be constructed.
     SurfaceAttributes(String),
-    /// Rendering surface creation failed.
+    /// Rendering surface creation failed. Wraps [`glutin::error::Error`].
     SurfaceCreation(glutin::error::Error),
-    /// Making the GL context current on the surface failed.
+    /// Making the GL context current on the surface failed. Wraps [`glutin::error::Error`].
     MakeCurrent(glutin::error::Error),
 }
 

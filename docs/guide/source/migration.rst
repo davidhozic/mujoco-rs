@@ -337,7 +337,7 @@ returned ``-1``).
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 |mjv_scene|'s :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>find_selection`
-now returns an :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjSelection` named struct
+now returns an :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>SceneSelection` named struct
 instead of a 5-tuple.
 
 **Before (2.x):**

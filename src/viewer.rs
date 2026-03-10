@@ -125,8 +125,6 @@ pub enum MjViewerError {
     GlutinError(glutin::error::Error),
     /// Returned when the egui painter (OpenGL UI renderer) fails to initialize.
     PainterInitError(String),
-    /// Returned when OpenGL buffer swap fails during rendering.
-    SwapBuffersError(glutin::error::Error),
     /// OpenGL / window initialization failed.
     GlInitFailed(crate::error::GlInitError),
     /// A scene operation failed (e.g. user-scene sync overflowed the geom buffer).
@@ -139,7 +137,6 @@ impl Display for MjViewerError {
             Self::EventLoopError(_) => write!(f, "event loop failed to initialize"),
             Self::GlutinError(_) => write!(f, "glutin error"),
             Self::PainterInitError(e) => write!(f, "failed to initialize egui painter: {}", e),
-            Self::SwapBuffersError(_) => write!(f, "OpenGL buffer swap failed"),
             Self::GlInitFailed(_) => write!(f, "GL initialization failed"),
             Self::SceneError(_) => write!(f, "scene error"),
         }
@@ -152,7 +149,6 @@ impl Error for MjViewerError {
             Self::EventLoopError(e) => Some(e),
             Self::GlutinError(e) => Some(e),
             Self::PainterInitError(_) => None,
-            Self::SwapBuffersError(e) => Some(e),
             Self::GlInitFailed(e) => Some(e),
             Self::SceneError(e) => Some(e),
         }
@@ -171,6 +167,11 @@ impl From<crate::error::GlInitError> for MjViewerError {
     }
 }
 
+impl From<glutin::error::Error> for MjViewerError {
+    fn from(e: glutin::error::Error) -> Self {
+        Self::GlutinError(e)
+    }
+}
 
 /// Internal state that is used by [`MjViewer`] to store
 /// [`MjData`]-related state. This is separate from [`MjViewer`]
@@ -557,7 +558,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
     /// Processes the UI (when enabled), processes events, draws the scene
     /// and swaps buffers in OpenGL.
     /// # Errors
-    /// - [`MjViewerError::SwapBuffersError`] if the OpenGL buffer swap fails.
+    /// - [`MjViewerError::GlutinError`] if the OpenGL buffer swap fails.
     /// - [`MjViewerError::SceneError`] if synchronizing user scene geoms fails (e.g. the scene is full).
     pub fn render(&mut self) -> Result<(), MjViewerError> {
         let RenderBaseGlState {
@@ -567,9 +568,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         } = self.adapter.state.as_ref().unwrap();
 
         /* Make sure everything is done on the viewer's window */
-        if gl_context.make_current(gl_surface).is_err() {
-            return Ok(());
-        }
+        gl_context.make_current(gl_surface)?;
 
         /* Read the screen size */
         self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
@@ -614,8 +613,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
         } = self.adapter.state.as_ref().unwrap();
 
         /* Swap OpenGL buffers (render to screen) */
-        gl_surface.swap_buffers(gl_context)
-            .map_err(MjViewerError::SwapBuffersError)
+        gl_surface.swap_buffers(gl_context).map_err(MjViewerError::GlutinError)
     }
 
     /// Captures the current framebuffer contents as a PNG screenshot.
@@ -671,7 +669,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             let path = format!("screenshot_{timestamp}_depth.png");
             if let Err(e) = write_png(
                 &path, &encoded, w as u32, h as u32,
-                png::ColorType::Grayscale, png::BitDepth::Sixteen
+                png::ColorType::Grayscale, png::BitDepth::Sixteen, png::Compression::High
             ) {
                 eprintln!("depth screenshot failed: {e}");
             } else {
@@ -687,7 +685,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             let path = format!("screenshot_{timestamp}.png");
             if let Err(e) = write_png(
                 &path, &rgb, w as u32, h as u32,
-                png::ColorType::Rgb, png::BitDepth::Eight
+                png::ColorType::Rgb, png::BitDepth::Eight, png::Compression::High
             ) {
                 eprintln!("screenshot failed: {e}");
             } else {

@@ -15,7 +15,7 @@ use crate::mujoco_c::*;
 
 /// Result of a mouse-based selection query via [`MjvScene::find_selection`].
 #[derive(Debug, Clone, PartialEq)]
-pub struct MjSelection {
+pub struct SceneSelection {
     /// Selected body id (-1 if none).
     pub body_id: i32,
     /// Selected geom id (-1 if none).
@@ -28,7 +28,7 @@ pub struct MjSelection {
     pub point: [MjtNum; 3],
 }
 
-impl Default for MjSelection {
+impl Default for SceneSelection {
     fn default() -> Self {
         Self {
             body_id: -1,
@@ -652,7 +652,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
     pub fn find_selection(
         &self, data: &MjData<M>, option: &MjvOption,
         aspect_ratio: MjtNum, relx: MjtNum, rely: MjtNum,
-    ) -> MjSelection {
+    ) -> SceneSelection {
         let (mut geom_id, mut flex_id, mut skin_id) = (-1 , -1, -1);
         let mut selpnt = [0.0; 3];
         let body_id = unsafe {
@@ -662,7 +662,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
                 &mut geom_id, &mut flex_id, &mut skin_id
             )
         };
-        MjSelection { body_id, geom_id, flex_id, skin_id, point: selpnt }
+        SceneSelection { body_id, geom_id, flex_id, skin_id, point: selpnt }
     }
 
     /// Reference to the wrapped FFI struct.
