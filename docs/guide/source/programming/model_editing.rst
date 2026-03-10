@@ -153,7 +153,7 @@ The specification can also be saved directly to an MJCF (XML) file:
         let model = spec.compile().expect("failed to compile");
         spec.save_xml("model.xml").expect("failed to save");     // save XML to a file.
         let xml_str = spec.save_xml_string(8192).expect("failed to save");  // save XML to a string.
-        model.save(Some("model.mjb"), None);                      // save binary.
+        model.save_to_file("model.mjb").expect("failed to save"); // save binary.
     }
 
 

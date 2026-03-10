@@ -41,6 +41,9 @@ update of MuJoCo alone can increase the major version.
     now takes ``contact_id: u32`` instead of ``usize``.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>maxuse_threadstack`
     now returns ``&[MjtSize; mjMAXTHREAD]`` instead of ``&[MjtSize]``.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print` and
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print_formatted`
+    now accept ``AsRef<Path>`` for the filename and return ``Result<(), MjDataError>``.
 
 - |mj_model|:
 
@@ -59,6 +62,17 @@ update of MuJoCo alone can increase the major version.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`
     now calls :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_loadModelBuffer` directly
     instead of going through a virtual file-system.
+  - ``MjModel::save()`` has been split into
+    :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_to_file`
+    (``Result<(), MjModelError>``) and
+    :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_to_buffer`
+    (``Result<(), MjModelError>``).
+    Both methods accept ``AsRef<Path>`` / a buffer respectively.
+    ``save_to_buffer`` validates the buffer size before writing and returns
+    :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::BufferTooSmall` if it is too small.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>print` and
+    :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>print_formatted`
+    now accept ``AsRef<Path>`` for the filename and return ``Result<(), MjModelError>``.
 
 - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom` gained a ``normal_out``
   parameter (``Option<&mut [MjtNum; 3]>``). Pass ``None`` to preserve the previous behavior.
@@ -162,6 +176,10 @@ Pre-existing types :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` and
        :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml_string`,
        :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`,
        :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml`,
+       :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_to_file` :sup:`new`,
+       :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_to_buffer` :sup:`new`,
+       :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>print`,
+       :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>print_formatted`,
        :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state` :sup:`new`,
        :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state_into` :sup:`new`
      - :docs-rs:`~mujoco_rs::error::<enum>MjModelError`
@@ -180,6 +198,8 @@ Pre-existing types :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` and
        :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>geom_distance`,
        :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>local_to_global`,
        :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray`,
+       :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print`,
+       :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print_formatted`,
        :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_ctrl_history` :sup:`new`,
        :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_sensor_history` :sup:`new`,
        :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_ctrl` :sup:`new`,
@@ -237,6 +257,12 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
 
 - :docs-rs:`~mujoco_rs::error::<enum>GlInitError` replaces opaque ``String`` errors
   for OpenGL context initialization failures in the renderer and viewer.
+
+- :docs-rs:`~mujoco_rs::error::<enum>MjModelError` gained the ``BufferTooSmall`` variant for
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_to_buffer` buffer validation.
+
+- :docs-rs:`~mujoco_rs::error::<enum>MjDataError` gained the ``InvalidUtf8Path`` variant,
+  returned when a path argument contains non-UTF-8 data.
 
 - New fallible ``try_`` methods (infallible counterparts now delegate to their ``try_``
   variants via ``.expect()``, preserving backward compatibility).

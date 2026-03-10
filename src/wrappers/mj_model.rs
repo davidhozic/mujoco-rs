@@ -1,5 +1,5 @@
 //! MjModel related.
-use std::ffi::{CStr, CString, NulError, c_int, c_void};
+use std::ffi::{CStr, CString, c_int, c_void};
 use std::path::Path;
 use std::ptr::{self, NonNull};
 
@@ -510,23 +510,42 @@ impl MjModel {
             .ok_or(MjModelError::AllocationFailed)
     }
 
-    /// Save model to binary MJB file or memory buffer; buffer has precedence when given.
+    /// Save model to binary MJB file.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// # Panics
-    /// When the `filename` contains '\0' characters, a panic occurs.
-    pub fn save(&self, filename: Option<&str>, buffer: Option<&mut [u8]>) {
-        let c_filename = filename.map(|f| CString::new(f).unwrap());
-        let (buffer_ptr, buffer_len) = if let Some(b) = buffer {
-            (b.as_mut_ptr(), b.len())
-        }
-        else {
-            (ptr::null_mut(), 0)
-        };
-        let c_filename_ptr = c_filename.as_ref().map_or(ptr::null(), |f| f.as_ptr());
-
+    /// When the filename contains '\0' characters, a panic occurs.
+    pub fn save_to_file<T: AsRef<Path>>(&self, filename: T) -> Result<(), MjModelError> {
+        let path_str = filename.as_ref().to_str()
+            .ok_or(MjModelError::InvalidUtf8Path)?;
+        let c_filename = CString::new(path_str).unwrap();
         unsafe { mj_saveModel(
-            self.ffi(), c_filename_ptr,
-            buffer_ptr as *mut std::ffi::c_void, buffer_len as i32
+            self.ffi(), c_filename.as_ptr(),
+            ptr::null_mut(), 0
         ) };
+        Ok(())
+    }
+
+    /// Save model to memory buffer.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjModelError::BufferTooSmall`] if the buffer is smaller than [`size()`](Self::size).
+    pub fn save_to_buffer(&self, buffer: &mut [u8]) -> Result<(), MjModelError> {
+        let needed = self.size() as usize;
+        if buffer.len() < needed {
+            return Err(MjModelError::BufferTooSmall {
+                needed,
+                available: buffer.len(),
+            });
+        }
+        unsafe { mj_saveModel(
+            self.ffi(), ptr::null(),
+            buffer.as_mut_ptr() as *mut c_void, buffer.len() as i32
+        ) };
+        Ok(())
     }
 
     /// Return size of buffer needed to hold model.
@@ -539,10 +558,14 @@ impl MjModel {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error of kind [`NulError`] if either strings contain interior null bytes.
-    pub fn print_formatted(&self, filename: &str, float_format: &str) -> Result<(), NulError> {
-        let c_filename = CString::new(filename)?;
-        let c_float_format = CString::new(float_format)?;
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// # Panics
+    /// When either string contains '\0' characters, a panic occurs.
+    pub fn print_formatted<T: AsRef<Path>>(&self, filename: T, float_format: &str) -> Result<(), MjModelError> {
+        let path_str = filename.as_ref().to_str()
+            .ok_or(MjModelError::InvalidUtf8Path)?;
+        let c_filename = CString::new(path_str).unwrap();
+        let c_float_format = CString::new(float_format).unwrap();
         unsafe { mj_printFormattedModel(self.ffi(), c_filename.as_ptr(), c_float_format.as_ptr()) }
         Ok(())
     }
@@ -551,9 +574,13 @@ impl MjModel {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns an error of kind [`NulError`] if the string contains interior null bytes.
-    pub fn print(&self, filename: &str) -> Result<(), NulError> {
-        let c_filename = CString::new(filename)?;
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// # Panics
+    /// When the filename contains '\0' characters, a panic occurs.
+    pub fn print<T: AsRef<Path>>(&self, filename: T) -> Result<(), MjModelError> {
+        let path_str = filename.as_ref().to_str()
+            .ok_or(MjModelError::InvalidUtf8Path)?;
+        let c_filename = CString::new(path_str).unwrap();
         unsafe { mj_printModel(self.ffi(), c_filename.as_ptr()) }
         Ok(())
     }
@@ -1949,11 +1976,11 @@ mod tests {
     fn test_model_save() {
         const MODEL_SAVE_PATH: &str = "./__TMP_MODEL2.mjb";
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
-        model.save(Some(MODEL_SAVE_PATH), None);
+        model.save_to_file(MODEL_SAVE_PATH).unwrap();
 
         let saved_data = fs::read(MODEL_SAVE_PATH).unwrap();
         let mut data = vec![0; saved_data.len()];
-        model.save(None, Some(&mut data));
+        model.save_to_buffer(&mut data).unwrap();
 
         assert_eq!(saved_data, data);
         fs::remove_file(MODEL_SAVE_PATH).unwrap();

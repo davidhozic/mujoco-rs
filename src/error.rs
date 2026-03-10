@@ -63,6 +63,8 @@ pub enum MjDataError {
     },
     /// The contact buffer is full; no more contacts can be added.
     ContactBufferFull,
+    /// A filesystem path argument contains invalid UTF-8.
+    InvalidUtf8Path,
 }
 
 impl fmt::Display for MjDataError {
@@ -102,6 +104,9 @@ impl fmt::Display for MjDataError {
             }
             Self::ContactBufferFull => {
                 write!(f, "contact buffer is full")
+            }
+            Self::InvalidUtf8Path => {
+                write!(f, "path contains invalid UTF-8")
             }
         }
     }

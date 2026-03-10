@@ -99,7 +99,7 @@ The table below maps the breaking error-type changes:
    * - Module / type
      - 2.x error type
      - 3.0.0 error type
-   * - |mj_model| (``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``from_buffer``, ``save_last_xml``)
+   * - |mj_model| (``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``from_buffer``, ``save_last_xml``, ``save_to_file``, ``save_to_buffer``)
      - ``io::Error``
      - ``MjModelError``
    * - |mj_vfs| (``add_from_file``, ``add_from_buffer``, ``delete_file``)
@@ -152,6 +152,64 @@ that returned ``Option<MjModel>`` has been replaced:
 fallible alternative to :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`.
 The existing ``sync()`` method still works but now delegates to ``try_sync().expect()``.
 If your code needs to handle scene-full errors gracefully, use ``try_sync()`` instead.
+
+
+``MjModel::save()`` split
+-----------------------------
+
+``MjModel::save(filename: Option<&str>, buffer: Option<&mut [u8]>)`` has been replaced by two
+dedicated methods:
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_to_file` --
+  saves the model to a binary MJB file. Accepts ``AsRef<Path>`` and returns ``Result<(), MjModelError>``.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_to_buffer` --
+  saves the model to a memory buffer and returns ``Result<(), MjModelError>``.
+  The buffer must be at least :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>size`
+  bytes; otherwise ``MjModelError::BufferTooSmall`` is returned.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    model.save(Some("model.mjb"), None);
+
+    let mut buffer = vec![0u8; model.size() as usize];
+    model.save(None, Some(&mut buffer));
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    model.save_to_file("model.mjb")?;
+
+    let mut buffer = vec![0u8; model.size() as usize];
+    model.save_to_buffer(&mut buffer)?;
+
+
+``MjData::print()`` and ``MjModel::print()``
+-----------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print_formatted`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>print`, and
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>print_formatted`
+now accept ``AsRef<Path>`` for the filename parameter and return ``Result`` with the
+corresponding error type (``MjDataError`` / ``MjModelError``).
+The error is returned when the path contains invalid UTF-8.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    data.print("data.txt");
+    model.print("model.txt");
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    data.print("data.txt")?;
+    model.print("model.txt")?;
 
 Newly fallible methods
 -----------------------------

@@ -7,6 +7,7 @@ use crate::{getter_setter, mujoco_c::*};
 use crate::error::MjDataError;
 
 use std::ffi::CString;
+use std::path::Path;
 use std::borrow::Cow;
 use std::ops::Deref;
 use std::fmt::Debug;
@@ -266,20 +267,34 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Print mjData to text file, specifying format.
     /// float_format must be a valid printf-style format string for a single float value.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjDataError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// # Panics
-    /// When the `filename` or `float_format` contain '\0' characters, a panic occurs.
-    pub fn print_formatted(&self, filename: &str, float_format: &str) {
-        let c_filename = CString::new(filename).unwrap();
+    /// When either string contains '\0' characters, a panic occurs.
+    pub fn print_formatted<T: AsRef<Path>>(&self, filename: T, float_format: &str) -> Result<(), MjDataError> {
+        let path_str = filename.as_ref().to_str()
+            .ok_or(MjDataError::InvalidUtf8Path)?;
+        let c_filename = CString::new(path_str).unwrap();
         let c_float_format = CString::new(float_format).unwrap();
         unsafe { mj_printFormattedData(self.model.ffi(), self.ffi(), c_filename.as_ptr(), c_float_format.as_ptr()) }
+        Ok(())
     }
 
     /// Print data to text file.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjDataError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// # Panics
-    /// When the `filename` contains '\0' characters, a panic occurs.
-    pub fn print(&self, filename: &str) {
-        let c_filename = CString::new(filename).unwrap();
+    /// When the filename contains '\0' characters, a panic occurs.
+    pub fn print<T: AsRef<Path>>(&self, filename: T) -> Result<(), MjDataError> {
+        let path_str = filename.as_ref().to_str()
+            .ok_or(MjDataError::InvalidUtf8Path)?;
+        let c_filename = CString::new(path_str).unwrap();
         unsafe { mj_printData(self.model.ffi(), self.ffi(), c_filename.as_ptr()) }
+        Ok(())
     }
 
     /// Run position-dependent computations.
