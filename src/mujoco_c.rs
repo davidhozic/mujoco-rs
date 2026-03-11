@@ -3469,7 +3469,7 @@ pub enum mjtOrientation_ {
 }
 pub use self::mjtOrientation_ as mjtOrientation;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsElement_ {
     pub(crate) elemtype: mjtObj,
     pub(crate) signature: u64,
@@ -3485,7 +3485,7 @@ const _: () = {
 };
 pub type mjsElement = mjsElement_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsCompiler_ {
     pub(crate) autolimits: mjtByte,
     pub(crate) boundmass: f64,
@@ -3548,7 +3548,7 @@ const _: () = {
 };
 pub type mjsCompiler = mjsCompiler_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjSpec_ {
     pub element: *mut mjsElement,
     pub modelname: *mut mjString,
@@ -3616,7 +3616,7 @@ const _: () = {
 };
 pub type mjSpec = mjSpec_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsOrientation_ {
     pub(crate) type_: mjtOrientation,
     pub(crate) axisangle: [f64; 4usize],
@@ -3641,7 +3641,7 @@ const _: () = {
 };
 pub type mjsOrientation = mjsOrientation_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsPlugin_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) name: *mut mjString,
@@ -3662,7 +3662,7 @@ const _: () = {
 };
 pub type mjsPlugin = mjsPlugin_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsBody_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) childclass: *mut mjString,
@@ -3711,7 +3711,7 @@ const _: () = {
 };
 pub type mjsBody = mjsBody_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsFrame_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) childclass: *mut mjString,
@@ -3734,7 +3734,7 @@ const _: () = {
 };
 pub type mjsFrame = mjsFrame_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsJoint_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) type_: mjtJoint,
@@ -3807,7 +3807,7 @@ const _: () = {
 };
 pub type mjsJoint = mjsJoint_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsGeom_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) type_: mjtGeom,
@@ -3884,7 +3884,7 @@ const _: () = {
 };
 pub type mjsGeom = mjsGeom_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsSite_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) pos: [f64; 3usize],
@@ -3918,7 +3918,7 @@ const _: () = {
 };
 pub type mjsSite = mjsSite_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsCamera_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) pos: [f64; 3usize],
@@ -3975,7 +3975,7 @@ const _: () = {
 };
 pub type mjsCamera = mjsCamera_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsLight_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) pos: [f64; 3usize],
@@ -4030,7 +4030,7 @@ const _: () = {
 };
 pub type mjsLight = mjsLight_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsFlex_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) contype: ::std::os::raw::c_int,
@@ -4125,7 +4125,7 @@ const _: () = {
 };
 pub type mjsFlex = mjsFlex_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsMesh_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) content_type: *mut mjString,
@@ -4180,7 +4180,7 @@ const _: () = {
 };
 pub type mjsMesh = mjsMesh_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsHField_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) content_type: *mut mjString,
@@ -4208,7 +4208,7 @@ const _: () = {
 };
 pub type mjsHField = mjsHField_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsSkin_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) file: *mut mjString,
@@ -4249,7 +4249,7 @@ const _: () = {
 };
 pub type mjsSkin = mjsSkin_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsTexture_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) type_: mjtTexture,
@@ -4311,7 +4311,7 @@ const _: () = {
 };
 pub type mjsTexture = mjsTexture_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsMaterial_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) textures: *mut mjStringVec,
@@ -4355,7 +4355,7 @@ const _: () = {
 };
 pub type mjsMaterial = mjsMaterial_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsPair_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) geomname1: *mut mjString,
@@ -4388,7 +4388,7 @@ const _: () = {
 };
 pub type mjsPair = mjsPair_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsExclude_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) bodyname1: *mut mjString,
@@ -4409,7 +4409,7 @@ const _: () = {
 };
 pub type mjsExclude = mjsExclude_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsEquality_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) type_: mjtEq,
@@ -4446,7 +4446,7 @@ const _: () = {
 };
 pub type mjsEquality = mjsEquality_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsTendon_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) stiffness: f64,
@@ -4511,7 +4511,7 @@ const _: () = {
 };
 pub type mjsTendon = mjsTendon_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsWrap_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) type_: mjtWrap,
@@ -4527,7 +4527,7 @@ const _: () = {
 };
 pub type mjsWrap = mjsWrap_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsActuator_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) gaintype: mjtGain,
@@ -4625,7 +4625,7 @@ const _: () = {
 };
 pub type mjsActuator = mjsActuator_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsSensor_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) type_: mjtSensor,
@@ -4677,7 +4677,7 @@ const _: () = {
 };
 pub type mjsSensor = mjsSensor_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsNumeric_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) data: *mut mjDoubleVec,
@@ -4696,7 +4696,7 @@ const _: () = {
 };
 pub type mjsNumeric = mjsNumeric_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsText_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) data: *mut mjString,
@@ -4712,7 +4712,7 @@ const _: () = {
 };
 pub type mjsText = mjsText_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsTuple_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) objtype: *mut mjIntVec,
@@ -4732,7 +4732,7 @@ const _: () = {
 };
 pub type mjsTuple = mjsTuple_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsKey_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) time: f64,
@@ -4760,7 +4760,7 @@ const _: () = {
 };
 pub type mjsKey = mjsKey_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjsDefault_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) joint: *mut mjsJoint,

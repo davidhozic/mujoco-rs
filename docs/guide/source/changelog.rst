@@ -28,6 +28,12 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: Breaking changes
 
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name`
+  now returns ``Result<(), MjEditError>`` instead of ``()``.
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name`
+  still returns ``&mut Self`` but now panics on duplicate names instead of
+  silently discarding the error.
+
 - Updated MuJoCo from 3.3.7 to **3.6.0**; C FFI bindings and Rust API wrappers regenerated.
 - Many methods now return typed ``Result`` variants instead of bare types or ``io::Error``.
   See `Error handling`_ below for the full list.

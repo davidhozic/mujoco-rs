@@ -58,6 +58,11 @@ impl RenderBase {
         if let Some(err) = s.init_error.take() {
             return Err(err);
         }
+        // If resumed() was never called (e.g. platform deferred it), no GL state
+        // was produced. Treat this the same as a failed window creation.
+        if s.state.is_none() {
+            return Err(GlInitError::NoWindow);
+        }
         Ok(s)
     }
 

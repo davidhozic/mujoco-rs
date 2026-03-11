@@ -10,6 +10,11 @@ Installation
 MuJoCo-rs
 ====================
 
+.. note::
+
+    MuJoCo-rs requires **Rust 1.88** or newer (MSRV).  Run ``rustup update stable``
+    to ensure you are on a supported toolchain.
+
 
 MuJoCo-rs can be added to your project like so:
 

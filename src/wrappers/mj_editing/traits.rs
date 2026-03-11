@@ -36,16 +36,24 @@ pub trait SpecItem: Sized {
     }
 
     /// Set a new name.
+    /// # Errors
+    /// Returns [`MjEditError::AlreadyExists`] when an element with the same name already exists.
     /// # Panics
     /// When the `name` contains '\0' characters mid string, a panic occurs.
-    fn set_name(&mut self, name: &str) {
+    fn set_name(&mut self, name: &str) -> Result<(), MjEditError> {
         let cstr = CString::new(name).unwrap();  // always has valid UTF-8
-        unsafe { mjs_setName(self.element_mut_pointer(), cstr.as_ptr()) };
+        let result = unsafe { mjs_setName(self.element_mut_pointer(), cstr.as_ptr()) };
+        if result != 0 {
+            return Err(MjEditError::AlreadyExists);
+        }
+        Ok(())
     }
 
     /// Builder style set a new name.
+    /// # Panics
+    /// Panics when an element with the same name already exists, or when `name` contains '\0'.
     fn with_name(&mut self, name: &str) -> &mut Self {
-        self.set_name(name);
+        self.set_name(name).expect("mjs_setName failed: duplicate name or null byte");
         self
     }
 

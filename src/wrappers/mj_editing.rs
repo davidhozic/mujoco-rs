@@ -152,7 +152,6 @@ impl MjSpec {
     /// - When MuJoCo fails to allocate the specification.
     ///   Use [`MjSpec::try_new`] for a fallible alternative.
     pub fn new() -> Self {
-        assert_mujoco_version();
         Self::try_new().expect("MuJoCo failed to allocate MjSpec")
     }
 
@@ -1713,7 +1712,7 @@ mod tests {
         let world = spec.world_body_mut();
         let body = world.add_body();
         assert_eq!(body.name(), "");
-        body.set_name(NEW_MODEL_NAME);
+        body.set_name(NEW_MODEL_NAME).unwrap();
         assert_eq!(body.name(), NEW_MODEL_NAME);
 
         spec.compile().unwrap();
@@ -1726,7 +1725,7 @@ mod tests {
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
         let world = spec.world_body_mut();
         let body = world.add_body();
-        body.set_name(NEW_MODEL_NAME);
+        body.set_name(NEW_MODEL_NAME).unwrap();
 
         /* Test normal body deletion */
         let body = spec.body_mut(NEW_MODEL_NAME).expect("failed to obtain the body");
@@ -1747,7 +1746,7 @@ mod tests {
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
         let world = spec.world_body_mut();
         let joint = world.add_joint();
-        joint.set_name(NEW_NAME);
+        joint.set_name(NEW_NAME).unwrap();
 
         /* Test normal body deletion */
         let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
@@ -1763,7 +1762,7 @@ mod tests {
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
         let hfield = spec.add_hfield();
-        hfield.set_name(NEW_NAME);
+        hfield.set_name(NEW_NAME).unwrap();
 
         /* Test normal hfield deletion */
         let hfield = spec.hfield_mut(NEW_NAME).expect("failed to obtain the hfield");
@@ -2102,7 +2101,7 @@ mod tests {
         let mut spec = MjSpec::new();
         let numeric = spec.add_numeric();
         let name = "test_numeric";
-        numeric.set_name(name);
+        numeric.set_name(name).unwrap();
         assert_eq!(numeric.name(), name);
 
         let data = [1.5, 2.5, 3.5, 4.5];
@@ -2117,7 +2116,7 @@ mod tests {
         let mut spec = MjSpec::new();
         let text = spec.add_text();
         let name = "test_text";
-        text.set_name(name);
+        text.set_name(name).unwrap();
         assert_eq!(text.name(), name);
 
         let content = "Hello MuJoCo!";
@@ -2137,7 +2136,7 @@ mod tests {
         let obj_param = [1.0, 2.0];
 
         let tuple = spec.add_tuple();
-        tuple.set_name(tuple_name);
+        tuple.set_name(tuple_name).unwrap();
         assert_eq!(tuple.name(), tuple_name);
 
         tuple.set_objname("body1 body2");

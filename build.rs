@@ -16,6 +16,14 @@ mod build_dependencies {
 
     impl ParseCallbacks for CloneCallback {
         fn add_derives(&self, info: &DeriveInfo) -> Vec<String> {
+            // mjs* types: omit Clone because unsafe impl Send + Clone on
+            // pointer-containing types is unsound -- clones share aliased raw
+            // pointers and can cause data races across thread boundaries.
+            // mjSpec_ has the same issue (contains *mut mjsElement etc.).
+            if info.name.starts_with("mjs") || info.name == "mjSpec_" {
+                return vec![];
+            }
+
             let mut data = vec!["Clone".into()];
             if info.name.starts_with("mjui") || info.name == "mjrRect_" {
                 data.push("Copy".into());
