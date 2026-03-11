@@ -292,6 +292,28 @@ now takes ``selection_xyz`` by reference (``&[MjtNum; 3]``) instead of by value.
     perturb.update_local_pos(&xyz, &data);
 
 
+``MjvPerturb::move_``
+------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>move_`
+no longer takes a separate ``model`` parameter; the model is obtained from
+``data.model()``. The ``data`` parameter also changed from ``&mut MjData<M>`` to
+``&MjData<M>`` (shared reference), matching the ``const mjData*`` in the underlying
+C function.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    perturb.move_(&model, &mut data, action, dx, dy, &scene);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    perturb.move_(&data, action, dx, dy, &scene);
+
+
 API renames
 -----------------------------
 

@@ -19,7 +19,7 @@ unsafe extern "C" {
     fn mujoco_cSimulate_RenderInit(sim: *mut mujoco_Simulate);
     fn mujoco_cSimulate_Load(sim: *mut mujoco_Simulate, m: *mut mjModel_, d: *mut mjData_, displayed_filename: *const std::os::raw::c_char);
     fn mujoco_cSimulate_RenderStep(sim: *mut mujoco_Simulate) -> std::os::raw::c_int;
-    fn mujoco_cSimulate_Sync(sim: *mut mujoco_Simulate, state_only: bool);
+    fn mujoco_cSimulate_Sync(sim: *mut mujoco_Simulate, state_only: std::os::raw::c_int);
     fn mujoco_cSimulate_ExitRequest(sim: *mut mujoco_Simulate);
     fn mujoco_cSimulate_destroy(sim: *mut mujoco_Simulate);
 }
@@ -123,8 +123,11 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
     /// Syncs the simulation state with the viewer as well as performs
     /// rendering on the viewer.
     pub fn sync(&mut self) {
+        if !self.running {
+            return;
+        }
         unsafe {
-            mujoco_cSimulate_Sync(self.sim, false);
+            mujoco_cSimulate_Sync(self.sim, 0);
         }
     }
 }

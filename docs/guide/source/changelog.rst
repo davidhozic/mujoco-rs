@@ -80,6 +80,12 @@ update of MuJoCo alone can increase the major version.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>update_local_pos`
   now takes ``selection_xyz`` by reference (``&[MjtNum; 3]``) instead of by value.
 
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>move_`
+  no longer takes a separate ``model: &MjModel`` parameter; the model is now obtained
+  internally from ``data.model()``. The ``data`` parameter also changed from ``&mut MjData<M>``
+  to ``&MjData<M>`` (shared reference), matching the ``const mjData*`` in the underlying
+  C function.
+
 - |mjv_scene|:
 
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update`:
@@ -518,6 +524,14 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb` and
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` would output
   vertically flipped (upside down) images.
+- :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp`:
+  :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync` FFI declaration
+  used Rust ``bool`` instead of ``c_int`` for the ``state_only`` parameter, causing an
+  ABI mismatch with the C++ function that expects ``int``.
+- :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp`:
+  :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync` could be called
+  after the viewer window was closed, causing undefined behavior. It now returns early
+  when the viewer is no longer running.
 
 .. rubric:: Other changes
 
