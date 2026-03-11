@@ -16,6 +16,14 @@ mod build_dependencies {
 
     impl ParseCallbacks for CloneCallback {
         fn add_derives(&self, info: &DeriveInfo) -> Vec<String> {
+            // mjs* types: omit Clone because unsafe impl Send + Clone on
+            // pointer-containing types is unsound -- clones share aliased raw
+            // pointers and can cause data races across thread boundaries.
+            // mjSpec_ has the same issue (contains *mut mjsElement etc.).
+            if info.name.starts_with("mjs") || info.name == "mjSpec_" {
+                return vec![];
+            }
+
             let mut data = vec!["Clone".into()];
             if info.name.starts_with("mjui") || info.name == "mjrRect_" {
                 data.push("Copy".into());
@@ -43,8 +51,6 @@ mod build_dependencies {
         let output_path = PathBuf::from("./src/");
         let current_dir = env::current_dir().unwrap();
         let include_dir_mujoco = current_dir.join("mujoco/include/mujoco");
-        let include_dir_simulate = current_dir.join("mujoco/simulate/");
-        let include_dir_glfw = current_dir.join("mujoco/build/_deps/glfw3-src/include/");
 
         let bindings_mujoco = bindgen::Builder::default()
             .header(include_dir_mujoco.join("mujoco.h").to_str().unwrap())
@@ -190,16 +196,6 @@ fn main() {
 
         println!("cargo::rustc-link-search={}", path_lib_dir_display);
         println!("cargo::rustc-link-lib=dylib=mujoco");
-
-        // Copy the DLL on Windows, if a relative path is given.
-        // Otherwise assume the DLL is discoverable through PATH.
-        #[cfg(target_os = "windows")]
-        if path_lib_dir.is_relative() {
-            let dll_path = path_lib_dir.parent().unwrap().join("bin/mujoco.dll");
-            if let Err(err) = std::fs::copy(dll_path, "mujoco.dll") {
-                println!("cargo:warning=failed to copy mujoco.dll to the current working directory ({err})");
-            }
-        }
     }
 
     /* pkg-config fallback (MacOS / Linux) with automatic download (Windows / Linux) on failure */
@@ -387,7 +383,7 @@ fn main() {
             std::fs::remove_file(&download_hash_path).unwrap_or_else(
                 |err| panic!("failed to delete hash file '{}' ({err})", download_hash_path.display())
             );
-
+            
             let libdir_path = outdirname.join("lib");
             println!("cargo::rustc-link-search={}", libdir_path.display());
             println!("cargo::rustc-link-lib=mujoco");

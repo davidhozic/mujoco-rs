@@ -1,8 +1,9 @@
-//! An example on how to use ffi attributes.
-//! While most structs in this library are direct FFI structs to the MuJoCo,
+//! An example on how to access attributes from the MuJoCo structs.
+//! While most structs in this library are direct FFI structs to MuJoCo,
 //! some have to be wrapped for safety reasons.
-//! The wrapped structs contain a `ffi()` method and a `ffi_mut()` method, which return
-//! a reference to the wrapped FFI struct.
+//! Wrapped structs expose their attributes through safe accessors such as `model.opt()`.
+//! For advanced use cases, `ffi()` and `ffi_mut()` methods provide direct access to
+//! the underlying C structs.
 //! 
 //! This example uses the viewer in single-threaded fashion.
 use std::time::Duration;

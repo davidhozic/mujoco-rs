@@ -6,7 +6,6 @@ description: How to run Miri on mujoco-rs with C FFI
 
 Run the codebase under Miri's experimental FFI native-lib support to detect undefined behavior in Rust code interoperating with MuJoCo C FFI.
 
-// turbo-all
 
 1. **Build MuJoCo with Miri support**:
    Navigate to the MuJoCo source directory (e.g., `mujoco/`) and build with the Miri allocator hooks enabled. We use a configuration similar to the official build environment but with shared libraries enabled for Miri:

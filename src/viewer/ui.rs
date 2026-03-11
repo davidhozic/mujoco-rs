@@ -731,6 +731,12 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     {
         self.user_ui_callbacks_detached.push(Box::new(callback));
     }
+
+    /// Release OpenGL resources held by the egui painter.
+    /// Must be called while the GL context is still current.
+    pub(crate) fn destroy_gl(&mut self) {
+        self.painter.destroy();
+    }
 }
 
 /// Implement an empty shell to support use in [`MjViewer`](super::MjViewer).

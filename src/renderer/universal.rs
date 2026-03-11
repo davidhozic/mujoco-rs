@@ -32,6 +32,9 @@ impl GlStateWinit {
     }
 
     pub(crate) fn make_current(&self) -> Result<(), glutin::error::Error> {
+        // SAFETY: GlStateWinit::new() only returns Ok when RenderBase::new()
+        // succeeds, which guarantees state is Some (pump_app_events called
+        // resumed and RenderBase::new returns Err(NoWindow) otherwise).
         let inner_state = self.inner.state.as_ref().unwrap();
         inner_state.gl_context.make_current(&inner_state.gl_surface)
     }

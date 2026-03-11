@@ -348,7 +348,8 @@ Here is an example of using the C++ wrapper:
     fn main() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
         let mut data = MjData::new(&model);
-        let mut viewer = MjViewerCpp::launch_passive(&model, &data, 100);
+        // SAFETY: model and data are kept alive and at a stable address.
+        let mut viewer = unsafe { MjViewerCpp::launch_passive(&model, &data, 100) };
         let step = model.opt().timestep;
         while viewer.running() {
             viewer.sync();
@@ -359,6 +360,4 @@ Here is an example of using the C++ wrapper:
     }
 
 
-Compared to the Rust-native viewer, the C++ wrapper doesn't take a ``data`` parameter to the :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync`
-method and has an additional :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render`
-method that must be called each frame.
+Compared to the Rust-native viewer, the C++ wrapper doesn't take a ``data`` parameter to the :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync`.

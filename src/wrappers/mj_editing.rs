@@ -91,7 +91,7 @@ impl MjsOrientation {
 
     /// Changes the orientation mode to quaternions. The orientation must
     /// be specified via the main angle attribute, not through [`MjsOrientation`].
-    pub fn switch_quat<T: AsRef<[f64; 4]>>(&mut self) {
+    pub fn switch_quat(&mut self) {
         self.type_ = MjtOrientation::mjORIENTATION_QUAT;
     }
 }
@@ -152,7 +152,6 @@ impl MjSpec {
     /// - When MuJoCo fails to allocate the specification.
     ///   Use [`MjSpec::try_new`] for a fallible alternative.
     pub fn new() -> Self {
-        assert_mujoco_version();
         Self::try_new().expect("MuJoCo failed to allocate MjSpec")
     }
 
@@ -168,6 +167,21 @@ impl MjSpec {
         assert_mujoco_version();
         let ptr = unsafe { mj_makeSpec() };
         Ok(MjSpec(NonNull::new(ptr).ok_or(MjEditError::AllocationFailed)?))
+    }
+
+    /// Creates a deep copy of this [`MjSpec`].
+    ///
+    /// Internally calls `mj_copySpec`, which invokes the C++ copy constructor
+    /// on the underlying model.  This is a proper deep copy: the returned spec
+    /// is fully independent from the original.
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
+    /// the copy (e.g. out of memory or an internal C++ exception).
+    pub fn try_clone(&self) -> Result<Self, MjEditError> {
+        // SAFETY: self.0 is always a valid, non-null pointer.
+        let ptr = unsafe { mj_copySpec(self.0.as_ptr()) };
+        NonNull::new(ptr).map(MjSpec).ok_or(MjEditError::AllocationFailed)
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
@@ -529,6 +543,17 @@ impl Default for MjSpec {
 impl Drop for MjSpec {
     fn drop(&mut self) {
         unsafe { mj_deleteSpec(self.0.as_ptr()); }
+    }
+}
+
+impl Clone for MjSpec {
+    /// Creates a deep copy of this [`MjSpec`].
+    ///
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the cloned spec.
+    /// Use [`MjSpec::try_clone`] for a fallible alternative.
+    fn clone(&self) -> Self {
+        self.try_clone().expect("MuJoCo failed to clone MjSpec")
     }
 }
 
@@ -1713,7 +1738,7 @@ mod tests {
         let world = spec.world_body_mut();
         let body = world.add_body();
         assert_eq!(body.name(), "");
-        body.set_name(NEW_MODEL_NAME);
+        body.set_name(NEW_MODEL_NAME).unwrap();
         assert_eq!(body.name(), NEW_MODEL_NAME);
 
         spec.compile().unwrap();
@@ -1726,7 +1751,7 @@ mod tests {
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
         let world = spec.world_body_mut();
         let body = world.add_body();
-        body.set_name(NEW_MODEL_NAME);
+        body.set_name(NEW_MODEL_NAME).unwrap();
 
         /* Test normal body deletion */
         let body = spec.body_mut(NEW_MODEL_NAME).expect("failed to obtain the body");
@@ -1747,7 +1772,7 @@ mod tests {
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
         let world = spec.world_body_mut();
         let joint = world.add_joint();
-        joint.set_name(NEW_NAME);
+        joint.set_name(NEW_NAME).unwrap();
 
         /* Test normal body deletion */
         let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
@@ -1763,7 +1788,7 @@ mod tests {
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
         let hfield = spec.add_hfield();
-        hfield.set_name(NEW_NAME);
+        hfield.set_name(NEW_NAME).unwrap();
 
         /* Test normal hfield deletion */
         let hfield = spec.hfield_mut(NEW_NAME).expect("failed to obtain the hfield");
@@ -2102,7 +2127,7 @@ mod tests {
         let mut spec = MjSpec::new();
         let numeric = spec.add_numeric();
         let name = "test_numeric";
-        numeric.set_name(name);
+        numeric.set_name(name).unwrap();
         assert_eq!(numeric.name(), name);
 
         let data = [1.5, 2.5, 3.5, 4.5];
@@ -2117,7 +2142,7 @@ mod tests {
         let mut spec = MjSpec::new();
         let text = spec.add_text();
         let name = "test_text";
-        text.set_name(name);
+        text.set_name(name).unwrap();
         assert_eq!(text.name(), name);
 
         let content = "Hello MuJoCo!";
@@ -2137,7 +2162,7 @@ mod tests {
         let obj_param = [1.0, 2.0];
 
         let tuple = spec.add_tuple();
-        tuple.set_name(tuple_name);
+        tuple.set_name(tuple_name).unwrap();
         assert_eq!(tuple.name(), tuple_name);
 
         tuple.set_objname("body1 body2");

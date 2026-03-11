@@ -1209,7 +1209,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
             self.camera.move_(action, &self.model, dx / height, dy / height, &self.scene);
         }
         else {  // When the perturbation is active, move apply the perturbation.
-            pert.move_(&self.model, data_passive, action, dx / height, dy / height, &self.scene);
+            pert.move_(data_passive, action, dx / height, dy / height, &self.scene);
         }
     }
 
@@ -1287,6 +1287,10 @@ impl<M: Deref<Target = MjModel> + Clone> Drop for MjViewer<M> {
         if let Some(ref state) = self.adapter.state {
             let _ = state.gl_context.make_current(&state.gl_surface);
         }
+
+        // Release egui painter GL resources while the context is still current.
+        #[cfg(feature = "viewer-ui")]
+        self.ui.destroy_gl();
     }
 }
 

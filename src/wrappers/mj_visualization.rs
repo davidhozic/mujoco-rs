@@ -118,8 +118,8 @@ impl MjvPerturb {
     }
 
     /// Move an object with mouse. This is a wrapper around `mjv_movePerturb`.
-    pub fn move_<M: Deref<Target = MjModel>>(&mut self, model: &MjModel, data: &mut MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene<M>) {
-        unsafe { mjv_movePerturb(model.ffi(), data.ffi(), action as i32, dx, dy, scene.ffi(), self); }
+    pub fn move_<M: Deref<Target = MjModel>>(&mut self, data: &MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene<M>) {
+        unsafe { mjv_movePerturb(data.model().ffi(), data.ffi(), action as i32, dx, dy, scene.ffi(), self); }
     }
 
     /// Apply perturbation pose and force.

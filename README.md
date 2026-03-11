@@ -15,7 +15,7 @@ More detailed documentation is available at the:
 - [**Guide book**](https://mujoco-rs.readthedocs.io/en/stable/)
 
 ## MuJoCo version
-This library uses FFI bindings to MuJoCo **3.5.0**.
+This library uses FFI bindings to MuJoCo **3.6.0**.
 
 ## Minimum Rust version
 Rust version 1.88 or newer is required.
@@ -60,7 +60,7 @@ Optional Cargo features can be enabled:
 - ``viewer``: enables the Rust-native MuJoCo viewer.
 
   - ``viewer-ui``: enables the (additional) user UI within the viewer.
-    This also allows users to add custom [`egui`](https://docs.rs/egui/0.33.2/egui/) widgets to the viewer.
+    This also allows users to add custom [`egui`](https://docs.rs/egui/0.33/egui/) widgets to the viewer.
 
 - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
   This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking).
@@ -137,7 +137,7 @@ fn main() {
     while viewer.running() {
         /* Step the simulation and sync the viewer */
         data.step();
-        viewer.sync_data(&mut data);  // this method and step() can also be called in other threads to improve performance.
+        viewer.sync_data(&mut data);  // see rust_viewer_threaded.rs for the multi-threaded variant using ViewerSharedState
         viewer.render().unwrap();
 
         /* Obtain the view and access first three variables of `qpos` (x, y, z) */

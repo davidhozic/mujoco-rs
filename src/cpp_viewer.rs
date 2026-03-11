@@ -19,7 +19,7 @@ unsafe extern "C" {
     fn mujoco_cSimulate_RenderInit(sim: *mut mujoco_Simulate);
     fn mujoco_cSimulate_Load(sim: *mut mujoco_Simulate, m: *mut mjModel_, d: *mut mjData_, displayed_filename: *const std::os::raw::c_char);
     fn mujoco_cSimulate_RenderStep(sim: *mut mujoco_Simulate) -> std::os::raw::c_int;
-    fn mujoco_cSimulate_Sync(sim: *mut mujoco_Simulate, state_only: bool);
+    fn mujoco_cSimulate_Sync(sim: *mut mujoco_Simulate, state_only: std::os::raw::c_int);
     fn mujoco_cSimulate_ExitRequest(sim: *mut mujoco_Simulate);
     fn mujoco_cSimulate_destroy(sim: *mut mujoco_Simulate);
 }
@@ -33,13 +33,9 @@ unsafe extern "C" {
 /// For convenience [`MjViewerCpp`] implements both `Send` and `Sync`, however that is meant only for
 /// syncing the viewer.
 ///
-/// Additionally, to allow certain flexibility while still maintaining
-/// compatibility with the C++ code, [`MjViewerCpp`] keeps internal pointers to mjModel and mjData,
-/// which are wrapped inside [`MjModel`] and [`MjData`], respectively.
-/// This technically allows `model` and `data` to be modified
-/// while the viewer keeps a pointer to them (their wrapped pointers).
-/// Undefined behavior should not occur, however caution is advised as this is a violation
-/// of the Rust's borrowing rules.
+/// [`MjViewerCpp::launch_passive`] keeps internal pointers to mjModel and mjData.
+/// The caller must ensure both remain alive and at a fixed address for the viewer's lifetime.
+/// See [`MjViewerCpp::launch_passive`] for the full safety contract.
 #[derive(Debug)]
 pub struct MjViewerCpp<M: Deref<Target = MjModel> + Clone + Send + Sync> {
     sim: *mut mujoco_Simulate,
@@ -68,8 +64,11 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
     /// as the initialization may fail internally in C++ anyway, which we have no way of checking.
     ///
     /// # Safety
-    /// See [`MjViewerCpp`]'s note.
-    pub fn launch_passive(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
+    /// The caller must ensure that both `model` and `data` remain alive and at a stable memory
+    /// address for the entire lifetime of the returned [`MjViewerCpp`]. Dropping or moving the
+    /// underlying [`MjModel`] or [`MjData`] while the viewer is alive is undefined behavior.
+    /// Calls to [`MjViewerCpp::render`] must be done only on the **main** thread.
+    pub unsafe fn launch_passive(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut cam = Box::new(MjvCamera::default());
         let mut opt: Box<MjvOption> = Box::new(MjvOption::default());
@@ -124,8 +123,11 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
     /// Syncs the simulation state with the viewer as well as performs
     /// rendering on the viewer.
     pub fn sync(&mut self) {
+        if !self.running {
+            return;
+        }
         unsafe {
-            mujoco_cSimulate_Sync(self.sim, false);
+            mujoco_cSimulate_Sync(self.sim, 0);
         }
     }
 }

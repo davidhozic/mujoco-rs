@@ -1,6 +1,6 @@
 [package]
 name = "mujoco-rs"
-version = "3.0.0+mj-3.5.0"
+version = "3.0.0+mj-3.6.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "A high-level Rust wrapper around the MuJoCo C library, with a native viewer (re-)written in Rust."

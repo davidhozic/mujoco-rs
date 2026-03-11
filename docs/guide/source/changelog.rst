@@ -23,12 +23,32 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
-3.0.0 (MuJoCo 3.5.0)
+3.0.0 (MuJoCo 3.6.0)
 ======================
 
 .. rubric:: Breaking changes
 
-- Updated MuJoCo from 3.3.7 to **3.5.0**; C FFI bindings and Rust API wrappers regenerated.
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name`
+  now returns ``Result<(), MjEditError>`` instead of ``()``.
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name`
+  still returns ``&mut Self`` but now panics on duplicate names instead of
+  silently discarding the error.
+
+- ``MjsOrientation::switch_quat`` no longer has a type parameter ``T: AsRef<[f64; 4]>``.
+  The unused type parameter was removed. Callers with explicit turbofish syntax
+  (``switch_quat::<[f64; 4]>()``) must be updated to ``switch_quat()``.
+
+.. rubric:: New features
+
+- |mj_editing|:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec` now implements
+    ``Clone`` (panics on allocation failure) and has a new
+    :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>try_clone`
+    method that returns ``Result<MjSpec, MjEditError>`` for fallible deep-copying.
+    The copy is performed via ``mj_copySpec`` (C++ copy constructor).
+
+- Updated MuJoCo from 3.3.7 to **3.6.0**; C FFI bindings and Rust API wrappers regenerated.
 - Many methods now return typed ``Result`` variants instead of bare types or ``io::Error``.
   See `Error handling`_ below for the full list.
 - |mj_data|:
@@ -80,6 +100,12 @@ update of MuJoCo alone can increase the major version.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>update_local_pos`
   now takes ``selection_xyz`` by reference (``&[MjtNum; 3]``) instead of by value.
 
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>move_`
+  no longer takes a separate ``model: &MjModel`` parameter; the model is now obtained
+  internally from ``data.model()``. The ``data`` parameter also changed from ``&mut MjData<M>``
+  to ``&MjData<M>`` (shared reference), matching the ``const mjData*`` in the underlying
+  C function.
+
 - |mjv_scene|:
 
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update`:
@@ -101,8 +127,19 @@ update of MuJoCo alone can increase the major version.
   - :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` no longer
     accepts the ``update_timer`` boolean parameter (the FPS timer is now always updated)
     and now returns ``Result<(), &'static str>`` instead of ``()``.
+  - :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>launch_passive`
+    is now an ``unsafe fn``. Callers must ensure the model and data remain alive and at a
+    stable address for the lifetime of the viewer. See the method-level ``# Safety`` doc
+    for the full contract.
   - ``MjViewerCpp::__raw()`` has been removed. There is no direct replacement; the method
     exposed internal C++ binding pointers that are no longer part of the public API.
+
+- |mj_data|:
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_subtree_com`
+    no longer accepts the ``jacp: bool`` parameter. The Jacobian is now always computed,
+    because the underlying C function unconditionally dereferences the output pointer.
+    Pass only the ``body_id`` argument.
 
 - Removed deprecated methods:
 
@@ -500,21 +537,32 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
 - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` now implements ``Drop`` to ensure
   the GL context is made current before resources are released, preventing resource leaks
   on some platforms.
+- :docs-rs:`~mujoco_rs::renderer::<struct>MjRendererBuilder`: the user-specified
+  ``font_scale`` is now actually applied during ``build()``. Previously the font scale
+  setting was silently ignored.
+- :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`: methods like
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb` and
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` would output
+  vertically flipped (upside down) images.
+- :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp`:
+  :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync` FFI declaration
+  used Rust ``bool`` instead of ``c_int`` for the ``state_only`` parameter, causing an
+  ABI mismatch with the C++ function that expects ``int``.
+- :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp`:
+  :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync` could be called
+  after the viewer window was closed, causing undefined behavior. It now returns early
+  when the viewer is no longer running.
 
 .. rubric:: Other changes
 
-- Updated enum type aliases to match MuJoCo 3.5.0 header definitions.
+- Updated enum type aliases to match MuJoCo 3.6.0 header definitions.
 - Improved fixed-size array pointer handling in generated wrappers.
-- |mj_data| and |mj_model| views now expose additional fields introduced in MuJoCo 3.5.0.
+- |mj_data| and |mj_model| views now expose additional fields introduced in MuJoCo 3.6.0.
 - New |mj_model| view types added for ``exclude``, ``mesh``, and ``skin``.
 - :docs-rs:`~mujoco_rs::util::<struct>PointerView::<method>new`,
   :docs-rs:`~mujoco_rs::util::<struct>PointerViewMut::<method>new`, and
   :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrRectangle::<method>new`
   are now ``const fn``.
-- Fixed a bug where :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` methods like
-  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb` and
-  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` would output
-  vertically flipped (upside down) images.
 - Added new examples based on the `MuJoCo Python tutorial <https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/tutorial.ipynb>`_:
 
   - :gh-example:`Self-inverting tippe-top <tippe_top.rs>`: Simulates the self-inverting tippe-top using the RK4 integrator and
