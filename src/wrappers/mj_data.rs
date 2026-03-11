@@ -212,7 +212,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
     }
 
-    /// Inverse dynamics: qacc must be set before calling ([`MjData::forward`]).
+    /// Inverse dynamics: qacc must be set before calling this function.
     /// This is a wrapper around `mj_inverse`.
     pub fn inverse(&mut self) {
         unsafe {
