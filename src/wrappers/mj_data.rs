@@ -766,21 +766,20 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Compute subtree center-of-mass end-effector Jacobian (translational only).
-    /// Set `jacp` to `true` to calculate the translational component. Returns a `Vec`.
-    /// Empty `Vec` indicates that the Jacobian was not computed.
+    /// Returns a `Vec` of length `3 * nv` (row-major 3×nv matrix).
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
-    pub fn jac_subtree_com(&mut self, jacp: bool, body_id: i32) -> Result<Vec<MjtNum>, MjDataError> {
+    pub fn jac_subtree_com(&mut self, body_id: i32) -> Result<Vec<MjtNum>, MjDataError> {
         let nbody = self.model.ffi().nbody as i64;
         if body_id < 0 || (body_id as i64) >= nbody {
             return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
         }
         let required_len = 3 * self.model.ffi().nv as usize;
-        let mut jacp_vec = if jacp { vec![0 as MjtNum; required_len] } else { vec![] };
+        let mut jacp_vec = vec![0 as MjtNum; required_len];
         unsafe {
             mj_jacSubtreeCom(
                 self.model.ffi(), self.ffi_mut(),
-                if jacp { jacp_vec.as_mut_ptr() } else { ptr::null_mut() },
+                jacp_vec.as_mut_ptr(),
                 body_id,
             )
         };
@@ -1866,21 +1865,25 @@ mod test {
     fn test_rne_and_collision_pipeline() {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let mut data = model.make_data();
-        data.step();
+        for _ in 0..5 {
+            data.step();
+        }
 
         // mj_rne returns a scalar as result
         data.rne(true);
 
         data.rne_post_constraint();
 
-        // // Collision and constraint pipeline
+        // Collision and constraint pipeline
         data.collision();
         data.make_constraint();
         data.island();
         data.project_constraint();
         data.reference_constraint();
 
-        let jar = vec![0.0; data.nefc() as usize];
+        let nefc = data.nefc() as usize;
+        assert!(nefc > 0, "expected at least one effective constraint after stepping");
+        let jar = vec![0.0; nefc];
         let mut cost = 0.0;
         data.constraint_update(&jar, None, false).unwrap();
         data.constraint_update(&jar, Some(&mut cost), true).unwrap();
@@ -1925,7 +1928,7 @@ mod test {
         assert_eq!(jacr_com.len(), expected_len);
 
         // Test subtree COM Jacobian (translational only)
-        let jac_subtree = data.jac_subtree_com(true, 0).unwrap();
+        let jac_subtree = data.jac_subtree_com(0).unwrap();
         assert_eq!(jac_subtree.len(), expected_len);
 
         // Test geom Jacobian
@@ -1957,10 +1960,10 @@ mod test {
         assert_eq!(mat.len(), (3 * data.model.ffi().nv as usize));
 
         let vel = data.object_velocity(MjtObj::mjOBJ_BODY, 0, true).unwrap();
-        assert_eq!(vel, vel); // just ensure it returns 6-length
+        assert_eq!(vel.len(), 6);
 
         let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, 0, false).unwrap();
-        assert_eq!(acc, acc);
+        assert_eq!(acc.len(), 6);
     }
 
     #[test]
@@ -4177,13 +4180,10 @@ mod test {
         let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
         let mut data = model.make_data();
 
-        let nsensordata = model.ffi().nsensordata as usize;
-        assert!(nsensordata > 0, "model needs at least one sensor");
-
         data.forward();
-        let _init_sensor: Vec<MjtNum> = data.sensordata().to_vec();
+        let init_qpos: Vec<MjtNum> = data.qpos().to_vec();
 
-        // Apply force to create contact which the touch sensor may detect
+        // Apply a downward force via force-cast xfrc_applied
         let b_slide = data.body("b_slide").unwrap();
         data.xfrc_applied_mut()[b_slide.id] = [0.0, 0.0, -50.0, 0.0, 0.0, 0.0];
 
@@ -4191,10 +4191,15 @@ mod test {
             data.step();
         }
 
+        // Positions should have evolved under applied force
+        let post_qpos = data.qpos();
+        assert_ne!(post_qpos, init_qpos.as_slice(),
+            "qpos did not evolve after 100 steps with applied force");
+
+        // Sensor FFI cross-validation
+        let nsensordata = model.ffi().nsensordata as usize;
         let post_sensor = data.sensordata();
         assert_eq!(post_sensor.len(), nsensordata);
-
-        // FFI cross-validation
         for i in 0..nsensordata {
             assert_eq!(post_sensor[i], unsafe { *data.ffi().sensordata.add(i) },
                 "sensordata[{}] FFI mismatch", i);

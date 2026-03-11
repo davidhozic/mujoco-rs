@@ -1997,7 +1997,7 @@ mod tests {
 
     #[test]
     fn test_site_view() {
-        // <site name="ball22" size="0 0.25 0" pos="5 1 3" rgba="1 2 3 1" type="box"/>
+        // <site name="ball22" size="0.5 0.25 0.5" pos="5 1 3" rgba="1 2 3 1" type="box"/>
         const BODY_NAME: &str = "ball2";
         const SITE_NAME: &str = "ball22";
         const SITE_SIZE: [f64; 3] = [0.5, 0.25, 0.5];

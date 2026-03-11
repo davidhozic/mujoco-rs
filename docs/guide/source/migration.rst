@@ -21,13 +21,13 @@ For a full list of changes, see the :ref:`changelog`.
 Migrating to 3.0.0
 ======================
 
-Version 3.0.0 updates the bundled MuJoCo to 3.5.0, introduces typed error enums,
+Version 3.0.0 updates the bundled MuJoCo to 3.6.0, introduces typed error enums,
 and removes previously deprecated APIs.
 
 
 MuJoCo upgrade
 -----------------------
-MuJoCo-rs 3.0.0 links against MuJoCo **3.5.0**. Make sure to download and use the
+MuJoCo-rs 3.0.0 links against MuJoCo **3.6.0**. Make sure to download and use the
 matching MuJoCo release. See :ref:`installation` for details.
 
 
@@ -423,3 +423,45 @@ exposed internal C++ binding pointers that are no longer part of the public API.
 .. code-block:: rust
 
     viewer.render().unwrap();
+
+
+``MjViewerCpp::launch_passive()`` is now ``unsafe``
+------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>launch_passive` is now an
+``unsafe fn``. Callers must ensure the model and data remain alive and at a stable memory
+address for the lifetime of the viewer.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    let viewer = MjViewerCpp::launch_passive(model, data, 100);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    // SAFETY: model and data are kept alive and at a stable address.
+    let viewer = unsafe { MjViewerCpp::launch_passive(model, data, 100) };
+
+
+``MjData::jac_subtree_com()`` parameter change
+------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_subtree_com` no longer
+accepts the ``jacp: bool`` parameter. The Jacobian is always computed, because the underlying
+C function unconditionally dereferences the output pointer.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    let jac = data.jac_subtree_com(true, body_id)?;
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    let jac = data.jac_subtree_com(body_id)?;
+

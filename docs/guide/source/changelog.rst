@@ -23,12 +23,12 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
-3.0.0 (MuJoCo 3.5.0)
+3.0.0 (MuJoCo 3.6.0)
 ======================
 
 .. rubric:: Breaking changes
 
-- Updated MuJoCo from 3.3.7 to **3.5.0**; C FFI bindings and Rust API wrappers regenerated.
+- Updated MuJoCo from 3.3.7 to **3.6.0**; C FFI bindings and Rust API wrappers regenerated.
 - Many methods now return typed ``Result`` variants instead of bare types or ``io::Error``.
   See `Error handling`_ below for the full list.
 - |mj_data|:
@@ -101,8 +101,19 @@ update of MuJoCo alone can increase the major version.
   - :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` no longer
     accepts the ``update_timer`` boolean parameter (the FPS timer is now always updated)
     and now returns ``Result<(), &'static str>`` instead of ``()``.
+  - :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>launch_passive`
+    is now an ``unsafe fn``. Callers must ensure the model and data remain alive and at a
+    stable address for the lifetime of the viewer. See the method-level ``# Safety`` doc
+    for the full contract.
   - ``MjViewerCpp::__raw()`` has been removed. There is no direct replacement; the method
     exposed internal C++ binding pointers that are no longer part of the public API.
+
+- |mj_data|:
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_subtree_com`
+    no longer accepts the ``jacp: bool`` parameter. The Jacobian is now always computed,
+    because the underlying C function unconditionally dereferences the output pointer.
+    Pass only the ``body_id`` argument.
 
 - Removed deprecated methods:
 
@@ -500,21 +511,24 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
 - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` now implements ``Drop`` to ensure
   the GL context is made current before resources are released, preventing resource leaks
   on some platforms.
+- :docs-rs:`~mujoco_rs::renderer::<struct>MjRendererBuilder`: the user-specified
+  ``font_scale`` is now actually applied during ``build()``. Previously the font scale
+  setting was silently ignored.
+- :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`: methods like
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb` and
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` would output
+  vertically flipped (upside down) images.
 
 .. rubric:: Other changes
 
-- Updated enum type aliases to match MuJoCo 3.5.0 header definitions.
+- Updated enum type aliases to match MuJoCo 3.6.0 header definitions.
 - Improved fixed-size array pointer handling in generated wrappers.
-- |mj_data| and |mj_model| views now expose additional fields introduced in MuJoCo 3.5.0.
+- |mj_data| and |mj_model| views now expose additional fields introduced in MuJoCo 3.6.0.
 - New |mj_model| view types added for ``exclude``, ``mesh``, and ``skin``.
 - :docs-rs:`~mujoco_rs::util::<struct>PointerView::<method>new`,
   :docs-rs:`~mujoco_rs::util::<struct>PointerViewMut::<method>new`, and
   :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrRectangle::<method>new`
   are now ``const fn``.
-- Fixed a bug where :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` methods like
-  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb` and
-  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` would output
-  vertically flipped (upside down) images.
 - Added new examples based on the `MuJoCo Python tutorial <https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/tutorial.ipynb>`_:
 
   - :gh-example:`Self-inverting tippe-top <tippe_top.rs>`: Simulates the self-inverting tippe-top using the RK4 integrator and
