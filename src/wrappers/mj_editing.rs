@@ -91,7 +91,7 @@ impl MjsOrientation {
 
     /// Changes the orientation mode to quaternions. The orientation must
     /// be specified via the main angle attribute, not through [`MjsOrientation`].
-    pub fn switch_quat<T: AsRef<[f64; 4]>>(&mut self) {
+    pub fn switch_quat(&mut self) {
         self.type_ = MjtOrientation::mjORIENTATION_QUAT;
     }
 }
@@ -167,6 +167,21 @@ impl MjSpec {
         assert_mujoco_version();
         let ptr = unsafe { mj_makeSpec() };
         Ok(MjSpec(NonNull::new(ptr).ok_or(MjEditError::AllocationFailed)?))
+    }
+
+    /// Creates a deep copy of this [`MjSpec`].
+    ///
+    /// Internally calls `mj_copySpec`, which invokes the C++ copy constructor
+    /// on the underlying model.  This is a proper deep copy: the returned spec
+    /// is fully independent from the original.
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
+    /// the copy (e.g. out of memory or an internal C++ exception).
+    pub fn try_clone(&self) -> Result<Self, MjEditError> {
+        // SAFETY: self.0 is always a valid, non-null pointer.
+        let ptr = unsafe { mj_copySpec(self.0.as_ptr()) };
+        NonNull::new(ptr).map(MjSpec).ok_or(MjEditError::AllocationFailed)
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
@@ -528,6 +543,17 @@ impl Default for MjSpec {
 impl Drop for MjSpec {
     fn drop(&mut self) {
         unsafe { mj_deleteSpec(self.0.as_ptr()); }
+    }
+}
+
+impl Clone for MjSpec {
+    /// Creates a deep copy of this [`MjSpec`].
+    ///
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the cloned spec.
+    /// Use [`MjSpec::try_clone`] for a fallible alternative.
+    fn clone(&self) -> Self {
+        self.try_clone().expect("MuJoCo failed to clone MjSpec")
     }
 }
 

@@ -9,7 +9,6 @@ Use this workflow to systematically verify correctness of the mujoco-rs wrapper 
 mismatches with MuJoCo C, stride/length errors in macro invocations, unsafe code safety,
 and potential undefined behavior.
 
-// turbo-all
 
 ## Phase 1 - Understand the codebase
 Before spawning any agents, read enough of the codebase to build a precise task list:

@@ -34,6 +34,20 @@ update of MuJoCo alone can increase the major version.
   still returns ``&mut Self`` but now panics on duplicate names instead of
   silently discarding the error.
 
+- ``MjsOrientation::switch_quat`` no longer has a type parameter ``T: AsRef<[f64; 4]>``.
+  The unused type parameter was removed. Callers with explicit turbofish syntax
+  (``switch_quat::<[f64; 4]>()``) must be updated to ``switch_quat()``.
+
+.. rubric:: New features
+
+- |mj_editing|:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec` now implements
+    ``Clone`` (panics on allocation failure) and has a new
+    :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>try_clone`
+    method that returns ``Result<MjSpec, MjEditError>`` for fallible deep-copying.
+    The copy is performed via ``mj_copySpec`` (C++ copy constructor).
+
 - Updated MuJoCo from 3.3.7 to **3.6.0**; C FFI bindings and Rust API wrappers regenerated.
 - Many methods now return typed ``Result`` variants instead of bare types or ``io::Error``.
   See `Error handling`_ below for the full list.

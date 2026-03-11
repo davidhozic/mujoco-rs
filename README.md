@@ -137,7 +137,7 @@ fn main() {
     while viewer.running() {
         /* Step the simulation and sync the viewer */
         data.step();
-        viewer.sync_data(&mut data);  // this method and step() can also be called in other threads to improve performance.
+        viewer.sync_data(&mut data);  // see rust_viewer_threaded.rs for the multi-threaded variant using ViewerSharedState
         viewer.render().unwrap();
 
         /* Obtain the view and access first three variables of `qpos` (x, y, z) */

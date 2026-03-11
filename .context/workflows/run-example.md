@@ -6,7 +6,6 @@ description: How to compile and run an example from the examples/ directory
 
 Compile and run one of the example programs.
 
-// turbo-all
 
 1. List available examples by exploring the `examples/` directory. The example name is the file stem (e.g., `basic.rs` -> `basic`).
 

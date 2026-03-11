@@ -6,7 +6,6 @@ description: How to build the mujoco-rs library
 
 Compile the library using a pre-downloaded MuJoCo shared library in the repository.
 
-// turbo-all
 
 1. Check `Cargo.toml` for the current MuJoCo version (look for `+mj-X.Y.Z` in the package version). Then find the matching `mujoco-X.Y.Z/` directory at the repository root.
 

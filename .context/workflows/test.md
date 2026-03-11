@@ -6,7 +6,6 @@ description: How to run the library's unit tests
 
 Run the in-crate unit tests (tests live inside `src/` files under `#[cfg(test)]`).
 
-// turbo-all
 
 1. Check `Cargo.toml` for the current MuJoCo version (look for `+mj-X.Y.Z` in the package version). Then find the matching `mujoco-X.Y.Z/` directory at the repository root.
 
