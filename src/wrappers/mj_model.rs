@@ -453,10 +453,9 @@ impl MjModel {
     info_method! { Model, ffi(), tendon,
         [adr: 1, num: 1, matid: 1, group: 1, treenum: 1, treeid: 2, limited: 1, actfrclimited: 1, width: 1,
         solref_lim: mjNREF as usize, solimp_lim: mjNIMP as usize, solref_fri: mjNREF as usize, solimp_fri: mjNIMP as usize, range: 2, actfrcrange: 2, margin: 1,
-        stiffness: 1, damping: 1, armature: 1, frictionloss: 1, lengthspring: 2, length0: 1, invweight0: 1,
-        rgba: 4],
+        stiffness: 1, damping: 1, armature: 1, frictionloss: 1, lengthspring: 2, length0: 1, invweight0: 1, J_rownnz: 1, J_rowadr: 1, rgba: 4],
         [user: nuser_tendon],
-        []
+        [J_colind: nJten]
     }
 
     info_method! { Model, ffi(), texture,
@@ -788,6 +787,7 @@ impl MjModel {
         [ffi] nexclude: MjtSize; "number of excluded geom pairs.";
         [ffi] neq: MjtSize; "number of equality constraints.";
         [ffi] ntendon: MjtSize; "number of tendons.";
+        [ffi] nJten: MjtSize; "number of non-zeros in sparse tendon Jacobian matrix.";
         [ffi] nwrap: MjtSize; "number of wrap objects in all tendon paths.";
         [ffi] nsensor: MjtSize; "number of sensors.";
         [ffi] nnumeric: MjtSize; "number of numeric custom fields.";
@@ -1155,6 +1155,9 @@ impl MjModel {
         tendon_group: &[i32; "group for visibility"; ffi().ntendon],
         tendon_treenum: &[i32; "number of trees along tendon's path"; ffi().ntendon],
         tendon_treeid: &[[i32; 2] [force]; "first two trees along tendon's path"; ffi().ntendon],
+        ten_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; ffi().ntendon],
+        ten_J_rowadr: &[i32; "row start address in colind array"; ffi().ntendon],
+        ten_J_colind: &[i32; "column indices in sparse Jacobian"; ffi().nJten],
         tendon_limited: &[bool [force]; "does tendon have length limits"; ffi().ntendon],
         tendon_actfrclimited: &[bool [force]; "does tendon have actuator force limits"; ffi().ntendon],
         tendon_width: &[MjtNum; "width for rendering"; ffi().ntendon],
@@ -1540,6 +1543,7 @@ info_with_view!(Model, tendon,
 	[[tendon_] adr: i32, [tendon_] num: i32,
 	 [tendon_] matid: i32, [tendon_] group: i32,
 	 [tendon_] treenum: i32, [tendon_] treeid: i32,
+     [ten_] J_rownnz: i32, [ten_] J_rowadr: i32, [ten_] J_colind: i32,
 	 [tendon_] limited: bool [force], [tendon_] actfrclimited: bool [force], [tendon_] width: MjtNum,
 	 [tendon_] solref_lim: MjtNum, [tendon_] solimp_lim: MjtNum,
 	 [tendon_] solref_fri: MjtNum, [tendon_] solimp_fri: MjtNum,

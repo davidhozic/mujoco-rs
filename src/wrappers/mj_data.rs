@@ -169,9 +169,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
 
     info_method! { Data, model.ffi(), tendon,
-        [wrapadr: 1, wrapnum: 1, J_rownnz: 1, J_rowadr: 1, length: 1, velocity: 1],
-        [J: nv, J_colind: nv],
-        []
+        [wrapadr: 1, wrapnum: 1, length: 1, velocity: 1],
+        [],
+        [J: nJten]
     }
 
     /// Steps the MuJoCo simulation.
@@ -1406,8 +1406,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         bvh_aabb_dyn: &[[MjtNum; 6] [force]; "global bounding box (center, size)"; model.ffi().nbvhdynamic],
         ten_wrapadr: &[i32; "start address of tendon's path"; model.ffi().ntendon],
         ten_wrapnum: &[i32; "number of wrap points in path"; model.ffi().ntendon],
-        ten_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; model.ffi().ntendon],
-        ten_J_rowadr: &[i32; "row start address in colind array"; model.ffi().ntendon],
+        ten_J: &[MjtNum; "tendon Jacobian"; model.ffi().nJten],
         ten_length: &[MjtNum; "tendon lengths"; model.ffi().ntendon],
         wrap_obj: &[[i32; 2] [force]; "geom id; -1: site; -2: pulley"; model.ffi().nwrap],
         wrap_xpos: &[[MjtNum; 6] [force]; "Cartesian 3D points in all paths"; model.ffi().nwrap],
@@ -1520,12 +1519,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         ifrc_constraint: &[MjtNum; "constraint force"; ffi().nidof]
     }
 
-    array_slice_dyn! {
-        sublen_dep {
-            ten_J_colind: &[[i32; model.ffi().nv as usize] [force]; "column indices in sparse Jacobian"; model.ffi().ntendon],
-            ten_J: &[[MjtNum; model.ffi().nv as usize] [force]; "tendon Jacobian"; model.ffi().ntendon]
-        }
-    }
+
 }
 
 impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
@@ -1633,11 +1627,8 @@ info_with_view!(Data, site,
 info_with_view!(Data, tendon,
     [[ten_] wrapadr: i32,
      [ten_] wrapnum: i32,
-     [ten_] J_rownnz: i32,
-     [ten_] J_rowadr: i32,
-     [ten_] J_colind: i32,
-     [ten_] length: MjtNum,
      [ten_] J: MjtNum,
+     [ten_] length: MjtNum,
      [ten_] velocity: MjtNum],
     [], M: Deref<Target = MjModel>);
 
@@ -3468,8 +3459,11 @@ mod test {
         assert!(data.mocap_quat().is_empty());
         assert!(data.wrap_obj().is_empty());
         assert!(data.wrap_xpos().is_empty());
-        assert!(data.ten_j_colind().is_empty());
         assert!(data.ten_j().is_empty());
+        assert!(model.ten_j_colind().is_empty());
+        assert!(model.ten_j_rownnz().is_empty());
+        assert!(model.ten_j_rowadr().is_empty());
+        assert_eq!(model.ffi().nJten, 0);
 
         // But body arrays should still work (nbody >= 1 always: world body)
         let nbody = model.ffi().nbody as usize;
@@ -3479,35 +3473,364 @@ mod test {
         assert_eq!(data.cinert().len(), nbody);
     }
 
-    /// Verifies [force]-cast sublen_dep variant: ten_J_colind and ten_J.
-    /// These have a variable inner dimension (nv).
+    /// Sparse ten_J and model sparsity fields cross-validated against raw FFI pointers.
     #[test]
-    fn test_force_cast_sublen_dep_ten_j() {
+    fn test_sparse_ten_j() {
         let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
         let mut data = model.make_data();
         data.forward();
 
         let ntendon = model.ffi().ntendon as usize;
-        let nv = model.ffi().nv as usize;
+        let njten = model.ffi().nJten as usize;
+        assert!(ntendon > 0);
+        assert!(njten > 0);
 
-        assert!(ntendon > 0, "test model must have at least one tendon");
-        assert!(nv > 0);
-
-        // ten_J_colind is a flat array of length ntendon * nv
-        let ten_j_colind = data.ten_j_colind();
-        assert_eq!(ten_j_colind.len(), ntendon * nv,
-            "ten_J_colind length must be ntendon*nv = {}*{} = {}", ntendon, nv, ntendon * nv);
-
-        // ten_J is also flat array of length ntendon * nv
         let ten_j = data.ten_j();
-        assert_eq!(ten_j.len(), ntendon * nv,
-            "ten_J length must be ntendon*nv = {}*{} = {}", ntendon, nv, ntendon * nv);
+        let ten_j_colind = model.ten_j_colind();
+        assert_eq!(ten_j.len(), njten);
+        assert_eq!(ten_j_colind.len(), njten);
+        assert_eq!(model.ten_j_rownnz().len(), ntendon);
+        assert_eq!(model.ten_j_rowadr().len(), ntendon);
 
-        // Cross-validate with FFI
-        for i in 0..(ntendon * nv) {
-            assert_eq!(ten_j_colind[i], unsafe { *data.ffi().ten_J_colind.add(i) });
+        for i in 0..njten {
             assert_eq!(ten_j[i], unsafe { *data.ffi().ten_J.add(i) });
+            assert_eq!(ten_j_colind[i], unsafe { *model.ffi().ten_J_colind.add(i) });
         }
+    }
+
+    /// Checks sparse ten_J against `dir^T * (J_s2 - J_s1)` from jac_site at the
+    /// default pose and after 50 gravity steps. Both flat and view APIs are tested.
+    #[test]
+    fn test_ten_j_vs_jac_site() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        let nv = model.nv() as usize;
+
+        let s1_id = model.name_to_id(MjtObj::mjOBJ_SITE, "s1").unwrap();
+        let s2_id = model.name_to_id(MjtObj::mjOBJ_SITE, "s2").unwrap();
+
+        for config in 0..2 {
+            if config == 0 {
+                data.forward();
+            } else {
+                for _ in 0..50 { data.step(); }
+            }
+
+            let ten_j = data.ten_j();
+            let rownnz = model.ten_j_rownnz();
+            let rowadr = model.ten_j_rowadr();
+            let colind = model.ten_j_colind();
+
+            let (jacp_s1, _) = data.jac_site(true, false, s1_id).unwrap();
+            let (jacp_s2, _) = data.jac_site(true, false, s2_id).unwrap();
+
+            let p1 = data.site_xpos()[s1_id as usize];
+            let p2 = data.site_xpos()[s2_id as usize];
+            let diff = [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]];
+            let length = (diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]).sqrt();
+            assert!(length > 1e-10);
+            let dir = [diff[0] / length, diff[1] / length, diff[2] / length];
+
+            // J_ten[j] = sum_k dir[k] * (J_s2[k,j] - J_s1[k,j])
+            let mut expected = vec![0.0 as MjtNum; nv];
+            for j in 0..nv {
+                for k in 0..3 {
+                    expected[j] += dir[k] * (jacp_s2[k * nv + j] - jacp_s1[k * nv + j]);
+                }
+            }
+
+            // Sparse -> dense
+            let nnz = rownnz[0] as usize;
+            let adr = rowadr[0] as usize;
+            assert!(nnz > 0);
+            let mut actual = vec![0.0 as MjtNum; nv];
+            for k in 0..nnz {
+                actual[colind[adr + k] as usize] = ten_j[adr + k];
+            }
+
+            let max_abs = actual.iter().map(|v| v.abs()).fold(0.0f64, f64::max);
+            assert!(max_abs > 0.1, "config {config}: max |J| = {max_abs}");
+            for j in 0..nv {
+                assert_relative_eq!(actual[j], expected[j], epsilon = 1e-10);
+            }
+
+            // Same check via view API
+            let ten_view = data.tendon("ten1").unwrap().view(&data);
+            let model_view = model.tendon("ten1").unwrap().view(&model);
+            let view_nnz = model_view.J_rownnz[0] as usize;
+            let mut view_dense = vec![0.0 as MjtNum; nv];
+            for k in 0..view_nnz {
+                view_dense[model_view.J_colind[k] as usize] = ten_view.J[k];
+            }
+            for j in 0..nv {
+                assert_relative_eq!(view_dense[j], expected[j], epsilon = 1e-10);
+            }
+
+            // Tendon length: view == flat == Euclidean distance
+            let ten_info = data.tendon("ten1").unwrap();
+            assert_relative_eq!(ten_view.length[0], data.ten_length()[ten_info.id], epsilon = 1e-15);
+            assert_relative_eq!(ten_view.length[0], length, epsilon = 1e-10);
+        }
+    }
+
+    /// Tendon data view's J matches the flat ten_j() sparse array; model view's
+    /// J_rownnz/J_rowadr/J_colind match their flat counterparts.
+    #[test]
+    fn test_tendon_view_j_fields() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let flat_j = data.ten_j();
+        let flat_rownnz = model.ten_j_rownnz();
+        let flat_rowadr = model.ten_j_rowadr();
+        let flat_colind = model.ten_j_colind();
+
+        let ten_info = data.tendon("ten1").unwrap();
+        let ten_view = ten_info.view(&data);
+        let nnz = flat_rownnz[ten_info.id] as usize;
+        let adr = flat_rowadr[ten_info.id] as usize;
+        assert_eq!(ten_view.J.len(), nnz);
+
+        let mut any_nonzero = false;
+        for k in 0..nnz {
+            assert_eq!(ten_view.J[k], flat_j[adr + k]);
+            any_nonzero |= ten_view.J[k].abs() > 1e-12;
+        }
+        assert!(any_nonzero);
+
+        let model_info = model.tendon("ten1").unwrap();
+        let model_view = model_info.view(&model);
+        assert_eq!(model_view.J_rownnz[0], flat_rownnz[model_info.id]);
+        assert_eq!(model_view.J_rowadr[0], flat_rowadr[model_info.id]);
+        assert_eq!(model_view.J_colind.len(), nnz);
+        for k in 0..nnz {
+            assert_eq!(model_view.J_colind[k], flat_colind[adr + k]);
+        }
+    }
+
+    /// Checks `ten_velocity == J_ten @ qvel` with several qvel patterns across
+    /// evolving simulation states, via both flat and view APIs.
+    #[test]
+    fn test_ten_j_velocity_transform() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        let ntendon = model.ntendon() as usize;
+        assert!(ntendon > 0);
+
+        // nv=8 in FORCE_MODEL: free(6) + slide(1) + hinge(1)
+        let qvel_patterns: &[&[MjtNum]] = &[
+            &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5, -0.7],
+            &[0.1, -0.2, 0.3, 0.5, -0.1, 0.4, 0.0, 0.0],
+            &[0.5, 0.0, -0.3, 0.0, 0.0, 0.0, 2.0, 1.0],
+        ];
+
+        for (round, &qv) in qvel_patterns.iter().enumerate() {
+            if round == 0 {
+                data.forward();
+            } else {
+                for _ in 0..20 { data.step(); }
+            }
+
+            data.qvel_mut().copy_from_slice(qv);
+            data.forward();
+
+            let ten_j = data.ten_j();
+            let rownnz = model.ten_j_rownnz();
+            let rowadr = model.ten_j_rowadr();
+            let colind = model.ten_j_colind();
+            let qvel = data.qvel();
+            let ten_vel = data.ten_velocity();
+
+            for t in 0..ntendon {
+                let nnz = rownnz[t] as usize;
+                let adr = rowadr[t] as usize;
+                let dot: MjtNum = (0..nnz)
+                    .map(|k| ten_j[adr + k] * qvel[colind[adr + k] as usize])
+                    .sum();
+                assert_relative_eq!(dot, ten_vel[t], epsilon = 1e-10);
+            }
+
+            // Same identity through the view API
+            let ten_view = data.tendon("ten1").unwrap().view(&data);
+            let model_view = model.tendon("ten1").unwrap().view(&model);
+            let view_nnz = model_view.J_rownnz[0] as usize;
+            let view_dot: MjtNum = (0..view_nnz)
+                .map(|k| ten_view.J[k] * qvel[model_view.J_colind[k] as usize])
+                .sum();
+            assert_relative_eq!(view_dot, ten_view.velocity[0], epsilon = 1e-10);
+
+            let ten_info = data.tendon("ten1").unwrap();
+            assert_relative_eq!(ten_view.velocity[0], ten_vel[ten_info.id], epsilon = 1e-10);
+        }
+
+        let max_vel = data.ten_velocity().iter().map(|v| v.abs()).fold(0.0f64, f64::max);
+        assert!(max_vel > 0.1, "max |ten_velocity| = {max_vel}");
+    }
+
+    /// Slide (x) + hinge (y) with the hinge site offset from the rotation axis so
+    /// both DOFs contribute non-trivially. nv = 2, s1 at origin, s2 at (1,0,3).
+    const TENDON_JAC_MODEL: &str = "
+<mujoco>
+  <worldbody>
+    <body name='b1'>
+      <joint name='j_slide' type='slide' axis='1 0 0'/>
+      <geom type='sphere' size='0.1' mass='1'/>
+      <site name='s1' pos='0 0 0'/>
+    </body>
+    <body name='b2' pos='0 0 3'>
+      <joint name='j_hinge' type='hinge' axis='0 1 0'/>
+      <geom type='sphere' size='0.1' mass='1'/>
+      <site name='s2' pos='1 0 0'/>
+    </body>
+  </worldbody>
+  <tendon>
+    <spatial name='ten1'>
+      <site site='s1'/>
+      <site site='s2'/>
+    </spatial>
+  </tendon>
+</mujoco>";
+
+    /// Analytical tendon Jacobian verification at three joint-space configurations,
+    /// testing per-DOF and combined velocity transforms via both flat and view APIs.
+    #[test]
+    fn test_ten_j_numerical_correctness() {
+        let model = MjModel::from_xml_string(TENDON_JAC_MODEL).unwrap();
+        let mut data = model.make_data();
+        let nv = model.nv() as usize;
+        assert_eq!(nv, 2);
+
+        let s1_id = model.name_to_id(MjtObj::mjOBJ_SITE, "s1").unwrap();
+        let s2_id = model.name_to_id(MjtObj::mjOBJ_SITE, "s2").unwrap();
+
+        let to_dense = |data: &MjData<_>, model: &MjModel| -> Vec<MjtNum> {
+            let ten_j = data.ten_j();
+            let nnz = model.ten_j_rownnz()[0] as usize;
+            let adr = model.ten_j_rowadr()[0] as usize;
+            let colind = model.ten_j_colind();
+            let mut dense = vec![0.0 as MjtNum; nv];
+            for k in 0..nnz {
+                dense[colind[adr + k] as usize] = ten_j[adr + k];
+            }
+            dense
+        };
+
+        let to_dense_view = |data: &MjData<_>, model: &MjModel| -> Vec<MjtNum> {
+            let ten_view = data.tendon("ten1").unwrap().view(data);
+            let model_view = model.tendon("ten1").unwrap().view(model);
+            let view_nnz = model_view.J_rownnz[0] as usize;
+            let mut dense = vec![0.0 as MjtNum; nv];
+            for k in 0..view_nnz {
+                dense[model_view.J_colind[k] as usize] = ten_view.J[k];
+            }
+            dense
+        };
+
+        // J_ten[j] = dir . (J_s2[:,j] - J_s1[:,j])
+        let from_jac_site = |data: &MjData<_>| -> Vec<MjtNum> {
+            let p1 = data.site_xpos()[s1_id as usize];
+            let p2 = data.site_xpos()[s2_id as usize];
+            let d = [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]];
+            let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+            let dir = [d[0] / len, d[1] / len, d[2] / len];
+            let (jp1, _) = data.jac_site(true, false, s1_id).unwrap();
+            let (jp2, _) = data.jac_site(true, false, s2_id).unwrap();
+            let mut expected = vec![0.0 as MjtNum; nv];
+            for j in 0..nv {
+                let mut v: MjtNum = 0.0;
+                for k in 0..3 {
+                    v += dir[k] * (jp2[k * nv + j] - jp1[k * nv + j]);
+                }
+                expected[j] = v;
+            }
+            expected
+        };
+
+        let check_j = |data: &MjData<_>, expected: &[MjtNum; 2]| {
+            let dense = to_dense(data, &model);
+            let dense_v = to_dense_view(data, &model);
+            let from_jac = from_jac_site(data);
+            for j in 0..nv {
+                assert_relative_eq!(dense[j], expected[j], epsilon = 1e-10);
+                assert_relative_eq!(dense_v[j], expected[j], epsilon = 1e-10);
+                assert_relative_eq!(from_jac[j], expected[j], epsilon = 1e-10);
+            }
+        };
+
+        let check_vel = |data: &MjData<_>, expected: MjtNum| {
+            assert_relative_eq!(data.ten_velocity()[0], expected, epsilon = 1e-10);
+            let v = data.tendon("ten1").unwrap().view(data);
+            assert_relative_eq!(v.velocity[0], expected, epsilon = 1e-10);
+        };
+
+        // Default config: s1=(0,0,0), s2=(1,0,3), dir=(1,0,3)/sqrt(10)
+        // Slide (x): J[0] = dir.(-1,0,0) = -1/sqrt(10)
+        // Hinge (y at pivot (0,0,3)): r=(1,0,0), omega x r = (0,0,-1), J[1] = -3/sqrt(10)
+        data.forward();
+        let sqrt10 = 10.0f64.sqrt();
+        check_j(&data, &[-1.0 / sqrt10, -3.0 / sqrt10]);
+
+        data.qvel_mut().copy_from_slice(&[1.0, 0.0]);
+        data.forward();
+        check_vel(&data, -1.0 / sqrt10);
+
+        data.qvel_mut().copy_from_slice(&[0.0, 1.0]);
+        data.forward();
+        check_vel(&data, -3.0 / sqrt10);
+
+        // qvel=(2,-0.5) -> vel = -2/sqrt10 + 1.5/sqrt10 = -0.5/sqrt10
+        data.qvel_mut().copy_from_slice(&[2.0, -0.5]);
+        data.forward();
+        check_vel(&data, -0.5 / sqrt10);
+
+        // Hinge at pi/4: s2 = (cos, 0, 3-sin), r = (cos, 0, -sin)
+        // omega x r = (0,1,0) x (cos,0,-sin) = (-sin, 0, -cos)
+        let a = std::f64::consts::FRAC_PI_4;
+        let (c, s) = (a.cos(), a.sin());
+        data.qpos_mut()[1] = a;
+        data.qvel_mut().copy_from_slice(&[0.0; 2]);
+        data.forward();
+
+        let len2 = (c * c + (3.0 - s) * (3.0 - s)).sqrt();
+        let dir2 = [c / len2, 0.0, (3.0 - s) / len2];
+        let j_slide = -dir2[0];
+        let j_hinge = dir2[0] * (-s) + dir2[2] * (-c);
+        check_j(&data, &[j_slide, j_hinge]);
+        assert!(j_slide.abs() > 0.05);
+        assert!(j_hinge.abs() > 0.05);
+
+        data.qvel_mut().copy_from_slice(&[1.0, 0.0]);
+        data.forward();
+        check_vel(&data, j_slide);
+
+        data.qvel_mut().copy_from_slice(&[0.0, 1.0]);
+        data.forward();
+        check_vel(&data, j_hinge);
+
+        data.qvel_mut().copy_from_slice(&[-1.0, 3.0]);
+        data.forward();
+        check_vel(&data, -j_slide + 3.0 * j_hinge);
+
+        // Hinge at -pi/3 + slide at 0.5: s1=(0.5,0,0),
+        // s2=(cos(-pi/3), 0, 3-sin(-pi/3)), r=(c3, 0, -s3)
+        let a3 = -std::f64::consts::FRAC_PI_3;
+        let (c3, s3) = (a3.cos(), a3.sin());
+        data.qpos_mut().copy_from_slice(&[0.5, a3]);
+        data.qvel_mut().copy_from_slice(&[0.0; 2]);
+        data.forward();
+
+        let dx3 = c3 - 0.5;
+        let dz3 = 3.0 - s3;
+        let len3 = (dx3 * dx3 + dz3 * dz3).sqrt();
+        let dir3 = [dx3 / len3, 0.0, dz3 / len3];
+        let j_slide3 = -dir3[0];
+        let j_hinge3 = dir3[0] * (-s3) + dir3[2] * (-c3);
+        check_j(&data, &[j_slide3, j_hinge3]);
+
+        data.qvel_mut().copy_from_slice(&[1.7, -2.3]);
+        data.forward();
+        check_vel(&data, j_slide3 * 1.7 + j_hinge3 * (-2.3));
     }
 
     /// Verifies [force]-cast for iefc_type and iefc_state (island-reordered constraint arrays).

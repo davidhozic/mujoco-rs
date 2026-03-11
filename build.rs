@@ -43,8 +43,6 @@ mod build_dependencies {
         let output_path = PathBuf::from("./src/");
         let current_dir = env::current_dir().unwrap();
         let include_dir_mujoco = current_dir.join("mujoco/include/mujoco");
-        let include_dir_simulate = current_dir.join("mujoco/simulate/");
-        let include_dir_glfw = current_dir.join("mujoco/build/_deps/glfw3-src/include/");
 
         let bindings_mujoco = bindgen::Builder::default()
             .header(include_dir_mujoco.join("mujoco.h").to_str().unwrap())
