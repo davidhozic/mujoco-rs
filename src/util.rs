@@ -1,6 +1,7 @@
 //! Utility types and macros used throughout the crate.
 use std::{marker::PhantomData, ops::{Deref, DerefMut}};
 use std::sync::{Mutex, MutexGuard};
+use std::ffi::c_char;
 
 use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 
@@ -9,13 +10,13 @@ use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 /// message length is `ERROR_BUF_LEN - 1` characters.
 pub const ERROR_BUF_LEN: usize = 100;
 
-/// Copies an ASCII `&str` into a fixed-size `i8` buffer, NUL-terminating and
+/// Copies an ASCII `&str` into a fixed-size `c_char` buffer, NUL-terminating and
 /// zero-filling the remainder.
 ///
 /// # Panics
 /// Panics if `value` is not valid ASCII or if `value` (plus NUL) does not fit
 /// in `buf`.
-pub(crate) fn write_ascii_to_buf(buf: &mut [i8], value: &str) {
+pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
     assert!(value.is_ascii(), "value must be valid ASCII");
     let c_string = std::ffi::CString::new(value).unwrap();
     let bytes = c_string.into_bytes_with_nul();

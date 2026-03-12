@@ -1,5 +1,5 @@
 //! Definitions related to model editing.
-use std::ffi::{c_int, CStr, CString};
+use std::ffi::{c_char, c_int, CStr, CString};
 use std::marker::PhantomData;
 use std::path::Path;
 use std::ptr::{self, NonNull};
@@ -123,7 +123,7 @@ impl MjsCompiler {
 
     getter_setter! {[&] with, get, [
         inertiagrouprange: &[i32; 2];       "range of geom groups used to compute inertia.";
-        eulerseq: &[i8; 3];                 "sequence for euler rotations.";
+        eulerseq: &[c_char; 3];             "sequence for euler rotations.";
         LRopt: &MjLROpt;                    "options for lengthrange computation.";
     ]}
 
@@ -213,14 +213,14 @@ impl MjSpec {
     fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
 
-        let mut error_buffer = [0u8; ERROR_BUF_LEN];
+        let mut error_buffer = [0; ERROR_BUF_LEN];
         unsafe {
             let path_str = path.as_ref().to_str()
                 .ok_or(MjEditError::InvalidUtf8Path)?;
             let path = CString::new(path_str).unwrap();
             let raw_ptr = mj_parseXML(
                 path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
-                error_buffer.as_mut_ptr().cast::<i8>(), error_buffer.len() as c_int
+                error_buffer.as_mut_ptr(), error_buffer.len() as c_int
             );
 
             Self::check_spec(raw_ptr, &error_buffer)
@@ -239,11 +239,11 @@ impl MjSpec {
         assert_mujoco_version();
 
         let c_xml = CString::new(xml).unwrap();
-        let mut error_buffer = [0u8; ERROR_BUF_LEN];
+        let mut error_buffer = [0; ERROR_BUF_LEN];
         unsafe {
             let spec_ptr = mj_parseXMLString(
                 c_xml.as_ptr(), ptr::null(),
-                error_buffer.as_mut_ptr().cast::<i8>(), error_buffer.len() as c_int
+                error_buffer.as_mut_ptr(), error_buffer.len() as c_int
             );
             Self::check_spec(spec_ptr, &error_buffer)
         }
@@ -280,26 +280,28 @@ impl MjSpec {
     /// When `filename` or `content_type` contains zero bytes.
     fn from_parse_file(filename: &str, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
-        let mut error_buffer = [0u8; ERROR_BUF_LEN];
+        let mut error_buffer = [0; ERROR_BUF_LEN];
         unsafe {
             let c_filename = CString::new(filename).unwrap();
             let c_content_type = CString::new(content_type).unwrap();
             let ptr = mj_parse(
                 c_filename.as_ptr(), c_content_type.as_ptr(),
                 vfs.map_or(ptr::null(), |v| v.ffi()),
-                error_buffer.as_mut_ptr().cast::<i8>(), error_buffer.len() as i32
+                error_buffer.as_mut_ptr(), error_buffer.len() as i32
             );
             Self::check_spec(ptr, &error_buffer)
         }
     }
 
     /// Handles spec pointer input.
-    fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[u8]) -> Result<Self, MjEditError> {
+    fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[c_char]) -> Result<Self, MjEditError> {
         if spec_ptr.is_null() {
             Err(MjEditError::ParseFailed(
-                CStr::from_bytes_until_nul(error_buffer)
-                    .map(|c| c.to_string_lossy().into_owned())
-                    .unwrap_or_default()
+                // SAFETY: error_buffer is zero-initialised and MuJoCo always
+                // NUL-terminates the message it writes into it.
+                unsafe { CStr::from_ptr(error_buffer.as_ptr()) }
+                    .to_string_lossy()
+                    .into_owned()
             ))
         }
         else {
@@ -354,18 +356,20 @@ impl MjSpec {
     /// # Panics
     /// When `filename` contains '\0' characters, a panic occurs.
     pub fn save_xml(&self, filename: &str) -> Result<(), MjEditError> {
-        let mut error_buff = [0u8; ERROR_BUF_LEN];
+        let mut error_buff = [0; ERROR_BUF_LEN];
         let cname = CString::new(filename).unwrap();  // filename is always UTF-8
         let result = unsafe { mj_saveXML(
             self.ffi(), cname.as_ptr(),
-            error_buff.as_mut_ptr().cast::<i8>(), error_buff.len() as i32
+            error_buff.as_mut_ptr(), error_buff.len() as i32
         ) };
         match result {
             0 => Ok(()),
             _ => Err(MjEditError::SaveFailed(
-                CStr::from_bytes_until_nul(&error_buff)
-                    .map(|c| c.to_string_lossy().into_owned())
-                    .unwrap_or_default()
+                // SAFETY: error_buff is zero-initialised and MuJoCo always
+                // NUL-terminates the message it writes into it.
+                unsafe { CStr::from_ptr(error_buff.as_ptr()) }
+                    .to_string_lossy()
+                    .into_owned()
             ))
         }
     }
@@ -378,18 +382,20 @@ impl MjSpec {
     /// Returns [`MjEditError::SaveFailed`] with MuJoCo's error message if the conversion fails.
     /// If `buffer_size` is too small, the output will be truncated.
     pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, MjEditError> {
-        let mut error_buff = [0u8; ERROR_BUF_LEN];
+        let mut error_buff = [0; ERROR_BUF_LEN];
         let mut result_buff = vec![0u8; buffer_size];
         let result = unsafe { mj_saveXMLString(
             self.ffi(), result_buff.as_mut_ptr().cast(), result_buff.len() as i32,
-            error_buff.as_mut_ptr().cast::<i8>(), error_buff.len() as i32
+            error_buff.as_mut_ptr(), error_buff.len() as i32
         ) };
         match result {
             0 => Ok(CStr::from_bytes_until_nul(&result_buff).unwrap().to_string_lossy().into_owned()),
             _ => Err(MjEditError::SaveFailed(
-                CStr::from_bytes_until_nul(&error_buff)
-                    .map(|c| c.to_string_lossy().into_owned())
-                    .unwrap_or_default()
+                // SAFETY: error_buff is zero-initialised and MuJoCo always
+                // NUL-terminates the message it writes into it.
+                unsafe { CStr::from_ptr(error_buff.as_ptr()) }
+                    .to_string_lossy()
+                    .into_owned()
             ))
         }
     }
@@ -1458,7 +1464,7 @@ impl MjsTexture {
             rgb2: &[f64; 3];               "second color for builtin.";
             markrgb: &[f64; 3];            "mark color.";
             gridsize: &[i32; 2];           "size of grid for composite file; (1,1)-repeat.";
-            gridlayout: &[i8; 12];         "row-major: L,R,F,B,U,D for faces; . for unused.";
+            gridlayout: &[c_char; 12];     "row-major: L,R,F,B,U,D for faces; . for unused.";
         ]
     }
 

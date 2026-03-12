@@ -1,5 +1,5 @@
 //! MjModel related.
-use std::ffi::{CStr, CString, c_int, c_void};
+use std::ffi::{c_char, CStr, CString, c_int, c_void};
 use std::path::Path;
 use std::ptr::{self, NonNull};
 
@@ -195,13 +195,13 @@ impl MjModel {
     fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, MjModelError> {
         assert_mujoco_version();
 
-        let mut error_buffer = [0u8; ERROR_BUF_LEN];
+        let mut error_buffer = [0; ERROR_BUF_LEN];
         let path_str = path.as_ref().to_str()
             .ok_or(MjModelError::InvalidUtf8Path)?;
         let path = CString::new(path_str).unwrap();
         let raw_ptr = unsafe { mj_loadXML(
             path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
-            error_buffer.as_mut_ptr().cast::<i8>(), error_buffer.len() as c_int
+            error_buffer.as_mut_ptr(), error_buffer.len() as c_int
         ) };
 
         Self::check_raw_model(raw_ptr, &error_buffer)
@@ -224,11 +224,11 @@ impl MjModel {
         // Add the file into a virtual file system
         vfs.add_from_buffer(filename, data.as_bytes())?;
 
-        let mut error_buffer = [0u8; ERROR_BUF_LEN];
+        let mut error_buffer = [0; ERROR_BUF_LEN];
         let filename_c = CString::new(filename).unwrap();
         let raw_ptr = unsafe { mj_loadXML(
             filename_c.as_ptr(), vfs.ffi(),
-            error_buffer.as_mut_ptr().cast::<i8>(), error_buffer.len() as c_int
+            error_buffer.as_mut_ptr(), error_buffer.len() as c_int
         ) };
 
         Self::check_raw_model(raw_ptr, &error_buffer)
@@ -261,18 +261,18 @@ impl MjModel {
     /// # Panics
     /// When `filename` contains '\0' characters, a panic occurs.
     pub fn save_last_xml(&self, filename: &str) -> Result<(), MjModelError> {
-        let mut error = [0u8; ERROR_BUF_LEN];
+        let mut error = [0; ERROR_BUF_LEN];
         let cstring = CString::new(filename).unwrap();
         let result = unsafe { mj_saveLastXML(
             cstring.as_ptr(), self.ffi(),
-            error.as_mut_ptr().cast::<i8>(), error.len() as i32
+            error.as_mut_ptr(), error.len() as i32
         ) };
         match result {
             1 => Ok(()),
             0 => {
-                let cstr_error = CStr::from_bytes_until_nul(&error)
-                    .map(|c| c.to_string_lossy().into_owned())
-                    .unwrap_or_default();
+                let cstr_error = unsafe { CStr::from_ptr(error.as_ptr()) }
+                    .to_string_lossy()
+                    .into_owned();
                 Err(MjModelError::SaveFailed(cstr_error))
             },
             _ => unreachable!()
@@ -298,13 +298,15 @@ impl MjModel {
     }
 
     /// Handles the pointer to the model.
-    fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[u8]) -> Result<Self, MjModelError> {
+    fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[c_char]) -> Result<Self, MjModelError> {
         match NonNull::new(ptr_model) {
             Some(nn) => Ok(Self(nn)),
             None => Err(MjModelError::LoadFailed(
-                CStr::from_bytes_until_nul(error_buffer)
-                    .map(|c| c.to_string_lossy().into_owned())
-                    .unwrap_or_default()
+                // SAFETY: error_buffer is zero-initialised and MuJoCo always
+                // NUL-terminates the message it writes into it.
+                unsafe { CStr::from_ptr(error_buffer.as_ptr()) }
+                    .to_string_lossy()
+                    .into_owned()
             )),
         }
     }
@@ -1226,14 +1228,14 @@ impl MjModel {
         plugin: &[i32; "globally registered plugin slot number"; ffi().nplugin],
         plugin_stateadr: &[i32; "address in the plugin state array"; ffi().nplugin],
         plugin_statenum: &[i32; "number of states in the plugin instance"; ffi().nplugin],
-        plugin_attr: &[i8; "config attributes of plugin instances"; ffi().npluginattr],
+        plugin_attr: &[c_char; "config attributes of plugin instances"; ffi().npluginattr],
         plugin_attradr: &[i32; "address to each instance's config attrib"; ffi().nplugin],
         numeric_adr: &[i32; "address of field in numeric_data"; ffi().nnumeric],
         numeric_size: &[i32; "size of numeric field"; ffi().nnumeric],
         numeric_data: &[MjtNum; "array of all numeric fields"; ffi().nnumericdata],
         text_adr: &[i32; "address of text in text_data"; ffi().ntext],
         text_size: &[i32; "size of text field (strlen+1)"; ffi().ntext],
-        text_data: &[i8; "array of all text fields (0-terminated)"; ffi().ntextdata],
+        text_data: &[c_char; "array of all text fields (0-terminated)"; ffi().ntextdata],
         tuple_adr: &[i32; "address of text in text_data"; ffi().ntuple],
         tuple_size: &[i32; "number of objects in tuple"; ffi().ntuple],
         tuple_objtype: &[MjtObj [force]; "array of object types in all tuples"; ffi().ntupledata],
@@ -1263,9 +1265,9 @@ impl MjModel {
         name_tupleadr: &[i32; "tuple name pointers"; ffi().ntuple],
         name_keyadr: &[i32; "keyframe name pointers"; ffi().nkey],
         name_pluginadr: &[i32; "plugin instance name pointers"; ffi().nplugin],
-        names: &[i8; "names of all objects, 0-terminated"; ffi().nnames],
+        names: &[c_char; "names of all objects, 0-terminated"; ffi().nnames],
         names_map: &[i32; "internal hash map of names"; ffi().nnames_map],
-        paths: &[i8; "paths to assets, 0-terminated"; ffi().npaths],
+        paths: &[c_char; "paths to assets, 0-terminated"; ffi().npaths],
         B_rownnz: &[i32; "body-dof: non-zeros in each row"; ffi().nbody],
         B_rowadr: &[i32; "body-dof: row addresses"; ffi().nbody],
         B_colind: &[i32; "body-dof: column indices"; ffi().nB],
