@@ -118,12 +118,23 @@ update of MuJoCo alone can increase the major version.
 
   - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_buffer` renamed from
     ``mjr_set_buffer`` (drop C-prefix).
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>new` is now
+    ``unsafe fn``. A valid OpenGL context must be current on the calling thread before calling it.
+    See the method-level ``# Safety`` documentation for the full contract.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>add_aux` and
+    :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>resize_offscreen`
+    now panic (``i32::try_from().expect()``) if the supplied dimensions exceed ``i32::MAX``.
+    Previously the values were silently truncated to a negative number, causing GL errors.
 
 - :ref:`mj_cpp_viewer`:
 
   - :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp` now requires ``M: Send + Sync``
     in addition to ``Deref<Target = MjModel> + Clone``. This tightens the previously unsound
     blanket ``Send + Sync`` impls.
+  - :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` is now
+    ``unsafe fn``. The method must be called from the **main thread**; calling it from any
+    other thread causes undefined behaviour in GLFW. Previously the safety requirement was
+    documented in a comment but not enforced.
   - :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` no longer
     accepts the ``update_timer`` boolean parameter (the FPS timer is now always updated)
     and now returns ``Result<(), &'static str>`` instead of ``()``.
@@ -136,6 +147,14 @@ update of MuJoCo alone can increase the major version.
 
 - |mj_data|:
 
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_state` and
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_set_state` are
+    now ``unsafe fn``. When ``spec`` includes ``mjSTATE_EQ_ACTIVE``, MuJoCo writes raw
+    ``mjtNum`` (f64) bytes directly into the ``eq_active`` byte array without booleanization,
+    which would make a subsequent call to
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>eq_active` undefined
+    behaviour. Callers must ensure ``eq_active`` bytes are re-validated (e.g. via
+    ``mj_forward``/``mj_step``) before reading ``eq_active()``.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_subtree_com`
     no longer accepts the ``jacp: bool`` parameter. The Jacobian is now always computed,
     because the underlying C function unconditionally dereferences the output pointer.
@@ -247,9 +266,7 @@ Pre-existing types :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` and
    * - |mj_vfs|
      - :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>add_from_file`,
        :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>add_from_buffer`,
-       :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>delete_file`,
-       :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>mount` :sup:`new`,
-       :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>unmount` :sup:`new`
+       :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>delete_file`
      - :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`
    * - |mj_spec|
      - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_xml`,
@@ -387,11 +404,6 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
 
   - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state` and
     :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state_into`.
-
-- |mj_vfs|:
-
-  - :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>mount` and
-    :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>unmount`.
 
 - |mjs_tendon|:
 

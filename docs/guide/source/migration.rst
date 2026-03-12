@@ -230,6 +230,81 @@ for example by appending ``.unwrap()`` or using ``?``.
 ``Result<(), MjViewerError>`` instead of ``()``.
 
 
+``MjrContext::new`` is now ``unsafe``
+----------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>new` is now
+``unsafe fn``. A valid OpenGL context must be current on the calling thread before calling it.
+
+You are unlikely to call ``MjrContext::new`` directly in application code — it is called
+internally by :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` and
+:docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`. If you are constructing ``MjrContext``
+manually, wrap the call in an ``unsafe`` block and ensure a valid GL context is current:
+
+**Before (2.x / early 3.0.0):**
+
+.. code-block:: rust
+
+    let context = MjrContext::new(&model);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    // SAFETY: a valid GL context has been made current above.
+    let context = unsafe { MjrContext::new(&model) };
+
+
+``MjViewerCpp::render`` is now ``unsafe``
+----------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` is now ``unsafe fn``.
+It must be called from the **main thread** as GLFW requires main-thread access and calling
+either from another thread causes undefined behaviour.
+
+**Before (2.x / early 3.0.0):**
+
+.. code-block:: rust
+
+    viewer.sync();
+    viewer.render().unwrap();
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    viewer.sync();
+    // SAFETY: called from the main thread.
+    unsafe { viewer.render().unwrap() };
+
+
+``MjData::set_state`` and ``try_set_state`` are now ``unsafe``
+----------------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_state` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_set_state` are now
+``unsafe fn``. When ``spec`` includes ``mjSTATE_EQ_ACTIVE``, MuJoCo writes raw ``mjtNum``
+(f64) bytes into the ``eq_active`` byte array without booleanization, making a subsequent
+call to :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>eq_active`
+undefined behaviour.
+
+The caller must ensure that ``eq_active()`` is not read until the values have been
+re-validated as 0 or 1 (e.g. by calling ``mj_forward``/``mj_step``).
+
+**Before (2.x / early 3.0.0):**
+
+.. code-block:: rust
+
+    data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    // SAFETY: state was captured via get_state/mj_getState; enum attributes and bools are valid (0 or 1).
+    unsafe { data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32) };
+
+
 ``MjData::ray()`` parameter change
 ----------------------------------------
 

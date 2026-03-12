@@ -1188,8 +1188,15 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// A panic will occur if `state`'s length is less than would be copied
     /// based on `spec`.
     /// Use [`MjData::try_set_state`] for a fallible alternative.
-    pub fn set_state(&mut self, state: &[MjtNum], spec: u32) {
-        self.try_set_state(state, spec)
+    ///
+    /// # Safety
+    /// When `spec` includes [`MjtState::mjSTATE_EQ_ACTIVE`], MuJoCo writes the raw
+    /// `mjtNum` (f64) bytes from `state` directly into the `eq_active` byte array
+    /// without booleanization. The caller must ensure that [`MjData::eq_active`] is
+    /// not accessed until the `eq_active` values have been re-validated as `0` or `1`
+    /// (e.g. by calling `mj_forward` or `mj_step`).
+    pub unsafe fn set_state(&mut self, state: &[MjtNum], spec: u32) {
+        unsafe { self.try_set_state(state, spec) }
             .expect("set_state failed")
     }
 
@@ -1198,7 +1205,14 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::BufferTooSmall`] if `state` is smaller than the
     /// length required by `spec`.
-    pub fn try_set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
+    ///
+    /// # Safety
+    /// When `spec` includes [`MjtState::mjSTATE_EQ_ACTIVE`], MuJoCo writes the raw
+    /// `mjtNum` (f64) bytes from `state` directly into the `eq_active` byte array
+    /// without booleanization. The caller must ensure that [`MjData::eq_active`] is
+    /// not accessed until the `eq_active` values have been re-validated as `0` or `1`
+    /// (e.g. by calling `mj_forward` or `mj_step`).
+    pub unsafe fn try_set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
         let required_len = self.model.state_size(spec) as usize;
         if state.len() < required_len {
             return Err(MjDataError::BufferTooSmall {
@@ -4317,7 +4331,8 @@ mod test {
         assert_ne!(diverged_xpos, saved_xpos, "state should diverge after more steps");
 
         // Restore state
-        data.set_state(&saved_state, MjtState::mjSTATE_FULLPHYSICS as u32);
+        // SAFETY: saved_state was captured via mj_getState; eq_active bytes are valid (0 or 1).
+        unsafe { data.set_state(&saved_state, MjtState::mjSTATE_FULLPHYSICS as u32) };
         data.forward();
 
         // Primary state (qpos) should be exactly restored

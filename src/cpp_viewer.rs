@@ -110,9 +110,9 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
     /// Returns `Err` when the viewer has been closed by the user.
     ///
     /// # Safety
-    /// This needs to be called periodically from the MAIN thread, otherwise
-    /// GLFW stops working.
-    pub fn render(&mut self) -> Result<(), &'static str> {
+    /// Must be called from the **main thread**. GLFW requires main-thread access; calling
+    /// from any other thread causes undefined behaviour.
+    pub unsafe fn render(&mut self) -> Result<(), &'static str> {
         if !self.running {
             return Err("render called after viewer has been closed!");
         }

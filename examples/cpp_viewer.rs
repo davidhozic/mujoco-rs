@@ -29,7 +29,8 @@ fn main() {
     let step = model.opt().timestep;
     while viewer.running() {
         viewer.sync();
-        viewer.render().unwrap();
+        // SAFETY: called from the main thread.
+        unsafe { viewer.render().unwrap() };
         data.step();
         std::thread::sleep(Duration::from_secs_f64(step));
     }

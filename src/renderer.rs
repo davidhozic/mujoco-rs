@@ -343,6 +343,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Sets the font size.
     pub fn set_font_scale(&mut self, font_scale: MjtFontScale) {
+        self.gl_state.make_current().expect("failed to make GL context current");
         self.context.change_font(font_scale);
     }
 

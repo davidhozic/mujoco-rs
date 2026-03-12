@@ -108,17 +108,28 @@ impl MjrContext {
     /// Add Aux buffer with given index to context; free previous Aux buffer.
     /// # Errors
     /// Returns [`MjSceneError::InvalidAuxBufferIndex`] when `index >= mjNAUX` (10).
+    ///
+    /// # Panics
+    /// Panics if `width`, `height`, or `samples` are too large to fit in `i32`.
     pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) -> Result<(), MjSceneError> {
         if index >= mjNAUX as usize {
             return Err(MjSceneError::InvalidAuxBufferIndex { index });
         }
-        unsafe { mjr_addAux(index as i32, width as i32, height as i32, samples as i32, self.ffi_mut()); }
+        let width_i32 = i32::try_from(width).expect("width overflows i32");
+        let height_i32 = i32::try_from(height).expect("height overflows i32");
+        let samples_i32 = i32::try_from(samples).expect("samples overflows i32");
+        unsafe { mjr_addAux(index as i32, width_i32, height_i32, samples_i32, self.ffi_mut()); }
         Ok(())
     }
 
     /// Resize offscreen buffers.
+    ///
+    /// # Panics
+    /// Panics if `width` or `height` are too large to fit in `i32`.
     pub fn resize_offscreen(&mut self, width: u32, height: u32) {
-        unsafe { mjr_resizeOffscreen(width as i32, height as i32, self.ffi_mut()); }
+        let width_i32 = i32::try_from(width).expect("width overflows i32");
+        let height_i32 = i32::try_from(height).expect("height overflows i32");
+        unsafe { mjr_resizeOffscreen(width_i32, height_i32, self.ffi_mut()); }
     }
 
     /// Upload texture to GPU, overwriting previous upload if any.

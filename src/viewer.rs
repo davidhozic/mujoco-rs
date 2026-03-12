@@ -311,7 +311,9 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
                 }
             }
 
-            data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32);
+            // SAFETY: mjSTATE_INTEGRATION does not include EQ_ACTIVE, so no
+            // non-boolean bytes are written to eq_active.
+            unsafe { data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32) };
         }
 
         if full_sync {
