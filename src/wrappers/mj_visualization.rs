@@ -343,11 +343,7 @@ impl Default for MjvOption {
 pub type MjvFigure = mjvFigure;
 impl Default for MjvFigure {
     fn default() -> Self {
-        let mut opt = MaybeUninit::uninit();
-        unsafe {
-            mjv_defaultFigure(opt.as_mut_ptr());
-            opt.assume_init()
-        }
+        *Self::new()
     }
 }
 

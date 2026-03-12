@@ -159,7 +159,7 @@ macro_rules! add_x_method {
             )]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 self.[<try_add_ $name>]()
-                    .expect(concat!("mjs_add", stringify!($name:camel), " returned null; allocation failed"))
+                    .expect(concat!("mjs_add", stringify!([<$name:camel>]), " returned null; allocation failed"))
             }
 
             #[doc = concat!(
@@ -191,7 +191,7 @@ macro_rules! add_x_method_by_frame {
             )]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 self.[<try_add_ $name>]()
-                    .expect(concat!("mjs_add", stringify!($name:camel), " returned null; allocation failed"))
+                    .expect(concat!("mjs_add", stringify!([<$name:camel>]), " returned null; allocation failed"))
             }
 
             #[doc = concat!(
@@ -244,7 +244,7 @@ macro_rules! add_x_method_no_default {
             )]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 self.[<try_add_ $name>]()
-                    .expect(concat!("mjs_add", stringify!($name:camel), " returned null; allocation failed"))
+                    .expect(concat!("mjs_add", stringify!([<$name:camel>]), " returned null; allocation failed"))
             }
 
             #[doc = concat!(
@@ -385,8 +385,10 @@ macro_rules! mjs_struct {
             )*)?
         }
 
-        // SAFETY: These are safe to implement, as access to them is available only
-        // through methods or through ffi() and ffi_mut() methods, where the latter is unsafe.
+        // SAFETY: Mjs* types are raw pointer wrappers. All shared-reference access goes
+        // through &self methods that do not mutate state. All mutation requires &mut self,
+        // which guarantees no concurrent aliasing. The pointer is valid for the lifetime
+        // of the owning MjSpec, which must outlive any Mjs* reference.
         unsafe impl Sync for [<Mjs $ffi_name>] {}
         unsafe impl Send for [<Mjs $ffi_name>] {}
     }};
