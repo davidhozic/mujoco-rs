@@ -172,6 +172,18 @@ pub enum MjSceneError {
         /// Current number of data points in the plot.
         current_len: usize,
     },
+    /// A plot index is out of the valid range `[0, mjMAXLINE)`.
+    InvalidPlotIndex {
+        /// The out-of-range plot index that was provided.
+        plot_index: usize,
+        /// Maximum number of plots (`mjMAXLINE`).
+        max_plots: usize,
+    },
+    /// A geom label string contains non-ASCII bytes.
+    ///
+    /// MuJoCo's renderer treats the label buffer as ASCII; multi-byte UTF-8
+    /// sequences would be rendered as garbage characters.
+    NonAsciiLabel,
 }
 
 impl fmt::Display for MjSceneError {
@@ -219,6 +231,15 @@ impl fmt::Display for MjSceneError {
                     "point index {point_index} is out of bounds for plot {plot_index} \
                      (current length = {current_len})"
                 )
+            }
+            Self::InvalidPlotIndex { plot_index, max_plots } => {
+                write!(
+                    f,
+                    "plot index {plot_index} is out of range [0, {max_plots})"
+                )
+            }
+            Self::NonAsciiLabel => {
+                write!(f, "label contains non-ASCII characters")
             }
         }
     }
@@ -326,7 +347,7 @@ impl fmt::Display for MjModelError {
                      but need at least {needed}"
                 )
             }
-            Self::VfsError(_) => write!(f, "VFS error"),
+            Self::VfsError(e) => write!(f, "VFS error: {e}"),
         }
     }
 }
@@ -407,10 +428,10 @@ impl fmt::Display for GlInitError {
             Self::DisplayBuild(e) => write!(f, "display build failed: {e}"),
             Self::NoWindow => write!(f, "display builder did not create a window"),
             Self::WindowHandle(e) => write!(f, "failed to obtain window handle: {e}"),
-            Self::ContextCreation(_) => write!(f, "GL context creation failed"),
+            Self::ContextCreation(e) => write!(f, "GL context creation failed: {e}"),
             Self::SurfaceAttributes(e) => write!(f, "failed to build surface attributes: {e}"),
-            Self::SurfaceCreation(_) => write!(f, "window surface creation failed"),
-            Self::MakeCurrent(_) => write!(f, "failed to make GL context current"),
+            Self::SurfaceCreation(e) => write!(f, "window surface creation failed: {e}"),
+            Self::MakeCurrent(e) => write!(f, "failed to make GL context current: {e}"),
         }
     }
 }

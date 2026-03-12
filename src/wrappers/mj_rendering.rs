@@ -70,7 +70,12 @@ pub struct MjrContext {
 impl MjrContext {
     /// Creates and initializes a new rendering context for `model`.
     /// The font scale defaults to 100 %.
-    pub fn new(model: &MjModel) -> Self {
+    ///
+    /// # Safety
+    /// A valid OpenGL context must exist and be current in the calling thread before calling
+    /// this function. Calling without an active GL context causes MuJoCo to abort the process.
+    /// The same GL context must also remain current when this `MjrContext` is dropped.
+    pub unsafe fn new(model: &MjModel) -> Self {
         unsafe {
             let mut c = Box::new_uninit();
             mjr_defaultContext(c.as_mut_ptr());
@@ -117,7 +122,12 @@ impl MjrContext {
     }
 
     /// Upload texture to GPU, overwriting previous upload if any.
+    ///
+    /// # Panics
+    /// Panics if `texid >= model.ntex()`.
     pub fn upload_texture(&mut self, model: &MjModel, texid: u32) {
+        let ntex = model.ntex();
+        assert!((texid as i64) < ntex, "texid {texid} is out of range [0, {ntex})");
         unsafe { mjr_uploadTexture(model.ffi(), self.ffi_mut(), texid as i32); }
     }
 

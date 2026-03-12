@@ -879,7 +879,7 @@ pub fn assert_mujoco_version() {
 pub unsafe fn force_cast<T, U>(val: T) -> U {
     const {
         assert!(std::mem::size_of::<T>() == std::mem::size_of::<U>());
-        assert!(std::mem::align_of::<U>().is_multiple_of(std::mem::align_of::<T>()));
+        assert!(std::mem::align_of::<T>().is_multiple_of(std::mem::align_of::<U>()));
     }
     #[repr(C)]
     union Transmuter<T, U> {

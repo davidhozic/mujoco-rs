@@ -1387,7 +1387,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
 
         let ngeom = model.ffi().ngeom as usize;
         let scene = MjvScene::new(model.clone(), ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
-        let context = MjrContext::new(&model);
+        // SAFETY: The OpenGL context was made current above via gl_surface.
+        let context = unsafe { MjrContext::new(&model) };
         let camera  = MjvCamera::new_free(&model);
 
         // Tracking of changes made between syncs

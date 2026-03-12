@@ -142,44 +142,6 @@ impl MjVfs {
         }
     }
 
-    /// Mounts a directory into the VFS so its files become accessible by name.
-    /// # Returns
-    /// `Ok(())` on success.
-    /// # Errors
-    /// - [`MjVfsError::Full`] if the VFS has no more room.
-    /// - [`MjVfsError::AlreadyExists`] if the directory is already mounted under the same name.
-    /// - [`MjVfsError::LoadFailed`] if the mount operation fails for another reason.
-    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
-    /// # Panics
-    /// When `filepath` contains `\0` characters, a panic occurs.
-    pub fn mount(&mut self, filepath: &str) -> Result<(), MjVfsError> {
-        let c_filepath = CString::new(filepath).unwrap();
-        Self::handle_add_result(unsafe {
-            mj_mountVFS(
-                self.ffi_mut(),
-                c_filepath.as_ptr(),
-                ptr::null()
-            )
-        })
-    }
-
-    /// Unmounts a previously mounted directory from the VFS.
-    /// # Returns
-    /// `Ok(())` on success.
-    /// # Errors
-    /// - [`MjVfsError::NotFound`] if the directory is not currently mounted.
-    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
-    /// # Panics
-    /// When `mountdir` contains `\0` characters, a panic occurs.
-    pub fn unmount(&mut self, mountdir: &str) -> Result<(), MjVfsError> {
-        let c_mountdir = CString::new(mountdir).unwrap();
-        unsafe {
-            Self::handle_remove_result(
-                mj_unmountVFS(self.ffi_mut(), c_mountdir.as_ptr())
-            )
-        }
-    }
-
     fn handle_remove_result(result: i32) -> Result<(), MjVfsError> {
         match result {
             0 => Ok(()),
@@ -293,14 +255,6 @@ mod tests {
         assert!(vfs.delete_file(RAW_FILE_NAME).is_err());
     }
 
-    #[test]
-    fn test_vfs_mount_unmount() {
-        let mut vfs = MjVfs::new();
-        // Since we don't have a resource provider, this just calls the API
-        // It might return an Err since the provider is null. We just ensure it doesn't crash.
-        let _ = vfs.mount("/tmp");
-        let _ = vfs.unmount("/tmp");
-    }
 
     /// Tests that deleting a nonexistent file from VFS returns the `NotFound` error variant.
     #[test]

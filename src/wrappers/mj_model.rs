@@ -1038,7 +1038,7 @@ impl MjModel {
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
-        flex_edgeequality: &[i32; "0: none, 1: edges, 2: vertices"; ffi().nflex],
+        flex_edgeequality: &[i32; "0: none, 1: edges, 2: vertices, 3: strain"; ffi().nflex],
         flex_rigid: &[bool [force]; "are all vertices in the same body"; ffi().nflex],
         flexedge_rigid: &[bool [force]; "are both edge vertices in same body"; ffi().nflexedge],
         flex_centered: &[bool [force]; "are all vertex coordinates (0,0,0)"; ffi().nflex],
