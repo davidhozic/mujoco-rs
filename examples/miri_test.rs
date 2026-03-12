@@ -296,6 +296,13 @@ fn test_auxiliary(model: &MjModel) {
     assert!(stat.meanmass > 0.0);
 }
 
+#[cfg(not(miri))]
+fn main() {
+    eprintln!("This example is intended for Miri testing only.");
+    eprintln!("Run with: cargo +nightly miri run --example miri_test");
+}
+
+#[cfg(miri)]
 fn main() {
     unsafe extern "C" {
         fn setup_miri_bump_allocator(buffer: *mut u8, size: usize);
