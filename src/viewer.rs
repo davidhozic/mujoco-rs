@@ -311,7 +311,9 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
                 }
             }
 
-            data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32);
+            // SAFETY: mjSTATE_INTEGRATION does not include EQ_ACTIVE, so no
+            // non-boolean bytes are written to eq_active.
+            unsafe { data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32) };
         }
 
         if full_sync {
@@ -1387,7 +1389,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewerBuilder<M> {
 
         let ngeom = model.ffi().ngeom as usize;
         let scene = MjvScene::new(model.clone(), ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
-        let context = MjrContext::new(&model);
+        // SAFETY: The OpenGL context was made current above via gl_surface.
+        let context = unsafe { MjrContext::new(&model) };
         let camera  = MjvCamera::new_free(&model);
 
         // Tracking of changes made between syncs

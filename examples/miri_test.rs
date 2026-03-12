@@ -149,7 +149,9 @@ fn test_inverse_dynamics_and_state<'a>(model: &'a MjModel, data: &mut MjData<&'a
     let full_state = mjtState_::mjSTATE_FULLPHYSICS as u32;
     let state = data.get_state(full_state);
     assert!(!state.is_empty());
-    data.set_state(&state, full_state);
+    // SAFETY: full_state is mjSTATE_FULLPHYSICS which restores from a previously read
+    // state; eq_active bytes come from mj_getState and are always valid (0 or 1).
+    unsafe { data.set_state(&state, full_state) };
 
     let mut data2 = model.make_data();
     data.copy_to(&mut data2);
@@ -296,6 +298,13 @@ fn test_auxiliary(model: &MjModel) {
     assert!(stat.meanmass > 0.0);
 }
 
+#[cfg(not(miri))]
+fn main() {
+    eprintln!("This example is intended for Miri testing only.");
+    eprintln!("Run with: cargo +nightly miri run --example miri_test");
+}
+
+#[cfg(miri)]
 fn main() {
     unsafe extern "C" {
         fn setup_miri_bump_allocator(buffer: *mut u8, size: usize);

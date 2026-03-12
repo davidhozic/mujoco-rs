@@ -186,7 +186,8 @@ which can be configured at the top of the model's XML like so:
         )?;
 
         // Initialize the rendering context to render to the offscreen buffer.
-        let mut context = MjrContext::new(&model);
+        // SAFETY: gl_state was just created above, establishing a current GL context.
+        let mut context = unsafe { MjrContext::new(&model) };
         context.offscreen();
         context.change_font(self.font_scale);
 
@@ -342,6 +343,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Sets the font size.
     pub fn set_font_scale(&mut self, font_scale: MjtFontScale) {
+        self.gl_state.make_current().expect("failed to make GL context current");
         self.context.change_font(font_scale);
     }
 

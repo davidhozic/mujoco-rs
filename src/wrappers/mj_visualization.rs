@@ -303,9 +303,13 @@ impl MjvGeom {
 
     /// Writes `s` into the fixed-size label buffer, NUL-terminating it.
     /// # Errors
+    /// Returns [`MjSceneError::NonAsciiLabel`] when `s` contains non-ASCII characters.
     /// Returns [`MjSceneError::LabelTooLong`] when `s` exceeds the buffer capacity
     /// (`self.label.len() - 1` bytes).
     pub fn set_label(&mut self, s: &str) -> Result<(), MjSceneError> {
+        if !s.is_ascii() {
+            return Err(MjSceneError::NonAsciiLabel);
+        }
         let capacity = self.label.len() - 1;
         if s.len() > capacity {
             return Err(MjSceneError::LabelTooLong { len: s.len(), capacity });
@@ -398,11 +402,17 @@ impl MjvFigure {
 impl MjvFigure {
 
     /// Checks if the buffer is full for plot with `plot_index`.
+    ///
+    /// # Panics
+    /// Panics if `plot_index >= mjMAXLINE`.
     pub fn full(&self, plot_index: usize) -> bool {
         self.linepnt[plot_index] >= (self.linedata[plot_index].len() / 2) as i32
     }
 
     /// Checks if the buffer is empty for plot with `plot_index`.
+    ///
+    /// # Panics
+    /// Panics if `plot_index >= mjMAXLINE`.
     pub fn empty(&self, plot_index: usize) -> bool {
         self.linepnt[plot_index] == 0
     }
@@ -420,9 +430,13 @@ impl MjvFigure {
     /// Fallible version of [`MjvFigure::push`].
     ///
     /// # Errors
+    /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
     /// Returns [`MjSceneError::FigureBufferFull`] if the buffer for
     /// `plot_index` is already at capacity.
     pub fn try_push(&mut self, plot_index: usize, x: f32, y: f32) -> Result<(), MjSceneError> {
+        if plot_index >= mjMAXLINE as usize {
+            return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
+        }
         let plot = &mut self.linedata[plot_index];
         let capacity = plot.len() / 2;
         let point_index = self.linepnt[plot_index] as usize;
@@ -448,6 +462,7 @@ impl MjvFigure {
     /// Fallible version of [`MjvFigure::set_at`].
     ///
     /// # Errors
+    /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
     /// Returns [`MjSceneError::FigureIndexOutOfBounds`] if `point_index` is
     /// not within the current data range for the given plot.
     pub fn try_set_at(
@@ -457,6 +472,9 @@ impl MjvFigure {
         x: f32,
         y: f32,
     ) -> Result<(), MjSceneError> {
+        if plot_index >= mjMAXLINE as usize {
+            return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
+        }
         let current_len = self.linepnt[plot_index] as usize;
         if point_index >= current_len {
             return Err(MjSceneError::FigureIndexOutOfBounds {
@@ -473,6 +491,9 @@ impl MjvFigure {
 
     /// Clears the plot with `maybe_plot_index`.
     /// If `maybe_plot_index` is [`None`], all plots will be cleared.
+    ///
+    /// # Panics
+    /// Panics if `maybe_plot_index` is `Some(i)` and `i >= mjMAXLINE`.
     pub fn clear(&mut self, maybe_plot_index: Option<usize>) {
         if let Some(plot_index) = maybe_plot_index {
             self.linepnt[plot_index] = 0;
@@ -485,6 +506,9 @@ impl MjvFigure {
     /// # Returns
     /// Returns [`Some(first element)`](Some) when plot contains any elements, otherwise [`None`] is returned.
     /// The return format is (x, y).
+    ///
+    /// # Panics
+    /// Panics if `plot_index >= mjMAXLINE`.
     pub fn pop_front(&mut self, plot_index: usize) -> Option<(f32, f32)> {
         let len = self.linepnt[plot_index];
         if len <= 0 {
@@ -505,6 +529,9 @@ impl MjvFigure {
     /// # Returns
     /// Returns [`Some(last element)`](Some) when plot contains any elements, otherwise [`None`] is returned.
     /// The return format is (x, y).
+    ///
+    /// # Panics
+    /// Panics if `plot_index >= mjMAXLINE`.
     pub fn pop_back(&mut self, plot_index: usize) -> Option<(f32, f32)> {
         let old_len = self.linepnt[plot_index];
         if old_len <= 0 {
@@ -518,6 +545,9 @@ impl MjvFigure {
     }
 
     /// Cuts the first `n` elements from the plot data of plot with `plot_index`.
+    ///
+    /// # Panics
+    /// Panics if `plot_index >= mjMAXLINE`.
     pub fn cut_front(&mut self, plot_index: usize, n: usize) {
         let len = self.linepnt[plot_index];
         if len < 0 || (len as usize) < n {
