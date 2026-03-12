@@ -1795,7 +1795,6 @@ mod test {
         assert!(cvel[1] > 0.0);  // wy should be positive when rolling with positive vx.
         assert_relative_eq!(cvel[2], 0.0, epsilon=1e-9);
         assert!(cvel[3] > 0.0);  // vx should point in the direction of the applied force.
-        // assert_relative_eq!(cvel[4], 0.0, epsilon=1e-9);  // vy should be 0, but slight simulation instability across architectures makes this flaky.
         // assert_relative_eq!(cvel[5], 0.0);  // vz should be 0, but we don't test it due to jumpiness (instability) of the ball.
 
         assert_relative_eq!(view.xfrc_applied[0], 5.0, epsilon=1e-9); // the original force should stay applied.
