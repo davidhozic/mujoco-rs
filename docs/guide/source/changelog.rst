@@ -40,7 +40,7 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: New features
 
-- |mj_editing|:
+- :ref:`model_editing`:
 
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec` now implements
     ``Clone`` (panics on allocation failure) and has a new
