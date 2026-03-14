@@ -1,13 +1,15 @@
 .. _basic_sim:
 
+.. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
+.. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
+
 ======================
 Basic simulation
 ======================
 
 Loading
 ==========================
-To perform basic simulation with MuJoCo, create a :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
-struct by calling one of the following methods:
+To perform basic simulation with MuJoCo, create a |mj_model| struct by calling one of the following methods:
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml` (loads XML from a file),
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml_vfs`
@@ -28,8 +30,8 @@ For example:
     }
 
 
-:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel` represents the compiled model from an XML
-file and contains everything from basic metadata to physics parameters.
+|mj_model| represents the compiled model from an XML file and contains everything from
+basic metadata to physics parameters.
 
 For managing actual simulation state, :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
 is used. It can be created either through the :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>new`
@@ -49,7 +51,8 @@ For example:
 
     Using the :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>new` method is far **more flexible**
     than using the :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>make_data` method.
-    The former allows parameters to be of any type as long as they implement the `Deref <https://doc.rust-lang.org/std/ops/trait.Deref.html>`_
+    The former allows parameters to be of any type as long as they implement
+    the `Deref <https://doc.rust-lang.org/std/ops/trait.Deref.html>`_
     trait (e.g., `Box\<MjModel\> <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_). For example:
 
     .. code-block:: rust
@@ -124,3 +127,43 @@ for precise timing.
             thread::sleep(Duration::from_secs_f64(timestep))
         }
     }
+
+
+Changing model's parameters
+================================
+For purposes transfer from simulation to reality in reinforcement learning
+it is beneficial to perform domain randomization [Tobin2017]_.
+Because MuJoCo-rs tries to keep the API contract correct in terms of Rust lifetimes,
+we don't allow the |mj_model| to be modified while any |mj_data| instances created
+from the same |mj_model| exist.
+
+To modify such parameters, without recreating |mj_data|, use the (unsafe)
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` method,
+which swaps the |mj_model| owned by |mj_data| for a the |mj_model| given as parameter.
+
+.. danger::
+
+    Not all parameters of |mj_model| are safe to change.
+    See `MuJoCo's documentation <https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes>`_
+    for a list of parameters that are safe to change.
+
+.. code-block:: rust
+    :linenos:
+    :emphasize-lines: 8
+
+    fn main() {
+        let mut model_template = Box::new(MjModel::from_xml("model.xml").expect("could not load the model"));
+
+        let model = model_template.clone();
+        let mut data = MjData::new(model);
+
+        // Modify simulation timestep
+        model_template.opt_mut().timestep = 0.004;
+        model_template = unsafe { data.swap_model(model_template).unwrap() };
+    }
+
+.. [Tobin2017] J. Tobin, R. Fong, A. Ray, J. Schneider, W. Zaremba, and P. Abbeel,
+   "Domain randomization for transferring deep neural networks from simulation to
+   the real world," in *2017 IEEE/RSJ International Conference on Intelligent
+   Robots and Systems (IROS)*, Vancouver, BC, Canada, Sep. 2017, pp. 23--30.
+   doi: `10.1109/IROS.2017.8202133 <https://ieeexplore.ieee.org/document/8202133>`_

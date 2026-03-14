@@ -86,6 +86,45 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             .ok_or(MjDataError::AllocationFailed)
     }
 
+    /// Sets a new [`MjModel`] to be used within the instance. This can be used to modify [`MjModel`]'s
+    /// parameters without causing size mismatches or violating borrow checker's requirements.
+    /// This can be done by keeping a clone of the model, which is then modified and swapped.
+    /// 
+    /// # Returns
+    /// When successful (the signature matches), [`Ok`] containing the old [`MjModel`] is returned.
+    /// 
+    /// # Errors
+    /// [`MjDataError::SignatureMismatch`] is returned when the signature of `model` does
+    /// not match the signature of the model this data belongs to.
+    /// 
+    /// # Safety
+    /// **Not all parameters are safe to change**, hence this method is made to be unsafe.
+    /// See [here](https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes)
+    /// to see what parameters can be changed.
+    /// 
+    /// If model recompilation speed is not an issue,
+    /// it is recommended to use [`MjSpec`](crate::wrappers::mj_editing::MjSpec) instead.
+    /// 
+    /// # Example
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// let mut model_template = Box::new(MjSpec::new().compile().unwrap());
+    /// let model_used = model_template.clone();
+    /// let mut data = MjData::new(model_used);
+    /// 
+    /// model_template.opt_mut().timestep = 0.004;
+    /// model_template = unsafe { data.swap_model(model_template).unwrap() };
+    /// ```
+    pub unsafe fn swap_model(&mut self, model: M) -> Result<M, MjDataError> {
+        let new_signature = model.signature();
+        let current_signature = self.model.signature();
+        if new_signature != current_signature {
+            return Err(MjDataError::SignatureMismatch { source: new_signature, destination: current_signature });
+        }
+
+        Ok(std::mem::replace(&mut self.model, model))
+    }
+
     /// Returns a slice of detected contacts.
     /// To obtain the contact force, call [`MjData::contact_force`].
     pub fn contacts(&self) -> &[MjContact] {
@@ -4440,5 +4479,23 @@ mod test {
                 assert_eq!(post_subtree_angmom[i][j], unsafe { *data.ffi().subtree_angmom.add(i * 3 + j) });
             }
         }
+    }
+
+    /// Test swap of [`MjModel`] borrowed by [`MjData`].
+    #[test]
+    fn test_model_swap() {
+        const OLD_TIMESTEP: f64 = 0.002;
+        const NEW_TIMESTEP: f64 = 0.1;
+
+        let mut model_template = Box::new(MjSpec::new().compile().unwrap());
+        model_template.opt_mut().timestep = OLD_TIMESTEP;
+
+        let model = model_template.clone();
+        let mut data = MjData::new(model);
+
+        model_template.opt_mut().timestep = NEW_TIMESTEP;
+        model_template = unsafe { data.swap_model(model_template).unwrap() };
+        assert_eq!(model_template.opt().timestep, OLD_TIMESTEP);
+        assert_eq!(data.model().opt().timestep, NEW_TIMESTEP);
     }
 }

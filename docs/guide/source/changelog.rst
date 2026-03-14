@@ -383,6 +383,11 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
 
 - |mj_data|:
 
+  - *Wrapper:*
+    (unsafe) :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model`.
+    This method allows the |mj_model| stored/borrowed within |mj_data| to be swapped
+    with another |mj_model|. This facilities model modification of the model's physics parameters
+    without violating borrow-checkers assumptions.
   - *Kinematics:*
     :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward_kinematics`.
   - *Ray casting:*
