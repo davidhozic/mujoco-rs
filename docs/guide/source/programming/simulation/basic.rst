@@ -1,7 +1,7 @@
-.. _basic_sim:
-
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
 .. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
+
+.. _basic_sim:
 
 ======================
 Basic simulation
@@ -64,9 +64,14 @@ For example:
             let model_ref = data.model();  // obtain a reference to the model
         }
 
-    Note that `Box\<MjModel\> <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_ can't be used in contexts
-    that require explicit borrowing. One such example is :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
-    In such cases, `Rc\<MjModel\> <https://doc.rust-lang.org/std/rc/struct.Rc.html>`_ can be used instead.
+    Note that all related APIs must use the same model-handle type ``M``.
+    For example, if you create ``MjData<Box<MjModel>>``, APIs expecting
+    ``MjData<&MjModel>`` (or ``Rc``/``Arc`` variants) are not interchangeable.
+    For shared ownership, use
+    `Rc\<MjModel\> <https://doc.rust-lang.org/std/rc/struct.Rc.html>`_
+    (single-threaded) or
+    `Arc\<MjModel\> <https://doc.rust-lang.org/std/sync/struct.Arc.html>`_
+    when thread-sharing is needed.
 
     Using ``Box`` or ``Rc`` (instead of direct references) allows usage in environments with lifetime restrictions.
     One such example is **Python bindings** created with **PyO3**.

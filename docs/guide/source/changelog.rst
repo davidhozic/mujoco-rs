@@ -369,17 +369,14 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
 
 .. rubric:: New methods and public API
 
+Methods already listed in the ``Error handling`` tables above are not repeated here.
+This section highlights additional APIs and public exports introduced in 3.0.0.
+
 - The :docs-rs:`~mujoco_rs::vis_common` module is now public
   (requires the ``viewer`` or ``renderer`` feature), exposing
   :docs-rs:`~mujoco_rs::vis_common::<fn>sync_geoms`,
   :docs-rs:`~mujoco_rs::vis_common::<fn>write_png`, and
   :docs-rs:`~mujoco_rs::vis_common::<fn>flip_image_vertically` for direct use.
-
-- |mj_spec|:
-
-  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_parse` and
-    :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>from_parse_vfs`, which
-    wrap :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_parse`.
 
 - |mj_data|:
 
@@ -397,18 +394,6 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
   - *State and forces:*
     :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_state_from_data`,
     :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>apply_ft`.
-  - *Sensor and control history:*
-    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_ctrl_history`,
-    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_sensor_history`,
-    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_ctrl`,
-    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_sensor_into`,
-    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_sensor_fixed`,
-    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_sensor`.
-
-- |mj_model|:
-
-  - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state` and
-    :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>extract_state_into`.
 
 - |mjs_tendon|:
 
@@ -458,18 +443,17 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
     :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw`
     now use ``bytemuck`` safe byte-reinterpretation APIs with a runtime length check.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml`
-    now declares its error buffer as ``[u8]`` and uses ``.cast::<i8>()`` for the C call,
-    then reads back safely via ``CStr::from_bytes_until_nul`` -- eliminating the previous
-    ``from_raw_parts`` + ``CStr::from_ptr`` pattern.
+    now uses a dedicated ``MjModelError::SaveFailed`` path with explicit error-message
+    propagation.
   - ``write_mjs_vec_byte`` and
     :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`
     now require ``T: bytemuck::NoUninit`` for compile-time verified byte reinterpretation.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>label` and
     :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom::<method>set_label`
     use ``bytemuck::cast_slice`` / ``cast_slice_mut`` for safe ``i8``-to-``u8`` conversion.
-  - Replaced ``unsafe { CStr::from_ptr(...) }`` with safe ``CStr::from_bytes_until_nul``
-    across error-buffer handling in |mj_model|, |mj_spec|, and the ``c_str_as_str_method!``
-    macro. ``check_raw_model`` and ``check_spec`` are now safe functions.
+  - ``check_raw_model`` and ``check_spec`` are now safe helper functions.
+    The ``c_str_as_str_method!`` macro now reads fixed-size C string buffers via
+    ``CStr::from_bytes_until_nul``.
 
 - Internal ``write_mjs_*`` / ``append_mjs_*`` utility functions are now marked ``unsafe fn``
   with documented safety contracts, requiring explicit ``unsafe`` blocks at every call site.
@@ -480,8 +464,6 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
 
 *Compile-time assertions:*
 
-- Module :docs-rs:`~mujoco_rs::mujoco_c` now uses compile-time layout tests to ensure
-  declarations match the platform ABI of the linked MuJoCo library.
 - Added ``const`` assertions in the viewer UI that ``GL_EFFECT_MAP``, ``VIS_OPT_MAP``,
   ``LABEL_TYPE_MAP``, and ``FRAME_TYPE_MAP`` lengths match the corresponding MuJoCo
   sentinel values (``mjNRNDFLAG``, ``mjNVISFLAG``, ``mjNLABEL``, ``mjNFRAME``).
@@ -528,8 +510,6 @@ the remaining methods existed in 2.x but previously returned bare types or ``io:
 - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`: mouse movement normalization now
   uses ``inner_size()`` instead of ``outer_size()``, fixing incorrect cursor mapping
   when window decorations are present.
-- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` UI: fixed a potential panic when
-  displaying a camera name for an out-of-bounds ``fixedcamid``.
 - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth` now guards
   against division by zero when the depth range is zero (all values identical).

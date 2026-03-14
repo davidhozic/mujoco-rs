@@ -31,6 +31,45 @@ MuJoCo-rs 3.0.0 links against MuJoCo **3.6.0**. Make sure to download and use th
 matching MuJoCo release. See :ref:`installation` for details.
 
 
+Model-editing API changes
+----------------------------
+
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name` now returns
+``Result<(), MjEditError>`` instead of ``()``.
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name` still returns
+``&mut Self``, but now panics on duplicate names.
+
+``MjsOrientation::switch_quat`` no longer has a generic type parameter. Remove turbofish
+syntax and call it directly.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+  item.set_name("arm_joint");
+  item.with_name("arm_joint");
+  orientation.switch_quat::<[f64; 4]>();
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+  item.set_name("arm_joint")?;
+  item.with_name("arm_joint");
+  orientation.switch_quat();
+
+
+Core ``Send``/``Sync`` bound tightening
+-----------------------------------------
+
+The ``unsafe impl Send``/``Sync`` bounds for core wrappers were tightened.
+In particular, |mj_data| and |mjv_scene| now require the inner model handle ``M``
+to itself be ``Send``/``Sync``.
+
+If you were using non-thread-safe handles (for example ``Rc<MjModel>``) in threaded code,
+switch to ``Arc<MjModel>``.
+
+
 Error handling
 -----------------------
 
@@ -255,29 +294,6 @@ manually, wrap the call in an ``unsafe`` block and ensure a valid GL context is 
     let context = unsafe { MjrContext::new(&model) };
 
 
-``MjViewerCpp::render`` is now ``unsafe``
-----------------------------------------------------------
-
-:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` is now ``unsafe fn``.
-It must be called from the **main thread** as GLFW requires main-thread access and calling
-either from another thread causes undefined behaviour.
-
-**Before (2.x / early 3.0.0):**
-
-.. code-block:: rust
-
-    viewer.sync();
-    viewer.render().unwrap();
-
-**After (3.0.0):**
-
-.. code-block:: rust
-
-    viewer.sync();
-    // SAFETY: called from the main thread.
-    unsafe { viewer.render().unwrap() };
-
-
 ``MjData::set_state`` and ``try_set_state`` are now ``unsafe``
 ----------------------------------------------------------------
 
@@ -305,8 +321,8 @@ re-validated as 0 or 1 (e.g. by calling ``mj_forward``/``mj_step``).
     unsafe { data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32) };
 
 
-``MjData::ray()`` parameter change
-----------------------------------------
+``Ray-casting`` parameter changes
+------------------------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` gained a new
 ``normal_out`` parameter. Pass ``None`` to preserve the previous behavior.
@@ -315,37 +331,33 @@ re-validated as 0 or 1 (e.g. by calling ``mj_forward``/``mj_step``).
 
 .. code-block:: rust
 
-    let (geom_id, dist) = data.ray(&pnt, &vec, None, true, -1);
+  let (geom_id, dist) = data.ray(&pnt, &vec, None, true, -1);
 
 **After (3.0.0):**
 
 .. code-block:: rust
 
-    let (geom_id, dist) = data.ray(&pnt, &vec, None, true, -1, None);
+  let (geom_id, dist) = data.ray(&pnt, &vec, None, true, -1, None);
 
 
 Similarly, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray` gained a
 new ``normals_out`` parameter and now returns ``Result``. Pass ``None`` to preserve the
 previous behavior.
 
-
-``mju_ray_geom()`` parameter change
-------------------------------------------
-
-:docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom` gained a new ``normal_out``
-parameter (``Option<&mut [MjtNum; 3]>``). Pass ``None`` to preserve the previous behavior.
+:docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom` also gained a new ``normal_out``
+parameter (``Option<&mut [MjtNum; 3]>``).
 
 **Before (2.x):**
 
 .. code-block:: rust
 
-    let dist = mju_ray_geom(&pos, &mat, &size, &pnt, &vec, geomtype);
+  let dist = mju_ray_geom(&pos, &mat, &size, &pnt, &vec, geomtype);
 
 **After (3.0.0):**
 
 .. code-block:: rust
 
-    let dist = mju_ray_geom(&pos, &mat, &size, &pnt, &vec, geomtype, None);
+  let dist = mju_ray_geom(&pos, &mat, &size, &pnt, &vec, geomtype, None);
 
 
 ``MjvPerturb::update_local_pos``
@@ -502,9 +514,9 @@ C++ viewer changes
 to implement ``Send + Sync`` (in addition to ``Deref<Target = MjModel> + Clone``). If you were
 passing a non-``Send``/``Sync`` wrapper (e.g., ``Rc<MjModel>``), switch to ``Arc<MjModel>``.
 
-:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` no longer accepts the
-``update_timer`` boolean parameter. The FPS timer is now always updated.
-The return type also changed from ``()`` to ``Result<(), &'static str>``.
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` is now ``unsafe fn``,
+must be called from the main thread, no longer accepts the ``update_timer`` boolean parameter,
+and now returns ``Result<(), &'static str>``.
 
 ``MjViewerCpp::__raw()`` has been removed. There is no direct replacement; the method
 exposed internal C++ binding pointers that are no longer part of the public API.
@@ -519,7 +531,8 @@ exposed internal C++ binding pointers that are no longer part of the public API.
 
 .. code-block:: rust
 
-    viewer.render().unwrap();
+    // SAFETY: called from the main thread.
+    unsafe { viewer.render().unwrap() };
 
 
 ``MjViewerCpp::launch_passive()`` is now ``unsafe``
@@ -533,14 +546,14 @@ address for the lifetime of the viewer.
 
 .. code-block:: rust
 
-    let viewer = MjViewerCpp::launch_passive(model, data, 100);
+  let viewer = MjViewerCpp::launch_passive(&model, &data, 100);
 
 **After (3.0.0):**
 
 .. code-block:: rust
 
     // SAFETY: model and data are kept alive and at a stable address.
-    let viewer = unsafe { MjViewerCpp::launch_passive(model, data, 100) };
+  let viewer = unsafe { MjViewerCpp::launch_passive(&model, &data, 100) };
 
 
 ``MjData::jac_subtree_com()`` parameter change

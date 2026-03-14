@@ -19,6 +19,12 @@ Rust's borrow checker rules. Re-looking up names each step would also be expensi
 To overcome this, "info" structs exist, which cache the required information for fast view
 creation after each step.
 
+.. warning::
+
+    Cached info structs are tied to the model signature they were created from.
+    Calling ``view()`` / ``view_mut()`` with data from an incompatible model
+    will panic with a model-signature mismatch.
+
 
 Reading
 ======================

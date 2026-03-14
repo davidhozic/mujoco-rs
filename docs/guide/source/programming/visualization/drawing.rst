@@ -19,12 +19,17 @@ There are two things that expose a scene for drawing custom visual-only geoms:
 
 Drawing to a scene
 ===================
-To draw custom geoms to a scene inside a viewer or a renderer, applications call two methods each frame:
+To draw custom geoms to a scene inside a viewer or a renderer, applications typically call two methods when updating custom geoms:
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>clear_geom`, which will
   clear all the existing geoms.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>create_geom`, which will
   add a new geom to the scene.
+
+.. note::
+
+        ``create_geom`` returns ``Result`` and can fail when the user scene has no free geom slots.
+        Increase the configured user-geom capacity if you hit this limit.
 
 This :gh-example:`example <drawing_scene_viewer.rs>` shows how to draw a line between two balls.
 

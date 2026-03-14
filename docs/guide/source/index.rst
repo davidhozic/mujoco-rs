@@ -77,9 +77,8 @@ Optional Cargo features can be enabled:
 
   - This is only available on Linux and Windows.
   - The environment variable ``MUJOCO_DOWNLOAD_DIR`` must be set to the absolute path of the download location.
-  - Downloaded MuJoCo library is still a shared library, see
-    `installation <https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco>`_
-    for information on complete configuration.
+  - Downloaded MuJoCo library is still a shared library; see :ref:`mujoco_dep`
+    for complete configuration details.
 
 
 By default, ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are enabled.
