@@ -19,13 +19,12 @@ cd mujoco
 rm -rf build
 ```
 
-Then configure and compile MuJoCo statically with ASan and UBSan injected. We use Ninja for speed and Clang for the best sanitizer integration:
+Then configure and compile MuJoCo statically with ASan and UBSan injected. We use Ninja for speed and Clang for best sanitizer integration:
 
 ```bash
 cmake -S . -B build \
     -DCMAKE_BUILD_TYPE:STRING=Release \
     -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON \
-    -DCMAKE_INSTALL_PREFIX:STRING="$(pwd)/mujoco_install" \
     -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF \
     -DMUJOCO_BUILD_TESTS=OFF \
     -DBUILD_SHARED_LIBS:BOOL=OFF \
@@ -33,11 +32,22 @@ cmake -S . -B build \
     -DCMAKE_C_COMPILER:STRING=clang \
     -DCMAKE_CXX_COMPILER:STRING=clang++ \
     -DMUJOCO_HARDEN:BOOL=ON \
-    -DCMAKE_C_FLAGS="-fsanitize=address,undefined" \
-    -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined"
+    -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -DADDRESS_SANITIZER -Dasm=__asm__ -Wno-gcc-compat" \
+    -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -DADDRESS_SANITIZER -Wno-gcc-compat"
 
-cmake --build build --parallel --target glfw libmujoco_simulate mujoco --config=Release
+cmake --build build --parallel --target mujoco --config=Release
 ```
+
+> [!IMPORTANT]
+> `-DADDRESS_SANITIZER` is **required** for MuJoCo's internal sanitizer-gated code paths (`mjsan.h` poison/unpoison instrumentation).
+>
+> `-Dasm=__asm__` is **required** for strict C11 compliance with inline assembly in the MuJoCo engine.
+>
+> `-Wno-gcc-compat` suppresses Clang warnings about GCC attribute syntax (e.g., `always_inline` placement), which are treated as errors by `-Werror` in the MuJoCo build.
+>
+> This workflow is **Clang-optimized**: We use Clang for superior sanitizer integration and keep warning flags minimal.
+>
+> The ASAN workflow only needs the core static library (`mujoco` target) for Rust-side ASAN linking.
 
 ## Step 2: Build and Run `mujoco-rs` with ASan
 
@@ -47,6 +57,7 @@ To run tests:
 ```bash
 export MUJOCO_STATIC_LINK_DIR="$(realpath mujoco/build/lib64)"
 export RUSTFLAGS="-Zsanitizer=address"
+export CARGO_TERM_PROGRESS_WHEN=never
 
 # Example: Run unit tests
 cargo +nightly test --lib --target x86_64-unknown-linux-gnu --no-default-features --features renderer
@@ -56,11 +67,23 @@ To run a specific example (e.g., `basic`):
 ```bash
 export MUJOCO_STATIC_LINK_DIR="$(realpath mujoco/build/lib64)"
 export RUSTFLAGS="-Zsanitizer=address"
+export CARGO_TERM_PROGRESS_WHEN=never
 
-cargo +nightly run --example basic --target x86_64-unknown-linux-gnu "--no-default-features" --features "<required features here>"
+cargo +nightly run --example basic --target x86_64-unknown-linux-gnu --no-default-features
 ```
 
 **IMPORTANT:** Always run the `examples/miri_test.rs` example with address sanitizer as well (in addition to other tests).
+
+```bash
+export MUJOCO_STATIC_LINK_DIR="$(realpath mujoco/build/lib64)"
+export RUSTFLAGS="-Zsanitizer=address"
+export CARGO_TERM_PROGRESS_WHEN=never
+
+cargo +nightly run --example miri_test --target x86_64-unknown-linux-gnu --no-default-features --features renderer
+```
+
+> [!NOTE]
+> `examples/miri_test.rs` executes a `#[cfg(not(miri))]` stub when run normally, so it is still required by project policy but does not provide deep runtime coverage outside actual Miri runs.
 
 > [!TIP]
 > **Why `--target x86_64-unknown-linux-gnu`?**
