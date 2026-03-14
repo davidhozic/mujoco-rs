@@ -273,7 +273,8 @@ macro_rules! info_method {
             #[doc = concat!(
                 "Obtains a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] struct containing information about the name, id, and ",
                 "indices required for obtaining references to the correct locations in [`Mj", stringify!($info_type), "`]. ",
-                "The actual view can be obtained via [`", stringify!([<Mj $type_:camel $info_type Info>]), "::view`].\n",
+                "The actual view can be obtained via [`", stringify!([<Mj $type_:camel $info_type Info>]), "::view`] ",
+                "or [`", stringify!([<Mj $type_:camel $info_type Info>]), "::try_view`].\n",
                 "# Panics\n",
                 "A panic will occur if `name` contains `\\0` characters."
             )]
@@ -355,19 +356,49 @@ macro_rules! info_with_view {
 
             impl [<Mj $name:camel $info_type Info>] {
                 #[doc = concat!("Returns a mutable view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
+                                "\n# Errors\n",
+                                "Returns `Err(", stringify!([<Mj $info_type Error>]), "::SignatureMismatch)` if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
+                pub fn try_view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> Result<[<Mj $name:camel $info_type ViewMut>]<'p>, $crate::error::[<Mj $info_type Error>]> {
+                    let destination_signature = [<$info_type:lower>].signature();
+                    if self.model_signature != destination_signature {
+                        return Err($crate::error::[<Mj $info_type Error>]::SignatureMismatch {
+                            source: self.model_signature,
+                            destination: destination_signature,
+                        });
+                    }
+
+                    Ok(view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], $crate::util::PointerViewMut::new))
+                }
+
+                #[doc = concat!("Returns a mutable view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
                                 "\n# Panics\n",
-                                "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
+                                "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.\n",
+                                "Use `try_view_mut()` to handle this mismatch as a `Result`.")]
                 pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
-                    assert_eq!(self.model_signature, [<$info_type:lower>].signature(), "model signature mismatch");
-                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], $crate::util::PointerViewMut::new)
+                    self.try_view_mut([<$info_type:lower>]).unwrap_or_else(|_| panic!("model signature mismatch"))
+                }
+
+                #[doc = concat!("Returns a view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
+                                "\n# Errors\n",
+                                "Returns `Err(", stringify!([<Mj $info_type Error>]), "::SignatureMismatch)` if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
+                pub fn try_view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> Result<[<Mj $name:camel $info_type View>]<'p>, $crate::error::[<Mj $info_type Error>]> {
+                    let destination_signature = [<$info_type:lower>].signature();
+                    if self.model_signature != destination_signature {
+                        return Err($crate::error::[<Mj $info_type Error>]::SignatureMismatch {
+                            source: self.model_signature,
+                            destination: destination_signature,
+                        });
+                    }
+
+                    Ok(view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], $crate::util::PointerView::new))
                 }
 
                 #[doc = concat!("Returns a view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
                                 "\n# Panics\n",
-                                "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
+                                "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.\n",
+                                "Use `try_view()` to handle this mismatch as a `Result`.")]
                 pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
-                    assert_eq!(self.model_signature, [<$info_type:lower>].signature(), "model signature mismatch");
-                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], $crate::util::PointerView::new)
+                    self.try_view([<$info_type:lower>]).unwrap_or_else(|_| panic!("model signature mismatch"))
                 }
             }
 

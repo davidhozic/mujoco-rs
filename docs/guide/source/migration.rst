@@ -184,6 +184,20 @@ that returned ``Option<MjModel>`` has been replaced:
     let model_copy = model.try_clone()?;
 
 
+``MjModel`` mutable array access restrictions
+-----------------------------------------------
+
+Mutable flat-slice accessors on |mj_model| are now disabled for structurally
+unsafe fields (address/index/topology arrays).
+
+If your code previously mutated such fields through ``*_mut`` methods, migrate to
+one of the following:
+
+- Recompile through |mj_spec| for structural edits.
+- Restrict runtime changes to fields that are safe to mutate.
+- Use per-item ``view_mut()`` accessors for safe parameter updates.
+
+
 ``try_sync()``
 -----------------------------
 

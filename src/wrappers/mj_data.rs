@@ -97,8 +97,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// [`MjDataError::SignatureMismatch`] is returned when the signature of `model` does
     /// not match the signature of the model this data belongs to.
     /// 
-    /// # Safety
-    /// **Not all parameters are safe to change**, hence this method is made to be unsafe.
+    /// # Notes
+    /// This method only validates model-signature compatibility.
+    /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
     /// See [here](https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
     /// 
@@ -113,9 +114,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// let mut data = MjData::new(model_used);
     /// 
     /// model_template.opt_mut().timestep = 0.004;
-    /// model_template = unsafe { data.swap_model(model_template).unwrap() };
+    /// model_template = data.swap_model(model_template).unwrap();
     /// ```
-    pub unsafe fn swap_model(&mut self, model: M) -> Result<M, MjDataError> {
+    pub fn swap_model(&mut self, model: M) -> Result<M, MjDataError> {
         let new_signature = model.signature();
         let current_signature = self.model.signature();
         if new_signature != current_signature {
@@ -2572,6 +2573,47 @@ mod test {
     }
 
     #[test]
+    #[should_panic(expected = "model signature mismatch")]
+    fn test_signature_mismatch_view_mut_panics() {
+        let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
+        let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();
+
+        let data1 = model1.make_data();
+        let joint_info1 = data1.joint("j1").unwrap();
+
+        let mut data2 = model2.make_data();
+        let _view = joint_info1.view_mut(&mut data2);
+    }
+
+    #[test]
+    fn test_try_view_signature_mismatch() {
+        let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
+        let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();
+
+        let data1 = model1.make_data();
+        let joint_info1 = data1.joint("j1").unwrap();
+        let mut data2 = model2.make_data();
+
+        let err = joint_info1.try_view(&data2).unwrap_err();
+        match err {
+            MjDataError::SignatureMismatch { source, destination } => {
+                assert_eq!(source, data1.signature());
+                assert_eq!(destination, data2.signature());
+            }
+            other => panic!("expected SignatureMismatch, got {other:?}"),
+        }
+
+        let err = joint_info1.try_view_mut(&mut data2).unwrap_err();
+        match err {
+            MjDataError::SignatureMismatch { source, destination } => {
+                assert_eq!(source, data1.signature());
+                assert_eq!(destination, data2.signature());
+            }
+            other => panic!("expected SignatureMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn test_signature_match_physics_param_change() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
         let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='2'/></body></worldbody></mujoco>").unwrap();
@@ -4494,7 +4536,7 @@ mod test {
         let mut data = MjData::new(model);
 
         model_template.opt_mut().timestep = NEW_TIMESTEP;
-        model_template = unsafe { data.swap_model(model_template).unwrap() };
+        model_template = data.swap_model(model_template).unwrap();
         assert_eq!(model_template.opt().timestep, OLD_TIMESTEP);
         assert_eq!(data.model().opt().timestep, NEW_TIMESTEP);
     }

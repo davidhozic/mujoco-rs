@@ -24,6 +24,8 @@ creation after each step.
     Cached info structs are tied to the model signature they were created from.
     Calling ``view()`` / ``view_mut()`` with data from an incompatible model
     will panic with a model-signature mismatch.
+    Use ``try_view()`` / ``try_view_mut()`` if you want to handle mismatches
+    as ``Result`` values instead of panicking.
 
 
 Reading
@@ -63,8 +65,13 @@ a reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so
         }
     }
 
-All the attributes inside views, like :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qpos`,
-are instances of :docs-rs:`mujoco_rs::util::<struct>PointerView`, which implements the
+If a signature mismatch is possible in your workflow, use
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>try_view`
+and handle the returned ``Result`` instead of panicking.
+
+View attributes like :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qpos`
+use :docs-rs:`mujoco_rs::util::<struct>PointerView` (or ``Option<PointerView>`` for optional
+fields). ``PointerView`` implements the
 `Deref <https://doc.rust-lang.org/std/ops/trait.Deref.html>`_ trait and on deref
 acts like a slice. While some fields might be scalars, we still treat those as arrays
 for implementation simplicity reasons.
@@ -88,6 +95,10 @@ and passed a mutable reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<stru
             joint_info.view_mut(&mut data).qpos[0] = 0.5;
         }
     }
+
+For fallible mutable access, use
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>try_view_mut`
+to get a ``Result`` instead of panicking on signature mismatch.
 
 
 Other views
