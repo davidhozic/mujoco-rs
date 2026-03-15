@@ -184,10 +184,10 @@ that returned ``Option<MjModel>`` has been replaced:
     let model_copy = model.try_clone()?;
 
 
-``MjModel`` mutable array access restrictions
+``MjModel`` and ``MjData``  mutable array access restrictions
 -----------------------------------------------
 
-Mutable flat-slice accessors on |mj_model| are now disabled for structurally
+Mutable flat-slice accessors on |mj_model| and |mj_data| are now disabled for structurally
 unsafe fields (address/index/topology arrays, and derived physics invariants
 such as ``body_simple``).
 
@@ -196,7 +196,8 @@ one of the following:
 
 - Recompile through |mj_spec| for structural edits.
 - Restrict runtime changes to fields that are safe to mutate.
-- Use per-item ``view_mut()`` accessors for safe parameter updates.
+- Access these via the low-level ``ffi()`` call, which gives
+  you access to raw array pointers.
 
 
 ``try_sync()``
