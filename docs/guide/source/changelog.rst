@@ -39,8 +39,9 @@ update of MuJoCo alone can increase the major version.
   (``switch_quat::<[f64; 4]>()``) must be updated to ``switch_quat()``.
 
 - |mj_model| now disables mutable flat-slice accessors for structurally unsafe arrays.
-  This prevents runtime mutation of address/index/topology fields that can
-  invalidate model memory layout assumptions.
+  This prevents runtime mutation of address/index/topology fields and derived
+  physics invariants (such as ``body_simple``) that can invalidate model memory
+  layout or simulation correctness assumptions.
 
 .. rubric:: New features
 

@@ -188,7 +188,8 @@ that returned ``Option<MjModel>`` has been replaced:
 -----------------------------------------------
 
 Mutable flat-slice accessors on |mj_model| are now disabled for structurally
-unsafe fields (address/index/topology arrays).
+unsafe fields (address/index/topology arrays, and derived physics invariants
+such as ``body_simple``).
 
 If your code previously mutated such fields through ``*_mut`` methods, migrate to
 one of the following:
