@@ -301,13 +301,14 @@ impl MjModel {
     fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[c_char]) -> Result<Self, MjModelError> {
         match NonNull::new(ptr_model) {
             Some(nn) => Ok(Self(nn)),
-            None => Err(MjModelError::LoadFailed(
+            None => {
                 // SAFETY: error_buffer is zero-initialised and MuJoCo always
                 // NUL-terminates the message it writes into it.
-                unsafe { CStr::from_ptr(error_buffer.as_ptr()) }
+                let message = unsafe { CStr::from_ptr(error_buffer.as_ptr()) }
                     .to_string_lossy()
-                    .into_owned()
-            )),
+                    .into_owned();
+                Err(MjModelError::LoadFailed(message))
+            }
         }
     }
 
@@ -1209,8 +1210,8 @@ impl MjModel {
         actuator_lengthrange: &[[MjtNum; 2] [force]; "feasible actuator length range"; ffi().nu],
         (allow_mut = false) actuator_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nu],
         (allow_mut = false) sensor_type: &[MjtSensor [force]; "sensor type"; ffi().nsensor],
-        sensor_datatype: &[MjtDataType [force]; "numeric data type"; ffi().nsensor],
-        sensor_needstage: &[MjtStage [force]; "required compute stage"; ffi().nsensor],
+        (allow_mut = false) sensor_datatype: &[MjtDataType [force]; "numeric data type"; ffi().nsensor],
+        (allow_mut = false) sensor_needstage: &[MjtStage [force]; "required compute stage"; ffi().nsensor],
         (allow_mut = false) sensor_objtype: &[MjtObj [force]; "type of sensorized object"; ffi().nsensor],
         (allow_mut = false) sensor_objid: &[i32; "id of sensorized object"; ffi().nsensor],
         (allow_mut = false) sensor_reftype: &[MjtObj [force]; "type of reference frame"; ffi().nsensor],

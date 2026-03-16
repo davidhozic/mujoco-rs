@@ -112,8 +112,9 @@ impl Default for MjvPerturb {
 impl MjvPerturb {
     /// Initializes the perturbation state for mouse interaction of the given `type_`.
     /// Must be called before [`MjvPerturb::move_`].
-    pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, model: &MjModel, data: &mut MjData<M>, scene: &MjvScene<M>) {
-        unsafe { mjv_initPerturb(model.ffi(), data.ffi_mut(), scene.ffi(), self); }
+    pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, data: &mut MjData<M>, scene: &MjvScene<M>) {
+        let model_ffi = { data.model().ffi() };
+        unsafe { mjv_initPerturb(model_ffi, data.ffi_mut(), scene.ffi(), self); }
         self.active = type_ as i32;
     }
 
@@ -128,12 +129,12 @@ impl MjvPerturb {
     /// This method **zeroes `xfrc_applied`** for all bodies before applying the perturbation
     /// force. Any external forces set on `data` before calling this method will be cleared.
     /// If you need to preserve external forces, apply them *after* calling this method.
-    pub fn apply<M: Deref<Target = MjModel>>(&mut self, model: &MjModel, data: &mut MjData<M>) {
-        unsafe {
-            data.xfrc_applied_mut().fill([0.0; 6]);
-            mjv_applyPerturbPose(model.ffi(), data.ffi_mut(), self, 0);
-            mjv_applyPerturbForce(model.ffi(), data.ffi_mut(), self);
-        }
+    pub fn apply<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+        data.xfrc_applied_mut().fill([0.0; 6]);
+        let model_ffi = { data.model().ffi() };
+        unsafe { mjv_applyPerturbPose(model_ffi, data.ffi_mut(), self, 0); }
+        let model_ffi = { data.model().ffi() };
+        unsafe { mjv_applyPerturbForce(model_ffi, data.ffi_mut(), self); }
     }
 
     /// Updates the body-local position of the selection point.

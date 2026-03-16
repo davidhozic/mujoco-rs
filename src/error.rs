@@ -269,12 +269,10 @@ pub enum MjEditError {
     NotFound,
     /// An element with the same name already exists.
     AlreadyExists,
-    /// This element cannot be deleted (e.g. the world body or defaults).
-    UnsupportedDeletion,
+    /// This operation is not supported for the current element.
+    UnsupportedOperation,
     /// MuJoCo returned an error while attempting to delete the element.
     DeleteFailed(String),
-    /// The referenced default class was not found.
-    ClassNotFound,
 }
 
 impl fmt::Display for MjEditError {
@@ -287,9 +285,8 @@ impl fmt::Display for MjEditError {
             Self::SaveFailed(msg) => write!(f, "save failed: {msg}"),
             Self::NotFound => write!(f, "referenced element not found"),
             Self::AlreadyExists => write!(f, "element with the same name already exists"),
-            Self::UnsupportedDeletion => write!(f, "this element cannot be deleted"),
+            Self::UnsupportedOperation => write!(f, "this operation is not supported"),
             Self::DeleteFailed(msg) => write!(f, "delete failed: {msg}"),
-            Self::ClassNotFound => write!(f, "default class not found"),
         }
     }
 }

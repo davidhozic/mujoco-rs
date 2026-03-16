@@ -67,7 +67,7 @@ pub trait SpecItem: Sized {
 
     /// Make the item inherit properties from a default class.
     /// # Errors
-    /// Returns [`MjEditError::ClassNotFound`] when the default with the `class_name` doesn't exist.
+    /// Returns [`MjEditError::NotFound`] when the default with the `class_name` doesn't exist.
     /// # Panics
     /// When the `class_name` contains '\0' characters, a panic occurs.
     fn set_default(&mut self, class_name: &str) -> Result<(), MjEditError> {
@@ -77,7 +77,7 @@ pub trait SpecItem: Sized {
         let spec = unsafe { mjs_getSpec(element) };
         let default = unsafe { mjs_findDefault(spec, cname.as_ptr()) };
         if default.is_null() {
-            return Err(MjEditError::ClassNotFound);
+            return Err(MjEditError::NotFound);
         }
 
         unsafe { mjs_setDefault(self.element_mut_pointer(), default); }
@@ -86,7 +86,7 @@ pub trait SpecItem: Sized {
 
     /// Builder style make the item inherit from a default class.
     /// # Errors
-    /// Returns [`MjEditError::ClassNotFound`] when the default with the `class_name` doesn't exist.
+    /// Returns [`MjEditError::NotFound`] when the default with the `class_name` doesn't exist.
     fn with_default(&mut self, class_name: &str) -> Result<&mut Self, MjEditError> {
         self.set_default(class_name)?;
         Ok(self)
@@ -95,7 +95,7 @@ pub trait SpecItem: Sized {
     /// Delete the item.
     /// # Errors
     /// - [`MjEditError::DeleteFailed`] if MuJoCo cannot delete the element.
-    /// - [`MjEditError::UnsupportedDeletion`] if the element cannot be deleted
+    /// - [`MjEditError::UnsupportedOperation`] if the element cannot be deleted
     ///   (e.g. the world body or default classes).
     /// # Safety
     /// Since this method can't consume variables holding pointers, nor can we consume the
