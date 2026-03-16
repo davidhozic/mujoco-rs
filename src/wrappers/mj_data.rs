@@ -1686,12 +1686,11 @@ info_with_view!(Data, site,
     [], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, tendon,
-    [[ten_] wrapadr: i32,
-     [ten_] wrapnum: i32,
-     [ten_] J: MjtNum,
+    [[ten_] J: MjtNum,
      [ten_] length: MjtNum,
      [ten_] velocity: MjtNum],
-    [],
+    [[ten_] wrapadr: i32,
+     [ten_] wrapnum: i32],
     [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
