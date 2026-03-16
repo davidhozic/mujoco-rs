@@ -1337,6 +1337,7 @@ info_with_view!(Model, actuator,
 	 [actuator_] cranklength: MjtNum, [actuator_] acc0: MjtNum,
 	 [actuator_] length0: MjtNum, [actuator_] lengthrange: MjtNum,
 	 [actuator_] user: MjtNum, [actuator_] plugin: i32],
+    [],
 	[]);
 
 info_with_view!(Model, body,
@@ -1354,6 +1355,7 @@ info_with_view!(Model, body,
 	 [body_] margin: MjtNum, [body_] plugin: i32,
 	 [body_] contype: i32, [body_] conaffinity: i32,
 	 [body_] bvhadr: i32, [body_] bvhnum: i32, [body_] user: MjtNum],
+    [],
 	[]);
 
 info_with_view!(Model, camera,
@@ -1373,6 +1375,7 @@ info_with_view!(Model, camera,
 	 [cam_] sensorsize: f32,
 	 [cam_] intrinsic: f32,
 	 [cam_] user: MjtNum],
+    [],
 	[]);
 
 info_with_view!(Model, equality,
@@ -1384,10 +1387,12 @@ info_with_view!(Model, equality,
 	 [eq_] solimp: MjtNum,
 	 [eq_] data: MjtNum,
      [eq_] objtype: MjtObj [force]],
+    [],
 	[]);
 
 info_with_view!(Model, exclude,
 	[[exclude_] signature: i32],
+    [],
 	[]);
 
 info_with_view!(Model, geom,
@@ -1403,6 +1408,7 @@ info_with_view!(Model, geom,
 	 [geom_] quat: MjtNum, [geom_] friction: MjtNum,
 	 [geom_] margin: MjtNum, [geom_] gap: MjtNum, [geom_] fluid: MjtNum,
 	 [geom_] user: MjtNum, [geom_] rgba: f32],
+    [],
 	[]);
 
 info_with_view!(Model, hfield,
@@ -1411,6 +1417,7 @@ info_with_view!(Model, hfield,
 	 [hfield_] ncol: i32,
 	 [hfield_] adr: i32,
      [hfield_] pathadr: i32],
+    [],
 	[[hfield_] data: f32]);
 
 info_with_view!(Model, joint,
@@ -1428,6 +1435,7 @@ info_with_view!(Model, joint,
      [dof_] frictionloss: MjtNum, [dof_] armature: MjtNum,
      [dof_] damping: MjtNum, [dof_] invweight0: MjtNum,
      [dof_] M0: MjtNum],
+    [],
 	[]);
 
 info_with_view!(Model, light,
@@ -1452,6 +1460,7 @@ info_with_view!(Model, light,
 	 [light_] ambient: f32,
 	 [light_] diffuse: f32,
 	 [light_] specular: f32],
+    [],
 	[]);
 
 info_with_view!(Model, material,
@@ -1465,6 +1474,7 @@ info_with_view!(Model, material,
 	 [mat_] rgba: f32,
      [mat_] metallic: f32,
      [mat_] roughness: f32],
+    [],
 	[]);
 
 info_with_view!(Model, mesh,
@@ -1474,11 +1484,13 @@ info_with_view!(Model, mesh,
 	 [mesh_] faceadr: i32,
 	 [mesh_] facenum: i32,
 	 [mesh_] graphadr: i32],
+    [],
 	[]);
 
 info_with_view!(Model, numeric,
 	[[numeric_] adr: i32,
 	 [numeric_] size: i32],
+    [],
 	[[numeric_] data: MjtNum]);
 
 info_with_view!(Model, pair,
@@ -1492,6 +1504,7 @@ info_with_view!(Model, pair,
 	 [pair_] gap: MjtNum,
 	 [pair_] friction: MjtNum,
      [pair_] solreffriction: MjtNum],
+    [],
 	[]);
 
 info_with_view!(Model, sensor,
@@ -1513,6 +1526,7 @@ info_with_view!(Model, sensor,
      [sensor_] interval: MjtNum,
 	 [sensor_] user: MjtNum,
 	 [sensor_] plugin: i32],
+    [],
 	[]);
 
 info_with_view!(Model, site,
@@ -1526,6 +1540,7 @@ info_with_view!(Model, site,
 	 [site_] quat: MjtNum,
 	 [site_] user: MjtNum,
 	 [site_] rgba: f32],
+    [],
 	[]);
 
 info_with_view!(Model, skin,
@@ -1540,6 +1555,7 @@ info_with_view!(Model, skin,
 	 [skin_] boneadr: i32,
 	 [skin_] bonenum: i32,
 	 [skin_] pathadr: i32],
+    [],
 	[]);
 
 info_with_view!(Model, tendon,
@@ -1555,6 +1571,7 @@ info_with_view!(Model, tendon,
 	 [tendon_] frictionloss: MjtNum, [tendon_] lengthspring: MjtNum,
 	 [tendon_] length0: MjtNum, [tendon_] invweight0: MjtNum,
 	 [tendon_] user: MjtNum, [tendon_] rgba: f32],
+    [],
 	[]);
 
 info_with_view!(Model, texture,
@@ -1565,6 +1582,7 @@ info_with_view!(Model, texture,
 	 [tex_] nchannel: i32,
 	 [tex_] adr: MjtSize,
 	 [tex_] pathadr: i32],
+    [],
 	[[tex_] data: MjtByte]);
 
 info_with_view!(Model, tuple,
@@ -1573,6 +1591,7 @@ info_with_view!(Model, tuple,
 	 [tuple_] objtype: MjtObj [force],
 	 [tuple_] objid: i32,
 	 [tuple_] objprm: MjtNum],
+    [],
 	[]);
 
 info_with_view!(Model, key,
@@ -1583,6 +1602,7 @@ info_with_view!(Model, key,
 	 [key_] mpos: MjtNum,
 	 [key_] mquat: MjtNum,
 	 [key_] ctrl: MjtNum],
+    [],
 	[]);
 
 #[cfg(test)]

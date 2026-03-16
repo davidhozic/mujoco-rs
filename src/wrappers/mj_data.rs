@@ -1611,6 +1611,7 @@ info_with_view!(Data, actuator,
      [actuator_] length: MjtNum,
      [actuator_] velocity: MjtNum,
      [actuator_] force: MjtNum],
+    [],
     [act: MjtNum], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, body,
@@ -1629,16 +1630,19 @@ info_with_view!(Data, body,
      cacc: MjtNum,
      cfrc_int: MjtNum,
      cfrc_ext: MjtNum],
+    [],
     [], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, camera,
     [[cam_] xpos: MjtNum,
      [cam_] xmat: MjtNum],
+    [],
     [], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, geom,
     [[geom_] xpos: MjtNum,
      [geom_] xmat: MjtNum],
+    [],
     [], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, joint,
@@ -1661,20 +1665,24 @@ info_with_view!(Data, joint,
      qacc_smooth: MjtNum,
      qfrc_constraint: MjtNum,
      qfrc_inverse: MjtNum],
+    [],
     [], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, light,
     [[light_] xpos: MjtNum,
      [light_] xdir: MjtNum],
+    [],
     [], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, sensor,
     [[sensor] data: MjtNum],
+    [],
     [], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, site,
     [[site_] xpos: MjtNum,
      [site_] xmat: MjtNum],
+    [],
     [], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, tendon,
@@ -1683,6 +1691,7 @@ info_with_view!(Data, tendon,
      [ten_] J: MjtNum,
      [ten_] length: MjtNum,
      [ten_] velocity: MjtNum],
+    [],
     [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/

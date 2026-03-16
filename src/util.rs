@@ -233,26 +233,55 @@ macro_rules! eval_or_expand {
     (@eval false { $($data:tt)* } ) => {};
 }
 
-
 /**************************************************************************************************/
 // View creation for MjData and MjModel
 /**************************************************************************************************/
 
-/// Creates a $view struct, mapping $field and $opt_field to the same location as in $data.
+/// Constructs a view struct by mapping fields to their corresponding locations in `$data`.
+///
+/// - `$field` list uses `$ptr_view` (read-write in `ViewMut`, read-only in `View`).
+/// - `$field_ro` list always uses `PointerView` (read-only in both `ViewMut` and `View`).
+/// - `$opt_field` list uses `$ptr_view`, wrapped in `Option`.
+///
+/// # Safety
+/// Caller must ensure the data pointers remain valid for the lifetime of the view.
 #[macro_export]
 #[doc(hidden)]
 macro_rules! view_creator {
-    ($self:expr, $view:ident, $data:expr, [$($([$prefix_field:ident])? $field:ident : $type_:ty $([$force:ident])? ),*], [$($([$prefix_opt_field:ident])? $opt_field:ident : $type_opt:ty $([$force_opt:ident])?),*], $ptr_view:expr) => {
+    (
+        $self:expr, $view:ident, $data:expr,
+        [$($([$prefix_field:ident])? $field:ident : $type_:ty $([$force:ident])?),*],
+        [$($([$prefix_field_ro:ident])? $field_ro:ident : $type_ro:ty $([$force_ro:ident])?),*],
+        [$($([$prefix_opt_field:ident])? $opt_field:ident : $type_opt:ty $([$force_opt:ident])?),*],
+        $ptr_view:expr
+    ) => {
         paste::paste! {
             unsafe {
                 $view {
                     $(
-                        $field: $ptr_view($crate::maybe_force_cast!($data.[<$($prefix_field)? $field>].add($self.$field.0), $type_ $(, $force)?), $self.$field.1, std::marker::PhantomData),
+                        $field: $ptr_view(
+                            $crate::maybe_force_cast!($data.[<$($prefix_field)? $field>].add($self.$field.0), $type_ $(, $force)?),
+                            $self.$field.1,
+                            std::marker::PhantomData
+                        ),
+                    )*
+                    $(
+                        $field_ro: $crate::util::PointerView::new(
+                            $crate::maybe_force_cast!($data.[<$($prefix_field_ro)? $field_ro>].add($self.$field_ro.0), $type_ro $(, $force_ro)?),
+                            $self.$field_ro.1,
+                            std::marker::PhantomData
+                        ),
                     )*
                     $(
                         $opt_field: if $self.$opt_field.1 > 0 {
-                            Some($ptr_view($crate::maybe_force_cast!($data.[<$($prefix_opt_field)? $opt_field>].add($self.$opt_field.0), $type_opt $(, $force_opt)?), $self.$opt_field.1, std::marker::PhantomData))
-                        } else {None},
+                            Some($ptr_view(
+                                $crate::maybe_force_cast!($data.[<$($prefix_opt_field)? $opt_field>].add($self.$opt_field.0), $type_opt $(, $force_opt)?),
+                                $self.$opt_field.1,
+                                std::marker::PhantomData
+                            ))
+                        } else {
+                            None
+                        },
                     )*
                 }
             }
@@ -261,29 +290,38 @@ macro_rules! view_creator {
 }
 
 
-/// Macro for reducing duplicated code when creating info structs to
-/// items in [`MjData`](crate::prelude::MjData) or [`MjModel`](crate::prelude::MjModel).
-/// This creates a method `X(self, name; &str) -> XInfo`.
-/// Compatible entries: (..., [name: fixed number], [name: ffi().attribute (* repeats)], [length of the item's data array (e.g., hfield -> nhfielddata, texture -> ntexdata)])
+/// Generates a lookup method `$type_(self, name: &str) -> Option<Mj{Type}{InfoType}Info>` on
+/// an wrapper.
+///
+/// The returned `Info` struct stores the name, id, and index ranges needed to
+/// create views into the corresponding `MjData` or `MjModel` arrays.
+///
+/// # Entry formats
+///
+/// - **Fixed stride**: `attr: N`: index range is `(id * N, N)`.
+/// - **FFI stride** (with optional multiplier): `attr: ffi_field (* k)`: stride taken from
+///   `model.ffi_field`, optionally scaled by `k`.
+/// - **Dynamic range**: `attr: nXXX`: start and length resolved via [`mj_view_indices!`],
+///   where `nXXX` is the major-dimension field (e.g. `nhfielddata`, `ntexdata`).
 #[doc(hidden)]
 #[macro_export]
 macro_rules! info_method {
     ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*], [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*], [$($attr_dyn:ident: $ffi_len_dyn:expr),*]) => {
         paste::paste! {
             #[doc = concat!(
-                "Obtains a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] struct containing information about the name, id, and ",
-                "indices required for obtaining references to the correct locations in [`Mj", stringify!($info_type), "`]. ",
-                "The actual view can be obtained via [`", stringify!([<Mj $type_:camel $info_type Info>]), "::view`] ",
-                "or [`", stringify!([<Mj $type_:camel $info_type Info>]), "::try_view`].\n",
+                "Returns a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] for the named ", stringify!($type_), ", ",
+                "containing the indices required to create views into [`Mj", stringify!($info_type), "`] arrays.\n\n",
+                "Call [`view`](", stringify!([<Mj $type_:camel $info_type Info>]), "::view) or ",
+                "[`try_view`](", stringify!([<Mj $type_:camel $info_type Info>]), "::try_view) on the result to obtain the actual view.\n\n",
                 "# Panics\n",
-                "A panic will occur if `name` contains `\\0` characters."
+                "Panics if `name` contains a `\\0` byte."
             )]
             #[allow(non_snake_case)]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let c_name = CString::new(name).unwrap();
                 let ffi = self.$ffi;
-                let id = unsafe { mj_name2id(ffi, MjtObj::[<mjOBJ_ $type_:upper>] as i32, c_name.as_ptr())};
-                if id == -1 {  // not found
+                let id = unsafe { mj_name2id(ffi, MjtObj::[<mjOBJ_ $type_:upper>] as i32, c_name.as_ptr()) };
+                if id == -1 {
                     return None;
                 }
 
@@ -291,11 +329,9 @@ macro_rules! info_method {
                 $(
                     let $attr = (id * $len, $len);
                 )*
-
                 $(
                     let $attr_ffi = (id * ffi.$len_ffi as usize $( * $multiplier)*, ffi.$len_ffi as usize $( * $multiplier)*);
                 )*
-
                 $(
                     let $attr_dyn = unsafe { mj_view_indices!(
                         id,
@@ -306,40 +342,43 @@ macro_rules! info_method {
                 )*
 
                 let model_signature = ffi.signature;
-                Some([<Mj $type_:camel $info_type Info>] {name: name.to_string(), id, model_signature, $($attr,)* $($attr_ffi,)* $($attr_dyn),*})
+                Some([<Mj $type_:camel $info_type Info>] { name: name.to_string(), id, model_signature, $($attr,)* $($attr_ffi,)* $($attr_dyn),* })
             }
         }
     }
 }
 
 
-/// This creates a method `X(self, name: &str) -> XInfo`.
-/// 
-/// # Compatible Entry Types
-/// The macro supports the following types of entries for struct fields:
-/// 
-/// - **Fixed number**:  
-///   `[field_name: fixed_length]`.  
-///   Example: `[id: 1]` (for a field with a fixed length of 1)
-/// 
-/// - **FFI attribute (possibly with multiplier)**:  
-///   `[field_name: ffi_attribute (* multiplier)]`.  
-///   Example: `[matid: nmatid * 2]` (where `nmatid` is an attribute from the FFI struct, and the field length is `nmatid * 2`)
-/// 
-/// - **Dynamic length (from item's data array)**:  
-///   `[field_name: data_array_length]`.  
-///   Example: `[hfielddata: nhfielddata]` (where `nhfielddata` is the length of the hfield data array).
-///   Note: nhfielddata is the major index (i.e., [nhfielddata x something] in the C array.)
+/// Generates `Info`, `ViewMut`, and `View` types for a named MuJoCo object, along with
+/// `view`, `try_view`, `view_mut`, and `try_view_mut` methods on the `Info` type.
 ///
+/// # Field lists
+///
+/// - **`[rw fields]`**: read-write: `PointerViewMut` in `ViewMut`, `PointerView` in `View`.
+/// - **`[ro fields]`**: read-only: `PointerView` in both `ViewMut` and `View`.
+/// - **`[opt fields]`**: optional read-write: `Option<PointerViewMut>` / `Option<PointerView>`.
+///
+/// # Field entry syntax
+///
+/// ```text
+/// [prefix_] field_name : ElementType [force]
+/// ```
+///
+/// - `[prefix_]`: optional prefix prepended to the FFI field name (e.g. `[actuator_]`).
+/// - `[force]`: emit a forced pointer cast via [`maybe_force_cast!`] (needed when the Rust
+///   element type differs from the C array element type, e.g. `f64` -> `[f64; 3]`).
 #[doc(hidden)]
 #[macro_export]
 macro_rules! info_with_view {
-    /* PointerView */
-
-    /* name of the view/info, attribute prefix in MjData/MjModel, [attributes always present], [attributes that can be None] */
-    ($info_type:ident, $name:ident, [$($([$prefix_attr:ident])? $attr:ident: $type_:ty $([$force:ident])? ),*], [$($([$prefix_opt_attr:ident])? $opt_attr:ident: $type_opt:ty $([$force_opt:ident])? ),*]$(,$generics:ty: $bound:ty)?) => {
+    (
+        $info_type:ident, $name:ident,
+        [$($([$prefix_attr:ident])? $attr:ident: $type_:ty $([$force:ident])?),*],
+        [$($([$prefix_attr_ro:ident])? $attr_ro:ident: $type_ro:ty $([$force_ro:ident])?),*],
+        [$($([$prefix_opt_attr:ident])? $opt_attr:ident: $type_opt:ty $([$force_opt:ident])?),*]
+        $(,$generics:ty: $bound:ty)?
+    ) => {
         paste::paste! {
-            #[doc = "Stores information required to create views to [`Mj" $info_type "`] arrays corresponding to a " $name "."]
+            #[doc = "Index ranges required to create views into [`Mj" $info_type "`] arrays for a " $name "."]
             #[allow(non_snake_case)]
             #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type Info>] {
@@ -350,14 +389,20 @@ macro_rules! info_with_view {
                     $attr: (usize, usize),
                 )*
                 $(
+                    $attr_ro: (usize, usize),
+                )*
+                $(
                     $opt_attr: (usize, usize),
                 )*
             }
 
             impl [<Mj $name:camel $info_type Info>] {
-                #[doc = concat!("Returns a mutable view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
-                                "\n# Errors\n",
-                                "Returns `Err(", stringify!([<Mj $info_type Error>]), "::SignatureMismatch)` if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
+                #[doc = concat!(
+                    "Returns a mutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
+                    "# Errors\n",
+                    "Returns [`SignatureMismatch`](", stringify!([<Mj $info_type Error>]), "::SignatureMismatch) if `",
+                    stringify!($info_type), "` was built from a different model than this `Info`."
+                )]
                 pub fn try_view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> Result<[<Mj $name:camel $info_type ViewMut>]<'p>, $crate::error::[<Mj $info_type Error>]> {
                     let destination_signature = [<$info_type:lower>].signature();
                     if self.model_signature != destination_signature {
@@ -366,21 +411,29 @@ macro_rules! info_with_view {
                             destination: destination_signature,
                         });
                     }
-
-                    Ok(view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], $crate::util::PointerViewMut::new))
+                    Ok(view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(),
+                        [$($([$prefix_attr])? $attr : $type_ $([$force])?),*],
+                        [$($([$prefix_attr_ro])? $attr_ro : $type_ro $([$force_ro])?),*],
+                        [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*],
+                        $crate::util::PointerViewMut::new))
                 }
 
-                #[doc = concat!("Returns a mutable view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
-                                "\n# Panics\n",
-                                "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.\n",
-                                "Use `try_view_mut()` to handle this mismatch as a `Result`.")]
+                #[doc = concat!(
+                    "Returns a mutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
+                    "# Panics\n",
+                    "Panics if `", stringify!($info_type), "` was built from a different model than this `Info`. ",
+                    "Use [`try_view_mut`](Self::try_view_mut) to handle this as a `Result`."
+                )]
                 pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
                     self.try_view_mut([<$info_type:lower>]).unwrap_or_else(|_| panic!("model signature mismatch"))
                 }
 
-                #[doc = concat!("Returns a view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
-                                "\n# Errors\n",
-                                "Returns `Err(", stringify!([<Mj $info_type Error>]), "::SignatureMismatch)` if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
+                #[doc = concat!(
+                    "Returns an immutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
+                    "# Errors\n",
+                    "Returns [`SignatureMismatch`](", stringify!([<Mj $info_type Error>]), "::SignatureMismatch) if `",
+                    stringify!($info_type), "` was built from a different model than this `Info`."
+                )]
                 pub fn try_view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> Result<[<Mj $name:camel $info_type View>]<'p>, $crate::error::[<Mj $info_type Error>]> {
                     let destination_signature = [<$info_type:lower>].signature();
                     if self.model_signature != destination_signature {
@@ -389,20 +442,27 @@ macro_rules! info_with_view {
                             destination: destination_signature,
                         });
                     }
-
-                    Ok(view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], $crate::util::PointerView::new))
+                    Ok(view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(),
+                        [$($([$prefix_attr])? $attr : $type_ $([$force])?),*],
+                        [$($([$prefix_attr_ro])? $attr_ro : $type_ro $([$force_ro])?),*],
+                        [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*],
+                        $crate::util::PointerView::new))
                 }
 
-                #[doc = concat!("Returns a view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
-                                "\n# Panics\n",
-                                "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.\n",
-                                "Use `try_view()` to handle this mismatch as a `Result`.")]
+                #[doc = concat!(
+                    "Returns an immutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
+                    "# Panics\n",
+                    "Panics if `", stringify!($info_type), "` was built from a different model than this `Info`. ",
+                    "Use [`try_view`](Self::try_view) to handle this as a `Result`."
+                )]
                 pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
                     self.try_view([<$info_type:lower>]).unwrap_or_else(|_| panic!("model signature mismatch"))
                 }
             }
 
-            #[doc = "A mutable view to " $name " variables of [`Mj" $info_type "`]."]
+            #[doc = "Mutable view into [`Mj" $info_type "`] arrays for a " $name ".\n\n"
+                    "Read-write fields are [`PointerViewMut`](crate::util::PointerViewMut); "
+                    "read-only fields are [`PointerView`](crate::util::PointerView)."]
             #[allow(non_snake_case)]
             #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type ViewMut>]<'d> {
@@ -410,12 +470,15 @@ macro_rules! info_with_view {
                     pub $attr: $crate::util::PointerViewMut<'d, $type_>,
                 )*
                 $(
+                    pub $attr_ro: $crate::util::PointerView<'d, $type_ro>,
+                )*
+                $(
                     pub $opt_attr: Option<$crate::util::PointerViewMut<'d, $type_opt>>,
                 )*
             }
 
             impl [<Mj $name:camel $info_type ViewMut>]<'_> {
-                /// Resets the internal variables to 0.0.
+                /// Zeroes all read-write fields. Read-only fields are left unchanged.
                 pub fn zero(&mut self) {
                     $(
                         self.$attr.fill(bytemuck::Zeroable::zeroed());
@@ -428,12 +491,15 @@ macro_rules! info_with_view {
                 }
             }
 
-            #[doc = "An immutable view to " $name " variables of [`Mj" $info_type "`]."]
+            #[doc = "Immutable view into [`Mj" $info_type "`] arrays for a " $name "."]
             #[allow(non_snake_case)]
             #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type View>]<'d> {
                 $(
                     pub $attr: $crate::util::PointerView<'d, $type_>,
+                )*
+                $(
+                    pub $attr_ro: $crate::util::PointerView<'d, $type_ro>,
                 )*
                 $(
                     pub $opt_attr: Option<$crate::util::PointerView<'d, $type_opt>>,
