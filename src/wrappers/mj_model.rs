@@ -347,7 +347,7 @@ impl MjModel {
         range: 2, actfrcrange: 2, margin: 1, bodyid: 1],
         [user: nuser_jnt],
         [qpos0: nq, qpos_spring: nq, jntid: nv,
-        parentid: nv, Madr: nv, simplenum: nv, frictionloss: nv,
+        dof_bodyid: nv, parentid: nv, dof_treeid: nv, Madr: nv, simplenum: nv, frictionloss: nv,
         armature: nv, damping: nv, invweight0: nv, M0: nv]
     }
 
@@ -1434,7 +1434,8 @@ info_with_view!(Model, joint,
      [dof_] M0: MjtNum],
 	[[jnt_] r#type: MjtJoint [force], [jnt_] qposadr: i32,
      [jnt_] dofadr: i32, [jnt_] bodyid: i32,
-     [dof_] jntid: i32, [dof_] parentid: i32,
+    dof_bodyid: i32, [dof_] jntid: i32,
+    [dof_] parentid: i32, dof_treeid: i32,
      [dof_] Madr: i32, [dof_] simplenum: i32],
 	[]);
 
@@ -1827,10 +1828,17 @@ mod tests {
 
         /* Test write */
         let mut view_mut = actuator_model_info.view_mut(&mut model);
-        // view_mut.gaintype[0] = MjtGain::mjGAIN_AFFINE;  // TODO: make unsafe
-        // assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_AFFINE);
+        // SAFETY: This mutation intentionally exercises the API that marks this field
+        // as unsafe-to-mutate, and the assigned enum variant is valid.
+        unsafe { view_mut.gaintype.as_mut_slice()[0] = MjtGain::mjGAIN_AFFINE; }
+        view_mut.delay[0] = 3.0;
+
+        assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_AFFINE);
+        assert_eq!(view_mut.delay[0], 3.0);
         view_mut.zero();
-        // assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_FIXED);
+
+        assert_eq!(view_mut.delay[0], 0.0);
+        assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_AFFINE);
     }
 
     #[test]
@@ -1884,6 +1892,23 @@ mod tests {
         assert_eq!(view.r#type[0], MjtJoint::mjJNT_SLIDE);
         assert_eq!(view.limited[0], true);
         assert_eq!(&view.axis[..], [0.0, 1.0 , 0.0]);
+        assert!(!view.dof_bodyid.is_empty());
+        assert!(!view.dof_treeid.is_empty());
+
+        let dof_start = model.jnt_dofadr()[model_info.id] as usize;
+        assert_eq!(view.dof_bodyid[0], model.dof_bodyid()[dof_start]);
+        assert_eq!(view.dof_treeid[0], model.dof_treeid()[dof_start]);
+
+        // Also validate mapping for a multi-DOF joint.
+        let free_info = model.joint("ball2").unwrap();
+        let free_view = free_info.view(&model);
+        assert!(free_view.dof_bodyid.len() > 1);
+        assert_eq!(free_view.dof_bodyid.len(), free_view.dof_treeid.len());
+
+        let free_dof_start = model.jnt_dofadr()[free_info.id] as usize;
+        let free_dof_end = free_dof_start + free_view.dof_bodyid.len();
+        assert_eq!(&free_view.dof_bodyid[..], &model.dof_bodyid()[free_dof_start..free_dof_end]);
+        assert_eq!(&free_view.dof_treeid[..], &model.dof_treeid()[free_dof_start..free_dof_end]);
 
         /* Test write */
         let mut view_mut = model_info.view_mut(&mut model);
@@ -3208,9 +3233,11 @@ mod tests {
 
         // Mutable enum roundtrip via view
         let mut slider_view_mut = slider_info.view_mut(&mut model);
-        // slider_view_mut.gaintype[0] = MjtGain::mjGAIN_AFFINE;  // TODO: make unsafe
+        // SAFETY: This mutation intentionally exercises the API that marks this field
+        // as unsafe-to-mutate, and the assigned enum variant is valid.
+        unsafe { slider_view_mut.gaintype.as_mut_slice()[0] = MjtGain::mjGAIN_AFFINE; }
         let slider_view2 = slider_info.view(&model);
-        // assert_eq!(slider_view2.gaintype[0], MjtGain::mjGAIN_AFFINE);
+        assert_eq!(slider_view2.gaintype[0], MjtGain::mjGAIN_AFFINE);
     }
 
     /// Verifies mutable model-array roundtrip via info views.

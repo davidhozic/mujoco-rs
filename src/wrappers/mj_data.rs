@@ -3714,6 +3714,47 @@ mod test {
         }
     }
 
+    /// Read-only fields in mutable tendon views can only be mutated via explicit unsafe API.
+    #[test]
+    fn test_tendon_data_view_ro_field_unsafe_mutation_api() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let tendon_info = data.tendon("ten1").unwrap();
+        let tendon_id = tendon_info.id;
+        let original;
+
+        {
+            let tendon_view = tendon_info.view(&data);
+            assert!(!tendon_view.wrapadr.is_empty(), "expected non-empty tendon wrapadr for FORCE_MODEL::ten1");
+            original = tendon_view.wrapadr[0];
+        }
+
+        let temporary = if original == i32::MAX { i32::MIN } else { original + 1 };
+        assert_ne!(temporary, original);
+
+        // SAFETY: This intentionally exercises the explicit unsafe mutation
+        // entrypoint and validates the write via independent flat accessors.
+        {
+            let mut tendon_view_mut = tendon_info.view_mut(&mut data);
+            unsafe {
+                tendon_view_mut.wrapadr.as_mut_slice()[0] = temporary;
+            }
+        }
+        assert_eq!(data.ten_wrapadr()[tendon_id], temporary);
+
+        // SAFETY: Restore original value before any further simulation use.
+        {
+            let mut tendon_view_mut = tendon_info.view_mut(&mut data);
+            unsafe {
+                tendon_view_mut.wrapadr.as_mut_slice()[0] = original;
+            }
+        }
+
+        assert_eq!(data.ten_wrapadr()[tendon_id], original);
+    }
+
     /// Checks `ten_velocity == J_ten @ qvel` with several qvel patterns across
     /// evolving simulation states, via both flat and view APIs.
     #[test]

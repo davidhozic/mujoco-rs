@@ -151,6 +151,12 @@ gained new variants. See `Error handling`_ below for the full method list.
   is now ``unsafe fn``. Model and data must remain alive and at a stable address for
   the lifetime of the viewer.
 
+- ``info_with_view!`` generated ``ViewMut`` types now expose read-only fields as
+  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`. Reading remains safe,
+  but mutating these fields now requires
+  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut::<method>as_mut_slice`
+  inside an ``unsafe`` block.
+
 *Thread-safety bound tightening*
 
 - ``MjData<M>`` and ``MjvScene<M>``: ``Send`` / ``Sync`` now require ``M: Send`` /
@@ -336,6 +342,8 @@ New error variants:
   ``flip_image_vertically``.
 - |mj_model| and |mj_data| views expose additional fields from MuJoCo 3.6.0.
   New |mj_model| view types added for ``exclude``, ``mesh``, and ``skin``.
+  Joint model views now also include ``dof_bodyid`` and ``dof_treeid`` metadata
+  fields for direct access to per-dof ownership/tree mapping.
 - ``info_with_view!`` structs now have ``try_view`` / ``try_view_mut`` methods.
 - Trait additions: ``Clone`` for |mj_spec|; ``Default`` for |mj_vfs|, |mj_spec|,
   ``MjOption``; ``Send`` + ``Sync`` for |mj_vfs|; ``FusedIterator`` for all

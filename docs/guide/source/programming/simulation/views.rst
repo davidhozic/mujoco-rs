@@ -100,6 +100,20 @@ For fallible mutable access, use
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>try_view_mut`
 to get a ``Result`` instead of panicking on signature mismatch.
 
+In mutable views, regular writable fields use
+:docs-rs:`mujoco_rs::util::<struct>PointerViewMut`. Fields marked as read-only in the
+generated view still support mutation, but only through
+:docs-rs:`mujoco_rs::util::<struct>PointerViewUnsafeMut` and explicit ``unsafe``:
+
+.. code-block:: rust
+
+    let mut model = MjModel::from_xml("model.xml").expect("could not load the model");
+    let mut view = model.actuator("slider").unwrap().view_mut(&mut model);
+    // SAFETY: assigning a valid enum variant for this field.
+    unsafe {
+        view.gaintype.as_mut_slice()[0] = MjtGain::mjGAIN_AFFINE;
+    }
+
 
 Other views
 ======================
