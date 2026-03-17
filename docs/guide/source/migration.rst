@@ -213,42 +213,107 @@ replaced by two dedicated methods:
     model.save_to_buffer(&mut buffer)?;
 
 
-Mutable array access restrictions
+Mutable accessor restrictions
 -----------------------------------------------
 
-Mutable flat-slice accessors (``*_mut`` methods) have been removed for fields that
-are managed exclusively by the engine or represent load-time structural invariants.
-If your code called ``*_mut()`` on any of these fields, remove those calls. For raw
-write access, use ``ffi_mut()`` directly --- but only if you understand the invariants
-involved.
+``*_mut()`` methods on |mj_model|, |mj_data|, and |mjv_scene| array fields are now
+``unsafe fn`` where unrestricted writes can corrupt MuJoCo's internal state.
+Two categories of fields are affected.
 
-On |mj_model|, **all 232 structural array fields** that previously exposed a
-``*_mut`` accessor no longer do so. This includes every address array (``*adr``,
-``*num``), topology index (``*bodyid``, ``*jntid``, …), physics-invariant
-(``body_simple``, ``dof_simplenum``, …), and name/path pointer. These are set once
-at load time by ``mj_setConst`` and must not be changed at runtime.
+Structural invariants
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-On |mj_data|, **44 engine-computed structural arrays** became read-only:
+Topology, address, and engine-computed arrays that must not be changed at runtime.
 
-- *Constraint structure* --- ``efc_type``, ``efc_id``, ``efc_J_rownnz``,
-  ``efc_J_rowadr``, ``efc_J_rowsuper``, ``efc_J_colind``,
-  ``efc_AR_rownnz``, ``efc_AR_rowadr``, ``efc_AR_colind``
-- *Island / constraint mapping* --- ``efc_island``, ``iefc_type``, ``iefc_id``,
-  ``iefc_J_rownnz``, ``iefc_J_rowadr``, ``iefc_J_rowsuper``, ``iefc_J_colind``,
-  ``tree_island``, ``dof_island``, ``tendon_efcadr``,
-  ``island_ntree``, ``island_nv``, ``island_ne``, ``island_nf``, ``island_nefc``,
-  ``island_itreeadr``, ``island_idofadr``, ``island_dofadr``, ``island_iefcadr``,
-  ``map_itree2tree``, ``map_dof2idof``, ``map_idof2dof``,
-  ``map_efc2iefc``, ``map_iefc2efc``
-- *Island inertia sparsity* --- ``iM_rownnz``, ``iM_rowadr``, ``iM_colind``
-- *Tendon wrap / actuator moment Jacobian / awake-body indices* ---
-  ``ten_wrapadr``, ``ten_wrapnum``, ``moment_rownnz``, ``moment_rowadr``,
-  ``moment_colind``, ``body_awake_ind``, ``parent_awake_ind``, ``dof_awake_ind``
+- |mj_model|: **202** fields --- every address array (``*adr``, ``*num``), topology
+  index (``*bodyid``, ``*jntid``, …), and physics-invariant.
+- |mj_data|: **43** fields --- ``contact``, ``efc_id``, ``efc_J_*``,
+  ``efc_AR_*``, ``efc_island``, ``iefc_id``, ``iefc_J_*``,
+  ``tree_island``, ``dof_island``, ``tendon_efcadr``, ``island_*``,
+  ``map_*``, ``iM_*``, ``ten_wrapadr``, ``ten_wrapnum``, ``moment_*``,
+  ``body_awake_ind``, ``parent_awake_ind``, ``dof_awake_ind``.
+- |mjv_scene|: **13** fields --- ``flexedge``, ``geoms``, ``geomorder``,
+  ``flexedgeadr``, ``flexedgenum``, ``flexvertadr``, ``flexvertnum``,
+  ``flexfaceadr``, ``flexfacenum``, ``flexfaceused``,
+  ``skinfacenum``, ``skinvertadr``, ``skinvertnum``.
 
-On |mjv_scene|, **10 flex and skin geometry address arrays** became read-only:
-``flexedgeadr``, ``flexedgenum``, ``flexvertadr``, ``flexvertnum``,
-``flexfaceadr``, ``flexfacenum``, ``flexfaceused``,
-``skinfacenum``, ``skinvertadr``, ``skinvertnum``.
+**Before (2.x):**
+
+.. code-block:: rust
+
+    model.body_parentid_mut()[0] = new_parent;
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    // SAFETY: caller keeps all companion topology fields consistent.
+    unsafe { model.body_parentid_mut() }[0] = new_parent;
+
+Companion-index fields
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Type/mode fields whose values control which array a companion index
+(``*id``, ``*adr``) indexes into. Writing an inconsistent value causes
+out-of-bounds access inside MuJoCo.
+
+- |mj_model|: ``jnt_type``, ``actuator_trntype``, ``actuator_dyntype``,
+  ``eq_type``, ``eq_objtype``, ``wrap_type``, ``wrap_prm``,
+  ``sensor_type``, ``sensor_objtype``, ``sensor_reftype``,
+  ``skin_matid``, ``tendon_matid``, ``tendon_treeid``.
+- |mj_data|: ``efc_type``, ``iefc_type``, ``tree_asleep``, ``wrap_obj``.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    model.jnt_type_mut()[i] = MjtJoint::mjJNT_BALL;
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    // SAFETY: companion fields (jnt_qposadr, jnt_dofadr, jnt_bodyid) are also
+    // updated to a state consistent with mjJNT_BALL.
+    unsafe { model.jnt_type_mut() }[i] = MjtJoint::mjJNT_BALL;
+
+Per-object ``ViewMut`` types expose these fields as
+:docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut` struct fields.
+Reading is safe; mutation requires
+:docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut::<method>as_mut_slice`
+inside ``unsafe``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - View type
+     - Fields requiring ``unsafe``
+   * - ``MjJointModelViewMut``
+     - ``r#type``
+   * - ``MjActuatorModelViewMut``
+     - ``trntype``, ``dyntype``
+   * - ``MjEqualityModelViewMut``
+     - ``r#type``, ``objtype``
+   * - ``MjSensorModelViewMut``
+     - ``r#type``, ``objtype``, ``reftype``
+   * - ``MjSkinModelViewMut``
+     - ``matid``
+   * - ``MjTendonModelViewMut``
+     - ``matid``, ``treeid``
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    view.r#type[0] = MjtJoint::mjJNT_BALL;
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    // SAFETY: companion fields are also updated consistently.
+    unsafe { view.r#type.as_mut_slice() }[0] = MjtJoint::mjJNT_BALL;
 
 
 ``MjData::print()`` and ``MjModel::print()``

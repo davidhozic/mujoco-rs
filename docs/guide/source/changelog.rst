@@ -151,12 +151,6 @@ gained new variants. See `Error handling`_ below for the full method list.
   is now ``unsafe fn``. Model and data must remain alive and at a stable address for
   the lifetime of the viewer.
 
-- ``info_with_view!`` generated ``ViewMut`` types now expose read-only fields as
-  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`. Reading remains safe,
-  but mutating these fields now requires
-  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut::<method>as_mut_slice`
-  inside an ``unsafe`` block.
-
 *Thread-safety bound tightening*
 
 - ``MjData<M>`` and ``MjvScene<M>``: ``Send`` / ``Sync`` now require ``M: Send`` /
@@ -166,38 +160,29 @@ gained new variants. See `Error handling`_ below for the full method list.
 - :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp` now requires
   ``M: Send + Sync`` (previously only ``Deref<Target = MjModel> + Clone``).
 
-*Mutable accessor restrictions (allow_mut)*
+*Mutable accessor restrictions*
 
-Mutable flat-slice accessors (``*_mut`` methods) have been removed for fields that
-must not be written by user code:
+``*_mut()`` methods on |mj_model|, |mj_data|, and |mjv_scene| array fields are now
+``unsafe fn`` where unrestricted writes can corrupt MuJoCo's internal state. Two
+categories of fields are affected:
 
-- |mj_model|: **232 structural, topology, and physics-invariant fields** — every
-  address array (``*adr``, ``*num``), topology index (``*bodyid``, ``*jntid``, …),
-  and derived invariant (``body_simple``, ``dof_simplenum``, …) no longer exposes a
-  ``*_mut`` accessor. Previously all these fields were mutable.
+- **Structural invariants** --- topology, address, and engine-computed arrays that
+  must not be changed at runtime: **202** fields on |mj_model|, **43** on |mj_data|,
+  **13** on |mjv_scene|.
 
-- |mj_data|: **44 engine-computed structural arrays** — their ``*_mut`` accessors
-  have been removed. The affected fields fall into four categories:
+- **Companion-index fields** --- type/mode fields whose values control which array a
+  companion index (``*id``, ``*adr``) indexes into; writing inconsistent values
+  causes out-of-bounds access: **13** fields on |mj_model| (``jnt_type``,
+  ``actuator_trntype``, ``actuator_dyntype``, ``eq_type``, ``eq_objtype``,
+  ``wrap_type``, ``wrap_prm``, ``sensor_type``, ``sensor_objtype``,
+  ``sensor_reftype``, ``skin_matid``, ``tendon_matid``, ``tendon_treeid``),
+  **4** on |mj_data| (``efc_type``, ``iefc_type``, ``tree_asleep``, ``wrap_obj``).
 
-  - *Constraint structure* — ``efc_type``, ``efc_id``, ``efc_J_rownnz``,
-    ``efc_J_rowadr``, ``efc_J_rowsuper``, ``efc_J_colind``,
-    ``efc_AR_rownnz``, ``efc_AR_rowadr``, ``efc_AR_colind``
-  - *Island / constraint mapping* — ``efc_island``, ``iefc_type``, ``iefc_id``,
-    ``iefc_J_rownnz``, ``iefc_J_rowadr``, ``iefc_J_rowsuper``, ``iefc_J_colind``,
-    ``tree_island``, ``dof_island``, ``tendon_efcadr``,
-    ``island_ntree``, ``island_nv``, ``island_ne``, ``island_nf``, ``island_nefc``,
-    ``island_itreeadr``, ``island_idofadr``, ``island_dofadr``, ``island_iefcadr``,
-    ``map_itree2tree``, ``map_dof2idof``, ``map_idof2dof``,
-    ``map_efc2iefc``, ``map_iefc2efc``
-  - *Island inertia sparsity* — ``iM_rownnz``, ``iM_rowadr``, ``iM_colind``
-  - *Tendon wrap / actuator moment Jacobian / awake-body indices* —
-    ``ten_wrapadr``, ``ten_wrapnum``, ``moment_rownnz``, ``moment_rowadr``,
-    ``moment_colind``, ``body_awake_ind``, ``parent_awake_ind``, ``dof_awake_ind``
-
-- |mjv_scene|: **10 flex and skin geometry address arrays** —
-  ``flexedgeadr``, ``flexedgenum``, ``flexvertadr``, ``flexvertnum``,
-  ``flexfaceadr``, ``flexfacenum``, ``flexfaceused``,
-  ``skinfacenum``, ``skinvertadr``, ``skinvertnum``.
+``info_with_view!`` generated ``ViewMut`` types expose the companion-index fields as
+:docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`; mutation requires
+:docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut::<method>as_mut_slice`
+inside an ``unsafe`` block. See :ref:`migration <migrate_3_0_0>` for full field
+lists and before/after examples.
 
 *Removed APIs*
 
