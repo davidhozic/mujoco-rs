@@ -711,22 +711,22 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
 impl<M: Deref<Target = MjModel>> MjvScene<M> {
     // Scalar length arrays
     array_slice_dyn! {
-        flexedge: &[[i32; 2] [force]; "flex edge data"; model.ffi().nflexedge],
+        (unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; model.ffi().nflexedge],
         flexvert: &[[f32; 3] [force]; "flex vertices"; model.ffi().nflexvert],
         skinvert: &[[f32; 3] [force]; "skin vertex data"; model.ffi().nskinvert],
         skinnormal: &[[f32; 3] [force]; "skin normal data"; model.ffi().nskinvert],
-        geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
-        geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
-        (allow_mut = false) flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
-        (allow_mut = false) flexedgenum: &[i32; "number of edges in flex"; ffi.nflex],
-        (allow_mut = false) flexvertadr: &[i32; "address of flex vertices"; ffi.nflex],
-        (allow_mut = false) flexvertnum: &[i32; "number of vertices in flex"; ffi.nflex],
-        (allow_mut = false) flexfaceadr: &[i32; "address of flex faces"; ffi.nflex],
-        (allow_mut = false) flexfacenum: &[i32; "number of flex faces allocated"; ffi.nflex],
-        (allow_mut = false) flexfaceused: &[i32; "number of flex faces currently in use"; ffi.nflex],
-        (allow_mut = false) skinfacenum: &[i32; "number of faces in skin"; ffi.nskin],
-        (allow_mut = false) skinvertadr: &[i32; "address of skin vertices"; ffi.nskin],
-        (allow_mut = false) skinvertnum: &[i32; "number of vertices in skin"; ffi.nskin],
+        (unsafe) geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
+        (unsafe) geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
+        (unsafe) flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
+        (unsafe) flexedgenum: &[i32; "number of edges in flex"; ffi.nflex],
+        (unsafe) flexvertadr: &[i32; "address of flex vertices"; ffi.nflex],
+        (unsafe) flexvertnum: &[i32; "number of vertices in flex"; ffi.nflex],
+        (unsafe) flexfaceadr: &[i32; "address of flex faces"; ffi.nflex],
+        (unsafe) flexfacenum: &[i32; "number of flex faces allocated"; ffi.nflex],
+        (unsafe) flexfaceused: &[i32; "number of flex faces currently in use"; ffi.nflex],
+        (unsafe) skinfacenum: &[i32; "number of faces in skin"; ffi.nskin],
+        (unsafe) skinvertadr: &[i32; "address of skin vertices"; ffi.nskin],
+        (unsafe) skinvertnum: &[i32; "number of vertices in skin"; ffi.nskin],
         lights: as_ptr as_mut_ptr &[MjvLight; "buffer for lights"; ffi.nlight]
     }
 
