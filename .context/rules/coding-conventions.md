@@ -31,9 +31,18 @@ trigger: always_on
 - Always verify any changes made to MuJoCo's official documentation to verify everything is correct.
 - Any changes made should be reflected in the changelog: `docs/guide/source/changelog.rst`.
   Make sure to follow the conventions and style of previous changelog entries.
+- Breaking changes must also have a before/after migration entry in `docs/guide/source/migration.rst`.
 - Always make sure MuJoCo-rs's documentation in `docs/guide` stays up to date with the changes.
 - After adding or modifying public items or doc comments, run `/doc` to check for rustdoc warnings/errors.
   See `workflows/doc.md` for the exact command.
+
+## Testing
+- When adding a new feature or fixing a bug, add a test for it if one does not already exist.
+- Tests must be **correctness tests** (verify behaviour is right), not build tests (verify it compiles).
+  A test that only calls a function and asserts no panic is not sufficient on its own.
+- Keep tests concise; avoid duplicating coverage that already exists in nearby tests.
+- Run tests with `--no-default-features --features renderer` for renderer-only changes.
+  See `workflows/test.md` for the full test command.
 
 ## Comprehensive verification
 - For deep audits (new major features, suspicions about correctness), use the `/verify` workflow.

@@ -4,6 +4,9 @@ use mujoco_rs::renderer::MjRenderer;
 use mujoco_rs::prelude::*;
 use std::fs;
 
+// Re-exported `png` crate for convenience.
+use mujoco_rs::renderer::png;
+
 
 const EXAMPLE_MODEL: &str = stringify!(
 <mujoco>
@@ -54,6 +57,7 @@ fn main() {
         .num_visual_user_geom(5)  // maximum number of visual-only geoms as result of the user
         .num_visual_internal_geom(0)  // maximum number of visual-only geoms not as result of the user
         .font_scale(MjtFontScale::mjFONTSCALE_100)  // scale of the font drawn by OpenGL
+        .png_compression(png::Compression::NoCompression)
         .rgb(true)  // rgb rendering
         .depth(true)  // depth rendering
         .camera(MjvCamera::default())  // default free camera
