@@ -1,4 +1,3 @@
-````markdown
 ---
 description: Comprehensive correctness audit - type/stride safety, UB, memory
 ---
@@ -165,4 +164,3 @@ Then implement fixes for all Critical and High items. Run `/test` after every fi
 > - Set both `MUJOCO_DYNAMIC_LINK_DIR` and `LD_LIBRARY_PATH` (see `important-context.md`).
 > - Do NOT run `cargo expand` unless the user explicitly requests it -- it is very slow.
 > - For memory/UB verification beyond static analysis, run `/asan` and `/miri` after fixing.
-````
