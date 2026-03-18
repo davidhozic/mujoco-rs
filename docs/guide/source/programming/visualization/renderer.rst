@@ -94,6 +94,13 @@ used for normalization, allowing depth values to be approximately reconstructed
 To save depth data as raw 32-bit float values representing **actual metric distances** from the
 camera, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw` can be used.
 
+The PNG compression level used by ``save_rgb`` and ``save_depth`` can be controlled via
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>set_png_compression` or the
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRendererBuilder::<method>png_compression`
+builder setter. The default is ``png::Compression::NoCompression`` (fastest encoding, largest files).
+Use ``png::Compression::Balanced`` or ``png::Compression::High`` to trade encoding time for
+smaller files.
+
 
 End-to-end example
 ------------------

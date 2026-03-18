@@ -47,6 +47,21 @@ update of MuJoCo alone can increase the major version.
   - ``vis_common::sync_geoms`` is now non-generic.
   - |mjv_scene| now derives ``Send + Sync`` unconditionally.
 
+*MjRenderer is no longer generic*
+
+- :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` and :docs-rs:`~mujoco_rs::renderer::<struct>MjRendererBuilder`
+  are no longer generic over ``M``.
+  Remove the ``<M>`` type parameter from all usage sites.
+
+  - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`,
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync`,
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>builder`, and
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`
+    retain ``<M: Deref<Target = MjModel>>`` as **method-level** generics;
+    call sites are unchanged.
+  - :docs-rs:`~mujoco_rs::renderer::<struct>MjRendererBuilder` no longer requires
+    ``M: Clone``; any ``M: Deref<Target = MjModel>`` is accepted.
+
 *MjViewer, MjViewerBuilder, ViewerSharedState are no longer generic*
 
 - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`,
@@ -381,6 +396,15 @@ New error variants:
   ``RendererError::SceneError`` instead of panicking.
 
 .. rubric:: New features and improvements
+
+- :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`: PNG compression is now
+  configurable via
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRendererBuilder::<method>png_compression`
+  (builder) and
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>set_png_compression`
+  (runtime setter). Defaults to ``png::Compression::NoCompression``. Affects
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb` and
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth`.
 
 - |mj_model|: ``extract_state`` / ``extract_state_into``, ``try_make_data``.
 - |mj_data|: ``swap_model`` (now safe; validates model signature),

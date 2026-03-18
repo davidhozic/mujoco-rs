@@ -14,11 +14,13 @@ use bitflags::bitflags;
 use std::io::{self, BufWriter, Write};
 use std::fmt::Display;
 use std::error::Error;
-use std::marker::PhantomData;
 use std::num::NonZero;
 use std::ops::Deref;
 use std::path::Path;
 use std::fs::File;
+
+/// Exported `png` crate for convenience.
+pub use png;
 
 /// Scale factor for converting normalized [0..1] depth to u16.
 const DEPTH_U16_SCALE: f32 = u16::MAX as f32;
@@ -34,6 +36,13 @@ mod egl;
 
 
 const EXTRA_INTERNAL_VISUAL_GEOMS: u32 = 100;
+
+/// Compute the depth near/far clip planes in metres from the model.
+fn model_near_far(model: &MjModel) -> (f32, f32) {
+    let map = &model.vis().map;
+    let extent = model.stat().extent as f32;
+    (map.znear * extent, map.zfar * extent)
+}
 
 
 /// GlState enum wrapper. By default, headless implementation will be used
@@ -85,34 +94,35 @@ impl GlState {
 
 /// A builder for [`MjRenderer`].
 #[derive(Debug)]
-pub struct MjRendererBuilder<M: Deref<Target = MjModel> + Clone> {
+pub struct MjRendererBuilder {
     width: u32,
     height: u32,
     num_visual_internal_geom: u32,
     num_visual_user_geom: u32,
     rgb: bool,
     depth: bool,
+    png_compression: png::Compression,
     font_scale: MjtFontScale,
     camera: MjvCamera,
     opts: MjvOption,
-    model_type: PhantomData<M>
 }
 
-impl<M: Deref<Target = MjModel> + Clone> MjRendererBuilder<M> {
+impl MjRendererBuilder {
     /// Create a builder with default configuration.
     /// Defaults are:
     /// - `width` and `height`: use offwidth and offheight of MuJoCo's visual/global settings from the model,
     /// - `num_visual_internal_geom`: 100,
     /// - `num_visual_user_geom`: 0,
     /// - `rgb`: true,
-    /// - `depth`: false.
+    /// - `depth`: false,
+    /// - `png_compression`: [`png::Compression::NoCompression`] (fastest, largest files).
     pub fn new() -> Self {
         Self {
             width: 0, height: 0,
             num_visual_internal_geom: EXTRA_INTERNAL_VISUAL_GEOMS, num_visual_user_geom: 0,
-            rgb: true, depth: false, font_scale: MjtFontScale::mjFONTSCALE_100,
+            rgb: true, depth: false, png_compression: png::Compression::NoCompression,
+            font_scale: MjtFontScale::mjFONTSCALE_100,
             camera: MjvCamera::default(), opts: MjvOption::default(),
-            model_type: PhantomData
         }
     }
 
@@ -157,6 +167,7 @@ which can be configured at the top of the model's XML like so:
         num_visual_user_geom: u32;      "maximum number of additional visual-only user geoms (drawn by the user).";
         rgb: bool;                      "RGB rendering enabled (true) or disabled (false).";
         depth: bool;                    "depth rendering enabled (true) or disabled (false).";
+        png_compression: png::Compression; "PNG compression level used by [`MjRenderer::save_rgb`] and [`MjRenderer::save_depth`].";
         font_scale: MjtFontScale;       "font scale of drawn text (with [MjrContext]).";
         camera: MjvCamera;              "camera used for drawing.";
         opts: MjvOption;                "visualization options.";
@@ -170,7 +181,7 @@ which can be configured at the top of the model's XML like so:
     /// - [`RendererError::GlutinError`] if OpenGL initialization fails.
     /// - [`RendererError::EventLoopError`] if the event loop fails to initialize.
     /// - [`RendererError::GlInitFailed`] if the fallback window initialization fails.
-    pub fn build(self, model: M) -> Result<MjRenderer<M>, RendererError> {
+    pub fn build<M: Deref<Target = MjModel>>(self, model: M) -> Result<MjRenderer, RendererError> {
         // Assume model's maximum should be used
         let mut height = self.height;
         let mut width = self.width;
@@ -191,23 +202,27 @@ which can be configured at the top of the model's XML like so:
         context.offscreen();
         context.change_font(self.font_scale);
 
+        let extra_geom = self.num_visual_internal_geom as usize + self.num_visual_user_geom as usize;
+        let (near, far) = model_near_far(&model);
+
         // The 3D scene for visualization
         let scene = MjvScene::new(
-            model.clone(),
-            model.ffi().ngeom as usize + self.num_visual_internal_geom as usize
-            + self.num_visual_user_geom as usize
+            &*model,
+            model.ffi().ngeom as usize + extra_geom
         );
 
         let user_scene = MjvScene::new(
-            model.clone(),
+            &*model,
             self.num_visual_user_geom as usize
         );
 
         // Construct the renderer and create allocated buffers.
         let renderer = MjRenderer {
-            scene, user_scene, context, model, camera: self.camera, option: self.opts,
+            scene, user_scene, context, camera: self.camera, option: self.opts,
             flags: RendererFlags::empty(), rgb: None, depth: None,
-            width: width as usize, height: height as usize, gl_state
+            width: width as usize, height: height as usize, gl_state,
+            png_compression: self.png_compression,
+            near, far, extra_geom,
         }   // These require special care
             .with_rgb_rendering(self.rgb)
             .with_depth_rendering(self.depth);
@@ -217,7 +232,7 @@ which can be configured at the top of the model's XML like so:
 }
 
 
-impl<M: Deref<Target = MjModel> + Clone> Default for MjRendererBuilder<M> {
+impl Default for MjRendererBuilder {
     fn default() -> Self {
         Self::new()
     }
@@ -226,11 +241,10 @@ impl<M: Deref<Target = MjModel> + Clone> Default for MjRendererBuilder<M> {
 /// A renderer for rendering 3D scenes.
 /// By default, RGB rendering is enabled and depth rendering is disabled.
 #[derive(Debug)]
-pub struct MjRenderer<M: Deref<Target = MjModel> + Clone> {
+pub struct MjRenderer {
     scene: MjvScene,
     user_scene: MjvScene,
     context: MjrContext,
-    model: M,
 
     /* OpenGL */
     gl_state: GlState,
@@ -239,6 +253,14 @@ pub struct MjRenderer<M: Deref<Target = MjModel> + Clone> {
     camera: MjvCamera,
     option: MjvOption,
     flags: RendererFlags,
+    png_compression: png::Compression,
+
+    /* Cached from the current model */
+    // Depth near/far clip planes in metres, derived from model.vis().map and model.stat().
+    near: f32,
+    far: f32,
+    // Scene capacity headroom beyond ngeom: preserved across model switches.
+    extra_geom: usize,
 
     /* Storage */
     // Use Box to allow less space to be used
@@ -250,7 +272,7 @@ pub struct MjRenderer<M: Deref<Target = MjModel> + Clone> {
     height: usize,
 }
 
-impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
+impl MjRenderer {
     /// Construct a new renderer.
     /// The `max_user_geom` parameter
     /// defines how much space will be allocated for additional, user-defined visual-only geoms.
@@ -285,14 +307,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// - [`RendererError::GlutinError`] if OpenGL initialization fails.
     /// - [`RendererError::EventLoopError`] if the event loop fails to initialize.
     /// - [`RendererError::GlInitFailed`] if the fallback window initialization fails.
-    pub fn new(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
-        let builder = Self::builder()
-            .width(width as u32).height(height as u32).num_visual_user_geom(max_user_geom as u32);
-        builder.build(model)
+    pub fn new<M: Deref<Target = MjModel>>(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
+        MjRendererBuilder::new()
+            .width(width as u32).height(height as u32).num_visual_user_geom(max_user_geom as u32)
+            .build(model)
     }
 
     /// Create a [`MjRendererBuilder`] to configure [`MjRenderer`].
-    pub fn builder() -> MjRendererBuilder<M> {
+    pub fn builder() -> MjRendererBuilder {
         MjRendererBuilder::new()
     }
 
@@ -399,12 +421,23 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
         self
     }
 
+    /// Set the PNG compression level used by [`MjRenderer::save_rgb`] and [`MjRenderer::save_depth`].
+    pub fn set_png_compression(&mut self, compression: png::Compression) {
+        self.png_compression = compression;
+    }
+
+    /// Set the PNG compression level. To be used on construction.
+    pub fn with_png_compression(mut self, compression: png::Compression) -> Self {
+        self.set_png_compression(compression);
+        self
+    }
+
     /// Update the scene with new data from data.
     ///
     /// # Panics
-    /// Panics if `data` comes from a different model than the renderer.
+    /// Panics if the internal render step fails.
     /// Use [`MjRenderer::try_sync`] for a fallible alternative.
-    pub fn sync(&mut self, data: &mut MjData<M>) {
+    pub fn sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         self.try_sync(data).expect("sync failed")
     }
 
@@ -416,18 +449,15 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     /// # Errors
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current.
     /// - [`RendererError::SceneError`] if the user-scene sync overflows the geom buffer.
-    pub fn try_sync(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
-        if data.model().signature() != self.model.signature() {
+    pub fn try_sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
+        if data.model().signature() != self.scene.signature() {
             /* Model changed: preserve the extra-geom headroom and user-geom
              * capacity, only substitute the per-model ngeom base count. */
-            let extra_geom = (self.scene.maxgeom() as usize)
-                .saturating_sub(self.model.ffi().ngeom as usize);
             let user_geom_cap = self.user_scene.maxgeom() as usize;
-            let new_model = data.model_clone();
-            let new_ngeom = new_model.ffi().ngeom as usize;
-            self.scene = MjvScene::new(data.model(), new_ngeom + extra_geom);
+            let new_ngeom = data.model().ffi().ngeom as usize;
+            self.scene = MjvScene::new(data.model(), new_ngeom + self.extra_geom);
             self.user_scene = MjvScene::new(data.model(), user_geom_cap);
-            self.model = new_model;
+            (self.near, self.far) = model_near_far(data.model());
         }
 
         self.scene.update(data, &self.option, &MjvPerturb::default(), &mut self.camera);
@@ -499,7 +529,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 self.height as u32,
                 png::ColorType::Rgb,
                 png::BitDepth::Eight,
-                png::Compression::NoCompression
+                self.png_compression
             )?;
             Ok(())
         }
@@ -539,11 +569,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
             else {
                 // Use model's camera near/far clip planes as the fixed normalization range.
                 // After linearization (in render()), depth values are in meters within [near, far].
-                let map = &self.model.vis().map;
-                let stat = &self.model.stat();
-                let extent = stat.extent as f32;
-                let near = map.znear * extent;
-                let far = map.zfar * extent;
+                let near = self.near;
+                let far = self.far;
                 (depth.iter().flat_map(|&x| (((x - near) / (far - near) * DEPTH_U16_SCALE).clamp(0.0, DEPTH_U16_SCALE) as u16).to_be_bytes()).collect::<Box<_>>(), near, far)
             };
 
@@ -554,7 +581,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 self.height as u32,
                 png::ColorType::Grayscale,
                 png::BitDepth::Sixteen,
-                png::Compression::NoCompression
+                self.png_compression
             )?;
             Ok((min, max))
         }
@@ -612,12 +639,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
         if let Some(depth) = self.depth.as_deref_mut() {
             flip_image_vertically(depth, self.height, self.width);
 
-            let map = &self.model.vis().map;
-            let stat = &self.model.stat();
-
-            let extent = stat.extent as f32;
-            let near = map.znear * extent;
-            let far = map.zfar * extent;
+            let near = self.near;
+            let far = self.far;
             for value in depth {
                 *value = near / (1.0 - *value * (1.0 - near / far));
             }
@@ -722,7 +745,7 @@ bitflags! {
 
 
 
-impl<M: Deref<Target = MjModel> + Clone> Drop for MjRenderer<M> {
+impl Drop for MjRenderer {
     fn drop(&mut self) {
         // Ensure the GL context is current before the implicit field drops
         // (MjrContext's Drop calls mjr_freeContext which requires an active GL context).
@@ -780,5 +803,54 @@ mod test {
 
         assert_relative_eq!(min, max, epsilon = 1e-4);
         assert_relative_eq!(min, 2.25, epsilon = 1e-4);
+    }
+
+    /// Decode a PNG file and return the raw pixel bytes.
+    #[cfg(target_os = "linux")]
+    fn decode_png_pixels(path: &std::path::Path) -> Vec<u8> {
+        let decoder = png::Decoder::new(std::io::BufReader::new(std::fs::File::open(path).unwrap()));
+        let mut reader = decoder.read_info().unwrap();
+        let mut buf = vec![0u8; reader.output_buffer_size().unwrap()];
+        reader.next_frame(&mut buf).unwrap();
+        buf
+    }
+
+    /// Verify that all compression levels produce identical pixel data.
+    /// This is only run on Linux due to EGL requirements (winit cannot be used on multiple threads).
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_png_compression_lossless() {
+        let model = MjModel::from_xml_string(MODEL).expect("could not load the model");
+        let mut data = MjData::new(&model);
+        data.step();
+
+        let mut renderer = MjRenderer::builder()
+            .rgb(true)
+            .depth(false)
+            .build(&model)
+            .unwrap();
+        renderer.sync(&mut data);
+
+        let tmp = std::env::temp_dir();
+        let path_none = tmp.join("mujoco_rs_test_none.png");
+        let path_fast = tmp.join("mujoco_rs_test_fast.png");
+        let path_high = tmp.join("mujoco_rs_test_high.png");
+
+        renderer.save_rgb(&path_none).unwrap();
+        renderer.set_png_compression(png::Compression::Fast);
+        renderer.save_rgb(&path_fast).unwrap();
+        renderer.set_png_compression(png::Compression::High);
+        renderer.save_rgb(&path_high).unwrap();
+
+        let pixels_none = decode_png_pixels(&path_none);
+        let pixels_fast = decode_png_pixels(&path_fast);
+        let pixels_high = decode_png_pixels(&path_high);
+
+        assert_eq!(pixels_none, pixels_fast, "Fast compression must produce identical pixels");
+        assert_eq!(pixels_none, pixels_high, "High compression must produce identical pixels");
+
+        let _ = std::fs::remove_file(&path_none);
+        let _ = std::fs::remove_file(&path_fast);
+        let _ = std::fs::remove_file(&path_high);
     }
 }

@@ -545,6 +545,38 @@ added as a fallible alternative to ``sync()``. The existing ``sync()`` delegates
 ``try_sync().expect()``. Use ``try_sync()`` if you need to handle scene-full errors.
 
 
+``MjRenderer`` is no longer generic
+--------------------------------------------
+
+:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` and
+:docs-rs:`~mujoco_rs::renderer::<struct>MjRendererBuilder` are no longer generic
+over ``M``. Remove the ``<M>`` type annotation from all usage sites.
+The ``Clone`` bound on ``M`` has also been dropped; any
+``M: Deref<Target = MjModel>`` is now accepted.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    let mut renderer: MjRenderer<Arc<MjModel>> = MjRenderer::builder()
+        .build(model.clone())
+        .expect("failed to initialize renderer");
+    renderer.sync(&mut data);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    let mut renderer: MjRenderer = MjRenderer::builder()
+        .build(model.clone())
+        .expect("failed to initialize renderer");
+    renderer.sync(&mut data);
+
+In practice the type annotation is rarely needed, so in most cases only the
+``MjRenderer<Arc<MjModel>>`` annotation at the variable declaration (or in a
+struct field) needs to be updated.
+
+
 C++ viewer changes
 -----------------------
 
