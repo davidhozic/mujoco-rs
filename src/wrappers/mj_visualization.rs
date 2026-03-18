@@ -112,8 +112,9 @@ impl Default for MjvPerturb {
 impl MjvPerturb {
     /// Initializes the perturbation state for mouse interaction of the given `type_`.
     /// Must be called before [`MjvPerturb::move_`].
-    pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, model: &MjModel, data: &mut MjData<M>, scene: &MjvScene<M>) {
-        unsafe { mjv_initPerturb(model.ffi(), data.ffi_mut(), scene.ffi(), self); }
+    pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, data: &mut MjData<M>, scene: &MjvScene<M>) {
+        let model_ffi = { data.model().ffi() };
+        unsafe { mjv_initPerturb(model_ffi, data.ffi_mut(), scene.ffi(), self); }
         self.active = type_ as i32;
     }
 
@@ -128,12 +129,12 @@ impl MjvPerturb {
     /// This method **zeroes `xfrc_applied`** for all bodies before applying the perturbation
     /// force. Any external forces set on `data` before calling this method will be cleared.
     /// If you need to preserve external forces, apply them *after* calling this method.
-    pub fn apply<M: Deref<Target = MjModel>>(&mut self, model: &MjModel, data: &mut MjData<M>) {
-        unsafe {
-            data.xfrc_applied_mut().fill([0.0; 6]);
-            mjv_applyPerturbPose(model.ffi(), data.ffi_mut(), self, 0);
-            mjv_applyPerturbForce(model.ffi(), data.ffi_mut(), self);
-        }
+    pub fn apply<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+        data.xfrc_applied_mut().fill([0.0; 6]);
+        let model_ffi = { data.model().ffi() };
+        unsafe { mjv_applyPerturbPose(model_ffi, data.ffi_mut(), self, 0); }
+        let model_ffi = { data.model().ffi() };
+        unsafe { mjv_applyPerturbForce(model_ffi, data.ffi_mut(), self); }
     }
 
     /// Updates the body-local position of the selection point.
@@ -710,22 +711,22 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
 impl<M: Deref<Target = MjModel>> MjvScene<M> {
     // Scalar length arrays
     array_slice_dyn! {
-        flexedge: &[[i32; 2] [force]; "flex edge data"; model.ffi().nflexedge],
+        (unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; model.ffi().nflexedge],
         flexvert: &[[f32; 3] [force]; "flex vertices"; model.ffi().nflexvert],
         skinvert: &[[f32; 3] [force]; "skin vertex data"; model.ffi().nskinvert],
         skinnormal: &[[f32; 3] [force]; "skin normal data"; model.ffi().nskinvert],
-        geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
-        geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
-        flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
-        flexedgenum: &[i32; "number of edges in flex"; ffi.nflex],
-        flexvertadr: &[i32; "address of flex vertices"; ffi.nflex],
-        flexvertnum: &[i32; "number of vertices in flex"; ffi.nflex],
-        flexfaceadr: &[i32; "address of flex faces"; ffi.nflex],
-        flexfacenum: &[i32; "number of flex faces allocated"; ffi.nflex],
-        flexfaceused: &[i32; "number of flex faces currently in use"; ffi.nflex],
-        skinfacenum: &[i32; "number of faces in skin"; ffi.nskin],
-        skinvertadr: &[i32; "address of skin vertices"; ffi.nskin],
-        skinvertnum: &[i32; "number of vertices in skin"; ffi.nskin],
+        (unsafe) geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
+        (unsafe) geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
+        (unsafe) flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
+        (unsafe) flexedgenum: &[i32; "number of edges in flex"; ffi.nflex],
+        (unsafe) flexvertadr: &[i32; "address of flex vertices"; ffi.nflex],
+        (unsafe) flexvertnum: &[i32; "number of vertices in flex"; ffi.nflex],
+        (unsafe) flexfaceadr: &[i32; "address of flex faces"; ffi.nflex],
+        (unsafe) flexfacenum: &[i32; "number of flex faces allocated"; ffi.nflex],
+        (unsafe) flexfaceused: &[i32; "number of flex faces currently in use"; ffi.nflex],
+        (unsafe) skinfacenum: &[i32; "number of faces in skin"; ffi.nskin],
+        (unsafe) skinvertadr: &[i32; "address of skin vertices"; ffi.nskin],
+        (unsafe) skinvertnum: &[i32; "number of vertices in skin"; ffi.nskin],
         lights: as_ptr as_mut_ptr &[MjvLight; "buffer for lights"; ffi.nlight]
     }
 

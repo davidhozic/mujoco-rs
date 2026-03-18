@@ -48,8 +48,13 @@ using :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`.
 
     ...
     data.step();  // data is an instance of MjData.
-    renderer.sync(&mut data);
+    renderer.sync(&mut data).unwrap();
     ...
+
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync` is an infallible convenience method
+that panics on failure (it internally delegates to
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` with ``expect``).
+Use ``try_sync()`` when you need fallible error handling.
 
 
 .. note::
@@ -64,14 +69,14 @@ After syncing, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb`
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth` can be used to obtain
 a reference to the rendered image in the correct 2D shape. The shape must be specified via
 the method's const generic parameters (``WIDTH`` and ``HEIGHT``), and the methods return
-``Result<_, RendererError>`` — an error is returned if the requested dimensions don't match the renderer's
-actual resolution.
+``Result<_, RendererError>`` --- an error is returned if the requested dimensions don't match the renderer's
+actual resolution, or when the corresponding rendering mode (RGB/depth) is currently disabled.
 
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` and
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth_flat` can be used to obtain
 a flat 1-D slice of the rendered data instead, returning ``Option<&[u8]>`` and ``Option<&[f32]>``
 respectively. These return ``None`` when the corresponding rendering mode (``rgb`` or ``depth``)
-was not enabled during construction.
+is currently disabled (either disabled at construction time or toggled off later).
 
 To save rendered images to a file, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb`
 and :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth` can be used.
@@ -83,7 +88,8 @@ argument. When ``true``, depth values are linearly normalized using per-frame mi
 normalization to the full 16-bit range (0-65535) before saving. When ``false``, depth values are
 linearly mapped using the model's camera near/far clip planes as a fixed range, providing a
 frame-independent mapping to 0-65535. In both cases, the method returns the ``(min, max)`` pair
-used for normalization, allowing the original depth values to be recovered.
+used for normalization, allowing depth values to be approximately reconstructed
+(subject to 16-bit quantization and clamping).
 
 To save depth data as raw 32-bit float values representing **actual metric distances** from the
 camera, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth_raw` can be used.

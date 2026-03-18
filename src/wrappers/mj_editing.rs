@@ -296,13 +296,12 @@ impl MjSpec {
     /// Handles spec pointer input.
     fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[c_char]) -> Result<Self, MjEditError> {
         if spec_ptr.is_null() {
-            Err(MjEditError::ParseFailed(
-                // SAFETY: error_buffer is zero-initialised and MuJoCo always
-                // NUL-terminates the message it writes into it.
-                unsafe { CStr::from_ptr(error_buffer.as_ptr()) }
-                    .to_string_lossy()
-                    .into_owned()
-            ))
+            // SAFETY: error_buffer is zero-initialised and MuJoCo always
+            // NUL-terminates the message it writes into it.
+            let message = unsafe { CStr::from_ptr(error_buffer.as_ptr()) }
+                .to_string_lossy()
+                .into_owned();
+            Err(MjEditError::ParseFailed(message))
         }
         else {
             // SAFETY: spec_ptr is confirmed non-null by the guard above.
@@ -364,13 +363,14 @@ impl MjSpec {
         ) };
         match result {
             0 => Ok(()),
-            _ => Err(MjEditError::SaveFailed(
+            _ => {
                 // SAFETY: error_buff is zero-initialised and MuJoCo always
                 // NUL-terminates the message it writes into it.
-                unsafe { CStr::from_ptr(error_buff.as_ptr()) }
+                let message = unsafe { CStr::from_ptr(error_buff.as_ptr()) }
                     .to_string_lossy()
-                    .into_owned()
-            ))
+                    .into_owned();
+                Err(MjEditError::SaveFailed(message))
+            }
         }
     }
 
@@ -390,13 +390,14 @@ impl MjSpec {
         ) };
         match result {
             0 => Ok(CStr::from_bytes_until_nul(&result_buff).unwrap().to_string_lossy().into_owned()),
-            _ => Err(MjEditError::SaveFailed(
+            _ => {
                 // SAFETY: error_buff is zero-initialised and MuJoCo always
                 // NUL-terminates the message it writes into it.
-                unsafe { CStr::from_ptr(error_buff.as_ptr()) }
+                let message = unsafe { CStr::from_ptr(error_buff.as_ptr()) }
                     .to_string_lossy()
-                    .into_owned()
-            ))
+                    .into_owned();
+                Err(MjEditError::SaveFailed(message))
+            }
         }
     }
 }
@@ -1547,7 +1548,7 @@ mjs_struct!(Body {
     // Override the delete method to prevent deletion of world.
     unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         if self.name() == "world" {
-            return Err(MjEditError::UnsupportedDeletion);
+            return Err(MjEditError::UnsupportedOperation);
         }
         unsafe { SpecItem::__delete_default__(self) }
     }

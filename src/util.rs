@@ -14,8 +14,8 @@ pub const ERROR_BUF_LEN: usize = 100;
 /// zero-filling the remainder.
 ///
 /// # Panics
-/// Panics if `value` is not valid ASCII or if `value` (plus NUL) does not fit
-/// in `buf`.
+/// Panics if `value` is not valid ASCII, contains an interior NUL byte,
+/// or if `value` (plus NUL) does not fit in `buf`.
 pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
     assert!(value.is_ascii(), "value must be valid ASCII");
     let c_string = std::ffi::CString::new(value).unwrap();
@@ -182,6 +182,61 @@ impl<T> DerefMut for PointerViewMut<'_, T> {
     }
 }
 
+/// Provides a read-only view to a C array with explicit unsafe mutable access.
+/// # Safety
+/// This does not check if the data is valid. It is assumed
+/// the correct data is given and that it doesn't get dropped before this struct.
+/// Mutable access is only available via [`PointerViewUnsafeMut::as_mut_slice`],
+/// where the caller must uphold Rust aliasing and validity guarantees.
+/// This should ONLY be used within a wrapper that fully encapsulates the underlying data.
+#[derive(Debug)]
+pub struct PointerViewUnsafeMut<'d, T> {
+    ptr: *mut T,
+    len: usize,
+    phantom: PhantomData<&'d mut ()>
+}
+
+impl<'d, T> PointerViewUnsafeMut<'d, T> {
+    pub(crate) const fn new(ptr: *mut T, len: usize, phantom: PhantomData<&'d mut ()>) -> Self {
+        Self { ptr, len, phantom }
+    }
+
+    /// Returns a mutable slice over the underlying data.
+    ///
+    /// # Safety
+    /// Caller must ensure that:
+    /// - `self.ptr` points to `self.len` properly aligned and initialized `T` values (or is null with `len == 0`);
+    /// - no other references (shared or mutable) to overlapping memory are alive while the returned slice is used;
+    /// - written values preserve Rust type validity and MuJoCo invariants.
+    pub unsafe fn as_mut_slice(&mut self) -> &mut [T] {
+        if self.ptr.is_null() {
+            debug_assert!(self.len == 0, "null pointer with non-zero length in PointerViewUnsafeMut::as_mut_slice");
+            return &mut [];
+        }
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+    }
+}
+
+/// Compares if the two views point to the same data with the same length.
+impl<T> PartialEq for PointerViewUnsafeMut<'_, T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ptr == other.ptr && self.len == other.len
+    }
+}
+
+impl<T> Eq for PointerViewUnsafeMut<'_, T> {}
+
+impl<T> Deref for PointerViewUnsafeMut<'_, T> {
+    type Target = [T];
+    fn deref(&self) -> &Self::Target {
+        if self.ptr.is_null() {
+            debug_assert!(self.len == 0, "null pointer with non-zero length in PointerViewUnsafeMut::deref");
+            return &[];
+        }
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
 /// Provides a more direct view to a C array.
 /// # Safety
 /// This does not check if the data is valid. It is assumed
@@ -233,26 +288,56 @@ macro_rules! eval_or_expand {
     (@eval false { $($data:tt)* } ) => {};
 }
 
-
 /**************************************************************************************************/
 // View creation for MjData and MjModel
 /**************************************************************************************************/
 
-/// Creates a $view struct, mapping $field and $opt_field to the same location as in $data.
+/// Constructs a view struct by mapping fields to their corresponding locations in `$data`.
+///
+/// - `$field` list uses `$ptr_view` (read-write in `ViewMut`, read-only in `View`).
+/// - `$field_ro` list uses `$ptr_view_ro` (`PointerViewUnsafeMut` in `ViewMut`, `PointerView` in `View`).
+/// - `$opt_field` list uses `$ptr_view`, wrapped in `Option`.
+///
+/// # Safety
+/// Caller must ensure the data pointers remain valid for the lifetime of the view.
 #[macro_export]
 #[doc(hidden)]
 macro_rules! view_creator {
-    ($self:expr, $view:ident, $data:expr, [$($([$prefix_field:ident])? $field:ident : $type_:ty $([$force:ident])? ),*], [$($([$prefix_opt_field:ident])? $opt_field:ident : $type_opt:ty $([$force_opt:ident])?),*], $ptr_view:expr) => {
+    (
+        $self:expr, $view:ident, $data:expr,
+        [$($([$prefix_field:ident])? $field:ident : $type_:ty $([$force:ident])?),*],
+        [$($([$prefix_field_ro:ident])? $field_ro:ident : $type_ro:ty $([$force_ro:ident])?),*],
+        [$($([$prefix_opt_field:ident])? $opt_field:ident : $type_opt:ty $([$force_opt:ident])?),*],
+        $ptr_view:expr,
+        $ptr_view_ro:expr
+    ) => {
         paste::paste! {
             unsafe {
                 $view {
                     $(
-                        $field: $ptr_view($crate::maybe_force_cast!($data.[<$($prefix_field)? $field>].add($self.$field.0), $type_ $(, $force)?), $self.$field.1, std::marker::PhantomData),
+                        $field: $ptr_view(
+                            $crate::maybe_force_cast!($data.[<$($prefix_field)? $field>].add($self.$field.0), $type_ $(, $force)?),
+                            $self.$field.1,
+                            std::marker::PhantomData
+                        ),
+                    )*
+                    $(
+                        $field_ro: $ptr_view_ro(
+                            $crate::maybe_force_cast!($data.[<$($prefix_field_ro)? $field_ro>].add($self.$field_ro.0), $type_ro $(, $force_ro)?),
+                            $self.$field_ro.1,
+                            std::marker::PhantomData
+                        ),
                     )*
                     $(
                         $opt_field: if $self.$opt_field.1 > 0 {
-                            Some($ptr_view($crate::maybe_force_cast!($data.[<$($prefix_opt_field)? $opt_field>].add($self.$opt_field.0), $type_opt $(, $force_opt)?), $self.$opt_field.1, std::marker::PhantomData))
-                        } else {None},
+                            Some($ptr_view(
+                                $crate::maybe_force_cast!($data.[<$($prefix_opt_field)? $opt_field>].add($self.$opt_field.0), $type_opt $(, $force_opt)?),
+                                $self.$opt_field.1,
+                                std::marker::PhantomData
+                            ))
+                        } else {
+                            None
+                        },
                     )*
                 }
             }
@@ -261,28 +346,38 @@ macro_rules! view_creator {
 }
 
 
-/// Macro for reducing duplicated code when creating info structs to
-/// items in [`MjData`](crate::prelude::MjData) or [`MjModel`](crate::prelude::MjModel).
-/// This creates a method `X(self, name; &str) -> XInfo`.
-/// Compatible entries: (..., [name: fixed number], [name: ffi().attribute (* repeats)], [length of the item's data array (e.g., hfield -> nhfielddata, texture -> ntexdata)])
+/// Generates a lookup method `$type_(&self, name: &str) -> Option<Mj{Type}{InfoType}Info>` on
+/// a wrapper.
+///
+/// The returned `Info` struct stores the name, id, and index ranges needed to
+/// create views into the corresponding `MjData` or `MjModel` arrays.
+///
+/// # Entry formats
+///
+/// - **Fixed stride**: `attr: N`: index range is `(id * N, N)`.
+/// - **FFI stride** (with optional multiplier): `attr: ffi_field (* k)`: stride taken from
+///   `model.ffi_field`, optionally scaled by `k`.
+/// - **Dynamic range**: `attr: nXXX`: start and length resolved via [`mj_view_indices!`],
+///   where `nXXX` is the major-dimension field (e.g. `nhfielddata`, `ntexdata`).
 #[doc(hidden)]
 #[macro_export]
 macro_rules! info_method {
     ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*], [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*], [$($attr_dyn:ident: $ffi_len_dyn:expr),*]) => {
         paste::paste! {
             #[doc = concat!(
-                "Obtains a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] struct containing information about the name, id, and ",
-                "indices required for obtaining references to the correct locations in [`Mj", stringify!($info_type), "`]. ",
-                "The actual view can be obtained via [`", stringify!([<Mj $type_:camel $info_type Info>]), "::view`].\n",
+                "Returns a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] for the named ", stringify!($type_), ", ",
+                "containing the indices required to create views into [`Mj", stringify!($info_type), "`] arrays.\n\n",
+                "Call [`view`](", stringify!([<Mj $type_:camel $info_type Info>]), "::view) or ",
+                "[`try_view`](", stringify!([<Mj $type_:camel $info_type Info>]), "::try_view) on the result to obtain the actual view.\n\n",
                 "# Panics\n",
-                "A panic will occur if `name` contains `\\0` characters."
+                "Panics if `name` contains a `\\0` byte."
             )]
             #[allow(non_snake_case)]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let c_name = CString::new(name).unwrap();
                 let ffi = self.$ffi;
-                let id = unsafe { mj_name2id(ffi, MjtObj::[<mjOBJ_ $type_:upper>] as i32, c_name.as_ptr())};
-                if id == -1 {  // not found
+                let id = unsafe { mj_name2id(ffi, MjtObj::[<mjOBJ_ $type_:upper>] as i32, c_name.as_ptr()) };
+                if id == -1 {
                     return None;
                 }
 
@@ -290,11 +385,9 @@ macro_rules! info_method {
                 $(
                     let $attr = (id * $len, $len);
                 )*
-
                 $(
                     let $attr_ffi = (id * ffi.$len_ffi as usize $( * $multiplier)*, ffi.$len_ffi as usize $( * $multiplier)*);
                 )*
-
                 $(
                     let $attr_dyn = unsafe { mj_view_indices!(
                         id,
@@ -305,40 +398,43 @@ macro_rules! info_method {
                 )*
 
                 let model_signature = ffi.signature;
-                Some([<Mj $type_:camel $info_type Info>] {name: name.to_string(), id, model_signature, $($attr,)* $($attr_ffi,)* $($attr_dyn),*})
+                Some([<Mj $type_:camel $info_type Info>] { name: name.to_string(), id, model_signature, $($attr,)* $($attr_ffi,)* $($attr_dyn),* })
             }
         }
     }
 }
 
 
-/// This creates a method `X(self, name: &str) -> XInfo`.
-/// 
-/// # Compatible Entry Types
-/// The macro supports the following types of entries for struct fields:
-/// 
-/// - **Fixed number**:  
-///   `[field_name: fixed_length]`.  
-///   Example: `[id: 1]` (for a field with a fixed length of 1)
-/// 
-/// - **FFI attribute (possibly with multiplier)**:  
-///   `[field_name: ffi_attribute (* multiplier)]`.  
-///   Example: `[matid: nmatid * 2]` (where `nmatid` is an attribute from the FFI struct, and the field length is `nmatid * 2`)
-/// 
-/// - **Dynamic length (from item's data array)**:  
-///   `[field_name: data_array_length]`.  
-///   Example: `[hfielddata: nhfielddata]` (where `nhfielddata` is the length of the hfield data array).
-///   Note: nhfielddata is the major index (i.e., [nhfielddata x something] in the C array.)
+/// Generates `Info`, `ViewMut`, and `View` types for a named MuJoCo object, along with
+/// `view`, `try_view`, `view_mut`, and `try_view_mut` methods on the `Info` type.
 ///
+/// # Field lists
+///
+/// - **`[rw fields]`**: read-write: `PointerViewMut` in `ViewMut`, `PointerView` in `View`.
+/// - **`[ro fields]`**: read as `PointerViewUnsafeMut` in `ViewMut` (unsafe to mutate), `PointerView` in `View`.
+/// - **`[opt fields]`**: optional read-write: `Option<PointerViewMut>` / `Option<PointerView>`.
+///
+/// # Field entry syntax
+///
+/// ```text
+/// [prefix_] field_name : ElementType [force]
+/// ```
+///
+/// - `[prefix_]`: optional prefix prepended to the FFI field name (e.g. `[actuator_]`).
+/// - `[force]`: emit a forced pointer cast via [`maybe_force_cast!`] (needed when the Rust
+///   element type differs from the C array element type, e.g. `f64` -> `[f64; 3]`).
 #[doc(hidden)]
 #[macro_export]
 macro_rules! info_with_view {
-    /* PointerView */
-
-    /* name of the view/info, attribute prefix in MjData/MjModel, [attributes always present], [attributes that can be None] */
-    ($info_type:ident, $name:ident, [$($([$prefix_attr:ident])? $attr:ident: $type_:ty $([$force:ident])? ),*], [$($([$prefix_opt_attr:ident])? $opt_attr:ident: $type_opt:ty $([$force_opt:ident])? ),*]$(,$generics:ty: $bound:ty)?) => {
+    (
+        $info_type:ident, $name:ident,
+        [$($([$prefix_attr:ident])? $attr:ident: $type_:ty $([$force:ident])?),*],
+        [$($([$prefix_attr_ro:ident])? $attr_ro:ident: $type_ro:ty $([$force_ro:ident])?),*],
+        [$($([$prefix_opt_attr:ident])? $opt_attr:ident: $type_opt:ty $([$force_opt:ident])?),*]
+        $(,$generics:ty: $bound:ty)?
+    ) => {
         paste::paste! {
-            #[doc = "Stores information required to create views to [`Mj" $info_type "`] arrays corresponding to a " $name "."]
+            #[doc = "Index ranges required to create views into [`Mj" $info_type "`] arrays for a " $name "."]
             #[allow(non_snake_case)]
             #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type Info>] {
@@ -349,29 +445,87 @@ macro_rules! info_with_view {
                     $attr: (usize, usize),
                 )*
                 $(
+                    $attr_ro: (usize, usize),
+                )*
+                $(
                     $opt_attr: (usize, usize),
                 )*
             }
 
             impl [<Mj $name:camel $info_type Info>] {
-                #[doc = concat!("Returns a mutable view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
-                                "\n# Panics\n",
-                                "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
-                pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
-                    assert_eq!(self.model_signature, [<$info_type:lower>].signature(), "model signature mismatch");
-                    view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], $crate::util::PointerViewMut::new)
+                #[doc = concat!(
+                    "Returns a mutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
+                    "Fields listed as read-only use [`PointerViewUnsafeMut`](crate::util::PointerViewUnsafeMut): ",
+                    "read is safe, mutation requires [`as_mut_slice`](crate::util::PointerViewUnsafeMut::as_mut_slice) and `unsafe`.\n\n",
+                    "# Errors\n",
+                    "Returns [`SignatureMismatch`](", stringify!([<Mj $info_type Error>]), "::SignatureMismatch) if `",
+                    stringify!($info_type), "` was built from a different model than this `Info`."
+                )]
+                pub fn try_view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> Result<[<Mj $name:camel $info_type ViewMut>]<'p>, $crate::error::[<Mj $info_type Error>]> {
+                    let destination_signature = [<$info_type:lower>].signature();
+                    if self.model_signature != destination_signature {
+                        return Err($crate::error::[<Mj $info_type Error>]::SignatureMismatch {
+                            source: self.model_signature,
+                            destination: destination_signature,
+                        });
+                    }
+                    Ok(view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(),
+                        [$($([$prefix_attr])? $attr : $type_ $([$force])?),*],
+                        [$($([$prefix_attr_ro])? $attr_ro : $type_ro $([$force_ro])?),*],
+                        [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*],
+                        $crate::util::PointerViewMut::new,
+                        $crate::util::PointerViewUnsafeMut::new))
                 }
 
-                #[doc = concat!("Returns a view to the correct fields in [`Mj", stringify!($info_type), "`].\n",
-                                "\n# Panics\n",
-                                "Panics if the `", stringify!($info_type), "` instance was created from a model with a different kinematic tree signature.")]
+                #[doc = concat!(
+                    "Returns a mutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
+                    "Fields listed as read-only use [`PointerViewUnsafeMut`](crate::util::PointerViewUnsafeMut): ",
+                    "read is safe, mutation requires [`as_mut_slice`](crate::util::PointerViewUnsafeMut::as_mut_slice) and `unsafe`.\n\n",
+                    "# Panics\n",
+                    "Panics if `", stringify!($info_type), "` was built from a different model than this `Info`. ",
+                    "Use [`try_view_mut`](Self::try_view_mut) to handle this as a `Result`."
+                )]
+                pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
+                    self.try_view_mut([<$info_type:lower>]).unwrap_or_else(|_| panic!("model signature mismatch"))
+                }
+
+                #[doc = concat!(
+                    "Returns an immutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
+                    "# Errors\n",
+                    "Returns [`SignatureMismatch`](", stringify!([<Mj $info_type Error>]), "::SignatureMismatch) if `",
+                    stringify!($info_type), "` was built from a different model than this `Info`."
+                )]
+                pub fn try_view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> Result<[<Mj $name:camel $info_type View>]<'p>, $crate::error::[<Mj $info_type Error>]> {
+                    let destination_signature = [<$info_type:lower>].signature();
+                    if self.model_signature != destination_signature {
+                        return Err($crate::error::[<Mj $info_type Error>]::SignatureMismatch {
+                            source: self.model_signature,
+                            destination: destination_signature,
+                        });
+                    }
+                    Ok(view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(),
+                        [$($([$prefix_attr])? $attr : $type_ $([$force])?),*],
+                        [$($([$prefix_attr_ro])? $attr_ro : $type_ro $([$force_ro])?),*],
+                        [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*],
+                        $crate::util::PointerView::new,
+                        $crate::util::PointerView::new))
+                }
+
+                #[doc = concat!(
+                    "Returns an immutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
+                    "# Panics\n",
+                    "Panics if `", stringify!($info_type), "` was built from a different model than this `Info`. ",
+                    "Use [`try_view`](Self::try_view) to handle this as a `Result`."
+                )]
                 pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
-                    assert_eq!(self.model_signature, [<$info_type:lower>].signature(), "model signature mismatch");
-                    view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(), [$($([$prefix_attr])? $attr : $type_ $([$force])?),*], [$($([$prefix_opt_attr])? $opt_attr : $type_opt $([$force_opt])?),*], $crate::util::PointerView::new)
+                    self.try_view([<$info_type:lower>]).unwrap_or_else(|_| panic!("model signature mismatch"))
                 }
             }
 
-            #[doc = "A mutable view to " $name " variables of [`Mj" $info_type "`]."]
+            #[doc = "Mutable view into [`Mj" $info_type "`] arrays for a " $name ".\n\n"
+                    "Read-write fields are [`PointerViewMut`](crate::util::PointerViewMut); "
+                    "read-only fields are [`PointerViewUnsafeMut`](crate::util::PointerViewUnsafeMut), "
+                    "which require [`as_mut_slice`](crate::util::PointerViewUnsafeMut::as_mut_slice) and explicit `unsafe` to mutate."]
             #[allow(non_snake_case)]
             #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type ViewMut>]<'d> {
@@ -379,12 +533,15 @@ macro_rules! info_with_view {
                     pub $attr: $crate::util::PointerViewMut<'d, $type_>,
                 )*
                 $(
+                    pub $attr_ro: $crate::util::PointerViewUnsafeMut<'d, $type_ro>,
+                )*
+                $(
                     pub $opt_attr: Option<$crate::util::PointerViewMut<'d, $type_opt>>,
                 )*
             }
 
             impl [<Mj $name:camel $info_type ViewMut>]<'_> {
-                /// Resets the internal variables to 0.0.
+                /// Zeroes all read-write fields. Read-only fields are left unchanged.
                 pub fn zero(&mut self) {
                     $(
                         self.$attr.fill(bytemuck::Zeroable::zeroed());
@@ -397,12 +554,15 @@ macro_rules! info_with_view {
                 }
             }
 
-            #[doc = "An immutable view to " $name " variables of [`Mj" $info_type "`]."]
+            #[doc = "Immutable view into [`Mj" $info_type "`] arrays for a " $name "."]
             #[allow(non_snake_case)]
             #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type View>]<'d> {
                 $(
                     pub $attr: $crate::util::PointerView<'d, $type_>,
+                )*
+                $(
+                    pub $attr_ro: $crate::util::PointerView<'d, $type_ro>,
                 )*
                 $(
                     pub $opt_attr: Option<$crate::util::PointerView<'d, $type_opt>>,
@@ -617,7 +777,7 @@ macro_rules! builder_setters {
 #[macro_export]
 macro_rules! array_slice_dyn {
     // Arrays that are of scalar variable size
-    ($($((allow_mut = $cfg_mut:literal))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
+    ($($(($unsafe_mut:ident))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
@@ -630,25 +790,21 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
-                $crate::eval_or_expand! {
-                    @eval $($cfg_mut)? {
-                        #[doc = concat!("Mutable slice of the ", $doc," array.")]
-                        pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
-                            let length = self.$($len_accessor)* as usize;
-                            let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
-                            if ptr.is_null() || length == 0 {
-                                return &mut [];
-                            }
-                            unsafe { std::slice::from_raw_parts_mut(ptr, length) }
-                        }
+                #[doc = concat!("Mutable slice of the ", $doc," array.")]
+                pub $($unsafe_mut)? fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
+                    let length = self.$($len_accessor)* as usize;
+                    let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
+                    if ptr.is_null() || length == 0 {
+                        return &mut [];
                     }
+                    unsafe { std::slice::from_raw_parts_mut(ptr, length) }
                 }
             )*
         }
     };
 
     // Arrays that are of summed variable size
-    (summed { $( $(allow_mut = $cfg_mut:literal)? $name:ident: &[$type:ty; $doc:literal; [$multiplier:literal ; ($($len_array:tt)*) ; ($($len_array_length:tt)*)]]),* }) => {
+    (summed { $( $(($unsafe_mut:ident))? $name:ident: &[$type:ty; $doc:literal; [$multiplier:literal ; ($($len_array:tt)*) ; ($($len_array_length:tt)*)]]),* }) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
@@ -672,36 +828,32 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts($crate::maybe_force_cast!(data_ptr, [$type; $multiplier], force), length) }
                 }
                 
-                $crate::eval_or_expand! {
-                    @eval $($cfg_mut)? {
-                        #[doc = concat!("Mutable slice of the ", $doc," array.")]
-                        pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [[$type; $multiplier]] {
-                            let length_array_length = self.$($len_array_length)* as usize;
-                            let data_ptr = unsafe { self.ffi_mut().$name };
-                            let length_ptr = self.$($len_array)*;
-                            if data_ptr.is_null() || length_ptr.is_null() || length_array_length == 0 {
-                                return &mut [];
-                            }
-
-                            let length = unsafe { std::slice::from_raw_parts(
-                                length_ptr,
-                                length_array_length
-                            ).iter().map(|&x| x as u32).sum::<u32>() as usize };
-
-                            if length == 0 {
-                                return &mut [];
-                            }
-
-                            unsafe { std::slice::from_raw_parts_mut($crate::maybe_force_cast!(data_ptr, [$type; $multiplier], force), length) }
-                        }
+                #[doc = concat!("Mutable slice of the ", $doc," array.")]
+                pub $($unsafe_mut)? fn [<$name:camel:snake _mut>](&mut self) -> &mut [[$type; $multiplier]] {
+                    let length_array_length = self.$($len_array_length)* as usize;
+                    let data_ptr = unsafe { self.ffi_mut().$name };
+                    let length_ptr = self.$($len_array)*;
+                    if data_ptr.is_null() || length_ptr.is_null() || length_array_length == 0 {
+                        return &mut [];
                     }
+
+                    let length = unsafe { std::slice::from_raw_parts(
+                        length_ptr,
+                        length_array_length
+                    ).iter().map(|&x| x as u32).sum::<u32>() as usize };
+
+                    if length == 0 {
+                        return &mut [];
+                    }
+
+                    unsafe { std::slice::from_raw_parts_mut($crate::maybe_force_cast!(data_ptr, [$type; $multiplier], force), length) }
                 }
             )*
         }
     };
 
     // Arrays whose second dimension is dependent on some variable
-    (sublen_dep {$( $(allow_mut = $cfg_mut:literal)? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[[$type:ty; $($inner_len_accessor:tt)*] $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*}) => {
+    (sublen_dep {$( $(($unsafe_mut:ident))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[[$type:ty; $($inner_len_accessor:tt)*] $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*}) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
@@ -715,18 +867,14 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
-                $crate::eval_or_expand! {
-                    @eval $($cfg_mut)? {
-                        #[doc = concat!("Mutable slice of the ", $doc," array.")]
-                        pub fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
-                            let length = self.$($len_accessor)* as usize * (self.$($inner_len_accessor)*) as usize;
-                            let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
-                            if ptr.is_null() || length == 0 {
-                                return &mut [];
-                            }
-                            unsafe { std::slice::from_raw_parts_mut(ptr, length) }
-                        }
+                #[doc = concat!("Mutable slice of the ", $doc," array.")]
+                pub $($unsafe_mut)? fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
+                    let length = self.$($len_accessor)* as usize * (self.$($inner_len_accessor)*) as usize;
+                    let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
+                    if ptr.is_null() || length == 0 {
+                        return &mut [];
                     }
+                    unsafe { std::slice::from_raw_parts_mut(ptr, length) }
                 }
             )*
         }
@@ -737,7 +885,7 @@ macro_rules! array_slice_dyn {
 ///
 /// # Safety
 /// The generated getters blindly interpret a `char` array as a C string; the
-/// array must be NUL-terminated and its contents valid ASCII.  Setters ensure
+/// array must be NUL-terminated and contain valid UTF-8. Setters ensure
 /// ASCII and length bounds but the caller must still guarantee the destination
 /// buffer is large enough.  The macro itself simply emits the unsafe code
 /// without additional checks.
@@ -758,7 +906,7 @@ macro_rules! array_slice_dyn {
 macro_rules! c_str_as_str_method {
     (get {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {
         $(
-            #[doc = concat!("Returns ", $comment, "\n\n# Panics", "\nPanics if the string contains invalid UTF-8.")]
+            #[doc = concat!("Returns ", $comment, "\n\n# Panics", "\nPanics if the buffer has no NUL terminator or if the resulting string contains invalid UTF-8.")]
             pub fn $name(&self $(, $sub_index_name: $sub_index_type)? ) -> &str {
                 let bytes: &[u8] = bytemuck::cast_slice(&self$(.$ffi())?.$name$([$sub_index_name])?[..]);
                 std::ffi::CStr::from_bytes_until_nul(bytes)
@@ -770,7 +918,7 @@ macro_rules! c_str_as_str_method {
 
     (set {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {paste::paste!{
         $(
-            #[doc = concat!("Sets ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII or is too long.")]
+            #[doc = concat!("Sets ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII, an interior NUL byte, or is too long.")]
             pub fn [<set_ $name>](&mut self, $($sub_index_name: $sub_index_type,)? $name: &str) {
                 $crate::util::write_ascii_to_buf(
                     &mut self$(.$ffi())?.$name$([$sub_index_name])?,
@@ -782,7 +930,7 @@ macro_rules! c_str_as_str_method {
 
     (with {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {paste::paste!{
         $(
-            #[doc = concat!("Builder method for setting ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII or is too long.")]
+            #[doc = concat!("Builder method for setting ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII, an interior NUL byte, or is too long.")]
             pub fn [<with_ $name>](mut self, $($sub_index_name: $sub_index_type,)? $name: &str) -> Self {
                 $crate::util::write_ascii_to_buf(
                     &mut self$(.$ffi())?.$name$([$sub_index_name])?,

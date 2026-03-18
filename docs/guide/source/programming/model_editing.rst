@@ -90,8 +90,9 @@ We can now add our ball's body, geom and joint like so:
     In the above block, we used methods that have the ``with_`` prefix.
     These allow method chaining.
     Alternatively, methods that have the ``set_`` prefix can be used, which don't return anything.
-    Setter (``set_``) methods exist only for simple types. Anything more complex can be modified
-    through getters, which end with the ``_mut`` suffix.
+    Setter (``set_``) methods are available for many common fields, including strings and
+    several vector/buffer fields. For nested or structured data, use getters that end with
+    the ``_mut`` suffix.
 
 Finally, we can now add the base plane, like so:
 
@@ -186,7 +187,11 @@ A new class is created by providing its ``class_name`` and optionally a ``parent
     }
 
 Elements can then reference the class via their ``childclass`` or ``class`` (``dclass``) attribute
-in the model XML, or by setting the ``childclass`` string on the relevant ``Mjs*`` struct.
+in the model XML.
+In Rust code, class assignment is typically done with
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_default` or
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_default`.
+Some item-specific wrappers (for example frames) also expose explicit ``childclass`` setters.
 
 
 Iterators

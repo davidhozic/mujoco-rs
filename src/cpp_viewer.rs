@@ -107,7 +107,9 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
     /// Renders the simulation.
     ///
     /// # Errors
-    /// Returns `Err` when the viewer has been closed by the user.
+    /// Returns `Err` when called after the viewer has already been closed.
+    /// The call that detects the close event still returns `Ok(())` and flips
+    /// the internal running state to false.
     ///
     /// # Safety
     /// Must be called from the **main thread**. GLFW requires main-thread access; calling

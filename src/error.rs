@@ -1,6 +1,6 @@
 //! Error types for MuJoCo-rs operations.
 //!
-//! - [`MjDataError`] - physics data and Jacobian operations (`MjData`).
+//! - [`MjDataError`] - physics data, view-signature, and Jacobian operations.
 //! - [`MjSceneError`] - 3-D scene and visualization operations (`MjvScene`, `MjrContext`).
 //! - [`MjEditError`] - model-specification editing operations (`MjSpec`).
 //! - [`MjModelError`] - model loading, saving, and state operations (`MjModel`).
@@ -46,8 +46,10 @@ pub enum MjDataError {
         /// Actual length that was provided.
         got: usize,
     },
-    /// Two [`MjData`](crate::wrappers::MjData) instances (or an `MjData` and a
-    /// renderer) were created from different models.
+    /// Two model-signature-bound objects were created from different models.
+    ///
+    /// This is returned by APIs that require matching model signatures,
+    /// including data-copy operations and info-view accessors.
     SignatureMismatch {
         /// Model signature of the source object.
         source: u64,
@@ -267,12 +269,10 @@ pub enum MjEditError {
     NotFound,
     /// An element with the same name already exists.
     AlreadyExists,
-    /// This element cannot be deleted (e.g. the world body or defaults).
-    UnsupportedDeletion,
+    /// This operation is not supported for the current element.
+    UnsupportedOperation,
     /// MuJoCo returned an error while attempting to delete the element.
     DeleteFailed(String),
-    /// The referenced default class was not found.
-    ClassNotFound,
 }
 
 impl fmt::Display for MjEditError {
@@ -285,9 +285,8 @@ impl fmt::Display for MjEditError {
             Self::SaveFailed(msg) => write!(f, "save failed: {msg}"),
             Self::NotFound => write!(f, "referenced element not found"),
             Self::AlreadyExists => write!(f, "element with the same name already exists"),
-            Self::UnsupportedDeletion => write!(f, "this element cannot be deleted"),
+            Self::UnsupportedOperation => write!(f, "this operation is not supported"),
             Self::DeleteFailed(msg) => write!(f, "delete failed: {msg}"),
-            Self::ClassNotFound => write!(f, "default class not found"),
         }
     }
 }
@@ -323,6 +322,13 @@ pub enum MjModelError {
         /// Actual number of elements available.
         available: usize,
     },
+    /// Two model-signature-bound objects were created from different models.
+    SignatureMismatch {
+        /// Model signature of the source object.
+        source: u64,
+        /// Model signature of the destination object.
+        destination: u64,
+    },
     /// A virtual-file-system operation failed while loading a model from a string.
     VfsError(MjVfsError),
 }
@@ -345,6 +351,13 @@ impl fmt::Display for MjModelError {
                     f,
                     "buffer is too small: got {available} elements, \
                      but need at least {needed}"
+                )
+            }
+            Self::SignatureMismatch { source, destination } => {
+                write!(
+                    f,
+                    "model signature mismatch: source {source:#X}, \
+                     destination {destination:#X}"
                 )
             }
             Self::VfsError(e) => write!(f, "VFS error: {e}"),

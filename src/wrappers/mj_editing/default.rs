@@ -47,11 +47,23 @@ impl SpecItem for MjsDefault {
         self.element
     }
 
+    fn default(&self) -> &MjsDefault {
+        self
+    }
+
+    fn set_default(&mut self, _class_name: &str) -> Result<(), MjEditError> {
+        Err(MjEditError::UnsupportedOperation)
+    }
+
+    fn with_default(&mut self, _class_name: &str) -> Result<&mut Self, MjEditError> {
+        Err(MjEditError::UnsupportedOperation)
+    }
+
     /// Defaults can't be deleted.
     /// # Errors
-    /// This will always error with [`MjEditError::UnsupportedDeletion`].
+    /// This will always error with [`MjEditError::UnsupportedOperation`].
     unsafe fn delete(&mut self) -> Result<(), MjEditError> {
-        Err(MjEditError::UnsupportedDeletion)
+        Err(MjEditError::UnsupportedOperation)
     }
 }
 

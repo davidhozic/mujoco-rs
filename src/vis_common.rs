@@ -1,7 +1,7 @@
 //! Common visualization utilities shared by the viewer and off-screen renderer.
 //!
 //! This module provides helpers for geometry synchronisation between
-//! [`MjvScene`](crate::wrappers::mj_visualization::MjvScene) instances,
+//! [`MjvScene`] instances,
 //! in-place image flipping, and PNG export.
 use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_model::MjModel;

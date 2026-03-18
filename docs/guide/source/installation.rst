@@ -118,7 +118,7 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
                     ::
 
-                        $env:MUJOCO_DYNAMIC_LINK_DIR="\path\mujoco\lib\"
+                        $env:MUJOCO_DYNAMIC_LINK_DIR="C:\path\mujoco\lib\"
 
             .. tab:: macOS
 

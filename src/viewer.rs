@@ -311,8 +311,9 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
                 }
             }
 
-            // SAFETY: mjSTATE_INTEGRATION does not include EQ_ACTIVE, so no
-            // non-boolean bytes are written to eq_active.
+            // SAFETY: data_state_buffer was filled by read_state_into using the
+            // same state spec on a compatible model, so eq_active bytes (included
+            // by mjSTATE_INTEGRATION) come from MuJoCo's own canonical encoding.
             unsafe { data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32) };
         }
 
@@ -334,7 +335,7 @@ impl<M: Deref<Target = MjModel> + Clone> ViewerSharedState<M> {
         self.data_passive_state_old.copy_from_slice(&self.data_passive_state);
 
         // Apply perturbations
-        self.pert.apply(self.data_passive.model(), data);
+        self.pert.apply(data);
     }
 }
 
@@ -1229,7 +1230,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjViewer<M> {
                     } else {
                         MjtPertBit::mjPERT_ROTATE
                     };
-                    pert.start(type_, &self.model, data_passive, &self.scene);
+                    pert.start(type_, data_passive, &self.scene);
                 }
 
                 /* Double click detection */
