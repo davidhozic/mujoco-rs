@@ -455,12 +455,19 @@ New error variants:
 - Fixed potential UB when parsing null string pointers from MuJoCo C++ wrappers.
 - Added strict runtime signature check to view creation (panics with
   ``model signature mismatch`` on mismatch).
+- :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState`: on model change,
+  ``sync_data`` / ``sync_data_full`` no longer spuriously write back the new
+  model's default pose (``qpos0``) to the incoming ``data``. Previously, models
+  with free joints, ball joints, or joints with a non-zero ``ref`` attribute would
+  have their simulation state silently reset to the default pose on the first sync
+  after a model switch. Active perturbations are also cleared on model change to
+  prevent stale body-index references from the previous model being applied.
 
 .. rubric:: Other changes
 
 - Updated enum type aliases to match MuJoCo 3.6.0 definitions.
 - Added examples: ``tippe_top``, ``chaotic_pendulum``, ``contact_forces``,
-  ``multi_legged_creatures``, ``procedural_tree``, ``miri_test``.
+  ``multi_legged_creatures``, ``procedural_tree``, ``miri_test``, ``model_switch``.
 
 2.3.5 (MuJoCo 3.3.7)
 ======================

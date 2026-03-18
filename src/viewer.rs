@@ -202,26 +202,40 @@ pub struct ViewerSharedState {
 
 impl ViewerSharedState {
     fn new(model: Arc<MjModel>, max_user_geom: usize) -> Self {
-        // Tracking of changes made between syncs
-        let state_size = model.state_size(MjtState::mjSTATE_INTEGRATION as u32) as usize;
-        let data_passive_state = vec![0.0; state_size].into_boxed_slice();
-        let data_passive_state_old = data_passive_state.clone();
-        let data_passive = MjData::new(model);
-        let data_state_buffer = data_passive_state.clone();
-        let user_scene = MjvScene::new(data_passive.model(), max_user_geom);
-        Self {
-            data_passive_state,
-            data_passive_state_old,
-            data_passive,
+        let empty: Box<[MjtNum]> = vec![].into_boxed_slice();
+        let mut shared_state = Self {
+            data_passive: MjData::new(Arc::clone(&model)),
+            data_passive_state: empty.clone(),
+            data_passive_state_old: empty.clone(),
+            data_state_buffer: empty,
+            user_scene: MjvScene::new(Arc::clone(&model), 0),
             pert: MjvPerturb::default(),
             running: true,
-            user_scene,
-
-            /* Internal */
             last_sync_time: Instant::now(),
             realtime_factor_smooth: 1.0,
-            data_state_buffer
-        }
+        };
+        shared_state.reload_model(model, max_user_geom);
+        shared_state
+    }
+
+    /// Reinitializes all model-dependent internal state.
+    /// Called on construction and whenever [`_sync_data`](Self::_sync_data) detects a model change.
+    fn reload_model(&mut self, model: Arc<MjModel>, max_user_geom: usize) {
+        self.data_passive = MjData::new(Arc::clone(&model));
+        self.user_scene = MjvScene::new(model, max_user_geom);
+        let state_size = self.data_passive.model().state_size(MjtState::mjSTATE_INTEGRATION as u32);
+        self.data_passive_state = vec![0.0; state_size].into_boxed_slice();
+        // Read the actual initial state (qpos0 may be non-zero) so that data_passive_state_old
+        // matches data_passive_state from the start, preventing a spurious write-back of the
+        // default pose to the incoming data on the first sync after a model change.
+        self.data_passive.read_state_into(
+            MjtState::mjSTATE_INTEGRATION as u32,
+            &mut self.data_passive_state,
+        );
+        self.data_passive_state_old = self.data_passive_state.clone();
+        self.data_state_buffer = self.data_passive_state.clone();
+        self.realtime_factor_smooth = 1.0;
+        self.pert = MjvPerturb::default();
     }
 
     /// Checks whether the viewer is still running or is supposed to run.
@@ -280,14 +294,8 @@ impl ViewerSharedState {
         /* Recreate internal data and user scene when the model changes */
         if data.model().signature() != self.data_passive.model().signature() {
             let new_model = Arc::new(data.model().clone());
-            let state_size = new_model.state_size(MjtState::mjSTATE_INTEGRATION as u32);
             let max_user_geom = self.user_scene.maxgeom() as usize;
-            self.data_passive = MjData::new(Arc::clone(&new_model));
-            self.user_scene = MjvScene::new(new_model, max_user_geom);
-            self.data_passive_state = vec![0.0; state_size].into_boxed_slice();
-            self.data_passive_state_old = self.data_passive_state.clone();
-            self.data_state_buffer = self.data_passive_state.clone();
-            self.realtime_factor_smooth = 1.0;
+            self.reload_model(new_model, max_user_geom);
         }
 
         /* Update statistics */
@@ -740,6 +748,11 @@ impl MjViewer {
                     ngeom + max_user_geom + EXTRA_SCENE_GEOM_SPACE
                 );
                 self.model_passive = new_model;
+                // Reset to a free camera: a tracking or fixed camera may reference a body
+                // or camera ID that does not exist in the new model.
+                self.camera = MjvCamera::new_free(&self.model_passive);
+                #[cfg(feature = "viewer-ui")]
+                self.ui.update_names(Arc::clone(&self.model_passive));
             }
 
             /* Update and render the scene from the MjData state */
@@ -864,7 +877,8 @@ impl MjViewer {
         let left = self.ui.process(
             window, &mut self.status,
             &mut self.scene, &mut self.opt,
-            &mut self.camera, &self.shared_state
+            &mut self.camera, &self.shared_state,
+            &self.model_passive
         );
 
         /* Adjust the viewport so MuJoCo doesn't draw over the UI */

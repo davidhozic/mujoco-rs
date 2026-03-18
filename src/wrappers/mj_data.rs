@@ -1333,10 +1333,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Returns a direct pointer to the underlying data.
     /// Returns a direct mutable pointer to the underlying C data struct.
     /// Only for internal use by viewer code that passes the pointer to C++ FFI.
+    #[cfg(feature = "cpp-viewer")]
     pub(crate) fn as_raw_ptr(&self) -> *mut mjData {
         self.data.as_ptr()
     }
-
 }
 
 

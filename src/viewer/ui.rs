@@ -138,8 +138,6 @@ pub(crate) struct ViewerUI {
     actuator_names: Vec<String>,
     joint_name_id: Vec<(String, usize)>,
     equality_names: Vec<String>,
-    /// Passive copy of the model used to populate joint/actuator/equality UI panels.
-    model_passive: Arc<MjModel>,
     user_ui_callbacks: Vec<UiCallback>,
     user_ui_callbacks_detached: Vec<UiCallbackDetached>,
 
@@ -172,19 +170,48 @@ impl ViewerUI {
         );
         let gl = unsafe { Arc::new(egui_glow::glow::Context::from_loader_function(get_addr)) };
 
-        let camera_names = (0..model.ncam()).map(|i| {
+        let painter = egui_glow::Painter::new(
+            gl.clone(),
+            "",
+            None,
+            false
+        ).map_err(|e| MjViewerError::PainterInitError(e.to_string()))?;
+
+        let mut viewer_ui = Self {
+            egui_ctx, state, painter, gl, events: VecDeque::new(),
+            camera_names: Vec::new(),
+            actuator_names: Vec::new(),
+            joint_name_id: Vec::new(),
+            equality_names: Vec::new(),
+            user_ui_callbacks: Vec::new(),
+            user_ui_callbacks_detached: Vec::new(),
+            actuator_window: false,
+            joint_window: false,
+            equality_window: false,
+            group_window: false,
+            screenshot_viewport_only: false,
+            screenshot_depth: false
+        };
+        viewer_ui.update_names(model);
+        Ok(viewer_ui)
+    }
+
+    /// Rebuilds all model-dependent cached state (name lists).
+    /// Must be called whenever the active model changes.
+    pub(crate) fn update_names(&mut self, model: Arc<MjModel>) {
+        self.camera_names = (0..model.ncam()).map(|i| {
             if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i as i32) {
                 name.to_string()
             } else { format!("Camera {i}") }
         }).collect();
 
-        let actuator_names = (0..model.nu()).map(|i| {
+        self.actuator_names = (0..model.nu()).map(|i| {
             if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, i as i32) {
                 name.to_string()
             } else { format!("Actuator {i}") }
         }).collect();
 
-        let joint_name_id = (0..model.njnt()).filter_map(|i| {
+        self.joint_name_id = (0..model.njnt()).filter_map(|i| {
             match model.jnt_type()[i as usize] {
                 MjtJoint::mjJNT_SLIDE | MjtJoint::mjJNT_HINGE => {
                     let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, i as i32) {
@@ -196,32 +223,12 @@ impl ViewerUI {
             }
         }).collect();
 
-        let equality_names = (0..model.neq()).map(|i| {
+        self.equality_names = (0..model.neq()).map(|i| {
             if let Some(name) = model.id_to_name(MjtObj::mjOBJ_EQUALITY, i as i32) {
                 name.to_string()
             } else { format!("Equality {i}") }
         }).collect();
 
-        let painter = egui_glow::Painter::new(
-            gl.clone(),
-            "",
-            None,
-            false
-        ).map_err(|e| MjViewerError::PainterInitError(e.to_string()))?;
-
-        Ok(Self {
-            egui_ctx, state, painter, gl, events: VecDeque::new(),
-            camera_names, actuator_names, joint_name_id, equality_names,
-            model_passive: model,
-            user_ui_callbacks: Vec::new(),
-            user_ui_callbacks_detached: Vec::new(),
-            actuator_window: false,
-            joint_window: false,
-            equality_window: false,
-            group_window: false,
-            screenshot_viewport_only: false,
-            screenshot_depth: false
-        })
     }
 
     /// Handles winit input events.
@@ -243,7 +250,8 @@ impl ViewerUI {
         window: &Window, status: &mut ViewerStatusBit,
         scene: &mut MjvScene, options: &mut MjvOption,
         camera: &mut MjvCamera,
-        shared_viewer_state: &Arc<Mutex<ViewerSharedState>>
+        shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
+        model: &MjModel
     ) -> f32 {
         // Viewport reservations, which will be excluded from MuJoCo's viewport.
         // This way MuJoCo won't draw over the UI.
@@ -540,8 +548,8 @@ impl ViewerUI {
                     );
                     for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
                         .zip(ctrl_mut.iter_mut())
-                        .zip(self.model_passive.actuator_ctrlrange())
-                        .zip(self.model_passive.actuator_ctrllimited())
+                        .zip(model.actuator_ctrlrange())
+                        .zip(model.actuator_ctrllimited())
                     {
                         ui.label(RichText::new(actuator_name).font(MAIN_FONT));
 
@@ -570,9 +578,9 @@ impl ViewerUI {
                 .show(ctx, |ui|
             {
                 egui::Grid::new("joint_grid").show(ui, |ui| {
-                    let limiteds = self.model_passive.jnt_limited();
-                    let ranges = self.model_passive.jnt_range();
-                    let qpos_addresses = self.model_passive.jnt_qposadr();
+                    let limiteds = model.jnt_limited();
+                    let ranges = model.jnt_range();
+                    let qpos_addresses = model.jnt_qposadr();
                     let data = &mut shared_viewer_state.lock_unpoison().data_passive;
                     let qpos = data.qpos();
                     for (name, index) in &self.joint_name_id

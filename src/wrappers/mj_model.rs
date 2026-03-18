@@ -722,6 +722,7 @@ impl MjModel {
 
     /// Returns a direct mutable pointer to the underlying C model struct.
     /// Only for internal use by viewer code that passes the pointer to C++ FFI.
+    #[cfg(feature = "cpp-viewer")]
     pub(crate) fn as_raw_ptr(&self) -> *mut mjModel {
         self.0.as_ptr()
     }
