@@ -29,10 +29,10 @@ Run the codebase under Miri's experimental FFI native-lib support to detect unde
    Run the codebase under Miri using the built library. Replace `<EXAMPLE_NAME>` as needed:
    ```bash
    # Set paths and Miri flags (using build/lib64/ or build/lib/ depending on your system)
-   # Check Cargo.toml for the exact library version (e.g. 3.5.0)
+   # Replace X.Y.Z with the MuJoCo version from Cargo.toml (e.g. +mj-3.6.0 -> 3.6.0)
    export MUJOCO_DYNAMIC_LINK_DIR=$(realpath build/lib64/) && \
    export LD_LIBRARY_PATH=$(realpath build/lib64/) && \
-   export MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-native-lib=$(realpath build/lib64/libmujoco.so.3.6.0) -Zmiri-permissive-provenance -Zmiri-symbolic-alignment-check" && \
+   export MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-native-lib=$(realpath build/lib64/libmujoco.so.X.Y.Z) -Zmiri-permissive-provenance -Zmiri-symbolic-alignment-check" && \
    cd .. && \
    cargo +nightly miri run --example miri_test
    ```
