@@ -92,6 +92,7 @@ pub struct MjRendererBuilder<M: Deref<Target = MjModel> + Clone> {
     num_visual_user_geom: u32,
     rgb: bool,
     depth: bool,
+    png_compression: png::Compression,
     font_scale: MjtFontScale,
     camera: MjvCamera,
     opts: MjvOption,
@@ -105,12 +106,14 @@ impl<M: Deref<Target = MjModel> + Clone> MjRendererBuilder<M> {
     /// - `num_visual_internal_geom`: 100,
     /// - `num_visual_user_geom`: 0,
     /// - `rgb`: true,
-    /// - `depth`: false.
+    /// - `depth`: false,
+    /// - `png_compression`: [`png::Compression::NoCompression`] (fastest, largest files).
     pub fn new() -> Self {
         Self {
             width: 0, height: 0,
             num_visual_internal_geom: EXTRA_INTERNAL_VISUAL_GEOMS, num_visual_user_geom: 0,
-            rgb: true, depth: false, font_scale: MjtFontScale::mjFONTSCALE_100,
+            rgb: true, depth: false, png_compression: png::Compression::NoCompression,
+            font_scale: MjtFontScale::mjFONTSCALE_100,
             camera: MjvCamera::default(), opts: MjvOption::default(),
             model_type: PhantomData
         }
@@ -157,6 +160,7 @@ which can be configured at the top of the model's XML like so:
         num_visual_user_geom: u32;      "maximum number of additional visual-only user geoms (drawn by the user).";
         rgb: bool;                      "RGB rendering enabled (true) or disabled (false).";
         depth: bool;                    "depth rendering enabled (true) or disabled (false).";
+        png_compression: png::Compression; "PNG compression level used by [`MjRenderer::save_rgb`] and [`MjRenderer::save_depth`].";
         font_scale: MjtFontScale;       "font scale of drawn text (with [MjrContext]).";
         camera: MjvCamera;              "camera used for drawing.";
         opts: MjvOption;                "visualization options.";
@@ -207,7 +211,8 @@ which can be configured at the top of the model's XML like so:
         let renderer = MjRenderer {
             scene, user_scene, context, model, camera: self.camera, option: self.opts,
             flags: RendererFlags::empty(), rgb: None, depth: None,
-            width: width as usize, height: height as usize, gl_state
+            width: width as usize, height: height as usize, gl_state,
+            png_compression: self.png_compression,
         }   // These require special care
             .with_rgb_rendering(self.rgb)
             .with_depth_rendering(self.depth);
@@ -239,6 +244,7 @@ pub struct MjRenderer<M: Deref<Target = MjModel> + Clone> {
     camera: MjvCamera,
     option: MjvOption,
     flags: RendererFlags,
+    png_compression: png::Compression,
 
     /* Storage */
     // Use Box to allow less space to be used
@@ -399,6 +405,17 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
         self
     }
 
+    /// Set the PNG compression level used by [`MjRenderer::save_rgb`] and [`MjRenderer::save_depth`].
+    pub fn set_png_compression(&mut self, compression: png::Compression) {
+        self.png_compression = compression;
+    }
+
+    /// Set the PNG compression level. To be used on construction.
+    pub fn with_png_compression(mut self, compression: png::Compression) -> Self {
+        self.set_png_compression(compression);
+        self
+    }
+
     /// Update the scene with new data from data.
     ///
     /// # Panics
@@ -499,7 +516,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 self.height as u32,
                 png::ColorType::Rgb,
                 png::BitDepth::Eight,
-                png::Compression::NoCompression
+                self.png_compression
             )?;
             Ok(())
         }
@@ -554,7 +571,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
                 self.height as u32,
                 png::ColorType::Grayscale,
                 png::BitDepth::Sixteen,
-                png::Compression::NoCompression
+                self.png_compression
             )?;
             Ok((min, max))
         }

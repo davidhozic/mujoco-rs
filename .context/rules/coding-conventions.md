@@ -32,6 +32,8 @@ trigger: always_on
 - Any changes made should be reflected in the changelog: `docs/guide/source/changelog.rst`.
   Make sure to follow the conventions and style of previous changelog entries.
 - Always make sure MuJoCo-rs's documentation in `docs/guide` stays up to date with the changes.
+- After adding or modifying public items or doc comments, run `/doc` to check for rustdoc warnings/errors.
+  See `workflows/doc.md` for the exact command.
 
 ## Comprehensive verification
 - For deep audits (new major features, suspicions about correctness), use the `/verify` workflow.
