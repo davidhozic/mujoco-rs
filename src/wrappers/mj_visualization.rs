@@ -5,7 +5,7 @@ use std::ops::Deref;
 use std::ptr;
 
 use super::mj_rendering::{MjrContext, MjrRectangle};
-use super::mj_primitive::{MjtNum, MjtByte};
+use super::mj_primitive::{MjtNum, MjtByte, MjtSize};
 use super::mj_model::{MjModel, MjtGeom};
 use super::mj_data::MjData;
 use crate::{array_slice_dyn, c_str_as_str_method};
@@ -112,14 +112,14 @@ impl Default for MjvPerturb {
 impl MjvPerturb {
     /// Initializes the perturbation state for mouse interaction of the given `type_`.
     /// Must be called before [`MjvPerturb::move_`].
-    pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, data: &mut MjData<M>, scene: &MjvScene<M>) {
-        let model_ffi = { data.model().ffi() };
+    pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, data: &mut MjData<M>, scene: &MjvScene) {
+        let model_ffi = data.model().ffi();
         unsafe { mjv_initPerturb(model_ffi, data.ffi_mut(), scene.ffi(), self); }
         self.active = type_ as i32;
     }
 
     /// Move an object with mouse. This is a wrapper around `mjv_movePerturb`.
-    pub fn move_<M: Deref<Target = MjModel>>(&mut self, data: &MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene<M>) {
+    pub fn move_<M: Deref<Target = MjModel>>(&mut self, data: &MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
         unsafe { mjv_movePerturb(data.model().ffi(), data.ffi(), action as i32, dx, dy, scene.ffi(), self); }
     }
 
@@ -131,9 +131,9 @@ impl MjvPerturb {
     /// If you need to preserve external forces, apply them *after* calling this method.
     pub fn apply<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         data.xfrc_applied_mut().fill([0.0; 6]);
-        let model_ffi = { data.model().ffi() };
+        let model_ffi = data.model().ffi();
         unsafe { mjv_applyPerturbPose(model_ffi, data.ffi_mut(), self, 0); }
-        let model_ffi = { data.model().ffi() };
+        let model_ffi = data.model().ffi();
         unsafe { mjv_applyPerturbForce(model_ffi, data.ffi_mut(), self); }
     }
 
@@ -218,7 +218,7 @@ impl MjvCamera {
     }
 
     /// Move camera with mouse.
-    pub fn move_<M: Deref<Target = MjModel>>(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum, scene: &MjvScene<M>) {
+    pub fn move_(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
         unsafe { mjv_moveCamera(model.ffi(), action as i32, dx, dy, scene.ffi(), self); };
     }
 
@@ -575,27 +575,51 @@ impl MjvFigure {
 ***********************************************************************************************************************/
 /// 3D scene visualization.
 /// This struct provides a way to render visual-only geometry.
-/// To prevent changes of array sizes in [`MjModel`], which can lead to overflows,
-/// an immutable reference is stored inside this struct.
+///
+/// The scene does not hold a reference to the model; the caller is responsible for
+/// ensuring that the same model (identified by signature) is used consistently.
+/// Passing data from a different model to [`MjvScene::update`] or
+/// [`MjvScene::find_selection`] will panic.
 #[derive(Debug)]
-pub struct MjvScene<M: Deref<Target = MjModel>> {
+pub struct MjvScene {
     ffi: Box<mjvScene>,
-    model: M,
+    signature: u64,
+    /// Cached from the model at construction time for the flex/skin array slice accessors.
+    nflexedge: MjtSize,
+    nflexvert: MjtSize,
+    nskinvert: MjtSize,
 }
 
-impl<M: Deref<Target = MjModel>> MjvScene<M> {
+impl MjvScene {
     /// Creates a new scene for `model`, allocating space for up to `max_geom` geoms.
-    pub fn new(model: M, max_geom: usize) -> Self {
+    pub fn new<M: Deref<Target = MjModel>>(model: M, max_geom: usize) -> Self {
+        let model_ffi = model.ffi();
+        let nflexedge = model_ffi.nflexedge;
+        let nflexvert = model_ffi.nflexvert;
+        let nskinvert = model_ffi.nskinvert;
+        let signature = model.signature();
         let scn = unsafe {
             let mut t = Box::new_uninit();
             mjv_defaultScene(t.as_mut_ptr());
-            mjv_makeScene(model.ffi(), t.as_mut_ptr(), max_geom as i32);
+            mjv_makeScene(model_ffi, t.as_mut_ptr(), max_geom as i32);
             t.assume_init()
         };
 
-        Self {
-            ffi: scn, model,
-        }
+        Self { ffi: scn, signature, nflexedge, nflexvert, nskinvert }
+    }
+
+    /// Returns the model signature this scene was created for.
+    pub fn signature(&self) -> u64 {
+        self.signature
+    }
+
+    /// Panics if `data_sig` does not match this scene's model signature.
+    fn assert_signature(&self, data_sig: u64) {
+        assert_eq!(
+            self.signature, data_sig,
+            "model signature mismatch: scene {:#X}, data model {:#X}",
+            self.signature, data_sig
+        );
     }
 
     /// Updates the scene from the current simulation state in `data`.
@@ -603,13 +627,17 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
     /// The `catmask` parameter controls which geom categories are included
     /// (e.g., [`MjtCatBit::mjCAT_ALL`] for everything, or a bitwise OR of
     /// [`MjtCatBit::mjCAT_STATIC`], [`MjtCatBit::mjCAT_DYNAMIC`], [`MjtCatBit::mjCAT_DECOR`]).
-    pub fn update_with_catmask(
+    ///
+    /// # Panics
+    /// Panics if `data` was created from a different model than this scene.
+    pub fn update_with_catmask<M: Deref<Target = MjModel>>(
         &mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb,
         cam: &mut MjvCamera, catmask: i32,
     ) {
+        self.assert_signature(data.model().signature());
         unsafe {
             mjv_updateScene(
-                self.model.ffi(), data.ffi_mut(), opt, perturb,
+                data.model().ffi(), data.ffi_mut(), opt, perturb,
                 cam, catmask, self.ffi.as_mut()
             );
         }
@@ -619,7 +647,10 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
     ///
     /// This is equivalent to calling [`update_with_catmask`](Self::update_with_catmask) with
     /// [`MjtCatBit::mjCAT_ALL`].
-    pub fn update(&mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb, cam: &mut MjvCamera) {
+    ///
+    /// # Panics
+    /// Panics if `data` was created from a different model than this scene.
+    pub fn update<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb, cam: &mut MjvCamera) {
         self.update_with_catmask(data, opt, perturb, cam, MjtCatBit::mjCAT_ALL as i32);
     }
 
@@ -676,15 +707,19 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
 
     /// Returns the selection point based on a mouse click.
     /// This is a wrapper around `mjv_select()`.
-    pub fn find_selection(
+    ///
+    /// # Panics
+    /// Panics if `data` was created from a different model than this scene.
+    pub fn find_selection<M: Deref<Target = MjModel>>(
         &self, data: &MjData<M>, option: &MjvOption,
         aspect_ratio: MjtNum, relx: MjtNum, rely: MjtNum,
     ) -> SceneSelection {
+        self.assert_signature(data.model().signature());
         let (mut geom_id, mut flex_id, mut skin_id) = (-1 , -1, -1);
         let mut selpnt = [0.0; 3];
         let body_id = unsafe {
             mjv_select(
-                self.model.ffi(), data.ffi(), option,
+                data.model().ffi(), data.ffi(), option,
                 aspect_ratio, relx, rely, self.ffi(), &mut selpnt,
                 &mut geom_id, &mut flex_id, &mut skin_id
             )
@@ -708,13 +743,13 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
 }
 
 /// Array slices.
-impl<M: Deref<Target = MjModel>> MjvScene<M> {
+impl MjvScene {
     // Scalar length arrays
     array_slice_dyn! {
-        (unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; model.ffi().nflexedge],
-        flexvert: &[[f32; 3] [force]; "flex vertices"; model.ffi().nflexvert],
-        skinvert: &[[f32; 3] [force]; "skin vertex data"; model.ffi().nskinvert],
-        skinnormal: &[[f32; 3] [force]; "skin normal data"; model.ffi().nskinvert],
+        (unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; nflexedge],
+        flexvert: &[[f32; 3] [force]; "flex vertices"; nflexvert],
+        skinvert: &[[f32; 3] [force]; "skin vertex data"; nskinvert],
+        skinnormal: &[[f32; 3] [force]; "skin normal data"; nskinvert],
         (unsafe) geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
         (unsafe) geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
         (unsafe) flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
@@ -744,7 +779,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
 
 
 /// Public API getters / setters / builders.
-impl<M: Deref<Target = MjModel>> MjvScene<M> {
+impl MjvScene {
     getter_setter! {get, [
         [ffi] maxgeom: i32; "size of allocated geom buffer.";
         [ffi] ngeom: i32; "number of geoms currently in buffer.";
@@ -787,7 +822,7 @@ impl<M: Deref<Target = MjModel>> MjvScene<M> {
 }
 
 
-impl<M: Deref<Target = MjModel>> Drop for MjvScene<M> {
+impl Drop for MjvScene {
     fn drop(&mut self) {
         unsafe {
             mjv_freeScene(self.ffi.as_mut());
@@ -795,11 +830,11 @@ impl<M: Deref<Target = MjModel>> Drop for MjvScene<M> {
     }
 }
 
-// SAFETY: MjvScene<M> owns the FFI scene data exclusively. It is safe to send across
-// threads as long as M itself is Send (e.g. Arc<MjModel>). Non-Send M types such as
-// Rc<MjModel> are correctly excluded by the M: Send / M: Sync bounds.
-unsafe impl<M: Deref<Target = MjModel> + Send> Send for MjvScene<M> {}
-unsafe impl<M: Deref<Target = MjModel> + Sync> Sync for MjvScene<M> {}
+// SAFETY: MjvScene owns its FFI scene data exclusively and does not hold any
+// raw pointers. All interior state is plain data (Box<mjvScene> plus cached
+// integer counts), so it is safe to send to and share with other threads.
+unsafe impl Send for MjvScene {}
+unsafe impl Sync for MjvScene {}
 
 #[cfg(test)]
 mod tests {

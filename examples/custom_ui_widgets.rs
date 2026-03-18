@@ -30,7 +30,7 @@ const EXAMPLE_MODEL: &str = "
 /// Example of a user-written simulation struct (minimal as possible).
 struct CustomSimulation {
     data: MjData<Rc<MjModel>>,
-    viewer: MjViewer<Rc<MjModel>>
+    viewer: MjViewer
 }
 
 

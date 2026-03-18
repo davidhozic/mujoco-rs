@@ -118,12 +118,13 @@ This is optional and can be removed or reduced to run the simulation faster than
 
 .. note::
 
-    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` copies only the subset of
-    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` needed for rendering (positions, velocities, contacts,
-    etc.), which is faster.
+    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` copies only the fields
+    of :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` required for visualization
+    (kinematics, contacts, sensor data, etc.), skipping large computed arrays
+    (mass matrices, constraint arrays ``efc_*``/``iefc_*`` including constraint Jacobians). This is faster.
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full` copies the **entire**
-    ``MjData`` struct — including large Jacobian arrays — and should only be used when those arrays
-    are needed inside the viewer (for example, when using
+    ``MjData`` struct and should only be used when those large arrays are needed inside the
+    viewer (for example, when using
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` to access them).
 
 .. admonition:: Performance tip
@@ -300,24 +301,25 @@ which demonstrates various types of UI elements including windows, side panels, 
 
 .. attention::
 
-    For performance reasons, when :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`
-    is called, the viewer only syncs the state required for visualization --- i.e., it skips
-    some large arrays. As a result, the :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` passed to
-    the callback (added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`)
-    may contain outdated information.
+    When :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` is called, the
+    user's data is copied into the viewer's internal passive copy via ``mjv_copyData``, which
+    skips large computed arrays not required for visualization. As a result, the
+    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` passed to UI callbacks
+    (added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`)
+    will **not** contain:
 
-    The following are **NOT SYNCHRONIZED** when using :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`:
+    - mass matrices (``qM``, ``qLD``, ``qLDiagInv``, ``qLU``);
+    - constraint arrays (``efc_*``, ``iefc_*``, including constraint Jacobians).
 
-    - Jacobian matrices;
-    - mass matrices.
+    If you require those in a UI callback, either call an appropriate method on the passed
+    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` instance
+    (e.g., :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward`),
+    or switch to :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full`.
 
-    If you require those, make sure to call an appropriate method/function on the
-    passed :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` instance
-    (e.g., :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward`).
-
-    Instead of :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`,
-    users can call :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full`, which will copy
-    the entire :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` struct at the expense of performance.
+    Additionally, the viewer writes any UI-driven state changes (e.g. actuator controls,
+    equality constraints) back to the user's ``data`` via the integration state. If your
+    code relies on derived quantities such as previously-computed Jacobians, recompute them
+    after each :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` call.
 
 
 .. _mj_cpp_viewer:

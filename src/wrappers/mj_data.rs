@@ -1268,13 +1268,15 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
 
-    /// Copy [`MjData`] to `destination`, skipping large arrays not required for visualization.
+    /// Copy [`MjData`] to `destination`, skipping large computed arrays not required for
+    /// visualization: mass matrices and constraint arrays (`efc_*`, `iefc_*`, including
+    /// constraint Jacobians).
     /// This is a wrapper for [`mjv_copyData`].
     ///
     /// # Panics
     /// Panics if `destination` was created from a different model.
     /// Use [`MjData::try_copy_visual_to`] for a fallible alternative.
-    pub fn copy_visual_to(&self, destination: &mut MjData<M>) {
+    pub fn copy_visual_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) {
         self.try_copy_visual_to(destination)
             .expect("copy_visual_to failed")
     }
@@ -1284,7 +1286,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
     /// from a different model.
-    pub fn try_copy_visual_to(&self, destination: &mut MjData<M>) -> Result<(), MjDataError> {
+    pub fn try_copy_visual_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
         let src_sig = self.model.signature();
         let dst_sig = destination.model.signature();
         if src_sig != dst_sig {
@@ -1305,7 +1307,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics if `destination` was created from a different model.
     /// Use [`MjData::try_copy_to`] for a fallible alternative.
-    pub fn copy_to(&self, destination: &mut MjData<M>) {
+    pub fn copy_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) {
         self.try_copy_to(destination)
             .expect("copy_to failed")
     }
@@ -1315,7 +1317,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
     /// from a different model.
-    pub fn try_copy_to(&self, destination: &mut MjData<M>) -> Result<(), MjDataError> {
+    pub fn try_copy_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
         let src_sig = self.model.signature();
         let dst_sig = destination.model.signature();
         if src_sig != dst_sig {
@@ -1331,13 +1333,12 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Returns a direct pointer to the underlying data.
-    /// THIS IS NOT TO BE USED.
-    /// It is only meant for the viewer code, which currently still depends
-    /// on mutable pointers to model and data. This will be removed in the future.
-    pub(crate) unsafe fn __raw(&self) -> *mut mjData {
+    /// Returns a direct mutable pointer to the underlying C data struct.
+    /// Only for internal use by viewer code that passes the pointer to C++ FFI.
+    #[cfg(feature = "cpp-viewer")]
+    pub(crate) fn as_raw_ptr(&self) -> *mut mjData {
         self.data.as_ptr()
     }
-
 }
 
 
@@ -1360,6 +1361,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Returns a reference to data's [`MjModel`].
     pub fn model(&self) -> &MjModel {
         &self.model
+    }
+
+    /// Returns a clone of the stored model.
+    /// Unlike [`model`](Self::model), this returns
+    /// the infered `M` type (cloned).
+    pub fn model_clone(&self) -> M where M: Clone {
+        self.model.clone()
     }
 
     getter_setter! {get, [

@@ -4,12 +4,10 @@
 //! [`MjvScene`] instances,
 //! in-place image flipping, and PNG export.
 use crate::wrappers::mj_visualization::MjvScene;
-use crate::wrappers::mj_model::MjModel;
 use crate::error::MjSceneError;
 
 use std::fs::File;
 use std::io::{self, BufWriter};
-use std::ops::Deref;
 use std::path::Path;
 
 
@@ -23,7 +21,7 @@ use std::path::Path;
 ///
 /// Returns [`MjSceneError::SceneFull`] if the combined geom count would
 /// exceed the destination scene's `maxgeom` capacity.
-pub fn sync_geoms<M: Deref<Target = MjModel>>(src: &MjvScene<M>, dst: &mut MjvScene<M>) -> Result<(), MjSceneError> {
+pub fn sync_geoms(src: &MjvScene, dst: &mut MjvScene) -> Result<(), MjSceneError> {
     let ffi_src = src.ffi();
     let ffi_dst = unsafe { dst.ffi_mut() };
 
