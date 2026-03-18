@@ -32,7 +32,7 @@ Run the codebase under Miri's experimental FFI native-lib support to detect unde
    # Check Cargo.toml for the exact library version (e.g. 3.5.0)
    export MUJOCO_DYNAMIC_LINK_DIR=$(realpath build/lib64/) && \
    export LD_LIBRARY_PATH=$(realpath build/lib64/) && \
-   export MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-native-lib=$(realpath build/lib64/libmujoco.so.3.5.0) -Zmiri-permissive-provenance -Zmiri-symbolic-alignment-check" && \
+   export MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-native-lib=$(realpath build/lib64/libmujoco.so.3.6.0) -Zmiri-permissive-provenance -Zmiri-symbolic-alignment-check" && \
    cd .. && \
    cargo +nightly miri run --example miri_test
    ```

@@ -214,7 +214,7 @@ impl MjModel {
     /// - [`MjModelError::VfsError`] if the internal VFS operation fails.
     /// - [`MjModelError::LoadFailed`] if MuJoCo fails to load the model.
     /// # Panics
-    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    /// Panics if the linked MuJoCo version does not match the version expected by mujoco-rs.
     pub fn from_xml_string(data: &str) -> Result<Self, MjModelError> {
         assert_mujoco_version();
 
@@ -257,12 +257,15 @@ impl MjModel {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns [`MjModelError::SaveFailed`] with MuJoCo's error message if saving fails.
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::SaveFailed`] with MuJoCo's error message if saving fails.
     /// # Panics
-    /// When `filename` contains '\0' characters, a panic occurs.
-    pub fn save_last_xml(&self, filename: &str) -> Result<(), MjModelError> {
+    /// When the path contains '\0' characters, a panic occurs.
+    pub fn save_last_xml<T: AsRef<Path>>(&self, filename: T) -> Result<(), MjModelError> {
+        let path_str = filename.as_ref().to_str()
+            .ok_or(MjModelError::InvalidUtf8Path)?;
         let mut error = [0; ERROR_BUF_LEN];
-        let cstring = CString::new(filename).unwrap();
+        let cstring = CString::new(path_str).unwrap();
         let result = unsafe { mj_saveLastXML(
             cstring.as_ptr(), self.ffi(),
             error.as_mut_ptr(), error.len() as i32
@@ -536,7 +539,7 @@ impl MjModel {
     /// # Errors
     /// - [`MjModelError::BufferTooSmall`] if the buffer is smaller than [`size()`](Self::size).
     pub fn save_to_buffer(&self, buffer: &mut [u8]) -> Result<(), MjModelError> {
-        let needed = self.size() as usize;
+        let needed = self.size();
         if buffer.len() < needed {
             return Err(MjModelError::BufferTooSmall {
                 needed,
@@ -551,8 +554,8 @@ impl MjModel {
     }
 
     /// Return size of buffer needed to hold model.
-    pub fn size(&self) -> MjtSize {
-        unsafe { mj_sizeModel(self.ffi()) }
+    pub fn size(&self) -> usize {
+        unsafe { mj_sizeModel(self.ffi()) as usize }
     }
 
     /// Print mjModel to text file, specifying format.
@@ -717,11 +720,9 @@ impl MjModel {
         unsafe { self.0.as_mut() }
     }
 
-    /// Returns a direct pointer to the underlying model.
-    /// THIS IS NOT TO BE USED.
-    /// It is only meant for the viewer code, which currently still depends
-    /// on mutable pointers to model and data. This will be removed in the future.
-    pub(crate) unsafe fn __raw(&self) -> *mut mjModel {
+    /// Returns a direct mutable pointer to the underlying C model struct.
+    /// Only for internal use by viewer code that passes the pointer to C++ FFI.
+    pub(crate) fn as_raw_ptr(&self) -> *mut mjModel {
         self.0.as_ptr()
     }
 }

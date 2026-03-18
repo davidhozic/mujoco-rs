@@ -23,7 +23,7 @@ const MODEL_XML: &str = stringify!(
 #[pyclass(unsendable)]
 struct Simulation {
     simulation_state: MjData<Rc<MjModel>>,
-    viewer: MjViewer<Rc<MjModel>>,
+    viewer: MjViewer,
     last_update: Instant
 }
 

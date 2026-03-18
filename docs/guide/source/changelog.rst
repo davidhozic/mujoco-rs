@@ -29,6 +29,66 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: Breaking changes
 
+*MjvScene is no longer generic*
+
+- |mjv_scene| is no longer generic over ``M``. It is now a plain ``struct MjvScene``
+  without a type parameter.
+
+  - ``MjvScene::new`` now takes ``model: M`` where ``M: Deref<Target = MjModel>``
+    (accepts ``Arc<MjModel>``, ``&MjModel``, etc.).
+  - ``MjvScene::update``, ``MjvScene::update_with_catmask``, and
+    ``MjvScene::find_selection`` now take a generic ``<M>`` parameter on the
+    method rather than on the struct. They **panic** if ``data`` was created from
+    a different model (signature mismatch).
+  - ``MjvScene`` exposes a new ``signature() -> u64`` method for the model
+    signature the scene was built for.
+  - ``MjvPerturb::start`` / ``move_`` and ``MjvCamera::move_`` now take
+    ``&MjvScene`` / ``&mut MjvScene`` without a type parameter.
+  - ``vis_common::sync_geoms`` is now non-generic.
+  - |mjv_scene| now derives ``Send + Sync`` unconditionally.
+
+*MjViewer, MjViewerBuilder, ViewerSharedState are no longer generic*
+
+- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`,
+  :docs-rs:`~mujoco_rs::viewer::<struct>MjViewerBuilder`, and
+  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState`
+  are no longer generic over ``M``. Remove the ``<M>`` type parameter from all
+  usage sites.
+
+  - The viewer stores a passive ``Arc<MjModel>`` internally (analogous to the
+    existing passive ``MjData`` copy). ``sync_data``, ``sync_data_full``, and
+    ``build_passive`` retain ``<M: Deref<Target = MjModel>>`` as **method-level**
+    generics, so the call sites are unchanged.
+  - ``MjViewerBuilder::build_passive`` now accepts any ``M: Deref<Target = MjModel>``
+    (e.g. ``&MjModel``, ``Arc<MjModel>``, ``Rc<MjModel>``).
+  - The closure passed to ``MjViewer::add_ui_callback`` now receives
+    ``&mut MjData<Arc<MjModel>>`` instead of ``&mut MjData<M>``. Update callback
+    signatures accordingly.
+
+*Viewer and renderer sync model automatically*
+
+- |mj_data|::
+
+    MjViewer::sync_data / ViewerSharedState::sync_data
+
+  and::
+
+    MjRenderer::sync / try_sync
+
+  now detect when ``data`` was created from a **different** model than the
+  viewer/renderer was initialised with. Instead of panicking or returning an
+  error, both automatically recreate the scene(s) for the new model and update
+  their internal model reference. The ``RendererError::SignatureMismatch``
+  variant has been removed.
+
+- ``MjData`` gained a new ``model_clone() -> M`` method (available when
+  ``M: Clone``).
+
+- ``MjData::copy_to``, ``try_copy_to``, ``copy_visual_to``, and
+  ``try_copy_visual_to`` now accept a destination of a **different** model type:
+  ``destination: &mut MjData<N>`` where ``N: Deref<Target = MjModel>``. Previously
+  the source and destination had to share the same ``M``.
+
 *MuJoCo upgrade*
 
 - Updated MuJoCo from **3.3.7** to **3.6.0**. C FFI bindings and all generated
@@ -62,7 +122,17 @@ gained new variants. See `Error handling`_ below for the full method list.
   and ``save_to_buffer`` methods.
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>size`
-  returns ``MjtSize`` (was ``i32``).
+  returns ``usize`` (was ``i32``).
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml`
+  now accepts ``AsRef<Path>`` (was ``&str``) and returns
+  ``Err(MjModelError::InvalidUtf8Path)`` for non-UTF-8 paths instead of
+  silently truncating.
+
+- ``MjViewerCpp<M>`` (``cpp-viewer`` feature) is no longer generic over ``M``.
+  Remove the type parameter from all usage sites. The ``launch_passive``
+  associated function retains ``<M: Deref<Target = MjModel>>`` as a
+  method-level generic.
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>state_size`
   returns ``usize`` (was ``i32``).
@@ -153,9 +223,10 @@ gained new variants. See `Error handling`_ below for the full method list.
 
 *Thread-safety bound tightening*
 
-- ``MjData<M>`` and ``MjvScene<M>``: ``Send`` / ``Sync`` now require ``M: Send`` /
+- ``MjData<M>``: ``Send`` / ``Sync`` now require ``M: Send`` /
   ``M: Sync``. Previously the bounds were unconditional, making
   ``MjData<Rc<MjModel>>`` incorrectly ``Send + Sync``.
+  (``MjvScene`` is now non-generic and unconditionally ``Send + Sync``.)
 
 - :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp` now requires
   ``M: Send + Sync`` (previously only ``Deref<Target = MjModel> + Clone``).

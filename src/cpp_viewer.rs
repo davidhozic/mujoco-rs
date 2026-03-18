@@ -37,22 +37,22 @@ unsafe extern "C" {
 /// The caller must ensure both remain alive and at a fixed address for the viewer's lifetime.
 /// See [`MjViewerCpp::launch_passive`] for the full safety contract.
 #[derive(Debug)]
-pub struct MjViewerCpp<M: Deref<Target = MjModel> + Clone + Send + Sync> {
+pub struct MjViewerCpp {
     sim: *mut mujoco_Simulate,
     running: bool,
 
-    user_scn: Box<MjvScene<M>>,
+    user_scn: Box<MjvScene>,
     _cam: Box<MjvCamera>,
     _opt: Box<MjvOption>,
     _pert: Box<MjvPerturb>,
 }
 
-impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
+impl MjViewerCpp {
     pub fn running(&self) -> bool {
         self.running
     }
 
-    pub fn user_scn_mut(&mut self) -> &mut MjvScene<M> {
+    pub fn user_scn_mut(&mut self) -> &mut MjvScene {
         &mut self.user_scn
     }
 
@@ -68,7 +68,7 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
     /// address for the entire lifetime of the returned [`MjViewerCpp`]. Dropping or moving the
     /// underlying [`MjModel`] or [`MjData`] while the viewer is alive is undefined behavior.
     /// Calls to [`MjViewerCpp::render`] must be done only on the **main** thread.
-    pub unsafe fn launch_passive(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
+    pub unsafe fn launch_passive<M: Deref<Target = MjModel> + Clone + Send + Sync>(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut cam = Box::new(MjvCamera::default());
         let mut opt: Box<MjvOption> = Box::new(MjvOption::default());
@@ -79,10 +79,8 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
         assert!(!sim.is_null(), "mujoco_cSimulate_create returned a null pointer");
         let sim_usize = sim as usize;
 
-        let model_raw = unsafe { model.__raw() };
-        let data_raw = unsafe { data.__raw() };
-        let model_usize = model_raw as usize;
-        let data_usize = data_raw as usize;
+        let model_usize = model.as_raw_ptr() as usize;
+        let data_usize = data.as_raw_ptr() as usize;
 
         unsafe { mujoco_cSimulate_RenderInit(sim) };
 
@@ -134,7 +132,7 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> MjViewerCpp<M> {
     }
 }
 
-impl<M: Deref<Target = MjModel> + Clone + Send + Sync> Drop for MjViewerCpp<M> {
+impl Drop for MjViewerCpp {
     fn drop(&mut self) {
         unsafe {
             mujoco_cSimulate_ExitRequest(self.sim);
@@ -143,5 +141,5 @@ impl<M: Deref<Target = MjModel> + Clone + Send + Sync> Drop for MjViewerCpp<M> {
     }
 }
 
-unsafe impl<M: Deref<Target = MjModel> + Clone + Send + Sync> Send for MjViewerCpp<M> {}
-unsafe impl<M: Deref<Target = MjModel> + Clone + Send + Sync> Sync for MjViewerCpp<M> {}
+unsafe impl Send for MjViewerCpp {}
+unsafe impl Sync for MjViewerCpp {}

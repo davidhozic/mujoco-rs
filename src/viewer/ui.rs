@@ -14,7 +14,6 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::ffi::CString;
 use std::fmt::Debug;
-use std::ops::Deref;
 
 use crate::wrappers::mj_visualization::{
     MjvOption, MjvCamera, MjtCamera, MjvScene
@@ -123,13 +122,13 @@ const FRAME_TYPE_MAP: [&str; 8] = [
 const _: () = assert!(FRAME_TYPE_MAP.len() == crate::mujoco_c::mjtFrame_::mjNFRAME as usize);
 
 /// Type alias for a user-provided UI callback function.
-pub(crate) type UiCallback<M> = Box<dyn FnMut(&egui::Context, &mut MjData<M>)>;
+pub(crate) type UiCallback = Box<dyn FnMut(&egui::Context, &mut MjData<Arc<MjModel>>)>;
 
 /// Type alias for a detached (from state) user-provided UI callback function.
 pub(crate) type UiCallbackDetached = Box<dyn FnMut(&egui::Context)>;
 
 /// Viewer user interface context.
-pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
+pub(crate) struct ViewerUI {
     egui_ctx: egui::Context,
     state: egui_winit::State,
     painter: egui_glow::Painter,
@@ -139,8 +138,9 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     actuator_names: Vec<String>,
     joint_name_id: Vec<(String, usize)>,
     equality_names: Vec<String>,
-    model: M,
-    user_ui_callbacks: Vec<UiCallback<M>>,
+    /// Passive copy of the model used to populate joint/actuator/equality UI panels.
+    model_passive: Arc<MjModel>,
+    user_ui_callbacks: Vec<UiCallback>,
     user_ui_callbacks_detached: Vec<UiCallbackDetached>,
 
     // Window toggles.
@@ -156,9 +156,9 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     screenshot_depth: bool
 }
 
-impl<M: Deref<Target = MjModel>> ViewerUI<M> {
+impl ViewerUI {
     /// Create a new [`ViewerUI`] instance for the specific winit window.
-    pub(crate) fn new(model: M, window: &Window, display: &Display) -> Result<Self, MjViewerError> {
+    pub(crate) fn new(model: Arc<MjModel>, window: &Window, display: &Display) -> Result<Self, MjViewerError> {
         let egui_ctx = egui::Context::default();
         let viewport_id = egui_ctx.viewport_id();
 
@@ -212,7 +212,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         Ok(Self {
             egui_ctx, state, painter, gl, events: VecDeque::new(),
             camera_names, actuator_names, joint_name_id, equality_names,
-            model,
+            model_passive: model,
             user_ui_callbacks: Vec::new(),
             user_ui_callbacks_detached: Vec::new(),
             actuator_window: false,
@@ -241,9 +241,9 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     pub(crate) fn process(
         &mut self,
         window: &Window, status: &mut ViewerStatusBit,
-        scene: &mut MjvScene<M>, options: &mut MjvOption,
+        scene: &mut MjvScene, options: &mut MjvOption,
         camera: &mut MjvCamera,
-        shared_viewer_state: &Arc<Mutex<ViewerSharedState<M>>>
+        shared_viewer_state: &Arc<Mutex<ViewerSharedState>>
     ) -> f32 {
         // Viewport reservations, which will be excluded from MuJoCo's viewport.
         // This way MuJoCo won't draw over the UI.
@@ -540,8 +540,8 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                     );
                     for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
                         .zip(ctrl_mut.iter_mut())
-                        .zip(self.model.actuator_ctrlrange())
-                        .zip(self.model.actuator_ctrllimited())
+                        .zip(self.model_passive.actuator_ctrlrange())
+                        .zip(self.model_passive.actuator_ctrllimited())
                     {
                         ui.label(RichText::new(actuator_name).font(MAIN_FONT));
 
@@ -570,9 +570,9 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 .show(ctx, |ui|
             {
                 egui::Grid::new("joint_grid").show(ui, |ui| {
-                    let limiteds = self.model.jnt_limited();
-                    let ranges = self.model.jnt_range();
-                    let qpos_addresses = self.model.jnt_qposadr();
+                    let limiteds = self.model_passive.jnt_limited();
+                    let ranges = self.model_passive.jnt_range();
+                    let qpos_addresses = self.model_passive.jnt_qposadr();
                     let data = &mut shared_viewer_state.lock_unpoison().data_passive;
                     let qpos = data.qpos();
                     for (name, index) in &self.joint_name_id
@@ -717,7 +717,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     /// panels, or other UI elements.
     pub(crate) fn add_ui_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&egui::Context, &mut MjData<M>) + 'static
+        F: FnMut(&egui::Context, &mut MjData<Arc<MjModel>>) + 'static
     {
         self.user_ui_callbacks.push(Box::new(callback));
     }
@@ -740,7 +740,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 }
 
 /// Implement an empty shell to support use in [`MjViewer`](super::MjViewer).
-impl<M: Deref<Target = MjModel>> Debug for ViewerUI<M> {
+impl Debug for ViewerUI {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "ViewerUI {{ .. }}")
     }

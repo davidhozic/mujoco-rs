@@ -227,8 +227,8 @@ impl<M: Deref<Target = MjModel> + Clone> Default for MjRendererBuilder<M> {
 /// By default, RGB rendering is enabled and depth rendering is disabled.
 #[derive(Debug)]
 pub struct MjRenderer<M: Deref<Target = MjModel> + Clone> {
-    scene: MjvScene<M>,
-    user_scene: MjvScene<M>,
+    scene: MjvScene,
+    user_scene: MjvScene,
     context: MjrContext,
     model: M,
 
@@ -297,17 +297,17 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
     }
 
     /// Return an immutable reference to the internal scene.
-    pub fn scene(&self) -> &MjvScene<M>{
+    pub fn scene(&self) -> &MjvScene {
         &self.scene
     }
 
     /// Return an immutable reference to a user scene for drawing custom visual-only geoms.
-    pub fn user_scene(&self) -> &MjvScene<M>{
+    pub fn user_scene(&self) -> &MjvScene {
         &self.user_scene
     }
 
     /// Return a mutable reference to a user scene for drawing custom visual-only geoms.
-    pub fn user_scene_mut(&mut self) -> &mut MjvScene<M>{
+    pub fn user_scene_mut(&mut self) -> &mut MjvScene {
         &mut self.user_scene
     }
 
@@ -410,19 +410,24 @@ impl<M: Deref<Target = MjModel> + Clone> MjRenderer<M> {
 
     /// Fallible version of [`MjRenderer::sync`].
     ///
+    /// When `data` was created from a different model than the renderer,
+    /// the internal scene is automatically recreated for the new model.
+    ///
     /// # Errors
-    /// - [`RendererError::SignatureMismatch`] if `data` was created from a
-    ///   different model than the renderer.
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current.
     /// - [`RendererError::SceneError`] if the user-scene sync overflows the geom buffer.
     pub fn try_sync(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
-        let src_sig = data.model().signature();
-        let dst_sig = self.model.signature();
-        if src_sig != dst_sig {
-            return Err(RendererError::SignatureMismatch {
-                source: src_sig,
-                destination: dst_sig,
-            });
+        if data.model().signature() != self.model.signature() {
+            /* Model changed: preserve the extra-geom headroom and user-geom
+             * capacity, only substitute the per-model ngeom base count. */
+            let extra_geom = (self.scene.maxgeom() as usize)
+                .saturating_sub(self.model.ffi().ngeom as usize);
+            let user_geom_cap = self.user_scene.maxgeom() as usize;
+            let new_model = data.model_clone();
+            let new_ngeom = new_model.ffi().ngeom as usize;
+            self.scene = MjvScene::new(data.model(), new_ngeom + extra_geom);
+            self.user_scene = MjvScene::new(data.model(), user_geom_cap);
+            self.model = new_model;
         }
 
         self.scene.update(data, &self.option, &MjvPerturb::default(), &mut self.camera);
@@ -636,13 +641,6 @@ pub enum RendererError {
     /// OpenGL / window initialization failed.
     #[cfg(feature = "renderer-winit-fallback")]
     GlInitFailed(crate::error::GlInitError),
-    /// The data and renderer were created from different models.
-    SignatureMismatch {
-        /// Model signature of the source object.
-        source: u64,
-        /// Model signature of the destination object.
-        destination: u64,
-    },
     /// RGB rendering was not enabled.
     RgbDisabled,
     /// Depth rendering was not enabled.
@@ -664,9 +662,6 @@ impl Display for RendererError {
             Self::ZeroDimension => write!(f, "renderer width and height must both be greater than zero"),
             #[cfg(feature = "renderer-winit-fallback")]
             Self::GlInitFailed(_) => write!(f, "GL initialization failed"),
-            Self::SignatureMismatch { source, destination } => {
-                write!(f, "model signature mismatch: source {source:#X}, destination {destination:#X}")
-            }
             Self::RgbDisabled => write!(f, "RGB rendering is not enabled (renderer.with_rgb_rendering(true))"),
             Self::DepthDisabled => write!(f, "depth rendering is not enabled (renderer.with_depth_rendering(true))"),
             Self::DimensionMismatch => write!(f, "the input width and height don't match the renderer's configuration"),
