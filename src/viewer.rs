@@ -261,28 +261,32 @@ impl ViewerSharedState {
         self._sync_data(data, true);
     }
 
-    /// Syncs the state of viewer's internal [`MjData`] with `data`.
+    /// Syncs the viewer's internal passive [`MjData`] with `data`.
     /// Synchronization happens in two steps.
     /// First the viewer checks if any changes have been made to the internal [`MjData`]
     /// since the last call to this method (since the last sync). Any changes made are
     /// directly copied to the parameter `data`.
-    /// Then the `data`'s state overwrites the internal [`MjData`]'s state.
+    /// Then `data` is copied into the viewer's internal passive copy
+    /// (visualization fields only; see warning below).
     ///
     /// Note that users must afterward call [`MjViewer::render`] for the scene
     /// to be rendered and the UI to be processed.
     ///
     /// <div class="warning">
-    /// Synchronization of data is performed via mjv_copyData, which only copies fields
-    /// required for visualization purposes.
+    /// The user's data is copied into the viewer's internal passive copy via ``mjv_copyData``,
+    /// which skips large computed arrays not required for visualization.
+    /// The viewer's passive copy will therefore **not** contain:
     ///
-    /// If you require everything to be synced for use in a UI callback,
-    /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).
-    /// Alternatively, you can opt into syncing the entire [`MjData`] struct by calling
-    /// [`ViewerSharedState::sync_data_full`] instead.
+    /// - mass matrices (``qM``, ``qLD``, ``qLDiagInv``, ``qLU``);
+    /// - constraint arrays (``efc_*``, ``iefc_*``, including constraint Jacobians).
     ///
-    /// The following are **NOT SYNCHRONIZED**:
-    /// - Jacobian matrices;
-    /// - mass matrices.
+    /// In UI callbacks these fields will be absent unless
+    /// [`ViewerSharedState::sync_data_full`] is used or they are recomputed explicitly
+    /// (e.g. via `data.forward()`).
+    ///
+    /// Additionally, because the viewer may write integration state (e.g. ``ctrl``) back
+    /// to the user's `data`, any Jacobians or other derived quantities in `data` may be
+    /// stale after this call and should be recomputed if needed.
     /// </div>
     ///
     pub fn sync_data<M: Deref<Target = MjModel> + Clone>(&mut self, data: &mut MjData<M>) {
@@ -553,17 +557,20 @@ impl MjViewer {
     /// to be rendered and the UI to be processed.
     /// 
     /// <div class="warning">
-    /// Synchronization of data is performed via mjv_copyData, which only copies fields
-    /// required for visualization purposes.
-    /// 
-    /// If you require everything to be synced for use in a UI callback,
-    /// you need to call appropriate functions/methods to calculate them (e.g., data.forward()).
-    /// Alternatively, you can opt into syncing the entire [`MjData`] struct by calling
-    /// [`MjViewer::sync_data_full`] instead.
-    /// 
-    /// The following are **NOT SYNCHRONIZED**:
-    /// - Jacobian matrices;
-    /// - mass matrices.
+    /// The user's data is copied into the viewer's internal passive copy via ``mjv_copyData``,
+    /// which skips large computed arrays not required for visualization.
+    /// The viewer's passive copy will therefore **not** contain:
+    ///
+    /// - mass matrices (``qM``, ``qLD``, ``qLDiagInv``, ``qLU``);
+    /// - constraint arrays (``efc_*``, ``iefc_*``, including constraint Jacobians).
+    ///
+    /// In UI callbacks these fields will be absent unless
+    /// [`MjViewer::sync_data_full`] is used or they are recomputed explicitly
+    /// (e.g. via `data.forward()`).
+    ///
+    /// Additionally, because the viewer may write integration state (e.g. ``ctrl``) back
+    /// to the user's `data`, any Jacobians or other derived quantities in `data` may be
+    /// stale after this call and should be recomputed if needed.
     /// </div>
     /// 
     /// # Example

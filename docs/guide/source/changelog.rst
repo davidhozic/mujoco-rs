@@ -67,25 +67,27 @@ update of MuJoCo alone can increase the major version.
 
 *Viewer and renderer sync model automatically*
 
-- |mj_data|::
-
-    MjViewer::sync_data / ViewerSharedState::sync_data
-
-  and::
-
-    MjRenderer::sync / try_sync
-
+- :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` /
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_data`
+  and
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync` /
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync`
   now detect when ``data`` was created from a **different** model than the
   viewer/renderer was initialised with. Instead of panicking or returning an
   error, both automatically recreate the scene(s) for the new model and update
   their internal model reference. The ``RendererError::SignatureMismatch``
   variant has been removed.
 
-- ``MjData`` gained a new ``model_clone() -> M`` method (available when
-  ``M: Clone``).
+- |mj_data| gained a new
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_clone`
+  ``-> M`` method (available when ``M: Clone``).
 
-- ``MjData::copy_to``, ``try_copy_to``, ``copy_visual_to``, and
-  ``try_copy_visual_to`` now accept a destination of a **different** model type:
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_copy_to`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`,
+  and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_copy_visual_to`
+  now accept a destination of a **different** model type:
   ``destination: &mut MjData<N>`` where ``N: Deref<Target = MjModel>``. Previously
   the source and destination had to share the same ``M``.
 
@@ -456,7 +458,9 @@ New error variants:
 - Added strict runtime signature check to view creation (panics with
   ``model signature mismatch`` on mismatch).
 - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState`: on model change,
-  ``sync_data`` / ``sync_data_full`` no longer spuriously write back the new
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_data` /
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_data_full`
+  no longer spuriously write back the new
   model's default pose (``qpos0``) to the incoming ``data``. Previously, models
   with free joints, ball joints, or joints with a non-zero ``ref`` attribute would
   have their simulation state silently reset to the default pose on the first sync

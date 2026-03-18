@@ -1268,7 +1268,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
 
-    /// Copy [`MjData`] to `destination`, skipping large arrays not required for visualization.
+    /// Copy [`MjData`] to `destination`, skipping large computed arrays not required for
+    /// visualization: mass matrices and constraint arrays (`efc_*`, `iefc_*`, including
+    /// constraint Jacobians).
     /// This is a wrapper for [`mjv_copyData`].
     ///
     /// # Panics
