@@ -379,8 +379,8 @@ impl MjSpec {
     /// # Returns
     /// On success, returns the generated XML string.
     /// # Errors
-    /// Returns [`MjEditError::SaveFailed`] with MuJoCo's error message if the conversion fails.
-    /// If `buffer_size` is too small, the output will be truncated.
+    /// Returns [`MjEditError::SaveFailed`] with MuJoCo's error message on failure, including
+    /// when `buffer_size` is too small (MuJoCo reports the required size in the message).
     pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, MjEditError> {
         let mut error_buff = [0; ERROR_BUF_LEN];
         let mut result_buff = vec![0u8; buffer_size];
@@ -393,6 +393,8 @@ impl MjSpec {
             _ => {
                 // SAFETY: error_buff is zero-initialised and MuJoCo always
                 // NUL-terminates the message it writes into it.
+                // On failure (-1) and on buffer-too-small (positive), MuJoCo writes
+                // a descriptive message into error_buff.
                 let message = unsafe { CStr::from_ptr(error_buff.as_ptr()) }
                     .to_string_lossy()
                     .into_owned();

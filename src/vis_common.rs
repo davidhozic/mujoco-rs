@@ -102,8 +102,8 @@ pub fn flip_image_vertically<T>(buffer: &mut [T], height: usize, row_len: usize)
 ///
 /// * `path`       - Destination file path.
 /// * `data`       - Raw pixel bytes in row-major, top-down order.
-///                  The caller is responsible for flipping the buffer first if
-///                  it came from an OpenGL readback (see [`flip_image_vertically`]).
+///   The caller is responsible for flipping the buffer first if
+///   it came from an OpenGL readback (see [`flip_image_vertically`]).
 /// * `width`      - Image width in pixels.
 /// * `height`     - Image height in pixels.
 /// * `color_type` - PNG colour model (e.g., `png::ColorType::Rgb`).
@@ -131,9 +131,9 @@ pub fn write_png<P: AsRef<Path>>(
 
     let mut writer = encoder
         .write_header()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
     writer
         .write_image_data(data)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
     Ok(())
 }

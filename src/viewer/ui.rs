@@ -233,7 +233,7 @@ impl ViewerUI {
 
     /// Handles winit input events.
     pub(crate) fn handle_events(&mut self, window: &Window, event: &WindowEvent) {
-        let _ = self.state.on_window_event(&window, event);  // ignore response as it can be obtained later.
+        let _ = self.state.on_window_event(window, event);  // ignore response as it can be obtained later.
     }
 
     /// Gains scoped access to [`egui::Context`] for dealing with custom initialization
@@ -245,6 +245,7 @@ impl ViewerUI {
     }
 
     /// Draws the UI to the viewport.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn process(
         &mut self,
         window: &Window, status: &mut ViewerStatusBit,
@@ -258,7 +259,7 @@ impl ViewerUI {
         let mut left = 0.0;
 
         // Process the UI
-        let raw_input = self.state.take_egui_input(&window);
+        let raw_input = self.state.take_egui_input(window);
         let full_output = self.egui_ctx.run(raw_input, |ctx| {
             if status.contains(ViewerStatusBit::UI) {
                 egui::SidePanel::new(egui::panel::Side::Left,"interface_panel")
@@ -392,7 +393,7 @@ impl ViewerUI {
                                     }
 
                                     for (id, name) in self.camera_names.iter().enumerate() {
-                                        if ui.selectable_value(&mut current_cam_name, &name, name).clicked() {
+                                        if ui.selectable_value(&mut current_cam_name, name, name).clicked() {
                                             *camera = MjvCamera::new_fixed(id as u32);
                                         }
                                     }
@@ -655,7 +656,7 @@ impl ViewerUI {
         });
 
         // Prevent window interactions when covering egui widgets
-        self.state.handle_platform_output(&window, full_output.platform_output);
+        self.state.handle_platform_output(window, full_output.platform_output);
 
         // Tessellate
         let pixels_per_point = full_output.pixels_per_point;

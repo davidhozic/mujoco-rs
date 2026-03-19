@@ -843,22 +843,22 @@ impl MjViewer {
                 MjtFont::mjFONT_NORMAL,
                 MjtGridPos::mjGRID_BOTTOMLEFT,
                 rectangle_from_ui,
-                &headers,
+                headers,
                 Some(&values)
             );
         }
 
         // Check for slowdowns
-        if self.status.contains(ViewerStatusBit::WARN_REALTIME) {
-            if (realtime_factor - 1.0).abs() > REALTIME_FACTOR_DISPLAY_THRESHOLD {
-                self.context.overlay(
-                    MjtFont::mjFONT_BIG,
-                    MjtGridPos::mjGRID_BOTTOMRIGHT,
-                    rectangle_full,
-                    &format!("Realtime factor: {:.1} %", realtime_factor * 100.0),
-                    None
-                );
-            }
+        if self.status.contains(ViewerStatusBit::WARN_REALTIME)
+            && (realtime_factor - 1.0).abs() > REALTIME_FACTOR_DISPLAY_THRESHOLD
+        {
+            self.context.overlay(
+                MjtFont::mjFONT_BIG,
+                MjtGridPos::mjGRID_BOTTOMRIGHT,
+                rectangle_full,
+                &format!("Realtime factor: {:.1} %", realtime_factor * 100.0),
+                None
+            );
         }
     }
 
@@ -963,10 +963,10 @@ impl MjViewer {
                 self.ui.handle_events(window, &window_event);
 
                 // if the UI has an active input focus, ignore all keyboard events
-                if let WindowEvent::KeyboardInput { .. } = &window_event {
-                    if self.ui.focused() {
-                        continue;
-                    }
+                if let WindowEvent::KeyboardInput { .. } = &window_event
+                    && self.ui.focused()
+                {
+                    continue;
                 }
             }
 
@@ -1436,15 +1436,15 @@ impl MjViewerBuilder {
         let ngeom = model.ffi().ngeom as usize;
         let scene = MjvScene::new(Arc::clone(&model), ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
         // SAFETY: The OpenGL context was made current above via gl_surface.
-        let context = unsafe { MjrContext::new(&*model) };
-        let camera  = MjvCamera::new_free(&*model);
+        let context = unsafe { MjrContext::new(&model) };
+        let camera  = MjvCamera::new_free(&model);
 
         // Tracking of changes made between syncs
         let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(Arc::clone(&model), self.max_user_geoms)));
 
         // User interface
         #[cfg(feature = "viewer-ui")]
-        let ui = ui::ViewerUI::new(Arc::clone(&model), &window, &gl_surface.display())?;
+        let ui = ui::ViewerUI::new(Arc::clone(&model), window, &gl_surface.display())?;
         #[cfg(feature = "viewer-ui")]
         let mut status = ViewerStatusBit::UI;
         #[cfg(not(feature = "viewer-ui"))]
