@@ -259,7 +259,7 @@ impl MjrContext {
 /// Array slices.
 impl MjrContext {
     array_slice_dyn! {
-        (unsafe) textureType: as_ptr as_mut_ptr &[u8 [force(u8)]; "type of texture"; ffi().ntexture],
+        (unsafe) textureType: as_ptr as_mut_ptr &[MjtTexture [force]; "type of texture"; ffi().ntexture],
         (unsafe) skinvertVBO: &[u32; "skin vertex position VBOs"; ffi().nskin],
         (unsafe) skinnormalVBO: &[u32; "skin vertex normal VBOs"; ffi().nskin],
         (unsafe) skintexcoordVBO: &[u32; "skin vertex texture coordinate VBOs"; ffi().nskin],

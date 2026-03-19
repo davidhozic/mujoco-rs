@@ -775,15 +775,11 @@ macro_rules! builder_setters {
 #[macro_export]
 macro_rules! array_slice_dyn {
     // Arrays that are of scalar variable size
-    ($($(($unsafe_mut:ident))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$force:ident $(($src_ty:ty))?])?; $doc:literal; $($len_accessor:tt)*]),*) => {
+    ($($(($unsafe_mut:ident))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake>](&self) -> &[$type] {
-                    // Statics inside functions are always evaluated at compile time (even in
-                    // generic contexts), so this check fires when the crate is built regardless
-                    // of whether this method is ever called.
-                    $( $( static _CAST_CHECK: () = $crate::util::assert_cast_compatible::<$src_ty, $type>(); )? )?
                     let length = self.$($len_accessor)* as usize;
                     let ptr = $crate::maybe_force_cast!(self.ffi().$name$(.$as_ptr())?, $type $(, $force)?);
                     if ptr.is_null() || length == 0 {
@@ -855,13 +851,11 @@ macro_rules! array_slice_dyn {
     };
 
     // Arrays whose second dimension is dependent on some variable
-    (sublen_dep {$( $(($unsafe_mut:ident))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[[$type:ty; $($inner_len_accessor:tt)*] $([$force:ident $(($src_ty:ty))?])?; $doc:literal; $($len_accessor:tt)*]),*}) => {
+    (sublen_dep {$( $(($unsafe_mut:ident))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[[$type:ty; $($inner_len_accessor:tt)*] $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*}) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
                 pub fn [<$name:camel:snake>](&self) -> &[$type] {
-                    // See basic arm for rationale on using a static for the eager check.
-                    $( $( static _CAST_CHECK: () = $crate::util::assert_cast_compatible::<$src_ty, $type>(); )? )?
                     let length = self.$($len_accessor)* as usize * (self.$($inner_len_accessor)*) as usize;
                     let ptr = $crate::maybe_force_cast!(self.ffi().$name$(.$as_ptr())?, $type $(, $force)?);
                     if ptr.is_null() || length == 0 {
@@ -1062,7 +1056,7 @@ pub fn assert_ptr_cast_valid<Src, Dst>(_ptr: *const Src) {
         // The underlying type should have the same alignment. This is for converting
         // between e.g. *f64 to *[f64; 3].
         assert!(std::mem::align_of::<Src>() == std::mem::align_of::<Dst>(),
-            "ptr cast: source alignment must be >= target alignment");
+            "ptr cast: source alignment must be == target alignment");
     }
 }
 
