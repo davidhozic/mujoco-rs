@@ -1,7 +1,3 @@
----
-trigger: always_on
----
-
 # Important Context
 
 ## Where to look first
@@ -54,6 +50,10 @@ If `MUJOCO_DYNAMIC_LINK_DIR` is also set, the pre-downloaded copy takes preceden
   C header's second dimension. E.g., `body_pos` uses `[MjtNum; 3]` because the header says `(nbody x 3)`.
 - **Error buffer sizes**: model loading functions use `[0i8; 100]` for error buffers. Verify the
   buffer is passed with the correct length to `mj_loadXML`.
+- **`debug_assert`-only bounds checks**: `debug_assert!` is compiled out in release builds. Any
+  bounds check that only uses `debug_assert!` before an FFI call silently skips validation in
+  release mode. Use `assert!` for safety-critical checks, or at minimum ensure the C function
+  itself has enough validation that skipping the Rust check cannot cause UB.
 - **Bounds checking**: functions like `jac()`, `object_velocity()` validate IDs with `>= 0 && < max`.
   Off-by-one errors (`<=` instead of `<`) can cause UB.
 - **Boolean-to-int conversions**: Rust `bool as i32` yields 0 or 1, matching MuJoCo's convention.

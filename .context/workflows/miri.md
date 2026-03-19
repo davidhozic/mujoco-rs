@@ -1,7 +1,3 @@
----
-description: How to run Miri on mujoco-rs with C FFI
----
-
 # Running with Miri
 
 Run the codebase under Miri's experimental FFI native-lib support to detect undefined behavior in Rust code interoperating with MuJoCo C FFI.

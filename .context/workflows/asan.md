@@ -1,7 +1,3 @@
----
-description: How to build and run MuJoCo and mujoco-rs with AddressSanitizer and UndefinedBehaviorSanitizer
----
-
 # Running with AddressSanitizer (ASan) and UndefinedBehaviorSanitizer (UBSan)
 
 Miri cannot track memory inside the FFI boundary because it doesn't hook into C's `malloc` and native function pointers. To properly check the interaction between Rust and C for memory errors (such as overflows, leaks, use-after-free, or undefined behavior like reference casting), we must compile **both** the C library and the Rust wrapper with sanitizers.
@@ -27,16 +23,16 @@ cmake -S . -B build \
     -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON \
     -DCMAKE_INSTALL_PREFIX:STRING="$(pwd)/mujoco_install" \
     -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF \
+    -DMUJOCO_BUILD_SIMULATE:BOOL=OFF \
     -DMUJOCO_BUILD_TESTS=OFF \
     -DBUILD_SHARED_LIBS:BOOL=OFF \
     -G Ninja \
     -DCMAKE_C_COMPILER:STRING=clang \
     -DCMAKE_CXX_COMPILER:STRING=clang++ \
-    -DMUJOCO_HARDEN:BOOL=ON \
     -DCMAKE_C_FLAGS="-fsanitize=address,undefined" \
     -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined"
 
-cmake --build build --parallel --target glfw libmujoco_simulate mujoco --config=Release
+cmake --build build --parallel --target mujoco
 ```
 
 ## Step 2: Build and Run `mujoco-rs` with ASan
@@ -57,8 +53,18 @@ To run a specific example (e.g., `basic`):
 export MUJOCO_STATIC_LINK_DIR="$(realpath mujoco/build/lib64)"
 export RUSTFLAGS="-Zsanitizer=address"
 
-cargo +nightly run --example basic --target x86_64-unknown-linux-gnu "--no-default-features" --features "<required features here>"
+cargo +nightly run --example basic --target x86_64-unknown-linux-gnu --no-default-features --features "<required features here>"
 ```
+
+> [!NOTE]
+> **Release mode**: The MuJoCo C library is always built with optimizations (`Release`). To also
+> enable the Rust optimizer -- which can expose bugs that only manifest with optimizations active
+> (e.g., temporary value use-after-free, optimizer-assumed invariants) -- add `--release` to the
+> cargo commands above.
+>
+> Release mode drops debug symbols, making stack traces harder to read. To get both optimizations
+> and readable traces, use `RelWithDebInfo` for the CMake build
+> (`-DCMAKE_BUILD_TYPE:STRING=RelWithDebInfo`) and add `-C debuginfo=1` to `RUSTFLAGS`.
 
 **IMPORTANT:** Always run the `examples/miri_test.rs` example with address sanitizer as well (in addition to other tests).
 

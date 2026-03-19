@@ -1,7 +1,3 @@
----
-description: How to run the library's unit tests
----
-
 # Running Tests
 
 Run the in-crate unit tests (tests live inside `src/` files under `#[cfg(test)]`).

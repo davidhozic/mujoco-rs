@@ -1,7 +1,3 @@
----
-trigger: always_on
----
-
 # Session End Protocol
 
 When the agent has finished its current task (verification round, bug fix, feature implementation, etc.),

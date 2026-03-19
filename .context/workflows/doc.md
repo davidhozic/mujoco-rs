@@ -1,7 +1,3 @@
----
-description: Build and check rustdoc documentation for warnings or errors
----
-
 # Building Documentation
 
 Run rustdoc with all features enabled and the `DOCS_RS=y` flag (which activates

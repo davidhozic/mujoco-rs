@@ -1,7 +1,3 @@
----
-description: Comprehensive correctness audit - type/stride safety, UB, memory
----
-
 # Comprehensive Codebase Verification
 
 Use this workflow to systematically verify correctness of the mujoco-rs wrapper layer: type
@@ -12,8 +8,8 @@ and potential undefined behavior.
 ## Phase 1 - Understand the codebase
 Before spawning any agents, read enough of the codebase to build a precise task list:
 1. Read `src/util.rs` - all macro definitions.
-2. Read `src/wrappers/mj_data.rs`, `src/wrappers/mj_model.rs`, `src/wrappers/mj_visualization.rs`.
-3. Read MuJoCo C headers: `mujoco/include/mujoco/mjmodel.h`, `mjdata.h`, `mjvisualize.h`.
+2. Glob `src/wrappers/**/*.rs` and read ALL resulting files.
+3. Glob `mujoco/include/mujoco/*.h` to discover available C headers; read those relevant to the wrappers.
 
 ## Phase 2 - Build a subtask list
 Build a numbered list covering all verification items. Organize by concern group:
@@ -29,39 +25,48 @@ Build a numbered list covering all verification items. Organize by concern group
 - Cast types in array slices (e.g., `[MjtNum; 3]`) match C struct dimensions
 
 ### C. Memory safety in unsafe blocks
-- `mj_view_indices!` sentinel / fallback logic (off-by-one, -1 handling)
-- `PointerView` / `PointerViewMut` null pointer returns empty slice (not UB)
-- `mj_model_nx_to_mapping!` / `mj_model_nx_to_nitem!` map to correct fields
-- `view_creator!` pointer arithmetic: `.add()` offset matches field definition
-- Error buffer sizes in model loading (too small = truncation or overflow)
-- `contacts()` slice: ptr null check, `ncon` cast, and struct layout
-- `contact_force()`: output array size matches `mj_contactForce` expectation (6 elements)
-- `MjvFigure` push/pop bounds
+- Address-sentinel macros (e.g. `mj_view_indices!`): off-by-one in sentinel/-1 handling, last-element fallback
+- Pointer-view types: null pointer must return empty slice, not UB
+- Index-to-mapping macros: verify they select the correct count/mapping field for the requested dimension
+- Pointer arithmetic (`.add()` offsets): offset must match the field's definition in the C struct
+- Error string buffers passed to C: size must be large enough for MuJoCo's maximum error length
+- Slices built from a raw pointer + C count field: null-pointer guard must exist; count field must match the array
+- Output array buffers passed to C functions: size must match what the C function expects to write
+- Push/pop or append operations on fixed-size C arrays: bounds must be checked before write
 
 ### D. Logic correctness
-- Bounds checks in Jacobian functions (off-by-one, wrong comparison operator)
-- Object type dispatch in `object_velocity`/`object_acceleration` (correct enum matching)
-- `is_pyramidal` / `is_sparse` / `is_dual` return value interpretation (== 1 vs != 0)
-- `forward_skip` / `inverse_skip`: boolean-to-int conversion correctness
-- `constraint_update`: jar length check against nefc
-- State extraction: bitmask subset check logic, buffer size validation
+- ID/index bounds checks before FFI calls: verify comparison operators (`>=`/`>`, `<`/`<=`) are correct
+- Enum-dispatch match blocks: verify all variants map to the correct C value; no arm matches the wrong case
+- Boolean return value interpretation: verify `== 1` vs `!= 0` matches what the C function documents
+- Boolean-to-int conversions passed to C: verify the encoding matches the C convention (0/1 or other)
+- Length/size checks on user-supplied slices before passing to C: verify the check is against the right field
+- Bitmask subset checks and buffer-size validation: correct operator and correct reference value
+- **Return code completeness**: for every C function whose return codes are mapped in Rust,
+  enumerate ALL return codes defined in the C header comment. Any Rust arm that maps a code
+  the C API never produces is a bug (invented error variant). Any real C code not matched is
+  also a bug (falls through to a wrong catch-all).
 
 ### E. Type safety
-- `mju_zero` and similar calls: type mismatches (mjtNum, mjtByte, enum values)
-- `c_str_as_str_method!` NUL termination / CStr::from_ptr safety
-- `cast_mut_info!` bytemuck alignment and size compatibility
-- `force_cast` union transmute: size and alignment assertions
-- Enum conversions via `as i32` -- valid discriminant values
+- C utility function calls (e.g. zero/fill/copy helpers): check for type mismatches in element type or size
+- `CStr::from_ptr` and similar: pointer must be NUL-terminated and valid for the lifetime used
+- `bytemuck` casts: alignment and size of source and target types must be compatible
+- Union-based transmutes: size and alignment assertions must be present and correct
+- Enum-to-int conversions: resulting integer must be a valid discriminant for the C enum
 
 ### F. Lifecycle and concurrency
-- Visualization struct lifecycle (Drop impl correctness)
-- Box<MaybeUninit> initialization patterns (fully written before use)
-- Send/Sync impl safety: verify that all `unsafe impl Send/Sync` for generic wrapper types require the generic parameter to also be `Send` / `Sync`
-- MjData model signature check in view methods
+- Drop impls for wrapper types: verify the correct C free/destroy function is called and only once
+- `Box<MaybeUninit>` patterns: all fields must be fully written before `assume_init` is called
+- `unsafe impl Send`/`Sync` on generic wrapper types: the generic parameter must also be bounded `Send`/`Sync`
+- Model-signature checks in view methods: verify the check is present and covers all access paths
 
-### G. Edge cases and misc
-- Free joints and nq vs njnt discrepancy
-- Last-joint fallback in mj_view_indices!
+### G. Safety-absent guards
+- **`debug_assert`-only bounds**: any bounds check before an FFI call that uses only
+  `debug_assert!` is absent in release builds. Flag these as Medium severity; the fix is
+  to promote to `assert!` or verify the C function handles the invalid value gracefully.
+
+### H. Edge cases and misc
+- Count fields where `nX != nY` for related concepts (e.g. nq vs njnt for joints with multiple DOFs)
+- Last-element / boundary fallback in address-array macros
 - Test coverage gaps
 - Build linkage correctness
 

@@ -1,7 +1,3 @@
----
-trigger: always_on
----
-
 # Coding Conventions
 
 ## Hard rules - MUST follow
@@ -11,6 +7,7 @@ trigger: always_on
 - **Cross-reference with MuJoCo C docs** when adding or modifying wrapper fields (see `important-context.md`).
 - **Prefer existing macros** in `src/util.rs` over writing manual accessor methods. Read `macro-system.md` for details.
 - **Verify stride against C headers**: every new `info_method!` field must have its stride confirmed against the dimension comment in `mujoco/include/mujoco/mjmodel.h` or `mjdata.h` (e.g. `// (nbody x 3)` means stride 3).
+- **Update `Cargo.toml` excludes**: when adding files or directories that are not part of the published crate (e.g. CI configs, internal tooling, docs, `.context/` entries, dev scripts), add them to the `exclude` list in `Cargo.toml` so they are not included in crates.io publishes.
 
 ## Feature flags
 - Read `Cargo.toml` to discover available features and their default state.
