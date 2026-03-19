@@ -749,10 +749,10 @@ impl MjvScene {
 impl MjvScene {
     // Scalar length arrays
     array_slice_dyn! {
-        (unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; nflexedge],
-        flexvert: &[[f32; 3] [force]; "flex vertices"; nflexvert],
-        skinvert: &[[f32; 3] [force]; "skin vertex data"; nskinvert],
-        skinnormal: &[[f32; 3] [force]; "skin normal data"; nskinvert],
+        (unsafe) flexedge: &[[i32; 2] [force(i32)]; "flex edge data"; nflexedge],
+        flexvert: &[[f32; 3] [force(f32)]; "flex vertices"; nflexvert],
+        skinvert: &[[f32; 3] [force(f32)]; "skin vertex data"; nskinvert],
+        skinnormal: &[[f32; 3] [force(f32)]; "skin normal data"; nskinvert],
         (unsafe) geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
         (unsafe) geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
         (unsafe) flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
