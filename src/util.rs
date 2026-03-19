@@ -1048,7 +1048,7 @@ pub unsafe fn force_cast<T, U>(val: T) -> U {
 /// The pointer argument is only used for type inference of `Src`; it is
 /// never dereferenced.
 #[inline(always)]
-pub fn assert_ptr_cast_valid<Src, Dst>(_ptr: *const Src) {
+pub const fn assert_ptr_cast_valid<Src, Dst>(_ptr: *const Src) {
     const {
         assert!(std::mem::size_of::<Dst>().is_multiple_of(std::mem::size_of::<Src>()),
             "ptr cast: target size must be a multiple of source size");
@@ -1059,26 +1059,6 @@ pub fn assert_ptr_cast_valid<Src, Dst>(_ptr: *const Src) {
             "ptr cast: source alignment must be == target alignment");
     }
 }
-
-
-/// Asserts at compile time that casting between `Src` and `Dst` is
-/// size-and-alignment compatible, taking both types explicitly.
-///
-/// Unlike [`assert_ptr_cast_valid`], this is a `const fn` and can be used in
-/// `const` item initialisers, which are evaluated eagerly (even when the
-/// containing function is never called).  Use this for build-time type-safety
-/// checks that must fire regardless of whether any method is exercised.
-pub const fn assert_cast_compatible<Src, Dst>() {
-    assert!(
-        std::mem::size_of::<Dst>().is_multiple_of(std::mem::size_of::<Src>()),
-        "ptr cast: target size must be a multiple of source size"
-    );
-    assert!(
-        std::mem::align_of::<Src>() == std::mem::align_of::<Dst>(),
-        "ptr cast: source alignment must match target alignment"
-    );
-}
-
 
 /// Conditionally casts a raw pointer to `$type` with compile-time
 /// size and alignment checks.  When the `force` token is absent the
