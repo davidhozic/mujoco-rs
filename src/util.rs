@@ -1048,18 +1048,17 @@ pub unsafe fn force_cast<T, U>(val: T) -> U {
 /// The pointer argument is only used for type inference of `Src`; it is
 /// never dereferenced.
 #[inline(always)]
-pub fn assert_ptr_cast_valid<Src, Dst>(_ptr: *const Src) {
+pub const fn assert_ptr_cast_valid<Src, Dst>(_ptr: *const Src) {
     const {
         assert!(std::mem::size_of::<Dst>().is_multiple_of(std::mem::size_of::<Src>()),
             "ptr cast: target size must be a multiple of source size");
-        
+
         // The underlying type should have the same alignment. This is for converting
         // between e.g. *f64 to *[f64; 3].
         assert!(std::mem::align_of::<Src>() == std::mem::align_of::<Dst>(),
-            "ptr cast: source alignment must be >= target alignment");
+            "ptr cast: source alignment must be == target alignment");
     }
 }
-
 
 /// Conditionally casts a raw pointer to `$type` with compile-time
 /// size and alignment checks.  When the `force` token is absent the
