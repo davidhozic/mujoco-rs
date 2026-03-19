@@ -210,7 +210,6 @@ impl<'d, T> PointerViewUnsafeMut<'d, T> {
     /// - written values preserve Rust type validity and MuJoCo invariants.
     pub unsafe fn as_mut_slice(&mut self) -> &mut [T] {
         if self.ptr.is_null() {
-            debug_assert!(self.len == 0, "null pointer with non-zero length in PointerViewUnsafeMut::as_mut_slice");
             return &mut [];
         }
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
@@ -230,7 +229,6 @@ impl<T> Deref for PointerViewUnsafeMut<'_, T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
         if self.ptr.is_null() {
-            debug_assert!(self.len == 0, "null pointer with non-zero length in PointerViewUnsafeMut::deref");
             return &[];
         }
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
@@ -790,7 +788,7 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
-                #[doc = concat!("Mutable slice of the ", $doc," array.")]
+                #[doc = concat!("Mutable slice of the ", $doc, " array.\n\n# Safety\n\nDirect mutation of this array bypasses MuJoCo's internal consistency checks. The caller must ensure that all values written remain valid for MuJoCo's internal state.")]
                 pub $($unsafe_mut)? fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                     let length = self.$($len_accessor)* as usize;
                     let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
@@ -867,7 +865,7 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
-                #[doc = concat!("Mutable slice of the ", $doc," array.")]
+                #[doc = concat!("Mutable slice of the ", $doc, " array.\n\n# Safety\n\nDirect mutation of this array bypasses MuJoCo's internal consistency checks. The caller must ensure that all values written remain valid for MuJoCo's internal state.")]
                 pub $($unsafe_mut)? fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                     let length = self.$($len_accessor)* as usize * (self.$($inner_len_accessor)*) as usize;
                     let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
@@ -1026,8 +1024,9 @@ pub fn assert_mujoco_version() {
 #[inline(always)]
 pub unsafe fn force_cast<T, U>(val: T) -> U {
     const {
+        // The underlying type should be the same in representation.
         assert!(std::mem::size_of::<T>() == std::mem::size_of::<U>());
-        assert!(std::mem::align_of::<T>().is_multiple_of(std::mem::align_of::<U>()));
+        assert!(std::mem::align_of::<T>() == std::mem::align_of::<U>());
     }
     #[repr(C)]
     union Transmuter<T, U> {
@@ -1051,9 +1050,12 @@ pub unsafe fn force_cast<T, U>(val: T) -> U {
 #[inline(always)]
 pub fn assert_ptr_cast_valid<Src, Dst>(_ptr: *const Src) {
     const {
-        assert!(std::mem::size_of::<Dst>() % std::mem::size_of::<Src>() == 0,
+        assert!(std::mem::size_of::<Dst>().is_multiple_of(std::mem::size_of::<Src>()),
             "ptr cast: target size must be a multiple of source size");
-        assert!(std::mem::align_of::<Src>() >= std::mem::align_of::<Dst>(),
+        
+        // The underlying type should have the same alignment. This is for converting
+        // between e.g. *f64 to *[f64; 3].
+        assert!(std::mem::align_of::<Src>() == std::mem::align_of::<Dst>(),
             "ptr cast: source alignment must be >= target alignment");
     }
 }

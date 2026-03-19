@@ -176,25 +176,28 @@ impl MjvCamera {
 
     /// Creates a new fixed camera.
     pub fn new_fixed(camera_id: u32) -> Self {
-        let mut camera: mjvCamera_ = Self::default();
-        camera.type_ = MjtCamera::mjCAMERA_FIXED as i32;
-        camera.fixedcamid = camera_id as i32;
-        camera
+        mjvCamera_ {
+            type_: MjtCamera::mjCAMERA_FIXED as i32,
+            fixedcamid: camera_id as i32,
+            ..Self::default()
+        }
     }
 
     /// Creates a new tracking camera to track a body with the given `tracking_id`.
     pub fn new_tracking(tracking_id: u32) -> Self {
-        let mut camera: mjvCamera_ = Self::default();
-        camera.type_ = MjtCamera::mjCAMERA_TRACKING as i32;
-        camera.trackbodyid = tracking_id as i32;
-        camera
+        mjvCamera_ {
+            type_: MjtCamera::mjCAMERA_TRACKING as i32,
+            trackbodyid: tracking_id as i32,
+            ..Self::default()
+        }
     }
 
     /// Creates a new camera of user type.
     pub fn new_user() -> Self {
-        let mut cam = Self::default();
-        cam.type_ = MjtCamera::mjCAMERA_USER as i32;
-        cam
+        mjvCamera_ {
+            type_: MjtCamera::mjCAMERA_USER as i32,
+            ..Self::default()
+        }
     }
 
     /// Sets the camera into tracking mode.
@@ -659,10 +662,10 @@ impl MjvScene {
     /// any code that might reallocate the geoms buffer runs.
     /// # Errors
     /// Returns [`MjSceneError::SceneFull`] when `ngeom >= maxgeom`.
-    pub fn create_geom<'s>(
-        &'s mut self, geom_type: MjtGeom, size: Option<[MjtNum; 3]>,
+    pub fn create_geom(
+        &mut self, geom_type: MjtGeom, size: Option<[MjtNum; 3]>,
         pos: Option<[MjtNum; 3]>, mat: Option<[MjtNum; 9]>, rgba: Option<[f32; 4]>
-    ) -> Result<&'s mut MjvGeom, MjSceneError> {
+    ) -> Result<&mut MjvGeom, MjSceneError> {
         if self.ffi.ngeom >= self.ffi.maxgeom {
             return Err(MjSceneError::SceneFull { capacity: self.ffi.maxgeom });
         }
@@ -700,7 +703,7 @@ impl MjvScene {
     /// Renders the scene to the screen. This does not automatically make the OpenGL context current.
     pub fn render(&mut self, viewport: &MjrRectangle, context: &MjrContext){
         unsafe {
-            mjr_render(viewport.clone(), self.ffi_mut(), context.ffi());
+            mjr_render(*viewport, self.ffi_mut(), context.ffi());
         }
     }
 

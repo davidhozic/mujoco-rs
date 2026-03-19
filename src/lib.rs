@@ -89,7 +89,7 @@ pub mod viewer;
 #[cfg(feature = "cpp-viewer")]
 pub mod cpp_viewer;
 
-#[allow(warnings)]
+#[allow(warnings, clippy::approx_constant)]
 pub mod mujoco_c;  // raw MuJoCo C and C++ bindings
 
 #[cfg(any(feature = "viewer", feature = "renderer-winit-fallback"))]

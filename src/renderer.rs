@@ -48,6 +48,7 @@ fn model_near_far(model: &MjModel) -> (f32, f32) {
 /// GlState enum wrapper. By default, headless implementation will be used
 /// when supported. Only on failure will an invisible winit window be used.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum GlState {
     #[cfg(feature = "renderer-winit-fallback")] Winit(GlStateWinit),
     #[cfg(target_os = "linux")] Egl(egl::GlStateEgl),

@@ -572,10 +572,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
 
         let ns = nsample as usize;
-        if let Some(t) = times {
-            if t.len() != ns {
-                return Err(MjDataError::LengthMismatch { name: "times", expected: ns, got: t.len() });
-            }
+        if let Some(t) = times
+            && t.len() != ns
+        {
+            return Err(MjDataError::LengthMismatch { name: "times", expected: ns, got: t.len() });
         }
         if values.len() != ns {
             return Err(MjDataError::LengthMismatch { name: "values", expected: ns, got: values.len() });
@@ -614,10 +614,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         let dim = self.model.sensor_dim()[id] as usize;
         let required = (nsample as usize) * dim;
 
-        if let Some(t) = times {
-            if t.len() != nsample as usize {
-                return Err(MjDataError::LengthMismatch { name: "times", expected: nsample as usize, got: t.len() });
-            }
+        if let Some(t) = times
+            && t.len() != nsample as usize
+        {
+            return Err(MjDataError::LengthMismatch { name: "times", expected: nsample as usize, got: t.len() });
         }
         if values.len() != required {
             return Err(MjDataError::LengthMismatch { name: "values", expected: required, got: values.len() });
@@ -739,7 +739,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is negative or `>= nbody`.
     pub fn jac(&self, jacp: bool, jacr: bool, point: &[MjtNum; 3], body_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
-        let nbody = self.model.ffi().nbody as i64;
+        let nbody = self.model.ffi().nbody;
         if body_id < 0 || (body_id as i64) >= nbody {
             return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
         }
@@ -763,7 +763,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
     pub fn jac_body(&self, jacp: bool, jacr: bool, body_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
-        let nbody = self.model.ffi().nbody as i64;
+        let nbody = self.model.ffi().nbody;
         if body_id < 0 || (body_id as i64) >= nbody {
             return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
         }
@@ -787,7 +787,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
     pub fn jac_body_com(&self, jacp: bool, jacr: bool, body_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
-        let nbody = self.model.ffi().nbody as i64;
+        let nbody = self.model.ffi().nbody;
         if body_id < 0 || (body_id as i64) >= nbody {
             return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
         }
@@ -810,7 +810,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
     pub fn jac_subtree_com(&mut self, body_id: i32) -> Result<Vec<MjtNum>, MjDataError> {
-        let nbody = self.model.ffi().nbody as i64;
+        let nbody = self.model.ffi().nbody;
         if body_id < 0 || (body_id as i64) >= nbody {
             return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
         }
@@ -832,7 +832,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `geom_id` is out of range.
     pub fn jac_geom(&self, jacp: bool, jacr: bool, geom_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
-        let ngeom = self.model.ffi().ngeom as i64;
+        let ngeom = self.model.ffi().ngeom;
         if geom_id < 0 || (geom_id as i64) >= ngeom {
             return Err(MjDataError::IndexOutOfBounds { kind: "geom_id", id: geom_id as i64, upper: ngeom });
         }
@@ -856,7 +856,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `site_id` is out of range.
     pub fn jac_site(&self, jacp: bool, jacr: bool, site_id: i32) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
-        let nsite = self.model.ffi().nsite as i64;
+        let nsite = self.model.ffi().nsite;
         if site_id < 0 || (site_id as i64) >= nsite {
             return Err(MjDataError::IndexOutOfBounds { kind: "site_id", id: site_id as i64, upper: nsite });
         }
@@ -878,7 +878,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
     pub fn angmom_mat(&mut self, body_id: i32) -> Result<Vec<MjtNum>, MjDataError> {
-        let nbody = self.model.ffi().nbody as i64;
+        let nbody = self.model.ffi().nbody;
         if body_id < 0 || (body_id as i64) >= nbody {
             return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id as i64, upper: nbody });
         }
@@ -943,7 +943,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when either geom id is negative or `>= ngeom`.
     pub fn geom_distance(&self, geom1_id: i32, geom2_id: i32, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> Result<MjtNum, MjDataError> {
-        let ngeom = self.model.ffi().ngeom as i64;
+        let ngeom = self.model.ffi().ngeom;
         if geom1_id < 0 || (geom1_id as i64) >= ngeom {
             return Err(MjDataError::IndexOutOfBounds { kind: "geom1_id", id: geom1_id as i64, upper: ngeom });
         }
@@ -981,15 +981,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// If `normals_out` is `Some`, it must be a slice of `nray` elements filled with surface normals. Use `None` to skip normals.
     /// # Errors
     /// Returns [`MjDataError::LengthMismatch`] if `normals_out` length does not match `vec.len()`.
+    #[allow(clippy::too_many_arguments)]
     pub fn multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
         flg_static: bool, bodyexclude: i32, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
     ) -> Result<(Vec<i32>, Vec<MjtNum>), MjDataError> {
         let nray = vec.len();
-        if let Some(buf) = &normals_out {
-            if buf.len() != nray {
-                return Err(MjDataError::LengthMismatch { name: "normals_out", expected: nray, got: buf.len() });
-            }
+        if let Some(buf) = &normals_out
+            && buf.len() != nray
+        {
+            return Err(MjDataError::LengthMismatch { name: "normals_out", expected: nray, got: buf.len() });
         }
 
         let mut geom_id = vec![0; nray];
@@ -1037,6 +1038,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     ///
     /// # Panics
     /// Panics if `flexid` is out of bounds (must be `0 <= flexid < nflex`).
+    #[allow(clippy::too_many_arguments)]
     pub fn ray_flex(
         &self, flex_layer: i32, flg_vert: bool, flg_edge: bool, flg_face: bool, flg_skin: bool, flexid: i32,
         pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
@@ -1136,7 +1138,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         body: i32,
         qfrc_target: &mut [MjtNum],
     ) -> Result<(), MjDataError> {
-        let nbody = self.model.ffi().nbody as i64;
+        let nbody = self.model.ffi().nbody;
         if body < 0 || body as i64 >= nbody {
             return Err(MjDataError::IndexOutOfBounds {
                 kind: "body",
@@ -1193,7 +1195,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     ///
     /// On success, returns the number of [`MjtNum`] elements written.
     pub fn try_read_state_into(&self, spec: u32, destination: &mut [MjtNum]) -> Result<usize, MjDataError> {
-        let state_size = self.model.state_size(spec) as usize;
+        let state_size = self.model.state_size(spec);
         if destination.len() < state_size {
             return Err(MjDataError::BufferTooSmall {
                 name: "destination",
@@ -1210,8 +1212,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Same as [`MjData::read_state_into`], except it allocates
     /// and returns new boxed data containing the state.
     pub fn get_state(&self, spec: u32) -> Box<[MjtNum]> {
-        let mut destination = vec![0.0; self.model.state_size(spec) as usize].into_boxed_slice();
-        Self::read_state_into(&self, spec, &mut destination);
+        let mut destination = vec![0.0; self.model.state_size(spec)].into_boxed_slice();
+        Self::read_state_into(self, spec, &mut destination);
         destination
     }
 
@@ -1253,7 +1255,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// not accessed until the `eq_active` values have been re-validated as `0` or `1`
     /// (e.g. by calling `mj_forward` or `mj_step`).
     pub unsafe fn try_set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
-        let required_len = self.model.state_size(spec) as usize;
+        let required_len = self.model.state_size(spec);
         if state.len() < required_len {
             return Err(MjDataError::BufferTooSmall {
                 name: "state",

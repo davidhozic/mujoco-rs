@@ -47,6 +47,7 @@ impl MjrRectangle {
     }
 }
 
+#[allow(clippy::derivable_impls)]  // MjrRectangle is a type alias of a foreign type; derive is not applicable
 impl Default for MjrRectangle {
     fn default() -> Self {
         Self {
@@ -194,21 +195,21 @@ impl MjrContext {
                 });
             }
         }
-        if let Some(buf) = depth.as_ref() {
-            if buf.len() < size {
-                return Err(MjSceneError::BufferTooSmall {
-                    name: "depth",
-                    got: buf.len(),
-                    needed: size,
-                });
-            }
+        if let Some(buf) = depth.as_ref()
+            && buf.len() < size
+        {
+            return Err(MjSceneError::BufferTooSmall {
+                name: "depth",
+                got: buf.len(),
+                needed: size,
+            });
         }
 
         unsafe {
             mjr_readPixels(
                 rgb.map_or(ptr::null_mut(), |x| x.as_mut_ptr()),
                 depth.map_or(ptr::null_mut(), |x| x.as_mut_ptr()),
-                viewport.clone(), self.ffi()
+                *viewport, self.ffi()
             )
         }
         Ok(())

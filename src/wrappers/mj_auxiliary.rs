@@ -77,7 +77,6 @@ impl MjVfs {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// - [`MjVfsError::Full`] if the VFS has no more room.
     /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
     /// - [`MjVfsError::LoadFailed`] if the file could not be loaded.
     /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
@@ -99,7 +98,6 @@ impl MjVfs {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// - [`MjVfsError::Full`] if the VFS has no more room.
     /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
     /// - [`MjVfsError::LoadFailed`] if MuJoCo fails to register the buffer.
     /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
@@ -135,7 +133,6 @@ impl MjVfs {
     fn handle_add_result(result: i32) -> Result<(), MjVfsError> {
         match result {
             0 => Ok(()),
-            1 => Err(MjVfsError::Full),
             2 => Err(MjVfsError::AlreadyExists),
             -1 => Err(MjVfsError::LoadFailed),
             code => Err(MjVfsError::Unknown(code))
