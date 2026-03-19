@@ -1,7 +1,3 @@
----
-description: How to compile and run an example from the examples/ directory
----
-
 # Running an Example
 
 Compile and run one of the example programs.

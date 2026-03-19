@@ -1,7 +1,3 @@
----
-description: How to build the mujoco-rs library
----
-
 # Building MuJoCo-rs
 
 Compile the library using a pre-downloaded MuJoCo shared library in the repository.

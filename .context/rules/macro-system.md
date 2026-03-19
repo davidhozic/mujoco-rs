@@ -1,7 +1,3 @@
----
-trigger: always_on
----
-
 # Macro System
 
 This crate uses declarative macros extensively to reduce boilerplate when wrapping MuJoCo's C arrays.

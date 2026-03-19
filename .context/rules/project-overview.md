@@ -1,7 +1,3 @@
----
-trigger: always_on
----
-
 # Project Overview
 
 MuJoCo-rs is a high-level Rust wrapper around the [MuJoCo](https://mujoco.org/) C physics simulation library. It provides safe Rust wrappers, a Rust-native 3D viewer, and an offscreen renderer.

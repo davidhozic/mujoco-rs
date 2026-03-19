@@ -1,7 +1,3 @@
----
-trigger: always_on
----
-
 # Terminal Execution Policy
 
 This rule applies to VS Code agent terminal tooling only.
