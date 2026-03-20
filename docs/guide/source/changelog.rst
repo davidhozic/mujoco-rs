@@ -143,8 +143,8 @@ gained new variants. See `Error handling`_ below for the full method list.
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml`
   now accepts ``AsRef<Path>`` (was ``&str``) and returns
-  ``Err(MjModelError::InvalidUtf8Path)`` for non-UTF-8 paths instead of
-  silently truncating.
+  ``Err(MjModelError::InvalidUtf8Path)`` for non-UTF-8 paths (previously
+  impossible to pass since ``&str`` is always UTF-8).
 
 - ``MjViewerCpp<M>`` (``cpp-viewer`` feature) is no longer generic over ``M``.
   Remove the type parameter from all usage sites. The ``launch_passive``
@@ -409,7 +409,7 @@ New error variants:
 
 - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`: ``RgbDisabled``,
   ``DepthDisabled``, ``DimensionMismatch``, ``ZeroDimension``, ``IoError``,
-  ``SceneError``, ``GlInitFailed``, ``SignatureMismatch``.
+  ``SceneError``, ``GlInitFailed``.
 - :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError`: ``PainterInitError``,
   ``GlInitFailed``, ``SceneError``.
 - :docs-rs:`~mujoco_rs::error::<enum>MjModelError`: ``BufferTooSmall``,
