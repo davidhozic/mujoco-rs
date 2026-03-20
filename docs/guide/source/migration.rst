@@ -342,11 +342,45 @@ Type changes
 
 - |mj_model|: ``size()`` returns ``MjtSize`` (was ``i32``).
 - |mj_model|: ``state_size()`` returns ``usize`` (was ``i32``).
-- |mj_model|: ``name_to_id()`` returns ``Option<i32>`` (was ``i32``; ``-1`` is now ``None``).
+- |mj_model|: ``name_to_id()`` returns ``Option<usize>`` (was ``i32``; ``-1`` is now ``None``).
 - |mj_model|: ``tuple_objtype()`` returns ``&[MjtObj]`` (was ``&[i32]``).
 - |mj_model|: ``maxuse_threadstack()`` returns ``&[MjtSize; mjMAXTHREAD]`` (was ``&[MjtSize]``).
 - |mj_data|: ``contact_force()`` takes ``contact_id: u32`` (was ``usize``).
+- |mj_data|: ``jac``, ``jac_body``, ``jac_body_com``, ``jac_subtree_com``, ``jac_geom``,
+  ``jac_site``, ``angmom_mat``, ``object_velocity``, ``object_acceleration``,
+  ``geom_distance``, ``local_to_global``, ``apply_ft``, ``try_apply_ft``:
+  index parameters now take ``usize`` (was ``i32``). Add ``as usize`` at call sites.
+- |mj_data|: ``ray`` and ``multi_ray``: ``bodyexclude`` changed from ``i32`` (``-1`` = no
+  exclusion) to ``Option<usize>`` (``None`` = no exclusion). Replace ``-1`` with ``None``
+  and ``body_id`` with ``Some(body_id as usize)``.
+- |mj_data|: ``ray_flex``: ``flexid`` takes ``usize`` (was ``i32``).
+- |mj_model|: ``id_to_name``: ``id`` takes ``usize`` (was ``i32``).
 - |mjs_tendon|: ``limited`` and ``actfrclimited`` are now ``MjtLimited`` tri-state (was ``bool``).
+
+
+``MjData::reset_keyframe()``
+-----------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>reset_keyframe`
+now takes ``key: usize`` (was ``i32``) and returns ``Result<(), MjDataError>``.
+Out-of-range keys that previously silently fell back to a plain reset now return
+``Err(MjDataError::IndexOutOfBounds)``.
+A new fallible variant
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_reset_keyframe`
+is available for explicit error handling.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    data.reset_keyframe(0);          // silently ignored if key >= nkey
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    data.reset_keyframe(0);          // panics if key >= nkey
+    data.try_reset_keyframe(0)?;     // returns Err if key >= nkey
 
 
 Ray-casting parameter changes

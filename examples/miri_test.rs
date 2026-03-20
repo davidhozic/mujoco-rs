@@ -84,8 +84,6 @@ fn test_basic_getters(model: &MjModel) {
     assert_eq!(model.ffi().ngeom, 3);
 
     let motor_id = model.name_to_id(MjtObj::mjOBJ_ACTUATOR, "box2_motor").unwrap();
-    assert!(motor_id >= 0);
-    
     let motor_name = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, motor_id).unwrap();
     assert_eq!(motor_name, "box2_motor");
 
@@ -97,12 +95,12 @@ fn test_simulation_and_sensors<'a>(model: &'a MjModel, data: &mut MjData<&'a MjM
     println!("Stepping simulation and testing sensors...");
     let motor_id = model.name_to_id(MjtObj::mjOBJ_ACTUATOR, "box2_motor").unwrap();
     for _ in 0..10 {
-        data.ctrl_mut()[motor_id as usize] = 1.0;
+        data.ctrl_mut()[motor_id] = 1.0;
         data.step();
     }
     
     data.sensor_pos();
-    let sensor_id = model.name_to_id(MjtObj::mjOBJ_SENSOR, "box2_pos_sensor").unwrap() as usize;
+    let sensor_id = model.name_to_id(MjtObj::mjOBJ_SENSOR, "box2_pos_sensor").unwrap();
     // box2_pos_sensor is mjSENS_JOINTPOS (dim=1)
     let sensor_data: [f64; 1] = data.read_sensor_fixed(sensor_id, 0.0, 0).expect("Failed to read sensor");
     assert!(!sensor_data.is_empty());
@@ -168,7 +166,7 @@ fn test_vfs_raycasting<'a>(_model: &'a MjModel, data: &mut MjData<&'a MjModel>) 
 
     let pnt = [0.0, 0.0, 5.0];
     let vec = [0.0, 0.0, -1.0];
-    let geomid = data.ray(&pnt, &vec, None, false, -1, None);
+    let geomid = data.ray(&pnt, &vec, None, false, None, None);
     println!("Ray hit result: {:?}", geomid);
 }
 
@@ -215,11 +213,11 @@ fn test_iterators_and_views(model: &MjModel, data: &mut MjData<&MjModel>) {
     
     // MjModel "iteration" via indices
     for i in 0..model.ffi().nbody {
-        let name = model.id_to_name(MjtObj::mjOBJ_BODY, i as i32).unwrap_or("unnamed");
+        let name = model.id_to_name(MjtObj::mjOBJ_BODY, i as usize).unwrap_or("unnamed");
         assert!(!name.is_empty());
     }
     for i in 0..model.ffi().njnt {
-        let name = model.id_to_name(MjtObj::mjOBJ_JOINT, i as i32).unwrap_or("unnamed");
+        let name = model.id_to_name(MjtObj::mjOBJ_JOINT, i as usize).unwrap_or("unnamed");
         assert!(!name.is_empty());
     }
     // Data named accessors and views

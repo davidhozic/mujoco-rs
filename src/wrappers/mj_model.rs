@@ -272,13 +272,12 @@ impl MjModel {
         ) };
         match result {
             1 => Ok(()),
-            0 => {
+            _ => {
                 let cstr_error = unsafe { CStr::from_ptr(error.as_ptr()) }
                     .to_string_lossy()
                     .into_owned();
                 Err(MjModelError::SaveFailed(cstr_error))
             },
-            _ => unreachable!()
         }
     }
 
@@ -493,12 +492,12 @@ impl MjModel {
     /// Returns `None` if the name is not found.
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
-    pub fn name_to_id(&self, type_: MjtObj, name: &str) -> Option<i32> {
+    pub fn name_to_id(&self, type_: MjtObj, name: &str) -> Option<usize> {
         let c_string = CString::new(name).unwrap();
         let id = unsafe {
             mj_name2id(self.ffi(), type_ as i32, c_string.as_ptr())
         };
-        if id == -1 { None } else { Some(id) }
+        if id == -1 { None } else { Some(id as usize) }
     }
 
     /* Partially auto-generated */
@@ -684,8 +683,8 @@ impl MjModel {
     /// Wraps `mj_id2name`.
     /// # Panics
     /// Panics if MuJoCo internally returns a C string that is not valid UTF-8.
-    pub fn id_to_name(&self, type_: MjtObj, id: i32) -> Option<&str> {
-        let ptr = unsafe { mj_id2name(self.ffi(), type_ as i32, id) };
+    pub fn id_to_name(&self, type_: MjtObj, id: usize) -> Option<&str> {
+        let ptr = unsafe { mj_id2name(self.ffi(), type_ as i32, id as i32) };
         if ptr.is_null() {
             None
         }
@@ -2308,8 +2307,8 @@ mod tests {
         assert_eq!(view_eq.r#type[0], MjtEq::mjEQ_CONNECT);
 
         // Check connected bodies
-        assert_eq!(view_eq.obj1id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body3").unwrap());
-        assert_eq!(view_eq.obj2id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body4").unwrap());
+        assert_eq!(view_eq.obj1id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body3").unwrap() as i32);
+        assert_eq!(view_eq.obj2id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body4").unwrap() as i32);
         assert_eq!(view_eq.objtype[0], MjtObj::mjOBJ_BODY);
 
         // Check active
