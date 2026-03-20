@@ -187,17 +187,21 @@ gained new variants. See `Error handling`_ below for the full method list.
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>object_velocity`,
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>object_acceleration`,
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>geom_distance`,
-    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>local_to_global`,
-    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>apply_ft`,
-    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_apply_ft`:
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>local_to_global`:
     object-id / body-id / geom-id / site-id parameters now take ``usize`` (was ``i32``).
     The ``>= 0`` guard is implicit in the type; pass ``body_id as usize`` at call sites.
-  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_flex`:
-    ``flexid`` takes ``usize`` (was ``i32``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray`,
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray`:
     ``bodyexclude`` changed from ``i32`` to ``Option<usize>``. Replace ``-1`` with
     ``None`` and ``body_id`` with ``Some(body_id as usize)``.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` now returns
+    ``(Option<usize>, MjtNum)`` instead of ``(i32, MjtNum)``. The returned geom id is
+    ``None`` when the ray misses all geometry (previously ``-1``).
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray` now
+    returns ``Result<(Vec<Option<usize>>, Vec<MjtNum>), MjDataError>`` instead of
+    ``Result<(Vec<i32>, Vec<MjtNum>), MjDataError>``. Each element of the geom-id
+    vector is ``None`` when the corresponding ray misses all geometry (previously
+    ``-1``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` gained a new
     ``normal_out: Option<&mut [MjtNum; 3]>`` parameter. Pass ``None`` to preserve
     previous behaviour.
