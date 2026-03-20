@@ -143,8 +143,8 @@ gained new variants. See `Error handling`_ below for the full method list.
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml`
   now accepts ``AsRef<Path>`` (was ``&str``) and returns
-  ``Err(MjModelError::InvalidUtf8Path)`` for non-UTF-8 paths instead of
-  silently truncating.
+  ``Err(MjModelError::InvalidUtf8Path)`` for non-UTF-8 paths (previously
+  impossible to pass since ``&str`` is always UTF-8).
 
 - ``MjViewerCpp<M>`` (``cpp-viewer`` feature) is no longer generic over ``M``.
   Remove the type parameter from all usage sites. The ``launch_passive``
@@ -155,7 +155,7 @@ gained new variants. See `Error handling`_ below for the full method list.
   returns ``usize`` (was ``i32``).
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>name_to_id`
-  returns ``Option<i32>`` (was ``i32``; ``-1`` is now ``None``).
+  returns ``Option<usize>`` (was ``i32``; ``-1`` is now ``None``).
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>totalmass`
   renamed from ``get_totalmass``.
@@ -165,10 +165,43 @@ gained new variants. See `Error handling`_ below for the full method list.
 
 - |mj_data|:
 
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>reset_keyframe`
+    now takes ``key: usize`` (was ``i32``) and returns ``Result<(), MjDataError>``.
+    Out-of-range keys that previously silently fell back to a plain reset now return
+    ``Err(MjDataError::IndexOutOfBounds)``. Use the new
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_reset_keyframe`
+    for explicit error handling.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>runge_kutta`
+    now panics if ``n < 1`` (previously passed negative or zero values silently to C).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force`
     takes ``contact_id: u32`` (was ``usize``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>maxuse_threadstack`
     returns ``&[MjtSize; mjMAXTHREAD]`` (was ``&[MjtSize]``).
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_body`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_body_com`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_subtree_com`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_geom`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_site`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>angmom_mat`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>object_velocity`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>object_acceleration`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>geom_distance`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>local_to_global`:
+    object-id / body-id / geom-id / site-id parameters now take ``usize`` (was ``i32``).
+    The ``>= 0`` guard is implicit in the type; pass ``body_id as usize`` at call sites.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray`:
+    ``bodyexclude`` changed from ``i32`` to ``Option<usize>``. Replace ``-1`` with
+    ``None`` and ``body_id`` with ``Some(body_id as usize)``.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` now returns
+    ``(Option<usize>, MjtNum)`` instead of ``(i32, MjtNum)``. The returned geom id is
+    ``None`` when the ray misses all geometry (previously ``-1``).
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray` now
+    returns ``Result<(Vec<Option<usize>>, Vec<MjtNum>), MjDataError>`` instead of
+    ``Result<(Vec<i32>, Vec<MjtNum>), MjDataError>``. Each element of the geom-id
+    vector is ``None`` when the corresponding ray misses all geometry (previously
+    ``-1``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` gained a new
     ``normal_out: Option<&mut [MjtNum; 3]>`` parameter. Pass ``None`` to preserve
     previous behaviour.
@@ -181,6 +214,10 @@ gained new variants. See `Error handling`_ below for the full method list.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print` and
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print_formatted`
     now accept ``AsRef<Path>`` and return ``Result``.
+
+- |mj_model|:
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>id_to_name`:
+  ``id`` takes ``usize`` (was ``i32``).
 
 - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom` gained
   ``normal_out: Option<&mut [MjtNum; 3]>``.
@@ -343,7 +380,8 @@ New error types in :docs-rs:`~mujoco_rs::error`
        ``read_ctrl`` :sup:`new`,
        ``read_sensor_into`` :sup:`new`,
        ``read_sensor_fixed`` :sup:`new`,
-       ``read_sensor`` :sup:`new`
+       ``read_sensor`` :sup:`new`,
+       ``try_reset_keyframe`` :sup:`new`
      - :docs-rs:`~mujoco_rs::error::<enum>MjDataError`
    * - |mj_vfs|
      - ``add_from_file``, ``add_from_buffer``, ``delete_file``
@@ -371,7 +409,7 @@ New error variants:
 
 - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`: ``RgbDisabled``,
   ``DepthDisabled``, ``DimensionMismatch``, ``ZeroDimension``, ``IoError``,
-  ``SceneError``, ``GlInitFailed``, ``SignatureMismatch``.
+  ``SceneError``, ``GlInitFailed``.
 - :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError`: ``PainterInitError``,
   ``GlInitFailed``, ``SceneError``.
 - :docs-rs:`~mujoco_rs::error::<enum>MjModelError`: ``BufferTooSmall``,
@@ -382,7 +420,8 @@ New error variants:
 
   - |mj_data|: ``try_new``, ``try_clone``, ``try_copy_state_from_data`` :sup:`new`,
     ``try_apply_ft`` :sup:`new`, ``try_read_state_into``, ``try_set_state``,
-    ``try_copy_visual_to``, ``try_copy_to``
+    ``try_copy_visual_to``, ``try_copy_to``,
+    ``try_reset_keyframe`` :sup:`new`
   - |mj_model|: ``try_clone``, ``try_make_data``
   - |mj_spec| / |mjs_tendon| / ``MjsBody``: ``try_new``, ``try_add_frame``,
     ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, ``try_wrap_pulley``,
@@ -446,6 +485,11 @@ New error variants:
 
 .. rubric:: Bug fixes
 
+- |mj_model|:
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml`:
+  a ``_ => unreachable!()`` arm would panic if MuJoCo ever returned a value other
+  than ``0`` or ``1``; changed to ``_ => Err(MjModelError::SaveFailed(...))`` so any
+  unexpected return code is surfaced as an error instead of aborting the process.
 - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_is_bad`: now tests
   ``!= 0`` instead of ``== 1``.
 - |mjr_context|: ``add_aux`` and ``resize_offscreen`` now panic if dimensions

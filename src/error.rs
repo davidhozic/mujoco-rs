@@ -18,9 +18,9 @@ pub enum MjDataError {
         /// Name of the index parameter, e.g. `"body_id"` or `"geom_id"`.
         kind: &'static str,
         /// The index value that was passed.
-        id: i64,
+        id: usize,
         /// Exclusive upper bound of the valid range.
-        upper: i64,
+        upper: usize,
     },
     /// The provided MuJoCo object type is not supported by this operation.
     ///

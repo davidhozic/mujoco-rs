@@ -200,13 +200,13 @@ impl ViewerUI {
     /// Must be called whenever the active model changes.
     pub(crate) fn update_names(&mut self, model: Arc<MjModel>) {
         self.camera_names = (0..model.ncam()).map(|i| {
-            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i as i32) {
+            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i as usize) {
                 name.to_string()
             } else { format!("Camera {i}") }
         }).collect();
 
         self.actuator_names = (0..model.nu()).map(|i| {
-            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, i as i32) {
+            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, i as usize) {
                 name.to_string()
             } else { format!("Actuator {i}") }
         }).collect();
@@ -214,7 +214,7 @@ impl ViewerUI {
         self.joint_name_id = (0..model.njnt()).filter_map(|i| {
             match model.jnt_type()[i as usize] {
                 MjtJoint::mjJNT_SLIDE | MjtJoint::mjJNT_HINGE => {
-                    let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, i as i32) {
+                    let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, i as usize) {
                         name.to_string()
                     } else { format!("Joint {i}") };
                     Some((name, i as usize))
@@ -224,7 +224,7 @@ impl ViewerUI {
         }).collect();
 
         self.equality_names = (0..model.neq()).map(|i| {
-            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_EQUALITY, i as i32) {
+            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_EQUALITY, i as usize) {
                 name.to_string()
             } else { format!("Equality {i}") }
         }).collect();
