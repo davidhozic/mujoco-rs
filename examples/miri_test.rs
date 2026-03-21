@@ -139,7 +139,7 @@ fn test_kinematics_and_jacobians<'a>(model: &'a MjModel, data: &mut MjData<&'a M
 fn test_inverse_dynamics_and_state<'a>(model: &'a MjModel, data: &mut MjData<&'a MjModel>) {
     println!("Testing collisions, inverse dynamics, and state management...");
     data.collision();
-    let contacts = data.contacts();
+    let contacts = data.contact();
     println!("Detected {} contacts.", contacts.len());
     
     data.inverse();

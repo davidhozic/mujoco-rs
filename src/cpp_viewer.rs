@@ -95,7 +95,11 @@ impl MjViewerCpp {
         });
 
         while !load_thread.is_finished() {
-            unsafe { mujoco_cSimulate_RenderStep(sim) };
+            let running = unsafe { mujoco_cSimulate_RenderStep(sim) };
+            if running == 0 {
+                // Window closed during model load; stop rendering.
+                break;
+            }
         }
         load_thread.join().unwrap();
 

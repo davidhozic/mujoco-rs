@@ -278,10 +278,11 @@ pub enum MjEditError {
     ///
     /// `required_size` follows `snprintf`-style semantics: it is the number of bytes MuJoCo would
     /// write, **not** counting the NUL terminator.  To retry successfully, pass a buffer of at
-    /// least `required_size as usize + 1` bytes.
+    /// least `required_size + 1` bytes.
     XmlBufferTooSmall {
         /// Number of bytes MuJoCo would write (excluding the NUL terminator).
-        required_size: i32,
+        /// Pass a buffer of at least `required_size + 1` bytes to retry.
+        required_size: usize,
     },
 }
 

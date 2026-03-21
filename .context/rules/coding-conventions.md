@@ -15,14 +15,33 @@
 - The `cpp-viewer` feature requires static linking - do not enable it unless the static build has been set up.
 - The `ffi-regenerate` feature rebuilds `src/mujoco_c.rs` from headers. **Never trigger this feature as an agent.**
 
+## Error handling
+- Standard pattern: the panicking wrapper calls the `try_` variant with `.expect()`; never duplicate
+  the logic. Only the `try_` variant contains the implementation; the panicking version is a thin
+  wrapper.
+- When adding a new fallible operation, add both `try_fn()` (returns `Result`) and `fn()` (panics).
+- **CString/CStr panics are exempt**: converting C string inputs to `CString` or checking C string
+  validity via `.unwrap()` is intentional. Do NOT convert these to `Result`.
+- **`src/wrappers/fun/` functions stay panicking**: functions in this module should panic on failure,
+  not return `Result`.
+
 ## Code style
 - Read existing code in the file you're modifying to understand naming, safety, and documentation conventions.
 - Follow the existing error handling patterns used in the same file.
 - Use `/// Safety` doc comments on all `unsafe` blocks.
+- For guaranteed non-null raw FFI pointers, use `&*ptr` / `&mut *ptr` directly. Do NOT use
+  `.as_ref().unwrap()` / `.as_mut().unwrap()` -- those add an unnecessary Option round-trip.
+- Do NOT duplicate `// SAFETY:` comments: if the same or nearly identical safety justification has
+  already been stated in an earlier block in the same function or impl scope, omit it from subsequent
+  blocks and trust the reader to refer upward. Only add a new comment when the reasoning differs.
 - Public items should have `///` doc comments.
 - Always use ASCII characters only. Never use UTF-8 (e.g., em dashes, arrows, etc.).
 - Imports (`use`) should be sorted by line length with the longest line on top.
 - Prefer to group imports with the same parent module.
+- Do NOT flag or fix integer truncation casts (e.g., `usize as i32`, `len() as i32`) when the
+  underlying C API already validates or clamps the value (e.g., passing a count that MuJoCo itself
+  allocated and therefore cannot exceed the C-side maximum). Only fix truncation casts when the
+  value originates in pure Rust and is not subsequently validated by the C layer.
 
 ## Documentation
 - Always verify any changes made to MuJoCo's official documentation to verify everything is correct.

@@ -97,15 +97,22 @@ mod build_dependencies {
 
 
 fn main() {
-    // Verify feature selection before compilation.
-    #[cfg(feature = "renderer")]
-    #[cfg(not(target_os = "linux"))]
-    #[cfg(not(feature = "renderer-winit-fallback"))]
-    compile_error!("MuJoCo-rs requires that the 'renderer-winit-fallback' Cargo feature is enabled on non-Linux platforms as only winit based renderer is available.");
-
     // Setup everything.
     if std::env::var("DOCS_RS").is_ok() {
         return;
+    }
+
+    // Read the target OS from Cargo's environment (reflects the compilation TARGET, not the host).
+    // Using CARGO_CFG_TARGET_OS here is intentional: build scripts are compiled for the HOST
+    // machine, so cfg!(target_os = "...") would reflect the host OS, not the target being
+    // compiled for. CARGO_CFG_TARGET_OS is always set by Cargo before invoking build scripts.
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+
+    // Verify feature selection before compilation.
+    #[cfg(feature = "renderer")]
+    #[cfg(not(feature = "renderer-winit-fallback"))]
+    if target_os != "linux" {
+        panic!("MuJoCo-rs requires that the 'renderer-winit-fallback' Cargo feature is enabled on non-Linux platforms as only winit based renderer is available.");
     }
 
     const MUJOCO_STATIC_LIB_PATH_VAR: &str = "MUJOCO_STATIC_LINK_DIR";
@@ -131,7 +138,7 @@ fn main() {
             panic!("{MUJOCO_STATIC_LIB_PATH_VAR} must be an absolute path ('{path_lib_dir_display}' is not).");
         }
 
-        let path_lib_file = if cfg!(target_os = "windows") {
+        let path_lib_file = if target_os == "windows" {
             path_lib_dir.join("mujoco.lib")
         } else {
             path_lib_dir.join("libmujoco.a")
@@ -161,11 +168,11 @@ fn main() {
         println!("cargo::rustc-link-lib=static=qhullstatic_r");
         println!("cargo::rustc-link-lib=static=ccd");
 
-        #[cfg(target_os = "linux")]
-        println!("cargo::rustc-link-lib=stdc++");
-
-        #[cfg(target_os = "macos")]
-        println!("cargo::rustc-link-lib=c++");
+        if target_os == "linux" {
+            println!("cargo::rustc-link-lib=stdc++");
+        } else if target_os == "macos" {
+            println!("cargo::rustc-link-lib=c++");
+        }
     }
 
     /* Dynamic linking */
@@ -177,9 +184,9 @@ fn main() {
             panic!("{MUJOCO_DYN_LIB_PATH_VAR} must be an absolute path ('{path_lib_dir_display}' is not).");
         }
 
-        let path_lib_file = if cfg!(target_os = "windows") {
+        let path_lib_file = if target_os == "windows" {
             path_lib_dir.join("mujoco.lib")
-        } else if cfg!(target_os = "macos") {
+        } else if target_os == "macos" {
             path_lib_dir.join("libmujoco.dylib")
         } else {
             path_lib_dir.join("libmujoco.so")
@@ -214,25 +221,25 @@ fn main() {
                 .err();
 
             #[cfg(not(feature = "auto-download-mujoco"))]
-            if let Some(err) = maybe_err {
-                #[cfg(target_os = "linux")]
-                panic!(
-                    "{err}\
-                    \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
-                    \n=================================================================================================\
-                    \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set and the 'auto-download-mujoco' Cargo feature is disabled.\
-                    \nConsider enabling automatic download of MuJoCo: 'cargo add mujoco-rs --features \"auto-download-mujoco\"'.\
-                    \n================================================================================================="
-                );
-
-                #[cfg(target_os = "macos")]
-                panic!(
-                    "{err}\
-                    \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
-                    \n=================================================================================================\
-                    \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
-                    \n================================================================================================="
-                );
+            if let Some(err) = &maybe_err {
+                if target_os == "linux" {
+                    panic!(
+                        "{err}\
+                        \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
+                        \n=================================================================================================\
+                        \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set and the 'auto-download-mujoco' Cargo feature is disabled.\
+                        \nConsider enabling automatic download of MuJoCo: 'cargo add mujoco-rs --features \"auto-download-mujoco\"'.\
+                        \n================================================================================================="
+                    );
+                } else if target_os == "macos" {
+                    panic!(
+                        "{err}\
+                        \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
+                        \n=================================================================================================\
+                        \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
+                        \n================================================================================================="
+                    );
+                }
             }
 
             maybe_err.is_some()
@@ -241,29 +248,23 @@ fn main() {
         // There is no pkg-config on Windows, thus always download if not otherwise configured.
         #[cfg(target_os = "windows")]
         #[allow(unused)]
-        let allow_download = true;
+        let allow_download = {
+            #[cfg(not(feature = "auto-download-mujoco"))]
+            if target_os == "windows" {
+                panic!(
+                    "Unable to locate MuJoCo because 'auto-download-mujoco' Cargo feature is disabled and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
+                    \nConsider enabling automatic download of MuJoCo: 'cargo add mujoco-rs --features \"auto-download-mujoco\"'."
+                );
+            }
 
-        #[cfg(not(feature = "auto-download-mujoco"))]
-        #[cfg(target_os = "windows")]
-        panic!(
-            "Unable to locate MuJoCo because 'auto-download-mujoco' Cargo feature is disabled and neither {MUJOCO_STATIC_LIB_PATH_VAR} nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
-            \nConsider enabling automatic download of MuJoCo: 'cargo add mujoco-rs --features \"auto-download-mujoco\"'."
-        );
+            true
+        };
 
         // On Linux and Windows try to automatically download as a fallback.
-        // Other platforms will also fall under this condition, but will panic.
-        #[cfg(not(target_os = "macos"))]
         #[cfg(feature = "auto-download-mujoco")]
-        if allow_download {
+        if allow_download && target_os != "macos" {
             use std::io::{BufReader, Read};
             use sha2::Digest;
-
-            let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_else(|_| {
-                panic!(
-                    "unable to obtain the OS information -- please manually download MuJoCo \
-                    and specify {MUJOCO_DYN_LIB_PATH_VAR} (and potentially add the path to LD_LIBRARY_PATH)"
-                )
-            });
 
             let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| {
                 panic!(
@@ -272,10 +273,25 @@ fn main() {
                 )
             });
 
-            let download_url = if cfg!(target_os = "linux") {
+            let download_url = if target_os == "linux" {
+                // Cross-OS extraction is not supported: build deps (flate2/tar) are only compiled
+                // on Linux hosts. For Windows→Linux cross-OS, use the 'cross' tool or
+                // set MUJOCO_DYNAMIC_LINK_DIR manually.
+                #[cfg(not(target_os = "linux"))]
+                panic!(
+                    "automatic download of MuJoCo for a Linux target is not supported on non-Linux hosts -- \
+                    use 'cross' for cross-OS compilation or manually download MuJoCo and specify {MUJOCO_DYN_LIB_PATH_VAR}"
+                );
                 format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-linux-{target_arch}.tar.gz")
             }
-            else if cfg!(target_os = "windows") {
+            else if target_os == "windows" {
+                // Cross-OS extraction is not supported: build deps (zip) are only compiled on
+                // Windows hosts.
+                #[cfg(not(target_os = "windows"))]
+                panic!(
+                    "automatic download of MuJoCo for a Windows target is not supported on non-Windows hosts -- \
+                    use 'cross' for cross-OS compilation or manually download MuJoCo and specify {MUJOCO_DYN_LIB_PATH_VAR}"
+                );
                 format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-windows-{target_arch}.zip")
             }
             else {
@@ -291,7 +307,7 @@ fn main() {
 
             // Obtain the download directory from MUJOCO_DOWNLOAD_PATH_VAR.
             let download_dir = PathBuf::from(std::env::var(MUJOCO_DOWNLOAD_PATH_VAR).unwrap_or_else(|_| {
-                let os_example = if cfg!(unix) {
+                let os_example = if cfg!(target_os = "linux") {
                     format!("e.g., export {MUJOCO_DOWNLOAD_PATH_VAR}=\"$(realpath .)\"")
                 } else {
                     format!("e.g., $env:{MUJOCO_DOWNLOAD_PATH_VAR}=\"/full/absolute/path/\"")
@@ -370,10 +386,13 @@ fn main() {
 
             /* Extraction */
             #[cfg(target_os = "windows")]
-            extract_windows(&download_path, &outdirname);
-
+            if target_os == "windows" {
+                extract_windows(&download_path, &outdirname);
+            }
             #[cfg(target_os = "linux")]
-            extract_linux(&download_path);
+            if target_os == "linux" {
+                extract_linux(&download_path);
+            }
 
             // No need to keep the downloaded file and its hash file.
             std::fs::remove_file(&download_path).unwrap_or_else(
