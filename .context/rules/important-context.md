@@ -79,3 +79,11 @@ If `MUJOCO_DYNAMIC_LINK_DIR` is also set, the pre-downloaded copy takes preceden
   tests; no need to disable them unless specifically testing headless behaviour.
 - **Macro expansion is slow**: do NOT run `/expand-macros` unless the user explicitly requests it.
   For deep audits use the `/verify` workflow instead.
+- **`MjData::model()` returns `&MjModel` (not `&M`)**: When reasoning about generic bounds, note that
+  `data.model().clone()` clones `MjModel` directly (not `M`). The `M: Clone` bound is only required
+  where `self.model.clone()` is called on the holder field directly (e.g., in `try_clone()`), not
+  where `data.model().clone()` is used.
+- **`cfg!(target_os)` checks the HOST, not the target**: In `build.rs`, `cfg!(target_os = "linux")`
+  evaluates the machine running the build, not the compilation target. Use the
+  `CARGO_CFG_TARGET_OS` environment variable when branching on the target platform (e.g., for
+  selecting download URLs in cross-compilation scenarios).

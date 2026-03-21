@@ -257,7 +257,7 @@ impl ViewerSharedState {
 
     /// Same as [`ViewerSharedState::sync_data`], except it copies the entire [`MjData`]
     /// struct (including large Jacobian and other arrays), not just the state needed for visualization.
-    pub fn sync_data_full<M: Deref<Target = MjModel> + Clone>(&mut self, data: &mut MjData<M>) {
+    pub fn sync_data_full<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         self._sync_data(data, true);
     }
 
@@ -289,12 +289,12 @@ impl ViewerSharedState {
     /// stale after this call and should be recomputed if needed.
     /// </div>
     ///
-    pub fn sync_data<M: Deref<Target = MjModel> + Clone>(&mut self, data: &mut MjData<M>) {
+    pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         self._sync_data(data, false);
     }
 
     /// Data sync implementation.
-    fn _sync_data<M: Deref<Target = MjModel> + Clone>(&mut self, data: &mut MjData<M>, full_sync: bool) {
+    fn _sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, full_sync: bool) {
         /* Recreate internal data and user scene when the model changes */
         if data.model().signature() != self.data_passive.model().signature() {
             let new_model = Arc::new(data.model().clone());
@@ -542,7 +542,7 @@ impl MjViewer {
     /// Same as [`MjViewer::sync_data`], except it copies the entire [`MjData`]
     /// struct (including large Jacobian and other arrays), not just the state needed for visualization.
     /// This is a proxy to [`ViewerSharedState::sync_data_full`].
-    pub fn sync_data_full<M: Deref<Target = MjModel> + Clone>(&mut self, data: &mut MjData<M>) {
+    pub fn sync_data_full<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         self.shared_state.lock_unpoison().sync_data_full(data);
     }
 
@@ -583,7 +583,7 @@ impl MjViewer {
     /// viewer.sync_data(&mut data);  // sync the data
     /// viewer.render().unwrap();  // render the scene and process the user interface
     /// ```
-    pub fn sync_data<M: Deref<Target = MjModel> + Clone>(&mut self, data: &mut MjData<M>) {
+    pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         self.shared_state.lock_unpoison().sync_data(data);
     }
 

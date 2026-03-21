@@ -90,8 +90,7 @@ update of MuJoCo alone can increase the major version.
   now detect when ``data`` was created from a **different** model than the
   viewer/renderer was initialised with. Instead of panicking or returning an
   error, both automatically recreate the scene(s) for the new model and update
-  their internal model reference. The ``RendererError::SignatureMismatch``
-  variant has been removed.
+  their internal model reference.
 
 - |mj_data| gained a new
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_clone`
@@ -166,13 +165,14 @@ gained new variants. See `Error handling`_ below for the full method list.
 - |mj_data|:
 
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>reset_keyframe`
-    now takes ``key: usize`` (was ``i32``) and returns ``Result<(), MjDataError>``.
-    Out-of-range keys that previously silently fell back to a plain reset now return
-    ``Err(MjDataError::IndexOutOfBounds)``. Use the new
+    now takes ``key: usize`` (was ``i32``) and **panics** on out-of-range keys.
+    Out-of-range keys that previously silently fell back to a plain reset now panic.
+    Use the new
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_reset_keyframe`
-    for explicit error handling.
+    for explicit error handling (returns ``Result<(), MjDataError>``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>runge_kutta`
-    now panics if ``n < 1`` (previously passed negative or zero values silently to C).
+    now takes ``n: u32`` (was ``i32``) and panics if ``n < 1``
+    (previously passed negative or zero values silently to C).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force`
     takes ``contact_id: u32`` (was ``usize``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>maxuse_threadstack`
@@ -199,7 +199,7 @@ gained new variants. See `Error handling`_ below for the full method list.
     ``None`` when the ray misses all geometry (previously ``-1``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray` now
     returns ``Result<(Vec<Option<usize>>, Vec<MjtNum>), MjDataError>`` instead of
-    ``Result<(Vec<i32>, Vec<MjtNum>), MjDataError>``. Each element of the geom-id
+    ``(Vec<i32>, Vec<MjtNum>)``. Each element of the geom-id
     vector is ``None`` when the corresponding ray misses all geometry (previously
     ``-1``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` gained a new
@@ -315,7 +315,7 @@ lists and before/after examples.
 - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`: ``figure``
   renamed to ``draw``.
 - ``MjViewer::sync`` removed (deprecated in 2.2.0; use ``sync_data`` + ``render``).
-- ``MjViewer::user_scn`` / ``user_scn_mut`` removed (deprecated in 2.2.0).
+- ``MjViewer::user_scn`` / ``user_scn_mut`` removed (deprecated in 1.3.0).
 - Removed deprecated methods:
 
   .. list-table::
@@ -405,13 +405,16 @@ New error types in :docs-rs:`~mujoco_rs::error`
 Methods marked :sup:`new` are new in 3.0.0; the rest existed in 2.x and previously
 returned bare types or ``io::Error``.
 
-New error variants:
+New error variants in pre-existing enums:
 
 - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`: ``RgbDisabled``,
   ``DepthDisabled``, ``DimensionMismatch``, ``ZeroDimension``, ``IoError``,
   ``SceneError``, ``GlInitFailed``.
 - :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError`: ``PainterInitError``,
   ``GlInitFailed``, ``SceneError``.
+
+The six new enums (all ``#[non_exhaustive]``) have the following variants:
+
 - :docs-rs:`~mujoco_rs::error::<enum>MjModelError`: ``BufferTooSmall``,
   ``SignatureMismatch``.
 - :docs-rs:`~mujoco_rs::error::<enum>MjDataError`: ``InvalidUtf8Path``.
@@ -423,11 +426,11 @@ New error variants:
   variants now delegate to ``try_``.``expect()``):
 
   - |mj_data|: ``try_new``, ``try_clone``, ``try_copy_state_from_data`` :sup:`new`,
-    ``try_apply_ft`` :sup:`new`, ``try_read_state_into``, ``try_set_state``,
+    ``try_apply_ft`` :sup:`new`, ``try_read_state_into``, ``try_set_state`` (``unsafe``),
     ``try_copy_visual_to``, ``try_copy_to``,
     ``try_reset_keyframe`` :sup:`new`
   - |mj_model|: ``try_clone``, ``try_make_data``
-  - |mj_spec| / |mjs_tendon| / ``MjsBody``: ``try_new``, ``try_add_frame``,
+  - |mj_spec| / |mjs_tendon| / ``MjsBody``: ``try_new``, ``try_clone``, ``try_add_frame``,
     ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, ``try_wrap_pulley``,
     macro-generated ``try_add_*``
   - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`:
@@ -450,7 +453,7 @@ New error variants:
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth`.
 
 - |mj_model|: ``extract_state`` / ``extract_state_into``, ``try_make_data``.
-- |mj_data|: ``swap_model`` (now safe; validates model signature),
+- |mj_data|: ``swap_model`` :sup:`new` (validates model signature),
   ``forward_kinematics``, ``apply_ft``, ``copy_state_from_data``,
   ``ray_flex`` / ``ray_mesh`` / ``ray_hfield``,
   ``init_ctrl_history`` / ``init_sensor_history``,
@@ -467,8 +470,9 @@ New error variants:
   ``flip_image_vertically``.
 - |mj_model| and |mj_data| views expose additional fields from MuJoCo 3.6.0.
   New |mj_model| view types added for ``exclude``, ``mesh``, and ``skin``.
-  Joint model views now also include ``dof_bodyid`` and ``dof_treeid`` metadata
-  fields for direct access to per-dof ownership/tree mapping.
+  ``dof_bodyid`` and ``dof_treeid`` are now exposed in per-dof joint model view
+  types (the fields existed in MuJoCo 3.3.7 but were not previously accessible
+  via per-object view types).
 - ``info_with_view!`` structs now have ``try_view`` / ``try_view_mut`` methods.
 - Trait additions: ``Clone`` for |mj_spec|; ``Default`` for |mj_vfs|, |mj_spec|,
   ``MjOption``; ``Send`` + ``Sync`` for |mj_vfs|; ``FusedIterator`` for all

@@ -63,6 +63,17 @@ impl Default for MjrRectangle {
 /***********************************************************************************************************************
 ** MjrContext
 ***********************************************************************************************************************/
+/// Wraps `mjrContext`, the MuJoCo rendering context.
+///
+/// # Thread safety
+/// `MjrContext` is `!Send` and `!Sync`. It must remain on the thread that owns the active
+/// OpenGL context for its entire lifetime, because the underlying GL resources (textures,
+/// renderbuffers, framebuffers) are bound to that GL context and thread. In particular:
+///
+/// - `new()` must be called while a valid GL context is current on the calling thread.
+/// - All method calls, including `drop`, must happen on that same thread while the GL
+///   context is still current. Dropping `MjrContext` on any other thread, or after the GL
+///   context has been released, causes undefined behaviour.
 #[derive(Debug)]
 pub struct MjrContext {
     ffi: Box<mjrContext>
@@ -75,7 +86,8 @@ impl MjrContext {
     /// # Safety
     /// A valid OpenGL context must exist and be current in the calling thread before calling
     /// this function. Calling without an active GL context causes MuJoCo to abort the process.
-    /// The same GL context must also remain current when this `MjrContext` is dropped.
+    /// The same GL context must also remain current when this `MjrContext` is dropped, and must
+    /// remain on the same thread for the lifetime of this value.
     pub unsafe fn new(model: &MjModel) -> Self {
         unsafe {
             let mut c = Box::new_uninit();

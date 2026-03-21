@@ -128,6 +128,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Returns a slice of detected contacts.
     /// To obtain the contact force, call [`MjData::contact_force`].
+    #[deprecated(since = "3.0.0", note = "use contact() instead")]
     pub fn contacts(&self) -> &[MjContact] {
         let ffi = self.ffi();
         let ptr = ffi.contact;
@@ -270,7 +271,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Calculates the contact force for the given `contact_id`.
     /// The `contact_id` matches the index of the contact when iterating
-    /// via [`MjData::contacts`].
+    /// via [`MjData::contact`].
     /// Calls `mj_contactForce` internally.
     /// # Note
     /// When `contact_id >= ncon`, `[0; 6]` is returned.
@@ -1069,7 +1070,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         &self, flex_layer: i32, flg_vert: bool, flg_edge: bool, flg_face: bool, flg_skin: bool, flexid: usize,
         pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         vertid: Option<&mut i32>, normal_out: Option<&mut [MjtNum; 3]>
-    ) -> mjtNum {
+    ) -> MjtNum {
         let nflex = self.model.ffi().nflex as usize;
         assert!(flexid < nflex, "ray_flex: flexid {flexid} out of bounds (nflex = {nflex})");
         unsafe { mj_rayFlex(
@@ -1085,7 +1086,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics if `src` was created from a different model.
     /// Use [`MjData::try_copy_state_from_data`] for a fallible alternative.
-    pub fn copy_state_from_data(&mut self, src: &MjData<M>, spec: u32) {
+    pub fn copy_state_from_data<N: Deref<Target = MjModel>>(&mut self, src: &MjData<N>, spec: u32) {
         self.try_copy_state_from_data(src, spec)
             .expect("copy_state_from_data failed")
     }
@@ -1095,7 +1096,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::SignatureMismatch`] if `src` was created from
     /// a different model.
-    pub fn try_copy_state_from_data(&mut self, src: &MjData<M>, spec: u32) -> Result<(), MjDataError> {
+    pub fn try_copy_state_from_data<N: Deref<Target = MjModel>>(&mut self, src: &MjData<N>, spec: u32) -> Result<(), MjDataError> {
         let src_sig = src.model.signature();
         let dst_sig = self.model.signature();
         if src_sig != dst_sig {
@@ -1117,7 +1118,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
     pub fn ray_hfield(
         &self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
-    ) -> mjtNum {
+    ) -> MjtNum {
         let ngeom = self.model.ffi().ngeom as usize;
         assert!(geom_id < ngeom, "ray_hfield: geom_id {geom_id} out of bounds (ngeom = {ngeom})");
         unsafe {
@@ -1132,7 +1133,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
     pub fn ray_mesh(
         &self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
-    ) -> mjtNum {
+    ) -> MjtNum {
         let ngeom = self.model.ffi().ngeom as usize;
         assert!(geom_id < ngeom, "ray_mesh: geom_id {geom_id} out of bounds (ngeom = {ngeom})");
         unsafe {
@@ -1633,6 +1634,7 @@ impl<M: Deref<Target = MjModel> + Clone> MjData<M> {
     /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
     /// the copy.
     pub fn try_clone(&self) -> Result<Self, MjDataError> {
+        // When dest is null, mj_copyData allocates a new mjData on MuJoCo's heap.
         let raw = unsafe { mj_copyData(ptr::null_mut(), self.model.ffi(), self.ffi()) };
         NonNull::new(raw)
             .map(|data| Self { data, model: self.model.clone() })
@@ -2250,7 +2252,6 @@ mod test {
         data.step();
 
         assert!(data.contact().len() != 0);
-        assert_eq!(data.contact().len(), data.contacts().len());
     }
 
     #[test]
@@ -4193,7 +4194,7 @@ mod test {
         // (not guaranteed in every model, but MODEL has spheres falling on a plane)
         if ncon > 0 {
             // Contact positions (xpos) should have changed
-            let contacts = data.contacts();
+            let contacts = data.contact();
             assert_eq!(contacts.len(), ncon);
             for c in contacts {
                 // Each contact's pos is a [f64; 3]
@@ -4616,5 +4617,74 @@ mod test {
         model_template = data.swap_model(model_template).unwrap();
         assert_eq!(model_template.opt().timestep, OLD_TIMESTEP);
         assert_eq!(data.model().opt().timestep, NEW_TIMESTEP);
+    }
+
+    /// Exercises the `nsensordata` arm of `mj_model_nx_to_mapping!` and
+    /// `mj_model_nx_to_nitem!` by calling `data.sensor("jp")` on a model
+    /// that contains a single `jointpos` sensor.
+    #[test]
+    fn test_sensor_info_nsensordata_arm() {
+        const SENSOR_MODEL: &str = r#"<mujoco>
+  <worldbody>
+    <body>
+      <joint name="hinge" type="hinge"/>
+      <geom size="0.1"/>
+    </body>
+  </worldbody>
+  <sensor>
+    <jointpos name="jp" joint="hinge"/>
+  </sensor>
+</mujoco>"#;
+        let model = MjModel::from_xml_string(SENSOR_MODEL).expect("model load failed");
+        let data = model.make_data();
+        let info = data.sensor("jp").expect("sensor 'jp' not found");
+        let view = info.view(&data);
+        // A jointpos sensor outputs exactly 1 scalar value.
+        assert_eq!(view.data.len(), 1, "jointpos sensor must produce 1 sensordata element");
+    }
+
+    /// Exercises `getter_setter!` arm 2 (`get, [... & $type ...]`) and arm 17
+    /// (`with, get, [...]`) via `MjData::energy()`, which returns `&[MjtNum; 2]`.
+    #[test]
+    fn test_energy_ref_getter_arms_2_and_17() {
+        let model = MjModel::from_xml_string(MODEL).expect("model load failed");
+        let mut data = model.make_data();
+        data.energy_pos();
+        data.energy_vel();
+        let energy: &[MjtNum; 2] = data.energy();
+        assert_eq!(energy.len(), 2);
+        assert!(energy[0].is_finite(), "potential energy must be finite");
+        assert!(energy[1].is_finite(), "kinetic energy must be finite");
+    }
+
+    /// Exercises the `eval_or_expand! @eval true` path via `MjData::energy_mut()`,
+    /// which is generated inside `getter_setter!` arm 2 when `allow_mut` is absent
+    /// (defaults to true).
+    #[test]
+    fn test_energy_mut_eval_or_expand_true() {
+        let model = MjModel::from_xml_string(MODEL).expect("model load failed");
+        let mut data = model.make_data();
+        data.energy_pos();
+        let energy_mut: &mut [MjtNum; 2] = data.energy_mut();
+        energy_mut[0] = 1.23;
+        assert!(
+            (data.energy()[0] - 1.23).abs() < 1e-12,
+            "written energy value must be readable back"
+        );
+    }
+
+    /// Exercises the `eval_or_expand! @eval false` path via
+    /// `MjData::maxuse_threadstack()`, which uses `(allow_mut = false)` and
+    /// therefore suppresses the `_mut` accessor.
+    #[test]
+    fn test_maxuse_threadstack_eval_or_expand_false() {
+        let model = MjModel::from_xml_string(MODEL).expect("model load failed");
+        let data = model.make_data();
+        let stack: &[MjtSize; crate::mujoco_c::mjMAXTHREAD as usize] = data.maxuse_threadstack();
+        assert_eq!(
+            stack.len(),
+            crate::mujoco_c::mjMAXTHREAD as usize,
+            "maxuse_threadstack must have mjMAXTHREAD elements"
+        );
     }
 }

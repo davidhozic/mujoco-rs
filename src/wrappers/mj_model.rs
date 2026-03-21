@@ -3538,4 +3538,13 @@ mod tests {
         assert_eq!(model.key_mquat().len(), 0,
             "key_mquat must be empty when nmocap == 0");
     }
+
+    /// Loading invalid XML must return an Err whose message is non-empty.
+    #[test]
+    fn test_from_xml_string_invalid() {
+        let result = MjModel::from_xml_string("<this is not valid mujoco xml>");
+        assert!(result.is_err(), "loading invalid XML must return Err");
+        let msg = result.unwrap_err().to_string();
+        assert!(!msg.is_empty(), "error message must not be empty for invalid XML");
+    }
 }

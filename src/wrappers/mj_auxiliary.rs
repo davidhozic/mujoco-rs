@@ -282,4 +282,19 @@ mod tests {
         assert_eq!(model.ffi().nbody, 2);
         assert!(model.body("extra_body").is_some());
     }
+
+    /// Adding the same filename to a VFS twice must return `AlreadyExists`.
+    #[test]
+    fn test_vfs_add_buffer_already_exists() {
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer(RAW_FILE_NAME, RAW_FILE_DATA.as_bytes())
+            .expect("first add should succeed");
+        let err = vfs
+            .add_from_buffer(RAW_FILE_NAME, RAW_FILE_DATA.as_bytes())
+            .expect_err("second add with same name should fail");
+        assert!(
+            matches!(err, MjVfsError::AlreadyExists),
+            "expected AlreadyExists, got {err:?}"
+        );
+    }
 }

@@ -80,6 +80,10 @@ Optional Cargo features can be enabled:
   - Downloaded MuJoCo library is still a shared library. See
     [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco)
     for information on complete configuration.
+  - **Cross-OS downloads are not supported** (e.g. Linux host → Windows target).
+    Same-OS cross-compilation works (e.g. Linux x86_64 → Linux aarch64).
+    For cross-OS builds, use the [`cross`](https://github.com/cross-rs/cross) tool
+    or manually set ``MUJOCO_DYNAMIC_LINK_DIR``.
 
 By default, ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are enabled.
 

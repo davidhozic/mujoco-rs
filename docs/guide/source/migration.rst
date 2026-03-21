@@ -11,6 +11,7 @@ Migration guide
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
 .. |mjv_camera| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`
 .. |mjr_context| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`
+.. |mjs_tendon| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsTendon`
 
 
 This page documents the migration steps for upgrading between major versions of MuJoCo-rs.
@@ -128,7 +129,7 @@ Append ``?`` or ``.unwrap()`` to call sites.
   ``constraint_update``, ``jac``, ``jac_body``, ``jac_body_com``,
   ``jac_subtree_com``, ``jac_geom``, ``jac_site``, ``angmom_mat``,
   ``object_velocity``, ``object_acceleration``, ``geom_distance``,
-  ``local_to_global``, ``multi_ray``.
+  ``local_to_global``, ``multi_ray``, ``print``, ``print_formatted``.
 
 |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / |mjr_context| methods now returning ``Result<_, MjSceneError>``:
   ``create_geom``, ``set_label``, ``add_aux``, ``set_aux``.
@@ -226,7 +227,7 @@ Structural invariants
 Topology, address, and engine-computed arrays that must not be changed at runtime.
 
 - |mj_model|: **202** fields --- every address array (``*adr``, ``*num``), topology
-  index (``*bodyid``, ``*jntid``, …), and physics-invariant.
+  index (``*bodyid``, ``*jntid``, ...), and physics-invariant.
 - |mj_data|: **43** fields --- ``contact``, ``efc_id``, ``efc_J_*``,
   ``efc_AR_*``, ``efc_island``, ``iefc_id``, ``iefc_J_*``,
   ``tree_island``, ``dof_island``, ``tendon_efcadr``, ``island_*``,
@@ -327,7 +328,7 @@ and return ``Result`` with the appropriate error type.
 .. code-block:: rust
 
     data.print("data.txt");
-    model.print("model.txt");
+    model.print("model.txt")?;
 
 **After (3.0.0):**
 
@@ -357,21 +358,27 @@ Type changes
 - |mj_data|: ``ray()`` returns ``(Option<usize>, MjtNum)`` (was ``(i32, MjtNum)``).
   ``None`` means no intersection (previously ``-1``).
 - |mj_data|: ``multi_ray()`` returns ``Result<(Vec<Option<usize>>, Vec<MjtNum>), ...>``
-  (was ``Result<(Vec<i32>, Vec<MjtNum>), ...>``). Each ``None`` element means no
+  (was ``(Vec<i32>, Vec<MjtNum>)``). Each ``None`` element means no
   intersection for that ray (previously ``-1``).
 - |mjs_tendon|: ``limited`` and ``actfrclimited`` are now ``MjtLimited`` tri-state (was ``bool``).
+- |mj_data|: ``runge_kutta()`` now takes ``n: u32`` (was ``i32``).
+  Replace ``data.runge_kutta(n)`` with ``data.runge_kutta(n as u32)`` at call sites.
+  The function also now panics if ``n < 1`` (previously passed negative or zero values
+  silently to MuJoCo C).
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`
+  now requires ``T: bytemuck::NoUninit`` (add ``bytemuck`` to your dependencies if you
+  call this method with a custom type, and derive or implement ``NoUninit`` for it).
 
 
 ``MjData::reset_keyframe()``
 -----------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>reset_keyframe`
-now takes ``key: usize`` (was ``i32``) and returns ``Result<(), MjDataError>``.
-Out-of-range keys that previously silently fell back to a plain reset now return
-``Err(MjDataError::IndexOutOfBounds)``.
+now takes ``key: usize`` (was ``i32``) and **panics** on out-of-range keys.
+Out-of-range keys that previously silently fell back to a plain reset now panic.
 A new fallible variant
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_reset_keyframe`
-is available for explicit error handling.
+is available for explicit error handling (returns ``Result<(), MjDataError>``).
 
 **Before (2.x):**
 
@@ -439,7 +446,7 @@ The ``jacp: bool`` parameter has been removed (the Jacobian is always computed).
 
 .. code-block:: rust
 
-    let jac = data.jac_subtree_com(true, body_id)?;
+    let jac = data.jac_subtree_com(true, body_id);
 
 **After (3.0.0):**
 
@@ -511,7 +518,8 @@ struct instead of a 5-tuple.
 Core ``Send``/``Sync`` bound tightening
 -----------------------------------------
 
-``MjData<M>`` and ``MjvScene<M>`` now require ``M: Send`` / ``M: Sync``.
+``MjData<M>`` now requires ``M: Send`` / ``M: Sync``.
+``MjvScene`` is no longer generic and derives ``Send + Sync`` unconditionally.
 ``MjViewerCpp<M>`` now requires ``M: Send + Sync``.
 
 If you were using ``Rc<MjModel>`` in threaded code, switch to ``Arc<MjModel>``.
@@ -619,6 +627,77 @@ The ``Clone`` bound on ``M`` has also been dropped; any
 In practice the type annotation is rarely needed, so in most cases only the
 ``MjRenderer<Arc<MjModel>>`` annotation at the variable declaration (or in a
 struct field) needs to be updated.
+
+
+``MjvScene`` is no longer generic
+--------------------------------------------
+
+|mjv_scene| is no longer generic over ``M``. Remove the ``<M>`` type annotation
+from all usage sites.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    let scene: MjvScene<Arc<MjModel>> = MjvScene::new(model.clone(), 1000);
+    scene.update(&data, mjCAT_ALL);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    let scene: MjvScene = MjvScene::new(model.clone(), 1000);
+    scene.update(&data, mjCAT_ALL);
+
+Additional details:
+
+- ``MjvScene::update``, ``MjvScene::update_with_catmask``, and
+  ``MjvScene::find_selection`` retain ``<M: Deref<Target = MjModel>>`` as
+  **method-level** generics; call sites are unchanged.
+- ``MjvPerturb::start`` / ``move_`` and ``MjvCamera::move_`` now take
+  ``&MjvScene`` / ``&mut MjvScene`` without a type parameter.
+- ``vis_common::sync_geoms`` is now non-generic.
+- |mjv_scene| derives ``Send + Sync`` unconditionally (no bound on ``M`` required).
+
+
+``MjViewer``, ``MjViewerBuilder``, ``ViewerSharedState`` are no longer generic
+---------------------------------------------------------------------------------
+
+:docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`,
+:docs-rs:`~mujoco_rs::viewer::<struct>MjViewerBuilder`, and
+:docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState`
+are no longer generic over ``M``. Remove the ``<M>`` type parameter from all
+usage sites.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    let viewer: MjViewer<Arc<MjModel>> = MjViewer::builder()
+        .build_passive(model.clone(), data.clone())
+        .expect("failed to start viewer");
+
+    viewer.add_ui_callback(|data: &mut MjData<Arc<MjModel>>, ui| { ... });
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    let viewer: MjViewer = MjViewer::builder()
+        .build_passive(model.clone(), data.clone())
+        .expect("failed to start viewer");
+
+    viewer.add_ui_callback(|data: &mut MjData<Arc<MjModel>>, ui| { ... });
+
+Additional details:
+
+- ``sync_data``, ``sync_data_full``, and ``build_passive`` retain
+  ``<M: Deref<Target = MjModel>>`` as **method-level** generics; call sites
+  are unchanged.
+- The closure passed to ``MjViewer::add_ui_callback`` now receives
+  ``&mut MjData<Arc<MjModel>>`` instead of ``&mut MjData<M>``. If your
+  closure used a different ``M``, update the type annotation to
+  ``&mut MjData<Arc<MjModel>>``.
 
 
 C++ viewer changes
