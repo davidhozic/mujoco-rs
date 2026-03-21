@@ -385,8 +385,6 @@ impl From<MjVfsError> for MjModelError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MjVfsError {
-    /// The VFS has no more room for additional files.
-    Full,
     /// A file or mount with the same name already exists.
     AlreadyExists,
     /// MuJoCo failed to load the file or register the buffer.
@@ -400,7 +398,6 @@ pub enum MjVfsError {
 impl fmt::Display for MjVfsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Full => write!(f, "VFS is full"),
             Self::AlreadyExists => write!(f, "file already exists in VFS"),
             Self::LoadFailed => write!(f, "failed to load file into VFS"),
             Self::NotFound => write!(f, "file not found in VFS"),
