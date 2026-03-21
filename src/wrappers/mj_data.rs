@@ -128,6 +128,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Returns a slice of detected contacts.
     /// To obtain the contact force, call [`MjData::contact_force`].
+    #[deprecated(since = "3.0.0", note = "use contact() instead")]
     pub fn contacts(&self) -> &[MjContact] {
         let ffi = self.ffi();
         let ptr = ffi.contact;
@@ -1069,7 +1070,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         &self, flex_layer: i32, flg_vert: bool, flg_edge: bool, flg_face: bool, flg_skin: bool, flexid: usize,
         pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         vertid: Option<&mut i32>, normal_out: Option<&mut [MjtNum; 3]>
-    ) -> mjtNum {
+    ) -> MjtNum {
         let nflex = self.model.ffi().nflex as usize;
         assert!(flexid < nflex, "ray_flex: flexid {flexid} out of bounds (nflex = {nflex})");
         unsafe { mj_rayFlex(
@@ -1117,7 +1118,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
     pub fn ray_hfield(
         &self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
-    ) -> mjtNum {
+    ) -> MjtNum {
         let ngeom = self.model.ffi().ngeom as usize;
         assert!(geom_id < ngeom, "ray_hfield: geom_id {geom_id} out of bounds (ngeom = {ngeom})");
         unsafe {
@@ -1132,7 +1133,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
     pub fn ray_mesh(
         &self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
-    ) -> mjtNum {
+    ) -> MjtNum {
         let ngeom = self.model.ffi().ngeom as usize;
         assert!(geom_id < ngeom, "ray_mesh: geom_id {geom_id} out of bounds (ngeom = {ngeom})");
         unsafe {

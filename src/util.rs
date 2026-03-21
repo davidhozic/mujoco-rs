@@ -1095,3 +1095,32 @@ impl<T> LockUnpoison<T> for Mutex<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+    use super::LockUnpoison;
+
+    /// Verifies that `lock_unpoison` recovers a poisoned mutex and preserves the inner value.
+    #[test]
+    fn test_lock_unpoison_recovers_poisoned_mutex() {
+        let mutex = Arc::new(Mutex::new(42_i32));
+        let mutex_clone = Arc::clone(&mutex);
+
+        // Panic while holding the lock to poison it.
+        let _ = std::panic::catch_unwind(move || {
+            let _guard = mutex_clone.lock().unwrap();
+            panic!("intentional panic to poison mutex");
+        });
+
+        // The mutex must be poisoned now.
+        assert!(mutex.lock().is_err(), "mutex should be poisoned");
+
+        // lock_unpoison must recover the lock and preserve the value.
+        let value = *mutex.lock_unpoison();
+        assert_eq!(value, 42, "inner value must be preserved after unpoison");
+
+        // After unpoison, regular lock must succeed.
+        assert!(mutex.lock().is_ok(), "mutex should no longer be poisoned");
+    }
+}
