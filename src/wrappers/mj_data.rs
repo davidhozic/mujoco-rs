@@ -4618,4 +4618,73 @@ mod test {
         assert_eq!(model_template.opt().timestep, OLD_TIMESTEP);
         assert_eq!(data.model().opt().timestep, NEW_TIMESTEP);
     }
+
+    /// Exercises the `nsensordata` arm of `mj_model_nx_to_mapping!` and
+    /// `mj_model_nx_to_nitem!` by calling `data.sensor("jp")` on a model
+    /// that contains a single `jointpos` sensor.
+    #[test]
+    fn test_sensor_info_nsensordata_arm() {
+        const SENSOR_MODEL: &str = r#"<mujoco>
+  <worldbody>
+    <body>
+      <joint name="hinge" type="hinge"/>
+      <geom size="0.1"/>
+    </body>
+  </worldbody>
+  <sensor>
+    <jointpos name="jp" joint="hinge"/>
+  </sensor>
+</mujoco>"#;
+        let model = MjModel::from_xml_string(SENSOR_MODEL).expect("model load failed");
+        let data = model.make_data();
+        let info = data.sensor("jp").expect("sensor 'jp' not found");
+        let view = info.view(&data);
+        // A jointpos sensor outputs exactly 1 scalar value.
+        assert_eq!(view.data.len(), 1, "jointpos sensor must produce 1 sensordata element");
+    }
+
+    /// Exercises `getter_setter!` arm 2 (`get, [... & $type ...]`) and arm 17
+    /// (`with, get, [...]`) via `MjData::energy()`, which returns `&[MjtNum; 2]`.
+    #[test]
+    fn test_energy_ref_getter_arms_2_and_17() {
+        let model = MjModel::from_xml_string(MODEL).expect("model load failed");
+        let mut data = model.make_data();
+        data.energy_pos();
+        data.energy_vel();
+        let energy: &[MjtNum; 2] = data.energy();
+        assert_eq!(energy.len(), 2);
+        assert!(energy[0].is_finite(), "potential energy must be finite");
+        assert!(energy[1].is_finite(), "kinetic energy must be finite");
+    }
+
+    /// Exercises the `eval_or_expand! @eval true` path via `MjData::energy_mut()`,
+    /// which is generated inside `getter_setter!` arm 2 when `allow_mut` is absent
+    /// (defaults to true).
+    #[test]
+    fn test_energy_mut_eval_or_expand_true() {
+        let model = MjModel::from_xml_string(MODEL).expect("model load failed");
+        let mut data = model.make_data();
+        data.energy_pos();
+        let energy_mut: &mut [MjtNum; 2] = data.energy_mut();
+        energy_mut[0] = 1.23;
+        assert!(
+            (data.energy()[0] - 1.23).abs() < 1e-12,
+            "written energy value must be readable back"
+        );
+    }
+
+    /// Exercises the `eval_or_expand! @eval false` path via
+    /// `MjData::maxuse_threadstack()`, which uses `(allow_mut = false)` and
+    /// therefore suppresses the `_mut` accessor.
+    #[test]
+    fn test_maxuse_threadstack_eval_or_expand_false() {
+        let model = MjModel::from_xml_string(MODEL).expect("model load failed");
+        let data = model.make_data();
+        let stack: &[MjtSize; crate::mujoco_c::mjMAXTHREAD as usize] = data.maxuse_threadstack();
+        assert_eq!(
+            stack.len(),
+            crate::mujoco_c::mjMAXTHREAD as usize,
+            "maxuse_threadstack must have mjMAXTHREAD elements"
+        );
+    }
 }

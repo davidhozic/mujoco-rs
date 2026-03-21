@@ -1059,4 +1059,16 @@ mod tests {
         fig.set_title("world");
         assert_eq!(fig.title(), "world");
     }
+
+    /// Exercises the `summed { ... }` arm of `array_slice_dyn!` via
+    /// `MjvScene::flexface`, `flexnormal`, and `flextexcoord`. A model with no
+    /// flex bodies must produce empty slices for all three.
+    #[test]
+    fn test_array_slice_dyn_summed_flex_empty() {
+        let model = load_model();
+        let scene = MjvScene::new(&model, 1000);
+        assert!(scene.flexface().is_empty(), "flexface must be empty with no flex bodies");
+        assert!(scene.flexnormal().is_empty(), "flexnormal must be empty with no flex bodies");
+        assert!(scene.flextexcoord().is_empty(), "flextexcoord must be empty with no flex bodies");
+    }
 }

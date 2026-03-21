@@ -1099,6 +1099,7 @@ impl<T> LockUnpoison<T> for Mutex<T> {
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
+    use std::ffi::c_char;
     use super::LockUnpoison;
 
     /// Verifies that `lock_unpoison` recovers a poisoned mutex and preserves the inner value.
@@ -1122,5 +1123,105 @@ mod tests {
 
         // After unpoison, regular lock must succeed.
         assert!(mutex.lock().is_ok(), "mutex should no longer be poisoned");
+    }
+
+    /// Exercises the three "dead" combination arms of `getter_setter!` (arms 11, 12, 13)
+    /// by instantiating each on a minimal dummy struct.
+    ///
+    /// - Arm 11: `(force!, get, set, [...])` — force-cast getter + setter.
+    /// - Arm 12: `(get, set, [... : bool ...])` — bool getter (field `== 1`) + setter.
+    /// - Arm 13: `(get, set, [... : $type ...])` — `.into()` getter + setter.
+    #[test]
+    fn test_getter_setter_dead_arms_11_12_13() {
+        struct ArmEleven { x: i32, y: i32 }
+        impl ArmEleven {
+            crate::getter_setter!(force!, get, set, [x: i32; "x field."; y: i32; "y field.";]);
+        }
+
+        struct ArmTwelve { flag: i32 }
+        impl ArmTwelve {
+            crate::getter_setter!(get, set, [flag: bool; "flag field.";]);
+        }
+
+        struct ArmThirteen { count: i32 }
+        impl ArmThirteen {
+            crate::getter_setter!(get, set, [count: i32; "count field.";]);
+        }
+
+        let mut arm11 = ArmEleven { x: 3, y: 7 };
+        assert_eq!(arm11.x(), 3);
+        assert_eq!(arm11.y(), 7);
+        arm11.set_x(9);
+        assert_eq!(arm11.x(), 9);
+
+        let mut arm12 = ArmTwelve { flag: 1 };
+        assert!(arm12.flag());
+        arm12.set_flag(false);
+        assert!(!arm12.flag());
+
+        let mut arm13 = ArmThirteen { count: 5 };
+        assert_eq!(arm13.count(), 5);
+        arm13.set_count(10);
+        assert_eq!(arm13.count(), 10);
+    }
+
+    /// Tests both arms of `cast_mut_info!`: without and with the optional debug expression.
+    #[test]
+    fn test_cast_mut_info_both_arms() {
+        let mut val: [u8; 4] = [7, 0, 0, 0];
+
+        // Without debug expression.
+        let r: &mut [u8; 4] = crate::cast_mut_info!(&mut val);
+        r[0] = 42;
+        assert_eq!(val[0], 42);
+
+        // With debug expression.
+        let idx: usize = 0;
+        let r2: &mut [u8; 4] = crate::cast_mut_info!(&mut val, idx);
+        r2[0] = 99;
+        assert_eq!(val[0], 99);
+    }
+
+    /// Tests the three combination arms of `c_str_as_str_method!` that are never
+    /// used in production code: `(get, set)` (arm 5), `(with, set)` (arm 6),
+    /// and `(with, get)` (arm 7).
+    #[test]
+    fn test_c_str_as_str_method_combination_arms() {
+        // arm 5: (get, set) -- getter + setter, no builder.
+        struct GetSet { name: [c_char; 16] }
+        impl GetSet {
+            crate::c_str_as_str_method!(get, set { name; "name."; });
+        }
+
+        // arm 6: (with, set) -- setter + builder, no getter.
+        struct WithSet { label: [c_char; 16] }
+        impl WithSet {
+            crate::c_str_as_str_method!(with, set { label; "label."; });
+        }
+
+        // arm 7: (with, get) -- getter + builder, no setter.
+        struct WithGet { title: [c_char; 16] }
+        impl WithGet {
+            crate::c_str_as_str_method!(with, get { title; "title."; });
+        }
+
+        // arm 5: set then get.
+        let mut gs = GetSet { name: [0; 16] };
+        gs.set_name("hello");
+        assert_eq!(gs.name(), "hello");
+
+        // arm 6: with_ builder; raw bytes confirm the write.
+        let ws = WithSet { label: [0; 16] }.with_label("world");
+        let bytes: &[u8] = bytemuck::cast_slice(&ws.label[..]);
+        assert!(bytes.starts_with(b"world\0"), "with_label did not write label");
+        // arm 6 setter path.
+        let mut ws2 = WithSet { label: [0; 16] };
+        ws2.set_label("bye");
+        let bytes2: &[u8] = bytemuck::cast_slice(&ws2.label[..]);
+        assert!(bytes2.starts_with(b"bye\0"), "set_label did not write label");
+
+        // arm 7: with_ builder then getter.
+        let wg = WithGet { title: [0; 16] }.with_title("foo");
+        assert_eq!(wg.title(), "foo");
     }
 }
