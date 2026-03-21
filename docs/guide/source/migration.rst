@@ -358,7 +358,7 @@ Type changes
 - |mj_data|: ``ray()`` returns ``(Option<usize>, MjtNum)`` (was ``(i32, MjtNum)``).
   ``None`` means no intersection (previously ``-1``).
 - |mj_data|: ``multi_ray()`` returns ``Result<(Vec<Option<usize>>, Vec<MjtNum>), ...>``
-  (was ``Result<(Vec<i32>, Vec<MjtNum>), ...>``). Each ``None`` element means no
+  (was ``(Vec<i32>, Vec<MjtNum>)``). Each ``None`` element means no
   intersection for that ray (previously ``-1``).
 - |mjs_tendon|: ``limited`` and ``actfrclimited`` are now ``MjtLimited`` tri-state (was ``bool``).
 - |mj_data|: ``runge_kutta()`` now takes ``n: u32`` (was ``i32``).
@@ -374,12 +374,11 @@ Type changes
 -----------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>reset_keyframe`
-now takes ``key: usize`` (was ``i32``) and returns ``Result<(), MjDataError>``.
-Out-of-range keys that previously silently fell back to a plain reset now return
-``Err(MjDataError::IndexOutOfBounds)``.
+now takes ``key: usize`` (was ``i32``) and **panics** on out-of-range keys.
+Out-of-range keys that previously silently fell back to a plain reset now panic.
 A new fallible variant
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_reset_keyframe`
-is available for explicit error handling.
+is available for explicit error handling (returns ``Result<(), MjDataError>``).
 
 **Before (2.x):**
 

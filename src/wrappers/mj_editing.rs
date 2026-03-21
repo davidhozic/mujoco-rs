@@ -392,7 +392,7 @@ impl MjSpec {
         ) };
         match result {
             0 => Ok(CStr::from_bytes_until_nul(&result_buff).unwrap().to_string_lossy().into_owned()),
-            r if r > 0 => Err(MjEditError::XmlBufferTooSmall { required_size: r }),
+            r if r > 0 => Err(MjEditError::XmlBufferTooSmall { required_size: r as usize }),
             _ => {
                 // SAFETY: error_buff is zero-initialised and MuJoCo always
                 // NUL-terminates the message it writes into it.
@@ -1917,7 +1917,7 @@ mod tests {
         // Retry with the size MuJoCo reported plus one extra byte for safety
         // (MuJoCo uses a strict less-than comparison, so the buffer must be
         // at least required_size + 1 to succeed).
-        let xml = spec.save_xml_string(required_size as usize + 1)
+        let xml = spec.save_xml_string(required_size + 1)
             .expect("save_xml_string should succeed with required_size + 1 bytes");
         assert!(!xml.is_empty(), "saved XML must be non-empty");
     }

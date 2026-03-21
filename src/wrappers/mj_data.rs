@@ -80,6 +80,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Prefer this method over [`MjData::new`] when you want to handle
     /// allocation failures without a panic.
     pub fn try_new(model: M) -> Result<Self, MjDataError> {
+        // SAFETY: model.ffi() is a valid *const mjModel (MjModel invariant upheld by the wrapper).
         let data_ptr = unsafe { mj_makeData(model.ffi()) };
         NonNull::new(data_ptr)
             .map(|data| Self { data, model })
@@ -134,6 +135,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         if ptr.is_null() {
             &[]
         } else {
+            // SAFETY: ptr is non-null (checked above), properly aligned, and points to ffi.ncon
+            // initialized MjContact elements managed by MuJoCo. The slice lifetime is tied to &self.
             unsafe { std::slice::from_raw_parts(ptr, ffi.ncon as usize) }
         }
     }
@@ -166,6 +169,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
         let model_ffi = self.model.ffi();
         let id = id as usize;
+        // SAFETY: model.ffi() is a valid *const mjModel (MjModel invariant). id is a valid
+        // joint index returned by mj_name2id (checked to be >= 0 above). mjModel fields
+        // accessed here (jnt_type, jnt_qposadr, etc.) are valid for the lifetime of &self.
         unsafe {
             let nq_range = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nq), mj_model_nx_to_nitem!(model_ffi, nq), model_ffi.nq);
             let nv_range = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
@@ -1085,7 +1091,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics if `src` was created from a different model.
     /// Use [`MjData::try_copy_state_from_data`] for a fallible alternative.
-    pub fn copy_state_from_data(&mut self, src: &MjData<M>, spec: u32) {
+    pub fn copy_state_from_data<N: Deref<Target = MjModel>>(&mut self, src: &MjData<N>, spec: u32) {
         self.try_copy_state_from_data(src, spec)
             .expect("copy_state_from_data failed")
     }
@@ -1095,7 +1101,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::SignatureMismatch`] if `src` was created from
     /// a different model.
-    pub fn try_copy_state_from_data(&mut self, src: &MjData<M>, spec: u32) -> Result<(), MjDataError> {
+    pub fn try_copy_state_from_data<N: Deref<Target = MjModel>>(&mut self, src: &MjData<N>, spec: u32) -> Result<(), MjDataError> {
         let src_sig = src.model.signature();
         let dst_sig = self.model.signature();
         if src_sig != dst_sig {
@@ -1374,6 +1380,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjData {
+        // SAFETY: self.data is a NonNull<mjData> initialized by mj_makeData and exclusively
+        // owned by this MjData wrapper. It is valid, aligned, and initialized for the lifetime of &self.
         unsafe { self.data.as_ref() }
     }
 
@@ -1383,6 +1391,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Modifying the underlying FFI struct directly can break the invariants
     /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjData {
+        // SAFETY: self.data is a NonNull<mjData> initialized by mj_makeData and exclusively
+        // owned by this MjData wrapper. It is valid, aligned, and initialized for the lifetime of &mut self.
         unsafe { self.data.as_mut() }
     }
 
@@ -1611,6 +1621,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
 impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
     fn drop(&mut self) {
+        // SAFETY: self.data is a valid, non-null, uniquely-owned mjData* allocated by
+        // mj_makeData. Drop runs exactly once, so there is no double-free.
         unsafe {
             mj_deleteData(self.data.as_ptr());
         }
@@ -1633,6 +1645,8 @@ impl<M: Deref<Target = MjModel> + Clone> MjData<M> {
     /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
     /// the copy.
     pub fn try_clone(&self) -> Result<Self, MjDataError> {
+        // When dest is null, mj_copyData allocates a new mjData on MuJoCo's heap.
+        // SAFETY: self.model.ffi() and self.ffi() are valid pointers (wrapper invariants).
         let raw = unsafe { mj_copyData(ptr::null_mut(), self.model.ffi(), self.ffi()) };
         NonNull::new(raw)
             .map(|data| Self { data, model: self.model.clone() })

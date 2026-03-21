@@ -75,6 +75,8 @@ impl MjViewerCpp {
         let mut pert = Box::new(MjvPerturb::default());
         let mut user_scn = Box::new(MjvScene::new(model.clone(), max_user_geom));
 
+        // SAFETY: sim is a valid non-null pointer to mujoco_Simulate, allocated by
+        // mujoco_cSimulate_create and exclusively owned by this MjViewerCpp instance.
         let sim = unsafe { mujoco_cSimulate_create(&mut *cam, &mut *opt, &mut *pert, user_scn.ffi_mut()) };
         assert!(!sim.is_null(), "mujoco_cSimulate_create returned a null pointer");
         let sim_usize = sim as usize;
@@ -82,6 +84,8 @@ impl MjViewerCpp {
         let model_usize = model.as_raw_ptr() as usize;
         let data_usize = data.as_raw_ptr() as usize;
 
+        // SAFETY: sim is a valid non-null pointer to mujoco_Simulate, allocated by
+        // mujoco_cSimulate_create and exclusively owned by this MjViewerCpp instance.
         unsafe { mujoco_cSimulate_RenderInit(sim) };
 
         // Load on another thread, since the viewer internally blocks until loaded.
@@ -91,11 +95,18 @@ impl MjViewerCpp {
             let m = model_usize as *mut mjModel_;
             let d = data_usize as *mut mjData_;
             let c_filename = CString::new("file.xml").unwrap();
+            // SAFETY: sim is a valid non-null pointer to mujoco_Simulate, allocated by
+            // mujoco_cSimulate_create and owned by this thread for the duration of loading.
             unsafe { mujoco_cSimulate_Load(sim, m, d, c_filename.as_ptr()) };
         });
 
         while !load_thread.is_finished() {
-            unsafe { mujoco_cSimulate_RenderStep(sim) };
+            // SAFETY: sim is a valid non-null pointer to mujoco_Simulate (created above).
+            let running = unsafe { mujoco_cSimulate_RenderStep(sim) };
+            if running == 0 {
+                // Window closed during model load; stop rendering.
+                break;
+            }
         }
         load_thread.join().unwrap();
 
@@ -116,6 +127,9 @@ impl MjViewerCpp {
         if !self.running {
             return Err("render called after viewer has been closed!");
         }
+        // SAFETY: sim is a valid non-null pointer to mujoco_Simulate, allocated by
+        // mujoco_cSimulate_create and exclusively owned by this MjViewerCpp instance.
+        // This method is documented as main-thread-only, satisfying GLFW requirements.
         unsafe { self.running = mujoco_cSimulate_RenderStep(self.sim) == 1; }
         Ok(())
     }
@@ -126,6 +140,8 @@ impl MjViewerCpp {
         if !self.running {
             return;
         }
+        // SAFETY: sim is a valid non-null pointer to mujoco_Simulate, allocated by
+        // mujoco_cSimulate_create and exclusively owned by this MjViewerCpp instance.
         unsafe {
             mujoco_cSimulate_Sync(self.sim, 0);
         }
@@ -134,6 +150,8 @@ impl MjViewerCpp {
 
 impl Drop for MjViewerCpp {
     fn drop(&mut self) {
+        // SAFETY: Self is being dropped; sim is valid and we hold exclusive ownership.
+        // We signal exit first so the C++ simulation loop can clean up before we destroy.
         unsafe {
             mujoco_cSimulate_ExitRequest(self.sim);
             mujoco_cSimulate_destroy(self.sim);
@@ -141,5 +159,13 @@ impl Drop for MjViewerCpp {
     }
 }
 
+// SAFETY: MjViewerCpp exclusively owns its *mut mujoco_Simulate pointer. The pointer is
+// never aliased. All GL/GLFW access is confined to the main-thread `render()` method
+// (documented as requiring main-thread execution). The `sync()` method is the only
+// cross-thread operation and only reads/writes plain data through the C++ API.
 unsafe impl Send for MjViewerCpp {}
+// SAFETY: MjViewerCpp exclusively owns its *mut mujoco_Simulate pointer. The pointer is
+// never aliased. All GL/GLFW access is confined to the main-thread `render()` method
+// (documented as requiring main-thread execution). The `sync()` method is the only
+// cross-thread operation and only reads/writes plain data through the C++ API.
 unsafe impl Sync for MjViewerCpp {}
