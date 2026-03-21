@@ -19,10 +19,17 @@
 - Read existing code in the file you're modifying to understand naming, safety, and documentation conventions.
 - Follow the existing error handling patterns used in the same file.
 - Use `/// Safety` doc comments on all `unsafe` blocks.
+- Do NOT duplicate `// SAFETY:` comments: if the same or nearly identical safety justification has
+  already been stated in an earlier block in the same function or impl scope, omit it from subsequent
+  blocks and trust the reader to refer upward. Only add a new comment when the reasoning differs.
 - Public items should have `///` doc comments.
 - Always use ASCII characters only. Never use UTF-8 (e.g., em dashes, arrows, etc.).
 - Imports (`use`) should be sorted by line length with the longest line on top.
 - Prefer to group imports with the same parent module.
+- Do NOT flag or fix integer truncation casts (e.g., `usize as i32`, `len() as i32`) when the
+  underlying C API already validates or clamps the value (e.g., passing a count that MuJoCo itself
+  allocated and therefore cannot exceed the C-side maximum). Only fix truncation casts when the
+  value originates in pure Rust and is not subsequently validated by the C layer.
 
 ## Documentation
 - Always verify any changes made to MuJoCo's official documentation to verify everything is correct.
