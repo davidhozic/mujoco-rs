@@ -85,7 +85,8 @@ Optional Cargo features can be enabled:
     For cross-OS builds, use the [`cross`](https://github.com/cross-rs/cross) tool
     or manually set ``MUJOCO_DYNAMIC_LINK_DIR``.
 
-By default, ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are enabled.
+By default, no optional features are enabled. Enable the features you need explicitly
+(e.g. ``cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"``).
 
 
 ## Example

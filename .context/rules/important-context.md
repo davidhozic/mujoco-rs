@@ -75,8 +75,8 @@ If `MUJOCO_DYNAMIC_LINK_DIR` is also set, the pre-downloaded copy takes preceden
   MUST require the generic parameter to also be `Send` / `Sync`. Without these bounds, non-thread-safe
   inner types are incorrectly marked thread-safe. (`MjvScene` is non-generic as of 3.0.0 and is
   unconditionally `Send + Sync`; this pitfall applies to `MjData<M>` and future generic wrappers.)
-- **The test environment supports rendering**: default features (including viewer) can be used in
-  tests; no need to disable them unless specifically testing headless behaviour.
+- **The test environment supports rendering**: viewer/renderer features can be explicitly enabled in
+  tests; they are not part of the default feature set.
 - **Macro expansion is slow**: do NOT run `/expand-macros` unless the user explicitly requests it.
   For deep audits use the `/verify` workflow instead.
 - **`MjData::model()` returns `&MjModel` (not `&M`)**: When reasoning about generic bounds, note that

@@ -1153,6 +1153,8 @@ mod tests {
         assert_eq!(arm11.y(), 7);
         arm11.set_x(9);
         assert_eq!(arm11.x(), 9);
+        arm11.set_y(10);
+        assert_eq!(arm11.y(), 10);
 
         let mut arm12 = ArmTwelve { flag: 1 };
         assert!(arm12.flag());

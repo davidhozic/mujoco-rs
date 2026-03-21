@@ -81,7 +81,8 @@ Optional Cargo features can be enabled:
     for complete configuration details.
 
 
-By default, ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are enabled.
+By default, no optional features are enabled. Enable the features you need explicitly
+(e.g. ``cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"``).
 
 
 Table of contents

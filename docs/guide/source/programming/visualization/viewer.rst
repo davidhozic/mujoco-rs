@@ -14,8 +14,8 @@ static linking to modified MuJoCo code, as described in :ref:`static_linking`.
 Rust-native 3D viewer
 =======================
 
-The Rust-native 3D viewer supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
-This also includes object perturbations. Optionally, enabled by the ``viewer-ui`` feature (default), the viewer
+The Rust-native 3D viewer, enabled by the ``viewer`` feature, supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
+This also includes object perturbations. Optionally, enabled by the ``viewer-ui`` feature, the viewer
 also provides a user interface, which tries to replicate the original C++ viewer as best as possible
 and thus allows control of constraints, joints, actuators, etc.
 
@@ -295,7 +295,7 @@ which demonstrates various types of UI elements including windows, side panels, 
 
 .. note::
 
-    Custom UI widgets are only available when the ``viewer-ui`` feature is enabled (default).
+    Custom UI widgets are only available when the ``viewer-ui`` feature is enabled.
     The ``egui`` crate is re-exported from ``mujoco_rs::viewer::egui`` for convenience.
 
 

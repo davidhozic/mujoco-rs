@@ -282,6 +282,7 @@ fn main() {
                     "automatic download of MuJoCo for a Linux target is not supported on non-Linux hosts -- \
                     use 'cross' for cross-OS compilation or manually download MuJoCo and specify {MUJOCO_DYN_LIB_PATH_VAR}"
                 );
+                #[allow(unreachable_code)]
                 format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-linux-{target_arch}.tar.gz")
             }
             else if target_os == "windows" {
@@ -292,6 +293,7 @@ fn main() {
                     "automatic download of MuJoCo for a Windows target is not supported on non-Windows hosts -- \
                     use 'cross' for cross-OS compilation or manually download MuJoCo and specify {MUJOCO_DYN_LIB_PATH_VAR}"
                 );
+                #[allow(unreachable_code)]
                 format!("{MUJOCO_BASE_DOWNLOAD_LINK}/{mujoco_version}/mujoco-{mujoco_version}-windows-{target_arch}.zip")
             }
             else {

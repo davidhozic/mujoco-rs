@@ -29,6 +29,12 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: Breaking changes
 
+*Default features changed*
+
+- ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are **no longer enabled
+  by default**. Enable them explicitly when needed
+  (e.g. ``cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"``).
+
 *MjvScene is no longer generic*
 
 - |mjv_scene| is no longer generic over ``M``. It is now a plain ``struct MjvScene``
