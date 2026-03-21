@@ -415,6 +415,10 @@ New error variants:
 - :docs-rs:`~mujoco_rs::error::<enum>MjModelError`: ``BufferTooSmall``,
   ``SignatureMismatch``.
 - :docs-rs:`~mujoco_rs::error::<enum>MjDataError`: ``InvalidUtf8Path``.
+- :docs-rs:`~mujoco_rs::error::<enum>MjEditError`: ``XmlBufferTooSmall`` --- returned by
+  ``save_xml_string`` when the supplied buffer is too small; the ``required_size`` field
+  carries the ``snprintf``-style byte count (excluding NUL), so retry with
+  ``required_size as usize + 1``.
 - New ``try_`` methods paired with existing infallible counterparts (infallible
   variants now delegate to ``try_``.``expect()``):
 

@@ -273,6 +273,16 @@ pub enum MjEditError {
     UnsupportedOperation,
     /// MuJoCo returned an error while attempting to delete the element.
     DeleteFailed(String),
+    /// The output buffer passed to [`MjSpec::save_xml_string`](crate::wrappers::mj_editing::MjSpec::save_xml_string)
+    /// was too small to hold the XML.
+    ///
+    /// `required_size` follows `snprintf`-style semantics: it is the number of bytes MuJoCo would
+    /// write, **not** counting the NUL terminator.  To retry successfully, pass a buffer of at
+    /// least `required_size as usize + 1` bytes.
+    XmlBufferTooSmall {
+        /// Number of bytes MuJoCo would write (excluding the NUL terminator).
+        required_size: i32,
+    },
 }
 
 impl fmt::Display for MjEditError {
@@ -287,6 +297,11 @@ impl fmt::Display for MjEditError {
             Self::AlreadyExists => write!(f, "element with the same name already exists"),
             Self::UnsupportedOperation => write!(f, "this operation is not supported"),
             Self::DeleteFailed(msg) => write!(f, "delete failed: {msg}"),
+            Self::XmlBufferTooSmall { required_size } => write!(
+                f,
+                "XML output buffer too small; retry with at least {} bytes (required_size + 1)",
+                required_size + 1
+            ),
         }
     }
 }

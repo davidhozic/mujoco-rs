@@ -379,8 +379,10 @@ impl MjSpec {
     /// # Returns
     /// On success, returns the generated XML string.
     /// # Errors
-    /// Returns [`MjEditError::SaveFailed`] with MuJoCo's error message on failure, including
-    /// when `buffer_size` is too small (MuJoCo reports the required size in the message).
+    /// - [`MjEditError::XmlBufferTooSmall`] when `buffer_size` is too small.
+    ///   The `required_size` field uses `snprintf`-style semantics (bytes to write, excluding NUL),
+    ///   so retry with `required_size as usize + 1` bytes.
+    /// - [`MjEditError::SaveFailed`] with MuJoCo's error message on any other failure.
     pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, MjEditError> {
         let mut error_buff = [0; ERROR_BUF_LEN];
         let mut result_buff = vec![0u8; buffer_size];
@@ -390,11 +392,10 @@ impl MjSpec {
         ) };
         match result {
             0 => Ok(CStr::from_bytes_until_nul(&result_buff).unwrap().to_string_lossy().into_owned()),
+            r if r > 0 => Err(MjEditError::XmlBufferTooSmall { required_size: r }),
             _ => {
                 // SAFETY: error_buff is zero-initialised and MuJoCo always
                 // NUL-terminates the message it writes into it.
-                // On failure (-1) and on buffer-too-small (positive), MuJoCo writes
-                // a descriptive message into error_buff.
                 let message = unsafe { CStr::from_ptr(error_buff.as_ptr()) }
                     .to_string_lossy()
                     .into_owned();
@@ -1895,6 +1896,30 @@ mod tests {
         assert_eq!(spec.save_xml_string(1000).unwrap(), EXPECTED_XML);
 
         spec.compile().unwrap();
+    }
+
+    /// `save_xml_string` with a 1-byte buffer must return `XmlBufferTooSmall` and
+    /// the reported `required_size` must be enough to succeed on retry.
+    #[test]
+    fn test_save_xml_string_buffer_too_small() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_body().add_geom().with_size([0.01, 0.0, 0.0]);
+        spec.compile().unwrap();
+
+        let err = spec.save_xml_string(1)
+            .expect_err("expected XmlBufferTooSmall with a 1-byte buffer");
+        let required_size = match err {
+            MjEditError::XmlBufferTooSmall { required_size } => required_size,
+            other => panic!("expected XmlBufferTooSmall, got {other:?}"),
+        };
+        assert!(required_size > 1, "required_size must exceed the original 1-byte buffer");
+
+        // Retry with the size MuJoCo reported plus one extra byte for safety
+        // (MuJoCo uses a strict less-than comparison, so the buffer must be
+        // at least required_size + 1 to succeed).
+        let xml = spec.save_xml_string(required_size as usize + 1)
+            .expect("save_xml_string should succeed with required_size + 1 bytes");
+        assert!(!xml.is_empty(), "saved XML must be non-empty");
     }
 
     #[test]
