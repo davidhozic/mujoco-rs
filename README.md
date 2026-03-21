@@ -90,7 +90,9 @@ By default, no optional features are enabled. Enable the features you need expli
 
 
 ## Example
-This example shows how to launch the viewer and print the coordinates
+This example requires the ``viewer`` or the ``viewer-ui`` feature
+(``cargo add mujoco-rs --features viewer``).
+It launches the viewer and prints the coordinates
 of a moving ball to the terminal.
 Other examples can be found under the ``examples/`` directory.
 

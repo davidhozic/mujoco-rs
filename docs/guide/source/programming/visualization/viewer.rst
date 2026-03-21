@@ -14,6 +14,12 @@ static linking to modified MuJoCo code, as described in :ref:`static_linking`.
 Rust-native 3D viewer
 =======================
 
+.. note::
+
+    The viewer requires the ``viewer`` Cargo feature (not enabled by default).
+    Enable it with: ``cargo add mujoco-rs --features viewer``
+    (or ``viewer-ui`` for UI support).
+
 The Rust-native 3D viewer, enabled by the ``viewer`` feature, supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
 This also includes object perturbations. Optionally, enabled by the ``viewer-ui`` feature, the viewer
 also provides a user interface, which tries to replicate the original C++ viewer as best as possible

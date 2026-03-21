@@ -3,6 +3,12 @@
 3D renderer
 ============
 
+.. note::
+
+    The renderer requires the ``renderer`` Cargo feature (not enabled by default).
+    Enable it with: ``cargo add mujoco-rs --features renderer``
+    (add ``renderer-winit-fallback`` on Windows/macOS or when offscreen rendering is unavailable).
+
 Unlike the :ref:`mj_rust_viewer`, which displays the simulation's 3D scene in a window,
 the renderer exists to provide users with the ability to render offscreen. This includes
 rendering RGB and depth images to either an array or to a file.

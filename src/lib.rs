@@ -27,8 +27,8 @@
 //! [here](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco).
 //!
 //! ## 3D viewer
-//! The Rust-native viewer is available ([`viewer::MjViewer`]), as well as MuJoCo's original C++
-//! one ([`crate::cpp_viewer::MjViewerCpp`]).
+//! The Rust-native viewer is available ([`viewer::MjViewer`]) when the `viewer` / `viewer-ui` feature is enabled,
+//! as well as MuJoCo's original C++ one ([`crate::cpp_viewer::MjViewerCpp`]).
 //! The C++ viewer, however, requires manual compilation of a patched MuJoCo repository,
 //! like described [here](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking).
 //!
@@ -69,7 +69,9 @@
 //!     [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco)
 //!     for information on complete configuration.
 //!
-//! By default, `viewer`, `viewer-ui`, `renderer`, and `renderer-winit-fallback` are enabled.
+//! By default, no optional features are enabled. Enable the features you need explicitly
+//! (e.g. `cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"` for support
+//! with the viewer and the viewer's extra UI, and the render with invisible window as a fallback).
 //!
 //!
 use std::ffi::CStr;
