@@ -271,7 +271,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Calculates the contact force for the given `contact_id`.
     /// The `contact_id` matches the index of the contact when iterating
-    /// via [`MjData::contacts`].
+    /// via [`MjData::contact`].
     /// Calls `mj_contactForce` internally.
     /// # Note
     /// When `contact_id >= ncon`, `[0; 6]` is returned.
@@ -2252,7 +2252,6 @@ mod test {
         data.step();
 
         assert!(data.contact().len() != 0);
-        assert_eq!(data.contact().len(), data.contacts().len());
     }
 
     #[test]
@@ -4195,7 +4194,7 @@ mod test {
         // (not guaranteed in every model, but MODEL has spheres falling on a plane)
         if ncon > 0 {
             // Contact positions (xpos) should have changed
-            let contacts = data.contacts();
+            let contacts = data.contact();
             assert_eq!(contacts.len(), ncon);
             for c in contacts {
                 // Each contact's pos is a [f64; 3]
