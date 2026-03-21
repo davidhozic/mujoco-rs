@@ -2424,4 +2424,49 @@ mod tests {
         assert_eq!(jnt_limited[2], true,
             "Joint with limited=AUTO and range should resolve to true");
     }
+
+    /// Parsing invalid XML must return Err with a non-empty message.
+    #[test]
+    fn test_parse_xml_string_invalid() {
+        let result = MjSpec::from_xml_string("<not valid mujoco xml>");
+        assert!(result.is_err(), "parsing invalid XML must return Err");
+        let msg = result.unwrap_err().to_string();
+        assert!(!msg.is_empty(), "error message must not be empty for invalid XML");
+    }
+
+    /// Parsing via VFS must produce a model with the expected properties, not just succeed.
+    #[test]
+    fn test_parse_xml_vfs_content() {
+        const PATH: &str = "./mj_spec_test_parse_xml_vfs_content.xml";
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer(PATH, MODEL.as_bytes()).unwrap();
+        let mut spec = MjSpec::from_xml_vfs(PATH, &vfs).expect("VFS parse failed");
+        let model = spec.compile().expect("compile failed");
+
+        // MODEL has: worldbody + 1 named body ("ball") = 2 bodies total (world + ball)
+        assert_eq!(model.ffi().nbody, 2, "expected 2 bodies (world + ball)");
+        // MODEL has: 1 free joint on "ball"
+        assert_eq!(model.ffi().njnt, 1, "expected 1 joint");
+        // MODEL has: 1 sphere geom + 1 plane geom = 2 geoms
+        assert_eq!(model.ffi().ngeom, 2, "expected 2 geoms (sphere + floor)");
+    }
+
+    /// Parsing via XML file must produce a model with the expected properties.
+    #[test]
+    fn test_parse_xml_file_content() {
+        const PATH: &str = "./mj_spec_test_parse_xml_file_content.xml";
+        let mut file = fs::File::create(PATH).expect("file creation failed");
+        file.write_all(MODEL.as_bytes()).expect("unable to write");
+        file.flush().unwrap();
+
+        let result = MjSpec::from_xml(PATH);
+        fs::remove_file(PATH).expect("file removal failed");
+
+        let mut spec = result.expect("file parse failed");
+        let model = spec.compile().expect("compile failed");
+
+        assert_eq!(model.ffi().nbody, 2, "expected 2 bodies (world + ball)");
+        assert_eq!(model.ffi().njnt, 1, "expected 1 joint");
+        assert_eq!(model.ffi().ngeom, 2, "expected 2 geoms (sphere + floor)");
+    }
 }
