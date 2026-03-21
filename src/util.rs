@@ -8,7 +8,7 @@ use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 /// Standard size of temporary error buffers passed to MuJoCo C functions.
 /// MuJoCo NUL-terminates within this size, so the effective maximum
 /// message length is `ERROR_BUF_LEN - 1` characters.
-pub const ERROR_BUF_LEN: usize = 100;
+pub(crate) const ERROR_BUF_LEN: usize = 100;
 
 /// Copies an ASCII `&str` into a fixed-size `c_char` buffer, NUL-terminating and
 /// zero-filling the remainder.

@@ -172,7 +172,8 @@ gained new variants. See `Error handling`_ below for the full method list.
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_reset_keyframe`
     for explicit error handling.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>runge_kutta`
-    now panics if ``n < 1`` (previously passed negative or zero values silently to C).
+    now takes ``n: u32`` (was ``i32``) and panics if ``n < 1``
+    (previously passed negative or zero values silently to C).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force`
     takes ``contact_id: u32`` (was ``usize``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>maxuse_threadstack`
