@@ -262,6 +262,15 @@ fn main() {
 
         // On Linux and Windows try to automatically download as a fallback.
         #[cfg(feature = "auto-download-mujoco")]
+        if allow_download && target_os == "macos" {
+            panic!(
+                "Automatic download of MuJoCo is not supported on macOS. \
+                Please install MuJoCo and make it discoverable via pkg-config, \
+                or set {MUJOCO_STATIC_LIB_PATH_VAR} / {MUJOCO_DYN_LIB_PATH_VAR}."
+            );
+        }
+
+        #[cfg(feature = "auto-download-mujoco")]
         if allow_download && target_os != "macos" {
             use std::io::{BufReader, Read};
             use sha2::Digest;

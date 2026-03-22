@@ -275,12 +275,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Calls `mj_contactForce` internally.
     /// # Note
     /// When `contact_id >= ncon`, `[0; 6]` is returned.
-    pub fn contact_force(&self, contact_id: u32) -> [MjtNum; 6] {
+    pub fn contact_force(&self, contact_id: usize) -> [MjtNum; 6] {
         let mut force = [0.0; 6];
         unsafe {
-            // Safety: contact_id is validated internally.
-            // When contact_id is outside valid range of i32,
-            // it overflows to value below 0, which is also checked internally.
             mj_contactForce(
                 self.model.ffi(), self.data.as_ptr(),
                 contact_id as i32, &mut force

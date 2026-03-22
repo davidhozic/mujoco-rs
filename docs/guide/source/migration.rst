@@ -346,7 +346,6 @@ Type changes
 - |mj_model|: ``name_to_id()`` returns ``Option<usize>`` (was ``i32``; ``-1`` is now ``None``).
 - |mj_model|: ``tuple_objtype()`` returns ``&[MjtObj]`` (was ``&[i32]``).
 - |mj_model|: ``id_to_name``: ``id`` takes ``usize`` (was ``i32``).
-- |mj_data|: ``contact_force()`` takes ``contact_id: u32`` (was ``usize``).
 - |mj_data|: ``maxuse_threadstack()`` returns ``&[MjtSize; mjMAXTHREAD]`` (was ``&[MjtSize]``).
 - |mj_data|: ``jac``, ``jac_body``, ``jac_body_com``, ``jac_subtree_com``, ``jac_geom``,
   ``jac_site``, ``angmom_mat``, ``object_velocity``, ``object_acceleration``,
@@ -361,6 +360,11 @@ Type changes
   (was ``(Vec<i32>, Vec<MjtNum>)``). Each ``None`` element means no
   intersection for that ray (previously ``-1``).
 - |mjs_tendon|: ``limited`` and ``actfrclimited`` are now ``MjtLimited`` tri-state (was ``bool``).
+- |mjv_camera|: ``new_fixed``, ``new_tracking``, ``track``, ``fix`` now take ``usize`` (was ``u32``).
+  Remove ``as u32`` casts at call sites.
+- :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>SceneSelection`:
+  ``body_id``, ``geom_id``, ``flex_id``, ``skin_id`` are now ``Option<usize>`` (was ``i32``).
+  Replace ``sel.body_id >= 0`` with ``sel.body_id.is_some()`` or ``if let Some(id) = sel.body_id``.
 - |mj_data|: ``runge_kutta()`` now takes ``n: u32`` (was ``i32``).
   Replace ``data.runge_kutta(n)`` with ``data.runge_kutta(n as u32)`` at call sites.
   The function also now panics if ``n < 1`` (previously passed negative or zero values

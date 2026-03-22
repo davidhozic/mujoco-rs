@@ -58,7 +58,7 @@ fn main() {
 
     /* Make a camera that follows the ball */
     let ball_body_id = model.body("ball").unwrap().id;
-    let mut camera = MjvCamera::new_tracking(ball_body_id as u32);
+    let mut camera = MjvCamera::new_tracking(ball_body_id);
     camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -1.0, renderer.scene());  // zoom-out a bit
     renderer.set_camera(camera);
 

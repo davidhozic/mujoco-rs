@@ -179,8 +179,6 @@ gained new variants. See `Error handling`_ below for the full method list.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>runge_kutta`
     now takes ``n: u32`` (was ``i32``) and panics if ``n < 1``
     (previously passed negative or zero values silently to C).
-  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force`
-    takes ``contact_id: u32`` (was ``usize``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>maxuse_threadstack`
     returns ``&[MjtSize; mjMAXTHREAD]`` (was ``&[MjtSize]``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac`,
@@ -237,7 +235,13 @@ gained new variants. See `Error handling`_ below for the full method list.
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>find_selection`
   returns :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>SceneSelection`
-  (was a 5-tuple ``(i32, i32, i32, i32, [MjtNum; 3])``).
+  (was a 5-tuple ``(i32, i32, i32, [MjtNum; 3])``).
+  ``SceneSelection`` fields (``body_id``, ``geom_id``, ``flex_id``, ``skin_id``) are
+  ``Option<usize>`` (``None`` = no selection). Use ``if let Some(id) = sel.body_id``
+  instead of ``if sel.body_id >= 0``.
+
+- |mjv_camera|: ``new_fixed``, ``new_tracking``, ``track``, ``fix`` now take
+  ``usize`` (was ``u32``). Remove ``as u32`` casts at call sites.
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update`:
   the ``pertub`` parameter has been renamed to ``perturb`` (typo fix).
