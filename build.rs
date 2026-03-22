@@ -237,26 +237,29 @@ fn main() {
             Ok(_) => true,
             Err(_err) => {
                 #[cfg(target_os = "macos")]
-                panic!(
-                    "{_err}\
-                    \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
-                    \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} \
-                    nor {MUJOCO_DYN_LIB_PATH_VAR} is set."
-                );
-                #[cfg(not(target_os = "macos"))]
                 {
-                    #[cfg(not(feature = "auto-download-mujoco"))]
+                    #[cfg(feature = "auto-download-mujoco")]
+                    compile_error!("automatic downloads are not supported on macOS");
+
                     panic!(
                         "{_err}\
                         \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
                         \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} \
-                        nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
-                        \nConsider enabling automatic download: \
-                        'cargo add mujoco-rs --features \"auto-download-mujoco\"'."
+                        nor {MUJOCO_DYN_LIB_PATH_VAR} is set."
                     );
-                    #[cfg(feature = "auto-download-mujoco")]
-                    false
                 }
+
+                #[cfg(not(feature = "auto-download-mujoco"))]
+                panic!(
+                    "{_err}\
+                    \n---------------- ^^^ pkg-config output ^^^ ----------------\n\
+                    \nUnable to locate MuJoCo via pkg-config and neither {MUJOCO_STATIC_LIB_PATH_VAR} \
+                    nor {MUJOCO_DYN_LIB_PATH_VAR} is set.\
+                    \nConsider enabling automatic download: \
+                    'cargo add mujoco-rs --features \"auto-download-mujoco\"'."
+                );
+                #[cfg(feature = "auto-download-mujoco")]
+                false
             }
         };
 
