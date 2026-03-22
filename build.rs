@@ -274,6 +274,7 @@ fn main() {
         };
 
         // Auto-download MuJoCo (Linux and Windows native builds only).
+        #[cfg(not(target_os = "macos"))]
         #[cfg(feature = "auto-download-mujoco")]
         if !found {
             use std::io::{BufReader, Read};
