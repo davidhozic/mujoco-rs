@@ -33,6 +33,19 @@ MuJoCo-rs 3.0.0 links against MuJoCo **3.6.0**. Download the matching release
 and update your library path. See :ref:`installation` for details.
 
 
+Default features changed
+-----------------------
+
+The ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback``
+features are **no longer enabled by default**. If your project relies on the
+viewer or renderer, add the features explicitly in ``Cargo.toml``:
+
+.. code-block:: toml
+
+    [dependencies]
+    mujoco-rs = { version = "3", features = ["viewer-ui", "renderer-winit-fallback"] }
+
+
 Error handling
 -----------------------
 
@@ -210,7 +223,7 @@ replaced by two dedicated methods:
 
     model.save_to_file("model.mjb")?;
 
-    let mut buffer = vec![0u8; model.size() as usize];
+    let mut buffer = vec![0u8; model.size()];
     model.save_to_buffer(&mut buffer)?;
 
 
