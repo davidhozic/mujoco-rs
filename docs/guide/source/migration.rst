@@ -640,14 +640,14 @@ from all usage sites.
 .. code-block:: rust
 
     let scene: MjvScene<Arc<MjModel>> = MjvScene::new(model.clone(), 1000);
-    scene.update(&data, mjCAT_ALL);
+    scene.update(&mut data, &opt, &perturb, &mut cam);
 
 **After (3.0.0):**
 
 .. code-block:: rust
 
     let scene: MjvScene = MjvScene::new(model.clone(), 1000);
-    scene.update(&data, mjCAT_ALL);
+    scene.update(&mut data, &opt, &perturb, &mut cam);
 
 Additional details:
 
