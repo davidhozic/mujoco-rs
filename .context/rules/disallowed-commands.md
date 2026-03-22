@@ -23,7 +23,7 @@ propose alternatives if a request would require running any prohibited command.
 - Package managers with remote access (`npm install`, `pip install`, etc.) when
   they would fetch from external repositories. (Dependency management should be
   described to the user instead.) If you need to install a package, ask the user
-  about what do do. Ask by prompting the user via `ask_questions` tool (multiple-choice window).
+  about what to do. Ask by prompting the user via `ask_user` tool (multiple-choice window).
   
 
 ## Privilege Escalation & System Modifications
@@ -57,7 +57,7 @@ propose alternatives if a request would require running any prohibited command.
 - `echo $SECRET` or reading environment variables containing secrets.
 
 > **Note:** This list is not exhaustive. When in doubt, err on the side of
-> caution: present the user with instructions (`ask_questions` tool) rather than executing potentially
+> caution: present the user with instructions (`ask_user` tool) rather than executing potentially
 > harmful commands.
 
 When in doubt, ask for clarification if a requested action might violate
