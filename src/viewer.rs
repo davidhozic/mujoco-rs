@@ -1,5 +1,5 @@
 //! Module related to implementation of the [`MjViewer`]. For implementation of the C++ wrapper,
-//! see [`crate::cpp_viewer::MjViewerCpp`] (enabled by the `cpp-viewer` cargo feature).
+//! see `MjViewerCpp` (enabled by the `cpp-viewer` cargo feature).
 #[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
 use glutin::prelude::PossiblyCurrentGlContext;
 use glutin::surface::GlSurface;
@@ -758,6 +758,10 @@ impl MjViewer {
                 // Reset to a free camera: a tracking or fixed camera may reference a body
                 // or camera ID that does not exist in the new model.
                 self.camera = MjvCamera::new_free(&self.model_passive);
+                // Recreate the rendering context so that GPU resources (textures,
+                // meshes, heightfields, skins) match the new model.
+                // SAFETY: the GL context was made current in render() before this call.
+                self.context = unsafe { MjrContext::new(&self.model_passive) };
                 #[cfg(feature = "viewer-ui")]
                 self.ui.update_names(Arc::clone(&self.model_passive));
             }
