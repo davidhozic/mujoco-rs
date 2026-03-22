@@ -520,7 +520,7 @@ Core ``Send``/``Sync`` bound tightening
 
 ``MjData<M>`` now requires ``M: Send`` / ``M: Sync``.
 ``MjvScene`` is no longer generic and derives ``Send + Sync`` unconditionally.
-``MjViewerCpp<M>`` now requires ``M: Send + Sync``.
+``MjViewerCpp::launch_passive`` now requires ``M: Send + Sync``.
 
 If you were using ``Rc<MjModel>`` in threaded code, switch to ``Arc<MjModel>``.
 
@@ -655,7 +655,7 @@ Additional details:
   ``MjvScene::find_selection`` retain ``<M: Deref<Target = MjModel>>`` as
   **method-level** generics; call sites are unchanged.
 - ``MjvPerturb::start`` / ``move_`` and ``MjvCamera::move_`` now take
-  ``&MjvScene`` / ``&mut MjvScene`` without a type parameter.
+  ``&MjvScene`` without a type parameter.
 - ``vis_common::sync_geoms`` is now non-generic.
 - |mjv_scene| derives ``Send + Sync`` unconditionally (no bound on ``M`` required).
 
@@ -674,20 +674,20 @@ usage sites.
 .. code-block:: rust
 
     let viewer: MjViewer<Arc<MjModel>> = MjViewer::builder()
-        .build_passive(model.clone(), data.clone())
+        .build_passive(model.clone())
         .expect("failed to start viewer");
 
-    viewer.add_ui_callback(|data: &mut MjData<Arc<MjModel>>, ui| { ... });
+    viewer.add_ui_callback(|ctx, data: &mut MjData<Arc<MjModel>>| { ... });
 
 **After (3.0.0):**
 
 .. code-block:: rust
 
     let viewer: MjViewer = MjViewer::builder()
-        .build_passive(model.clone(), data.clone())
+        .build_passive(model.clone())
         .expect("failed to start viewer");
 
-    viewer.add_ui_callback(|data: &mut MjData<Arc<MjModel>>, ui| { ... });
+    viewer.add_ui_callback(|ctx, data: &mut MjData<Arc<MjModel>>| { ... });
 
 Additional details:
 

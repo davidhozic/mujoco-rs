@@ -142,7 +142,7 @@ Because MuJoCo-rs tries to keep the API contract correct in terms of Rust lifeti
 we don't allow the |mj_model| to be modified while any |mj_data| instances created
 from the same |mj_model| exist.
 
-To modify such parameters, without recreating |mj_data|, use the (unsafe)
+To modify such parameters, without recreating |mj_data|, use the
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` method,
 which swaps the |mj_model| owned by |mj_data| for a the |mj_model| given as parameter.
 
@@ -164,7 +164,7 @@ which swaps the |mj_model| owned by |mj_data| for a the |mj_model| given as para
 
         // Modify simulation timestep
         model_template.opt_mut().timestep = 0.004;
-        model_template = unsafe { data.swap_model(model_template).unwrap() };
+        model_template = data.swap_model(model_template).unwrap();
     }
 
 .. [Tobin2017] J. Tobin, R. Fong, A. Ray, J. Schneider, W. Zaremba, and P. Abbeel,

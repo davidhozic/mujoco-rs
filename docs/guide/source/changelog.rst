@@ -49,7 +49,7 @@ update of MuJoCo alone can increase the major version.
   - ``MjvScene`` exposes a new ``signature() -> u64`` method for the model
     signature the scene was built for.
   - ``MjvPerturb::start`` / ``move_`` and ``MjvCamera::move_`` now take
-    ``&MjvScene`` / ``&mut MjvScene`` without a type parameter.
+    ``&MjvScene`` without a type parameter.
   - ``vis_common::sync_geoms`` is now non-generic.
   - |mjv_scene| now derives ``Send + Sync`` unconditionally.
 
@@ -288,7 +288,7 @@ gained new variants. See `Error handling`_ below for the full method list.
   ``MjData<Rc<MjModel>>`` incorrectly ``Send + Sync``.
   (``MjvScene`` is now non-generic and unconditionally ``Send + Sync``.)
 
-- :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp` now requires
+- :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>launch_passive` now requires
   ``M: Send + Sync`` (previously only ``Deref<Target = MjModel> + Clone``).
 
 *Mutable accessor restrictions*
