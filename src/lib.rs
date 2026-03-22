@@ -58,7 +58,7 @@
 //!
 //!   - `renderer-winit-fallback`: enables the invisible window fallback (based on winit) when offscreen
 //!     rendering fails to initialize. Note that true offscreen rendering is only available on Linux platforms
-//!     when the video driver supports it. On Windows and MacOS, this feature must always be
+//!     when the video driver supports it. On Windows and macOS, this feature must always be
 //!     enabled when the `renderer` feature is enabled.
 //!
 //! - `auto-download-mujoco`: MuJoCo dependency will be automatically downloaded to the specified path.

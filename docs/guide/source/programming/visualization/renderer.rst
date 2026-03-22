@@ -54,7 +54,7 @@ using :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`.
 
     ...
     data.step();  // data is an instance of MjData.
-    renderer.sync(&mut data).unwrap();
+    renderer.sync(&mut data);
     ...
 
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync` is an infallible convenience method
