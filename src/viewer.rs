@@ -758,6 +758,10 @@ impl MjViewer {
                 // Reset to a free camera: a tracking or fixed camera may reference a body
                 // or camera ID that does not exist in the new model.
                 self.camera = MjvCamera::new_free(&self.model_passive);
+                // Recreate the rendering context so that GPU resources (textures,
+                // meshes, heightfields, skins) match the new model.
+                // SAFETY: the GL context was made current in render() before this call.
+                self.context = unsafe { MjrContext::new(&self.model_passive) };
                 #[cfg(feature = "viewer-ui")]
                 self.ui.update_names(Arc::clone(&self.model_passive));
             }
@@ -1199,7 +1203,7 @@ impl MjViewer {
             return;
         }
 
-        self.camera.fix((self.camera.fixedcamid + direction).rem_euclid(n_cam as i32) as u32);
+        self.camera.fix((self.camera.fixedcamid + direction).rem_euclid(n_cam as i32) as usize);
     }
 
     /// Toggles full screen mode.
@@ -1298,24 +1302,24 @@ impl MjViewer {
 
                     /* Set tracking camera */
                     if modifier_state.alt_key() {
-                        if sel.body_id >= 0 {
+                        if let Some(body_id) = sel.body_id {
                             self.camera.lookat = sel.point;
                             if modifier_state.control_key() {
-                                self.camera.track(sel.body_id as u32);
+                                self.camera.track(body_id);
                             }
                         }
                     }
                     else {
                         /* Mark selection */
-                        if sel.body_id >= 0 {
-                            pert.select = sel.body_id;
-                            pert.flexselect = sel.flex_id;
-                            pert.skinselect = sel.skin_id;
+                        if let Some(body_id) = sel.body_id {
+                            pert.select = body_id as i32;
+                            pert.flexselect = sel.flex_id.map(|v| v as i32).unwrap_or(-1);
+                            pert.skinselect = sel.skin_id.map(|v| v as i32).unwrap_or(-1);
                             pert.active = 0;
                             pert.update_local_pos(&sel.point, data_passive);
                         }
                         else {
-                            pert.select = 0;
+                            pert.select = -1;
                             pert.flexselect = -1;
                             pert.skinselect = -1;
                         }

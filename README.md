@@ -63,7 +63,7 @@ Optional Cargo features can be enabled:
     This also allows users to add custom [`egui`](https://docs.rs/egui/0.33/egui/) widgets to the viewer.
 
 - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
-  This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking).
+  This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/stable/installation.html#static-linking).
 - ``renderer``: enables offscreen rendering for writing RGB and
   depth data to memory or file.
 
@@ -78,18 +78,21 @@ Optional Cargo features can be enabled:
   - The environment variable ``MUJOCO_DOWNLOAD_DIR`` must be
     set to the absolute path of the download location.
   - Downloaded MuJoCo library is still a shared library. See
-    [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco)
+    [installation](https://mujoco-rs.readthedocs.io/en/stable/installation.html#mujoco)
     for information on complete configuration.
   - **Cross-OS downloads are not supported** (e.g. Linux host → Windows target).
     Same-OS cross-compilation works (e.g. Linux x86_64 → Linux aarch64).
     For cross-OS builds, use the [`cross`](https://github.com/cross-rs/cross) tool
     or manually set ``MUJOCO_DYNAMIC_LINK_DIR``.
 
-By default, ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are enabled.
+By default, no optional features are enabled. Enable the features you need explicitly
+(e.g. ``cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"``).
 
 
 ## Example
-This example shows how to launch the viewer and print the coordinates
+This example requires the ``viewer`` or the ``viewer-ui`` feature
+(``cargo add mujoco-rs --features viewer``).
+It launches the viewer and prints the coordinates
 of a moving ball to the terminal.
 Other examples can be found under the ``examples/`` directory.
 

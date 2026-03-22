@@ -679,7 +679,7 @@ impl MjModel {
         unsafe { mj_isDual(self.ffi()) == 1 }
     }
 
-    /// Get name of object with the specified [`MjtObj`] type and id, returns NULL if name not found.
+    /// Get name of object with the specified [`MjtObj`] type and id, returns `None` if name not found.
     /// Wraps `mj_id2name`.
     /// # Panics
     /// Panics if MuJoCo internally returns a C string that is not valid UTF-8.

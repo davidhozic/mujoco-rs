@@ -131,7 +131,7 @@ fn main() {
         if ncon > 0 {
             let force_strs: Vec<String> = (0..ncon)
                 .map(|j| {
-                    let force = data.contact_force(j as u32);
+                    let force = data.contact_force(j);
                     // The first 3 components are the force (normal + 2 tangential);
                     // the last 3 are the torque.  We report the force magnitude.
                     let norm = (force[0] * force[0]

@@ -29,6 +29,12 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: Breaking changes
 
+*Default features changed*
+
+- ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are **no longer enabled
+  by default**. Enable them explicitly when needed
+  (e.g. ``cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"``).
+
 *MjvScene is no longer generic*
 
 - |mjv_scene| is no longer generic over ``M``. It is now a plain ``struct MjvScene``
@@ -43,7 +49,7 @@ update of MuJoCo alone can increase the major version.
   - ``MjvScene`` exposes a new ``signature() -> u64`` method for the model
     signature the scene was built for.
   - ``MjvPerturb::start`` / ``move_`` and ``MjvCamera::move_`` now take
-    ``&MjvScene`` / ``&mut MjvScene`` without a type parameter.
+    ``&MjvScene`` without a type parameter.
   - ``vis_common::sync_geoms`` is now non-generic.
   - |mjv_scene| now derives ``Send + Sync`` unconditionally.
 
@@ -173,8 +179,6 @@ gained new variants. See `Error handling`_ below for the full method list.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>runge_kutta`
     now takes ``n: u32`` (was ``i32``) and panics if ``n < 1``
     (previously passed negative or zero values silently to C).
-  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force`
-    takes ``contact_id: u32`` (was ``usize``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>maxuse_threadstack`
     returns ``&[MjtSize; mjMAXTHREAD]`` (was ``&[MjtSize]``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac`,
@@ -232,6 +236,12 @@ gained new variants. See `Error handling`_ below for the full method list.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>find_selection`
   returns :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>SceneSelection`
   (was a 5-tuple ``(i32, i32, i32, i32, [MjtNum; 3])``).
+  ``SceneSelection`` fields (``body_id``, ``geom_id``, ``flex_id``, ``skin_id``) are
+  ``Option<usize>`` (``None`` = no selection). Use ``if let Some(id) = sel.body_id``
+  instead of ``if sel.body_id >= 0``.
+
+- |mjv_camera|: ``new_fixed``, ``new_tracking``, ``track``, ``fix`` now take
+  ``usize`` (was ``u32``). Remove ``as u32`` casts at call sites.
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update`:
   the ``pertub`` parameter has been renamed to ``perturb`` (typo fix).
@@ -282,7 +292,7 @@ gained new variants. See `Error handling`_ below for the full method list.
   ``MjData<Rc<MjModel>>`` incorrectly ``Send + Sync``.
   (``MjvScene`` is now non-generic and unconditionally ``Send + Sync``.)
 
-- :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp` now requires
+- :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>launch_passive` now requires
   ``M: Send + Sync`` (previously only ``Deref<Target = MjModel> + Clone``).
 
 *Mutable accessor restrictions*
@@ -545,6 +555,8 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
 
 .. rubric:: Other changes
 
+- Added ``links = "mujoco"`` to ``Cargo.toml``, preventing multiple crates from
+  linking different MuJoCo versions into the same binary.
 - Updated enum type aliases to match MuJoCo 3.6.0 definitions.
 - Added examples: ``tippe_top``, ``chaotic_pendulum``, ``contact_forces``,
   ``multi_legged_creatures``, ``procedural_tree``, ``miri_test``, ``model_switch``.

@@ -394,7 +394,7 @@ impl ViewerUI {
 
                                     for (id, name) in self.camera_names.iter().enumerate() {
                                         if ui.selectable_value(&mut current_cam_name, name, name).clicked() {
-                                            *camera = MjvCamera::new_fixed(id as u32);
+                                            *camera = MjvCamera::new_fixed(id);
                                         }
                                     }
                                 });

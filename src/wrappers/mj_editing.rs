@@ -1204,19 +1204,19 @@ impl MjsTendon {
     }
 
     /// Return the number of wrap objects.
-    pub fn get_wrap_num(&self) -> i32 {
-        unsafe { mjs_getWrapNum(self) }
+    pub fn get_wrap_num(&self) -> usize {
+        unsafe { mjs_getWrapNum(self) as usize }
     }
 
     /// Return an indexed wrap object. Returns `None` if index is out of bounds.
-    pub fn get_wrap(&self, i: i32) -> Option<&MjsWrap> {
-        let ptr = unsafe { mjs_getWrap(self, i) };
+    pub fn get_wrap(&self, i: usize) -> Option<&MjsWrap> {
+        let ptr = unsafe { mjs_getWrap(self, i as i32) };
         unsafe { ptr.as_ref() }
     }
 
     /// Return a mutable indexed wrap object. Returns `None` if index is out of bounds.
-    pub fn get_wrap_mut(&mut self, i: i32) -> Option<&mut MjsWrap> {
-        let ptr = unsafe { mjs_getWrap(self, i) };
+    pub fn get_wrap_mut(&mut self, i: usize) -> Option<&mut MjsWrap> {
+        let ptr = unsafe { mjs_getWrap(self, i as i32) };
         unsafe { ptr.as_mut() }
     }
 }

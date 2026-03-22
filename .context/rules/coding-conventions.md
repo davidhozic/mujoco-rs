@@ -11,7 +11,7 @@
 
 ## Feature flags
 - Read `Cargo.toml` to discover available features and their default state.
-- When building on headless systems (servers, CI), disable defaults: `--no-default-features`. NOTE: The current agentic test environment handles rendering gracefully, so defaults are fine here.
+- Viewer and renderer features are opt-in (not in defaults). Enable them explicitly when needed: `--features "viewer-ui renderer-winit-fallback"`. NOTE: The current agentic test environment handles rendering gracefully.
 - The `cpp-viewer` feature requires static linking - do not enable it unless the static build has been set up.
 - The `ffi-regenerate` feature rebuilds `src/mujoco_c.rs` from headers. **Never trigger this feature as an agent.**
 

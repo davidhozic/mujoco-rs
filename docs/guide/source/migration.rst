@@ -33,6 +33,19 @@ MuJoCo-rs 3.0.0 links against MuJoCo **3.6.0**. Download the matching release
 and update your library path. See :ref:`installation` for details.
 
 
+Default features changed
+-----------------------
+
+The ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback``
+features are **no longer enabled by default**. If your project relies on the
+viewer or renderer, add the features explicitly in ``Cargo.toml``:
+
+.. code-block:: toml
+
+    [dependencies]
+    mujoco-rs = { version = "3", features = ["viewer-ui", "renderer-winit-fallback"] }
+
+
 Error handling
 -----------------------
 
@@ -210,7 +223,7 @@ replaced by two dedicated methods:
 
     model.save_to_file("model.mjb")?;
 
-    let mut buffer = vec![0u8; model.size() as usize];
+    let mut buffer = vec![0u8; model.size()];
     model.save_to_buffer(&mut buffer)?;
 
 
@@ -346,7 +359,6 @@ Type changes
 - |mj_model|: ``name_to_id()`` returns ``Option<usize>`` (was ``i32``; ``-1`` is now ``None``).
 - |mj_model|: ``tuple_objtype()`` returns ``&[MjtObj]`` (was ``&[i32]``).
 - |mj_model|: ``id_to_name``: ``id`` takes ``usize`` (was ``i32``).
-- |mj_data|: ``contact_force()`` takes ``contact_id: u32`` (was ``usize``).
 - |mj_data|: ``maxuse_threadstack()`` returns ``&[MjtSize; mjMAXTHREAD]`` (was ``&[MjtSize]``).
 - |mj_data|: ``jac``, ``jac_body``, ``jac_body_com``, ``jac_subtree_com``, ``jac_geom``,
   ``jac_site``, ``angmom_mat``, ``object_velocity``, ``object_acceleration``,
@@ -361,6 +373,11 @@ Type changes
   (was ``(Vec<i32>, Vec<MjtNum>)``). Each ``None`` element means no
   intersection for that ray (previously ``-1``).
 - |mjs_tendon|: ``limited`` and ``actfrclimited`` are now ``MjtLimited`` tri-state (was ``bool``).
+- |mjv_camera|: ``new_fixed``, ``new_tracking``, ``track``, ``fix`` now take ``usize`` (was ``u32``).
+  Remove ``as u32`` casts at call sites.
+- :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>SceneSelection`:
+  ``body_id``, ``geom_id``, ``flex_id``, ``skin_id`` are now ``Option<usize>`` (was ``i32``).
+  Replace ``sel.body_id >= 0`` with ``sel.body_id.is_some()`` or ``if let Some(id) = sel.body_id``.
 - |mj_data|: ``runge_kutta()`` now takes ``n: u32`` (was ``i32``).
   Replace ``data.runge_kutta(n)`` with ``data.runge_kutta(n as u32)`` at call sites.
   The function also now panics if ``n < 1`` (previously passed negative or zero values
@@ -520,7 +537,7 @@ Core ``Send``/``Sync`` bound tightening
 
 ``MjData<M>`` now requires ``M: Send`` / ``M: Sync``.
 ``MjvScene`` is no longer generic and derives ``Send + Sync`` unconditionally.
-``MjViewerCpp<M>`` now requires ``M: Send + Sync``.
+``MjViewerCpp::launch_passive`` now requires ``M: Send + Sync``.
 
 If you were using ``Rc<MjModel>`` in threaded code, switch to ``Arc<MjModel>``.
 
@@ -640,14 +657,14 @@ from all usage sites.
 .. code-block:: rust
 
     let scene: MjvScene<Arc<MjModel>> = MjvScene::new(model.clone(), 1000);
-    scene.update(&data, mjCAT_ALL);
+    scene.update(&mut data, &opt, &perturb, &mut cam);
 
 **After (3.0.0):**
 
 .. code-block:: rust
 
     let scene: MjvScene = MjvScene::new(model.clone(), 1000);
-    scene.update(&data, mjCAT_ALL);
+    scene.update(&mut data, &opt, &perturb, &mut cam);
 
 Additional details:
 
@@ -655,7 +672,7 @@ Additional details:
   ``MjvScene::find_selection`` retain ``<M: Deref<Target = MjModel>>`` as
   **method-level** generics; call sites are unchanged.
 - ``MjvPerturb::start`` / ``move_`` and ``MjvCamera::move_`` now take
-  ``&MjvScene`` / ``&mut MjvScene`` without a type parameter.
+  ``&MjvScene`` without a type parameter.
 - ``vis_common::sync_geoms`` is now non-generic.
 - |mjv_scene| derives ``Send + Sync`` unconditionally (no bound on ``M`` required).
 
@@ -674,20 +691,20 @@ usage sites.
 .. code-block:: rust
 
     let viewer: MjViewer<Arc<MjModel>> = MjViewer::builder()
-        .build_passive(model.clone(), data.clone())
+        .build_passive(model.clone())
         .expect("failed to start viewer");
 
-    viewer.add_ui_callback(|data: &mut MjData<Arc<MjModel>>, ui| { ... });
+    viewer.add_ui_callback(|ctx, data: &mut MjData<Arc<MjModel>>| { ... });
 
 **After (3.0.0):**
 
 .. code-block:: rust
 
     let viewer: MjViewer = MjViewer::builder()
-        .build_passive(model.clone(), data.clone())
+        .build_passive(model.clone())
         .expect("failed to start viewer");
 
-    viewer.add_ui_callback(|data: &mut MjData<Arc<MjModel>>, ui| { ... });
+    viewer.add_ui_callback(|ctx, data: &mut MjData<Arc<MjModel>>| { ... });
 
 Additional details:
 

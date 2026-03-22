@@ -16,4 +16,4 @@ export MUJOCO_DYNAMIC_LINK_DIR=$(realpath mujoco-X.Y.Z/lib) && export LD_LIBRARY
 > [!NOTE]
 > - To run a single test: `cargo test --lib <test_name>`.
 > - To run tests in release mode add `--release`.
-> - Read `Cargo.toml` `[features]` for available features. On headless systems, disable defaults: `--no-default-features`.
+> - Read `Cargo.toml` `[features]` for available features. Viewer/renderer features are opt-in (not in defaults).

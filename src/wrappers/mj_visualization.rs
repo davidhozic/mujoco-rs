@@ -16,14 +16,14 @@ use crate::mujoco_c::*;
 /// Result of a mouse-based selection query via [`MjvScene::find_selection`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct SceneSelection {
-    /// Selected body id (-1 if none).
-    pub body_id: i32,
-    /// Selected geom id (-1 if none).
-    pub geom_id: i32,
-    /// Selected flex id (-1 if none).
-    pub flex_id: i32,
-    /// Selected skin id (-1 if none).
-    pub skin_id: i32,
+    /// Selected body id, or `None` if nothing was selected.
+    pub body_id: Option<usize>,
+    /// Selected geom id, or `None` if nothing was selected.
+    pub geom_id: Option<usize>,
+    /// Selected flex id, or `None` if nothing was selected.
+    pub flex_id: Option<usize>,
+    /// Selected skin id, or `None` if nothing was selected.
+    pub skin_id: Option<usize>,
     /// 3D world coordinates of the selection point.
     pub point: [MjtNum; 3],
 }
@@ -31,10 +31,10 @@ pub struct SceneSelection {
 impl Default for SceneSelection {
     fn default() -> Self {
         Self {
-            body_id: -1,
-            geom_id: -1,
-            flex_id: -1,
-            skin_id: -1,
+            body_id: None,
+            geom_id: None,
+            flex_id: None,
+            skin_id: None,
             point: [0.0; 3],
         }
     }
@@ -175,7 +175,7 @@ impl MjvCamera {
     }
 
     /// Creates a new fixed camera.
-    pub fn new_fixed(camera_id: u32) -> Self {
+    pub fn new_fixed(camera_id: usize) -> Self {
         mjvCamera_ {
             type_: MjtCamera::mjCAMERA_FIXED as i32,
             fixedcamid: camera_id as i32,
@@ -184,7 +184,7 @@ impl MjvCamera {
     }
 
     /// Creates a new tracking camera to track a body with the given `tracking_id`.
-    pub fn new_tracking(tracking_id: u32) -> Self {
+    pub fn new_tracking(tracking_id: usize) -> Self {
         mjvCamera_ {
             type_: MjtCamera::mjCAMERA_TRACKING as i32,
             trackbodyid: tracking_id as i32,
@@ -201,7 +201,7 @@ impl MjvCamera {
     }
 
     /// Sets the camera into tracking mode.
-    pub fn track(&mut self, tracking_id: u32) {
+    pub fn track(&mut self, tracking_id: usize) {
         self.type_ = MjtCamera::mjCAMERA_TRACKING as i32;
         self.fixedcamid = -1;
         self.trackbodyid = tracking_id as i32;
@@ -214,7 +214,7 @@ impl MjvCamera {
     }
 
     /// Sets the camera to a fixed `camera_id`.
-    pub fn fix(&mut self, camera_id: u32) {
+    pub fn fix(&mut self, camera_id: usize) {
         self.type_ = MjtCamera::mjCAMERA_FIXED as i32;
         self.fixedcamid = camera_id as i32;
         self.trackbodyid = -1;
@@ -727,7 +727,8 @@ impl MjvScene {
                 &mut geom_id, &mut flex_id, &mut skin_id
             )
         };
-        SceneSelection { body_id, geom_id, flex_id, skin_id, point: selpnt }
+        let to_opt = |v| if v >= 0 { Some(v as usize) } else { None };
+        SceneSelection { body_id: to_opt(body_id), geom_id: to_opt(geom_id), flex_id: to_opt(flex_id), skin_id: to_opt(skin_id), point: selpnt }
     }
 
     /// Reference to the wrapped FFI struct.

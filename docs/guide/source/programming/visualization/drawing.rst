@@ -10,6 +10,10 @@ Custom visualization
 Aside from the true simulation state, MuJoCo provides ways to draw additional 3D geometries (geoms)
 onto an existing 3D scene.
 
+.. note::
+
+    Custom visualization requires either the ``viewer`` / ``viewer-ui`` or the ``renderer`` Cargo feature to be enabled.
+
 In MuJoCo-rs, drawing is done through |mjv_scene|.
 There are two things that expose a scene for drawing custom visual-only geoms:
 

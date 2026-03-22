@@ -11,6 +11,7 @@ categories = ["simulation", "science::robotics", "api-bindings"]
 homepage = "https://crates.io/crates/mujoco-rs"
 documentation = "https://docs.rs/mujoco-rs/"
 rust-version = "1.88"
+links = "mujoco"
 
 exclude = [
     ".context/",
@@ -32,6 +33,82 @@ all-features = true
 name = "cpp_viewer"
 required-features = ["cpp-viewer"]
 
+[[example]]
+name = "chaotic_pendulum"
+required-features = ["viewer"]
+
+[[example]]
+name = "contact_forces"
+required-features = ["renderer"]
+
+[[example]]
+name = "custom_ui_widgets"
+required-features = ["viewer-ui"]
+
+[[example]]
+name = "drawing_scene_renderer"
+required-features = ["renderer"]
+
+[[example]]
+name = "drawing_scene_viewer"
+required-features = ["viewer"]
+
+[[example]]
+name = "ffi_attributes"
+required-features = ["viewer"]
+
+[[example]]
+name = "joint_view"
+required-features = ["viewer"]
+
+[[example]]
+name = "miri_test"
+required-features = ["renderer"]
+
+[[example]]
+name = "model_editing"
+required-features = ["viewer"]
+
+[[example]]
+name = "model_switch"
+required-features = ["viewer"]
+
+[[example]]
+name = "multi_legged_creatures"
+required-features = ["viewer"]
+
+[[example]]
+name = "procedural_tree"
+required-features = ["viewer"]
+
+[[example]]
+name = "renderer"
+required-features = ["renderer"]
+
+[[example]]
+name = "rust_viewer"
+required-features = ["viewer-ui"]
+
+[[example]]
+name = "rust_viewer_threaded"
+required-features = ["viewer"]
+
+[[example]]
+name = "tendon"
+required-features = ["viewer"]
+
+[[example]]
+name = "terrain_generation"
+required-features = ["viewer"]
+
+[[example]]
+name = "tippe_top"
+required-features = ["viewer"]
+
+[[example]]
+name = "touch_sensor"
+required-features = ["viewer"]
+
 
 [features]
 viewer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit", "dep:png"]
@@ -44,7 +121,7 @@ ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only
 
 auto-download-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip", "dep:sha2"]
 
-default = ["viewer", "viewer-ui", "renderer", "renderer-winit-fallback"]
+default = []
 
 [dependencies]
 bitflags = {version = "2.9.4", optional = true}

@@ -454,11 +454,21 @@ impl MjRenderer {
         if data.model().signature() != self.scene.signature() {
             /* Model changed: preserve the extra-geom headroom and user-geom
              * capacity, only substitute the per-model ngeom base count. */
+            // Ensure the GL context is current before dropping old GPU resources
+            // (MjrContext::drop calls mjr_freeContext) and creating new ones.
+            self.gl_state.make_current().map_err(RendererError::GlutinError)?;
+
             let user_geom_cap = self.user_scene.maxgeom() as usize;
             let new_ngeom = data.model().ffi().ngeom as usize;
             self.scene = MjvScene::new(data.model(), new_ngeom + self.extra_geom);
             self.user_scene = MjvScene::new(data.model(), user_geom_cap);
             (self.near, self.far) = model_near_far(data.model());
+
+            // Recreate the rendering context so that GPU resources (textures,
+            // meshes, heightfields, skins) match the new model.
+            // SAFETY: the GL context was made current above.
+            self.context = unsafe { MjrContext::new(data.model()) };
+            self.context.offscreen();
         }
 
         self.scene.update(data, &self.option, &MjvPerturb::default(), &mut self.camera);
@@ -794,7 +804,7 @@ mod test {
         let mut renderer = MjRenderer::builder()
             .rgb(false)
             .depth(true)
-            .camera(MjvCamera::new_fixed(model.name_to_id(MjtObj::mjOBJ_CAMERA, "depth_test").unwrap() as u32))
+            .camera(MjvCamera::new_fixed(model.name_to_id(MjtObj::mjOBJ_CAMERA, "depth_test").unwrap()))
             .build(&model)
             .unwrap();
 

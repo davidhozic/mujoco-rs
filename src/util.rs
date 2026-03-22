@@ -756,6 +756,20 @@ macro_rules! builder_setters {
     };
 }
 
+/// Helper macro for conditionally generating `# Safety` docs on mutable array slice methods.
+/// When `unsafe` is passed (method is unsafe), includes the safety section.
+/// When no `unsafe` is passed (method is safe), only generates the basic doc.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! array_mut_doc {
+    (unsafe, $doc:literal) => {
+        concat!("Mutable slice of the ", $doc, " array.\n\n# Safety\n\nDirect mutation of this array bypasses MuJoCo's internal consistency checks. The caller must ensure that all values written remain valid for MuJoCo's internal state.")
+    };
+    ($doc:literal) => {
+        concat!("Mutable slice of the ", $doc, " array.")
+    };
+}
+
 /// A macro for creating a slice over a raw array of dynamic size (given by some other variable in $len_accessor).
 /// Syntax: attribute: <optional pre-transformations (e.g., `as_ptr as_mut_ptr`)> &[datatype; documentation string;
 /// code to access the length attribute, appearing after `self.`]
@@ -788,7 +802,7 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
-                #[doc = concat!("Mutable slice of the ", $doc, " array.\n\n# Safety\n\nDirect mutation of this array bypasses MuJoCo's internal consistency checks. The caller must ensure that all values written remain valid for MuJoCo's internal state.")]
+                #[doc = $crate::array_mut_doc!($($unsafe_mut,)? $doc)]
                 pub $($unsafe_mut)? fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                     let length = self.$($len_accessor)* as usize;
                     let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
@@ -826,7 +840,7 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts($crate::maybe_force_cast!(data_ptr, [$type; $multiplier], force), length) }
                 }
                 
-                #[doc = concat!("Mutable slice of the ", $doc," array.")]
+                #[doc = $crate::array_mut_doc!($($unsafe_mut,)? $doc)]
                 pub $($unsafe_mut)? fn [<$name:camel:snake _mut>](&mut self) -> &mut [[$type; $multiplier]] {
                     let length_array_length = self.$($len_array_length)* as usize;
                     let data_ptr = unsafe { self.ffi_mut().$name };
@@ -865,7 +879,7 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
-                #[doc = concat!("Mutable slice of the ", $doc, " array.\n\n# Safety\n\nDirect mutation of this array bypasses MuJoCo's internal consistency checks. The caller must ensure that all values written remain valid for MuJoCo's internal state.")]
+                #[doc = $crate::array_mut_doc!($($unsafe_mut,)? $doc)]
                 pub $($unsafe_mut)? fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                     let length = self.$($len_accessor)* as usize * (self.$($inner_len_accessor)*) as usize;
                     let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
@@ -1153,6 +1167,8 @@ mod tests {
         assert_eq!(arm11.y(), 7);
         arm11.set_x(9);
         assert_eq!(arm11.x(), 9);
+        arm11.set_y(10);
+        assert_eq!(arm11.y(), 10);
 
         let mut arm12 = ArmTwelve { flag: 1 };
         assert!(arm12.flag());
