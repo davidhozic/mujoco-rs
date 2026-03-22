@@ -1,5 +1,5 @@
 //! Module related to implementation of the [`MjViewer`]. For implementation of the C++ wrapper,
-//! see `MjViewerCpp` (enabled by the `cpp-viewer` cargo feature).
+//! see [`crate::cpp_viewer::MjViewerCpp`] (enabled by the `cpp-viewer` cargo feature).
 #[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
 use glutin::prelude::PossiblyCurrentGlContext;
 use glutin::surface::GlSurface;
