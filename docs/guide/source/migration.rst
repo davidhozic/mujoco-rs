@@ -32,9 +32,15 @@ MuJoCo upgrade
 MuJoCo-rs 3.0.0 links against MuJoCo **3.6.0**. Download the matching release
 and update your library path. See :ref:`installation` for details.
 
+``Cargo.toml`` now declares ``links = "mujoco"``. Cargo enforces that at most
+one crate in a build graph may declare the same ``links`` key. If any other
+crate in your dependency tree also declares ``links = "mujoco"`` you will get a
+hard build error. In practice this only affects custom or third-party FFI crates
+that wrap MuJoCo directly; standard Rust dependencies are unaffected.
+
 
 Default features changed
------------------------
+------------------------
 
 The ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback``
 features are **no longer enabled by default**. If your project relies on the

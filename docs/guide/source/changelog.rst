@@ -557,6 +557,11 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
 
 - Added ``links = "mujoco"`` to ``Cargo.toml``, preventing multiple crates from
   linking different MuJoCo versions into the same binary.
+- Fixed security issue: ``model_signature`` field on all ``*Info`` structs
+  (e.g. ``MjJointDataInfo``) was public, allowing the signature to be
+  overwritten to bypass the bounds guard in ``try_view``/``try_view_mut``,
+  which could cause out-of-bounds raw-pointer arithmetic (UB). The field is
+  now private; use the ``model_signature()`` getter instead.
 - Updated enum type aliases to match MuJoCo 3.6.0 definitions.
 - Added examples: ``tippe_top``, ``chaotic_pendulum``, ``contact_forces``,
   ``multi_legged_creatures``, ``procedural_tree``, ``miri_test``, ``model_switch``.

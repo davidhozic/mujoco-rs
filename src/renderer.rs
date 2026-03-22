@@ -365,6 +365,9 @@ impl MjRenderer {
     }
 
     /// Sets the font size.
+    ///
+    /// # Panics
+    /// Panics if the OpenGL context cannot be made current.
     pub fn set_font_scale(&mut self, font_scale: MjtFontScale) {
         self.gl_state.make_current().expect("failed to make GL context current");
         self.context.change_font(font_scale);

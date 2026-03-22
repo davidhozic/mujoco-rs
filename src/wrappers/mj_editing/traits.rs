@@ -125,7 +125,7 @@ pub trait SpecItem: Sized {
                     if ptr.is_null() {
                         "Unknown error".to_owned()
                     } else {
-                        CStr::from_ptr(ptr).to_str().unwrap().to_owned()
+                        CStr::from_ptr(ptr).to_string_lossy().into_owned()
                     }
                 };
                 Err(MjEditError::DeleteFailed(error_msg))
