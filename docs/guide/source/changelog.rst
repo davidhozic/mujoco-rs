@@ -235,7 +235,7 @@ gained new variants. See `Error handling`_ below for the full method list.
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>find_selection`
   returns :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>SceneSelection`
-  (was a 5-tuple ``(i32, i32, i32, [MjtNum; 3])``).
+  (was a 5-tuple ``(i32, i32, i32, i32, [MjtNum; 3])``).
   ``SceneSelection`` fields (``body_id``, ``geom_id``, ``flex_id``, ``skin_id``) are
   ``Option<usize>`` (``None`` = no selection). Use ``if let Some(id) = sel.body_id``
   instead of ``if sel.body_id >= 0``.

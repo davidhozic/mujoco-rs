@@ -16,7 +16,7 @@
 //! MuJoCo-rs relies on MuJoCo [3.6.0](https://github.com/google-deepmind/mujoco/releases/tag/3.6.0).
 //!
 //! ## Documentation
-//! A more guided documentation can be obtained [here](https://mujoco-rs.readthedocs.io/en/latest/).
+//! A more guided documentation can be obtained [here](https://mujoco-rs.readthedocs.io/en/stable/).
 //!
 //! ### Missing library errors
 //! Guided documentation also contains information on how to **configure MuJoCo**.
@@ -24,13 +24,13 @@
 //! **load-time errors** about **missing libraries**.
 //!
 //! Information on how to configure MuJoCo and resolve these issues is available
-//! [here](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco).
+//! [here](https://mujoco-rs.readthedocs.io/en/stable/installation.html#mujoco).
 //!
 //! ## 3D viewer
 //! The Rust-native viewer is available ([`viewer::MjViewer`]) when the `viewer` / `viewer-ui` feature is enabled,
 //! as well as MuJoCo's original C++ one ([`crate::cpp_viewer::MjViewerCpp`]).
 //! The C++ viewer, however, requires manual compilation of a patched MuJoCo repository,
-//! like described [here](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking).
+//! like described [here](https://mujoco-rs.readthedocs.io/en/stable/installation.html#static-linking).
 //!
 //! ## Model editing
 //! [`MjModel`](wrappers::MjModel) can be procedurally generated through the model editing module.
@@ -52,7 +52,7 @@
 //!     This also allows users to add custom [`egui`](https://docs.rs/egui/0.33/egui/) widgets to the viewer.
 //!
 //! - `cpp-viewer`: enables the Rust wrapper around the C++ MuJoCo viewer.
-//!   This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking).
+//!   This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/stable/installation.html#static-linking).
 //! - `renderer`: enables offscreen rendering for writing RGB and
 //!   depth data to memory or file.
 //!
@@ -66,7 +66,7 @@
 //!   - This is only available on Linux and Windows.
 //!   - The environment variable `MUJOCO_DOWNLOAD_DIR` must be set to the absolute path of the download location.
 //!   - Downloaded MuJoCo library is still a shared library. See
-//!     [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco)
+//!     [installation](https://mujoco-rs.readthedocs.io/en/stable/installation.html#mujoco)
 //!     for information on complete configuration.
 //!
 //! By default, no optional features are enabled. Enable the features you need explicitly
