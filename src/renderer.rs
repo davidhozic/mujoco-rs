@@ -222,7 +222,7 @@ which can be configured at the top of the model's XML like so:
             scene, user_scene, context, camera: self.camera, option: self.opts,
             flags: RendererFlags::empty(), rgb: None, depth: None,
             width: width as usize, height: height as usize, gl_state,
-            png_compression: self.png_compression,
+            png_compression: self.png_compression, font_scale: self.font_scale,
             near, far, extra_geom,
         }   // These require special care
             .with_rgb_rendering(self.rgb)
@@ -255,6 +255,7 @@ pub struct MjRenderer {
     option: MjvOption,
     flags: RendererFlags,
     png_compression: png::Compression,
+    font_scale: MjtFontScale,
 
     /* Cached from the current model */
     // Depth near/far clip planes in metres, derived from model.vis().map and model.stat().
@@ -370,6 +371,7 @@ impl MjRenderer {
     /// Panics if the OpenGL context cannot be made current.
     pub fn set_font_scale(&mut self, font_scale: MjtFontScale) {
         self.gl_state.make_current().expect("failed to make GL context current");
+        self.font_scale = font_scale;
         self.context.change_font(font_scale);
     }
 
@@ -472,6 +474,7 @@ impl MjRenderer {
             // SAFETY: the GL context was made current above.
             self.context = unsafe { MjrContext::new(data.model()) };
             self.context.offscreen();
+            self.context.change_font(self.font_scale);
         }
 
         self.scene.update(data, &self.option, &MjvPerturb::default(), &mut self.camera);
@@ -694,16 +697,16 @@ impl Display for RendererError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             #[cfg(feature = "renderer-winit-fallback")]
-            Self::EventLoopError(_) => write!(f, "event loop failed to initialize"),
-            Self::GlutinError(_) => write!(f, "glutin error"),
+            Self::EventLoopError(e) => write!(f, "event loop failed to initialize: {e}"),
+            Self::GlutinError(e) => write!(f, "glutin error: {e}"),
             Self::ZeroDimension => write!(f, "renderer width and height must both be greater than zero"),
             #[cfg(feature = "renderer-winit-fallback")]
-            Self::GlInitFailed(_) => write!(f, "GL initialization failed"),
+            Self::GlInitFailed(e) => write!(f, "GL initialization failed: {e}"),
             Self::RgbDisabled => write!(f, "RGB rendering is not enabled (renderer.with_rgb_rendering(true))"),
             Self::DepthDisabled => write!(f, "depth rendering is not enabled (renderer.with_depth_rendering(true))"),
             Self::DimensionMismatch => write!(f, "the input width and height don't match the renderer's configuration"),
-            Self::IoError(_) => write!(f, "I/O error"),
-            Self::SceneError(_) => write!(f, "scene error"),
+            Self::IoError(e) => write!(f, "I/O error: {e}"),
+            Self::SceneError(e) => write!(f, "scene error: {e}"),
         }
     }
 }

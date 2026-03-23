@@ -555,13 +555,23 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
 
 .. rubric:: Other changes
 
-- Added ``links = "mujoco"`` to ``Cargo.toml``, preventing multiple crates from
-  linking different MuJoCo versions into the same binary.
 - Fixed security issue: ``model_signature`` field on all ``*Info`` structs
   (e.g. ``MjJointDataInfo``) was public, allowing the signature to be
   overwritten to bypass the bounds guard in ``try_view``/``try_view_mut``,
   which could cause out-of-bounds raw-pointer arithmetic (UB). The field is
   now private; use the ``model_signature()`` getter instead.
+- Fixed :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` ``Display`` impl:
+  the four wrapper variants (``GlutinError``, ``GlInitFailed``, ``IoError``,
+  ``SceneError``) were discarding the inner error message, making error
+  output non-actionable (e.g. ``"scene error"`` instead of the actual cause).
+  They now include the inner error: e.g. ``"scene error: …"``.
+  ``EventLoopError`` in both ``RendererError`` and ``MjViewerError`` had the
+  same issue and was also fixed.
+- Fixed :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync`:
+  font scale set via ``MjRendererBuilder::font_scale`` or
+  ``MjRenderer::set_font_scale`` was silently reset to ``mjFONTSCALE_100``
+  whenever a model switch caused the ``MjrContext`` to be recreated. The
+  active scale is now preserved across model switches.
 - Updated enum type aliases to match MuJoCo 3.6.0 definitions.
 - Added examples: ``tippe_top``, ``chaotic_pendulum``, ``contact_forces``,
   ``multi_legged_creatures``, ``procedural_tree``, ``miri_test``, ``model_switch``.
