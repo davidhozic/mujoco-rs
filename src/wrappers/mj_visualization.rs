@@ -834,9 +834,10 @@ impl Drop for MjvScene {
     }
 }
 
-// SAFETY: MjvScene owns its FFI scene data exclusively and does not hold any
-// raw pointers. All interior state is plain data (Box<mjvScene> plus cached
-// integer counts), so it is safe to send to and share with other threads.
+// SAFETY: MjvScene exclusively owns the heap allocation behind Box<mjvScene>.
+// The raw pointers inside mjvScene (geoms, lights, etc.) point into memory owned
+// by the same allocation, so no aliasing with other threads is possible. All
+// mutation requires &mut self, so &MjvScene sharing across threads is safe.
 unsafe impl Send for MjvScene {}
 unsafe impl Sync for MjvScene {}
 

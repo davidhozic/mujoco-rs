@@ -92,7 +92,8 @@ pub mod viewer;
 pub mod cpp_viewer;
 
 #[allow(warnings, clippy::approx_constant)]
-pub mod mujoco_c;  // raw MuJoCo C and C++ bindings
+/// Raw MuJoCo C and C++ FFI bindings (auto-generated).
+pub mod mujoco_c;
 
 #[cfg(any(feature = "viewer", feature = "renderer-winit-fallback"))]
 mod winit_gl_base;

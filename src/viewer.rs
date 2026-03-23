@@ -133,11 +133,11 @@ pub enum MjViewerError {
 impl Display for MjViewerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EventLoopError(_) => write!(f, "event loop failed to initialize"),
-            Self::GlutinError(_) => write!(f, "glutin error"),
-            Self::PainterInitError(e) => write!(f, "failed to initialize egui painter: {}", e),
-            Self::GlInitFailed(_) => write!(f, "GL initialization failed"),
-            Self::SceneError(_) => write!(f, "scene error"),
+            Self::EventLoopError(e) => write!(f, "event loop failed to initialize: {e}"),
+            Self::GlutinError(e) => write!(f, "glutin error: {e}"),
+            Self::PainterInitError(e) => write!(f, "failed to initialize egui painter: {e}"),
+            Self::GlInitFailed(e) => write!(f, "GL initialization failed: {e}"),
+            Self::SceneError(e) => write!(f, "scene error: {e}"),
         }
     }
 }
@@ -503,6 +503,12 @@ impl MjViewer {
     /// and modify simulation state. Note that the model can be accessed through [`MjData::model`].
     ///
     /// This method is only available when the `viewer-ui` feature is enabled.
+    ///
+    /// # Note
+    /// The viewer's internal shared-state [`Mutex`](std::sync::Mutex) is **held for the entire
+    /// duration of the callback** (because `data` is a live borrow of the guarded
+    /// `data_passive` field). Do **not** attempt to lock the shared state again from
+    /// within the callback as that will deadlock the viewer thread:
     ///
     /// # Example
     /// ```no_run

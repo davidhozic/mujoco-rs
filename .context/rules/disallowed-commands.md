@@ -15,6 +15,9 @@ propose alternatives if a request would require running any prohibited command.
   servers or change branch state on its own.
 - `git reset --hard` / `git clean` - Avoid destructive resets or removals that
   could wipe working files.
+- `git checkout -b`, `git switch -c` - Creating or switching branches
+  is disallowed. Work in the current branch only.
+- `git tag`, `git stash pop` - Do not create tags or restore stashed changes automatically.
 
 ## Network & Remote Access
 

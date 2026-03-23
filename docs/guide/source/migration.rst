@@ -34,7 +34,7 @@ and update your library path. See :ref:`installation` for details.
 
 
 Default features changed
------------------------
+------------------------
 
 The ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback``
 features are **no longer enabled by default**. If your project relies on the

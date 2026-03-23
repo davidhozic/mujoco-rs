@@ -438,7 +438,7 @@ macro_rules! info_with_view {
             pub struct [<Mj $name:camel $info_type Info>] {
                 pub name: String,
                 pub id: usize,
-                pub model_signature: u64,
+                model_signature: u64,
                 $(
                     $attr: (usize, usize),
                 )*
@@ -451,6 +451,11 @@ macro_rules! info_with_view {
             }
 
             impl [<Mj $name:camel $info_type Info>] {
+                /// Returns the model signature this `Info` was created from.
+                pub fn model_signature(&self) -> u64 {
+                    self.model_signature
+                }
+
                 #[doc = concat!(
                     "Returns a mutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
                     "Fields listed as read-only use [`PointerViewUnsafeMut`](crate::util::PointerViewUnsafeMut): ",
