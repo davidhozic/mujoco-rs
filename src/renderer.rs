@@ -439,23 +439,14 @@ impl MjRenderer {
     }
 
     /// Update the scene with new data from data.
-    ///
-    /// # Panics
-    /// Panics if the internal render step fails.
-    /// Use [`MjRenderer::try_sync`] for a fallible alternative.
-    pub fn sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
-        self.try_sync(data).expect("sync failed")
-    }
-
-    /// Fallible version of [`MjRenderer::sync`].
-    ///
     /// When `data` was created from a different model than the renderer,
     /// the internal scene is automatically recreated for the new model.
     ///
     /// # Errors
-    /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current.
-    /// - [`RendererError::SceneError`] if the user-scene sync overflows the geom buffer.
-    pub fn try_sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
+    /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current
+    ///   (only when the [`MjModel`] in `data` differs from the internal model).
+    /// - [`RendererError::SceneError`] ([`MjSceneError::SceneFull`]) if the user-scene sync overflows the geom buffer.
+    pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
         if data.model().signature() != self.scene.signature() {
             /* Model changed: preserve the extra-geom headroom and user-geom
              * capacity, only substitute the per-model ngeom base count. */
@@ -480,8 +471,30 @@ impl MjRenderer {
         self.scene.update(data, &self.option, &MjvPerturb::default(), &mut self.camera);
 
         /* Draw user scene geoms */
-        sync_geoms(&self.user_scene, &mut self.scene)?;
+        sync_geoms(&self.user_scene, &mut self.scene).map_err(RendererError::SceneError)
+    }
 
+    /// Update the scene with new data from data.
+    ///
+    /// # Panics
+    /// Panics if the internal render step fails.
+    /// Use [`MjRenderer::try_sync`] for a fallible alternative.
+    #[deprecated(note = "replaced with sync_data + render", since = "3.0.0")]
+    pub fn sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+        self.try_sync(data).expect("sync failed")
+    }
+
+    /// Fallible version of [`MjRenderer::sync`].
+    ///
+    /// When `data` was created from a different model than the renderer,
+    /// the internal scene is automatically recreated for the new model.
+    ///
+    /// # Errors
+    /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current.
+    /// - [`RendererError::SceneError`] if the user-scene sync overflows the geom buffer.
+    #[deprecated(note = "replaced with sync_data + render", since = "3.0.0")]
+    pub fn try_sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
+        self.sync_data(data)?;
         self.render()?;
         Ok(())
     }
