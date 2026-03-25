@@ -62,6 +62,9 @@ update of MuJoCo alone can increase the major version.
     signature the scene was built for.
   - ``MjvPerturb::start`` / ``move_`` and ``MjvCamera::move_`` now take
     ``&MjvScene`` without a type parameter.
+  - ``MjvPerturb::start`` and ``MjvPerturb::apply`` no longer take a
+    ``model: &MjModel`` parameter (the model is now obtained internally via
+    ``data.model()``).
   - ``vis_common::sync_geoms`` is now non-generic.
   - |mjv_scene| now derives ``Send + Sync`` unconditionally.
 
@@ -335,6 +338,9 @@ lists and before/after examples.
   renamed to ``draw``.
 - ``MjViewer::sync`` removed (deprecated in 2.2.0; use ``sync_data`` + ``render``).
 - ``MjViewer::user_scn`` / ``user_scn_mut`` removed (deprecated in 1.3.0).
+- ``MjViewer::user_scene`` / ``user_scene_mut`` removed (deprecated in 2.2.0;
+  access via ``ViewerSharedState::user_scene`` / ``user_scene_mut`` through
+  ``viewer.state()``).
 - Removed deprecated methods:
 
   .. list-table::
@@ -463,12 +469,14 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
 
 - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`: PNG compression is now
   configurable via
-  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRendererBuilder::<method>png_compression`
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRendererBuilder::<method>with_png_compression`
   (builder) and
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>set_png_compression`
   (runtime setter). Defaults to ``png::Compression::NoCompression``. Affects
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_rgb` and
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>save_depth`.
+  The ``png`` crate is re-exported as ``mujoco_rs::renderer::png`` for naming
+  ``png::Compression``.
 
 - |mj_model|: ``extract_state`` / ``extract_state_into``, ``try_make_data``.
 - |mj_data|: ``swap_model`` :sup:`new` (validates model signature),
@@ -478,6 +486,8 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``read_ctrl`` / ``read_sensor`` / ``read_sensor_into`` / ``read_sensor_fixed``,
   ``model_clone`` :sup:`new` (``-> M``, available when ``M: Clone``).
 - |mj_spec|: ``from_parse`` / ``from_parse_vfs``.
+  ``MjSpec`` and ``SpecItem`` are also re-exported from
+  :docs-rs:`mujoco_rs::wrappers`.
 - |mjs_tendon|: ``get_wrap`` / ``get_wrap_mut`` / ``get_wrap_num``.
 - |mjs_wrap|: ``coef``, ``divisor``, ``side_site``, ``side_site_mut``.
 - |mjv_scene|: ``update_with_catmask`` (exposes ``catmask`` filter parameter).
@@ -492,15 +502,20 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``dof_bodyid`` and ``dof_treeid`` are now exposed in per-dof joint model view
   types (the fields existed in MuJoCo 3.3.7 but were not previously accessible
   via per-object view types).
+  **Breaking:** ``MjTendonDataInfo`` no longer exposes ``J_rownnz``,
+  ``J_rowadr``, or ``J_colind``; these fields moved upstream to ``mjModel`` in
+  MuJoCo 3.6.0 and are now on ``MjTendonModelInfo`` (via ``model.tendon()``).
 - ``info_with_view!`` structs now have ``try_view`` / ``try_view_mut`` methods.
 - Trait additions: ``Clone`` for |mj_spec|; ``Default`` for |mj_vfs|, |mj_spec|,
-  ``MjOption``; ``Send`` + ``Sync`` for |mj_vfs|; ``FusedIterator`` for all
-  model-editing iterators; ``Eq`` for ``PointerView`` / ``PointerViewMut``.
+  ``MjOption``, ``MjRendererBuilder``, ``MjViewerBuilder``; ``Send`` + ``Sync``
+  for |mj_vfs|; ``FusedIterator`` for all model-editing iterators; ``Eq`` for
+  ``PointerView`` / ``PointerViewMut``; ``Drop`` for ``MjRenderer``.
 - ``PointerView::new``, ``PointerViewMut::new``, ``MjrRectangle::new`` are now
   ``const fn``.
 - |mj_model| and |mj_data| now use ``NonNull<mjModel>`` / ``NonNull<mjData>``
   internally, encoding the non-null invariant at the type level and enabling
   niche optimisation for ``Option<MjModel>`` / ``Option<MjData>``.
+- |mj_data|: ``contacts()`` is deprecated; use ``contact()`` instead.
 
 .. rubric:: MjViewer
 

@@ -537,6 +537,46 @@ no longer takes a separate ``model`` parameter (the model is obtained from
     perturb.move_(&data, action, dx, dy, &scene);
 
 
+``MjvPerturb::start``
+------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>start`
+no longer takes a separate ``model`` parameter (the model is obtained from
+``data.model()``), and ``scene`` changed from ``&MjvScene<M>`` to ``&MjvScene``.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    perturb.start(type_, &model, &mut data, &scene);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    perturb.start(type_, &mut data, &scene);
+
+
+``MjvPerturb::apply``
+------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>apply`
+no longer takes a separate ``model`` parameter (the model is obtained from
+``data.model()``).
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    perturb.apply(&model, &mut data);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    perturb.apply(&mut data);
+
+
 ``find_selection()`` return type
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -835,3 +875,4 @@ Removed deprecated methods
    * - ``MjViewer::sync``
      - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` then
        :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`
+
