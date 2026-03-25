@@ -111,7 +111,7 @@ generated view still support mutation, but only through
     let mut view = model.actuator("slider").unwrap().view_mut(&mut model);
     // SAFETY: assigning a valid enum variant for this field.
     unsafe {
-        view.gaintype.as_mut_slice()[0] = MjtGain::mjGAIN_AFFINE;
+        view.dyntype.as_mut_slice()[0] = MjtDyn::mjDYN_FILTER;
     }
 
 
