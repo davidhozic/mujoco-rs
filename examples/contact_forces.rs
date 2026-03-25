@@ -151,7 +151,8 @@ fn main() {
 
         // ---- Render and save frame -------------------------------------------
         if step % SAVE_EVERY == 0 {
-            renderer.sync(&mut data);
+            renderer.sync_data(&mut data).unwrap();
+            renderer.render().unwrap();
             let path = format!("{OUTPUT_DIR}/frame_{step:04}.png");
             renderer.save_rgb(&path).expect("failed to save RGB image");
             println!("  -> saved {path}");

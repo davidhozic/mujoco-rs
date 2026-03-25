@@ -439,23 +439,13 @@ impl MjRenderer {
     }
 
     /// Update the scene with new data from data.
-    ///
-    /// # Panics
-    /// Panics if the internal render step fails.
-    /// Use [`MjRenderer::try_sync`] for a fallible alternative.
-    pub fn sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
-        self.try_sync(data).expect("sync failed")
-    }
-
-    /// Fallible version of [`MjRenderer::sync`].
-    ///
     /// When `data` was created from a different model than the renderer,
     /// the internal scene is automatically recreated for the new model.
     ///
     /// # Errors
-    /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current.
-    /// - [`RendererError::SceneError`] if the user-scene sync overflows the geom buffer.
-    pub fn try_sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
+    /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current
+    ///   (only when the [`MjModel`] in `data` differs from the internal model).
+    pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
         if data.model().signature() != self.scene.signature() {
             /* Model changed: preserve the extra-geom headroom and user-geom
              * capacity, only substitute the per-model ngeom base count. */
@@ -478,12 +468,18 @@ impl MjRenderer {
         }
 
         self.scene.update(data, &self.option, &MjvPerturb::default(), &mut self.camera);
-
-        /* Draw user scene geoms */
-        sync_geoms(&self.user_scene, &mut self.scene)?;
-
-        self.render()?;
         Ok(())
+    }
+
+    /// Update the scene with new data from data.
+    ///
+    /// # Panics
+    /// Panics if the internal render step fails.
+    /// Use [`MjRenderer::sync_data`] + [`MjRenderer::render`] instead.
+    #[deprecated(note = "replaced with sync_data + render", since = "3.0.0")]
+    pub fn sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+        self.sync_data(data).expect("sync failed");
+        self.render().expect("render failed");
     }
 
     /// Return a flattened RGB image of the scene.
@@ -631,7 +627,14 @@ impl MjRenderer {
 
     /// Draws the scene to internal arrays.
     /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image.
-    fn render(&mut self) -> Result<(), RendererError> {
+    ///
+    /// # Errors
+    /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current.
+    /// - [`RendererError::SceneError`] ([`MjSceneError::SceneFull`]) if the user-scene sync overflows the geom buffer.
+    pub fn render(&mut self) -> Result<(), RendererError> {
+        /* Sync user scene geoms into the main scene before rendering */
+        sync_geoms(&self.user_scene, &mut self.scene).map_err(RendererError::SceneError)?;
+
         self.gl_state.make_current().map_err(RendererError::GlutinError)?;
         let vp = MjrRectangle::new(0, 0, self.width as i32, self.height as i32);
         self.scene.render(&vp, &self.context);

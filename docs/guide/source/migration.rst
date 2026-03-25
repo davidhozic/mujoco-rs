@@ -606,12 +606,28 @@ API renames
      - ``draw()``
 
 
-``try_sync()``
------------------------------
+``sync()`` deprecated
+---------------------------------------
 
-:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` has been
-added as a fallible alternative to ``sync()``. The existing ``sync()`` delegates to
-``try_sync().expect()``. Use ``try_sync()`` if you need to handle scene-full errors.
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync` is deprecated.
+Use :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data`
+followed by :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>render`
+instead. ``sync_data`` updates the scene without rendering, giving you the
+opportunity to insert custom logic (e.g. user-scene geoms) between the sync and
+render steps.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    renderer.sync(&mut data);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    renderer.sync_data(&mut data)?;
+    renderer.render()?;
 
 
 ``MjRenderer`` is no longer generic
@@ -639,7 +655,8 @@ The ``Clone`` bound on ``M`` has also been dropped; any
     let mut renderer: MjRenderer = MjRenderer::builder()
         .build(model.clone())
         .expect("failed to initialize renderer");
-    renderer.sync(&mut data);
+    renderer.sync_data(&mut data).unwrap();
+    renderer.render().unwrap();
 
 In practice the type annotation is rarely needed, so in most cases only the
 ``MjRenderer<Arc<MjModel>>`` annotation at the variable declaration (or in a

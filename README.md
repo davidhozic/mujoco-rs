@@ -4,6 +4,12 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/davidhozic/mujoco-rs/tests.yml?label=CI)](https://github.com/davidhozic/mujoco-rs/actions)
 [![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
 
+> [!IMPORTANT]
+> **Upgrading from 2.x to 3.0.0?** This release contains breaking changes including
+> new error types, removed generics on viewer/renderer, and API renames.
+> Read the [migration guide](https://mujoco-rs.readthedocs.io/en/stable/migration.html)
+> before upgrading.
+
 MuJoCo bindings and high-level wrappers for the Rust programming language. Includes a Rust-native viewer and also
 bindings to a modified C++ one.
 

@@ -189,7 +189,8 @@ fn test_renderer<'a>(model: &'a MjModel, data: &mut MjData<&'a MjModel>) {
 
     match res {
         Ok(Ok(mut renderer)) => {
-            renderer.sync(data);
+            renderer.sync_data(data).unwrap();
+            renderer.render().unwrap();
             let rgb = renderer.rgb_flat().expect("No RGB data");
             assert_eq!(rgb.len(), 64 * 64 * 3);
             
