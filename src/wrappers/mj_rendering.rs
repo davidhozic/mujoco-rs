@@ -169,22 +169,11 @@ impl MjrContext {
     /// Read pixels from current OpenGL framebuffer to client buffer.
     /// The `rgb` array is of size `[width * height * 3]`, while `depth` is of size `[width * height]`.
     ///
-    /// # Panics
-    /// Panics if the viewport dimensions are negative or the provided buffers
-    /// are not large enough for the given `viewport`.
-    /// Use [`MjrContext::try_read_pixels`] for a fallible alternative.
-    pub fn read_pixels(&self, rgb: Option<&mut [u8]>, depth: Option<&mut [f32]>, viewport: &MjrRectangle) {
-        self.try_read_pixels(rgb, depth, viewport)
-            .expect("read_pixels failed")
-    }
-
-    /// Fallible version of [`MjrContext::read_pixels`].
-    ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidViewport`] if the viewport has negative
     /// dimensions, or [`MjSceneError::BufferTooSmall`] if `rgb` or `depth`
     /// buffers are too small.
-    pub fn try_read_pixels(
+    pub fn read_pixels(
         &self,
         rgb: Option<&mut [u8]>,
         depth: Option<&mut [f32]>,

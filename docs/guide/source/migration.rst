@@ -391,11 +391,9 @@ Type changes
 -----------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>reset_keyframe`
-now takes ``key: usize`` (was ``i32``) and **panics** on out-of-range keys.
-Out-of-range keys that previously silently fell back to a plain reset now panic.
-A new fallible variant
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_reset_keyframe`
-is available for explicit error handling (returns ``Result<(), MjDataError>``).
+now takes ``key: usize`` (was ``i32``) and returns ``Result<(), MjDataError>``
+instead of ``()``. Out-of-range keys that previously silently fell back to a
+plain reset now return ``Err(MjDataError::IndexOutOfBounds)``.
 
 **Before (2.x):**
 
@@ -407,8 +405,36 @@ is available for explicit error handling (returns ``Result<(), MjDataError>``).
 
 .. code-block:: rust
 
-    data.reset_keyframe(0);          // panics if key >= nkey
-    data.try_reset_keyframe(0)?;     // returns Err if key >= nkey
+    data.reset_keyframe(0)?;         // returns Err if key >= nkey
+
+
+Methods now return ``Result`` instead of panicking
+---------------------------------------------------
+
+The following methods previously returned ``()`` and panicked on invalid input.
+They now return ``Result`` directly.
+
+.. list-table::
+   :header-rows: 1
+
+   * - 2.x call
+     - 3.0.0 call
+   * - ``data.reset_keyframe(0)``
+     - ``data.reset_keyframe(0)?``
+   * - ``data.set_state(&s, spec)``
+     - ``unsafe { data.set_state(&s, spec)? }``
+   * - ``data.copy_visual_to(&mut dst)``
+     - ``data.copy_visual_to(&mut dst)?``
+   * - ``data.copy_to(&mut dst)``
+     - ``data.copy_to(&mut dst)?``
+   * - ``ctx.read_pixels(rgb, depth, &vp)``
+     - ``ctx.read_pixels(rgb, depth, &vp)?``
+   * - ``fig.push(idx, x, y)``
+     - ``fig.push(idx, x, y)?``
+   * - ``fig.set_at(idx, pt, x, y)``
+     - ``fig.set_at(idx, pt, x, y)?``
+
+Append ``.unwrap()``, ``.expect(...)`` or ``?`` at call sites.
 
 
 Ray-casting parameter changes
@@ -564,8 +590,10 @@ it internally). If you construct ``MjrContext`` manually:
     let context = unsafe { MjrContext::new(&model) };
 
 
-``MjData::set_state`` and ``try_set_state`` are now ``unsafe``
+``MjData::set_state`` is now ``unsafe`` and returns ``Result``
 ----------------------------------------------------------------
+
+``set_state`` is now ``unsafe`` and returns ``Result<(), MjDataError>`` directly.
 
 When ``spec`` includes ``mjSTATE_EQ_ACTIVE``, MuJoCo writes raw ``f64`` bytes into
 the ``eq_active`` byte array without booleanization, making a subsequent call to
@@ -583,7 +611,7 @@ the ``eq_active`` byte array without booleanization, making a subsequent call to
 .. code-block:: rust
 
     // SAFETY: state captured via get_state; bools are valid (0 or 1).
-    unsafe { data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32) };
+    unsafe { data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32) }?;
 
 
 API renames

@@ -339,15 +339,18 @@ impl ViewerSharedState {
             // SAFETY: data_state_buffer was filled by read_state_into using the
             // same state spec on a compatible model, so eq_active bytes (included
             // by mjSTATE_INTEGRATION) come from MuJoCo's own canonical encoding.
-            unsafe { data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32) };
+            unsafe { data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32) }
+                .expect("set_state failed");
         }
 
         if full_sync {
             // Copy everything.
-            data.copy_to(&mut self.data_passive);
+            data.copy_to(&mut self.data_passive)
+                .expect("copy_to failed");
         } else {
             // Copy only visually-required information to the internal passive data.
-            data.copy_visual_to(&mut self.data_passive);
+            data.copy_visual_to(&mut self.data_passive)
+                .expect("copy_visual_to failed");
         }
 
         // Make both saved states the same.
@@ -676,7 +679,8 @@ impl MjViewer {
 
         if depth {
             let mut depth_buf = vec![0.0f32; w * h];
-            self.context.read_pixels(None, Some(&mut depth_buf), rect);
+            self.context.read_pixels(None, Some(&mut depth_buf), rect)
+                .expect("read_pixels failed");
 
             // OpenGL reads bottom-up; flip for top-down PNG row order.
             flip_image_vertically(&mut depth_buf, h, w);
@@ -715,7 +719,8 @@ impl MjViewer {
             }
         } else {
             let mut rgb = vec![0u8; w * h * 3];
-            self.context.read_pixels(Some(&mut rgb), None, rect);
+            self.context.read_pixels(Some(&mut rgb), None, rect)
+                .expect("read_pixels failed");
 
             // OpenGL reads bottom-up; flip for top-down PNG row order.
             flip_image_vertically(&mut rgb, h, w * 3);

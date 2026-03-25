@@ -648,7 +648,7 @@ impl MjRenderer {
             flat_rgb,
             flat_depth,
             &vp
-        );
+        ).expect("read_pixels failed");
 
         /* Flip the read pixels vertically, as OpenGL reads bottom-up */
         if let Some(rgb) = self.rgb.as_deref_mut() {

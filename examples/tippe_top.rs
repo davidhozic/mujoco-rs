@@ -83,7 +83,7 @@ fn main() {
 
     // Reset to keyframe 0 ("spinning") so the top starts with its initial
     // angular velocity rather than at rest.
-    data.reset_keyframe(0);
+    data.reset_keyframe(0).expect("could not reset to keyframe 0");
 
     // Launch an interactive viewer so we can watch the inversion.
     let mut viewer = MjViewer::launch_passive(&model, 0)

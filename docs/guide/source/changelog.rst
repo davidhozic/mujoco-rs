@@ -29,6 +29,18 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: Breaking changes
 
+*Methods now return Result instead of panicking*
+
+- The following methods previously returned ``()`` and panicked on error.
+  They now return ``Result`` directly:
+
+  - |mj_data|: ``reset_keyframe``, ``set_state``, ``copy_visual_to``, ``copy_to``
+  - |mjr_context|: ``read_pixels``
+  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure`:
+    ``push``, ``set_at``
+
+  Callers must now handle the ``Result`` (e.g. append ``.unwrap()`` or ``?``).
+
 *Default features changed*
 
 - ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are **no longer enabled
@@ -121,11 +133,8 @@ gained new variants. See `Error handling`_ below for the full method list.
 
 *Type and signature changes*
 
-- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to`,
-  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_copy_to`,
-  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`,
-  and
-  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_copy_visual_to`
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`
   now accept a destination of a **different** model type:
   ``destination: &mut MjData<N>`` where ``N: Deref<Target = MjModel>``. Previously
   the source and destination had to share the same ``M``.
@@ -174,11 +183,9 @@ gained new variants. See `Error handling`_ below for the full method list.
 - |mj_data|:
 
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>reset_keyframe`
-    now takes ``key: usize`` (was ``i32``) and **panics** on out-of-range keys.
-    Out-of-range keys that previously silently fell back to a plain reset now panic.
-    Use the new
-    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_reset_keyframe`
-    for explicit error handling (returns ``Result<(), MjDataError>``).
+    now takes ``key: usize`` (was ``i32``) and returns ``Result<(), MjDataError>``.
+    Out-of-range keys that previously silently fell back to a plain reset now return
+    an error.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>runge_kutta`
     now takes ``n: u32`` (was ``i32``) and panics if ``n < 1``
     (previously passed negative or zero values silently to C).
@@ -273,12 +280,11 @@ gained new variants. See `Error handling`_ below for the full method list.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>new`
   is now ``unsafe fn``. A valid OpenGL context must be current on the calling thread.
 
-- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_state` and
-  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_set_state`
-  are now ``unsafe fn``. When ``spec`` includes ``mjSTATE_EQ_ACTIVE``, MuJoCo writes
-  raw ``f64`` bytes into the ``eq_active`` array without booleanization; calling
-  ``eq_active()`` afterwards is UB until the state is re-validated (e.g. via
-  ``mj_forward`` / ``mj_step``).
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_state`
+  is now ``unsafe fn`` and returns ``Result<(), MjDataError>``. When ``spec`` includes
+  ``mjSTATE_EQ_ACTIVE``, MuJoCo writes raw ``f64`` bytes into the ``eq_active``
+  array without booleanization; calling ``eq_active()`` afterwards is UB until the
+  state is re-validated (e.g. via ``mj_forward`` / ``mj_step``).
 
 - :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` is now
   ``unsafe fn``, must be called from the main thread, no longer accepts
@@ -394,7 +400,12 @@ New error types in :docs-rs:`~mujoco_rs::error`
        ``read_sensor_into`` :sup:`new`,
        ``read_sensor_fixed`` :sup:`new`,
        ``read_sensor`` :sup:`new`,
-       ``try_reset_keyframe`` :sup:`new`
+       ``reset_keyframe``,
+       ``copy_state_from_data`` :sup:`new`,
+       ``apply_ft`` :sup:`new`,
+       ``set_state``,
+       ``copy_visual_to``,
+       ``copy_to``
      - :docs-rs:`~mujoco_rs::error::<enum>MjDataError`
    * - |mj_vfs|
      - ``add_from_file``, ``add_from_buffer``, ``delete_file``
@@ -405,8 +416,9 @@ New error types in :docs-rs:`~mujoco_rs::error`
        ``from_parse`` :sup:`new`,
        ``from_parse_vfs`` :sup:`new`
      - :docs-rs:`~mujoco_rs::error::<enum>MjEditError`
-   * - |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / |mjr_context|
-     - ``create_geom``, ``set_label``, ``add_aux``, ``set_aux``
+   * - |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure` / |mjr_context|
+     - ``create_geom``, ``set_label``, ``add_aux``, ``set_aux``,
+       ``push``, ``set_at``, ``read_pixels``
      - :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`
    * - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`
      - ``rgb``, ``depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw``
@@ -438,17 +450,14 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
 - New ``try_`` methods paired with existing infallible counterparts (infallible
   variants now delegate to ``try_``.``expect()``):
 
-  - |mj_data|: ``try_new``, ``try_clone``, ``try_copy_state_from_data`` :sup:`new`,
-    ``try_apply_ft`` :sup:`new`, ``try_read_state_into``, ``try_set_state`` (``unsafe``),
-    ``try_copy_visual_to``, ``try_copy_to``,
-    ``try_reset_keyframe`` :sup:`new`
+  - |mj_data|: ``try_new``, ``try_clone``, ``try_read_state_into``
   - |mj_model|: ``try_clone``, ``try_make_data``
   - |mj_spec| / |mjs_tendon| / ``MjsBody``: ``try_new``, ``try_clone``, ``try_add_frame``,
     ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, ``try_wrap_pulley``,
     macro-generated ``try_add_*``
-  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`:
-    ``try_push``, ``try_set_at``
-  - |mjr_context|: ``try_read_pixels``
+
+- New |mj_data| methods that return ``Result`` directly (no separate ``try_`` variant):
+  ``copy_state_from_data``, ``apply_ft``.
 
 .. rubric:: New features and improvements
 
