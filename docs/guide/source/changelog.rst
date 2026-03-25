@@ -60,7 +60,6 @@ update of MuJoCo alone can increase the major version.
   Remove the ``<M>`` type parameter from all usage sites.
 
   - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`,
-    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync`,
     :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>builder`, and
     :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`
     retain ``<M: Deref<Target = MjModel>>`` as **method-level** generics;
@@ -91,10 +90,9 @@ update of MuJoCo alone can increase the major version.
 - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` /
   :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_data`
   and
-  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync` /
-  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync`
-  now detect when ``data`` was created from a **different** model than the
-  viewer/renderer was initialised with. Instead of panicking or returning an
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`.
+  now detects when ``data`` was created from a **different** model than the
+  viewer/renderer was initialized with. Instead of panicking or returning an
   error, both automatically recreate the scene(s) for the new model and update
   their internal model reference.
 
@@ -447,10 +445,6 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
     ``try_push``, ``try_set_at``
   - |mjr_context|: ``try_read_pixels``
 
-- :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` added as a
-  fallible alternative to ``sync``; propagates scene-full errors as
-  ``RendererError::SceneError`` instead of panicking.
-
 .. rubric:: New features and improvements
 
 - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`: PNG compression is now
@@ -567,11 +561,6 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   They now include the inner error: e.g. ``"scene error: …"``.
   ``EventLoopError`` in both ``RendererError`` and ``MjViewerError`` had the
   same issue and was also fixed.
-- Fixed :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync`:
-  font scale set via ``MjRendererBuilder::font_scale`` or
-  ``MjRenderer::set_font_scale`` was silently reset to ``mjFONTSCALE_100``
-  whenever a model switch caused the ``MjrContext`` to be recreated. The
-  active scale is now preserved across model switches.
 - Updated enum type aliases to match MuJoCo 3.6.0 definitions.
 - Added examples: ``tippe_top``, ``chaotic_pendulum``, ``contact_forces``,
   ``multi_legged_creatures``, ``procedural_tree``, ``miri_test``, ``model_switch``.

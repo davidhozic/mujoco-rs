@@ -481,6 +481,7 @@ impl MjRenderer {
     /// Use [`MjRenderer::try_sync`] for a fallible alternative.
     #[deprecated(note = "replaced with sync_data + render", since = "3.0.0")]
     pub fn sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+        #[allow(deprecated)]
         self.try_sync(data).expect("sync failed")
     }
 
@@ -644,7 +645,7 @@ impl MjRenderer {
 
     /// Draws the scene to internal arrays.
     /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image.
-    fn render(&mut self) -> Result<(), RendererError> {
+    pub fn render(&mut self) -> Result<(), RendererError> {
         self.gl_state.make_current().map_err(RendererError::GlutinError)?;
         let vp = MjrRectangle::new(0, 0, self.width as i32, self.height as i32);
         self.scene.render(&vp, &self.context);

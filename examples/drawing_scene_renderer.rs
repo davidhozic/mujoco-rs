@@ -85,7 +85,8 @@ fn main() {
                 Some([1.0, 1.0, 1.0, 1.0])
             ).unwrap().connect(0.05, from, to);  // adjust size, pos and mat to make the line connect the ball and the box.
 
-            renderer.sync(&mut data);
+            renderer.sync_data(&mut data).unwrap();
+            renderer.render().unwrap();
             renderer.save_rgb(format!("{OUTPUT_DIRECTORY}/img_rgb{i}.png")).unwrap();
             renderer.save_depth(format!("{OUTPUT_DIRECTORY}/img_depth{i}.png"), true).unwrap();
         }

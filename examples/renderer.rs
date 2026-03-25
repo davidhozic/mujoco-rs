@@ -74,7 +74,8 @@ fn main() {
 
         /* Save an image every SAVE_FREQUENCY step */
         if i % SAVE_FREQUENCY == 0 {
-            renderer.sync(&mut data);
+            renderer.sync_data(&mut data).unwrap();
+            renderer.render().unwrap();
             renderer.save_rgb(format!("{OUTPUT_DIRECTORY}/img_rgb{i}.png")).unwrap();
             let (_min, _max) = renderer.save_depth(format!("{OUTPUT_DIRECTORY}/img_depth{i}.png"), true).unwrap();
         }
