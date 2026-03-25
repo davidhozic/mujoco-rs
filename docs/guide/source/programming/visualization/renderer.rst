@@ -46,32 +46,33 @@ By default, RGB rendering is enabled, while depth rendering is disabled.
         </mujoco>
 
 
-Much like the viewer, the renderer must also be synced with the simulation state,
-using :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`.
+Much like the viewer, the renderer must also be synced with the simulation state
+using :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data`,
+followed by a call to
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>render`.
 
 .. code-block:: rust
-    :emphasize-lines: 3
+    :emphasize-lines: 3-4
 
     ...
     data.step();  // data is an instance of MjData.
-    renderer.sync(&mut data);
+    renderer.sync_data(&mut data).unwrap();
+    renderer.render().unwrap();
     ...
 
-:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync` is an infallible convenience method
-that panics on failure (it internally delegates to
-:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_sync` with ``expect``).
-Use ``try_sync()`` when you need fallible error handling.
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data` updates
+the internal scene from ``data`` without rendering.
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>render` performs the
+actual offscreen render pass. Splitting the two steps lets you insert custom
+logic (e.g. adding user-scene geoms) between sync and render.
 
 
 .. note::
 
-    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync` is similar to the MuJoCo
-    Python ``Renderer.update_scene`` method. Unlike the MuJoCo Python method,
-    MuJoCo-rs's implementation also performs
-    rendering. This was done to make :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` behave
-    closer to the :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`.
+    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data` is similar to the MuJoCo
+    Python ``Renderer.update_scene`` method.
 
-After syncing, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb` and
+After rendering, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb` and
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth` can be used to obtain
 a reference to the rendered image in the correct 2D shape. The shape must be specified via
 the method's const generic parameters (``WIDTH`` and ``HEIGHT``), and the methods return
@@ -146,7 +147,8 @@ and saves both an RGB and a depth image:
             .build(&model).expect("failed to initialize renderer");
 
         data.step();
-        renderer.sync(&mut data);
+        renderer.sync_data(&mut data).unwrap();
+        renderer.render().unwrap();
 
         renderer.save_rgb("frame.png").expect("failed to save RGB");
         renderer.save_depth("depth.png", true).expect("failed to save depth");  // true = normalize to 0-65535 range.

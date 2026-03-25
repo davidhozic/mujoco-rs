@@ -59,13 +59,14 @@ update of MuJoCo alone can increase the major version.
   are no longer generic over ``M``.
   Remove the ``<M>`` type parameter from all usage sites.
 
-  - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`,
+  - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data`,
     :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>builder`, and
     :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`
     retain ``<M: Deref<Target = MjModel>>`` as **method-level** generics;
     call sites are unchanged.
   - :docs-rs:`~mujoco_rs::renderer::<struct>MjRendererBuilder` no longer requires
     ``M: Clone``; any ``M: Deref<Target = MjModel>`` is accepted.
+  - ``sync`` is deprecated; use ``sync_data`` + ``render`` instead.
 
 *MjViewer, MjViewerBuilder, ViewerSharedState are no longer generic*
 
@@ -90,24 +91,19 @@ update of MuJoCo alone can increase the major version.
 - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` /
   :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_data`
   and
-  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync`.
-  now detects when ``data`` was created from a **different** model than the
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data`
+  now detect when ``data`` was created from a **different** model than the
   viewer/renderer was initialized with. Instead of panicking or returning an
   error, both automatically recreate the scene(s) for the new model and update
   their internal model reference.
 
-- |mj_data| gained a new
-  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_clone`
-  ``-> M`` method (available when ``M: Clone``).
+*Separate renderer sync and render*
 
-- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to`,
-  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_copy_to`,
-  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`,
-  and
-  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_copy_visual_to`
-  now accept a destination of a **different** model type:
-  ``destination: &mut MjData<N>`` where ``N: Deref<Target = MjModel>``. Previously
-  the source and destination had to share the same ``M``.
+- :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`: new
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data` method
+  updates the scene without rendering. Call
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>render` separately
+  afterwards. This replaces the combined ``sync`` method, which is now deprecated.
 
 *MuJoCo upgrade*
 
@@ -124,6 +120,15 @@ the prelude): ``MjDataError``, ``MjSceneError``, ``MjEditError``, ``MjModelError
 gained new variants. See `Error handling`_ below for the full method list.
 
 *Type and signature changes*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_copy_to`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`,
+  and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_copy_visual_to`
+  now accept a destination of a **different** model type:
+  ``destination: &mut MjData<N>`` where ``N: Deref<Target = MjModel>``. Previously
+  the source and destination had to share the same ``M``.
 
 - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name`
   now returns ``Result<(), MjEditError>`` instead of ``()``. Append ``?`` to call
@@ -461,7 +466,8 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``forward_kinematics``, ``apply_ft``, ``copy_state_from_data``,
   ``ray_flex`` / ``ray_mesh`` / ``ray_hfield``,
   ``init_ctrl_history`` / ``init_sensor_history``,
-  ``read_ctrl`` / ``read_sensor`` / ``read_sensor_into`` / ``read_sensor_fixed``.
+  ``read_ctrl`` / ``read_sensor`` / ``read_sensor_into`` / ``read_sensor_fixed``,
+  ``model_clone`` :sup:`new` (``-> M``, available when ``M: Clone``).
 - |mj_spec|: ``from_parse`` / ``from_parse_vfs``.
 - |mjs_tendon|: ``get_wrap`` / ``get_wrap_mut`` / ``get_wrap_num``.
 - |mjs_wrap|: ``coef``, ``divisor``, ``side_site``, ``side_site_mut``.
