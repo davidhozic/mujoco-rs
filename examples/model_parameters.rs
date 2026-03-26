@@ -1,6 +1,6 @@
 //! Example of modifying model parameters at runtime.
 //!
-//! Demonstrates three approaches for changing physics parameters of an
+//! Demonstrates two approaches for changing physics parameters of an
 //! [`MjModel`] that is already attached to an [`MjData`]:
 //!
 //! 1. **[`MjData::model_mut`]** --- direct mutable access.
@@ -12,16 +12,12 @@
 //!    Works with any `M` (including `Arc<MjModel>`) and validates model
 //!    signature compatibility.
 //!
-//! 3. **`unsafe` [`MjModel::ffi_mut`]** --- direct access to the underlying
-//!    C struct. This bypasses all Rust-level safety guarantees and should
-//!    only be used when the safe API does not expose the field you need.
-//!
 //! **Not all model parameters are safe to change at runtime.**
 //! See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes)
 //! for details on which parameters can be changed.
 //!
 //! The example loads a simple free-falling ball, runs a few steps with the
-//! default gravity, then halves gravity using each of the three methods and
+//! default gravity, then halves gravity using each of the two methods and
 //! shows the effect on the ball's vertical position.
 
 use std::ops::Deref;
@@ -111,34 +107,13 @@ fn main() {
     println!("  gravity[2]   = {half_gravity:.2}");
     println!("  z after {STEPS} steps = {z_swap:.4}");
 
-    // Restore for the next method.
-    data.model_mut().opt_mut().gravity[2] = default_gravity;
-    data.reset();
-
     // ---------------------------------------------------------------
-    // Method 3 --- unsafe ffi_mut  (escape hatch)
-    // ---------------------------------------------------------------
-    // When the safe wrappers do not expose a particular field, the
-    // underlying C struct can be accessed through ffi_mut().
-    //
-    // SAFETY: We only modify opt.gravity, which is a physics parameter
-    // documented by MuJoCo as safe to change at runtime.
-    unsafe { data.model_mut().ffi_mut() }.opt.gravity[2] = half_gravity;
-    data.reset();
-
-    let z_ffi = simulate_steps(&mut data);
-    println!("\n=== Method 3: unsafe ffi_mut ===");
-    println!("  gravity[2]   = {half_gravity:.2}");
-    println!("  z after {STEPS} steps = {z_ffi:.4}");
-
-    // ---------------------------------------------------------------
-    // Verify all methods produce the same result.
+    // Verify both methods produce the same result.
     // ---------------------------------------------------------------
     println!("\n=== Summary ===");
-    println!("  Baseline z       = {z_baseline:.4}");
-    println!("  model_mut z      = {z_model_mut:.4}");
-    println!("  swap_model z     = {z_swap:.4}");
-    println!("  unsafe ffi_mut z = {z_ffi:.4}");
+    println!("  Baseline z   = {z_baseline:.4}");
+    println!("  model_mut z  = {z_model_mut:.4}");
+    println!("  swap_model z = {z_swap:.4}");
 
     let eps = 1e-10;
     assert!(
@@ -146,13 +121,9 @@ fn main() {
         "model_mut and swap_model should produce identical results"
     );
     assert!(
-        (z_model_mut - z_ffi).abs() < eps,
-        "model_mut and ffi_mut should produce identical results"
-    );
-    assert!(
         z_model_mut > z_baseline,
         "halved gravity should result in a higher position than full gravity"
     );
 
-    println!("\nAll three methods produce identical results.");
+    println!("\nBoth methods produce identical results.");
 }

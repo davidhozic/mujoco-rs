@@ -171,8 +171,8 @@ gives direct mutable access to the model's physics parameters.
     ``model_mut`` is **not** available when ``M`` is a shared-ownership type
     (e.g., ``Arc<MjModel>``, ``&MjModel``). In those cases, use ``swap_model`` below.
 
-See the :gh-example:`model_parameters.rs` example for a complete runnable comparison of all three
-approaches (``model_mut``, ``swap_model``, and ``unsafe ffi_mut``).
+See the :gh-example:`model_parameters.rs` example for a complete runnable comparison of both
+approaches (``model_mut`` and ``swap_model``).
 
 Swapping models with ``swap_model``
 --------------------------------------
