@@ -42,6 +42,9 @@
   underlying C API already validates or clamps the value (e.g., passing a count that MuJoCo itself
   allocated and therefore cannot exceed the C-side maximum). Only fix truncation casts when the
   value originates in pure Rust and is not subsequently validated by the C layer.
+- Prefer `if let` over `matches!` unless `matches!` is clearly more convenient (e.g. inside
+  `assert!` in tests). In conditionals, use `if let Some(x) = expr` instead of
+  `if matches!(expr, Some(x))`.
 
 ## Documentation
 - Always verify any changes made to MuJoCo's official documentation to verify everything is correct.

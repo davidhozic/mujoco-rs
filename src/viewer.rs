@@ -624,7 +624,7 @@ impl MjViewer {
         /* Viewport-only screenshot: capture the centered scene before the UI
          * panel is drawn on top (the scene is rendered to rect_full, so it
          * fills the entire window). */
-        if matches!(self.screenshot_pending, Some((true, _))) {
+        if let Some((true, _)) = self.screenshot_pending {
             let (_, depth) = self.screenshot_pending.take().unwrap();
             self.capture_screenshot(depth)?;
         }
@@ -637,7 +637,7 @@ impl MjViewer {
         self.update_menus();
 
         /* Full-window screenshot: capture after all rendering (UI + overlays). */
-        if matches!(self.screenshot_pending, Some((false, _))) {
+        if let Some((false, _)) = self.screenshot_pending {
             let (_, depth) = self.screenshot_pending.take().unwrap();
             self.capture_screenshot(depth)?;
         }
