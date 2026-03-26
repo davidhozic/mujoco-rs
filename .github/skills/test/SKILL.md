@@ -1,3 +1,8 @@
+---
+name: test
+description: Run the in-crate unit tests for mujoco-rs. Use this when asked to run tests or verify that changes work correctly.
+---
+
 # Running Tests
 
 Run the in-crate unit tests (tests live inside `src/` files under `#[cfg(test)]`).

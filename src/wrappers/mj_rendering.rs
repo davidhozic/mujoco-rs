@@ -121,28 +121,17 @@ impl MjrContext {
     /// Add Aux buffer with given index to context; free previous Aux buffer.
     /// # Errors
     /// Returns [`MjSceneError::InvalidAuxBufferIndex`] when `index >= mjNAUX` (10).
-    ///
-    /// # Panics
-    /// Panics if `width`, `height`, or `samples` are too large to fit in `i32`.
     pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) -> Result<(), MjSceneError> {
         if index >= mjNAUX as usize {
             return Err(MjSceneError::InvalidAuxBufferIndex { index });
         }
-        let width_i32 = i32::try_from(width).expect("width overflows i32");
-        let height_i32 = i32::try_from(height).expect("height overflows i32");
-        let samples_i32 = i32::try_from(samples).expect("samples overflows i32");
-        unsafe { mjr_addAux(index as i32, width_i32, height_i32, samples_i32, self.ffi_mut()); }
+        unsafe { mjr_addAux(index as i32, width as i32, height as i32, samples as i32, self.ffi_mut()); }
         Ok(())
     }
 
     /// Resize offscreen buffers.
-    ///
-    /// # Panics
-    /// Panics if `width` or `height` are too large to fit in `i32`.
     pub fn resize_offscreen(&mut self, width: u32, height: u32) {
-        let width_i32 = i32::try_from(width).expect("width overflows i32");
-        let height_i32 = i32::try_from(height).expect("height overflows i32");
-        unsafe { mjr_resizeOffscreen(width_i32, height_i32, self.ffi_mut()); }
+        unsafe { mjr_resizeOffscreen(width as i32, height as i32, self.ffi_mut()); }
     }
 
     /// Upload texture to GPU, overwriting previous upload if any.
@@ -169,22 +158,11 @@ impl MjrContext {
     /// Read pixels from current OpenGL framebuffer to client buffer.
     /// The `rgb` array is of size `[width * height * 3]`, while `depth` is of size `[width * height]`.
     ///
-    /// # Panics
-    /// Panics if the viewport dimensions are negative or the provided buffers
-    /// are not large enough for the given `viewport`.
-    /// Use [`MjrContext::try_read_pixels`] for a fallible alternative.
-    pub fn read_pixels(&self, rgb: Option<&mut [u8]>, depth: Option<&mut [f32]>, viewport: &MjrRectangle) {
-        self.try_read_pixels(rgb, depth, viewport)
-            .expect("read_pixels failed")
-    }
-
-    /// Fallible version of [`MjrContext::read_pixels`].
-    ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidViewport`] if the viewport has negative
     /// dimensions, or [`MjSceneError::BufferTooSmall`] if `rgb` or `depth`
     /// buffers are too small.
-    pub fn try_read_pixels(
+    pub fn read_pixels(
         &self,
         rgb: Option<&mut [u8]>,
         depth: Option<&mut [f32]>,

@@ -339,15 +339,18 @@ impl ViewerSharedState {
             // SAFETY: data_state_buffer was filled by read_state_into using the
             // same state spec on a compatible model, so eq_active bytes (included
             // by mjSTATE_INTEGRATION) come from MuJoCo's own canonical encoding.
-            unsafe { data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32) };
+            unsafe { data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32) }
+                .expect("set_state failed");
         }
 
         if full_sync {
             // Copy everything.
-            data.copy_to(&mut self.data_passive);
+            data.copy_to(&mut self.data_passive)
+                .expect("copy_to failed");
         } else {
             // Copy only visually-required information to the internal passive data.
-            data.copy_visual_to(&mut self.data_passive);
+            data.copy_visual_to(&mut self.data_passive)
+                .expect("copy_visual_to failed");
         }
 
         // Make both saved states the same.
@@ -597,7 +600,8 @@ impl MjViewer {
     /// and swaps buffers in OpenGL.
     /// # Errors
     /// - [`MjViewerError::GlutinError`] if the OpenGL buffer swap fails.
-    /// - [`MjViewerError::SceneError`] if synchronizing user scene geoms fails (e.g. the scene is full).
+    /// - [`MjViewerError::SceneError`] if synchronizing user scene geoms fails (e.g. the scene is
+    ///   full) or if reading pixels for a pending screenshot fails.
     pub fn render(&mut self) -> Result<(), MjViewerError> {
         let RenderBaseGlState {
             gl_context,
@@ -620,9 +624,9 @@ impl MjViewer {
         /* Viewport-only screenshot: capture the centered scene before the UI
          * panel is drawn on top (the scene is rendered to rect_full, so it
          * fills the entire window). */
-        if matches!(self.screenshot_pending, Some((true, _))) {
+        if let Some((true, _)) = self.screenshot_pending {
             let (_, depth) = self.screenshot_pending.take().unwrap();
-            self.capture_screenshot(depth);
+            self.capture_screenshot(depth)?;
         }
 
         /* Draw the user menu on top */
@@ -633,9 +637,9 @@ impl MjViewer {
         self.update_menus();
 
         /* Full-window screenshot: capture after all rendering (UI + overlays). */
-        if matches!(self.screenshot_pending, Some((false, _))) {
+        if let Some((false, _)) = self.screenshot_pending {
             let (_, depth) = self.screenshot_pending.take().unwrap();
-            self.capture_screenshot(depth);
+            self.capture_screenshot(depth)?;
         }
 
         /* Flush to the GPU */
@@ -659,13 +663,16 @@ impl MjViewer {
     /// The caller controls what is visible by choosing *when* to call this
     /// method in the render pipeline. When `depth` is `true`, a 16-bit
     /// grayscale depth image is saved instead of an RGB image.
-    fn capture_screenshot(&self, depth: bool) {
+    ///
+    /// # Errors
+    /// Returns [`MjViewerError::SceneError`] if reading pixels from the framebuffer fails.
+    fn capture_screenshot(&self, depth: bool) -> Result<(), MjViewerError> {
         let rect = &self.rect_full;
 
         let w = rect.width as usize;
         let h = rect.height as usize;
         if w == 0 || h == 0 {
-            return;
+            return Ok(());
         }
 
         // Generate a timestamped filename.
@@ -676,7 +683,8 @@ impl MjViewer {
 
         if depth {
             let mut depth_buf = vec![0.0f32; w * h];
-            self.context.read_pixels(None, Some(&mut depth_buf), rect);
+            self.context.read_pixels(None, Some(&mut depth_buf), rect)
+                .map_err(MjViewerError::SceneError)?;
 
             // OpenGL reads bottom-up; flip for top-down PNG row order.
             flip_image_vertically(&mut depth_buf, h, w);
@@ -715,7 +723,8 @@ impl MjViewer {
             }
         } else {
             let mut rgb = vec![0u8; w * h * 3];
-            self.context.read_pixels(Some(&mut rgb), None, rect);
+            self.context.read_pixels(Some(&mut rgb), None, rect)
+                .map_err(MjViewerError::SceneError)?;
 
             // OpenGL reads bottom-up; flip for top-down PNG row order.
             flip_image_vertically(&mut rgb, h, w * 3);
@@ -730,6 +739,7 @@ impl MjViewer {
                 eprintln!("screenshot saved to {path}");
             }
         }
+        Ok(())
     }
 
     fn update_smooth_fps(&mut self) {

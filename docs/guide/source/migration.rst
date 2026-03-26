@@ -147,6 +147,24 @@ Append ``?`` or ``.unwrap()`` to call sites.
 |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / |mjr_context| methods now returning ``Result<_, MjSceneError>``:
   ``create_geom``, ``set_label``, ``add_aux``, ``set_aux``.
 
+:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` methods now returning ``Result``:
+  ``set_font_scale`` returns ``Result<(), RendererError>``;
+  ``with_font_scale`` returns ``Result<Self, RendererError>``.
+
+**Before:**
+
+.. code-block:: rust
+
+   renderer.set_font_scale(MjtFontScale::mjFONTSCALE_150);
+   let renderer = renderer.with_font_scale(MjtFontScale::mjFONTSCALE_150);
+
+**After:**
+
+.. code-block:: rust
+
+   renderer.set_font_scale(MjtFontScale::mjFONTSCALE_150)?;
+   let renderer = renderer.with_font_scale(MjtFontScale::mjFONTSCALE_150)?;
+
 
 Model-editing API changes
 ----------------------------
@@ -385,17 +403,17 @@ Type changes
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`
   now requires ``T: bytemuck::NoUninit`` (add ``bytemuck`` to your dependencies if you
   call this method with a custom type, and derive or implement ``NoUninit`` for it).
+- |mj_data|: ``contact_force()`` now takes ``contact_id: usize`` (was ``u32``).
+  Remove ``as u32`` casts at call sites.
 
 
 ``MjData::reset_keyframe()``
 -----------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>reset_keyframe`
-now takes ``key: usize`` (was ``i32``) and **panics** on out-of-range keys.
-Out-of-range keys that previously silently fell back to a plain reset now panic.
-A new fallible variant
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_reset_keyframe`
-is available for explicit error handling (returns ``Result<(), MjDataError>``).
+now takes ``key: usize`` (was ``i32``) and returns ``Result<(), MjDataError>``
+instead of ``()``. Out-of-range keys that previously silently fell back to a
+plain reset now return ``Err(MjDataError::IndexOutOfBounds)``.
 
 **Before (2.x):**
 
@@ -407,8 +425,36 @@ is available for explicit error handling (returns ``Result<(), MjDataError>``).
 
 .. code-block:: rust
 
-    data.reset_keyframe(0);          // panics if key >= nkey
-    data.try_reset_keyframe(0)?;     // returns Err if key >= nkey
+    data.reset_keyframe(0)?;         // returns Err if key >= nkey
+
+
+Methods now return ``Result`` instead of panicking
+---------------------------------------------------
+
+The following methods previously returned ``()`` and panicked on invalid input.
+They now return ``Result`` directly.
+
+.. list-table::
+   :header-rows: 1
+
+   * - 2.x call
+     - 3.0.0 call
+   * - ``data.reset_keyframe(0)``
+     - ``data.reset_keyframe(0)?``
+   * - ``data.set_state(&s, spec)``
+     - ``unsafe { data.set_state(&s, spec)? }``
+   * - ``data.copy_visual_to(&mut dst)``
+     - ``data.copy_visual_to(&mut dst)?``
+   * - ``data.copy_to(&mut dst)``
+     - ``data.copy_to(&mut dst)?``
+   * - ``ctx.read_pixels(rgb, depth, &vp)``
+     - ``ctx.read_pixels(rgb, depth, &vp)?``
+   * - ``fig.push(idx, x, y)``
+     - ``fig.push(idx, x, y)?``
+   * - ``fig.set_at(idx, pt, x, y)``
+     - ``fig.set_at(idx, pt, x, y)?``
+
+Append ``.unwrap()``, ``.expect(...)`` or ``?`` at call sites.
 
 
 Ray-casting parameter changes
@@ -511,6 +557,46 @@ no longer takes a separate ``model`` parameter (the model is obtained from
     perturb.move_(&data, action, dx, dy, &scene);
 
 
+``MjvPerturb::start``
+------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>start`
+no longer takes a separate ``model`` parameter (the model is obtained from
+``data.model()``), and ``scene`` changed from ``&MjvScene<M>`` to ``&MjvScene``.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    perturb.start(type_, &model, &mut data, &scene);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    perturb.start(type_, &mut data, &scene);
+
+
+``MjvPerturb::apply``
+------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>apply`
+no longer takes a separate ``model`` parameter (the model is obtained from
+``data.model()``).
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    perturb.apply(&model, &mut data);
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    perturb.apply(&mut data);
+
+
 ``find_selection()`` return type
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -564,8 +650,10 @@ it internally). If you construct ``MjrContext`` manually:
     let context = unsafe { MjrContext::new(&model) };
 
 
-``MjData::set_state`` and ``try_set_state`` are now ``unsafe``
+``MjData::set_state`` is now ``unsafe`` and returns ``Result``
 ----------------------------------------------------------------
+
+``set_state`` is now ``unsafe`` and returns ``Result<(), MjDataError>`` directly.
 
 When ``spec`` includes ``mjSTATE_EQ_ACTIVE``, MuJoCo writes raw ``f64`` bytes into
 the ``eq_active`` byte array without booleanization, making a subsequent call to
@@ -583,7 +671,7 @@ the ``eq_active`` byte array without booleanization, making a subsequent call to
 .. code-block:: rust
 
     // SAFETY: state captured via get_state; bools are valid (0 or 1).
-    unsafe { data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32) };
+    unsafe { data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32) }?;
 
 
 API renames
@@ -807,3 +895,4 @@ Removed deprecated methods
    * - ``MjViewer::sync``
      - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` then
        :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`
+

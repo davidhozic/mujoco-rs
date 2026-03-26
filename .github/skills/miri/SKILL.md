@@ -1,3 +1,8 @@
+---
+name: miri
+description: Run the codebase under Miri with native FFI support to detect undefined behavior in Rust-C interop. Use this when asked to check for UB or verify memory safety.
+---
+
 # Running with Miri
 
 Run the codebase under Miri's experimental FFI native-lib support to detect undefined behavior in Rust code interoperating with MuJoCo C FFI.

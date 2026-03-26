@@ -423,21 +423,11 @@ impl MjvFigure {
 
     /// Pushes a new data point to buffer for the specific plot with `plot_index`.
     ///
-    /// # Panics
-    /// A panic will occur if the buffer is full.
-    /// Use [`MjvFigure::try_push`] for a fallible alternative.
-    pub fn push(&mut self, plot_index: usize, x: f32, y: f32) {
-        self.try_push(plot_index, x, y)
-            .expect("figure push failed")
-    }
-
-    /// Fallible version of [`MjvFigure::push`].
-    ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
     /// Returns [`MjSceneError::FigureBufferFull`] if the buffer for
     /// `plot_index` is already at capacity.
-    pub fn try_push(&mut self, plot_index: usize, x: f32, y: f32) -> Result<(), MjSceneError> {
+    pub fn push(&mut self, plot_index: usize, x: f32, y: f32) -> Result<(), MjSceneError> {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
@@ -455,21 +445,11 @@ impl MjvFigure {
 
     /// Overrides existing data with a new data point at a specific `point_index` for specific plot with `plot_index`.
     ///
-    /// # Panics
-    /// The data must already be present at `point_index`, otherwise an assertion panic will occur.
-    /// Use [`MjvFigure::try_set_at`] for a fallible alternative.
-    pub fn set_at(&mut self, plot_index: usize, point_index: usize, x: f32, y: f32) {
-        self.try_set_at(plot_index, point_index, x, y)
-            .expect("figure set_at failed")
-    }
-
-    /// Fallible version of [`MjvFigure::set_at`].
-    ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
     /// Returns [`MjSceneError::FigureIndexOutOfBounds`] if `point_index` is
     /// not within the current data range for the given plot.
-    pub fn try_set_at(
+    pub fn set_at(
         &mut self,
         plot_index: usize,
         point_index: usize,
@@ -921,8 +901,8 @@ mod tests {
         assert_eq!(fig.pop_back(plot), None);
 
         // Push two points
-        fig.push(plot, 1.0, 2.0);
-        fig.push(plot, 3.0, 4.0);
+        fig.push(plot, 1.0, 2.0).unwrap();
+        fig.push(plot, 3.0, 4.0).unwrap();
 
         assert!(!fig.empty(plot));
 
@@ -1014,28 +994,28 @@ mod tests {
         assert_eq!(geom.label(), "");
     }
 
-    /// Tests `try_push` returns `FigureBufferFull` at capacity,
+    /// Tests `push` returns `FigureBufferFull` at capacity,
     /// and push succeeds after `pop_back` frees a slot.
     #[test]
-    fn test_figure_try_push_overflow() {
+    fn test_figure_push_overflow() {
         let mut fig = MjvFigure::new();
         let plot = 0;
         let capacity = fig.linedata[plot].len() / 2;
 
         // Fill to capacity
         for i in 0..capacity {
-            fig.try_push(plot, i as f32, i as f32).unwrap();
+            fig.push(plot, i as f32, i as f32).unwrap();
         }
         assert!(fig.full(plot));
 
         // Next push should fail
-        let err = fig.try_push(plot, 0.0, 0.0).unwrap_err();
+        let err = fig.push(plot, 0.0, 0.0).unwrap_err();
         assert!(matches!(err, MjSceneError::FigureBufferFull { plot_index: 0, .. }));
 
         // Pop one element, then push should succeed again
         fig.pop_back(plot);
         assert!(!fig.full(plot));
-        fig.try_push(plot, 99.0, 99.0).unwrap();
+        fig.push(plot, 99.0, 99.0).unwrap();
         assert!(fig.full(plot));
     }
 

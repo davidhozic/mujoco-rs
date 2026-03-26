@@ -316,7 +316,7 @@ fn test_integration_state_save_restore_force_cast() {
 
     // Restore
     // SAFETY: saved was captured via mj_getState; eq_active bytes are valid (0 or 1).
-    unsafe { data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32) };
+    unsafe { data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32) }.unwrap();
     data.forward();
 
     // Primary state must match exactly

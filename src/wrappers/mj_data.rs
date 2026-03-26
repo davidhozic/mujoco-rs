@@ -300,17 +300,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Reset data to keyframe `key` (zero-based index).
     ///
-    /// # Panics
-    /// Panics if `key >= nkey`. Use [`MjData::try_reset_keyframe`] for a fallible alternative.
-    pub fn reset_keyframe(&mut self, key: usize) {
-        self.try_reset_keyframe(key).expect("reset_keyframe: key out of range")
-    }
-
-    /// Fallible version of [`MjData::reset_keyframe`].
-    ///
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] if `key >= nkey`.
-    pub fn try_reset_keyframe(&mut self, key: usize) -> Result<(), MjDataError> {
+    pub fn reset_keyframe(&mut self, key: usize) -> Result<(), MjDataError> {
         let nkey = self.model.ffi().nkey as usize;
         if key >= nkey {
             return Err(MjDataError::IndexOutOfBounds {
@@ -1080,20 +1072,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Copies data state from `src` to `self` based on the specified `spec` combination of `mjtState` flags.
     ///
-    /// # Panics
-    /// Panics if `src` was created from a different model.
-    /// Use [`MjData::try_copy_state_from_data`] for a fallible alternative.
-    pub fn copy_state_from_data<N: Deref<Target = MjModel>>(&mut self, src: &MjData<N>, spec: u32) {
-        self.try_copy_state_from_data(src, spec)
-            .expect("copy_state_from_data failed")
-    }
-
-    /// Fallible version of [`MjData::copy_state_from_data`].
-    ///
     /// # Errors
     /// Returns [`MjDataError::SignatureMismatch`] if `src` was created from
     /// a different model.
-    pub fn try_copy_state_from_data<N: Deref<Target = MjModel>>(&mut self, src: &MjData<N>, spec: u32) -> Result<(), MjDataError> {
+    pub fn copy_state_from_data<N: Deref<Target = MjModel>>(&mut self, src: &MjData<N>, spec: u32) -> Result<(), MjDataError> {
         let src_sig = src.model.signature();
         let dst_sig = self.model.signature();
         if src_sig != dst_sig {
@@ -1140,21 +1122,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Apply Cartesian force and torque to a point on a body, and add the result to `qfrc_target`.
     ///
-    /// # Panics
-    /// Panics if `body` is not a valid body index or `qfrc_target` length is less than `nv`.
-    /// Use [`MjData::try_apply_ft`] for a fallible alternative.
-    pub fn apply_ft(&mut self, force: &[MjtNum; 3], torque: &[MjtNum; 3], point: &[MjtNum; 3], body: usize, qfrc_target: &mut [MjtNum]) {
-        self.try_apply_ft(force, torque, point, body, qfrc_target)
-            .expect("apply_ft failed")
-    }
-
-    /// Fallible version of [`MjData::apply_ft`].
-    ///
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] if `body` is not a valid body
     /// index, or [`MjDataError::BufferTooSmall`] if `qfrc_target` is shorter
     /// than `nv`.
-    pub fn try_apply_ft(
+    pub fn apply_ft(
         &mut self,
         force: &[MjtNum; 3],
         torque: &[MjtNum; 3],
@@ -1250,24 +1222,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// buffer to store any possible state based on `spec`, without having to query the size
     /// every time. This benefits performance in some cases.
     ///
-    /// # Panics
-    /// A panic will occur if `state`'s length is less than would be copied
-    /// based on `spec`.
-    /// Use [`MjData::try_set_state`] for a fallible alternative.
-    ///
-    /// # Safety
-    /// When `spec` includes [`MjtState::mjSTATE_EQ_ACTIVE`], MuJoCo writes the raw
-    /// `mjtNum` (f64) bytes from `state` directly into the `eq_active` byte array
-    /// without booleanization. The caller must ensure that [`MjData::eq_active`] is
-    /// not accessed until the `eq_active` values have been re-validated as `0` or `1`
-    /// (e.g. by calling `mj_forward` or `mj_step`).
-    pub unsafe fn set_state(&mut self, state: &[MjtNum], spec: u32) {
-        unsafe { self.try_set_state(state, spec) }
-            .expect("set_state failed")
-    }
-
-    /// Fallible version of [`MjData::set_state`].
-    ///
     /// # Errors
     /// Returns [`MjDataError::BufferTooSmall`] if `state` is smaller than the
     /// length required by `spec`.
@@ -1278,7 +1232,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// without booleanization. The caller must ensure that [`MjData::eq_active`] is
     /// not accessed until the `eq_active` values have been re-validated as `0` or `1`
     /// (e.g. by calling `mj_forward` or `mj_step`).
-    pub unsafe fn try_set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
+    pub unsafe fn set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
         let required_len = self.model.state_size(spec);
         if state.len() < required_len {
             return Err(MjDataError::BufferTooSmall {
@@ -1299,20 +1253,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// constraint Jacobians).
     /// This is a wrapper for [`mjv_copyData`].
     ///
-    /// # Panics
-    /// Panics if `destination` was created from a different model.
-    /// Use [`MjData::try_copy_visual_to`] for a fallible alternative.
-    pub fn copy_visual_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) {
-        self.try_copy_visual_to(destination)
-            .expect("copy_visual_to failed")
-    }
-
-    /// Fallible version of [`MjData::copy_visual_to`].
-    ///
     /// # Errors
     /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
     /// from a different model.
-    pub fn try_copy_visual_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
+    pub fn copy_visual_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
         let src_sig = self.model.signature();
         let dst_sig = destination.model.signature();
         if src_sig != dst_sig {
@@ -1330,20 +1274,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Copy [`MjData`] to `destination` in full.
     /// This is a wrapper for [`mj_copyData`].
     ///
-    /// # Panics
-    /// Panics if `destination` was created from a different model.
-    /// Use [`MjData::try_copy_to`] for a fallible alternative.
-    pub fn copy_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) {
-        self.try_copy_to(destination)
-            .expect("copy_to failed")
-    }
-
-    /// Fallible version of [`MjData::copy_to`].
-    ///
     /// # Errors
     /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
     /// from a different model.
-    pub fn try_copy_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
+    pub fn copy_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
         let src_sig = self.model.signature();
         let dst_sig = destination.model.signature();
         if src_sig != dst_sig {
@@ -1906,8 +1840,8 @@ mod test {
         // Test reset variants
         data.reset();
         data.reset_debug(7);
-        // MODEL has no keyframes so use try_reset_keyframe and check OOB behaviour.
-        assert!(data.try_reset_keyframe(0).is_err());
+        // MODEL has no keyframes so use reset_keyframe and check OOB behaviour.
+        assert!(data.reset_keyframe(0).is_err());
     }
 
     #[test]
@@ -2511,7 +2445,7 @@ mod test {
         let mut data2 = model.make_data();
 
         data1.set_time(1.23);
-        data2.copy_state_from_data(&data1, MjtState::mjSTATE_TIME as u32);
+        data2.copy_state_from_data(&data1, MjtState::mjSTATE_TIME as u32).unwrap();
 
         assert_eq!(data2.time(), 1.23);
     }
@@ -2567,7 +2501,7 @@ mod test {
         let torque = [0.1, 0.2, 0.3];
         let point = [0.2, 0.2, 0.1];
 
-        data.apply_ft(&force, &torque, &point, body_id, &mut qfrc);
+        data.apply_ft(&force, &torque, &point, body_id, &mut qfrc).unwrap();
 
         // The "ball" has a free joint.
         // In MuJoCo, for a free joint, the first 3 DOFs are translation (linear),
@@ -2818,22 +2752,22 @@ mod test {
 
         // Now overwrite only QPOS from a fresh data instance
         let fresh = model.make_data();
-        data.copy_state_from_data(&fresh, MjtState::mjSTATE_QPOS as u32);
+        data.copy_state_from_data(&fresh, MjtState::mjSTATE_QPOS as u32).unwrap();
 
         // qvel should be untouched
         assert_relative_eq!(jinfo.view(&data).qvel[0], original_qvel0, epsilon = 1e-15);
     }
 
-    /// Tests `try_copy_state_from_data` returns `SignatureMismatch` for mismatched models.
+    /// Tests `copy_state_from_data` returns `SignatureMismatch` for mismatched models.
     #[test]
-    fn test_try_copy_state_signature_mismatch() {
+    fn test_copy_state_signature_mismatch() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body><joint type='free'/><geom size='0.1'/></body></worldbody></mujoco>").unwrap();
         let model2 = MjModel::from_xml_string("<mujoco><worldbody><body><joint type='slide'/><geom size='0.1'/></body></worldbody></mujoco>").unwrap();
 
         let data1 = model1.make_data();
         let mut data2 = model2.make_data();
 
-        let err = data2.try_copy_state_from_data(&data1, MjtState::mjSTATE_FULLPHYSICS as u32).unwrap_err();
+        let err = data2.copy_state_from_data(&data1, MjtState::mjSTATE_FULLPHYSICS as u32).unwrap_err();
         match err {
             MjDataError::SignatureMismatch { source, destination } => {
                 assert_ne!(source, destination);
@@ -2854,7 +2788,7 @@ mod test {
         data1.joint("ball").unwrap().view_mut(&mut data1).qpos[0] = 5.0;
         data1.joint("ball").unwrap().view_mut(&mut data1).qvel[0] = 3.0;
 
-        data2.copy_state_from_data(&data1, MjtState::mjSTATE_FULLPHYSICS as u32);
+        data2.copy_state_from_data(&data1, MjtState::mjSTATE_FULLPHYSICS as u32).unwrap();
 
         assert_relative_eq!(data2.time(), 1.0, epsilon = 1e-15);
         assert_relative_eq!(data2.qpos()[0], 5.0, epsilon = 1e-15);
@@ -4488,7 +4422,7 @@ mod test {
 
         // Restore state
         // SAFETY: saved_state was captured via mj_getState; eq_active bytes are valid (0 or 1).
-        unsafe { data.set_state(&saved_state, MjtState::mjSTATE_FULLPHYSICS as u32) };
+        unsafe { data.set_state(&saved_state, MjtState::mjSTATE_FULLPHYSICS as u32) }.unwrap();
         data.forward();
 
         // Primary state (qpos) should be exactly restored
