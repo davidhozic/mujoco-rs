@@ -403,6 +403,8 @@ Type changes
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`
   now requires ``T: bytemuck::NoUninit`` (add ``bytemuck`` to your dependencies if you
   call this method with a custom type, and derive or implement ``NoUninit`` for it).
+- |mj_data|: ``contact_force()`` now takes ``contact_id: usize`` (was ``u32``).
+  Remove ``as u32`` casts at call sites.
 
 
 ``MjData::reset_keyframe()``

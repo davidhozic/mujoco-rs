@@ -234,6 +234,9 @@ gained new variants. See `Error handling`_ below for the full method list.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print` and
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print_formatted`
     now accept ``AsRef<Path>`` and return ``Result``.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force`:
+    ``contact_id`` now takes ``usize`` (was ``u32``). Remove ``as u32`` casts at
+    call sites.
 
 - |mj_model|:
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>id_to_name`:
@@ -537,8 +540,6 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   unexpected return code is surfaced as an error instead of aborting the process.
 - :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_is_bad`: now tests
   ``!= 0`` instead of ``== 1``.
-- |mjr_context|: ``add_aux`` and ``resize_offscreen`` now panic if dimensions
-  exceed ``i32::MAX`` (previously silently truncated, causing GL errors).
 - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
 
   - ``save_depth``: guards against division by zero when the depth range is zero.
