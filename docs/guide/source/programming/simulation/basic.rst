@@ -136,7 +136,7 @@ for precise timing.
 
 Changing model's parameters
 ================================
-For purposes transfer from simulation to reality in reinforcement learning
+For purposes of transfer from simulation to reality in reinforcement learning
 it is beneficial to perform domain randomization [Tobin2017]_.
 
 .. danger::
@@ -159,7 +159,7 @@ gives direct mutable access to the model's physics parameters.
     :emphasize-lines: 5, 6
 
     fn main() {
-        let model = MjModel::from_xml("model.xml").expect("could not load the model");
+        let model = Box::new(MjModel::from_xml("model.xml").expect("could not load the model"));
         let mut data = MjData::new(model);
 
         data.model_mut().opt_mut().timestep = 0.004;
@@ -170,6 +170,9 @@ gives direct mutable access to the model's physics parameters.
 
     ``model_mut`` is **not** available when ``M`` is a shared-ownership type
     (e.g., ``Arc<MjModel>``, ``&MjModel``). In those cases, use ``swap_model`` below.
+
+See the :gh-example:`model_parameters.rs` example for a complete runnable comparison of all three
+approaches (``model_mut``, ``swap_model``, and ``unsafe ffi_mut``).
 
 Swapping models with ``swap_model``
 --------------------------------------

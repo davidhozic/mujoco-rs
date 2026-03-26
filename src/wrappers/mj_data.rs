@@ -6,12 +6,12 @@ use super::mj_primitive::*;
 use crate::{getter_setter, mujoco_c::*};
 use crate::error::MjDataError;
 
-use std::ffi::CString;
-use std::path::Path;
-use std::borrow::Cow;
 use std::ops::{Deref, DerefMut};
-use std::fmt::Debug;
 use std::ptr::{self, NonNull};
+use std::ffi::CString;
+use std::borrow::Cow;
+use std::path::Path;
+use std::fmt::Debug;
 
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
@@ -1403,11 +1403,10 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// access; use [`swap_model`](MjData::swap_model) instead.
     ///
     /// # Example
-    /// ```no_run
-    /// # use mujoco_rs::MjModel;
-    /// # use mujoco_rs::MjData;
-    /// let model = MjModel::from_xml_str("<mujoco/>").unwrap();
-    /// let mut data = MjData::new(model).unwrap();
+    /// ```rust
+    /// # use mujoco_rs::prelude::{MjModel, MjData};
+    /// let model = Box::new(MjModel::from_xml_string("<mujoco/>").unwrap());
+    /// let mut data = MjData::new(model);
     /// data.model_mut().opt_mut().timestep = 0.001;
     /// data.model_mut().opt_mut().gravity[2] = -5.0;
     /// ```
