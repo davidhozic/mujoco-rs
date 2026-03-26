@@ -367,12 +367,13 @@ impl MjRenderer {
 
     /// Sets the font size.
     ///
-    /// # Panics
-    /// Panics if the OpenGL context cannot be made current.
-    pub fn set_font_scale(&mut self, font_scale: MjtFontScale) {
-        self.gl_state.make_current().expect("failed to make GL context current");
+    /// # Errors
+    /// Returns [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn set_font_scale(&mut self, font_scale: MjtFontScale) -> Result<(), RendererError> {
+        self.gl_state.make_current().map_err(RendererError::GlutinError)?;
         self.font_scale = font_scale;
         self.context.change_font(font_scale);
+        Ok(())
     }
 
     /// Update the visualization options and return a reference to self.
@@ -398,9 +399,12 @@ impl MjRenderer {
     }
 
     /// Sets the font size. To be used on construction.
-    pub fn with_font_scale(mut self, font_scale: MjtFontScale) -> Self {
-        self.set_font_scale(font_scale);
-        self
+    ///
+    /// # Errors
+    /// Returns [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn with_font_scale(mut self, font_scale: MjtFontScale) -> Result<Self, RendererError> {
+        self.set_font_scale(font_scale)?;
+        Ok(self)
     }
 
     /// Update the visualization options and return a reference to self. To be used on construction.
@@ -630,7 +634,8 @@ impl MjRenderer {
     ///
     /// # Errors
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current.
-    /// - [`RendererError::SceneError`] ([`MjSceneError::SceneFull`]) if the user-scene sync overflows the geom buffer.
+    /// - [`RendererError::SceneError`] if the user-scene sync overflows the geom buffer
+    ///   or if reading pixels from the framebuffer fails.
     pub fn render(&mut self) -> Result<(), RendererError> {
         /* Sync user scene geoms into the main scene before rendering */
         sync_geoms(&self.user_scene, &mut self.scene).map_err(RendererError::SceneError)?;
@@ -648,7 +653,7 @@ impl MjRenderer {
             flat_rgb,
             flat_depth,
             &vp
-        ).expect("read_pixels failed");
+        ).map_err(RendererError::SceneError)?;
 
         /* Flip the read pixels vertically, as OpenGL reads bottom-up */
         if let Some(rgb) = self.rgb.as_deref_mut() {

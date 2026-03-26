@@ -38,6 +38,9 @@ update of MuJoCo alone can increase the major version.
   - |mjr_context|: ``read_pixels``
   - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure`:
     ``push``, ``set_at``
+  - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
+    ``set_font_scale`` now returns ``Result<(), RendererError>``;
+    ``with_font_scale`` now returns ``Result<Self, RendererError>``.
 
   Callers must now handle the ``Result`` (e.g. append ``.unwrap()`` or ``?``).
 

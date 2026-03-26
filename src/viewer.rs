@@ -600,7 +600,8 @@ impl MjViewer {
     /// and swaps buffers in OpenGL.
     /// # Errors
     /// - [`MjViewerError::GlutinError`] if the OpenGL buffer swap fails.
-    /// - [`MjViewerError::SceneError`] if synchronizing user scene geoms fails (e.g. the scene is full).
+    /// - [`MjViewerError::SceneError`] if synchronizing user scene geoms fails (e.g. the scene is
+    ///   full) or if reading pixels for a pending screenshot fails.
     pub fn render(&mut self) -> Result<(), MjViewerError> {
         let RenderBaseGlState {
             gl_context,
@@ -625,7 +626,7 @@ impl MjViewer {
          * fills the entire window). */
         if matches!(self.screenshot_pending, Some((true, _))) {
             let (_, depth) = self.screenshot_pending.take().unwrap();
-            self.capture_screenshot(depth);
+            self.capture_screenshot(depth)?;
         }
 
         /* Draw the user menu on top */
@@ -638,7 +639,7 @@ impl MjViewer {
         /* Full-window screenshot: capture after all rendering (UI + overlays). */
         if matches!(self.screenshot_pending, Some((false, _))) {
             let (_, depth) = self.screenshot_pending.take().unwrap();
-            self.capture_screenshot(depth);
+            self.capture_screenshot(depth)?;
         }
 
         /* Flush to the GPU */
@@ -662,13 +663,16 @@ impl MjViewer {
     /// The caller controls what is visible by choosing *when* to call this
     /// method in the render pipeline. When `depth` is `true`, a 16-bit
     /// grayscale depth image is saved instead of an RGB image.
-    fn capture_screenshot(&self, depth: bool) {
+    ///
+    /// # Errors
+    /// Returns [`MjViewerError::SceneError`] if reading pixels from the framebuffer fails.
+    fn capture_screenshot(&self, depth: bool) -> Result<(), MjViewerError> {
         let rect = &self.rect_full;
 
         let w = rect.width as usize;
         let h = rect.height as usize;
         if w == 0 || h == 0 {
-            return;
+            return Ok(());
         }
 
         // Generate a timestamped filename.
@@ -680,7 +684,7 @@ impl MjViewer {
         if depth {
             let mut depth_buf = vec![0.0f32; w * h];
             self.context.read_pixels(None, Some(&mut depth_buf), rect)
-                .expect("read_pixels failed");
+                .map_err(MjViewerError::SceneError)?;
 
             // OpenGL reads bottom-up; flip for top-down PNG row order.
             flip_image_vertically(&mut depth_buf, h, w);
@@ -720,7 +724,7 @@ impl MjViewer {
         } else {
             let mut rgb = vec![0u8; w * h * 3];
             self.context.read_pixels(Some(&mut rgb), None, rect)
-                .expect("read_pixels failed");
+                .map_err(MjViewerError::SceneError)?;
 
             // OpenGL reads bottom-up; flip for top-down PNG row order.
             flip_image_vertically(&mut rgb, h, w * 3);
@@ -735,6 +739,7 @@ impl MjViewer {
                 eprintln!("screenshot saved to {path}");
             }
         }
+        Ok(())
     }
 
     fn update_smooth_fps(&mut self) {

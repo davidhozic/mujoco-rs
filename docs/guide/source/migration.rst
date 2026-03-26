@@ -147,6 +147,24 @@ Append ``?`` or ``.unwrap()`` to call sites.
 |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / |mjr_context| methods now returning ``Result<_, MjSceneError>``:
   ``create_geom``, ``set_label``, ``add_aux``, ``set_aux``.
 
+:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` methods now returning ``Result``:
+  ``set_font_scale`` returns ``Result<(), RendererError>``;
+  ``with_font_scale`` returns ``Result<Self, RendererError>``.
+
+**Before:**
+
+.. code-block:: rust
+
+   renderer.set_font_scale(MjtFontScale::mjFONTSCALE_150);
+   let renderer = renderer.with_font_scale(MjtFontScale::mjFONTSCALE_150);
+
+**After:**
+
+.. code-block:: rust
+
+   renderer.set_font_scale(MjtFontScale::mjFONTSCALE_150)?;
+   let renderer = renderer.with_font_scale(MjtFontScale::mjFONTSCALE_150)?;
+
 
 Model-editing API changes
 ----------------------------
