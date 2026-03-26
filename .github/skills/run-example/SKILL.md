@@ -1,3 +1,8 @@
+---
+name: run-example
+description: Compile and run one of the example programs. Use this when asked to run an example or demo.
+---
+
 # Running an Example
 
 Compile and run one of the example programs.

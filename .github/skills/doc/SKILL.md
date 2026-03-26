@@ -1,3 +1,8 @@
+---
+name: doc
+description: Build rustdoc documentation with all features enabled and DOCS_RS mode. Use this when asked to build docs, check doc comments, or verify documentation.
+---
+
 # Building Documentation
 
 Run rustdoc with all features enabled and the `DOCS_RS=y` flag (which activates

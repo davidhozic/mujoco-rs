@@ -1,3 +1,8 @@
+---
+name: build
+description: Build the mujoco-rs library using the pre-downloaded MuJoCo shared library. Use this when asked to build or compile the project.
+---
+
 # Building MuJoCo-rs
 
 Compile the library using a pre-downloaded MuJoCo shared library in the repository.

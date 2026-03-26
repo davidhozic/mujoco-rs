@@ -1,3 +1,8 @@
+---
+name: verify
+description: Systematically verify correctness of the mujoco-rs wrapper layer using parallel subagents. Use this when asked to audit, verify, or deeply check the codebase for bugs.
+---
+
 # Comprehensive Codebase Verification
 
 Use this workflow to systematically verify correctness of the mujoco-rs wrapper layer: type

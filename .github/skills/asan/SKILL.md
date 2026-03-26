@@ -1,3 +1,8 @@
+---
+name: asan
+description: Run AddressSanitizer and UndefinedBehaviorSanitizer on the Rust+C FFI boundary. Use this when asked to check for memory errors, undefined behavior, or when verifying FFI safety.
+---
+
 # Running with AddressSanitizer (ASan) and UndefinedBehaviorSanitizer (UBSan)
 
 Miri cannot track memory inside the FFI boundary because it doesn't hook into C's `malloc` and native function pointers. To properly check the interaction between Rust and C for memory errors (such as overflows, leaks, use-after-free, or undefined behavior like reference casting), we must compile **both** the C library and the Rust wrapper with sanitizers.
