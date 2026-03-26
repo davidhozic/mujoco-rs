@@ -6,8 +6,5 @@ Follow all of the rules always (READ THEM NOW) and take advantage of the skills 
 When launching subagents, follow `.github/rules/subagent-policy.md` to ensure they also
 read and follow the rules and take advantage of the available skills.
 
-If context may have been compacted due to a long conversation, re-read `.github/rules/`
-before starting new work.
-
-After every `ask_user` response, re-read all files in `.github/rules/` to refresh context.
-This simulates a new session start and guards against compaction losses.
+If context has been compacted (indicated by a summary replacing earlier conversation turns),
+re-read all files in `.github/rules/` before starting new work to guard against lost context.
