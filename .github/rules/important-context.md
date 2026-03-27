@@ -54,7 +54,7 @@ If `MUJOCO_DYNAMIC_LINK_DIR` is also set, the pre-downloaded copy takes preceden
   bounds check that only uses `debug_assert!` before an FFI call silently skips validation in
   release mode. Use `assert!` for safety-critical checks, or at minimum ensure the C function
   itself has enough validation that skipping the Rust check cannot cause UB.
-- **Bounds checking**: functions like `jac()`, `object_velocity()` validate IDs with `>= 0 && < max`.
+- **Bounds checking**: functions like `jac()`, `object_velocity()` validate IDs with `< max`.
   Off-by-one errors (`<=` instead of `<`) can cause UB.
 - **Boolean-to-int conversions**: Rust `bool as i32` yields 0 or 1, matching MuJoCo's convention.
   Verify the C function actually expects 0/1 and not some other encoding.
@@ -89,3 +89,16 @@ If `MUJOCO_DYNAMIC_LINK_DIR` is also set, the pre-downloaded copy takes preceden
   returns `[0; 6]` in that case. Do NOT add a Rust-side bounds check — the documented behavior
   is already enforced by the C implementation. Make sure to also check other functions for similar
   behavior before reporting problems.
+
+## MuJoCo version bump checklist
+
+When upgrading the MuJoCo version:
+
+1. Update the `+mj-X.Y.Z` suffix in `Cargo.toml` `[package].version`.
+2. Download and extract the new MuJoCo release into a `mujoco-X.Y.Z/` directory at the repo root.
+3. Update `build.rs` if the linking strategy or expected paths changed.
+4. Regenerate FFI bindings with the `ffi-regenerate` feature (developer only -- agents must NOT do
+   this step).
+5. Review the MuJoCo release notes for API changes; update wrappers accordingly.
+6. Update `changelog.rst` and `migration.rst` with all changes.
+7. Run the full test suite, `/doc`, and spot-check examples.
