@@ -109,23 +109,22 @@ The table below maps the breaking error-type changes:
      - 2.x error type
      - 3.0.0 error type
    * - |mj_model|: ``from_xml``, ``from_xml_vfs``, ``from_xml_string``,
-       ``from_buffer``, ``save_last_xml``, ``save_to_file``, ``save_to_buffer``,
+       ``from_buffer``, ``save_last_xml``,
        ``print``, ``print_formatted``
      - ``io::Error`` / ``NulError``
      - ``MjModelError``
-   * - |mj_vfs|: ``add_file``, ``add_file_from``, ``add_from_buffer``, ``delete_file``
+   * - |mj_vfs|: ``add_from_buffer``, ``delete_file``
      - ``io::Error``
      - ``MjVfsError``
    * - |mj_spec|: ``from_xml``, ``from_xml_vfs``, ``from_xml_string``,
-       ``compile``, ``save_xml``, ``save_xml_string``, ``try_add_default``
+       ``compile``, ``save_xml``, ``save_xml_string``, ``add_default``
      - ``io::Error``
      - ``MjEditError``
-   * - |mj_data|: ``add_contact``, ``print``,
-       ``print_formatted``
+   * - |mj_data|: ``add_contact``
      - ``io::Error``
      - ``MjDataError``
    * - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
-       ``try_rgb``, ``try_depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw``
+       ``save_rgb``, ``save_depth``, ``save_depth_raw``
      - ``io::Error``
      - ``RendererError``
    * - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`: ``render``
@@ -164,7 +163,7 @@ Newly ``Result``-returning methods
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 |mj_data| methods now returning ``Result<_, MjDataError>``:
-  ``constraint_update``.
+  ``constraint_update``, ``print``, ``print_formatted``.
 
 |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / |mjr_context| methods now returning ``Result<_, MjSceneError>``:
   ``set_label``, ``add_aux``, ``set_aux``.
@@ -468,8 +467,6 @@ Type changes
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`
   now requires ``T: bytemuck::NoUninit`` (add ``bytemuck`` to your dependencies if you
   call this method with a custom type, and derive or implement ``NoUninit`` for it).
-- |mj_data|: ``contact_force()`` now takes ``contact_id: usize`` (was ``u32``).
-  Remove ``as u32`` casts at call sites.
 
 
 ``MjData::reset_keyframe()``
