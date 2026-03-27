@@ -490,7 +490,7 @@ impl MjViewer {
     ///     .build_passive(&model).unwrap();
     /// viewer.with_state_lock(|mut lock| {
     ///     let scene = lock.user_scene_mut();
-    ///     scene.create_geom(MjtGeom::mjGEOM_BOX, Some([1.0, 1.0, 1.0]), Some([0.0, 0.0, 0.0]), None, None).unwrap();
+    ///     scene.create_geom(MjtGeom::mjGEOM_BOX, Some([1.0, 1.0, 1.0]), Some([0.0, 0.0, 0.0]), None, None);
     /// }).unwrap();
     /// ```
     pub fn with_state_lock<F, R>(&self, fun: F) -> Result<R, PoisonError<MutexGuard<'_, ViewerSharedState>>>

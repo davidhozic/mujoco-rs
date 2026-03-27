@@ -426,12 +426,12 @@ New error types in :docs-rs:`~mujoco_rs::error`
      - :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`
    * - |mj_spec|
      - ``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``compile``,
-       ``save_xml``, ``save_xml_string``, ``add_default``,
+       ``save_xml``, ``save_xml_string``, ``try_add_default``,
        ``from_parse`` :sup:`new`,
        ``from_parse_vfs`` :sup:`new`
      - :docs-rs:`~mujoco_rs::error::<enum>MjEditError`
    * - |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure` / |mjr_context|
-     - ``create_geom``, ``set_label``, ``add_aux``, ``set_aux``,
+     - ``try_create_geom``, ``set_label``, ``add_aux``, ``set_aux``,
        ``push``, ``set_at``, ``read_pixels``
      - :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`
    * - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`
@@ -476,9 +476,11 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
     ``try_extract_state``, ``try_extract_state_into``
   - |mj_spec| / |mjs_tendon| / ``MjsBody``: ``try_new``, ``try_clone``, ``try_add_frame``,
     ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, ``try_wrap_pulley``,
-    macro-generated ``try_add_*``
+    ``try_add_default``, macro-generated ``try_add_*``
   - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
     ``try_rgb``, ``try_depth``
+  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`:
+    ``try_create_geom``
 
 - New |mj_data| methods that return ``Result`` directly (no separate ``try_`` variant):
   ``copy_state_from_data``, ``apply_ft``.

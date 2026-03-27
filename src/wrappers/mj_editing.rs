@@ -490,6 +490,17 @@ impl MjSpec {
     }
 
     /// Adds a new `<default>` element.
+    ///
+    /// # Panics
+    /// Panics when `class_name` already exists or `parent_class_name` doesn't exist.
+    /// Also panics when the `class_name` or `parent_class_name` contain '\0' characters.
+    ///
+    /// Use [`MjSpec::try_add_default`] for a fallible alternative.
+    pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> &mut MjsDefault {
+        self.try_add_default(class_name, parent_class_name).expect("add_default failed")
+    }
+
+    /// Fallible version of [`MjSpec::add_default`].
     /// # Returns
     /// On success, returns a mutable reference to the newly created [`MjsDefault`].
     /// # Errors
@@ -497,7 +508,7 @@ impl MjSpec {
     /// Returns [`MjEditError::NotFound`] when `parent_class_name` doesn't exist.
     /// # Panics
     /// When the `class_name` or `parent_class_name` contain '\0' characters, a panic occurs.
-    pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<&mut MjsDefault, MjEditError> {
+    pub fn try_add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<&mut MjsDefault, MjEditError> {
         let c_class_name = CString::new(class_name).unwrap();
 
         let parent_ptr = if let Some(name) = parent_class_name {
@@ -1857,7 +1868,7 @@ mod tests {
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
 
         /* Test search */
-        spec.add_default(DEFAULT_NAME, None).unwrap();
+        spec.add_default(DEFAULT_NAME, None);
 
         /* Test delete */
         assert!(spec.default(DEFAULT_NAME).is_some());

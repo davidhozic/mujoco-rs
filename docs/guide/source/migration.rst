@@ -117,7 +117,7 @@ The table below maps the breaking error-type changes:
      - ``io::Error``
      - ``MjVfsError``
    * - |mj_spec|: ``from_xml``, ``from_xml_vfs``, ``from_xml_string``,
-       ``compile``, ``save_xml``, ``save_xml_string``, ``add_default``
+       ``compile``, ``save_xml``, ``save_xml_string``, ``try_add_default``
      - ``io::Error``
      - ``MjEditError``
    * - |mj_data|: ``add_contact``, ``print``,
@@ -167,7 +167,49 @@ Newly ``Result``-returning methods
   ``constraint_update``.
 
 |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / |mjr_context| methods now returning ``Result<_, MjSceneError>``:
-  ``create_geom``, ``set_label``, ``add_aux``, ``set_aux``.
+  ``set_label``, ``add_aux``, ``set_aux``.
+
+|mjv_scene|: ``create_geom`` now panics on failure (was bare type in 2.x).
+Use ``try_create_geom`` for a fallible alternative.
+
+**Before:**
+
+.. code-block:: rust
+
+   let geom = scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None);
+
+**After (panicking):**
+
+.. code-block:: rust
+
+   let geom = scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None);
+
+**After (fallible):**
+
+.. code-block:: rust
+
+   let geom = scene.try_create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None)?;
+
+|mj_spec|: ``add_default`` now panics on failure (was ``Result`` in 2.x).
+Use ``try_add_default`` for a fallible alternative.
+
+**Before:**
+
+.. code-block:: rust
+
+   let def = spec.add_default("my_class", None)?;
+
+**After (panicking):**
+
+.. code-block:: rust
+
+   let def = spec.add_default("my_class", None);
+
+**After (fallible):**
+
+.. code-block:: rust
+
+   let def = spec.try_add_default("my_class", None)?;
 
 :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` methods now returning ``Result``:
   ``set_font_scale`` returns ``Result<(), RendererError>``;

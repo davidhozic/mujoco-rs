@@ -83,7 +83,7 @@ fn main() {
                 MjtGeom::mjGEOM_LINE,
                 None, None, None,
                 Some([1.0, 1.0, 1.0, 1.0])
-            ).unwrap().connect(0.05, from, to);  // adjust size, pos and mat to make the line connect the ball and the box.
+            ).connect(0.05, from, to);  // adjust size, pos and mat to make the line connect the ball and the box.
 
             renderer.sync_data(&mut data).unwrap();
             renderer.render().unwrap();
