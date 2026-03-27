@@ -77,8 +77,6 @@ If `MUJOCO_DYNAMIC_LINK_DIR` is also set, the pre-downloaded copy takes preceden
   unconditionally `Send + Sync`; this pitfall applies to `MjData<M>` and future generic wrappers.)
 - **The test environment supports rendering**: viewer/renderer features can be explicitly enabled in
   tests; they are not part of the default feature set.
-- **Macro expansion is slow**: do NOT run `/expand-macros` unless the user explicitly requests it.
-  For deep audits use the `/verify` workflow instead.
 - **`MjData::model()` returns `&MjModel` (not `&M`)**: When reasoning about generic bounds, note that
   `data.model().clone()` clones `MjModel` directly (not `M`). The `M: Clone` bound is only required
   where `self.model.clone()` is called on the holder field directly (e.g., in `try_clone()`), not

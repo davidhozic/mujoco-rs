@@ -486,6 +486,7 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
 
 - |mj_model|: ``extract_state`` / ``extract_state_into``, ``try_make_data``.
 - |mj_data|: ``swap_model`` :sup:`new` (validates model signature),
+  ``model_mut`` :sup:`new` (``-> &mut MjModel``, available when ``M: DerefMut``),
   ``forward_kinematics``, ``apply_ft``, ``copy_state_from_data``,
   ``ray_flex`` / ``ray_mesh`` / ``ray_hfield``,
   ``init_ctrl_history`` / ``init_sensor_history``,

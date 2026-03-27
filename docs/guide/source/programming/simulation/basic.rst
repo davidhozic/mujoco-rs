@@ -136,21 +136,51 @@ for precise timing.
 
 Changing model's parameters
 ================================
-For purposes transfer from simulation to reality in reinforcement learning
+For purposes of transfer from simulation to reality in reinforcement learning
 it is beneficial to perform domain randomization [Tobin2017]_.
-Because MuJoCo-rs tries to keep the API contract correct in terms of Rust lifetimes,
-we don't allow the |mj_model| to be modified while any |mj_data| instances created
-from the same |mj_model| exist.
-
-To modify such parameters, without recreating |mj_data|, use the
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` method,
-which swaps the |mj_model| owned by |mj_data| for a the |mj_model| given as parameter.
 
 .. danger::
 
     Not all parameters of |mj_model| are safe to change.
     See `MuJoCo's documentation <https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes>`_
     for a list of parameters that are safe to change.
+
+Direct mutation with ``model_mut``
+------------------------------------
+
+When the model-handle type ``M`` implements
+`DerefMut\<Target = MjModel\> <https://doc.rust-lang.org/std/ops/trait.DerefMut.html>`_
+(e.g., owned |mj_model|, ``Box<MjModel>``), the
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_mut` method
+gives direct mutable access to the model's physics parameters.
+
+.. code-block:: rust
+    :linenos:
+    :emphasize-lines: 5, 6
+
+    fn main() {
+        let model = Box::new(MjModel::from_xml("model.xml").expect("could not load the model"));
+        let mut data = MjData::new(model);
+
+        data.model_mut().opt_mut().timestep = 0.004;
+        data.model_mut().opt_mut().gravity[2] = -5.0;
+    }
+
+.. note::
+
+    ``model_mut`` is **not** available when ``M`` is a shared-ownership type
+    (e.g., ``Arc<MjModel>``, ``&MjModel``). In those cases, use ``swap_model`` below.
+
+See the :gh-example:`model_parameters.rs` example for a complete runnable comparison of both
+approaches (``model_mut`` and ``swap_model``).
+
+Swapping models with ``swap_model``
+--------------------------------------
+
+When ``M`` does not support ``DerefMut`` (e.g., ``Arc<MjModel>``), or when you need to
+swap in an entirely different model instance, use the
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` method,
+which swaps the |mj_model| owned by |mj_data| for the |mj_model| given as parameter.
 
 .. code-block:: rust
     :linenos:

@@ -3,15 +3,15 @@
 ## Hard rules - MUST follow
 - **Never edit `src/mujoco_c.rs`** - it is auto-generated via bindgen. Editing it will be overwritten.
 - **Never commit `expanded.rs`** - it is a temporary artifact from `/expand-macros`.
-- **Always verify macro changes** with `/expand-macros` before considering work done.
+- **Always verify macro changes** with `/expand-macros` before considering work done (see `macro-system.md`).
 - **Cross-reference with MuJoCo C docs** when adding or modifying wrapper fields (see `important-context.md`).
 - **Prefer existing macros** in `src/util.rs` over writing manual accessor methods. Read `macro-system.md` for details.
-- **Verify stride against C headers**: every new `info_method!` field must have its stride confirmed against the dimension comment in `mujoco/include/mujoco/mjmodel.h` or `mjdata.h` (e.g. `// (nbody x 3)` means stride 3).
+- **Verify stride against C headers**: see the verification checklist in `macro-system.md`.
 - **Update `Cargo.toml` excludes**: when adding files or directories that are not part of the published crate (e.g. CI configs, internal tooling, docs, `.context/` entries, dev scripts), add them to the `exclude` list in `Cargo.toml` so they are not included in crates.io publishes.
 
 ## Feature flags
 - Read `Cargo.toml` to discover available features and their default state.
-- Viewer and renderer features are opt-in (not in defaults). Enable them explicitly when needed: `--features "viewer-ui renderer-winit-fallback"`. NOTE: The current agentic test environment handles rendering gracefully.
+- Viewer and renderer features are opt-in (not in defaults). Enable them explicitly when needed: `--features "viewer-ui renderer-winit-fallback"`.
 - The `cpp-viewer` feature requires static linking - do not enable it unless the static build has been set up.
 - The `ffi-regenerate` feature rebuilds `src/mujoco_c.rs` from headers. **Never trigger this feature as an agent.**
 

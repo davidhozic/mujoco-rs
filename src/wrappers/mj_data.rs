@@ -6,12 +6,12 @@ use super::mj_primitive::*;
 use crate::{getter_setter, mujoco_c::*};
 use crate::error::MjDataError;
 
-use std::ffi::CString;
-use std::path::Path;
-use std::borrow::Cow;
-use std::ops::Deref;
-use std::fmt::Debug;
+use std::ops::{Deref, DerefMut};
 use std::ptr::{self, NonNull};
+use std::ffi::CString;
+use std::borrow::Cow;
+use std::path::Path;
+use std::fmt::Debug;
 
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
@@ -102,6 +102,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
     /// See [here](https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
+    /// 
+    /// If `M` implements [`DerefMut`], prefer
+    /// [`model_mut`](MjData::model_mut) for direct in-place modification instead.
     /// 
     /// If model recompilation speed is not an issue,
     /// it is recommended to use [`MjSpec`](crate::wrappers::mj_editing::MjSpec) instead.
@@ -1319,6 +1322,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Returns a reference to data's [`MjModel`].
+    ///
+    /// See also [`model_mut`](MjData::model_mut) for mutable access
+    /// (requires `M: DerefMut<Target = MjModel>`).
     pub fn model(&self) -> &MjModel {
         &self.model
     }
@@ -1377,6 +1383,35 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             [ffi, ffi_mut] warning: &[MjWarningStat; MjtWarning::mjNWARNING as usize]; "warning statistics (mutable).";
             [ffi, ffi_mut] timer: &[MjTimerStat; MjtTimer::mjNTIMER as usize]; "timer statistics.";
         ]
+    }
+}
+
+impl<M: DerefMut<Target = MjModel>> MjData<M> {
+    /// Returns a mutable reference to data's [`MjModel`].
+    ///
+    /// This is useful for modifying the physics parameters of the model
+    /// (e.g., timestep, gravity) without having to rebuild the simulation.
+    ///
+    /// **Not all model parameters are safe to change at runtime.**
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes)
+    /// for a list of parameters that are safe to change.
+    ///
+    /// Only available when the inner model type `M` implements
+    /// [`DerefMut<Target = MjModel>`](std::ops::DerefMut)
+    /// (e.g., owned [`MjModel`], `Box<MjModel>`).
+    /// Shared-ownership types such as `Arc<MjModel>` do not provide mutable
+    /// access; use [`swap_model`](MjData::swap_model) instead.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use mujoco_rs::prelude::{MjModel, MjData};
+    /// let model = Box::new(MjModel::from_xml_string("<mujoco/>").unwrap());
+    /// let mut data = MjData::new(model);
+    /// data.model_mut().opt_mut().timestep = 0.001;
+    /// data.model_mut().opt_mut().gravity[2] = -5.0;
+    /// ```
+    pub fn model_mut(&mut self) -> &mut MjModel {
+        &mut self.model
     }
 }
 

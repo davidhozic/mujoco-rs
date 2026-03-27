@@ -17,5 +17,6 @@ conventions:
    - The macro system guide (`macro-system.md`) when the subagent will touch wrapper files or
      `src/util.rs`.
 
-4. **Re-read rules after compaction.** If the conversation is long and context may have been
-   compacted, re-read `.github/rules/` before starting new work to ensure no rules are forgotten.
+4. **Periodic rule re-reads (subagents).**
+   - Subagent prompts for long-running tasks should include an explicit instruction to re-read the
+     embedded rules midway through multi-step work.

@@ -32,6 +32,9 @@ all-features = true
 name = "basic"
 
 [[example]]
+name = "model_parameters"
+
+[[example]]
 name = "cpp_viewer"
 required-features = ["cpp-viewer"]
 
