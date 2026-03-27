@@ -543,7 +543,7 @@ pub struct MjsSpecItemIterMut<'a, T> {
 }
 
 /// Immutable iterator over items in [`MjSpec`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MjsSpecItemIter<'a, T> {
     root: &'a MjSpec,
     last: *mut mjsElement,
@@ -1667,7 +1667,7 @@ pub struct MjsBodyItemIterMut<'a, T> {
 }
 
 /// Immutable iterator over items in [`MjsBody`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MjsBodyItemIter<'a, T> {
     root: &'a MjsBody,
     last: *mut mjsElement,

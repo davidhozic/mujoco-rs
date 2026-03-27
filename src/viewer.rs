@@ -1380,7 +1380,7 @@ impl Drop for MjViewer {
 /// - `vsync`: false
 /// - `warn_non_realtime`: false
 /// 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MjViewerBuilder {
     /// The name shown on the window decoration.
     window_name: Cow<'static, str>,

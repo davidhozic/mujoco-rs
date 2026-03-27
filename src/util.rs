@@ -444,7 +444,7 @@ macro_rules! info_with_view {
         paste::paste! {
             #[doc = "Index ranges required to create views into [`Mj" $info_type "`] arrays for a " $name "."]
             #[allow(non_snake_case)]
-            #[derive(Debug)]
+            #[derive(Debug, Clone)]
             pub struct [<Mj $name:camel $info_type Info>] {
                 pub name: String,
                 pub id: usize,

@@ -22,6 +22,8 @@
   from the function name (visible in the panic backtrace). Reserve `.expect("...")` for messages
   that add genuine diagnostic value beyond the function name (e.g. allocation failures, specific
   C-API return codes).
+- **Method ordering**: place the panicking method first, then the `try_` variant immediately after.
+  This matches the convention in `mj_data.rs` and other wrapper files.
 - **When to apply the try_/panicking split**: only for methods returning `Result<T, E>` where
   **T is not `()`** and the failure represents a **programmer error** (bad index, size mismatch,
   invalid argument that could be validated beforehand). Methods with runtime/environmental errors

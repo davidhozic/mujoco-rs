@@ -1178,20 +1178,39 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     ///
     /// # Panics
     /// Panics if `flexid` is out of bounds (must be `0 <= flexid < nflex`).
+    ///
+    /// Use [`MjData::try_ray_flex`] for a fallible alternative.
     #[allow(clippy::too_many_arguments)]
     pub fn ray_flex(
         &self, flex_layer: i32, flg_vert: bool, flg_edge: bool, flg_face: bool, flg_skin: bool, flexid: usize,
         pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         vertid: Option<&mut i32>, normal_out: Option<&mut [MjtNum; 3]>
     ) -> MjtNum {
+        self.try_ray_flex(flex_layer, flg_vert, flg_edge, flg_face, flg_skin, flexid, pnt, vec, vertid, normal_out).unwrap()
+    }
+
+    /// Intersect ray with flex, returning the distance or -1.0 if no intersection.
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] if `flexid >= nflex`.
+    ///
+    /// Use [`MjData::ray_flex`] for a panicking alternative.
+    #[allow(clippy::too_many_arguments)]
+    pub fn try_ray_flex(
+        &self, flex_layer: i32, flg_vert: bool, flg_edge: bool, flg_face: bool, flg_skin: bool, flexid: usize,
+        pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
+        vertid: Option<&mut i32>, normal_out: Option<&mut [MjtNum; 3]>
+    ) -> Result<MjtNum, MjDataError> {
         let nflex = self.model.ffi().nflex as usize;
-        assert!(flexid < nflex, "ray_flex: flexid {flexid} out of bounds (nflex = {nflex})");
-        unsafe { mj_rayFlex(
+        if flexid >= nflex {
+            return Err(MjDataError::IndexOutOfBounds { kind: "flexid", id: flexid, upper: nflex });
+        }
+        Ok(unsafe { mj_rayFlex(
             self.model.ffi(), self.ffi(),
             flex_layer, flg_vert as MjtByte, flg_edge as MjtByte, flg_face as MjtByte, flg_skin as MjtByte, flexid as i32,
             pnt, vec,
             vertid.map_or(ptr::null_mut(), |x| x), normal_out.map_or(ptr::null_mut(), |x| x)
-        ) }
+        ) })
     }
 
     /// Copies data state from `src` to `self` based on the specified `spec` combination of `mjtState` flags.
@@ -1219,14 +1238,30 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     ///
     /// # Panics
     /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
+    ///
+    /// Use [`MjData::try_ray_hfield`] for a fallible alternative.
     pub fn ray_hfield(
         &self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
     ) -> MjtNum {
+        self.try_ray_hfield(geom_id, pnt, vec, normal_out).unwrap()
+    }
+
+    /// Intersect ray with hfield, returning the distance or -1.0 if no intersection.
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] if `geom_id >= ngeom`.
+    ///
+    /// Use [`MjData::ray_hfield`] for a panicking alternative.
+    pub fn try_ray_hfield(
+        &self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
+    ) -> Result<MjtNum, MjDataError> {
         let ngeom = self.model.ffi().ngeom as usize;
-        assert!(geom_id < ngeom, "ray_hfield: geom_id {geom_id} out of bounds (ngeom = {ngeom})");
-        unsafe {
-            mj_rayHfield(self.model.ffi(), self.ffi(), geom_id as i32, pnt, vec, normal_out.map_or(ptr::null_mut(), |x| x))
+        if geom_id >= ngeom {
+            return Err(MjDataError::IndexOutOfBounds { kind: "geom_id", id: geom_id, upper: ngeom });
         }
+        Ok(unsafe {
+            mj_rayHfield(self.model.ffi(), self.ffi(), geom_id as i32, pnt, vec, normal_out.map_or(ptr::null_mut(), |x| x))
+        })
     }
 
     /// Intersect ray with mesh.
@@ -1234,14 +1269,30 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     ///
     /// # Panics
     /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
+    ///
+    /// Use [`MjData::try_ray_mesh`] for a fallible alternative.
     pub fn ray_mesh(
         &self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
     ) -> MjtNum {
+        self.try_ray_mesh(geom_id, pnt, vec, normal_out).unwrap()
+    }
+
+    /// Intersect ray with mesh, returning the distance or -1.0 if no intersection.
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] if `geom_id >= ngeom`.
+    ///
+    /// Use [`MjData::ray_mesh`] for a panicking alternative.
+    pub fn try_ray_mesh(
+        &self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
+    ) -> Result<MjtNum, MjDataError> {
         let ngeom = self.model.ffi().ngeom as usize;
-        assert!(geom_id < ngeom, "ray_mesh: geom_id {geom_id} out of bounds (ngeom = {ngeom})");
-        unsafe {
-            mj_rayMesh(self.model.ffi(), self.ffi(), geom_id as i32, pnt, vec, normal_out.map_or(ptr::null_mut(), |x| x))
+        if geom_id >= ngeom {
+            return Err(MjDataError::IndexOutOfBounds { kind: "geom_id", id: geom_id, upper: ngeom });
         }
+        Ok(unsafe {
+            mj_rayMesh(self.model.ffi(), self.ffi(), geom_id as i32, pnt, vec, normal_out.map_or(ptr::null_mut(), |x| x))
+        })
     }
 
     /// Apply Cartesian force and torque to a point on a body, and add the result to `qfrc_target`.
@@ -2607,7 +2658,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "ray_flex: flexid")]
+    #[should_panic]
     fn test_ray_flex() {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let data = model.make_data();

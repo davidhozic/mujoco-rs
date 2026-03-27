@@ -47,6 +47,14 @@ impl MjrRectangle {
     }
 }
 
+impl PartialEq for MjrRectangle {
+    fn eq(&self, other: &Self) -> bool {
+        self.left == other.left && self.bottom == other.bottom
+            && self.width == other.width && self.height == other.height
+    }
+}
+impl Eq for MjrRectangle {}
+
 #[allow(clippy::derivable_impls)]  // MjrRectangle is a type alias of a foreign type; derive is not applicable
 impl Default for MjrRectangle {
     fn default() -> Self {

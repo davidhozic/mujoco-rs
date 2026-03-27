@@ -431,7 +431,7 @@ impl std::error::Error for MjVfsError {}
 ///
 /// Each variant represents a distinct step in the initialization pipeline.
 #[cfg(any(feature = "viewer", feature = "renderer-winit-fallback"))]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum GlInitError {
     /// The windowing / display builder failed to initialize.
