@@ -255,10 +255,11 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
     /// # Panics
-    /// When `filename` or `content_type` contains zero bytes.
-    pub fn from_parse(filename: &str, content_type: &str) -> Result<Self, MjEditError> {
+    /// When `content_type` or the path contain interior `\0` characters.
+    pub fn from_parse<T: AsRef<Path>>(filename: T, content_type: &str) -> Result<Self, MjEditError> {
         Self::from_parse_file(filename, content_type, None)
     }
 
@@ -266,10 +267,11 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
-    /// Returns [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
     /// # Panics
-    /// When `filename` or `content_type` contains zero bytes.
-    pub fn from_parse_vfs(filename: &str, content_type: &str, vfs: &MjVfs) -> Result<Self, MjEditError> {
+    /// When `content_type` or the path contain interior `\0` characters.
+    pub fn from_parse_vfs<T: AsRef<Path>>(filename: T, content_type: &str, vfs: &MjVfs) -> Result<Self, MjEditError> {
         Self::from_parse_file(filename, content_type, Some(vfs))
     }
 
@@ -277,12 +279,15 @@ impl MjSpec {
     /// The `content_type` controls the decoder to use.
     /// This is a wrapper around low-level method [`mj_parse`].
     /// # Panics
-    /// When `filename` or `content_type` contains zero bytes.
-    fn from_parse_file(filename: &str, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
+    /// When `content_type` or the path contain interior `\0` characters.
+    fn from_parse_file<T: AsRef<Path>>(filename: T, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
         let mut error_buffer = [0; ERROR_BUF_LEN];
         unsafe {
-            let c_filename = CString::new(filename).unwrap();
+            let c_filename = CString::new(
+                filename.as_ref().to_str()
+                .ok_or(MjEditError::InvalidUtf8Path)?
+            ).unwrap();
             let c_content_type = CString::new(content_type).unwrap();
             let ptr = mj_parse(
                 c_filename.as_ptr(), c_content_type.as_ptr(),
@@ -351,12 +356,16 @@ impl MjSpec {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// Returns [`MjEditError::SaveFailed`] with MuJoCo's error message if saving fails.
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::SaveFailed`] with MuJoCo's error message if saving fails.
     /// # Panics
-    /// When `filename` contains '\0' characters, a panic occurs.
-    pub fn save_xml(&self, filename: &str) -> Result<(), MjEditError> {
+    /// When `filename` contains interior `\0` characters.
+    pub fn save_xml<T: AsRef<Path>>(&self, filename: T) -> Result<(), MjEditError> {
         let mut error_buff = [0; ERROR_BUF_LEN];
-        let cname = CString::new(filename).unwrap();  // filename is always UTF-8
+        let cname = CString::new(
+            filename.as_ref().to_str()
+            .ok_or(MjEditError::InvalidUtf8Path)?
+        ).unwrap();  // filename is always UTF-8
         let result = unsafe { mj_saveXML(
             self.ffi(), cname.as_ptr(),
             error_buff.as_mut_ptr(), error_buff.len() as i32
@@ -1671,6 +1680,7 @@ impl MjsBody {
 #[cfg(test)]
 mod tests {
     use std::io::Write;
+    use std::path::{Path, PathBuf};
     use std::fs;
 
     use super::*;
@@ -2468,5 +2478,67 @@ mod tests {
         assert_eq!(model.ffi().nbody, 2, "expected 2 bodies (world + ball)");
         assert_eq!(model.ffi().njnt, 1, "expected 1 joint");
         assert_eq!(model.ffi().ngeom, 2, "expected 2 geoms (sphere + floor)");
+    }
+
+    /// `from_parse` accepts `PathBuf` and `&Path` in addition to `&str`.
+    #[test]
+    fn test_from_parse_path_types() {
+        const PATH: &str = "./mj_spec_test_from_parse_path_types.xml";
+        let mut file = fs::File::create(PATH).expect("file creation failed");
+        file.write_all(MODEL.as_bytes()).expect("write failed");
+        file.flush().unwrap();
+
+        // &str
+        assert!(MjSpec::from_parse(PATH, "").is_ok());
+        // String
+        assert!(MjSpec::from_parse(String::from(PATH), "").is_ok());
+        // &Path
+        assert!(MjSpec::from_parse(Path::new(PATH), "").is_ok());
+        // PathBuf
+        assert!(MjSpec::from_parse(PathBuf::from(PATH), "").is_ok());
+
+        fs::remove_file(PATH).expect("file removal failed");
+    }
+
+    /// `from_parse_vfs` accepts `PathBuf` and `&Path`.
+    #[test]
+    fn test_from_parse_vfs_path_types() {
+        const PATH: &str = "./mj_spec_test_from_parse_vfs_path_types.xml";
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer(PATH, MODEL.as_bytes()).unwrap();
+
+        // &str
+        assert!(MjSpec::from_parse_vfs(PATH, "", &vfs).is_ok());
+        // PathBuf
+        assert!(MjSpec::from_parse_vfs(PathBuf::from(PATH), "", &vfs).is_ok());
+        // &Path
+        assert!(MjSpec::from_parse_vfs(Path::new(PATH), "", &vfs).is_ok());
+    }
+
+    /// `save_xml` accepts `PathBuf` and `&Path` in addition to `&str`.
+    #[test]
+    fn test_save_xml_path_types() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_body().add_geom().with_size([0.01, 0.0, 0.0]);
+        spec.compile().unwrap();
+
+        let paths: [PathBuf; 3] = [
+            PathBuf::from("./mj_spec_save_xml_str.xml"),
+            PathBuf::from("./mj_spec_save_xml_pathbuf.xml"),
+            PathBuf::from("./mj_spec_save_xml_path.xml"),
+        ];
+
+        // &str
+        spec.save_xml(paths[0].to_str().unwrap()).unwrap();
+        // PathBuf
+        spec.save_xml(paths[1].clone()).unwrap();
+        // &Path
+        spec.save_xml(paths[2].as_path()).unwrap();
+
+        for p in &paths {
+            let content = fs::read_to_string(p).expect("saved file should be readable");
+            assert!(content.contains("<mujoco"), "saved XML should contain <mujoco tag");
+            fs::remove_file(p).expect("cleanup failed");
+        }
     }
 }

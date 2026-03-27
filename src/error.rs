@@ -407,6 +407,8 @@ pub enum MjVfsError {
     LoadFailed,
     /// The specified file or directory was not found in the VFS.
     NotFound,
+    /// The provided path contains invalid UTF-8.
+    InvalidUtf8Path,
     /// An unrecognized MuJoCo return code.
     Unknown(i32),
 }
@@ -417,6 +419,7 @@ impl fmt::Display for MjVfsError {
             Self::AlreadyExists => write!(f, "file already exists in VFS"),
             Self::LoadFailed => write!(f, "failed to load file into VFS"),
             Self::NotFound => write!(f, "file not found in VFS"),
+            Self::InvalidUtf8Path => write!(f, "path contains invalid UTF-8"),
             Self::Unknown(code) => write!(f, "unknown VFS error (code {code})"),
         }
     }
