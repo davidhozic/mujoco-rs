@@ -88,7 +88,12 @@
   type/method, old signature, and new signature. Group related changes under the same heading.
 - **Verify changelog/migration after major doc changes.** After substantial edits to
   `changelog.rst` or `migration.rst`, run a verification pass (compare claims against actual code
-  on HEAD and the previous release tag) before considering the work done.
+  on HEAD and the previous release tag) before considering the work done. This includes verifying
+  that all `.. code-block:: rust` blocks contain syntactically valid Rust with correct method names,
+  types, and signatures matching the actual code.
+- **Run `/doc` after RST changes.** After editing any `.rst` file under `docs/guide/source/`,
+  run `/doc` to verify both rustdoc and Sphinx builds are clean. This catches RST syntax errors,
+  broken cross-references, and invalid custom roles that rustdoc cannot detect.
 - **Version tagging and branching conventions.** Git release tags use no `v` prefix (e.g., `2.3.5`,
   `3.0.0`). Release branches follow the `vMajor.Minor.x` convention (e.g., `v2.3.x`, `v3.0.x`),
   where `v` and `x` are literal/fixed. Use these when diffing against previous releases
