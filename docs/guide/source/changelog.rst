@@ -493,6 +493,9 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``read_ctrl`` / ``read_sensor`` / ``read_sensor_into`` / ``read_sensor_fixed``,
   ``model_clone`` :sup:`new` (``-> M``, available when ``M: Clone``).
 - |mj_spec|: ``from_parse`` / ``from_parse_vfs``.
+  ``from_parse``, ``from_parse_vfs``, and ``save_xml`` now accept
+  ``AsRef<Path>`` (was ``&str``); returns ``Err(MjEditError::InvalidUtf8Path)``
+  for non-UTF-8 paths.
   ``MjSpec`` and ``SpecItem`` are also re-exported from
   :docs-rs:`mujoco_rs::wrappers`.
 - |mjs_tendon|: ``get_wrap`` / ``get_wrap_mut`` / ``get_wrap_num``.
