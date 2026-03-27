@@ -26,6 +26,7 @@ impl GlStateEgl {
             glutin::error::ErrorKind::NotSupported("could not find any compatible devices")
         )?;
 
+        // SAFETY: device is a valid EGL device obtained from query_devices.
         let display = unsafe { Display::with_device(&device, None)? };
         let config_template = ConfigTemplateBuilder::new()
             .with_surface_type(ConfigSurfaceTypes::PBUFFER)
@@ -35,6 +36,7 @@ impl GlStateEgl {
             .with_stencil_size(8)
             .build();
 
+        // SAFETY: display is a valid EGL display and config_template requests supported attributes.
         let config = unsafe { display.find_configs(config_template)?.next().ok_or_else(||
             glutin::error::ErrorKind::NotSupported("could not find any compatible configs")
         )}?;
@@ -44,11 +46,13 @@ impl GlStateEgl {
             .with_context_api(ContextApi::OpenGl(Some(Version::new(2, 0))))
             .build(None);
 
+        // SAFETY: display and config are valid; context_attrs requests a compatible GL profile.
         let context_not_current = unsafe { display.create_context(&config, &context_attrs)? };
 
         let surface_attrs = SurfaceAttributesBuilder::<PbufferSurface>::new()
             .build(width, height);
 
+        // SAFETY: display and config are valid; surface_attrs has valid non-zero dimensions.
         let surface = unsafe { display.create_pbuffer_surface(&config, &surface_attrs)? };
         let context = context_not_current.make_current(&surface)?;
         Ok(Self {context, surface})

@@ -497,7 +497,7 @@ impl MjSpec {
     ///
     /// Use [`MjSpec::try_add_default`] for a fallible alternative.
     pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> &mut MjsDefault {
-        self.try_add_default(class_name, parent_class_name).expect("add_default failed")
+        self.try_add_default(class_name, parent_class_name).unwrap()
     }
 
     /// Fallible version of [`MjSpec::add_default`].

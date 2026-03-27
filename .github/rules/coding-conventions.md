@@ -16,9 +16,12 @@
 - The `ffi-regenerate` feature rebuilds `src/mujoco_c.rs` from headers. **Never trigger this feature as an agent.**
 
 ## Error handling
-- Standard pattern: the panicking wrapper calls the `try_` variant with `.expect()`; never duplicate
+- Standard pattern: the panicking wrapper calls the `try_` variant with `.unwrap()`; never duplicate
   the logic. Only the `try_` variant contains the implementation; the panicking version is a thin
-  wrapper.
+  wrapper. Use `.unwrap()` instead of `.expect("X failed")` when the failure context is obvious
+  from the function name (visible in the panic backtrace). Reserve `.expect("...")` for messages
+  that add genuine diagnostic value beyond the function name (e.g. allocation failures, specific
+  C-API return codes).
 - **When to apply the try_/panicking split**: only for methods returning `Result<T, E>` where
   **T is not `()`** and the failure represents a **programmer error** (bad index, size mismatch,
   invalid argument that could be validated beforehand). Methods with runtime/environmental errors

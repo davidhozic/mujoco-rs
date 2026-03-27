@@ -233,6 +233,7 @@ which can be configured at the top of the model's XML like so:
 }
 
 
+/// Delegates to [`MjRendererBuilder::new`].
 impl Default for MjRendererBuilder {
     fn default() -> Self {
         Self::new()
@@ -482,8 +483,8 @@ impl MjRenderer {
     /// Use [`MjRenderer::sync_data`] + [`MjRenderer::render`] instead.
     #[deprecated(note = "replaced with sync_data + render", since = "3.0.0")]
     pub fn sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
-        self.sync_data(data).expect("sync failed");
-        self.render().expect("render failed");
+        self.sync_data(data).unwrap();
+        self.render().unwrap();
     }
 
     /// Return a flattened RGB image of the scene.
@@ -500,7 +501,7 @@ impl MjRenderer {
     ///
     /// Use [`MjRenderer::try_rgb`] for a fallible alternative.
     pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> &[[[u8; 3]; WIDTH]; HEIGHT] {
-        self.try_rgb::<WIDTH, HEIGHT>().expect("rgb failed")
+        self.try_rgb::<WIDTH, HEIGHT>().unwrap()
     }
 
     /// Fallible version of [`MjRenderer::rgb`].
@@ -533,7 +534,7 @@ impl MjRenderer {
     ///
     /// Use [`MjRenderer::try_depth`] for a fallible alternative.
     pub fn depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> &[[f32; WIDTH]; HEIGHT] {
-        self.try_depth::<WIDTH, HEIGHT>().expect("depth failed")
+        self.try_depth::<WIDTH, HEIGHT>().unwrap()
     }
 
     /// Fallible version of [`MjRenderer::depth`].
@@ -723,6 +724,7 @@ pub enum RendererError {
     SceneError(crate::error::MjSceneError),
 }
 
+/// Formats a human-readable description of the renderer error.
 impl Display for RendererError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -741,6 +743,7 @@ impl Display for RendererError {
     }
 }
 
+/// Provides the underlying error source, if any.
 impl Error for RendererError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
@@ -756,24 +759,28 @@ impl Error for RendererError {
     }
 }
 
+/// Converts an [`io::Error`] into [`RendererError::IoError`].
 impl From<io::Error> for RendererError {
     fn from(e: io::Error) -> Self {
         Self::IoError(e)
     }
 }
 
+/// Converts a [`png::EncodingError`] into [`RendererError::IoError`].
 impl From<png::EncodingError> for RendererError {
     fn from(e: png::EncodingError) -> Self {
         Self::IoError(io::Error::from(e))
     }
 }
 
+/// Converts an [`MjSceneError`] into [`RendererError::SceneError`].
 impl From<crate::error::MjSceneError> for RendererError {
     fn from(e: crate::error::MjSceneError) -> Self {
         Self::SceneError(e)
     }
 }
 
+/// Converts a [`GlInitError`] into [`RendererError::GlInitFailed`].
 #[cfg(feature = "renderer-winit-fallback")]
 impl From<crate::error::GlInitError> for RendererError {
     fn from(e: crate::error::GlInitError) -> Self {
@@ -792,6 +799,7 @@ bitflags! {
 
 
 
+/// Ensures the OpenGL context is current before GPU resources are freed.
 impl Drop for MjRenderer {
     fn drop(&mut self) {
         // Ensure the GL context is current before the implicit field drops

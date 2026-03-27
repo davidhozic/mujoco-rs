@@ -89,6 +89,9 @@ impl MjrContext {
     /// The same GL context must also remain current when this `MjrContext` is dropped, and must
     /// remain on the same thread for the lifetime of this value.
     pub unsafe fn new(model: &MjModel) -> Self {
+        // SAFETY: caller guarantees a valid GL context is current (documented above).
+        // Box::new_uninit is fully initialized by mjr_defaultContext + mjr_makeContext
+        // before assume_init.
         unsafe {
             let mut c = Box::new_uninit();
             mjr_defaultContext(c.as_mut_ptr());
@@ -99,6 +102,7 @@ impl MjrContext {
 
     /// Set OpenGL framebuffer for rendering to mjFB_OFFSCREEN.
     pub fn offscreen(&mut self) -> &mut Self {
+        // SAFETY: self.ffi is a valid, fully initialized mjrContext.
         unsafe {
             mjr_setBuffer(MjtFramebuffer::mjFB_OFFSCREEN as i32, self.ffi.as_mut());
         }
@@ -107,6 +111,7 @@ impl MjrContext {
 
     /// Set OpenGL framebuffer for rendering to mjFB_WINDOW.
     pub fn window(&mut self) -> &mut Self {
+        // SAFETY: self.ffi is a valid, fully initialized mjrContext.
         unsafe {
             mjr_setBuffer(MjtFramebuffer::mjFB_WINDOW as i32, self.ffi.as_mut());
         }
@@ -115,6 +120,7 @@ impl MjrContext {
 
     /// Change font of existing context.
     pub fn change_font(&mut self, fontscale: MjtFontScale) {
+        // SAFETY: self.ffi is a valid, fully initialized mjrContext.
         unsafe { mjr_changeFont(fontscale as i32, self.ffi_mut()) }
     }
 
@@ -125,12 +131,14 @@ impl MjrContext {
         if index >= mjNAUX as usize {
             return Err(MjSceneError::InvalidAuxBufferIndex { index });
         }
+        // SAFETY: index is bounds-checked above; self.ffi is valid.
         unsafe { mjr_addAux(index as i32, width as i32, height as i32, samples as i32, self.ffi_mut()); }
         Ok(())
     }
 
     /// Resize offscreen buffers.
     pub fn resize_offscreen(&mut self, width: u32, height: u32) {
+        // SAFETY: self.ffi is a valid, fully initialized mjrContext.
         unsafe { mjr_resizeOffscreen(width as i32, height as i32, self.ffi_mut()); }
     }
 
@@ -141,17 +149,20 @@ impl MjrContext {
     pub fn upload_texture(&mut self, model: &MjModel, texid: u32) {
         let ntex = model.ntex();
         assert!((texid as i64) < ntex, "texid {texid} is out of range [0, {ntex})");
+        // SAFETY: texid is bounds-checked above; model and context are valid.
         unsafe { mjr_uploadTexture(model.ffi(), self.ffi_mut(), texid as i32); }
     }
 
     /// Make the context's buffer current again.
     pub fn restore_buffer(&mut self) {
+        // SAFETY: self.ffi is a valid, fully initialized mjrContext.
         unsafe { mjr_restoreBuffer(self.ffi_mut()); }
     }
 
     /// Sets the active OpenGL framebuffer to the given raw `framebuffer` id.
     /// Prefer [`MjrContext::offscreen`] or [`MjrContext::window`] for the common cases.
     pub fn set_buffer(&mut self, framebuffer: i32) {
+        // SAFETY: self.ffi is a valid, fully initialized mjrContext.
         unsafe { mjr_setBuffer(framebuffer, self.ffi_mut()); }
     }
 
@@ -195,6 +206,8 @@ impl MjrContext {
             });
         }
 
+        // SAFETY: viewport dimensions are validated above; buffer sizes are checked;
+        // null is passed for None options. self.ffi is a valid context.
         unsafe {
             mjr_readPixels(
                 rgb.map_or(ptr::null_mut(), |x| x.as_mut_ptr()),
@@ -212,6 +225,7 @@ impl MjrContext {
         if index >= mjNAUX as usize {
             return Err(MjSceneError::InvalidAuxBufferIndex { index });
         }
+        // SAFETY: index is bounds-checked above; self.ffi is valid.
         unsafe { mjr_setAux(index as i32, self.ffi_mut()); }
         Ok(())
     }
@@ -223,6 +237,8 @@ impl MjrContext {
         let c_overlay = CString::new(overlay).unwrap();
         let c_overlay2 = overlay2.map(|x| CString::new(x).unwrap());
 
+        // SAFETY: CString pointers are valid for the duration of the call;
+        // null is passed for None overlay2. self.ffi is a valid context.
         unsafe { mjr_overlay(
             font as i32, gridpos as i32, viewport,
             c_overlay.as_ptr(),
@@ -323,6 +339,7 @@ impl MjrContext {
 
 impl Drop for MjrContext {
     fn drop(&mut self) {
+        // SAFETY: self.ffi was fully initialized in new() and has not been freed.
         unsafe {
             mjr_freeContext(self.ffi.as_mut());
         }

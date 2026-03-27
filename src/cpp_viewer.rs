@@ -48,10 +48,12 @@ pub struct MjViewerCpp {
 }
 
 impl MjViewerCpp {
+    /// Returns whether the viewer window is still open.
     pub fn running(&self) -> bool {
         self.running
     }
 
+    /// Returns a mutable reference to the user scene for drawing custom visual-only geoms.
     pub fn user_scn_mut(&mut self) -> &mut MjvScene {
         &mut self.user_scn
     }
@@ -136,6 +138,7 @@ impl MjViewerCpp {
     }
 }
 
+/// Requests viewer exit and destroys the underlying C++ simulation handle.
 impl Drop for MjViewerCpp {
     fn drop(&mut self) {
         unsafe {
@@ -145,5 +148,11 @@ impl Drop for MjViewerCpp {
     }
 }
 
+/// # Safety
+/// Rendering must only be performed on the main thread. `Send` is provided so
+/// the viewer handle can be moved to the main thread after construction.
 unsafe impl Send for MjViewerCpp {}
+/// # Safety
+/// The viewer is safe to share across threads for syncing, but rendering must
+/// only be done on the main thread. See [`MjViewerCpp`] for the full contract.
 unsafe impl Sync for MjViewerCpp {}

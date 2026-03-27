@@ -664,7 +664,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics when `id >= nu`. Use [`MjData::try_read_ctrl`] for a fallible alternative.
     pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> MjtNum {
-        self.try_read_ctrl(id, time, interp).expect("read_ctrl failed")
+        self.try_read_ctrl(id, time, interp).unwrap()
     }
 
     /// Fallible version of [`MjData::read_ctrl`].
@@ -709,7 +709,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Panics when `id >= nsensor` or `N != sensor_dim[id]`.
     /// Use [`MjData::try_read_sensor_fixed`] for a fallible alternative.
     pub fn read_sensor_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> [MjtNum; N] {
-        self.try_read_sensor_fixed(id, time, interp).expect("read_sensor_fixed failed")
+        self.try_read_sensor_fixed(id, time, interp).unwrap()
     }
 
     /// Fallible version of [`MjData::read_sensor_fixed`].
@@ -743,7 +743,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics when `id >= nsensor`. Use [`MjData::try_read_sensor`] for a fallible alternative.
     pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> Cow<'_, [MjtNum]> {
-        self.try_read_sensor(id, time, interp).expect("read_sensor failed")
+        self.try_read_sensor(id, time, interp).unwrap()
     }
 
     /// Fallible version of [`MjData::read_sensor`].
@@ -786,7 +786,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics when `body_id >= nbody`. Use [`MjData::try_jac`] for a fallible alternative.
     pub fn jac(&self, jacp: bool, jacr: bool, point: &[MjtNum; 3], body_id: usize) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        self.try_jac(jacp, jacr, point, body_id).expect("jac failed")
+        self.try_jac(jacp, jacr, point, body_id).unwrap()
     }
 
     /// Fallible version of [`MjData::jac`].
@@ -817,7 +817,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics when `body_id` is out of range. Use [`MjData::try_jac_body`] for a fallible alternative.
     pub fn jac_body(&self, jacp: bool, jacr: bool, body_id: usize) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        self.try_jac_body(jacp, jacr, body_id).expect("jac_body failed")
+        self.try_jac_body(jacp, jacr, body_id).unwrap()
     }
 
     /// Fallible version of [`MjData::jac_body`].
@@ -848,7 +848,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics when `body_id` is out of range. Use [`MjData::try_jac_body_com`] for a fallible alternative.
     pub fn jac_body_com(&self, jacp: bool, jacr: bool, body_id: usize) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        self.try_jac_body_com(jacp, jacr, body_id).expect("jac_body_com failed")
+        self.try_jac_body_com(jacp, jacr, body_id).unwrap()
     }
 
     /// Fallible version of [`MjData::jac_body_com`].
@@ -878,7 +878,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics when `body_id` is out of range. Use [`MjData::try_jac_subtree_com`] for a fallible alternative.
     pub fn jac_subtree_com(&mut self, body_id: usize) -> Vec<MjtNum> {
-        self.try_jac_subtree_com(body_id).expect("jac_subtree_com failed")
+        self.try_jac_subtree_com(body_id).unwrap()
     }
 
     /// Fallible version of [`MjData::jac_subtree_com`].
@@ -907,7 +907,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics when `geom_id` is out of range. Use [`MjData::try_jac_geom`] for a fallible alternative.
     pub fn jac_geom(&self, jacp: bool, jacr: bool, geom_id: usize) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        self.try_jac_geom(jacp, jacr, geom_id).expect("jac_geom failed")
+        self.try_jac_geom(jacp, jacr, geom_id).unwrap()
     }
 
     /// Fallible version of [`MjData::jac_geom`].
@@ -938,7 +938,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics when `site_id` is out of range. Use [`MjData::try_jac_site`] for a fallible alternative.
     pub fn jac_site(&self, jacp: bool, jacr: bool, site_id: usize) -> (Vec<MjtNum>, Vec<MjtNum>) {
-        self.try_jac_site(jacp, jacr, site_id).expect("jac_site failed")
+        self.try_jac_site(jacp, jacr, site_id).unwrap()
     }
 
     /// Fallible version of [`MjData::jac_site`].
@@ -967,7 +967,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics when `body_id` is out of range. Use [`MjData::try_angmom_mat`] for a fallible alternative.
     pub fn angmom_mat(&mut self, body_id: usize) -> Vec<MjtNum> {
-        self.try_angmom_mat(body_id).expect("angmom_mat failed")
+        self.try_angmom_mat(body_id).unwrap()
     }
 
     /// Fallible version of [`MjData::angmom_mat`].
@@ -993,7 +993,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Panics when `obj_type` is unsupported or `obj_id` is out of range.
     /// Use [`MjData::try_object_velocity`] for a fallible alternative.
     pub fn object_velocity(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> [MjtNum; 6] {
-        self.try_object_velocity(obj_type, obj_id, flg_local).expect("object_velocity failed")
+        self.try_object_velocity(obj_type, obj_id, flg_local).unwrap()
     }
 
     /// Fallible version of [`MjData::object_velocity`].
@@ -1025,7 +1025,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Panics when `obj_type` is unsupported or `obj_id` is out of range.
     /// Use [`MjData::try_object_acceleration`] for a fallible alternative.
     pub fn object_acceleration(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> [MjtNum; 6] {
-        self.try_object_acceleration(obj_type, obj_id, flg_local).expect("object_acceleration failed")
+        self.try_object_acceleration(obj_type, obj_id, flg_local).unwrap()
     }
 
     /// Fallible version of [`MjData::object_acceleration`].
@@ -1055,7 +1055,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics when either geom id is `>= ngeom`. Use [`MjData::try_geom_distance`] for a fallible alternative.
     pub fn geom_distance(&self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
-        self.try_geom_distance(geom1_id, geom2_id, dist_max, fromto).expect("geom_distance failed")
+        self.try_geom_distance(geom1_id, geom2_id, dist_max, fromto).unwrap()
     }
 
     /// Fallible version of [`MjData::geom_distance`].
@@ -1083,7 +1083,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// Panics when `body_id` is out of range. Use [`MjData::try_local_to_global`] for a fallible alternative.
     pub fn local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: usize, sameframe: MjtSameFrame) -> ([MjtNum; 3], [MjtNum; 9]) {
-        self.try_local_to_global(pos, quat, body_id, sameframe).expect("local_to_global failed")
+        self.try_local_to_global(pos, quat, body_id, sameframe).unwrap()
     }
 
     /// Fallible version of [`MjData::local_to_global`].
@@ -1113,7 +1113,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
         flg_static: bool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
     ) -> (Vec<Option<usize>>, Vec<MjtNum>) {
-        self.try_multi_ray(pnt, vec, geomgroup, flg_static, bodyexclude, cutoff, normals_out).expect("multi_ray failed")
+        self.try_multi_ray(pnt, vec, geomgroup, flg_static, bodyexclude, cutoff, normals_out).unwrap()
     }
 
     /// Fallible version of [`MjData::multi_ray`].
@@ -1304,7 +1304,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Use [`MjData::try_read_state_into`] for a fallible alternative.
     pub fn read_state_into(&self, spec: u32, destination: &mut [MjtNum]) -> usize {
         self.try_read_state_into(spec, destination)
-            .expect("read_state_into failed")
+            .unwrap()
     }
 
     /// Fallible version of [`MjData::read_state_into`].

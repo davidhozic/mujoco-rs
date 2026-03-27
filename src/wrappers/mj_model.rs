@@ -603,7 +603,7 @@ impl MjModel {
     ///
     /// Use [`MjModel::try_extract_state`] for a fallible alternative.
     pub fn extract_state(&self, src: &[MjtNum], src_spec: u32, dst_spec: u32) -> Box<[MjtNum]> {
-        self.try_extract_state(src, src_spec, dst_spec).expect("extract_state failed")
+        self.try_extract_state(src, src_spec, dst_spec).unwrap()
     }
 
     /// Fallible version of [`MjModel::extract_state`].
@@ -648,7 +648,7 @@ impl MjModel {
     ///
     /// Use [`MjModel::try_extract_state_into`] for a fallible alternative.
     pub fn extract_state_into(&self, src: &[MjtNum], src_spec: u32, dst: &mut [MjtNum], dst_spec: u32) -> usize {
-        self.try_extract_state_into(src, src_spec, dst, dst_spec).expect("extract_state_into failed")
+        self.try_extract_state_into(src, src_spec, dst, dst_spec).unwrap()
     }
 
     /// Fallible version of [`MjModel::extract_state_into`].
