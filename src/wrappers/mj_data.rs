@@ -1,10 +1,13 @@
 //! MjData related.
+use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
+use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
+use crate::{getter_setter, mujoco_c::*};
+use crate::error::MjDataError;
+
 use super::mj_statistic::{MjWarningStat, MjTimerStat, MjSolverStat};
 use super::mj_model::{MjModel, MjtSameFrame, MjtObj, MjtStage};
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
-use crate::{getter_setter, mujoco_c::*};
-use crate::error::MjDataError;
 
 use std::ops::{Deref, DerefMut};
 use std::ptr::{self, NonNull};
@@ -12,9 +15,6 @@ use std::ffi::CString;
 use std::borrow::Cow;
 use std::path::Path;
 use std::fmt::Debug;
-
-use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
-use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
 
 /*******************************************/
 // Types

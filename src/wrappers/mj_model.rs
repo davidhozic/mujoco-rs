@@ -1,22 +1,21 @@
 //! MjModel related.
-use std::ffi::{c_char, CStr, CString, c_int, c_void};
-use std::path::Path;
-use std::ptr::{self, NonNull};
-
-use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
-use super::mj_primitive::*;
-
-use crate::wrappers::mj_option::MjOption;
-use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
-use crate::wrappers::mj_data::MjData;
-use crate::error::{MjDataError, MjModelError};
-use crate::mujoco_c::*;
-
 use crate::{
     view_creator, info_method, info_with_view,
     mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem,
     array_slice_dyn, getter_setter
 };
+use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
+use crate::error::{MjDataError, MjModelError};
+use crate::wrappers::mj_option::MjOption;
+use crate::wrappers::mj_data::MjData;
+use crate::mujoco_c::*;
+
+use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
+use super::mj_primitive::*;
+
+use std::ffi::{c_char, CStr, CString, c_int, c_void};
+use std::ptr::{self, NonNull};
+use std::path::Path;
 
 
 /*******************************************/

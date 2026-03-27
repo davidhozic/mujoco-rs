@@ -2400,12 +2400,12 @@ mod tests {
                 "Before compile: joint '{}' align should be {:?}", name, expected);
         }
 
-        // Compile and verify — AUTO should resolve, FALSE/TRUE should remain
+        // Compile and verify - AUTO should resolve, FALSE/TRUE should remain
         let model = spec.compile().unwrap();
         let jnt_count = model.ffi().njnt as usize;
         assert_eq!(jnt_count, 3, "expected 3 joints");
 
-        // Must compile without error — the key correctness is the round-trip above;
+        // Must compile without error - the key correctness is the round-trip above;
         // compilation proves MuJoCo accepted the enum values.
     }
 
@@ -2436,7 +2436,7 @@ mod tests {
                 "Before compile: joint '{}' limited should be {:?}", name, expected);
         }
 
-        // Compile — AUTO resolves based on range presence
+        // Compile - AUTO resolves based on range presence
         let model = spec.compile().unwrap();
         let jnt_limited = model.jnt_limited();
         assert_eq!(jnt_limited[0], false);
