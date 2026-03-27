@@ -113,7 +113,7 @@ The table below maps the breaking error-type changes:
        ``print``, ``print_formatted``
      - ``io::Error`` / ``NulError``
      - ``MjModelError``
-   * - |mj_vfs|: ``add_from_file``, ``add_from_buffer``, ``delete_file``
+   * - |mj_vfs|: ``add_file``, ``add_file_from``, ``add_from_buffer``, ``delete_file``
      - ``io::Error``
      - ``MjVfsError``
    * - |mj_spec|: ``from_xml``, ``from_xml_vfs``, ``from_xml_string``,

@@ -421,7 +421,7 @@ New error types in :docs-rs:`~mujoco_rs::error`
      - :docs-rs:`~mujoco_rs::error::<enum>MjDataError`
    * - |mj_vfs|
      - ``add_file`` :sup:`new`, ``add_file_from`` :sup:`new`,
-       ``add_from_file``, ``add_from_buffer``, ``delete_file``
+       ``add_from_file`` :sup:`deprecated`, ``add_from_buffer``, ``delete_file``
      - :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`
    * - |mj_spec|
      - ``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``compile``,
