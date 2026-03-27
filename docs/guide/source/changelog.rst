@@ -420,7 +420,8 @@ New error types in :docs-rs:`~mujoco_rs::error`
        ``copy_to``
      - :docs-rs:`~mujoco_rs::error::<enum>MjDataError`
    * - |mj_vfs|
-     - ``add_from_file``, ``add_from_buffer``, ``delete_file``
+     - ``add_file`` :sup:`new`, ``add_file_from`` :sup:`new`,
+       ``add_from_file``, ``add_from_buffer``, ``delete_file``
      - :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`
    * - |mj_spec|
      - ``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``compile``,
@@ -455,6 +456,7 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
 - :docs-rs:`~mujoco_rs::error::<enum>MjModelError`: ``BufferTooSmall``,
   ``SignatureMismatch``.
 - :docs-rs:`~mujoco_rs::error::<enum>MjDataError`: ``InvalidUtf8Path``.
+- :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`: ``InvalidUtf8Path``.
 - :docs-rs:`~mujoco_rs::error::<enum>MjEditError`: ``XmlBufferTooSmall`` --- returned by
   ``save_xml_string`` when the supplied buffer is too small; the ``required_size`` field
   carries the ``snprintf``-style byte count (excluding NUL), so retry with
@@ -500,6 +502,10 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   :docs-rs:`mujoco_rs::wrappers`.
 - |mjs_tendon|: ``get_wrap`` / ``get_wrap_mut`` / ``get_wrap_num``.
 - |mjs_wrap|: ``coef``, ``divisor``, ``side_site``, ``side_site_mut``.
+- |mj_vfs|: ``add_file`` / ``add_file_from`` replace ``add_from_file``
+  (which is now deprecated). ``add_from_buffer`` and ``delete_file`` now accept
+  ``AsRef<Path>``; returns ``Err(MjVfsError::InvalidUtf8Path)`` for non-UTF-8
+  paths.
 - |mjv_scene|: ``update_with_catmask`` (exposes ``catmask`` filter parameter).
 - |mjv_camera|: ``frame``, ``frustum``.
 - New :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>SceneSelection`

@@ -1,6 +1,7 @@
 //! MuJoCo's auxiliary structs.
 use std::ffi::{c_void, CString};
 use std::mem::MaybeUninit;
+use std::path::Path;
 use std::ptr;
 
 use crate::error::MjVfsError;
@@ -77,18 +78,64 @@ impl MjVfs {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
+    /// - [`MjVfsError::InvalidUtf8Path`] if `directory` or `filename` contains invalid UTF-8.
     /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
     /// - [`MjVfsError::LoadFailed`] if the file could not be loaded.
     /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
-    /// A panic will occur if `directory` or `filename` contain `\0` characters.
+    /// When `directory` or `filename` contain `\0` characters.
+    #[deprecated(since = "3.0.0", note = "use `add_file` or `add_file_from` instead")]
     pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> Result<(), MjVfsError> {
-        let c_directory = directory.map(|d| CString::new(d).unwrap());
-        let c_filename = CString::new(filename).unwrap();
+        match directory {
+            Some(d) => self.add_file_from(d, filename),
+            None => self.add_file(filename),
+        }
+    }
+
+    /// Adds a file from disk to the virtual file system, searching in `directory`.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjVfsError::InvalidUtf8Path`] if `directory` or `filename` contains invalid UTF-8.
+    /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
+    /// - [`MjVfsError::LoadFailed`] if the file could not be loaded.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
+    /// # Panics
+    /// When `directory` or `filename` contain `\0` characters.
+    pub fn add_file_from<T: AsRef<Path>, U: AsRef<Path>>(&mut self, directory: T, filename: U) -> Result<(), MjVfsError> {
+        let c_directory = CString::new(
+            directory.as_ref().to_str().ok_or(MjVfsError::InvalidUtf8Path)?
+        ).unwrap();
+        let c_filename = CString::new(
+            filename.as_ref().to_str().ok_or(MjVfsError::InvalidUtf8Path)?
+        ).unwrap();
         Self::handle_add_result(unsafe {
             mj_addFileVFS(
                 self.ffi_mut(),
-                c_directory.as_ref().map_or(ptr::null(), |d| d.as_ptr()),
+                c_directory.as_ptr(),
+                c_filename.as_ptr()
+            )
+        })
+    }
+
+    /// Adds a file from disk to the virtual file system.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjVfsError::InvalidUtf8Path`] if `filename` contains invalid UTF-8.
+    /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
+    /// - [`MjVfsError::LoadFailed`] if the file could not be loaded.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
+    /// # Panics
+    /// When `filename` contains `\0` characters.
+    pub fn add_file<T: AsRef<Path>>(&mut self, filename: T) -> Result<(), MjVfsError> {
+        let c_filename = CString::new(
+            filename.as_ref().to_str().ok_or(MjVfsError::InvalidUtf8Path)?
+        ).unwrap();
+        Self::handle_add_result(unsafe {
+            mj_addFileVFS(
+                self.ffi_mut(),
+                ptr::null(),
                 c_filename.as_ptr()
             )
         })
@@ -98,13 +145,16 @@ impl MjVfs {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
+    /// - [`MjVfsError::InvalidUtf8Path`] if `filename` contains invalid UTF-8.
     /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
     /// - [`MjVfsError::LoadFailed`] if MuJoCo fails to register the buffer.
     /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// When the `filename` contains '\0' characters, a panic occurs.
-    pub fn add_from_buffer(&mut self, filename: &str, buffer: &[u8]) -> Result<(), MjVfsError> {
-        let c_filename = CString::new(filename).unwrap();
+    pub fn add_from_buffer<T: AsRef<Path>>(&mut self, filename: T, buffer: &[u8]) -> Result<(), MjVfsError> {
+        let c_filename = CString::new(
+            filename.as_ref().to_str().ok_or(MjVfsError::InvalidUtf8Path)?
+        ).unwrap();
         Self::handle_add_result(unsafe {
             mj_addBufferVFS(
                 self.ffi_mut(), c_filename.as_ptr(),
@@ -117,12 +167,15 @@ impl MjVfs {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
+    /// - [`MjVfsError::InvalidUtf8Path`] if `filename` contains invalid UTF-8.
     /// - [`MjVfsError::NotFound`] if the file doesn't exist.
     /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// When the `filename` contains '\0' characters, a panic occurs.
-    pub fn delete_file(&mut self, filename: &str) -> Result<(), MjVfsError> {
-        let c_filename = CString::new(filename).unwrap();
+    pub fn delete_file<T: AsRef<Path>>(&mut self, filename: T) -> Result<(), MjVfsError> {
+        let c_filename = CString::new(
+            filename.as_ref().to_str().ok_or(MjVfsError::InvalidUtf8Path)?
+        ).unwrap();
         unsafe {
             Self::handle_remove_result(
                 mj_deleteFileVFS(self.ffi_mut(), c_filename.as_ptr())
@@ -225,12 +278,12 @@ mod tests {
 
         /* No directory */
         vfs = MjVfs::new();
-        assert!(vfs.add_from_file(None, REAL_FILE_NAME).is_ok());
+        assert!(vfs.add_file(REAL_FILE_NAME).is_ok());
         drop(vfs);
 
         /* With directory */
         vfs = MjVfs::new();
-        assert!(vfs.add_from_file(Some("./"), REAL_FILE_NAME).is_ok());
+        assert!(vfs.add_file_from("./", REAL_FILE_NAME).is_ok());
 
         fs::remove_file(REAL_FILE_NAME).expect("could not delete the file from disk");
 
