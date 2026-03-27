@@ -86,7 +86,7 @@ If `MUJOCO_DYNAMIC_LINK_DIR` is also set, the pre-downloaded copy takes preceden
   `CARGO_CFG_TARGET_OS` environment variable when branching on the target platform (e.g., for
   selecting download URLs in cross-compilation scenarios).
 - **`mj_contactForce` with `id >= ncon`**: The C function already handles out-of-range IDs and
-  returns `[0; 6]` in that case. Do NOT add a Rust-side bounds check — the documented behavior
+  returns `[0; 6]` in that case. Do NOT add a Rust-side bounds check -- the documented behavior
   is already enforced by the C implementation. Make sure to also check other functions for similar
   behavior before reporting problems.
 

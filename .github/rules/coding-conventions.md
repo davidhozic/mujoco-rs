@@ -44,7 +44,8 @@
   blocks and trust the reader to refer upward. Only add a new comment when the reasoning differs.
 - Public items should have `///` doc comments.
 - Always use ASCII characters only. Avoid non-ASCII Unicode characters (e.g., em dashes, arrows,
-  smart quotes).
+  smart quotes). Use `--` (double hyphen) as the ASCII substitute for em dashes. This applies to
+  both source code and `.github/` rule/skill files.
 - Imports (`use`) should be sorted by line length with the longest line on top.
 - Prefer to group imports with the same parent module.
 - Do NOT flag or fix integer truncation casts (e.g., `usize as i32`, `len() as i32`) when the
