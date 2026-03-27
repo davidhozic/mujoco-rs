@@ -299,8 +299,25 @@ fn test_auxiliary(model: &MjModel) {
 
 #[cfg(not(miri))]
 fn main() {
-    eprintln!("This example is intended for Miri testing only.");
-    eprintln!("Run with: cargo +nightly miri run --example miri_test");
+    println!("Loading procedurally generated model...");
+    let model = build_model();
+    let mut data = model.make_data();
+
+    test_basic_getters(&model);
+    test_simulation_and_sensors(&model, &mut data);
+    test_kinematics_and_jacobians(&model, &mut data);
+    test_inverse_dynamics_and_state(&model, &mut data);
+    test_vfs_raycasting(&model, &mut data);
+    test_iterators_and_views(&model, &mut data);
+    test_utilities();
+    test_derivatives();
+    test_auxiliary(&model);
+
+    println!("Comprehensive test completed successfully (core physics and utilities)!");
+
+    test_renderer(&model, &mut data);
+
+    println!("Full suite (including renderer) completed successfully!");
 }
 
 #[cfg(miri)]

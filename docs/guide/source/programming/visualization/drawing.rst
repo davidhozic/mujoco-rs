@@ -32,7 +32,8 @@ To draw custom geoms to a scene inside a viewer or a renderer, applications typi
 
 .. note::
 
-        ``create_geom`` returns ``Result`` and can fail when the user scene has no free geom slots.
+        ``create_geom`` panics when the user scene has no free geom slots.
+        Use ``try_create_geom`` for the fallible variant that returns ``Result``.
         Increase the configured user-geom capacity if you hit this limit.
 
 This :gh-example:`example <drawing_scene_viewer.rs>` shows how to draw a line between two balls.
@@ -66,7 +67,7 @@ at this stage.
             None,  // position: ignore here as we set it below.
             None,  // rotational matrix: ignore here as we set it below.
             Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
-        ).unwrap();
+        );
     }).unwrap();
 
 
@@ -89,7 +90,7 @@ which calculates the values to result in the geom pointing from one point to ano
             None,  // position: ignore here as we set it below.
             None,  // rotational matrix: ignore here as we set it below.
             Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
-        ).unwrap();
+        );
 
         /* Read X, Y and Z coordinates of both balls. */
         let ball1_position = ball1_joint_info.view(&data).qpos[..3]

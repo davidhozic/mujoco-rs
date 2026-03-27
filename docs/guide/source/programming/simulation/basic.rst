@@ -194,7 +194,7 @@ which swaps the |mj_model| owned by |mj_data| for the |mj_model| given as parame
 
         // Modify simulation timestep
         model_template.opt_mut().timestep = 0.004;
-        model_template = data.swap_model(model_template).unwrap();
+        model_template = data.swap_model(model_template);
     }
 
 .. [Tobin2017] J. Tobin, R. Fong, A. Ray, J. Schneider, W. Zaremba, and P. Abbeel,
