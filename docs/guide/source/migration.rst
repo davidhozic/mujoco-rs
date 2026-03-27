@@ -117,7 +117,8 @@ The table below maps the breaking error-type changes:
      - ``io::Error``
      - ``MjVfsError``
    * - |mj_spec|: ``from_xml``, ``from_xml_vfs``, ``from_xml_string``,
-       ``compile``, ``save_xml``, ``save_xml_string``, ``add_default``
+       ``compile``, ``save_xml``, ``save_xml_string``,
+       ``add_default`` (now ``try_add_default``)
      - ``io::Error``
      - ``MjEditError``
    * - |mj_data|: ``add_contact``
@@ -543,7 +544,8 @@ changed from ``(i32, MjtNum)`` to ``(Option<usize>, MjtNum)``; the geom id is
   if geom_id.is_none() { /* miss */ }
 
 Similarly, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray`
-gained ``normals_out``, now returns ``Result``, and its geom-id vector changed from
+gained ``normals_out``, now panics on invalid input (use ``try_multi_ray`` for a
+fallible alternative), and its geom-id vector changed from
 ``Vec<i32>`` to ``Vec<Option<usize>>``. Pass ``None`` for ``normals_out``.
 
 :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom` also gained
@@ -677,7 +679,7 @@ struct instead of a 5-tuple.
 .. code-block:: rust
 
     let sel = scene.find_selection(&data, ...);
-    println!("{} {} {} {} {:?}", sel.body_id, sel.geom_id, sel.flex_id, sel.skin_id, sel.point);
+    println!("{:?} {:?} {:?} {:?} {:?}", sel.body_id, sel.geom_id, sel.flex_id, sel.skin_id, sel.point);
 
 
 Core ``Send``/``Sync`` bound tightening

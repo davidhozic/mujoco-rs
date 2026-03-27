@@ -218,19 +218,20 @@ gained new variants. See `Error handling`_ below for the full method list.
     ``(Option<usize>, MjtNum)`` instead of ``(i32, MjtNum)``. The returned geom id is
     ``None`` when the ray misses all geometry (previously ``-1``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray` now
-    returns ``Result<(Vec<Option<usize>>, Vec<MjtNum>), MjDataError>`` instead of
-    ``(Vec<i32>, Vec<MjtNum>)``. Each element of the geom-id
+    returns ``(Vec<Option<usize>>, Vec<MjtNum>)`` instead of
+    ``(Vec<i32>, Vec<MjtNum>)`` (use ``try_multi_ray`` for a ``Result``-returning
+    alternative). Each element of the geom-id
     vector is ``None`` when the corresponding ray misses all geometry (previously
     ``-1``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` gained a new
     ``normal_out: Option<&mut [MjtNum; 3]>`` parameter. Pass ``None`` to preserve
     previous behaviour.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray`
-    gained ``normals_out`` and now returns ``Result``. Pass ``None`` for the new
-    parameter.
+    gained ``normals_out`` and now panics on invalid input (use ``try_multi_ray``
+    for a fallible alternative). Pass ``None`` for the new parameter.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_subtree_com`
-    no longer accepts ``jacp: bool`` (the Jacobian is always computed); now returns
-    ``Result``.
+    no longer accepts ``jacp: bool`` (the Jacobian is always computed); now panics
+    on invalid input (use ``try_jac_subtree_com`` for a fallible alternative).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print` and
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print_formatted`
     now accept ``AsRef<Path>`` and return ``Result``.
@@ -432,7 +433,7 @@ New error types in :docs-rs:`~mujoco_rs::error`
        ``push``, ``set_at``, ``read_pixels``
      - :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`
    * - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`
-     - ``try_rgb``, ``try_depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw``
+     - ``try_rgb`` :sup:`new`, ``try_depth`` :sup:`new`, ``save_rgb``, ``save_depth``, ``save_depth_raw``
      - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`
    * - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`
      - ``render``
@@ -615,8 +616,10 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``EventLoopError`` in both ``RendererError`` and ``MjViewerError`` had the
   same issue and was also fixed.
 - Updated enum type aliases to match MuJoCo 3.6.0 definitions.
-- Added examples: ``tippe_top``, ``chaotic_pendulum``, ``contact_forces``,
-  ``multi_legged_creatures``, ``procedural_tree``, ``miri_test``, ``model_switch``.
+- Added examples: :gh-example:`tippe_top.rs`, :gh-example:`chaotic_pendulum.rs`,
+  :gh-example:`contact_forces.rs`, :gh-example:`multi_legged_creatures.rs`,
+  :gh-example:`procedural_tree.rs`, :gh-example:`miri_test.rs`,
+  :gh-example:`model_switch.rs`, :gh-example:`model_parameters.rs`.
 
 2.3.5 (MuJoCo 3.3.7)
 ======================

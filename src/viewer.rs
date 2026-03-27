@@ -508,7 +508,7 @@ impl MjViewer {
     /// This method is only available when the `viewer-ui` feature is enabled.
     ///
     /// # Note
-    /// The viewer's internal shared-state [`Mutex`](std::sync::Mutex) is **held for the entire
+    /// The viewer's internal shared-state [`Mutex`] is **held for the entire
     /// duration of the callback** (because `data` is a live borrow of the guarded
     /// `data_passive` field). Do **not** attempt to lock the shared state again from
     /// within the callback as that will deadlock the viewer thread:
