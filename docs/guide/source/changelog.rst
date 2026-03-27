@@ -218,25 +218,23 @@ gained new variants. See `Error handling`_ below for the full method list.
     ``(Option<usize>, MjtNum)`` instead of ``(i32, MjtNum)``. The returned geom id is
     ``None`` when the ray misses all geometry (previously ``-1``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray` now
-    returns ``Result<(Vec<Option<usize>>, Vec<MjtNum>), MjDataError>`` instead of
-    ``(Vec<i32>, Vec<MjtNum>)``. Each element of the geom-id
+    returns ``(Vec<Option<usize>>, Vec<MjtNum>)`` instead of
+    ``(Vec<i32>, Vec<MjtNum>)`` (use ``try_multi_ray`` for a ``Result``-returning
+    alternative). Each element of the geom-id
     vector is ``None`` when the corresponding ray misses all geometry (previously
     ``-1``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` gained a new
     ``normal_out: Option<&mut [MjtNum; 3]>`` parameter. Pass ``None`` to preserve
     previous behaviour.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray`
-    gained ``normals_out`` and now returns ``Result``. Pass ``None`` for the new
-    parameter.
+    gained ``normals_out`` and now panics on invalid input (use ``try_multi_ray``
+    for a fallible alternative). Pass ``None`` for the new parameter.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_subtree_com`
-    no longer accepts ``jacp: bool`` (the Jacobian is always computed); now returns
-    ``Result``.
+    no longer accepts ``jacp: bool`` (the Jacobian is always computed); now panics
+    on invalid input (use ``try_jac_subtree_com`` for a fallible alternative).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print` and
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print_formatted`
     now accept ``AsRef<Path>`` and return ``Result``.
-  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force`:
-    ``contact_id`` now takes ``usize`` (was ``u32``). Remove ``as u32`` casts at
-    call sites.
 
 - |mj_model|:
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>id_to_name`:
@@ -397,21 +395,22 @@ New error types in :docs-rs:`~mujoco_rs::error`
        ``save_to_file`` :sup:`new`,
        ``save_to_buffer`` :sup:`new`,
        ``print``, ``print_formatted``,
-       ``extract_state`` :sup:`new`,
-       ``extract_state_into`` :sup:`new`
+       ``try_extract_state`` :sup:`new`,
+       ``try_extract_state_into`` :sup:`new`
      - :docs-rs:`~mujoco_rs::error::<enum>MjModelError`
    * - |mj_data|
      - ``add_contact``, ``constraint_update``,
-       ``jac``, ``jac_body``, ``jac_body_com``, ``jac_subtree_com``,
-       ``jac_geom``, ``jac_site``, ``angmom_mat``,
-       ``object_velocity``, ``object_acceleration``, ``geom_distance``,
-       ``local_to_global``, ``multi_ray``, ``print``, ``print_formatted``,
+       ``try_jac`` :sup:`new`, ``try_jac_body`` :sup:`new`, ``try_jac_body_com`` :sup:`new`, ``try_jac_subtree_com`` :sup:`new`,
+       ``try_jac_geom`` :sup:`new`, ``try_jac_site`` :sup:`new`, ``try_angmom_mat`` :sup:`new`,
+       ``try_object_velocity`` :sup:`new`, ``try_object_acceleration`` :sup:`new`, ``try_geom_distance`` :sup:`new`,
+       ``try_local_to_global`` :sup:`new`, ``try_multi_ray`` :sup:`new`, ``print``, ``print_formatted``,
        ``init_ctrl_history`` :sup:`new`,
        ``init_sensor_history`` :sup:`new`,
-       ``read_ctrl`` :sup:`new`,
+       ``try_read_ctrl`` :sup:`new`,
        ``read_sensor_into`` :sup:`new`,
-       ``read_sensor_fixed`` :sup:`new`,
-       ``read_sensor`` :sup:`new`,
+       ``try_read_sensor_fixed`` :sup:`new`,
+       ``try_read_sensor`` :sup:`new`,
+       ``try_swap_model`` :sup:`new`,
        ``reset_keyframe``,
        ``copy_state_from_data`` :sup:`new`,
        ``apply_ft`` :sup:`new`,
@@ -425,16 +424,16 @@ New error types in :docs-rs:`~mujoco_rs::error`
      - :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`
    * - |mj_spec|
      - ``from_xml``, ``from_xml_vfs``, ``from_xml_string``, ``compile``,
-       ``save_xml``, ``save_xml_string``, ``add_default``,
+       ``save_xml``, ``save_xml_string``, ``try_add_default`` :sup:`new`,
        ``from_parse`` :sup:`new`,
        ``from_parse_vfs`` :sup:`new`
      - :docs-rs:`~mujoco_rs::error::<enum>MjEditError`
    * - |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure` / |mjr_context|
-     - ``create_geom``, ``set_label``, ``add_aux``, ``set_aux``,
+     - ``try_create_geom`` :sup:`new`, ``set_label``, ``add_aux``, ``set_aux``,
        ``push``, ``set_at``, ``read_pixels``
      - :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`
    * - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`
-     - ``rgb``, ``depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw``
+     - ``try_rgb`` :sup:`new`, ``try_depth`` :sup:`new`, ``save_rgb``, ``save_depth``, ``save_depth_raw``
      - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`
    * - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`
      - ``render``
@@ -464,11 +463,22 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
 - New ``try_`` methods paired with existing infallible counterparts (infallible
   variants now delegate to ``try_``.``expect()``):
 
-  - |mj_data|: ``try_new``, ``try_clone``, ``try_read_state_into``
-  - |mj_model|: ``try_clone``, ``try_make_data``
+  - |mj_data|: ``try_new``, ``try_clone``, ``try_read_state_into``,
+    ``try_swap_model``, ``try_read_ctrl``, ``try_read_sensor_fixed``,
+    ``try_read_sensor``,
+    ``try_jac``, ``try_jac_body``, ``try_jac_body_com``,
+    ``try_jac_subtree_com``, ``try_jac_geom``, ``try_jac_site``,
+    ``try_angmom_mat``, ``try_object_velocity``, ``try_object_acceleration``,
+    ``try_geom_distance``, ``try_local_to_global``, ``try_multi_ray``
+  - |mj_model|: ``try_clone``, ``try_make_data``,
+    ``try_extract_state``, ``try_extract_state_into``
   - |mj_spec| / |mjs_tendon| / ``MjsBody``: ``try_new``, ``try_clone``, ``try_add_frame``,
     ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, ``try_wrap_pulley``,
-    macro-generated ``try_add_*``
+    ``try_add_default``, macro-generated ``try_add_*``
+  - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
+    ``try_rgb``, ``try_depth``
+  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`:
+    ``try_create_geom``
 
 - New |mj_data| methods that return ``Result`` directly (no separate ``try_`` variant):
   ``copy_state_from_data``, ``apply_ft``.
@@ -606,8 +616,10 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``EventLoopError`` in both ``RendererError`` and ``MjViewerError`` had the
   same issue and was also fixed.
 - Updated enum type aliases to match MuJoCo 3.6.0 definitions.
-- Added examples: ``tippe_top``, ``chaotic_pendulum``, ``contact_forces``,
-  ``multi_legged_creatures``, ``procedural_tree``, ``miri_test``, ``model_switch``.
+- Added examples: :gh-example:`tippe_top.rs`, :gh-example:`chaotic_pendulum.rs`,
+  :gh-example:`contact_forces.rs`, :gh-example:`multi_legged_creatures.rs`,
+  :gh-example:`procedural_tree.rs`, :gh-example:`miri_test.rs`,
+  :gh-example:`model_switch.rs`, :gh-example:`model_parameters.rs`.
 
 2.3.5 (MuJoCo 3.3.7)
 ======================

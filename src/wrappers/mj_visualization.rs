@@ -640,9 +640,22 @@ impl MjvScene {
     /// Creates a new [`MjvGeom`] in this scene, returning a mutable reference to it.
     /// The geom reference is bound to the scene's lifetime; it is invalidated when
     /// any code that might reallocate the geoms buffer runs.
+    ///
+    /// # Panics
+    /// Panics when `ngeom >= maxgeom` (the scene's geom buffer is full).
+    ///
+    /// Use [`MjvScene::try_create_geom`] for a fallible alternative.
+    pub fn create_geom(
+        &mut self, geom_type: MjtGeom, size: Option<[MjtNum; 3]>,
+        pos: Option<[MjtNum; 3]>, mat: Option<[MjtNum; 9]>, rgba: Option<[f32; 4]>
+    ) -> &mut MjvGeom {
+        self.try_create_geom(geom_type, size, pos, mat, rgba).expect("create_geom failed: scene full")
+    }
+
+    /// Fallible version of [`MjvScene::create_geom`].
     /// # Errors
     /// Returns [`MjSceneError::SceneFull`] when `ngeom >= maxgeom`.
-    pub fn create_geom(
+    pub fn try_create_geom(
         &mut self, geom_type: MjtGeom, size: Option<[MjtNum; 3]>,
         pos: Option<[MjtNum; 3]>, mat: Option<[MjtNum; 9]>, rgba: Option<[f32; 4]>
     ) -> Result<&mut MjvGeom, MjSceneError> {
@@ -853,7 +866,7 @@ mod tests {
         let mut scene = MjvScene::new(&model, 1000);
         
         /* Test label handling. Other things are trivial one-liners. */
-        let geom = scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None).unwrap();
+        let geom = scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
         let label = "Hello World";
         geom.set_label(label).unwrap();
         assert_eq!(geom.label(), label);
@@ -868,7 +881,7 @@ mod tests {
         let mut scene = MjvScene::new(&model, 1000);
 
         for _ in 0..N_GEOM {
-            scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None).unwrap();
+            scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
         }
 
         assert_eq!(scene.geoms().len(), N_GEOM);
@@ -960,11 +973,11 @@ mod tests {
         let mut scene = MjvScene::new(&model, 2);
 
         // Fill to capacity
-        scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None).unwrap();
-        scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None).unwrap();
+        scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
+        scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
 
         // Next should fail
-        let err = scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None).unwrap_err();
+        let err = scene.try_create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None).unwrap_err();
         assert!(matches!(err, MjSceneError::SceneFull { capacity: 2 }));
     }
 
@@ -974,7 +987,7 @@ mod tests {
     fn test_geom_label_boundary() {
         let model = load_model();
         let mut scene = MjvScene::new(&model, 10);
-        let geom = scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None).unwrap();
+        let geom = scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None);
 
         // Determine capacity (buffer len - 1 for NUL)
         let capacity = geom.label.len() - 1;

@@ -169,6 +169,13 @@ Produce a structured final report:
 ```
 Then implement fixes for all Critical and High items. Run `/test` after every fix.
 
+## Phase 7 - Documentation verification
+After code fixes are applied:
+1. Run `/doc` to check for rustdoc warnings/errors.
+2. Run `/doc` to verify both rustdoc and Sphinx documentation build cleanly.
+3. Verify that code blocks in `changelog.rst` and `migration.rst` are syntactically
+   correct Rust (method names, types, and signatures match the actual code on HEAD).
+
 > [!NOTE]
 > - Always run `/test` as a baseline before starting.
 > - Set both `MUJOCO_DYNAMIC_LINK_DIR` and `LD_LIBRARY_PATH` (see `important-context.md`).

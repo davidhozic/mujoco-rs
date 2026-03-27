@@ -1147,9 +1147,9 @@ mod tests {
     /// Exercises the three "dead" combination arms of `getter_setter!` (arms 11, 12, 13)
     /// by instantiating each on a minimal dummy struct.
     ///
-    /// - Arm 11: `(force!, get, set, [...])` — force-cast getter + setter.
-    /// - Arm 12: `(get, set, [... : bool ...])` — bool getter (field `== 1`) + setter.
-    /// - Arm 13: `(get, set, [... : $type ...])` — `.into()` getter + setter.
+    /// - Arm 11: `(force!, get, set, [...])` - force-cast getter + setter.
+    /// - Arm 12: `(get, set, [... : bool ...])` - bool getter (field `== 1`) + setter.
+    /// - Arm 13: `(get, set, [... : $type ...])` - `.into()` getter + setter.
     #[test]
     fn test_getter_setter_dead_arms_11_12_13() {
         struct ArmEleven { x: i32, y: i32 }

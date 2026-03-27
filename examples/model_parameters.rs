@@ -58,9 +58,9 @@ fn main() {
     let fresh = Box::new(
         MjModel::from_xml_string(MODEL_XML).expect("could not load the model"),
     );
-    let mut swapped_out = data.swap_model(fresh).unwrap();
+    let mut swapped_out = data.swap_model(fresh);
     swapped_out.opt_mut().gravity[2] = half_gravity;
-    let _prev = data.swap_model(swapped_out).unwrap();
+    let _prev = data.swap_model(swapped_out);
     data.reset();
     for _ in 0..STEPS {
         data.step();

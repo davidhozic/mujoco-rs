@@ -1,22 +1,21 @@
 //! MjModel related.
-use std::ffi::{c_char, CStr, CString, c_int, c_void};
-use std::path::Path;
-use std::ptr::{self, NonNull};
-
-use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
-use super::mj_primitive::*;
-
-use crate::wrappers::mj_option::MjOption;
-use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
-use crate::wrappers::mj_data::MjData;
-use crate::error::{MjDataError, MjModelError};
-use crate::mujoco_c::*;
-
 use crate::{
     view_creator, info_method, info_with_view,
     mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem,
     array_slice_dyn, getter_setter
 };
+use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
+use crate::error::{MjDataError, MjModelError};
+use crate::wrappers::mj_option::MjOption;
+use crate::wrappers::mj_data::MjData;
+use crate::mujoco_c::*;
+
+use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
+use super::mj_primitive::*;
+
+use std::ffi::{c_char, CStr, CString, c_int, c_void};
+use std::ptr::{self, NonNull};
+use std::path::Path;
 
 
 /*******************************************/
@@ -597,12 +596,23 @@ impl MjModel {
     /// Extract the subset of components specified by `dst_spec` from a state `src`
     /// previously obtained via [`MjData::read_state_into`] or [`MjData::get_state`]
     /// with components specified by `src_spec`.
+    ///
+    /// # Panics
+    /// - When `src.len()` does not equal the size required by `src_spec`.
+    /// - When `dst_spec` is not a subset of `src_spec`.
+    ///
+    /// Use [`MjModel::try_extract_state`] for a fallible alternative.
+    pub fn extract_state(&self, src: &[MjtNum], src_spec: u32, dst_spec: u32) -> Box<[MjtNum]> {
+        self.try_extract_state(src, src_spec, dst_spec).expect("extract_state failed")
+    }
+
+    /// Fallible version of [`MjModel::extract_state`].
     /// # Returns
     /// On success, returns [`Ok`] variant containing the extracted state.
     /// # Errors
     /// - When `src.len()` does not equal the size required by `src_spec`, [`MjModelError::StateSliceLengthMismatch`] is returned.
     /// - When `dst_spec` is not a subset of `src_spec`, [`MjModelError::SpecNotSubset`] is returned.
-    pub fn extract_state(&self, src: &[MjtNum], src_spec: u32, dst_spec: u32) -> Result<Box<[MjtNum]>, MjModelError> {
+    pub fn try_extract_state(&self, src: &[MjtNum], src_spec: u32, dst_spec: u32) -> Result<Box<[MjtNum]>, MjModelError> {
         let expected = self.state_size(src_spec);
         if src.len() != expected {
             return Err(MjModelError::StateSliceLengthMismatch { expected, got: src.len() });
@@ -630,13 +640,25 @@ impl MjModel {
     /// Extract into dst the subset of components specified by `dst_spec` from a state `src`
     /// previously obtained via [`MjData::read_state_into`] or [`MjData::get_state`]
     /// with components specified by `src_spec`.
+    ///
+    /// # Panics
+    /// - When `src.len()` does not equal the size required by `src_spec`.
+    /// - When `dst_spec` is not a subset of `src_spec`.
+    /// - When `dst` is too small to hold the requested components.
+    ///
+    /// Use [`MjModel::try_extract_state_into`] for a fallible alternative.
+    pub fn extract_state_into(&self, src: &[MjtNum], src_spec: u32, dst: &mut [MjtNum], dst_spec: u32) -> usize {
+        self.try_extract_state_into(src, src_spec, dst, dst_spec).expect("extract_state_into failed")
+    }
+
+    /// Fallible version of [`MjModel::extract_state_into`].
     /// # Returns
     /// On success, returns [`Ok`] variant containing the number of elements written to `dst`.
     /// # Errors
     /// - When `src.len()` does not equal the size required by `src_spec`, [`MjModelError::StateSliceLengthMismatch`] is returned.
     /// - When `dst_spec` is not a subset of `src_spec`, [`MjModelError::SpecNotSubset`] is returned.
     /// - When `dst` is too small to hold the requested components, [`MjModelError::BufferTooSmall`] is returned.
-    pub fn extract_state_into(&self, src: &[MjtNum], src_spec: u32, dst: &mut [MjtNum], dst_spec: u32) -> Result<usize, MjModelError> {
+    pub fn try_extract_state_into(&self, src: &[MjtNum], src_spec: u32, dst: &mut [MjtNum], dst_spec: u32) -> Result<usize, MjModelError> {
         let expected = self.state_size(src_spec);
         if src.len() != expected {
             return Err(MjModelError::StateSliceLengthMismatch { expected, got: src.len() });
@@ -2367,7 +2389,7 @@ mod tests {
         let _bytes_written = model.extract_state_into(
             &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
             &mut dst_buffer, MjtState::mjSTATE_PHYSICS as u32
-        ).unwrap();
+        );
 
         assert_eq!(state_physics, dst_buffer);
 
@@ -2380,7 +2402,7 @@ mod tests {
         let dst_buffer = model.extract_state(
             &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
             MjtState::mjSTATE_PHYSICS as u32
-        ).unwrap();
+        );
 
         assert_eq!(state_physics, dst_buffer);
     }
@@ -2396,7 +2418,7 @@ mod tests {
         let data = MjData::new(&model);
 
         let state_full_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
-        let res = model.extract_state(
+        let res = model.try_extract_state(
             &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
             MjtState::mjSTATE_PHYSICS as u32
         );
@@ -2415,7 +2437,7 @@ mod tests {
         let required_size = model.state_size(MjtState::mjSTATE_PHYSICS as u32);
         let mut dst_buffer = vec![0.0; required_size].into_boxed_slice();
         let state_full_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
-        let res = model.extract_state_into(
+        let res = model.try_extract_state_into(
             &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
             &mut dst_buffer, MjtState::mjSTATE_PHYSICS as u32
         );
@@ -2432,7 +2454,7 @@ mod tests {
         let data = MjData::new(&model);
 
         let state_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
-        let res = model.extract_state(
+        let res = model.try_extract_state(
             &state_physics, MjtState::mjSTATE_PHYSICS as u32,
             MjtState::mjSTATE_FULLPHYSICS as u32
         );
@@ -2451,7 +2473,7 @@ mod tests {
         let state_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
         let mut dst = vec![0.0; model.state_size(MjtState::mjSTATE_PHYSICS as u32)];
 
-        let res = model.extract_state_into(
+        let res = model.try_extract_state_into(
             &state_physics, MjtState::mjSTATE_PHYSICS as u32,
             &mut dst, MjtState::mjSTATE_FULLPHYSICS as u32
         );
@@ -2472,7 +2494,7 @@ mod tests {
         // make buffer smaller than required
         let mut dst = vec![0.0; required.saturating_sub(1)];
 
-        let res = model.extract_state_into(
+        let res = model.try_extract_state_into(
             &state_full, MjtState::mjSTATE_FULLPHYSICS as u32,
             &mut dst, MjtState::mjSTATE_PHYSICS as u32
         );
@@ -2491,12 +2513,12 @@ mod tests {
         let state_full = data.get_state(MjtState::mjSTATE_FULLPHYSICS as u32);
 
         // extract zero-sized spec -> empty slice
-        let dst = model.extract_state(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, 0u32).unwrap();
+        let dst = model.extract_state(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, 0u32);
         assert_eq!(dst.len(), 0);
 
         // extract_into with zero-sized spec -> writes 0 elements
         let mut buf: &mut [f64] = &mut [];
-        let written = model.extract_state_into(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, &mut buf, 0u32).unwrap();
+        let written = model.extract_state_into(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, &mut buf, 0u32);
         assert_eq!(written, 0);
     }
 

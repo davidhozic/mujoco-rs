@@ -490,7 +490,7 @@ impl MjViewer {
     ///     .build_passive(&model).unwrap();
     /// viewer.with_state_lock(|mut lock| {
     ///     let scene = lock.user_scene_mut();
-    ///     scene.create_geom(MjtGeom::mjGEOM_BOX, Some([1.0, 1.0, 1.0]), Some([0.0, 0.0, 0.0]), None, None).unwrap();
+    ///     scene.create_geom(MjtGeom::mjGEOM_BOX, Some([1.0, 1.0, 1.0]), Some([0.0, 0.0, 0.0]), None, None);
     /// }).unwrap();
     /// ```
     pub fn with_state_lock<F, R>(&self, fun: F) -> Result<R, PoisonError<MutexGuard<'_, ViewerSharedState>>>
@@ -508,7 +508,7 @@ impl MjViewer {
     /// This method is only available when the `viewer-ui` feature is enabled.
     ///
     /// # Note
-    /// The viewer's internal shared-state [`Mutex`](std::sync::Mutex) is **held for the entire
+    /// The viewer's internal shared-state [`Mutex`] is **held for the entire
     /// duration of the callback** (because `data` is a live borrow of the guarded
     /// `data_passive` field). Do **not** attempt to lock the shared state again from
     /// within the callback as that will deadlock the viewer thread:

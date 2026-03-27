@@ -1,10 +1,13 @@
 //! MjData related.
+use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
+use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
+use crate::{getter_setter, mujoco_c::*};
+use crate::error::MjDataError;
+
 use super::mj_statistic::{MjWarningStat, MjTimerStat, MjSolverStat};
 use super::mj_model::{MjModel, MjtSameFrame, MjtObj, MjtStage};
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
-use crate::{getter_setter, mujoco_c::*};
-use crate::error::MjDataError;
 
 use std::ops::{Deref, DerefMut};
 use std::ptr::{self, NonNull};
@@ -12,9 +15,6 @@ use std::ffi::CString;
 use std::borrow::Cow;
 use std::path::Path;
 use std::fmt::Debug;
-
-use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
-use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
 
 /*******************************************/
 // Types
@@ -90,12 +90,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// parameters without causing size mismatches or violating borrow checker's requirements.
     /// This can be done by keeping a clone of the model, which is then modified and swapped.
     /// 
-    /// # Returns
-    /// When successful (the signature matches), [`Ok`] containing the old [`MjModel`] is returned.
+    /// # Panics
+    /// Panics if the signature of `model` does not match the signature of the model
+    /// this data belongs to.
     /// 
-    /// # Errors
-    /// [`MjDataError::SignatureMismatch`] is returned when the signature of `model` does
-    /// not match the signature of the model this data belongs to.
+    /// Use [`MjData::try_swap_model`] for a fallible alternative.
     /// 
     /// # Notes
     /// This method only validates model-signature compatibility.
@@ -117,9 +116,18 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// let mut data = MjData::new(model_used);
     /// 
     /// model_template.opt_mut().timestep = 0.004;
-    /// model_template = data.swap_model(model_template).unwrap();
+    /// model_template = data.swap_model(model_template);
     /// ```
-    pub fn swap_model(&mut self, model: M) -> Result<M, MjDataError> {
+    pub fn swap_model(&mut self, model: M) -> M {
+        self.try_swap_model(model).expect("swap_model failed: model signature mismatch")
+    }
+
+    /// Fallible version of [`MjData::swap_model`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::SignatureMismatch`] if the new model's signature
+    /// does not match the current one.
+    pub fn try_swap_model(&mut self, model: M) -> Result<M, MjDataError> {
         let new_signature = model.signature();
         let current_signature = self.model.signature();
         if new_signature != current_signature {
@@ -653,9 +661,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Reads the control history value for actuator `id` at `time`
     /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
+    /// # Panics
+    /// Panics when `id >= nu`. Use [`MjData::try_read_ctrl`] for a fallible alternative.
+    pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> MjtNum {
+        self.try_read_ctrl(id, time, interp).expect("read_ctrl failed")
+    }
+
+    /// Fallible version of [`MjData::read_ctrl`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nu`.
-    pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> Result<MjtNum, MjDataError> {
+    pub fn try_read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> Result<MjtNum, MjDataError> {
         let nu = self.model.ffi().nu as usize;
         if id >= nu {
             return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nu });
@@ -690,10 +705,18 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reads sensor `id` at `time` into a stack-allocated `[MjtNum; N]`
     /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic). `N` must match `sensor_dim[id]`.
     /// See also [`read_sensor`](Self::read_sensor), [`read_sensor_into`](Self::read_sensor_into).
+    /// # Panics
+    /// Panics when `id >= nsensor` or `N != sensor_dim[id]`.
+    /// Use [`MjData::try_read_sensor_fixed`] for a fallible alternative.
+    pub fn read_sensor_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> [MjtNum; N] {
+        self.try_read_sensor_fixed(id, time, interp).expect("read_sensor_fixed failed")
+    }
+
+    /// Fallible version of [`MjData::read_sensor_fixed`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
     /// Returns [`MjDataError::LengthMismatch`] when `N != sensor_dim[id]`.
-    pub fn read_sensor_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> Result<[MjtNum; N], MjDataError> {
+    pub fn try_read_sensor_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> Result<[MjtNum; N], MjDataError> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
             return Err(MjDataError::IndexOutOfBounds { kind: "sensor_id", id, upper: nsensor });
@@ -717,9 +740,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Returns [`Cow::Borrowed`] (zero-copy) for exact matches, ZOH, and extrapolation.
     /// Returns [`Cow::Owned`] for linear/cubic interpolation.
     /// See also [`read_sensor_fixed`](Self::read_sensor_fixed), [`read_sensor_into`](Self::read_sensor_into).
+    /// # Panics
+    /// Panics when `id >= nsensor`. Use [`MjData::try_read_sensor`] for a fallible alternative.
+    pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> Cow<'_, [MjtNum]> {
+        self.try_read_sensor(id, time, interp).expect("read_sensor failed")
+    }
+
+    /// Fallible version of [`MjData::read_sensor`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
-    pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> Result<Cow<'_, [MjtNum]>, MjDataError> {
+    pub fn try_read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> Result<Cow<'_, [MjtNum]>, MjDataError> {
         let nsensor = self.model.ffi().nsensor as usize;
         if id >= nsensor {
             return Err(MjDataError::IndexOutOfBounds { kind: "sensor_id", id, upper: nsensor });
@@ -753,9 +783,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Set `jacp` to `true` to calculate the translational Jacobian and `jacr` to `true` for
     /// the rotational Jacobian. Returns a `(Vec, Vec)` for translation and rotation. Empty `Vec`s
     /// indicate that the corresponding Jacobian was not computed.
+    /// # Panics
+    /// Panics when `body_id >= nbody`. Use [`MjData::try_jac`] for a fallible alternative.
+    pub fn jac(&self, jacp: bool, jacr: bool, point: &[MjtNum; 3], body_id: usize) -> (Vec<MjtNum>, Vec<MjtNum>) {
+        self.try_jac(jacp, jacr, point, body_id).expect("jac failed")
+    }
+
+    /// Fallible version of [`MjData::jac`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is `>= nbody`.
-    pub fn jac(&self, jacp: bool, jacr: bool, point: &[MjtNum; 3], body_id: usize) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+    pub fn try_jac(&self, jacp: bool, jacr: bool, point: &[MjtNum; 3], body_id: usize) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
         let nbody = self.model.ffi().nbody;
         if body_id >= nbody as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id, upper: nbody as usize });
@@ -777,9 +814,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Compute body frame end-effector Jacobian.
     /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
     /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
+    /// # Panics
+    /// Panics when `body_id` is out of range. Use [`MjData::try_jac_body`] for a fallible alternative.
+    pub fn jac_body(&self, jacp: bool, jacr: bool, body_id: usize) -> (Vec<MjtNum>, Vec<MjtNum>) {
+        self.try_jac_body(jacp, jacr, body_id).expect("jac_body failed")
+    }
+
+    /// Fallible version of [`MjData::jac_body`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
-    pub fn jac_body(&self, jacp: bool, jacr: bool, body_id: usize) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+    pub fn try_jac_body(&self, jacp: bool, jacr: bool, body_id: usize) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
         let nbody = self.model.ffi().nbody;
         if body_id >= nbody as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id, upper: nbody as usize });
@@ -801,9 +845,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Compute body center-of-mass end-effector Jacobian.
     /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
     /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
+    /// # Panics
+    /// Panics when `body_id` is out of range. Use [`MjData::try_jac_body_com`] for a fallible alternative.
+    pub fn jac_body_com(&self, jacp: bool, jacr: bool, body_id: usize) -> (Vec<MjtNum>, Vec<MjtNum>) {
+        self.try_jac_body_com(jacp, jacr, body_id).expect("jac_body_com failed")
+    }
+
+    /// Fallible version of [`MjData::jac_body_com`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
-    pub fn jac_body_com(&self, jacp: bool, jacr: bool, body_id: usize) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+    pub fn try_jac_body_com(&self, jacp: bool, jacr: bool, body_id: usize) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
         let nbody = self.model.ffi().nbody;
         if body_id >= nbody as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id, upper: nbody as usize });
@@ -823,10 +874,17 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Compute subtree center-of-mass end-effector Jacobian (translational only).
-    /// Returns a `Vec` of length `3 * nv` (row-major 3×nv matrix).
+    /// Returns a `Vec` of length `3 * nv` (row-major 3xnv matrix).
+    /// # Panics
+    /// Panics when `body_id` is out of range. Use [`MjData::try_jac_subtree_com`] for a fallible alternative.
+    pub fn jac_subtree_com(&mut self, body_id: usize) -> Vec<MjtNum> {
+        self.try_jac_subtree_com(body_id).expect("jac_subtree_com failed")
+    }
+
+    /// Fallible version of [`MjData::jac_subtree_com`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
-    pub fn jac_subtree_com(&mut self, body_id: usize) -> Result<Vec<MjtNum>, MjDataError> {
+    pub fn try_jac_subtree_com(&mut self, body_id: usize) -> Result<Vec<MjtNum>, MjDataError> {
         let nbody = self.model.ffi().nbody;
         if body_id >= nbody as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id, upper: nbody as usize });
@@ -846,9 +904,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Compute geom end-effector Jacobian.
     /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
     /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
+    /// # Panics
+    /// Panics when `geom_id` is out of range. Use [`MjData::try_jac_geom`] for a fallible alternative.
+    pub fn jac_geom(&self, jacp: bool, jacr: bool, geom_id: usize) -> (Vec<MjtNum>, Vec<MjtNum>) {
+        self.try_jac_geom(jacp, jacr, geom_id).expect("jac_geom failed")
+    }
+
+    /// Fallible version of [`MjData::jac_geom`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `geom_id` is out of range.
-    pub fn jac_geom(&self, jacp: bool, jacr: bool, geom_id: usize) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+    pub fn try_jac_geom(&self, jacp: bool, jacr: bool, geom_id: usize) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
         let ngeom = self.model.ffi().ngeom;
         if geom_id >= ngeom as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "geom_id", id: geom_id, upper: ngeom as usize });
@@ -870,9 +935,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Compute site end-effector Jacobian.
     /// Set `jacp`/`jacr` to `true` to calculate translational/rotational components.
     /// Returns `(Vec, Vec)` for translation and rotation. Empty `Vec`s indicate not computed.
+    /// # Panics
+    /// Panics when `site_id` is out of range. Use [`MjData::try_jac_site`] for a fallible alternative.
+    pub fn jac_site(&self, jacp: bool, jacr: bool, site_id: usize) -> (Vec<MjtNum>, Vec<MjtNum>) {
+        self.try_jac_site(jacp, jacr, site_id).expect("jac_site failed")
+    }
+
+    /// Fallible version of [`MjData::jac_site`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `site_id` is out of range.
-    pub fn jac_site(&self, jacp: bool, jacr: bool, site_id: usize) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
+    pub fn try_jac_site(&self, jacp: bool, jacr: bool, site_id: usize) -> Result<(Vec<MjtNum>, Vec<MjtNum>), MjDataError> {
         let nsite = self.model.ffi().nsite;
         if site_id >= nsite as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "site_id", id: site_id, upper: nsite as usize });
@@ -892,9 +964,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Compute subtree angular momentum matrix.
+    /// # Panics
+    /// Panics when `body_id` is out of range. Use [`MjData::try_angmom_mat`] for a fallible alternative.
+    pub fn angmom_mat(&mut self, body_id: usize) -> Vec<MjtNum> {
+        self.try_angmom_mat(body_id).expect("angmom_mat failed")
+    }
+
+    /// Fallible version of [`MjData::angmom_mat`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
-    pub fn angmom_mat(&mut self, body_id: usize) -> Result<Vec<MjtNum>, MjDataError> {
+    pub fn try_angmom_mat(&mut self, body_id: usize) -> Result<Vec<MjtNum>, MjDataError> {
         let nbody = self.model.ffi().nbody;
         if body_id >= nbody as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id, upper: nbody as usize });
@@ -910,12 +989,20 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Compute object 6D velocity (rot:lin) in object-centered frame, world/local orientation.
+    /// # Panics
+    /// Panics when `obj_type` is unsupported or `obj_id` is out of range.
+    /// Use [`MjData::try_object_velocity`] for a fallible alternative.
+    pub fn object_velocity(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> [MjtNum; 6] {
+        self.try_object_velocity(obj_type, obj_id, flg_local).expect("object_velocity failed")
+    }
+
+    /// Fallible version of [`MjData::object_velocity`].
     /// # Errors
     /// Returns:
     /// - [`MjDataError::UnsupportedObjectType`] when `obj_type` is not one of
     ///   `mjOBJ_BODY`, `mjOBJ_XBODY`, `mjOBJ_GEOM`, `mjOBJ_SITE`, `mjOBJ_CAMERA`.
     /// - [`MjDataError::IndexOutOfBounds`] when `obj_id` is out of range for the given type.
-    pub fn object_velocity(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
+    pub fn try_object_velocity(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
         let max_id = match obj_type {
             MjtObj::mjOBJ_BODY | MjtObj::mjOBJ_XBODY => self.model.ffi().nbody,
             MjtObj::mjOBJ_GEOM => self.model.ffi().ngeom,
@@ -934,11 +1021,19 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Compute object 6D acceleration (rot:lin) in object-centered frame, world/local orientation.
+    /// # Panics
+    /// Panics when `obj_type` is unsupported or `obj_id` is out of range.
+    /// Use [`MjData::try_object_acceleration`] for a fallible alternative.
+    pub fn object_acceleration(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> [MjtNum; 6] {
+        self.try_object_acceleration(obj_type, obj_id, flg_local).expect("object_acceleration failed")
+    }
+
+    /// Fallible version of [`MjData::object_acceleration`].
     /// # Errors
     /// Returns:
     /// - [`MjDataError::UnsupportedObjectType`] when `obj_type` is not supported.
     /// - [`MjDataError::IndexOutOfBounds`] when `obj_id` is out of range for the given type.
-    pub fn object_acceleration(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
+    pub fn try_object_acceleration(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
         let max_id = match obj_type {
             MjtObj::mjOBJ_BODY | MjtObj::mjOBJ_XBODY => self.model.ffi().nbody,
             MjtObj::mjOBJ_GEOM => self.model.ffi().ngeom,
@@ -957,9 +1052,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Returns smallest signed distance between two geoms and optionally the contact segment.
+    /// # Panics
+    /// Panics when either geom id is `>= ngeom`. Use [`MjData::try_geom_distance`] for a fallible alternative.
+    pub fn geom_distance(&self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
+        self.try_geom_distance(geom1_id, geom2_id, dist_max, fromto).expect("geom_distance failed")
+    }
+
+    /// Fallible version of [`MjData::geom_distance`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when either geom id is negative or `>= ngeom`.
-    pub fn geom_distance(&self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> Result<MjtNum, MjDataError> {
+    pub fn try_geom_distance(&self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> Result<MjtNum, MjDataError> {
         let ngeom = self.model.ffi().ngeom;
         if geom1_id >= ngeom as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "geom1_id", id: geom1_id, upper: ngeom as usize });
@@ -978,9 +1080,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Map from body local to global Cartesian coordinates. Returns (global position, global orientation matrix).
     /// `sameframe` takes values from [`MjtSameFrame`]. Wraps `mj_local2Global`.
+    /// # Panics
+    /// Panics when `body_id` is out of range. Use [`MjData::try_local_to_global`] for a fallible alternative.
+    pub fn local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: usize, sameframe: MjtSameFrame) -> ([MjtNum; 3], [MjtNum; 9]) {
+        self.try_local_to_global(pos, quat, body_id, sameframe).expect("local_to_global failed")
+    }
+
+    /// Fallible version of [`MjData::local_to_global`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `body_id` is out of range.
-    pub fn local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: usize, sameframe: MjtSameFrame) -> Result<([MjtNum; 3], [MjtNum; 9]), MjDataError> {
+    pub fn try_local_to_global(&mut self, pos: &[MjtNum; 3], quat: &[MjtNum; 4], body_id: usize, sameframe: MjtSameFrame) -> Result<([MjtNum; 3], [MjtNum; 9]), MjDataError> {
         let nbody = self.model.ffi().nbody;
         if body_id >= nbody as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "body_id", id: body_id, upper: nbody as usize });
@@ -996,10 +1105,22 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Intersect multiple rays emanating from a single point.
     /// Similar semantics to mj_ray, but `vec` is an array of (nray x 3) directions.
     /// If `normals_out` is `Some`, it must be a slice of `nray` elements filled with surface normals. Use `None` to skip normals.
+    /// # Panics
+    /// Panics if `normals_out` length does not match `vec.len()`.
+    /// Use [`MjData::try_multi_ray`] for a fallible alternative.
+    #[allow(clippy::too_many_arguments)]
+    pub fn multi_ray(
+        &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
+        flg_static: bool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
+    ) -> (Vec<Option<usize>>, Vec<MjtNum>) {
+        self.try_multi_ray(pnt, vec, geomgroup, flg_static, bodyexclude, cutoff, normals_out).expect("multi_ray failed")
+    }
+
+    /// Fallible version of [`MjData::multi_ray`].
     /// # Errors
     /// Returns [`MjDataError::LengthMismatch`] if `normals_out` length does not match `vec.len()`.
     #[allow(clippy::too_many_arguments)]
-    pub fn multi_ray(
+    pub fn try_multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
         flg_static: bool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
     ) -> Result<(Vec<Option<usize>>, Vec<MjtNum>), MjDataError> {
@@ -1979,40 +2100,40 @@ mod test {
         let ball_body_id = model.body("ball").unwrap().id as usize;
 
         // Test global point Jacobian
-        let (jacp, jacr) = data.jac(true, true, &point, ball_body_id).unwrap();
+        let (jacp, jacr) = data.jac(true, true, &point, ball_body_id);
         assert_eq!(jacp.len(), expected_len);
         assert_eq!(jacr.len(), expected_len);
 
         // Test body frame Jacobian
-        let (jacp_body, jacr_body) = data.jac_body(true, true, ball_body_id).unwrap();
+        let (jacp_body, jacr_body) = data.jac_body(true, true, ball_body_id);
         assert_eq!(jacp_body.len(), expected_len);
         assert_eq!(jacr_body.len(), expected_len);
 
         // Test body COM Jacobian
-        let (jacp_com, jacr_com) = data.jac_body_com(true, true, ball_body_id).unwrap();
+        let (jacp_com, jacr_com) = data.jac_body_com(true, true, ball_body_id);
         assert_eq!(jacp_com.len(), expected_len);
         assert_eq!(jacr_com.len(), expected_len);
 
         // Test subtree COM Jacobian (translational only)
-        let jac_subtree = data.jac_subtree_com(0).unwrap();
+        let jac_subtree = data.jac_subtree_com(0);
         assert_eq!(jac_subtree.len(), expected_len);
 
         // Test geom Jacobian
         let green_geom_id = model.geom("green_sphere").unwrap().id as usize;
-        let (jacp_geom, jacr_geom) = data.jac_geom(true, true, green_geom_id).unwrap();
+        let (jacp_geom, jacr_geom) = data.jac_geom(true, true, green_geom_id);
         assert_eq!(jacp_geom.len(), expected_len);
         assert_eq!(jacr_geom.len(), expected_len);
 
         // Test site Jacobian - only if sites exist
         if model.ffi().nsite > 0 {
             let site_id = 0usize;
-            let (jacp_site, jacr_site) = data.jac_site(true, true, site_id).unwrap();
+            let (jacp_site, jacr_site) = data.jac_site(true, true, site_id);
             assert_eq!(jacp_site.len(), expected_len);
             assert_eq!(jacr_site.len(), expected_len);
         }
 
         // Test flags set to false produce empty Vec
-        let (jacp_none, jacr_none) = data.jac(false, false, &[0.0; 3], ball_body_id).unwrap();
+        let (jacp_none, jacr_none) = data.jac(false, false, &[0.0; 3], ball_body_id);
         assert!(jacp_none.is_empty());
         assert!(jacr_none.is_empty());
     }
@@ -2022,13 +2143,13 @@ mod test {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let mut data = model.make_data();
 
-        let mat = data.angmom_mat(0).unwrap();
+        let mat = data.angmom_mat(0);
         assert_eq!(mat.len(), (3 * data.model.ffi().nv as usize));
 
-        let vel = data.object_velocity(MjtObj::mjOBJ_BODY, 0, true).unwrap();
+        let vel = data.object_velocity(MjtObj::mjOBJ_BODY, 0, true);
         assert_eq!(vel.len(), 6);
 
-        let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, 0, false).unwrap();
+        let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, 0, false);
         assert_eq!(acc.len(), 6);
     }
 
@@ -2045,7 +2166,7 @@ mod test {
         let geom1_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere2").unwrap();
 
         let mut ft = [0.0; 6];
-        let dist = data.geom_distance(geom0_id, geom1_id, 1.0, Some(&mut ft)).unwrap();
+        let dist = data.geom_distance(geom0_id, geom1_id, 1.0, Some(&mut ft));
         assert!(dist > 0.0, "distance between separate geoms should be positive, got {dist}");
         assert!(dist < 1.0, "distance should be less than distmax, got {dist}");
         assert_relative_eq!(dist, 0.3, epsilon=1e-3);
@@ -2055,12 +2176,12 @@ mod test {
 
         let pos = [0.0; 3];
         let quat = [1.0, 0.0, 0.0, 0.0];
-        let (xpos, xmat) = data.local_to_global(&pos, &quat, 0, MjtSameFrame::mjSAMEFRAME_NONE).unwrap();
+        let (xpos, xmat) = data.local_to_global(&pos, &quat, 0, MjtSameFrame::mjSAMEFRAME_NONE);
         assert_eq!(xpos.len(), 3);
         assert_eq!(xmat.len(), 9);
 
         let ray_vecs = [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
-        let rays = data.multi_ray(&pos, &ray_vecs, None, false, None, 10.0, None).unwrap();
+        let rays = data.multi_ray(&pos, &ray_vecs, None, false, None, 10.0, None);
         assert_eq!(rays.0.len(), 3);
         assert_eq!(rays.1.len(), 3);
 
@@ -2081,7 +2202,7 @@ mod test {
         }
 
         let mut normals_buf = vec![[0.0; 3]; ray_vecs.len()];
-        let (gids, dists) = data.multi_ray(&pos, &ray_vecs, None, false, None, 10.0, Some(&mut normals_buf)).unwrap();
+        let (gids, dists) = data.multi_ray(&pos, &ray_vecs, None, false, None, 10.0, Some(&mut normals_buf));
         assert_eq!(gids.len(), normals_buf.len());
         assert_eq!(dists.len(), normals_buf.len());
         for (d, n) in dists.iter().zip(normals_buf.iter()) {
@@ -2147,7 +2268,7 @@ mod test {
         data.init_ctrl_history(0, Some(&times_ctrl), &values_ctrl).unwrap();
 
         // read back via safe wrapper: exact-match should return provided value
-        let val = data.read_ctrl(0, times_ctrl[2], 0).unwrap();
+        let val = data.read_ctrl(0, times_ctrl[2], 0);
         assert_relative_eq!(val, values_ctrl[2], epsilon=1e-12);
 
         // sensor history via wrapper
@@ -2156,12 +2277,12 @@ mod test {
         let values_sens = vec![2.718; 4 * 1];
         data.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).unwrap();
 
-        let got = data.read_sensor_fixed::<1>(0, times_sens[1], 0).unwrap();
+        let got = data.read_sensor_fixed::<1>(0, times_sens[1], 0);
         assert_eq!(got.len(), 1);
         assert_relative_eq!(got[0], values_sens[1], epsilon=1e-12);
 
         // also test interpolation path (time between samples)
-        let interp_res = data.read_sensor_fixed::<1>(0, 0.005, 1).unwrap();
+        let interp_res = data.read_sensor_fixed::<1>(0, 0.005, 1);
         assert_eq!(interp_res.len(), 1);
         // values are identical here, but ensure we get a value
         assert_relative_eq!(interp_res[0], values_sens[0], epsilon=1e-12);
@@ -2261,7 +2382,7 @@ mod test {
         assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "actuator_id", .. }));
 
         // read_ctrl invalid id -> IndexOutOfBounds
-        let err = data.read_ctrl(99, times[0], 0).unwrap_err();
+        let err = data.try_read_ctrl(99, times[0], 0).unwrap_err();
         assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "actuator_id", .. }));
 
         // actuator exists but has no history buffer -> NoHistoryBuffer
@@ -2325,7 +2446,7 @@ mod test {
         assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
 
         // read_sensor invalid id -> IndexOutOfBounds
-        let err: Result<[MjtNum; 1], MjDataError> = data.read_sensor_fixed::<1>(99, times_sens[0], 0);
+        let err: Result<[MjtNum; 1], MjDataError> = data.try_read_sensor_fixed::<1>(99, times_sens[0], 0);
         assert!(matches!(err.unwrap_err(), MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
 
         // sensor exists but has no history buffer -> NoHistoryBuffer
@@ -2380,7 +2501,7 @@ mod test {
 
         // exact match -> Cow::Borrowed
         let query_time = hist_times[2] + delay; // 0.02 + 0.03 = 0.05
-        let cow = data.read_sensor(0, query_time, 0).unwrap();
+        let cow = data.read_sensor(0, query_time, 0);
         assert_eq!(cow.len(), 1);
         assert_relative_eq!(cow[0], 30.0, epsilon = 1e-12);
         assert!(matches!(cow, std::borrow::Cow::Borrowed(_)),
@@ -2389,22 +2510,22 @@ mod test {
         // interpolation -> Cow::Owned
         // midpoint between hist_times[1]=0.01 and hist_times[2]=0.02 -> internal time 0.015
         let interp_query = (hist_times[1] + hist_times[2]) / 2.0 + delay; // 0.045
-        let cow_interp = data.read_sensor(0, interp_query, 1).unwrap();
+        let cow_interp = data.read_sensor(0, interp_query, 1);
         assert_eq!(cow_interp.len(), 1);
         assert_relative_eq!(cow_interp[0], 25.0, epsilon = 1e-6); // linear interp of 20 and 30
         assert!(matches!(cow_interp, std::borrow::Cow::Owned(_)),
                 "interpolation should yield Cow::Owned");
 
         // read_sensor_fixed<N>: exact match (stack array)
-        let arr_exact: [f64; 1] = data.read_sensor_fixed(0, query_time, 0).unwrap();
+        let arr_exact: [f64; 1] = data.read_sensor_fixed(0, query_time, 0);
         assert_relative_eq!(arr_exact[0], 30.0, epsilon = 1e-12);
 
         // read_sensor_fixed<N>: interpolation (stack array)
-        let arr_interp: [f64; 1] = data.read_sensor_fixed(0, interp_query, 1).unwrap();
+        let arr_interp: [f64; 1] = data.read_sensor_fixed(0, interp_query, 1);
         assert_relative_eq!(arr_interp[0], 25.0, epsilon = 1e-6);
 
         // read_sensor_fixed<N>: wrong N -> Err(LengthMismatch)
-        let err: Result<[MjtNum; 3], MjDataError> = data.read_sensor_fixed::<3>(0, query_time, 0);
+        let err: Result<[MjtNum; 3], MjDataError> = data.try_read_sensor_fixed::<3>(0, query_time, 0);
         assert!(matches!(err.unwrap_err(), MjDataError::LengthMismatch { name: "N", .. }));
 
         // read_sensor_into: exact match
@@ -2428,9 +2549,9 @@ mod test {
         assert!(matches!(err, MjDataError::LengthMismatch { name: "dst", .. }));
 
         // invalid sensor id -> IndexOutOfBounds for all methods
-        let err: Result<[MjtNum; 1], MjDataError> = data.read_sensor_fixed::<1>(99, 0.0, 0);
+        let err: Result<[MjtNum; 1], MjDataError> = data.try_read_sensor_fixed::<1>(99, 0.0, 0);
         assert!(matches!(err.unwrap_err(), MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
-        let err = data.read_sensor(99, 0.0, 0).unwrap_err();
+        let err = data.try_read_sensor(99, 0.0, 0).unwrap_err();
         assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
         let err = data.read_sensor_into(99, 0.0, 0, &mut buf).unwrap_err();
         assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "sensor_id", .. }));
@@ -2438,8 +2559,8 @@ mod test {
         // read_sensor_fixed<N>, read_sensor, and read_sensor_into agree for all history times
         for &t in &hist_times {
             let query = t + delay;
-            let arr = data.read_sensor_fixed::<1>(0, query, 0).unwrap();
-            let cow_val = data.read_sensor(0, query, 0).unwrap();
+            let arr = data.read_sensor_fixed::<1>(0, query, 0);
+            let cow_val = data.read_sensor(0, query, 0);
             let mut into_val = [0.0; 1];
             data.read_sensor_into(0, query, 0, &mut into_val).unwrap();
             assert_relative_eq!(arr[0], cow_val[0], epsilon = 1e-12);
@@ -2455,7 +2576,7 @@ mod test {
         let ray_vecs: Vec<[MjtNum; 3]> = Vec::new();
 
         // ensure calling with zero rays returns empty vectors and does not crash
-        let (gids, dists) = data.multi_ray(&pos, &ray_vecs, None, false, None, 10.0, None).unwrap();
+        let (gids, dists) = data.multi_ray(&pos, &ray_vecs, None, false, None, 10.0, None);
         assert!(gids.is_empty());
         assert!(dists.is_empty());
     }
@@ -2468,7 +2589,7 @@ mod test {
         let ray_vecs = [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
         let mut bad_normals = vec![[0.0; 3]; 2]; // length 2 != 3
 
-        let res = data.multi_ray(&pos, &ray_vecs, None, false, None, 10.0, Some(&mut bad_normals));
+        let res = data.try_multi_ray(&pos, &ray_vecs, None, false, None, 10.0, Some(&mut bad_normals));
         assert!(res.is_err());
         assert!(matches!(res.unwrap_err(), MjDataError::LengthMismatch { name: "normals_out", .. }));
     }
@@ -2754,7 +2875,7 @@ mod test {
         let point = [0.0; 3];
 
         // Too-large ID
-        let err = data.jac(true, true, &point, 9999).unwrap_err();
+        let err = data.try_jac(true, true, &point, 9999).unwrap_err();
         assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "body_id", .. }));
     }
 
@@ -2766,11 +2887,11 @@ mod test {
         let data = model.make_data();
 
         // Unsupported type (mjOBJ_JOINT is not in the match arms)
-        let err = data.object_velocity(MjtObj::mjOBJ_JOINT, 0, false).unwrap_err();
+        let err = data.try_object_velocity(MjtObj::mjOBJ_JOINT, 0, false).unwrap_err();
         assert!(matches!(err, MjDataError::UnsupportedObjectType(_)));
 
         // Out-of-range body ID
-        let err = data.object_velocity(MjtObj::mjOBJ_BODY, 9999, false).unwrap_err();
+        let err = data.try_object_velocity(MjtObj::mjOBJ_BODY, 9999, false).unwrap_err();
         assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "obj_id", .. }));
     }
 
@@ -3623,8 +3744,8 @@ mod test {
             let rowadr = model.ten_j_rowadr();
             let colind = model.ten_j_colind();
 
-            let (jacp_s1, _) = data.jac_site(true, false, s1_id).unwrap();
-            let (jacp_s2, _) = data.jac_site(true, false, s2_id).unwrap();
+            let (jacp_s1, _) = data.jac_site(true, false, s1_id);
+            let (jacp_s2, _) = data.jac_site(true, false, s2_id);
 
             let p1 = data.site_xpos()[s1_id];
             let p2 = data.site_xpos()[s2_id];
@@ -3877,8 +3998,8 @@ mod test {
             let d = [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]];
             let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
             let dir = [d[0] / len, d[1] / len, d[2] / len];
-            let (jp1, _) = data.jac_site(true, false, s1_id).unwrap();
-            let (jp2, _) = data.jac_site(true, false, s2_id).unwrap();
+            let (jp1, _) = data.jac_site(true, false, s1_id);
+            let (jp2, _) = data.jac_site(true, false, s2_id);
             let mut expected = vec![0.0 as MjtNum; nv];
             for j in 0..nv {
                 let mut v: MjtNum = 0.0;
@@ -4580,7 +4701,7 @@ mod test {
         let mut data = MjData::new(model);
 
         model_template.opt_mut().timestep = NEW_TIMESTEP;
-        model_template = data.swap_model(model_template).unwrap();
+        model_template = data.swap_model(model_template);
         assert_eq!(model_template.opt().timestep, OLD_TIMESTEP);
         assert_eq!(data.model().opt().timestep, NEW_TIMESTEP);
     }

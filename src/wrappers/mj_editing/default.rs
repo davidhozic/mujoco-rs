@@ -1,13 +1,13 @@
 //! Module implements [`MjsDefault`], which is a special type of [`SpecItem`].
 
-use crate::error::MjEditError;
-
-use super::traits::SpecItem;
-use crate::mujoco_c::*;
 use crate::wrappers::mj_editing::{
     MjsJoint, MjsGeom, MjsSite, MjsCamera, MjsLight, MjsFlex, MjsMesh, MjsMaterial,
     MjsPair, MjsEquality, MjsTendon, MjsActuator
 };
+use crate::error::MjEditError;
+use crate::mujoco_c::*;
+
+use super::traits::SpecItem;
 
 
 macro_rules! default_accessor_wrapper {

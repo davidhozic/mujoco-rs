@@ -109,43 +109,107 @@ The table below maps the breaking error-type changes:
      - 2.x error type
      - 3.0.0 error type
    * - |mj_model|: ``from_xml``, ``from_xml_vfs``, ``from_xml_string``,
-       ``from_buffer``, ``save_last_xml``, ``save_to_file``, ``save_to_buffer``,
+       ``from_buffer``, ``save_last_xml``,
        ``print``, ``print_formatted``
      - ``io::Error`` / ``NulError``
      - ``MjModelError``
-   * - |mj_vfs|: ``add_file``, ``add_file_from``, ``add_from_buffer``, ``delete_file``
+   * - |mj_vfs|: ``add_from_buffer``, ``delete_file``
      - ``io::Error``
      - ``MjVfsError``
    * - |mj_spec|: ``from_xml``, ``from_xml_vfs``, ``from_xml_string``,
-       ``compile``, ``save_xml``, ``save_xml_string``, ``add_default``
+       ``compile``, ``save_xml``, ``save_xml_string``,
+       ``add_default`` (now ``try_add_default``)
      - ``io::Error``
      - ``MjEditError``
-   * - |mj_data|: ``add_contact``, Jacobian methods, ``multi_ray``, ``print``,
-       ``print_formatted``
-     - ``io::Error`` / bare types
+   * - |mj_data|: ``add_contact``
+     - ``io::Error``
      - ``MjDataError``
    * - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
-       ``rgb``, ``depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw``
+       ``save_rgb``, ``save_depth``, ``save_depth_raw``
      - ``io::Error``
      - ``RendererError``
    * - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`: ``render``
      - ``()``
      - ``Result<(), MjViewerError>``
 
-Newly fallible methods
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+``MjRenderer::rgb`` / ``MjRenderer::depth`` no longer return ``Result``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Several methods that previously returned bare types now return ``Result``.
-Append ``?`` or ``.unwrap()`` to call sites.
+:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::rgb` and
+:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::depth` previously returned
+``io::Result`` (2.x) / ``Result<_, RendererError>`` (intermediate 3.0 dev builds).
+They now **panic** on error and return the image directly.
+Use ``try_rgb`` / ``try_depth`` for fallible alternatives.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+   let pixels = renderer.rgb::<W, H>()?;
+   let depth  = renderer.depth::<W, H>()?;
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+   // Panicking (most callers)
+   let pixels = renderer.rgb::<W, H>();
+   let depth  = renderer.depth::<W, H>();
+
+   // Fallible
+   let pixels = renderer.try_rgb::<W, H>()?;
+   let depth  = renderer.try_depth::<W, H>()?;
+
+Newly ``Result``-returning methods
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 |mj_data| methods now returning ``Result<_, MjDataError>``:
-  ``constraint_update``, ``jac``, ``jac_body``, ``jac_body_com``,
-  ``jac_subtree_com``, ``jac_geom``, ``jac_site``, ``angmom_mat``,
-  ``object_velocity``, ``object_acceleration``, ``geom_distance``,
-  ``local_to_global``, ``multi_ray``, ``print``, ``print_formatted``.
+  ``constraint_update``, ``print``, ``print_formatted``.
 
 |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / |mjr_context| methods now returning ``Result<_, MjSceneError>``:
-  ``create_geom``, ``set_label``, ``add_aux``, ``set_aux``.
+  ``set_label``, ``add_aux``, ``set_aux``.
+
+|mjv_scene|: ``create_geom`` now panics on failure (was bare type in 2.x).
+Use ``try_create_geom`` for a fallible alternative.
+
+**Before:**
+
+.. code-block:: rust
+
+   let geom = scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None);
+
+**After (panicking):**
+
+.. code-block:: rust
+
+   let geom = scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None);
+
+**After (fallible):**
+
+.. code-block:: rust
+
+   let geom = scene.try_create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None)?;
+
+|mj_spec|: ``add_default`` now panics on failure (was ``Result`` in 2.x).
+Use ``try_add_default`` for a fallible alternative.
+
+**Before:**
+
+.. code-block:: rust
+
+   let def = spec.add_default("my_class", None)?;
+
+**After (panicking):**
+
+.. code-block:: rust
+
+   let def = spec.add_default("my_class", None);
+
+**After (fallible):**
+
+.. code-block:: rust
+
+   let def = spec.try_add_default("my_class", None)?;
 
 :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` methods now returning ``Result``:
   ``set_font_scale`` returns ``Result<(), RendererError>``;
@@ -387,8 +451,9 @@ Type changes
   and ``body_id`` with ``Some(body_id as usize)``.
 - |mj_data|: ``ray()`` returns ``(Option<usize>, MjtNum)`` (was ``(i32, MjtNum)``).
   ``None`` means no intersection (previously ``-1``).
-- |mj_data|: ``multi_ray()`` returns ``Result<(Vec<Option<usize>>, Vec<MjtNum>), ...>``
-  (was ``(Vec<i32>, Vec<MjtNum>)``). Each ``None`` element means no
+- |mj_data|: ``try_multi_ray()`` returns ``Result<(Vec<Option<usize>>, Vec<MjtNum>), ...>``
+  (was ``(Vec<i32>, Vec<MjtNum>)``). ``multi_ray()`` panics on error.
+  Each ``None`` element means no
   intersection for that ray (previously ``-1``).
 - |mjs_tendon|: ``limited`` and ``actfrclimited`` are now ``MjtLimited`` tri-state (was ``bool``).
 - |mjv_camera|: ``new_fixed``, ``new_tracking``, ``track``, ``fix`` now take ``usize`` (was ``u32``).
@@ -403,8 +468,6 @@ Type changes
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`
   now requires ``T: bytemuck::NoUninit`` (add ``bytemuck`` to your dependencies if you
   call this method with a custom type, and derive or implement ``NoUninit`` for it).
-- |mj_data|: ``contact_force()`` now takes ``contact_id: usize`` (was ``u32``).
-  Remove ``as u32`` casts at call sites.
 
 
 ``MjData::reset_keyframe()``
@@ -481,7 +544,8 @@ changed from ``(i32, MjtNum)`` to ``(Option<usize>, MjtNum)``; the geom id is
   if geom_id.is_none() { /* miss */ }
 
 Similarly, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray`
-gained ``normals_out``, now returns ``Result``, and its geom-id vector changed from
+gained ``normals_out``, now panics on invalid input (use ``try_multi_ray`` for a
+fallible alternative), and its geom-id vector changed from
 ``Vec<i32>`` to ``Vec<Option<usize>>``. Pass ``None`` for ``normals_out``.
 
 :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_ray_geom` also gained
@@ -515,7 +579,7 @@ The ``jacp: bool`` parameter has been removed (the Jacobian is always computed).
 
 .. code-block:: rust
 
-    let jac = data.jac_subtree_com(body_id)?;
+    let jac = data.jac_subtree_com(body_id);
 
 
 ``MjvPerturb::update_local_pos``
@@ -615,7 +679,7 @@ struct instead of a 5-tuple.
 .. code-block:: rust
 
     let sel = scene.find_selection(&data, ...);
-    println!("{} {} {} {} {:?}", sel.body_id, sel.geom_id, sel.flex_id, sel.skin_id, sel.point);
+    println!("{:?} {:?} {:?} {:?} {:?}", sel.body_id, sel.geom_id, sel.flex_id, sel.skin_id, sel.point);
 
 
 Core ``Send``/``Sync`` bound tightening
