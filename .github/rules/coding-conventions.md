@@ -51,9 +51,15 @@
 - Any changes made should be reflected in the changelog: `docs/guide/source/changelog.rst`.
   Make sure to follow the conventions and style of previous changelog entries.
 - Breaking changes must also have a before/after migration entry in `docs/guide/source/migration.rst`.
+- The migration guide is **only for breaking changes**. New non-breaking additions (e.g. new `try_`
+  variants that don't change existing signatures) belong in the changelog only.
 - Always make sure MuJoCo-rs's documentation in `docs/guide` stays up to date with the changes.
 - After adding or modifying public items or doc comments, run `/doc` to check for rustdoc warnings/errors.
   See `workflows/doc.md` for the exact command.
+- All public API changes must adhere to the
+  [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/). Consult
+  the guidelines when adding or modifying public types, traits, methods, naming,
+  or error handling.
 
 ## Testing
 - When adding a new feature or fixing a bug, add a test for it if one does not already exist.

@@ -120,29 +120,51 @@ The table below maps the breaking error-type changes:
        ``compile``, ``save_xml``, ``save_xml_string``, ``add_default``
      - ``io::Error``
      - ``MjEditError``
-   * - |mj_data|: ``add_contact``, Jacobian methods, ``multi_ray``, ``print``,
+   * - |mj_data|: ``add_contact``, ``print``,
        ``print_formatted``
-     - ``io::Error`` / bare types
+     - ``io::Error``
      - ``MjDataError``
    * - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
-       ``rgb``, ``depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw``
+       ``try_rgb``, ``try_depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw``
      - ``io::Error``
      - ``RendererError``
    * - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`: ``render``
      - ``()``
      - ``Result<(), MjViewerError>``
 
-Newly fallible methods
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+``MjRenderer::rgb`` / ``MjRenderer::depth`` no longer return ``Result``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Several methods that previously returned bare types now return ``Result``.
-Append ``?`` or ``.unwrap()`` to call sites.
+:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::rgb` and
+:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::depth` previously returned
+``io::Result`` (2.x) / ``Result<_, RendererError>`` (intermediate 3.0 dev builds).
+They now **panic** on error and return the image directly.
+Use ``try_rgb`` / ``try_depth`` for fallible alternatives.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+   let pixels = renderer.rgb::<W, H>()?;
+   let depth  = renderer.depth::<W, H>()?;
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+   // Panicking (most callers)
+   let pixels = renderer.rgb::<W, H>();
+   let depth  = renderer.depth::<W, H>();
+
+   // Fallible
+   let pixels = renderer.try_rgb::<W, H>()?;
+   let depth  = renderer.try_depth::<W, H>()?;
+
+Newly ``Result``-returning methods
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 |mj_data| methods now returning ``Result<_, MjDataError>``:
-  ``constraint_update``, ``jac``, ``jac_body``, ``jac_body_com``,
-  ``jac_subtree_com``, ``jac_geom``, ``jac_site``, ``angmom_mat``,
-  ``object_velocity``, ``object_acceleration``, ``geom_distance``,
-  ``local_to_global``, ``multi_ray``, ``print``, ``print_formatted``.
+  ``constraint_update``.
 
 |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / |mjr_context| methods now returning ``Result<_, MjSceneError>``:
   ``create_geom``, ``set_label``, ``add_aux``, ``set_aux``.
@@ -387,8 +409,9 @@ Type changes
   and ``body_id`` with ``Some(body_id as usize)``.
 - |mj_data|: ``ray()`` returns ``(Option<usize>, MjtNum)`` (was ``(i32, MjtNum)``).
   ``None`` means no intersection (previously ``-1``).
-- |mj_data|: ``multi_ray()`` returns ``Result<(Vec<Option<usize>>, Vec<MjtNum>), ...>``
-  (was ``(Vec<i32>, Vec<MjtNum>)``). Each ``None`` element means no
+- |mj_data|: ``try_multi_ray()`` returns ``Result<(Vec<Option<usize>>, Vec<MjtNum>), ...>``
+  (was ``(Vec<i32>, Vec<MjtNum>)``). ``multi_ray()`` panics on error.
+  Each ``None`` element means no
   intersection for that ray (previously ``-1``).
 - |mjs_tendon|: ``limited`` and ``actfrclimited`` are now ``MjtLimited`` tri-state (was ``bool``).
 - |mjv_camera|: ``new_fixed``, ``new_tracking``, ``track``, ``fix`` now take ``usize`` (was ``u32``).
@@ -515,7 +538,7 @@ The ``jacp: bool`` parameter has been removed (the Jacobian is always computed).
 
 .. code-block:: rust
 
-    let jac = data.jac_subtree_com(body_id)?;
+    let jac = data.jac_subtree_com(body_id);
 
 
 ``MjvPerturb::update_local_pos``

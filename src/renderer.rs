@@ -493,12 +493,23 @@ impl MjRenderer {
 
     /// Return an RGB image of the scene. This method accepts two generic parameters <WIDTH, HEIGHT>
     /// that define the shape of the output slice.
+    ///
+    /// # Panics
+    /// - If the image size doesn't match the required dimensions.
+    /// - If RGB rendering is disabled.
+    ///
+    /// Use [`MjRenderer::try_rgb`] for a fallible alternative.
+    pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> &[[[u8; 3]; WIDTH]; HEIGHT] {
+        self.try_rgb::<WIDTH, HEIGHT>().expect("rgb failed")
+    }
+
+    /// Fallible version of [`MjRenderer::rgb`].
     /// # Returns
     /// On success, returns [`Ok`] variant containing the rendered RGB image.
     /// # Errors
     /// - [`RendererError::DimensionMismatch`] if the image size doesn't match the required dimensions.
     /// - [`RendererError::RgbDisabled`] if RGB rendering is disabled.
-    pub fn rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[[u8; 3]; WIDTH]; HEIGHT], RendererError> {
+    pub fn try_rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[[u8; 3]; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.rgb_flat() {
             bytemuck::try_from_bytes(flat)
                 .map_err(|_| RendererError::DimensionMismatch)
@@ -515,12 +526,23 @@ impl MjRenderer {
 
     /// Return a depth image of the scene. This method accepts two generic parameters <WIDTH, HEIGHT>
     /// that define the shape of the output slice.
+    ///
+    /// # Panics
+    /// - If the image size doesn't match the required dimensions.
+    /// - If depth rendering is disabled.
+    ///
+    /// Use [`MjRenderer::try_depth`] for a fallible alternative.
+    pub fn depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> &[[f32; WIDTH]; HEIGHT] {
+        self.try_depth::<WIDTH, HEIGHT>().expect("depth failed")
+    }
+
+    /// Fallible version of [`MjRenderer::depth`].
     /// # Returns
     /// On success, returns [`Ok`] variant containing the rendered depth image.
     /// # Errors
     /// - [`RendererError::DimensionMismatch`] if the image size doesn't match the required dimensions.
     /// - [`RendererError::DepthDisabled`] if depth rendering is disabled.
-    pub fn depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[f32; WIDTH]; HEIGHT], RendererError> {
+    pub fn try_depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[f32; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.depth_flat() {
             let bytes: &[u8] = bytemuck::cast_slice(flat);
             bytemuck::try_from_bytes(bytes)

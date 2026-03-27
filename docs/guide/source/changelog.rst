@@ -397,21 +397,22 @@ New error types in :docs-rs:`~mujoco_rs::error`
        ``save_to_file`` :sup:`new`,
        ``save_to_buffer`` :sup:`new`,
        ``print``, ``print_formatted``,
-       ``extract_state`` :sup:`new`,
-       ``extract_state_into`` :sup:`new`
+       ``try_extract_state`` :sup:`new`,
+       ``try_extract_state_into`` :sup:`new`
      - :docs-rs:`~mujoco_rs::error::<enum>MjModelError`
    * - |mj_data|
      - ``add_contact``, ``constraint_update``,
-       ``jac``, ``jac_body``, ``jac_body_com``, ``jac_subtree_com``,
-       ``jac_geom``, ``jac_site``, ``angmom_mat``,
-       ``object_velocity``, ``object_acceleration``, ``geom_distance``,
-       ``local_to_global``, ``multi_ray``, ``print``, ``print_formatted``,
+       ``try_jac``, ``try_jac_body``, ``try_jac_body_com``, ``try_jac_subtree_com``,
+       ``try_jac_geom``, ``try_jac_site``, ``try_angmom_mat``,
+       ``try_object_velocity``, ``try_object_acceleration``, ``try_geom_distance``,
+       ``try_local_to_global``, ``try_multi_ray``, ``print``, ``print_formatted``,
        ``init_ctrl_history`` :sup:`new`,
        ``init_sensor_history`` :sup:`new`,
-       ``read_ctrl`` :sup:`new`,
+       ``try_read_ctrl`` :sup:`new`,
        ``read_sensor_into`` :sup:`new`,
-       ``read_sensor_fixed`` :sup:`new`,
-       ``read_sensor`` :sup:`new`,
+       ``try_read_sensor_fixed`` :sup:`new`,
+       ``try_read_sensor`` :sup:`new`,
+       ``try_swap_model`` :sup:`new`,
        ``reset_keyframe``,
        ``copy_state_from_data`` :sup:`new`,
        ``apply_ft`` :sup:`new`,
@@ -434,7 +435,7 @@ New error types in :docs-rs:`~mujoco_rs::error`
        ``push``, ``set_at``, ``read_pixels``
      - :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`
    * - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`
-     - ``rgb``, ``depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw``
+     - ``try_rgb``, ``try_depth``, ``save_rgb``, ``save_depth``, ``save_depth_raw``
      - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`
    * - :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer`
      - ``render``
@@ -464,11 +465,20 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
 - New ``try_`` methods paired with existing infallible counterparts (infallible
   variants now delegate to ``try_``.``expect()``):
 
-  - |mj_data|: ``try_new``, ``try_clone``, ``try_read_state_into``
-  - |mj_model|: ``try_clone``, ``try_make_data``
+  - |mj_data|: ``try_new``, ``try_clone``, ``try_read_state_into``,
+    ``try_swap_model``, ``try_read_ctrl``, ``try_read_sensor_fixed``,
+    ``try_read_sensor``,
+    ``try_jac``, ``try_jac_body``, ``try_jac_body_com``,
+    ``try_jac_subtree_com``, ``try_jac_geom``, ``try_jac_site``,
+    ``try_angmom_mat``, ``try_object_velocity``, ``try_object_acceleration``,
+    ``try_geom_distance``, ``try_local_to_global``, ``try_multi_ray``
+  - |mj_model|: ``try_clone``, ``try_make_data``,
+    ``try_extract_state``, ``try_extract_state_into``
   - |mj_spec| / |mjs_tendon| / ``MjsBody``: ``try_new``, ``try_clone``, ``try_add_frame``,
     ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, ``try_wrap_pulley``,
     macro-generated ``try_add_*``
+  - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
+    ``try_rgb``, ``try_depth``
 
 - New |mj_data| methods that return ``Result`` directly (no separate ``try_`` variant):
   ``copy_state_from_data``, ``apply_ft``.

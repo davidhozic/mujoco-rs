@@ -102,7 +102,7 @@ fn test_simulation_and_sensors<'a>(model: &'a MjModel, data: &mut MjData<&'a MjM
     data.sensor_pos();
     let sensor_id = model.name_to_id(MjtObj::mjOBJ_SENSOR, "box2_pos_sensor").unwrap();
     // box2_pos_sensor is mjSENS_JOINTPOS (dim=1)
-    let sensor_data: [f64; 1] = data.read_sensor_fixed(sensor_id, 0.0, 0).expect("Failed to read sensor");
+    let sensor_data: [f64; 1] = data.read_sensor_fixed(sensor_id, 0.0, 0);
     assert!(!sensor_data.is_empty());
 }
 
@@ -114,25 +114,25 @@ fn test_kinematics_and_jacobians<'a>(model: &'a MjModel, data: &mut MjData<&'a M
     let site_id = model.name_to_id(MjtObj::mjOBJ_SITE, "box1_site").unwrap();
     let box1_body_id = model.name_to_id(MjtObj::mjOBJ_BODY, "box1").unwrap();
     
-    let (jacp, jacr) = data.jac_site(true, true, site_id).unwrap();
+    let (jacp, jacr) = data.jac_site(true, true, site_id);
     assert_eq!(jacp.len(), 3 * model.ffi().nv as usize);
     assert_eq!(jacr.len(), 3 * model.ffi().nv as usize);
     
-    let (jacp_body, _) = data.jac_body_com(true, false, box1_body_id).unwrap();
+    let (jacp_body, _) = data.jac_body_com(true, false, box1_body_id);
     assert_eq!(jacp_body.len(), 3 * model.ffi().nv as usize);
 
     println!("Testing object velocity/acceleration...");
-    let vel = data.object_velocity(MjtObj::mjOBJ_BODY, box1_body_id, false).unwrap();
+    let vel = data.object_velocity(MjtObj::mjOBJ_BODY, box1_body_id, false);
     assert_eq!(vel.len(), 6);
     
     data.fwd_position();
     data.fwd_velocity();
     data.fwd_actuation();
     data.fwd_acceleration();
-    let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, box1_body_id, false).unwrap();
+    let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, box1_body_id, false);
     assert_eq!(acc.len(), 6);
     
-    let am_mat = data.angmom_mat(box1_body_id).unwrap();
+    let am_mat = data.angmom_mat(box1_body_id);
     assert_eq!(am_mat.len(), 3 * model.ffi().nv as usize);
 }
 
