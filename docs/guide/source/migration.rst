@@ -832,7 +832,7 @@ from all usage sites.
 
 .. code-block:: rust
 
-    let scene: MjvScene = MjvScene::new(model.clone(), 1000);
+    let mut scene: MjvScene = MjvScene::new(model.clone(), 1000);
     scene.update(&mut data, &opt, &perturb, &mut cam);
 
 Additional details:
@@ -869,7 +869,7 @@ usage sites.
 
 .. code-block:: rust
 
-    let viewer: MjViewer = MjViewer::builder()
+    let mut viewer: MjViewer = MjViewer::builder()
         .build_passive(model.clone())
         .expect("failed to start viewer");
 

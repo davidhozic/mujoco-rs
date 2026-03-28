@@ -425,8 +425,8 @@ impl MjvFigure {
 
     /// Checks if the buffer is full for plot with `plot_index`.
     ///
-    /// Returns [`Err(MjSceneError::InvalidPlotIndex)`](MjSceneError::InvalidPlotIndex)
-    /// if `plot_index >= mjMAXLINE`.
+    /// # Errors
+    /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
     ///
     /// Use [`MjvFigure::full`] for a panicking alternative.
     pub fn try_full(&self, plot_index: usize) -> Result<bool, MjSceneError> {
@@ -448,8 +448,8 @@ impl MjvFigure {
 
     /// Checks if the buffer is empty for plot with `plot_index`.
     ///
-    /// Returns [`Err(MjSceneError::InvalidPlotIndex)`](MjSceneError::InvalidPlotIndex)
-    /// if `plot_index >= mjMAXLINE`.
+    /// # Errors
+    /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
     ///
     /// Use [`MjvFigure::empty`] for a panicking alternative.
     pub fn try_empty(&self, plot_index: usize) -> Result<bool, MjSceneError> {
@@ -540,8 +540,10 @@ impl MjvFigure {
 
     /// Pops the first element from the plot data of plot with `plot_index`.
     ///
-    /// Returns `Ok(Some((x, y)))` when the plot contains elements, `Ok(None)` when empty,
-    /// or `Err(`[`MjSceneError::InvalidPlotIndex`]`)` if `plot_index >= mjMAXLINE`.
+    /// # Errors
+    /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
+    ///
+    /// Returns `Ok(Some((x, y)))` when the plot contains elements, `Ok(None)` when empty.
     ///
     /// Use [`MjvFigure::pop_front`] for a panicking alternative.
     pub fn try_pop_front(&mut self, plot_index: usize) -> Result<Option<(f32, f32)>, MjSceneError> {
@@ -575,8 +577,10 @@ impl MjvFigure {
 
     /// Pops the last element from the plot data of plot with `plot_index`.
     ///
-    /// Returns `Ok(Some((x, y)))` when the plot contains elements, `Ok(None)` when empty,
-    /// or `Err(`[`MjSceneError::InvalidPlotIndex`]`)` if `plot_index >= mjMAXLINE`.
+    /// # Errors
+    /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
+    ///
+    /// Returns `Ok(Some((x, y)))` when the plot contains elements, `Ok(None)` when empty.
     ///
     /// Use [`MjvFigure::pop_back`] for a panicking alternative.
     pub fn try_pop_back(&mut self, plot_index: usize) -> Result<Option<(f32, f32)>, MjSceneError> {
@@ -607,8 +611,8 @@ impl MjvFigure {
 
     /// Fallible version of [`MjvFigure::cut_front`].
     ///
-    /// Returns [`Err(MjSceneError::InvalidPlotIndex)`](MjSceneError::InvalidPlotIndex)
-    /// if `plot_index >= mjMAXLINE`.
+    /// # Errors
+    /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
     ///
     /// Use [`MjvFigure::cut_front`] for a panicking alternative.
     pub fn try_cut_front(&mut self, plot_index: usize, n: usize) -> Result<(), MjSceneError> {
@@ -639,8 +643,8 @@ impl MjvFigure {
 
     /// Fallible version of [`MjvFigure::cut_end`].
     ///
-    /// Returns [`Err(MjSceneError::InvalidPlotIndex)`](MjSceneError::InvalidPlotIndex)
-    /// if `plot_index >= mjMAXLINE`.
+    /// # Errors
+    /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
     ///
     /// Use [`MjvFigure::cut_end`] for a panicking alternative.
     pub fn try_cut_end(&mut self, plot_index: usize, n: usize) -> Result<(), MjSceneError> {

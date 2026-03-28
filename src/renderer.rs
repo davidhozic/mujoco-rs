@@ -116,7 +116,10 @@ impl MjRendererBuilder {
     /// - `num_visual_user_geom`: 0,
     /// - `rgb`: true,
     /// - `depth`: false,
-    /// - `png_compression`: [`png::Compression::NoCompression`] (fastest, largest files).
+    /// - `png_compression`: [`png::Compression::NoCompression`] (fastest, largest files),
+    /// - `font_scale`: [`MjtFontScale::mjFONTSCALE_100`],
+    /// - `camera`: [`MjvCamera::default()`] (MuJoCo's `mjv_defaultCamera`),
+    /// - `opts`: [`MjvOption::default()`] (MuJoCo's `mjv_defaultOption`).
     pub fn new() -> Self {
         Self {
             width: 0, height: 0,
@@ -180,8 +183,10 @@ which can be configured at the top of the model's XML like so:
     /// # Errors
     /// - [`RendererError::ZeroDimension`] if the width or height is zero.
     /// - [`RendererError::GlutinError`] if OpenGL initialization fails.
-    /// - [`RendererError::EventLoopError`] if the event loop fails to initialize.
-    /// - [`RendererError::GlInitFailed`] if the fallback window initialization fails.
+    /// - [`RendererError::EventLoopError`] if the event loop fails to initialize
+    ///   (feature `renderer-winit-fallback`).
+    /// - [`RendererError::GlInitFailed`] if the fallback window initialization fails
+    ///   (feature `renderer-winit-fallback`).
     pub fn build<M: Deref<Target = MjModel>>(self, model: M) -> Result<MjRenderer, RendererError> {
         // Assume model's maximum should be used
         let mut height = self.height;
@@ -308,8 +313,10 @@ impl MjRenderer {
     /// # Errors
     /// - [`RendererError::ZeroDimension`] if the width or height is zero.
     /// - [`RendererError::GlutinError`] if OpenGL initialization fails.
-    /// - [`RendererError::EventLoopError`] if the event loop fails to initialize.
-    /// - [`RendererError::GlInitFailed`] if the fallback window initialization fails.
+    /// - [`RendererError::EventLoopError`] if the event loop fails to initialize
+    ///   (feature `renderer-winit-fallback`).
+    /// - [`RendererError::GlInitFailed`] if the fallback window initialization fails
+    ///   (feature `renderer-winit-fallback`).
     pub fn new<M: Deref<Target = MjModel>>(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
         MjRendererBuilder::new()
             .width(width as u32).height(height as u32).num_visual_user_geom(max_user_geom as u32)

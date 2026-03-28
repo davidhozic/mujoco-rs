@@ -87,6 +87,8 @@ pub trait SpecItem: Sized {
     /// Builder style make the item inherit from a default class.
     /// # Errors
     /// Returns [`MjEditError::NotFound`] when the default with the `class_name` doesn't exist.
+    /// # Panics
+    /// When the `class_name` contains '\0' characters, a panic occurs.
     fn with_default(&mut self, class_name: &str) -> Result<&mut Self, MjEditError> {
         self.set_default(class_name)?;
         Ok(self)

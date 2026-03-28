@@ -57,6 +57,7 @@ pub struct MjData<M: Deref<Target = MjModel>> {
 // Allow usage in threaded contexts as long as M itself is Send / Sync
 // (e.g. Arc<MjModel>). Non-Send M types such as Rc<MjModel> are correctly
 // excluded by the M: Send / M: Sync bounds.
+// SAFETY: MjData owns its mjData heap allocation exclusively. Send/Sync follow from M's bounds.
 unsafe impl<M: Deref<Target = MjModel> + Send> Send for MjData<M> {}
 unsafe impl<M: Deref<Target = MjModel> + Sync> Sync for MjData<M> {}
 
