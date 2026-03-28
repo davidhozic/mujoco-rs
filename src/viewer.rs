@@ -267,12 +267,18 @@ impl ViewerSharedState {
     }
 
     /// Syncs the viewer's internal passive [`MjData`] with `data`.
-    /// Synchronization happens in two steps.
-    /// First the viewer checks if any changes have been made to the internal [`MjData`]
-    /// since the last call to this method (since the last sync). Any changes made are
-    /// directly copied to the parameter `data`.
-    /// Then `data` is copied into the viewer's internal passive copy
-    /// (visualization fields only; see warning below).
+    /// Synchronization happens in three steps:
+    ///
+    /// 1. The viewer checks if any changes have been made to the internal [`MjData`]
+    ///    since the last call to this method (since the last sync). Changed elements
+    ///    are selectively merged into `data` (elements the viewer did not touch are
+    ///    preserved).
+    /// 2. `data` is copied into the viewer's internal passive copy
+    ///    (visualization fields only; see warning below).
+    /// 3. Perturbations are applied to `data` via [`MjvPerturb::apply`], which
+    ///    **unconditionally zeroes `xfrc_applied`** before writing any active
+    ///    perturbation forces. Any external forces previously set on `data` will be
+    ///    cleared.
     ///
     /// Note that users must afterward call [`MjViewer::render`] for the scene
     /// to be rendered and the UI to be processed.
@@ -563,9 +569,11 @@ impl MjViewer {
     /// Syncs the state of viewer's internal [`MjData`] with `data`.
     /// This is a proxy to [`ViewerSharedState::sync_data`].
     /// 
-    /// Additionally, any changes made to the internal [`MjData`] in between syncs
-    /// get copied back to `data` before the actual sync.
-    /// This includes object perturbations.
+    /// Any changes made to the internal [`MjData`] in between syncs
+    /// get selectively merged back into `data` before the copy.
+    /// Perturbations are applied to `data` **after** the sync, which
+    /// **unconditionally zeroes `xfrc_applied`** (see
+    /// [`ViewerSharedState::sync_data`] for details).
     /// 
     /// Note that users must afterward call [`MjViewer::render`] for the scene
     /// to be rendered and the UI to be processed.

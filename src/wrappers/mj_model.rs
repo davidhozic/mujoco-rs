@@ -158,8 +158,8 @@ unsafe impl bytemuck::Zeroable for mjtColorSpace_ {}
 #[derive(Debug)]
 pub struct MjModel(NonNull<mjModel>);
 
-// Allow usage in threaded contexts as the data won't be shared anywhere outside Rust,
-// except in the C++ code.
+// SAFETY: MjModel owns its mjModel heap allocation exclusively. The data is not shared
+// outside of Rust, except in the C++ code which is synchronized via wrapper APIs.
 unsafe impl Send for MjModel {}
 unsafe impl Sync for MjModel {}
 

@@ -323,8 +323,7 @@ pub fn mju_normalize_4(vec: &mut [MjtNum; 4]) -> MjtNum  {
 }
 
 /// Coordinate transform of 6D motion or force vector in rotation:translation format.
-/// rotnew2old is 3-by-3, NULL means no rotation; flg_force specifies force or motion type.
-/// Nullable: rotnew2old
+/// `rotnew_2old` is 3-by-3; pass `None` for no rotation. `flg_force` specifies force or motion type.
 pub fn mju_transform_spatial(res: &mut [MjtNum; 6], vec: &[MjtNum; 6], flg_force: bool, newpos: &[MjtNum; 3], oldpos: &[MjtNum; 3], rotnew_2old: Option<&[MjtNum; 9]>)  {
     // SAFETY: all arguments are valid references; nullable parameters use null when None.
     unsafe { mujoco_c::mju_transformSpatial(

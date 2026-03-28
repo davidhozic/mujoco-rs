@@ -460,6 +460,14 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``save_xml_string`` when the supplied buffer is too small; the ``required_size`` field
   carries the ``snprintf``-style byte count (excluding NUL), so retry with
   ``required_size as usize + 1``.
+- :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`: ``SceneFull``,
+  ``LabelTooLong``, ``InvalidAuxBufferIndex``, ``InvalidViewport``,
+  ``BufferTooSmall``, ``FigureBufferFull``, ``FigureIndexOutOfBounds``,
+  ``InvalidPlotIndex``, ``NonAsciiLabel``.
+- :docs-rs:`~mujoco_rs::error::<enum>GlInitError` (requires ``viewer`` or
+  ``renderer-winit-fallback`` feature): ``DisplayBuild``, ``NoWindow``,
+  ``WindowHandle``, ``ContextCreation``, ``SurfaceAttributes``,
+  ``SurfaceCreation``, ``MakeCurrent``.
 - New ``try_`` methods paired with existing infallible counterparts (infallible
   variants now delegate to ``try_``.``expect()``):
 

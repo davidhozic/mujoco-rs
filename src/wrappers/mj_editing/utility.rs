@@ -536,11 +536,11 @@ macro_rules! vec_set {
     }};
 }
 
-/// Implements appenders for non-string attributes of a double vec.
+/// Implements appenders for non-string attributes of a vector of vectors.
 macro_rules! vec_vec_append {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
-            #[doc = concat!("Set ", $comment)]
+            #[doc = concat!("Append to ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
                 // SAFETY: self.$name is a valid pointer for the lifetime of self.
                 unsafe { [<append_mjs_vec_vec_ $type>](value, self.$name) };
