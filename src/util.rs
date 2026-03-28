@@ -169,6 +169,8 @@ impl<T> Deref for PointerViewMut<'_, T> {
         if self.ptr.is_null() {
             return &[];
         }
+        // SAFETY: ptr is non-null (checked above), properly aligned, and points to
+        // self.len initialized elements owned by the parent wrapper for lifetime 'd.
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
@@ -178,6 +180,8 @@ impl<T> DerefMut for PointerViewMut<'_, T> {
         if self.ptr.is_null() {
             return &mut [];
         }
+        // SAFETY: ptr is non-null (checked above), properly aligned, points to self.len
+        // initialized elements, and &mut self guarantees exclusive access.
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
@@ -212,6 +216,8 @@ impl<'d, T> PointerViewUnsafeMut<'d, T> {
         if self.ptr.is_null() {
             return &mut [];
         }
+        // SAFETY: caller upholds aliasing and validity guarantees (documented above).
+        // ptr is non-null (checked above) and points to self.len elements.
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
@@ -231,6 +237,8 @@ impl<T> Deref for PointerViewUnsafeMut<'_, T> {
         if self.ptr.is_null() {
             return &[];
         }
+        // SAFETY: ptr is non-null (checked above), properly aligned, and points to
+        // self.len initialized elements owned by the parent wrapper for lifetime 'd.
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
@@ -270,6 +278,8 @@ impl<T> Deref for PointerView<'_, T> {
         if self.ptr.is_null() {
             return &[];
         }
+        // SAFETY: ptr is non-null (checked above), properly aligned, and points to
+        // self.len initialized elements owned by the parent wrapper for lifetime 'd.
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
@@ -434,7 +444,7 @@ macro_rules! info_with_view {
         paste::paste! {
             #[doc = "Index ranges required to create views into [`Mj" $info_type "`] arrays for a " $name "."]
             #[allow(non_snake_case)]
-            #[derive(Debug)]
+            #[derive(Debug, Clone)]
             pub struct [<Mj $name:camel $info_type Info>] {
                 pub name: String,
                 pub id: usize,
@@ -1147,9 +1157,9 @@ mod tests {
     /// Exercises the three "dead" combination arms of `getter_setter!` (arms 11, 12, 13)
     /// by instantiating each on a minimal dummy struct.
     ///
-    /// - Arm 11: `(force!, get, set, [...])` - force-cast getter + setter.
-    /// - Arm 12: `(get, set, [... : bool ...])` - bool getter (field `== 1`) + setter.
-    /// - Arm 13: `(get, set, [... : $type ...])` - `.into()` getter + setter.
+    /// - Arm 11: `(force!, get, set, [...])` -- force-cast getter + setter.
+    /// - Arm 12: `(get, set, [... : bool ...])` -- bool getter (field `== 1`) + setter.
+    /// - Arm 13: `(get, set, [... : $type ...])` -- `.into()` getter + setter.
     #[test]
     fn test_getter_setter_dead_arms_11_12_13() {
         struct ArmEleven { x: i32, y: i32 }

@@ -479,6 +479,12 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
     ``try_rgb``, ``try_depth``
   - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`:
     ``try_create_geom``
+  - |mj_data|: ``try_ray_flex`` :sup:`new`, ``try_ray_hfield`` :sup:`new`,
+    ``try_ray_mesh`` :sup:`new`
+  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure`:
+    ``try_full`` :sup:`new`, ``try_empty`` :sup:`new`,
+    ``try_pop_front`` :sup:`new`, ``try_pop_back`` :sup:`new`,
+    ``try_cut_front`` :sup:`new`, ``try_cut_end`` :sup:`new`
 
 - New |mj_data| methods that return ``Result`` directly (no separate ``try_`` variant):
   ``copy_state_from_data``, ``apply_ft``.

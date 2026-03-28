@@ -16,9 +16,14 @@
 - The `ffi-regenerate` feature rebuilds `src/mujoco_c.rs` from headers. **Never trigger this feature as an agent.**
 
 ## Error handling
-- Standard pattern: the panicking wrapper calls the `try_` variant with `.expect()`; never duplicate
+- Standard pattern: the panicking wrapper calls the `try_` variant with `.unwrap()`; never duplicate
   the logic. Only the `try_` variant contains the implementation; the panicking version is a thin
-  wrapper.
+  wrapper. Use `.unwrap()` instead of `.expect("X failed")` when the failure context is obvious
+  from the function name (visible in the panic backtrace). Reserve `.expect("...")` for messages
+  that add genuine diagnostic value beyond the function name (e.g. allocation failures, specific
+  C-API return codes).
+- **Method ordering**: place the panicking method first, then the `try_` variant immediately after.
+  This matches the convention in `mj_data.rs` and other wrapper files.
 - **When to apply the try_/panicking split**: only for methods returning `Result<T, E>` where
   **T is not `()`** and the failure represents a **programmer error** (bad index, size mismatch,
   invalid argument that could be validated beforehand). Methods with runtime/environmental errors
@@ -41,7 +46,8 @@
   blocks and trust the reader to refer upward. Only add a new comment when the reasoning differs.
 - Public items should have `///` doc comments.
 - Always use ASCII characters only. Avoid non-ASCII Unicode characters (e.g., em dashes, arrows,
-  smart quotes).
+  smart quotes). Use `--` (double hyphen) as the ASCII substitute for em dashes. This applies to
+  both source code and `.github/` rule/skill files.
 - Imports (`use`) should be sorted by line length with the longest line on top.
 - Prefer to group imports with the same parent module.
 - Do NOT flag or fix integer truncation casts (e.g., `usize as i32`, `len() as i32`) when the

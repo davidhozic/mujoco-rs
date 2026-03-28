@@ -5,6 +5,7 @@ pub type MjOption = mjOption;
 
 impl Default for MjOption {
     fn default() -> Self {
+        // SAFETY: mj_defaultOption fully initializes the struct before assume_init.
         unsafe {
             let mut opt = std::mem::MaybeUninit::uninit();
             mj_defaultOption(opt.as_mut_ptr());

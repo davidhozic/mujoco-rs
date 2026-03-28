@@ -175,7 +175,11 @@ impl MjvCamera {
     }
 
     /// Creates a new fixed camera.
+    ///
+    /// # Panics
+    /// In debug builds, panics if `camera_id` exceeds `i32::MAX`.
     pub fn new_fixed(camera_id: usize) -> Self {
+        debug_assert!(camera_id <= i32::MAX as usize, "camera_id exceeds i32::MAX");
         mjvCamera_ {
             type_: MjtCamera::mjCAMERA_FIXED as i32,
             fixedcamid: camera_id as i32,
@@ -184,7 +188,11 @@ impl MjvCamera {
     }
 
     /// Creates a new tracking camera to track a body with the given `tracking_id`.
+    ///
+    /// # Panics
+    /// In debug builds, panics if `tracking_id` exceeds `i32::MAX`.
     pub fn new_tracking(tracking_id: usize) -> Self {
+        debug_assert!(tracking_id <= i32::MAX as usize, "tracking_id exceeds i32::MAX");
         mjvCamera_ {
             type_: MjtCamera::mjCAMERA_TRACKING as i32,
             trackbodyid: tracking_id as i32,
@@ -409,16 +417,46 @@ impl MjvFigure {
     ///
     /// # Panics
     /// Panics if `plot_index >= mjMAXLINE`.
+    ///
+    /// Use [`MjvFigure::try_full`] for a fallible alternative.
     pub fn full(&self, plot_index: usize) -> bool {
-        self.linepnt[plot_index] >= (self.linedata[plot_index].len() / 2) as i32
+        self.try_full(plot_index).unwrap()
+    }
+
+    /// Checks if the buffer is full for plot with `plot_index`.
+    ///
+    /// Returns [`Err(MjSceneError::InvalidPlotIndex)`](MjSceneError::InvalidPlotIndex)
+    /// if `plot_index >= mjMAXLINE`.
+    ///
+    /// Use [`MjvFigure::full`] for a panicking alternative.
+    pub fn try_full(&self, plot_index: usize) -> Result<bool, MjSceneError> {
+        if plot_index >= mjMAXLINE as usize {
+            return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
+        }
+        Ok(self.linepnt[plot_index] >= (self.linedata[plot_index].len() / 2) as i32)
     }
 
     /// Checks if the buffer is empty for plot with `plot_index`.
     ///
     /// # Panics
     /// Panics if `plot_index >= mjMAXLINE`.
+    ///
+    /// Use [`MjvFigure::try_empty`] for a fallible alternative.
     pub fn empty(&self, plot_index: usize) -> bool {
-        self.linepnt[plot_index] == 0
+        self.try_empty(plot_index).unwrap()
+    }
+
+    /// Checks if the buffer is empty for plot with `plot_index`.
+    ///
+    /// Returns [`Err(MjSceneError::InvalidPlotIndex)`](MjSceneError::InvalidPlotIndex)
+    /// if `plot_index >= mjMAXLINE`.
+    ///
+    /// Use [`MjvFigure::empty`] for a panicking alternative.
+    pub fn try_empty(&self, plot_index: usize) -> Result<bool, MjSceneError> {
+        if plot_index >= mjMAXLINE as usize {
+            return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
+        }
+        Ok(self.linepnt[plot_index] == 0)
     }
 
     /// Pushes a new data point to buffer for the specific plot with `plot_index`.
@@ -487,68 +525,134 @@ impl MjvFigure {
     }
 
     /// Pops the first element from the plot data of plot with `plot_index`.
+    ///
     /// # Returns
     /// Returns [`Some(first element)`](Some) when plot contains any elements, otherwise [`None`] is returned.
     /// The return format is (x, y).
     ///
     /// # Panics
     /// Panics if `plot_index >= mjMAXLINE`.
+    ///
+    /// Use [`MjvFigure::try_pop_front`] for a fallible alternative.
     pub fn pop_front(&mut self, plot_index: usize) -> Option<(f32, f32)> {
+        self.try_pop_front(plot_index).unwrap()
+    }
+
+    /// Pops the first element from the plot data of plot with `plot_index`.
+    ///
+    /// Returns `Ok(Some((x, y)))` when the plot contains elements, `Ok(None)` when empty,
+    /// or `Err(`[`MjSceneError::InvalidPlotIndex`]`)` if `plot_index >= mjMAXLINE`.
+    ///
+    /// Use [`MjvFigure::pop_front`] for a panicking alternative.
+    pub fn try_pop_front(&mut self, plot_index: usize) -> Result<Option<(f32, f32)>, MjSceneError> {
+        if plot_index >= mjMAXLINE as usize {
+            return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
+        }
         let len = self.linepnt[plot_index];
         if len <= 0 {
-            return None;
+            return Ok(None);
         }
-
         let plot_data = &mut self.linedata[plot_index];
         let first = (plot_data[0], plot_data[1]);
-
         plot_data.copy_within(2..len as usize * 2, 0);
-
         self.linepnt[plot_index] -= 1;
-
-        Some(first)
+        Ok(Some(first))
     }
 
     /// Pops the last element from the plot data of plot with `plot_index`.
+    ///
     /// # Returns
     /// Returns [`Some(last element)`](Some) when plot contains any elements, otherwise [`None`] is returned.
     /// The return format is (x, y).
     ///
     /// # Panics
     /// Panics if `plot_index >= mjMAXLINE`.
+    ///
+    /// Use [`MjvFigure::try_pop_back`] for a fallible alternative.
     pub fn pop_back(&mut self, plot_index: usize) -> Option<(f32, f32)> {
+        self.try_pop_back(plot_index).unwrap()
+    }
+
+    /// Pops the last element from the plot data of plot with `plot_index`.
+    ///
+    /// Returns `Ok(Some((x, y)))` when the plot contains elements, `Ok(None)` when empty,
+    /// or `Err(`[`MjSceneError::InvalidPlotIndex`]`)` if `plot_index >= mjMAXLINE`.
+    ///
+    /// Use [`MjvFigure::pop_back`] for a panicking alternative.
+    pub fn try_pop_back(&mut self, plot_index: usize) -> Result<Option<(f32, f32)>, MjSceneError> {
+        if plot_index >= mjMAXLINE as usize {
+            return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
+        }
         let old_len = self.linepnt[plot_index];
         if old_len <= 0 {
-            return None;
+            return Ok(None);
         }
         let plot_data = &mut self.linedata[plot_index];
         let new_start = ((old_len - 1) * 2) as usize;
         self.linepnt[plot_index] -= 1;
-
-        Some((plot_data[new_start], plot_data[new_start + 1]))  // new len is the previous last index
+        Ok(Some((plot_data[new_start], plot_data[new_start + 1])))
     }
 
     /// Cuts the first `n` elements from the plot data of plot with `plot_index`.
     ///
+    /// If `n` exceeds the current length, this is a no-op.
+    ///
     /// # Panics
     /// Panics if `plot_index >= mjMAXLINE`.
+    ///
+    /// Use [`MjvFigure::try_cut_front`] for a fallible alternative.
     pub fn cut_front(&mut self, plot_index: usize, n: usize) {
+        self.try_cut_front(plot_index, n).unwrap();
+    }
+
+    /// Fallible version of [`MjvFigure::cut_front`].
+    ///
+    /// Returns [`Err(MjSceneError::InvalidPlotIndex)`](MjSceneError::InvalidPlotIndex)
+    /// if `plot_index >= mjMAXLINE`.
+    ///
+    /// Use [`MjvFigure::cut_front`] for a panicking alternative.
+    pub fn try_cut_front(&mut self, plot_index: usize, n: usize) -> Result<(), MjSceneError> {
+        if plot_index >= mjMAXLINE as usize {
+            return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
+        }
         let len = self.linepnt[plot_index];
         if len < 0 || (len as usize) < n {
-            return;
+            return Ok(());
         }
 
         self.linedata[plot_index].copy_within(2 * n..(len as usize * 2), 0);
         self.linepnt[plot_index] -= n as i32;
+        Ok(())
     }
 
     /// Cuts the last `n` elements from the plot data of plot with `plot_index`.
+    ///
+    /// If `n` exceeds the current length, this is a no-op.
+    ///
+    /// # Panics
+    /// Panics if `plot_index >= mjMAXLINE`.
+    ///
+    /// Use [`MjvFigure::try_cut_end`] for a fallible alternative.
     pub fn cut_end(&mut self, plot_index: usize, n: usize) {
+        self.try_cut_end(plot_index, n).unwrap();
+    }
+
+    /// Fallible version of [`MjvFigure::cut_end`].
+    ///
+    /// Returns [`Err(MjSceneError::InvalidPlotIndex)`](MjSceneError::InvalidPlotIndex)
+    /// if `plot_index >= mjMAXLINE`.
+    ///
+    /// Use [`MjvFigure::cut_end`] for a panicking alternative.
+    pub fn try_cut_end(&mut self, plot_index: usize, n: usize) -> Result<(), MjSceneError> {
+        if plot_index >= mjMAXLINE as usize {
+            return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
+        }
         let len = self.linepnt[plot_index];
         if len < 0 || (len as usize) < n {
-            return;
+            return Ok(());
         }
         self.linepnt[plot_index] -= n as i32;
+        Ok(())
     }
 }
 
@@ -575,7 +679,11 @@ pub struct MjvScene {
 
 impl MjvScene {
     /// Creates a new scene for `model`, allocating space for up to `max_geom` geoms.
+    ///
+    /// # Panics
+    /// In debug builds, panics if `max_geom` exceeds `i32::MAX`.
     pub fn new<M: Deref<Target = MjModel>>(model: M, max_geom: usize) -> Self {
+        debug_assert!(max_geom <= i32::MAX as usize, "max_geom exceeds i32::MAX");
         let model_ffi = model.ffi();
         let nflexedge = model_ffi.nflexedge;
         let nflexvert = model_ffi.nflexvert;

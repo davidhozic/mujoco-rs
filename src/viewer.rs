@@ -130,6 +130,7 @@ pub enum MjViewerError {
     SceneError(crate::error::MjSceneError),
 }
 
+/// Formats a human-readable description of the viewer error.
 impl Display for MjViewerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -142,6 +143,7 @@ impl Display for MjViewerError {
     }
 }
 
+/// Provides the underlying error source, if any.
 impl Error for MjViewerError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
@@ -154,18 +156,21 @@ impl Error for MjViewerError {
     }
 }
 
+/// Converts an [`MjSceneError`](crate::error::MjSceneError) into [`MjViewerError::SceneError`].
 impl From<crate::error::MjSceneError> for MjViewerError {
     fn from(e: crate::error::MjSceneError) -> Self {
         Self::SceneError(e)
     }
 }
 
+/// Converts a [`GlInitError`](crate::error::GlInitError) into [`MjViewerError::GlInitFailed`].
 impl From<crate::error::GlInitError> for MjViewerError {
     fn from(e: crate::error::GlInitError) -> Self {
         Self::GlInitFailed(e)
     }
 }
 
+/// Converts a [`glutin::error::Error`] into [`MjViewerError::GlutinError`].
 impl From<glutin::error::Error> for MjViewerError {
     fn from(e: glutin::error::Error) -> Self {
         Self::GlutinError(e)
@@ -340,17 +345,17 @@ impl ViewerSharedState {
             // same state spec on a compatible model, so eq_active bytes (included
             // by mjSTATE_INTEGRATION) come from MuJoCo's own canonical encoding.
             unsafe { data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32) }
-                .expect("set_state failed");
+                .unwrap();
         }
 
         if full_sync {
             // Copy everything.
             data.copy_to(&mut self.data_passive)
-                .expect("copy_to failed");
+                .unwrap();
         } else {
             // Copy only visually-required information to the internal passive data.
             data.copy_visual_to(&mut self.data_passive)
-                .expect("copy_visual_to failed");
+                .unwrap();
         }
 
         // Make both saved states the same.
@@ -1351,6 +1356,8 @@ impl MjViewer {
     }
 }
 
+/// Releases OpenGL resources (rendering context and egui painter) while the
+/// GL context is still current.
 impl Drop for MjViewer {
     fn drop(&mut self) {
         // Ensure the GL context is current before the implicit field drops so that
@@ -1373,7 +1380,7 @@ impl Drop for MjViewer {
 /// - `vsync`: false
 /// - `warn_non_realtime`: false
 /// 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MjViewerBuilder {
     /// The name shown on the window decoration.
     window_name: Cow<'static, str>,
@@ -1499,6 +1506,7 @@ impl MjViewerBuilder {
     }
 }
 
+/// Delegates to [`MjViewerBuilder::new`].
 impl Default for MjViewerBuilder {
     fn default() -> Self {
         MjViewerBuilder::new()

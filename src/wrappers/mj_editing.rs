@@ -497,7 +497,7 @@ impl MjSpec {
     ///
     /// Use [`MjSpec::try_add_default`] for a fallible alternative.
     pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> &mut MjsDefault {
-        self.try_add_default(class_name, parent_class_name).expect("add_default failed")
+        self.try_add_default(class_name, parent_class_name).unwrap()
     }
 
     /// Fallible version of [`MjSpec::add_default`].
@@ -543,7 +543,7 @@ pub struct MjsSpecItemIterMut<'a, T> {
 }
 
 /// Immutable iterator over items in [`MjSpec`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MjsSpecItemIter<'a, T> {
     root: &'a MjSpec,
     last: *mut mjsElement,
@@ -1667,7 +1667,7 @@ pub struct MjsBodyItemIterMut<'a, T> {
 }
 
 /// Immutable iterator over items in [`MjsBody`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MjsBodyItemIter<'a, T> {
     root: &'a MjsBody,
     last: *mut mjsElement,
@@ -2400,12 +2400,12 @@ mod tests {
                 "Before compile: joint '{}' align should be {:?}", name, expected);
         }
 
-        // Compile and verify - AUTO should resolve, FALSE/TRUE should remain
+        // Compile and verify -- AUTO should resolve, FALSE/TRUE should remain
         let model = spec.compile().unwrap();
         let jnt_count = model.ffi().njnt as usize;
         assert_eq!(jnt_count, 3, "expected 3 joints");
 
-        // Must compile without error - the key correctness is the round-trip above;
+        // Must compile without error -- the key correctness is the round-trip above;
         // compilation proves MuJoCo accepted the enum values.
     }
 
@@ -2436,7 +2436,7 @@ mod tests {
                 "Before compile: joint '{}' limited should be {:?}", name, expected);
         }
 
-        // Compile - AUTO resolves based on range presence
+        // Compile -- AUTO resolves based on range presence
         let model = spec.compile().unwrap();
         let jnt_limited = model.jnt_limited();
         assert_eq!(jnt_limited[0], false);

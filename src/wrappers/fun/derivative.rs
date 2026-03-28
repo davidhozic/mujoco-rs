@@ -7,6 +7,7 @@ use std::ptr;
 /// Nullable: Da, Db.
 /// Db = -Da^T
 pub fn mjd_sub_quat(qa: &[MjtNum; 4], qb: &[MjtNum; 4], da: Option<&mut [MjtNum; 9]>, db: Option<&mut [MjtNum; 9]>)  {
+    // SAFETY: all arguments are valid references; nullable parameters use null when None.
     unsafe { mujoco_c::mjd_subQuat(
         qa, qb,
         da.map_or(ptr::null_mut(), |d| d),
@@ -17,6 +18,7 @@ pub fn mjd_sub_quat(qa: &[MjtNum; 4], qb: &[MjtNum; 4], da: Option<&mut [MjtNum;
 /// Derivatives of mju_quatIntegrate.
 /// Nullable: Dquat, Dvel, Dscale.
 pub fn mjd_quat_integrate(vel: &[MjtNum; 3], scale: MjtNum, dquat: Option<&mut [MjtNum; 9]>, dvel: Option<&mut [MjtNum; 9]>, dscale: Option<&mut [MjtNum; 3]>)  {
+    // SAFETY: all arguments are valid references; nullable parameters use null when None.
     unsafe { mujoco_c::mjd_quatIntegrate(
         vel, scale,
         dquat.map_or(ptr::null_mut(), |d| d),
