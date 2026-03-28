@@ -30,7 +30,7 @@ fn main() {
         // Syncs are also expensive in this example.
         if timer_refresh.elapsed().as_millis() > RENDER_TIME_MS {
             timer_refresh = Instant::now();
-            viewer.render();
+            viewer.render().unwrap();
         }
 
         // Step data in realtime

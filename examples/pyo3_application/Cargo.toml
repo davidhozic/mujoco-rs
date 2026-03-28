@@ -8,5 +8,5 @@ crate-type = ["cdylib"]
 
 
 [dependencies]
-mujoco-rs = {path = "../../"}
-pyo3 = { version = "0.26.0", features = ["abi3"] }
+mujoco-rs = {path = "../../", features = ["viewer-ui"]}
+pyo3 = { version = "0.28.2", features = ["abi3", "extension-module"] }

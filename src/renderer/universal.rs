@@ -11,6 +11,7 @@ use winit::event_loop::EventLoop;
 use std::num::NonZero;
 
 
+#[derive(Debug)]
 pub(crate) struct GlStateWinit {
     inner: RenderBase,
 }
@@ -18,19 +19,22 @@ pub(crate) struct GlStateWinit {
 impl GlStateWinit {
     pub(crate) fn new(width: NonZero<u32>, height: NonZero<u32>) -> Result<Self, RendererError> {
         let mut event_loop = EventLoop::new().map_err(
-            |e| RendererError::EventLoopError(e)
+            RendererError::EventLoopError
         )?;
 
         let inner = RenderBase::new(
             width.into(), height.into(), "".to_string(),
             &mut event_loop,
             false
-        );
+        )?;
 
         Ok(Self {inner})
     }
 
     pub(crate) fn make_current(&self) -> Result<(), glutin::error::Error> {
+        // SAFETY: GlStateWinit::new() only returns Ok when RenderBase::new()
+        // succeeds, which guarantees state is Some (pump_app_events called
+        // resumed and RenderBase::new returns Err(NoWindow) otherwise).
         let inner_state = self.inner.state.as_ref().unwrap();
         inner_state.gl_context.make_current(&inner_state.gl_surface)
     }

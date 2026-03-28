@@ -84,7 +84,7 @@ fn main() {
             );
         }).unwrap();
 
-        viewer.render();
+        viewer.render().unwrap();
         std::thread::sleep(Duration::from_secs_f64(timestep));
     }
 }

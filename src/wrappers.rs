@@ -11,6 +11,7 @@ pub mod mj_data;
 
 pub mod fun;
 
+pub use mj_editing::{MjSpec, SpecItem};  // don't expose everything directly to prevent workspace spam.
 pub use mj_visualization::*;
 pub use mj_statistic::*;
 pub use mj_rendering::*;

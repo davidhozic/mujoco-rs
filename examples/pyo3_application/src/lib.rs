@@ -23,7 +23,7 @@ const MODEL_XML: &str = stringify!(
 #[pyclass(unsendable)]
 struct Simulation {
     simulation_state: MjData<Rc<MjModel>>,
-    viewer: MjViewer<Rc<MjModel>>,
+    viewer: MjViewer,
     last_update: Instant
 }
 
@@ -45,7 +45,8 @@ impl Simulation {
             if self.last_update.elapsed().as_secs_f64() > timestep {
                 self.last_update = Instant::now();
                 self.simulation_state.step();
-                self.viewer.sync(&mut self.simulation_state);
+                self.viewer.sync_data(&mut self.simulation_state);
+                self.viewer.render().unwrap();
             }
         }
     }

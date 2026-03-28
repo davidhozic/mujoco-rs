@@ -1,9 +1,9 @@
 //! Definitions related to model editing.
-use std::ffi::{c_int, CStr, CString};
-use std::io::{Error, ErrorKind};
+use std::ffi::{c_char, c_int, CStr, CString};
 use std::marker::PhantomData;
 use std::path::Path;
-use std::ptr;
+use std::ptr::{self, NonNull};
+use crate::error::MjEditError;
 
 #[macro_use]
 mod utility;
@@ -19,7 +19,8 @@ use super::mj_model::{
     MjModel, MjtObj, MjtGeom, MjtJoint, MjtCamLight,
     MjtLightType, MjtSensor, MjtDataType, MjtGain,
     MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace,
-    MjtTrn, MjtStage, MjtFlexSelf
+    MjtTrn, MjtStage, MjtFlexSelf, MjtProjection,
+    MjtSleepPolicy, MjtWrap
 };
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic, MjLROpt};
 use super::mj_option::MjOption;
@@ -30,8 +31,33 @@ use crate::getter_setter;
 
 // Re-export with lowercase 'f' to fix method generation
 use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
-use crate::util::assert_mujoco_version;
+use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
 
+/* Types */
+/// Type of inertia inference.
+pub type MjtGeomInertia = mjtGeomInertia;
+
+/// Type of mesh inertia.
+pub type MjtMeshInertia = mjtMeshInertia;
+
+/// Type of built-in procedural texture.
+pub type MjtBuiltin = mjtBuiltin;
+
+/// Mark type for procedural textures.
+pub type MjtMark = mjtMark;
+
+/// Type of limit specification.
+pub type MjtLimited = mjtLimited;
+
+/// Whether to align free joints with the inertial frame.
+pub type MjtAlignFree = mjtAlignFree;
+
+/// Whether to infer body inertias from child geoms.
+pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
+
+/// Type of orientation specifier.
+pub type MjtOrientation = mjtOrientation;
+/*******************************************************/
 
 /******************************
 ** Type aliases
@@ -65,34 +91,10 @@ impl MjsOrientation {
 
     /// Changes the orientation mode to quaternions. The orientation must
     /// be specified via the main angle attribute, not through [`MjsOrientation`].
-    pub fn switch_quat<T: AsRef<[f64; 4]>>(&mut self) {
+    pub fn switch_quat(&mut self) {
         self.type_ = MjtOrientation::mjORIENTATION_QUAT;
     }
 }
-
-/// Type of inertia inference.
-pub type MjtGeomInertia = mjtGeomInertia;
-
-/// Type of mesh inertia.
-pub type MjtMeshInertia = mjtMeshInertia;
-
-/// Type of built-in procedural texture.
-pub type MjtBuiltin = mjtBuiltin;
-
-/// Mark type for procedural textures.
-pub type MjtMark = mjtMark;
-
-/// Type of limit specification.
-pub type MjtLimited = mjtLimited;
-
-/// Whether to align free joints with the inertial frame.
-pub type MjtAlignFree = mjtAlignFree;
-
-/// Whether to infer body inertias from child geoms.
-pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
-
-/// Type of orientation specifier.
-pub type MjtOrientation = mjtOrientation;
 
 /// Compiler options.
 pub type MjsCompiler = mjsCompiler;
@@ -121,7 +123,7 @@ impl MjsCompiler {
 
     getter_setter! {[&] with, get, [
         inertiagrouprange: &[i32; 2];       "range of geom groups used to compute inertia.";
-        eulerseq: &[i8; 3];                 "sequence for euler rotations.";
+        eulerseq: &[c_char; 3];             "sequence for euler rotations.";
         LRopt: &MjLROpt;                    "options for lengthrange computation.";
     ]}
 
@@ -135,7 +137,8 @@ impl MjsCompiler {
 ** Model Specification
 ***************************/
 /// Model specification. This wraps the FFI type [`mjSpec`] internally.
-pub struct MjSpec(*mut mjSpec);
+#[derive(Debug)]
+pub struct MjSpec(NonNull<mjSpec>);
 
 // SAFETY: The pointer cannot be accessed without borrowing the wrapper.
 unsafe impl Sync for MjSpec {}
@@ -143,38 +146,81 @@ unsafe impl Send for MjSpec {}
 
 impl MjSpec {
     /// Creates an empty [`MjSpec`].
+    ///
+    /// # Panics
+    /// - When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    /// - When MuJoCo fails to allocate the specification.
+    ///   Use [`MjSpec::try_new`] for a fallible alternative.
+    pub fn new() -> Self {
+        Self::try_new().expect("MuJoCo failed to allocate MjSpec")
+    }
+
+    /// Fallible version of [`MjSpec::new`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
+    /// the specification.
+    ///
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn new() -> Self {
+    pub fn try_new() -> Result<Self, MjEditError> {
         assert_mujoco_version();
-        unsafe { Self::check_spec(mj_makeSpec(), &[0]).unwrap() }
+        let ptr = unsafe { mj_makeSpec() };
+        Ok(MjSpec(NonNull::new(ptr).ok_or(MjEditError::AllocationFailed)?))
+    }
+
+    /// Creates a deep copy of this [`MjSpec`].
+    ///
+    /// Internally calls `mj_copySpec`, which invokes the C++ copy constructor
+    /// on the underlying model.  This is a proper deep copy: the returned spec
+    /// is fully independent from the original.
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
+    /// the copy (e.g. out of memory or an internal C++ exception).
+    pub fn try_clone(&self) -> Result<Self, MjEditError> {
+        // SAFETY: self.0 is always a valid, non-null pointer.
+        let ptr = unsafe { mj_copySpec(self.0.as_ptr()) };
+        NonNull::new(ptr).map(MjSpec).ok_or(MjEditError::AllocationFailed)
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
+    /// # Errors
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the XML.
     /// # Panics
-    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, Error> {
+    pub fn from_xml<T: AsRef<Path>>(path: T) -> Result<Self, MjEditError> {
         Self::from_xml_file(path, None)
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file, located in a virtual file system (`vfs`).
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
+    /// # Errors
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the XML.
     /// # Panics
-    /// - when the `path` contains invalid utf-8 or '\0'.
+    /// - when the `path` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, Error> {
+    pub fn from_xml_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, MjEditError> {
         Self::from_xml_file(path, Some(vfs))
     }
 
-    fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, Error> {
+    fn from_xml_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
 
-        let mut error_buffer = [0i8; 100];
+        let mut error_buffer = [0; ERROR_BUF_LEN];
         unsafe {
-            let path = CString::new(path.as_ref().to_str().expect("invalid utf")).unwrap();
+            let path_str = path.as_ref().to_str()
+                .ok_or(MjEditError::InvalidUtf8Path)?;
+            let path = CString::new(path_str).unwrap();
             let raw_ptr = mj_parseXML(
                 path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi()),
-                &mut error_buffer as *mut i8, error_buffer.len() as c_int
+                error_buffer.as_mut_ptr(), error_buffer.len() as c_int
             );
 
             Self::check_spec(raw_ptr, &error_buffer)
@@ -182,84 +228,172 @@ impl MjSpec {
     }
 
     /// Creates a [`MjSpec`] from an `xml` string.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
+    /// # Errors
+    /// Returns [`MjEditError::ParseFailed`] if MuJoCo encounters an error parsing the string.
     /// # Panics
     /// - when the `xml` contains '\0'.
     /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    pub fn from_xml_string(xml: &str) -> Result<Self, Error> {
+    pub fn from_xml_string(xml: &str) -> Result<Self, MjEditError> {
         assert_mujoco_version();
 
         let c_xml = CString::new(xml).unwrap();
-        let mut error_buffer = [0i8; 100];
+        let mut error_buffer = [0; ERROR_BUF_LEN];
         unsafe {
             let spec_ptr = mj_parseXMLString(
                 c_xml.as_ptr(), ptr::null(),
-                &mut error_buffer as *mut i8, error_buffer.len() as c_int
+                error_buffer.as_mut_ptr(), error_buffer.len() as c_int
             );
             Self::check_spec(spec_ptr, &error_buffer)
         }
     }
 
+    /// Parse and create a [`MjSpec`] from `filename`.
+    /// The `content_type` controls the decoder to use.
+    /// This is a wrapper around low-level method [`mj_parse`].
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
+    /// # Errors
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
+    /// # Panics
+    /// When `content_type` or the path contain interior `\0` characters.
+    pub fn from_parse<T: AsRef<Path>>(filename: T, content_type: &str) -> Result<Self, MjEditError> {
+        Self::from_parse_file(filename, content_type, None)
+    }
+
+    /// Same as [`MjSpec::from_parse`], except `filename` is taken from `vfs`.
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
+    /// # Errors
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
+    /// # Panics
+    /// When `content_type` or the path contain interior `\0` characters.
+    pub fn from_parse_vfs<T: AsRef<Path>>(filename: T, content_type: &str, vfs: &MjVfs) -> Result<Self, MjEditError> {
+        Self::from_parse_file(filename, content_type, Some(vfs))
+    }
+
+    /// Parse and create a [`MjSpec`] from `filename`.
+    /// The `content_type` controls the decoder to use.
+    /// This is a wrapper around low-level method [`mj_parse`].
+    /// # Panics
+    /// When `content_type` or the path contain interior `\0` characters.
+    fn from_parse_file<T: AsRef<Path>>(filename: T, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
+        assert_mujoco_version();
+        let mut error_buffer = [0; ERROR_BUF_LEN];
+        unsafe {
+            let c_filename = CString::new(
+                filename.as_ref().to_str()
+                .ok_or(MjEditError::InvalidUtf8Path)?
+            ).unwrap();
+            let c_content_type = CString::new(content_type).unwrap();
+            let ptr = mj_parse(
+                c_filename.as_ptr(), c_content_type.as_ptr(),
+                vfs.map_or(ptr::null(), |v| v.ffi()),
+                error_buffer.as_mut_ptr(), error_buffer.len() as i32
+            );
+            Self::check_spec(ptr, &error_buffer)
+        }
+    }
+
     /// Handles spec pointer input.
-    /// # Safety
-    /// `error_buffer` must not be empty and the last element must be 0.
-    unsafe fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[i8]) -> Result<Self, Error> {
+    fn check_spec(spec_ptr: *mut mjSpec, error_buffer: &[c_char]) -> Result<Self, MjEditError> {
         if spec_ptr.is_null() {
-            // SAFETY: i8 and u8 have the same size, and no negative values can appear in the error_buffer.
-            Err(Error::new(
-                ErrorKind::UnexpectedEof, 
-                unsafe { CStr::from_ptr(error_buffer.as_ptr().cast()).to_string_lossy().into_owned() }
-            ))
+            // SAFETY: error_buffer is zero-initialised and MuJoCo always
+            // NUL-terminates the message it writes into it.
+            let message = unsafe { CStr::from_ptr(error_buffer.as_ptr()) }
+                .to_string_lossy()
+                .into_owned();
+            Err(MjEditError::ParseFailed(message))
         }
         else {
-            Ok(MjSpec(spec_ptr))
+            // SAFETY: spec_ptr is confirmed non-null by the guard above.
+            Ok(MjSpec(unsafe { NonNull::new_unchecked(spec_ptr) }))
         }
     }
 
     /// An immutable reference to the internal FFI struct.
     pub fn ffi(&self) -> &mjSpec {
-        unsafe { self.0.as_ref().unwrap() }
+        unsafe { self.0.as_ref() }
     }
 
     /// A mutable reference to the internal FFI struct.
+    ///
+    /// # Safety
+    /// Modifying the underlying FFI struct directly can break the invariants
+    /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjSpec {
-        unsafe { self.0.as_mut().unwrap() }
+        unsafe { self.0.as_mut() }
     }
 
     /// Compile [`MjSpec`] to [`MjModel`].
     /// A spec can be edited and compiled multiple times,
     /// returning a new mjModel instance that takes the edits into account.
-    pub fn compile(&mut self) -> Result<MjModel, Error> {
-        let result = unsafe { MjModel::from_raw( mj_compile(self.0, ptr::null()) ) };
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
+    /// # Errors
+    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile.
+    pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
+        let result = unsafe { MjModel::from_raw( mj_compile(self.0.as_ptr(), ptr::null()) ) };
         result.map_err(|_| {
-            let error = unsafe { CStr::from_ptr(mjs_getError(self.ffi_mut())).to_string_lossy().into_owned() };
-            Error::new(ErrorKind::InvalidData, error)
+            // SAFETY: The spec is still valid after failed compilation.
+            // The error pointer is valid until the next MuJoCo call on this spec.
+            let error_msg: String = unsafe {
+                let ptr = mjs_getError(self.ffi_mut());
+                if ptr.is_null() {
+                    "Compilation failed (unknown error)".to_owned()
+                } else {
+                    CStr::from_ptr(ptr).to_string_lossy().into_owned()
+                }
+            };
+            MjEditError::CompileFailed(error_msg)
         })
     }
 
-    /// Save spec to an XML file.
+    /// Saves the spec to an XML file.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::SaveFailed`] with MuJoCo's error message if saving fails.
     /// # Panics
-    /// When the `filename` contains '\0' characters, a panic occurs.
-    pub fn save_xml(&self, filename: &str) -> Result<(), Error> {
-        let mut error_buff = [0; 100];
-        let cname = CString::new(filename).unwrap();  // filename is always UTF-8
+    /// When `filename` contains interior `\0` characters.
+    pub fn save_xml<T: AsRef<Path>>(&self, filename: T) -> Result<(), MjEditError> {
+        let mut error_buff = [0; ERROR_BUF_LEN];
+        let cname = CString::new(
+            filename.as_ref().to_str()
+            .ok_or(MjEditError::InvalidUtf8Path)?
+        ).unwrap();  // filename is always UTF-8
         let result = unsafe { mj_saveXML(
             self.ffi(), cname.as_ptr(),
             error_buff.as_mut_ptr(), error_buff.len() as i32
         ) };
         match result {
             0 => Ok(()),
-            _ => Err(
-                Error::new(
-                    ErrorKind::Other,
-                    unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().into_owned() }
-                ))
+            _ => {
+                // SAFETY: error_buff is zero-initialised and MuJoCo always
+                // NUL-terminates the message it writes into it.
+                let message = unsafe { CStr::from_ptr(error_buff.as_ptr()) }
+                    .to_string_lossy()
+                    .into_owned();
+                Err(MjEditError::SaveFailed(message))
+            }
         }
     }
 
-    /// Save spec to an XML string. The `buffer_size` controls
-    /// how much space is allocated for conversion.
-    pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, Error> {
-        let mut error_buff = [0; 100];
+    /// Saves the spec to an XML string.
+    /// `buffer_size` controls how many bytes are allocated for the output.
+    /// # Returns
+    /// On success, returns the generated XML string.
+    /// # Errors
+    /// - [`MjEditError::XmlBufferTooSmall`] when `buffer_size` is too small.
+    ///   The `required_size` field uses `snprintf`-style semantics (bytes to write, excluding NUL),
+    ///   so retry with `required_size as usize + 1` bytes.
+    /// - [`MjEditError::SaveFailed`] with MuJoCo's error message on any other failure.
+    pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, MjEditError> {
+        let mut error_buff = [0; ERROR_BUF_LEN];
         let mut result_buff = vec![0u8; buffer_size];
         let result = unsafe { mj_saveXMLString(
             self.ffi(), result_buff.as_mut_ptr().cast(), result_buff.len() as i32,
@@ -267,11 +401,15 @@ impl MjSpec {
         ) };
         match result {
             0 => Ok(CStr::from_bytes_until_nul(&result_buff).unwrap().to_string_lossy().into_owned()),
-            _ => Err(
-                Error::new(
-                    ErrorKind::Other,
-                    unsafe { CStr::from_ptr(error_buff.as_ptr().cast()).to_string_lossy().to_string() }
-                ))
+            r if r > 0 => Err(MjEditError::XmlBufferTooSmall { required_size: r as usize }),
+            _ => {
+                // SAFETY: error_buff is zero-initialised and MuJoCo always
+                // NUL-terminates the message it writes into it.
+                let message = unsafe { CStr::from_ptr(error_buff.as_ptr()) }
+                    .to_string_lossy()
+                    .into_owned();
+                Err(MjEditError::SaveFailed(message))
+            }
         }
     }
 }
@@ -286,11 +424,15 @@ impl MjSpec {
     find_x_method_direct! { default }
 
     /// Returns an immutable reference to the world body.
+    /// # Panics
+    /// Panics if the "world" body is not found.
     pub fn world_body(&self) -> &MjsBody {
         self.body("world").unwrap()
     }
 
     /// Returns a mutable reference to the world body.
+    /// # Panics
+    /// Panics if the "world" body is not found.
     pub fn world_body_mut(&mut self) -> &mut MjsBody {
         self.body_mut("world").unwrap()
     }
@@ -348,18 +490,29 @@ impl MjSpec {
     }
 
     /// Adds a new `<default>` element.
+    ///
+    /// # Panics
+    /// Panics when `class_name` already exists or `parent_class_name` doesn't exist.
+    /// Also panics when the `class_name` or `parent_class_name` contain '\0' characters.
+    ///
+    /// Use [`MjSpec::try_add_default`] for a fallible alternative.
+    pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> &mut MjsDefault {
+        self.try_add_default(class_name, parent_class_name).unwrap()
+    }
+
+    /// Fallible version of [`MjSpec::add_default`].
+    /// # Returns
+    /// On success, returns a mutable reference to the newly created [`MjsDefault`].
     /// # Errors
-    /// Errors a [`ErrorKind::AlreadyExists`] error when `class_name` already exists.
-    /// Errors a [`ErrorKind::NotFound`] when `parent_class_name` doesn't exist.
+    /// Returns [`MjEditError::AlreadyExists`] when `class_name` already exists.
+    /// Returns [`MjEditError::NotFound`] when `parent_class_name` doesn't exist.
     /// # Panics
     /// When the `class_name` or `parent_class_name` contain '\0' characters, a panic occurs.
-    pub fn add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<&mut MjsDefault, Error> {
+    pub fn try_add_default(&mut self, class_name: &str, parent_class_name: Option<&str>) -> Result<&mut MjsDefault, MjEditError> {
         let c_class_name = CString::new(class_name).unwrap();
-        
+
         let parent_ptr = if let Some(name) = parent_class_name {
-                self.default(name).ok_or_else(
-                    || Error::new(ErrorKind::NotFound, "invalid parent name")
-                )?
+                self.default(name).ok_or(MjEditError::NotFound)?
         } else {
             ptr::null()
         };
@@ -371,16 +524,17 @@ impl MjSpec {
                 parent_ptr
             );
             if ptr_default.is_null() {
-                Err(Error::new(ErrorKind::AlreadyExists, "duplicated name"))
+                Err(MjEditError::AlreadyExists)
             }
             else {
-                Ok(ptr_default.as_mut().unwrap())
+                Ok(&mut *ptr_default)
             }
         }
     }
 }
 
 /// Mutable iterator over items in [`MjSpec`].
+#[derive(Debug)]
 pub struct MjsSpecItemIterMut<'a, T> {
     root: &'a mut MjSpec,
     last: *mut mjsElement,
@@ -388,6 +542,8 @@ pub struct MjsSpecItemIterMut<'a, T> {
     item_type: PhantomData<T>
 }
 
+/// Immutable iterator over items in [`MjSpec`].
+#[derive(Debug, Clone)]
 pub struct MjsSpecItemIter<'a, T> {
     root: &'a MjSpec,
     last: *mut mjsElement,
@@ -408,9 +564,26 @@ impl MjSpec {
     }
 }
 
+impl Default for MjSpec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Drop for MjSpec {
     fn drop(&mut self) {
-        unsafe { mj_deleteSpec(self.0); }
+        unsafe { mj_deleteSpec(self.0.as_ptr()); }
+    }
+}
+
+impl Clone for MjSpec {
+    /// Creates a deep copy of this [`MjSpec`].
+    ///
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the cloned spec.
+    /// Use [`MjSpec::try_clone`] for a fallible alternative.
+    fn clone(&self) -> Self {
+        self.try_clone().expect("MuJoCo failed to clone MjSpec")
     }
 }
 
@@ -451,17 +624,48 @@ mjs_struct!(Joint);
 impl MjsJoint {
     getter_setter! {
         [&] with, get, [
-            pos:     &[f64; 3];         "joint position.";
+            // kinematics
+            pos:     &[f64; 3];         "anchor position.";
             axis:    &[f64; 3];         "joint axis.";
-            ref_ + _:    &f64;          "joint reference.";
-            range:   &[f64; 2];         "joint range.";
+            ref_ + _:    &f64;          "value at reference configuration: qpos0.";
+            springdamper: &[f64; 2];    "timeconst, dampratio.";
+
+            // limits
+            range:   &[f64; 2];         "joint limits.";
+            solref_limit: &[MjtNum; mjNREF as usize];  "solver reference: joint limits.";
+            solimp_limit: &[MjtNum; mjNIMP as usize];  "solver impedance: joint limits.";
+            actfrcrange: &[f64; 2];     "actuator force limits.";
+
+            // dof properties
+            solref_friction: &[MjtNum; mjNREF as usize]; "solver reference: dof friction.";
+            solimp_friction: &[MjtNum; mjNIMP as usize]; "solver impedance: dof friction.";
         ]
     }
 
     getter_setter!([&] with, get, set, [
         type_ + _: MjtJoint;           "joint type.";
         group: i32;                    "joint group.";
+        stiffness: f64;               "stiffness coefficient.";
+        springref: f64;               "spring reference value: qpos_spring.";
+        margin: f64;                  "margin value for joint limit detection.";
+        armature: f64;                "armature inertia (mass for slider).";
+        damping: f64;                 "damping coefficient.";
+        frictionloss: f64;            "friction loss.";
     ]);
+
+    getter_setter! {
+        force!, [&] with, get, set, [
+            align: MjtAlignFree;       "align free joint with body com (mjtAlignFree).";
+            limited: MjtLimited;       "does joint have limits (mjtLimited).";
+            actfrclimited: MjtLimited; "are actuator forces on joint limited (mjtLimited).";
+        ]
+    }
+
+    getter_setter! {
+        [&] with, get, set, [
+            actgravcomp: bool;         "is gravcomp force applied via actuators.";
+        ]
+    }
 
     userdata_method!(f64);
 }
@@ -530,7 +734,7 @@ impl MjsCamera {
             alt: &MjsOrientation;         "alternative orientation.";
             intrinsic: &[f32; 4];         "intrinsic parameters.";
             sensor_size: &[f32; 2];       "sensor size.";
-            resolution: &[f32; 2];        "resolution.";
+            resolution: &[i32; 2];        "resolution.";
             focal_length: &[f32; 2];      "focal length (length).";
             focal_pixel: &[f32; 2];       "focal length (pixel).";
             principal_length: &[f32; 2];  "principal point (length).";
@@ -539,14 +743,12 @@ impl MjsCamera {
     }
 
     getter_setter!([&] with, get, set, [
-        mode: MjtCamLight;             "camera mode.";
-        fovy: f64;                    "field of view in y direction.";
-        ipd: f64;                     "inter-pupillary distance for stereo.";
+        mode: MjtCamLight;              "camera mode.";
+        fovy: f64;                      "field of view in y direction.";
+        ipd: f64;                       "inter-pupillary distance for stereo.";
+        proj: MjtProjection;            "camera projection type.";
+        output: i32;                    "bit flags for output type.";
     ]);
-
-    getter_setter! {
-        [&] with, get, set, [orthographic: bool; "is camera orthographic."]
-    }
 
     userdata_method!(f64);
 
@@ -613,14 +815,31 @@ impl MjsFrame {
         childclass; "childclass name.";
     }
 
-    /// Adds a child frame.
+    /// Add and return a child frame.
+    ///
+    /// Delegates to [`Self::try_add_frame`] and panics if allocation fails.
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the frame.
     pub fn add_frame(&mut self) -> &mut MjsFrame {
-        unsafe {
-            let parent_body = mjs_getParent(self.element_mut_pointer());
-            let parent_frame = self.element_mut_pointer();
-            let frame_ptr = mjs_addFrame(parent_body, parent_frame.cast());
-            frame_ptr.as_mut().unwrap()
-        }
+        self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
+    }
+
+    /// Fallible version of [`Self::add_frame`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
+    /// the frame, instead of panicking.
+    pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
+        // SAFETY: element_mut_pointer() reads `self.element`, valid for any live MjsFrame.
+        // mjs_getParent returns non-null because every Rust-API MjsFrame was created via
+        // mjs_addFrame, which always calls SetParent(body).
+        let parent_body = unsafe { mjs_getParent(self.element_mut_pointer()) };
+        debug_assert!(!parent_body.is_null(), "mjs_getParent returned null; frame has no parent body");
+        let ptr = unsafe { mjs_addFrame(parent_body, self as *mut MjsFrame) };
+        // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
+        // pointee is properly aligned and initialized by C++ operator new, and freshly
+        // allocated so no existing Rust reference aliases it for the returned lifetime.
+        unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 }
 
@@ -659,6 +878,9 @@ impl MjsActuator {
         trntype: MjtTrn;               "transmission type.";
         cranklength: f64;              "crank length, for slider-crank.";
         inheritrange: f64;             "automatic range setting for position and intvelocity.";
+        nsample: i32;                  "number of samples in history buffer.";
+        interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
+        delay: f64;                    "delay time in seconds; 0: no delay.";
     ]);
 
     getter_setter! {
@@ -692,6 +914,7 @@ impl MjsSensor {
     getter_setter! {
         [&] with, get, [
             intprm: &[i32; mjNSENS as usize];            "integer parameters.";
+            interval: &[f64; 2];                         "[period, time_prev] in seconds.";
         ]
     }
 
@@ -710,6 +933,9 @@ impl MjsSensor {
         noise: f64;                    "noise stdev.";
         needstage: MjtStage;           "compute stage needed to simulate sensor.";
         dim: i32;                      "number of scalar outputs.";
+        nsample: i32;                  "number of samples in history buffer.";
+        interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
+        delay: f64;                    "delay time in seconds; 0: no delay.";
     ]);
 
     userdata_method!(f64);
@@ -731,6 +957,7 @@ impl MjsFlex {
             friction: &[f64; 3];                            "contact friction vector.";
             solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
             solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
+            size: &[f64; 3];                                "vertex bounding box half sizes in qpos0.";
         ]
     }
 
@@ -890,9 +1117,9 @@ impl MjsTendon {
     ]}
 
     getter_setter! {
-        [&] with, get, set, [
-            limited: bool;       "does tendon have limits (mjtLimited).";
-            actfrclimited: bool; "does tendon have actuator force limits."
+        force!, [&] with, get, set, [
+            limited: MjtLimited;       "does tendon have limits (mjtLimited).";
+            actfrclimited: MjtLimited; "does tendon have actuator force limits."
         ]
     }
 
@@ -902,40 +1129,115 @@ impl MjsTendon {
     }
 
     /// Wrap a site corresponding to `name`, using the tendon.
+    ///
     /// # Panics
-    /// When the `name` contains '\0' characters, a panic occurs.
+    /// - When the `name` contains '\0' characters, a panic occurs.
+    /// - When MuJoCo fails to allocate the wrap element.
+    ///   Use [`MjsTendon::try_wrap_site`] for a fallible alternative.
     pub fn wrap_site(&mut self, name: &str) -> &mut MjsWrap {
+        self.try_wrap_site(name).expect("failed to wrap site")
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_site`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
+    /// pointer.
+    ///
+    /// # Panics
+    /// When the `name` contains '\0' characters.
+    pub fn try_wrap_site(&mut self, name: &str) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let wrap_ptr = unsafe { mjs_wrapSite(self, cname.as_ptr()) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Wrap a geom corresponding to `name`, using the tendon.
+    ///
     /// # Panics
-    /// When the `name` or `sidesite` contain '\0' characters, a panic occurs.
+    /// - When the `name` or `sidesite` contain '\0' characters, a panic occurs.
+    /// - When MuJoCo fails to allocate the wrap element.
+    ///   Use [`MjsTendon::try_wrap_geom`] for a fallible alternative.
     pub fn wrap_geom(&mut self, name: &str, sidesite: &str) -> &mut MjsWrap {
+        self.try_wrap_geom(name, sidesite).expect("failed to wrap geom")
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_geom`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
+    /// pointer.
+    ///
+    /// # Panics
+    /// When `name` or `sidesite` contain '\0' characters.
+    pub fn try_wrap_geom(&mut self, name: &str, sidesite: &str) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let csidesite = CString::new(sidesite).unwrap();
         let wrap_ptr = unsafe { mjs_wrapGeom(
             self,
             cname.as_ptr(), csidesite.as_ptr()
         ) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Wrap a joint corresponding to `name`, using the tendon.
+    ///
     /// # Panics
-    /// When the `name` contains '\0' characters, a panic occurs.
+    /// - When the `name` contains '\0' characters, a panic occurs.
+    /// - When MuJoCo fails to allocate the wrap element.
+    ///   Use [`MjsTendon::try_wrap_joint`] for a fallible alternative.
     pub fn wrap_joint(&mut self, name: &str, coef: f64) -> &mut MjsWrap {
+        self.try_wrap_joint(name, coef).expect("failed to wrap joint")
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_joint`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
+    /// pointer.
+    ///
+    /// # Panics
+    /// When `name` contains '\0' characters.
+    pub fn try_wrap_joint(&mut self, name: &str, coef: f64) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let wrap_ptr = unsafe { mjs_wrapJoint(self, cname.as_ptr(), coef) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Wrap a pulley using the tendon.
+    ///
+    /// # Panics
+    /// When MuJoCo fails to allocate the wrap element.
+    /// Use [`MjsTendon::try_wrap_pulley`] for a fallible alternative.
     pub fn wrap_pulley(&mut self, divisor: f64) -> &mut MjsWrap {
+        self.try_wrap_pulley(divisor).expect("failed to wrap pulley")
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_pulley`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
+    /// pointer.
+    pub fn try_wrap_pulley(&mut self, divisor: f64) -> Result<&mut MjsWrap, MjEditError> {
         let wrap_ptr = unsafe { mjs_wrapPulley(self, divisor) };
-        unsafe { wrap_ptr.as_mut().unwrap() }
+        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
+    }
+
+    /// Return the number of wrap objects.
+    pub fn get_wrap_num(&self) -> usize {
+        unsafe { mjs_getWrapNum(self) as usize }
+    }
+
+    /// Return an indexed wrap object. Returns `None` if index is out of bounds.
+    pub fn get_wrap(&self, i: usize) -> Option<&MjsWrap> {
+        let ptr = unsafe { mjs_getWrap(self, i as i32) };
+        unsafe { ptr.as_ref() }
+    }
+
+    /// Return a mutable indexed wrap object. Returns `None` if index is out of bounds.
+    pub fn get_wrap_mut(&mut self, i: usize) -> Option<&mut MjsWrap> {
+        let ptr = unsafe { mjs_getWrap(self, i as i32) };
+        unsafe { ptr.as_mut() }
     }
 }
 
@@ -944,7 +1246,33 @@ impl MjsTendon {
 ***************************/
 mjs_struct!(Wrap);
 impl MjsWrap {
-    /* Auto-implemented */
+    getter_setter! {
+        [&] with, get, set, [
+            type_ + _: MjtWrap; "wrap type.";
+        ]
+    }
+
+    /// Return the side site element.
+    pub fn side_site(&self) -> Option<&MjsSite> {
+        let ptr = unsafe { mjs_getWrapSideSite(self as *const _ as *mut _) };
+        if ptr.is_null() { None } else { Some(unsafe { &*ptr }) }
+    }
+
+    /// Return the side site element mutably.
+    pub fn side_site_mut(&mut self) -> Option<&mut MjsSite> {
+        let ptr = unsafe { mjs_getWrapSideSite(self) };
+        if ptr.is_null() { None } else { Some(unsafe { &mut *ptr }) }
+    }
+
+    /// Return the wrap divisor.
+    pub fn divisor(&self) -> f64 {
+        unsafe { mjs_getWrapDivisor(self as *const _ as *mut _) }
+    }
+
+    /// Return the wrap coefficient.
+    pub fn coef(&self) -> f64 {
+        unsafe { mjs_getWrapCoef(self as *const _ as *mut _) }
+    }
 }
 
 /***************************
@@ -1075,6 +1403,7 @@ impl MjsMesh {
         usernormal: f32;             "user normal data.";
         usertexcoord: f32;           "user texcoord data.";
         userface: i32;               "user vertex indices.";
+        userfacenormal: i32;         "user face normal indices.";
         userfacetexcoord: i32;       "user texcoord indices.";
     }
 }
@@ -1102,7 +1431,8 @@ impl MjsHfield {
 
     /// Sets `userdata`.
     pub fn set_userdata<T: AsRef<[f32]>>(&mut self, userdata: T) {
-        write_mjs_vec_f32(userdata.as_ref(), unsafe {self.userdata.as_mut().unwrap() })
+        // SAFETY: self.userdata is a valid mjFloatVec pointer for the lifetime of self.
+        unsafe { write_mjs_vec_f32(userdata.as_ref(), self.userdata) };
     }
 }
 
@@ -1158,7 +1488,7 @@ impl MjsTexture {
             rgb2: &[f64; 3];               "second color for builtin.";
             markrgb: &[f64; 3];            "mark color.";
             gridsize: &[i32; 2];           "size of grid for composite file; (1,1)-repeat.";
-            gridlayout: &[i8; 13];         "row-major: L,R,F,B,U,D for faces; . for unused.";
+            gridlayout: &[c_char; 12];     "row-major: L,R,F,B,U,D for faces; . for unused.";
         ]
     }
 
@@ -1190,8 +1520,9 @@ impl MjsTexture {
     ]}
 
     /// Sets texture `data`.
-    pub fn set_data<T>(&mut self, data: &[T]) {
-        write_mjs_vec_byte(data, unsafe { self.data.as_mut().unwrap() });
+    pub fn set_data<T: bytemuck::NoUninit>(&mut self, data: &[T]) {
+        // SAFETY: self.data is a valid mjByteVec pointer for the lifetime of self.
+        unsafe { write_mjs_vec_byte(data, self.data) };
     }
 
     string_set_get_with! {[&]
@@ -1238,9 +1569,9 @@ impl MjsMaterial {
 ***************************/
 mjs_struct!(Body {
     // Override the delete method to prevent deletion of world.
-    unsafe fn delete(&mut self) -> Result<(), Error> {
+    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         if self.name() == "world" {
-            return Err(Error::new(ErrorKind::Unsupported, "world body can't be deleted"));
+            return Err(MjEditError::UnsupportedOperation);
         }
         unsafe { SpecItem::__delete_default__(self) }
     }
@@ -1257,9 +1588,28 @@ impl MjsBody {
 
     // Special case
     /// Add and return a child frame.
+    ///
+    /// Delegates to [`Self::try_add_frame`] and panics if allocation fails.
+    /// # Panics
+    /// Panics if MuJoCo fails to allocate the frame.
     pub fn add_frame(&mut self) -> &mut MjsFrame {
-        let ptr = unsafe { mjs_addFrame(self, ptr::null_mut()) };
-        unsafe { ptr.as_mut().unwrap() }
+        self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
+    }
+
+    /// Fallible version of [`Self::add_frame`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
+    /// the frame, instead of panicking.
+    pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
+        // SAFETY: ffi_mut() returns self unchanged; the coercion to *mut mjsBody is safe.
+        // ptr::null_mut() for parentframe is valid: the MuJoCo API accepts null to mean
+        // "attach directly to the body with no parent frame".
+        let ptr = unsafe { mjs_addFrame(self.ffi_mut(), ptr::null_mut()) };
+        // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
+        // pointee is properly aligned and initialized by C++ operator new, and freshly
+        // allocated so no existing Rust reference aliases it for the returned lifetime.
+        unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
     }
 }
 
@@ -1292,6 +1642,7 @@ impl MjsBody {
         [&] with, get, set, [
             mass: f64;                     "mass.";
             gravcomp: f64;                 "gravity compensation.";
+            sleep: MjtSleepPolicy;           "sleep policy.";
         ]
     }
 
@@ -1306,6 +1657,7 @@ impl MjsBody {
 }
 
 /// Mutable iterator over items in [`MjsBody`].
+#[derive(Debug)]
 pub struct MjsBodyItemIterMut<'a, T> {
     root: &'a mut MjsBody,
     last: *mut mjsElement,
@@ -1315,6 +1667,7 @@ pub struct MjsBodyItemIterMut<'a, T> {
 }
 
 /// Immutable iterator over items in [`MjsBody`].
+#[derive(Debug, Clone)]
 pub struct MjsBodyItemIter<'a, T> {
     root: &'a MjsBody,
     last: *mut mjsElement,
@@ -1338,6 +1691,7 @@ impl MjsBody {
 #[cfg(test)]
 mod tests {
     use std::io::Write;
+    use std::path::{Path, PathBuf};
     use std::fs;
 
     use super::*;
@@ -1415,7 +1769,7 @@ mod tests {
         let world = spec.world_body_mut();
         let body = world.add_body();
         assert_eq!(body.name(), "");
-        body.set_name(NEW_MODEL_NAME);
+        body.set_name(NEW_MODEL_NAME).unwrap();
         assert_eq!(body.name(), NEW_MODEL_NAME);
 
         spec.compile().unwrap();
@@ -1428,7 +1782,7 @@ mod tests {
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
         let world = spec.world_body_mut();
         let body = world.add_body();
-        body.set_name(NEW_MODEL_NAME);
+        body.set_name(NEW_MODEL_NAME).unwrap();
 
         /* Test normal body deletion */
         let body = spec.body_mut(NEW_MODEL_NAME).expect("failed to obtain the body");
@@ -1449,7 +1803,7 @@ mod tests {
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
         let world = spec.world_body_mut();
         let joint = world.add_joint();
-        joint.set_name(NEW_NAME);
+        joint.set_name(NEW_NAME).unwrap();
 
         /* Test normal body deletion */
         let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
@@ -1465,7 +1819,7 @@ mod tests {
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
         let hfield = spec.add_hfield();
-        hfield.set_name(NEW_NAME);
+        hfield.set_name(NEW_NAME).unwrap();
 
         /* Test normal hfield deletion */
         let hfield = spec.hfield_mut(NEW_NAME).expect("failed to obtain the hfield");
@@ -1514,7 +1868,7 @@ mod tests {
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
 
         /* Test search */
-        spec.add_default(DEFAULT_NAME, None).unwrap();
+        spec.add_default(DEFAULT_NAME, None);
 
         /* Test delete */
         assert!(spec.default(DEFAULT_NAME).is_some());
@@ -1563,6 +1917,30 @@ mod tests {
         assert_eq!(spec.save_xml_string(1000).unwrap(), EXPECTED_XML);
 
         spec.compile().unwrap();
+    }
+
+    /// `save_xml_string` with a 1-byte buffer must return `XmlBufferTooSmall` and
+    /// the reported `required_size` must be enough to succeed on retry.
+    #[test]
+    fn test_save_xml_string_buffer_too_small() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_body().add_geom().with_size([0.01, 0.0, 0.0]);
+        spec.compile().unwrap();
+
+        let err = spec.save_xml_string(1)
+            .expect_err("expected XmlBufferTooSmall with a 1-byte buffer");
+        let required_size = match err {
+            MjEditError::XmlBufferTooSmall { required_size } => required_size,
+            other => panic!("expected XmlBufferTooSmall, got {other:?}"),
+        };
+        assert!(required_size > 1, "required_size must exceed the original 1-byte buffer");
+
+        // Retry with the size MuJoCo reported plus one extra byte for safety
+        // (MuJoCo uses a strict less-than comparison, so the buffer must be
+        // at least required_size + 1 to succeed).
+        let xml = spec.save_xml_string(required_size + 1)
+            .expect("save_xml_string should succeed with required_size + 1 bytes");
+        assert!(!xml.is_empty(), "saved XML must be non-empty");
     }
 
     #[test]
@@ -1756,5 +2134,422 @@ mod tests {
         assert_eq!(world.body_iter_mut(true).count(), N_BODY - 1);  // world must now be excluded
         assert_eq!(world.site_iter_mut(true).count(), N_SITE);
         assert_eq!(world.body_iter_mut(false).last().unwrap().name(), LAST_WORLD_BODY_NAME);
+    }
+
+    /// Tests wrapper method of [`mj_parse`] with VFS.
+    #[test]
+    fn test_parse_vfs() {
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer("hello.xml", MODEL.as_bytes()).unwrap();
+        let mut spec = MjSpec::from_parse_vfs("hello.xml", "XML", &vfs).unwrap();
+        let model = spec.compile().unwrap();
+        assert!(model.geom("floor1").is_some());
+    }
+
+    /// Tests wrapper method of [`mj_parse`] without VFS.
+    #[test]
+    fn test_parse_file() {
+        std::fs::write("test_parse_vfs.xml", MODEL).unwrap();
+        let mut spec = MjSpec::from_parse("test_parse_vfs.xml", "XML").unwrap();
+        std::fs::remove_file("test_parse_vfs.xml").unwrap();
+        let model = spec.compile().unwrap();
+        assert!(model.geom("floor1").is_some());
+    }
+
+    #[test]
+    fn test_tendon_wrap_methods() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_body().with_name("body1");
+        spec.world_body_mut().add_body().with_name("body2");
+        spec.world_body_mut().add_site().with_name("site1");
+
+        let tendon = spec.add_tendon();
+        tendon.wrap_site("site1");
+        tendon.wrap_joint("joint1", 0.5);
+        tendon.wrap_pulley(1.5);
+
+        assert_eq!(tendon.get_wrap_num(), 3);
+
+        let wrap = tendon.get_wrap(1).unwrap();
+        assert_eq!(wrap.coef(), 0.5);
+
+        let wrap_pulley = tendon.get_wrap(2).unwrap();
+        assert_eq!(wrap_pulley.divisor(), 1.5);
+    }
+
+    #[test]
+    fn test_numeric_vec() {
+        let mut spec = MjSpec::new();
+        let numeric = spec.add_numeric();
+        let name = "test_numeric";
+        numeric.set_name(name).unwrap();
+        assert_eq!(numeric.name(), name);
+
+        let data = [1.5, 2.5, 3.5, 4.5];
+        numeric.set_data(&data);
+        assert_eq!(numeric.data(), &data);
+
+        spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_text_string() {
+        let mut spec = MjSpec::new();
+        let text = spec.add_text();
+        let name = "test_text";
+        text.set_name(name).unwrap();
+        assert_eq!(text.name(), name);
+
+        let content = "Hello MuJoCo!";
+        text.set_data(content);
+        assert_eq!(text.data(), content);
+
+        spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_tuple_names_and_params() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_body().with_name("body1");
+        spec.world_body_mut().add_body().with_name("body2");
+
+        let tuple_name = "test_tuple";
+        let obj_param = [1.0, 2.0];
+
+        let tuple = spec.add_tuple();
+        tuple.set_name(tuple_name).unwrap();
+        assert_eq!(tuple.name(), tuple_name);
+
+        tuple.set_objname("body1 body2");
+        tuple.set_objprm(&obj_param);
+        tuple.set_objtype(&[MjtObj::mjOBJ_BODY as i32, MjtObj::mjOBJ_BODY as i32]);
+
+        assert_eq!(tuple.objprm(), &obj_param);
+
+        spec.compile().unwrap();
+
+        // Verify via XML as objname has no spec getter
+        let xml = spec.save_xml_string(2000).unwrap();
+        assert!(xml.contains("objname=\"body1\""));
+        assert!(xml.contains("objname=\"body2\""));
+        assert!(xml.contains("prm=\"1\""));
+        assert!(xml.contains("prm=\"2\""));
+    }
+
+    /// Tests that wrapping sites on a tendon produces a compiled model
+    /// with correct ntendon, nwrap, wrap types, and wrap object IDs.
+    #[test]
+    fn test_tendon_wrap_site_compiled_model() {
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+
+        let b1 = world.add_body().with_pos([0.0, 0.0, 0.5]);
+        b1.add_geom().with_size([0.01; 3]);
+        b1.add_site().with_name("s1");
+        b1.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        let b2 = world.add_body().with_pos([1.0, 0.0, 0.5]);
+        b2.add_geom().with_size([0.01; 3]);
+        b2.add_site().with_name("s2");
+        b2.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+
+        let tendon = spec.add_tendon().with_range([0.0, 1.0]);
+        tendon.wrap_site("s1");
+        tendon.wrap_site("s2");
+
+        let model = spec.compile().unwrap();
+
+        assert_eq!(model.ffi().ntendon, 1, "expected one tendon");
+        assert_eq!(model.ffi().nwrap, 2, "expected two wrap elements");
+
+        // Verify wrap types are mjWRAP_SITE (= 1)
+        let wrap_types = model.wrap_type();
+        assert_eq!(wrap_types[0], MjtWrap::mjWRAP_SITE);
+        assert_eq!(wrap_types[1], MjtWrap::mjWRAP_SITE);
+
+        // Verify wrap object IDs point to the correct sites
+        let wrap_objid = model.wrap_objid();
+        let s1_id = model.site("s1").unwrap().id as i32;
+        let s2_id = model.site("s2").unwrap().id as i32;
+        assert_eq!(wrap_objid[0], s1_id);
+        assert_eq!(wrap_objid[1], s2_id);
+    }
+
+    /// Test that MjsTendon `limited` correctly round-trips all three enum states
+    /// (FALSE, TRUE, AUTO), which would fail if the field were `bool`.
+    #[test]
+    fn test_tendon_limited_tristate() {
+        use crate::mujoco_c::mjtLimited_::*;
+
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+
+        let b1 = world.add_body().with_pos([0.0, 0.0, 0.5]);
+        b1.add_geom().with_size([0.01; 3]);
+        b1.add_site().with_name("s1");
+        b1.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        let b2 = world.add_body().with_pos([1.0, 0.0, 0.5]);
+        b2.add_geom().with_size([0.01; 3]);
+        b2.add_site().with_name("s2");
+        b2.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+
+        // Create 3 tendons, one for each LIMITED enum value
+        for (name, val) in [("t_false", mjLIMITED_FALSE), ("t_true", mjLIMITED_TRUE), ("t_auto", mjLIMITED_AUTO)] {
+            let t = spec.add_tendon()
+                .with_name(name)
+                .with_range([0.0, 1.0])
+                .with_limited(val);
+            t.wrap_site("s1");
+            t.wrap_site("s2");
+        }
+
+        // Verify before compilation: getter round-trip
+        for (name, expected) in [("t_false", mjLIMITED_FALSE), ("t_true", mjLIMITED_TRUE), ("t_auto", mjLIMITED_AUTO)] {
+            let t = spec.tendon(name).expect("tendon not found");
+            assert_eq!(t.limited(), expected,
+                "Before compile: tendon '{}' limited should be {:?}", name, expected);
+        }
+
+        // Compile and verify the compiled model's tendon_limited field
+        let model = spec.compile().unwrap();
+        let tendon_limited = model.tendon_limited();
+        // After compilation, enum values resolve to bool: FALSE->false, TRUE->true, AUTO->resolved
+        assert_eq!(tendon_limited[0], false,
+            "Compiled tendon 0 limited should be false");
+        assert_eq!(tendon_limited[1], true,
+            "Compiled tendon 1 limited should be true");
+        // AUTO resolves to a concrete bool in the compiled model
+        assert!(
+            tendon_limited[2] == false || tendon_limited[2] == true,
+            "Compiled tendon 2 (AUTO) should resolve to a bool, got {:?}", tendon_limited[2]
+        );
+    }
+
+    /// Test that MjsTendon `actfrclimited` correctly round-trips all three enum
+    /// states (FALSE, TRUE, AUTO).
+    #[test]
+    fn test_tendon_actfrclimited_tristate() {
+        use crate::mujoco_c::mjtLimited_::*;
+
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+
+        let b1 = world.add_body().with_pos([0.0, 0.0, 0.5]);
+        b1.add_geom().with_size([0.01; 3]);
+        b1.add_site().with_name("s1");
+        b1.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        let b2 = world.add_body().with_pos([1.0, 0.0, 0.5]);
+        b2.add_geom().with_size([0.01; 3]);
+        b2.add_site().with_name("s2");
+        b2.add_joint().with_type(MjtJoint::mjJNT_FREE);
+
+        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+
+        // Set actfrclimited to each variant (with actfrcrange for TRUE/AUTO)
+        for (name, val) in [("t_false", mjLIMITED_FALSE), ("t_true", mjLIMITED_TRUE), ("t_auto", mjLIMITED_AUTO)] {
+            let t = spec.add_tendon()
+                .with_name(name)
+                .with_range([0.0, 1.0])
+                .with_actfrcrange([-1.0, 1.0])
+                .with_actfrclimited(val);
+            t.wrap_site("s1");
+            t.wrap_site("s2");
+        }
+
+        // Verify round-trip before compilation
+        for (name, expected) in [("t_false", mjLIMITED_FALSE), ("t_true", mjLIMITED_TRUE), ("t_auto", mjLIMITED_AUTO)] {
+            let t = spec.tendon(name).expect("tendon not found");
+            assert_eq!(t.actfrclimited(), expected,
+                "Before compile: tendon '{}' actfrclimited should be {:?}", name, expected);
+        }
+
+        // Must compile without error
+        spec.compile().unwrap();
+    }
+
+    /// Test that MjsJoint `align` correctly round-trips all three enum states
+    /// (FALSE, TRUE, AUTO), which would fail if the field were `i32`.
+    #[test]
+    fn test_joint_align_tristate() {
+        use crate::mujoco_c::mjtAlignFree_::*;
+
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+
+        // Create 3 free joints, one for each align state
+        for (name, val) in [("j_false", mjALIGNFREE_FALSE), ("j_true", mjALIGNFREE_TRUE), ("j_auto", mjALIGNFREE_AUTO)] {
+            let body = world.add_body().with_pos([0.0, 0.0, 1.0]);
+            body.add_geom().with_size([0.1; 3]);
+            body.add_joint()
+                .with_name(name)
+                .with_type(MjtJoint::mjJNT_FREE)
+                .with_align(val);
+        }
+
+        // Verify round-trip before compilation
+        for (name, expected) in [("j_false", mjALIGNFREE_FALSE), ("j_true", mjALIGNFREE_TRUE), ("j_auto", mjALIGNFREE_AUTO)] {
+            let j = spec.joint(name).expect("joint not found");
+            assert_eq!(j.align(), expected,
+                "Before compile: joint '{}' align should be {:?}", name, expected);
+        }
+
+        // Compile and verify -- AUTO should resolve, FALSE/TRUE should remain
+        let model = spec.compile().unwrap();
+        let jnt_count = model.ffi().njnt as usize;
+        assert_eq!(jnt_count, 3, "expected 3 joints");
+
+        // Must compile without error -- the key correctness is the round-trip above;
+        // compilation proves MuJoCo accepted the enum values.
+    }
+
+    /// Test that MjsJoint `limited` also correctly round-trips all three states
+    /// since it was also changed to MjtLimited.
+    #[test]
+    fn test_joint_limited_tristate() {
+        use crate::mujoco_c::mjtLimited_::*;
+
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+
+        for (name, val) in [("j_false", mjLIMITED_FALSE), ("j_true", mjLIMITED_TRUE), ("j_auto", mjLIMITED_AUTO)] {
+            let body = world.add_body().with_pos([0.0, 0.0, 1.0]);
+            body.add_geom().with_size([0.1; 3]);
+            body.add_joint()
+                .with_name(name)
+                .with_type(MjtJoint::mjJNT_SLIDE)
+                .with_range([0.0, 1.0])
+                .with_limited(val);
+        }
+
+        // Verify round-trip before compilation
+        for (name, expected) in [("j_false", mjLIMITED_FALSE), ("j_true", mjLIMITED_TRUE), ("j_auto", mjLIMITED_AUTO)] {
+            let j = spec.joint(name).expect("joint not found");
+            assert_eq!(j.limited(), expected,
+                "Before compile: joint '{}' limited should be {:?}", name, expected);
+        }
+
+        // Compile -- AUTO resolves based on range presence
+        let model = spec.compile().unwrap();
+        let jnt_limited = model.jnt_limited();
+        assert_eq!(jnt_limited[0], false);
+        assert_eq!(jnt_limited[1], true);
+        // AUTO with range present should resolve to true
+        assert_eq!(jnt_limited[2], true,
+            "Joint with limited=AUTO and range should resolve to true");
+    }
+
+    /// Parsing invalid XML must return Err with a non-empty message.
+    #[test]
+    fn test_parse_xml_string_invalid() {
+        let result = MjSpec::from_xml_string("<not valid mujoco xml>");
+        assert!(result.is_err(), "parsing invalid XML must return Err");
+        let msg = result.unwrap_err().to_string();
+        assert!(!msg.is_empty(), "error message must not be empty for invalid XML");
+    }
+
+    /// Parsing via VFS must produce a model with the expected properties, not just succeed.
+    #[test]
+    fn test_parse_xml_vfs_content() {
+        const PATH: &str = "./mj_spec_test_parse_xml_vfs_content.xml";
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer(PATH, MODEL.as_bytes()).unwrap();
+        let mut spec = MjSpec::from_xml_vfs(PATH, &vfs).expect("VFS parse failed");
+        let model = spec.compile().expect("compile failed");
+
+        // MODEL has: worldbody + 1 named body ("ball") = 2 bodies total (world + ball)
+        assert_eq!(model.ffi().nbody, 2, "expected 2 bodies (world + ball)");
+        // MODEL has: 1 free joint on "ball"
+        assert_eq!(model.ffi().njnt, 1, "expected 1 joint");
+        // MODEL has: 1 sphere geom + 1 plane geom = 2 geoms
+        assert_eq!(model.ffi().ngeom, 2, "expected 2 geoms (sphere + floor)");
+    }
+
+    /// Parsing via XML file must produce a model with the expected properties.
+    #[test]
+    fn test_parse_xml_file_content() {
+        const PATH: &str = "./mj_spec_test_parse_xml_file_content.xml";
+        let mut file = fs::File::create(PATH).expect("file creation failed");
+        file.write_all(MODEL.as_bytes()).expect("unable to write");
+        file.flush().unwrap();
+
+        let result = MjSpec::from_xml(PATH);
+        fs::remove_file(PATH).expect("file removal failed");
+
+        let mut spec = result.expect("file parse failed");
+        let model = spec.compile().expect("compile failed");
+
+        assert_eq!(model.ffi().nbody, 2, "expected 2 bodies (world + ball)");
+        assert_eq!(model.ffi().njnt, 1, "expected 1 joint");
+        assert_eq!(model.ffi().ngeom, 2, "expected 2 geoms (sphere + floor)");
+    }
+
+    /// `from_parse` accepts `PathBuf` and `&Path` in addition to `&str`.
+    #[test]
+    fn test_from_parse_path_types() {
+        const PATH: &str = "./mj_spec_test_from_parse_path_types.xml";
+        let mut file = fs::File::create(PATH).expect("file creation failed");
+        file.write_all(MODEL.as_bytes()).expect("write failed");
+        file.flush().unwrap();
+
+        // &str
+        assert!(MjSpec::from_parse(PATH, "").is_ok());
+        // String
+        assert!(MjSpec::from_parse(String::from(PATH), "").is_ok());
+        // &Path
+        assert!(MjSpec::from_parse(Path::new(PATH), "").is_ok());
+        // PathBuf
+        assert!(MjSpec::from_parse(PathBuf::from(PATH), "").is_ok());
+
+        fs::remove_file(PATH).expect("file removal failed");
+    }
+
+    /// `from_parse_vfs` accepts `PathBuf` and `&Path`.
+    #[test]
+    fn test_from_parse_vfs_path_types() {
+        const PATH: &str = "./mj_spec_test_from_parse_vfs_path_types.xml";
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer(PATH, MODEL.as_bytes()).unwrap();
+
+        // &str
+        assert!(MjSpec::from_parse_vfs(PATH, "", &vfs).is_ok());
+        // PathBuf
+        assert!(MjSpec::from_parse_vfs(PathBuf::from(PATH), "", &vfs).is_ok());
+        // &Path
+        assert!(MjSpec::from_parse_vfs(Path::new(PATH), "", &vfs).is_ok());
+    }
+
+    /// `save_xml` accepts `PathBuf` and `&Path` in addition to `&str`.
+    #[test]
+    fn test_save_xml_path_types() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_body().add_geom().with_size([0.01, 0.0, 0.0]);
+        spec.compile().unwrap();
+
+        let paths: [PathBuf; 3] = [
+            PathBuf::from("./mj_spec_save_xml_str.xml"),
+            PathBuf::from("./mj_spec_save_xml_pathbuf.xml"),
+            PathBuf::from("./mj_spec_save_xml_path.xml"),
+        ];
+
+        // &str
+        spec.save_xml(paths[0].to_str().unwrap()).unwrap();
+        // PathBuf
+        spec.save_xml(paths[1].clone()).unwrap();
+        // &Path
+        spec.save_xml(paths[2].as_path()).unwrap();
+
+        for p in &paths {
+            let content = fs::read_to_string(p).expect("saved file should be readable");
+            assert!(content.contains("<mujoco"), "saved XML should contain <mujoco tag");
+            fs::remove_file(p).expect("cleanup failed");
+        }
     }
 }

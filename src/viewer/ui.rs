@@ -14,13 +14,12 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::ffi::CString;
 use std::fmt::Debug;
-use std::ops::Deref;
 
 use crate::wrappers::mj_visualization::{
     MjvOption, MjvCamera, MjtCamera, MjvScene
 };
 use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint};
-use crate::viewer::{ViewerSharedState, ViewerStatusBit};
+use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_data::MjData;
 use crate::mujoco_c::mjNGROUP;
 
@@ -36,7 +35,7 @@ const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
 const SIDE_PANEL_PAD: f32 = 10.0;
 
 /// Maps [`MjtRndFlag`](crate::wrappers::mj_visualization::MjtRndFlag) to their string
-const GL_EFFECT_MAP: [&str; 10] = [
+const GL_EFFECT_MAP: [&str; 11] = [
     "Shadow",
     "Wireframe",
     "Reflection",
@@ -44,10 +43,12 @@ const GL_EFFECT_MAP: [&str; 10] = [
     "Skybox",
     "Fog",
     "Haze",
+    "Depth",
     "Segment",
     "ID color",
     "Cull face"
 ];
+const _: () = assert!(GL_EFFECT_MAP.len() == crate::mujoco_c::mjtRndFlag_::mjNRNDFLAG as usize);
 
 /// Maps [`MjtVisFlag`](crate::wrappers::mj_visualization::MjtVisFlag) to their string
 const VIS_OPT_MAP: [&str; 31] = [
@@ -83,6 +84,7 @@ const VIS_OPT_MAP: [&str; 31] = [
     "Mesh BVH",
     "SDF iteration"
 ];
+const _: () = assert!(VIS_OPT_MAP.len() == crate::mujoco_c::mjtVisFlag_::mjNVISFLAG as usize);
 
 /// Maps [`MjtLabel`](crate::wrappers::mj_visualization::MjtLabel) to their string
 const LABEL_TYPE_MAP: [&str; 17] = [
@@ -104,6 +106,7 @@ const LABEL_TYPE_MAP: [&str; 17] = [
     "Contact force",
     "Island"
 ];
+const _: () = assert!(LABEL_TYPE_MAP.len() == crate::mujoco_c::mjtLabel_::mjNLABEL as usize);
 
 /// Maps [`MjtFrame`](crate::wrappers::mj_visualization::MjtFrame) to their string
 const FRAME_TYPE_MAP: [&str; 8] = [
@@ -116,15 +119,16 @@ const FRAME_TYPE_MAP: [&str; 8] = [
     "Contact",
     "World"
 ];
+const _: () = assert!(FRAME_TYPE_MAP.len() == crate::mujoco_c::mjtFrame_::mjNFRAME as usize);
 
 /// Type alias for a user-provided UI callback function.
-pub(crate) type UiCallback<M> = Box<dyn FnMut(&egui::Context, &mut MjData<M>)>;
+pub(crate) type UiCallback = Box<dyn FnMut(&egui::Context, &mut MjData<Arc<MjModel>>)>;
 
 /// Type alias for a detached (from state) user-provided UI callback function.
 pub(crate) type UiCallbackDetached = Box<dyn FnMut(&egui::Context)>;
 
 /// Viewer user interface context.
-pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
+pub(crate) struct ViewerUI {
     egui_ctx: egui::Context,
     state: egui_winit::State,
     painter: egui_glow::Painter,
@@ -134,8 +138,7 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     actuator_names: Vec<String>,
     joint_name_id: Vec<(String, usize)>,
     equality_names: Vec<String>,
-    model: M,
-    user_ui_callbacks: Vec<UiCallback<M>>,
+    user_ui_callbacks: Vec<UiCallback>,
     user_ui_callbacks_detached: Vec<UiCallbackDetached>,
 
     // Window toggles.
@@ -146,12 +149,14 @@ pub(crate) struct ViewerUI<M: Deref<Target = MjModel>> {
     actuator_window: bool,
     joint_window: bool,
     equality_window: bool,
-    group_window: bool
+    group_window: bool,
+    screenshot_viewport_only: bool,
+    screenshot_depth: bool
 }
 
-impl<M: Deref<Target = MjModel>> ViewerUI<M> {
+impl ViewerUI {
     /// Create a new [`ViewerUI`] instance for the specific winit window.
-    pub(crate) fn new(model: M, window: &Window, display: &Display) -> Self {
+    pub(crate) fn new(model: Arc<MjModel>, window: &Window, display: &Display) -> Result<Self, MjViewerError> {
         let egui_ctx = egui::Context::default();
         let viewport_id = egui_ctx.viewport_id();
 
@@ -165,22 +170,51 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         );
         let gl = unsafe { Arc::new(egui_glow::glow::Context::from_loader_function(get_addr)) };
 
-        let camera_names = (0..model.ncam()).map(|i| {
-            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i) {
+        let painter = egui_glow::Painter::new(
+            gl.clone(),
+            "",
+            None,
+            false
+        ).map_err(|e| MjViewerError::PainterInitError(e.to_string()))?;
+
+        let mut viewer_ui = Self {
+            egui_ctx, state, painter, gl, events: VecDeque::new(),
+            camera_names: Vec::new(),
+            actuator_names: Vec::new(),
+            joint_name_id: Vec::new(),
+            equality_names: Vec::new(),
+            user_ui_callbacks: Vec::new(),
+            user_ui_callbacks_detached: Vec::new(),
+            actuator_window: false,
+            joint_window: false,
+            equality_window: false,
+            group_window: false,
+            screenshot_viewport_only: false,
+            screenshot_depth: false
+        };
+        viewer_ui.update_names(model);
+        Ok(viewer_ui)
+    }
+
+    /// Rebuilds all model-dependent cached state (name lists).
+    /// Must be called whenever the active model changes.
+    pub(crate) fn update_names(&mut self, model: Arc<MjModel>) {
+        self.camera_names = (0..model.ncam()).map(|i| {
+            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i as usize) {
                 name.to_string()
             } else { format!("Camera {i}") }
         }).collect();
 
-        let actuator_names = (0..model.nu()).map(|i| {
-            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, i) {
+        self.actuator_names = (0..model.nu()).map(|i| {
+            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, i as usize) {
                 name.to_string()
             } else { format!("Actuator {i}") }
         }).collect();
 
-        let joint_name_id = (0..model.njnt()).filter_map(|i| {
+        self.joint_name_id = (0..model.njnt()).filter_map(|i| {
             match model.jnt_type()[i as usize] {
                 MjtJoint::mjJNT_SLIDE | MjtJoint::mjJNT_HINGE => {
-                    let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, i) {
+                    let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, i as usize) {
                         name.to_string()
                     } else { format!("Joint {i}") };
                     Some((name, i as usize))
@@ -189,35 +223,17 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
             }
         }).collect();
 
-        let equality_names = (0..model.neq()).map(|i| {
-            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_EQUALITY, i) {
+        self.equality_names = (0..model.neq()).map(|i| {
+            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_EQUALITY, i as usize) {
                 name.to_string()
             } else { format!("Equality {i}") }
         }).collect();
 
-        let painter = egui_glow::Painter::new(
-            gl.clone(),
-            "",
-            None,
-            false
-        ).unwrap();
-
-        Self {
-            egui_ctx, state, painter, gl, events: VecDeque::new(),
-            camera_names, actuator_names, joint_name_id, equality_names,
-            model,
-            user_ui_callbacks: Vec::new(),
-            user_ui_callbacks_detached: Vec::new(),
-            actuator_window: false,
-            joint_window: false,
-            equality_window: false,
-            group_window: false
-        }
     }
 
     /// Handles winit input events.
     pub(crate) fn handle_events(&mut self, window: &Window, event: &WindowEvent) {
-        let _ = self.state.on_window_event(&window, event);  // ignore response as it can be obtained later.
+        let _ = self.state.on_window_event(window, event);  // ignore response as it can be obtained later.
     }
 
     /// Gains scoped access to [`egui::Context`] for dealing with custom initialization
@@ -229,19 +245,21 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     }
 
     /// Draws the UI to the viewport.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn process(
         &mut self,
         window: &Window, status: &mut ViewerStatusBit,
-        scene: &mut MjvScene<M>, options: &mut MjvOption,
+        scene: &mut MjvScene, options: &mut MjvOption,
         camera: &mut MjvCamera,
-        shared_viewer_state: &Arc<Mutex<ViewerSharedState<M>>>
+        shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
+        model: &MjModel
     ) -> f32 {
         // Viewport reservations, which will be excluded from MuJoCo's viewport.
         // This way MuJoCo won't draw over the UI.
         let mut left = 0.0;
 
         // Process the UI
-        let raw_input = self.state.take_egui_input(&window);
+        let raw_input = self.state.take_egui_input(window);
         let full_output = self.egui_ctx.run(raw_input, |ctx| {
             if status.contains(ViewerStatusBit::UI) {
                 egui::SidePanel::new(egui::panel::Side::Left,"interface_panel")
@@ -264,13 +282,15 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                             .default_open(true)
                             .show(ui, |ui|
                         {
-                            if ui.add(egui::Button::new(
-                                RichText::new("Quit").font(MAIN_FONT)
-                            ).corner_radius(BUTTON_ROUNDING)).clicked() {
-                                self.events.push_back(UiEvent::Close);
-                            }
+                            ui.horizontal_wrapped(|ui| {
+                                if ui.add(egui::Button::new(
+                                    RichText::new("Quit").font(MAIN_FONT)
+                                ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                                    self.events.push_back(UiEvent::Close);
+                                }
+                            });
                         });
-                        
+
                         /* UI toggles */
                         egui::CollapsingHeader::new(RichText::new("UI").font(HEADING_FONT))
                             .default_open(true)
@@ -347,15 +367,19 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                         /* Visualization options */
                         egui::CollapsingHeader::new(RichText::new("Rendering").font(HEADING_FONT))
-                            .default_open(false)
+                            .default_open(true)
                             .show(ui, |ui|
                         {
                             egui::Grid::new("render_select_grid").show(ui, |ui| {
                                 // Camera
                                 ui.label(RichText::new("Camera").font(MAIN_FONT));
-                                let enumerated = camera.type_.try_into().unwrap_or_else(|_| {
-                                    panic!("failed to convert {} into MjtCamera", camera.type_)
-                                });
+                                let Ok(enumerated) = camera.type_.try_into() else {
+                                    // Unknown camera type - skip the camera row rather than panic.
+                                    ui.label(format!("Unknown camera type {}", camera.type_));
+                                    ui.end_row();
+                                    return;
+                                };
+                                let enumerated: MjtCamera = enumerated;
                                 let mut current_cam_name = match enumerated {
                                     MjtCamera::mjCAMERA_FIXED => &self.camera_names[camera.fixedcamid as usize],
                                     MjtCamera::mjCAMERA_TRACKING => "Tracking",
@@ -369,8 +393,8 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                     }
 
                                     for (id, name) in self.camera_names.iter().enumerate() {
-                                        if ui.selectable_value(&mut current_cam_name, &name, name).clicked() {
-                                            *camera = MjvCamera::new_fixed(id as u32);
+                                        if ui.selectable_value(&mut current_cam_name, name, name).clicked() {
+                                            *camera = MjvCamera::new_fixed(id);
                                         }
                                     }
                                 });
@@ -409,12 +433,65 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                                 ui.end_row();
                             });
 
+                            ui.add_space(5.0);
+
+                            // Copy camera state to clipboard as XML
+                            if ui.add(egui::Button::new(
+                                RichText::new("Print camera").font(MAIN_FONT)
+                            ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                                let gl_cams = scene.camera();
+                                let fwd = gl_cams[0].forward;
+                                let up = gl_cams[0].up;
+
+                                // right = forward x up
+                                let right = [
+                                    fwd[1] * up[2] - fwd[2] * up[1],
+                                    fwd[2] * up[0] - fwd[0] * up[2],
+                                    fwd[0] * up[1] - fwd[1] * up[0],
+                                ];
+
+                                // Average position of left and right eye cameras
+                                let pos = [
+                                    (gl_cams[0].pos[0] + gl_cams[1].pos[0]) / 2.0,
+                                    (gl_cams[0].pos[1] + gl_cams[1].pos[1]) / 2.0,
+                                    (gl_cams[0].pos[2] + gl_cams[1].pos[2]) / 2.0,
+                                ];
+
+                                println!(
+                                    "<camera pos=\"{:.3} {:.3} {:.3}\" \
+                                    xyaxes=\"{:.3} {:.3} {:.3} {:.3} {:.3} {:.3}\"/>",
+                                    pos[0], pos[1], pos[2],
+                                    right[0], right[1], right[2],
+                                    up[0], up[1], up[2]
+                                );
+                                // TODO in the future, when
+                                // clipboard copying feature doesn't crash:
+                                // ctx.copy_text(xml);
+                                // Until then ^^^.
+                            }
+
+                            // Screenshot
+                            ui.collapsing(RichText::new("Screenshot").font(MAIN_FONT), |ui| {
+                                if ui.add(egui::Button::new(
+                                    RichText::new("Screenshot").font(MAIN_FONT)
+                                ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                                    self.events.push_back(UiEvent::Screenshot {
+                                        viewport_only: self.screenshot_viewport_only,
+                                        depth: self.screenshot_depth
+                                    });
+                                }
+                                ui.checkbox(
+                                    &mut self.screenshot_viewport_only,
+                                    RichText::new("Viewport only").font(MAIN_FONT)
+                                );
+                                ui.checkbox(
+                                    &mut self.screenshot_depth,
+                                    RichText::new("Depth").font(MAIN_FONT)
+                                );
+                            });
+
                             ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    debug_assert_eq!(
-                                        options.flags.len(), VIS_OPT_MAP.len(),
-                                        "visualization names don't match options length. This is a bug!"
-                                    );
                                     for (flag, (enabled, flag_name)) in options.flags.iter_mut().zip(VIS_OPT_MAP).enumerate() {
                                         ui.toggle_value(cast_mut_info!(enabled, flag), flag_name);
                                     }
@@ -431,10 +508,6 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
 
                             ui.collapsing(RichText::new("OpenGL effects").font(MAIN_FONT), |ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    debug_assert_eq!(
-                                        scene.flags_mut().len(), GL_EFFECT_MAP.len(),
-                                        "OpenGL effect flag names don't match scene flags length. This is a bug!"
-                                    );
                                     for (flag, (enabled, flag_name)) in scene.flags_mut().iter_mut().zip(GL_EFFECT_MAP).enumerate() {
                                         ui.toggle_value(
                                             cast_mut_info!(enabled, flag),
@@ -476,8 +549,8 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                     );
                     for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
                         .zip(ctrl_mut.iter_mut())
-                        .zip(self.model.actuator_ctrlrange())
-                        .zip(self.model.actuator_ctrllimited())
+                        .zip(model.actuator_ctrlrange())
+                        .zip(model.actuator_ctrllimited())
                     {
                         ui.label(RichText::new(actuator_name).font(MAIN_FONT));
 
@@ -506,9 +579,9 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
                 .show(ctx, |ui|
             {
                 egui::Grid::new("joint_grid").show(ui, |ui| {
-                    let limiteds = self.model.jnt_limited();
-                    let ranges = self.model.jnt_range();
-                    let qpos_addresses = self.model.jnt_qposadr();
+                    let limiteds = model.jnt_limited();
+                    let ranges = model.jnt_range();
+                    let qpos_addresses = model.jnt_qposadr();
                     let data = &mut shared_viewer_state.lock_unpoison().data_passive;
                     let qpos = data.qpos();
                     for (name, index) in &self.joint_name_id
@@ -583,7 +656,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
         });
 
         // Prevent window interactions when covering egui widgets
-        self.state.handle_platform_output(&window, full_output.platform_output);
+        self.state.handle_platform_output(window, full_output.platform_output);
 
         // Tessellate
         let pixels_per_point = full_output.pixels_per_point;
@@ -653,7 +726,7 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     /// panels, or other UI elements.
     pub(crate) fn add_ui_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&egui::Context, &mut MjData<M>) + 'static
+        F: FnMut(&egui::Context, &mut MjData<Arc<MjModel>>) + 'static
     {
         self.user_ui_callbacks.push(Box::new(callback));
     }
@@ -667,10 +740,16 @@ impl<M: Deref<Target = MjModel>> ViewerUI<M> {
     {
         self.user_ui_callbacks_detached.push(Box::new(callback));
     }
+
+    /// Release OpenGL resources held by the egui painter.
+    /// Must be called while the GL context is still current.
+    pub(crate) fn destroy_gl(&mut self) {
+        self.painter.destroy();
+    }
 }
 
 /// Implement an empty shell to support use in [`MjViewer`](super::MjViewer).
-impl<M: Deref<Target = MjModel>> Debug for ViewerUI<M> {
+impl Debug for ViewerUI {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "ViewerUI {{ .. }}")
     }
@@ -681,5 +760,6 @@ pub(crate) enum UiEvent {
     Fullscreen,
     ResetSimulation,
     AlignCamera,
-    VSyncToggle
+    VSyncToggle,
+    Screenshot { viewport_only: bool, depth: bool }
 }

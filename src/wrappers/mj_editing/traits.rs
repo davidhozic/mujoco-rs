@@ -1,7 +1,7 @@
 //! Trait definitions for model editing.
-use std::io::{Error, ErrorKind};
 use std::ffi::{CStr, CString};
 
+use crate::error::MjEditError;
 use crate::mujoco_c::*;
 
 use super::default::MjsDefault;
@@ -14,56 +14,70 @@ use super::utility::*;
 pub trait SpecItem: Sized {
     /// Returns the internal element struct.
     /// The element struct is the C++ implementation of the
-    /// actual item, which is hidden to the user, but is needed
+    /// actual item, which is hidden from the user, but is needed
     /// in some functions.
     /// 
-    /// # SAFETY
+    /// # Safety
     /// This borrows immutably, but returns a mutable pointer. This is done to overcome MJS's wrong
     /// use of mutable pointers in functions, such as [`mjs_getName`].
     unsafe fn element_pointer(&self) -> *mut mjsElement;
 
     /// Same as [`SpecItem::element_pointer`], but with a mutable borrow.
+    ///
+    /// # Safety
+    /// See [`SpecItem::element_pointer`].
     unsafe fn element_mut_pointer(&mut self) -> *mut mjsElement {
         unsafe { self.element_pointer() }
     }
 
     /// Returns the item's name.
     fn name(&self) -> &str {
-        read_mjs_string( unsafe { mjs_getName(self.element_pointer()).as_ref().unwrap() } )
+        unsafe { read_mjs_string(mjs_getName(self.element_pointer())) }
     }
 
     /// Set a new name.
+    /// # Errors
+    /// Returns [`MjEditError::AlreadyExists`] when an element with the same name already exists.
     /// # Panics
     /// When the `name` contains '\0' characters mid string, a panic occurs.
-    fn set_name(&mut self, name: &str) {
+    fn set_name(&mut self, name: &str) -> Result<(), MjEditError> {
         let cstr = CString::new(name).unwrap();  // always has valid UTF-8
-        unsafe { mjs_setName(self.element_mut_pointer(), cstr.as_ptr()) };
+        let result = unsafe { mjs_setName(self.element_mut_pointer(), cstr.as_ptr()) };
+        if result != 0 {
+            return Err(MjEditError::AlreadyExists);
+        }
+        Ok(())
     }
 
     /// Builder style set a new name.
+    /// # Panics
+    /// Panics when an element with the same name already exists, or when `name` contains '\0'.
     fn with_name(&mut self, name: &str) -> &mut Self {
-        self.set_name(name);
+        self.set_name(name).expect("mjs_setName failed: duplicate name or null byte");
         self
     }
 
     /// Returns the used default.
     fn default(&self) -> &MjsDefault {
-        unsafe { mjs_getDefault(self.element_pointer()).as_ref().unwrap() }
+        // SAFETY: mjs_getDefault indexes into mjCModel::def_map which always
+        // contains the element's classname (inserted at construction), so the
+        // returned pointer is never null.
+        unsafe { &*mjs_getDefault(self.element_pointer()) }
     }
 
     /// Make the item inherit properties from a default class.
     /// # Errors
-    /// Returns a [`ErrorKind::NotFound`] when the default with the `class_name` doesn't exist.
+    /// Returns [`MjEditError::NotFound`] when the default with the `class_name` doesn't exist.
     /// # Panics
     /// When the `class_name` contains '\0' characters, a panic occurs.
-    fn set_default(&mut self, class_name: &str) -> Result<(), Error> {
+    fn set_default(&mut self, class_name: &str) -> Result<(), MjEditError> {
         /* Workaround to pass the borrow checker (we use the existing borrow) */
         let cname = CString::new(class_name).unwrap();  // class_name is always valid UTF-8.
         let element = unsafe { self.element_mut_pointer() };
         let spec = unsafe { mjs_getSpec(element) };
         let default = unsafe { mjs_findDefault(spec, cname.as_ptr()) };
         if default.is_null() {
-            return Err(Error::new(ErrorKind::NotFound, "class doesn't exist"));
+            return Err(MjEditError::NotFound);
         }
 
         unsafe { mjs_setDefault(self.element_mut_pointer(), default); }
@@ -71,18 +85,24 @@ pub trait SpecItem: Sized {
     }
 
     /// Builder style make the item inherit from a default class.
-    fn with_default(&mut self, class_name: &str) -> Result<&mut Self, Error> {
+    /// # Errors
+    /// Returns [`MjEditError::NotFound`] when the default with the `class_name` doesn't exist.
+    fn with_default(&mut self, class_name: &str) -> Result<&mut Self, MjEditError> {
         self.set_default(class_name)?;
         Ok(self)
     }
 
     /// Delete the item.
+    /// # Errors
+    /// - [`MjEditError::DeleteFailed`] if MuJoCo cannot delete the element.
+    /// - [`MjEditError::UnsupportedOperation`] if the element cannot be deleted
+    ///   (e.g. the world body or default classes).
     /// # Safety
     /// Since this method can't consume variables holding pointers, nor can we consume the
     /// actual struct, this accepts a mutable reference to the item.
     /// Consequently, the compiler still allows the original reference to be used, which
     /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!
-    unsafe fn delete(&mut self) -> Result<(), Error> {
+    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         unsafe { self.__delete_default__() }
     }
 
@@ -93,13 +113,23 @@ pub trait SpecItem: Sized {
     /// actual struct, this accepts a mutable reference to the item.
     /// Consequently, the compiler still allows the original reference to be used, which
     /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!
-    unsafe fn __delete_default__(&mut self) -> Result<(), Error> {
+    unsafe fn __delete_default__(&mut self) -> Result<(), MjEditError> {
         let element = unsafe { self.element_mut_pointer() };
         let spec = unsafe { mjs_getSpec(element) };
         let result = unsafe { mjs_delete(spec, element) };
         match result {
             0 => Ok(()),
-            _ => Err(Error::new(ErrorKind::Other, unsafe { CStr::from_ptr(mjs_getError(spec)).to_string_lossy().into_owned() }))
+            _ => {
+                let error_msg: String = unsafe {
+                    let ptr = mjs_getError(spec);
+                    if ptr.is_null() {
+                        "Unknown error".to_owned()
+                    } else {
+                        CStr::from_ptr(ptr).to_string_lossy().into_owned()
+                    }
+                };
+                Err(MjEditError::DeleteFailed(error_msg))
+            }
         }
     }
 }

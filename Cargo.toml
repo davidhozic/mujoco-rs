@@ -1,6 +1,6 @@
 [package]
 name = "mujoco-rs"
-version = "2.3.5+mj-3.3.7"
+version = "3.0.0+mj-3.6.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "A high-level Rust wrapper around the MuJoCo C library, with a native viewer (re-)written in Rust."
@@ -12,14 +12,111 @@ homepage = "https://crates.io/crates/mujoco-rs"
 documentation = "https://docs.rs/mujoco-rs/"
 rust-version = "1.88"
 
-exclude = [".gitignore", ".gitmodules", "mujoco/*", "docs/"]
+exclude = [
+    ".context/",
+    ".github/",
+    ".gitignore",
+    ".gitmodules",
+    ".readthedocs.yaml",
+    ".vscode/",
+    "__pycache__/",
+    "docs/",
+    "Dockerfile.ubuntu",
+    "mujoco/*",
+]
 
 [package.metadata.docs.rs]
 all-features = true
 
+[[example]]
+name = "basic"
+
+[[example]]
+name = "model_parameters"
+
+[[example]]
+name = "cpp_viewer"
+required-features = ["cpp-viewer"]
+
+[[example]]
+name = "chaotic_pendulum"
+required-features = ["viewer"]
+
+[[example]]
+name = "contact_forces"
+required-features = ["renderer"]
+
+[[example]]
+name = "custom_ui_widgets"
+required-features = ["viewer-ui"]
+
+[[example]]
+name = "drawing_scene_renderer"
+required-features = ["renderer"]
+
+[[example]]
+name = "drawing_scene_viewer"
+required-features = ["viewer"]
+
+[[example]]
+name = "ffi_attributes"
+required-features = ["viewer"]
+
+[[example]]
+name = "joint_view"
+required-features = ["viewer"]
+
+[[example]]
+name = "miri_test"
+required-features = ["renderer"]
+
+[[example]]
+name = "model_editing"
+required-features = ["viewer"]
+
+[[example]]
+name = "model_switch"
+required-features = ["viewer"]
+
+[[example]]
+name = "multi_legged_creatures"
+required-features = ["viewer"]
+
+[[example]]
+name = "procedural_tree"
+required-features = ["viewer"]
+
+[[example]]
+name = "renderer"
+required-features = ["renderer"]
+
+[[example]]
+name = "rust_viewer"
+required-features = ["viewer-ui"]
+
+[[example]]
+name = "rust_viewer_threaded"
+required-features = ["viewer"]
+
+[[example]]
+name = "tendon"
+required-features = ["viewer"]
+
+[[example]]
+name = "terrain_generation"
+required-features = ["viewer"]
+
+[[example]]
+name = "tippe_top"
+required-features = ["viewer"]
+
+[[example]]
+name = "touch_sensor"
+required-features = ["viewer"]
+
 
 [features]
-viewer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit"]
+viewer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit", "dep:png"]
 viewer-ui = ["viewer", "dep:egui-winit", "dep:egui_glow", "dep:egui"]
 renderer = ["dep:bitflags", "dep:glutin", "dep:png"]
 renderer-winit-fallback = ["renderer", "dep:winit", "dep:glutin-winit"]
@@ -29,13 +126,13 @@ ffi-regenerate = ["dep:regex", "dep:bindgen"]  # Generate the ffi bindings. Only
 
 auto-download-mujoco = ["dep:ureq", "dep:flate2", "dep:tar", "dep:zip", "dep:sha2"]
 
-default = ["viewer", "viewer-ui", "renderer", "renderer-winit-fallback"]
+default = []
 
 [dependencies]
 bitflags = {version = "2.9.4", optional = true}
 png = {version = "0.18.0", optional = true}
 paste = "1.0.15"
-bytemuck = "1.24.0"
+bytemuck = {version = "1.24.0", features = ["min_const_generics"]}
 
 # Rendering dependencies
 glutin = {version = "0.32.3", optional = true}
@@ -66,3 +163,6 @@ pkg-config = "0.3"
 
 [dev-dependencies]
 rand = "0.9.2"
+
+[lints.clippy]
+unnecessary_lazy_evaluations = "allow"

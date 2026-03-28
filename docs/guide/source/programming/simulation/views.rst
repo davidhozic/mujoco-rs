@@ -6,7 +6,7 @@ Attribute views
 
 The MuJoCo library stores data about joints, bodies, and other elements in contiguous arrays.
 These can be challenging to work with, particularly when the array's length varies between elements.
-For example, different types of joints may have different number of degrees of freedom.
+For example, different types of joints may have a different number of degrees of freedom.
 `MuJoCo's Python bindings <https://mujoco.readthedocs.io/en/stable/python.html>`_ solve
 this issue by providing views to specific ranges in the corresponding arrays.
 
@@ -14,10 +14,18 @@ Like MuJoCo's Python bindings, MuJoCo-rs also provides views. Specifically, we p
 attributes of :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` and
 :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`.
 
-A view cannot be created directly, as that would require recreating the view after each simulation
-step. Allowing preservation of views between simulation steps would violate Rust's borrow checker rules.
-To overcome this, "info" structs exist, which store required information for fast view
+Views borrow data and cannot be preserved across simulation steps, as that would violate
+Rust's borrow checker rules. Re-looking up names each step would also be expensive.
+To overcome this, "info" structs exist, which cache the required information for fast view
 creation after each step.
+
+.. warning::
+
+    Cached info structs are tied to the model signature they were created from.
+    Calling ``view()`` / ``view_mut()`` with data from an incompatible model
+    will panic with a model-signature mismatch.
+    Use ``try_view()`` / ``try_view_mut()`` if you want to handle mismatches
+    as ``Result`` values instead of panicking.
 
 
 Reading
@@ -36,7 +44,7 @@ like so:
         let joint_info = data.joint("football-ball").expect("name not found");
         loop {
             data.step();
-            ...
+            // ...
         }
     }
 
@@ -57,16 +65,21 @@ a reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so
         }
     }
 
-All the attributes inside views, like :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qpos`,
-are instances of :docs-rs:`mujoco_rs::util::<struct>PointerView`, which implements the
+If a signature mismatch is possible in your workflow, use
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>try_view`
+and handle the returned ``Result`` instead of panicking.
+
+View attributes like :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataView::<structfield>qpos`
+use :docs-rs:`mujoco_rs::util::<struct>PointerView` (or ``Option<PointerView>`` for optional
+fields). ``PointerView`` implements the
 `Deref <https://doc.rust-lang.org/std/ops/trait.Deref.html>`_ trait and on deref
-acts like a slice. While some fields might be scalers, we still treat those as arrays
+acts like a slice. While some fields might be scalars, we still treat those as arrays
 for implementation simplicity reasons.
 
 
 Writing
 ==================
-The above example shows a read-only view. For mutability, 
+The above example shows a read-only view. For mutability,
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>view_mut` must be called
 and passed a mutable reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so:
 
@@ -81,6 +94,24 @@ and passed a mutable reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<stru
             data.step();
             joint_info.view_mut(&mut data).qpos[0] = 0.5;
         }
+    }
+
+For fallible mutable access, use
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>try_view_mut`
+to get a ``Result`` instead of panicking on signature mismatch.
+
+In mutable views, regular writable fields use
+:docs-rs:`mujoco_rs::util::<struct>PointerViewMut`. Fields marked as read-only in the
+generated view still support mutation, but only through
+:docs-rs:`mujoco_rs::util::<struct>PointerViewUnsafeMut` and explicit ``unsafe``:
+
+.. code-block:: rust
+
+    let mut model = MjModel::from_xml("model.xml").expect("could not load the model");
+    let mut view = model.actuator("slider").unwrap().view_mut(&mut model);
+    // SAFETY: assigning a valid enum variant for this field.
+    unsafe {
+        view.dyntype.as_mut_slice()[0] = MjtDyn::mjDYN_FILTER;
     }
 
 
