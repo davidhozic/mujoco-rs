@@ -180,10 +180,11 @@ A new class is created by providing its ``class_name`` and optionally a ``parent
         let mut spec = MjSpec::new();
 
         // Create a top-level default class named "red".
-        spec.add_default("red", None).expect("failed to create default");
+        // Use try_add_default() for a fallible variant that returns Result.
+        spec.add_default("red", None);
 
         // Create a child class "small-red" that inherits from "red".
-        spec.add_default("small-red", Some("red")).expect("failed to create default");
+        spec.add_default("small-red", Some("red"));
     }
 
 Elements can then reference the class via their ``childclass`` or ``class`` (``dclass``) attribute

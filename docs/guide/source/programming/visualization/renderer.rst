@@ -72,12 +72,16 @@ logic (e.g. adding user-scene geoms) between sync and render.
     :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data` is similar to the MuJoCo
     Python ``Renderer.update_scene`` method.
 
-After rendering, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb` and
-:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth` can be used to obtain
+After rendering, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_rgb` and
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_depth` can be used to obtain
 a reference to the rendered image in the correct 2D shape. The shape must be specified via
 the method's const generic parameters (``WIDTH`` and ``HEIGHT``), and the methods return
-``Result<_, RendererError>`` --- an error is returned if the requested dimensions don't match the renderer's
-actual resolution, or when the corresponding rendering mode (RGB/depth) is currently disabled.
+``Result<_, RendererError>`` --- an error is returned if the requested dimensions don't match the
+renderer's actual resolution, or when the corresponding rendering mode (RGB/depth) is currently
+disabled. The panicking variants
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb` and
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth` are also available for
+convenience when the dimensions are known at compile time.
 
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb_flat` and
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth_flat` can be used to obtain

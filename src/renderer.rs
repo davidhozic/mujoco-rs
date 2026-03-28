@@ -163,7 +163,7 @@ which can be configured at the top of the model's XML like so:
         num_visual_internal_geom: u32; "\
             maximum number of additional visual-only internal geoms to allocate for.
             Note that the total number of geoms in the internal scene will be
-            `num_visual_internal_geom` + `num_visual_user_geom`.";
+            `model.ngeom` + `num_visual_internal_geom` + `num_visual_user_geom`.";
 
         num_visual_user_geom: u32;      "maximum number of additional visual-only user geoms (drawn by the user).";
         rgb: bool;                      "RGB rendering enabled (true) or disabled (false).";
