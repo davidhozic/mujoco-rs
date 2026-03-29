@@ -318,15 +318,16 @@ gained new variants. See `Error handling`_ below for the full method list.
 categories of fields are affected:
 
 - **Structural invariants** --- topology, address, and engine-computed arrays that
-  must not be changed at runtime: **202** fields on |mj_model|, **43** on |mj_data|,
-  **13** on |mjv_scene|.
+  must not be changed at runtime: **200** fields on |mj_model|, **43** on |mj_data|,
+  **12** on |mjv_scene|.
 
 - **Companion-index fields** --- type/mode fields whose values control which array a
   companion index (``*id``, ``*adr``) indexes into; writing inconsistent values
-  causes out-of-bounds access: **13** fields on |mj_model| (``jnt_type``,
+  causes out-of-bounds access: **17** fields on |mj_model| (``jnt_type``,
   ``actuator_trntype``, ``actuator_dyntype``, ``eq_type``, ``eq_objtype``,
   ``wrap_type``, ``wrap_prm``, ``sensor_type``, ``sensor_objtype``,
-  ``sensor_reftype``, ``skin_matid``, ``tendon_matid``, ``tendon_treeid``),
+  ``sensor_reftype``, ``skin_matid``, ``tendon_matid``, ``tendon_treeid``,
+  ``body_plugin``, ``actuator_plugin``, ``geom_plugin``, ``sensor_plugin``),
   **4** on |mj_data| (``efc_type``, ``iefc_type``, ``tree_asleep``, ``wrap_obj``).
 
 ``info_with_view!`` generated ``ViewMut`` types expose the companion-index fields as
@@ -452,13 +453,22 @@ New error variants in pre-existing enums:
 
 The six new enums (all ``#[non_exhaustive]``) have the following variants:
 
-- :docs-rs:`~mujoco_rs::error::<enum>MjModelError`: ``BufferTooSmall``,
-  ``SignatureMismatch``.
-- :docs-rs:`~mujoco_rs::error::<enum>MjDataError`: ``InvalidUtf8Path``.
-- :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`: ``InvalidUtf8Path``.
-- :docs-rs:`~mujoco_rs::error::<enum>MjEditError`: ``XmlBufferTooSmall`` --- returned by
-  ``save_xml_string`` when the supplied buffer is too small; the ``required_size`` field
-  carries the ``snprintf``-style byte count (excluding NUL), so retry with
+- :docs-rs:`~mujoco_rs::error::<enum>MjModelError`: ``InvalidUtf8Path``,
+  ``LoadFailed``, ``SaveFailed``, ``AllocationFailed``,
+  ``StateSliceLengthMismatch``, ``SpecNotSubset``, ``BufferTooSmall``,
+  ``SignatureMismatch``, ``VfsError``.
+- :docs-rs:`~mujoco_rs::error::<enum>MjDataError`: ``IndexOutOfBounds``,
+  ``UnsupportedObjectType``, ``AllocationFailed``, ``BufferTooSmall``,
+  ``LengthMismatch``, ``SignatureMismatch``, ``NoHistoryBuffer``,
+  ``ContactBufferFull``, ``InvalidUtf8Path``.
+- :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`: ``AlreadyExists``,
+  ``LoadFailed``, ``NotFound``, ``InvalidUtf8Path``, ``Unknown``.
+- :docs-rs:`~mujoco_rs::error::<enum>MjEditError`: ``AllocationFailed``,
+  ``InvalidUtf8Path``, ``ParseFailed``, ``CompileFailed``, ``SaveFailed``,
+  ``NotFound``, ``AlreadyExists``, ``UnsupportedOperation``, ``DeleteFailed``,
+  ``XmlBufferTooSmall`` --- returned by ``save_xml_string`` when the supplied
+  buffer is too small; the ``required_size`` field carries the
+  ``snprintf``-style byte count (excluding NUL), so retry with
   ``required_size as usize + 1``.
 - :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`: ``SceneFull``,
   ``LabelTooLong``, ``InvalidAuxBufferIndex``, ``InvalidViewport``,

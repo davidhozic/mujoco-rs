@@ -356,7 +356,8 @@ out-of-bounds access inside MuJoCo.
 - |mj_model|: ``jnt_type``, ``actuator_trntype``, ``actuator_dyntype``,
   ``eq_type``, ``eq_objtype``, ``wrap_type``, ``wrap_prm``,
   ``sensor_type``, ``sensor_objtype``, ``sensor_reftype``,
-  ``skin_matid``, ``tendon_matid``, ``tendon_treeid``.
+  ``skin_matid``, ``tendon_matid``, ``tendon_treeid``,
+  ``body_plugin``, ``actuator_plugin``, ``geom_plugin``, ``sensor_plugin``.
 - |mj_data|: ``efc_type``, ``iefc_type``, ``tree_asleep``, ``wrap_obj``.
 
 **Before (2.x):**

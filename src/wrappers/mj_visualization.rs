@@ -860,7 +860,7 @@ impl MjvScene {
         skinvert: &[[f32; 3] [force]; "skin vertex data"; nskinvert],
         skinnormal: &[[f32; 3] [force]; "skin normal data"; nskinvert],
         (unsafe) geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
-        (unsafe) geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
+        geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
         (unsafe) flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
         (unsafe) flexedgenum: &[i32; "number of edges in flex"; ffi.nflex],
         (unsafe) flexvertadr: &[i32; "address of flex vertices"; ffi.nflex],
