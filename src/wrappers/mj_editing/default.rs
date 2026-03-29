@@ -60,8 +60,13 @@ impl SpecItem for MjsDefault {
     }
 
     /// Defaults can't be deleted.
+    ///
     /// # Errors
     /// This will always error with [`MjEditError::UnsupportedOperation`].
+    ///
+    /// # Safety
+    /// Calling this function is always safe; it never performs any unsafe operation
+    /// and only returns an error.
     unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         Err(MjEditError::UnsupportedOperation)
     }

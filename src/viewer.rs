@@ -183,7 +183,7 @@ impl From<glutin::error::Error> for MjViewerError {
 /// runs in another thread and syncs the state with the viewer
 /// running in the main thread.
 /// 
-/// The state can be obtained through [`MjViewer::state`], which will return an `Arc<Mutex<ViewerSharedState>>`
+/// The state can be obtained through [`MjViewer::state`], which will return a reference to an `Arc<Mutex<ViewerSharedState>>`
 /// instance. For scoped access, you may also use [`MjViewer::with_state_lock`].
 #[derive(Debug)]
 pub struct ViewerSharedState {
@@ -262,6 +262,9 @@ impl ViewerSharedState {
 
     /// Same as [`ViewerSharedState::sync_data`], except it copies the entire [`MjData`]
     /// struct (including large Jacobian and other arrays), not just the state needed for visualization.
+    ///
+    /// # Panics
+    /// Panics if the internal data copy fails due to an inconsistent model state (indicates a bug).
     pub fn sync_data_full<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         self._sync_data(data, true);
     }
@@ -300,6 +303,9 @@ impl ViewerSharedState {
     /// stale after this call and should be recomputed if needed.
     /// </div>
     ///
+    /// # Panics
+    /// Panics if the internal data copy or state merge fails due to an inconsistent model
+    /// state (indicates a bug).
     pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         self._sync_data(data, false);
     }
@@ -473,7 +479,7 @@ impl MjViewer {
         MjViewerBuilder::new()
     }
 
-    /// Checks whether the window is still open.
+    /// Checks whether the viewer is still running.
     pub fn running(&self) -> bool {
         self.shared_state.lock_unpoison().running()
     }
@@ -562,6 +568,9 @@ impl MjViewer {
     /// Same as [`MjViewer::sync_data`], except it copies the entire [`MjData`]
     /// struct (including large Jacobian and other arrays), not just the state needed for visualization.
     /// This is a proxy to [`ViewerSharedState::sync_data_full`].
+    ///
+    /// # Panics
+    /// Panics if the internal data copy fails due to an inconsistent model state (indicates a bug).
     pub fn sync_data_full<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         self.shared_state.lock_unpoison().sync_data_full(data);
     }
@@ -594,7 +603,11 @@ impl MjViewer {
     /// to the user's `data`, any Jacobians or other derived quantities in `data` may be
     /// stale after this call and should be recomputed if needed.
     /// </div>
-    /// 
+    ///
+    /// # Panics
+    /// Panics if the internal data copy or state merge fails due to an inconsistent model
+    /// state (indicates a bug).
+    ///
     /// # Example
     /// ```no_run
     /// # use mujoco_rs::prelude::*;
@@ -612,7 +625,7 @@ impl MjViewer {
     /// Processes the UI (when enabled), processes events, draws the scene
     /// and swaps buffers in OpenGL.
     /// # Errors
-    /// - [`MjViewerError::GlutinError`] if the OpenGL buffer swap fails.
+    /// - [`MjViewerError::GlutinError`] if the OpenGL context cannot be made current or the buffer swap fails.
     /// - [`MjViewerError::SceneError`] if synchronizing user scene geoms fails (e.g. the scene is
     ///   full) or if reading pixels for a pending screenshot fails.
     pub fn render(&mut self) -> Result<(), MjViewerError> {

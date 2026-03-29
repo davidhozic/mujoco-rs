@@ -70,6 +70,9 @@ impl MjViewerCpp {
     /// address for the entire lifetime of the returned [`MjViewerCpp`]. Dropping or moving the
     /// underlying [`MjModel`] or [`MjData`] while the viewer is alive is undefined behavior.
     /// Calls to [`MjViewerCpp::render`] must be done only on the **main** thread.
+    ///
+    /// # Panics
+    /// Panics if `mujoco_cSimulate_create` returns a null pointer, or if the load thread panics.
     pub unsafe fn launch_passive<M: Deref<Target = MjModel> + Clone + Send + Sync>(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut cam = Box::new(MjvCamera::default());
@@ -77,6 +80,8 @@ impl MjViewerCpp {
         let mut pert = Box::new(MjvPerturb::default());
         let mut user_scn = Box::new(MjvScene::new(model.clone(), max_user_geom));
 
+        // SAFETY: all pointer arguments are valid (heap-allocated above); the caller guarantees
+        // model and data remain alive at stable addresses for the viewer's lifetime.
         let sim = unsafe { mujoco_cSimulate_create(&mut *cam, &mut *opt, &mut *pert, user_scn.ffi_mut()) };
         assert!(!sim.is_null(), "mujoco_cSimulate_create returned a null pointer");
         let sim_usize = sim as usize;
@@ -93,6 +98,9 @@ impl MjViewerCpp {
             let m = model_usize as *mut mjModel_;
             let d = data_usize as *mut mjData_;
             let c_filename = CString::new("file.xml").unwrap();
+            // SAFETY: sim, m, and d are valid pointers kept alive by the caller's contract
+            // (model and data at stable addresses for the viewer's lifetime). c_filename is
+            // a valid null-terminated C string for the duration of this call.
             unsafe { mujoco_cSimulate_Load(sim, m, d, c_filename.as_ptr()) };
         });
 
@@ -122,16 +130,18 @@ impl MjViewerCpp {
         if !self.running {
             return Err("render called after viewer has been closed!");
         }
+        // SAFETY: self.sim is a valid non-null pointer (asserted on construction and kept alive
+        // while the viewer is running); the caller guarantees this is the main thread.
         unsafe { self.running = mujoco_cSimulate_RenderStep(self.sim) == 1; }
         Ok(())
     }
 
-    /// Syncs the simulation state with the viewer as well as performs
-    /// rendering on the viewer.
+    /// Syncs the simulation state with the viewer.
     pub fn sync(&mut self) {
         if !self.running {
             return;
         }
+        // SAFETY: self.sim is a valid non-null pointer kept alive for the viewer's lifetime.
         unsafe {
             mujoco_cSimulate_Sync(self.sim, 0);
         }
@@ -141,6 +151,8 @@ impl MjViewerCpp {
 /// Requests viewer exit and destroys the underlying C++ simulation handle.
 impl Drop for MjViewerCpp {
     fn drop(&mut self) {
+        // SAFETY: self.sim is a valid non-null pointer; ExitRequest signals the C++ side to
+        // shut down, and destroy frees the allocation. Called at most once (in Drop).
         unsafe {
             mujoco_cSimulate_ExitRequest(self.sim);
             mujoco_cSimulate_destroy(self.sim);

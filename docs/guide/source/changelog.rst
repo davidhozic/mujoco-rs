@@ -77,8 +77,7 @@ update of MuJoCo alone can increase the major version.
   are no longer generic over ``M``.
   Remove the ``<M>`` type parameter from all usage sites.
 
-  - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data`,
-    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>builder`, and
+  - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data` and
     :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`
     retain ``<M: Deref<Target = MjModel>>`` as **method-level** generics;
     call sites are unchanged.
@@ -318,7 +317,7 @@ gained new variants. See `Error handling`_ below for the full method list.
 categories of fields are affected:
 
 - **Structural invariants** --- topology, address, and engine-computed arrays that
-  must not be changed at runtime: **200** fields on |mj_model|, **43** on |mj_data|,
+  must not be changed at runtime: **199** fields on |mj_model|, **43** on |mj_data|,
   **12** on |mjv_scene|.
 
 - **Companion-index fields** --- type/mode fields whose values control which array a
@@ -502,7 +501,7 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure`:
     ``try_full`` :sup:`new`, ``try_empty`` :sup:`new`,
     ``try_pop_front`` :sup:`new`, ``try_pop_back`` :sup:`new`,
-    ``try_cut_front`` :sup:`new`, ``try_cut_end`` :sup:`new`
+    ``cut_front`` :sup:`new`, ``cut_end`` :sup:`new`
 
 - New |mj_data| methods that return ``Result`` directly (no separate ``try_`` variant):
   ``copy_state_from_data``, ``apply_ft``.

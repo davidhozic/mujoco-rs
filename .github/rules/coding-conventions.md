@@ -57,6 +57,12 @@
 - Prefer `if let` over `matches!` unless `matches!` is clearly more convenient (e.g. inside
   `assert!` in tests). In conditionals, use `if let Some(x) = expr` instead of
   `if matches!(expr, Some(x))`.
+- **`debug_assert!` policy**: Use `debug_assert!` for invariants that are guaranteed by the
+  implementation and would only fail due to a bug in MuJoCo or mujoco-rs itself (not due to
+  valid user input or normal runtime conditions). Use `assert!` (or `Result`-returning error
+  handling) for conditions that can fail in correct code, such as allocation failures or
+  user-facing precondition violations. Allocations are not guaranteed to succeed, so allocation
+  checks must use `assert!` or `Result`-returning error handling instead of `debug_assert!`.
 
 ## Documentation
 - Always verify any changes against MuJoCo's official documentation to ensure correctness.

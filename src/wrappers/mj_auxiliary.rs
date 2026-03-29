@@ -14,6 +14,8 @@ use crate::mujoco_c::*;
 pub type MjVisual = mjVisual;
 impl Default for MjVisual {
     fn default() -> Self {
+        // SAFETY: mj_defaultVisual initializes all fields of an uninitialized mjVisual to valid
+        // defaults; the pointer from MaybeUninit is properly aligned and writable.
         unsafe {
             let mut s = MaybeUninit::uninit();
             mj_defaultVisual(s.as_mut_ptr());
@@ -41,6 +43,8 @@ unsafe impl bytemuck::Zeroable for mjContact_ {}
 pub type MjLROpt = mjLROpt;
 impl Default for MjLROpt {
     fn default() -> Self {
+        // SAFETY: mj_defaultLROpt initializes all fields of an uninitialized mjLROpt to valid
+        // defaults; the pointer from MaybeUninit is properly aligned and writable.
         unsafe {
             let mut s = MaybeUninit::uninit();
             mj_defaultLROpt(s.as_mut_ptr());
@@ -67,6 +71,8 @@ pub struct MjVfs {
 impl MjVfs {
     /// Creates a new, empty virtual file system.
     pub fn new() -> Self {
+        // SAFETY: mj_defaultVFS initializes all fields of an uninitialized mjVFS to valid defaults;
+        // the pointer from Box::new_uninit is properly aligned and writable.
         unsafe {
             let mut maybe_uninit = Box::new_uninit();
             mj_defaultVFS(maybe_uninit.as_mut_ptr());
@@ -78,7 +84,6 @@ impl MjVfs {
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
-    /// - [`MjVfsError::InvalidUtf8Path`] if `directory` or `filename` contains invalid UTF-8.
     /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
     /// - [`MjVfsError::LoadFailed`] if the file could not be loaded.
     /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
@@ -109,7 +114,8 @@ impl MjVfs {
         let c_filename = CString::new(
             filename.as_ref().to_str().ok_or(MjVfsError::InvalidUtf8Path)?
         ).unwrap();
-        Self::handle_add_result(unsafe {
+        Self::handle_add_result(
+            unsafe {
             mj_addFileVFS(
                 self.ffi_mut(),
                 c_directory.as_ptr(),
@@ -228,6 +234,7 @@ unsafe impl Sync for MjVfs {}
 
 impl Drop for MjVfs {
     fn drop(&mut self) {
+        // SAFETY: self.ffi is a valid pointer to a live mjVFS; called exactly once in Drop.
         unsafe {
             mj_deleteVFS(self.ffi.as_mut());
         }

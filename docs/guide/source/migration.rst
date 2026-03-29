@@ -321,14 +321,14 @@ Structural invariants
 
 Topology, address, and engine-computed arrays that must not be changed at runtime.
 
-- |mj_model|: **202** fields --- every address array (``*adr``, ``*num``), topology
+- |mj_model|: **199** fields --- every address array (``*adr``, ``*num``), topology
   index (``*bodyid``, ``*jntid``, ...), and physics-invariant.
 - |mj_data|: **43** fields --- ``contact``, ``efc_id``, ``efc_J_*``,
   ``efc_AR_*``, ``efc_island``, ``iefc_id``, ``iefc_J_*``,
   ``tree_island``, ``dof_island``, ``tendon_efcadr``, ``island_*``,
   ``map_*``, ``iM_*``, ``ten_wrapadr``, ``ten_wrapnum``, ``moment_*``,
   ``body_awake_ind``, ``parent_awake_ind``, ``dof_awake_ind``.
-- |mjv_scene|: **13** fields --- ``flexedge``, ``geoms``, ``geomorder``,
+- |mjv_scene|: **12** fields --- ``flexedge``, ``geoms``,
   ``flexedgeadr``, ``flexedgenum``, ``flexvertadr``, ``flexvertnum``,
   ``flexfaceadr``, ``flexfacenum``, ``flexfaceused``,
   ``skinfacenum``, ``skinvertadr``, ``skinvertnum``.
@@ -754,9 +754,7 @@ API renames
    * - |mjr_context|
      - ``mjr_set_buffer()``
      - ``set_buffer()``
-   * - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`
-     - ``figure()``
-     - ``draw()``
+
 
 
 ``sync()`` deprecated
@@ -890,8 +888,10 @@ Additional details:
 C++ viewer changes
 -----------------------
 
-:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp` now requires
-``M: Send + Sync``. Switch to ``Arc<MjModel>`` if using ``Rc<MjModel>``.
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp` is no longer generic;
+the type parameter ``M`` has been removed from the struct.
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>launch_passive`
+now requires ``M: Send + Sync``. Switch to ``Arc<MjModel>`` if using ``Rc<MjModel>``.
 
 :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` is now
 ``unsafe fn``, must be called from the main thread, no longer accepts
@@ -960,4 +960,6 @@ Removed deprecated methods
    * - ``MjViewer::sync``
      - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` then
        :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`
+   * - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure` ``figure()``
+     - ``draw()``
 

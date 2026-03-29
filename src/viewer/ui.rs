@@ -168,6 +168,8 @@ impl ViewerUI {
         let get_addr = |s: &str| display.get_proc_address(
             &CString::new(s).unwrap()
         );
+        // SAFETY: the glow::Context is constructed from a loader function backed by the
+        // current glutin Display, which provides valid OpenGL proc addresses.
         let gl = unsafe { Arc::new(egui_glow::glow::Context::from_loader_function(get_addr)) };
 
         let painter = egui_glow::Painter::new(
@@ -692,6 +694,7 @@ impl ViewerUI {
     /// Prepares OpenGL for drawing 2D overlays.
     pub(crate) fn init_2d(&self) {
         let gl = &self.gl;
+        // SAFETY: the GL context is current (made current by the render loop before this call).
         unsafe { 
             gl.disable(glow::DEPTH_TEST);
             gl.disable(glow::CULL_FACE);
@@ -704,6 +707,8 @@ impl ViewerUI {
     /// Resets OpenGL state. This is needed for MuJoCo's renderer.
     pub(crate) fn reset(&mut self) {
         let gl = &self.gl;
+        // SAFETY: the GL context is current; unbinding programs and buffers is always safe
+        // as long as no draw calls are in flight, which is guaranteed by the render loop.
         unsafe {
             // Disable shaders
             gl.use_program(None);

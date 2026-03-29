@@ -27,11 +27,15 @@ pub trait SpecItem: Sized {
     /// # Safety
     /// See [`SpecItem::element_pointer`].
     unsafe fn element_mut_pointer(&mut self) -> *mut mjsElement {
+        // SAFETY: self.element is a valid non-null pointer to the C spec element
+        // for the lifetime of the parent MjSpec (struct invariant).
         unsafe { self.element_pointer() }
     }
 
     /// Returns the item's name.
     fn name(&self) -> &str {
+        // SAFETY: mjs_getName returns a pointer to a null-terminated string owned
+        // by the spec element, valid for the element's lifetime.
         unsafe { read_mjs_string(mjs_getName(self.element_pointer())) }
     }
 
@@ -41,7 +45,7 @@ pub trait SpecItem: Sized {
     /// # Panics
     /// When the `name` contains '\0' characters mid string, a panic occurs.
     fn set_name(&mut self, name: &str) -> Result<(), MjEditError> {
-        let cstr = CString::new(name).unwrap();  // always has valid UTF-8
+        let cstr = CString::new(name).unwrap();  // panics on interior NUL bytes; &str guarantees UTF-8
         let result = unsafe { mjs_setName(self.element_mut_pointer(), cstr.as_ptr()) };
         if result != 0 {
             return Err(MjEditError::AlreadyExists);
@@ -110,12 +114,16 @@ pub trait SpecItem: Sized {
 
     /// Default implementation of the delete method.
     /// Override [`SpecItem::delete`] for custom deletion logic.
+    /// # Errors
+    /// Returns [`MjEditError::DeleteFailed`] if MuJoCo's internal deletion fails.
     /// # Safety
     /// Since this method can't consume variables holding pointers, nor can we consume the
     /// actual struct, this accepts a mutable reference to the item.
     /// Consequently, the compiler still allows the original reference to be used, which
     /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!
     unsafe fn __delete_default__(&mut self) -> Result<(), MjEditError> {
+        // SAFETY: element_mut_pointer() is valid (struct invariant); mjs_getSpec
+        // returns the owning spec, also valid.
         let element = unsafe { self.element_mut_pointer() };
         let spec = unsafe { mjs_getSpec(element) };
         let result = unsafe { mjs_delete(spec, element) };

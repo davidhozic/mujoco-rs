@@ -18,6 +18,9 @@ pub fn mju_fill(res: &mut [MjtNum], val: MjtNum)  {
 }
 
 /// Set res = vec.
+///
+/// # Panics
+/// Panics if `res` and `vec` have different lengths.
 pub fn mju_copy(res: &mut [MjtNum], vec: &[MjtNum])  {
     assert!(res.len() == vec.len());
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
@@ -37,6 +40,9 @@ pub fn mju_l1(vec: &[MjtNum]) -> MjtNum {
 }
 
 /// Scale a vector: `res = vec * scl`.
+///
+/// # Panics
+/// Panics if `res` and `vec` have different lengths.
 pub fn mju_scl(res: &mut [MjtNum], vec: &[MjtNum], scl: MjtNum) {
     assert!(res.len() == vec.len());
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
@@ -44,6 +50,9 @@ pub fn mju_scl(res: &mut [MjtNum], vec: &[MjtNum], scl: MjtNum) {
 }
 
 /// Add two vectors element-wise: `res = vec1 + vec2`.
+///
+/// # Panics
+/// Panics if `res`, `vec1`, and `vec2` do not all have the same length.
 pub fn mju_add(res: &mut [MjtNum], vec1: &[MjtNum], vec2: &[MjtNum]) {
     assert!(res.len() == vec1.len() && vec1.len() == vec2.len());
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
@@ -51,6 +60,9 @@ pub fn mju_add(res: &mut [MjtNum], vec1: &[MjtNum], vec2: &[MjtNum]) {
 }
 
 /// Subtract two vectors element-wise: `res = vec1 - vec2`.
+///
+/// # Panics
+/// Panics if `res`, `vec1`, and `vec2` do not all have the same length.
 pub fn mju_sub(res: &mut [MjtNum], vec1: &[MjtNum], vec2: &[MjtNum]) {
     assert!(res.len() == vec1.len() && vec1.len() == vec2.len());
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
@@ -58,6 +70,9 @@ pub fn mju_sub(res: &mut [MjtNum], vec1: &[MjtNum], vec2: &[MjtNum]) {
 }
 
 /// Add vector `vec` to `res` in place: `res += vec`.
+///
+/// # Panics
+/// Panics if `res` and `vec` have different lengths.
 pub fn mju_add_to(res: &mut [MjtNum], vec: &[MjtNum]) {
     assert!(res.len() == vec.len());
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
@@ -65,6 +80,9 @@ pub fn mju_add_to(res: &mut [MjtNum], vec: &[MjtNum]) {
 }
 
 /// Subtract vector `vec` from `res` in place: `res -= vec`.
+///
+/// # Panics
+/// Panics if `res` and `vec` have different lengths.
 pub fn mju_sub_from(res: &mut [MjtNum], vec: &[MjtNum]) {
     assert!(res.len() == vec.len());
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
@@ -72,6 +90,9 @@ pub fn mju_sub_from(res: &mut [MjtNum], vec: &[MjtNum]) {
 }
 
 /// Add scaled vector to `res` in place: `res += vec * scl`.
+///
+/// # Panics
+/// Panics if `res` and `vec` have different lengths.
 pub fn mju_add_to_scl(res: &mut [MjtNum], vec: &[MjtNum], scl: MjtNum) {
     assert!(res.len() == vec.len());
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
@@ -79,6 +100,9 @@ pub fn mju_add_to_scl(res: &mut [MjtNum], vec: &[MjtNum], scl: MjtNum) {
 }
 
 /// Add a vector and a scaled vector: `res = vec1 + vec2 * scl`.
+///
+/// # Panics
+/// Panics if `res`, `vec1`, and `vec2` do not all have the same length.
 pub fn mju_add_scl(res: &mut [MjtNum], vec1: &[MjtNum], vec2: &[MjtNum], scl: MjtNum) {
     assert!(res.len() == vec1.len() && vec1.len() == vec2.len());
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
@@ -98,6 +122,9 @@ pub fn mju_norm(vec: &[MjtNum]) -> MjtNum {
 }
 
 /// Return the dot product of two vectors.
+///
+/// # Panics
+/// Panics if `vec1` and `vec2` have different lengths.
 pub fn mju_dot(vec1: &[MjtNum], vec2: &[MjtNum]) -> MjtNum {
     assert!(vec1.len() == vec2.len());
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
@@ -105,6 +132,9 @@ pub fn mju_dot(vec1: &[MjtNum], vec2: &[MjtNum]) -> MjtNum {
 }
 
 /// Multiply matrix and vector: `res = mat * vec`.
+///
+/// # Panics
+/// Panics if `mat` does not have `res.len() * vec.len()` elements.
 pub fn mju_mul_mat_vec(res: &mut [MjtNum], mat: &[MjtNum], vec: &[MjtNum]) {
     let nr = res.len();
     let nc = vec.len();
@@ -114,6 +144,9 @@ pub fn mju_mul_mat_vec(res: &mut [MjtNum], mat: &[MjtNum], vec: &[MjtNum]) {
 }
 
 /// Multiply transposed matrix and vector: `res = mat^T * vec`.
+///
+/// # Panics
+/// Panics if `mat` does not have `vec.len() * res.len()` elements.
 pub fn mju_mul_mat_t_vec(res: &mut [MjtNum], mat: &[MjtNum], vec: &[MjtNum]) {
     let nc = res.len();
     let nr = vec.len();
@@ -123,6 +156,10 @@ pub fn mju_mul_mat_t_vec(res: &mut [MjtNum], mat: &[MjtNum], vec: &[MjtNum]) {
 }
 
 /// Multiply square matrix with vectors on both sides: returns `vec1^T * mat * vec2`.
+///
+/// # Panics
+/// - Panics if `vec1` and `vec2` have different lengths.
+/// - Panics if `mat` does not have `vec1.len() * vec1.len()` elements (must be square).
 pub fn mju_mul_vec_mat_vec(vec1: &[MjtNum], mat: &[MjtNum], vec2: &[MjtNum]) -> MjtNum {
     let n = vec1.len();
     assert!(vec2.len() == n && mat.len() == n * n);
@@ -131,6 +168,9 @@ pub fn mju_mul_vec_mat_vec(vec1: &[MjtNum], mat: &[MjtNum], vec2: &[MjtNum]) -> 
 }
 
 /// Transpose a matrix: `res = mat^T`.
+///
+/// # Panics
+/// Panics if `res` or `mat` does not have `nr * nc` elements.
 pub fn mju_transpose(res: &mut [MjtNum], mat: &[MjtNum], nr: usize, nc: usize) {
     assert!(res.len() == nr * nc && mat.len() == nr * nc);
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
@@ -138,6 +178,9 @@ pub fn mju_transpose(res: &mut [MjtNum], mat: &[MjtNum], nr: usize, nc: usize) {
 }
 
 /// Symmetrize a square matrix: `res = (mat + mat^T)/2`.
+///
+/// # Panics
+/// Panics if `res` or `mat` does not have `n * n` elements.
 pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum], n: usize) {
     assert!(res.len() == n * n && mat.len() == n * n);
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
@@ -145,6 +188,9 @@ pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum], n: usize) {
 }
 
 /// Set a square matrix to identity.
+///
+/// # Panics
+/// Panics if `mat` does not have `n * n` elements.
 pub fn mju_eye(mat: &mut [MjtNum], n: usize) {
     assert!(mat.len() == n * n);
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
@@ -152,6 +198,11 @@ pub fn mju_eye(mat: &mut [MjtNum], n: usize) {
 }
 
 /// Multiply matrices: `res = mat1 * mat2`.
+///
+/// # Panics
+/// - Panics if `mat1` does not have `r1 * c1` elements.
+/// - Panics if `mat2` does not have `c1 * c2` elements.
+/// - Panics if `res` does not have `r1 * c2` elements.
 pub fn mju_mul_mat_mat(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r1: usize, c1: usize, c2: usize) {
     assert!(mat1.len() == r1 * c1);
     assert!(mat2.len() == c1 * c2);
@@ -161,6 +212,11 @@ pub fn mju_mul_mat_mat(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r1:
 }
 
 /// Multiply matrices, second transposed: `res = mat1 * mat2^T`.
+///
+/// # Panics
+/// - Panics if `mat1` does not have `r1 * c1` elements.
+/// - Panics if `mat2` does not have `r2 * c1` elements.
+/// - Panics if `res` does not have `r1 * r2` elements.
 pub fn mju_mul_mat_mat_t(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r1: usize, c1: usize, r2: usize) {
     assert!(mat1.len() == r1 * c1);
     assert!(mat2.len() == r2 * c1);
@@ -170,6 +226,11 @@ pub fn mju_mul_mat_mat_t(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r
 }
 
 /// Multiply matrices, first transposed: `res = mat1^T * mat2`.
+///
+/// # Panics
+/// - Panics if `mat1` does not have `r1 * c1` elements.
+/// - Panics if `mat2` does not have `r1 * c2` elements.
+/// - Panics if `res` does not have `c1 * c2` elements.
 pub fn mju_mul_mat_t_mat(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r1: usize, c1: usize, c2: usize) {
     assert!(mat1.len() == r1 * c1);
     assert!(mat2.len() == r1 * c2);
@@ -179,6 +240,11 @@ pub fn mju_mul_mat_t_mat(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r
 }
 
 /// Compute `res = mat^T * diag * mat` if `diag` is Some, else `res = mat^T * mat`.
+///
+/// # Panics
+/// - Panics if `mat` does not have `nr * nc` elements.
+/// - Panics if `res` does not have `nc * nc` elements.
+/// - Panics if `diag` is `Some` and does not have `nr` elements.
 pub fn mju_sqr_mat_td(res: &mut [MjtNum], mat: &[MjtNum], diag: Option<&[MjtNum]>, nr: usize, nc: usize) {
     assert!(mat.len() == nr * nc);
     assert!(res.len() == nc * nc);
@@ -208,7 +274,7 @@ pub fn mju_zero_3(res: &mut [MjtNum; 3])  {
     unsafe { mujoco_c::mju_zero3(res) }
 }
 
-/// Set res = vec.
+/// Set res = data.
 pub fn mju_copy_3(res: &mut [MjtNum; 3], data: &[MjtNum; 3])  {
     // SAFETY: all arguments are valid references with correct sizes.
     unsafe { mujoco_c::mju_copy3(res, data) }
@@ -310,7 +376,7 @@ pub fn mju_unit_4(res: &mut [MjtNum; 4])  {
     unsafe { mujoco_c::mju_unit4(res) }
 }
 
-/// Set res = vec.
+/// Set res = data.
 pub fn mju_copy_4(res: &mut [MjtNum; 4], data: &[MjtNum; 4])  {
     // SAFETY: all arguments are valid references with correct sizes.
     unsafe { mujoco_c::mju_copy4(res, data) }

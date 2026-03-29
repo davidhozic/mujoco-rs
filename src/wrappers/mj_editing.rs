@@ -1,8 +1,8 @@
 //! Definitions related to model editing.
 use std::ffi::{c_char, c_int, CStr, CString};
 use std::marker::PhantomData;
-use std::path::Path;
 use std::ptr::{self, NonNull};
+use std::path::Path;
 use crate::error::MjEditError;
 
 #[macro_use]
@@ -165,6 +165,8 @@ impl MjSpec {
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn try_new() -> Result<Self, MjEditError> {
         assert_mujoco_version();
+        // SAFETY: mj_makeSpec allocates a new MjSpec; returns null on allocation
+        // failure, handled by ok_or below.
         let ptr = unsafe { mj_makeSpec() };
         Ok(MjSpec(NonNull::new(ptr).ok_or(MjEditError::AllocationFailed)?))
     }
@@ -179,7 +181,8 @@ impl MjSpec {
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
     /// the copy (e.g. out of memory or an internal C++ exception).
     pub fn try_clone(&self) -> Result<Self, MjEditError> {
-        // SAFETY: self.0 is always a valid, non-null pointer.
+        // SAFETY: self.0 is a valid non-null mjSpec pointer for the lifetime of self
+        // (struct invariant); mj_copySpec returns null on allocation failure, handled below.
         let ptr = unsafe { mj_copySpec(self.0.as_ptr()) };
         NonNull::new(ptr).map(MjSpec).ok_or(MjEditError::AllocationFailed)
     }
@@ -316,6 +319,8 @@ impl MjSpec {
 
     /// An immutable reference to the internal FFI struct.
     pub fn ffi(&self) -> &mjSpec {
+        // SAFETY: self.0 is a valid non-null mjSpec pointer for the lifetime of
+        // self (struct invariant).
         unsafe { self.0.as_ref() }
     }
 
@@ -572,6 +577,8 @@ impl Default for MjSpec {
 
 impl Drop for MjSpec {
     fn drop(&mut self) {
+        // SAFETY: self.0 is a valid non-null mjSpec pointer; called exactly once
+        // in Drop.
         unsafe { mj_deleteSpec(self.0.as_ptr()); }
     }
 }
@@ -1569,6 +1576,15 @@ impl MjsMaterial {
 ***************************/
 mjs_struct!(Body {
     // Override the delete method to prevent deletion of world.
+    /// Delete this body from its parent spec.
+    ///
+    /// # Errors
+    /// - Returns [`MjEditError::UnsupportedOperation`] if this is the world body.
+    /// - Returns [`MjEditError::DeleteFailed`] if MuJoCo's internal deletion fails.
+    ///
+    /// # Safety
+    /// The caller must ensure no other Rust references to this body or its children
+    /// remain live after this call, as the underlying C memory will be freed.
     unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         if self.name() == "world" {
             return Err(MjEditError::UnsupportedOperation);

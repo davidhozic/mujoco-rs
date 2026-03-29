@@ -272,6 +272,9 @@ impl MjModel {
         match result {
             1 => Ok(()),
             _ => {
+                // SAFETY: error is zero-initialised and MuJoCo NUL-terminates the message it
+                // writes into it; the resulting CStr borrows the stack buffer and is consumed
+                // before the buffer goes out of scope.
                 let cstr_error = unsafe { CStr::from_ptr(error.as_ptr()) }
                     .to_string_lossy()
                     .into_owned();
@@ -625,6 +628,9 @@ impl MjModel {
         let required_size = self.state_size(dst_spec);
         let mut dst = Vec::with_capacity(required_size);
 
+        // SAFETY: all pointer arguments are valid for the duration of this call. mj_extractState
+        // writes exactly `required_size` elements into dst; set_len then exposes only those
+        // initialized elements.
         unsafe {
             mj_extractState(
                 self.ffi(),
@@ -711,6 +717,8 @@ impl MjModel {
             None
         }
         else {
+            // SAFETY: ptr was checked non-null above; MuJoCo guarantees the pointed-to string is
+            // valid UTF-8 and lives as long as the model.
             let cstr = unsafe { CStr::from_ptr(ptr).to_str().unwrap() };
             Some(cstr)
         }
@@ -729,14 +737,17 @@ impl MjModel {
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
+        // SAFETY: self.0 is a valid non-null mjModel pointer for the lifetime of self
+        // (struct invariant).
         unsafe { self.0.as_ref() }
     }
 
     /// Returns a mutable reference to the wrapped FFI struct.
     ///
     /// # Safety
-    /// Modifying the underlying FFI struct directly can break the invariants
-    /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
+    /// The caller must ensure that any modifications to the underlying struct preserve
+    /// the invariants that MuJoCo expects (e.g. do not corrupt computed fields or
+    /// break index relationships). Violating these invariants can cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjModel {
         unsafe { self.0.as_mut() }
     }
@@ -1289,7 +1300,7 @@ impl MjModel {
         (unsafe) name_tupleadr: &[i32; "tuple name pointers"; ffi().ntuple],
         (unsafe) name_keyadr: &[i32; "keyframe name pointers"; ffi().nkey],
         (unsafe) name_pluginadr: &[i32; "plugin instance name pointers"; ffi().nplugin],
-        (unsafe) names: &[c_char; "names of all objects, 0-terminated"; ffi().nnames],
+        names: &[c_char; "names of all objects, 0-terminated"; ffi().nnames],
         (unsafe) names_map: &[i32; "internal hash map of names"; ffi().nnames_map],
         paths: &[c_char; "paths to assets, 0-terminated"; ffi().npaths],
         (unsafe) B_rownnz: &[i32; "body-dof: non-zeros in each row"; ffi().nbody],
@@ -1339,6 +1350,7 @@ impl Clone for MjModel {
 
 impl Drop for MjModel {
     fn drop(&mut self) {
+        // SAFETY: self.0 is a valid non-null mjModel pointer; called exactly once in Drop.
         unsafe {
             mj_deleteModel(self.0.as_ptr());
         }

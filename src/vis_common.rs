@@ -95,19 +95,20 @@ pub fn flip_image_vertically<T>(buffer: &mut [T], height: usize, row_len: usize)
 ///
 /// This is a thin convenience wrapper around the [`png`] crate's encoder.
 /// It creates (or overwrites) the file at `path`, writes the PNG header with
-/// the given dimensions, colour type, and bit depth, then writes `data` as
-/// a single image.
+/// the given dimensions, colour type, bit depth, and compression settings,
+/// then writes `data` as a single image.
 ///
 /// # Arguments
 ///
-/// * `path`       - Destination file path.
-/// * `data`       - Raw pixel bytes in row-major, top-down order.
+/// * `path`        - Destination file path.
+/// * `data`        - Raw pixel bytes in row-major, top-down order.
 ///   The caller is responsible for flipping the buffer first if
 ///   it came from an OpenGL readback (see [`flip_image_vertically`]).
-/// * `width`      - Image width in pixels.
-/// * `height`     - Image height in pixels.
-/// * `color_type` - PNG colour model (e.g., `png::ColorType::Rgb`).
-/// * `bit_depth`  - Bits per channel (e.g., `png::BitDepth::Eight`).
+/// * `width`       - Image width in pixels.
+/// * `height`      - Image height in pixels.
+/// * `color_type`  - PNG colour model (e.g., `png::ColorType::Rgb`).
+/// * `bit_depth`   - Bits per channel (e.g., `png::BitDepth::Eight`).
+/// * `compression` - PNG compression level (e.g., `png::Compression::Default`).
 ///
 /// # Errors
 ///
