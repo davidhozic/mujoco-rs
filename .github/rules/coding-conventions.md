@@ -8,6 +8,10 @@
 - **Prefer existing macros** in `src/util.rs` over writing manual accessor methods. Read `macro-system.md` for details.
 - **Verify stride against C headers**: see the verification checklist in `macro-system.md`.
 - **Update `Cargo.toml` excludes**: when adding files or directories that are not part of the published crate (e.g. CI configs, internal tooling, docs, `.context/` entries, dev scripts), add them to the `exclude` list in `Cargo.toml` so they are not included in crates.io publishes.
+- **Do not fix pre-existing style issues in committed code.** Only flag and fix style problems
+  (e.g. RST-style double backticks in Rust doc comments) in **new, uncommitted changes**. Existing
+  committed code on `develop` or `main` should be left as-is unless it contains actually invalid
+  or broken syntax.
 
 ## Feature flags
 - Read `Cargo.toml` to discover available features and their default state.
@@ -29,8 +33,11 @@
   invalid argument that could be validated beforehand). Methods with runtime/environmental errors
   (I/O, parsing, GL init) stay `Result`-only. Methods returning `Result<(), E>` stay `Result`-only
   since the ergonomic gain from a panicking wrapper is minimal (just `.unwrap()`).
-- **CString/CStr panics are exempt**: converting C string inputs to `CString` or checking C string
-  validity via `.unwrap()` is intentional. Do NOT convert these to `Result`.
+- **CString/CStr panics are exempt from conversion to `Result`**: converting C string inputs to
+  `CString` or checking C string validity via `.unwrap()` is intentional. Do NOT convert these to
+  `Result`. However, `# Panics` documentation is still **required** for any function that can panic,
+  including CString panics. Note: functions accepting `AsRef<Path>` should still return `Result` for
+  invalid UTF-8 paths, since that is a realistic runtime condition (not a programmer error).
 - **`src/wrappers/fun/` functions stay panicking**: functions in this module should panic on failure,
   not return `Result`.
 
@@ -45,6 +52,9 @@
   already been stated in an earlier block in the same function or impl scope, omit it from subsequent
   blocks and trust the reader to refer upward. Only add a new comment when the reasoning differs.
 - Public items should have `///` doc comments.
+- **Type aliases (`pub type`) are not wrappers.** Do NOT write "Wraps `X`" in doc comments for type
+  aliases. Just describe what the type represents. "Wraps" language is fine for struct methods that
+  call C functions.
 - Always use ASCII characters only. Avoid non-ASCII Unicode characters (e.g., em dashes, arrows,
   smart quotes). Use `--` (double hyphen) as the ASCII substitute for em dashes. This applies to
   both source code and `.github/` rule/skill files.
