@@ -413,6 +413,34 @@ inside ``unsafe``:
     unsafe { view.r#type.as_mut_slice() }[0] = MjtJoint::mjJNT_BALL;
 
 
+Null-terminated string buffer fields
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Concatenated ``c_char`` arrays where each object's name or attribute is null-terminated.
+Overwriting a ``'\0'`` byte allows MuJoCo's C string functions (and ``CStr::from_ptr``
+inside wrappers such as :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>id_to_name`)
+to scan past the buffer boundary, causing undefined behavior.
+
+- |mj_model|: ``names``, ``plugin_attr``, ``text_data``, ``paths``.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    // Write a replacement name directly (unsafe in 3.0.0).
+    let buf = model.names_mut();
+    buf[0] = b'X' as c_char;
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    // SAFETY: all '\0' terminators within the buffer are preserved; no byte
+    // at offset nnames-1 (the final terminator) is overwritten.
+    let buf = unsafe { model.names_mut() };
+    buf[0] = b'X' as c_char;
+
+
 ``MjData::print()`` and ``MjModel::print()``
 -----------------------------------------------
 

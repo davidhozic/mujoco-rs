@@ -1578,13 +1578,19 @@ mjs_struct!(Body {
     // Override the delete method to prevent deletion of world.
     /// Delete this body from its parent spec.
     ///
+    /// This method must be called **at most once** per body. After a successful deletion
+    /// the underlying C body and all of its children (joints, geoms, sites, etc.) are freed
+    /// by MuJoCo; any further use of `self` or of references to child elements obtained
+    /// before this call is **use-after-free** undefined behavior. If the call returns `Err`,
+    /// nothing is freed and the body remains valid.
+    ///
     /// # Errors
     /// - Returns [`MjEditError::UnsupportedOperation`] if this is the world body.
     /// - Returns [`MjEditError::DeleteFailed`] if MuJoCo's internal deletion fails.
     ///
     /// # Safety
-    /// The caller must ensure no other Rust references to this body or its children
-    /// remain live after this call, as the underlying C memory will be freed.
+    /// The caller must guarantee that no references to this body or any of its children
+    /// remain live after a successful return, as the underlying C memory will have been freed.
     unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         if self.name() == "world" {
             return Err(MjEditError::UnsupportedOperation);

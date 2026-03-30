@@ -99,28 +99,36 @@ pub trait SpecItem: Sized {
     }
 
     /// Delete the item.
+    ///
+    /// This method must be called **at most once** per item. After a successful deletion
+    /// the underlying C element is freed by MuJoCo; any further use of `self` -- including
+    /// calling `delete` again or reading any field -- is **use-after-free** undefined behavior.
+    /// If the call returns `Err`, no memory is freed and the item remains valid.
+    ///
     /// # Errors
     /// - [`MjEditError::DeleteFailed`] if MuJoCo cannot delete the element.
     /// - [`MjEditError::UnsupportedOperation`] if the element cannot be deleted
     ///   (e.g. the world body or default classes).
+    ///
     /// # Safety
-    /// Since this method can't consume variables holding pointers, nor can we consume the
-    /// actual struct, this accepts a mutable reference to the item.
-    /// Consequently, the compiler still allows the original reference to be used, which
-    /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!
+    /// The `&mut self` receiver prevents aliased mutable access at the call site, but the
+    /// Rust compiler cannot prevent the caller from retaining other references (shared or
+    /// mutable) that were obtained before this call. The caller must guarantee that no such
+    /// references remain live after a successful return, as the underlying C memory will
+    /// have been freed. Violating this invariant is **use-after-free** undefined behavior.
     unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         unsafe { self.__delete_default__() }
     }
 
     /// Default implementation of the delete method.
     /// Override [`SpecItem::delete`] for custom deletion logic.
+    ///
     /// # Errors
     /// Returns [`MjEditError::DeleteFailed`] if MuJoCo's internal deletion fails.
+    ///
     /// # Safety
-    /// Since this method can't consume variables holding pointers, nor can we consume the
-    /// actual struct, this accepts a mutable reference to the item.
-    /// Consequently, the compiler still allows the original reference to be used, which
-    /// should be considered deallocated. Using the item after deleting it is in this case **use-after-free**!
+    /// Same contract as [`SpecItem::delete`]: must be called at most once per item; any use
+    /// of `self` after a successful call is **use-after-free** undefined behavior.
     unsafe fn __delete_default__(&mut self) -> Result<(), MjEditError> {
         // SAFETY: element_mut_pointer() is valid (struct invariant); mjs_getSpec
         // returns the owning spec, also valid.

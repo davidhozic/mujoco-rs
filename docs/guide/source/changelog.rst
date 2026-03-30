@@ -329,6 +329,11 @@ categories of fields are affected:
   ``body_plugin``, ``actuator_plugin``, ``geom_plugin``, ``sensor_plugin``),
   **4** on |mj_data| (``efc_type``, ``iefc_type``, ``tree_asleep``, ``wrap_obj``).
 
+- **Null-terminated string buffers** --- concatenated ``c_char`` arrays where each
+  entry is null-terminated; removing a ``'\\0'`` byte allows MuJoCo's C string
+  functions (and ``CStr::from_ptr``) to read past the buffer boundary: **4** fields
+  on |mj_model| (``names``, ``plugin_attr``, ``text_data``, ``paths``).
+
 ``info_with_view!`` generated ``ViewMut`` types expose the companion-index fields as
 :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`; mutation requires
 :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut::<method>as_mut_slice`

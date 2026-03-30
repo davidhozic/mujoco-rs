@@ -1,3 +1,8 @@
+//! Wrapper around MuJoCo's original C++ viewer (also named Simulate).
+//!
+//! This module exposes [`MjViewerCpp`], which requires static linking against a patched MuJoCo
+//! build. It is only available when the `cpp-viewer` Cargo feature is enabled.
+//! For most use cases, the Rust-native [`crate::viewer::MjViewer`] is recommended instead.
 use crate::mujoco_c::*;
 use std::ffi::CString;
 use std::ops::Deref;
