@@ -860,7 +860,8 @@ mod test {
             .build(&model)
             .unwrap();
 
-        renderer.sync(&mut data);
+        renderer.sync_data(&mut data).unwrap();
+        renderer.render().unwrap();
         let min = renderer.depth_flat().unwrap().iter().fold(f32::INFINITY, |a , &b| a.min(b));
         let max = renderer.depth_flat().unwrap().iter().fold(f32::NEG_INFINITY, |a , &b| a.max(b));
 
@@ -892,7 +893,9 @@ mod test {
             .depth(false)
             .build(&model)
             .unwrap();
-        renderer.sync(&mut data);
+
+        renderer.sync_data(&mut data).unwrap();
+        renderer.render().unwrap();
 
         let tmp = std::env::temp_dir();
         let path_none = tmp.join("mujoco_rs_test_none.png");
