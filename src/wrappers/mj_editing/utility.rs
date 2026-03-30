@@ -451,12 +451,12 @@ macro_rules! vec_string_set_append {
 /// Implements string methods for given attribute $name.
 macro_rules! string_set_get_with {
     (@impl common $([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;) => {paste::paste!{
-        #[allow(unused_unsafe)]
         #[doc = concat!(
             "Return ", $comment,
             "\n",
             "# Panics\n",
-            "Panics if the stored string is not valid UTF-8."
+            "Panics if the stored string is not valid UTF-8, which can only happen on internal memory corruption \
+            -- MuJoCo only uses ASCII values."
         )]
         pub fn $name(&self) -> &str {
                 // SAFETY: the mjString field is valid for the lifetime of self.
@@ -549,6 +549,12 @@ macro_rules! vec_vec_append {
             pub fn [<append_ $name>](&mut self, value: &[$type]) {
                 // SAFETY: self.$name is a valid pointer for the lifetime of self.
                 unsafe { [<append_mjs_vec_vec_ $type>](value, self.$name) };
+            }
+
+            #[doc = concat!("Set ", $comment, " (deprecated; use ", stringify!([<append_ $name>]), " instead).")]
+            #[deprecated(note = "use append_ instead of set_ for vector-of-vectors attributes", since = "3.0.0")]
+            pub fn [<set_ $name>](&mut self, value: &[$type]) {
+                self.[<append_ $name>](value);
             }
         )*
     }};

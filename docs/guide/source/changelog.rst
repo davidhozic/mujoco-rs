@@ -595,12 +595,6 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   so the precondition is always enforced. The ``# Panics`` documentation now correctly states
   panics occur in all builds, not only debug builds.
 
-- :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb` ``update_local_pos``:
-  ``debug_assert!`` guard on ``self.select >= 0`` was silently skipped in release builds,
-  allowing ``-1 as usize`` index arithmetic on the ``xpos``/``xmat`` slices. Changed to
-  ``assert!`` so the precondition (a body must be selected before calling this method) is
-  always enforced.
-
 - |mj_model|:
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml`:
   a ``_ => unreachable!()`` arm would panic if MuJoCo ever returned a value other
