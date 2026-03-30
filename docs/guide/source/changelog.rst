@@ -274,6 +274,10 @@ gained new variants. See `Error handling`_ below for the full method list.
 - |mj_model|: ``tuple_objtype`` accessor now returns ``&[MjtObj]`` instead of
   ``&[i32]``.
 
+- ``MjCameraModelView`` / ``MjCameraModelViewMut``: camera field ``projection``
+  (type ``MjtProjection``) replaces the old boolean ``orthographic`` field,
+  matching MuJoCo's ``cam_projection`` rename.
+
 - |mjs_tendon|: ``limited`` and ``actfrclimited`` are now ``MjtLimited``
   (tri-state: ``FALSE`` / ``TRUE`` / ``AUTO``) instead of ``bool``, matching the
   C ``mjtLimited`` semantics.

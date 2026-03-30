@@ -397,6 +397,9 @@ impl MjSpec {
     ///   The `required_size` field uses `snprintf`-style semantics (bytes to write, excluding NUL),
     ///   so retry with `required_size as usize + 1` bytes.
     /// - [`MjEditError::SaveFailed`] with MuJoCo's error message on any other failure.
+    /// # Panics
+    /// Panics if MuJoCo reports success but returns XML that is not NUL-terminated
+    /// within the allocated output buffer.
     pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, MjEditError> {
         let mut error_buff = [0; ERROR_BUF_LEN];
         let mut result_buff = vec![0u8; buffer_size];

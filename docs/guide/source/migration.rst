@@ -468,6 +468,8 @@ Type changes
 - |mj_model|: ``size()`` returns ``usize`` (was ``i32``).
 - |mj_model|: ``state_size()`` returns ``usize`` (was ``i32``).
 - |mj_model|: ``name_to_id()`` returns ``Option<usize>`` (was ``i32``; ``-1`` is now ``None``).
+- ``MjCameraModelView`` / ``MjCameraModelViewMut``: ``projection`` (``MjtProjection``)
+  replaces the old boolean ``orthographic`` field.
 - |mj_model|: ``tuple_objtype()`` returns ``&[MjtObj]`` (was ``&[i32]``).
 - |mj_model|: ``id_to_name``: ``id`` takes ``usize`` (was ``i32``).
 - |mj_data|: ``maxuse_threadstack()`` returns ``&[MjtSize; mjMAXTHREAD]`` (was ``&[MjtSize]``).
@@ -508,8 +510,31 @@ Type changes
       let nnz = view.J_rownnz[0];
 
       // After (3.0.0) -- accessed through model
-      let view = model.tendon(0).view(&model);
-      let nnz = view.J_rownnz[0];
+       let view = model.tendon(0).view(&model);
+       let nnz = view.J_rownnz[0];
+
+
+``MjCameraModelView::projection`` replaces ``orthographic``
+-----------------------------------------------------------
+
+MuJoCo 3.6.0 replaced the old ``cam_orthographic`` flag with the
+``cam_projection`` enum. The Rust camera model views mirror that upstream
+change, so code that previously read ``view.orthographic[0]`` must now read
+``view.projection[0]`` and compare it against :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtProjection`.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    let view = model.camera("main").unwrap().view(&model);
+    let is_ortho = view.orthographic[0];
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    let view = model.camera("main").unwrap().view(&model);
+    let is_ortho = view.projection[0] == MjtProjection::mjPROJ_ORTHOGRAPHIC;
 
 
 ``MjData::reset_keyframe()``
@@ -1003,4 +1028,3 @@ Removed deprecated methods
        :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`
    * - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure` ``figure()``
      - ``draw()``
-

@@ -33,6 +33,9 @@ pub trait SpecItem: Sized {
     }
 
     /// Returns the item's name.
+    ///
+    /// # Panics
+    /// Panics if the stored MuJoCo string is not valid UTF-8.
     fn name(&self) -> &str {
         // SAFETY: mjs_getName returns a pointer to a null-terminated string owned
         // by the spec element, valid for the element's lifetime.

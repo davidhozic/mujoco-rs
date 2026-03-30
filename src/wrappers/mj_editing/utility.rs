@@ -452,7 +452,12 @@ macro_rules! vec_string_set_append {
 macro_rules! string_set_get_with {
     (@impl common $([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;) => {paste::paste!{
         #[allow(unused_unsafe)]
-        #[doc = concat!("Return ", $comment)]
+        #[doc = concat!(
+            "Return ", $comment,
+            "\n",
+            "# Panics\n",
+            "Panics if the stored string is not valid UTF-8."
+        )]
         pub fn $name(&self) -> &str {
                 // SAFETY: the mjString field is valid for the lifetime of self.
                 unsafe { read_mjs_string(self$(.$ffi())?.$name) }
