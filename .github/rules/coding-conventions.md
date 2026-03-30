@@ -68,6 +68,8 @@
 - Always verify any changes against MuJoCo's official documentation to ensure correctness.
 - Any changes made should be reflected in the changelog: `docs/guide/source/changelog.rst`.
   Make sure to follow the conventions and style of previous changelog entries.
+- **Documentation-only changes** (adding or improving doc comments, fixing typos in docs) do NOT
+  need changelog or migration guide entries.
 - Breaking changes must also have a before/after migration entry in `docs/guide/source/migration.rst`.
 - The migration guide is **only for breaking changes**. New non-breaking additions (e.g. new `try_`
   variants that don't change existing signatures) belong in the changelog only.

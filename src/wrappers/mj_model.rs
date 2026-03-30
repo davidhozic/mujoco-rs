@@ -692,17 +692,17 @@ impl MjModel {
         Ok(required_size)
     }
 
-    /// Determine type of friction cone.
+    /// Determine type of friction cone. Returns `true` if pyramidal, `false` if elliptic.
     pub fn is_pyramidal(&self) -> bool {
         unsafe { mj_isPyramidal(self.ffi()) == 1 }
     }
 
-    /// Determine type of constraint Jacobian.
+    /// Determine type of constraint Jacobian. Returns `true` if sparse, `false` if dense.
     pub fn is_sparse(&self) -> bool {
         unsafe { mj_isSparse(self.ffi()) == 1 }
     }
 
-    /// Determine type of solver (PGS is dual, CG and Newton are primal).
+    /// Determine type of solver. Returns `true` if dual (PGS), `false` if primal (CG or Newton).
     pub fn is_dual(&self) -> bool {
         unsafe { mj_isDual(self.ffi()) == 1 }
     }

@@ -11,6 +11,7 @@ use crate::mujoco_c::*;
 /***********************************************************************************************************************
 ** MjVisual
 ***********************************************************************************************************************/
+/// Visual properties of the model (headlight, rgba defaults, scale, etc.).
 pub type MjVisual = mjVisual;
 impl Default for MjVisual {
     fn default() -> Self {
@@ -27,11 +28,13 @@ impl Default for MjVisual {
 /***********************************************************************************************************************
 ** MjStatistic
 ***********************************************************************************************************************/
+/// Model statistics (center, extent, mean body mass, mean inertia, etc.).
 pub type MjStatistic = mjStatistic;
 
 /***********************************************************************************************************************
 ** MjContact
 ***********************************************************************************************************************/
+/// Contact point data (position, frame, friction/solver parameters, geom/flex ids, etc.).
 pub type MjContact = mjContact;
 
 // SAFETY: mjContact_ contains only f64 and c_int fields, which are all zero-valid.
@@ -40,6 +43,7 @@ unsafe impl bytemuck::Zeroable for mjContact_ {}
 /***********************************************************************************************************************
 ** MjLROpt
 ***********************************************************************************************************************/
+/// Options for the length-range computation of actuator length ranges.
 pub type MjLROpt = mjLROpt;
 impl Default for MjLROpt {
     fn default() -> Self {

@@ -98,6 +98,7 @@ pub type MjtStereo = mjtStereo;
 /***********************************************************************************************************************
 ** MjvPerturb
 ***********************************************************************************************************************/
+/// Mouse perturbation state (selected body/flex/skin, interaction mode, reference position/orientation, local position).
 pub type MjvPerturb = mjvPerturb;
 impl Default for MjvPerturb {
     fn default() -> Self {
@@ -140,6 +141,10 @@ impl MjvPerturb {
     }
 
     /// Updates the body-local position of the selection point.
+    ///
+    /// # Panics
+    /// Panics if `self.select` is out of range for the `xpos`/`xmat` arrays (i.e., negative or
+    /// `>= nbody`). In debug builds, a dedicated assertion fires first for the negative case.
     pub fn update_local_pos<M: Deref<Target = MjModel>>(&mut self, selection_xyz: &[MjtNum; 3], data: &MjData<M>) {
         debug_assert!(self.select >= 0, "invalid selecting when calling update_local_pos");
         let select = self.select as usize;
@@ -166,6 +171,7 @@ impl MjvPerturb {
 /***********************************************************************************************************************
 ** MjvCamera
 ***********************************************************************************************************************/
+/// Abstract camera parameters (type, fixed/tracking ids, lookat, distance, azimuth, elevation, orthographic mode).
 pub type MjvCamera = mjvCamera;
 impl MjvCamera {
     /// Creates a new free camera.
@@ -280,6 +286,7 @@ impl Default for MjvCamera {
 /***********************************************************************************************************************
 ** mjvGLCamera
 ***********************************************************************************************************************/
+/// OpenGL camera parameters (position, forward/up vectors, frustum planes).
 pub type MjvGLCamera = mjvGLCamera;
 
 impl MjvGLCamera {
@@ -292,6 +299,7 @@ impl MjvGLCamera {
 /***********************************************************************************************************************
 ** MjvGeom
 ***********************************************************************************************************************/
+/// Visual geometry element (type, size, material, RGBA, label, etc.) used in a scene.
 pub type MjvGeom = mjvGeom;
 
 impl MjvGeom {
@@ -340,11 +348,13 @@ impl MjvGeom {
 /***********************************************************************************************************************
 ** MjvLight
 ***********************************************************************************************************************/
+/// Visual light source parameters (position, direction, ambient/diffuse/specular RGB, etc.).
 pub type MjvLight = mjvLight;
 
 /***********************************************************************************************************************
 ** MjvOption
 ***********************************************************************************************************************/
+/// Visualization rendering options (flags, label types, frame display, etc.).
 pub type MjvOption = mjvOption;
 impl Default for MjvOption {
     fn default() -> Self {

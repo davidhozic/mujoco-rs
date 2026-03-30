@@ -36,7 +36,7 @@ update of MuJoCo alone can increase the major version.
 
   - |mj_data|: ``reset_keyframe``, ``set_state``, ``copy_visual_to``, ``copy_to``
   - |mjr_context|: ``read_pixels``
-  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure`:
+  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`:
     ``push``, ``set_at``
   - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
     ``set_font_scale`` now returns ``Result<(), RendererError>``;
@@ -380,6 +380,12 @@ lists and before/after examples.
        - ``new``
        - ``new_free``, ``new_fixed``, ``new_tracking``, or ``new_user``
 
+*MjTendonDataInfo field removal*
+
+- ``MjTendonDataInfo`` no longer exposes ``J_rownnz``, ``J_rowadr``, or
+  ``J_colind``; these fields moved upstream to ``mjModel`` in MuJoCo 3.6.0
+  and are now accessible via ``MjTendonModelInfo`` (i.e. ``model.tendon()``).
+
 .. _Error handling:
 
 .. rubric:: Error handling
@@ -433,7 +439,7 @@ New error types in :docs-rs:`~mujoco_rs::error`
        ``from_parse`` :sup:`new`,
        ``from_parse_vfs`` :sup:`new`
      - :docs-rs:`~mujoco_rs::error::<enum>MjEditError`
-   * - |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure` / |mjr_context|
+   * - |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure` / |mjr_context|
      - ``try_create_geom`` :sup:`new`, ``set_label``, ``add_aux``, ``set_aux``,
        ``push``, ``set_at``, ``read_pixels``
      - :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`
@@ -503,7 +509,7 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
     ``try_create_geom``
   - |mj_data|: ``try_ray_flex`` :sup:`new`, ``try_ray_hfield`` :sup:`new`,
     ``try_ray_mesh`` :sup:`new`
-  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure`:
+  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`:
     ``try_full`` :sup:`new`, ``try_empty`` :sup:`new`,
     ``try_pop_front`` :sup:`new`, ``try_pop_back`` :sup:`new`,
     ``cut_front`` :sup:`new`, ``cut_end`` :sup:`new`
@@ -556,9 +562,6 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``dof_bodyid`` and ``dof_treeid`` are now exposed in per-dof joint model view
   types (the fields existed in MuJoCo 3.3.7 but were not previously accessible
   via per-object view types).
-  **Breaking:** ``MjTendonDataInfo`` no longer exposes ``J_rownnz``,
-  ``J_rowadr``, or ``J_colind``; these fields moved upstream to ``mjModel`` in
-  MuJoCo 3.6.0 and are now on ``MjTendonModelInfo`` (via ``model.tendon()``).
 - ``info_with_view!`` structs now have ``try_view`` / ``try_view_mut`` methods.
 - Trait additions: ``Clone`` for |mj_spec|; ``Default`` for |mj_vfs|, |mj_spec|,
   ``MjOption``, ``MjRendererBuilder``, ``MjViewerBuilder``; ``Send`` + ``Sync``
@@ -580,6 +583,19 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   checkbox (16-bit grayscale depth PNG).
 
 .. rubric:: Bug fixes
+
+- :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera` ``new_fixed`` / ``new_tracking``
+  and :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene` ``new``:
+  ``debug_assert!`` guards on user-supplied ``camera_id``, ``tracking_id``, and ``max_geom``
+  (checking they fit in ``i32``) were silently skipped in release builds. Changed to ``assert!``
+  so the precondition is always enforced. The ``# Panics`` documentation now correctly states
+  panics occur in all builds, not only debug builds.
+
+- :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb` ``update_local_pos``:
+  ``debug_assert!`` guard on ``self.select >= 0`` was silently skipped in release builds,
+  allowing ``-1 as usize`` index arithmetic on the ``xpos``/``xmat`` slices. Changed to
+  ``assert!`` so the precondition (a body must be selected before calling this method) is
+  always enforced.
 
 - |mj_model|:
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml`:

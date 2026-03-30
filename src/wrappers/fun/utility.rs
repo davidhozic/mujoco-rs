@@ -286,13 +286,13 @@ pub fn mju_scl_3(res: &mut [MjtNum; 3], vec: &[MjtNum; 3], scl: MjtNum)  {
     unsafe { mujoco_c::mju_scl3(res, vec, scl) }
 }
 
-/// Set res = vec1 + vec2.
+/// Set res = vec_1 + vec_2.
 pub fn mju_add_3(res: &mut [MjtNum; 3], vec_1: &[MjtNum; 3], vec_2: &[MjtNum; 3])  {
     // SAFETY: all arguments are valid references with correct sizes.
     unsafe { mujoco_c::mju_add3(res, vec_1, vec_2) }
 }
 
-/// Set res = vec1 - vec2.
+/// Set res = vec_1 - vec_2.
 pub fn mju_sub_3(res: &mut [MjtNum; 3], vec_1: &[MjtNum; 3], vec_2: &[MjtNum; 3])  {
     // SAFETY: all arguments are valid references with correct sizes.
     unsafe { mujoco_c::mju_sub3(res, vec_1, vec_2) }
@@ -316,7 +316,7 @@ pub fn mju_add_to_scl_3(res: &mut [MjtNum; 3], vec: &[MjtNum; 3], scl: MjtNum)  
     unsafe { mujoco_c::mju_addToScl3(res, vec, scl) }
 }
 
-/// Set res = vec1 + vec2*scl.
+/// Set res = vec_1 + vec_2*scl.
 pub fn mju_add_scl_3(res: &mut [MjtNum; 3], vec_1: &[MjtNum; 3], vec_2: &[MjtNum; 3], scl: MjtNum)  {
     // SAFETY: all arguments are valid references with correct sizes.
     unsafe { mujoco_c::mju_addScl3(res, vec_1, vec_2, scl) }
@@ -334,13 +334,13 @@ pub fn mju_norm_3(vec: &[MjtNum; 3]) -> MjtNum  {
     unsafe { mujoco_c::mju_norm3(vec) }
 }
 
-/// Return dot-product of vec1 and vec2.
+/// Return dot-product of vec_1 and vec_2.
 pub fn mju_dot_3(vec_1: &[MjtNum; 3], vec_2: &[MjtNum; 3]) -> MjtNum  {
     // SAFETY: all arguments are valid references with correct sizes.
     unsafe { mujoco_c::mju_dot3(vec_1, vec_2) }
 }
 
-/// Return Cartesian distance between 3D vectors pos1 and pos2.
+/// Return Cartesian distance between 3D vectors pos_1 and pos_2.
 pub fn mju_dist_3(pos_1: &[MjtNum; 3], pos_2: &[MjtNum; 3]) -> MjtNum  {
     // SAFETY: all arguments are valid references with correct sizes.
     unsafe { mujoco_c::mju_dist3(pos_1, pos_2) }
@@ -389,7 +389,7 @@ pub fn mju_normalize_4(vec: &mut [MjtNum; 4]) -> MjtNum  {
 }
 
 /// Coordinate transform of 6D motion or force vector in rotation:translation format.
-/// `rotnew_2old` is 3-by-3; pass `None` for no rotation. `flg_force` specifies force or motion type.
+/// `rotnew_2old` is 3-by-3; pass `None` for no rotation. `flg_force`: `true` for force vector, `false` for motion vector.
 pub fn mju_transform_spatial(res: &mut [MjtNum; 6], vec: &[MjtNum; 6], flg_force: bool, newpos: &[MjtNum; 3], oldpos: &[MjtNum; 3], rotnew_2old: Option<&[MjtNum; 9]>)  {
     // SAFETY: all arguments are valid references; nullable parameters use null when None.
     unsafe { mujoco_c::mju_transformSpatial(
@@ -410,7 +410,7 @@ pub fn mju_neg_quat(res: &mut [MjtNum; 4], quat: &[MjtNum; 4])  {
     unsafe { mujoco_c::mju_negQuat(res, quat) }
 }
 
-/// Multiply quaternions.
+/// Set res = quat_1 * quat_2 (quaternion product).
 pub fn mju_mul_quat(res: &mut [MjtNum; 4], quat_1: &[MjtNum; 4], quat_2: &[MjtNum; 4])  {
     // SAFETY: all arguments are valid references with correct sizes.
     unsafe { mujoco_c::mju_mulQuat(res, quat_1, quat_2) }

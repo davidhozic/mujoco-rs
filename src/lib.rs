@@ -103,6 +103,9 @@ pub mod vis_common;
 
 
 /// Returns the version string of the MuJoCo library.
+///
+/// # Panics
+/// Panics if the MuJoCo version string is not valid UTF-8.
 pub fn get_mujoco_version() -> &'static str {
     let arr = unsafe { mujoco_c::mj_versionString() };
     unsafe { CStr::from_ptr(arr).to_str().unwrap() }

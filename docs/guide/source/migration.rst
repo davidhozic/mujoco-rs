@@ -497,6 +497,19 @@ Type changes
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`
   now requires ``T: bytemuck::NoUninit`` (add ``bytemuck`` to your dependencies if you
   call this method with a custom type, and derive or implement ``NoUninit`` for it).
+- ``MjTendonDataInfo``: ``J_rownnz``, ``J_rowadr``, and ``J_colind`` are no longer
+  exposed. These fields moved to ``mjModel`` in MuJoCo 3.6.0 and are now accessible
+  via ``MjTendonModelInfo`` (i.e. ``model.tendon()``).
+
+  .. code-block:: rust
+
+      // Before (2.x) -- accessed through data
+      let view = data.tendon(0).view(&data);
+      let nnz = view.J_rownnz[0];
+
+      // After (3.0.0) -- accessed through model
+      let view = model.tendon(0).view(&model);
+      let nnz = view.J_rownnz[0];
 
 
 ``MjData::reset_keyframe()``
