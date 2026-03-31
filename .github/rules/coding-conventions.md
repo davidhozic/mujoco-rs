@@ -118,6 +118,13 @@
 - **Run `/doc` after RST changes.** After editing any `.rst` file under `docs/guide/source/`,
   run `/doc` to verify both rustdoc and Sphinx builds are clean. This catches RST syntax errors,
   broken cross-references, and invalid custom roles that rustdoc cannot detect.
+- **docs-rs links must point to non-deprecated items.** When referencing an API item in RST/Sphinx
+  documentation via `:docs-rs:`, always link to the current (non-deprecated) target path. When the
+  display text needs to show the old/deprecated name, use the `display text <path>` form:
+  `:docs-rs:\`MjData::get_state <mujoco_rs::...::<method>state>\`` -- displays the old name but
+  links to the new method. Do not use `~`/`~~` inside the `<path>` of the display-text form; those
+  prefixes only affect the auto-generated display name. Never create a `:docs-rs:` link whose target
+  path resolves to a `#[deprecated]` item.
 - **Version tagging and branching conventions.** Git release tags use no `v` prefix (e.g., `2.3.5`,
   `3.0.0`). Release branches follow the `vMajor.Minor.x` convention (e.g., `v2.3.x`, `v3.0.x`),
   where `v` and `x` are literal/fixed. Use these when diffing against previous releases

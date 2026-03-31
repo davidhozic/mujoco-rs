@@ -807,7 +807,7 @@ the ``eq_active`` byte array without booleanization, making a subsequent call to
 
 .. code-block:: rust
 
-    // SAFETY: state captured via get_state; bools are valid (0 or 1).
+    // SAFETY: state captured via state(); bools are valid (0 or 1).
     unsafe { data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32) }?;
 
 
@@ -1034,3 +1034,9 @@ Removed deprecated methods
        :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`
    * - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure` ``figure()``
      - ``draw()``
+   * - :docs-rs:`get_mujoco_version <mujoco_rs::<fn>mujoco_version>`
+     - :docs-rs:`~~mujoco_rs::<fn>mujoco_version`
+   * - :docs-rs:`MjData::get_state <mujoco_rs::wrappers::mj_data::<struct>MjData::<method>state>`
+     - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>state`
+   * - :docs-rs:`MjvFigure::new <mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>new_boxed>`
+     - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>new_boxed`

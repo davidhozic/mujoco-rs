@@ -1388,10 +1388,17 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Same as [`MjData::read_state_into`], except it allocates
     /// and returns new boxed data containing the state.
-    pub fn get_state(&self, spec: u32) -> Box<[MjtNum]> {
+    pub fn state(&self, spec: u32) -> Box<[MjtNum]> {
         let mut destination = vec![0.0; self.model.state_size(spec)].into_boxed_slice();
         Self::read_state_into(self, spec, &mut destination);
         destination
+    }
+
+    /// Same as [`MjData::read_state_into`], except it allocates
+    /// and returns new boxed data containing the state.
+    #[deprecated(since = "3.0.0", note = "use `state` instead")]
+    pub fn get_state(&self, spec: u32) -> Box<[MjtNum]> {
+        self.state(spec)
     }
 
     /// Sets the `state` to [`MjData`]. This is a wrapper around [`mj_setState`].
@@ -4607,7 +4614,7 @@ mod test {
         }
     }
 
-    /// Steps the simulation, copies state via get_state/set_state, steps further,
+    /// Steps the simulation, copies state via state/set_state, steps further,
     /// and verifies force-cast arrays reflect the correct state at each point.
     #[test]
     fn test_force_cast_multi_step_state_save_restore() {
@@ -4624,7 +4631,7 @@ mod test {
         data.forward();
 
         // Save state
-        let saved_state = data.get_state(MjtState::mjSTATE_FULLPHYSICS as u32);
+        let saved_state = data.state(MjtState::mjSTATE_FULLPHYSICS as u32);
         let saved_xpos: Vec<[MjtNum; 3]> = data.xpos().to_vec();
         let saved_qpos: Vec<MjtNum> = data.qpos().to_vec();
 

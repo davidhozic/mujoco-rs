@@ -1234,18 +1234,18 @@ impl MjsTendon {
     }
 
     /// Return the number of wrap objects.
-    pub fn get_wrap_num(&self) -> usize {
+    pub fn wrap_num(&self) -> usize {
         unsafe { mjs_getWrapNum(self) as usize }
     }
 
     /// Return an indexed wrap object. Returns `None` if index is out of bounds.
-    pub fn get_wrap(&self, i: usize) -> Option<&MjsWrap> {
+    pub fn wrap(&self, i: usize) -> Option<&MjsWrap> {
         let ptr = unsafe { mjs_getWrap(self, i as i32) };
         unsafe { ptr.as_ref() }
     }
 
     /// Return a mutable indexed wrap object. Returns `None` if index is out of bounds.
-    pub fn get_wrap_mut(&mut self, i: usize) -> Option<&mut MjsWrap> {
+    pub fn wrap_mut(&mut self, i: usize) -> Option<&mut MjsWrap> {
         let ptr = unsafe { mjs_getWrap(self, i as i32) };
         unsafe { ptr.as_mut() }
     }
@@ -2197,12 +2197,12 @@ mod tests {
         tendon.wrap_joint("joint1", 0.5);
         tendon.wrap_pulley(1.5);
 
-        assert_eq!(tendon.get_wrap_num(), 3);
+        assert_eq!(tendon.wrap_num(), 3);
 
-        let wrap = tendon.get_wrap(1).unwrap();
+        let wrap = tendon.wrap(1).unwrap();
         assert_eq!(wrap.coef(), 0.5);
 
-        let wrap_pulley = tendon.get_wrap(2).unwrap();
+        let wrap_pulley = tendon.wrap(2).unwrap();
         assert_eq!(wrap_pulley.divisor(), 1.5);
     }
 

@@ -25,7 +25,7 @@ use crate::prelude::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_data::{MjData, MjtState};
-use crate::{builder_setters, get_mujoco_version};
+use crate::{builder_setters, mujoco_version};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
@@ -1432,7 +1432,7 @@ impl MjViewerBuilder {
     /// Creates a [`MjViewerBuilder`] with default settings.
     pub fn new() -> Self {
         Self {
-            window_name: Cow::Owned(format!("MuJoCo Rust Viewer (MuJoCo {})", get_mujoco_version())),
+            window_name: Cow::Owned(format!("MuJoCo Rust Viewer (MuJoCo {})", mujoco_version())),
             max_user_geoms: 0, vsync: false, warn_non_realtime: false,
         }
     }

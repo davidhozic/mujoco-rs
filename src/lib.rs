@@ -106,18 +106,24 @@ pub mod vis_common;
 ///
 /// # Panics
 /// Panics if the MuJoCo version string is not valid UTF-8.
-pub fn get_mujoco_version() -> &'static str {
+pub fn mujoco_version() -> &'static str {
     let arr = unsafe { mujoco_c::mj_versionString() };
     unsafe { CStr::from_ptr(arr).to_str().unwrap() }
 }
 
+/// Returns the version string of the MuJoCo library.
+#[deprecated(since = "3.0.0", note = "use `mujoco_version` instead")]
+pub fn get_mujoco_version() -> &'static str {
+    mujoco_version()
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::get_mujoco_version;
+    use crate::mujoco_version;
 
     #[test]
     fn test_version() {
-        let version = get_mujoco_version();
+        let version = mujoco_version();
         assert!(!version.is_empty());
     }
 

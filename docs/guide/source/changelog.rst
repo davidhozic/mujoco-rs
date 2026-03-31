@@ -138,6 +138,19 @@ gained new variants. See `Error handling`_ below for the full method list.
 
 *Type and signature changes*
 
+- :docs-rs:`get_mujoco_version <mujoco_rs::<fn>mujoco_version>` has been renamed to
+  :docs-rs:`~~mujoco_rs::<fn>mujoco_version`. The old name is deprecated.
+
+- :docs-rs:`MjData::get_state <mujoco_rs::wrappers::mj_data::<struct>MjData::<method>state>`
+  has been renamed to
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>state`.
+  The old name is deprecated.
+
+- :docs-rs:`MjvFigure::new <mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>new_boxed>`
+  has been renamed to
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>new_boxed`.
+  The old name is deprecated.
+
 - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`
   now accept a destination of a **different** model type:

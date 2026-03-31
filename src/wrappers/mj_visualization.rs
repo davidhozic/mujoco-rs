@@ -375,13 +375,15 @@ impl Default for MjvOption {
 pub type MjvFigure = mjvFigure;
 impl Default for MjvFigure {
     fn default() -> Self {
-        *Self::new()
+        *Self::new_boxed()
     }
 }
 
 impl MjvFigure {
-    /// Instantiates a new figure with default values.
-    pub fn new() -> Box<Self> {
+    /// Instantiates a new figure with default values, allocated on the heap.
+    ///
+    /// `MjvFigure` is ~800 KB; this constructor avoids placing it on the stack.
+    pub fn new_boxed() -> Box<Self> {
         let mut opt = Box::new(MaybeUninit::uninit());
         // SAFETY: mjv_defaultFigure initializes all fields to valid defaults;
         // the MaybeUninit pointer is valid and aligned.
@@ -389,6 +391,12 @@ impl MjvFigure {
             mjv_defaultFigure(opt.as_mut_ptr());
             opt.assume_init()
         }
+    }
+
+    /// Instantiates a new figure with default values, allocated on the heap.
+    #[deprecated(since = "3.0.0", note = "use `new_boxed` instead")]
+    pub fn new() -> Box<Self> {
+        Self::new_boxed()
     }
 
     /// Draws the 2D figure to the `viewport` on screen.
@@ -1013,7 +1021,7 @@ mod tests {
 
     #[test]
     fn test_figure() {
-        let mut fig = MjvFigure::new();
+        let mut fig = MjvFigure::new_boxed();
         let plot = 0;
 
         // Initially empty
@@ -1119,7 +1127,7 @@ mod tests {
     /// and push succeeds after `pop_back` frees a slot.
     #[test]
     fn test_figure_push_overflow() {
-        let mut fig = MjvFigure::new();
+        let mut fig = MjvFigure::new_boxed();
         let plot = 0;
         let capacity = fig.linedata[plot].len() / 2;
 
@@ -1149,7 +1157,7 @@ mod tests {
     /// path, so the builder is not exercised here.
     #[test]
     fn test_c_str_as_str_method_title_roundtrip() {
-        let mut fig = MjvFigure::new();
+        let mut fig = MjvFigure::new_boxed();
 
         // Default title should be empty.
         assert_eq!(fig.title(), "");
