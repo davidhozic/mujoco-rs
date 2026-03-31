@@ -567,7 +567,7 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   for non-UTF-8 paths.
   ``MjSpec`` and ``SpecItem`` are also re-exported from
   :docs-rs:`mujoco_rs::wrappers`.
-- |mjs_tendon|: ``get_wrap`` / ``get_wrap_mut`` / ``get_wrap_num``.
+- |mjs_tendon|: ``wrap`` / ``wrap_mut`` / ``wrap_num``.
 - |mjs_wrap|: ``coef``, ``divisor``, ``side_site``, ``side_site_mut``.
 - |mj_vfs|: ``add_file`` / ``add_file_from`` replace ``add_from_file``
   (which is now deprecated). ``add_from_buffer`` and ``delete_file`` now accept

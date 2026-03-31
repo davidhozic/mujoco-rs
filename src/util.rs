@@ -446,7 +446,9 @@ macro_rules! info_with_view {
             #[allow(non_snake_case)]
             #[derive(Debug, Clone)]
             pub struct [<Mj $name:camel $info_type Info>] {
+                /// Name of the element.
                 pub name: String,
+                /// Index of the element.
                 pub id: usize,
                 model_signature: u64,
                 $(
@@ -543,12 +545,15 @@ macro_rules! info_with_view {
             #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type ViewMut>]<'d> {
                 $(
+                    #[doc = concat!("Mutable view of `", stringify!($attr), "`.")]
                     pub $attr: $crate::util::PointerViewMut<'d, $type_>,
                 )*
                 $(
+                    #[doc = concat!("Read-only view of `", stringify!($attr_ro), "`. Requires `unsafe` for mutation.")]
                     pub $attr_ro: $crate::util::PointerViewUnsafeMut<'d, $type_ro>,
                 )*
                 $(
+                    #[doc = concat!("Optional mutable view of `", stringify!($opt_attr), "`.")]
                     pub $opt_attr: Option<$crate::util::PointerViewMut<'d, $type_opt>>,
                 )*
             }
@@ -572,12 +577,15 @@ macro_rules! info_with_view {
             #[derive(Debug)]
             pub struct [<Mj $name:camel $info_type View>]<'d> {
                 $(
+                    #[doc = concat!("View of `", stringify!($attr), "`.")]
                     pub $attr: $crate::util::PointerView<'d, $type_>,
                 )*
                 $(
+                    #[doc = concat!("View of `", stringify!($attr_ro), "`.")]
                     pub $attr_ro: $crate::util::PointerView<'d, $type_ro>,
                 )*
                 $(
+                    #[doc = concat!("Optional view of `", stringify!($opt_attr), "`.")]
                     pub $opt_attr: Option<$crate::util::PointerView<'d, $type_opt>>,
                 )*
             }

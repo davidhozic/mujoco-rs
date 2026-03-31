@@ -40,8 +40,8 @@ The main features on top of MuJoCo include:
 - High-level :ref:`model_editing`.
 - :ref:`visualization`:
 
-  - :ref:`mj_renderer`: offscreen rendering to array or file.
-  - :ref:`mj_rust_viewer`: onscreen visualization.
+  - :ref:`mj_renderer`: offscreen rendering to array or file (enabled by the ``renderer`` feature).
+  - :ref:`mj_rust_viewer`: onscreen visualization (enabled by the ``viewer`` and ``viewer-ui`` features).
 
     .. image:: ../../img_common/viewer_spot.png
         :width: 50%
