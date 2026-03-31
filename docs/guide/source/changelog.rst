@@ -150,6 +150,9 @@ gained new variants. See `Error handling`_ below for the full method list.
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name`
   still returns ``&mut Self`` but now panics on duplicate names.
 
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem` is now a sealed
+  trait. External implementations are no longer permitted.
+
 - ``MjsOrientation::switch_quat`` no longer has a type parameter. Replace
   ``switch_quat::<[f64; 4]>()`` with ``switch_quat()``.
 

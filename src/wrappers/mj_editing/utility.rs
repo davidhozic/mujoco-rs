@@ -375,6 +375,8 @@ macro_rules! mjs_struct {
             }
         }
 
+        impl crate::wrappers::mj_editing::traits::sealed::Sealed for [<Mjs $ffi_name>] {}
+
         impl SpecItem for [<Mjs $ffi_name>] {
             unsafe fn element_pointer(&self) -> *mut mjsElement {
                 self.element

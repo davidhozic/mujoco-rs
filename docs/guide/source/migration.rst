@@ -238,6 +238,10 @@ now returns ``Result<(), MjEditError>`` instead of ``()``.
 :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name`
 still returns ``&mut Self`` but now panics on duplicate names.
 
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem` is now a sealed
+trait. External implementations are no longer permitted -- remove any
+``impl SpecItem for MyType`` blocks from downstream code.
+
 ``MjsOrientation::switch_quat`` no longer has a generic type parameter. Remove
 turbofish syntax and call it directly.
 
