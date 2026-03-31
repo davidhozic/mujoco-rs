@@ -259,6 +259,9 @@ gained new variants. See `Error handling`_ below for the full method list.
 - |mjv_camera|: ``new_fixed``, ``new_tracking``, ``track``, ``fix`` now take
   ``usize`` (was ``u32``). Remove ``as u32`` casts at call sites.
 
+- ``TryFrom<i32> for MjtCamera`` now uses ``MjSceneError`` as its error type
+  (was ``()``). Replace ``Err(())`` matches with ``Err(MjSceneError::InvalidCameraType(_))``.
+
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update`:
   the ``pertub`` parameter has been renamed to ``perturb`` (typo fix).
 
@@ -525,7 +528,7 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
 
 - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`: PNG compression is now
   configurable via
-  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRendererBuilder::<method>with_png_compression`
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRendererBuilder::<method>png_compression`
   (builder) and
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>set_png_compression`
   (runtime setter). Defaults to ``png::Compression::NoCompression``. Affects

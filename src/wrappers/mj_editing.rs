@@ -1606,6 +1606,10 @@ impl MjsBody {
     add_x_method! { body, site, joint, geom, camera, light }
 
     /// Dummy mutable FFI method used to simplify access through macros.
+    ///
+    /// # Safety
+    /// Callers must ensure that any mutations performed through the returned reference
+    /// preserve the invariants that MuJoCo expects for `mjsBody`.
     #[inline]
     unsafe fn ffi_mut(&mut self) -> &mut Self {
         self

@@ -66,14 +66,14 @@ const _: () = {
 };
 
 impl TryFrom<i32> for MjtCamera {
-    type Error = ();
+    type Error = MjSceneError;
     fn try_from(value: i32) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(Self::mjCAMERA_FREE),
             1 => Ok(Self::mjCAMERA_TRACKING),
             2 => Ok(Self::mjCAMERA_FIXED),
             3 => Ok(Self::mjCAMERA_USER),
-            _ => Err(())
+            _ => Err(MjSceneError::InvalidCameraType(value))
         }
     }
 }

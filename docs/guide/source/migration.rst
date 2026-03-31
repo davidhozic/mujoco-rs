@@ -489,6 +489,8 @@ Type changes
 - |mjs_tendon|: ``limited`` and ``actfrclimited`` are now ``MjtLimited`` tri-state (was ``bool``).
 - |mjv_camera|: ``new_fixed``, ``new_tracking``, ``track``, ``fix`` now take ``usize`` (was ``u32``).
   Remove ``as u32`` casts at call sites.
+- ``TryFrom<i32> for MjtCamera`` now uses ``MjSceneError`` as its error type (was ``()``).
+  Replace ``Err(())`` matches with ``Err(MjSceneError::InvalidCameraType(_))``.
 - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>SceneSelection`:
   ``body_id``, ``geom_id``, ``flex_id``, ``skin_id`` are now ``Option<usize>`` (was ``i32``).
   Replace ``sel.body_id >= 0`` with ``sel.body_id.is_some()`` or ``if let Some(id) = sel.body_id``.
