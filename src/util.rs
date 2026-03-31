@@ -1034,7 +1034,13 @@ macro_rules! cast_mut_info {
 
 /// Asserts that the MuJoCo version used matches
 /// the one MuJoCo-rs was compiled with.
+///
+/// # Panics
+/// Panics if the linked MuJoCo library version does not match
+/// the version MuJoCo-rs was compiled against.
 pub fn assert_mujoco_version() {
+    // SAFETY: mj_version() is a pure query function with no side effects; safe to call at any
+    // time after the library is loaded.
     let linked_version = unsafe { mj_version() as u32 };
     let mujoco_rs_version_string = option_env!("CARGO_PKG_VERSION").unwrap_or_else(|| "unknown+mj-unknown");
     assert_eq!(
@@ -1046,10 +1052,12 @@ pub fn assert_mujoco_version() {
 
 
 /// Forcefully casts a value of type `T` to type `U`.
+/// Performs compile-time size and alignment checks, but does **not** guarantee
+/// that the bit patterns are compatible.
+///
 /// # Safety
-/// This is a safer alternative to `std::mem::transmute` that performs compile-time
-/// size and alignment checks.  It does **not** guarantee that the bit patterns
-/// are compatible -- the caller must still ensure semantic validity.
+/// The bit pattern of `val` must be a valid representation for type `U`;
+/// otherwise the behavior is undefined.
 #[inline(always)]
 pub unsafe fn force_cast<T, U>(val: T) -> U {
     const {
@@ -1062,6 +1070,8 @@ pub unsafe fn force_cast<T, U>(val: T) -> U {
         from: std::mem::ManuallyDrop<T>,
         to: std::mem::ManuallyDrop<U>,
     }
+    // SAFETY: size and alignment equality is verified by the const assertions above; the caller
+    // guarantees bit-pattern validity (see # Safety).
     unsafe { std::mem::ManuallyDrop::into_inner(Transmuter { from: std::mem::ManuallyDrop::new(val) }.to) }
 }
 
@@ -1109,6 +1119,7 @@ macro_rules! maybe_force_cast {
 /// This is useful on locations that don't need any special handling
 /// after a thread panicked while holding a mutex lock.
 pub trait LockUnpoison<T> {
+    /// Locks the synchronization primitive, resetting its poison status if necessary.
     fn lock_unpoison(&self) -> MutexGuard<'_, T>;
 }
 

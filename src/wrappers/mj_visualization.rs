@@ -98,9 +98,12 @@ pub type MjtStereo = mjtStereo;
 /***********************************************************************************************************************
 ** MjvPerturb
 ***********************************************************************************************************************/
+/// Mouse perturbation state (selected body/flex/skin, interaction mode, reference position/orientation, local position).
 pub type MjvPerturb = mjvPerturb;
 impl Default for MjvPerturb {
     fn default() -> Self {
+        // SAFETY: mjv_defaultPerturb initializes all fields to valid defaults;
+        // the MaybeUninit pointer is valid and aligned.
         unsafe {
             let mut pert = MaybeUninit::uninit();
             mjv_defaultPerturb(pert.as_mut_ptr());
@@ -138,6 +141,10 @@ impl MjvPerturb {
     }
 
     /// Updates the body-local position of the selection point.
+    ///
+    /// # Panics
+    /// Panics if `self.select` is out of range for the `xpos`/`xmat` arrays (i.e., negative or
+    /// `>= nbody`). In debug builds, a dedicated assertion fires first for the negative case.
     pub fn update_local_pos<M: Deref<Target = MjModel>>(&mut self, selection_xyz: &[MjtNum; 3], data: &MjData<M>) {
         debug_assert!(self.select >= 0, "invalid selecting when calling update_local_pos");
         let select = self.select as usize;
@@ -164,6 +171,7 @@ impl MjvPerturb {
 /***********************************************************************************************************************
 ** MjvCamera
 ***********************************************************************************************************************/
+/// Abstract camera parameters (type, fixed/tracking ids, lookat, distance, azimuth, elevation, orthographic mode).
 pub type MjvCamera = mjvCamera;
 impl MjvCamera {
     /// Creates a new free camera.
@@ -265,6 +273,8 @@ impl MjvCamera {
 
 impl Default for MjvCamera {
     fn default() -> Self {
+        // SAFETY: mjv_defaultCamera initializes all fields to valid defaults;
+        // the MaybeUninit pointer is valid and aligned.
         unsafe {
             let mut c = MaybeUninit::uninit();
             mjv_defaultCamera(c.as_mut_ptr());
@@ -276,6 +286,7 @@ impl Default for MjvCamera {
 /***********************************************************************************************************************
 ** mjvGLCamera
 ***********************************************************************************************************************/
+/// OpenGL camera parameters (position, forward/up vectors, frustum planes).
 pub type MjvGLCamera = mjvGLCamera;
 
 impl MjvGLCamera {
@@ -288,6 +299,7 @@ impl MjvGLCamera {
 /***********************************************************************************************************************
 ** MjvGeom
 ***********************************************************************************************************************/
+/// Visual geometry element (type, size, material, RGBA, label, etc.) used in a scene.
 pub type MjvGeom = mjvGeom;
 
 impl MjvGeom {
@@ -336,15 +348,19 @@ impl MjvGeom {
 /***********************************************************************************************************************
 ** MjvLight
 ***********************************************************************************************************************/
+/// Visual light source parameters (position, direction, ambient/diffuse/specular RGB, etc.).
 pub type MjvLight = mjvLight;
 
 /***********************************************************************************************************************
 ** MjvOption
 ***********************************************************************************************************************/
+/// Visualization rendering options (flags, label types, frame display, etc.).
 pub type MjvOption = mjvOption;
 impl Default for MjvOption {
     fn default() -> Self {
         let mut opt = MaybeUninit::uninit();
+        // SAFETY: mjv_defaultOption initializes all fields to valid defaults;
+        // the MaybeUninit pointer is valid and aligned.
         unsafe {
             mjv_defaultOption(opt.as_mut_ptr());
             opt.assume_init()
@@ -367,6 +383,8 @@ impl MjvFigure {
     /// Instantiates a new figure with default values.
     pub fn new() -> Box<Self> {
         let mut opt = Box::new(MaybeUninit::uninit());
+        // SAFETY: mjv_defaultFigure initializes all fields to valid defaults;
+        // the MaybeUninit pointer is valid and aligned.
         unsafe {
             mjv_defaultFigure(opt.as_mut_ptr());
             opt.assume_init()
@@ -601,21 +619,9 @@ impl MjvFigure {
     ///
     /// If `n` exceeds the current length, this is a no-op.
     ///
-    /// # Panics
-    /// Panics if `plot_index >= mjMAXLINE`.
-    ///
-    /// Use [`MjvFigure::try_cut_front`] for a fallible alternative.
-    pub fn cut_front(&mut self, plot_index: usize, n: usize) {
-        self.try_cut_front(plot_index, n).unwrap();
-    }
-
-    /// Fallible version of [`MjvFigure::cut_front`].
-    ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
-    ///
-    /// Use [`MjvFigure::cut_front`] for a panicking alternative.
-    pub fn try_cut_front(&mut self, plot_index: usize, n: usize) -> Result<(), MjSceneError> {
+    pub fn cut_front(&mut self, plot_index: usize, n: usize) -> Result<(), MjSceneError> {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
@@ -633,21 +639,9 @@ impl MjvFigure {
     ///
     /// If `n` exceeds the current length, this is a no-op.
     ///
-    /// # Panics
-    /// Panics if `plot_index >= mjMAXLINE`.
-    ///
-    /// Use [`MjvFigure::try_cut_end`] for a fallible alternative.
-    pub fn cut_end(&mut self, plot_index: usize, n: usize) {
-        self.try_cut_end(plot_index, n).unwrap();
-    }
-
-    /// Fallible version of [`MjvFigure::cut_end`].
-    ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
-    ///
-    /// Use [`MjvFigure::cut_end`] for a panicking alternative.
-    pub fn try_cut_end(&mut self, plot_index: usize, n: usize) -> Result<(), MjSceneError> {
+    pub fn cut_end(&mut self, plot_index: usize, n: usize) -> Result<(), MjSceneError> {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
@@ -693,6 +687,8 @@ impl MjvScene {
         let nflexvert = model_ffi.nflexvert;
         let nskinvert = model_ffi.nskinvert;
         let signature = model.signature();
+        // SAFETY: mjv_defaultScene + mjv_makeScene initialize the struct and allocate
+        // internal geom buffers; model pointer is valid for the duration of this call.
         let scn = unsafe {
             let mut t = Box::new_uninit();
             mjv_defaultScene(t.as_mut_ptr());
@@ -750,8 +746,7 @@ impl MjvScene {
     }
 
     /// Creates a new [`MjvGeom`] in this scene, returning a mutable reference to it.
-    /// The geom reference is bound to the scene's lifetime; it is invalidated when
-    /// any code that might reallocate the geoms buffer runs.
+    /// The geom reference is valid for the duration of the `&mut self` borrow.
     ///
     /// # Panics
     /// Panics when `ngeom >= maxgeom` (the scene's geom buffer is full).
@@ -860,7 +855,7 @@ impl MjvScene {
         skinvert: &[[f32; 3] [force]; "skin vertex data"; nskinvert],
         skinnormal: &[[f32; 3] [force]; "skin normal data"; nskinvert],
         (unsafe) geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
-        (unsafe) geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
+        geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
         (unsafe) flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
         (unsafe) flexedgenum: &[i32; "number of edges in flex"; ffi.nflex],
         (unsafe) flexvertadr: &[i32; "address of flex vertices"; ffi.nflex],
@@ -933,6 +928,7 @@ impl MjvScene {
 
 impl Drop for MjvScene {
     fn drop(&mut self) {
+        // SAFETY: self.ffi is a valid initialized MjvScene; called exactly once in Drop.
         unsafe {
             mjv_freeScene(self.ffi.as_mut());
         }

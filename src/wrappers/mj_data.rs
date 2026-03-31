@@ -81,6 +81,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Prefer this method over [`MjData::new`] when you want to handle
     /// allocation failures without a panic.
     pub fn try_new(model: M) -> Result<Self, MjDataError> {
+        // SAFETY: model.ffi() is a valid non-null mjModel pointer; mj_makeData may return null
+        // on allocation failure, handled below.
         let data_ptr = unsafe { mj_makeData(model.ffi()) };
         NonNull::new(data_ptr)
             .map(|data| Self { data, model })
@@ -147,6 +149,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         if ptr.is_null() {
             &[]
         } else {
+            // SAFETY: ptr is non-null (checked above), points to a valid array of `ncon`
+            // initialized mjContact values owned by MjData, and is valid for `'self`.
             unsafe { std::slice::from_raw_parts(ptr, ffi.ncon as usize) }
         }
     }
@@ -234,15 +238,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
     }
 
-    /// Calculates new dynamics. This is a wrapper around `mj_step1`.
+    /// Runs the first phase of a simulation step: computes kinematics and sensor data,
+    /// before the user sets controls. This is a wrapper around `mj_step1`.
     pub fn step1(&mut self) {
         unsafe {
             mj_step1(self.model.ffi(), self.ffi_mut());
         }
     }
 
-    /// Calculates the rest after dynamics and integrates in time.
-    /// This is a wrapper around `mj_step2`.
+    /// Runs the second phase of a simulation step: computes dynamics and integrates forward
+    /// in time, after the user sets controls. This is a wrapper around `mj_step2`.
     pub fn step2(&mut self) {
         unsafe {
             mj_step2(self.model.ffi(), self.ffi_mut());
@@ -281,7 +286,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
     }
 
-    /// Calculates the contact force for the given `contact_id`.
+    /// Extracts the contact force in the contact frame for the given `contact_id`.
     /// The `contact_id` matches the index of the contact when iterating
     /// via [`MjData::contact`].
     /// Calls `mj_contactForce` internally.
@@ -1061,7 +1066,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Fallible version of [`MjData::geom_distance`].
     /// # Errors
-    /// Returns [`MjDataError::IndexOutOfBounds`] when either geom id is negative or `>= ngeom`.
+    /// Returns [`MjDataError::IndexOutOfBounds`] when either geom id is `>= ngeom`.
     pub fn try_geom_distance(&self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> Result<MjtNum, MjDataError> {
         let ngeom = self.model.ffi().ngeom;
         if geom1_id >= ngeom as usize {
@@ -1482,6 +1487,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjData {
+        // SAFETY: self.data is a valid non-null mjData pointer for the lifetime of self
+        // (struct invariant).
         unsafe { self.data.as_ref() }
     }
 
@@ -1504,7 +1511,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Returns a clone of the stored model.
     /// Unlike [`model`](Self::model), this returns
-    /// the infered `M` type (cloned).
+    /// the inferred `M` type (cloned).
     pub fn model_clone(&self) -> M where M: Clone {
         self.model.clone()
     }
@@ -1751,6 +1758,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
 impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
     fn drop(&mut self) {
+        // SAFETY: self.data is a valid non-null mjData pointer; called exactly once in Drop.
         unsafe {
             mj_deleteData(self.data.as_ptr());
         }
@@ -1773,7 +1781,6 @@ impl<M: Deref<Target = MjModel> + Clone> MjData<M> {
     /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
     /// the copy.
     pub fn try_clone(&self) -> Result<Self, MjDataError> {
-        // When dest is null, mj_copyData allocates a new mjData on MuJoCo's heap.
         let raw = unsafe { mj_copyData(ptr::null_mut(), self.model.ffi(), self.ffi()) };
         NonNull::new(raw)
             .map(|data| Self { data, model: self.model.clone() })

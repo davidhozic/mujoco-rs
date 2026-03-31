@@ -36,7 +36,7 @@ update of MuJoCo alone can increase the major version.
 
   - |mj_data|: ``reset_keyframe``, ``set_state``, ``copy_visual_to``, ``copy_to``
   - |mjr_context|: ``read_pixels``
-  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure`:
+  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`:
     ``push``, ``set_at``
   - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`:
     ``set_font_scale`` now returns ``Result<(), RendererError>``;
@@ -77,8 +77,7 @@ update of MuJoCo alone can increase the major version.
   are no longer generic over ``M``.
   Remove the ``<M>`` type parameter from all usage sites.
 
-  - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data`,
-    :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>builder`, and
+  - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data` and
     :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`
     retain ``<M: Deref<Target = MjModel>>`` as **method-level** generics;
     call sites are unchanged.
@@ -275,6 +274,10 @@ gained new variants. See `Error handling`_ below for the full method list.
 - |mj_model|: ``tuple_objtype`` accessor now returns ``&[MjtObj]`` instead of
   ``&[i32]``.
 
+- ``MjCameraModelView`` / ``MjCameraModelViewMut``: camera field ``projection``
+  (type ``MjtProjection``) replaces the old boolean ``orthographic`` field,
+  matching MuJoCo's ``cam_projection`` rename.
+
 - |mjs_tendon|: ``limited`` and ``actfrclimited`` are now ``MjtLimited``
   (tri-state: ``FALSE`` / ``TRUE`` / ``AUTO``) instead of ``bool``, matching the
   C ``mjtLimited`` semantics.
@@ -318,16 +321,22 @@ gained new variants. See `Error handling`_ below for the full method list.
 categories of fields are affected:
 
 - **Structural invariants** --- topology, address, and engine-computed arrays that
-  must not be changed at runtime: **202** fields on |mj_model|, **43** on |mj_data|,
-  **13** on |mjv_scene|.
+  must not be changed at runtime: **199** fields on |mj_model|, **43** on |mj_data|,
+  **12** on |mjv_scene|.
 
 - **Companion-index fields** --- type/mode fields whose values control which array a
   companion index (``*id``, ``*adr``) indexes into; writing inconsistent values
-  causes out-of-bounds access: **13** fields on |mj_model| (``jnt_type``,
+  causes out-of-bounds access: **17** fields on |mj_model| (``jnt_type``,
   ``actuator_trntype``, ``actuator_dyntype``, ``eq_type``, ``eq_objtype``,
   ``wrap_type``, ``wrap_prm``, ``sensor_type``, ``sensor_objtype``,
-  ``sensor_reftype``, ``skin_matid``, ``tendon_matid``, ``tendon_treeid``),
+  ``sensor_reftype``, ``skin_matid``, ``tendon_matid``, ``tendon_treeid``,
+  ``body_plugin``, ``actuator_plugin``, ``geom_plugin``, ``sensor_plugin``),
   **4** on |mj_data| (``efc_type``, ``iefc_type``, ``tree_asleep``, ``wrap_obj``).
+
+- **Null-terminated string buffers** --- concatenated ``c_char`` arrays where each
+  entry is null-terminated; removing a ``'\\0'`` byte allows MuJoCo's C string
+  functions (and ``CStr::from_ptr``) to read past the buffer boundary: **4** fields
+  on |mj_model| (``names``, ``plugin_attr``, ``text_data``, ``paths``).
 
 ``info_with_view!`` generated ``ViewMut`` types expose the companion-index fields as
 :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`; mutation requires
@@ -374,6 +383,12 @@ lists and before/after examples.
      * - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`
        - ``new``
        - ``new_free``, ``new_fixed``, ``new_tracking``, or ``new_user``
+
+*MjTendonDataInfo field removal*
+
+- ``MjTendonDataInfo`` no longer exposes ``J_rownnz``, ``J_rowadr``, or
+  ``J_colind``; these fields moved upstream to ``mjModel`` in MuJoCo 3.6.0
+  and are now accessible via ``MjTendonModelInfo`` (i.e. ``model.tendon()``).
 
 .. _Error handling:
 
@@ -428,7 +443,7 @@ New error types in :docs-rs:`~mujoco_rs::error`
        ``from_parse`` :sup:`new`,
        ``from_parse_vfs`` :sup:`new`
      - :docs-rs:`~mujoco_rs::error::<enum>MjEditError`
-   * - |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure` / |mjr_context|
+   * - |mjv_scene| / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom` / :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure` / |mjr_context|
      - ``try_create_geom`` :sup:`new`, ``set_label``, ``add_aux``, ``set_aux``,
        ``push``, ``set_at``, ``read_pixels``
      - :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`
@@ -452,13 +467,22 @@ New error variants in pre-existing enums:
 
 The six new enums (all ``#[non_exhaustive]``) have the following variants:
 
-- :docs-rs:`~mujoco_rs::error::<enum>MjModelError`: ``BufferTooSmall``,
-  ``SignatureMismatch``.
-- :docs-rs:`~mujoco_rs::error::<enum>MjDataError`: ``InvalidUtf8Path``.
-- :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`: ``InvalidUtf8Path``.
-- :docs-rs:`~mujoco_rs::error::<enum>MjEditError`: ``XmlBufferTooSmall`` --- returned by
-  ``save_xml_string`` when the supplied buffer is too small; the ``required_size`` field
-  carries the ``snprintf``-style byte count (excluding NUL), so retry with
+- :docs-rs:`~mujoco_rs::error::<enum>MjModelError`: ``InvalidUtf8Path``,
+  ``LoadFailed``, ``SaveFailed``, ``AllocationFailed``,
+  ``StateSliceLengthMismatch``, ``SpecNotSubset``, ``BufferTooSmall``,
+  ``SignatureMismatch``, ``VfsError``.
+- :docs-rs:`~mujoco_rs::error::<enum>MjDataError`: ``IndexOutOfBounds``,
+  ``UnsupportedObjectType``, ``AllocationFailed``, ``BufferTooSmall``,
+  ``LengthMismatch``, ``SignatureMismatch``, ``NoHistoryBuffer``,
+  ``ContactBufferFull``, ``InvalidUtf8Path``.
+- :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`: ``AlreadyExists``,
+  ``LoadFailed``, ``NotFound``, ``InvalidUtf8Path``, ``Unknown``.
+- :docs-rs:`~mujoco_rs::error::<enum>MjEditError`: ``AllocationFailed``,
+  ``InvalidUtf8Path``, ``ParseFailed``, ``CompileFailed``, ``SaveFailed``,
+  ``NotFound``, ``AlreadyExists``, ``UnsupportedOperation``, ``DeleteFailed``,
+  ``XmlBufferTooSmall`` --- returned by ``save_xml_string`` when the supplied
+  buffer is too small; the ``required_size`` field carries the
+  ``snprintf``-style byte count (excluding NUL), so retry with
   ``required_size as usize + 1``.
 - :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`: ``SceneFull``,
   ``LabelTooLong``, ``InvalidAuxBufferIndex``, ``InvalidViewport``,
@@ -489,10 +513,10 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
     ``try_create_geom``
   - |mj_data|: ``try_ray_flex`` :sup:`new`, ``try_ray_hfield`` :sup:`new`,
     ``try_ray_mesh`` :sup:`new`
-  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvFigure`:
+  - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`:
     ``try_full`` :sup:`new`, ``try_empty`` :sup:`new`,
     ``try_pop_front`` :sup:`new`, ``try_pop_back`` :sup:`new`,
-    ``try_cut_front`` :sup:`new`, ``try_cut_end`` :sup:`new`
+    ``cut_front`` :sup:`new`, ``cut_end`` :sup:`new`
 
 - New |mj_data| methods that return ``Result`` directly (no separate ``try_`` variant):
   ``copy_state_from_data``, ``apply_ft``.
@@ -542,9 +566,6 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``dof_bodyid`` and ``dof_treeid`` are now exposed in per-dof joint model view
   types (the fields existed in MuJoCo 3.3.7 but were not previously accessible
   via per-object view types).
-  **Breaking:** ``MjTendonDataInfo`` no longer exposes ``J_rownnz``,
-  ``J_rowadr``, or ``J_colind``; these fields moved upstream to ``mjModel`` in
-  MuJoCo 3.6.0 and are now on ``MjTendonModelInfo`` (via ``model.tendon()``).
 - ``info_with_view!`` structs now have ``try_view`` / ``try_view_mut`` methods.
 - Trait additions: ``Clone`` for |mj_spec|; ``Default`` for |mj_vfs|, |mj_spec|,
   ``MjOption``, ``MjRendererBuilder``, ``MjViewerBuilder``; ``Send`` + ``Sync``
@@ -566,6 +587,13 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   checkbox (16-bit grayscale depth PNG).
 
 .. rubric:: Bug fixes
+
+- :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera` ``new_fixed`` / ``new_tracking``
+  and :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene` ``new``:
+  ``debug_assert!`` guards on user-supplied ``camera_id``, ``tracking_id``, and ``max_geom``
+  (checking they fit in ``i32``) were silently skipped in release builds. Changed to ``assert!``
+  so the precondition is always enforced. The ``# Panics`` documentation now correctly states
+  panics occur in all builds, not only debug builds.
 
 - |mj_model|:
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>save_last_xml`:

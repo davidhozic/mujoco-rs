@@ -272,6 +272,9 @@ impl MjModel {
         match result {
             1 => Ok(()),
             _ => {
+                // SAFETY: error is zero-initialised and MuJoCo NUL-terminates the message it
+                // writes into it; the resulting CStr borrows the stack buffer and is consumed
+                // before the buffer goes out of scope.
                 let cstr_error = unsafe { CStr::from_ptr(error.as_ptr()) }
                     .to_string_lossy()
                     .into_owned();
@@ -625,6 +628,9 @@ impl MjModel {
         let required_size = self.state_size(dst_spec);
         let mut dst = Vec::with_capacity(required_size);
 
+        // SAFETY: all pointer arguments are valid for the duration of this call. mj_extractState
+        // writes exactly `required_size` elements into dst; set_len then exposes only those
+        // initialized elements.
         unsafe {
             mj_extractState(
                 self.ffi(),
@@ -686,17 +692,17 @@ impl MjModel {
         Ok(required_size)
     }
 
-    /// Determine type of friction cone.
+    /// Determine type of friction cone. Returns `true` if pyramidal, `false` if elliptic.
     pub fn is_pyramidal(&self) -> bool {
         unsafe { mj_isPyramidal(self.ffi()) == 1 }
     }
 
-    /// Determine type of constraint Jacobian.
+    /// Determine type of constraint Jacobian. Returns `true` if sparse, `false` if dense.
     pub fn is_sparse(&self) -> bool {
         unsafe { mj_isSparse(self.ffi()) == 1 }
     }
 
-    /// Determine type of solver (PGS is dual, CG and Newton are primal).
+    /// Determine type of solver. Returns `true` if dual (PGS), `false` if primal (CG or Newton).
     pub fn is_dual(&self) -> bool {
         unsafe { mj_isDual(self.ffi()) == 1 }
     }
@@ -711,6 +717,8 @@ impl MjModel {
             None
         }
         else {
+            // SAFETY: ptr was checked non-null above; MuJoCo guarantees the pointed-to string is
+            // valid UTF-8 and lives as long as the model.
             let cstr = unsafe { CStr::from_ptr(ptr).to_str().unwrap() };
             Some(cstr)
         }
@@ -729,14 +737,17 @@ impl MjModel {
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
+        // SAFETY: self.0 is a valid non-null mjModel pointer for the lifetime of self
+        // (struct invariant).
         unsafe { self.0.as_ref() }
     }
 
     /// Returns a mutable reference to the wrapped FFI struct.
     ///
     /// # Safety
-    /// Modifying the underlying FFI struct directly can break the invariants
-    /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
+    /// The caller must ensure that any modifications to the underlying struct preserve
+    /// the invariants that MuJoCo expects (e.g. do not corrupt computed fields or
+    /// break index relationships). Violating these invariants can cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjModel {
         unsafe { self.0.as_mut() }
     }
@@ -885,7 +896,7 @@ impl MjModel {
         body_invweight0: &[[MjtNum; 2] [force]; "mean inv inert in qpos0 (trn, rot)"; ffi().nbody],
         body_gravcomp: &[MjtNum; "antigravity force, units of body weight"; ffi().nbody],
         body_margin: &[MjtNum; "MAX over all geom margins"; ffi().nbody],
-        body_plugin: &[i32; "plugin instance id; -1: not in use"; ffi().nbody],
+        (unsafe) body_plugin: &[i32; "plugin instance id; -1: not in use"; ffi().nbody],
         body_contype: &[i32; "OR over all geom contypes"; ffi().nbody],
         body_conaffinity: &[i32; "OR over all geom conaffinities"; ffi().nbody],
         (unsafe) body_bvhadr: &[i32; "address of bvh root"; ffi().nbody],
@@ -1231,7 +1242,7 @@ impl MjModel {
         actuator_acc0: &[MjtNum; "acceleration from unit force in qpos0"; ffi().nu],
         actuator_length0: &[MjtNum; "actuator length in qpos0"; ffi().nu],
         actuator_lengthrange: &[[MjtNum; 2] [force]; "feasible actuator length range"; ffi().nu],
-        actuator_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nu],
+        (unsafe) actuator_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nu],
         (unsafe) sensor_type: &[MjtSensor [force]; "sensor type"; ffi().nsensor],
         sensor_datatype: &[MjtDataType [force]; "numeric data type"; ffi().nsensor],
         sensor_needstage: &[MjtStage [force]; "required compute stage"; ffi().nsensor],
@@ -1252,14 +1263,14 @@ impl MjModel {
         (unsafe) plugin: &[i32; "globally registered plugin slot number"; ffi().nplugin],
         (unsafe) plugin_stateadr: &[i32; "address in the plugin state array"; ffi().nplugin],
         (unsafe) plugin_statenum: &[i32; "number of states in the plugin instance"; ffi().nplugin],
-        plugin_attr: &[c_char; "config attributes of plugin instances"; ffi().npluginattr],
+        (unsafe) plugin_attr: &[c_char; "config attributes of plugin instances"; ffi().npluginattr],
         (unsafe) plugin_attradr: &[i32; "address to each instance's config attrib"; ffi().nplugin],
         (unsafe) numeric_adr: &[i32; "address of field in numeric_data"; ffi().nnumeric],
         (unsafe) numeric_size: &[i32; "size of numeric field"; ffi().nnumeric],
         numeric_data: &[MjtNum; "array of all numeric fields"; ffi().nnumericdata],
         (unsafe) text_adr: &[i32; "address of text in text_data"; ffi().ntext],
         (unsafe) text_size: &[i32; "size of text field (strlen+1)"; ffi().ntext],
-        text_data: &[c_char; "array of all text fields (0-terminated)"; ffi().ntextdata],
+        (unsafe) text_data: &[c_char; "array of all text fields (0-terminated)"; ffi().ntextdata],
         (unsafe) tuple_adr: &[i32; "address of text in text_data"; ffi().ntuple],
         (unsafe) tuple_size: &[i32; "number of objects in tuple"; ffi().ntuple],
         tuple_objtype: &[MjtObj [force]; "array of object types in all tuples"; ffi().ntupledata],
@@ -1291,7 +1302,7 @@ impl MjModel {
         (unsafe) name_pluginadr: &[i32; "plugin instance name pointers"; ffi().nplugin],
         (unsafe) names: &[c_char; "names of all objects, 0-terminated"; ffi().nnames],
         (unsafe) names_map: &[i32; "internal hash map of names"; ffi().nnames_map],
-        paths: &[c_char; "paths to assets, 0-terminated"; ffi().npaths],
+        (unsafe) paths: &[c_char; "paths to assets, 0-terminated"; ffi().npaths],
         (unsafe) B_rownnz: &[i32; "body-dof: non-zeros in each row"; ffi().nbody],
         (unsafe) B_rowadr: &[i32; "body-dof: row addresses"; ffi().nbody],
         (unsafe) B_colind: &[i32; "body-dof: column indices"; ffi().nB],
@@ -1339,6 +1350,7 @@ impl Clone for MjModel {
 
 impl Drop for MjModel {
     fn drop(&mut self) {
+        // SAFETY: self.0 is a valid non-null mjModel pointer; called exactly once in Drop.
         unsafe {
             mj_deleteModel(self.0.as_ptr());
         }

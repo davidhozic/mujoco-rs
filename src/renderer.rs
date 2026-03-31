@@ -373,7 +373,7 @@ impl MjRenderer {
         self.flags.contains(RendererFlags::RENDER_DEPTH)
     }
 
-    /// Sets the font size.
+    /// Sets the font scale.
     ///
     /// # Errors
     /// Returns [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
@@ -384,7 +384,7 @@ impl MjRenderer {
         Ok(())
     }
 
-    /// Update the visualization options and return a reference to self.
+    /// Update the visualization options.
     pub fn set_opts(&mut self, options: MjvOption) {
         self.option = options;
     }
@@ -406,7 +406,7 @@ impl MjRenderer {
         self.depth = if enable { Some(vec![0.0; self.width * self.height].into_boxed_slice()) } else { None } ;
     }
 
-    /// Sets the font size. To be used on construction.
+    /// Sets the font scale. To be used on construction.
     ///
     /// # Errors
     /// Returns [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
@@ -415,7 +415,7 @@ impl MjRenderer {
         Ok(self)
     }
 
-    /// Update the visualization options and return a reference to self. To be used on construction.
+    /// Update the visualization options and return `self`. To be used on construction.
     pub fn with_opts(mut self, options: MjvOption) -> Self {
         self.set_opts(options);
         self
@@ -483,11 +483,12 @@ impl MjRenderer {
         Ok(())
     }
 
-    /// Update the scene with new data from data.
+    /// Update the scene with new data and render it.
     ///
     /// # Panics
-    /// Panics if the internal render step fails.
-    /// Use [`MjRenderer::sync_data`] + [`MjRenderer::render`] instead.
+    /// Panics if syncing the data or performing the render step fails (e.g. the OpenGL
+    /// context cannot be made current). Use [`MjRenderer::sync_data`] + [`MjRenderer::render`]
+    /// instead.
     #[deprecated(note = "replaced with sync_data + render", since = "3.0.0")]
     pub fn sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         self.sync_data(data).unwrap();
@@ -638,8 +639,8 @@ impl MjRenderer {
     }
 
     /// Save the raw depth data to the `path`. The data is encoded
-    /// as a sequence of bytes, where groups of four represent a single f32 value.
-    /// The lower bytes of individual f32 appear first (little-endianness).
+    /// as a sequence of bytes, where groups of four represent a single f32 value
+    /// in native byte order.
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
@@ -859,7 +860,8 @@ mod test {
             .build(&model)
             .unwrap();
 
-        renderer.sync(&mut data);
+        renderer.sync_data(&mut data).unwrap();
+        renderer.render().unwrap();
         let min = renderer.depth_flat().unwrap().iter().fold(f32::INFINITY, |a , &b| a.min(b));
         let max = renderer.depth_flat().unwrap().iter().fold(f32::NEG_INFINITY, |a , &b| a.max(b));
 
@@ -891,7 +893,9 @@ mod test {
             .depth(false)
             .build(&model)
             .unwrap();
-        renderer.sync(&mut data);
+
+        renderer.sync_data(&mut data).unwrap();
+        renderer.render().unwrap();
 
         let tmp = std::env::temp_dir();
         let path_none = tmp.join("mujoco_rs_test_none.png");

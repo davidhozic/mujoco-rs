@@ -1,6 +1,7 @@
 //! Definition of MjOption.
 use crate::mujoco_c::{mjOption, mj_defaultOption};
 
+/// Simulation options (timestep, integrator, flags, etc.).
 pub type MjOption = mjOption;
 
 impl Default for MjOption {

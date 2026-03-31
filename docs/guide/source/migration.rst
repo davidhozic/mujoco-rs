@@ -321,14 +321,14 @@ Structural invariants
 
 Topology, address, and engine-computed arrays that must not be changed at runtime.
 
-- |mj_model|: **202** fields --- every address array (``*adr``, ``*num``), topology
+- |mj_model|: **199** fields --- every address array (``*adr``, ``*num``), topology
   index (``*bodyid``, ``*jntid``, ...), and physics-invariant.
 - |mj_data|: **43** fields --- ``contact``, ``efc_id``, ``efc_J_*``,
   ``efc_AR_*``, ``efc_island``, ``iefc_id``, ``iefc_J_*``,
   ``tree_island``, ``dof_island``, ``tendon_efcadr``, ``island_*``,
   ``map_*``, ``iM_*``, ``ten_wrapadr``, ``ten_wrapnum``, ``moment_*``,
   ``body_awake_ind``, ``parent_awake_ind``, ``dof_awake_ind``.
-- |mjv_scene|: **13** fields --- ``flexedge``, ``geoms``, ``geomorder``,
+- |mjv_scene|: **12** fields --- ``flexedge``, ``geoms``,
   ``flexedgeadr``, ``flexedgenum``, ``flexvertadr``, ``flexvertnum``,
   ``flexfaceadr``, ``flexfacenum``, ``flexfaceused``,
   ``skinfacenum``, ``skinvertadr``, ``skinvertnum``.
@@ -356,7 +356,8 @@ out-of-bounds access inside MuJoCo.
 - |mj_model|: ``jnt_type``, ``actuator_trntype``, ``actuator_dyntype``,
   ``eq_type``, ``eq_objtype``, ``wrap_type``, ``wrap_prm``,
   ``sensor_type``, ``sensor_objtype``, ``sensor_reftype``,
-  ``skin_matid``, ``tendon_matid``, ``tendon_treeid``.
+  ``skin_matid``, ``tendon_matid``, ``tendon_treeid``,
+  ``body_plugin``, ``actuator_plugin``, ``geom_plugin``, ``sensor_plugin``.
 - |mj_data|: ``efc_type``, ``iefc_type``, ``tree_asleep``, ``wrap_obj``.
 
 **Before (2.x):**
@@ -412,6 +413,34 @@ inside ``unsafe``:
     unsafe { view.r#type.as_mut_slice() }[0] = MjtJoint::mjJNT_BALL;
 
 
+Null-terminated string buffer fields
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Concatenated ``c_char`` arrays where each object's name or attribute is null-terminated.
+Overwriting a ``'\0'`` byte allows MuJoCo's C string functions (and ``CStr::from_ptr``
+inside wrappers such as :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>id_to_name`)
+to scan past the buffer boundary, causing undefined behavior.
+
+- |mj_model|: ``names``, ``plugin_attr``, ``text_data``, ``paths``.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    // Write a replacement name directly (unsafe in 3.0.0).
+    let buf = model.names_mut();
+    buf[0] = b'X' as c_char;
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    // SAFETY: all '\0' terminators within the buffer are preserved; no byte
+    // at offset nnames-1 (the final terminator) is overwritten.
+    let buf = unsafe { model.names_mut() };
+    buf[0] = b'X' as c_char;
+
+
 ``MjData::print()`` and ``MjModel::print()``
 -----------------------------------------------
 
@@ -439,6 +468,8 @@ Type changes
 - |mj_model|: ``size()`` returns ``usize`` (was ``i32``).
 - |mj_model|: ``state_size()`` returns ``usize`` (was ``i32``).
 - |mj_model|: ``name_to_id()`` returns ``Option<usize>`` (was ``i32``; ``-1`` is now ``None``).
+- ``MjCameraModelView`` / ``MjCameraModelViewMut``: ``projection`` (``MjtProjection``)
+  replaces the old boolean ``orthographic`` field.
 - |mj_model|: ``tuple_objtype()`` returns ``&[MjtObj]`` (was ``&[i32]``).
 - |mj_model|: ``id_to_name``: ``id`` takes ``usize`` (was ``i32``).
 - |mj_data|: ``maxuse_threadstack()`` returns ``&[MjtSize; mjMAXTHREAD]`` (was ``&[MjtSize]``).
@@ -468,6 +499,42 @@ Type changes
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`
   now requires ``T: bytemuck::NoUninit`` (add ``bytemuck`` to your dependencies if you
   call this method with a custom type, and derive or implement ``NoUninit`` for it).
+- ``MjTendonDataInfo``: ``J_rownnz``, ``J_rowadr``, and ``J_colind`` are no longer
+  exposed. These fields moved to ``mjModel`` in MuJoCo 3.6.0 and are now accessible
+  via ``MjTendonModelInfo`` (i.e. ``model.tendon()``).
+
+  .. code-block:: rust
+
+      // Before (2.x) -- accessed through data
+      let view = data.tendon(0).view(&data);
+      let nnz = view.J_rownnz[0];
+
+      // After (3.0.0) -- accessed through model
+       let view = model.tendon(0).view(&model);
+       let nnz = view.J_rownnz[0];
+
+
+``MjCameraModelView::projection`` replaces ``orthographic``
+-----------------------------------------------------------
+
+MuJoCo 3.6.0 replaced the old ``cam_orthographic`` flag with the
+``cam_projection`` enum. The Rust camera model views mirror that upstream
+change, so code that previously read ``view.orthographic[0]`` must now read
+``view.projection[0]`` and compare it against :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtProjection`.
+
+**Before (2.x):**
+
+.. code-block:: rust
+
+    let view = model.camera("main").unwrap().view(&model);
+    let is_ortho = view.orthographic[0];
+
+**After (3.0.0):**
+
+.. code-block:: rust
+
+    let view = model.camera("main").unwrap().view(&model);
+    let is_ortho = view.projection[0] == MjtProjection::mjPROJ_ORTHOGRAPHIC;
 
 
 ``MjData::reset_keyframe()``
@@ -753,9 +820,7 @@ API renames
    * - |mjr_context|
      - ``mjr_set_buffer()``
      - ``set_buffer()``
-   * - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`
-     - ``figure()``
-     - ``draw()``
+
 
 
 ``sync()`` deprecated
@@ -889,8 +954,10 @@ Additional details:
 C++ viewer changes
 -----------------------
 
-:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp` now requires
-``M: Send + Sync``. Switch to ``Arc<MjModel>`` if using ``Rc<MjModel>``.
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp` is no longer generic;
+the type parameter ``M`` has been removed from the struct.
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>launch_passive`
+now requires ``M: Send + Sync``. Switch to ``Arc<MjModel>`` if using ``Rc<MjModel>``.
 
 :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>render` is now
 ``unsafe fn``, must be called from the main thread, no longer accepts
@@ -959,4 +1026,5 @@ Removed deprecated methods
    * - ``MjViewer::sync``
      - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` then
        :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`
-
+   * - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure` ``figure()``
+     - ``draw()``

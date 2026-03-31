@@ -22,7 +22,10 @@ exclude = [
     "__pycache__/",
     "docs/",
     "Dockerfile.ubuntu",
+    "MUJOCO_LOG.TXT",
     "mujoco/*",
+    "scripts/",
+    "tests/",
 ]
 
 [package.metadata.docs.rs]

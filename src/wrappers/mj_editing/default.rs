@@ -60,8 +60,16 @@ impl SpecItem for MjsDefault {
     }
 
     /// Defaults can't be deleted.
+    ///
+    /// This override always returns [`MjEditError::UnsupportedOperation`] without performing
+    /// any operation, so the post-deletion use-after-free restriction from [`SpecItem::delete`]
+    /// does not apply -- `self` remains valid after an `Err` return.
+    ///
     /// # Errors
     /// This will always error with [`MjEditError::UnsupportedOperation`].
+    ///
+    /// # Safety
+    /// No unsafe operations are performed; the struct is unchanged on return.
     unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         Err(MjEditError::UnsupportedOperation)
     }

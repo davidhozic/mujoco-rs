@@ -33,6 +33,7 @@ pub type MjtFont = mjtFont;
 /***********************************************************************************************************************
 ** MjrRectangle
 ***********************************************************************************************************************/
+/// Axis-aligned rectangle (bottom-left corner + dimensions) used for off-screen and on-screen viewports.
 pub type MjrRectangle = mjrRect;
 impl MjrRectangle {
     /// Creates a new rectangle defined by its bottom-left corner (`left`, `bottom`) and
