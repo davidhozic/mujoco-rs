@@ -138,6 +138,19 @@ gained new variants. See `Error handling`_ below for the full method list.
 
 *Type and signature changes*
 
+- :docs-rs:`get_mujoco_version <mujoco_rs::<fn>mujoco_version>` has been renamed to
+  :docs-rs:`~~mujoco_rs::<fn>mujoco_version`. The old name is deprecated.
+
+- :docs-rs:`MjData::get_state <mujoco_rs::wrappers::mj_data::<struct>MjData::<method>state>`
+  has been renamed to
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>state`.
+  The old name is deprecated.
+
+- :docs-rs:`MjvFigure::new <mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>new_boxed>`
+  has been renamed to
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>new_boxed`.
+  The old name is deprecated.
+
 - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`
   now accept a destination of a **different** model type:
@@ -149,6 +162,9 @@ gained new variants. See `Error handling`_ below for the full method list.
   sites.
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name`
   still returns ``&mut Self`` but now panics on duplicate names.
+
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem` is now a sealed
+  trait. External implementations are no longer permitted.
 
 - ``MjsOrientation::switch_quat`` no longer has a type parameter. Replace
   ``switch_quat::<[f64; 4]>()`` with ``switch_quat()``.
@@ -258,6 +274,9 @@ gained new variants. See `Error handling`_ below for the full method list.
 
 - |mjv_camera|: ``new_fixed``, ``new_tracking``, ``track``, ``fix`` now take
   ``usize`` (was ``u32``). Remove ``as u32`` casts at call sites.
+
+- ``TryFrom<i32> for MjtCamera`` now uses ``MjSceneError`` as its error type
+  (was ``()``). Replace ``Err(())`` matches with ``Err(MjSceneError::InvalidCameraType(_))``.
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update`:
   the ``pertub`` parameter has been renamed to ``perturb`` (typo fix).
@@ -525,7 +544,7 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
 
 - :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`: PNG compression is now
   configurable via
-  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRendererBuilder::<method>with_png_compression`
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRendererBuilder::<method>png_compression`
   (builder) and
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>set_png_compression`
   (runtime setter). Defaults to ``png::Compression::NoCompression``. Affects
@@ -548,7 +567,7 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   for non-UTF-8 paths.
   ``MjSpec`` and ``SpecItem`` are also re-exported from
   :docs-rs:`mujoco_rs::wrappers`.
-- |mjs_tendon|: ``get_wrap`` / ``get_wrap_mut`` / ``get_wrap_num``.
+- |mjs_tendon|: ``wrap`` / ``wrap_mut`` / ``wrap_num``.
 - |mjs_wrap|: ``coef``, ``divisor``, ``side_site``, ``side_site_mut``.
 - |mj_vfs|: ``add_file`` / ``add_file_from`` replace ``add_from_file``
   (which is now deprecated). ``add_from_buffer`` and ``delete_file`` now accept
@@ -566,6 +585,20 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``dof_bodyid`` and ``dof_treeid`` are now exposed in per-dof joint model view
   types (the fields existed in MuJoCo 3.3.7 but were not previously accessible
   via per-object view types).
+- ``MjsMaterial``:
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial::<method>set_texture` /
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial::<method>with_texture`
+  set a texture name by
+  :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtTextureRole`, correctly targeting the
+  pre-sized slot the MuJoCo renderer reads (e.g. ``mjTEXROLE_RGB``).
+  The existing ``set_textures`` / ``append_textures`` methods are retained but
+  should generally be avoided for role-indexed vectors.
+- ``MjsTexture``:
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>set_cubefile` /
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>with_cubefile`
+  set a cube-map face file by
+  :docs-rs:`~mujoco_rs::wrappers::mj_model::<enum>MjtCubeFace`.
+  The existing ``set_cubefiles`` / ``append_cubefiles`` methods are retained.
 - ``info_with_view!`` structs now have ``try_view`` / ``try_view_mut`` methods.
 - Trait additions: ``Clone`` for |mj_spec|; ``Default`` for |mj_vfs|, |mj_spec|,
   ``MjOption``, ``MjRendererBuilder``, ``MjViewerBuilder``; ``Send`` + ``Sync``

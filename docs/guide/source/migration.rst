@@ -238,6 +238,10 @@ now returns ``Result<(), MjEditError>`` instead of ``()``.
 :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name`
 still returns ``&mut Self`` but now panics on duplicate names.
 
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem` is now a sealed
+trait. External implementations are no longer permitted -- remove any
+``impl SpecItem for MyType`` blocks from downstream code.
+
 ``MjsOrientation::switch_quat`` no longer has a generic type parameter. Remove
 turbofish syntax and call it directly.
 
@@ -489,6 +493,8 @@ Type changes
 - |mjs_tendon|: ``limited`` and ``actfrclimited`` are now ``MjtLimited`` tri-state (was ``bool``).
 - |mjv_camera|: ``new_fixed``, ``new_tracking``, ``track``, ``fix`` now take ``usize`` (was ``u32``).
   Remove ``as u32`` casts at call sites.
+- ``TryFrom<i32> for MjtCamera`` now uses ``MjSceneError`` as its error type (was ``()``).
+  Replace ``Err(())`` matches with ``Err(MjSceneError::InvalidCameraType(_))``.
 - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>SceneSelection`:
   ``body_id``, ``geom_id``, ``flex_id``, ``skin_id`` are now ``Option<usize>`` (was ``i32``).
   Replace ``sel.body_id >= 0`` with ``sel.body_id.is_some()`` or ``if let Some(id) = sel.body_id``.
@@ -801,7 +807,7 @@ the ``eq_active`` byte array without booleanization, making a subsequent call to
 
 .. code-block:: rust
 
-    // SAFETY: state captured via get_state; bools are valid (0 or 1).
+    // SAFETY: state captured via state(); bools are valid (0 or 1).
     unsafe { data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32) }?;
 
 
@@ -1028,3 +1034,9 @@ Removed deprecated methods
        :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`
    * - :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure` ``figure()``
      - ``draw()``
+   * - :docs-rs:`get_mujoco_version <mujoco_rs::<fn>mujoco_version>`
+     - :docs-rs:`~~mujoco_rs::<fn>mujoco_version`
+   * - :docs-rs:`MjData::get_state <mujoco_rs::wrappers::mj_data::<struct>MjData::<method>state>`
+     - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>state`
+   * - :docs-rs:`MjvFigure::new <mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>new_boxed>`
+     - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>new_boxed`

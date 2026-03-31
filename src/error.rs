@@ -186,6 +186,8 @@ pub enum MjSceneError {
     /// MuJoCo's renderer treats the label buffer as ASCII; multi-byte UTF-8
     /// sequences would be rendered as garbage characters.
     NonAsciiLabel,
+    /// An integer value does not correspond to any known camera type variant.
+    InvalidCameraType(i32),
 }
 
 impl fmt::Display for MjSceneError {
@@ -242,6 +244,9 @@ impl fmt::Display for MjSceneError {
             }
             Self::NonAsciiLabel => {
                 write!(f, "label contains non-ASCII characters")
+            }
+            Self::InvalidCameraType(raw) => {
+                write!(f, "unknown camera type {raw}")
             }
         }
     }

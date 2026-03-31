@@ -61,6 +61,30 @@ pub type MjtTextureRole = mjtTextureRole;
 /// Type of color space encoding for textures.
 pub type MjtColorSpace = mjtColorSpace;
 
+/// Cube map face indices used by [`MjsTexture::set_cubefile`](super::mj_editing::MjsTexture::set_cubefile).
+///
+/// Each variant corresponds to one face of a cube-map texture, matching the order
+/// MuJoCo uses internally (right=0, left=1, up=2, down=3, front=4, back=5).
+///
+/// **Note:** this enum is defined in mujoco-rs only; MuJoCo's C API uses raw integer
+/// indices for cube-map faces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(i32)]
+pub enum MjtCubeFace {
+    /// Positive-X face (index 0).
+    Right  = 0,
+    /// Negative-X face (index 1).
+    Left   = 1,
+    /// Positive-Y face (index 2).
+    Up     = 2,
+    /// Negative-Y face (index 3).
+    Down   = 3,
+    /// Positive-Z face (index 4).
+    Front  = 4,
+    /// Negative-Z face (index 5).
+    Back   = 5,
+}
+
 /// Numerical integrator types. These values are used in `m->opt.integrator`.
 pub type MjtIntegrator = mjtIntegrator;
 
@@ -597,7 +621,7 @@ impl MjModel {
     }
 
     /// Extract the subset of components specified by `dst_spec` from a state `src`
-    /// previously obtained via [`MjData::read_state_into`] or [`MjData::get_state`]
+    /// previously obtained via [`MjData::read_state_into`] or [`MjData::state`]
     /// with components specified by `src_spec`.
     ///
     /// # Panics
@@ -644,7 +668,7 @@ impl MjModel {
     }
 
     /// Extract into dst the subset of components specified by `dst_spec` from a state `src`
-    /// previously obtained via [`MjData::read_state_into`] or [`MjData::get_state`]
+    /// previously obtained via [`MjData::read_state_into`] or [`MjData::state`]
     /// with components specified by `src_spec`.
     ///
     /// # Panics
@@ -2393,8 +2417,8 @@ mod tests {
         /* Test of extraction into existing buffer */
         // Physics is subset of full physics.
         // Extract physics from full physics.
-        let state_full_physics = data.get_state(MjtState::mjSTATE_FULLPHYSICS as u32);
-        let state_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
+        let state_full_physics = data.state(MjtState::mjSTATE_FULLPHYSICS as u32);
+        let state_physics = data.state(MjtState::mjSTATE_PHYSICS as u32);
 
         let required_size = model.state_size(MjtState::mjSTATE_PHYSICS as u32);
         let mut dst_buffer = vec![0.0; required_size].into_boxed_slice();
@@ -2408,8 +2432,8 @@ mod tests {
         /* Test of extraction into new buffer (internally) */
         // Physics is subset of full physics.
         // Extract physics from full physics.
-        let state_full_physics = data.get_state(MjtState::mjSTATE_FULLPHYSICS as u32);
-        let state_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
+        let state_full_physics = data.state(MjtState::mjSTATE_FULLPHYSICS as u32);
+        let state_physics = data.state(MjtState::mjSTATE_PHYSICS as u32);
 
         let dst_buffer = model.extract_state(
             &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
@@ -2429,7 +2453,7 @@ mod tests {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
         let data = MjData::new(&model);
 
-        let state_full_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
+        let state_full_physics = data.state(MjtState::mjSTATE_PHYSICS as u32);
         let res = model.try_extract_state(
             &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
             MjtState::mjSTATE_PHYSICS as u32
@@ -2448,7 +2472,7 @@ mod tests {
 
         let required_size = model.state_size(MjtState::mjSTATE_PHYSICS as u32);
         let mut dst_buffer = vec![0.0; required_size].into_boxed_slice();
-        let state_full_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
+        let state_full_physics = data.state(MjtState::mjSTATE_PHYSICS as u32);
         let res = model.try_extract_state_into(
             &state_full_physics, MjtState::mjSTATE_FULLPHYSICS as u32,
             &mut dst_buffer, MjtState::mjSTATE_PHYSICS as u32
@@ -2465,7 +2489,7 @@ mod tests {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
         let data = MjData::new(&model);
 
-        let state_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
+        let state_physics = data.state(MjtState::mjSTATE_PHYSICS as u32);
         let res = model.try_extract_state(
             &state_physics, MjtState::mjSTATE_PHYSICS as u32,
             MjtState::mjSTATE_FULLPHYSICS as u32
@@ -2482,7 +2506,7 @@ mod tests {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
         let data = MjData::new(&model);
 
-        let state_physics = data.get_state(MjtState::mjSTATE_PHYSICS as u32);
+        let state_physics = data.state(MjtState::mjSTATE_PHYSICS as u32);
         let mut dst = vec![0.0; model.state_size(MjtState::mjSTATE_PHYSICS as u32)];
 
         let res = model.try_extract_state_into(
@@ -2501,7 +2525,7 @@ mod tests {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
         let data = MjData::new(&model);
 
-        let state_full = data.get_state(MjtState::mjSTATE_FULLPHYSICS as u32);
+        let state_full = data.state(MjtState::mjSTATE_FULLPHYSICS as u32);
         let required = model.state_size(MjtState::mjSTATE_PHYSICS as u32);
         // make buffer smaller than required
         let mut dst = vec![0.0; required.saturating_sub(1)];
@@ -2522,7 +2546,7 @@ mod tests {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
         let data = MjData::new(&model);
 
-        let state_full = data.get_state(MjtState::mjSTATE_FULLPHYSICS as u32);
+        let state_full = data.state(MjtState::mjSTATE_FULLPHYSICS as u32);
 
         // extract zero-sized spec -> empty slice
         let dst = model.extract_state(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, 0u32);

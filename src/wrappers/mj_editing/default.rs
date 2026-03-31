@@ -42,6 +42,8 @@ impl MjsDefault {
     }
 }
 
+impl super::traits::sealed::Sealed for MjsDefault {}
+
 impl SpecItem for MjsDefault {
     unsafe fn element_pointer(&self) -> *mut mjsElement {
         self.element

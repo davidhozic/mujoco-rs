@@ -302,7 +302,7 @@ fn test_integration_state_save_restore_force_cast() {
     data.forward();
 
     // Save full physics state
-    let saved = data.get_state(MjtState::mjSTATE_FULLPHYSICS as u32);
+    let saved = data.state(MjtState::mjSTATE_FULLPHYSICS as u32);
     let saved_xpos = data.xpos().to_vec();
     let saved_qpos = data.qpos().to_vec();
     let saved_qvel = data.qvel().to_vec();

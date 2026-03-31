@@ -57,6 +57,7 @@ The main features on top of MuJoCo include:
 
 ## Rust-native viewer
 Screenshot of the built-in Rust viewer. Showing a scene from [MuJoCo's menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot).
+Requires the `viewer` feature or the `viewer-ui` feature for UI support.
 ![](docs/img_common/viewer_spot.png)
 
 

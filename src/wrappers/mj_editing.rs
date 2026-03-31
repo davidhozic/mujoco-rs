@@ -20,7 +20,7 @@ use super::mj_model::{
     MjtLightType, MjtSensor, MjtDataType, MjtGain,
     MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace,
     MjtTrn, MjtStage, MjtFlexSelf, MjtProjection,
-    MjtSleepPolicy, MjtWrap
+    MjtSleepPolicy, MjtWrap, MjtTextureRole, MjtCubeFace
 };
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic, MjLROpt};
 use super::mj_option::MjOption;
@@ -1234,18 +1234,18 @@ impl MjsTendon {
     }
 
     /// Return the number of wrap objects.
-    pub fn get_wrap_num(&self) -> usize {
+    pub fn wrap_num(&self) -> usize {
         unsafe { mjs_getWrapNum(self) as usize }
     }
 
     /// Return an indexed wrap object. Returns `None` if index is out of bounds.
-    pub fn get_wrap(&self, i: usize) -> Option<&MjsWrap> {
+    pub fn wrap(&self, i: usize) -> Option<&MjsWrap> {
         let ptr = unsafe { mjs_getWrap(self, i as i32) };
         unsafe { ptr.as_ref() }
     }
 
     /// Return a mutable indexed wrap object. Returns `None` if index is out of bounds.
-    pub fn get_wrap_mut(&mut self, i: usize) -> Option<&mut MjsWrap> {
+    pub fn wrap_mut(&mut self, i: usize) -> Option<&mut MjsWrap> {
         let ptr = unsafe { mjs_getWrap(self, i as i32) };
         unsafe { ptr.as_mut() }
     }
@@ -1491,6 +1491,14 @@ impl MjsSkin {
 ** Texture specification
 ***************************/
 mjs_struct!(Texture);
+
+/// # Note -- cube-map files
+///
+/// The `cubefiles` field is a **pre-sized** string vector (6 entries, one per cube face).
+/// Use [`set_cubefile`](Self::set_cubefile) with a [`MjtCubeFace`] variant to assign a
+/// file to a specific face. The bulk [`set_cubefiles`](Self::set_cubefiles) /
+/// [`append_cubefiles`](Self::append_cubefiles) methods are also available but
+/// operate on the vector as a whole.
 impl MjsTexture {
     getter_setter! {
         [&] with, get, [
@@ -1521,7 +1529,7 @@ impl MjsTexture {
     }
 
     vec_string_set_append! {
-        cubefiles; "different file for each side of the cube.";
+        cubefiles[MjtCubeFace] => cubefile; "different file for each side of the cube.";
     }
 
     getter_setter! {[&] with, get, set, [
@@ -1545,6 +1553,15 @@ impl MjsTexture {
 ** Material specification
 ***************************/
 mjs_struct!(Material);
+
+/// # Note -- texture assignment
+///
+/// The `textures` field is a **pre-sized** string vector (`mjNTEXROLE` entries, one per
+/// [`MjtTextureRole`]). Use [`set_texture`](Self::set_texture) to assign a texture name
+/// to a specific role (e.g. [`MjtTextureRole::mjTEXROLE_RGB`] for the base colour used by
+/// the renderer). The bulk [`set_textures`](Self::set_textures) /
+/// [`append_textures`](Self::append_textures) methods are also available but operate on
+/// the vector as a whole and may disrupt the pre-sized layout.
 impl MjsMaterial {
     getter_setter! {
         [&] with, get, [
@@ -1569,7 +1586,7 @@ impl MjsMaterial {
     }
 
     vec_string_set_append! {
-        textures; "names of textures (empty: none).";
+        textures[MjtTextureRole] => texture; "names of textures (empty: none).";
     }
 }
 
@@ -1606,6 +1623,10 @@ impl MjsBody {
     add_x_method! { body, site, joint, geom, camera, light }
 
     /// Dummy mutable FFI method used to simplify access through macros.
+    ///
+    /// # Safety
+    /// Callers must ensure that any mutations performed through the returned reference
+    /// preserve the invariants that MuJoCo expects for `mjsBody`.
     #[inline]
     unsafe fn ffi_mut(&mut self) -> &mut Self {
         self
@@ -2193,12 +2214,12 @@ mod tests {
         tendon.wrap_joint("joint1", 0.5);
         tendon.wrap_pulley(1.5);
 
-        assert_eq!(tendon.get_wrap_num(), 3);
+        assert_eq!(tendon.wrap_num(), 3);
 
-        let wrap = tendon.get_wrap(1).unwrap();
+        let wrap = tendon.wrap(1).unwrap();
         assert_eq!(wrap.coef(), 0.5);
 
-        let wrap_pulley = tendon.get_wrap(2).unwrap();
+        let wrap_pulley = tendon.wrap(2).unwrap();
         assert_eq!(wrap_pulley.divisor(), 1.5);
     }
 
@@ -2576,5 +2597,37 @@ mod tests {
             assert!(content.contains("<mujoco"), "saved XML should contain <mujoco tag");
             fs::remove_file(p).expect("cleanup failed");
         }
+    }
+
+    #[test]
+    fn test_material_set_texture() {
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+        world.add_geom()
+            .with_type(MjtGeom::mjGEOM_PLANE)
+            .with_size([1.0, 1.0, 0.01])
+            .with_material("floor");
+
+        spec.add_texture()
+            .with_name("floor")
+            .with_type(MjtTexture::mjTEXTURE_2D)
+            .with_builtin(MjtBuiltin::mjBUILTIN_CHECKER)
+            .with_rgb1([0.9, 0.9, 0.9])
+            .with_rgb2([0.1, 0.1, 0.1])
+            .with_width(512)
+            .with_height(512);
+
+        let mat = spec.add_material().with_name("floor");
+        mat.set_texture(MjtTextureRole::mjTEXROLE_RGB, "floor");
+
+        let model = spec.compile().unwrap();
+        let xml = spec.save_xml_string(8192).unwrap();
+        assert!(xml.contains("texture=\"floor\""), "XML should reference the floor texture");
+
+        let mat_info = model.material("floor").unwrap();
+        let mat_view = mat_info.view(&model);
+        let tex_id = mat_view.texid;
+        assert_ne!(tex_id[MjtTextureRole::mjTEXROLE_RGB as usize], -1,
+            "RGB texture slot should be resolved (not -1)");
     }
 }

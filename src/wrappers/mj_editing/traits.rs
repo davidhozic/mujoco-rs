@@ -7,11 +7,15 @@ use crate::mujoco_c::*;
 use super::default::MjsDefault;
 use super::utility::*;
 
+pub(crate) mod sealed {
+    /// Prevents external implementations of [`SpecItem`](super::SpecItem).
+    pub trait Sealed {}
+}
 
 /// Represents all the types that [`MjSpec`](super::MjSpec) supports.
 /// This is pre-implemented for all the specification types and is not
 /// meant to be implemented by the user.
-pub trait SpecItem: Sized {
+pub trait SpecItem: Sized + sealed::Sealed {
     /// Returns the internal element struct.
     /// The element struct is the C++ implementation of the
     /// actual item, which is hidden from the user, but is needed
