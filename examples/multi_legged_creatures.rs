@@ -12,6 +12,7 @@ use std::f64::consts::TAU;
 use std::time::Duration;
 use mujoco_rs::prelude::*;
 use mujoco_rs::wrappers::mj_editing::{MjsBody, MjtBuiltin};
+use mujoco_rs::wrappers::mj_model::MjtTextureRole;
 use mujoco_rs::viewer::MjViewer;
 
 const TORSO_R: f64   = 0.1;
@@ -154,7 +155,7 @@ fn build_scene() -> MjModel {
         .with_rgb1([0.2_f64, 0.3, 0.4])
         .with_rgb2([0.3_f64, 0.4, 0.5]);
     let mat = spec.add_material().with_name("floor");
-    mat.append_textures("floor");
+    mat.set_texture(MjtTextureRole::mjTEXROLE_RGB, "floor");
     mat.with_texrepeat([5.0_f32, 5.0_f32]);
     mat.with_texuniform(true);
     mat.with_reflectance(0.2_f32);

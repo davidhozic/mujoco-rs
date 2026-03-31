@@ -585,6 +585,20 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``dof_bodyid`` and ``dof_treeid`` are now exposed in per-dof joint model view
   types (the fields existed in MuJoCo 3.3.7 but were not previously accessible
   via per-object view types).
+- ``MjsMaterial``:
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial::<method>set_texture` /
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial::<method>with_texture`
+  set a texture name by
+  :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtTextureRole`, correctly targeting the
+  pre-sized slot the MuJoCo renderer reads (e.g. ``mjTEXROLE_RGB``).
+  The existing ``set_textures`` / ``append_textures`` methods are retained but
+  should generally be avoided for role-indexed vectors.
+- ``MjsTexture``:
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>set_cubefile` /
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>with_cubefile`
+  set a cube-map face file by
+  :docs-rs:`~mujoco_rs::wrappers::mj_model::<enum>MjtCubeFace`.
+  The existing ``set_cubefiles`` / ``append_cubefiles`` methods are retained.
 - ``info_with_view!`` structs now have ``try_view`` / ``try_view_mut`` methods.
 - Trait additions: ``Clone`` for |mj_spec|; ``Default`` for |mj_vfs|, |mj_spec|,
   ``MjOption``, ``MjRendererBuilder``, ``MjViewerBuilder``; ``Send`` + ``Sync``

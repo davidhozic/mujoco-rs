@@ -448,6 +448,72 @@ macro_rules! vec_string_set_append {
             }
         )*
     }};
+
+    // Indexed variant: the string vector is pre-sized (one entry per enum variant)
+    // and entries must be set by index. Generates `set_<singular>(role, name)` and
+    // `with_<singular>(role, name)` in addition to the bulk `set_<plural>` / `append_<plural>`.
+    ($name:ident[$role_ty:ty] => $singular:ident; $comment:expr $(;)?) => {paste::paste!{
+        #[doc = concat!(
+            "Sets the entry at index `role` in `", stringify!($name), "` to `name`. ",
+            $comment,
+            "\n\n",
+            "The `", stringify!($name), "` vector is pre-sized by MuJoCo (one slot per ",
+            "[`", stringify!($role_ty), "`] variant); this method writes directly into ",
+            "the correct slot.\n",
+            "\n",
+            "# Panics\n",
+            "When `name` contains '\\0' characters, a panic occurs."
+        )]
+        pub fn [<set_ $singular>](&mut self, role: $role_ty, name: &str) {
+            let c_name = CString::new(name).unwrap();
+            // SAFETY: self.$name is a valid mjStringVec pre-sized to one entry per role.
+            unsafe { mjs_setInStringVec(self.$name, role as std::ffi::c_int, c_name.as_ptr()) };
+        }
+
+        #[doc = concat!(
+            "Sets the entry at index `role` in `", stringify!($name), "` to `name`, ",
+            "returning `&mut Self` for chaining. ",
+            $comment,
+            "\n\n",
+            "Equivalent to [`set_", stringify!($singular), "`](Self::set_", stringify!($singular), ")."
+        )]
+        pub fn [<with_ $singular>](&mut self, role: $role_ty, name: &str) -> &mut Self {
+            self.[<set_ $singular>](role, name);
+            self
+        }
+
+        #[doc = concat!(
+            "Replaces the entire `", stringify!($name), "` vector with whitespace-split entries from `value`. ",
+            $comment,
+            "\n\n",
+            "**Note:** this replaces the pre-sized vector. Prefer [`set_",
+            stringify!($singular), "`](Self::set_", stringify!($singular),
+            "`) to set individual entries by role.\n",
+            "\n",
+            "# Panics\n",
+            "When the `value` contains '\\0' characters, a panic occurs."
+        )]
+        pub fn [<set_ $name>](&mut self, value: &str) {
+            // SAFETY: self.$name is a valid mjStringVec pointer for the lifetime of self.
+            unsafe { write_mjs_vec_string(value, self.$name) };
+        }
+
+        #[doc = concat!(
+            "Appends `value` to the end of `", stringify!($name), "`. ",
+            $comment,
+            "\n\n",
+            "**Note:** appending extends past the pre-sized vector. Prefer [`set_",
+            stringify!($singular), "`](Self::set_", stringify!($singular),
+            "`) to set individual entries by role.\n",
+            "\n",
+            "# Panics\n",
+            "When the `value` contains '\\0' characters, a panic occurs."
+        )]
+        pub fn [<append_ $name>](&mut self, value: &str) {
+            // SAFETY: self.$name is a valid mjStringVec pointer for the lifetime of self.
+            unsafe { append_mjs_vec_string(value, self.$name) };
+        }
+    }};
 }
 
 /// Implements string methods for given attribute $name.

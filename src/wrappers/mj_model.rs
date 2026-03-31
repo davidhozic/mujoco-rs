@@ -61,6 +61,30 @@ pub type MjtTextureRole = mjtTextureRole;
 /// Type of color space encoding for textures.
 pub type MjtColorSpace = mjtColorSpace;
 
+/// Cube map face indices used by [`MjsTexture::set_cubefile`](super::mj_editing::MjsTexture::set_cubefile).
+///
+/// Each variant corresponds to one face of a cube-map texture, matching the order
+/// MuJoCo uses internally (right=0, left=1, up=2, down=3, front=4, back=5).
+///
+/// **Note:** this enum is defined in mujoco-rs only; MuJoCo's C API uses raw integer
+/// indices for cube-map faces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(i32)]
+pub enum MjtCubeFace {
+    /// Positive-X face (index 0).
+    Right  = 0,
+    /// Negative-X face (index 1).
+    Left   = 1,
+    /// Positive-Y face (index 2).
+    Up     = 2,
+    /// Negative-Y face (index 3).
+    Down   = 3,
+    /// Positive-Z face (index 4).
+    Front  = 4,
+    /// Negative-Z face (index 5).
+    Back   = 5,
+}
+
 /// Numerical integrator types. These values are used in `m->opt.integrator`.
 pub type MjtIntegrator = mjtIntegrator;
 
