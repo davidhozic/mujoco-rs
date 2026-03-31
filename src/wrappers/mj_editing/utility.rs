@@ -486,10 +486,11 @@ macro_rules! vec_string_set_append {
             "Replaces the entire `", stringify!($name), "` vector with whitespace-split entries from `value`. ",
             $comment,
             "\n\n",
-            "**Note:** this replaces the pre-sized vector. Prefer [`set_",
+            "<div class=\"warning\">\n\n",
+            "This replaces the pre-sized vector. Prefer [`set_",
             stringify!($singular), "`](Self::set_", stringify!($singular),
-            "`) to set individual entries by role.\n",
-            "\n",
+            "`) to set individual entries by role.\n\n",
+            "</div>\n\n",
             "# Panics\n",
             "When the `value` contains '\\0' characters, a panic occurs."
         )]
@@ -502,10 +503,11 @@ macro_rules! vec_string_set_append {
             "Appends `value` to the end of `", stringify!($name), "`. ",
             $comment,
             "\n\n",
-            "**Note:** appending extends past the pre-sized vector. Prefer [`set_",
+            "<div class=\"warning\">\n\n",
+            "Appending extends past the pre-sized vector. Prefer [`set_",
             stringify!($singular), "`](Self::set_", stringify!($singular),
-            "`) to set individual entries by role.\n",
-            "\n",
+            "`) to set individual entries by role.\n\n",
+            "</div>\n\n",
             "# Panics\n",
             "When the `value` contains '\\0' characters, a panic occurs."
         )]
