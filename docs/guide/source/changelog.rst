@@ -506,7 +506,7 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
 - :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`: ``SceneFull``,
   ``LabelTooLong``, ``InvalidAuxBufferIndex``, ``InvalidViewport``,
   ``BufferTooSmall``, ``FigureBufferFull``, ``FigureIndexOutOfBounds``,
-  ``InvalidPlotIndex``, ``NonAsciiLabel``.
+  ``InvalidPlotIndex``, ``NonAsciiLabel``, ``InvalidCameraType``.
 - :docs-rs:`~mujoco_rs::error::<enum>GlInitError` (requires ``viewer`` or
   ``renderer-winit-fallback`` feature): ``DisplayBuild``, ``NoWindow``,
   ``WindowHandle``, ``ContextCreation``, ``SurfaceAttributes``,
