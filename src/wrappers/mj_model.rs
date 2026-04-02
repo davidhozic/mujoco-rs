@@ -541,8 +541,12 @@ impl MjModel {
     }
 
     /// Save model to binary MJB file.
+    ///
     /// # Returns
-    /// `Ok(())` on success.
+    /// `Ok(())` if the path is valid UTF-8 and contains no interior `\0` characters.
+    /// **Note:** the underlying C function `mj_saveModel` returns `void`, so file I/O
+    /// errors (e.g. permission denied, disk full) are not detectable; `Ok(())` does
+    /// **not** guarantee the file was written.
     /// # Errors
     /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// # Panics
@@ -585,8 +589,11 @@ impl MjModel {
 
     /// Print mjModel to text file, specifying format.
     /// float_format must be a valid printf-style format string for a single float value.
+    ///
     /// # Returns
-    /// `Ok(())` on success.
+    /// `Ok(())` if the path and format string are valid UTF-8 and contain no interior `\0`
+    /// characters. **Note:** the underlying C function `mj_printFormattedModel` returns `void`,
+    /// so file I/O errors are not detectable; `Ok(())` does **not** guarantee the file was written.
     /// # Errors
     /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// # Panics
@@ -601,8 +608,11 @@ impl MjModel {
     }
 
     /// Print model to text file.
+    ///
     /// # Returns
-    /// `Ok(())` on success.
+    /// `Ok(())` if the path is valid UTF-8 and contains no interior `\0` characters.
+    /// **Note:** the underlying C function `mj_printModel` returns `void`, so file I/O
+    /// errors are not detectable; `Ok(())` does **not** guarantee the file was written.
     /// # Errors
     /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// # Panics
@@ -734,7 +744,8 @@ impl MjModel {
     /// Get name of object with the specified [`MjtObj`] type and id, returns `None` if name not found.
     /// Wraps `mj_id2name`.
     /// # Panics
-    /// Panics if MuJoCo internally returns a C string that is not valid UTF-8.
+    /// Panics if MuJoCo internally returns a C string that is not valid UTF-8. In practice
+    /// MuJoCo names are always valid ASCII (and therefore UTF-8), so this should not occur.
     pub fn id_to_name(&self, type_: MjtObj, id: usize) -> Option<&str> {
         let ptr = unsafe { mj_id2name(self.ffi(), type_ as i32, id as i32) };
         if ptr.is_null() {

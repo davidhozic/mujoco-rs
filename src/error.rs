@@ -305,7 +305,7 @@ impl fmt::Display for MjEditError {
             Self::DeleteFailed(msg) => write!(f, "delete failed: {msg}"),
             Self::XmlBufferTooSmall { required_size } => write!(
                 f,
-                "XML output buffer too small; retry with at least {} bytes (required_size + 1)",
+                "XML output buffer too small; retry with at least {} bytes",
                 required_size + 1
             ),
         }

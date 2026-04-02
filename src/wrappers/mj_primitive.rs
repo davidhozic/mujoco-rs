@@ -4,7 +4,7 @@ use crate::mujoco_c::*;
 /***********************************************************************************************************************
 ** MjtSize
 ***********************************************************************************************************************/
-/// Signed 64-bit integer used for memory sizes in MuJoCo.
+/// Signed 64-bit integer used for sizes, counts, and other integer dimensions in MuJoCo.
 pub type MjtSize = mjtSize;
 
 /***********************************************************************************************************************
@@ -17,6 +17,6 @@ pub type MjtNum = mjtNum;
 /***********************************************************************************************************************
 ** MjtByte
 ***********************************************************************************************************************/
-/// Boolean flag type (`unsigned char`) used for true/false values in MuJoCo.
+/// Byte type (`unsigned char`) used for boolean flags and raw byte data (e.g. texture buffers) in MuJoCo.
 pub type MjtByte = mjtByte;
 

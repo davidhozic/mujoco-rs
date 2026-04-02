@@ -503,7 +503,7 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``XmlBufferTooSmall`` --- returned by ``save_xml_string`` when the supplied
   buffer is too small; the ``required_size`` field carries the
   ``snprintf``-style byte count (excluding NUL), so retry with
-  ``required_size as usize + 1``.
+  ``required_size + 1``.
 - :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`: ``SceneFull``,
   ``LabelTooLong``, ``InvalidAuxBufferIndex``, ``InvalidViewport``,
   ``BufferTooSmall``, ``FigureBufferFull``, ``FigureIndexOutOfBounds``,

@@ -284,7 +284,8 @@ impl MjSpec {
     /// The `content_type` controls the decoder to use.
     /// This is a wrapper around low-level method [`mj_parse`].
     /// # Panics
-    /// When `content_type` or the path contain interior `\0` characters.
+    /// - When `content_type` or the path contain interior `\0` characters.
+    /// - When the linked MuJoCo version does not match the version MuJoCo-rs was compiled against.
     fn from_parse_file<T: AsRef<Path>>(filename: T, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
         let mut error_buffer = [0; ERROR_BUF_LEN];
