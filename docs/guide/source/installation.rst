@@ -4,29 +4,34 @@
 Installation
 =============================
 
-.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.3.7
+.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.6.0
 
 
 MuJoCo-rs
 ====================
 
+.. note::
+
+    MuJoCo-rs requires **Rust 1.88** or newer (MSRV).  Run ``rustup update stable``
+    to ensure you are on a supported toolchain.
+
 
 MuJoCo-rs can be added to your project like so:
-
-- **With** visualization/rendering support:
-
-  ::
-
-    cargo add mujoco-rs --no-default-features --features "viewer viewer-ui renderer renderer-winit-fallback"
 
 - **Without** visualization/rendering support:
 
   ::
 
-    cargo add mujoco-rs --no-default-features
+    cargo add mujoco-rs
 
-See :ref:`opt-cargo-features` for information about available Cargo features. We strongly recommend to disable any
-rendering-related features when rendering is not needed, which will reduce compilation time.
+- **With** visualization/rendering support:
+
+  ::
+
+    cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"
+
+See :ref:`opt-cargo-features` for information about available Cargo features.
+Visualization and rendering features are opt-in to keep compilation fast for headless use cases.
 
 Then :ref:`mujoco_dep` installation needs to be configured, as described below.
 MuJoCo is the actual physics engine that MuJoCo-rs depends on.
@@ -58,9 +63,9 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
         ::
 
-            cargo add mujoco-rs --no-default-features --features "auto-download-mujoco"
+            cargo add mujoco-rs --features "auto-download-mujoco"
 
-        Then, set the environmental variable ``MUJOCO_DOWNLOAD_DIR`` to the **absolute path**
+        Then, set the environment variable ``MUJOCO_DOWNLOAD_DIR`` to the **absolute path**
         into which the MuJoCo library will be extracted. Note that a subdirectory will
         be created automatically in the format ``mujoco-x.y.z``, where ``x.y.z`` is the MuJoCo version.
 
@@ -78,15 +83,15 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
                     $env:MUJOCO_DOWNLOAD_DIR="C:\Users\User\Libraries\"
 
-            .. tab:: MacOS
+            .. tab:: macOS
 
-                Automatic download for MacOS is not supported.
+                Automatic download for macOS is not supported.
 
     .. tab:: Manual download
 
         .. note::
 
-            On Linux and MacOS, if you somehow managed to register MuJoCo with pkg-config, nothing more is needed.
+            On Linux and macOS, if you somehow managed to register MuJoCo with pkg-config, nothing more is needed.
             MuJoCo provides no official way to do this, but we still keep the option open.
 
         When providing MuJoCo manually, make sure its version is |MUJOCO_VERSION_BOLD|.
@@ -113,18 +118,18 @@ you can either tell MuJoCo-rs to download MuJoCo automatically or you can downlo
 
                     ::
 
-                        $env:MUJOCO_DYNAMIC_LINK_DIR="\path\mujoco\lib\"
+                        $env:MUJOCO_DYNAMIC_LINK_DIR="C:\path\mujoco\lib\"
 
-            .. tab:: MacOS
+            .. tab:: macOS
 
-                    One option is to set up your own homebrew file and install pkg-config
-                    (see `this issue <https://github.com/davidhozic/mujoco-rs/pull/94>`_).
+                    One option is to set up your own Homebrew formula and install pkg-config
+                    (see `this pull request <https://github.com/davidhozic/mujoco-rs/pull/94>`_).
 
                     Another option is to copy and link some files:
 
                     1. Open the `downloaded <mj_download_>`_ .dmg file.
                     2. Copy ``mujoco.framework`` to the current working directory.
-                    3. Create a symbolic link to the copied: ``libmujoco.x.x.x.dylib`` and name it ``libmujoco.dylib``:
+                    3. Create a symbolic link to the copied ``libmujoco.x.x.x.dylib`` and name it ``libmujoco.dylib``:
 
                     - ``ln -s mujoco.framework/Versions/Current/libmujoco.x.x.x.dylib libmujoco.dylib``.
 
@@ -137,8 +142,8 @@ You should now be able to compile and run your crate.
 
 Regardless of whether MuJoCo is downloaded by MuJoCo-rs or you provided it manually, you may encounter
 **runtime errors** about the library not being found. This can happen if the library is not
-located in a **standard location** nor added to the OS-dependent **path environmental variable**.
-You can fix these kind of errors like so:
+located in a **standard location** nor added to the OS-dependent **path environment variable**.
+You can fix these kinds of errors like so:
 
 .. tabs::
 
@@ -157,7 +162,7 @@ You can fix these kind of errors like so:
     .. tab:: Windows
 
         Place the ``mujoco.dll`` file in the **current working directory** (next to the EXE).
-        Alternatively, the path to the DLL file's directory can be added to the PATH environmental variable.
+        Alternatively, the path to the DLL file's directory can be added to the PATH environment variable.
         See `here <https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/>`_
         for a tutorial on configuring PATH.
 
@@ -169,7 +174,7 @@ You can fix these kind of errors like so:
             The **.lib** file is contained in the ``lib/`` directory of the MuJoCo download.
 
 
-    .. tab:: MacOS
+    .. tab:: macOS
 
         Update the ``DYLD_LIBRARY_PATH`` environment variable.
 
@@ -177,7 +182,6 @@ You can fix these kind of errors like so:
         ::
 
             export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/path/to/mujoco/lib/
-
 
 
 .. _static_linking:
@@ -215,13 +219,17 @@ To build statically linkable libraries, perform the following steps:
 
         See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/main/Dockerfile.ubuntu>`_ for a reproducible
         build environment which, to our knowledge, matches MuJoCo's official build environment.
-        The Dockerfile also installs the Rust toolchain, however our testing showed that static libraries
+        The Dockerfile includes commented-out commands for installing the Rust toolchain and
+        for using clang-13/clang++-13 as the compiler. Our testing showed that static libraries
         built in the container also work outside of the container, even on the rust-lld linker.
 
-        The Dockerfile defines a container running Ubuntu 22.04 and uses clang-13/clang++-13 as the compiler.
+        The Dockerfile defines a container running Ubuntu 22.04 and installs clang-13 alongside
+        build-essential. See the commented-out cmake commands in the Dockerfile for the recommended
+        compiler flags.
 
-4. Set the environmental variable ``MUJOCO_STATIC_LINK_DIR`` to the **absolute** path of the ``lib/`` subdirectory
-   inside ``mujoco/build/``. Bash example:
+4. Set the environment variable ``MUJOCO_STATIC_LINK_DIR`` to the **absolute** path of the ``lib/`` subdirectory
+   inside ``mujoco/build/`` (on some distributions, e.g. Fedora/RHEL/Arch, the directory may be ``lib64/``).
+   Bash example:
 
    ::
 

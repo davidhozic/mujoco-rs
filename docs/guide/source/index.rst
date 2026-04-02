@@ -27,11 +27,11 @@ MuJoCo-rs uses FFI bindings to MuJoCo |MUJOCO_VERSION_BOLD|.
 
 Main features
 =======================
-MuJoCo-rs tries to stay close to the MuJoCo's C API, with a few additional features for ease of use.
+MuJoCo-rs tries to stay close to MuJoCo's C API, with a few additional features for ease of use.
 The main features on top of MuJoCo include:
 
 - Safe wrappers around structs:
-  
+
   - Automatic allocation and cleanup.
   - Lifetime checks.
 
@@ -40,8 +40,8 @@ The main features on top of MuJoCo include:
 - High-level :ref:`model_editing`.
 - :ref:`visualization`:
 
-  - :ref:`mj_renderer`: offscreen rendering to array or file.
-  - :ref:`mj_rust_viewer`: onscreen visualization.
+  - :ref:`mj_renderer`: offscreen rendering to array or file (enabled by the ``renderer`` feature).
+  - :ref:`mj_rust_viewer`: onscreen visualization (enabled by the ``viewer`` and ``viewer-ui`` features).
 
     .. image:: ../../img_common/viewer_spot.png
         :width: 50%
@@ -61,7 +61,7 @@ Optional Cargo features can be enabled:
 - ``viewer``: enables the Rust-native MuJoCo viewer.
 
   - ``viewer-ui``: enables the (additional) user UI within the viewer.
-    This also allows users to add custom `egui <https://docs.rs/egui/0.33.2/egui/>`_ widgets to the viewer.
+    This also allows users to add custom `egui <https://docs.rs/egui/0.33.0/egui/>`_ widgets to the viewer.
 
 - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
   This requires static linking to a modified fork of MuJoCo, as described in :ref:`installation`.
@@ -70,21 +70,19 @@ Optional Cargo features can be enabled:
 
   - ``renderer-winit-fallback``: enables the invisible window fallback (based on winit) when offscreen
     rendering fails to initialize. Note that true offscreen rendering is only available on Linux platforms
-    when the video driver supports it. On Windows and MacOS, this feature must always be
+    when the video driver supports it. On Windows and macOS, this feature must always be
     enabled when the ``renderer`` feature is enabled.
 
 - ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded to the specified path.
 
   - This is only available on Linux and Windows.
-  - The environmental variable ``MUJOCO_DOWNLOAD_DIR`` must be set to the absolute path of the download location.
-  - Downloaded MuJoCo library is still a shared library, see
-    `installation <https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco>`_
-    for information on complete configuration.
+  - The environment variable ``MUJOCO_DOWNLOAD_DIR`` must be set to the absolute path of the download location.
+  - Downloaded MuJoCo library is still a shared library; see :ref:`mujoco_dep`
+    for complete configuration details.
 
 
-By default, ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are enabled.
-
-
+By default, no optional features are enabled. Enable the features you need explicitly
+(e.g. ``cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"``).
 
 
 Table of contents
@@ -97,3 +95,4 @@ Table of contents
    programming/programming
    api
    changelog
+   migration

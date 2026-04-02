@@ -29,3 +29,4 @@ settings.json
 
 # Ignore local MuJoCo downloads
 mujoco-3.*
+MUJOCO_LOG.TXT

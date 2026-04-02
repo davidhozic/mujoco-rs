@@ -4,6 +4,12 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/davidhozic/mujoco-rs/tests.yml?label=CI)](https://github.com/davidhozic/mujoco-rs/actions)
 [![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
 
+> [!IMPORTANT]
+> **Upgrading from 2.x to 3.0.0?** This release contains breaking changes including
+> new error types, removed generics on viewer/renderer, and API renames.
+> Read the [migration guide](https://mujoco-rs.readthedocs.io/en/stable/migration.html)
+> before upgrading.
+
 MuJoCo bindings and high-level wrappers for the Rust programming language. Includes a Rust-native viewer and also
 bindings to a modified C++ one.
 
@@ -15,7 +21,7 @@ More detailed documentation is available at the:
 - [**Guide book**](https://mujoco-rs.readthedocs.io/en/stable/)
 
 ## MuJoCo version
-This library uses FFI bindings to MuJoCo **3.3.7**.
+This library uses FFI bindings to MuJoCo **3.6.0**.
 
 ## Minimum Rust version
 Rust version 1.88 or newer is required.
@@ -29,14 +35,14 @@ MuJoCo-rs cannot fully configure it itself due to MuJoCo being a shared C librar
 **load-time errors** about **missing libraries**.
 
 Information on how to configure MuJoCo and resolve these issues is available
-[here](https://mujoco-rs.readthedocs.io/en/v2.1.x/installation.html#mujoco).
+[here](https://mujoco-rs.readthedocs.io/en/stable/installation.html#mujoco).
 
 ## Main features
-MuJoCo-rs tries to stay close to the MuJoCo's C API, with a few additional features for ease of use.
-The main features on top of MuJoCo include
+MuJoCo-rs tries to stay close to MuJoCo's C API, with a few additional features for ease of use.
+The main features on top of MuJoCo include:
 
 - Safe wrappers around structs:
-  
+
   - Automatic allocation and cleanup.
   - Lifetime guarantees.
 
@@ -50,7 +56,8 @@ The main features on top of MuJoCo include
 
 
 ## Rust-native viewer
-Screenshot of the built-in Rust viewer. Showing scene from [MuJoCo's menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot).
+Screenshot of the built-in Rust viewer. Showing a scene from [MuJoCo's menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot).
+Requires the `viewer` feature or the `viewer-ui` feature for UI support.
 ![](docs/img_common/viewer_spot.png)
 
 
@@ -60,39 +67,46 @@ Optional Cargo features can be enabled:
 - ``viewer``: enables the Rust-native MuJoCo viewer.
 
   - ``viewer-ui``: enables the (additional) user UI within the viewer.
-    This also allows users to add custom [`egui`](https://docs.rs/egui/0.33.2/egui/) widgets to the viewer.
+    This also allows users to add custom [`egui`](https://docs.rs/egui/0.33/egui/) widgets to the viewer.
 
 - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
-  This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#static-linking).
+  This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/stable/installation.html#static-linking).
 - ``renderer``: enables offscreen rendering for writing RGB and
   depth data to memory or file.
 
   - ``renderer-winit-fallback``: enables the invisible window fallback (based on winit) when offscreen
     rendering fails to initialize. Note that true offscreen rendering is only available on Linux platforms
-    when the video driver supports it. On Windows and MacOS, this feature must always be
+    when the video driver supports it. On Windows and macOS, this feature must always be
     enabled when the ``renderer`` feature is enabled.
 
 - ``auto-download-mujoco``: MuJoCo dependency will be automatically downloaded to the specified path.
 
   - This is only available on Linux and Windows.
-  - The environmental variable ``MUJOCO_DOWNLOAD_DIR`` must be
+  - The environment variable ``MUJOCO_DOWNLOAD_DIR`` must be
     set to the absolute path of the download location.
   - Downloaded MuJoCo library is still a shared library. See
-    [installation](https://mujoco-rs.readthedocs.io/en/latest/installation.html#mujoco)
+    [installation](https://mujoco-rs.readthedocs.io/en/stable/installation.html#mujoco)
     for information on complete configuration.
+  - **Cross-OS downloads are not supported** (e.g. Linux host → Windows target).
+    Same-OS cross-compilation works (e.g. Linux x86_64 → Linux aarch64).
+    For cross-OS builds, use the [`cross`](https://github.com/cross-rs/cross) tool
+    or manually set ``MUJOCO_DYNAMIC_LINK_DIR``.
 
-By default, ``viewer``, ``viewer-ui``, ``renderer``, and ``renderer-winit-fallback`` are enabled.
+By default, no optional features are enabled. Enable the features you need explicitly
+(e.g. ``cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"``).
 
 
 ## Example
-This example shows how to launch the viewer and print the coordinates
+This example requires the ``viewer`` or the ``viewer-ui`` feature
+(``cargo add mujoco-rs --features viewer``).
+It launches the viewer and prints the coordinates
 of a moving ball to the terminal.
 Other examples can be found under the ``examples/`` directory.
 
 ```rust
 //! Example of using views.
-//! The example shows how to obtain a [`MjJointInfo`] struct that can be used
-//! to create a (temporary) [`MjJointView`] to corresponding fields in [`MjData`].
+//! The example shows how to obtain a [`MjJointDataInfo`] struct that can be used
+//! to create a (temporary) [`MjJointDataView`] to corresponding fields in [`MjData`].
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
@@ -121,7 +135,11 @@ fn main() {
     let mut data = model.make_data();  // or MjData::new(&model);
 
     /* Launch a passive Rust-native viewer */
-    let mut viewer = MjViewer::launch_passive(&model, 0)
+    let mut viewer = MjViewer::builder()
+        .max_user_geoms(0)
+        .vsync(false)
+        .warn_non_realtime(false)
+        .build_passive(&model)
         .expect("could not launch the viewer");
 
     /* Create the joint info */
@@ -132,8 +150,9 @@ fn main() {
 
     while viewer.running() {
         /* Step the simulation and sync the viewer */
-        viewer.sync(&mut data);
         data.step();
+        viewer.sync_data(&mut data);  // see rust_viewer_threaded.rs for the multi-threaded variant using ViewerSharedState
+        viewer.render().unwrap();
 
         /* Obtain the view and access first three variables of `qpos` (x, y, z) */
         let xyz = &ball_info.view(&data).qpos[..3];

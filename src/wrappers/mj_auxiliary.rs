@@ -1,19 +1,22 @@
 //! MuJoCo's auxiliary structs.
-use std::io::{self, Error, ErrorKind};
 use std::ffi::{c_void, CString};
 use std::mem::MaybeUninit;
+use std::path::Path;
 use std::ptr;
 
-
+use crate::error::MjVfsError;
 use crate::mujoco_c::*;
 
 
 /***********************************************************************************************************************
 ** MjVisual
 ***********************************************************************************************************************/
+/// Visual properties of the model (headlight, rgba defaults, scale, etc.).
 pub type MjVisual = mjVisual;
 impl Default for MjVisual {
     fn default() -> Self {
+        // SAFETY: mj_defaultVisual initializes all fields of an uninitialized mjVisual to valid
+        // defaults; the pointer from MaybeUninit is properly aligned and writable.
         unsafe {
             let mut s = MaybeUninit::uninit();
             mj_defaultVisual(s.as_mut_ptr());
@@ -25,19 +28,27 @@ impl Default for MjVisual {
 /***********************************************************************************************************************
 ** MjStatistic
 ***********************************************************************************************************************/
+/// Model statistics (center, extent, mean body mass, mean inertia, etc.).
 pub type MjStatistic = mjStatistic;
 
 /***********************************************************************************************************************
 ** MjContact
 ***********************************************************************************************************************/
+/// Contact point data (position, frame, friction/solver parameters, geom/flex ids, etc.).
 pub type MjContact = mjContact;
+
+// SAFETY: mjContact_ contains only f64 and c_int fields, which are all zero-valid.
+unsafe impl bytemuck::Zeroable for mjContact_ {}
 
 /***********************************************************************************************************************
 ** MjLROpt
 ***********************************************************************************************************************/
+/// Options for the length-range computation of actuator length ranges.
 pub type MjLROpt = mjLROpt;
 impl Default for MjLROpt {
     fn default() -> Self {
+        // SAFETY: mj_defaultLROpt initializes all fields of an uninitialized mjLROpt to valid
+        // defaults; the pointer from MaybeUninit is properly aligned and writable.
         unsafe {
             let mut s = MaybeUninit::uninit();
             mj_defaultLROpt(s.as_mut_ptr());
@@ -56,53 +67,127 @@ impl Default for MjLROpt {
 ** MjVfs
 ***********************************************************************************************************************/
 /// Wrapper around the virtual-file system.
+#[derive(Debug)]
 pub struct MjVfs {
-    ffi: mjVFS
+    ffi: Box<mjVFS>
 }
 
 impl MjVfs {
+    /// Creates a new, empty virtual file system.
     pub fn new() -> Self {
-        let ffi = unsafe {
-            let mut s = MaybeUninit::uninit();
-            mj_defaultVFS(s.as_mut_ptr());
-            s.assume_init()
-        };
-        Self { ffi }
+        // SAFETY: mj_defaultVFS initializes all fields of an uninitialized mjVFS to valid defaults;
+        // the pointer from Box::new_uninit is properly aligned and writable.
+        unsafe {
+            let mut maybe_uninit = Box::new_uninit();
+            mj_defaultVFS(maybe_uninit.as_mut_ptr());
+            Self { ffi: maybe_uninit.assume_init() }
+        }
     }
 
-    /// Adds a file to the virtual file system.
+    /// Adds a file from disk to the virtual file system.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
+    /// - [`MjVfsError::LoadFailed`] if the file could not be loaded.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
-    /// A panic will occur if `directory` or `filename` contain `\0` characters.
-    pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> io::Result<()> {
-        let c_directory = directory.map(|d| CString::new(d).unwrap());
-        let c_filename = CString::new(filename).unwrap();
-        Self::handle_add_result(unsafe {
+    /// When `directory` or `filename` contain interior `\0` characters.
+    #[deprecated(since = "3.0.0", note = "use `add_file` or `add_file_from` instead")]
+    pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> Result<(), MjVfsError> {
+        match directory {
+            Some(d) => self.add_file_from(d, filename),
+            None => self.add_file(filename),
+        }
+    }
+
+    /// Adds a file from disk to the virtual file system, searching in `directory`.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjVfsError::InvalidUtf8Path`] if `directory` or `filename` contains invalid UTF-8.
+    /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
+    /// - [`MjVfsError::LoadFailed`] if the file could not be loaded.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
+    /// # Panics
+    /// When `directory` or `filename` contain interior `\0` characters.
+    pub fn add_file_from<T: AsRef<Path>, U: AsRef<Path>>(&mut self, directory: T, filename: U) -> Result<(), MjVfsError> {
+        let c_directory = CString::new(
+            directory.as_ref().to_str().ok_or(MjVfsError::InvalidUtf8Path)?
+        ).unwrap();
+        let c_filename = CString::new(
+            filename.as_ref().to_str().ok_or(MjVfsError::InvalidUtf8Path)?
+        ).unwrap();
+        Self::handle_add_result(
+            unsafe {
             mj_addFileVFS(
                 self.ffi_mut(),
-                c_directory.as_ref().map_or(ptr::null(), |d| d.as_ptr()),
+                c_directory.as_ptr(),
                 c_filename.as_ptr()
             )
         })
     }
 
-    /// Adds a file to the virtual file system from a buffer.
+    /// Adds a file from disk to the virtual file system.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjVfsError::InvalidUtf8Path`] if `filename` contains invalid UTF-8.
+    /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
+    /// - [`MjVfsError::LoadFailed`] if the file could not be loaded.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
-    /// When the `filename` contains '\0' characters, a panic occurs.
-    pub fn add_from_buffer(&mut self, filename: &str, buffer: &[u8]) -> io::Result<()> {
-        let c_filename = CString::new(filename).unwrap();
+    /// When `filename` contains interior `\0` characters.
+    pub fn add_file<T: AsRef<Path>>(&mut self, filename: T) -> Result<(), MjVfsError> {
+        let c_filename = CString::new(
+            filename.as_ref().to_str().ok_or(MjVfsError::InvalidUtf8Path)?
+        ).unwrap();
+        Self::handle_add_result(unsafe {
+            mj_addFileVFS(
+                self.ffi_mut(),
+                ptr::null(),
+                c_filename.as_ptr()
+            )
+        })
+    }
+
+    /// Adds a file to the virtual file system from a byte buffer.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjVfsError::InvalidUtf8Path`] if `filename` contains invalid UTF-8.
+    /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
+    /// - [`MjVfsError::LoadFailed`] if MuJoCo fails to register the buffer.
+    /// - [`MjVfsError::BufferTooLarge`] if `buffer` exceeds `i32::MAX` bytes.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
+    /// # Panics
+    /// When the `filename` contains interior `\0` characters.
+    pub fn add_from_buffer<T: AsRef<Path>>(&mut self, filename: T, buffer: &[u8]) -> Result<(), MjVfsError> {
+        let c_filename = CString::new(
+            filename.as_ref().to_str().ok_or(MjVfsError::InvalidUtf8Path)?
+        ).unwrap();
+        let nbuffer = i32::try_from(buffer.len()).map_err(|_| MjVfsError::BufferTooLarge)?;
         Self::handle_add_result(unsafe {
             mj_addBufferVFS(
                 self.ffi_mut(), c_filename.as_ptr(),
-                buffer.as_ptr() as *const c_void, buffer.len() as i32
+                buffer.as_ptr() as *const c_void, nbuffer
             )
         })
     }
 
     /// Removes a file from the virtual file system.
+    /// # Returns
+    /// `Ok(())` on success.
+    /// # Errors
+    /// - [`MjVfsError::InvalidUtf8Path`] if `filename` contains invalid UTF-8.
+    /// - [`MjVfsError::NotFound`] if the file doesn't exist.
+    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
-    /// When the `filename` contains '\0' characters, a panic occurs.
-    pub fn delete_file(&mut self, filename: &str) -> io::Result<()> {
-        let c_filename = CString::new(filename).unwrap();
+    /// When the `filename` contains interior `\0` characters.
+    pub fn delete_file<T: AsRef<Path>>(&mut self, filename: T) -> Result<(), MjVfsError> {
+        let c_filename = CString::new(
+            filename.as_ref().to_str().ok_or(MjVfsError::InvalidUtf8Path)?
+        ).unwrap();
         unsafe {
             Self::handle_remove_result(
                 mj_deleteFileVFS(self.ffi_mut(), c_filename.as_ptr())
@@ -110,20 +195,20 @@ impl MjVfs {
         }
     }
 
-    fn handle_add_result(result: i32) -> io::Result<()> {
+    fn handle_add_result(result: i32) -> Result<(), MjVfsError> {
         match result {
             0 => Ok(()),
-            2 => Err(Error::new(ErrorKind::AlreadyExists, "repeated name")),
-            -1 => Err(Error::new(ErrorKind::InvalidData, "failed to load")),
-            _ => Err(Error::new(ErrorKind::Other, "unknown MuJoCo error"))
+            2 => Err(MjVfsError::AlreadyExists),
+            -1 => Err(MjVfsError::LoadFailed),
+            code => Err(MjVfsError::Unknown(code))
         }
     }
 
-    fn handle_remove_result(result: i32) -> io::Result<()> {
+    fn handle_remove_result(result: i32) -> Result<(), MjVfsError> {
         match result {
             0 => Ok(()),
-            -1 => Err(Error::new(ErrorKind::NotFound, "file not found in the VFS")),
-            _ => Err(Error::new(ErrorKind::Other, "unknown MuJoCo error"))
+            -1 => Err(MjVfsError::NotFound),
+            code => Err(MjVfsError::Unknown(code))
         }
     }
 
@@ -133,15 +218,31 @@ impl MjVfs {
     }
 
     /// Mutable reference to the wrapped FFI struct.
+    ///
+    /// # Safety
+    /// Modifying the underlying FFI struct directly can break the invariants
+    /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjVFS {
         &mut self.ffi
     }
 }
 
+impl Default for MjVfs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// SAFETY: MjVfs owns its data exclusively (no shared mutable aliasing)
+// and the underlying mjVFS does not use thread-local state.
+unsafe impl Send for MjVfs {}
+unsafe impl Sync for MjVfs {}
+
 impl Drop for MjVfs {
     fn drop(&mut self) {
+        // SAFETY: self.ffi is a valid pointer to a live mjVFS; called exactly once in Drop.
         unsafe {
-            mj_deleteVFS(&mut self.ffi);
+            mj_deleteVFS(self.ffi.as_mut());
         }
     }
 }
@@ -151,6 +252,7 @@ mod tests {
     use crate::wrappers::MjModel;
     use super::*;
     use std::fs;
+    use std::path::{Path, PathBuf};
 
     const RAW_FILE_DATA: &str = "
 <mujoco>
@@ -190,12 +292,12 @@ mod tests {
 
         /* No directory */
         vfs = MjVfs::new();
-        assert!(vfs.add_from_file(None, REAL_FILE_NAME).is_ok());
+        assert!(vfs.add_file(REAL_FILE_NAME).is_ok());
         drop(vfs);
 
         /* With directory */
         vfs = MjVfs::new();
-        assert!(vfs.add_from_file(Some("./"), REAL_FILE_NAME).is_ok());
+        assert!(vfs.add_file_from("./", REAL_FILE_NAME).is_ok());
 
         fs::remove_file(REAL_FILE_NAME).expect("could not delete the file from disk");
 
@@ -215,5 +317,177 @@ mod tests {
 
         /* Remove it once (an error should occur) */
         assert!(vfs.delete_file(RAW_FILE_NAME).is_err());
+    }
+
+
+    /// Tests that deleting a nonexistent file from VFS returns the `NotFound` error variant.
+    #[test]
+    fn test_vfs_delete_nonexistent() {
+        let mut vfs = MjVfs::new();
+        let err = vfs.delete_file("does_not_exist.xml").unwrap_err();
+        assert!(matches!(err, MjVfsError::NotFound));
+    }
+
+    /// Tests adding a model buffer to VFS and loading it back: verifies the model is
+    /// parsed correctly and has the expected body count.
+    #[test]
+    fn test_vfs_buffer_round_trip() {
+        const CUSTOM_MODEL: &str = "
+<mujoco>
+  <worldbody>
+    <body name='extra_body'>
+      <geom size='0.1'/>
+    </body>
+  </worldbody>
+</mujoco>";
+
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer("round_trip.xml", CUSTOM_MODEL.as_bytes()).unwrap();
+
+        let model = MjModel::from_xml_vfs("round_trip.xml", &vfs).unwrap();
+        // 2 bodies: worldbody + extra_body
+        assert_eq!(model.ffi().nbody, 2);
+        assert!(model.body("extra_body").is_some());
+    }
+
+    /// Adding the same filename to a VFS twice must return `AlreadyExists`.
+    #[test]
+    fn test_vfs_add_buffer_already_exists() {
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer(RAW_FILE_NAME, RAW_FILE_DATA.as_bytes())
+            .expect("first add should succeed");
+        let err = vfs
+            .add_from_buffer(RAW_FILE_NAME, RAW_FILE_DATA.as_bytes())
+            .expect_err("second add with same name should fail");
+        assert!(
+            matches!(err, MjVfsError::AlreadyExists),
+            "expected AlreadyExists, got {err:?}"
+        );
+    }
+
+    /// `add_from_buffer` accepts `&Path`, `PathBuf`, `&str`, and `String` as the filename.
+    #[test]
+    fn test_vfs_add_from_buffer_path_types() {
+        let mut vfs = MjVfs::new();
+
+        // &str
+        vfs.add_from_buffer("str.xml", RAW_FILE_DATA.as_bytes()).unwrap();
+        assert!(MjModel::from_xml_vfs("str.xml", &vfs).is_ok());
+
+        // String
+        vfs.add_from_buffer(String::from("string.xml"), RAW_FILE_DATA.as_bytes()).unwrap();
+        assert!(MjModel::from_xml_vfs("string.xml", &vfs).is_ok());
+
+        // &Path
+        vfs.add_from_buffer(Path::new("path.xml"), RAW_FILE_DATA.as_bytes()).unwrap();
+        assert!(MjModel::from_xml_vfs("path.xml", &vfs).is_ok());
+
+        // PathBuf
+        vfs.add_from_buffer(PathBuf::from("pathbuf.xml"), RAW_FILE_DATA.as_bytes()).unwrap();
+        assert!(MjModel::from_xml_vfs("pathbuf.xml", &vfs).is_ok());
+    }
+
+    /// `delete_file` accepts `&Path`, `PathBuf`, `&str`, and `String` as the filename.
+    #[test]
+    fn test_vfs_delete_file_path_types() {
+        let mut vfs = MjVfs::new();
+
+        // Add four files, then delete each with a different path type
+        for name in &["del_str.xml", "del_string.xml", "del_path.xml", "del_pathbuf.xml"] {
+            vfs.add_from_buffer(*name, RAW_FILE_DATA.as_bytes()).unwrap();
+        }
+
+        vfs.delete_file("del_str.xml").unwrap();
+        vfs.delete_file(String::from("del_string.xml")).unwrap();
+        vfs.delete_file(Path::new("del_path.xml")).unwrap();
+        vfs.delete_file(PathBuf::from("del_pathbuf.xml")).unwrap();
+
+        // All deleted -- re-deleting any should fail
+        assert!(matches!(vfs.delete_file("del_str.xml").unwrap_err(), MjVfsError::NotFound));
+    }
+
+    /// `add_file` accepts `&Path`, `PathBuf`, `&str`, and `String`.
+    #[test]
+    fn test_vfs_add_file_path_types() {
+        const FILE: &str = "mujoco-rs-add-file-path-types.xml";
+        fs::write(FILE, RAW_FILE_DATA).expect("could not write temp file");
+
+        let mut vfs;
+
+        // &str
+        vfs = MjVfs::new();
+        vfs.add_file(FILE).unwrap();
+        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+
+        // String
+        vfs = MjVfs::new();
+        vfs.add_file(String::from(FILE)).unwrap();
+        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+
+        // &Path
+        vfs = MjVfs::new();
+        vfs.add_file(Path::new(FILE)).unwrap();
+        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+
+        // PathBuf
+        vfs = MjVfs::new();
+        vfs.add_file(PathBuf::from(FILE)).unwrap();
+        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+
+        fs::remove_file(FILE).expect("could not clean up temp file");
+    }
+
+    /// `add_file_from` accepts `&Path`, `PathBuf`, `&str`, and `String` for both arguments.
+    #[test]
+    fn test_vfs_add_file_from_path_types() {
+        const FILE: &str = "mujoco-rs-add-file-from-path-types.xml";
+        fs::write(FILE, RAW_FILE_DATA).expect("could not write temp file");
+
+        let mut vfs;
+
+        // &str, &str
+        vfs = MjVfs::new();
+        vfs.add_file_from("./", FILE).unwrap();
+        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+
+        // String, PathBuf
+        vfs = MjVfs::new();
+        vfs.add_file_from(String::from("./"), PathBuf::from(FILE)).unwrap();
+        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+
+        // &Path, String
+        vfs = MjVfs::new();
+        vfs.add_file_from(Path::new("./"), String::from(FILE)).unwrap();
+        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+
+        // PathBuf, &Path
+        vfs = MjVfs::new();
+        vfs.add_file_from(PathBuf::from("./"), Path::new(FILE)).unwrap();
+        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+
+        fs::remove_file(FILE).expect("could not clean up temp file");
+    }
+
+    /// The deprecated `add_from_file` still delegates correctly.
+    #[test]
+    fn test_vfs_deprecated_add_from_file() {
+        const FILE: &str = "mujoco-rs-deprecated-add-from-file.xml";
+        fs::write(FILE, RAW_FILE_DATA).expect("could not write temp file");
+
+        let mut vfs;
+
+        // With directory (delegates to add_file_from)
+        vfs = MjVfs::new();
+        #[allow(deprecated)]
+        vfs.add_from_file(Some("./"), FILE).unwrap();
+        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+
+        // Without directory (delegates to add_file)
+        vfs = MjVfs::new();
+        #[allow(deprecated)]
+        vfs.add_from_file(None, FILE).unwrap();
+        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
+
+        fs::remove_file(FILE).expect("could not clean up temp file");
     }
 }

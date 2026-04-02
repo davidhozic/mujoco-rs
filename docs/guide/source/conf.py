@@ -10,7 +10,7 @@ import tomllib
 
 
 project = 'MuJoCo-rs'
-copyright = '2025, David Hožič'
+copyright = '2026, David Hožič'
 author = 'David Hožič'
 
 # Read the version from the Rust crate

@@ -45,7 +45,7 @@ fn main() {
         /* Step the simulation and sync the viewer */
         data.step();
         viewer.sync_data(&mut data);
-        viewer.render();
+        viewer.render().unwrap();
 
         /* Print the touch sensor output, which is the contact force */
         println!("{}", sensor_data_info.view(&data).data[0]);

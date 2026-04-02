@@ -46,7 +46,7 @@ RUN apt autoremove -y
 WORKDIR /mujoco/
 
 # Commands.
-# Note that we enable IPO with -DBUILD_SHARED_LIBS:BOOL=OFF and
+# Note that we enable IPO with -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON and
 # tell CMake to build static libs with -DBUILD_SHARED_LIBS:BOOL=OFF.
 # -----------------------------------------
 # docker buildx build . -t mujoco-build -f Dockerfile.ubuntu

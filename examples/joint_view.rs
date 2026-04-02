@@ -1,6 +1,6 @@
 //! Example of using views.
-//! The example shows how to obtain a [`MjJointInfo`] struct that can be used
-//! to create a (temporary) [`MjJointView`] to corresponding fields in [`MjData`].
+//! The example shows how to obtain a [`MjJointDataInfo`] struct that can be used
+//! to create a (temporary) [`MjJointDataView`] to corresponding fields in [`MjData`].
 //! 
 //! This example uses the viewer in single-threaded fashion.
 use std::time::Duration;
@@ -40,7 +40,7 @@ fn main() {
         /* Step the simulation and sync the viewer */
         data.step();
         viewer.sync_data(&mut data);
-        viewer.render();
+        viewer.render().unwrap();
 
         /* Obtain the view and access first three variables of `qpos` (x, y, z) */
         let xyz = &ball_info.view(&data).qpos[..3];

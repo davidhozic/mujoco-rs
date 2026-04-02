@@ -48,7 +48,7 @@ fn main() {
         /* Step the simulation and sync the viewer */
         data.step();
         viewer.sync_data(&mut data);
-        viewer.render();
+        viewer.render().unwrap();
 
         std::thread::sleep(Duration::from_secs_f64(0.002));
     }

@@ -30,7 +30,7 @@ const EXAMPLE_MODEL: &str = "
 /// Example of a user-written simulation struct (minimal as possible).
 struct CustomSimulation {
     data: MjData<Rc<MjModel>>,
-    viewer: MjViewer<Rc<MjModel>>
+    viewer: MjViewer
 }
 
 
@@ -136,7 +136,7 @@ impl CustomSimulation {
     fn step(&mut self) {
         self.data.step();
         self.viewer.sync_data(&mut self.data);
-        self.viewer.render();
+        self.viewer.render().unwrap();
     }
 }
 

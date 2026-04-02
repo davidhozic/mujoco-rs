@@ -25,11 +25,12 @@ const EXAMPLE_MODEL: &str = "
 fn main() {
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
     let mut data = MjData::new(&model);  // or model.make_data()
-    let mut viewer = MjViewerCpp::launch_passive(&model, &data, 100);
+    let mut viewer = unsafe { MjViewerCpp::launch_passive(&model, &data, 100) };
     let step = model.opt().timestep;
     while viewer.running() {
         viewer.sync();
-        viewer.render(true);
+        // SAFETY: called from the main thread.
+        unsafe { viewer.render().unwrap() };
         data.step();
         std::thread::sleep(Duration::from_secs_f64(step));
     }

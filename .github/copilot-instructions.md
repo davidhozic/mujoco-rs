@@ -1,21 +1,10 @@
-Your task is to review the code, changed on pull request, as well as any really bad, wrong or unsafe
-code that was present before the pull request changes. The code is written in Rust.
+# Instructions for Copilot
+All of the rules are written in .github/rules.
+All of the tools/workflows/skills are written in .github/skills.
+Follow all of the rules always (READ THEM NOW) and take advantage of the skills when needed.
 
-<Goals>
-- Highlight inconsistency in added changes with the previous code.
-- Detect dangerous code that results in undefined behavior.
-- Detect incorrect index access.
-- Detect wrong or inconsistent documentation comments that don't sit with the actual code.
-- Pull requests should also update unit tests.
-</Goals>
+When launching subagents, follow `.github/rules/subagent-policy.md` to ensure they also
+read and follow the rules and take advantage of the available skills.
 
-<Limitations>
-- Don't show nitpicks for things that are safe and actually improve performance.
-</Limitations>
-
-<StepsToFollow>
-- Review the entire code repository on each request and highlight things that are really wrong,
-  unsafe or dangerous in any way.
-- Highlight incorrect documentation in docs/ or at the documentation strings.
-- At the end, provide a summary of changes that is not too detailed.
-</StepsToFollow>
+If context has been compacted (indicated by a summary replacing earlier conversation turns),
+re-read all files in `.github/rules/` before starting new work to guard against lost context.
