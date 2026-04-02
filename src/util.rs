@@ -1089,8 +1089,8 @@ pub unsafe fn force_cast<T, U>(val: T) -> U {
 ///
 /// The target element size must be a multiple of the source element size
 /// (covers both same-size type conversions and array-grouping casts like
-/// `*const f64` to `*const [f64; 3]`), and the source alignment must be at
-/// least as strict as the target alignment.
+/// `*const f64` to `*const [f64; 3]`), and the source and target alignments
+/// must be equal.
 ///
 /// The pointer argument is only used for type inference of `Src`; it is
 /// never dereferenced.

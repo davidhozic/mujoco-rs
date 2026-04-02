@@ -495,7 +495,8 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``LengthMismatch``, ``SignatureMismatch``, ``NoHistoryBuffer``,
   ``ContactBufferFull``, ``InvalidUtf8Path``.
 - :docs-rs:`~mujoco_rs::error::<enum>MjVfsError`: ``AlreadyExists``,
-  ``LoadFailed``, ``NotFound``, ``InvalidUtf8Path``, ``Unknown``.
+  ``LoadFailed``, ``NotFound``, ``InvalidUtf8Path``, ``BufferTooLarge``,
+  ``Unknown``.
 - :docs-rs:`~mujoco_rs::error::<enum>MjEditError`: ``AllocationFailed``,
   ``InvalidUtf8Path``, ``ParseFailed``, ``CompileFailed``, ``SaveFailed``,
   ``NotFound``, ``AlreadyExists``, ``UnsupportedOperation``, ``DeleteFailed``,

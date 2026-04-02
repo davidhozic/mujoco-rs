@@ -553,8 +553,7 @@ impl MjvFigure {
     /// Pops the first element from the plot data of plot with `plot_index`.
     ///
     /// # Returns
-    /// Returns [`Some(first element)`](Some) when plot contains any elements, otherwise [`None`] is returned.
-    /// The return format is (x, y).
+    /// Returns `Some((x, y))` when the plot contains any elements, otherwise `None` is returned.
     ///
     /// # Panics
     /// Panics if `plot_index >= mjMAXLINE`.
@@ -590,8 +589,7 @@ impl MjvFigure {
     /// Pops the last element from the plot data of plot with `plot_index`.
     ///
     /// # Returns
-    /// Returns [`Some(last element)`](Some) when plot contains any elements, otherwise [`None`] is returned.
-    /// The return format is (x, y).
+    /// Returns `Some((x, y))` when the plot contains any elements, otherwise `None` is returned.
     ///
     /// # Panics
     /// Panics if `plot_index >= mjMAXLINE`.
