@@ -158,6 +158,7 @@ impl MjVfs {
     /// - [`MjVfsError::InvalidUtf8Path`] if `filename` contains invalid UTF-8.
     /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
     /// - [`MjVfsError::LoadFailed`] if MuJoCo fails to register the buffer.
+    /// - [`MjVfsError::BufferTooLarge`] if `buffer` exceeds `i32::MAX` bytes.
     /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
     /// # Panics
     /// When the `filename` contains interior `\0` characters.
@@ -165,10 +166,11 @@ impl MjVfs {
         let c_filename = CString::new(
             filename.as_ref().to_str().ok_or(MjVfsError::InvalidUtf8Path)?
         ).unwrap();
+        let nbuffer = i32::try_from(buffer.len()).map_err(|_| MjVfsError::BufferTooLarge)?;
         Self::handle_add_result(unsafe {
             mj_addBufferVFS(
                 self.ffi_mut(), c_filename.as_ptr(),
-                buffer.as_ptr() as *const c_void, buffer.len() as i32
+                buffer.as_ptr() as *const c_void, nbuffer
             )
         })
     }

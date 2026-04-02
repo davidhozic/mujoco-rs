@@ -414,6 +414,8 @@ pub enum MjVfsError {
     NotFound,
     /// The provided path contains invalid UTF-8.
     InvalidUtf8Path,
+    /// The buffer length exceeds `i32::MAX` bytes.
+    BufferTooLarge,
     /// An unrecognized MuJoCo return code.
     Unknown(i32),
 }
@@ -425,6 +427,7 @@ impl fmt::Display for MjVfsError {
             Self::LoadFailed => write!(f, "failed to load file into VFS"),
             Self::NotFound => write!(f, "file not found in VFS"),
             Self::InvalidUtf8Path => write!(f, "path contains invalid UTF-8"),
+            Self::BufferTooLarge => write!(f, "buffer length exceeds i32::MAX bytes"),
             Self::Unknown(code) => write!(f, "unknown VFS error (code {code})"),
         }
     }
