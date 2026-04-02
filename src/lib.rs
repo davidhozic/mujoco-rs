@@ -28,7 +28,7 @@
 //!
 //! ## 3D viewer
 //! The Rust-native viewer is available ([`viewer::MjViewer`]) when the `viewer` / `viewer-ui` feature is enabled,
-//! as well as MuJoCo's original C++ one ([`crate::cpp_viewer::MjViewerCpp`]).
+//! as well as MuJoCo's C++ one ([`crate::cpp_viewer::MjViewerCpp`]).
 //! The C++ viewer, however, requires manual compilation of a patched MuJoCo repository,
 //! like described [here](https://mujoco-rs.readthedocs.io/en/stable/installation.html#static-linking).
 //!

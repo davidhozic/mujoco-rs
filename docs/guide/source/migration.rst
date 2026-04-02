@@ -348,7 +348,7 @@ Topology, address, and engine-computed arrays that must not be changed at runtim
 .. code-block:: rust
 
     // SAFETY: caller keeps all companion topology fields consistent.
-    unsafe { model.body_parentid_mut() }[0] = new_parent;
+    unsafe { model.body_parentid_mut()[0] = new_parent; }
 
 Companion-index fields
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -376,7 +376,7 @@ out-of-bounds access inside MuJoCo.
 
     // SAFETY: companion fields (jnt_qposadr, jnt_dofadr, jnt_bodyid) are also
     // updated to a state consistent with mjJNT_BALL.
-    unsafe { model.jnt_type_mut() }[i] = MjtJoint::mjJNT_BALL;
+    unsafe { model.jnt_type_mut()[i] = MjtJoint::mjJNT_BALL; }
 
 Per-object ``ViewMut`` types expose these fields as
 :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut` struct fields.
@@ -414,7 +414,7 @@ inside ``unsafe``:
 .. code-block:: rust
 
     // SAFETY: companion fields are also updated consistently.
-    unsafe { view.r#type.as_mut_slice() }[0] = MjtJoint::mjJNT_BALL;
+    unsafe { view.r#type.as_mut_slice()[0] = MjtJoint::mjJNT_BALL; }
 
 
 Null-terminated string buffer fields

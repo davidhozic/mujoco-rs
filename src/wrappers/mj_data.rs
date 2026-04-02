@@ -568,11 +568,11 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Compute efc_state, efc_force, qfrc_constraint, and (optionally) cone Hessians.
     /// If cost is not `None`, set `*cost = s(jar)` where `jar = Jac*qacc - aref`.
     /// # Errors
-    /// Returns [`MjDataError::LengthMismatch`] if the `jar` length is incorrect.
+    /// Returns [`MjDataError::BufferTooSmall`] if `jar.len() < nefc` (buffer too small).
     pub fn constraint_update(&mut self, jar: &[MjtNum], cost: Option<&mut MjtNum>, flg_cone_hessian: bool) -> Result<(), MjDataError> {
         let nefc = self.ffi().nefc as usize;
         if jar.len() < nefc {
-            return Err(MjDataError::LengthMismatch { name: "jar", expected: nefc, got: jar.len() });
+            return Err(MjDataError::BufferTooSmall { name: "jar", got: jar.len(), needed: nefc });
         }
 
         unsafe { mj_constraintUpdate(

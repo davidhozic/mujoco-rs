@@ -53,10 +53,24 @@ impl SpecItem for MjsDefault {
         self
     }
 
+    /// `MjsDefault` cannot be assigned to a named default class.
+    ///
+    /// This override always returns [`MjEditError::UnsupportedOperation`] without using
+    /// `class_name` or performing any operation.
+    ///
+    /// # Errors
+    /// Always returns [`MjEditError::UnsupportedOperation`].
     fn set_default(&mut self, _class_name: &str) -> Result<(), MjEditError> {
         Err(MjEditError::UnsupportedOperation)
     }
 
+    /// `MjsDefault` cannot be assigned to a named default class.
+    ///
+    /// This override always returns [`MjEditError::UnsupportedOperation`] without using
+    /// `class_name` or performing any operation.
+    ///
+    /// # Errors
+    /// Always returns [`MjEditError::UnsupportedOperation`].
     fn with_default(&mut self, _class_name: &str) -> Result<&mut Self, MjEditError> {
         Err(MjEditError::UnsupportedOperation)
     }

@@ -336,6 +336,10 @@ MuJoCo-rs also provides a wrapper around a modified version of MuJoCo's C++ 3D v
 Modifications to the C++ viewer are minor with the purpose of preserving future compatibility.
 The changes to the viewer are made to allow viewer rendering in a user-controlled loop.
 
+.. note::
+
+    This wrapper requires the ``cpp-viewer`` Cargo feature to be enabled.
+
 .. attention::
 
     To avoid a major rewrite of the C++ viewer,

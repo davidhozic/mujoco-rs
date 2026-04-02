@@ -261,7 +261,8 @@ impl MjSpec {
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
     /// # Panics
-    /// When `content_type` or the path contain interior `\0` characters.
+    /// - When `content_type` or the path contain interior `\0` characters.
+    /// - When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_parse<T: AsRef<Path>>(filename: T, content_type: &str) -> Result<Self, MjEditError> {
         Self::from_parse_file(filename, content_type, None)
     }
@@ -273,7 +274,8 @@ impl MjSpec {
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
     /// # Panics
-    /// When `content_type` or the path contain interior `\0` characters.
+    /// - When `content_type` or the path contain interior `\0` characters.
+    /// - When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn from_parse_vfs<T: AsRef<Path>>(filename: T, content_type: &str, vfs: &MjVfs) -> Result<Self, MjEditError> {
         Self::from_parse_file(filename, content_type, Some(vfs))
     }
@@ -282,7 +284,8 @@ impl MjSpec {
     /// The `content_type` controls the decoder to use.
     /// This is a wrapper around low-level method [`mj_parse`].
     /// # Panics
-    /// When `content_type` or the path contain interior `\0` characters.
+    /// - When `content_type` or the path contain interior `\0` characters.
+    /// - When the linked MuJoCo version does not match the version MuJoCo-rs was compiled against.
     fn from_parse_file<T: AsRef<Path>>(filename: T, content_type: &str, vfs: Option<&MjVfs>) -> Result<Self, MjEditError> {
         assert_mujoco_version();
         let mut error_buffer = [0; ERROR_BUF_LEN];
