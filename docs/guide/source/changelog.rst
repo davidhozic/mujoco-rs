@@ -34,6 +34,8 @@ update of MuJoCo alone can increase the major version.
   load a single or all MuJoCo plugin shared libraries. ``load_all_plugin_libraries``
   accepts an optional ``MjPluginLibraryLoadCallback`` :sup:`new` function pointer
   invoked for each loaded library.
+- Added :gh-example:`stl_mesh.rs` :sup:`new` -- demonstrates loading plugin libraries
+  and simulating a model with an STL mesh asset in the viewer.
 
 3.0.0 (MuJoCo 3.6.0)
 ======================
