@@ -24,6 +24,17 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+3.0.1 (MuJoCo 3.6.0)
+======================
+
+.. rubric:: New features and improvements
+
+- :docs-rs:`mujoco_rs::wrappers::mj_plugin`:
+  ``load_plugin_library`` :sup:`new` and ``load_all_plugin_libraries`` :sup:`new`
+  load a single or all MuJoCo plugin shared libraries. ``load_all_plugin_libraries``
+  accepts an optional ``MjPluginLibraryLoadCallback`` :sup:`new` function pointer
+  invoked for each loaded library.
+
 3.0.0 (MuJoCo 3.6.0)
 ======================
 

@@ -6,6 +6,7 @@ pub mod mj_auxiliary;
 pub mod mj_primitive;
 pub mod mj_editing;
 pub mod mj_option;
+pub mod mj_plugin;
 pub mod mj_model;
 pub mod mj_data;
 

@@ -435,6 +435,26 @@ impl fmt::Display for MjVfsError {
 
 impl std::error::Error for MjVfsError {}
 
+/// Errors that can occur when loading MuJoCo plugin libraries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MjPluginError {
+    /// The provided path contains invalid UTF-8.
+    InvalidUtf8Path,
+    /// The path string contains an interior null byte.
+    NullBytePath,
+}
+
+impl fmt::Display for MjPluginError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidUtf8Path => write!(f, "path contains invalid UTF-8"),
+            Self::NullBytePath => write!(f, "path contains an interior null byte"),
+        }
+    }
+}
+
+impl std::error::Error for MjPluginError {}
+
 /// Errors that can occur during OpenGL / window initialization.
 ///
 /// Each variant represents a distinct step in the initialization pipeline.
