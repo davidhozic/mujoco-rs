@@ -24,6 +24,22 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+3.0.1 (MuJoCo 3.6.0)
+======================
+
+.. rubric:: New features and improvements
+
+- ``mujoco_rs::wrappers::mj_plugin``:
+  :docs-rs:`~mujoco_rs::wrappers::mj_plugin::<fn>load_plugin_library` :sup:`new` and
+  :docs-rs:`~mujoco_rs::wrappers::mj_plugin::<fn>load_all_plugin_libraries` :sup:`new`
+  load a single or all MuJoCo plugin shared libraries.
+  :docs-rs:`~mujoco_rs::wrappers::mj_plugin::<fn>load_all_plugin_libraries`
+  accepts an optional
+  :docs-rs:`~mujoco_rs::wrappers::mj_plugin::<type>MjPluginLibraryLoadCallback` :sup:`new`
+  function pointer invoked for each loaded library.
+- Added :gh-example:`stl_mesh.rs` :sup:`new` -- demonstrates loading plugin libraries
+  and loading a model with an STL mesh asset.
+
 3.0.0 (MuJoCo 3.6.0)
 ======================
 
