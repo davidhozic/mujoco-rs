@@ -37,7 +37,9 @@ For example:
     you must load the relevant plugin library **before** loading the model, otherwise MuJoCo
     will report "no decoder found for mesh file".
 
-    Use ``load_all_plugin_libraries`` to load all plugins from MuJoCo's plugin directory:
+    Use
+    :docs-rs:`~mujoco_rs::wrappers::mj_plugin::<fn>load_all_plugin_libraries`
+    to load all plugins from MuJoCo's plugin directory:
 
     .. code-block:: rust
 
@@ -52,7 +54,9 @@ For example:
             let model = MjModel::from_xml("model.xml").expect("could not load the model");
         }
 
-    Alternatively, use ``load_plugin_library`` to load a specific plugin, for example
+    Alternatively, use
+    :docs-rs:`~mujoco_rs::wrappers::mj_plugin::<fn>load_plugin_library`
+    to load a specific plugin, for example
     only the STL decoder:
 
     .. code-block:: rust

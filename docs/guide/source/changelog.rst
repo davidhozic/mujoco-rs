@@ -29,13 +29,16 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: New features and improvements
 
-- :docs-rs:`mujoco_rs::wrappers::mj_plugin`:
-  ``load_plugin_library`` :sup:`new` and ``load_all_plugin_libraries`` :sup:`new`
-  load a single or all MuJoCo plugin shared libraries. ``load_all_plugin_libraries``
-  accepts an optional ``MjPluginLibraryLoadCallback`` :sup:`new` function pointer
-  invoked for each loaded library.
+- ``mujoco_rs::wrappers::mj_plugin``:
+  :docs-rs:`~mujoco_rs::wrappers::mj_plugin::<fn>load_plugin_library` :sup:`new` and
+  :docs-rs:`~mujoco_rs::wrappers::mj_plugin::<fn>load_all_plugin_libraries` :sup:`new`
+  load a single or all MuJoCo plugin shared libraries.
+  :docs-rs:`~mujoco_rs::wrappers::mj_plugin::<fn>load_all_plugin_libraries`
+  accepts an optional
+  :docs-rs:`~mujoco_rs::wrappers::mj_plugin::<type>MjPluginLibraryLoadCallback` :sup:`new`
+  function pointer invoked for each loaded library.
 - Added :gh-example:`stl_mesh.rs` :sup:`new` -- demonstrates loading plugin libraries
-  and simulating a model with an STL mesh asset in the viewer.
+  and loading a model with an STL mesh asset.
 
 3.0.0 (MuJoCo 3.6.0)
 ======================

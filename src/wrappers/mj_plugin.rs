@@ -76,6 +76,7 @@ mod tests {
 
     use crate::wrappers::mj_auxiliary::MjVfs;
     use crate::wrappers::mj_model::MjModel;
+
     use crate::error::MjPluginError;
 
     /// Minimal binary STL: a tetrahedron with four triangular faces.

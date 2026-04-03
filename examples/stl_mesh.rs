@@ -9,7 +9,6 @@
 //! 2. Inject an in-memory STL asset and a matching MJCF model into a
 //!    [`MjVfs`] virtual file system.
 //! 3. Load the model via [`MjModel::from_xml_vfs`].
-//! 4. Inspect the loaded mesh count.
 //!
 //! # Usage
 //!
@@ -20,8 +19,8 @@
 //! The argument must point to the directory that contains the decoder plugin
 //! shared libraries (e.g. `libstl_decoder.so` on Linux).
 
-use mujoco_rs::prelude::*;
 use mujoco_rs::wrappers::mj_auxiliary::MjVfs;
+use mujoco_rs::prelude::*;
 
 // ---------------------------------------------------------------------------
 // Embedded STL -- a minimal tetrahedron
@@ -114,7 +113,7 @@ fn main() {
         .expect("failed to load model with STL mesh");
 
     println!(
-        "Model loaded successfully: {} mesh(es), {} geom(s).",
+        "Model loaded: {} mesh(es), {} geom(s).",
         model.nmesh(),
         model.ngeom()
     );

@@ -18,6 +18,7 @@ pub use mj_statistic::*;
 pub use mj_rendering::*;
 pub use mj_auxiliary::*;
 pub use mj_primitive::*;
+pub use mj_plugin::*;
 pub use mj_option::*;
 pub use mj_model::*;
 pub use mj_data::*;

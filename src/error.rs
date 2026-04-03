@@ -5,6 +5,7 @@
 //! - [`MjEditError`] - model-specification editing operations (`MjSpec`).
 //! - [`MjModelError`] - model loading, saving, and state operations (`MjModel`).
 //! - [`MjVfsError`] - virtual file system operations (`MjVfs`).
+//! - [`MjPluginError`] - plugin library loading operations.
 //! - [`GlInitError`] - OpenGL / window initialization (feature-gated).
 use std::fmt;
 
@@ -435,8 +436,10 @@ impl fmt::Display for MjVfsError {
 
 impl std::error::Error for MjVfsError {}
 
+
 /// Errors that can occur when loading MuJoCo plugin libraries.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum MjPluginError {
     /// The provided path contains invalid UTF-8.
     InvalidUtf8Path,
