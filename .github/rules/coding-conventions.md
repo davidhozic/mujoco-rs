@@ -58,6 +58,16 @@
 - Always use ASCII characters only. Avoid non-ASCII Unicode characters (e.g., em dashes, arrows,
   smart quotes). Use `--` (double hyphen) as the ASCII substitute for em dashes. This applies to
   both source code and `.github/` rule/skill files.
+- **Section title comments**: use `/* Title */` block comments for logical section headings inside
+  function bodies (e.g. `/* Window controls */`, `/* Shared row macros */`). Use `//` for
+  inline explanatory comments, `TODO`s, and sub-item notes. Do NOT decorate titles with leading or
+  trailing dashes (e.g. `// --- Title ---` or `/* -- Title -- */` are wrong).
+- **Macro call alignment**: within a contiguous block of macro invocations (e.g. rows in a Grid),
+  all arguments should be column-aligned. Pad the field expression so string label arguments start
+  at the same column across all rows in the block. For rows that also have a trailing argument
+  (e.g. `speed=`, `range=`, or a map constant), pad the string label so all trailing arguments
+  also start at the same column. Rows without a trailing argument (e.g. `bool_row!`) only need
+  the field-column alignment.
 - Imports (`use`) should be sorted by line length with the longest line on top.
 - Prefer to group imports with the same parent module.
 - Do NOT flag or fix integer truncation casts (e.g., `usize as i32`, `len() as i32`) when the
