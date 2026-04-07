@@ -75,21 +75,6 @@ Expected output: `Step 0` through `Step 999`.
 
 ---
 
-## Running in a browser
-
-Copy `examples/viewer.html` next to the built `basic.js` and `basic.wasm`, then
-serve over HTTP and open the HTML file:
-
-```bash
-cp examples/viewer.html target/wasm32-unknown-emscripten/debug/examples/
-python3 -m http.server 8080 --directory target/wasm32-unknown-emscripten/debug/examples
-# open http://localhost:8080/viewer.html
-```
-
-Output from `print!`/`println!` will appear on the page.
-
----
-
 ## Running natively (without WASM)
 
 ```bash
