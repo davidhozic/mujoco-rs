@@ -22,22 +22,8 @@ example:
 
 .. note::
 
-    ``EMCC_CFLAGS="-fwasm-exceptions"`` is required because MuJoCo's
-    ``CMakeLists.txt`` adds ``-fexceptions`` for Emscripten targets, which
-    generates ``emscripten_longjmp`` -- a symbol present only in Emscripten's
-    JS glue, not in the native wasm sysroot that Rust links against.
-    ``EMCC_CFLAGS`` is appended to every ``emcc`` invocation *after* all
-    cmake-managed flags, so ``-fwasm-exceptions`` takes precedence (the last
-    flag wins in Clang).
-
-.. note::
-
     Only the ``wasm32-unknown-emscripten`` Rust target is supported.
     Rendering and visualization features are **not** available for this target.
-
-.. seealso::
-
-    :ref:`static_linking` for background on building a static MuJoCo library.
 
 
 .. _wasm_prerequisites:
