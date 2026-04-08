@@ -4,21 +4,8 @@
 WebAssembly (Emscripten)
 =============================
 
-.. versionadded:: 4.0.0
-
 MuJoCo-rs can be compiled to `WebAssembly <https://webassembly.org/>`_ via
-`Emscripten <https://emscripten.org/>`_, allowing simulations to run in the
-browser or under Node.js.
-
-Follow MuJoCo's
-`official WebAssembly build documentation <https://github.com/google-deepmind/mujoco/tree/main/wasm>`_
-to set up emsdk and build MuJoCo, but prepend
-``EMCC_CFLAGS="-fwasm-exceptions"`` to every ``cmake --build`` command.  For
-example:
-
-::
-
-    EMCC_CFLAGS="-fwasm-exceptions" cmake --build build --parallel
+`Emscripten <https://emscripten.org/>`_, allowing simulations to run under Node.js.
 
 .. note::
 
@@ -61,13 +48,6 @@ output inside it (excluded from version control by ``mujoco/.gitignore``):
     emcmake cmake -S mujoco -B mujoco/build/wasm
     EMCC_CFLAGS="-fwasm-exceptions" cmake --build mujoco/build/wasm --target mujoco --parallel
 
-.. note::
-
-    ``emcmake cmake`` may exit with **status 1** and print a fatal error about
-    ``install(EXPORT)`` and the ``lodepng`` target not being in an export set.
-    This is a known non-fatal issue; all required build files are still
-    generated.  Ignore the non-zero exit code and proceed to the next step.
-
 The static archive is written to ``mujoco/build/wasm/lib/libmujoco.a``.
 
 
@@ -81,8 +61,7 @@ Emscripten target:
 
 ::
 
-    LIB_DIR=$(realpath mujoco/build/wasm/lib)
-    MUJOCO_STATIC_LINK_DIR="$LIB_DIR" \
+    MUJOCO_STATIC_LINK_DIR=$(realpath mujoco/build/wasm/lib) \
         cargo build --example basic --target wasm32-unknown-emscripten
 
 Cargo produces two output artifacts inside
@@ -109,19 +88,4 @@ Replace ``<version>`` with the directory name found under
 ``/path/to/emsdk/node/`` (e.g. ``22.16.0_64bit``).
 
 Expected output: ``Step 0`` through ``Step 999``.
-
-
-.. _wasm_native_run:
-
-Running natively
-=============================
-
-To confirm the example works on the host platform before targeting WebAssembly,
-use the prebuilt MuJoCo shared library that ships with MuJoCo-rs:
-
-::
-
-    LIB_PATH=$(realpath mujoco-3.6.0/lib)
-    MUJOCO_DYNAMIC_LINK_DIR="$LIB_PATH" LD_LIBRARY_PATH="$LIB_PATH" \
-        cargo run --example basic
 
