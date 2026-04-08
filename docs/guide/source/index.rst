@@ -92,8 +92,8 @@ Table of contents
    :maxdepth: 2
 
    installation
-   webassembly
    programming/programming
    api
+   webassembly
    changelog
    migration
