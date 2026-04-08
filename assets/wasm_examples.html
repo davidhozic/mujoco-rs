@@ -68,8 +68,13 @@
       let scriptLoadFailed = false;
       try {
         await new Promise((resolve, reject) => {
+          const ts = Date.now();
           // Emscripten reads from window.Module before the script runs.
           window.Module = {
+            // Inject the same cache-buster into the .wasm URL, because
+            // Emscripten strips query strings from scriptDirectory before
+            // appending the .wasm filename.
+            locateFile(path, prefix) { return `${prefix}${path}?t=${ts}`; },
             print(text)    { appendLine(text); },
             printErr(text) { appendLine(text, 'err'); },
             onExit(code) {
@@ -84,7 +89,7 @@
           };
 
           const script = document.createElement('script');
-          script.src = `./${name}.js?t=${Date.now()}`;
+          script.src = `./${name}.js?t=${ts}`;
           script.onerror = (e) => {
             scriptLoadFailed = true;
             reject(new Error(`Failed to load ${name}.js`));

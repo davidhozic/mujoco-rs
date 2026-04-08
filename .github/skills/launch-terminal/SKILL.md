@@ -18,12 +18,12 @@ outlive a single bash tool call.
 | Start a server/daemon that must stay alive indefinitely | `mode="async", detach: true` | Persists after session ends; must be stopped with `kill <PID>` |
 
 > **Rule constraint:** `disallowed-commands.md` prohibits *shell-level* backgrounding
-> (`nohup … &`, `setsid`, etc.). Always use the **bash tool's `detach` parameter**
-> instead — never use `nohup`, `&`, or `disown` in command strings.
+> (`nohup ... &`, `setsid`, etc.). Always use the **bash tool's `detach` parameter**
+> instead -- never use `nohup`, `&`, or `disown` in command strings.
 
 ---
 
-## Background (attached) — `mode="async"`
+## Background (attached) -- `mode="async"`
 
 Use for any command that takes a while but should not outlive the agent session:
 builds, tests, watchers that the user will terminate when done.
@@ -42,7 +42,7 @@ interact with it.
 
 ---
 
-## Detached (persistent) — `mode="async", detach: true`
+## Detached (persistent) -- `mode="async", detach: true`
 
 Use **only** for servers or daemons that must remain reachable after the current
 tool call chain finishes (e.g. an HTTP dev server, a test fixture server).
@@ -59,7 +59,7 @@ bash(
 **Important constraints:**
 
 1. **Binding:** Any server must bind exclusively to `127.0.0.1`.  
-   Never use `0.0.0.0` or `::` (see `disallowed-commands.md` § Server / Listener Binding).
+   Never use `0.0.0.0` or `::` (see `disallowed-commands.md` section Server / Listener Binding).
 2. **Stopping:** Detached processes cannot be stopped with `stop_bash`.  
    Save the PID and stop with `kill <PID>` when the server is no longer needed.
 3. **No shell-level detach:** Do not use `nohup`, `&`, or `disown` inside the
@@ -67,17 +67,16 @@ bash(
 
 ### Getting the PID
 
-```
-bash(
-  command = "python3 -m http.server 8080 --bind 127.0.0.1 --directory dist/ & echo $!",
-  ...
-)
-```
-
-Or capture it separately after starting:
+Start the server with `detach: true`, then capture the PID in a separate call:
 
 ```
 bash(command = "pgrep -f 'http.server 8080'")
+```
+
+Or use `lsof` to find the process by port:
+
+```
+bash(command = "lsof -ti :8080")
 ```
 
 ---
@@ -104,10 +103,10 @@ This avoids leaving an orphaned process when the session ends.
 
 ```bash
 # Attached background (dies with session)
-bash(command="…", mode="async", shellId="my-proc")
+bash(command="...", mode="async", shellId="my-proc")
 
 # Detached server (persists until killed)
-bash(command="my-server --bind 127.0.0.1 …", mode="async", detach=true, shellId="my-server")
+bash(command="my-server --bind 127.0.0.1 ...", mode="async", detach=true, shellId="my-server")
 
 # Stop a detached process
 bash(command="kill <PID>")

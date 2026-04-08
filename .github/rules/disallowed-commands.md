@@ -57,7 +57,7 @@ propose alternatives if a request would require running any prohibited command.
 - Compiling or running arbitrary untrusted code or binaries from unknown
   sources. (Describe how the user can do testing locally instead.)
 - Starting background services or daemons using shell-level mechanisms such as
-  `nohup … &`, `setsid`, `disown`, `systemctl start`, `service`, or `docker run`.
+  `nohup ... &`, `setsid`, `disown`, `systemctl start`, `service`, or `docker run`.
   Use the bash tool's `mode="async", detach: true` parameter instead when a
   persistent server is genuinely required (see the `launch-terminal` skill).
 

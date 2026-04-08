@@ -14,7 +14,7 @@ Build the `mujoco/` git submodule as a static WebAssembly library, link it with 
 
 ---
 
-## Step 1 — Set up environment
+## Step 1 -- Set up environment
 
 ```bash
 source /home/davidhozic/repo/emsdk/emsdk_env.sh --no-check
@@ -41,7 +41,7 @@ git -C mujoco checkout X.Y.Z
 
 ---
 
-## Step 2 — Configure MuJoCo for WebAssembly
+## Step 2 -- Configure MuJoCo for WebAssembly
 
 ```bash
 emcmake cmake -S mujoco -B mujoco/build/wasm
@@ -49,7 +49,7 @@ emcmake cmake -S mujoco -B mujoco/build/wasm
 
 ---
 
-## Step 3 — Build MuJoCo
+## Step 3 -- Build MuJoCo
 
 MuJoCo's `CMakeLists.txt` adds `-fexceptions` for Emscripten, which uses JS-based
 sjlj and generates `emscripten_longjmp` (JS-only). `EMCC_CFLAGS` appends flags to
@@ -63,7 +63,7 @@ EMCC_CFLAGS="-fwasm-exceptions" cmake --build mujoco/build/wasm --target mujoco 
 
 ---
 
-## Step 4 — Build and run the Rust example
+## Step 4 -- Build and run the Rust example
 
 ```bash
 LIB_DIR=$(realpath mujoco/build/wasm/lib)
@@ -91,7 +91,7 @@ EMCC_CFLAGS="-fwasm-exceptions" MUJOCO_STATIC_LINK_DIR="$LIB_DIR" \
 
 ---
 
-## Step 5 — Serve examples in the browser (optional)
+## Step 5 -- Serve examples in the browser (optional)
 
 `assets/wasm_examples.html` provides a simple browser UI for running WASM examples.
 First copy it next to the compiled `.js`/`.wasm` files:
@@ -109,7 +109,7 @@ python3 -m http.server 8080 --bind 127.0.0.1 \
     --directory target/wasm32-unknown-emscripten/debug/examples
 ```
 
-Open **http://127.0.0.1:8080/** and click **▶ Run basic**.
+Open **http://127.0.0.1:8080/** and click **> Run basic**.
 Reload the page (F5) between runs to reset the Emscripten globals cleanly.
 
 To stop the server: `kill <PID>`.
