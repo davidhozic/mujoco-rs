@@ -25,12 +25,8 @@
 </head>
 <body>
   <h1>MuJoCo WASM Examples</h1>
-  <p style="color:#ce9178;font-size:0.85rem;margin:0 0 0.5rem">
-    ⚠ Reload the page (F5) between runs — Emscripten globals cannot be reset within the same page.
-  </p>
   <div class="controls">
-    <button id="btn-basic" onclick="runExample('basic')">▶ Run basic</button>
-    <button onclick="clearOutput()">✕ Clear</button>
+    <button id="btn-basic" onclick="runExample('basic')">&gt; Run basic</button>
   </div>
   <div id="output"><span class="status" id="placeholder">Select an example above to run it.</span></div>
 
@@ -63,48 +59,65 @@
       running = true;
       setButtons(true);
       clearOutput();
-      appendLine(`=== Running ${name}.wasm ===`, 'status');
+      appendLine('=== Running ' + name + '.wasm ===', 'status');
 
-      let scriptLoadFailed = false;
+      // Each run gets a fresh Web Worker so Emscripten globals are always isolated.
+      // Output streams to the page in real time via postMessage.
+      let worker = null;
       try {
         await new Promise((resolve, reject) => {
           const ts = Date.now();
-          // Emscripten reads from window.Module before the script runs.
-          window.Module = {
-            // Inject the same cache-buster into the .wasm URL, because
-            // Emscripten strips query strings from scriptDirectory before
-            // appending the .wasm filename.
-            locateFile(path, prefix) { return `${prefix}${path}?t=${ts}`; },
-            print(text)    { appendLine(text); },
-            printErr(text) { appendLine(text, 'err'); },
-            onExit(code) {
-              if (code === 0) appendLine('=== Done ===', 'ok');
-              else            appendLine(`=== Exit code: ${code} ===`, 'err');
+          const base = new URL('.', location.href).href;
+          const scriptUrl = base + name + '.js?t=' + ts;
+          const wasmUrl   = base + name + '.wasm?t=' + ts;
+
+          // Build the worker as a blob so no extra file is needed on the server.
+          // importScripts must receive an absolute URL because the blob: base URL
+          // would make relative paths unresolvable.
+          const workerSrc = [
+            'self.Module = {',
+            '  locateFile: function(path, prefix) {',
+            '    return path.endsWith(".wasm") ? "' + wasmUrl + '" : prefix + path;',
+            '  },',
+            '  print:    function(t) { self.postMessage({type:"print",    text:t}); },',
+            '  printErr: function(t) { self.postMessage({type:"printErr", text:t}); },',
+            '  onExit:   function(c) { self.postMessage({type:"exit",     code:c}); },',
+            '  onAbort:  function(r) { self.postMessage({type:"abort",  reason:r}); },',
+            '};',
+            'importScripts("' + scriptUrl + '");',
+          ].join('\n');
+
+          const blob = new Blob([workerSrc], {type: 'application/javascript'});
+          const blobUrl = URL.createObjectURL(blob);
+          worker = new Worker(blobUrl);
+          URL.revokeObjectURL(blobUrl);
+
+          worker.onmessage = function(e) {
+            const d = e.data;
+            if (d.type === 'print') {
+              appendLine(d.text);
+            } else if (d.type === 'printErr') {
+              appendLine(d.text, 'err');
+            } else if (d.type === 'exit') {
+              if (d.code === 0) appendLine('=== Done ===', 'ok');
+              else              appendLine('=== Exit code: ' + d.code + ' ===', 'err');
               resolve();
-            },
-            onAbort(reason) {
-              appendLine(`Aborted: ${reason}`, 'err');
+            } else if (d.type === 'abort') {
+              appendLine('Aborted: ' + d.reason, 'err');
               resolve();
-            },
+            }
           };
 
-          const script = document.createElement('script');
-          script.src = `./${name}.js?t=${ts}`;
-          script.onerror = (e) => {
-            scriptLoadFailed = true;
-            reject(new Error(`Failed to load ${name}.js`));
+          worker.onerror = function(e) {
+            reject(new Error('Failed to run ' + name + ': ' + e.message));
           };
-          document.head.appendChild(script);
         });
       } catch (e) {
-        appendLine(`Error: ${e}`, 'err');
+        appendLine('Error: ' + e.message, 'err');
       } finally {
+        if (worker) worker.terminate();
         running = false;
-        // Re-enable run buttons only if the script never loaded (Emscripten globals
-        // are untouched). Once Emscripten has started, globals are tainted for the
-        // page lifetime and a second run would malfunction — keep buttons disabled.
-        if (scriptLoadFailed) setButtons(false);
-        else appendLine('⚠ Reload the page (F5) before running again.', 'status');
+        setButtons(false);
       }
     }
   </script>
