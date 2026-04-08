@@ -40,8 +40,18 @@ you need:
 Building MuJoCo
 =============================
 
-Use the ``mujoco/`` submodule as the source directory and place the build
-output inside it (excluded from version control by ``mujoco/.gitignore``):
+Use either the ``mujoco/`` submodule (already initialized in the MuJoCo-rs
+repository) or a fresh clone of the official MuJoCo ``3.6.0`` release as the
+source directory.  The official unmodified tag is sufficient for WASM — the
+submodule patches are only required for native/C++ features.
+
+To clone the official release:
+
+::
+
+    git clone https://github.com/google-deepmind/mujoco.git --branch 3.6.0 --depth 1
+
+Then build (replace ``mujoco`` with the path to whichever source you chose):
 
 ::
 
