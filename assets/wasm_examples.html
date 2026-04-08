@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MuJoCo WASM Examples</title>
+  <style>
+    body { font-family: monospace; background: #1e1e1e; color: #d4d4d4; margin: 0; padding: 1rem; }
+    h1 { color: #569cd6; }
+    .controls { margin-bottom: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    button {
+      padding: 0.4rem 1rem; cursor: pointer; border: none; border-radius: 4px;
+      background: #0e639c; color: #fff; font-size: 0.95rem;
+    }
+    button:hover { background: #1177bb; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    #output {
+      background: #252526; border: 1px solid #3c3c3c; border-radius: 6px;
+      padding: 1rem; min-height: 300px; white-space: pre-wrap; font-size: 0.9rem;
+      overflow-y: auto; max-height: 70vh;
+    }
+    .status { color: #9cdcfe; margin-bottom: 0.5rem; }
+    .err { color: #f48771; }
+    .ok  { color: #4ec9b0; }
+  </style>
+</head>
+<body>
+  <h1>MuJoCo WASM Examples</h1>
+  <p style="color:#ce9178;font-size:0.85rem;margin:0 0 0.5rem">
+    ⚠ Reload the page (F5) between runs — Emscripten globals cannot be reset within the same page.
+  </p>
+  <div class="controls">
+    <button id="btn-basic" onclick="runExample('basic')">▶ Run basic</button>
+    <button onclick="clearOutput()">✕ Clear</button>
+  </div>
+  <div id="output"><span class="status" id="placeholder">Select an example above to run it.</span></div>
+
+  <script>
+    let running = false;
+
+    function clearOutput() {
+      document.getElementById('output').innerHTML =
+        '<span class="status" id="placeholder">Select an example above to run it.</span>';
+    }
+
+    function appendLine(text, cls) {
+      const out = document.getElementById('output');
+      const span = document.createElement('span');
+      if (cls) span.className = cls;
+      span.textContent = text + '\n';
+      // Remove the initial placeholder on first real output line.
+      const placeholder = document.getElementById('placeholder');
+      if (placeholder) placeholder.remove();
+      out.appendChild(span);
+      out.scrollTop = out.scrollHeight;
+    }
+
+    function setButtons(disabled) {
+      document.getElementById('btn-basic').disabled = disabled;
+    }
+
+    async function runExample(name) {
+      if (running) return;
+      running = true;
+      setButtons(true);
+      clearOutput();
+      appendLine(`=== Running ${name}.wasm ===`, 'status');
+
+      let scriptLoadFailed = false;
+      try {
+        await new Promise((resolve, reject) => {
+          // Emscripten reads from window.Module before the script runs.
+          window.Module = {
+            print(text)    { appendLine(text); },
+            printErr(text) { appendLine(text, 'err'); },
+            onExit(code) {
+              if (code === 0) appendLine('=== Done ===', 'ok');
+              else            appendLine(`=== Exit code: ${code} ===`, 'err');
+              resolve();
+            },
+            onAbort(reason) {
+              appendLine(`Aborted: ${reason}`, 'err');
+              resolve();
+            },
+          };
+
+          const script = document.createElement('script');
+          script.src = `./${name}.js?t=${Date.now()}`;
+          script.onerror = (e) => {
+            scriptLoadFailed = true;
+            reject(new Error(`Failed to load ${name}.js`));
+          };
+          document.head.appendChild(script);
+        });
+      } catch (e) {
+        appendLine(`Error: ${e}`, 'err');
+      } finally {
+        running = false;
+        // Re-enable run buttons only if the script never loaded (Emscripten globals
+        // are untouched). Once Emscripten has started, globals are tainted for the
+        // page lifetime and a second run would malfunction — keep buttons disabled.
+        if (scriptLoadFailed) setButtons(false);
+        else appendLine('⚠ Reload the page (F5) before running again.', 'status');
+      }
+    }
+  </script>
+</body>
+</html>

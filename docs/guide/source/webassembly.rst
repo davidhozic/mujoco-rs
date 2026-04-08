@@ -58,6 +58,12 @@ Then build (replace ``mujoco`` with the path to whichever source you chose):
     emcmake cmake -S mujoco -B mujoco/build/wasm
     EMCC_CFLAGS="-fwasm-exceptions" cmake --build mujoco/build/wasm --target mujoco --parallel
 
+``EMCC_CFLAGS="-fwasm-exceptions"`` is required because MuJoCo's ``CMakeLists.txt``
+injects ``-fexceptions``, which generates JS-only ``emscripten_longjmp`` calls that are
+incompatible with the Rust side.  ``-fwasm-exceptions`` overrides it (last flag wins)
+and switches to native WebAssembly exception handling, keeping the ABI consistent with
+the Rust crate.
+
 The static archive is written to ``mujoco/build/wasm/lib/libmujoco.a``.
 
 
@@ -67,11 +73,13 @@ Building the Rust crate
 =============================
 
 Point ``MUJOCO_STATIC_LINK_DIR`` at the ``lib/`` directory and build with the
-Emscripten target:
+Emscripten target.  ``EMCC_CFLAGS`` must match the flag used when building MuJoCo
+(see :ref:`wasm_building` for the explanation):
 
 ::
 
-    MUJOCO_STATIC_LINK_DIR=$(realpath mujoco/build/wasm/lib) \
+    EMCC_CFLAGS="-fwasm-exceptions" \
+        MUJOCO_STATIC_LINK_DIR=$(realpath mujoco/build/wasm/lib) \
         cargo build --example basic --target wasm32-unknown-emscripten
 
 Cargo produces two output artifacts inside
@@ -79,6 +87,24 @@ Cargo produces two output artifacts inside
 
 - ``basic.js`` -- Emscripten JS glue / loader
 - ``basic.wasm`` -- the compiled WebAssembly module
+
+
+.. _wasm_memory:
+
+Memory growth for complex models
+=================================
+
+The Emscripten WASM heap defaults to 16 MB.  Complex models (e.g. many geoms,
+tendons, or connected bodies) can exceed this limit during ``mj_compile()`` and
+will panic with ``"Could not allocate memory"``.  Add
+``-sALLOW_MEMORY_GROWTH=1`` as a linker argument via ``RUSTFLAGS``:
+
+::
+
+    EMCC_CFLAGS="-fwasm-exceptions" \
+        MUJOCO_STATIC_LINK_DIR=$(realpath mujoco/build/wasm/lib) \
+        RUSTFLAGS="-C link-arg=-sALLOW_MEMORY_GROWTH=1" \
+        cargo build --example <your_example> --target wasm32-unknown-emscripten
 
 
 .. _wasm_running:

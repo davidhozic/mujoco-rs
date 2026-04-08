@@ -32,9 +32,12 @@ grep "mjVERSION_HEADER" mujoco/include/mujoco/mujoco.h | head -1
 If the versions differ, check out the right tag:
 
 ```bash
-git -C mujoco fetch --tags
 git -C mujoco checkout X.Y.Z
 ```
+
+> **Note:** `git fetch` is a disallowed networked operation. If the required tag is not
+> present locally, ask the user to run `git -C mujoco fetch --tags` manually before
+> proceeding.
 
 ---
 
@@ -64,7 +67,7 @@ EMCC_CFLAGS="-fwasm-exceptions" cmake --build mujoco/build/wasm --target mujoco 
 
 ```bash
 LIB_DIR=$(realpath mujoco/build/wasm/lib)
-MUJOCO_STATIC_LINK_DIR="$LIB_DIR" \
+EMCC_CFLAGS="-fwasm-exceptions" MUJOCO_STATIC_LINK_DIR="$LIB_DIR" \
     cargo build --example basic --target wasm32-unknown-emscripten
 
 NODE_BIN="$(command -v node 2>/dev/null || echo '/home/davidhozic/repo/emsdk/node/22.16.0_64bit/bin/node')"
@@ -72,6 +75,44 @@ NODE_BIN="$(command -v node 2>/dev/null || echo '/home/davidhozic/repo/emsdk/nod
 ```
 
 Expected output: `Step 0` through `Step 999`.
+
+### Memory growth for complex models
+
+The Emscripten WASM heap defaults to 16 MB. Headless examples that programmatically build
+complex models (many geoms, tendons, or connected bodies) can exceed this limit during
+`mj_compile()` and panic with `"Could not allocate memory"`. Pass
+`-sALLOW_MEMORY_GROWTH=1` as a linker argument via `RUSTFLAGS`:
+
+```bash
+EMCC_CFLAGS="-fwasm-exceptions" MUJOCO_STATIC_LINK_DIR="$LIB_DIR" \
+    RUSTFLAGS="-C link-arg=-sALLOW_MEMORY_GROWTH=1" \
+    cargo build --example <your_example> --target wasm32-unknown-emscripten
+```
+
+---
+
+## Step 5 — Serve examples in the browser (optional)
+
+`assets/wasm_examples.html` provides a simple browser UI for running WASM examples.
+First copy it next to the compiled `.js`/`.wasm` files:
+
+```bash
+EXAMPLES_DIR="target/wasm32-unknown-emscripten/debug/examples"
+cp assets/wasm_examples.html "$EXAMPLES_DIR/index.html"
+```
+
+Then start the HTTP server using the bash tool with `mode="async", detach: true`
+(see the `launch-terminal` skill for details):
+
+```bash
+python3 -m http.server 8080 --bind 127.0.0.1 \
+    --directory target/wasm32-unknown-emscripten/debug/examples
+```
+
+Open **http://127.0.0.1:8080/** and click **▶ Run basic**.
+Reload the page (F5) between runs to reset the Emscripten globals cleanly.
+
+To stop the server: `kill <PID>`.
 
 ---
 

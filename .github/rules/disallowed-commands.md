@@ -27,7 +27,14 @@ propose alternatives if a request would require running any prohibited command.
   they would fetch from external repositories. (Dependency management should be
   described to the user instead.) If you need to install a package, ask the user
   about what to do. Ask by prompting the user via `ask_user` tool (multiple-choice window).
-  
+
+## Server / Listener Binding
+
+- Any HTTP server, TCP listener, WebSocket server, or similar network service
+  **must bind exclusively to `127.0.0.1` (localhost)**.
+- Never bind to `0.0.0.0`, `::`, or any interface that would expose the port to
+  the network (e.g. `python -m http.server --bind 0.0.0.0` is disallowed).
+- Correct example: `python -m http.server 8080 --bind 127.0.0.1`
 
 ## Privilege Escalation & System Modifications
 
@@ -49,8 +56,10 @@ propose alternatives if a request would require running any prohibited command.
 
 - Compiling or running arbitrary untrusted code or binaries from unknown
   sources. (Describe how the user can do testing locally instead.)
-- Starting background services or daemons that might persist beyond the agent
-  session, such as `systemctl start`, `service`, or launching `docker run`.
+- Starting background services or daemons using shell-level mechanisms such as
+  `nohup … &`, `setsid`, `disown`, `systemctl start`, `service`, or `docker run`.
+  Use the bash tool's `mode="async", detach: true` parameter instead when a
+  persistent server is genuinely required (see the `launch-terminal` skill).
 
 ## Miscellaneous
 
