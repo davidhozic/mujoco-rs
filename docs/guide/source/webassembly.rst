@@ -6,6 +6,7 @@ WebAssembly (Emscripten)
 
 MuJoCo-rs can be compiled to `WebAssembly <https://webassembly.org/>`_ via
 `Emscripten <https://emscripten.org/>`_, allowing simulations to run under Node.js.
+**Rendering and visualization are not currently supported -- only headless (physics-only) execution is available.**
 
 .. note::
 
