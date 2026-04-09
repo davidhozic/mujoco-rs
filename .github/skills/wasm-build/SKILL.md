@@ -81,11 +81,12 @@ Expected output: `Step 0` through `Step 999`.
 The Emscripten WASM heap defaults to 16 MB. Headless examples that programmatically build
 complex models (many geoms, tendons, or connected bodies) can exceed this limit during
 `mj_compile()` and panic with `"Could not allocate memory"`. Pass
-`-sALLOW_MEMORY_GROWTH=1` as a linker argument via `RUSTFLAGS`:
+`-sALLOW_MEMORY_GROWTH=1` together with `-sMAXIMUM_MEMORY=512MB` (to cap unbounded
+heap growth) as linker arguments via `RUSTFLAGS`:
 
 ```bash
 EMCC_CFLAGS="-fwasm-exceptions" MUJOCO_STATIC_LINK_DIR="$LIB_DIR" \
-    RUSTFLAGS="-C link-arg=-sALLOW_MEMORY_GROWTH=1" \
+    RUSTFLAGS="-C link-arg=-sALLOW_MEMORY_GROWTH=1 -C link-arg=-sMAXIMUM_MEMORY=512MB" \
     cargo build --example <your_example> --target wasm32-unknown-emscripten
 ```
 

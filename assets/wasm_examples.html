@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; worker-src blob:; connect-src 'self'" />
   <title>MuJoCo WASM Examples</title>
   <style>
     body { font-family: monospace; background: #1e1e1e; color: #d4d4d4; margin: 0; padding: 1rem; }
@@ -34,8 +36,13 @@
     let running = false;
 
     function clearOutput() {
-      document.getElementById('output').innerHTML =
-        '<span class="status" id="placeholder">Select an example above to run it.</span>';
+      const out = document.getElementById('output');
+      out.replaceChildren();
+      const span = document.createElement('span');
+      span.className = 'status';
+      span.id = 'placeholder';
+      span.textContent = 'Select an example above to run it.';
+      out.appendChild(span);
     }
 
     function appendLine(text, cls) {
@@ -77,14 +84,14 @@
           const workerSrc = [
             'self.Module = {',
             '  locateFile: function(path, prefix) {',
-            '    return path.endsWith(".wasm") ? "' + wasmUrl + '" : prefix + path;',
+            '    return path.endsWith(".wasm") ? ' + JSON.stringify(wasmUrl) + ' : prefix + path;',
             '  },',
             '  print:    function(t) { self.postMessage({type:"print",    text:t}); },',
             '  printErr: function(t) { self.postMessage({type:"printErr", text:t}); },',
             '  onExit:   function(c) { self.postMessage({type:"exit",     code:c}); },',
             '  onAbort:  function(r) { self.postMessage({type:"abort",  reason:r}); },',
             '};',
-            'importScripts("' + scriptUrl + '");',
+            'importScripts(' + JSON.stringify(scriptUrl) + ');',
           ].join('\n');
 
           const blob = new Blob([workerSrc], {type: 'application/javascript'});
