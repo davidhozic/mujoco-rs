@@ -6,7 +6,7 @@ WebAssembly (Emscripten)
 
 MuJoCo-rs can be compiled to `WebAssembly <https://webassembly.org/>`_ via
 `Emscripten <https://emscripten.org/>`_, allowing simulations to run under Node.js.
-**Rendering and visualization are not currently supported -- only headless (physics-only) execution is available.**
+**Rendering and visualization are not currently supported --- only headless (physics-only) execution is available.**
 
 .. note::
 
@@ -43,7 +43,7 @@ Building MuJoCo
 
 Use either the ``mujoco/`` submodule (already initialized in the MuJoCo-rs
 repository) or a fresh clone of the official MuJoCo ``3.6.0`` release as the
-source directory.  The official unmodified tag is sufficient for WASM -- the
+source directory.  The official unmodified tag is sufficient for WASM --- the
 submodule patches are only required for native/C++ features.
 
 To clone the official release:
@@ -86,8 +86,8 @@ Emscripten target.  ``EMCC_CFLAGS`` must match the flag used when building MuJoC
 Cargo produces two output artifacts inside
 ``target/wasm32-unknown-emscripten/debug/examples/``:
 
-- ``basic.js`` -- Emscripten JS glue / loader
-- ``basic.wasm`` -- the compiled WebAssembly module
+- ``basic.js`` --- Emscripten JS glue / loader
+- ``basic.wasm`` --- the compiled WebAssembly module
 
 
 .. _wasm_memory:
