@@ -94,5 +94,6 @@ Table of contents
    installation
    programming/programming
    api
+   webassembly
    changelog
    migration
