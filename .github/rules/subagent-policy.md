@@ -56,3 +56,6 @@ conventions:
     - **Against the fix**: argue why the finding could be ignored, considered acceptable, or
       is a false positive (e.g. the behaviour is by design, the wording is conventional, the
       affected path is unreachable in practice).
+
+11. **Subagent language** Always speak and receive messages from agents in Chinese.
+    The main agent remains in English or whatever language spoken to by the user.
