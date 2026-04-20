@@ -61,6 +61,9 @@ pub type MjtTextureRole = mjtTextureRole;
 /// Type of color space encoding for textures.
 pub type MjtColorSpace = mjtColorSpace;
 
+/// Mode for actuator length-range computation.
+pub type MjtLRMode = mjtLRMode;
+
 /// Cube map face indices used by [`MjsTexture::set_cubefile`](super::mj_editing::MjsTexture::set_cubefile).
 ///
 /// Each variant corresponds to one face of a cube-map texture, matching the order
@@ -343,7 +346,8 @@ impl MjModel {
     info_method! { Model, ffi(), actuator,
         [trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, trnid: 2, actadr: 1, actnum: 1,
         group: 1, history: 2, historyadr: 1, delay: 1, ctrllimited: 1, forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize, biasprm: mjNBIAS as usize,
-        actearly: 1, ctrlrange: 2, forcerange: 2, actrange: 2, gear: 6, cranklength: 1, acc0: 1, length0: 1,
+        actearly: 1, ctrlrange: 2, forcerange: 2, actrange: 2, damping: 1,
+        dampingpoly: mjNPOLY as usize, armature: 1, gear: 6, cranklength: 1, acc0: 1, length0: 1,
         lengthrange: 2, plugin: 1],
         [user: nuser_actuator],
         []
@@ -371,12 +375,12 @@ impl MjModel {
     info_method! { Model, ffi(), joint,
         [r#type: 1, qposadr: 1, dofadr: 1, group: 1,
         limited: 1, actfrclimited: 1, actgravcomp: 1, solref: mjNREF as usize, solimp: mjNIMP as usize,
-        pos: 3, axis: 3, stiffness: 1,
-        range: 2, actfrcrange: 2, margin: 1, bodyid: 1],
+        pos: 3, axis: 3, stiffness: 1, stiffnesspoly: mjNPOLY as usize,
+        range: 2, actfrcrange: 2, margin: 1, bodyid: 1, actuatorid: 1],
         [user: nuser_jnt],
         [qpos0: nq, qpos_spring: nq, jntid: nv,
         dof_bodyid: nv, parentid: nv, dof_treeid: nv, Madr: nv, simplenum: nv, frictionloss: nv,
-        armature: nv, damping: nv, invweight0: nv, M0: nv]
+        armature: nv, damping: nv, dampingpoly: nv, invweight0: nv, M0: nv]
     }
 
 
@@ -482,9 +486,11 @@ impl MjModel {
     }
 
     info_method! { Model, ffi(), tendon,
-        [adr: 1, num: 1, matid: 1, group: 1, treenum: 1, treeid: 2, limited: 1, actfrclimited: 1, width: 1,
+        [adr: 1, num: 1, matid: 1, actuatorid: 1, group: 1, treenum: 1, treeid: 2,
+        limited: 1, actfrclimited: 1, width: 1,
         solref_lim: mjNREF as usize, solimp_lim: mjNIMP as usize, solref_fri: mjNREF as usize, solimp_fri: mjNIMP as usize, range: 2, actfrcrange: 2, margin: 1,
-        stiffness: 1, damping: 1, armature: 1, frictionloss: 1, lengthspring: 2, length0: 1, invweight0: 1, J_rownnz: 1, J_rowadr: 1, rgba: 4],
+        stiffness: 1, stiffnesspoly: mjNPOLY as usize, damping: 1, dampingpoly: mjNPOLY as usize, armature: 1,
+        frictionloss: 1, lengthspring: 2, length0: 1, invweight0: 1, J_rownnz: 1, J_rowadr: 1, rgba: 4],
         [user: nuser_tendon],
         [J_colind: nJten]
     }
@@ -948,6 +954,7 @@ impl MjModel {
         (unsafe) jnt_qposadr: &[i32; "start addr in 'qpos' for joint's data"; ffi().njnt],
         (unsafe) jnt_dofadr: &[i32; "start addr in 'qvel' for joint's data"; ffi().njnt],
         (unsafe) jnt_bodyid: &[i32; "id of joint's body"; ffi().njnt],
+        (unsafe) jnt_actuatorid: &[i32; "actuator contributing damping / armature"; ffi().njnt],
         jnt_group: &[i32; "group for visibility"; ffi().njnt],
         jnt_limited: &[bool [force]; "does joint have limits"; ffi().njnt],
         jnt_actfrclimited: &[bool [force]; "does joint have actuator force limits"; ffi().njnt],
@@ -957,6 +964,7 @@ impl MjModel {
         jnt_pos: &[[MjtNum; 3] [force]; "local anchor position"; ffi().njnt],
         jnt_axis: &[[MjtNum; 3] [force]; "local joint axis"; ffi().njnt],
         jnt_stiffness: &[MjtNum; "stiffness coefficient"; ffi().njnt],
+        jnt_stiffnesspoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order stiffness coefficients"; ffi().njnt],
         jnt_range: &[[MjtNum; 2] [force]; "joint limits"; ffi().njnt],
         jnt_actfrcrange: &[[MjtNum; 2] [force]; "range of total actuator force"; ffi().njnt],
         jnt_margin: &[MjtNum; "min distance for limit detection"; ffi().njnt],
@@ -971,6 +979,7 @@ impl MjModel {
         dof_frictionloss: &[MjtNum; "dof friction loss"; ffi().nv],
         dof_armature: &[MjtNum; "dof armature inertia/mass"; ffi().nv],
         dof_damping: &[MjtNum; "damping coefficient"; ffi().nv],
+        dof_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().nv],
         dof_invweight0: &[MjtNum; "diag. inverse inertia in qpos0"; ffi().nv],
         dof_M0: &[MjtNum; "diag. inertia in qpos0"; ffi().nv],
         dof_length: &[MjtNum; "linear: 1; angular: approx. length scale"; ffi().nv],
@@ -1224,6 +1233,7 @@ impl MjModel {
         (unsafe) tendon_adr: &[i32; "address of first object in tendon's path"; ffi().ntendon],
         (unsafe) tendon_num: &[i32; "number of objects in tendon's path"; ffi().ntendon],
         (unsafe) tendon_matid: &[i32; "material id for rendering"; ffi().ntendon],
+        (unsafe) tendon_actuatorid: &[i32; "actuator contributing damping / armature"; ffi().ntendon],
         tendon_group: &[i32; "group for visibility"; ffi().ntendon],
         tendon_treenum: &[i32; "number of trees along tendon's path"; ffi().ntendon],
         (unsafe) tendon_treeid: &[[i32; 2] [force]; "first two trees along tendon's path"; ffi().ntendon],
@@ -1241,7 +1251,9 @@ impl MjModel {
         tendon_actfrcrange: &[[MjtNum; 2] [force]; "range of total actuator force"; ffi().ntendon],
         tendon_margin: &[MjtNum; "min distance for limit detection"; ffi().ntendon],
         tendon_stiffness: &[MjtNum; "stiffness coefficient"; ffi().ntendon],
+        tendon_stiffnesspoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order stiffness coefficients"; ffi().ntendon],
         tendon_damping: &[MjtNum; "damping coefficient"; ffi().ntendon],
+        tendon_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().ntendon],
         tendon_armature: &[MjtNum; "inertia associated with tendon velocity"; ffi().ntendon],
         tendon_frictionloss: &[MjtNum; "loss due to friction"; ffi().ntendon],
         tendon_lengthspring: &[[MjtNum; 2] [force]; "spring resting length range"; ffi().ntendon],
@@ -1272,6 +1284,9 @@ impl MjModel {
         actuator_ctrlrange: &[[MjtNum; 2] [force]; "range of controls"; ffi().nu],
         actuator_forcerange: &[[MjtNum; 2] [force]; "range of forces"; ffi().nu],
         actuator_actrange: &[[MjtNum; 2] [force]; "range of activations"; ffi().nu],
+        actuator_damping: &[MjtNum; "linear damping coefficient"; ffi().nu],
+        actuator_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().nu],
+        actuator_armature: &[MjtNum; "armature added to target"; ffi().nu],
         actuator_gear: &[[MjtNum; 6] [force]; "scale length and transmitted force"; ffi().nu],
         actuator_cranklength: &[MjtNum; "crank length for slider-crank"; ffi().nu],
         actuator_acc0: &[MjtNum; "acceleration from unit force in qpos0"; ffi().nu],
@@ -1400,6 +1415,8 @@ info_with_view!(Model, actuator,
 	 [actuator_] biasprm: MjtNum, [actuator_] actearly: bool [force],
 	 [actuator_] ctrlrange: MjtNum, [actuator_] forcerange: MjtNum,
 	 [actuator_] actrange: MjtNum, [actuator_] gear: MjtNum,
+	 [actuator_] damping: MjtNum, [actuator_] dampingpoly: MjtNum,
+	 [actuator_] armature: MjtNum,
 	 [actuator_] cranklength: MjtNum, [actuator_] acc0: MjtNum,
 	 [actuator_] length0: MjtNum, [actuator_] lengthrange: MjtNum,
 	 [actuator_] user: MjtNum,
@@ -1498,17 +1515,20 @@ info_with_view!(Model, joint,
 	 [jnt_] solref: MjtNum, [jnt_] solimp: MjtNum,
 	 [jnt_] pos: MjtNum,
      [jnt_] axis: MjtNum, [jnt_] stiffness: MjtNum,
+     [jnt_] stiffnesspoly: MjtNum,
      [jnt_] range: MjtNum, [jnt_] actfrcrange: MjtNum, [jnt_] margin: MjtNum,
      [jnt_] user: MjtNum,
      [dof_] frictionloss: MjtNum, [dof_] armature: MjtNum,
-     [dof_] damping: MjtNum, [dof_] invweight0: MjtNum,
+     [dof_] damping: MjtNum,
+     [dof_] dampingpoly: MjtNum,
+     [dof_] invweight0: MjtNum,
      [dof_] M0: MjtNum,
      [dof_] simplenum: i32],
 	[[jnt_] r#type: MjtJoint [force],
      [jnt_] qposadr: i32,
-     [jnt_] dofadr: i32, [jnt_] bodyid: i32,
-    dof_bodyid: i32, [dof_] jntid: i32,
-    [dof_] parentid: i32, dof_treeid: i32,
+     [jnt_] dofadr: i32, [jnt_] bodyid: i32, [jnt_] actuatorid: i32,
+     dof_bodyid: i32, [dof_] jntid: i32,
+     [dof_] parentid: i32, dof_treeid: i32,
      [dof_] Madr: i32],
 	[]);
 
@@ -1633,12 +1653,16 @@ info_with_view!(Model, tendon,
 	 [tendon_] solref_lim: MjtNum, [tendon_] solimp_lim: MjtNum,
 	 [tendon_] solref_fri: MjtNum, [tendon_] solimp_fri: MjtNum,
 	 [tendon_] range: MjtNum, [tendon_] actfrcrange: MjtNum, [tendon_] margin: MjtNum,
-	 [tendon_] stiffness: MjtNum, [tendon_] damping: MjtNum, [tendon_] armature: MjtNum,
+	 [tendon_] stiffness: MjtNum,
+	 [tendon_] stiffnesspoly: MjtNum,
+	 [tendon_] damping: MjtNum,
+	 [tendon_] dampingpoly: MjtNum,
+	 [tendon_] armature: MjtNum,
 	 [tendon_] frictionloss: MjtNum, [tendon_] lengthspring: MjtNum,
 	 [tendon_] length0: MjtNum, [tendon_] invweight0: MjtNum,
 	 [tendon_] user: MjtNum, [tendon_] rgba: f32,
 	 [tendon_] treenum: i32],
-	[[tendon_] matid: i32, [tendon_] treeid: i32,
+	[[tendon_] matid: i32, [tendon_] actuatorid: i32, [tendon_] treeid: i32,
 	 [tendon_] adr: i32, [tendon_] num: i32,
      [ten_] J_rownnz: i32, [ten_] J_rowadr: i32, [ten_] J_colind: i32],
 	[]);

@@ -54,6 +54,12 @@ update of MuJoCo alone can increase the major version.
 
 - Updated MuJoCo from **3.6.0** to **3.7.0**. The committed C FFI bindings and
   affected wrappers now match the MuJoCo 3.7.0 headers.
+- |mj_model| now exposes the new joint, dof, tendon, and actuator coefficient
+  arrays and actuator-linkage fields added in newer MuJoCo releases.
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator` now exposes its
+  ``damping`` coefficient array and ``armature`` field.
+- :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtLRMode` is now exported for
+  typed access to ``MjLROpt.mode``.
 
 3.0.1 (MuJoCo 3.6.0)
 ======================

@@ -872,6 +872,7 @@ impl MjsActuator {
             biasprm: &[f64; mjNBIAS as usize];          "bias parameters.";
             dynprm: &[f64; mjNDYN as usize];            "dynamic parameters.";
             lengthrange: &[f64; 2];                     "transmission length range.";
+            damping: &[f64; mjNPOLY as usize + 1];      "damping coefficient.";
             ctrlrange: &[f64; 2];                       "control range.";
             forcerange: &[f64; 2];                      "force range.";
             actrange: &[f64; 2];                        "activation range.";
@@ -893,6 +894,7 @@ impl MjsActuator {
         trntype: MjtTrn;               "transmission type.";
         cranklength: f64;              "crank length, for slider-crank.";
         inheritrange: f64;             "automatic range setting for position and intvelocity.";
+        armature: f64;                 "armature inertia.";
         nsample: i32;                  "number of samples in history buffer.";
         interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
         delay: f64;                    "delay time in seconds; 0: no delay.";
