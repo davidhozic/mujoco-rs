@@ -1060,14 +1060,14 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Returns smallest signed distance between two geoms and optionally the contact segment.
     /// # Panics
     /// Panics when either geom id is `>= ngeom`. Use [`MjData::try_geom_distance`] for a fallible alternative.
-    pub fn geom_distance(&self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
+    pub fn geom_distance(&mut self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
         self.try_geom_distance(geom1_id, geom2_id, dist_max, fromto).unwrap()
     }
 
     /// Fallible version of [`MjData::geom_distance`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when either geom id is `>= ngeom`.
-    pub fn try_geom_distance(&self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> Result<MjtNum, MjDataError> {
+    pub fn try_geom_distance(&mut self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> Result<MjtNum, MjDataError> {
         let ngeom = self.model.ffi().ngeom;
         if geom1_id >= ngeom as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "geom1_id", id: geom1_id, upper: ngeom as usize });
@@ -1077,7 +1077,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
         Ok(unsafe {
             mj_geomDistance(
-                self.model.ffi(), self.ffi(),
+                self.model.ffi(), self.ffi_mut(),
                 geom1_id as i32, geom2_id as i32, dist_max,
                 fromto.map_or(ptr::null_mut(), |x| x),
             )

@@ -43,7 +43,7 @@ impl<T> ::std::cmp::PartialEq for __BindgenUnionField<T> {
     }
 }
 impl<T> ::std::cmp::Eq for __BindgenUnionField<T> {}
-pub const mjVERSION_HEADER: u32 = 3006000;
+pub const mjVERSION_HEADER: u32 = 3007000;
 pub const mjMINVAL: f64 = 0.000000000000001;
 pub const mjPI: f64 = 3.141592653589793;
 pub const mjMAXVAL: f64 = 10000000000.0;
@@ -61,6 +61,7 @@ pub const mjNBIAS: u32 = 10;
 pub const mjNFLUID: u32 = 12;
 pub const mjNREF: u32 = 2;
 pub const mjNIMP: u32 = 5;
+pub const mjNPOLY: u32 = 2;
 pub const mjNSENS: u32 = 3;
 pub const mjNSOLVER: u32 = 200;
 pub const mjNISLAND: u32 = 20;
@@ -319,7 +320,8 @@ pub enum mjtDyn_ {
     mjDYN_FILTER = 2,
     mjDYN_FILTEREXACT = 3,
     mjDYN_MUSCLE = 4,
-    mjDYN_USER = 5,
+    mjDYN_DCMOTOR = 5,
+    mjDYN_USER = 6,
 }
 pub use self::mjtDyn_ as mjtDyn;
 #[repr(u32)]
@@ -328,7 +330,8 @@ pub enum mjtGain_ {
     mjGAIN_FIXED = 0,
     mjGAIN_AFFINE = 1,
     mjGAIN_MUSCLE = 2,
-    mjGAIN_USER = 3,
+    mjGAIN_DCMOTOR = 3,
+    mjGAIN_USER = 4,
 }
 pub use self::mjtGain_ as mjtGain;
 #[repr(u32)]
@@ -337,7 +340,8 @@ pub enum mjtBias_ {
     mjBIAS_NONE = 0,
     mjBIAS_AFFINE = 1,
     mjBIAS_MUSCLE = 2,
-    mjBIAS_USER = 3,
+    mjBIAS_DCMOTOR = 3,
+    mjBIAS_USER = 4,
 }
 pub use self::mjtBias_ as mjtBias;
 #[repr(u32)]
@@ -855,6 +859,7 @@ pub struct mjModel_ {
     pub jnt_qposadr: *mut ::std::os::raw::c_int,
     pub jnt_dofadr: *mut ::std::os::raw::c_int,
     pub jnt_bodyid: *mut ::std::os::raw::c_int,
+    pub jnt_actuatorid: *mut ::std::os::raw::c_int,
     pub jnt_group: *mut ::std::os::raw::c_int,
     pub jnt_limited: *mut mjtByte,
     pub jnt_actfrclimited: *mut mjtByte,
@@ -864,6 +869,7 @@ pub struct mjModel_ {
     pub jnt_pos: *mut mjtNum,
     pub jnt_axis: *mut mjtNum,
     pub jnt_stiffness: *mut mjtNum,
+    pub jnt_stiffnesspoly: *mut mjtNum,
     pub jnt_range: *mut mjtNum,
     pub jnt_actfrcrange: *mut mjtNum,
     pub jnt_margin: *mut mjtNum,
@@ -879,6 +885,7 @@ pub struct mjModel_ {
     pub dof_frictionloss: *mut mjtNum,
     pub dof_armature: *mut mjtNum,
     pub dof_damping: *mut mjtNum,
+    pub dof_dampingpoly: *mut mjtNum,
     pub dof_invweight0: *mut mjtNum,
     pub dof_M0: *mut mjtNum,
     pub dof_length: *mut mjtNum,
@@ -1135,6 +1142,7 @@ pub struct mjModel_ {
     pub tendon_adr: *mut ::std::os::raw::c_int,
     pub tendon_num: *mut ::std::os::raw::c_int,
     pub tendon_matid: *mut ::std::os::raw::c_int,
+    pub tendon_actuatorid: *mut ::std::os::raw::c_int,
     pub tendon_group: *mut ::std::os::raw::c_int,
     pub tendon_treenum: *mut ::std::os::raw::c_int,
     pub tendon_treeid: *mut ::std::os::raw::c_int,
@@ -1152,7 +1160,9 @@ pub struct mjModel_ {
     pub tendon_actfrcrange: *mut mjtNum,
     pub tendon_margin: *mut mjtNum,
     pub tendon_stiffness: *mut mjtNum,
+    pub tendon_stiffnesspoly: *mut mjtNum,
     pub tendon_damping: *mut mjtNum,
+    pub tendon_dampingpoly: *mut mjtNum,
     pub tendon_armature: *mut mjtNum,
     pub tendon_frictionloss: *mut mjtNum,
     pub tendon_lengthspring: *mut mjtNum,
@@ -1168,6 +1178,9 @@ pub struct mjModel_ {
     pub actuator_gaintype: *mut ::std::os::raw::c_int,
     pub actuator_biastype: *mut ::std::os::raw::c_int,
     pub actuator_trnid: *mut ::std::os::raw::c_int,
+    pub actuator_damping: *mut mjtNum,
+    pub actuator_dampingpoly: *mut mjtNum,
+    pub actuator_armature: *mut mjtNum,
     pub actuator_actadr: *mut ::std::os::raw::c_int,
     pub actuator_actnum: *mut ::std::os::raw::c_int,
     pub actuator_group: *mut ::std::os::raw::c_int,
@@ -1352,12 +1365,11 @@ pub enum mjtWarning_ {
     mjWARN_INERTIA = 0,
     mjWARN_CONTACTFULL = 1,
     mjWARN_CNSTRFULL = 2,
-    mjWARN_VGEOMFULL = 3,
-    mjWARN_BADQPOS = 4,
-    mjWARN_BADQVEL = 5,
-    mjWARN_BADQACC = 6,
-    mjWARN_BADCTRL = 7,
-    mjNWARNING = 8,
+    mjWARN_BADQPOS = 3,
+    mjWARN_BADQVEL = 4,
+    mjWARN_BADQACC = 5,
+    mjWARN_BADCTRL = 6,
+    mjNWARNING = 7,
 }
 pub use self::mjtWarning_ as mjtWarning;
 #[repr(u32)]
@@ -1457,7 +1469,7 @@ pub struct mjData_ {
     pub solver_niter: [::std::os::raw::c_int; 20usize],
     pub solver_nnz: [::std::os::raw::c_int; 20usize],
     pub solver_fwdinv: [mjtNum; 2usize],
-    pub warning: [mjWarningStat; 8usize],
+    pub warning: [mjWarningStat; 7usize],
     pub timer: [mjTimerStat; 15usize],
     pub ncon: ::std::os::raw::c_int,
     pub ne: ::std::os::raw::c_int,
@@ -1661,7 +1673,7 @@ pub type mjfAct = ::std::option::Option<
 pub type mjfCollision = ::std::option::Option<
     unsafe extern "C" fn(
         m: *const mjModel,
-        d: *const mjData,
+        d: *mut mjData,
         con: *mut mjContact,
         g1: ::std::os::raw::c_int,
         g2: ::std::os::raw::c_int,
@@ -1880,7 +1892,7 @@ pub struct mjsJoint_ {
     pub(crate) axis: [f64; 3usize],
     pub(crate) ref_: f64,
     pub(crate) align: ::std::os::raw::c_int,
-    pub(crate) stiffness: f64,
+    pub(crate) stiffness: [f64; 3usize],
     pub(crate) springref: f64,
     pub(crate) springdamper: [f64; 2usize],
     pub(crate) limited: ::std::os::raw::c_int,
@@ -1891,7 +1903,7 @@ pub struct mjsJoint_ {
     pub(crate) actfrclimited: ::std::os::raw::c_int,
     pub(crate) actfrcrange: [f64; 2usize],
     pub(crate) armature: f64,
-    pub(crate) damping: f64,
+    pub(crate) damping: [f64; 3usize],
     pub(crate) frictionloss: f64,
     pub(crate) solref_friction: [mjtNum; 2usize],
     pub(crate) solimp_friction: [mjtNum; 5usize],
@@ -2022,7 +2034,6 @@ pub struct mjsFlex_ {
     pub(crate) internal: mjtByte,
     pub(crate) flatskin: mjtByte,
     pub(crate) selfcollide: ::std::os::raw::c_int,
-    pub(crate) vertcollide: ::std::os::raw::c_int,
     pub(crate) passive: ::std::os::raw::c_int,
     pub(crate) activelayers: ::std::os::raw::c_int,
     pub(crate) group: ::std::os::raw::c_int,
@@ -2189,9 +2200,9 @@ pub type mjsEquality = mjsEquality_;
 #[derive(Debug)]
 pub struct mjsTendon_ {
     pub(crate) element: *mut mjsElement,
-    pub(crate) stiffness: f64,
+    pub(crate) stiffness: [f64; 3usize],
     pub(crate) springlength: [f64; 2usize],
-    pub(crate) damping: f64,
+    pub(crate) damping: [f64; 3usize],
     pub(crate) frictionloss: f64,
     pub(crate) solref_friction: [mjtNum; 2usize],
     pub(crate) solimp_friction: [mjtNum; 5usize],
@@ -2239,6 +2250,8 @@ pub struct mjsActuator_ {
     pub(crate) cranklength: f64,
     pub(crate) lengthrange: [f64; 2usize],
     pub(crate) inheritrange: f64,
+    pub(crate) damping: [f64; 3usize],
+    pub(crate) armature: f64,
     pub(crate) ctrllimited: ::std::os::raw::c_int,
     pub(crate) ctrlrange: [f64; 2usize],
     pub(crate) forcelimited: ::std::os::raw::c_int,
@@ -2717,6 +2730,22 @@ pub struct mjpDecoder {
     pub extension: *const ::std::os::raw::c_char,
     pub can_decode: mjfCanDecode,
     pub decode: mjfDecode,
+}
+pub type mjfEncode = ::std::option::Option<
+    unsafe extern "C" fn(
+        s: *const mjSpec,
+        m: *const mjModel,
+        vfs: *const mjVFS,
+        resource: *mut mjResource,
+    ) -> ::std::os::raw::c_int,
+>;
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct mjpEncoder {
+    pub content_type: *const ::std::os::raw::c_char,
+    pub extension: *const ::std::os::raw::c_char,
+    pub encode: mjfEncode,
+    pub close_resource: mjfCloseResource,
 }
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
@@ -3361,6 +3390,17 @@ unsafe extern "C" {
         error: *mut ::std::os::raw::c_char,
         error_sz: ::std::os::raw::c_int,
     ) -> *mut mjSpec;
+}
+unsafe extern "C" {
+    pub fn mj_encode(
+        s: *const mjSpec,
+        m: *const mjModel,
+        filename: *const ::std::os::raw::c_char,
+        content_type: *const ::std::os::raw::c_char,
+        vfs: *const mjVFS,
+        error: *mut ::std::os::raw::c_char,
+        error_sz: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub fn mj_compile(s: *mut mjSpec, vfs: *const mjVFS) -> *mut mjModel;
@@ -4019,7 +4059,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn mj_geomDistance(
         m: *const mjModel,
-        d: *const mjData,
+        d: *mut mjData,
         geom1: ::std::os::raw::c_int,
         geom2: ::std::os::raw::c_int,
         distmax: mjtNum,
@@ -5325,6 +5365,18 @@ unsafe extern "C" {
     ) -> *const mjpDecoder;
 }
 unsafe extern "C" {
+    pub fn mjp_registerEncoder(encoder: *const mjpEncoder);
+}
+unsafe extern "C" {
+    pub fn mjp_defaultEncoder(encoder: *mut mjpEncoder);
+}
+unsafe extern "C" {
+    pub fn mjp_findEncoder(
+        filename: *const ::std::os::raw::c_char,
+        content_type: *const ::std::os::raw::c_char,
+    ) -> *const mjpEncoder;
+}
+unsafe extern "C" {
     pub fn mju_openResource(
         dir: *const ::std::os::raw::c_char,
         name: *const ::std::os::raw::c_char,
@@ -5538,6 +5590,21 @@ unsafe extern "C" {
     pub fn mjs_setToAdhesion(
         actuator: *mut mjsActuator,
         gain: f64,
+    ) -> *const ::std::os::raw::c_char;
+}
+unsafe extern "C" {
+    pub fn mjs_setToDCMotor(
+        actuator: *mut mjsActuator,
+        motorconst: *mut [f64; 2usize],
+        resistance: f64,
+        nominal: *mut [f64; 3usize],
+        saturation: *mut [f64; 3usize],
+        inductance: *mut [f64; 2usize],
+        cogging: *mut [f64; 3usize],
+        controller: *mut [f64; 6usize],
+        thermal: *mut [f64; 6usize],
+        lugre: *mut [f64; 5usize],
+        input_mode: ::std::os::raw::c_int,
     ) -> *const ::std::os::raw::c_char;
 }
 unsafe extern "C" {
