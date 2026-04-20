@@ -24,6 +24,37 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+4.0.0 (MuJoCo 3.7.0)
+======================
+
+.. rubric:: Breaking changes
+
+*``MjData::geom_distance`` now requires mutable access*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>geom_distance` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_geom_distance`
+  now take ``&mut self`` instead of ``&self``. This follows MuJoCo 3.7.0, where
+  ``mj_geomDistance`` mutates ``mjData`` internally.
+
+*Model-editing wrappers now expose polynomial stiffness and damping coefficients*
+
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsJoint`:
+  ``stiffness`` and ``damping`` now expose coefficient arrays
+  instead of scalar ``f64`` values.
+- |mjs_tendon|:
+  ``stiffness`` and ``damping`` now expose coefficient arrays
+  instead of scalar ``f64`` values.
+
+*``MjsFlex::vertcollide`` removed*
+
+- ``MjsFlex::vertcollide`` is no longer available. MuJoCo 3.7.0 removed the
+  upstream ``mjsFlex::vertcollide`` field, so the wrapper no longer exposes it.
+
+.. rubric:: New features and improvements
+
+- Updated MuJoCo from **3.6.0** to **3.7.0**. The committed C FFI bindings and
+  affected wrappers now match the MuJoCo 3.7.0 headers.
+
 3.0.1 (MuJoCo 3.6.0)
 ======================
 

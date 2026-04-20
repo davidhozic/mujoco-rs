@@ -146,7 +146,7 @@ Similarly, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ste
 :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step1` and :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step2`, respectively.
 
 For more information about specific MuJoCo functions, see the
-`MuJoCo documentation <https://mujoco.readthedocs.io/en/stable/APIreference/APIfunctions.html#mj-step>`_.
+`MuJoCo documentation <https://mujoco.readthedocs.io/en/3.7.0/APIreference/APIfunctions.html#mj-step>`_.
 
 Real-time
 ----------------------
@@ -185,7 +185,7 @@ it is beneficial to perform domain randomization [Tobin2017]_.
 .. danger::
 
     Not all parameters of |mj_model| are safe to change.
-    See `MuJoCo's documentation <https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes>`_
+    See `MuJoCo's documentation <https://mujoco.readthedocs.io/en/3.7.0/programming/simulation.html#mjmodel-changes>`_
     for a list of parameters that are safe to change.
 
 Direct mutation with ``model_mut``

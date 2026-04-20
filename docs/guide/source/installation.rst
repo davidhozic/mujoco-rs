@@ -4,7 +4,7 @@
 Installation
 =============================
 
-.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.6.0
+.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.7.0
 
 
 MuJoCo-rs
@@ -263,4 +263,3 @@ To build statically linkable libraries, perform the following steps:
 
     In performance critical cases, it is also recommended to use the official MuJoCo shared (dynamic) libraries,
     which are generally more optimized. Performance gain with LTO enabled on static builds is about 10% more steps per second.
-
