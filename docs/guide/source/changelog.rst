@@ -29,7 +29,7 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: Breaking changes
 
-*``MjData::geom_distance`` now requires mutable access*
+*MjData::geom_distance now requires mutable access*
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>geom_distance` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_geom_distance`
@@ -45,7 +45,7 @@ update of MuJoCo alone can increase the major version.
   ``stiffness`` and ``damping`` now expose coefficient arrays
   instead of scalar ``f64`` values.
 
-*``MjsFlex::vertcollide`` removed*
+*MjsFlex::vertcollide removed*
 
 - ``MjsFlex::vertcollide`` is no longer available. MuJoCo 3.7.0 removed the
   upstream ``mjsFlex::vertcollide`` field, so the wrapper no longer exposes it.
