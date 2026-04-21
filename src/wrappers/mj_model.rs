@@ -380,7 +380,7 @@ impl MjModel {
         [user: nuser_jnt],
         [qpos0: nq, qpos_spring: nq, jntid: nv,
         dof_bodyid: nv, parentid: nv, dof_treeid: nv, Madr: nv, simplenum: nv, frictionloss: nv,
-        armature: nv, damping: nv, dampingpoly: nv, invweight0: nv, M0: nv]
+        armature: nv, damping: nv, dampingpoly: nv * mjNPOLY as usize, invweight0: nv, M0: nv]
     }
 
 
