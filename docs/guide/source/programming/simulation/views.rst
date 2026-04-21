@@ -7,7 +7,7 @@ Attribute views
 The MuJoCo library stores data about joints, bodies, and other elements in contiguous arrays.
 These can be challenging to work with, particularly when the array's length varies between elements.
 For example, different types of joints may have a different number of degrees of freedom.
-`MuJoCo's Python bindings <https://mujoco.readthedocs.io/en/stable/python.html>`_ solve
+`MuJoCo's Python bindings <https://mujoco.readthedocs.io/en/3.7.0/python.html>`_ solve
 this issue by providing views to specific ranges in the corresponding arrays.
 
 Like MuJoCo's Python bindings, MuJoCo-rs also provides views. Specifically, we provide views for

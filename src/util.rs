@@ -365,12 +365,16 @@ macro_rules! view_creator {
 /// - **Fixed stride**: `attr: N`: index range is `(id * N, N)`.
 /// - **FFI stride** (with optional multiplier): `attr: ffi_field (* k)`: stride taken from
 ///   `model.ffi_field`, optionally scaled by `k`.
-/// - **Dynamic range**: `attr: nXXX`: start and length resolved via [`mj_view_indices!`],
+/// - **Dynamic range**: `attr: nXXX (* k)`: start and length resolved via [`mj_view_indices!`],
 ///   where `nXXX` is the major-dimension field (e.g. `nhfielddata`, `ntexdata`).
+///   The optional `* k` is a stride multiplier: each logical unit occupies `k` flat elements,
+///   so both the start offset and the length are scaled by `k`. Use this when the target array
+///   stores `k` flat values per logical unit (e.g. `dof_dampingpoly (nv × mjNPOLY)` viewed as
+///   a flat `MjtNum` slice: offset = `dof_start * mjNPOLY`, length = `n_dofs * mjNPOLY`).
 #[doc(hidden)]
 #[macro_export]
 macro_rules! info_method {
-    ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*], [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*], [$($attr_dyn:ident: $ffi_len_dyn:expr),*]) => {
+    ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*], [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*], [$($attr_dyn:ident: $ffi_len_dyn:ident $(* $offset_mult:expr)?),*]) => {
         paste::paste! {
             #[doc = concat!(
                 "Returns a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] for the named ", stringify!($type_), ", ",
@@ -397,12 +401,13 @@ macro_rules! info_method {
                     let $attr_ffi = (id * ffi.$len_ffi as usize $( * $multiplier)*, ffi.$len_ffi as usize $( * $multiplier)*);
                 )*
                 $(
-                    let $attr_dyn = unsafe { mj_view_indices!(
+                    let (dyn_start, dyn_len) = unsafe { mj_view_indices!(
                         id,
                         mj_model_nx_to_mapping!(ffi, $ffi_len_dyn),
                         mj_model_nx_to_nitem!(ffi, $ffi_len_dyn),
                         ffi.$ffi_len_dyn
                     ) };
+                    let $attr_dyn = (dyn_start $(* $offset_mult)?, dyn_len $(* $offset_mult)?);
                 )*
 
                 let model_signature = ffi.signature;

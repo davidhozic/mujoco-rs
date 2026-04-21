@@ -643,6 +643,9 @@ impl MjsJoint {
             ref_ + _:    &f64;          "value at reference configuration: qpos0.";
             springdamper: &[f64; 2];    "timeconst, dampratio.";
 
+            // stiffness
+            stiffness: &[f64; mjNPOLY as usize + 1];            "stiffness coefficient.";
+
             // limits
             range:   &[f64; 2];         "joint limits.";
             solref_limit: &[MjtNum; mjNREF as usize];  "solver reference: joint limits.";
@@ -650,6 +653,7 @@ impl MjsJoint {
             actfrcrange: &[f64; 2];     "actuator force limits.";
 
             // dof properties
+            damping: &[f64; mjNPOLY as usize + 1];                 "damping coefficient.";
             solref_friction: &[MjtNum; mjNREF as usize]; "solver reference: dof friction.";
             solimp_friction: &[MjtNum; mjNIMP as usize]; "solver impedance: dof friction.";
         ]
@@ -658,11 +662,9 @@ impl MjsJoint {
     getter_setter!([&] with, get, set, [
         type_ + _: MjtJoint;           "joint type.";
         group: i32;                    "joint group.";
-        stiffness: f64;               "stiffness coefficient.";
         springref: f64;               "spring reference value: qpos_spring.";
         margin: f64;                  "margin value for joint limit detection.";
         armature: f64;                "armature inertia (mass for slider).";
-        damping: f64;                 "damping coefficient.";
         frictionloss: f64;            "friction loss.";
     ]);
 
@@ -870,6 +872,7 @@ impl MjsActuator {
             biasprm: &[f64; mjNBIAS as usize];          "bias parameters.";
             dynprm: &[f64; mjNDYN as usize];            "dynamic parameters.";
             lengthrange: &[f64; 2];                     "transmission length range.";
+            damping: &[f64; mjNPOLY as usize + 1];      "damping coefficient.";
             ctrlrange: &[f64; 2];                       "control range.";
             forcerange: &[f64; 2];                      "force range.";
             actrange: &[f64; 2];                        "activation range.";
@@ -891,6 +894,7 @@ impl MjsActuator {
         trntype: MjtTrn;               "transmission type.";
         cranklength: f64;              "crank length, for slider-crank.";
         inheritrange: f64;             "automatic range setting for position and intvelocity.";
+        armature: f64;                 "armature inertia.";
         nsample: i32;                  "number of samples in history buffer.";
         interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
         delay: f64;                    "delay time in seconds; 0: no delay.";
@@ -1002,7 +1006,6 @@ impl MjsFlex {
         [&] with, get, set, [
             internal: bool;       "enable internal collisions.";
             flatskin: bool;       "render flex skin with flat shading.";
-            vertcollide: bool;    "mode for vertex collision.";
             passive: bool;        "mode for passive collisions.";
         ]        
     }
@@ -1108,6 +1111,8 @@ mjs_struct!(Tendon);
 impl MjsTendon {
     getter_setter! {
         [&] with, get, [
+            damping: &[f64; mjNPOLY as usize + 1];       "damping coefficient.";
+            stiffness: &[f64; mjNPOLY as usize + 1];     "stiffness coefficient.";
             springlength: &[f64; 2];                    "spring length.";
             solref_friction: &[f64; mjNREF as usize];   "solver reference: tendon friction.";
             solimp_friction: &[f64; mjNIMP as usize];   "solver impedance: tendon friction.";
@@ -1121,8 +1126,6 @@ impl MjsTendon {
 
     getter_setter! {[&] with, get, set, [
         group: i32;         "group.";
-        damping: f64;       "damping coefficient.";
-        stiffness: f64;     "stiffness coefficient.";
         frictionloss: f64;  "friction loss.";
         armature: f64;      "inertia associated with tendon velocity.";
         margin: f64;        "margin value for tendon limit detection.";

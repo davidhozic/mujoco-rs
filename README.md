@@ -1,13 +1,12 @@
 # MuJoCo-rs
-[![Guide](https://img.shields.io/badge/Guide-book-white)](https://mujoco-rs.readthedocs.io/en/stable/)
+[![Guide](https://img.shields.io/badge/Guide-book-white)](https://mujoco-rs.readthedocs.io/en/v4.0.x/)
 [![docs.rs](https://img.shields.io/docsrs/mujoco-rs/latest)](https://docs.rs/mujoco-rs)
 [![CI](https://img.shields.io/github/actions/workflow/status/davidhozic/mujoco-rs/tests.yml?label=CI)](https://github.com/davidhozic/mujoco-rs/actions)
 [![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
 
 > [!IMPORTANT]
-> **Upgrading from 2.x to 3.0.0?** This release contains breaking changes including
-> new error types, removed generics on viewer/renderer, and API renames.
-> Read the [migration guide](https://mujoco-rs.readthedocs.io/en/stable/migration.html)
+> **Upgrading from 3.x to 4.0.0?** This release updates MuJoCo to 3.7.0.
+> Read the [migration guide](https://mujoco-rs.readthedocs.io/en/v4.0.x/migration.html)
 > before upgrading.
 
 MuJoCo bindings and high-level wrappers for the Rust programming language. Includes a Rust-native viewer and also
@@ -18,16 +17,16 @@ bindings to a modified C++ one.
 ## Documentation
 More detailed documentation is available at the:
 - [**API docs**](https://docs.rs/mujoco-rs)
-- [**Guide book**](https://mujoco-rs.readthedocs.io/en/stable/)
+- [**Guide book**](https://mujoco-rs.readthedocs.io/en/v4.0.x/)
 
 ## MuJoCo version
-This library uses FFI bindings to MuJoCo **3.6.0**.
+This library uses FFI bindings to MuJoCo **3.7.0**.
 
 ## Minimum Rust version
 Rust version 1.88 or newer is required.
 
 ## Installation
-For installation, see the [**guide book**](https://mujoco-rs.readthedocs.io/en/stable/installation.html).
+For installation, see the [**guide book**](https://mujoco-rs.readthedocs.io/en/v4.0.x/installation.html).
 
 ### Missing library errors
 The guide book also contains information on how to **configure MuJoCo**.
@@ -35,7 +34,7 @@ MuJoCo-rs cannot fully configure it itself due to MuJoCo being a shared C librar
 **load-time errors** about **missing libraries**.
 
 Information on how to configure MuJoCo and resolve these issues is available
-[here](https://mujoco-rs.readthedocs.io/en/stable/installation.html#mujoco).
+[here](https://mujoco-rs.readthedocs.io/en/v4.0.x/installation.html#mujoco).
 
 ## Main features
 MuJoCo-rs tries to stay close to MuJoCo's C API, with a few additional features for ease of use.
@@ -70,7 +69,7 @@ Optional Cargo features can be enabled:
     This also allows users to add custom [`egui`](https://docs.rs/egui/0.33/egui/) widgets to the viewer.
 
 - ``cpp-viewer``: enables the Rust wrapper around the C++ MuJoCo viewer.
-  This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/stable/installation.html#static-linking).
+  This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/v4.0.x/installation.html#static-linking).
 - ``renderer``: enables offscreen rendering for writing RGB and
   depth data to memory or file.
 
@@ -85,7 +84,7 @@ Optional Cargo features can be enabled:
   - The environment variable ``MUJOCO_DOWNLOAD_DIR`` must be
     set to the absolute path of the download location.
   - Downloaded MuJoCo library is still a shared library. See
-    [installation](https://mujoco-rs.readthedocs.io/en/stable/installation.html#mujoco)
+    [installation](https://mujoco-rs.readthedocs.io/en/v4.0.x/installation.html#mujoco)
     for information on complete configuration.
   - **Cross-OS downloads are not supported** (e.g. Linux host → Windows target).
     Same-OS cross-compilation works (e.g. Linux x86_64 → Linux aarch64).

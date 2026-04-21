@@ -102,7 +102,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Notes
     /// This method only validates model-signature compatibility.
     /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
-    /// See [here](https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes)
+    /// See [here](https://mujoco.readthedocs.io/en/3.7.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
     /// 
     /// If `M` implements [`DerefMut`], prefer
@@ -1060,14 +1060,14 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Returns smallest signed distance between two geoms and optionally the contact segment.
     /// # Panics
     /// Panics when either geom id is `>= ngeom`. Use [`MjData::try_geom_distance`] for a fallible alternative.
-    pub fn geom_distance(&self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
+    pub fn geom_distance(&mut self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
         self.try_geom_distance(geom1_id, geom2_id, dist_max, fromto).unwrap()
     }
 
     /// Fallible version of [`MjData::geom_distance`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when either geom id is `>= ngeom`.
-    pub fn try_geom_distance(&self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> Result<MjtNum, MjDataError> {
+    pub fn try_geom_distance(&mut self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> Result<MjtNum, MjDataError> {
         let ngeom = self.model.ffi().ngeom;
         if geom1_id >= ngeom as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "geom1_id", id: geom1_id, upper: ngeom as usize });
@@ -1077,7 +1077,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
         Ok(unsafe {
             mj_geomDistance(
-                self.model.ffi(), self.ffi(),
+                self.model.ffi(), self.ffi_mut(),
                 geom1_id as i32, geom2_id as i32, dist_max,
                 fromto.map_or(ptr::null_mut(), |x| x),
             )
@@ -1580,7 +1580,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// (e.g., timestep, gravity) without having to rebuild the simulation.
     ///
     /// **Not all model parameters are safe to change at runtime.**
-    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes)
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.7.0/programming/simulation.html#mjmodel-changes)
     /// for a list of parameters that are safe to change.
     ///
     /// Only available when the inner model type `M` implements
