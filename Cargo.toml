@@ -36,9 +36,6 @@ all-features = true
 name = "basic"
 
 [[example]]
-name = "stl_mesh"
-
-[[example]]
 name = "model_parameters"
 
 [[example]]
