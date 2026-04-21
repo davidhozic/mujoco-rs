@@ -18,13 +18,13 @@ pub type MjPluginLibraryLoadCallback =
 ///
 /// # Examples
 ///
-/// Load only the STL decoder plugin before loading a model with STL meshes:
+/// Load the PID actuator plugin before using PID-based actuators in a model:
 ///
 /// ```no_run
 /// use mujoco_rs::prelude::*;
 ///
-/// load_plugin_library("path/to/mujoco/bin/mujoco_plugin/libstl_decoder.so")
-///     .expect("failed to load STL decoder plugin");
+/// load_plugin_library("path/to/mujoco/bin/mujoco_plugin/libactuator.so")
+///     .expect("failed to load actuator plugin");
 ///
 /// let model = MjModel::from_xml("model.xml").expect("could not load the model");
 /// ```
@@ -45,8 +45,8 @@ pub fn load_plugin_library<P: AsRef<Path>>(path: P) -> Result<(), MjPluginError>
 ///
 /// # Examples
 ///
-/// Load all MuJoCo plugins from the plugin directory before loading a model with
-/// STL or OBJ meshes:
+/// Load all MuJoCo plugins from the plugin directory (e.g. to enable PID actuators,
+/// cable elasticity simulation, SDF collision shapes, or custom sensors):
 ///
 /// ```no_run
 /// use mujoco_rs::prelude::*;
@@ -78,7 +78,7 @@ mod tests {
 
     /// Verifies that [`load_all_plugin_libraries`] works.
     #[test]
-    fn load_all_plugin_libraries_enables_stl_mesh_loading() {
+    fn load_all_plugin_libraries_loads_from_directory() {
         let lib_dir = match std::env::var("MUJOCO_DYNAMIC_LINK_DIR") {
             Ok(d) => d,
             Err(_) => return,
