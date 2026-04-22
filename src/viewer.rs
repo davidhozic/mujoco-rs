@@ -12,6 +12,7 @@ use winit::dpi::PhysicalPosition;
 use winit::window::Fullscreen;
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use std::ops::{Deref, DerefMut};
 use std::num::NonZero;
@@ -24,9 +25,9 @@ use bitflags::bitflags;
 use crate::prelude::{MjSpec, MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
+use crate::wrappers::mj_primitive::{MjtNum, MjtSize};
 use crate::wrappers::mj_data::{MjData, MjtState};
 use crate::{builder_setters, mujoco_version};
-use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::util::LockUnpoison;
@@ -194,7 +195,7 @@ pub struct ViewerSharedState {
     data_passive_state_old: Box<[MjtNum]>,
     data_passive: MjData<Box<MjModel>>,
     pert: MjvPerturb,
-    running: bool,
+    running: Arc<AtomicBool>,
     user_scene: MjvScene,
 
     /* Internals */
@@ -220,7 +221,7 @@ impl ViewerSharedState {
             data_state_buffer: empty,
             user_scene: empty_scene,
             pert: MjvPerturb::default(),
-            running: true,
+            running: Arc::new(AtomicBool::new(true)),
             last_sync_time: Instant::now(),
             realtime_factor_smooth: 1.0,
         };
@@ -254,7 +255,7 @@ impl ViewerSharedState {
 
     /// Checks whether the viewer is still running or is supposed to run.
     pub fn running(&self) -> bool {
-        self.running
+        self.running.load(Ordering::Relaxed)
     }
 
     /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
@@ -443,12 +444,21 @@ pub struct MjViewer {
 
     /* External interaction */
     shared_state: Arc<Mutex<ViewerSharedState>>,
+    /// Shared atomic flag cloned from [`ViewerSharedState::running`].
+    /// Allows [`MjViewer::running`] to read the flag without locking the mutex on every call
+    /// (the user's sim loop polls this on every iteration).
+    running_flag: Arc<AtomicBool>,
 
     /* User interface */
     #[cfg(feature = "viewer-ui")]
     ui: ui::ViewerUI,
 
     status: ViewerStatusBit,
+
+    /// Cached number of MJCF-defined cameras (`model.ncam`).
+    /// Updated in [`update_scene`](Self::update_scene) whenever the model changes.
+    /// Avoids locking `shared_state` just to read this integer in [`cycle_camera`](Self::cycle_camera).
+    ncam: MjtSize,
 
     /// Pending screenshot request. [`Some`] with `(viewport_only, depth)` flags when a
     /// screenshot is queued; [`None`] otherwise.
@@ -487,7 +497,7 @@ impl MjViewer {
 
     /// Checks whether the viewer is still running.
     pub fn running(&self) -> bool {
-        self.shared_state.lock_unpoison().running()
+        self.running_flag.load(Ordering::Relaxed)
     }
 
     /// Returns a reference to the shared state [`ViewerSharedState`].
@@ -813,6 +823,7 @@ impl MjViewer {
                 // meshes, heightfields, skins) match the new model.
                 // SAFETY: the GL context was made current in render() before this call.
                 self.context = unsafe { MjrContext::new(new_model) };
+                self.ncam = new_model.ffi().ncam;
                 #[cfg(feature = "viewer-ui")]
                 self.ui.update_names(new_model);
             }
@@ -953,7 +964,7 @@ impl MjViewer {
         while let Some(event) = self.ui.drain_events() {
             use UiEvent::*;
             match event {
-                Close => self.shared_state.lock_unpoison().running = false,
+                Close => self.running_flag.store(false, Ordering::Relaxed),
                 Fullscreen => self.toggle_full_screen(),
                 ResetSimulation => {
                     let mut lock = self.shared_state.lock_unpoison();
@@ -1068,11 +1079,11 @@ impl MjViewer {
                         state: ElementState::Pressed, ..
                     }, ..
                 } if self.modifiers.state().control_key()  => {
-                    self.shared_state.lock_unpoison().running = false;
+                    self.running_flag.store(false, Ordering::Relaxed);
                 }
 
                 // Also set the viewer's state to pending exit if the window no longer exists.
-                WindowEvent::CloseRequested => { self.shared_state.lock_unpoison().running = false }
+                WindowEvent::CloseRequested => { self.running_flag.store(false, Ordering::Relaxed) }
 
                 // Free the camera from tracking.
                 WindowEvent::KeyboardInput {
@@ -1248,12 +1259,12 @@ impl MjViewer {
 
     /// Cycle MJCF defined cameras.
     fn cycle_camera(&mut self, direction: i32) {
-        let n_cam = self.shared_state.lock_unpoison().data_passive.model().ffi().ncam;
-        if n_cam == 0 {  // No cameras, ignore.
+        let ncam = self.ncam;
+        if ncam == 0 {  // No cameras, ignore.
             return;
         }
 
-        self.camera.fix((self.camera.fixedcamid + direction).rem_euclid(n_cam as i32) as usize);
+        self.camera.fix((self.camera.fixedcamid + direction).rem_euclid(ncam as i32) as usize);
     }
 
     /// Toggles full screen mode.
@@ -1503,6 +1514,7 @@ impl MjViewerBuilder {
 
         // Tracking of changes made between syncs
         let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(&*model, self.max_user_geoms)));
+        let running_flag = shared_state.lock_unpoison().running.clone();
 
         // User interface
         #[cfg(feature = "viewer-ui")]
@@ -1520,7 +1532,9 @@ impl MjViewerBuilder {
             context,
             camera,
             opt: MjvOption::default(),
+            ncam: model.ffi().ncam,
             shared_state,
+            running_flag,
             last_x: 0.0,
             last_y: 0.0,
             last_bnt_press_time: Instant::now(),
