@@ -64,7 +64,7 @@ update of MuJoCo alone can increase the major version.
 .. rubric:: Removed examples
 
 - Removed the ``stl_mesh`` example. It existed in MuJoCo-rs 3.0.1 due to MuJoCo 3.6.0 requiring a plugin to load
-  STL meshes. MuJoCo 3.7.0 fixes this, thus the example is no longer required.  
+  STL meshes. MuJoCo 3.7.0 fixes this, thus the example is no longer required.
 
 3.0.1 (MuJoCo 3.6.0)
 ======================
