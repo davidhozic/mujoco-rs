@@ -20,6 +20,7 @@ use crate::wrappers::mj_visualization::{
 };
 use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
+use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_data::MjData;
 use crate::mujoco_c::mjNGROUP;
 
@@ -138,6 +139,8 @@ pub(crate) struct ViewerUI {
     actuator_names: Vec<String>,
     joint_name_id: Vec<(String, usize)>,
     equality_names: Vec<String>,
+    actuator_ctrlrange: Vec<[MjtNum; 2]>,
+    actuator_ctrllimited: Vec<bool>,
     user_ui_callbacks: Vec<UiCallback>,
     user_ui_callbacks_detached: Vec<UiCallbackDetached>,
 
@@ -186,6 +189,8 @@ impl ViewerUI {
             actuator_names: Vec::new(),
             joint_name_id: Vec::new(),
             equality_names: Vec::new(),
+            actuator_ctrlrange: Vec::new(),
+            actuator_ctrllimited: Vec::new(),
             user_ui_callbacks: Vec::new(),
             user_ui_callbacks_detached: Vec::new(),
             actuator_window: false,
@@ -233,6 +238,8 @@ impl ViewerUI {
             } else { format!("Equality {i}") }
         }).collect();
 
+        self.actuator_ctrlrange = model.actuator_ctrlrange().to_vec();
+        self.actuator_ctrllimited = model.actuator_ctrllimited().to_vec();
     }
 
     /// Handles winit input events.
@@ -544,12 +551,8 @@ impl ViewerUI {
                 .open(&mut self.actuator_window)
                 .show(ctx, |ui|
             {
-                let data = &mut shared_viewer_state.lock_unpoison().data_passive;
-                let model = data.model();
-                let actuator_ctrlrange = model.actuator_ctrlrange().to_vec();
-                let actuator_ctrllimited = model.actuator_ctrllimited().to_vec();
-
-                let ctrl_mut = data.ctrl_mut();
+                let mut lock = shared_viewer_state.lock_unpoison();
+                let ctrl_mut = lock.data_passive.ctrl_mut();
                 egui::Grid::new("ctrl_grid").show(ui, |ui| {
                     debug_assert_eq!(
                         self.actuator_names.len(), ctrl_mut.len(),
@@ -557,8 +560,8 @@ impl ViewerUI {
                     );
                     for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
                         .zip(ctrl_mut.iter_mut())
-                        .zip(actuator_ctrlrange)
-                        .zip(actuator_ctrllimited)
+                        .zip(self.actuator_ctrlrange.iter())
+                        .zip(self.actuator_ctrllimited.iter().copied())
                     {
                         ui.label(RichText::new(actuator_name).font(MAIN_FONT));
 
