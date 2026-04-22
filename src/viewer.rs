@@ -1317,7 +1317,7 @@ impl MjViewer {
         if pert.active == 0 {
             self.camera.move_(
                 action,
-                self.shared_state.lock_unpoison().data_passive.model(),
+                data_passive.model(),
                 dx / height, dy / height, &self.scene
             );
         }

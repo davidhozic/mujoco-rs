@@ -587,13 +587,13 @@ impl ViewerUI {
                 .show(ctx, |ui|
             {
                 egui::Grid::new("joint_grid").show(ui, |ui| {
-                    let data = &shared_viewer_state.lock_unpoison().data_passive;
+                    let lock = shared_viewer_state.lock_unpoison();
+                    let data = &lock.data_passive;
                     let model = data.model();
 
                     let limiteds = model.jnt_limited();
                     let ranges = model.jnt_range();
                     let qpos_addresses = model.jnt_qposadr();
-                    let data = &mut shared_viewer_state.lock_unpoison().data_passive;
                     let qpos = data.qpos();
                     for (name, index) in &self.joint_name_id
                     {
@@ -664,7 +664,7 @@ impl ViewerUI {
                     RichText::new("Physics options").font(HEADING_FONT),
                     |ui|
                 {
-                    ui.horizontal_wrapped(|ui| {
+                    ui.horizontal_wrapped(|_ui| {
                     });
                 });
             });
