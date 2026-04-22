@@ -21,7 +21,7 @@ use std::borrow::Cow;
 
 use bitflags::bitflags;
 
-use crate::prelude::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
+use crate::prelude::{MjSpec, MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_data::{MjData, MjtState};
@@ -192,7 +192,7 @@ pub struct ViewerSharedState {
     /// This can happen due to changes made through the UI to joints, equalities, actuators, etc.
     data_passive_state: Box<[MjtNum]>,
     data_passive_state_old: Box<[MjtNum]>,
-    data_passive: MjData<Arc<MjModel>>,
+    data_passive: MjData<Box<MjModel>>,
     pert: MjvPerturb,
     running: bool,
     user_scene: MjvScene,
@@ -206,29 +206,38 @@ pub struct ViewerSharedState {
 }
 
 impl ViewerSharedState {
-    fn new(model: Arc<MjModel>, max_user_geom: usize) -> Self {
+    fn new<M: Deref<Target = MjModel>>(model: M, max_user_geom: usize) -> Self {
+        // Empty values to avoid unnecessary double creation
         let empty: Box<[MjtNum]> = vec![].into_boxed_slice();
+        let empty_model = Box::new(MjSpec::new().compile().unwrap());
+        let empty_data = MjData::new(empty_model);
+        let empty_scene = MjvScene::new(empty_data.model(), 0);
+
         let mut shared_state = Self {
-            data_passive: MjData::new(Arc::clone(&model)),
+            data_passive: empty_data,
             data_passive_state: empty.clone(),
             data_passive_state_old: empty.clone(),
             data_state_buffer: empty,
-            user_scene: MjvScene::new(Arc::clone(&model), 0),
+            user_scene: empty_scene,
             pert: MjvPerturb::default(),
             running: true,
             last_sync_time: Instant::now(),
             realtime_factor_smooth: 1.0,
         };
+
         shared_state.reload_model(model, max_user_geom);
         shared_state
     }
 
     /// Reinitializes all model-dependent internal state.
     /// Called on construction and whenever [`_sync_data`](Self::_sync_data) detects a model change.
-    fn reload_model(&mut self, model: Arc<MjModel>, max_user_geom: usize) {
-        self.data_passive = MjData::new(Arc::clone(&model));
-        self.user_scene = MjvScene::new(model, max_user_geom);
-        let state_size = self.data_passive.model().state_size(MjtState::mjSTATE_INTEGRATION as u32);
+    fn reload_model<M: Deref<Target = MjModel>>(&mut self, model: M, max_user_geom: usize) {
+        let model_passive = Box::new(model.clone());
+        self.data_passive = MjData::new(model_passive);
+        let model_passive = self.data_passive.model();
+
+        self.user_scene = MjvScene::new(model_passive, max_user_geom);
+        let state_size = model_passive.state_size(MjtState::mjSTATE_INTEGRATION as u32);
         self.data_passive_state = vec![0.0; state_size].into_boxed_slice();
         // Read the actual initial state (qpos0 may be non-zero) so that data_passive_state_old
         // matches data_passive_state from the start, preventing a spurious write-back of the
@@ -314,9 +323,8 @@ impl ViewerSharedState {
     fn _sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, full_sync: bool) {
         /* Recreate internal data and user scene when the model changes */
         if data.model().signature() != self.data_passive.model().signature() {
-            let new_model = Arc::new(data.model().clone());
             let max_user_geom = self.user_scene.maxgeom() as usize;
-            self.reload_model(new_model, max_user_geom);
+            self.reload_model(data.model(), max_user_geom);
         }
 
         /* Update statistics */
@@ -415,8 +423,6 @@ pub struct MjViewer {
     camera: MjvCamera,
 
     /* Other MuJoCo related */
-    /// Passive copy of the model, kept in sync with [`ViewerSharedState::data_passive`].
-    model_passive: Arc<MjModel>,
     opt: MjvOption,
 
     /* Internal state */
@@ -548,7 +554,7 @@ impl MjViewer {
     #[cfg(feature = "viewer-ui")]
     pub fn add_ui_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&egui::Context, &mut MjData<Arc<MjModel>>) + 'static
+        F: FnMut(&egui::Context, &mut MjData<Box<MjModel>>) + 'static
     {
         self.ui.add_ui_callback(callback);
     }
@@ -716,8 +722,11 @@ impl MjViewer {
             flip_image_vertically(&mut depth_buf, h, w);
 
             // Linearize raw OpenGL depth into metric distance.
-            let map = &self.model_passive.vis().map;
-            let stat = &self.model_passive.stat();
+            let (map, stat) = {
+                let lock = self.shared_state.lock_unpoison();
+                let model = lock.data_passive.model();
+                (model.vis().map.clone(), model.stat().clone())
+            };
             let extent = stat.extent as f32;
             let near = map.znear * extent;
             let far = map.zfar * extent;
@@ -789,23 +798,23 @@ impl MjViewer {
 
             /* Recreate scene when the model changes */
             if data_passive.model().signature() != self.scene.signature() {
-                let new_model = data_passive.model_clone();
+                let new_model = data_passive.model();
                 let ngeom = new_model.ffi().ngeom as usize;
                 let max_user_geom = user_scene.maxgeom() as usize;
                 self.scene = MjvScene::new(
-                    Arc::clone(&new_model),
+                    new_model,
                     ngeom + max_user_geom + EXTRA_SCENE_GEOM_SPACE
                 );
-                self.model_passive = new_model;
+
                 // Reset to a free camera: a tracking or fixed camera may reference a body
                 // or camera ID that does not exist in the new model.
-                self.camera = MjvCamera::new_free(&self.model_passive);
+                self.camera = MjvCamera::new_free(new_model);
                 // Recreate the rendering context so that GPU resources (textures,
                 // meshes, heightfields, skins) match the new model.
                 // SAFETY: the GL context was made current in render() before this call.
-                self.context = unsafe { MjrContext::new(&self.model_passive) };
+                self.context = unsafe { MjrContext::new(new_model) };
                 #[cfg(feature = "viewer-ui")]
-                self.ui.update_names(Arc::clone(&self.model_passive));
+                self.ui.update_names(new_model);
             }
 
             /* Update and render the scene from the MjData state */
@@ -931,7 +940,6 @@ impl MjViewer {
             window, &mut self.status,
             &mut self.scene, &mut self.opt,
             &mut self.camera, &self.shared_state,
-            &self.model_passive
         );
 
         /* Adjust the viewport so MuJoCo doesn't draw over the UI */
@@ -953,7 +961,7 @@ impl MjViewer {
                     lock.data_passive.forward();
                 },
                 AlignCamera => {
-                    self.camera = MjvCamera::new_free(&self.model_passive);
+                    self.camera = MjvCamera::new_free(self.shared_state.lock_unpoison().data_passive.model());
                 },
                 VSyncToggle => {
                     self.update_vsync();
@@ -1240,7 +1248,7 @@ impl MjViewer {
 
     /// Cycle MJCF defined cameras.
     fn cycle_camera(&mut self, direction: i32) {
-        let n_cam = self.model_passive.ffi().ncam;
+        let n_cam = self.shared_state.lock_unpoison().data_passive.model().ffi().ncam;
         if n_cam == 0 {  // No cameras, ignore.
             return;
         }
@@ -1261,7 +1269,11 @@ impl MjViewer {
 
     /// Processes scrolling events.
     fn process_scroll(&mut self, change: f64) {
-        self.camera.move_(MjtMouse::mjMOUSE_ZOOM, &self.model_passive, 0.0, -0.05 * change, &self.scene);
+        self.camera.move_(
+            MjtMouse::mjMOUSE_ZOOM,
+            self.shared_state.lock_unpoison().data_passive.model(),
+            0.0, -0.05 * change, &self.scene
+        );
     }
 
     /// Processes camera and perturbation movements.
@@ -1303,7 +1315,11 @@ impl MjViewer {
 
         /* When the perturbation isn't active, move the camera */
         if pert.active == 0 {
-            self.camera.move_(action, &self.model_passive, dx / height, dy / height, &self.scene);
+            self.camera.move_(
+                action,
+                self.shared_state.lock_unpoison().data_passive.model(),
+                dx / height, dy / height, &self.scene
+            );
         }
         else {  // When the perturbation is active, move apply the perturbation.
             pert.move_(data_passive, action, dx / height, dy / height, &self.scene);
@@ -1479,20 +1495,18 @@ impl MjViewerBuilder {
 
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
-        let model: Arc<MjModel> = Arc::new(model.deref().clone());
-
         let ngeom = model.ffi().ngeom as usize;
-        let scene = MjvScene::new(Arc::clone(&model), ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
+        let scene = MjvScene::new(&*model, ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
         // SAFETY: The OpenGL context was made current above via gl_surface.
         let context = unsafe { MjrContext::new(&model) };
         let camera  = MjvCamera::new_free(&model);
 
         // Tracking of changes made between syncs
-        let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(Arc::clone(&model), self.max_user_geoms)));
+        let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(&*model, self.max_user_geoms)));
 
         // User interface
         #[cfg(feature = "viewer-ui")]
-        let ui = ui::ViewerUI::new(Arc::clone(&model), window, &gl_surface.display())?;
+        let ui = ui::ViewerUI::new(&*model, window, &gl_surface.display())?;
         #[cfg(feature = "viewer-ui")]
         let mut status = ViewerStatusBit::UI;
         #[cfg(not(feature = "viewer-ui"))]
@@ -1502,7 +1516,6 @@ impl MjViewerBuilder {
         status.set(ViewerStatusBit::WARN_REALTIME, self.warn_non_realtime);
 
         Ok(MjViewer {
-            model_passive: model,
             scene,
             context,
             camera,

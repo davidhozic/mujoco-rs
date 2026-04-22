@@ -122,7 +122,7 @@ const FRAME_TYPE_MAP: [&str; 8] = [
 const _: () = assert!(FRAME_TYPE_MAP.len() == crate::mujoco_c::mjtFrame_::mjNFRAME as usize);
 
 /// Type alias for a user-provided UI callback function.
-pub(crate) type UiCallback = Box<dyn FnMut(&egui::Context, &mut MjData<Arc<MjModel>>)>;
+pub(crate) type UiCallback = Box<dyn FnMut(&egui::Context, &mut MjData<Box<MjModel>>)>;
 
 /// Type alias for a detached (from state) user-provided UI callback function.
 pub(crate) type UiCallbackDetached = Box<dyn FnMut(&egui::Context)>;
@@ -150,13 +150,14 @@ pub(crate) struct ViewerUI {
     joint_window: bool,
     equality_window: bool,
     group_window: bool,
+    model_param_window: bool,
     screenshot_viewport_only: bool,
     screenshot_depth: bool
 }
 
 impl ViewerUI {
     /// Create a new [`ViewerUI`] instance for the specific winit window.
-    pub(crate) fn new(model: Arc<MjModel>, window: &Window, display: &Display) -> Result<Self, MjViewerError> {
+    pub(crate) fn new(model: &MjModel, window: &Window, display: &Display) -> Result<Self, MjViewerError> {
         let egui_ctx = egui::Context::default();
         let viewport_id = egui_ctx.viewport_id();
 
@@ -191,6 +192,7 @@ impl ViewerUI {
             joint_window: false,
             equality_window: false,
             group_window: false,
+            model_param_window: false,
             screenshot_viewport_only: false,
             screenshot_depth: false
         };
@@ -200,7 +202,7 @@ impl ViewerUI {
 
     /// Rebuilds all model-dependent cached state (name lists).
     /// Must be called whenever the active model changes.
-    pub(crate) fn update_names(&mut self, model: Arc<MjModel>) {
+    pub(crate) fn update_names(&mut self, model: &MjModel) {
         self.camera_names = (0..model.ncam()).map(|i| {
             if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i as usize) {
                 name.to_string()
@@ -254,7 +256,6 @@ impl ViewerUI {
         scene: &mut MjvScene, options: &mut MjvOption,
         camera: &mut MjvCamera,
         shared_viewer_state: &Arc<Mutex<ViewerSharedState>>,
-        model: &MjModel
     ) -> f32 {
         // Viewport reservations, which will be excluded from MuJoCo's viewport.
         // This way MuJoCo won't draw over the UI.
@@ -330,6 +331,7 @@ impl ViewerUI {
                                 ui.toggle_value(&mut self.joint_window, RichText::new("Joint").font(MAIN_FONT));
                                 ui.toggle_value(&mut self.equality_window, RichText::new("Equality").font(MAIN_FONT));
                                 ui.toggle_value(&mut self.group_window, RichText::new("Group").font(MAIN_FONT));
+                                ui.toggle_value(&mut self.model_param_window, RichText::new("Model").font(MAIN_FONT));
                             });
 
                             ui.separator();
@@ -543,6 +545,10 @@ impl ViewerUI {
                 .show(ctx, |ui|
             {
                 let data = &mut shared_viewer_state.lock_unpoison().data_passive;
+                let model = data.model();
+                let actuator_ctrlrange = model.actuator_ctrlrange().to_vec();
+                let actuator_ctrllimited = model.actuator_ctrllimited().to_vec();
+
                 let ctrl_mut = data.ctrl_mut();
                 egui::Grid::new("ctrl_grid").show(ui, |ui| {
                     debug_assert_eq!(
@@ -551,12 +557,12 @@ impl ViewerUI {
                     );
                     for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
                         .zip(ctrl_mut.iter_mut())
-                        .zip(model.actuator_ctrlrange())
-                        .zip(model.actuator_ctrllimited())
+                        .zip(actuator_ctrlrange)
+                        .zip(actuator_ctrllimited)
                     {
                         ui.label(RichText::new(actuator_name).font(MAIN_FONT));
 
-                        let range_inc = if *limited {
+                        let range_inc = if limited {
                             range[0]..=range[1]
                         } else { -1.0..=1.0 };
 
@@ -581,6 +587,9 @@ impl ViewerUI {
                 .show(ctx, |ui|
             {
                 egui::Grid::new("joint_grid").show(ui, |ui| {
+                    let data = &shared_viewer_state.lock_unpoison().data_passive;
+                    let model = data.model();
+
                     let limiteds = model.jnt_limited();
                     let ranges = model.jnt_range();
                     let qpos_addresses = model.jnt_qposadr();
@@ -643,6 +652,20 @@ impl ViewerUI {
                         ui.toggle_value(cast_mut_info!(&mut options.skingroup[i], i), format!("Skin {i}"));
                         ui.end_row();
                     }
+                });
+            });
+
+            egui::Window::new("Model")
+                .open(&mut self.model_param_window)
+                .show(ctx, |ui|
+            {
+                /* Physics options drop down */
+                ui.collapsing(
+                    RichText::new("Physics options").font(HEADING_FONT),
+                    |ui|
+                {
+                    ui.horizontal_wrapped(|ui| {
+                    });
                 });
             });
 
@@ -731,7 +754,7 @@ impl ViewerUI {
     /// panels, or other UI elements.
     pub(crate) fn add_ui_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&egui::Context, &mut MjData<Arc<MjModel>>) + 'static
+        F: FnMut(&egui::Context, &mut MjData<Box<MjModel>>) + 'static
     {
         self.user_ui_callbacks.push(Box::new(callback));
     }
