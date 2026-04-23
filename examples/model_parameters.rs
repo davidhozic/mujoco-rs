@@ -43,7 +43,7 @@ fn main() {
     // model_mut: direct in-place mutation (requires M: DerefMut).
     data.reset();
     let half_gravity = default_gravity / 2.0;
-    data.model_mut().opt_mut().gravity[2] = half_gravity;
+    data.model_opt_mut().gravity[2] = half_gravity;
     for _ in 0..STEPS {
         data.step();
     }
@@ -51,7 +51,7 @@ fn main() {
     println!("model_mut  z={z_mut:.4}  (gravity={half_gravity:.2})");
 
     // Restore gravity for the next method.
-    data.model_mut().opt_mut().gravity[2] = default_gravity;
+    data.model_opt_mut().gravity[2] = default_gravity;
     data.reset();
 
     // swap_model: swap in a modified model (works with any M).

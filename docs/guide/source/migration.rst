@@ -111,6 +111,28 @@ longer available in MuJoCo-rs 4.0.0.
     let _ = flex;
 
 
+``MjData::model_mut`` is not unsafe
+------------------------------------
+To prevent a false sense of correctness, method
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_mut`
+is now marked unsafe to prevent users from direct swapping models to incompatible
+ones.
+
+**Before (3.x):**
+
+.. code-block:: rust
+
+    data.model_mut().opt_mut().gravity[2] = half_gravity;
+    *data.model_mut() = new_model;
+
+
+**After (4.0.0):**
+
+.. code-block:: rust
+
+    let mut old_model = data.swap_model(new_model);
+
+
 .. _migrate_3_0_0:
 
 Migrating to 3.0.0

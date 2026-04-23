@@ -50,6 +50,11 @@ update of MuJoCo alone can increase the major version.
 - ``MjsFlex::vertcollide`` is no longer available. MuJoCo 3.7.0 removed the
   upstream ``mjsFlex::vertcollide`` field, so the wrapper no longer exposes it.
 
+*MjData::model_mut is now unsafe*
+
+- Because the :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_mut` allows full
+  model replacement in unsafe ways, it is now marked unsafe.
+
 .. rubric:: New features and improvements
 
 - Updated MuJoCo from **3.6.0** to **3.7.0**. The committed C FFI bindings and
@@ -60,6 +65,11 @@ update of MuJoCo alone can increase the major version.
   ``damping`` coefficient array and ``armature`` field.
 - :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtLRMode` is now exported for
   typed access to ``MjLROpt.mode``.
+- In light of :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_mut` becoming unsafe,
+  two new methods are created to allow modification of common model fields:
+  
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut` and
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`.
 
 .. rubric:: Removed examples
 
