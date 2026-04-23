@@ -136,11 +136,9 @@ pub(crate) struct ViewerUI {
     gl: Arc<egui_glow::glow::Context>,
     events: VecDeque<UiEvent>,
     camera_names: Vec<String>,
-    actuator_names: Vec<String>,
-    joint_name_id: Vec<(String, usize)>,
+    actuator_display_info: Vec<(String, bool, [MjtNum; 2])>,
+    joint_display_info: Vec<(String, bool, [MjtNum; 2], usize)>,
     equality_names: Vec<String>,
-    actuator_ctrlrange: Vec<[MjtNum; 2]>,
-    actuator_ctrllimited: Vec<bool>,
     user_ui_callbacks: Vec<UiCallback>,
     user_ui_callbacks_detached: Vec<UiCallbackDetached>,
 
@@ -186,11 +184,9 @@ impl ViewerUI {
         let mut viewer_ui = Self {
             egui_ctx, state, painter, gl, events: VecDeque::new(),
             camera_names: Vec::new(),
-            actuator_names: Vec::new(),
-            joint_name_id: Vec::new(),
+            actuator_display_info: Vec::new(),
+            joint_display_info: Vec::new(),
             equality_names: Vec::new(),
-            actuator_ctrlrange: Vec::new(),
-            actuator_ctrllimited: Vec::new(),
             user_ui_callbacks: Vec::new(),
             user_ui_callbacks_detached: Vec::new(),
             actuator_window: false,
@@ -214,19 +210,27 @@ impl ViewerUI {
             } else { format!("Camera {i}") }
         }).collect();
 
-        self.actuator_names = (0..model.nu()).map(|i| {
-            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, i as usize) {
+        self.actuator_display_info = (0..model.nu()).map(|i| {
+            let idx = i as usize;
+            let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, idx) {
                 name.to_string()
-            } else { format!("Actuator {i}") }
+            } else { format!("Actuator {i}") };
+            let limited = model.actuator_ctrllimited()[idx];
+            let range   = model.actuator_ctrlrange()[idx];
+            (name, limited, range)
         }).collect();
 
-        self.joint_name_id = (0..model.njnt()).filter_map(|i| {
-            match model.jnt_type()[i as usize] {
+        self.joint_display_info = (0..model.njnt()).filter_map(|i| {
+            let idx = i as usize;
+            match model.jnt_type()[idx] {
                 MjtJoint::mjJNT_SLIDE | MjtJoint::mjJNT_HINGE => {
-                    let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, i as usize) {
+                    let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, idx) {
                         name.to_string()
                     } else { format!("Joint {i}") };
-                    Some((name, i as usize))
+                    let limited  = model.jnt_limited()[idx];
+                    let range    = model.jnt_range()[idx];
+                    let qpos_adr = model.jnt_qposadr()[idx] as usize;
+                    Some((name, limited, range, qpos_adr))
                 }
                 _ => None
             }
@@ -237,9 +241,6 @@ impl ViewerUI {
                 name.to_string()
             } else { format!("Equality {i}") }
         }).collect();
-
-        self.actuator_ctrlrange = model.actuator_ctrlrange().to_vec();
-        self.actuator_ctrllimited = model.actuator_ctrllimited().to_vec();
     }
 
     /// Handles winit input events.
@@ -555,17 +556,15 @@ impl ViewerUI {
                 let ctrl_mut = lock.data_passive.ctrl_mut();
                 egui::Grid::new("ctrl_grid").show(ui, |ui| {
                     debug_assert_eq!(
-                        self.actuator_names.len(), ctrl_mut.len(),
+                        self.actuator_display_info.len(), ctrl_mut.len(),
                         "actuator names don't match num of actuators in model. This is a bug!"
                     );
-                    for (((actuator_name, ctrl), range), limited) in self.actuator_names.iter()
+                    for ((name, limited, range), ctrl) in self.actuator_display_info.iter()
                         .zip(ctrl_mut.iter_mut())
-                        .zip(self.actuator_ctrlrange.iter())
-                        .zip(self.actuator_ctrllimited.iter().copied())
                     {
-                        ui.label(RichText::new(actuator_name).font(MAIN_FONT));
+                        ui.label(RichText::new(name).font(MAIN_FONT));
 
-                        let range_inc = if limited {
+                        let range_inc = if *limited {
                             range[0]..=range[1]
                         } else { -1.0..=1.0 };
 
@@ -591,23 +590,15 @@ impl ViewerUI {
             {
                 egui::Grid::new("joint_grid").show(ui, |ui| {
                     let lock = shared_viewer_state.lock_unpoison();
-                    let data = &lock.data_passive;
-                    let model = data.model();
-
-                    let limiteds = model.jnt_limited();
-                    let ranges = model.jnt_range();
-                    let qpos_addresses = model.jnt_qposadr();
-                    let qpos = data.qpos();
-                    for (name, index) in &self.joint_name_id
+                    let qpos = lock.data_passive.qpos();
+                    for (name, limited, range, qpos_adr) in &self.joint_display_info
                     {
                         ui.label(RichText::new(name).font(MAIN_FONT));
-                        let limited = limiteds[*index];
-                        let range = ranges[*index];
-                        let mut value = qpos[qpos_addresses[*index] as usize];
+                        let mut value = qpos[*qpos_adr];
                         ui.add_enabled(false, egui::DragValue::new(&mut value));
 
-                        if limited {
-                            let [low, high] = range;
+                        if *limited {
+                            let [low, high] = *range;
                             let value_scaled = ((value - low) / (high - low)).clamp(0.0, 1.0);
                             ui.add(egui::ProgressBar::new(value_scaled as f32));
                         }
