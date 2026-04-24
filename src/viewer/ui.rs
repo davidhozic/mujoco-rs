@@ -151,7 +151,6 @@ pub(crate) struct ViewerUI {
     joint_window: bool,
     equality_window: bool,
     group_window: bool,
-    model_param_window: bool,
     screenshot_viewport_only: bool,
     screenshot_depth: bool
 }
@@ -193,7 +192,6 @@ impl ViewerUI {
             joint_window: false,
             equality_window: false,
             group_window: false,
-            model_param_window: false,
             screenshot_viewport_only: false,
             screenshot_depth: false
         };
@@ -339,7 +337,6 @@ impl ViewerUI {
                                 ui.toggle_value(&mut self.joint_window, RichText::new("Joint").font(MAIN_FONT));
                                 ui.toggle_value(&mut self.equality_window, RichText::new("Equality").font(MAIN_FONT));
                                 ui.toggle_value(&mut self.group_window, RichText::new("Group").font(MAIN_FONT));
-                                ui.toggle_value(&mut self.model_param_window, RichText::new("Model").font(MAIN_FONT));
                             });
 
                             ui.separator();
@@ -377,9 +374,25 @@ impl ViewerUI {
                             });
                         });
 
+
+                        /* Physics options */
+                        egui::CollapsingHeader::new(RichText::new("Physics").font(HEADING_FONT))
+                            .show(ui, |ui|
+                        {
+                            let mut options = shared_viewer_state.lock_unpoison().data_passive.model().opt().clone();
+                            ui.collapsing("Algorithm parameters", |ui| {
+                                ui_row_scalar(ui, "timestep", &mut options.timestep, 1e-6);
+                            });
+
+                            ui.collapsing("Physics parameters", |ui| {
+
+                            });
+
+                            *shared_viewer_state.lock_unpoison().data_passive.model_opt_mut() = options;
+                        });
+
                         /* Visualization options */
                         egui::CollapsingHeader::new(RichText::new("Rendering").font(HEADING_FONT))
-                            .default_open(true)
                             .show(ui, |ui|
                         {
                             egui::Grid::new("render_select_grid").show(ui, |ui| {
@@ -649,20 +662,6 @@ impl ViewerUI {
                 });
             });
 
-            egui::Window::new("Model")
-                .open(&mut self.model_param_window)
-                .show(ctx, |ui|
-            {
-                /* Physics options drop down */
-                ui.collapsing(
-                    RichText::new("Physics options").font(HEADING_FONT),
-                    |ui|
-                {
-                    ui.horizontal_wrapped(|_ui| {
-                    });
-                });
-            });
-
             /* User-defined UI callbacks */
             // Callbacks that receive the egui context and MjData passive instance
             for callback in self.user_ui_callbacks.iter_mut() {
@@ -784,4 +783,13 @@ pub(crate) enum UiEvent {
     AlignCamera,
     VSyncToggle,
     Screenshot { viewport_only: bool, depth: bool }
+}
+
+/* Utility */
+#[inline(always)]
+fn ui_row_scalar(ui: &mut egui::Ui, attr_name: &str, target: &mut MjtNum, speed: MjtNum) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(attr_name).font(MAIN_FONT));
+        ui.add(egui::DragValue::new(target).speed(speed));
+    });
 }
