@@ -1612,6 +1612,16 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
         &mut self.model
     }
 
+    /// Returns an immutable reference to the model physics options.
+    pub fn model_opt(&self) -> &MjOption {
+        self.model.opt()
+    }
+
+    /// Returns an immutable reference to the model visualization options.
+    pub fn model_vis(&self) -> &MjVisual {
+        self.model.vis()
+    }
+
     /// Returns a mutable reference to [`MjModel::opt_mut`] without allowing unsafe
     /// modifications to the rest of the [`MjModel`].
     /// 

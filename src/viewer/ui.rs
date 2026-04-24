@@ -381,7 +381,8 @@ impl ViewerUI {
                         {
                             let mut options = shared_viewer_state.lock_unpoison().data_passive.model().opt().clone();
                             ui.collapsing("Algorithm parameters", |ui| {
-                                ui_row_scalar(ui, "timestep", &mut options.timestep, 1e-6);
+                                ui_row_scalar(ui, "Timestep", &mut options.timestep, 1e-6);
+                                ui_row_scalar(ui, "Iterations", &mut options.iterations, 1.0);
                             });
 
                             ui.collapsing("Physics parameters", |ui| {
@@ -787,9 +788,13 @@ pub(crate) enum UiEvent {
 
 /* Utility */
 #[inline(always)]
-fn ui_row_scalar(ui: &mut egui::Ui, attr_name: &str, target: &mut MjtNum, speed: MjtNum) {
+fn ui_row_scalar<Num: egui::emath::Numeric>(ui: &mut egui::Ui, attr_name: &str, target: &mut Num, speed: f64) {
     ui.horizontal(|ui| {
         ui.label(RichText::new(attr_name).font(MAIN_FONT));
-        ui.add(egui::DragValue::new(target).speed(speed));
+        ui.add_sized(
+        [ui.available_width().min(250.0), ui.spacing().interact_size.y],
+        egui::DragValue::new(target)
+            .speed(speed)
+        );
     });
 }

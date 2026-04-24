@@ -22,13 +22,13 @@ use std::borrow::Cow;
 
 use bitflags::bitflags;
 
-use crate::prelude::{MjSpec, MjrContext, MjrRectangle, MjtFont, MjtGridPos};
+use crate::prelude::{MjOption, MjSpec, MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_primitive::{MjtNum, MjtSize};
 use crate::wrappers::mj_data::{MjData, MjtState};
 use crate::{builder_setters, mujoco_version};
-use crate::wrappers::mj_visualization::*;
+use crate::wrappers::{MjVisual, mj_visualization::*};
 use crate::wrappers::mj_model::MjModel;
 use crate::util::LockUnpoison;
 
@@ -268,6 +268,37 @@ impl ViewerSharedState {
     /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`].
     pub fn user_scene_mut(&mut self) -> &mut MjvScene {
         &mut self.user_scene
+    }
+
+    /// Returns an immutable reference to the passive [`MjData`] instance of the viewer.
+    pub fn data_passive(&self) -> &MjData<Box<MjModel>> {
+        &self.data_passive
+    }
+
+    /// Returns an immutable reference to the passive [`MjModel`] instance of the viewer.
+    /// This is a shortcut for the passive data's [`MjData::model`] method.
+    pub fn model_passive(&self) -> &MjModel {
+        &self.data_passive.model()
+    }
+
+    /// Returns an immutable reference for reading the passive model's physics parameters ([`MjOption`]).
+    pub fn model_opt(&self) -> &MjOption {
+        self.data_passive.model().opt()
+    }
+
+    /// Returns a immutable reference for reading the passive model's visualization parameters ([`MjVisual`]).
+    pub fn model_vis(&self) -> &MjVisual {
+        self.data_passive.model().vis()
+    }
+
+    /// Returns a mutable reference for modifying the passive model's physics parameters ([`MjOption`]).
+    pub fn model_opt_mut(&mut self) -> &mut MjOption {
+        self.data_passive.model_opt_mut()
+    }
+
+    /// Returns a mutable reference for modifying the passive model's visualization parameters ([`MjVisual`]).
+    pub fn model_vis_mut(&mut self) -> &mut MjVisual {
+        self.data_passive.model_vis_mut()
     }
 
     /// Same as [`ViewerSharedState::sync_data`], except it copies the entire [`MjData`]
