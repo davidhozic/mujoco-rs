@@ -31,7 +31,7 @@ const BUTTON_SPACING_X: f32 = 10.0;
 const BUTTON_SPACING_Y: f32 = 5.0;
 const BUTTON_ROUNDING: f32 = 50.0;
 
-const SIDE_PANEL_DEFAULT_WIDTH: f32 = 250.0;
+const SIDE_PANEL_DEFAULT_WIDTH: f32 = 200.0;
 const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
 const SIDE_PANEL_PAD: f32 = 10.0;
 
@@ -380,12 +380,12 @@ impl ViewerUI {
                             .show(ui, |ui|
                         {
                             let mut options = shared_viewer_state.lock_unpoison().data_passive.model().opt().clone();
-                            ui.collapsing("Algorithm parameters", |ui| {
+                            ui.collapsing(RichText::new("Algorithm parameters").font(MAIN_FONT), |ui| {
                                 ui_row_scalar(ui, "Timestep", &mut options.timestep, 1e-6);
                                 ui_row_scalar(ui, "Iterations", &mut options.iterations, 1.0);
                             });
 
-                            ui.collapsing("Physics parameters", |ui| {
+                            ui.collapsing(RichText::new("Physics parameters").font(MAIN_FONT), |ui| {
 
                             });
 
@@ -792,7 +792,7 @@ fn ui_row_scalar<Num: egui::emath::Numeric>(ui: &mut egui::Ui, attr_name: &str, 
     ui.horizontal(|ui| {
         ui.label(RichText::new(attr_name).font(MAIN_FONT));
         ui.add_sized(
-        [ui.available_width().min(250.0), ui.spacing().interact_size.y],
+        [ui.available_width().min(100.0), ui.spacing().interact_size.y],
         egui::DragValue::new(target)
             .speed(speed)
         );

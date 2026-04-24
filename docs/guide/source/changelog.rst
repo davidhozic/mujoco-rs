@@ -76,6 +76,10 @@ update of MuJoCo alone can increase the major version.
 - Removed the ``stl_mesh`` example. It existed in MuJoCo-rs 3.0.1 due to MuJoCo 3.6.0 requiring a plugin to load
   STL meshes. MuJoCo 3.7.0 fixes this, thus the example is no longer required.
 
+.. rubric:: Other changes
+
+- Reduced default width of the viewer's UI side panel to 200.0.
+
 3.0.1 (MuJoCo 3.6.0)
 ======================
 
