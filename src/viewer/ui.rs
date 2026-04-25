@@ -34,7 +34,7 @@ const BUTTON_ROUNDING: f32 = 50.0;
 const SIDE_PANEL_DEFAULT_WIDTH: f32 = 200.0;
 const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
 const SIDE_PANEL_PAD: f32 = 10.0;
-const MAX_PHYSICS_WIDGET_WIDTH: f32 = 150.0;
+const MAX_PHYSICS_WIDGET_WIDTH: f32 = 300.0;
 
 /// Maps [`MjtRndFlag`](crate::wrappers::mj_visualization::MjtRndFlag) to their string
 const GL_EFFECT_MAP: [&str; 11] = [
@@ -554,6 +554,21 @@ impl ViewerUI {
                                         "Imp Ratio", &mut options.impratio, 1e-3
                                     ));
                                     ui.end_row();
+
+                                    ui.add(RowArray::new(
+                                        "Gravity", &mut options.gravity, 1e-3
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowArray::new(
+                                        "Wind", &mut options.wind, 1e-3
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowArray::new(
+                                        "Magnetic", &mut options.magnetic, 1e-3
+                                    ));
+                                    ui.end_row();
                                 });
                             });
 
@@ -561,6 +576,21 @@ impl ViewerUI {
                                 egui::Grid::new("contact_override_grid").num_columns(2).striped(true).show(ui, |ui| {
                                     ui.add(RowScalar::new(
                                         "Margin", &mut options.o_margin, 1e-5
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowArray::new(
+                                        "Sol Ref", &mut options.o_solref, 1e-5
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowArray::new(
+                                        "Sol Imp", &mut options.o_solimp, 1e-6
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowArray::new(
+                                        "Friction", &mut options.o_friction, 1e-3
                                     ));
                                     ui.end_row();
                                 });
@@ -981,11 +1011,48 @@ impl<'t, Num: egui::emath::Numeric> RowScalar<'t, Num> {
 impl<'t, Num: egui::emath::Numeric> egui::Widget for RowScalar<'t, Num> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.label(self.name);
-        let available_width = ui.available_width().min(MAX_PHYSICS_WIDGET_WIDTH);
         ui.add_sized(
-            [available_width, ui.spacing().interact_size.y],
+            [ui.available_width().min(MAX_PHYSICS_WIDGET_WIDTH), ui.spacing().interact_size.y],
             egui::DragValue::new(self.target)
             .speed(self.increment)
         )
+    }
+}
+
+struct RowArray<'t, Num: egui::emath::Numeric> {
+    name: egui::WidgetText,
+    values: &'t mut [Num],
+    increment: f64,
+}
+
+impl<'t, Num: egui::emath::Numeric> RowArray<'t, Num> {
+    fn new(name: impl Into<egui::WidgetText>, values: &'t mut [Num], increment: f64) -> Self {
+        Self { name: name.into(), values, increment }
+    }
+}
+
+impl<'t, Num: egui::emath::Numeric> egui::Widget for RowArray<'t, Num> {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        const GRID_SPACING: f32 = 5.0;
+
+        ui.label(self.name);
+        let available_width = ui.available_width().min(MAX_PHYSICS_WIDGET_WIDTH);
+        egui::Grid::new(ui.id().with("grid_vector"))
+            .spacing(egui::vec2(GRID_SPACING, 0.0))
+            .show(ui, |ui|
+        {
+            let values_len = self.values.len();
+            let per_element_width = (available_width - GRID_SPACING * (values_len - 1) as f32) / values_len as f32;
+
+            let mut last_response = None;
+            for value in self.values.iter_mut() {
+                last_response = Some(ui.add_sized(
+                    [per_element_width, ui.spacing().interact_size.y],
+                    egui::DragValue::new(value)
+                    .speed(self.increment)
+                ));
+            }
+            last_response.unwrap_or_else(|| ui.label(""))
+        }).inner
     }
 }
