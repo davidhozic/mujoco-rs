@@ -18,7 +18,7 @@ use std::fmt::Debug;
 use crate::wrappers::mj_visualization::{
     MjvOption, MjvCamera, MjtCamera, MjvScene
 };
-use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint};
+use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint, MjtDisableBit};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_data::MjData;
@@ -149,6 +149,29 @@ const SOLVER_MAP: [&str; 3] = [
     "PGS",
     "CG",
     "Newton"
+];
+
+/// Maps MuJoCo disable flag bits to their string representations
+const DISABLE_FLAGS: &[(&str, MjtDisableBit)] = &[
+    ("Constraint", MjtDisableBit::mjDSBL_CONSTRAINT),
+    ("Equality", MjtDisableBit::mjDSBL_EQUALITY),
+    ("Friction Loss", MjtDisableBit::mjDSBL_FRICTIONLOSS),
+    ("Limit", MjtDisableBit::mjDSBL_LIMIT),
+    ("Contact", MjtDisableBit::mjDSBL_CONTACT),
+    ("Spring", MjtDisableBit::mjDSBL_SPRING),
+    ("Damper", MjtDisableBit::mjDSBL_DAMPER),
+    ("Gravity", MjtDisableBit::mjDSBL_GRAVITY),
+    ("Clamp Ctrl", MjtDisableBit::mjDSBL_CLAMPCTRL),
+    ("Warm Start", MjtDisableBit::mjDSBL_WARMSTART),
+    ("Filter Parent", MjtDisableBit::mjDSBL_FILTERPARENT),
+    ("Actuation", MjtDisableBit::mjDSBL_ACTUATION),
+    ("Ref Safe", MjtDisableBit::mjDSBL_REFSAFE),
+    ("Sensor", MjtDisableBit::mjDSBL_SENSOR),
+    ("Mid Phase", MjtDisableBit::mjDSBL_MIDPHASE),
+    ("Euler Damp", MjtDisableBit::mjDSBL_EULERDAMP),
+    ("Auto Reset", MjtDisableBit::mjDSBL_AUTORESET),
+    ("Native CCD", MjtDisableBit::mjDSBL_NATIVECCD),
+    ("Island", MjtDisableBit::mjDSBL_ISLAND),
 ];
 
 /// Type alias for a user-provided UI callback function.
@@ -569,6 +592,21 @@ impl ViewerUI {
                                         "Magnetic", &mut options.magnetic, 1e-3
                                     ));
                                     ui.end_row();
+                                });
+                            });
+
+                            ui.collapsing(RichText::new("Disable Flags").font(MAIN_FONT), |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    for (flag_name, flag_value) in DISABLE_FLAGS {
+                                        let mut is_enabled = (options.disableflags & (*flag_value as i32)) != 0;
+                                        if ui.toggle_value(&mut is_enabled, *flag_name).changed() {
+                                            if is_enabled {
+                                                options.disableflags |= *flag_value as i32;
+                                            } else {
+                                                options.disableflags &= !(*flag_value as i32);
+                                            }
+                                        }
+                                    }
                                 });
                             });
 
@@ -1035,8 +1073,6 @@ impl<'t, Num: egui::emath::Numeric> RowArray<'t, Num> {
 
 impl<'t, Num: egui::emath::Numeric> egui::Widget for RowArray<'t, Num> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        const GRID_SPACING: f32 = 2.0;
-
         ui.label(self.name);
         
         let interact_height = ui.spacing().interact_size.y;
