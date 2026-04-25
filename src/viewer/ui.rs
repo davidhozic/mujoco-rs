@@ -1,28 +1,26 @@
 //! Implementation of the interface for use in the viewer.
-use egui_glow::glow::{self, HasContext};
-use egui_winit::winit::event::WindowEvent;
-use glutin::display::{Display, GlDisplay};
-use egui_winit::winit::window::Window;
-use egui::{FontId, RichText};
-use egui_winit::egui;
-use egui_winit;
-
-use crate::{cast_mut_info, set_flag};
-use crate::util::LockUnpoison;
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::ffi::CString;
 use std::fmt::Debug;
 
-use crate::wrappers::mj_visualization::{
-    MjvOption, MjvCamera, MjtCamera, MjvScene
-};
+use glutin::display::{Display, GlDisplay};
+use egui_winit::winit::event::WindowEvent;
+use egui_glow::glow::{self, HasContext};
+use egui_winit::winit::window::Window;
+use egui::{FontId, RichText};
+use egui_winit::egui;
+use egui_winit;
+
 use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint, MjtDisableBit, MjtEnableBit};
+use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjtCamera, MjvScene};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_data::MjData;
+use crate::{cast_mut_info, set_flag};
 use crate::mujoco_c::mjNGROUP;
+use crate::util::LockUnpoison;
 
 const MAIN_FONT: FontId = FontId::proportional(15.0);
 const HEADING_FONT: FontId = FontId::proportional(20.0);
@@ -395,7 +393,7 @@ impl ViewerUI {
 
                             ui.separator();
 
-                            // Window toggles
+                            /* Window toggles */
                             ui.horizontal_wrapped(|ui| {
                                 ui.toggle_value(&mut self.actuator_window, RichText::new("Actuator").font(MAIN_FONT));
                                 ui.toggle_value(&mut self.joint_window, RichText::new("Joint").font(MAIN_FONT));
@@ -416,7 +414,7 @@ impl ViewerUI {
                             });
                         });
 
-                        /* Simulation  */
+                        /* Simulation */
                         egui::CollapsingHeader::new(RichText::new("Simulation").font(HEADING_FONT))
                             .default_open(true)
                             .show(ui, |ui|
@@ -836,6 +834,9 @@ impl ViewerUI {
                             )
                         };
 
+                        if !is_editable {
+                            ui.colored_label(egui::Color32::YELLOW, "Model parameters are not synced!");
+                        }
                         
                         // Headlight
                         ui.collapsing(RichText::new("Headlight").font(MAIN_FONT), |ui| {
@@ -1330,6 +1331,7 @@ impl Debug for ViewerUI {
     }
 }
 
+/// Enum representing UI events raised from the interface.
 pub(crate) enum UiEvent {
     Close,
     Fullscreen,

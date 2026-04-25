@@ -1,15 +1,5 @@
 //! Module related to implementation of the [`MjViewer`]. For implementation of the C++ wrapper,
 //! see [`crate::cpp_viewer::MjViewerCpp`] (enabled by the `cpp-viewer` cargo feature).
-#[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
-use glutin::prelude::PossiblyCurrentGlContext;
-use glutin::surface::GlSurface;
-
-use winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::platform::pump_events::EventLoopExtPumpEvents;
-use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::event_loop::EventLoop;
-use winit::dpi::PhysicalPosition;
-use winit::window::Fullscreen;
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,15 +10,25 @@ use std::error::Error;
 use std::fmt::Display;
 use std::borrow::Cow;
 
+use winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, WindowEvent};
+#[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
+use winit::platform::pump_events::EventLoopExtPumpEvents;
+use glutin::prelude::PossiblyCurrentGlContext;
+use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::event_loop::EventLoop;
+use winit::dpi::PhysicalPosition;
+use glutin::surface::GlSurface;
+use winit::window::Fullscreen;
 use bitflags::bitflags;
 
-use crate::prelude::{MjOption, MjSpec, MjrContext, MjrRectangle, MjtFont, MjtGridPos};
+use crate::wrappers::mj_rendering::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_primitive::{MjtNum, MjtSize};
 use crate::wrappers::mj_data::{MjData, MjtState};
 use crate::{builder_setters, mujoco_version};
-use crate::wrappers::{MjVisual, MjStatistic, mj_visualization::*};
+use crate::wrappers::mj_visualization::*;
+use crate::wrappers::mj_editing::MjSpec;
 use crate::wrappers::mj_model::MjModel;
 use crate::util::LockUnpoison;
 
@@ -41,9 +41,7 @@ mod ui;
 pub use egui;
 
 
-/****************************************** */
 // Rust native viewer
-/****************************************** */
 const MJ_VIEWER_DEFAULT_SIZE_PX: (u32, u32) = (1280, 720);
 const DOUBLE_CLICK_WINDOW_MS: u128 = 250;
 const TOUCH_BAR_ZOOM_FACTOR: f64 = 0.1;
@@ -194,7 +192,7 @@ pub struct ViewerSharedState {
     /// This can happen due to changes made through the UI to joints, equalities, actuators, etc.
     data_passive_state: Box<[MjtNum]>,
     data_passive_state_old: Box<[MjtNum]>,
-    data_passive: MjData<Box<MjModel>>,
+    pub(crate) data_passive: MjData<Box<MjModel>>,
     pert: MjvPerturb,
     running: Arc<AtomicBool>,
     user_scene: MjvScene,
@@ -286,76 +284,31 @@ impl ViewerSharedState {
         &self.data_passive.model()
     }
 
-    /// Returns an immutable reference for reading the passive model's physics parameters ([`MjOption`]).
-    pub fn model_opt(&self) -> &MjOption {
-        self.data_passive.model().opt()
-    }
-
-    /// Returns a immutable reference for reading the passive model's visualization parameters ([`MjVisual`]).
-    pub fn model_vis(&self) -> &MjVisual {
-        self.data_passive.model().vis()
-    }
-
-    /// Returns an immutable reference for reading the passive model's statistics ([`MjStatistic`]).
-    pub fn model_stat(&self) -> &MjStatistic {
-        self.data_passive.model().stat()
-    }
-
     /// Checks if the model parameters (opt, vis, stat) are currently editable.
-    /// Returns `false` if parameters have diverged from sync for 5+ seconds.
+    /// Returns `false` if parameters have diverged from sync for 1 second.
     pub fn are_parameters_editable(&self) -> bool {
-        self.last_change_time.elapsed()
-            < PHYSICS_SYNC_TIMEOUT
+        self.last_change_time.elapsed() < PHYSICS_SYNC_TIMEOUT
     }
 
-    /* Helper functions to compare struct values */
-    fn opt_equals(a: &MjOption, b: &MjOption) -> bool {
-        a.integrator == b.integrator
-            && a.cone == b.cone
-            && a.jacobian == b.jacobian
-            && a.solver == b.solver
-            && (a.timestep - b.timestep).abs() < 1e-14
-            && a.iterations == b.iterations
-            && (a.tolerance - b.tolerance).abs() < 1e-14
-            && a.ls_iterations == b.ls_iterations
-            && (a.ls_tolerance - b.ls_tolerance).abs() < 1e-14
-            && a.noslip_iterations == b.noslip_iterations
-            && (a.noslip_tolerance - b.noslip_tolerance).abs() < 1e-14
-            && a.ccd_iterations == b.ccd_iterations
-            && a.disableflags == b.disableflags
-            && a.enableflags == b.enableflags
-    }
 
-    fn vis_equals(a: &MjVisual, b: &MjVisual) -> bool {
-        /* Compare visualization option fields */
-        a.global.cameraid == b.global.cameraid
-            && a.global.orthographic == b.global.orthographic
-            && (a.global.fovy - b.global.fovy).abs() < 1e-6
-            && a.quality.shadowsize == b.quality.shadowsize
-            && a.quality.offsamples == b.quality.offsamples
-            && a.headlight.active == b.headlight.active
-            && (a.map.stiffness - b.map.stiffness).abs() < 1e-6
-    }
-
-    fn stat_equals(a: &MjStatistic, b: &MjStatistic) -> bool {
-        /* Model statistics are typically read-only, but compare for completeness */
-        (a.meaninertia - b.meaninertia).abs() < 1e-14
-            && (a.meanmass - b.meanmass).abs() < 1e-14
-            && (a.meansize - b.meansize).abs() < 1e-14
-            && (a.extent - b.extent).abs() < 1e-14
-            && (a.center[0] - b.center[0]).abs() < 1e-14
-            && (a.center[1] - b.center[1]).abs() < 1e-14
-            && (a.center[2] - b.center[2]).abs() < 1e-14
-    }
-
-    /// Returns a mutable reference for modifying the passive model's physics parameters ([`MjOption`]).
-    pub fn model_opt_mut(&mut self) -> &mut MjOption {
-        self.data_passive.model_opt_mut()
-    }
-
-    /// Returns a mutable reference for modifying the passive model's visualization parameters ([`MjVisual`]).
-    pub fn model_vis_mut(&mut self) -> &mut MjVisual {
-        self.data_passive.model_vis_mut()
+    /// Syncs model parameters between passive and incoming model bidirectionally.
+    /// Detects model changes via signature comparison and reloads if needed.
+    /// When a reload occurs, model parameters are NOT synced (reset to new model defaults).
+    /// Otherwise, passive model's parameter changes are propagated to the incoming model.
+    pub fn sync_model(&mut self, model: &mut MjModel) {
+        // Check if model signature changed
+        if model.signature() != self.data_passive.model().signature() {
+            // Model changed: reload internal state, skip parameter sync
+            let max_user_geom = self.user_scene.maxgeom() as usize;
+            self.reload_model(model, max_user_geom);
+        } else {
+            // Same model: sync parameter changes from passive to incoming model
+            *model.opt_mut() = self.data_passive.model().opt().clone();
+            *model.vis_mut() = self.data_passive.model().vis().clone();
+            *model.stat_mut() = self.data_passive.model().stat().clone();
+        }
+        // Update sync timer to indicate successful parameter sync
+        self.last_change_time = Instant::now();
     }
 
     /// Same as [`ViewerSharedState::sync_data`], except it copies the entire [`MjData`]
@@ -410,31 +363,13 @@ impl ViewerSharedState {
 
     /// Data sync implementation.
     fn _sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, full_sync: bool) {
-        /* Recreate internal data and user scene when the model changes */
+        // Recreate internal data and user scene when the model changes
         if data.model().signature() != self.data_passive.model().signature() {
             let max_user_geom = self.user_scene.maxgeom() as usize;
             self.reload_model(data.model(), max_user_geom);
         }
 
-        /* Check if incoming model parameters match passive model (sync detected) */
-        let incoming_opt = data.model().opt();
-        let incoming_vis = data.model().vis();
-        let incoming_stat = data.model().stat();
-        let passive_opt = self.data_passive.model().opt();
-        let passive_vis = self.data_passive.model().vis();
-        let passive_stat = self.data_passive.model().stat();
-        
-        let is_synced = Self::opt_equals(incoming_opt, passive_opt)
-            && Self::vis_equals(incoming_vis, passive_vis)
-            && Self::stat_equals(incoming_stat, passive_stat);
-        
-        if is_synced {
-            /* Parameters match: reset the lock timer */
-            println!("Synched");
-            self.last_change_time = Instant::now();
-        }
-
-        /* Update statistics */
+        // Update statistics
         let passive_time = self.data_passive.time();
         let active_time = data.time();
         if passive_time > 0.0 && active_time > passive_time {  // time = 0 means data was reset
@@ -452,7 +387,7 @@ impl ViewerSharedState {
 
         self.last_sync_time = Instant::now();
 
-        /* Sync */
+        // Sync
         self.data_passive.read_state_into(
             MjtState::mjSTATE_INTEGRATION as u32,
             &mut self.data_passive_state
@@ -757,40 +692,40 @@ impl MjViewer {
             ..
         } = self.adapter.state.as_ref().unwrap();
 
-        /* Make sure everything is done on the viewer's window */
+        // Make sure everything is done on the viewer's window
         gl_context.make_current(gl_surface)?;
 
-        /* Read the screen size */
+        // Read the screen size
         self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
 
-        /* Process mouse and keyboard events */
+        // Process mouse and keyboard events
         self.process_events();
 
-        /* Update the scene from data and render */
+        // Update the scene from data and render
         self.update_scene()?;
 
-        /* Viewport-only screenshot: capture the centered scene before the UI
-         * panel is drawn on top (the scene is rendered to rect_full, so it
-         * fills the entire window). */
+        // Viewport-only screenshot: capture the centered scene before the UI
+        // panel is drawn on top (the scene is rendered to rect_full, so it
+        // fills the entire window).
         if let Some((true, _)) = self.screenshot_pending {
             let (_, depth) = self.screenshot_pending.take().unwrap();
             self.capture_screenshot(depth)?;
         }
 
-        /* Draw the user menu on top */
+        // Draw the user menu on top
         #[cfg(feature = "viewer-ui")]
         self.process_user_ui();
 
-        /* Update the user menu state and overlays */
+        // Update the user menu state and overlays
         self.update_menus();
 
-        /* Full-window screenshot: capture after all rendering (UI + overlays). */
+        // Full-window screenshot: capture after all rendering (UI + overlays).
         if let Some((false, _)) = self.screenshot_pending {
             let (_, depth) = self.screenshot_pending.take().unwrap();
             self.capture_screenshot(depth)?;
         }
 
-        /* Flush to the GPU */
+        // Flush to the GPU
         self.swap_buffers()
     }
 
@@ -802,7 +737,7 @@ impl MjViewer {
             ..
         } = self.adapter.state.as_ref().unwrap();
 
-        /* Swap OpenGL buffers (render to screen) */
+        // Swap OpenGL buffers (render to screen)
         gl_surface.swap_buffers(gl_context).map_err(MjViewerError::GlutinError)
     }
 
@@ -912,7 +847,7 @@ impl MjViewer {
             let mut lock = self.shared_state.lock_unpoison();
             let ViewerSharedState { data_passive, pert, user_scene, .. } = lock.deref_mut();
 
-            /* Recreate scene when the model changes */
+            // Recreate scene when the model changes
             if data_passive.model().signature() != self.scene.signature() {
                 let new_model = data_passive.model();
                 let ngeom = new_model.ffi().ngeom as usize;
@@ -934,7 +869,7 @@ impl MjViewer {
                 self.ui.update_names(new_model);
             }
 
-            /* Update and render the scene from the MjData state */
+            // Update and render the scene from the MjData state
             self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
 
             // Draw geoms drawn through the user scene.
@@ -949,7 +884,7 @@ impl MjViewer {
         let rectangle_from_ui = self.rect_view;
         let rectangle_full = self.rect_full;
 
-        /* Overlay section */
+        // Overlay section
         if self.status.contains(ViewerStatusBit::HELP) {  // Help
             self.context.overlay(
                 MjtFont::mjFONT_NORMAL, MjtGridPos::mjGRID_TOPLEFT,
@@ -1046,7 +981,7 @@ impl MjViewer {
     /// Draws the user UI
     #[cfg(feature = "viewer-ui")]
     fn process_user_ui(&mut self) {
-        /* Draw the user interface */
+        // Draw the user interface
 
         use crate::viewer::ui::UiEvent;
         let RenderBaseGlState {window, ..} = &self.adapter.state.as_ref().unwrap();
@@ -1059,14 +994,14 @@ impl MjViewer {
             &mut self.camera, &self.shared_state,
         );
 
-        /* Adjust the viewport so MuJoCo doesn't draw over the UI */
+        // Adjust the viewport so MuJoCo doesn't draw over the UI
         self.rect_view.left = left as i32;
         self.rect_view.width = inner_size.width as i32;
 
-        /* Reset some OpenGL settings so that MuJoCo can still draw */
+        // Reset some OpenGL settings so that MuJoCo can still draw
         self.ui.reset();
 
-        /* Process events made in the user UI */
+        // Process events made in the user UI
         while let Some(event) = self.ui.drain_events() {
             use UiEvent::*;
             match event {
@@ -1396,7 +1331,7 @@ impl MjViewer {
     /// Processes camera and perturbation movements.
     fn process_cursor_pos(&mut self, x: f64, y: f64) {
         self.raw_cursor_position = (x, y);
-        /* Calculate the change in mouse position since last call */
+        // Calculate the change in mouse position since last call
         let dx = x - self.last_x;
         let dy = y - self.last_y;
         self.last_x = x;
@@ -1406,7 +1341,7 @@ impl MjViewer {
         let buttons = &self.buttons_pressed;
         let shift = modifiers.shift_key();
 
-        /* Check mouse presses and move the camera if any of them is pressed */
+        // Check mouse presses and move the camera if any of them is pressed
         let action;
         let height = window.inner_size().height as f64;
 
@@ -1430,7 +1365,7 @@ impl MjViewer {
             return;  // If buttons aren't pressed, ignore.
         }
 
-        /* When the perturbation isn't active, move the camera */
+        // When the perturbation isn't active, move the camera
         if pert.active == 0 {
             self.camera.move_(
                 action,
@@ -1450,7 +1385,7 @@ impl MjViewer {
         let ViewerSharedState {data_passive, pert, ..} = lock.deref_mut();
         match state {
             ElementState::Pressed => {
-                /* Clicking and holding applies perturbation */
+                // Clicking and holding applies perturbation
                 if pert.select > 0 && modifier_state.control_key() {
                     let type_ = if modifier_state.alt_key() {
                         MjtPertBit::mjPERT_TRANSLATE
@@ -1460,13 +1395,13 @@ impl MjViewer {
                     pert.start(type_, data_passive, &self.scene);
                 }
 
-                /* Double click detection */
+                // Double click detection
                 if self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
                     let cp = self.raw_cursor_position;
                     let x = cp.0;
                     let y = self.rect_full.height as f64 - cp.1;
 
-                    /* Obtain the selection */ 
+                    // Obtain the selection 
                     let rect = &self.rect_full;
                     let sel = self.scene.find_selection(
                         data_passive, &self.opt,
@@ -1475,7 +1410,7 @@ impl MjViewer {
                         (y - rect.bottom as MjtNum) / rect.height as MjtNum
                     );
 
-                    /* Set tracking camera */
+                    // Set tracking camera
                     if modifier_state.alt_key() {
                         if let Some(body_id) = sel.body_id {
                             self.camera.lookat = sel.point;
@@ -1485,7 +1420,7 @@ impl MjViewer {
                         }
                     }
                     else {
-                        /* Mark selection */
+                        // Mark selection
                         if let Some(body_id) = sel.body_id {
                             pert.select = body_id as i32;
                             pert.flexselect = sel.flex_id.map(|v| v as i32).unwrap_or(-1);
@@ -1589,7 +1524,7 @@ impl MjViewerBuilder {
             true  // process events
         )?;
 
-        /* Initialize the OpenGL related things */
+        // Initialize the OpenGL related things
         let RenderBaseGlState {
             gl_context,
             gl_surface,
