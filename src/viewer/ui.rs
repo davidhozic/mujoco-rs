@@ -7,8 +7,8 @@ use egui::{FontId, RichText};
 use egui_winit::egui;
 use egui_winit;
 
+use crate::{cast_mut_info, set_flag};
 use crate::util::LockUnpoison;
-use crate::cast_mut_info;
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -18,7 +18,7 @@ use std::fmt::Debug;
 use crate::wrappers::mj_visualization::{
     MjvOption, MjvCamera, MjtCamera, MjvScene
 };
-use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint, MjtDisableBit};
+use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint, MjtDisableBit, MjtEnableBit};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_primitive::MjtNum;
 use crate::wrappers::mj_data::MjData;
@@ -173,6 +173,18 @@ const DISABLE_FLAGS: &[(&str, MjtDisableBit)] = &[
     ("Native CCD", MjtDisableBit::mjDSBL_NATIVECCD),
     ("Island", MjtDisableBit::mjDSBL_ISLAND),
 ];
+const _: () = assert!(DISABLE_FLAGS.len() == crate::mujoco_c::mjtDisableBit_::mjNDISABLE as usize);
+
+/// Maps MuJoCo enable flag bits to their string representations
+const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
+    ("Override", MjtEnableBit::mjENBL_OVERRIDE),
+    ("Energy", MjtEnableBit::mjENBL_ENERGY),
+    ("Forward Inverse", MjtEnableBit::mjENBL_FWDINV),
+    ("Inverse Discrete", MjtEnableBit::mjENBL_INVDISCRETE),
+    ("Multi CCD", MjtEnableBit::mjENBL_MULTICCD),
+    ("Sleep", MjtEnableBit::mjENBL_SLEEP),
+];
+const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit_::mjNENABLE as usize);
 
 /// Type alias for a user-provided UI callback function.
 pub(crate) type UiCallback = Box<dyn FnMut(&egui::Context, &mut MjData<Box<MjModel>>)>;
@@ -600,11 +612,18 @@ impl ViewerUI {
                                     for (flag_name, flag_value) in DISABLE_FLAGS {
                                         let mut is_enabled = (options.disableflags & (*flag_value as i32)) != 0;
                                         if ui.toggle_value(&mut is_enabled, *flag_name).changed() {
-                                            if is_enabled {
-                                                options.disableflags |= *flag_value as i32;
-                                            } else {
-                                                options.disableflags &= !(*flag_value as i32);
-                                            }
+                                            set_flag!(options.disableflags, *flag_value as i32, is_enabled);
+                                        }
+                                    }
+                                });
+                            });
+
+                            ui.collapsing(RichText::new("Enable Flags").font(MAIN_FONT), |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    for (flag_name, flag_value) in ENABLE_FLAGS {
+                                        let mut is_enabled = (options.enableflags & (*flag_value as i32)) != 0;
+                                        if ui.toggle_value(&mut is_enabled, *flag_name).changed() {
+                                            set_flag!(options.enableflags, *flag_value as i32, is_enabled);
                                         }
                                     }
                                 });

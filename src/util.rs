@@ -25,6 +25,24 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
     dest[bytes.len()..].fill(0);
 }
 
+/// Sets or clears a bit flag based on a boolean value.
+///
+/// # Examples
+/// ```ignore
+/// let mut flags = 0i32;
+/// set_flag!(flags, 0x01, true);   // sets bit 0
+/// set_flag!(flags, 0x01, false);  // clears bit 0
+/// ```
+#[macro_export]
+macro_rules! set_flag {
+    ($flags:expr, $mask:expr, $enabled:expr) => {
+        if $enabled {
+            $flags |= $mask;
+        } else {
+            $flags &= !$mask;
+        }
+    };
+}
 
 /// Creates a (start, length) tuple based on
 /// lookup variables that define the mapping in MuJoCo's mjModel struct.
