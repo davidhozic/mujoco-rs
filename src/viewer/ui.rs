@@ -34,6 +34,7 @@ const BUTTON_ROUNDING: f32 = 50.0;
 const SIDE_PANEL_DEFAULT_WIDTH: f32 = 200.0;
 const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
 const SIDE_PANEL_PAD: f32 = 10.0;
+const MAX_PHYSICS_WIDGET_WIDTH: f32 = 150.0;
 
 /// Maps [`MjtRndFlag`](crate::wrappers::mj_visualization::MjtRndFlag) to their string
 const GL_EFFECT_MAP: [&str; 11] = [
@@ -121,6 +122,34 @@ const FRAME_TYPE_MAP: [&str; 8] = [
     "World"
 ];
 const _: () = assert!(FRAME_TYPE_MAP.len() == crate::mujoco_c::mjtFrame_::mjNFRAME as usize);
+
+/// Maps integrator modes to their string representations
+const INTEGRATOR_MAP: [&str; 4] = [
+    "Euler",
+    "RK4",
+    "implicit",
+    "implicitfast"
+];
+
+/// Maps friction cone types to their string representations
+const CONE_MAP: [&str; 2] = [
+    "Pyramidal",
+    "Elliptic"
+];
+
+/// Maps Jacobian types to their string representations
+const JACOBIAN_MAP: [&str; 3] = [
+    "Dense",
+    "Sparse",
+    "Auto"
+];
+
+/// Maps solver algorithms to their string representations
+const SOLVER_MAP: [&str; 3] = [
+    "PGS",
+    "CG",
+    "Newton"
+];
 
 /// Type alias for a user-provided UI callback function.
 pub(crate) type UiCallback = Box<dyn FnMut(&egui::Context, &mut MjData<Box<MjModel>>)>;
@@ -380,15 +409,161 @@ impl ViewerUI {
                             .show(ui, |ui|
                         {
                             let mut options = shared_viewer_state.lock_unpoison().data_passive.model().opt().clone();
+                            
+                            // Physics solver and method selectors (top level)
+                            egui::Grid::new("physics_enum_grid").num_columns(2).striped(true).show(ui, |ui| {
+                                ui.label(RichText::new("Integrator").font(MAIN_FONT));
+                                let current_integrator = INTEGRATOR_MAP[options.integrator as usize];
+                                let mut integrator_idx = options.integrator as usize;
+                                let available_width = ui.available_width().min(MAX_PHYSICS_WIDGET_WIDTH);
+                                egui::ComboBox::from_id_salt("integrator_combo")
+                                    .selected_text(current_integrator)
+                                    .width(available_width)
+                                    .show_ui(ui, |ui| {
+                                        for (i, integrator_name) in INTEGRATOR_MAP.iter().enumerate() {
+                                            ui.selectable_value(&mut integrator_idx, i, *integrator_name);
+                                        }
+                                    });
+                                options.integrator = integrator_idx as i32;
+                                ui.end_row();
+
+                                ui.label(RichText::new("Cone").font(MAIN_FONT));
+                                let current_cone = CONE_MAP[options.cone as usize];
+                                let mut cone_idx = options.cone as usize;
+                                let available_width = ui.available_width().min(MAX_PHYSICS_WIDGET_WIDTH);
+                                egui::ComboBox::from_id_salt("cone_combo")
+                                    .selected_text(current_cone)
+                                    .width(available_width)
+                                    .show_ui(ui, |ui| {
+                                        for (i, cone_name) in CONE_MAP.iter().enumerate() {
+                                            ui.selectable_value(&mut cone_idx, i, *cone_name);
+                                        }
+                                    });
+                                options.cone = cone_idx as i32;
+                                ui.end_row();
+
+                                ui.label(RichText::new("Jacobian").font(MAIN_FONT));
+                                let current_jacobian = JACOBIAN_MAP[options.jacobian as usize];
+                                let mut jacobian_idx = options.jacobian as usize;
+                                let available_width = ui.available_width().min(MAX_PHYSICS_WIDGET_WIDTH);
+                                egui::ComboBox::from_id_salt("jacobian_combo")
+                                    .selected_text(current_jacobian)
+                                    .width(available_width)
+                                    .show_ui(ui, |ui| {
+                                        for (i, jacobian_name) in JACOBIAN_MAP.iter().enumerate() {
+                                            ui.selectable_value(&mut jacobian_idx, i, *jacobian_name);
+                                        }
+                                    });
+                                options.jacobian = jacobian_idx as i32;
+                                ui.end_row();
+
+                                ui.label(RichText::new("Solver").font(MAIN_FONT));
+                                let current_solver = SOLVER_MAP[options.solver as usize];
+                                let mut solver_idx = options.solver as usize;
+                                let available_width = ui.available_width().min(MAX_PHYSICS_WIDGET_WIDTH);
+                                egui::ComboBox::from_id_salt("solver_combo")
+                                    .selected_text(current_solver)
+                                    .width(available_width)
+                                    .show_ui(ui, |ui| {
+                                        for (i, solver_name) in SOLVER_MAP.iter().enumerate() {
+                                            ui.selectable_value(&mut solver_idx, i, *solver_name);
+                                        }
+                                    });
+                                options.solver = solver_idx as i32;
+                                ui.end_row();
+                            });
+                            
                             ui.collapsing(RichText::new("Algorithm parameters").font(MAIN_FONT), |ui| {
-                                const TEXT_WIDTH: f32 = 70.0;
-                                const DRAG_WIDTH: f32 = 100.0;
-                                ui.add(RowScalar::new("Timestep", &mut options.timestep, 1e-6, TEXT_WIDTH, DRAG_WIDTH));
-                                ui.add(RowScalar::new("Iterations", &mut options.iterations, 1.0, TEXT_WIDTH, DRAG_WIDTH));
+                                egui::Grid::new("algo_param_grid").num_columns(2).striped(true).show(ui, |ui| {
+                                    ui.add(RowScalar::new(
+                                        "Timestep", &mut options.timestep, 1e-6
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowScalar::new(
+                                        "Iterations", &mut options.iterations, 1.0
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowScalar::new(
+                                        "Tolerance", &mut options.tolerance, 1e-8
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowScalar::new(
+                                        "LS Iter", &mut options.ls_iterations, 1.0
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowScalar::new(
+                                        "LS Tol", &mut options.ls_tolerance, 1e-8
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowScalar::new(
+                                        "Noslip Iter", &mut options.noslip_iterations, 1.0
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowScalar::new(
+                                        "Noslip Tol", &mut options.noslip_tolerance, 1e-8
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowScalar::new(
+                                        "CCD Iter", &mut options.ccd_iterations, 1.0
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowScalar::new(
+                                        "CCD Tol", &mut options.ccd_tolerance, 1e-8
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowScalar::new(
+                                        "Sleep Tol", &mut options.sleep_tolerance, 1e-8
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowScalar::new(
+                                        "SDF Iter", &mut options.sdf_iterations, 1.0
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowScalar::new(
+                                        "SDF Init", &mut options.sdf_initpoints, 1.0
+                                    ));
+                                    ui.end_row();
+
+                                });
                             });
 
                             ui.collapsing(RichText::new("Physics parameters").font(MAIN_FONT), |ui| {
+                                egui::Grid::new("phys_param_grid").num_columns(2).striped(true).show(ui, |ui| {
+                                    ui.add(RowScalar::new(
+                                        "Density", &mut options.density, 1e-3
+                                    ));
+                                    ui.end_row();
 
+                                    ui.add(RowScalar::new(
+                                        "Viscosity", &mut options.viscosity, 1e-6
+                                    ));
+                                    ui.end_row();
+
+                                    ui.add(RowScalar::new(
+                                        "Imp Ratio", &mut options.impratio, 1e-3
+                                    ));
+                                    ui.end_row();
+                                });
+                            });
+
+                            ui.collapsing(RichText::new("Contact Override").font(MAIN_FONT), |ui| {
+                                egui::Grid::new("contact_override_grid").num_columns(2).striped(true).show(ui, |ui| {
+                                    ui.add(RowScalar::new(
+                                        "Margin", &mut options.o_margin, 1e-5
+                                    ));
+                                    ui.end_row();
+                                });
                             });
 
                             *shared_viewer_state.lock_unpoison().data_passive.model_opt_mut() = options;
@@ -795,31 +970,22 @@ struct RowScalar<'t, Num: egui::emath::Numeric> {
     name: egui::WidgetText,
     target: &'t mut Num,
     increment: f64,
-    text_width: f32,
-    drag_width: f32
 }
 
 impl<'t, Num: egui::emath::Numeric> RowScalar<'t, Num> {
-    fn new(
-        name: impl Into<egui::WidgetText>, target: &'t mut Num, increment: f64,
-        text_width: f32, drag_width: f32,
-    ) -> Self {
-        Self { name: name.into(), target, increment, text_width, drag_width }
+    fn new(name: impl Into<egui::WidgetText>, target: &'t mut Num, increment: f64) -> Self {
+        Self { name: name.into(), target, increment }
     }
 }
 
 impl<'t, Num: egui::emath::Numeric> egui::Widget for RowScalar<'t, Num> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        ui.horizontal(|ui| {
-            ui.add_sized(
-                [self.text_width, ui.spacing().interact_size.y],
-                egui::Label::new(self.name),
-            );
-            ui.add_sized(
-                [ui.available_width().min(self.drag_width), ui.spacing().interact_size.y],
-                egui::DragValue::new(self.target)
-                    .speed(self.increment)
-            )
-        }).inner
+        ui.label(self.name);
+        let available_width = ui.available_width().min(MAX_PHYSICS_WIDGET_WIDTH);
+        ui.add_sized(
+            [available_width, ui.spacing().interact_size.y],
+            egui::DragValue::new(self.target)
+            .speed(self.increment)
+        )
     }
 }
