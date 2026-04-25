@@ -28,7 +28,7 @@ use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_primitive::{MjtNum, MjtSize};
 use crate::wrappers::mj_data::{MjData, MjtState};
 use crate::{builder_setters, mujoco_version};
-use crate::wrappers::{MjVisual, mj_visualization::*};
+use crate::wrappers::{MjVisual, MjStatistic, mj_visualization::*};
 use crate::wrappers::mj_model::MjModel;
 use crate::util::LockUnpoison;
 
@@ -50,6 +50,7 @@ const TOUCH_BAR_ZOOM_FACTOR: f64 = 0.1;
 const FPS_SMOOTHING_FACTOR: f64 = 0.1;
 const REALTIME_FACTOR_SMOOTHING_FACTOR: f64 = 0.1;
 const REALTIME_FACTOR_DISPLAY_THRESHOLD: f64 = 0.02;
+const PHYSICS_SYNC_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// How much extra room to create in the internal [`MjvScene`]. Useful for drawing labels, etc.
 pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
@@ -204,6 +205,8 @@ pub struct ViewerSharedState {
     realtime_factor_smooth: f64,
     /// Preallocated buffer for storing the new [`MjData`] state.
     data_state_buffer: Box<[MjtNum]>,
+    /// Timestamp when parameters were last observed to change
+    last_change_time: Instant,
 }
 
 impl ViewerSharedState {
@@ -224,6 +227,7 @@ impl ViewerSharedState {
             running: Arc::new(AtomicBool::new(true)),
             last_sync_time: Instant::now(),
             realtime_factor_smooth: 1.0,
+            last_change_time: Instant::now(),
         };
 
         shared_state.reload_model(model, max_user_geom);
@@ -236,6 +240,7 @@ impl ViewerSharedState {
         let model_passive = Box::new(model.clone());
         self.data_passive = MjData::new(model_passive);
         let model_passive = self.data_passive.model();
+        self.last_change_time = Instant::now();
 
         self.user_scene = MjvScene::new(model_passive, max_user_geom);
         let state_size = model_passive.state_size(MjtState::mjSTATE_INTEGRATION as u32);
@@ -289,6 +294,58 @@ impl ViewerSharedState {
     /// Returns a immutable reference for reading the passive model's visualization parameters ([`MjVisual`]).
     pub fn model_vis(&self) -> &MjVisual {
         self.data_passive.model().vis()
+    }
+
+    /// Returns an immutable reference for reading the passive model's statistics ([`MjStatistic`]).
+    pub fn model_stat(&self) -> &MjStatistic {
+        self.data_passive.model().stat()
+    }
+
+    /// Checks if the model parameters (opt, vis, stat) are currently editable.
+    /// Returns `false` if parameters have diverged from sync for 5+ seconds.
+    pub fn are_parameters_editable(&self) -> bool {
+        self.last_change_time.elapsed()
+            < PHYSICS_SYNC_TIMEOUT
+    }
+
+    /* Helper functions to compare struct values */
+    fn opt_equals(a: &MjOption, b: &MjOption) -> bool {
+        a.integrator == b.integrator
+            && a.cone == b.cone
+            && a.jacobian == b.jacobian
+            && a.solver == b.solver
+            && (a.timestep - b.timestep).abs() < 1e-14
+            && a.iterations == b.iterations
+            && (a.tolerance - b.tolerance).abs() < 1e-14
+            && a.ls_iterations == b.ls_iterations
+            && (a.ls_tolerance - b.ls_tolerance).abs() < 1e-14
+            && a.noslip_iterations == b.noslip_iterations
+            && (a.noslip_tolerance - b.noslip_tolerance).abs() < 1e-14
+            && a.ccd_iterations == b.ccd_iterations
+            && a.disableflags == b.disableflags
+            && a.enableflags == b.enableflags
+    }
+
+    fn vis_equals(a: &MjVisual, b: &MjVisual) -> bool {
+        /* Compare visualization option fields */
+        a.global.cameraid == b.global.cameraid
+            && a.global.orthographic == b.global.orthographic
+            && (a.global.fovy - b.global.fovy).abs() < 1e-6
+            && a.quality.shadowsize == b.quality.shadowsize
+            && a.quality.offsamples == b.quality.offsamples
+            && a.headlight.active == b.headlight.active
+            && (a.map.stiffness - b.map.stiffness).abs() < 1e-6
+    }
+
+    fn stat_equals(a: &MjStatistic, b: &MjStatistic) -> bool {
+        /* Model statistics are typically read-only, but compare for completeness */
+        (a.meaninertia - b.meaninertia).abs() < 1e-14
+            && (a.meanmass - b.meanmass).abs() < 1e-14
+            && (a.meansize - b.meansize).abs() < 1e-14
+            && (a.extent - b.extent).abs() < 1e-14
+            && (a.center[0] - b.center[0]).abs() < 1e-14
+            && (a.center[1] - b.center[1]).abs() < 1e-14
+            && (a.center[2] - b.center[2]).abs() < 1e-14
     }
 
     /// Returns a mutable reference for modifying the passive model's physics parameters ([`MjOption`]).
@@ -357,6 +414,24 @@ impl ViewerSharedState {
         if data.model().signature() != self.data_passive.model().signature() {
             let max_user_geom = self.user_scene.maxgeom() as usize;
             self.reload_model(data.model(), max_user_geom);
+        }
+
+        /* Check if incoming model parameters match passive model (sync detected) */
+        let incoming_opt = data.model().opt();
+        let incoming_vis = data.model().vis();
+        let incoming_stat = data.model().stat();
+        let passive_opt = self.data_passive.model().opt();
+        let passive_vis = self.data_passive.model().vis();
+        let passive_stat = self.data_passive.model().stat();
+        
+        let is_synced = Self::opt_equals(incoming_opt, passive_opt)
+            && Self::vis_equals(incoming_vis, passive_vis)
+            && Self::stat_equals(incoming_stat, passive_stat);
+        
+        if is_synced {
+            /* Parameters match: reset the lock timer */
+            println!("Synched");
+            self.last_change_time = Instant::now();
         }
 
         /* Update statistics */

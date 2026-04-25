@@ -438,13 +438,17 @@ impl ViewerUI {
                             });
                         });
 
+                        let is_editable = shared_viewer_state.lock_unpoison().are_parameters_editable();
 
                         /* Physics options */
                         egui::CollapsingHeader::new(RichText::new("Physics").font(HEADING_FONT))
                             .show(ui, |ui|
                         {
                             let mut options = shared_viewer_state.lock_unpoison().data_passive.model().opt().clone();
-                            
+                            if !is_editable {
+                                ui.colored_label(egui::Color32::YELLOW, "Model parameters are not synced!");
+                            }
+
                             // Physics solver and method selectors (top level)
                             egui::Grid::new("physics_enum_grid").num_columns(2).show(ui, |ui| {
                                 ui.label(RichText::new("Integrator").font(MAIN_FONT));
@@ -664,7 +668,6 @@ impl ViewerUI {
                                     ui.end_row();
                                 });
                             });
-
                             *shared_viewer_state.lock_unpoison().data_passive.model_opt_mut() = options;
                         });
 
