@@ -1,7 +1,7 @@
 //! MjData related.
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
-use crate::wrappers::mj_auxiliary::MjVisual;
+use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::wrappers::mj_option::MjOption;
 use crate::{getter_setter, mujoco_c::*};
 use crate::error::MjDataError;
@@ -1622,6 +1622,11 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
         self.model.vis()
     }
 
+    /// Returns an immutable reference to the model statistics.
+    pub fn model_stat(&self) -> &MjStatistic {
+        self.model.stat()
+    }
+
     /// Returns a mutable reference to [`MjModel::opt_mut`] without allowing unsafe
     /// modifications to the rest of the [`MjModel`].
     /// 
@@ -1656,6 +1661,23 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// ```
     pub fn model_vis_mut(&mut self) -> &mut MjVisual {
         self.model.vis_mut()
+    }
+
+    /// Returns a mutable reference to [`MjModel::stat_mut`] without allowing unsafe
+    /// modifications to the rest of the [`MjModel`].
+    /// 
+    /// Immutable references can be made through [`MjData::model_stat`].
+    /// 
+    /// Can be used to modify the model statistics.
+    /// # Example
+    /// ```rust
+    /// # use mujoco_rs::prelude::{MjModel, MjData};
+    /// let model = Box::new(MjModel::from_xml_string("<mujoco/>").unwrap());
+    /// let mut data = MjData::new(model);
+    /// data.model_stat_mut().center = [0.0, 0.0, 0.5];
+    /// ```
+    pub fn model_stat_mut(&mut self) -> &mut MjStatistic {
+        self.model.stat_mut()
     }
 }
 
