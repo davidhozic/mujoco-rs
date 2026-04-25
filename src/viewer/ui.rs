@@ -629,6 +629,18 @@ impl ViewerUI {
                                 });
                             });
 
+                            ui.collapsing(RichText::new("Actuator Group Enable").font(MAIN_FONT), |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    for i in 0..mjNGROUP as usize {
+                                        let mask = 1 << i;
+                                        let mut is_enabled = (options.disableactuator & (mask as i32)) == 0;
+                                        if ui.toggle_value(&mut is_enabled, format!("Act Group {i}")).changed() {
+                                            set_flag!(options.disableactuator, mask as i32, !is_enabled);
+                                        }
+                                    }
+                                });
+                            });
+
                             ui.collapsing(RichText::new("Contact Override").font(MAIN_FONT), |ui| {
                                 egui::Grid::new("contact_override_grid").num_columns(2).show(ui, |ui| {
                                     ui.add(RowScalar::new(
