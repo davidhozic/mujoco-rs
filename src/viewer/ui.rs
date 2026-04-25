@@ -381,8 +381,10 @@ impl ViewerUI {
                         {
                             let mut options = shared_viewer_state.lock_unpoison().data_passive.model().opt().clone();
                             ui.collapsing(RichText::new("Algorithm parameters").font(MAIN_FONT), |ui| {
-                                ui.add(RowScalar::new("Timestep", &mut options.timestep, 1e-6));
-                                ui.add(RowScalar::new("Iterations", &mut options.iterations, 1.0));
+                                const TEXT_WIDTH: f32 = 70.0;
+                                const DRAG_WIDTH: f32 = 100.0;
+                                ui.add(RowScalar::new("Timestep", &mut options.timestep, 1e-6, TEXT_WIDTH, DRAG_WIDTH));
+                                ui.add(RowScalar::new("Iterations", &mut options.iterations, 1.0, TEXT_WIDTH, DRAG_WIDTH));
                             });
 
                             ui.collapsing(RichText::new("Physics parameters").font(MAIN_FONT), |ui| {
@@ -792,24 +794,32 @@ pub(crate) enum UiEvent {
 struct RowScalar<'t, Num: egui::emath::Numeric> {
     name: egui::WidgetText,
     target: &'t mut Num,
-    increment: f64
+    increment: f64,
+    text_width: f32,
+    drag_width: f32
 }
 
 impl<'t, Num: egui::emath::Numeric> RowScalar<'t, Num> {
-    fn new(name: impl Into<egui::WidgetText>, target: &'t mut Num, increment: f64) -> Self {
-        Self { name: name.into(), target, increment }
+    fn new(
+        name: impl Into<egui::WidgetText>, target: &'t mut Num, increment: f64,
+        text_width: f32, drag_width: f32,
+    ) -> Self {
+        Self { name: name.into(), target, increment, text_width, drag_width }
     }
 }
 
 impl<'t, Num: egui::emath::Numeric> egui::Widget for RowScalar<'t, Num> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
         ui.horizontal(|ui| {
-            ui.label(self.name);
             ui.add_sized(
-            [ui.available_width().min(100.0), ui.spacing().interact_size.y],
+                [self.text_width, ui.spacing().interact_size.y],
+                egui::Label::new(self.name),
+            );
+            ui.add_sized(
+                [ui.available_width().min(self.drag_width), ui.spacing().interact_size.y],
                 egui::DragValue::new(self.target)
                     .speed(self.increment)
-                )
+            )
         }).inner
     }
 }
