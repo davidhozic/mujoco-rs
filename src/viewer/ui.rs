@@ -1033,7 +1033,7 @@ impl<'t, Num: egui::emath::Numeric> RowArray<'t, Num> {
 
 impl<'t, Num: egui::emath::Numeric> egui::Widget for RowArray<'t, Num> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        const GRID_SPACING: f32 = 5.0;
+        const GRID_SPACING: f32 = 2.0;
 
         ui.label(self.name);
         let available_width = ui.available_width().min(MAX_PHYSICS_WIDGET_WIDTH);
