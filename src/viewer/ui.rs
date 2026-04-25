@@ -381,8 +381,8 @@ impl ViewerUI {
                         {
                             let mut options = shared_viewer_state.lock_unpoison().data_passive.model().opt().clone();
                             ui.collapsing(RichText::new("Algorithm parameters").font(MAIN_FONT), |ui| {
-                                ui_row_scalar(ui, "Timestep", &mut options.timestep, 1e-6);
-                                ui_row_scalar(ui, "Iterations", &mut options.iterations, 1.0);
+                                ui.add(RowScalar::new("Timestep", &mut options.timestep, 1e-6));
+                                ui.add(RowScalar::new("Iterations", &mut options.iterations, 1.0));
                             });
 
                             ui.collapsing(RichText::new("Physics parameters").font(MAIN_FONT), |ui| {
@@ -786,15 +786,30 @@ pub(crate) enum UiEvent {
     Screenshot { viewport_only: bool, depth: bool }
 }
 
-/* Utility */
-#[inline(always)]
-fn ui_row_scalar<Num: egui::emath::Numeric>(ui: &mut egui::Ui, attr_name: &str, target: &mut Num, speed: f64) {
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(attr_name).font(MAIN_FONT));
-        ui.add_sized(
-        [ui.available_width().min(100.0), ui.spacing().interact_size.y],
-        egui::DragValue::new(target)
-            .speed(speed)
-        );
-    });
+
+// Extra widgets
+#[must_use = "use ui.add( row_scalar )"]
+struct RowScalar<'t, Num: egui::emath::Numeric> {
+    name: egui::WidgetText,
+    target: &'t mut Num,
+    increment: f64
+}
+
+impl<'t, Num: egui::emath::Numeric> RowScalar<'t, Num> {
+    fn new(name: impl Into<egui::WidgetText>, target: &'t mut Num, increment: f64) -> Self {
+        Self { name: name.into(), target, increment }
+    }
+}
+
+impl<'t, Num: egui::emath::Numeric> egui::Widget for RowScalar<'t, Num> {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        ui.horizontal(|ui| {
+            ui.label(self.name);
+            ui.add_sized(
+            [ui.available_width().min(100.0), ui.spacing().interact_size.y],
+                egui::DragValue::new(self.target)
+                    .speed(self.increment)
+                )
+        }).inner
+    }
 }
