@@ -23,10 +23,12 @@ use bitflags::bitflags;
 
 use crate::wrappers::mj_rendering::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
+use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_primitive::{MjtNum, MjtSize};
 use crate::wrappers::mj_data::{MjData, MjtState};
 use crate::{builder_setters, mujoco_version};
+use crate::wrappers::mj_option::MjOption;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_editing::MjSpec;
 use crate::wrappers::mj_model::MjModel;
@@ -300,35 +302,26 @@ impl ViewerSharedState {
     }
 
     /// Syncs the model's [`MjModel::opt`] from the viewer's passive state to the
-    /// provided model. This allows updating individual parameter types without requiring
+    /// provided option struct. This allows updating physics options without requiring
     /// `unsafe` access via [`MjData::model_mut`].
-    ///
-    /// Returns early (silently) if the model signature has changed, indicating the viewer
-    /// is tracking a different model version.
-    pub fn sync_model_opt(&mut self, model: &mut MjModel) {
-        *model.opt_mut() = self.data_passive.model().opt().clone();
+    pub fn sync_model_opt(&mut self, opt: &mut MjOption) {
+        *opt = self.data_passive.model().opt().clone();
         self.last_change_time = Instant::now();
     }
 
     /// Syncs the model's [`MjModel::vis`] from the viewer's passive state to the
-    /// provided model. This allows updating individual parameter types without requiring
+    /// provided visual struct. This allows updating visualization options without requiring
     /// `unsafe` access via [`MjData::model_mut`].
-    ///
-    /// Returns early (silently) if the model signature has changed, indicating the viewer
-    /// is tracking a different model version.
-    pub fn sync_model_vis(&mut self, model: &mut MjModel) {
-        *model.vis_mut() = self.data_passive.model().vis().clone();
+    pub fn sync_model_vis(&mut self, vis: &mut MjVisual) {
+        *vis = self.data_passive.model().vis().clone();
         self.last_change_time = Instant::now();
     }
 
     /// Syncs the model's [`MjModel::stat`] from the viewer's passive state to the
-    /// provided model. This allows updating individual parameter types without requiring
+    /// provided statistic struct. This allows updating model statistics without requiring
     /// `unsafe` access via [`MjData::model_mut`].
-    ///
-    /// Returns early (silently) if the model signature has changed, indicating the viewer
-    /// is tracking a different model version.
-    pub fn sync_model_stat(&mut self, model: &mut MjModel) {
-        *model.stat_mut() = self.data_passive.model().stat().clone();
+    pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {
+        *stat = self.data_passive.model().stat().clone();
         self.last_change_time = Instant::now();
     }
 
@@ -698,6 +691,43 @@ impl MjViewer {
     /// ```
     pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         self.shared_state.lock_unpoison().sync_data(data);
+    }
+
+    /// Syncs model parameters between passive and incoming model bidirectionally.
+    /// This is a proxy to [`ViewerSharedState::sync_model`].
+    /// 
+    /// Detects model changes via signature comparison and reloads if needed.
+    /// When a reload occurs, model parameters are NOT synced (reset to new model defaults).
+    /// Otherwise, passive model's parameter changes are propagated to the incoming model.
+    pub fn sync_model(&mut self, model: &mut MjModel) {
+        self.shared_state.lock_unpoison().sync_model(model);
+    }
+
+    /// Syncs the model's [`MjModel::opt`] from the viewer's passive state to the
+    /// provided option struct. This is a proxy to [`ViewerSharedState::sync_model_opt`].
+    /// 
+    /// This allows updating physics options without requiring `unsafe` access via
+    /// [`MjData::model_mut`] or manipulating the viewer's shared state directly.
+    pub fn sync_model_opt(&mut self, opt: &mut MjOption) {
+        self.shared_state.lock_unpoison().sync_model_opt(opt);
+    }
+
+    /// Syncs the model's [`MjModel::vis`] from the viewer's passive state to the
+    /// provided visual struct. This is a proxy to [`ViewerSharedState::sync_model_vis`].
+    /// 
+    /// This allows updating visualization options without requiring `unsafe` access via
+    /// [`MjData::model_mut`] or manipulating the viewer's shared state directly.
+    pub fn sync_model_vis(&mut self, vis: &mut MjVisual) {
+        self.shared_state.lock_unpoison().sync_model_vis(vis);
+    }
+
+    /// Syncs the model's [`MjModel::stat`] from the viewer's passive state to the
+    /// provided statistic struct. This is a proxy to [`ViewerSharedState::sync_model_stat`].
+    /// 
+    /// This allows updating model statistics without requiring `unsafe` access via
+    /// [`MjData::model_mut`] or manipulating the viewer's shared state directly.
+    pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {
+        self.shared_state.lock_unpoison().sync_model_stat(stat);
     }
 
     /// Processes the UI (when enabled), processes events, draws the scene

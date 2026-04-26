@@ -42,8 +42,12 @@ fn main() {
             {
                 let mut lock = shared_state.lock().unwrap();
                 lock.sync_data(&mut data);
+                lock.sync_model_opt(data.model_opt_mut());
+                lock.sync_model_vis(data.model_vis_mut());
+                lock.sync_model_stat(data.model_stat_mut());
+                // OR
+                //  lock.sync_model(unsafe { data.model_mut() });
                 viewer_running = lock.running();
-                *data.model_opt_mut() = lock.model_opt().clone();
             }
 
             // Use a while loop and polling to wait for accuracy purposes.
