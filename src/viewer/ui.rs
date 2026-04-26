@@ -8,8 +8,8 @@ use std::fmt::Debug;
 use glutin::display::{Display, GlDisplay};
 use egui_winit::winit::event::WindowEvent;
 use egui_glow::glow::{self, HasContext};
-use egui_winit::winit::window::Window;
 use egui::{FontId, RichText, Modal, Id};
+use egui_winit::winit::window::Window;
 use egui_winit::egui;
 use egui_winit;
 
