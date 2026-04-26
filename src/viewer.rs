@@ -306,9 +306,6 @@ impl ViewerSharedState {
     /// Returns early (silently) if the model signature has changed, indicating the viewer
     /// is tracking a different model version.
     pub fn sync_model_opt(&mut self, model: &mut MjModel) {
-        if model.signature() != self.data_passive.model().signature() {
-            return;
-        }
         *model.opt_mut() = self.data_passive.model().opt().clone();
         self.last_change_time = Instant::now();
     }
@@ -320,9 +317,6 @@ impl ViewerSharedState {
     /// Returns early (silently) if the model signature has changed, indicating the viewer
     /// is tracking a different model version.
     pub fn sync_model_vis(&mut self, model: &mut MjModel) {
-        if model.signature() != self.data_passive.model().signature() {
-            return;
-        }
         *model.vis_mut() = self.data_passive.model().vis().clone();
         self.last_change_time = Instant::now();
     }
@@ -334,9 +328,6 @@ impl ViewerSharedState {
     /// Returns early (silently) if the model signature has changed, indicating the viewer
     /// is tracking a different model version.
     pub fn sync_model_stat(&mut self, model: &mut MjModel) {
-        if model.signature() != self.data_passive.model().signature() {
-            return;
-        }
         *model.stat_mut() = self.data_passive.model().stat().clone();
         self.last_change_time = Instant::now();
     }
