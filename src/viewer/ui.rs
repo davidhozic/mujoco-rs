@@ -715,44 +715,42 @@ impl ViewerUI {
                                     return;
                                 };
                                 let enumerated: MjtCamera = enumerated;
-                                let guard = shared_viewer_state.lock_unpoison();
-                                let model = guard.data_passive.model();
+                                let lock = shared_viewer_state.lock_unpoison();
+                                let model = lock.data_passive.model();
                                 let mut camera_choice = match enumerated {
                                     MjtCamera::mjCAMERA_FIXED => self.camera_names[camera.fixedcamid as usize].to_string(),
                                     MjtCamera::mjCAMERA_TRACKING => {
                                         let bid = camera.trackbodyid as usize;
                                         if let Some(name) = model.id_to_name(MjtObj::mjOBJ_BODY, bid) {
-                                            format!("Track: {}", name)
+                                            format!("Tracking: {}", name)
                                         } else {
-                                            format!("Track: Body {}", bid)
+                                            format!("Tracking: Body {}", bid)
                                         }
                                     },
                                     MjtCamera::mjCAMERA_FREE => "Free".to_string(),
                                     MjtCamera::mjCAMERA_USER => "User".to_string(),
                                 };
-                                drop(guard);
-                                ui.horizontal(|ui| {
-                                    egui::ComboBox::from_id_salt("camera_combo")
-                                        .selected_text(&camera_choice)
-                                        .width(combo_width)
-                                        .show_ui(ui, |ui| {
-                                            if ui.selectable_value(&mut camera_choice, "Free".to_string(), "Free").clicked() {
-                                                camera.free();
-                                            }
+                                drop(lock);
+                                egui::ComboBox::from_id_salt("camera_combo")
+                                    .selected_text(&camera_choice)
+                                    .width(combo_width)
+                                    .show_ui(ui, |ui| {
+                                        if ui.selectable_value(&mut camera_choice, "Free".to_string(), "Free").clicked() {
+                                            camera.free();
+                                        }
 
-                                            // Separator for fixed cameras
-                                            for (pos, name) in self.camera_names.iter().enumerate() {
-                                                if ui.selectable_value(&mut camera_choice, name.to_string(), name).clicked() {
-                                                    *camera = MjvCamera::new_fixed(pos);
-                                                }
-                                            }
-                                        });
+                                        // Button to open tracking modal
+                                        if ui.button("Track").clicked() {
+                                            self.show_tracking_modal = true;
+                                        }
 
-                                    // Button to open tracking modal
-                                    if ui.button("Track body").clicked() {
-                                        self.show_tracking_modal = true;
-                                    }
-                                });
+                                        // Separator for fixed cameras
+                                        for (pos, name) in self.camera_names.iter().enumerate() {
+                                            if ui.selectable_value(&mut camera_choice, name.to_string(), name).clicked() {
+                                                *camera = MjvCamera::new_fixed(pos);
+                                            }
+                                        }
+                                    });
 
                                 // Apply selected body if one was selected in the modal
                                 if let Some(body_id) = self.tracking_selected_body.take() {
@@ -1467,35 +1465,28 @@ impl ViewerUI {
             if self.show_tracking_modal {
                 let modal = Modal::new(Id::new("select_body_tracking"))
                     .show(ctx, |ui| {
-                        ui.set_width(300.0);
                         ui.heading("Available bodies");
                         ui.separator();
 
-                        let guard = shared_viewer_state.lock_unpoison();
-                        let model = guard.data_passive.model();
-                        let nbody = model.nbody() as usize;
-                        drop(guard);
+                        let nbody = shared_viewer_state.lock_unpoison().data_passive.model().nbody();
+                        ui.horizontal_wrapped(|ui|
+                        {
+                            let lock = shared_viewer_state.lock_unpoison();
+                            let model = lock.data_passive.model();
 
-                        egui::ScrollArea::vertical()
-                            .max_height(300.0)
-                            .show(ui, |ui| {
-                                let guard = shared_viewer_state.lock_unpoison();
-                                let model = guard.data_passive.model();
+                            for body_id in 0..nbody as usize {
+                                let body_name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_BODY, body_id) {
+                                    name.to_string()
+                                } else {
+                                    format!("Body {}", body_id)
+                                };
 
-                                for body_id in 0..nbody {
-                                    let body_name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_BODY, body_id) {
-                                        name.to_string()
-                                    } else {
-                                        format!("Body {}", body_id)
-                                    };
-
-                                    if ui.button(RichText::new(&body_name).font(MAIN_FONT)).clicked() {
-                                        self.tracking_selected_body = Some(body_id);
-                                        ui.close();
-                                    }
+                                if ui.button(RichText::new(&body_name).font(MAIN_FONT)).clicked() {
+                                    self.tracking_selected_body = Some(body_id);
+                                    ui.close();
                                 }
-                                drop(guard);
-                            });
+                            }
+                        });
 
                         ui.separator();
                         if ui.button(RichText::new("Cancel").font(MAIN_FONT)).clicked() {
