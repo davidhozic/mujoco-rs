@@ -1464,9 +1464,10 @@ impl ViewerUI {
             /* Camera Tracking Modal */
             if self.show_tracking_modal {
                 let modal = egui::Modal::new(Id::new("select_body_tracking"))
-                    .show(ctx, |ui| {
+                    .show(ctx, |ui|
+                {
                         ui.set_width(600.0);
-                        ui.heading("Select Body to Track");
+                        ui.heading("Select the body to track");
                         ui.separator();
 
                         let nbody = shared_viewer_state.lock_unpoison().data_passive.model().nbody();
@@ -1475,7 +1476,7 @@ impl ViewerUI {
 
                         egui::ScrollArea::both()
                             .auto_shrink([false; 2])
-                            .max_height(128.0)
+                            .max_height(400.0)
                             .show(ui, |ui| {
                                 let lock = shared_viewer_state.lock_unpoison();
                                 let model = lock.data_passive.model();
@@ -1499,7 +1500,7 @@ impl ViewerUI {
 
                                             ui.painter().rect_filled(rect, 4.0, if response.hovered() { egui::Color32::from_gray(60) } else { egui::Color32::from_gray(40) });
 
-                                            ui.painter().text(
+                                            ui.painter().with_clip_rect(rect).text(
                                                 rect.center(),
                                                 egui::Align2::CENTER_CENTER,
                                                 &body_name,
