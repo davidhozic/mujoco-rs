@@ -35,6 +35,17 @@ const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
 const SIDE_PANEL_PAD: f32 = 10.0;
 const MAX_SPAN_WIDTH: f32 = 350.0;
 
+// Camera tracking modal settings
+const CAMERA_MODAL_WIDTH: f32 = 600.0;
+const CAMERA_MODAL_MAX_HEIGHT: f32 = 300.0;
+const CAMERA_MODAL_BUTTONS_PER_ROW: usize = 5;
+const CAMERA_MODAL_BUTTON_WIDTH: f32 = 100.0;
+const CAMERA_MODAL_BUTTON_HEIGHT: f32 = 35.0;
+const CAMERA_MODAL_CELL_SIZE: egui::Vec2 = egui::Vec2 { x: CAMERA_MODAL_BUTTON_WIDTH, y: CAMERA_MODAL_BUTTON_HEIGHT };
+const CAMERA_MODAL_BUTTON_ROUNDING: f32 = 4.0;
+const CAMERA_MODAL_BUTTON_COLOR_DEFAULT: u8 = 40;
+const CAMERA_MODAL_BUTTON_COLOR_HOVERED: u8 = 60;
+
 const PHYSICS_SYNC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 const MODEL_OPT_SYNC_WARNING: &str = "⚠ Physics options not synced!";
 const MODEL_VIS_SYNC_WARNING: &str = "⚠ Visualization options not synced!";
@@ -1466,24 +1477,21 @@ impl ViewerUI {
                 let modal = egui::Modal::new(Id::new("select_body_tracking"))
                     .show(ctx, |ui|
                 {
-                        ui.set_width(600.0);
+                        ui.set_width(CAMERA_MODAL_WIDTH);
                         ui.heading("Select the body to track");
                         ui.separator();
 
                         let nbody = shared_viewer_state.lock_unpoison().data_passive.model().nbody();
-                        let buttons_per_row = 5;
-                        let cell_size = egui::vec2(100.0, 35.0);
 
                         egui::ScrollArea::both()
                             .auto_shrink([false; 2])
-                            .max_height(400.0)
+                            .max_height(CAMERA_MODAL_MAX_HEIGHT)
                             .show(ui, |ui| {
                                 let lock = shared_viewer_state.lock_unpoison();
                                 let model = lock.data_passive.model();
 
                                 egui::Grid::new("body_grid")
-                                    .spacing([8.0, 4.0])
-                                    .num_columns(buttons_per_row)
+                                    .num_columns(CAMERA_MODAL_BUTTONS_PER_ROW)
                                     .show(ui, |ui| {
                                         for body_id in 0..nbody as usize {
                                             let body_name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_BODY, body_id) {
@@ -1492,13 +1500,18 @@ impl ViewerUI {
                                                 format!("Body {}", body_id)
                                             };
 
-                                            let (rect, response) = ui.allocate_exact_size(cell_size, egui::Sense::click());
+                                            let (rect, response) = ui.allocate_exact_size(CAMERA_MODAL_CELL_SIZE, egui::Sense::click());
                                             if response.clicked() {
                                                 self.tracking_selected_body = Some(body_id);
                                                 ui.close();
                                             }
 
-                                            ui.painter().rect_filled(rect, 4.0, if response.hovered() { egui::Color32::from_gray(60) } else { egui::Color32::from_gray(40) });
+                                            let button_color = if response.hovered() { 
+                                                egui::Color32::from_gray(CAMERA_MODAL_BUTTON_COLOR_HOVERED) 
+                                            } else { 
+                                                egui::Color32::from_gray(CAMERA_MODAL_BUTTON_COLOR_DEFAULT) 
+                                            };
+                                            ui.painter().rect_filled(rect, CAMERA_MODAL_BUTTON_ROUNDING, button_color);
 
                                             ui.painter().with_clip_rect(rect).text(
                                                 rect.center(),
@@ -1508,7 +1521,7 @@ impl ViewerUI {
                                                 egui::Color32::WHITE,
                                             );
 
-                                            if (body_id + 1) % buttons_per_row == 0 {
+                                            if (body_id + 1) % CAMERA_MODAL_BUTTONS_PER_ROW == 0 {
                                                 ui.end_row();
                                             }
                                         }
