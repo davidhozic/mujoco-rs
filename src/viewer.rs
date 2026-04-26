@@ -1701,7 +1701,7 @@ bitflags! {
 /// 
 /// This assumes `outside`, `inside`, and `inside_prev` are all plain-old-datatypes
 /// which contain no pointers.
-fn three_way_byte_merge<T: ThreeWayMergeSafe + Clone>(outside: &mut T, inside: &mut T, inside_prev: &mut T) {
+fn three_way_byte_merge<T: ThreeWayMergeSafe>(outside: &mut T, inside: &mut T, inside_prev: &mut T) {
     let outside_bytes = unsafe { std::slice::from_raw_parts_mut(outside as *mut T as *mut u8, std::mem::size_of::<T>()) };
     let inside_bytes = unsafe { std::slice::from_raw_parts(inside as *const T as *const u8, std::mem::size_of::<T>()) };
     let inside_prev_bytes = unsafe { std::slice::from_raw_parts(inside_prev as *const T as *const u8, std::mem::size_of::<T>()) };
