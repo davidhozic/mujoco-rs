@@ -107,6 +107,11 @@ update of MuJoCo alone can increase the major version.
   corresponding :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState` methods, enabling convenient
   parameter synchronization without manual lock management.
 
+*Viewer camera tracking modal*
+
+- The viewer UI now features an interactive **camera tracking modal** for selecting bodies to track.
+  Select "Track" in the camera panel to open a modal with a scrollable grid of body buttons.
+
 .. rubric:: Removed examples
 
 - Removed the ``stl_mesh`` example. It existed in MuJoCo-rs 3.0.1 due to MuJoCo 3.6.0 requiring a plugin to load
