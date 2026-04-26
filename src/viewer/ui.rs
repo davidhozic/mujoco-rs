@@ -9,7 +9,7 @@ use glutin::display::{Display, GlDisplay};
 use egui_winit::winit::event::WindowEvent;
 use egui_glow::glow::{self, HasContext};
 use egui_winit::winit::window::Window;
-use egui::{FontId, RichText};
+use egui::{FontId, RichText, Modal, Id};
 use egui_winit::egui;
 use egui_winit;
 
@@ -220,7 +220,11 @@ pub(crate) struct ViewerUI {
     equality_window: bool,
     group_window: bool,
     screenshot_viewport_only: bool,
-    screenshot_depth: bool
+    screenshot_depth: bool,
+
+    // Camera tracking modal state
+    show_tracking_modal: bool,
+    tracking_selected_body: Option<usize>,
 }
 
 impl ViewerUI {
@@ -261,7 +265,9 @@ impl ViewerUI {
             equality_window: false,
             group_window: false,
             screenshot_viewport_only: false,
-            screenshot_depth: false
+            screenshot_depth: false,
+            show_tracking_modal: false,
+            tracking_selected_body: None,
         };
         viewer_ui.update_names(model);
         Ok(viewer_ui)
@@ -709,26 +715,50 @@ impl ViewerUI {
                                     return;
                                 };
                                 let enumerated: MjtCamera = enumerated;
+                                let guard = shared_viewer_state.lock_unpoison();
+                                let model = guard.data_passive.model();
                                 let mut camera_choice = match enumerated {
                                     MjtCamera::mjCAMERA_FIXED => self.camera_names[camera.fixedcamid as usize].to_string(),
-                                    MjtCamera::mjCAMERA_TRACKING => "Tracking".to_string(),
+                                    MjtCamera::mjCAMERA_TRACKING => {
+                                        let bid = camera.trackbodyid as usize;
+                                        if let Some(name) = model.id_to_name(MjtObj::mjOBJ_BODY, bid) {
+                                            format!("Track: {}", name)
+                                        } else {
+                                            format!("Track: Body {}", bid)
+                                        }
+                                    },
                                     MjtCamera::mjCAMERA_FREE => "Free".to_string(),
                                     MjtCamera::mjCAMERA_USER => "User".to_string(),
                                 };
-                                egui::ComboBox::from_id_salt("camera_combo")
-                                    .selected_text(&camera_choice)
-                                    .width(combo_width)
-                                    .show_ui(ui, |ui| {
-                                        ui.selectable_value(&mut camera_choice, "Free".to_string(), "Free");
-                                        for name in self.camera_names.iter() {
-                                            ui.selectable_value(&mut camera_choice, name.to_string(), name);
-                                        }
-                                    });
-                                if camera_choice == "Free" && enumerated != MjtCamera::mjCAMERA_FREE {
-                                    camera.free();
-                                } else if let Some(pos) = self.camera_names.iter().position(|n| n == &camera_choice) {
-                                    *camera = MjvCamera::new_fixed(pos);
+                                drop(guard);
+                                ui.horizontal(|ui| {
+                                    egui::ComboBox::from_id_salt("camera_combo")
+                                        .selected_text(&camera_choice)
+                                        .width(combo_width)
+                                        .show_ui(ui, |ui| {
+                                            if ui.selectable_value(&mut camera_choice, "Free".to_string(), "Free").clicked() {
+                                                camera.free();
+                                            }
+
+                                            // Separator for fixed cameras
+                                            for (pos, name) in self.camera_names.iter().enumerate() {
+                                                if ui.selectable_value(&mut camera_choice, name.to_string(), name).clicked() {
+                                                    *camera = MjvCamera::new_fixed(pos);
+                                                }
+                                            }
+                                        });
+
+                                    // Button to open tracking modal
+                                    if ui.button("Track body").clicked() {
+                                        self.show_tracking_modal = true;
+                                    }
+                                });
+
+                                // Apply selected body if one was selected in the modal
+                                if let Some(body_id) = self.tracking_selected_body.take() {
+                                    camera.track(body_id);
                                 }
+
                                 ui.end_row();
 
                                 // Label
@@ -1432,6 +1462,51 @@ impl ViewerUI {
                     }
                 });
             });
+
+            /* Camera Tracking Modal */
+            if self.show_tracking_modal {
+                let modal = Modal::new(Id::new("select_body_tracking"))
+                    .show(ctx, |ui| {
+                        ui.set_width(300.0);
+                        ui.heading("Available bodies");
+                        ui.separator();
+
+                        let guard = shared_viewer_state.lock_unpoison();
+                        let model = guard.data_passive.model();
+                        let nbody = model.nbody() as usize;
+                        drop(guard);
+
+                        egui::ScrollArea::vertical()
+                            .max_height(300.0)
+                            .show(ui, |ui| {
+                                let guard = shared_viewer_state.lock_unpoison();
+                                let model = guard.data_passive.model();
+
+                                for body_id in 0..nbody {
+                                    let body_name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_BODY, body_id) {
+                                        name.to_string()
+                                    } else {
+                                        format!("Body {}", body_id)
+                                    };
+
+                                    if ui.button(RichText::new(&body_name).font(MAIN_FONT)).clicked() {
+                                        self.tracking_selected_body = Some(body_id);
+                                        ui.close();
+                                    }
+                                }
+                                drop(guard);
+                            });
+
+                        ui.separator();
+                        if ui.button(RichText::new("Cancel").font(MAIN_FONT)).clicked() {
+                            ui.close();
+                        }
+                    });
+
+                if modal.should_close() {
+                    self.show_tracking_modal = false;
+                }
+            }
 
             /* User-defined UI callbacks */
             // Callbacks that receive the egui context and MjData passive instance
