@@ -36,7 +36,6 @@ const SIDE_PANEL_PAD: f32 = 10.0;
 const MAX_SPAN_WIDTH: f32 = 350.0;
 
 // Camera tracking modal settings
-const CAMERA_MODAL_WIDTH: f32 = 600.0;
 const CAMERA_MODAL_MAX_HEIGHT: f32 = 300.0;
 const CAMERA_MODAL_BUTTONS_PER_ROW: usize = 5;
 const CAMERA_MODAL_BUTTON_WIDTH: f32 = 100.0;
@@ -1477,7 +1476,6 @@ impl ViewerUI {
                 let modal = egui::Modal::new(Id::new("select_body_tracking"))
                     .show(ctx, |ui|
                 {
-                        ui.set_width(CAMERA_MODAL_WIDTH);
                         ui.heading("Select the body to track");
                         ui.separator();
 
@@ -1520,6 +1518,10 @@ impl ViewerUI {
                                                 MAIN_FONT,
                                                 egui::Color32::WHITE,
                                             );
+
+                                            if response.hovered() {
+                                                response.on_hover_text(&body_name);
+                                            }
 
                                             if (body_id + 1) % CAMERA_MODAL_BUTTONS_PER_ROW == 0 {
                                                 ui.end_row();
