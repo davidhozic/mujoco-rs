@@ -273,23 +273,11 @@ impl ViewerSharedState {
         &mut self.user_scene
     }
 
-    /// Returns an immutable reference to the passive [`MjData`] instance of the viewer.
-    pub fn data_passive(&self) -> &MjData<Box<MjModel>> {
-        &self.data_passive
-    }
-
-    /// Returns an immutable reference to the passive [`MjModel`] instance of the viewer.
-    /// This is a shortcut for the passive data's [`MjData::model`] method.
-    pub fn model_passive(&self) -> &MjModel {
-        &self.data_passive.model()
-    }
-
     /// Checks if the model parameters (opt, vis, stat) are currently editable.
     /// Returns `false` if parameters have diverged from sync for 1 second.
     pub fn are_parameters_editable(&self) -> bool {
         self.last_change_time.elapsed() < PHYSICS_SYNC_TIMEOUT
     }
-
 
     /// Syncs model parameters between passive and incoming model bidirectionally.
     /// Detects model changes via signature comparison and reloads if needed.
@@ -308,6 +296,48 @@ impl ViewerSharedState {
             *model.stat_mut() = self.data_passive.model().stat().clone();
         }
         // Update sync timer to indicate successful parameter sync
+        self.last_change_time = Instant::now();
+    }
+
+    /// Syncs the model's [`MjModel::opt`] from the viewer's passive state to the
+    /// provided model. This allows updating individual parameter types without requiring
+    /// `unsafe` access via [`MjData::model_mut`].
+    ///
+    /// Returns early (silently) if the model signature has changed, indicating the viewer
+    /// is tracking a different model version.
+    pub fn sync_model_opt(&mut self, model: &mut MjModel) {
+        if model.signature() != self.data_passive.model().signature() {
+            return;
+        }
+        *model.opt_mut() = self.data_passive.model().opt().clone();
+        self.last_change_time = Instant::now();
+    }
+
+    /// Syncs the model's [`MjModel::vis`] from the viewer's passive state to the
+    /// provided model. This allows updating individual parameter types without requiring
+    /// `unsafe` access via [`MjData::model_mut`].
+    ///
+    /// Returns early (silently) if the model signature has changed, indicating the viewer
+    /// is tracking a different model version.
+    pub fn sync_model_vis(&mut self, model: &mut MjModel) {
+        if model.signature() != self.data_passive.model().signature() {
+            return;
+        }
+        *model.vis_mut() = self.data_passive.model().vis().clone();
+        self.last_change_time = Instant::now();
+    }
+
+    /// Syncs the model's [`MjModel::stat`] from the viewer's passive state to the
+    /// provided model. This allows updating individual parameter types without requiring
+    /// `unsafe` access via [`MjData::model_mut`].
+    ///
+    /// Returns early (silently) if the model signature has changed, indicating the viewer
+    /// is tracking a different model version.
+    pub fn sync_model_stat(&mut self, model: &mut MjModel) {
+        if model.signature() != self.data_passive.model().signature() {
+            return;
+        }
+        *model.stat_mut() = self.data_passive.model().stat().clone();
         self.last_change_time = Instant::now();
     }
 
