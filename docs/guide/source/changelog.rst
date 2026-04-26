@@ -66,27 +66,46 @@ update of MuJoCo alone can increase the major version.
 - :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtLRMode` is now exported for
   typed access to ``MjLROpt.mode``.
 - In light of :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_mut` becoming unsafe,
-  two new methods are created to allow modification of common model fields:
+  six new methods are created to allow safe access to model fields:
   
-  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut` and
-  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`.
+  Immutable getters:
+  
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt`,
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis`, and
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_stat`
+  
+  Mutable accessors:
+  
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut`,
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`, and
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_stat_mut`.
 
 *MjViewer model parameter synchronization*
 
 - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState` now provides methods to sync model parameters:
   
+  - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model` syncs all model
+    parameters (physics options, visualization, and statistics) bidirectionally, detecting model
+    changes via signature comparison.
   - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_opt`,
   - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_vis`, and
   - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_stat`
   
-  allow syncing model physics options, visualization parameters, and statistics from the viewer's
-  passive state to external structures without requiring ``unsafe`` access.
+  allow syncing model physics options, visualization parameters, and statistics individually from
+  the viewer's passive state to external structures without requiring ``unsafe`` access.
+  
+  Corresponding getter methods :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>last_opt_sync_time`,
+  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>last_vis_sync_time`, and
+  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>last_stat_sync_time` return
+  when each parameter type was last synchronized, enabling UI warnings for out-of-sync parameters.
 
-- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` now provides corresponding proxy methods
-  (:docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model_opt`,
+- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` now provides proxy methods
+  (:docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model`,
+  :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model_opt`,
   :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model_vis`,
-  :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model_stat`)
-  for convenient parameter synchronization without manual lock management.
+  :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model_stat`) that delegate to the
+  corresponding :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState` methods, enabling convenient
+  parameter synchronization without manual lock management.
 
 .. rubric:: Removed examples
 

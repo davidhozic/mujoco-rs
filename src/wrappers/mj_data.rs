@@ -1650,7 +1650,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// 
     /// Immutable references can be made through [`MjData::model`].
     /// 
-    /// Can be used to modify the physics parameters.
+    /// Can be used to modify the visualization parameters.
     /// # Example
     /// ```rust
     /// # use mujoco_rs::prelude::{MjModel, MjData};

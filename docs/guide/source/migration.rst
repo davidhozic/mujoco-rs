@@ -111,7 +111,7 @@ longer available in MuJoCo-rs 4.0.0.
     let _ = flex;
 
 
-``MjData::model_mut`` is not unsafe
+``MjData::model_mut`` is now unsafe
 ------------------------------------
 To prevent a false sense of correctness, method
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_mut`
