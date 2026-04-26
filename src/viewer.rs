@@ -1710,8 +1710,20 @@ fn three_way_byte_merge<T: ThreeWayMergeSafe + Clone>(outside: &mut T, inside: &
             *o = *i;
         }
     }
-    *inside = outside.clone();
-    *inside_prev = inside.clone();
+
+    // Copy at pointer level to include padding bytes.
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            outside as *const T,
+            inside as *mut T,
+            1
+        );
+        std::ptr::copy_nonoverlapping(
+            inside as *const T,
+            inside_prev as *mut T,
+            1
+        );
+    }
 }
 
 unsafe trait ThreeWayMergeSafe {}
