@@ -210,6 +210,11 @@ pub struct ViewerSharedState {
     last_vis_change_time: Instant,
     /// Timestamp when statistics (stat) were last synced
     last_stat_change_time: Instant,
+
+    /* Model parameter change tracking */
+    prev_opt: MjOption,
+    prev_vis: MjVisual,
+    prev_stat: MjStatistic
 }
 
 impl ViewerSharedState {
@@ -233,15 +238,19 @@ impl ViewerSharedState {
             last_opt_change_time: Instant::now(),
             last_vis_change_time: Instant::now(),
             last_stat_change_time: Instant::now(),
+            /* Model parameter change tracking */
+            prev_opt: MjOption::default(),
+            prev_vis: MjVisual::default(),
+            prev_stat: MjStatistic::default(),
         };
 
-        shared_state.reload_model(model, max_user_geom);
+        shared_state.reload_model(&model, max_user_geom);
         shared_state
     }
 
     /// Reinitializes all model-dependent internal state.
     /// Called on construction and whenever [`_sync_data`](Self::_sync_data) detects a model change.
-    fn reload_model<M: Deref<Target = MjModel>>(&mut self, model: M, max_user_geom: usize) {
+    fn reload_model(&mut self, model: &MjModel, max_user_geom: usize) {
         let model_passive = Box::new(model.clone());
         self.data_passive = MjData::new(model_passive);
         let model_passive = self.data_passive.model();
@@ -289,40 +298,50 @@ impl ViewerSharedState {
             // Model changed: reload internal state, skip parameter sync
             let max_user_geom = self.user_scene.maxgeom() as usize;
             self.reload_model(model, max_user_geom);
-        } else {
-            // Same model: sync parameter changes from passive to incoming model
-            *model.opt_mut() = self.data_passive.model().opt().clone();
-            *model.vis_mut() = self.data_passive.model().vis().clone();
-            *model.stat_mut() = self.data_passive.model().stat().clone();
         }
-        let now = Instant::now();
-        self.last_opt_change_time = now;
-        self.last_vis_change_time = now;
-        self.last_stat_change_time = now;
+
+        self.sync_model_opt(model.opt_mut());
+        self.sync_model_vis(model.vis_mut());
+        self.sync_model_stat(model.stat_mut());
     }
 
     /// Syncs the model's [`MjModel::opt`] from the viewer's passive state to the
     /// provided option struct. This allows updating physics options without requiring
     /// `unsafe` access via [`MjData::model_mut`].
     pub fn sync_model_opt(&mut self, opt: &mut MjOption) {
+        if self.prev_opt != *opt {
+            *self.data_passive.model_opt_mut() = opt.clone();
+        }
+
         *opt = self.data_passive.model().opt().clone();
         self.last_opt_change_time = Instant::now();
+        self.prev_opt = opt.clone();
     }
 
     /// Syncs the model's [`MjModel::vis`] from the viewer's passive state to the
     /// provided visual struct. This allows updating visualization options without requiring
     /// `unsafe` access via [`MjData::model_mut`].
     pub fn sync_model_vis(&mut self, vis: &mut MjVisual) {
+        if self.prev_vis != *vis {
+            *self.data_passive.model_vis_mut() = vis.clone();
+        }
+
         *vis = self.data_passive.model().vis().clone();
         self.last_vis_change_time = Instant::now();
+        self.prev_vis = vis.clone();
     }
 
     /// Syncs the model's [`MjModel::stat`] from the viewer's passive state to the
     /// provided statistic struct. This allows updating model statistics without requiring
     /// `unsafe` access via [`MjData::model_mut`].
     pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {
+        if self.prev_stat != *stat {
+            *self.data_passive.model_stat_mut() = stat.clone();
+        }
+
         *stat = self.data_passive.model().stat().clone();
         self.last_stat_change_time = Instant::now();
+        self.prev_stat = stat.clone();
     }
 
     /// Returns the last time physics options (opt) were synced.

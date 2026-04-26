@@ -32,6 +32,12 @@ mod build_dependencies {
             else if info.name.starts_with("mjt") {  // enums
                 data.push("Copy".into());
             }
+            else if ["mjOption_", "mjStatistic_"].contains(&info.name) || info.name.starts_with("mjVisual") {
+                data.push("PartialEq".into());
+                if info.name == "mjStatistic_" {
+                    data.push("Default".into());
+                }
+            }
 
             data
         }
