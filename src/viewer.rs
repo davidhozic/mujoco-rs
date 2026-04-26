@@ -309,39 +309,24 @@ impl ViewerSharedState {
     /// provided option struct. This allows updating physics options without requiring
     /// `unsafe` access via [`MjData::model_mut`].
     pub fn sync_model_opt(&mut self, opt: &mut MjOption) {
-        if self.prev_opt != *opt {
-            *self.data_passive.model_opt_mut() = opt.clone();
-        }
-
-        *opt = self.data_passive.model().opt().clone();
+        three_way_byte_merge(opt, self.data_passive.model_opt_mut(), &mut self.prev_opt);
         self.last_opt_change_time = Instant::now();
-        self.prev_opt = opt.clone();
     }
 
     /// Syncs the model's [`MjModel::vis`] from the viewer's passive state to the
     /// provided visual struct. This allows updating visualization options without requiring
     /// `unsafe` access via [`MjData::model_mut`].
     pub fn sync_model_vis(&mut self, vis: &mut MjVisual) {
-        if self.prev_vis != *vis {
-            *self.data_passive.model_vis_mut() = vis.clone();
-        }
-
-        *vis = self.data_passive.model().vis().clone();
+        three_way_byte_merge(vis, self.data_passive.model_vis_mut(), &mut self.prev_vis);
         self.last_vis_change_time = Instant::now();
-        self.prev_vis = vis.clone();
     }
 
     /// Syncs the model's [`MjModel::stat`] from the viewer's passive state to the
     /// provided statistic struct. This allows updating model statistics without requiring
     /// `unsafe` access via [`MjData::model_mut`].
     pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {
-        if self.prev_stat != *stat {
-            *self.data_passive.model_stat_mut() = stat.clone();
-        }
-
-        *stat = self.data_passive.model().stat().clone();
+        three_way_byte_merge(stat, self.data_passive.model_stat_mut(), &mut self.prev_stat);
         self.last_stat_change_time = Instant::now();
-        self.prev_stat = stat.clone();
     }
 
     /// Returns the last time physics options (opt) were synced.
@@ -1708,3 +1693,29 @@ bitflags! {
         const RIGHT = 1 << 2;
     }
 }
+
+/// Performs a three-way merge. This means, that if the `inside` attributes changed
+/// (detected by comparing to `inside_prev`), the corresponding byte on the `outside`
+/// is overwriten. When no change was made on the inside, the outside is copied to the inside
+/// completely.
+/// 
+/// This assumes `outside`, `inside`, and `inside_prev` are all plain-old-datatypes
+/// which contain no pointers.
+fn three_way_byte_merge<T: ThreeWayMergeSafe + Clone>(outside: &mut T, inside: &mut T, inside_prev: &mut T) {
+    let outside_bytes = unsafe { std::slice::from_raw_parts_mut(outside as *mut T as *mut u8, std::mem::size_of::<T>()) };
+    let inside_bytes = unsafe { std::slice::from_raw_parts(inside as *const T as *const u8, std::mem::size_of::<T>()) };
+    let inside_prev_bytes = unsafe { std::slice::from_raw_parts(inside_prev as *const T as *const u8, std::mem::size_of::<T>()) };
+    for ((o, i), ip) in outside_bytes.iter_mut().zip(inside_bytes).zip(inside_prev_bytes) {
+        if *i != *ip {
+            *o = *i;
+        }
+    }
+    *inside = outside.clone();
+    *inside_prev = inside.clone();
+}
+
+unsafe trait ThreeWayMergeSafe {}
+
+unsafe impl ThreeWayMergeSafe for MjOption {}
+unsafe impl ThreeWayMergeSafe for MjVisual {}
+unsafe impl ThreeWayMergeSafe for MjStatistic {}
