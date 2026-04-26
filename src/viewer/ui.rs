@@ -8,7 +8,7 @@ use std::fmt::Debug;
 use glutin::display::{Display, GlDisplay};
 use egui_winit::winit::event::WindowEvent;
 use egui_glow::glow::{self, HasContext};
-use egui::{FontId, RichText, Modal, Id};
+use egui::{FontId, RichText, Id};
 use egui_winit::winit::window::Window;
 use egui_winit::egui;
 use egui_winit;
@@ -1463,30 +1463,56 @@ impl ViewerUI {
 
             /* Camera Tracking Modal */
             if self.show_tracking_modal {
-                let modal = Modal::new(Id::new("select_body_tracking"))
+                let modal = egui::Modal::new(Id::new("select_body_tracking"))
                     .show(ctx, |ui| {
-                        ui.heading("Available bodies");
+                        ui.set_width(600.0);
+                        ui.heading("Select Body to Track");
                         ui.separator();
 
                         let nbody = shared_viewer_state.lock_unpoison().data_passive.model().nbody();
-                        ui.horizontal_wrapped(|ui|
-                        {
-                            let lock = shared_viewer_state.lock_unpoison();
-                            let model = lock.data_passive.model();
+                        let buttons_per_row = 5;
+                        let cell_size = egui::vec2(100.0, 35.0);
 
-                            for body_id in 0..nbody as usize {
-                                let body_name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_BODY, body_id) {
-                                    name.to_string()
-                                } else {
-                                    format!("Body {}", body_id)
-                                };
+                        egui::ScrollArea::both()
+                            .auto_shrink([false; 2])
+                            .max_height(128.0)
+                            .show(ui, |ui| {
+                                let lock = shared_viewer_state.lock_unpoison();
+                                let model = lock.data_passive.model();
 
-                                if ui.button(RichText::new(&body_name).font(MAIN_FONT)).clicked() {
-                                    self.tracking_selected_body = Some(body_id);
-                                    ui.close();
-                                }
-                            }
-                        });
+                                egui::Grid::new("body_grid")
+                                    .spacing([8.0, 4.0])
+                                    .num_columns(buttons_per_row)
+                                    .show(ui, |ui| {
+                                        for body_id in 0..nbody as usize {
+                                            let body_name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_BODY, body_id) {
+                                                name.to_string()
+                                            } else {
+                                                format!("Body {}", body_id)
+                                            };
+
+                                            let (rect, response) = ui.allocate_exact_size(cell_size, egui::Sense::click());
+                                            if response.clicked() {
+                                                self.tracking_selected_body = Some(body_id);
+                                                ui.close();
+                                            }
+
+                                            ui.painter().rect_filled(rect, 4.0, if response.hovered() { egui::Color32::from_gray(60) } else { egui::Color32::from_gray(40) });
+
+                                            ui.painter().text(
+                                                rect.center(),
+                                                egui::Align2::CENTER_CENTER,
+                                                &body_name,
+                                                MAIN_FONT,
+                                                egui::Color32::WHITE,
+                                            );
+
+                                            if (body_id + 1) % buttons_per_row == 0 {
+                                                ui.end_row();
+                                            }
+                                        }
+                                    });
+                            });
 
                         ui.separator();
                         if ui.button(RichText::new("Cancel").font(MAIN_FONT)).clicked() {
