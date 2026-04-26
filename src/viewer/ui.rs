@@ -28,7 +28,7 @@ const HEADING_POST_SPACE: f32 = 5.0;
 const BUTTON_SPACING_X: f32 = 10.0;
 const BUTTON_SPACING_Y: f32 = 5.0;
 const BUTTON_ROUNDING: f32 = 50.0;
-const ZBUFFER_PRECISION_TOLERANCE: f32 = 1e-4;
+const RANGE_PRECISION_TOLERANCE: f32 = 1e-4;
 
 const SIDE_PANEL_DEFAULT_WIDTH: f32 = 200.0;
 const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
@@ -996,25 +996,25 @@ impl ViewerUI {
 
                                 ui.add(
                                     RowScalar::new("Fog start", &mut vis.map.fogstart, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
+                                        .range(0.0..=(vis.map.fogend - RANGE_PRECISION_TOLERANCE).max(0.0))
                                 );
                                 ui.end_row();
 
                                 ui.add(
                                     RowScalar::new("Fog end", &mut vis.map.fogend, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
+                                        .range((vis.map.fogstart + RANGE_PRECISION_TOLERANCE)..=f32::INFINITY)
                                 );
                                 ui.end_row();
 
                                 ui.add(
                                     RowScalar::new("Z near", &mut vis.map.znear, 1e-3)
-                                        .range(0.001..=(vis.map.zfar - ZBUFFER_PRECISION_TOLERANCE))
+                                        .range(0.001..=(vis.map.zfar - RANGE_PRECISION_TOLERANCE))
                                 );
                                 ui.end_row();
 
                                 ui.add(
                                     RowScalar::new("Z far", &mut vis.map.zfar, 1e-3)
-                                        .range((vis.map.znear + ZBUFFER_PRECISION_TOLERANCE)..=f32::INFINITY)
+                                        .range((vis.map.znear + RANGE_PRECISION_TOLERANCE)..=f32::INFINITY)
                                 );
                                 ui.end_row();
 
