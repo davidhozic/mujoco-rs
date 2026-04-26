@@ -22,20 +22,24 @@ use crate::{cast_mut_info, set_flag};
 use crate::mujoco_c::mjNGROUP;
 use crate::util::LockUnpoison;
 
+/* UI Fonts */
 const MAIN_FONT: FontId = FontId::proportional(15.0);
 const HEADING_FONT: FontId = FontId::proportional(20.0);
+
+/* UI Spacing and Dimensions */
 const HEADING_POST_SPACE: f32 = 5.0;
 const BUTTON_SPACING_X: f32 = 10.0;
 const BUTTON_SPACING_Y: f32 = 5.0;
 const BUTTON_ROUNDING: f32 = 50.0;
-const RANGE_PRECISION_TOLERANCE: f32 = 1e-4;
-
 const SIDE_PANEL_DEFAULT_WIDTH: f32 = 200.0;
 const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
 const SIDE_PANEL_PAD: f32 = 10.0;
 const MAX_SPAN_WIDTH: f32 = 350.0;
 
-// Camera tracking modal settings
+/* Precision and Tolerances */
+const RANGE_PRECISION_TOLERANCE: f32 = 1e-4;
+
+/* Camera Tracking Modal Settings */
 const CAMERA_MODAL_MAX_HEIGHT: f32 = 300.0;
 const CAMERA_MODAL_BUTTONS_PER_ROW: usize = 5;
 const CAMERA_MODAL_BUTTON_WIDTH: f32 = 100.0;
@@ -45,10 +49,11 @@ const CAMERA_MODAL_BUTTON_ROUNDING: f32 = 4.0;
 const CAMERA_MODAL_BUTTON_COLOR_DEFAULT: u8 = 40;
 const CAMERA_MODAL_BUTTON_COLOR_HOVERED: u8 = 60;
 
+/* Model Synchronization and Status */
 const PHYSICS_SYNC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
-const MODEL_OPT_SYNC_WARNING: &str = "⚠ Physics options not synced!";
-const MODEL_VIS_SYNC_WARNING: &str = "⚠ Visualization options not synced!";
-const MODEL_STAT_SYNC_WARNING: &str = "⚠ Statistics not synced!";
+const MODEL_OPT_SYNC_WARNING: &str = "[WARNING] Physics options not synced!";
+const MODEL_VIS_SYNC_WARNING: &str = "[WARNING] Visualization options not synced!";
+const MODEL_STAT_SYNC_WARNING: &str = "[WARNING] Statistics not synced!";
 
 /// Maps [`MjtRndFlag`](crate::wrappers::mj_visualization::MjtRndFlag) to their string
 const GL_EFFECT_MAP: [&str; 11] = [

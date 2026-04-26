@@ -1607,7 +1607,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// access; use [`swap_model`](MjData::swap_model) instead.
     /// 
     /// # Safety
-    /// This method is marked unsafe as the owned model can be swapped entirely without any compability
+    /// This method is marked unsafe as the owned model can be swapped entirely without any compatibility
     /// checks.
     /// 
     /// It is the caller's responsibility to ensure the internal [`MjModel::signature`] matches the
