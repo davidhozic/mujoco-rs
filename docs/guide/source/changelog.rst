@@ -71,6 +71,23 @@ update of MuJoCo alone can increase the major version.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut` and
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`.
 
+*MjViewer model parameter synchronization*
+
+- :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState` now provides methods to sync model parameters:
+  
+  - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_opt`,
+  - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_vis`, and
+  - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_stat`
+  
+  allow syncing model physics options, visualization parameters, and statistics from the viewer's
+  passive state to external structures without requiring ``unsafe`` access.
+
+- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` now provides corresponding proxy methods
+  (:docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model_opt`,
+  :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model_vis`,
+  :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model_stat`)
+  for convenient parameter synchronization without manual lock management.
+
 .. rubric:: Removed examples
 
 - Removed the ``stl_mesh`` example. It existed in MuJoCo-rs 3.0.1 due to MuJoCo 3.6.0 requiring a plugin to load
@@ -79,6 +96,9 @@ update of MuJoCo alone can increase the major version.
 .. rubric:: Other changes
 
 - Reduced default width of the viewer's UI side panel to 200.0.
+- Physics options (integrator, cone, jacobian, solver) in the viewer UI display a yellow warning when
+  model parameters (opt/vis/stat) are out of sync with their initial values, indicating that parameters
+  have been modified in the viewer.
 
 3.0.1 (MuJoCo 3.6.0)
 ======================

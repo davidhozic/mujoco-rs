@@ -34,7 +34,10 @@ const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
 const SIDE_PANEL_PAD: f32 = 10.0;
 const MAX_SPAN_WIDTH: f32 = 350.0;
 
-const MODEL_SYNC_WARNING: &str = "Model parameters are not synced!";
+const PHYSICS_SYNC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
+const MODEL_OPT_SYNC_WARNING: &str = "⚠ Physics options not synced!";
+const MODEL_VIS_SYNC_WARNING: &str = "⚠ Visualization options not synced!";
+const MODEL_STAT_SYNC_WARNING: &str = "⚠ Statistics not synced!";
 
 /// Maps [`MjtRndFlag`](crate::wrappers::mj_visualization::MjtRndFlag) to their string
 const GL_EFFECT_MAP: [&str; 11] = [
@@ -438,15 +441,19 @@ impl ViewerUI {
                             });
                         });
 
-                        let is_editable = shared_viewer_state.lock_unpoison().are_parameters_editable();
-
                         /* Physics options */
                         egui::CollapsingHeader::new(RichText::new("Physics").font(HEADING_FONT))
                             .show(ui, |ui|
                         {
-                            let mut options = shared_viewer_state.lock_unpoison().data_passive.model().opt().clone();
-                            if !is_editable {
-                                ui.colored_label(egui::Color32::YELLOW, MODEL_SYNC_WARNING);
+                            let (opt_is_editable, mut options) = {
+                                let state = shared_viewer_state.lock_unpoison();
+                                (
+                                    state.last_opt_sync_time().elapsed() < PHYSICS_SYNC_TIMEOUT,
+                                    state.data_passive.model().opt().clone(),
+                                )
+                            };
+                            if !opt_is_editable {
+                                ui.colored_label(egui::Color32::YELLOW, MODEL_OPT_SYNC_WARNING);
                             }
 
                             // Physics solver and method selectors (top level)
@@ -828,16 +835,21 @@ impl ViewerUI {
                         egui::CollapsingHeader::new(RichText::new("Visualization").font(HEADING_FONT))
                             .show(ui, |ui|
                         {
-                        let (mut vis, mut stat) = {
-                            let lock = shared_viewer_state.lock_unpoison();
+                        let (stat_is_editable, vis_is_editable, mut vis, mut stat) = {
+                            let state = shared_viewer_state.lock_unpoison();
                             (
-                                lock.data_passive.model_vis().clone(),
-                                lock.data_passive.model_stat().clone(),
+                                state.last_stat_sync_time().elapsed() < PHYSICS_SYNC_TIMEOUT,
+                                state.last_vis_sync_time().elapsed() < PHYSICS_SYNC_TIMEOUT,
+                                state.data_passive.model_vis().clone(),
+                                state.data_passive.model_stat().clone(),
                             )
                         };
 
-                        if !is_editable {
-                            ui.colored_label(egui::Color32::YELLOW, MODEL_SYNC_WARNING);
+                        if !vis_is_editable {
+                            ui.colored_label(egui::Color32::YELLOW, MODEL_VIS_SYNC_WARNING);
+                        }
+                        if !stat_is_editable {
+                            ui.colored_label(egui::Color32::YELLOW, MODEL_STAT_SYNC_WARNING);
                         }
 
                         // Headlight

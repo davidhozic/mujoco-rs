@@ -50,7 +50,6 @@ const TOUCH_BAR_ZOOM_FACTOR: f64 = 0.1;
 const FPS_SMOOTHING_FACTOR: f64 = 0.1;
 const REALTIME_FACTOR_SMOOTHING_FACTOR: f64 = 0.1;
 const REALTIME_FACTOR_DISPLAY_THRESHOLD: f64 = 0.02;
-const PHYSICS_SYNC_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// How much extra room to create in the internal [`MjvScene`]. Useful for drawing labels, etc.
 pub(crate) const EXTRA_SCENE_GEOM_SPACE: usize = 2000;
@@ -205,8 +204,12 @@ pub struct ViewerSharedState {
     realtime_factor_smooth: f64,
     /// Preallocated buffer for storing the new [`MjData`] state.
     data_state_buffer: Box<[MjtNum]>,
-    /// Timestamp when parameters were last observed to change
-    last_change_time: Instant,
+    /// Timestamp when physics options (opt) were last synced
+    last_opt_change_time: Instant,
+    /// Timestamp when visualization options (vis) were last synced
+    last_vis_change_time: Instant,
+    /// Timestamp when statistics (stat) were last synced
+    last_stat_change_time: Instant,
 }
 
 impl ViewerSharedState {
@@ -227,7 +230,9 @@ impl ViewerSharedState {
             running: Arc::new(AtomicBool::new(true)),
             last_sync_time: Instant::now(),
             realtime_factor_smooth: 1.0,
-            last_change_time: Instant::now(),
+            last_opt_change_time: Instant::now(),
+            last_vis_change_time: Instant::now(),
+            last_stat_change_time: Instant::now(),
         };
 
         shared_state.reload_model(model, max_user_geom);
@@ -240,7 +245,6 @@ impl ViewerSharedState {
         let model_passive = Box::new(model.clone());
         self.data_passive = MjData::new(model_passive);
         let model_passive = self.data_passive.model();
-        self.last_change_time = Instant::now();
 
         self.user_scene = MjvScene::new(model_passive, max_user_geom);
         let state_size = model_passive.state_size(MjtState::mjSTATE_INTEGRATION as u32);
@@ -275,12 +279,6 @@ impl ViewerSharedState {
         &mut self.user_scene
     }
 
-    /// Checks if the model parameters (opt, vis, stat) are currently editable.
-    /// Returns `false` if parameters have diverged from sync for 1 second.
-    pub fn are_parameters_editable(&self) -> bool {
-        self.last_change_time.elapsed() < PHYSICS_SYNC_TIMEOUT
-    }
-
     /// Syncs model parameters between passive and incoming model bidirectionally.
     /// Detects model changes via signature comparison and reloads if needed.
     /// When a reload occurs, model parameters are NOT synced (reset to new model defaults).
@@ -297,8 +295,10 @@ impl ViewerSharedState {
             *model.vis_mut() = self.data_passive.model().vis().clone();
             *model.stat_mut() = self.data_passive.model().stat().clone();
         }
-        // Update sync timer to indicate successful parameter sync
-        self.last_change_time = Instant::now();
+        let now = Instant::now();
+        self.last_opt_change_time = now;
+        self.last_vis_change_time = now;
+        self.last_stat_change_time = now;
     }
 
     /// Syncs the model's [`MjModel::opt`] from the viewer's passive state to the
@@ -306,7 +306,7 @@ impl ViewerSharedState {
     /// `unsafe` access via [`MjData::model_mut`].
     pub fn sync_model_opt(&mut self, opt: &mut MjOption) {
         *opt = self.data_passive.model().opt().clone();
-        self.last_change_time = Instant::now();
+        self.last_opt_change_time = Instant::now();
     }
 
     /// Syncs the model's [`MjModel::vis`] from the viewer's passive state to the
@@ -314,7 +314,7 @@ impl ViewerSharedState {
     /// `unsafe` access via [`MjData::model_mut`].
     pub fn sync_model_vis(&mut self, vis: &mut MjVisual) {
         *vis = self.data_passive.model().vis().clone();
-        self.last_change_time = Instant::now();
+        self.last_vis_change_time = Instant::now();
     }
 
     /// Syncs the model's [`MjModel::stat`] from the viewer's passive state to the
@@ -322,7 +322,22 @@ impl ViewerSharedState {
     /// `unsafe` access via [`MjData::model_mut`].
     pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {
         *stat = self.data_passive.model().stat().clone();
-        self.last_change_time = Instant::now();
+        self.last_stat_change_time = Instant::now();
+    }
+
+    /// Returns the last time physics options (opt) were synced.
+    pub fn last_opt_sync_time(&self) -> Instant {
+        self.last_opt_change_time
+    }
+
+    /// Returns the last time visualization options (vis) were synced.
+    pub fn last_vis_sync_time(&self) -> Instant {
+        self.last_vis_change_time
+    }
+
+    /// Returns the last time statistics (stat) were synced.
+    pub fn last_stat_sync_time(&self) -> Instant {
+        self.last_stat_change_time
     }
 
     /// Same as [`ViewerSharedState::sync_data`], except it copies the entire [`MjData`]
