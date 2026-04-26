@@ -1481,8 +1481,7 @@ impl ViewerUI {
 
                         let nbody = shared_viewer_state.lock_unpoison().data_passive.model().nbody();
 
-                        egui::ScrollArea::both()
-                            .auto_shrink([false; 2])
+                        egui::ScrollArea::vertical()
                             .max_height(CAMERA_MODAL_MAX_HEIGHT)
                             .show(ui, |ui| {
                                 let lock = shared_viewer_state.lock_unpoison();
