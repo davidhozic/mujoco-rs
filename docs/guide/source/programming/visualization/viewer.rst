@@ -328,6 +328,36 @@ which demonstrates various types of UI elements including windows, side panels, 
     after each :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` call.
 
 
+.. _model_parameter_sync:
+
+Model Parameter Synchronization
+---------------------------------
+
+The viewer provides methods to synchronize model parameters (``opt``, ``vis``,
+``stat``) between the simulation and the viewer's passive internal state.
+
+The primary method is :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_opt`,
+:docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_vis`,
+and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_stat`:
+
+.. code-block:: rust
+
+    viewer.with_state_lock(|mut lock| {
+        lock.sync_model_opt(data.model_opt_mut());
+        lock.sync_model_vis(data.model_vis_mut());
+        lock.sync_model_stat(data.model_stat_mut());
+    }).unwrap();
+
+When the model structure changes (e.g., different body configuration), the viewer
+detects this via model signature comparison and reloads its internal state. Changes
+made in the UI are cleared when a model change is detected.
+
+To safely modify parameters without using unsafe code, use the direct accessors
+on :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`:
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`,
+
+
 .. _mj_cpp_viewer:
 
 Wrapper of MuJoCo's C++ 3D viewer
