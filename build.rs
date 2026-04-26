@@ -37,6 +37,9 @@ mod build_dependencies {
                 if info.name == "mjStatistic_" {
                     data.push("Default".into());
                 }
+
+                // Special synchronization requirement.
+                data.push("mujoco_rs_derive::ThreeWayMerge".into());
             }
 
             data

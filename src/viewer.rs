@@ -309,7 +309,8 @@ impl ViewerSharedState {
     /// provided option struct. This allows updating physics options without requiring
     /// `unsafe` access via [`MjData::model_mut`].
     pub fn sync_model_opt(&mut self, opt: &mut MjOption) {
-        three_way_byte_merge(opt, self.data_passive.model_opt_mut(), &mut self.prev_opt);
+        // three_way_byte_merge(opt, self.data_passive.model_opt_mut(), &mut self.prev_opt);
+        ThreeWayMerge::merge(opt, self.data_passive.model_opt_mut(), &mut self.prev_opt);
         self.last_opt_change_time = Instant::now();
     }
 
@@ -317,7 +318,7 @@ impl ViewerSharedState {
     /// provided visual struct. This allows updating visualization options without requiring
     /// `unsafe` access via [`MjData::model_mut`].
     pub fn sync_model_vis(&mut self, vis: &mut MjVisual) {
-        three_way_byte_merge(vis, self.data_passive.model_vis_mut(), &mut self.prev_vis);
+        ThreeWayMerge::merge(vis, self.data_passive.model_vis_mut(), &mut self.prev_vis);
         self.last_vis_change_time = Instant::now();
     }
 
@@ -325,7 +326,7 @@ impl ViewerSharedState {
     /// provided statistic struct. This allows updating model statistics without requiring
     /// `unsafe` access via [`MjData::model_mut`].
     pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {
-        three_way_byte_merge(stat, self.data_passive.model_stat_mut(), &mut self.prev_stat);
+        ThreeWayMerge::merge(stat, self.data_passive.model_stat_mut(), &mut self.prev_stat);
         self.last_stat_change_time = Instant::now();
     }
 
@@ -1694,40 +1695,47 @@ bitflags! {
     }
 }
 
-/// Performs a three-way merge. This means, that if the `inside` attributes changed
-/// (detected by comparing to `inside_prev`), the corresponding byte on the `outside`
-/// is overwriten. When no change was made on the inside, the outside is copied to the inside
-/// completely.
-/// 
-/// This assumes `outside`, `inside`, and `inside_prev` are all plain-old-datatypes
-/// which contain no pointers.
-fn three_way_byte_merge<T: ThreeWayMergeSafe>(outside: &mut T, inside: &mut T, inside_prev: &mut T) {
-    let outside_bytes = unsafe { std::slice::from_raw_parts_mut(outside as *mut T as *mut u8, std::mem::size_of::<T>()) };
-    let inside_bytes = unsafe { std::slice::from_raw_parts(inside as *const T as *const u8, std::mem::size_of::<T>()) };
-    let inside_prev_bytes = unsafe { std::slice::from_raw_parts(inside_prev as *const T as *const u8, std::mem::size_of::<T>()) };
-    for ((o, i), ip) in outside_bytes.iter_mut().zip(inside_bytes).zip(inside_prev_bytes) {
-        if *i != *ip {
-            *o = *i;
-        }
-    }
+pub trait ThreeWayMerge {
+    fn merge(&mut self, other: &mut Self, other_prev: &mut Self);
+}
 
-    // Copy at pointer level to include padding bytes.
-    unsafe {
-        std::ptr::copy_nonoverlapping(
-            outside as *const T,
-            inside as *mut T,
-            1
-        );
-        std::ptr::copy_nonoverlapping(
-            inside as *const T,
-            inside_prev as *mut T,
-            1
-        );
+macro_rules! impl_three_way_merge_copy {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            impl ThreeWayMerge for $ty {
+                fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
+                    if *other != *other_prev {
+                        *self = *other;
+                    }
+
+                    *other = *self;
+                    *other_prev = *other;
+                }
+            }
+        )*
+    };
+}
+
+impl_three_way_merge_copy!(
+    bool,
+    char,
+    u8, u16, u32, u64, u128, usize,
+    i8, i16, i32, i64, i128, isize,
+    f32, f64,
+);
+
+impl ThreeWayMerge for String {
+    fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
+        if self == other_prev {
+            *self = other.clone();
+        }
     }
 }
 
-unsafe trait ThreeWayMergeSafe {}
-
-unsafe impl ThreeWayMergeSafe for MjOption {}
-unsafe impl ThreeWayMergeSafe for MjVisual {}
-unsafe impl ThreeWayMergeSafe for MjStatistic {}
+impl<T: ThreeWayMerge, const N: usize> ThreeWayMerge for [T; N] {
+    fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
+        for i in 0..N {
+            self[i].merge(&mut other[i], &mut other_prev[i]);
+        }
+    }
+}
