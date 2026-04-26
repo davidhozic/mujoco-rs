@@ -909,7 +909,10 @@ impl ViewerUI {
                         // Global
                         ui.collapsing(RichText::new("Global").font(MAIN_FONT), |ui| {
                             egui::Grid::new("global_grid").num_columns(2).show(ui, |ui| {
-                                ui.add(RowScalar::new("Extent", &mut stat.extent, 1e-3));
+                                ui.add(
+                                    RowScalar::new("Extent", &mut stat.extent, 1e-3)
+                                        .range(0.001..=f32::INFINITY)
+                                );
                                 ui.end_row();
 
                                 ui.label("Inertia Geom");
@@ -1376,22 +1379,34 @@ struct RowScalar<'t, Num: egui::emath::Numeric> {
     name: egui::WidgetText,
     target: &'t mut Num,
     increment: f64,
+    maybe_range: Option<std::ops::RangeInclusive<f32>>
 }
 
 impl<'t, Num: egui::emath::Numeric> RowScalar<'t, Num> {
     fn new(name: impl Into<egui::WidgetText>, target: &'t mut Num, increment: f64) -> Self {
-        Self { name: name.into(), target, increment }
+        Self { name: name.into(), target, increment, maybe_range: None }
+    }
+
+    fn range(mut self, range: std::ops::RangeInclusive<f32>) -> Self {
+        self.maybe_range = Some(range);
+        self
     }
 }
 
 impl<'t, Num: egui::emath::Numeric> egui::Widget for RowScalar<'t, Num> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        let mut drag = egui::DragValue::new(self.target)
+            .speed(self.increment);
+
+        if let Some(range) = self.maybe_range {
+            drag = drag.range(range);
+        }
+
         ui.label(self.name);
         ui.horizontal_top(|ui| {
             ui.add_sized(
                 [ui.available_width().min(MAX_SPAN_WIDTH), ui.spacing().interact_size.y],
-                egui::DragValue::new(self.target)
-                .speed(self.increment)
+                drag
             )
         }).inner
     }

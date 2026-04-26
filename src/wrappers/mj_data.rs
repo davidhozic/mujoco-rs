@@ -1518,6 +1518,21 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         &self.model
     }
 
+    /// Returns an immutable reference to the model physics options.
+    pub fn model_opt(&self) -> &MjOption {
+        self.model.opt()
+    }
+
+    /// Returns an immutable reference to the model visualization options.
+    pub fn model_vis(&self) -> &MjVisual {
+        self.model.vis()
+    }
+
+    /// Returns an immutable reference to the model statistics.
+    pub fn model_stat(&self) -> &MjStatistic {
+        self.model.stat()
+    }
+
     /// Returns a clone of the stored model.
     /// Unlike [`model`](Self::model), this returns
     /// the inferred `M` type (cloned).
@@ -1610,21 +1625,6 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// ```
     pub unsafe fn model_mut(&mut self) -> &mut MjModel {
         &mut self.model
-    }
-
-    /// Returns an immutable reference to the model physics options.
-    pub fn model_opt(&self) -> &MjOption {
-        self.model.opt()
-    }
-
-    /// Returns an immutable reference to the model visualization options.
-    pub fn model_vis(&self) -> &MjVisual {
-        self.model.vis()
-    }
-
-    /// Returns an immutable reference to the model statistics.
-    pub fn model_stat(&self) -> &MjStatistic {
-        self.model.stat()
     }
 
     /// Returns a mutable reference to [`MjModel::opt_mut`] without allowing unsafe
