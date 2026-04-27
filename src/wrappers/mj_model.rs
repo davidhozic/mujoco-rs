@@ -836,6 +836,7 @@ impl MjModel {
         [ffi] nflexedge: MjtSize; "number of edges in all flexes.";
         [ffi] nflexelem: MjtSize; "number of elements in all flexes.";
         [ffi] nflexelemdata: MjtSize; "number of element vertex ids in all flexes.";
+        [ffi] nflexstiffness: MjtSize; "number of stiffness parameters in all flexes.";
         [ffi] nflexelemedge: MjtSize; "number of element edge ids in all flexes.";
         [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
         [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
@@ -1076,6 +1077,8 @@ impl MjModel {
         (unsafe) flex_matid: &[i32; "material id for rendering"; ffi().nflex],
         flex_group: &[i32; "group for visibility"; ffi().nflex],
         (unsafe) flex_interp: &[i32; "interpolation (0: vertex, 1: nodes)"; ffi().nflex],
+        (unsafe) flex_bandwidth: &[i32; "precomputed solver bandwidth"; ffi().nflex],
+        (unsafe) flex_cellnum: &[[i32; 3] [force]; "finite cell num per dimension"; ffi().nflex],
         (unsafe) flex_nodeadr: &[i32; "first node address"; ffi().nflex],
         (unsafe) flex_nodenum: &[i32; "number of nodes"; ffi().nflex],
         (unsafe) flex_vertadr: &[i32; "first vertex address"; ffi().nflex],
@@ -1085,6 +1088,7 @@ impl MjModel {
         (unsafe) flex_elemadr: &[i32; "first element address"; ffi().nflex],
         (unsafe) flex_elemnum: &[i32; "number of elements"; ffi().nflex],
         (unsafe) flex_elemdataadr: &[i32; "first element vertex id address"; ffi().nflex],
+        (unsafe) flex_stiffnessadr: &[i32; "stiffness matrix address"; ffi().nflex],
         (unsafe) flex_elemedgeadr: &[i32; "first element edge id address"; ffi().nflex],
         (unsafe) flex_shellnum: &[i32; "number of shells"; ffi().nflex],
         (unsafe) flex_shelldataadr: &[i32; "first shell data address"; ffi().nflex],

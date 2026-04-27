@@ -43,7 +43,7 @@ impl<T> ::std::cmp::PartialEq for __BindgenUnionField<T> {
     }
 }
 impl<T> ::std::cmp::Eq for __BindgenUnionField<T> {}
-pub const mjVERSION_HEADER: u32 = 3007000;
+pub const mjVERSION_HEADER: u32 = 3008000;
 pub const mjMINVAL: f64 = 0.000000000000001;
 pub const mjPI: f64 = 3.141592653589793;
 pub const mjMAXVAL: f64 = 10000000000.0;
@@ -137,7 +137,8 @@ pub enum mjtDisableBit_ {
     mjDSBL_AUTORESET = 65536,
     mjDSBL_NATIVECCD = 131072,
     mjDSBL_ISLAND = 262144,
-    mjNDISABLE = 19,
+    mjDSBL_MULTICCD = 524288,
+    mjNDISABLE = 20,
 }
 pub use self::mjtDisableBit_ as mjtDisableBit;
 #[repr(u32)]
@@ -147,9 +148,8 @@ pub enum mjtEnableBit_ {
     mjENBL_ENERGY = 2,
     mjENBL_FWDINV = 4,
     mjENBL_INVDISCRETE = 8,
-    mjENBL_MULTICCD = 16,
-    mjENBL_SLEEP = 32,
-    mjNENABLE = 6,
+    mjENBL_SLEEP = 16,
+    mjNENABLE = 5,
 }
 pub use self::mjtEnableBit_ as mjtEnableBit;
 #[repr(u32)]
@@ -756,6 +756,7 @@ pub struct mjModel_ {
     pub nflexedge: mjtSize,
     pub nflexelem: mjtSize,
     pub nflexelemdata: mjtSize,
+    pub nflexstiffness: mjtSize,
     pub nflexelemedge: mjtSize,
     pub nflexshelldata: mjtSize,
     pub nflexevpair: mjtSize,
@@ -993,6 +994,8 @@ pub struct mjModel_ {
     pub flex_matid: *mut ::std::os::raw::c_int,
     pub flex_group: *mut ::std::os::raw::c_int,
     pub flex_interp: *mut ::std::os::raw::c_int,
+    pub flex_bandwidth: *mut ::std::os::raw::c_int,
+    pub flex_cellnum: *mut ::std::os::raw::c_int,
     pub flex_nodeadr: *mut ::std::os::raw::c_int,
     pub flex_nodenum: *mut ::std::os::raw::c_int,
     pub flex_vertadr: *mut ::std::os::raw::c_int,
@@ -1002,6 +1005,7 @@ pub struct mjModel_ {
     pub flex_elemadr: *mut ::std::os::raw::c_int,
     pub flex_elemnum: *mut ::std::os::raw::c_int,
     pub flex_elemdataadr: *mut ::std::os::raw::c_int,
+    pub flex_stiffnessadr: *mut ::std::os::raw::c_int,
     pub flex_elemedgeadr: *mut ::std::os::raw::c_int,
     pub flex_shellnum: *mut ::std::os::raw::c_int,
     pub flex_shelldataadr: *mut ::std::os::raw::c_int,
@@ -2055,6 +2059,8 @@ pub struct mjsFlex_ {
     pub(crate) damping: f64,
     pub(crate) thickness: f64,
     pub(crate) elastic2d: ::std::os::raw::c_int,
+    pub(crate) cellcount: [::std::os::raw::c_int; 3usize],
+    pub(crate) order: ::std::os::raw::c_int,
     pub(crate) nodebody: *mut mjStringVec,
     pub(crate) vertbody: *mut mjStringVec,
     pub(crate) node: *mut mjDoubleVec,
@@ -3292,10 +3298,10 @@ unsafe extern "C" {
     pub static mut mjCOLLISIONFUNC: [[mjfCollision; 9usize]; 9usize];
 }
 unsafe extern "C" {
-    pub static mut mjDISABLESTRING: [*const ::std::os::raw::c_char; 19usize];
+    pub static mut mjDISABLESTRING: [*const ::std::os::raw::c_char; 20usize];
 }
 unsafe extern "C" {
-    pub static mut mjENABLESTRING: [*const ::std::os::raw::c_char; 6usize];
+    pub static mut mjENABLESTRING: [*const ::std::os::raw::c_char; 5usize];
 }
 unsafe extern "C" {
     pub static mut mjTIMERSTRING: [*const ::std::os::raw::c_char; 15usize];
@@ -3346,6 +3352,19 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn mj_deleteFileVFS(
         vfs: *mut mjVFS,
+        filename: *const ::std::os::raw::c_char,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mj_containsBufferVFS(
+        vfs: *mut mjVFS,
+        name: *const ::std::os::raw::c_char,
+    ) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mj_containsFileVFS(
+        vfs: *mut mjVFS,
+        directory: *const ::std::os::raw::c_char,
         filename: *const ::std::os::raw::c_char,
     ) -> ::std::os::raw::c_int;
 }
@@ -3794,6 +3813,14 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mj_rnePostConstraint(m: *const mjModel, d: *mut mjData);
+}
+unsafe extern "C" {
+    pub fn mj_maxContact(
+        m: *const mjModel,
+        g1: ::std::os::raw::c_int,
+        g2: ::std::os::raw::c_int,
+        has_margin: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub fn mj_collision(m: *const mjModel, d: *mut mjData);

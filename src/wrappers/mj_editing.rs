@@ -975,6 +975,7 @@ impl MjsFlex {
             solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
             solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
             size: &[f64; 3];                                "vertex bounding box half sizes in qpos0.";
+            cellcount: &[i32; 3];                           "grid cell count for finite cell method.";
         ]
     }
 
@@ -999,6 +1000,7 @@ impl MjsFlex {
             damping: f64;            "Rayleigh's damping.";
             thickness: f64;          "thickness (2D only).";
             elastic2d: i32;          "2D passive forces; 0: none, 1: bending, 2: stretching, 3: both.";
+            order: i32;              "interpolation order (1: trilinear, 2: quadratic).";
         ]
     }
 
