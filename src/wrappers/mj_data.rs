@@ -158,7 +158,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     info_method! { Data, model.ffi(), body, [
         xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10,
-        crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6
+        crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6,
+        awake: 1
     ], [], []}
     info_method! { Data, model.ffi(), camera, [xpos: 3, xmat: 9], [], []}
     info_method! { Data, model.ffi(), geom, [xpos: 3, xmat: 9], [], []}
@@ -210,15 +211,18 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             let qfrc_damper = nv_range;
             let qfrc_gravcomp = nv_range;
             let qfrc_fluid = nv_range;
-            /* Special case attributes, used for some internal calculation */
-            // cdof
-            // cdof_dot
+            let cdof = (nv_range.0 * 6, nv_range.1 * 6);
+            let cdof_dot = (nv_range.0 * 6, nv_range.1 * 6);
+            let dof_island = nv_range;
+            let map_dof2idof = nv_range;
+            let dof_awake_ind = nv_range;
 
             let model_signature = self.model.signature();
             Some(MjJointDataInfo {name: name.to_string(), id: id as usize, model_signature,
                 qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
                 qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_passive,
-                qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
+                qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse,
+                cdof, cdof_dot, dof_island, map_dof2idof, dof_awake_ind
             })
         }
     }
@@ -227,7 +231,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
 
     info_method! { Data, model.ffi(), tendon,
-        [wrapadr: 1, wrapnum: 1, length: 1, velocity: 1],
+        [wrapadr: 1, wrapnum: 1, efcadr: 1, length: 1, velocity: 1],
         [],
         [J: nJten]
     }
@@ -1896,7 +1900,7 @@ info_with_view!(Data, body,
      cacc: MjtNum,
      cfrc_int: MjtNum,
      cfrc_ext: MjtNum],
-    [],
+    [[body_] awake: MjtSleepState [force]],
     [], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, camera,
@@ -1956,7 +1960,8 @@ info_with_view!(Data, tendon,
      [ten_] length: MjtNum,
      [ten_] velocity: MjtNum],
     [[ten_] wrapadr: i32,
-     [ten_] wrapnum: i32],
+     [ten_] wrapnum: i32,
+     [tendon_] efcadr: i32],
     [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
