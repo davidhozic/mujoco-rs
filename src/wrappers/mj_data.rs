@@ -211,18 +211,12 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             let qfrc_damper = nv_range;
             let qfrc_gravcomp = nv_range;
             let qfrc_fluid = nv_range;
-            let cdof = (nv_range.0 * 6, nv_range.1 * 6);
-            let cdof_dot = (nv_range.0 * 6, nv_range.1 * 6);
-            let dof_island = nv_range;
-            let map_dof2idof = nv_range;
-            let dof_awake_ind = nv_range;
 
             let model_signature = self.model.signature();
             Some(MjJointDataInfo {name: name.to_string(), id: id as usize, model_signature,
                 qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
                 qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_passive,
-                qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse,
-                cdof, cdof_dot, dof_island, map_dof2idof, dof_awake_ind
+                qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
             })
         }
     }
