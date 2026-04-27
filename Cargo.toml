@@ -132,7 +132,7 @@ required-features = ["viewer"]
 
 
 [features]
-viewer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit", "dep:png"]
+viewer = ["dep:bitflags", "dep:glutin", "dep:winit", "dep:glutin-winit", "dep:png", "dep:mujoco-rs-derive"]
 viewer-ui = ["viewer", "dep:egui-winit", "dep:egui_glow", "dep:egui"]
 renderer = ["dep:bitflags", "dep:glutin", "dep:png"]
 renderer-winit-fallback = ["renderer", "dep:winit", "dep:glutin-winit"]
@@ -159,7 +159,7 @@ egui-winit = {version = "0.33.0", default-features = false, features = ["wayland
 egui_glow = {version = "0.33.0", features = ["x11", "winit", "wayland", "egui-winit"], optional = true}
 egui = {version = "0.33.0", optional = true}
 
-mujoco-rs-derive = { version = "0.1.0", path = "mujoco-rs-derive" }
+mujoco-rs-derive = { version = "0.1.0", path = "mujoco-rs-derive", optional = true }
 
 [build-dependencies]
 bindgen = {version = "0.71.1", optional = true}

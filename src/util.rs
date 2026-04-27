@@ -1167,6 +1167,7 @@ impl<T> LockUnpoison<T> for Mutex<T> {
     }
 }
 
+#[cfg(feature = "viewer")]
 /// Performs a three-way merge of a value.
 ///
 /// Given three versions of a value (`self`, `other`, `other_prev`), the merge
@@ -1178,7 +1179,9 @@ pub(crate) trait ThreeWayMerge {
     fn merge(&mut self, other: &mut Self, other_prev: &mut Self);
 }
 
+#[cfg(feature = "viewer")]
 impl<T: Copy + PartialEq> ThreeWayMerge for T {
+    #[inline]
     fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
         if *other != *other_prev {
             *self = *other;
