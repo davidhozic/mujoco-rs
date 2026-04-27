@@ -24,10 +24,17 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
-4.0.0 (MuJoCo 3.7.0)
+4.0.0 (MuJoCo 3.8.0)
 ======================
 
 .. rubric:: Breaking changes
+
+*MuJoCo upgraded to 3.8.0*
+
+- MuJoCo-rs 4.0.0 is based on **MuJoCo 3.8.0**, upgraded from 3.6.0.
+  MuJoCo 3.8.0 introduces breaking changes to its C API (renamed and removed constants,
+  new struct fields). Code relying on specific MuJoCo enum values or internal constants
+  may need to be updated.
 
 *MjData::geom_distance now requires mutable access*
 
@@ -57,8 +64,7 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: New features and improvements
 
-- Updated MuJoCo from **3.6.0** to **3.7.0**. The committed C FFI bindings and
-  affected wrappers now match the MuJoCo 3.7.0 headers.
+- Updated FFI bindings and wrappers to match MuJoCo 3.8.0 headers.
 - |mj_model| now exposes the new joint, dof, tendon, and actuator coefficient
   arrays and actuator-linkage fields added in newer MuJoCo releases.
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator` now exposes its
@@ -115,7 +121,7 @@ update of MuJoCo alone can increase the major version.
 .. rubric:: Removed examples
 
 - Removed the ``stl_mesh`` example. It existed in MuJoCo-rs 3.0.1 due to MuJoCo 3.6.0 requiring a plugin to load
-  STL meshes. MuJoCo 3.7.0 fixes this, thus the example is no longer required.
+  STL meshes. MuJoCo 3.7.0+ fixes this, thus the example is no longer required.
 
 .. rubric:: Other changes
 
