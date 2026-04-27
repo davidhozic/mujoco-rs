@@ -786,7 +786,7 @@ impl MjModel {
     /// inside [`Some`] (true indicating a present margin). 
     /// 
     /// # Panics
-    /// Panics when either `geom1` or `geom2` are greater than [`MjModel::ngeom`].
+    /// Panics when either `geom1` or `geom2` are equal or greater than [`MjModel::ngeom`].
     /// Use [`MjModel::try_max_contacts`] for a fallible alternative.
     pub fn max_contacts(&self, geom1: usize, geom2: usize, has_margin: Option<bool>) -> u32 {
         self.try_max_contacts(geom1, geom2, has_margin).unwrap()
@@ -794,7 +794,7 @@ impl MjModel {
 
     /// Fallible version of [`MjModel::max_contacts`].
     /// # Errors
-    /// Returns [`MjModelError::InvalidIndex`] when either `geom1` or `geom2` are greater than [`MjModel::ngeom`].
+    /// Returns [`MjModelError::InvalidIndex`] when either `geom1` or `geom2` are equal or greater than [`MjModel::ngeom`].
     pub fn try_max_contacts(&self, geom1: usize, geom2: usize, has_margin: Option<bool>) -> Result<u32, MjModelError> {
         let ngeom = self.ngeom() as usize;
 
