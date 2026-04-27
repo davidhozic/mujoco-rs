@@ -1,17 +1,8 @@
 //! Module related to implementation of the [`MjViewer`]. For implementation of the C++ wrapper,
 //! see [`crate::cpp_viewer::MjViewerCpp`] (enabled by the `cpp-viewer` cargo feature).
-#[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
-use glutin::prelude::PossiblyCurrentGlContext;
-use glutin::surface::GlSurface;
-
-use winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::platform::pump_events::EventLoopExtPumpEvents;
-use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::event_loop::EventLoop;
-use winit::dpi::PhysicalPosition;
-use winit::window::Fullscreen;
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use std::ops::{Deref, DerefMut};
 use std::num::NonZero;
@@ -19,17 +10,29 @@ use std::error::Error;
 use std::fmt::Display;
 use std::borrow::Cow;
 
+use winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, WindowEvent};
+#[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
+use winit::platform::pump_events::EventLoopExtPumpEvents;
+use glutin::prelude::PossiblyCurrentGlContext;
+use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::event_loop::EventLoop;
+use winit::dpi::PhysicalPosition;
+use glutin::surface::GlSurface;
+use winit::window::Fullscreen;
 use bitflags::bitflags;
 
-use crate::prelude::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
+use crate::wrappers::mj_rendering::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
+use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
+use crate::wrappers::mj_primitive::{MjtNum, MjtSize};
 use crate::wrappers::mj_data::{MjData, MjtState};
+use crate::util::{LockUnpoison, ThreeWayMerge};
 use crate::{builder_setters, mujoco_version};
-use crate::wrappers::mj_primitive::MjtNum;
+use crate::wrappers::mj_option::MjOption;
 use crate::wrappers::mj_visualization::*;
+use crate::wrappers::mj_editing::MjSpec;
 use crate::wrappers::mj_model::MjModel;
-use crate::util::LockUnpoison;
 
 
 #[cfg(feature = "viewer-ui")]
@@ -40,9 +43,7 @@ mod ui;
 pub use egui;
 
 
-/****************************************** */
 // Rust native viewer
-/****************************************** */
 const MJ_VIEWER_DEFAULT_SIZE_PX: (u32, u32) = (1280, 720);
 const DOUBLE_CLICK_WINDOW_MS: u128 = 250;
 const TOUCH_BAR_ZOOM_FACTOR: f64 = 0.1;
@@ -192,9 +193,9 @@ pub struct ViewerSharedState {
     /// This can happen due to changes made through the UI to joints, equalities, actuators, etc.
     data_passive_state: Box<[MjtNum]>,
     data_passive_state_old: Box<[MjtNum]>,
-    data_passive: MjData<Arc<MjModel>>,
+    pub(crate) data_passive: MjData<Box<MjModel>>,
     pert: MjvPerturb,
-    running: bool,
+    running: Arc<AtomicBool>,
     user_scene: MjvScene,
 
     /* Internals */
@@ -203,32 +204,60 @@ pub struct ViewerSharedState {
     realtime_factor_smooth: f64,
     /// Preallocated buffer for storing the new [`MjData`] state.
     data_state_buffer: Box<[MjtNum]>,
+    /// Timestamp when physics options (opt) were last synced
+    last_opt_sync_time: Instant,
+    /// Timestamp when visualization options (vis) were last synced
+    last_vis_sync_time: Instant,
+    /// Timestamp when statistics (stat) were last synced
+    last_stat_sync_time: Instant,
+
+    /* Model parameter change tracking */
+    prev_opt: MjOption,
+    prev_vis: MjVisual,
+    prev_stat: MjStatistic
 }
 
 impl ViewerSharedState {
-    fn new(model: Arc<MjModel>, max_user_geom: usize) -> Self {
+    fn new<M: Deref<Target = MjModel>>(model: M, max_user_geom: usize) -> Self {
+        // Empty values to avoid unnecessary double creation
         let empty: Box<[MjtNum]> = vec![].into_boxed_slice();
+        let empty_model = Box::new(MjSpec::new().compile().unwrap());
+        let empty_data = MjData::new(empty_model);
+        let empty_scene = MjvScene::new(empty_data.model(), 0);
+
         let mut shared_state = Self {
-            data_passive: MjData::new(Arc::clone(&model)),
+            data_passive: empty_data,
             data_passive_state: empty.clone(),
             data_passive_state_old: empty.clone(),
             data_state_buffer: empty,
-            user_scene: MjvScene::new(Arc::clone(&model), 0),
+            user_scene: empty_scene,
             pert: MjvPerturb::default(),
-            running: true,
+            running: Arc::new(AtomicBool::new(true)),
             last_sync_time: Instant::now(),
             realtime_factor_smooth: 1.0,
+            last_opt_sync_time: Instant::now(),
+            last_vis_sync_time: Instant::now(),
+            last_stat_sync_time: Instant::now(),
+            /* Model parameter change tracking */
+            prev_opt: MjOption::default(),
+            prev_vis: MjVisual::default(),
+            prev_stat: MjStatistic::default(),
         };
-        shared_state.reload_model(model, max_user_geom);
+
+        shared_state.reload_model(&model, max_user_geom);
         shared_state
     }
 
     /// Reinitializes all model-dependent internal state.
-    /// Called on construction and whenever [`_sync_data`](Self::_sync_data) detects a model change.
-    fn reload_model(&mut self, model: Arc<MjModel>, max_user_geom: usize) {
-        self.data_passive = MjData::new(Arc::clone(&model));
-        self.user_scene = MjvScene::new(model, max_user_geom);
-        let state_size = self.data_passive.model().state_size(MjtState::mjSTATE_INTEGRATION as u32);
+    /// Called on construction and whenever [`_sync_data`](Self::_sync_data) or
+    /// [`sync_model`](Self::sync_model) detects a model change.
+    fn reload_model(&mut self, model: &MjModel, max_user_geom: usize) {
+        let model_passive = Box::new(model.clone());
+        self.data_passive = MjData::new(model_passive);
+        let model_passive = self.data_passive.model();
+
+        self.user_scene = MjvScene::new(model_passive, max_user_geom);
+        let state_size = model_passive.state_size(MjtState::mjSTATE_INTEGRATION as u32);
         self.data_passive_state = vec![0.0; state_size].into_boxed_slice();
         // Read the actual initial state (qpos0 may be non-zero) so that data_passive_state_old
         // matches data_passive_state from the start, preventing a spurious write-back of the
@@ -245,7 +274,7 @@ impl ViewerSharedState {
 
     /// Checks whether the viewer is still running or is supposed to run.
     pub fn running(&self) -> bool {
-        self.running
+        self.running.load(Ordering::Relaxed)
     }
 
     /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
@@ -258,6 +287,73 @@ impl ViewerSharedState {
     /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`].
     pub fn user_scene_mut(&mut self) -> &mut MjvScene {
         &mut self.user_scene
+    }
+
+    /// Performs a bidirectional three-way merge of model parameters between the
+    /// viewer's passive model and the incoming model.
+    ///
+    /// Detects model changes via signature comparison and reloads internal state if needed.
+    /// After a reload, the passive model mirrors the incoming model's current defaults, so
+    /// the first merge after reload is effectively a no-op (both sides agree).
+    /// On subsequent calls, changes made by the viewer UI (e.g., modified physics options)
+    /// are propagated to the incoming model, and changes made by the simulation are
+    /// propagated back to the viewer.
+    pub fn sync_model(&mut self, model: &mut MjModel) {
+        // Check if model signature changed
+        if model.signature() != self.data_passive.model().signature() {
+            // Model changed: reload internal state, skip parameter sync
+            let max_user_geom = self.user_scene.maxgeom() as usize;
+            self.reload_model(model, max_user_geom);
+        }
+
+        self.sync_model_opt(model.opt_mut());
+        self.sync_model_vis(model.vis_mut());
+        self.sync_model_stat(model.stat_mut());
+    }
+
+    /// Performs a bidirectional three-way merge of [`MjModel::opt`] between the viewer's
+    /// passive model and the provided option struct.
+    ///
+    /// Changes made by the viewer UI are written to `opt`; changes made to `opt` externally
+    /// are written back to the viewer's passive model.
+    pub fn sync_model_opt(&mut self, opt: &mut MjOption) {
+        ThreeWayMerge::merge(opt, self.data_passive.model_opt_mut(), &mut self.prev_opt);
+        self.last_opt_sync_time = Instant::now();
+    }
+
+    /// Performs a bidirectional three-way merge of [`MjModel::vis`] between the viewer's
+    /// passive model and the provided visual struct.
+    ///
+    /// Changes made by the viewer UI are written to `vis`; changes made to `vis` externally
+    /// are written back to the viewer's passive model.
+    pub fn sync_model_vis(&mut self, vis: &mut MjVisual) {
+        ThreeWayMerge::merge(vis, self.data_passive.model_vis_mut(), &mut self.prev_vis);
+        self.last_vis_sync_time = Instant::now();
+    }
+
+    /// Performs a bidirectional three-way merge of [`MjModel::stat`] between the viewer's
+    /// passive model and the provided statistic struct.
+    ///
+    /// Changes made by the viewer UI are written to `stat`; changes made to `stat` externally
+    /// are written back to the viewer's passive model.
+    pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {
+        ThreeWayMerge::merge(stat, self.data_passive.model_stat_mut(), &mut self.prev_stat);
+        self.last_stat_sync_time = Instant::now();
+    }
+
+    /// Returns the last time physics options (opt) were synced.
+    pub fn last_opt_sync_time(&self) -> Instant {
+        self.last_opt_sync_time
+    }
+
+    /// Returns the last time visualization options (vis) were synced.
+    pub fn last_vis_sync_time(&self) -> Instant {
+        self.last_vis_sync_time
+    }
+
+    /// Returns the last time statistics (stat) were synced.
+    pub fn last_stat_sync_time(&self) -> Instant {
+        self.last_stat_sync_time
     }
 
     /// Same as [`ViewerSharedState::sync_data`], except it copies the entire [`MjData`]
@@ -312,14 +408,13 @@ impl ViewerSharedState {
 
     /// Data sync implementation.
     fn _sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, full_sync: bool) {
-        /* Recreate internal data and user scene when the model changes */
+        // Recreate internal data and user scene when the model changes
         if data.model().signature() != self.data_passive.model().signature() {
-            let new_model = Arc::new(data.model().clone());
             let max_user_geom = self.user_scene.maxgeom() as usize;
-            self.reload_model(new_model, max_user_geom);
+            self.reload_model(data.model(), max_user_geom);
         }
 
-        /* Update statistics */
+        // Update statistics
         let passive_time = self.data_passive.time();
         let active_time = data.time();
         if passive_time > 0.0 && active_time > passive_time {  // time = 0 means data was reset
@@ -337,7 +432,7 @@ impl ViewerSharedState {
 
         self.last_sync_time = Instant::now();
 
-        /* Sync */
+        // Sync
         self.data_passive.read_state_into(
             MjtState::mjSTATE_INTEGRATION as u32,
             &mut self.data_passive_state
@@ -415,8 +510,6 @@ pub struct MjViewer {
     camera: MjvCamera,
 
     /* Other MuJoCo related */
-    /// Passive copy of the model, kept in sync with [`ViewerSharedState::data_passive`].
-    model_passive: Arc<MjModel>,
     opt: MjvOption,
 
     /* Internal state */
@@ -437,12 +530,21 @@ pub struct MjViewer {
 
     /* External interaction */
     shared_state: Arc<Mutex<ViewerSharedState>>,
+    /// Shared atomic flag cloned from [`ViewerSharedState::running`].
+    /// Allows [`MjViewer::running`] to read the flag without locking the mutex on every call
+    /// (the user's sim loop polls this on every iteration).
+    running_flag: Arc<AtomicBool>,
 
     /* User interface */
     #[cfg(feature = "viewer-ui")]
     ui: ui::ViewerUI,
 
     status: ViewerStatusBit,
+
+    /// Cached number of MJCF-defined cameras (`model.ncam`).
+    /// Updated in [`update_scene`](Self::update_scene) whenever the model changes.
+    /// Avoids locking `shared_state` just to read this integer in [`cycle_camera`](Self::cycle_camera).
+    ncam: MjtSize,
 
     /// Pending screenshot request. [`Some`] with `(viewport_only, depth)` flags when a
     /// screenshot is queued; [`None`] otherwise.
@@ -481,7 +583,7 @@ impl MjViewer {
 
     /// Checks whether the viewer is still running.
     pub fn running(&self) -> bool {
-        self.shared_state.lock_unpoison().running()
+        self.running_flag.load(Ordering::Relaxed)
     }
 
     /// Returns a reference to the shared state [`ViewerSharedState`].
@@ -522,13 +624,11 @@ impl MjViewer {
     /// It also receives a mutable reference to [`MjData`], which can be used to read
     /// and modify simulation state. Note that the model can be accessed through [`MjData::model`].
     ///
-    /// This method is only available when the `viewer-ui` feature is enabled.
-    ///
     /// # Note
     /// The viewer's internal shared-state [`Mutex`] is **held for the entire
     /// duration of the callback** (because `data` is a live borrow of the guarded
     /// `data_passive` field). Do **not** attempt to lock the shared state again from
-    /// within the callback as that will deadlock the viewer thread:
+    /// within the callback as that will deadlock the viewer thread.
     ///
     /// # Example
     /// ```no_run
@@ -548,7 +648,7 @@ impl MjViewer {
     #[cfg(feature = "viewer-ui")]
     pub fn add_ui_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&egui::Context, &mut MjData<Arc<MjModel>>) + 'static
+        F: FnMut(&egui::Context, &mut MjData<Box<MjModel>>) + 'static
     {
         self.ui.add_ui_callback(callback);
     }
@@ -622,6 +722,48 @@ impl MjViewer {
         self.shared_state.lock_unpoison().sync_data(data);
     }
 
+    /// Performs a bidirectional three-way merge of model parameters between the
+    /// viewer's passive model and the incoming model.
+    /// This is a proxy to [`ViewerSharedState::sync_model`].
+    ///
+    /// Detects model changes via signature comparison and reloads internal state if needed.
+    /// After a reload, the passive model mirrors the incoming model's defaults, so the
+    /// first merge is effectively a no-op. On subsequent calls, viewer UI changes and
+    /// simulation-side changes are merged bidirectionally.
+    pub fn sync_model(&mut self, model: &mut MjModel) {
+        self.shared_state.lock_unpoison().sync_model(model);
+    }
+
+    /// Performs a bidirectional three-way merge of [`MjModel::opt`] between the viewer's
+    /// passive model and the provided option struct.
+    /// This is a proxy to [`ViewerSharedState::sync_model_opt`].
+    ///
+    /// This allows updating physics options without requiring `unsafe` access via
+    /// [`MjData::model_mut`] or manipulating the viewer's shared state directly.
+    pub fn sync_model_opt(&mut self, opt: &mut MjOption) {
+        self.shared_state.lock_unpoison().sync_model_opt(opt);
+    }
+
+    /// Performs a bidirectional three-way merge of [`MjModel::vis`] between the viewer's
+    /// passive model and the provided visual struct.
+    /// This is a proxy to [`ViewerSharedState::sync_model_vis`].
+    ///
+    /// This allows updating visualization options without requiring `unsafe` access via
+    /// [`MjData::model_mut`] or manipulating the viewer's shared state directly.
+    pub fn sync_model_vis(&mut self, vis: &mut MjVisual) {
+        self.shared_state.lock_unpoison().sync_model_vis(vis);
+    }
+
+    /// Performs a bidirectional three-way merge of [`MjModel::stat`] between the viewer's
+    /// passive model and the provided statistic struct.
+    /// This is a proxy to [`ViewerSharedState::sync_model_stat`].
+    ///
+    /// This allows updating model statistics without requiring `unsafe` access via
+    /// [`MjData::model_mut`] or manipulating the viewer's shared state directly.
+    pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {
+        self.shared_state.lock_unpoison().sync_model_stat(stat);
+    }
+
     /// Processes the UI (when enabled), processes events, draws the scene
     /// and swaps buffers in OpenGL.
     /// # Errors
@@ -635,40 +777,40 @@ impl MjViewer {
             ..
         } = self.adapter.state.as_ref().unwrap();
 
-        /* Make sure everything is done on the viewer's window */
+        // Make sure everything is done on the viewer's window
         gl_context.make_current(gl_surface)?;
 
-        /* Read the screen size */
+        // Read the screen size
         self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
 
-        /* Process mouse and keyboard events */
+        // Process mouse and keyboard events
         self.process_events();
 
-        /* Update the scene from data and render */
+        // Update the scene from data and render
         self.update_scene()?;
 
-        /* Viewport-only screenshot: capture the centered scene before the UI
-         * panel is drawn on top (the scene is rendered to rect_full, so it
-         * fills the entire window). */
+        // Viewport-only screenshot: capture the centered scene before the UI
+        // panel is drawn on top (the scene is rendered to rect_full, so it
+        // fills the entire window).
         if let Some((true, _)) = self.screenshot_pending {
             let (_, depth) = self.screenshot_pending.take().unwrap();
             self.capture_screenshot(depth)?;
         }
 
-        /* Draw the user menu on top */
+        // Draw the user menu on top
         #[cfg(feature = "viewer-ui")]
         self.process_user_ui();
 
-        /* Update the user menu state and overlays */
+        // Update the user menu state and overlays
         self.update_menus();
 
-        /* Full-window screenshot: capture after all rendering (UI + overlays). */
+        // Full-window screenshot: capture after all rendering (UI + overlays).
         if let Some((false, _)) = self.screenshot_pending {
             let (_, depth) = self.screenshot_pending.take().unwrap();
             self.capture_screenshot(depth)?;
         }
 
-        /* Flush to the GPU */
+        // Flush to the GPU
         self.swap_buffers()
     }
 
@@ -680,7 +822,7 @@ impl MjViewer {
             ..
         } = self.adapter.state.as_ref().unwrap();
 
-        /* Swap OpenGL buffers (render to screen) */
+        // Swap OpenGL buffers (render to screen)
         gl_surface.swap_buffers(gl_context).map_err(MjViewerError::GlutinError)
     }
 
@@ -716,8 +858,11 @@ impl MjViewer {
             flip_image_vertically(&mut depth_buf, h, w);
 
             // Linearize raw OpenGL depth into metric distance.
-            let map = &self.model_passive.vis().map;
-            let stat = &self.model_passive.stat();
+            let (map, stat) = {
+                let lock = self.shared_state.lock_unpoison();
+                let model = lock.data_passive.model();
+                (model.vis().map.clone(), model.stat().clone())
+            };
             let extent = stat.extent as f32;
             let near = map.znear * extent;
             let far = map.zfar * extent;
@@ -787,28 +932,29 @@ impl MjViewer {
             let mut lock = self.shared_state.lock_unpoison();
             let ViewerSharedState { data_passive, pert, user_scene, .. } = lock.deref_mut();
 
-            /* Recreate scene when the model changes */
+            // Recreate scene when the model changes
             if data_passive.model().signature() != self.scene.signature() {
-                let new_model = data_passive.model_clone();
+                let new_model = data_passive.model();
                 let ngeom = new_model.ffi().ngeom as usize;
                 let max_user_geom = user_scene.maxgeom() as usize;
                 self.scene = MjvScene::new(
-                    Arc::clone(&new_model),
+                    new_model,
                     ngeom + max_user_geom + EXTRA_SCENE_GEOM_SPACE
                 );
-                self.model_passive = new_model;
+
                 // Reset to a free camera: a tracking or fixed camera may reference a body
                 // or camera ID that does not exist in the new model.
-                self.camera = MjvCamera::new_free(&self.model_passive);
+                self.camera = MjvCamera::new_free(new_model);
                 // Recreate the rendering context so that GPU resources (textures,
                 // meshes, heightfields, skins) match the new model.
                 // SAFETY: the GL context was made current in render() before this call.
-                self.context = unsafe { MjrContext::new(&self.model_passive) };
+                self.context = unsafe { MjrContext::new(new_model) };
+                self.ncam = new_model.ffi().ncam;
                 #[cfg(feature = "viewer-ui")]
-                self.ui.update_names(Arc::clone(&self.model_passive));
+                self.ui.update_names(new_model);
             }
 
-            /* Update and render the scene from the MjData state */
+            // Update and render the scene from the MjData state
             self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
 
             // Draw geoms drawn through the user scene.
@@ -823,7 +969,7 @@ impl MjViewer {
         let rectangle_from_ui = self.rect_view;
         let rectangle_full = self.rect_full;
 
-        /* Overlay section */
+        // Overlay section
         if self.status.contains(ViewerStatusBit::HELP) {  // Help
             self.context.overlay(
                 MjtFont::mjFONT_NORMAL, MjtGridPos::mjGRID_TOPLEFT,
@@ -920,7 +1066,7 @@ impl MjViewer {
     /// Draws the user UI
     #[cfg(feature = "viewer-ui")]
     fn process_user_ui(&mut self) {
-        /* Draw the user interface */
+        // Draw the user interface
 
         use crate::viewer::ui::UiEvent;
         let RenderBaseGlState {window, ..} = &self.adapter.state.as_ref().unwrap();
@@ -931,21 +1077,20 @@ impl MjViewer {
             window, &mut self.status,
             &mut self.scene, &mut self.opt,
             &mut self.camera, &self.shared_state,
-            &self.model_passive
         );
 
-        /* Adjust the viewport so MuJoCo doesn't draw over the UI */
+        // Adjust the viewport so MuJoCo doesn't draw over the UI
         self.rect_view.left = left as i32;
         self.rect_view.width = inner_size.width as i32;
 
-        /* Reset some OpenGL settings so that MuJoCo can still draw */
+        // Reset some OpenGL settings so that MuJoCo can still draw
         self.ui.reset();
 
-        /* Process events made in the user UI */
+        // Process events made in the user UI
         while let Some(event) = self.ui.drain_events() {
             use UiEvent::*;
             match event {
-                Close => self.shared_state.lock_unpoison().running = false,
+                Close => self.running_flag.store(false, Ordering::Relaxed),
                 Fullscreen => self.toggle_full_screen(),
                 ResetSimulation => {
                     let mut lock = self.shared_state.lock_unpoison();
@@ -953,7 +1098,7 @@ impl MjViewer {
                     lock.data_passive.forward();
                 },
                 AlignCamera => {
-                    self.camera = MjvCamera::new_free(&self.model_passive);
+                    self.camera = MjvCamera::new_free(self.shared_state.lock_unpoison().data_passive.model());
                 },
                 VSyncToggle => {
                     self.update_vsync();
@@ -1060,11 +1205,11 @@ impl MjViewer {
                         state: ElementState::Pressed, ..
                     }, ..
                 } if self.modifiers.state().control_key()  => {
-                    self.shared_state.lock_unpoison().running = false;
+                    self.running_flag.store(false, Ordering::Relaxed);
                 }
 
                 // Also set the viewer's state to pending exit if the window no longer exists.
-                WindowEvent::CloseRequested => { self.shared_state.lock_unpoison().running = false }
+                WindowEvent::CloseRequested => { self.running_flag.store(false, Ordering::Relaxed) }
 
                 // Free the camera from tracking.
                 WindowEvent::KeyboardInput {
@@ -1240,12 +1385,12 @@ impl MjViewer {
 
     /// Cycle MJCF defined cameras.
     fn cycle_camera(&mut self, direction: i32) {
-        let n_cam = self.model_passive.ffi().ncam;
-        if n_cam == 0 {  // No cameras, ignore.
+        let ncam = self.ncam;
+        if ncam == 0 {  // No cameras, ignore.
             return;
         }
 
-        self.camera.fix((self.camera.fixedcamid + direction).rem_euclid(n_cam as i32) as usize);
+        self.camera.fix((self.camera.fixedcamid + direction).rem_euclid(ncam as i32) as usize);
     }
 
     /// Toggles full screen mode.
@@ -1261,13 +1406,17 @@ impl MjViewer {
 
     /// Processes scrolling events.
     fn process_scroll(&mut self, change: f64) {
-        self.camera.move_(MjtMouse::mjMOUSE_ZOOM, &self.model_passive, 0.0, -0.05 * change, &self.scene);
+        self.camera.move_(
+            MjtMouse::mjMOUSE_ZOOM,
+            self.shared_state.lock_unpoison().data_passive.model(),
+            0.0, -0.05 * change, &self.scene
+        );
     }
 
     /// Processes camera and perturbation movements.
     fn process_cursor_pos(&mut self, x: f64, y: f64) {
         self.raw_cursor_position = (x, y);
-        /* Calculate the change in mouse position since last call */
+        // Calculate the change in mouse position since last call
         let dx = x - self.last_x;
         let dy = y - self.last_y;
         self.last_x = x;
@@ -1277,7 +1426,7 @@ impl MjViewer {
         let buttons = &self.buttons_pressed;
         let shift = modifiers.shift_key();
 
-        /* Check mouse presses and move the camera if any of them is pressed */
+        // Check mouse presses and move the camera if any of them is pressed
         let action;
         let height = window.inner_size().height as f64;
 
@@ -1301,9 +1450,13 @@ impl MjViewer {
             return;  // If buttons aren't pressed, ignore.
         }
 
-        /* When the perturbation isn't active, move the camera */
+        // When the perturbation isn't active, move the camera
         if pert.active == 0 {
-            self.camera.move_(action, &self.model_passive, dx / height, dy / height, &self.scene);
+            self.camera.move_(
+                action,
+                data_passive.model(),
+                dx / height, dy / height, &self.scene
+            );
         }
         else {  // When the perturbation is active, move apply the perturbation.
             pert.move_(data_passive, action, dx / height, dy / height, &self.scene);
@@ -1317,7 +1470,7 @@ impl MjViewer {
         let ViewerSharedState {data_passive, pert, ..} = lock.deref_mut();
         match state {
             ElementState::Pressed => {
-                /* Clicking and holding applies perturbation */
+                // Clicking and holding applies perturbation
                 if pert.select > 0 && modifier_state.control_key() {
                     let type_ = if modifier_state.alt_key() {
                         MjtPertBit::mjPERT_TRANSLATE
@@ -1327,13 +1480,13 @@ impl MjViewer {
                     pert.start(type_, data_passive, &self.scene);
                 }
 
-                /* Double click detection */
+                // Double click detection
                 if self.last_bnt_press_time.elapsed().as_millis() < DOUBLE_CLICK_WINDOW_MS {
                     let cp = self.raw_cursor_position;
                     let x = cp.0;
                     let y = self.rect_full.height as f64 - cp.1;
 
-                    /* Obtain the selection */ 
+                    // Obtain the selection 
                     let rect = &self.rect_full;
                     let sel = self.scene.find_selection(
                         data_passive, &self.opt,
@@ -1342,7 +1495,7 @@ impl MjViewer {
                         (y - rect.bottom as MjtNum) / rect.height as MjtNum
                     );
 
-                    /* Set tracking camera */
+                    // Set tracking camera
                     if modifier_state.alt_key() {
                         if let Some(body_id) = sel.body_id {
                             self.camera.lookat = sel.point;
@@ -1352,7 +1505,7 @@ impl MjViewer {
                         }
                     }
                     else {
-                        /* Mark selection */
+                        // Mark selection
                         if let Some(body_id) = sel.body_id {
                             pert.select = body_id as i32;
                             pert.flexselect = sel.flex_id.map(|v| v as i32).unwrap_or(-1);
@@ -1456,7 +1609,7 @@ impl MjViewerBuilder {
             true  // process events
         )?;
 
-        /* Initialize the OpenGL related things */
+        // Initialize the OpenGL related things
         let RenderBaseGlState {
             gl_context,
             gl_surface,
@@ -1479,20 +1632,19 @@ impl MjViewerBuilder {
 
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
-        let model: Arc<MjModel> = Arc::new(model.deref().clone());
-
         let ngeom = model.ffi().ngeom as usize;
-        let scene = MjvScene::new(Arc::clone(&model), ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
+        let scene = MjvScene::new(&*model, ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
         // SAFETY: The OpenGL context was made current above via gl_surface.
         let context = unsafe { MjrContext::new(&model) };
         let camera  = MjvCamera::new_free(&model);
 
         // Tracking of changes made between syncs
-        let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(Arc::clone(&model), self.max_user_geoms)));
+        let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(&*model, self.max_user_geoms)));
+        let running_flag = shared_state.lock_unpoison().running.clone();
 
         // User interface
         #[cfg(feature = "viewer-ui")]
-        let ui = ui::ViewerUI::new(Arc::clone(&model), window, &gl_surface.display())?;
+        let ui = ui::ViewerUI::new(&*model, window, &gl_surface.display())?;
         #[cfg(feature = "viewer-ui")]
         let mut status = ViewerStatusBit::UI;
         #[cfg(not(feature = "viewer-ui"))]
@@ -1502,12 +1654,13 @@ impl MjViewerBuilder {
         status.set(ViewerStatusBit::WARN_REALTIME, self.warn_non_realtime);
 
         Ok(MjViewer {
-            model_passive: model,
             scene,
             context,
             camera,
             opt: MjvOption::default(),
+            ncam: model.ffi().ncam,
             shared_state,
+            running_flag,
             last_x: 0.0,
             last_y: 0.0,
             last_bnt_press_time: Instant::now(),
@@ -1555,3 +1708,4 @@ bitflags! {
         const RIGHT = 1 << 2;
     }
 }
+

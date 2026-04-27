@@ -564,7 +564,8 @@ pub struct mjVFS_ {
 }
 pub type mjVFS = mjVFS_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "viewer", derive(mujoco_rs_derive::ThreeWayMerge))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct mjOption_ {
     pub timestep: mjtNum,
     pub impratio: mjtNum,
@@ -598,7 +599,8 @@ pub struct mjOption_ {
 }
 pub type mjOption = mjOption_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "viewer", derive(mujoco_rs_derive::ThreeWayMerge))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct mjVisual_ {
     pub global: mjVisual___bindgen_ty_1,
     pub quality: mjVisual___bindgen_ty_2,
@@ -608,7 +610,8 @@ pub struct mjVisual_ {
     pub rgba: mjVisual___bindgen_ty_6,
 }
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "viewer", derive(mujoco_rs_derive::ThreeWayMerge))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct mjVisual___bindgen_ty_1 {
     pub cameraid: ::std::os::raw::c_int,
     pub orthographic: ::std::os::raw::c_int,
@@ -625,7 +628,8 @@ pub struct mjVisual___bindgen_ty_1 {
     pub bvactive: ::std::os::raw::c_int,
 }
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "viewer", derive(mujoco_rs_derive::ThreeWayMerge))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct mjVisual___bindgen_ty_2 {
     pub shadowsize: ::std::os::raw::c_int,
     pub offsamples: ::std::os::raw::c_int,
@@ -634,7 +638,8 @@ pub struct mjVisual___bindgen_ty_2 {
     pub numquads: ::std::os::raw::c_int,
 }
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "viewer", derive(mujoco_rs_derive::ThreeWayMerge))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct mjVisual___bindgen_ty_3 {
     pub ambient: [f32; 3usize],
     pub diffuse: [f32; 3usize],
@@ -642,7 +647,8 @@ pub struct mjVisual___bindgen_ty_3 {
     pub active: ::std::os::raw::c_int,
 }
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "viewer", derive(mujoco_rs_derive::ThreeWayMerge))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct mjVisual___bindgen_ty_4 {
     pub stiffness: f32,
     pub stiffnessrot: f32,
@@ -659,7 +665,8 @@ pub struct mjVisual___bindgen_ty_4 {
     pub actuatortendon: f32,
 }
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "viewer", derive(mujoco_rs_derive::ThreeWayMerge))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct mjVisual___bindgen_ty_5 {
     pub forcewidth: f32,
     pub contactwidth: f32,
@@ -680,7 +687,8 @@ pub struct mjVisual___bindgen_ty_5 {
     pub frustum: f32,
 }
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "viewer", derive(mujoco_rs_derive::ThreeWayMerge))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct mjVisual___bindgen_ty_6 {
     pub fog: [f32; 4usize],
     pub haze: [f32; 4usize],
@@ -710,7 +718,8 @@ pub struct mjVisual___bindgen_ty_6 {
 }
 pub type mjVisual = mjVisual_;
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "viewer", derive(mujoco_rs_derive::ThreeWayMerge))]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct mjStatistic_ {
     pub meaninertia: mjtNum,
     pub meanmass: mjtNum,

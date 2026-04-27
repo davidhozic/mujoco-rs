@@ -25,6 +25,25 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
     dest[bytes.len()..].fill(0);
 }
 
+/// Sets or clears a bit flag based on a boolean value.
+///
+/// # Examples
+/// ```ignore
+/// let mut flags = 0i32;
+/// set_flag!(flags, 0x01, true);   // sets bit 0
+/// set_flag!(flags, 0x01, false);  // clears bit 0
+/// ```
+#[doc(hidden)]
+#[macro_export]
+macro_rules! set_flag {
+    ($flags:expr, $mask:expr, $enabled:expr) => {
+        if $enabled {
+            $flags |= $mask;
+        } else {
+            $flags &= !$mask;
+        }
+    };
+}
 
 /// Creates a (start, length) tuple based on
 /// lookup variables that define the mapping in MuJoCo's mjModel struct.
@@ -925,10 +944,8 @@ macro_rules! array_slice_dyn {
 ///
 /// # Safety
 /// The generated getters blindly interpret a `char` array as a C string; the
-/// array must be NUL-terminated and contain valid UTF-8. Setters ensure
-/// ASCII and length bounds but the caller must still guarantee the destination
-/// buffer is large enough.  The macro itself simply emits the unsafe code
-/// without additional checks.
+/// array must be NUL-terminated and contain valid UTF-8. Setters validate
+/// ASCII encoding and will **panic** if the value exceeds the buffer length.
 /// The macro works by first specifying the methods to create (get = getter, set = setter) --- c_str_as_str_method {get, set, {...}} ---
 /// and then providing the rest of the parameters.
 /// 
@@ -1146,6 +1163,31 @@ impl<T> LockUnpoison<T> for Mutex<T> {
                 e.into_inner()
             }
         }
+    }
+}
+
+#[cfg(feature = "viewer")]
+/// Performs a three-way merge of a value.
+///
+/// Given three versions of a value (`self`, `other`, `other_prev`), the merge
+/// updates `self` when `other` has changed relative to `other_prev`, then
+/// writes the resolved value back into both `other` and `other_prev` so the
+/// next call starts from a consistent baseline.
+pub(crate) trait ThreeWayMerge {
+    /// Merges `other` into `self` using `other_prev` as the baseline.
+    fn merge(&mut self, other: &mut Self, other_prev: &mut Self);
+}
+
+#[cfg(feature = "viewer")]
+impl<T: Copy + PartialEq> ThreeWayMerge for T {
+    #[inline]
+    fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
+        if *other != *other_prev {
+            *self = *other;
+        }
+
+        *other = *self;
+        *other_prev = *other;
     }
 }
 

@@ -111,6 +111,51 @@ longer available in MuJoCo-rs 4.0.0.
     let _ = flex;
 
 
+``MjData::model_mut`` is now unsafe
+------------------------------------
+To prevent a false sense of correctness, method
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_mut`
+is now marked unsafe to prevent users from direct swapping models to incompatible
+ones.
+
+**Before (3.x):**
+
+.. code-block:: rust
+
+    data.model_mut().opt_mut().gravity[2] = half_gravity;
+    *data.model_mut() = new_model;
+
+
+**After (4.0.0):**
+
+.. code-block:: rust
+
+    let mut old_model = data.swap_model(new_model);
+
+
+``MjViewer::add_ui_callback`` closure now receives ``Box<MjModel>``
+--------------------------------------------------------------------
+The passive model stored inside the viewer changed from ``Arc<MjModel>`` to
+``Box<MjModel>``. The closure passed to
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`
+now receives ``&mut MjData<Box<MjModel>>``.
+
+**Before (3.x):**
+
+.. code-block:: rust
+
+    viewer.add_ui_callback(|ctx, data: &mut MjData<Arc<MjModel>>| { ... });
+
+**After (4.0.0):**
+
+.. code-block:: rust
+
+    viewer.add_ui_callback(|ctx, data: &mut MjData<Box<MjModel>>| { ... });
+
+Type annotations in closure parameters must be updated if present.
+Closures without an explicit type annotation require no change.
+
+
 .. _migrate_3_0_0:
 
 Migrating to 3.0.0

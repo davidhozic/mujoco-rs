@@ -1,6 +1,8 @@
 //! MjData related.
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
+use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
+use crate::wrappers::mj_option::MjOption;
 use crate::{getter_setter, mujoco_c::*};
 use crate::error::MjDataError;
 
@@ -75,8 +77,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Fallible version of [`MjData::new`].
     ///
     /// # Errors
-    /// Returns `Ok(MjData)` on success, or [`MjDataError::AllocationFailed`] if
-    /// MuJoCo returns a null pointer from `mj_makeData`.
+    /// Returns [`MjDataError::AllocationFailed`] if MuJoCo returns a null pointer from `mj_makeData`.
     ///
     /// Prefer this method over [`MjData::new`] when you want to handle
     /// allocation failures without a panic.
@@ -1480,7 +1481,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Returns a direct pointer to the underlying data.
     /// Returns a direct mutable pointer to the underlying C data struct.
     /// Only for internal use by viewer code that passes the pointer to C++ FFI.
     #[cfg(feature = "cpp-viewer")]
@@ -1514,6 +1514,21 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// (requires `M: DerefMut<Target = MjModel>`).
     pub fn model(&self) -> &MjModel {
         &self.model
+    }
+
+    /// Returns an immutable reference to the model physics options.
+    pub fn model_opt(&self) -> &MjOption {
+        self.model.opt()
+    }
+
+    /// Returns an immutable reference to the model visualization options.
+    pub fn model_vis(&self) -> &MjVisual {
+        self.model.vis()
+    }
+
+    /// Returns an immutable reference to the model statistics.
+    pub fn model_stat(&self) -> &MjStatistic {
+        self.model.stat()
     }
 
     /// Returns a clone of the stored model.
@@ -1585,20 +1600,82 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     ///
     /// Only available when the inner model type `M` implements
     /// [`DerefMut<Target = MjModel>`](std::ops::DerefMut)
-    /// (e.g., owned [`MjModel`], `Box<MjModel>`).
+    /// (e.g., `Box<MjModel>`, `&mut MjModel`).
     /// Shared-ownership types such as `Arc<MjModel>` do not provide mutable
     /// access; use [`swap_model`](MjData::swap_model) instead.
+    /// 
+    /// # Safety
+    /// This method is marked unsafe as the owned model can be swapped entirely without any compatibility
+    /// checks.
+    /// 
+    /// It is the caller's responsibility to ensure the internal [`MjModel::signature`] matches the
+    /// swapped model's signature in case of a swap.
+    /// 
+    /// For safe swapping consider [`MjData::swap_model`] or [`MjData::try_swap_model`] for a failable alternative.
     ///
     /// # Example
     /// ```rust
     /// # use mujoco_rs::prelude::{MjModel, MjData};
     /// let model = Box::new(MjModel::from_xml_string("<mujoco/>").unwrap());
     /// let mut data = MjData::new(model);
-    /// data.model_mut().opt_mut().timestep = 0.001;
-    /// data.model_mut().opt_mut().gravity[2] = -5.0;
+    /// unsafe { data.model_mut() }.opt_mut().timestep = 0.001;
+    /// unsafe { data.model_mut() }.opt_mut().gravity[2] = -5.0;
     /// ```
-    pub fn model_mut(&mut self) -> &mut MjModel {
+    pub unsafe fn model_mut(&mut self) -> &mut MjModel {
         &mut self.model
+    }
+
+    /// Returns a mutable reference to [`MjModel::opt_mut`] without allowing unsafe
+    /// modifications to the rest of the [`MjModel`].
+    /// 
+    /// Immutable references can be made through [`MjData::model_opt`].
+    /// 
+    /// Can be used to modify the physics parameters.
+    /// # Example
+    /// ```rust
+    /// # use mujoco_rs::prelude::{MjModel, MjData};
+    /// let model = Box::new(MjModel::from_xml_string("<mujoco/>").unwrap());
+    /// let mut data = MjData::new(model);
+    /// data.model_opt_mut().timestep = 0.001;
+    /// data.model_opt_mut().gravity[2] = -5.0;
+    /// ```
+    pub fn model_opt_mut(&mut self) -> &mut MjOption {
+        self.model.opt_mut()
+    }
+
+    /// Returns a mutable reference to [`MjModel::vis_mut`] without allowing unsafe
+    /// modifications to the rest of the [`MjModel`].
+    /// 
+    /// Immutable references can be made through [`MjData::model_vis`].
+    /// 
+    /// Can be used to modify the visualization parameters.
+    /// # Example
+    /// ```rust
+    /// # use mujoco_rs::prelude::{MjModel, MjData};
+    /// let model = Box::new(MjModel::from_xml_string("<mujoco/>").unwrap());
+    /// let mut data = MjData::new(model);
+    /// data.model_vis_mut().headlight.ambient = [0.0, 0.0, 0.0];
+    /// data.model_vis_mut().headlight.active = 1;
+    /// ```
+    pub fn model_vis_mut(&mut self) -> &mut MjVisual {
+        self.model.vis_mut()
+    }
+
+    /// Returns a mutable reference to [`MjModel::stat_mut`] without allowing unsafe
+    /// modifications to the rest of the [`MjModel`].
+    /// 
+    /// Immutable references can be made through [`MjData::model_stat`].
+    /// 
+    /// Can be used to modify the model statistics.
+    /// # Example
+    /// ```rust
+    /// # use mujoco_rs::prelude::{MjModel, MjData};
+    /// let model = Box::new(MjModel::from_xml_string("<mujoco/>").unwrap());
+    /// let mut data = MjData::new(model);
+    /// data.model_stat_mut().center = [0.0, 0.0, 0.5];
+    /// ```
+    pub fn model_stat_mut(&mut self) -> &mut MjStatistic {
+        self.model.stat_mut()
     }
 }
 

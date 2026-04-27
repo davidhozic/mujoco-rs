@@ -1,7 +1,6 @@
 //! Example on how to use the Rust-native viewer ([`MjViewer`]) in a multi-threaded fashion.
 //! By that we mean rendering can be done on the main thread, and the physics on another.
 use std::time::Instant;
-use std::sync::Arc;
 
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
@@ -24,14 +23,14 @@ const EXAMPLE_MODEL: &str = stringify! {
 
 fn main() {
     // Create model and data.
-    let model = Arc::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
-    let mut data = MjData::new(model.clone());
+    let model = Box::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
+    let mut data = MjData::new(model);
 
     // Create the viewer, bound to the model.
     let mut viewer = MjViewer::builder()
         .max_user_geoms(100)
         .vsync(true)  // let the viewer select the appropriate refresh rate.
-        .build_passive(model.clone())
+        .build_passive(data.model())
         .expect("could not launch the viewer");
 
     let shared_state = viewer.state().clone();
@@ -43,13 +42,18 @@ fn main() {
             {
                 let mut lock = shared_state.lock().unwrap();
                 lock.sync_data(&mut data);
+                lock.sync_model_opt(data.model_opt_mut());
+                lock.sync_model_vis(data.model_vis_mut());
+                lock.sync_model_stat(data.model_stat_mut());
+                // OR
+                //  lock.sync_model(unsafe { data.model_mut() });
                 viewer_running = lock.running();
             }
 
             // Use a while loop and polling to wait for accuracy purposes.
             // To increase performance, std::thread::sleep may be used,
             // however that comes at the cost of less accuracy.
-            while timer.elapsed().as_secs_f64() < model.opt().timestep {}
+            while timer.elapsed().as_secs_f64() < data.model().opt().timestep {}
         }
     });
 
