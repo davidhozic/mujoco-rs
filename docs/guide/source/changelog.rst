@@ -123,6 +123,12 @@ update of MuJoCo alone can increase the major version.
 - Removed the ``stl_mesh`` example. It existed in MuJoCo-rs 3.0.1 due to MuJoCo 3.6.0 requiring a plugin to load
   STL meshes. MuJoCo 3.7.0+ fixes this, thus the example is no longer required.
 
+.. rubric:: Error changes
+
+- Added a new variant for handling invalid indices in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_max_contacts`:
+  :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>InvalidIndex`. 
+
 .. rubric:: Other changes
 
 - Reduced default width of the viewer's UI side panel to 200.0.

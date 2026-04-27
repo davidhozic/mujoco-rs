@@ -780,17 +780,38 @@ impl MjModel {
         unsafe { mj_setTotalmass(self.ffi_mut(), newmass) }
     }
 
-    /// Return the maximum number of contacts that can be generated between two geoms.
-    /// 
-    /// To pull margin from model, set `has_margin` to [`None`], otherwise pass `true` or `false`
-    /// inside [`Some`] (true indicating a present margin). 
-    pub fn max_contacts(&self, geom1: usize, geom2: usize, has_margin: Option<bool>) -> u32 {
-        unsafe { mj_maxContact(
+    /// Failable version of [`MjModel::max_contacts`].
+    /// # Errors
+    /// Returns [`MjModelError::InvalidIndex`] when either `geom1` or `geom2` are grater than [`MjModel::ngeom`].
+    pub fn try_max_contacts(&self, geom1: usize, geom2: usize, has_margin: Option<bool>) -> Result<u32, MjModelError> {
+        let ngeom = self.ngeom() as usize;
+
+        if geom1 >= ngeom {
+            return Err(MjModelError::InvalidIndex(geom1, ngeom - 1));
+        }
+
+        if geom2 >= ngeom {
+            return Err(MjModelError::InvalidIndex(geom2, ngeom - 1));
+        }
+
+        Ok(unsafe { mj_maxContact(
             self.ffi(),
             geom1 as i32, geom2 as i32,
             // if Some(...), pass 0 or 1, otherwise pull from model (-1)
             has_margin.map(|m| m as i32).unwrap_or(-1)
-        ) as u32 }
+        ) as u32 })
+    }
+
+    /// Return the maximum number of contacts that can be generated between two geoms.
+    /// 
+    /// To pull margin from model, set `has_margin` to [`None`], otherwise pass `true` or `false`
+    /// inside [`Some`] (true indicating a present margin). 
+    /// 
+    /// # Panics
+    /// Panics when either `geom1` or `geom2` are grater than [`MjModel::ngeom`].
+    /// Use [`MjModel::try_max_contacts`] for a faillable alternative.
+    pub fn max_contacts(&self, geom1: usize, geom2: usize, has_margin: Option<bool>) -> u32 {
+        self.try_max_contacts(geom1, geom2, has_margin).unwrap()
     }
 
     /* FFI */
@@ -3753,8 +3774,7 @@ mod tests {
         let mc = model.max_contacts(geom1, geom2, Some(true));
         assert_eq!(mc, 1);
 
-        // Geoms should not matter in case of spheres.
-        let mc = model.max_contacts(999, geom2, Some(true));
-        assert_eq!(mc, 1);
+        // Test invalid geom index.
+        assert!( model.try_max_contacts(999, geom2, Some(true)).is_err());
     }
 }

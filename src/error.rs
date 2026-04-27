@@ -353,6 +353,8 @@ pub enum MjModelError {
     },
     /// A virtual-file-system operation failed while loading a model from a string.
     VfsError(MjVfsError),
+    /// The given index is invalid or out of range.
+    InvalidIndex(usize, usize),
 }
 
 impl fmt::Display for MjModelError {
@@ -383,6 +385,10 @@ impl fmt::Display for MjModelError {
                 )
             }
             Self::VfsError(e) => write!(f, "VFS error: {e}"),
+            Self::InvalidIndex(index, max_index) => write!(
+                f,
+                "invalid index: {index} is out of bounds (max allowed index is {max_index})"
+            ),
         }
     }
 }
