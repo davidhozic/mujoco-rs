@@ -40,7 +40,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         let field_ident = field.ident.as_ref().unwrap();
 
         quote! {
-            crate::viewer::ThreeWayMerge::merge(
+            crate::util::ThreeWayMerge::merge(
                 &mut self.#field_ident,
                 &mut other.#field_ident,
                 &mut other_prev.#field_ident,
@@ -49,7 +49,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     });
 
     let output = quote! {
-        impl crate::viewer::ThreeWayMerge for #ident {
+        impl crate::util::ThreeWayMerge for #ident {
             fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
                 #(#field_merges)*
             }

@@ -27,12 +27,12 @@ use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_primitive::{MjtNum, MjtSize};
 use crate::wrappers::mj_data::{MjData, MjtState};
+use crate::util::{LockUnpoison, ThreeWayMerge};
 use crate::{builder_setters, mujoco_version};
 use crate::wrappers::mj_option::MjOption;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_editing::MjSpec;
 use crate::wrappers::mj_model::MjModel;
-use crate::util::LockUnpoison;
 
 
 #[cfg(feature = "viewer-ui")]
@@ -1695,47 +1695,3 @@ bitflags! {
     }
 }
 
-pub trait ThreeWayMerge {
-    fn merge(&mut self, other: &mut Self, other_prev: &mut Self);
-}
-
-macro_rules! impl_three_way_merge_copy {
-    ($($ty:ty),* $(,)?) => {
-        $(
-            impl ThreeWayMerge for $ty {
-                fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
-                    if *other != *other_prev {
-                        *self = *other;
-                    }
-
-                    *other = *self;
-                    *other_prev = *other;
-                }
-            }
-        )*
-    };
-}
-
-impl_three_way_merge_copy!(
-    bool,
-    char,
-    u8, u16, u32, u64, u128, usize,
-    i8, i16, i32, i64, i128, isize,
-    f32, f64,
-);
-
-impl ThreeWayMerge for String {
-    fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
-        if self == other_prev {
-            *self = other.clone();
-        }
-    }
-}
-
-impl<T: ThreeWayMerge, const N: usize> ThreeWayMerge for [T; N] {
-    fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
-        for i in 0..N {
-            self[i].merge(&mut other[i], &mut other_prev[i]);
-        }
-    }
-}
