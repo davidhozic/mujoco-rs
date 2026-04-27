@@ -1173,49 +1173,19 @@ impl<T> LockUnpoison<T> for Mutex<T> {
 /// updates `self` when `other` has changed relative to `other_prev`, then
 /// writes the resolved value back into both `other` and `other_prev` so the
 /// next call starts from a consistent baseline.
-pub trait ThreeWayMerge {
+pub(crate) trait ThreeWayMerge {
     /// Merges `other` into `self` using `other_prev` as the baseline.
     fn merge(&mut self, other: &mut Self, other_prev: &mut Self);
 }
 
-macro_rules! impl_three_way_merge_copy {
-    ($($ty:ty),*) => {
-        $(
-            impl ThreeWayMerge for $ty {
-                fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
-                    if *other != *other_prev {
-                        *self = *other;
-                    }
-
-                    *other = *self;
-                    *other_prev = *other;
-                }
-            }
-        )*
-    };
-}
-
-impl_three_way_merge_copy!(
-    bool,
-    char,
-    u8, u16, u32, u64, u128, usize,
-    i8, i16, i32, i64, i128, isize,
-    f32, f64
-);
-
-impl ThreeWayMerge for String {
+impl<T: Copy + PartialEq> ThreeWayMerge for T {
     fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
-        if self == other_prev {
-            *self = other.clone();
+        if *other != *other_prev {
+            *self = *other;
         }
-    }
-}
 
-impl<T: ThreeWayMerge, const N: usize> ThreeWayMerge for [T; N] {
-    fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
-        for i in 0..N {
-            self[i].merge(&mut other[i], &mut other_prev[i]);
-        }
+        *other = *self;
+        *other_prev = *other;
     }
 }
 
