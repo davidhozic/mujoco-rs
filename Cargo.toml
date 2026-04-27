@@ -1,16 +1,27 @@
+[workspace]
+members = ["mujoco-rs-derive"]
+
+[workspace.package]
+license     = "MIT OR Apache-2.0"
+repository  = "https://github.com/davidhozic/mujoco-rs"
+rust-version = "1.88"
+
+[workspace.lints.clippy]
+unnecessary_lazy_evaluations = "allow"
+
 [package]
 name = "mujoco-rs"
 version = "4.0.0+mj-3.7.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 description = "A high-level Rust wrapper around the MuJoCo C library, with a native viewer (re-)written in Rust."
 readme = "README.md"
-repository = "https://github.com/davidhozic/mujoco-rs"
+repository.workspace = true
 keywords = ["MuJoCo", "Viewer", "Bindings", "Wrapper"]
 categories = ["simulation", "science::robotics", "api-bindings"]
 homepage = "https://crates.io/crates/mujoco-rs"
 documentation = "https://docs.rs/mujoco-rs/"
-rust-version = "1.88"
+rust-version.workspace = true
 
 exclude = [
     ".context/",
@@ -25,6 +36,7 @@ exclude = [
     "Dockerfile.ubuntu",
     "MUJOCO_LOG.TXT",
     "mujoco/*",
+    "mujoco-rs-derive/",
     "scripts/",
     "tests/",
 ]
@@ -170,5 +182,5 @@ pkg-config = "0.3"
 [dev-dependencies]
 rand = "0.9.2"
 
-[lints.clippy]
-unnecessary_lazy_evaluations = "allow"
+[lints]
+workspace = true
