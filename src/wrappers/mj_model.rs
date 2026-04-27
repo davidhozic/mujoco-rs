@@ -1121,7 +1121,7 @@ impl MjModel {
         flexedge_invweight0: &[MjtNum; "edge inv. weight in qpos0"; ffi().nflexedge],
         flex_radius: &[MjtNum; "radius around primitive element"; ffi().nflex],
         flex_size: &[[MjtNum; 3] [force]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
-        flex_stiffness: &[[MjtNum; 21] [force]; "finite element stiffness matrix"; ffi().nflexelem],
+        flex_stiffness: &[MjtNum; "finite element stiffness matrix"; ffi().nflexstiffness],
         flex_bending: &[[MjtNum; 17] [force]; "bending stiffness"; ffi().nflexedge],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
@@ -3660,5 +3660,66 @@ mod tests {
         assert!(result.is_err(), "loading invalid XML must return Err");
         let msg = result.unwrap_err().to_string();
         assert!(!msg.is_empty(), "error message must not be empty for invalid XML");
+    }
+
+    /// Verifies the new mesh view fields added in MuJoCo 3.8.0:
+    /// read-only index fields (`normaladr`, `normalnum`, etc.) have length 1,
+    /// and the read-write fields (`scale`, `pos`, `quat`) have the right length
+    /// and survive a roundtrip write.
+    #[test]
+    fn test_mesh_view_new_fields() {
+        const MESH_MODEL: &str = "<mujoco>\
+          <asset>\
+            <mesh name=\"cube\" vertex=\"-0.5 -0.5 -0.5  0.5 -0.5 -0.5  -0.5  0.5 -0.5  0.5  0.5 -0.5  \
+                                         -0.5 -0.5  0.5  0.5 -0.5  0.5  -0.5  0.5  0.5  0.5  0.5  0.5\"/>\
+          </asset>\
+          <worldbody>\
+            <geom type=\"mesh\" mesh=\"cube\"/>\
+          </worldbody>\
+        </mujoco>";
+
+        let mut model = MjModel::from_xml_string(MESH_MODEL).unwrap();
+        let mesh_info = model.mesh("cube").unwrap();
+
+        let view = mesh_info.view(&model);
+
+        /* Verify field dimensions for read-write fields */
+        assert_eq!(view.scale.len(), 3);
+        assert_eq!(view.pos.len(), 3);
+        assert_eq!(view.quat.len(), 4);
+
+        /* Verify field dimensions for read-only index fields */
+        assert_eq!(view.normaladr.len(), 1);
+        assert_eq!(view.normalnum.len(), 1);
+        assert_eq!(view.texcoordnum.len(), 1);
+        assert_eq!(view.bvhadr.len(), 1);
+        assert_eq!(view.bvhnum.len(), 1);
+        assert_eq!(view.octadr.len(), 1);
+        assert_eq!(view.octnum.len(), 1);
+        assert_eq!(view.pathadr.len(), 1);
+        assert_eq!(view.polynum.len(), 1);
+        assert_eq!(view.polyadr.len(), 1);
+
+        /* Verify write-read roundtrip for scale */
+        let mut view_mut = mesh_info.view_mut(&mut model);
+        view_mut.scale[0] = 2.0;
+        view_mut.scale[1] = 3.0;
+        view_mut.scale[2] = 4.0;
+
+        let view2 = mesh_info.view(&model);
+        assert_eq!(view2.scale[0], 2.0);
+        assert_eq!(view2.scale[1], 3.0);
+        assert_eq!(view2.scale[2], 4.0);
+    }
+
+    /// Verifies that `flex_bandwidth`, `flex_cellnum`, and `flex_stiffnessadr`
+    /// return empty slices when the model contains no flex bodies.
+    #[test]
+    fn test_flex_array_slices_empty_for_non_flex_model() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        assert_eq!(model.ffi().nflex, 0);
+        assert_eq!(model.flex_bandwidth().len(), 0);
+        assert_eq!(model.flex_cellnum().len(), 0);
+        assert_eq!(model.flex_stiffnessadr().len(), 0);
     }
 }

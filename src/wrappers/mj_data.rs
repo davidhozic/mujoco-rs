@@ -4902,6 +4902,63 @@ mod test {
         );
     }
 
+    /// Verifies that the body view `awake` field returns a single-element slice
+    /// that matches the corresponding entry in `data.body_awake()`.
+    #[test]
+    fn test_body_view_awake_field() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let body_info = data.body("b_free").unwrap();
+        let view = body_info.view(&data);
+
+        /* Verify field dimensions */
+        assert_eq!(view.awake.len(), 1);
+
+        /* Verify alignment with the top-level array slice */
+        assert_eq!(view.awake[0], data.body_awake()[body_info.id]);
+    }
+
+    /// Verifies that the tendon view `efcadr` field returns a single-element slice
+    /// that matches the corresponding entry in `data.tendon_efcadr()`.
+    #[test]
+    fn test_tendon_view_efcadr_field() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let tendon_info = data.tendon("ten1").unwrap();
+        let view = tendon_info.view(&data);
+
+        /* Verify field dimensions */
+        assert_eq!(view.efcadr.len(), 1);
+
+        /* Verify alignment with the top-level array slice */
+        assert_eq!(view.efcadr[0], data.tendon_efcadr()[tendon_info.id]);
+    }
+
+    /// Verifies that `dof_island`, `map_dof2idof`, and `dof_awake_ind` all have
+    /// length `nv` and are backed by the correct FFI pointers.
+    #[test]
+    fn test_dof_island_map_dof2idof_dof_awake_ind_lengths() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nv = model.ffi().nv as usize;
+
+        assert_eq!(data.dof_island().len(), nv);
+        assert_eq!(data.map_dof2idof().len(), nv);
+        assert_eq!(data.dof_awake_ind().len(), nv);
+
+        for i in 0..nv {
+            assert_eq!(data.dof_island()[i], unsafe { *data.ffi().dof_island.add(i) });
+            assert_eq!(data.map_dof2idof()[i], unsafe { *data.ffi().map_dof2idof.add(i) });
+            assert_eq!(data.dof_awake_ind()[i], unsafe { *data.ffi().dof_awake_ind.add(i) });
+        }
+    }
+
     /// Exercises the `eval_or_expand! @eval false` path via
     /// `MjData::maxuse_threadstack()`, which uses `(allow_mut = false)` and
     /// therefore suppresses the `_mut` accessor.

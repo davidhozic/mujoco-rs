@@ -2638,4 +2638,40 @@ mod tests {
         assert_ne!(tex_id[MjtTextureRole::mjTEXROLE_RGB as usize], -1,
             "RGB texture slot should be resolved (not -1)");
     }
+
+    /// Verifies `MjsFlex::cellcount` (read-only `&[i32; 3]`) and `order` (read-write `i32`)
+    /// by parsing a minimal flexcomp model and reading/writing through the spec.
+    #[test]
+    fn test_mjs_flex_cellcount_and_order() {
+        const FLEX_MODEL: &str = "\
+<mujoco>\
+  <worldbody>\
+    <body name=\"pin\" pos=\"0 0 1\">\
+      <flexcomp type=\"grid\" count=\"3 3 1\" spacing=\".1 .1 .1\" mass=\"1\"\
+                name=\"myflex\" radius=\"0.001\" dim=\"2\">\
+        <elasticity young=\"1e4\" poisson=\"0.0\"/>\
+      </flexcomp>\
+    </body>\
+  </worldbody>\
+</mujoco>";
+
+        let mut spec = MjSpec::from_xml_string(FLEX_MODEL).expect("failed to parse flex model");
+        let flex = spec.flex("myflex").expect("flex 'myflex' not found in spec");
+
+        /* Verify field dimensions */
+        assert_eq!(flex.cellcount().len(), 3);
+
+        /* Verify write-read roundtrip for order */
+        {
+            let flex_mut = spec.flex_mut("myflex").unwrap();
+            flex_mut.set_order(2);
+        }
+        assert_eq!(spec.flex("myflex").unwrap().order(), 2);
+
+        {
+            let flex_mut = spec.flex_mut("myflex").unwrap();
+            flex_mut.set_order(1);
+        }
+        assert_eq!(spec.flex("myflex").unwrap().order(), 1);
+    }
 }
