@@ -200,8 +200,8 @@ impl MjVfs {
     /// A mutable borrow is required due to the internal mutex. 
     /// 
     /// # Panics
-    /// When `name` or `directory` contain path of non-UTF elements or with null elements.
-    pub fn contains_file_in<T: AsRef<Path>>(&mut self, directory: T, name: T) -> bool {
+    /// When `name` or `directory` contain path with null elements.
+    pub fn contains_file_in(&mut self, directory: impl AsRef<Path>, name: impl AsRef<Path>) -> bool {
         let c_name = if let Some(name) = name.as_ref().to_str() {
             CString::new(name).unwrap()
         } else {
@@ -228,7 +228,7 @@ impl MjVfs {
     /// A mutable borrow is required due to the internal mutex. 
     /// 
     /// # Panics
-    /// When `name` or `directory` contain path of non-UTF elements or with null elements.
+    /// When `name` contains path with null elements.
     pub fn contains_file<T: AsRef<Path>>(&mut self, name: T) -> bool {
         let c_name = if let Some(name) = name.as_ref().to_str() {
             CString::new(name).unwrap()
