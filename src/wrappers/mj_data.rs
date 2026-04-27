@@ -103,7 +103,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Notes
     /// This method only validates model-signature compatibility.
     /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
-    /// See [here](https://mujoco.readthedocs.io/en/3.7.0/programming/simulation.html#mjmodel-changes)
+    /// See [here](https://mujoco.readthedocs.io/en/3.8.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
     /// 
     /// If `M` implements [`DerefMut`], prefer
@@ -1593,7 +1593,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// (e.g., timestep, gravity) without having to rebuild the simulation.
     ///
     /// **Not all model parameters are safe to change at runtime.**
-    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.7.0/programming/simulation.html#mjmodel-changes)
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.8.0/programming/simulation.html#mjmodel-changes)
     /// for a list of parameters that are safe to change.
     ///
     /// Only available when the inner model type `M` implements
