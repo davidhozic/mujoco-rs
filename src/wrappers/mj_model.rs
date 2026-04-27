@@ -780,6 +780,19 @@ impl MjModel {
         unsafe { mj_setTotalmass(self.ffi_mut(), newmass) }
     }
 
+    /// Return the maximum number of contacts that can be generated between two geoms.
+    /// 
+    /// To pull margin from model, set `has_margin` to [`None`], otherwise pass `true` or `false`
+    /// inside [`Some`] (true indicating a present margin). 
+    pub fn max_contacts(&self, geom1: usize, geom2: usize, has_margin: Option<bool>) -> u32 {
+        unsafe { mj_maxContact(
+            self.ffi(),
+            geom1 as i32, geom2 as i32,
+            // if Some(...), pass 0 or 1, otherwise pull from model (-1)
+            has_margin.map(|m| m as i32).unwrap_or(-1)
+        ) as u32 }
+    }
+
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
@@ -3721,5 +3734,27 @@ mod tests {
         assert_eq!(model.flex_bandwidth().len(), 0);
         assert_eq!(model.flex_cellnum().len(), 0);
         assert_eq!(model.flex_stiffnessadr().len(), 0);
+    }
+
+    /// Tests the wrapper of `mj_maxContact` ([`MjModel::max_contacts`]).
+    #[test]
+    fn test_max_contacts() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let geom1 = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere").unwrap();
+        let geom2 = model.name_to_id(MjtObj::mjOBJ_GEOM, "ball2").unwrap();
+
+        let mc = model.max_contacts(geom1, geom2, None);  // pull margin from model.
+        assert_eq!(mc, 1);
+
+        let mc = model.max_contacts(geom1, geom2, Some(false));
+        assert_eq!(mc, 1);
+
+        // Spheres always have one contact, regardless of margin.
+        let mc = model.max_contacts(geom1, geom2, Some(true));
+        assert_eq!(mc, 1);
+
+        // Geoms should not matter in case of spheres.
+        let mc = model.max_contacts(999, geom2, Some(true));
+        assert_eq!(mc, 1);
     }
 }

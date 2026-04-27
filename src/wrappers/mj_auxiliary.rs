@@ -195,6 +195,54 @@ impl MjVfs {
         }
     }
 
+    /// Check if file exists in VFS in the given directory.
+    /// 
+    /// A mutable borrow is required due to the internal mutex. 
+    /// 
+    /// # Panics
+    /// When `name` or `directory` contain path of non-UTF elements or with null elements.
+    pub fn contains_file_in<T: AsRef<Path>>(&mut self, directory: T, name: T) -> bool {
+        let c_name = if let Some(name) = name.as_ref().to_str() {
+            CString::new(name).unwrap()
+        } else {
+            return false;
+        };
+
+        let directory = if let Some(directory) = directory.as_ref().to_str() {
+            CString::new(directory).unwrap()
+        } else {
+            return false
+        }; 
+
+        unsafe { mj_containsFileVFS(
+            self.ffi_mut(),
+            directory.as_ptr(),
+            c_name.as_ptr()
+        ) != 0 }
+    }
+
+    /// Check if file exists in VFS.
+    /// 
+    /// Use [`MjVfs::contains_file_in`] to search within a directory.
+    /// 
+    /// A mutable borrow is required due to the internal mutex. 
+    /// 
+    /// # Panics
+    /// When `name` or `directory` contain path of non-UTF elements or with null elements.
+    pub fn contains_file<T: AsRef<Path>>(&mut self, name: T) -> bool {
+        let c_name = if let Some(name) = name.as_ref().to_str() {
+            CString::new(name).unwrap()
+        } else {
+            return false;
+        };
+
+        unsafe { mj_containsFileVFS(
+            self.ffi_mut(),
+            ptr::null(),
+            c_name.as_ptr()
+        ) != 0 }
+    }
+
     fn handle_add_result(result: i32) -> Result<(), MjVfsError> {
         match result {
             0 => Ok(()),
@@ -292,12 +340,16 @@ mod tests {
 
         /* No directory */
         vfs = MjVfs::new();
+        assert!(!vfs.contains_file(REAL_FILE_NAME));
         assert!(vfs.add_file(REAL_FILE_NAME).is_ok());
+        assert!(vfs.contains_file(REAL_FILE_NAME));
         drop(vfs);
 
         /* With directory */
         vfs = MjVfs::new();
+        assert!(!vfs.contains_file_in("./", REAL_FILE_NAME));
         assert!(vfs.add_file_from("./", REAL_FILE_NAME).is_ok());
+        assert!(vfs.contains_file_in("./", REAL_FILE_NAME));
 
         fs::remove_file(REAL_FILE_NAME).expect("could not delete the file from disk");
 
