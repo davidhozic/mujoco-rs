@@ -1609,7 +1609,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// It is the caller's responsibility to ensure the internal [`MjModel::signature`] matches the
     /// swapped model's signature in case of a swap.
     /// 
-    /// For safe swapping consider [`MjData::swap_model`] or [`MjData::try_swap_model`] for a failable alternative.
+    /// For safe swapping consider [`MjData::swap_model`] or [`MjData::try_swap_model`] for a fallible alternative.
     ///
     /// # Example
     /// ```rust

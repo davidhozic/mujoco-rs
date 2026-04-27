@@ -385,9 +385,9 @@ impl fmt::Display for MjModelError {
                 )
             }
             Self::VfsError(e) => write!(f, "VFS error: {e}"),
-            Self::InvalidIndex(index, max_index) => write!(
+            Self::InvalidIndex(index, length) => write!(
                 f,
-                "invalid index: {index} is out of bounds (max allowed index is {max_index})"
+                "invalid index: {index} is out of bounds (there are {length} elements available)"
             ),
         }
     }
