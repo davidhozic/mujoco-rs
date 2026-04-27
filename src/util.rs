@@ -33,6 +33,7 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
 /// set_flag!(flags, 0x01, true);   // sets bit 0
 /// set_flag!(flags, 0x01, false);  // clears bit 0
 /// ```
+#[doc(hidden)]
 #[macro_export]
 macro_rules! set_flag {
     ($flags:expr, $mask:expr, $enabled:expr) => {
@@ -943,10 +944,8 @@ macro_rules! array_slice_dyn {
 ///
 /// # Safety
 /// The generated getters blindly interpret a `char` array as a C string; the
-/// array must be NUL-terminated and contain valid UTF-8. Setters ensure
-/// ASCII and length bounds but the caller must still guarantee the destination
-/// buffer is large enough.  The macro itself simply emits the unsafe code
-/// without additional checks.
+/// array must be NUL-terminated and contain valid UTF-8. Setters validate
+/// ASCII encoding and will **panic** if the value exceeds the buffer length.
 /// The macro works by first specifying the methods to create (get = getter, set = setter) --- c_str_as_str_method {get, set, {...}} ---
 /// and then providing the rest of the parameters.
 /// 

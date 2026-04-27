@@ -328,7 +328,8 @@ impl MjModel {
         MjData::try_new(self)
     }
 
-    /// Handles the pointer to the model.
+    /// Wraps a raw model pointer returned by MuJoCo load functions.
+    /// Returns an error with the C error-buffer message if the pointer is null.
     fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[c_char]) -> Result<Self, MjModelError> {
         match NonNull::new(ptr_model) {
             Some(nn) => Ok(Self(nn)),

@@ -77,8 +77,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Fallible version of [`MjData::new`].
     ///
     /// # Errors
-    /// Returns `Ok(MjData)` on success, or [`MjDataError::AllocationFailed`] if
-    /// MuJoCo returns a null pointer from `mj_makeData`.
+    /// Returns [`MjDataError::AllocationFailed`] if MuJoCo returns a null pointer from `mj_makeData`.
     ///
     /// Prefer this method over [`MjData::new`] when you want to handle
     /// allocation failures without a panic.
@@ -1482,7 +1481,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Returns a direct pointer to the underlying data.
     /// Returns a direct mutable pointer to the underlying C data struct.
     /// Only for internal use by viewer code that passes the pointer to C++ FFI.
     #[cfg(feature = "cpp-viewer")]
@@ -1602,7 +1600,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     ///
     /// Only available when the inner model type `M` implements
     /// [`DerefMut<Target = MjModel>`](std::ops::DerefMut)
-    /// (e.g., owned [`MjModel`], `Box<MjModel>`).
+    /// (e.g., `Box<MjModel>`, `&mut MjModel`).
     /// Shared-ownership types such as `Arc<MjModel>` do not provide mutable
     /// access; use [`swap_model`](MjData::swap_model) instead.
     /// 
@@ -1630,7 +1628,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// Returns a mutable reference to [`MjModel::opt_mut`] without allowing unsafe
     /// modifications to the rest of the [`MjModel`].
     /// 
-    /// Immutable references can be made through [`MjData::model`].
+    /// Immutable references can be made through [`MjData::model_opt`].
     /// 
     /// Can be used to modify the physics parameters.
     /// # Example
@@ -1648,7 +1646,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// Returns a mutable reference to [`MjModel::vis_mut`] without allowing unsafe
     /// modifications to the rest of the [`MjModel`].
     /// 
-    /// Immutable references can be made through [`MjData::model`].
+    /// Immutable references can be made through [`MjData::model_vis`].
     /// 
     /// Can be used to modify the visualization parameters.
     /// # Example

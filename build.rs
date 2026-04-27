@@ -100,7 +100,7 @@ mod build_dependencies {
         fdata = re.replace_all(&fdata, "*$1 $2").to_string();
 
         // Wrap ThreeWayMerge in cfg_attr so it is only derived when the viewer feature is active.
-        re = regex::Regex::new(r"(#\[derive\([^)]*?), mujoco_rs_derive :: ThreeWayMerge(\)\])").unwrap();
+        re = regex::Regex::new(r"(#\[derive\([^)]*?),\s*mujoco_rs_derive\s*::\s*ThreeWayMerge(\)\])").unwrap();
         fdata = re.replace_all(
             &fdata,
             "#[cfg_attr(feature = \"viewer\", derive(mujoco_rs_derive::ThreeWayMerge))]\n$1$2",

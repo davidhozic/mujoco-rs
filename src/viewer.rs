@@ -205,11 +205,11 @@ pub struct ViewerSharedState {
     /// Preallocated buffer for storing the new [`MjData`] state.
     data_state_buffer: Box<[MjtNum]>,
     /// Timestamp when physics options (opt) were last synced
-    last_opt_change_time: Instant,
+    last_opt_sync_time: Instant,
     /// Timestamp when visualization options (vis) were last synced
-    last_vis_change_time: Instant,
+    last_vis_sync_time: Instant,
     /// Timestamp when statistics (stat) were last synced
-    last_stat_change_time: Instant,
+    last_stat_sync_time: Instant,
 
     /* Model parameter change tracking */
     prev_opt: MjOption,
@@ -235,9 +235,9 @@ impl ViewerSharedState {
             running: Arc::new(AtomicBool::new(true)),
             last_sync_time: Instant::now(),
             realtime_factor_smooth: 1.0,
-            last_opt_change_time: Instant::now(),
-            last_vis_change_time: Instant::now(),
-            last_stat_change_time: Instant::now(),
+            last_opt_sync_time: Instant::now(),
+            last_vis_sync_time: Instant::now(),
+            last_stat_sync_time: Instant::now(),
             /* Model parameter change tracking */
             prev_opt: MjOption::default(),
             prev_vis: MjVisual::default(),
@@ -249,7 +249,8 @@ impl ViewerSharedState {
     }
 
     /// Reinitializes all model-dependent internal state.
-    /// Called on construction and whenever [`_sync_data`](Self::_sync_data) detects a model change.
+    /// Called on construction and whenever [`_sync_data`](Self::_sync_data) or
+    /// [`sync_model`](Self::sync_model) detects a model change.
     fn reload_model(&mut self, model: &MjModel, max_user_geom: usize) {
         let model_passive = Box::new(model.clone());
         self.data_passive = MjData::new(model_passive);
@@ -288,10 +289,15 @@ impl ViewerSharedState {
         &mut self.user_scene
     }
 
-    /// Syncs model parameters between passive and incoming model bidirectionally.
-    /// Detects model changes via signature comparison and reloads if needed.
-    /// When a reload occurs, model parameters are NOT synced (reset to new model defaults).
-    /// Otherwise, passive model's parameter changes are propagated to the incoming model.
+    /// Performs a bidirectional three-way merge of model parameters between the
+    /// viewer's passive model and the incoming model.
+    ///
+    /// Detects model changes via signature comparison and reloads internal state if needed.
+    /// After a reload, the passive model mirrors the incoming model's current defaults, so
+    /// the first merge after reload is effectively a no-op (both sides agree).
+    /// On subsequent calls, changes made by the viewer UI (e.g., modified physics options)
+    /// are propagated to the incoming model, and changes made by the simulation are
+    /// propagated back to the viewer.
     pub fn sync_model(&mut self, model: &mut MjModel) {
         // Check if model signature changed
         if model.signature() != self.data_passive.model().signature() {
@@ -305,44 +311,49 @@ impl ViewerSharedState {
         self.sync_model_stat(model.stat_mut());
     }
 
-    /// Syncs the model's [`MjModel::opt`] from the viewer's passive state to the
-    /// provided option struct. This allows updating physics options without requiring
-    /// `unsafe` access via [`MjData::model_mut`].
+    /// Performs a bidirectional three-way merge of [`MjModel::opt`] between the viewer's
+    /// passive model and the provided option struct.
+    ///
+    /// Changes made by the viewer UI are written to `opt`; changes made to `opt` externally
+    /// are written back to the viewer's passive model.
     pub fn sync_model_opt(&mut self, opt: &mut MjOption) {
-        // three_way_byte_merge(opt, self.data_passive.model_opt_mut(), &mut self.prev_opt);
         ThreeWayMerge::merge(opt, self.data_passive.model_opt_mut(), &mut self.prev_opt);
-        self.last_opt_change_time = Instant::now();
+        self.last_opt_sync_time = Instant::now();
     }
 
-    /// Syncs the model's [`MjModel::vis`] from the viewer's passive state to the
-    /// provided visual struct. This allows updating visualization options without requiring
-    /// `unsafe` access via [`MjData::model_mut`].
+    /// Performs a bidirectional three-way merge of [`MjModel::vis`] between the viewer's
+    /// passive model and the provided visual struct.
+    ///
+    /// Changes made by the viewer UI are written to `vis`; changes made to `vis` externally
+    /// are written back to the viewer's passive model.
     pub fn sync_model_vis(&mut self, vis: &mut MjVisual) {
         ThreeWayMerge::merge(vis, self.data_passive.model_vis_mut(), &mut self.prev_vis);
-        self.last_vis_change_time = Instant::now();
+        self.last_vis_sync_time = Instant::now();
     }
 
-    /// Syncs the model's [`MjModel::stat`] from the viewer's passive state to the
-    /// provided statistic struct. This allows updating model statistics without requiring
-    /// `unsafe` access via [`MjData::model_mut`].
+    /// Performs a bidirectional three-way merge of [`MjModel::stat`] between the viewer's
+    /// passive model and the provided statistic struct.
+    ///
+    /// Changes made by the viewer UI are written to `stat`; changes made to `stat` externally
+    /// are written back to the viewer's passive model.
     pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {
         ThreeWayMerge::merge(stat, self.data_passive.model_stat_mut(), &mut self.prev_stat);
-        self.last_stat_change_time = Instant::now();
+        self.last_stat_sync_time = Instant::now();
     }
 
     /// Returns the last time physics options (opt) were synced.
     pub fn last_opt_sync_time(&self) -> Instant {
-        self.last_opt_change_time
+        self.last_opt_sync_time
     }
 
     /// Returns the last time visualization options (vis) were synced.
     pub fn last_vis_sync_time(&self) -> Instant {
-        self.last_vis_change_time
+        self.last_vis_sync_time
     }
 
     /// Returns the last time statistics (stat) were synced.
     pub fn last_stat_sync_time(&self) -> Instant {
-        self.last_stat_change_time
+        self.last_stat_sync_time
     }
 
     /// Same as [`ViewerSharedState::sync_data`], except it copies the entire [`MjData`]
@@ -613,13 +624,11 @@ impl MjViewer {
     /// It also receives a mutable reference to [`MjData`], which can be used to read
     /// and modify simulation state. Note that the model can be accessed through [`MjData::model`].
     ///
-    /// This method is only available when the `viewer-ui` feature is enabled.
-    ///
     /// # Note
     /// The viewer's internal shared-state [`Mutex`] is **held for the entire
     /// duration of the callback** (because `data` is a live borrow of the guarded
     /// `data_passive` field). Do **not** attempt to lock the shared state again from
-    /// within the callback as that will deadlock the viewer thread:
+    /// within the callback as that will deadlock the viewer thread.
     ///
     /// # Example
     /// ```no_run
@@ -713,37 +722,42 @@ impl MjViewer {
         self.shared_state.lock_unpoison().sync_data(data);
     }
 
-    /// Syncs model parameters between passive and incoming model bidirectionally.
+    /// Performs a bidirectional three-way merge of model parameters between the
+    /// viewer's passive model and the incoming model.
     /// This is a proxy to [`ViewerSharedState::sync_model`].
-    /// 
-    /// Detects model changes via signature comparison and reloads if needed.
-    /// When a reload occurs, model parameters are NOT synced (reset to new model defaults).
-    /// Otherwise, passive model's parameter changes are propagated to the incoming model.
+    ///
+    /// Detects model changes via signature comparison and reloads internal state if needed.
+    /// After a reload, the passive model mirrors the incoming model's defaults, so the
+    /// first merge is effectively a no-op. On subsequent calls, viewer UI changes and
+    /// simulation-side changes are merged bidirectionally.
     pub fn sync_model(&mut self, model: &mut MjModel) {
         self.shared_state.lock_unpoison().sync_model(model);
     }
 
-    /// Syncs the model's [`MjModel::opt`] from the viewer's passive state to the
-    /// provided option struct. This is a proxy to [`ViewerSharedState::sync_model_opt`].
-    /// 
+    /// Performs a bidirectional three-way merge of [`MjModel::opt`] between the viewer's
+    /// passive model and the provided option struct.
+    /// This is a proxy to [`ViewerSharedState::sync_model_opt`].
+    ///
     /// This allows updating physics options without requiring `unsafe` access via
     /// [`MjData::model_mut`] or manipulating the viewer's shared state directly.
     pub fn sync_model_opt(&mut self, opt: &mut MjOption) {
         self.shared_state.lock_unpoison().sync_model_opt(opt);
     }
 
-    /// Syncs the model's [`MjModel::vis`] from the viewer's passive state to the
-    /// provided visual struct. This is a proxy to [`ViewerSharedState::sync_model_vis`].
-    /// 
+    /// Performs a bidirectional three-way merge of [`MjModel::vis`] between the viewer's
+    /// passive model and the provided visual struct.
+    /// This is a proxy to [`ViewerSharedState::sync_model_vis`].
+    ///
     /// This allows updating visualization options without requiring `unsafe` access via
     /// [`MjData::model_mut`] or manipulating the viewer's shared state directly.
     pub fn sync_model_vis(&mut self, vis: &mut MjVisual) {
         self.shared_state.lock_unpoison().sync_model_vis(vis);
     }
 
-    /// Syncs the model's [`MjModel::stat`] from the viewer's passive state to the
-    /// provided statistic struct. This is a proxy to [`ViewerSharedState::sync_model_stat`].
-    /// 
+    /// Performs a bidirectional three-way merge of [`MjModel::stat`] between the viewer's
+    /// passive model and the provided statistic struct.
+    /// This is a proxy to [`ViewerSharedState::sync_model_stat`].
+    ///
     /// This allows updating model statistics without requiring `unsafe` access via
     /// [`MjData::model_mut`] or manipulating the viewer's shared state directly.
     pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {

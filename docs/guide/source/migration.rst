@@ -133,6 +133,29 @@ ones.
     let mut old_model = data.swap_model(new_model);
 
 
+``MjViewer::add_ui_callback`` closure now receives ``Box<MjModel>``
+--------------------------------------------------------------------
+The passive model stored inside the viewer changed from ``Arc<MjModel>`` to
+``Box<MjModel>``. The closure passed to
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`
+now receives ``&mut MjData<Box<MjModel>>``.
+
+**Before (3.x):**
+
+.. code-block:: rust
+
+    viewer.add_ui_callback(|ctx, data: &mut MjData<Arc<MjModel>>| { ... });
+
+**After (4.0.0):**
+
+.. code-block:: rust
+
+    viewer.add_ui_callback(|ctx, data: &mut MjData<Box<MjModel>>| { ... });
+
+Type annotations in closure parameters must be updated if present.
+Closures without an explicit type annotation require no change.
+
+
 .. _migrate_3_0_0:
 
 Migrating to 3.0.0

@@ -483,7 +483,7 @@ impl ViewerUI {
                                 ui.label(RichText::new("Integrator").font(MAIN_FONT));
                                 let combo_width = ui.available_width().min(MAX_SPAN_WIDTH);
 
-                                let current_integrator = INTEGRATOR_MAP[options.integrator as usize];
+                                let current_integrator = INTEGRATOR_MAP.get(options.integrator as usize).copied().unwrap_or("Unknown");
                                 let mut integrator_idx = options.integrator as usize;
                                 egui::ComboBox::from_id_salt("integrator_combo")
                                     .selected_text(current_integrator)
@@ -497,7 +497,7 @@ impl ViewerUI {
                                 ui.end_row();
 
                                 ui.label(RichText::new("Cone").font(MAIN_FONT));
-                                let current_cone = CONE_MAP[options.cone as usize];
+                                let current_cone = CONE_MAP.get(options.cone as usize).copied().unwrap_or("Unknown");
                                 let mut cone_idx = options.cone as usize;
                                 egui::ComboBox::from_id_salt("cone_combo")
                                     .selected_text(current_cone)
@@ -511,7 +511,7 @@ impl ViewerUI {
                                 ui.end_row();
 
                                 ui.label(RichText::new("Jacobian").font(MAIN_FONT));
-                                let current_jacobian = JACOBIAN_MAP[options.jacobian as usize];
+                                let current_jacobian = JACOBIAN_MAP.get(options.jacobian as usize).copied().unwrap_or("Unknown");
                                 let mut jacobian_idx = options.jacobian as usize;
                                 egui::ComboBox::from_id_salt("jacobian_combo")
                                     .selected_text(current_jacobian)
@@ -525,7 +525,7 @@ impl ViewerUI {
                                 ui.end_row();
 
                                 ui.label(RichText::new("Solver").font(MAIN_FONT));
-                                let current_solver = SOLVER_MAP[options.solver as usize];
+                                let current_solver = SOLVER_MAP.get(options.solver as usize).copied().unwrap_or("Unknown");
                                 let mut solver_idx = options.solver as usize;
                                 egui::ComboBox::from_id_salt("solver_combo")
                                     .selected_text(current_solver)
@@ -1484,13 +1484,12 @@ impl ViewerUI {
                         ui.heading("Select the body to track");
                         ui.separator();
 
-                        let nbody = shared_viewer_state.lock_unpoison().data_passive.model().nbody();
-
                         egui::ScrollArea::vertical()
                             .max_height(CAMERA_MODAL_MAX_HEIGHT)
                             .show(ui, |ui| {
                                 let lock = shared_viewer_state.lock_unpoison();
                                 let model = lock.data_passive.model();
+                                let nbody = model.nbody();
 
                                 egui::Grid::new("body_grid")
                                     .num_columns(CAMERA_MODAL_BUTTONS_PER_ROW)
