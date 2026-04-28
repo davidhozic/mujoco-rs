@@ -191,6 +191,7 @@ const DISABLE_FLAGS: &[(&str, MjtDisableBit)] = &[
     ("Auto Reset", MjtDisableBit::mjDSBL_AUTORESET),
     ("Native CCD", MjtDisableBit::mjDSBL_NATIVECCD),
     ("Island", MjtDisableBit::mjDSBL_ISLAND),
+    ("Multi CCD", MjtDisableBit::mjDSBL_MULTICCD),
 ];
 const _: () = assert!(DISABLE_FLAGS.len() == crate::mujoco_c::mjtDisableBit_::mjNDISABLE as usize);
 
@@ -200,7 +201,6 @@ const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
     ("Energy", MjtEnableBit::mjENBL_ENERGY),
     ("Forward Inverse", MjtEnableBit::mjENBL_FWDINV),
     ("Inverse Discrete", MjtEnableBit::mjENBL_INVDISCRETE),
-    ("Multi CCD", MjtEnableBit::mjENBL_MULTICCD),
     ("Sleep", MjtEnableBit::mjENBL_SLEEP),
 ];
 const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit_::mjNENABLE as usize);

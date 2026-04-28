@@ -5,7 +5,7 @@
 [![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
 
 > [!IMPORTANT]
-> **Upgrading from 3.x to 4.0.0?** This release updates MuJoCo to 3.7.0.
+> **Upgrading from 3.x to 4.0.0?** This release updates MuJoCo to 3.8.0.
 > Read the [migration guide](https://mujoco-rs.readthedocs.io/en/v4.0.x/migration.html)
 > before upgrading.
 
@@ -20,7 +20,7 @@ More detailed documentation is available at the:
 - [**Guide book**](https://mujoco-rs.readthedocs.io/en/v4.0.x/)
 
 ## MuJoCo version
-This library uses FFI bindings to MuJoCo **3.7.0**.
+This library uses FFI bindings to MuJoCo **3.8.0**.
 
 ## Minimum Rust version
 Rust version 1.88 or newer is required.

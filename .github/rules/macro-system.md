@@ -41,6 +41,7 @@ Convenience lookups that map a total-count field name to the corresponding addre
 | `nnumericdata` | `numeric_adr` | `nnumeric` |
 | `nhfielddata` | `hfield_adr` | `nhfield` |
 | `na` | `actuator_actadr` | `nu` |
+| `nJten` | `ten_J_rowadr` | `ntendon` |
 
 ### `array_slice_dyn!` - three variants
 Creates raw-pointer slices safely (null-pointer and zero-length guarded):

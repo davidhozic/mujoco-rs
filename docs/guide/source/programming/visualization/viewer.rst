@@ -31,7 +31,7 @@ A screenshot of the Rust 3D viewer is shown below.
 
     Rust-native interactive 3D viewer.
     Showing the `Spot <https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot>`_ scene from
-    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.7.0/models.html>`_.
+    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.8.0/models.html>`_.
 
 The viewer can be launched only in **passive mode**, i.e. it won't run as a separate application,
 and needs to be periodically "synced" by the user application.

@@ -103,7 +103,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Notes
     /// This method only validates model-signature compatibility.
     /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
-    /// See [here](https://mujoco.readthedocs.io/en/3.7.0/programming/simulation.html#mjmodel-changes)
+    /// See [here](https://mujoco.readthedocs.io/en/3.8.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
     /// 
     /// If `M` implements [`DerefMut`], prefer
@@ -158,7 +158,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     info_method! { Data, model.ffi(), body, [
         xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10,
-        crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6
+        crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6,
+        awake: 1
     ], [], []}
     info_method! { Data, model.ffi(), camera, [xpos: 3, xmat: 9], [], []}
     info_method! { Data, model.ffi(), geom, [xpos: 3, xmat: 9], [], []}
@@ -210,9 +211,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             let qfrc_damper = nv_range;
             let qfrc_gravcomp = nv_range;
             let qfrc_fluid = nv_range;
-            /* Special case attributes, used for some internal calculation */
-            // cdof
-            // cdof_dot
 
             let model_signature = self.model.signature();
             Some(MjJointDataInfo {name: name.to_string(), id: id as usize, model_signature,
@@ -227,7 +225,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
 
     info_method! { Data, model.ffi(), tendon,
-        [wrapadr: 1, wrapnum: 1, length: 1, velocity: 1],
+        [wrapadr: 1, wrapnum: 1, efcadr: 1, length: 1, velocity: 1],
         [],
         [J: nJten]
     }
@@ -1595,7 +1593,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// (e.g., timestep, gravity) without having to rebuild the simulation.
     ///
     /// **Not all model parameters are safe to change at runtime.**
-    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.7.0/programming/simulation.html#mjmodel-changes)
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.8.0/programming/simulation.html#mjmodel-changes)
     /// for a list of parameters that are safe to change.
     ///
     /// Only available when the inner model type `M` implements
@@ -1611,7 +1609,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// It is the caller's responsibility to ensure the internal [`MjModel::signature`] matches the
     /// swapped model's signature in case of a swap.
     /// 
-    /// For safe swapping consider [`MjData::swap_model`] or [`MjData::try_swap_model`] for a failable alternative.
+    /// For safe swapping consider [`MjData::swap_model`] or [`MjData::try_swap_model`] for a fallible alternative.
     ///
     /// # Example
     /// ```rust
@@ -1896,7 +1894,7 @@ info_with_view!(Data, body,
      cacc: MjtNum,
      cfrc_int: MjtNum,
      cfrc_ext: MjtNum],
-    [],
+    [[body_] awake: MjtSleepState [force]],
     [], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, camera,
@@ -1956,7 +1954,8 @@ info_with_view!(Data, tendon,
      [ten_] length: MjtNum,
      [ten_] velocity: MjtNum],
     [[ten_] wrapadr: i32,
-     [ten_] wrapnum: i32],
+     [ten_] wrapnum: i32,
+     [tendon_] efcadr: i32],
     [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
@@ -4901,6 +4900,63 @@ mod test {
             (data.energy()[0] - 1.23).abs() < 1e-12,
             "written energy value must be readable back"
         );
+    }
+
+    /// Verifies that the body view `awake` field returns a single-element slice
+    /// that matches the corresponding entry in `data.body_awake()`.
+    #[test]
+    fn test_body_view_awake_field() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let body_info = data.body("b_free").unwrap();
+        let view = body_info.view(&data);
+
+        /* Verify field dimensions */
+        assert_eq!(view.awake.len(), 1);
+
+        /* Verify alignment with the top-level array slice */
+        assert_eq!(view.awake[0], data.body_awake()[body_info.id]);
+    }
+
+    /// Verifies that the tendon view `efcadr` field returns a single-element slice
+    /// that matches the corresponding entry in `data.tendon_efcadr()`.
+    #[test]
+    fn test_tendon_view_efcadr_field() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let tendon_info = data.tendon("ten1").unwrap();
+        let view = tendon_info.view(&data);
+
+        /* Verify field dimensions */
+        assert_eq!(view.efcadr.len(), 1);
+
+        /* Verify alignment with the top-level array slice */
+        assert_eq!(view.efcadr[0], data.tendon_efcadr()[tendon_info.id]);
+    }
+
+    /// Verifies that `dof_island`, `map_dof2idof`, and `dof_awake_ind` all have
+    /// length `nv` and are backed by the correct FFI pointers.
+    #[test]
+    fn test_dof_island_map_dof2idof_dof_awake_ind_lengths() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nv = model.ffi().nv as usize;
+
+        assert_eq!(data.dof_island().len(), nv);
+        assert_eq!(data.map_dof2idof().len(), nv);
+        assert_eq!(data.dof_awake_ind().len(), nv);
+
+        for i in 0..nv {
+            assert_eq!(data.dof_island()[i], unsafe { *data.ffi().dof_island.add(i) });
+            assert_eq!(data.map_dof2idof()[i], unsafe { *data.ffi().map_dof2idof.add(i) });
+            assert_eq!(data.dof_awake_ind()[i], unsafe { *data.ffi().dof_awake_ind.add(i) });
+        }
     }
 
     /// Exercises the `eval_or_expand! @eval false` path via

@@ -24,14 +24,14 @@ For a full list of changes, see the :ref:`changelog`.
 Migrating to 4.0.0
 ======================
 
-Version 4.0.0 updates MuJoCo to 3.7.0 and follows the upstream API changes in
+Version 4.0.0 updates MuJoCo to 3.8.0 and follows the upstream API changes in
 ``mj_geomDistance`` and the model-editing specification structs.
 
 
 MuJoCo upgrade
 -----------------------
 
-MuJoCo-rs 4.0.0 links against MuJoCo **3.7.0**. Download the matching release
+MuJoCo-rs 4.0.0 links against MuJoCo **3.8.0**. Download the matching release
 and update your library path. See :ref:`installation` for details.
 
 

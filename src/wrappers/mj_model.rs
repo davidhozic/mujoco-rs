@@ -440,7 +440,11 @@ impl MjModel {
     info_method! { Model, ffi(), mesh,
         [vertadr: 1, vertnum: 1,
         texcoordadr: 1, faceadr: 1,
-        facenum: 1, graphadr: 1],
+        facenum: 1, graphadr: 1,
+        normaladr: 1, normalnum: 1, texcoordnum: 1,
+        bvhadr: 1, bvhnum: 1, octadr: 1, octnum: 1,
+        pathadr: 1, polynum: 1, polyadr: 1,
+        scale: 3, pos: 3, quat: 4],
         [],
         []
     }
@@ -776,6 +780,40 @@ impl MjModel {
         unsafe { mj_setTotalmass(self.ffi_mut(), newmass) }
     }
 
+    /// Return the maximum number of contacts that can be generated between two geoms.
+    /// 
+    /// To pull margin from model, set `has_margin` to [`None`], otherwise pass `true` or `false`
+    /// inside [`Some`] (true indicating a present margin). 
+    /// 
+    /// # Panics
+    /// Panics when either `geom1` or `geom2` are equal or greater than [`MjModel::ngeom`].
+    /// Use [`MjModel::try_max_contacts`] for a fallible alternative.
+    pub fn max_contacts(&self, geom1: usize, geom2: usize, has_margin: Option<bool>) -> u32 {
+        self.try_max_contacts(geom1, geom2, has_margin).unwrap()
+    }
+
+    /// Fallible version of [`MjModel::max_contacts`].
+    /// # Errors
+    /// Returns [`MjModelError::InvalidIndex`] when either `geom1` or `geom2` are equal or greater than [`MjModel::ngeom`].
+    pub fn try_max_contacts(&self, geom1: usize, geom2: usize, has_margin: Option<bool>) -> Result<u32, MjModelError> {
+        let ngeom = self.ngeom() as usize;
+
+        if geom1 >= ngeom {
+            return Err(MjModelError::InvalidIndex(geom1, ngeom));
+        }
+
+        if geom2 >= ngeom {
+            return Err(MjModelError::InvalidIndex(geom2, ngeom));
+        }
+
+        Ok(unsafe { mj_maxContact(
+            self.ffi(),
+            geom1 as i32, geom2 as i32,
+            // if Some(...), pass 0 or 1, otherwise pull from model (-1)
+            has_margin.map(|m| m as i32).unwrap_or(-1)
+        ) as u32 })
+    }
+
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
@@ -836,6 +874,7 @@ impl MjModel {
         [ffi] nflexedge: MjtSize; "number of edges in all flexes.";
         [ffi] nflexelem: MjtSize; "number of elements in all flexes.";
         [ffi] nflexelemdata: MjtSize; "number of element vertex ids in all flexes.";
+        [ffi] nflexstiffness: MjtSize; "number of stiffness parameters in all flexes.";
         [ffi] nflexelemedge: MjtSize; "number of element edge ids in all flexes.";
         [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
         [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
@@ -1076,6 +1115,8 @@ impl MjModel {
         (unsafe) flex_matid: &[i32; "material id for rendering"; ffi().nflex],
         flex_group: &[i32; "group for visibility"; ffi().nflex],
         (unsafe) flex_interp: &[i32; "interpolation (0: vertex, 1: nodes)"; ffi().nflex],
+        (unsafe) flex_bandwidth: &[i32; "precomputed solver bandwidth"; ffi().nflex],
+        (unsafe) flex_cellnum: &[[i32; 3] [force]; "finite cell num per dimension"; ffi().nflex],
         (unsafe) flex_nodeadr: &[i32; "first node address"; ffi().nflex],
         (unsafe) flex_nodenum: &[i32; "number of nodes"; ffi().nflex],
         (unsafe) flex_vertadr: &[i32; "first vertex address"; ffi().nflex],
@@ -1085,6 +1126,7 @@ impl MjModel {
         (unsafe) flex_elemadr: &[i32; "first element address"; ffi().nflex],
         (unsafe) flex_elemnum: &[i32; "number of elements"; ffi().nflex],
         (unsafe) flex_elemdataadr: &[i32; "first element vertex id address"; ffi().nflex],
+        (unsafe) flex_stiffnessadr: &[i32; "stiffness matrix address"; ffi().nflex],
         (unsafe) flex_elemedgeadr: &[i32; "first element edge id address"; ffi().nflex],
         (unsafe) flex_shellnum: &[i32; "number of shells"; ffi().nflex],
         (unsafe) flex_shelldataadr: &[i32; "first shell data address"; ffi().nflex],
@@ -1113,7 +1155,7 @@ impl MjModel {
         flexedge_invweight0: &[MjtNum; "edge inv. weight in qpos0"; ffi().nflexedge],
         flex_radius: &[MjtNum; "radius around primitive element"; ffi().nflex],
         flex_size: &[[MjtNum; 3] [force]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
-        flex_stiffness: &[[MjtNum; 21] [force]; "finite element stiffness matrix"; ffi().nflexelem],
+        flex_stiffness: &[MjtNum; "finite element stiffness matrix"; ffi().nflexstiffness],
         flex_bending: &[[MjtNum; 17] [force]; "bending stiffness"; ffi().nflexedge],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
@@ -1571,13 +1613,25 @@ info_with_view!(Model, material,
 	[]);
 
 info_with_view!(Model, mesh,
-	[],
+	[[mesh_] scale: MjtNum,
+	 [mesh_] pos: MjtNum,
+	 [mesh_] quat: MjtNum],
 	[[mesh_] vertadr: i32,
 	 [mesh_] vertnum: i32,
 	 [mesh_] texcoordadr: i32,
 	 [mesh_] faceadr: i32,
 	 [mesh_] facenum: i32,
-	 [mesh_] graphadr: i32],
+	 [mesh_] graphadr: i32,
+	 [mesh_] normaladr: i32,
+	 [mesh_] normalnum: i32,
+	 [mesh_] texcoordnum: i32,
+	 [mesh_] bvhadr: i32,
+	 [mesh_] bvhnum: i32,
+	 [mesh_] octadr: i32,
+	 [mesh_] octnum: i32,
+	 [mesh_] pathadr: i32,
+	 [mesh_] polynum: i32,
+	 [mesh_] polyadr: i32],
 	[]);
 
 info_with_view!(Model, numeric,
@@ -3640,5 +3694,87 @@ mod tests {
         assert!(result.is_err(), "loading invalid XML must return Err");
         let msg = result.unwrap_err().to_string();
         assert!(!msg.is_empty(), "error message must not be empty for invalid XML");
+    }
+
+    /// Verifies the new mesh view fields added in MuJoCo 3.8.0:
+    /// read-only index fields (`normaladr`, `normalnum`, etc.) have length 1,
+    /// and the read-write fields (`scale`, `pos`, `quat`) have the right length
+    /// and survive a roundtrip write.
+    #[test]
+    fn test_mesh_view_new_fields() {
+        const MESH_MODEL: &str = "<mujoco>\
+          <asset>\
+            <mesh name=\"cube\" vertex=\"-0.5 -0.5 -0.5  0.5 -0.5 -0.5  -0.5  0.5 -0.5  0.5  0.5 -0.5  \
+                                         -0.5 -0.5  0.5  0.5 -0.5  0.5  -0.5  0.5  0.5  0.5  0.5  0.5\"/>\
+          </asset>\
+          <worldbody>\
+            <geom type=\"mesh\" mesh=\"cube\"/>\
+          </worldbody>\
+        </mujoco>";
+
+        let mut model = MjModel::from_xml_string(MESH_MODEL).unwrap();
+        let mesh_info = model.mesh("cube").unwrap();
+
+        let view = mesh_info.view(&model);
+
+        /* Verify field dimensions for read-write fields */
+        assert_eq!(view.scale.len(), 3);
+        assert_eq!(view.pos.len(), 3);
+        assert_eq!(view.quat.len(), 4);
+
+        /* Verify field dimensions for read-only index fields */
+        assert_eq!(view.normaladr.len(), 1);
+        assert_eq!(view.normalnum.len(), 1);
+        assert_eq!(view.texcoordnum.len(), 1);
+        assert_eq!(view.bvhadr.len(), 1);
+        assert_eq!(view.bvhnum.len(), 1);
+        assert_eq!(view.octadr.len(), 1);
+        assert_eq!(view.octnum.len(), 1);
+        assert_eq!(view.pathadr.len(), 1);
+        assert_eq!(view.polynum.len(), 1);
+        assert_eq!(view.polyadr.len(), 1);
+
+        /* Verify write-read roundtrip for scale */
+        let mut view_mut = mesh_info.view_mut(&mut model);
+        view_mut.scale[0] = 2.0;
+        view_mut.scale[1] = 3.0;
+        view_mut.scale[2] = 4.0;
+
+        let view2 = mesh_info.view(&model);
+        assert_eq!(view2.scale[0], 2.0);
+        assert_eq!(view2.scale[1], 3.0);
+        assert_eq!(view2.scale[2], 4.0);
+    }
+
+    /// Verifies that `flex_bandwidth`, `flex_cellnum`, and `flex_stiffnessadr`
+    /// return empty slices when the model contains no flex bodies.
+    #[test]
+    fn test_flex_array_slices_empty_for_non_flex_model() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        assert_eq!(model.ffi().nflex, 0);
+        assert_eq!(model.flex_bandwidth().len(), 0);
+        assert_eq!(model.flex_cellnum().len(), 0);
+        assert_eq!(model.flex_stiffnessadr().len(), 0);
+    }
+
+    /// Tests the wrapper of `mj_maxContact` ([`MjModel::max_contacts`]).
+    #[test]
+    fn test_max_contacts() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let geom1 = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere").unwrap();
+        let geom2 = model.name_to_id(MjtObj::mjOBJ_GEOM, "ball2").unwrap();
+
+        let mc = model.max_contacts(geom1, geom2, None);  // pull margin from model.
+        assert_eq!(mc, 1);
+
+        let mc = model.max_contacts(geom1, geom2, Some(false));
+        assert_eq!(mc, 1);
+
+        // Spheres always have one contact, regardless of margin.
+        let mc = model.max_contacts(geom1, geom2, Some(true));
+        assert_eq!(mc, 1);
+
+        // Test invalid geom index.
+        assert!( model.try_max_contacts(999, geom2, Some(true)).is_err());
     }
 }

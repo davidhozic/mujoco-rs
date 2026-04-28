@@ -119,8 +119,10 @@ To stop the server: `kill <PID>`.
 
 ## Running natively (without WASM)
 
+Check `Cargo.toml` for the current MuJoCo version (`+mj-X.Y.Z`) and replace `X.Y.Z` below:
+
 ```bash
-LIB_PATH=$(realpath mujoco-3.6.0/lib)
+LIB_PATH=$(realpath mujoco-X.Y.Z/lib)
 MUJOCO_DYNAMIC_LINK_DIR="$LIB_PATH" LD_LIBRARY_PATH="$LIB_PATH" \
     cargo run --example basic
 ```
