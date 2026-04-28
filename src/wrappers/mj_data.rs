@@ -1,6 +1,8 @@
 //! MjData related.
 use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
+use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
+use crate::wrappers::mj_option::MjOption;
 use crate::{getter_setter, mujoco_c::*};
 use crate::error::MjDataError;
 
@@ -75,8 +77,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Fallible version of [`MjData::new`].
     ///
     /// # Errors
-    /// Returns `Ok(MjData)` on success, or [`MjDataError::AllocationFailed`] if
-    /// MuJoCo returns a null pointer from `mj_makeData`.
+    /// Returns [`MjDataError::AllocationFailed`] if MuJoCo returns a null pointer from `mj_makeData`.
     ///
     /// Prefer this method over [`MjData::new`] when you want to handle
     /// allocation failures without a panic.
@@ -102,7 +103,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Notes
     /// This method only validates model-signature compatibility.
     /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
-    /// See [here](https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes)
+    /// See [here](https://mujoco.readthedocs.io/en/3.8.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
     /// 
     /// If `M` implements [`DerefMut`], prefer
@@ -157,7 +158,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     info_method! { Data, model.ffi(), body, [
         xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10,
-        crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6
+        crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6,
+        awake: 1
     ], [], []}
     info_method! { Data, model.ffi(), camera, [xpos: 3, xmat: 9], [], []}
     info_method! { Data, model.ffi(), geom, [xpos: 3, xmat: 9], [], []}
@@ -209,9 +211,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             let qfrc_damper = nv_range;
             let qfrc_gravcomp = nv_range;
             let qfrc_fluid = nv_range;
-            /* Special case attributes, used for some internal calculation */
-            // cdof
-            // cdof_dot
 
             let model_signature = self.model.signature();
             Some(MjJointDataInfo {name: name.to_string(), id: id as usize, model_signature,
@@ -226,7 +225,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
 
     info_method! { Data, model.ffi(), tendon,
-        [wrapadr: 1, wrapnum: 1, length: 1, velocity: 1],
+        [wrapadr: 1, wrapnum: 1, efcadr: 1, length: 1, velocity: 1],
         [],
         [J: nJten]
     }
@@ -1060,14 +1059,14 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Returns smallest signed distance between two geoms and optionally the contact segment.
     /// # Panics
     /// Panics when either geom id is `>= ngeom`. Use [`MjData::try_geom_distance`] for a fallible alternative.
-    pub fn geom_distance(&self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
+    pub fn geom_distance(&mut self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
         self.try_geom_distance(geom1_id, geom2_id, dist_max, fromto).unwrap()
     }
 
     /// Fallible version of [`MjData::geom_distance`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when either geom id is `>= ngeom`.
-    pub fn try_geom_distance(&self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> Result<MjtNum, MjDataError> {
+    pub fn try_geom_distance(&mut self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> Result<MjtNum, MjDataError> {
         let ngeom = self.model.ffi().ngeom;
         if geom1_id >= ngeom as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "geom1_id", id: geom1_id, upper: ngeom as usize });
@@ -1077,7 +1076,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
         Ok(unsafe {
             mj_geomDistance(
-                self.model.ffi(), self.ffi(),
+                self.model.ffi(), self.ffi_mut(),
                 geom1_id as i32, geom2_id as i32, dist_max,
                 fromto.map_or(ptr::null_mut(), |x| x),
             )
@@ -1480,7 +1479,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Returns a direct pointer to the underlying data.
     /// Returns a direct mutable pointer to the underlying C data struct.
     /// Only for internal use by viewer code that passes the pointer to C++ FFI.
     #[cfg(feature = "cpp-viewer")]
@@ -1514,6 +1512,21 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// (requires `M: DerefMut<Target = MjModel>`).
     pub fn model(&self) -> &MjModel {
         &self.model
+    }
+
+    /// Returns an immutable reference to the model physics options.
+    pub fn model_opt(&self) -> &MjOption {
+        self.model.opt()
+    }
+
+    /// Returns an immutable reference to the model visualization options.
+    pub fn model_vis(&self) -> &MjVisual {
+        self.model.vis()
+    }
+
+    /// Returns an immutable reference to the model statistics.
+    pub fn model_stat(&self) -> &MjStatistic {
+        self.model.stat()
     }
 
     /// Returns a clone of the stored model.
@@ -1580,25 +1593,87 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// (e.g., timestep, gravity) without having to rebuild the simulation.
     ///
     /// **Not all model parameters are safe to change at runtime.**
-    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes)
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.8.0/programming/simulation.html#mjmodel-changes)
     /// for a list of parameters that are safe to change.
     ///
     /// Only available when the inner model type `M` implements
     /// [`DerefMut<Target = MjModel>`](std::ops::DerefMut)
-    /// (e.g., owned [`MjModel`], `Box<MjModel>`).
+    /// (e.g., `Box<MjModel>`, `&mut MjModel`).
     /// Shared-ownership types such as `Arc<MjModel>` do not provide mutable
     /// access; use [`swap_model`](MjData::swap_model) instead.
+    /// 
+    /// # Safety
+    /// This method is marked unsafe as the owned model can be swapped entirely without any compatibility
+    /// checks.
+    /// 
+    /// It is the caller's responsibility to ensure the internal [`MjModel::signature`] matches the
+    /// swapped model's signature in case of a swap.
+    /// 
+    /// For safe swapping consider [`MjData::swap_model`] or [`MjData::try_swap_model`] for a fallible alternative.
     ///
     /// # Example
     /// ```rust
     /// # use mujoco_rs::prelude::{MjModel, MjData};
     /// let model = Box::new(MjModel::from_xml_string("<mujoco/>").unwrap());
     /// let mut data = MjData::new(model);
-    /// data.model_mut().opt_mut().timestep = 0.001;
-    /// data.model_mut().opt_mut().gravity[2] = -5.0;
+    /// unsafe { data.model_mut() }.opt_mut().timestep = 0.001;
+    /// unsafe { data.model_mut() }.opt_mut().gravity[2] = -5.0;
     /// ```
-    pub fn model_mut(&mut self) -> &mut MjModel {
+    pub unsafe fn model_mut(&mut self) -> &mut MjModel {
         &mut self.model
+    }
+
+    /// Returns a mutable reference to [`MjModel::opt_mut`] without allowing unsafe
+    /// modifications to the rest of the [`MjModel`].
+    /// 
+    /// Immutable references can be made through [`MjData::model_opt`].
+    /// 
+    /// Can be used to modify the physics parameters.
+    /// # Example
+    /// ```rust
+    /// # use mujoco_rs::prelude::{MjModel, MjData};
+    /// let model = Box::new(MjModel::from_xml_string("<mujoco/>").unwrap());
+    /// let mut data = MjData::new(model);
+    /// data.model_opt_mut().timestep = 0.001;
+    /// data.model_opt_mut().gravity[2] = -5.0;
+    /// ```
+    pub fn model_opt_mut(&mut self) -> &mut MjOption {
+        self.model.opt_mut()
+    }
+
+    /// Returns a mutable reference to [`MjModel::vis_mut`] without allowing unsafe
+    /// modifications to the rest of the [`MjModel`].
+    /// 
+    /// Immutable references can be made through [`MjData::model_vis`].
+    /// 
+    /// Can be used to modify the visualization parameters.
+    /// # Example
+    /// ```rust
+    /// # use mujoco_rs::prelude::{MjModel, MjData};
+    /// let model = Box::new(MjModel::from_xml_string("<mujoco/>").unwrap());
+    /// let mut data = MjData::new(model);
+    /// data.model_vis_mut().headlight.ambient = [0.0, 0.0, 0.0];
+    /// data.model_vis_mut().headlight.active = 1;
+    /// ```
+    pub fn model_vis_mut(&mut self) -> &mut MjVisual {
+        self.model.vis_mut()
+    }
+
+    /// Returns a mutable reference to [`MjModel::stat_mut`] without allowing unsafe
+    /// modifications to the rest of the [`MjModel`].
+    /// 
+    /// Immutable references can be made through [`MjData::model_stat`].
+    /// 
+    /// Can be used to modify the model statistics.
+    /// # Example
+    /// ```rust
+    /// # use mujoco_rs::prelude::{MjModel, MjData};
+    /// let model = Box::new(MjModel::from_xml_string("<mujoco/>").unwrap());
+    /// let mut data = MjData::new(model);
+    /// data.model_stat_mut().center = [0.0, 0.0, 0.5];
+    /// ```
+    pub fn model_stat_mut(&mut self) -> &mut MjStatistic {
+        self.model.stat_mut()
     }
 }
 
@@ -1819,7 +1894,7 @@ info_with_view!(Data, body,
      cacc: MjtNum,
      cfrc_int: MjtNum,
      cfrc_ext: MjtNum],
-    [],
+    [[body_] awake: MjtSleepState [force]],
     [], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, camera,
@@ -1879,7 +1954,8 @@ info_with_view!(Data, tendon,
      [ten_] length: MjtNum,
      [ten_] velocity: MjtNum],
     [[ten_] wrapadr: i32,
-     [ten_] wrapnum: i32],
+     [ten_] wrapnum: i32,
+     [tendon_] efcadr: i32],
     [], M: Deref<Target = MjModel>);
 
 /**************************************************************************************************/
@@ -4824,6 +4900,63 @@ mod test {
             (data.energy()[0] - 1.23).abs() < 1e-12,
             "written energy value must be readable back"
         );
+    }
+
+    /// Verifies that the body view `awake` field returns a single-element slice
+    /// that matches the corresponding entry in `data.body_awake()`.
+    #[test]
+    fn test_body_view_awake_field() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let body_info = data.body("b_free").unwrap();
+        let view = body_info.view(&data);
+
+        /* Verify field dimensions */
+        assert_eq!(view.awake.len(), 1);
+
+        /* Verify alignment with the top-level array slice */
+        assert_eq!(view.awake[0], data.body_awake()[body_info.id]);
+    }
+
+    /// Verifies that the tendon view `efcadr` field returns a single-element slice
+    /// that matches the corresponding entry in `data.tendon_efcadr()`.
+    #[test]
+    fn test_tendon_view_efcadr_field() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let tendon_info = data.tendon("ten1").unwrap();
+        let view = tendon_info.view(&data);
+
+        /* Verify field dimensions */
+        assert_eq!(view.efcadr.len(), 1);
+
+        /* Verify alignment with the top-level array slice */
+        assert_eq!(view.efcadr[0], data.tendon_efcadr()[tendon_info.id]);
+    }
+
+    /// Verifies that `dof_island`, `map_dof2idof`, and `dof_awake_ind` all have
+    /// length `nv` and are backed by the correct FFI pointers.
+    #[test]
+    fn test_dof_island_map_dof2idof_dof_awake_ind_lengths() {
+        let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
+        let mut data = model.make_data();
+        data.forward();
+
+        let nv = model.ffi().nv as usize;
+
+        assert_eq!(data.dof_island().len(), nv);
+        assert_eq!(data.map_dof2idof().len(), nv);
+        assert_eq!(data.dof_awake_ind().len(), nv);
+
+        for i in 0..nv {
+            assert_eq!(data.dof_island()[i], unsafe { *data.ffi().dof_island.add(i) });
+            assert_eq!(data.map_dof2idof()[i], unsafe { *data.ffi().map_dof2idof.add(i) });
+            assert_eq!(data.dof_awake_ind()[i], unsafe { *data.ffi().dof_awake_ind.add(i) });
+        }
     }
 
     /// Exercises the `eval_or_expand! @eval false` path via

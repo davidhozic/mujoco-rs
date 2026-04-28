@@ -25,6 +25,25 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
     dest[bytes.len()..].fill(0);
 }
 
+/// Sets or clears a bit flag based on a boolean value.
+///
+/// # Examples
+/// ```ignore
+/// let mut flags = 0i32;
+/// set_flag!(flags, 0x01, true);   // sets bit 0
+/// set_flag!(flags, 0x01, false);  // clears bit 0
+/// ```
+#[doc(hidden)]
+#[macro_export]
+macro_rules! set_flag {
+    ($flags:expr, $mask:expr, $enabled:expr) => {
+        if $enabled {
+            $flags |= $mask;
+        } else {
+            $flags &= !$mask;
+        }
+    };
+}
 
 /// Creates a (start, length) tuple based on
 /// lookup variables that define the mapping in MuJoCo's mjModel struct.
@@ -365,12 +384,16 @@ macro_rules! view_creator {
 /// - **Fixed stride**: `attr: N`: index range is `(id * N, N)`.
 /// - **FFI stride** (with optional multiplier): `attr: ffi_field (* k)`: stride taken from
 ///   `model.ffi_field`, optionally scaled by `k`.
-/// - **Dynamic range**: `attr: nXXX`: start and length resolved via [`mj_view_indices!`],
+/// - **Dynamic range**: `attr: nXXX (* k)`: start and length resolved via [`mj_view_indices!`],
 ///   where `nXXX` is the major-dimension field (e.g. `nhfielddata`, `ntexdata`).
+///   The optional `* k` is a stride multiplier: each logical unit occupies `k` flat elements,
+///   so both the start offset and the length are scaled by `k`. Use this when the target array
+///   stores `k` flat values per logical unit (e.g. `dof_dampingpoly (nv × mjNPOLY)` viewed as
+///   a flat `MjtNum` slice: offset = `dof_start * mjNPOLY`, length = `n_dofs * mjNPOLY`).
 #[doc(hidden)]
 #[macro_export]
 macro_rules! info_method {
-    ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*], [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*], [$($attr_dyn:ident: $ffi_len_dyn:expr),*]) => {
+    ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*], [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*], [$($attr_dyn:ident: $ffi_len_dyn:ident $(* $offset_mult:expr)?),*]) => {
         paste::paste! {
             #[doc = concat!(
                 "Returns a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] for the named ", stringify!($type_), ", ",
@@ -397,12 +420,13 @@ macro_rules! info_method {
                     let $attr_ffi = (id * ffi.$len_ffi as usize $( * $multiplier)*, ffi.$len_ffi as usize $( * $multiplier)*);
                 )*
                 $(
-                    let $attr_dyn = unsafe { mj_view_indices!(
+                    let (dyn_start, dyn_len) = unsafe { mj_view_indices!(
                         id,
                         mj_model_nx_to_mapping!(ffi, $ffi_len_dyn),
                         mj_model_nx_to_nitem!(ffi, $ffi_len_dyn),
                         ffi.$ffi_len_dyn
                     ) };
+                    let $attr_dyn = (dyn_start $(* $offset_mult)?, dyn_len $(* $offset_mult)?);
                 )*
 
                 let model_signature = ffi.signature;
@@ -920,10 +944,8 @@ macro_rules! array_slice_dyn {
 ///
 /// # Safety
 /// The generated getters blindly interpret a `char` array as a C string; the
-/// array must be NUL-terminated and contain valid UTF-8. Setters ensure
-/// ASCII and length bounds but the caller must still guarantee the destination
-/// buffer is large enough.  The macro itself simply emits the unsafe code
-/// without additional checks.
+/// array must be NUL-terminated and contain valid UTF-8. Setters validate
+/// ASCII encoding and will **panic** if the value exceeds the buffer length.
 /// The macro works by first specifying the methods to create (get = getter, set = setter) --- c_str_as_str_method {get, set, {...}} ---
 /// and then providing the rest of the parameters.
 /// 
@@ -1141,6 +1163,31 @@ impl<T> LockUnpoison<T> for Mutex<T> {
                 e.into_inner()
             }
         }
+    }
+}
+
+#[cfg(feature = "viewer")]
+/// Performs a three-way merge of a value.
+///
+/// Given three versions of a value (`self`, `other`, `other_prev`), the merge
+/// updates `self` when `other` has changed relative to `other_prev`, then
+/// writes the resolved value back into both `other` and `other_prev` so the
+/// next call starts from a consistent baseline.
+pub(crate) trait ThreeWayMerge {
+    /// Merges `other` into `self` using `other_prev` as the baseline.
+    fn merge(&mut self, other: &mut Self, other_prev: &mut Self);
+}
+
+#[cfg(feature = "viewer")]
+impl<T: Copy + PartialEq> ThreeWayMerge for T {
+    #[inline]
+    fn merge(&mut self, other: &mut Self, other_prev: &mut Self) {
+        if *other != *other_prev {
+            *self = *other;
+        }
+
+        *other = *self;
+        *other_prev = *other;
     }
 }
 

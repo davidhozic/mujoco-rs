@@ -31,7 +31,7 @@ A screenshot of the Rust 3D viewer is shown below.
 
     Rust-native interactive 3D viewer.
     Showing the `Spot <https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot>`_ scene from
-    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/stable/models.html>`_.
+    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.8.0/models.html>`_.
 
 The viewer can be launched only in **passive mode**, i.e. it won't run as a separate application,
 and needs to be periodically "synced" by the user application.
@@ -326,6 +326,36 @@ which demonstrates various types of UI elements including windows, side panels, 
     equality constraints) back to the user's ``data`` via the integration state. If your
     code relies on derived quantities such as previously-computed Jacobians, recompute them
     after each :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` call.
+
+
+.. _model_parameter_sync:
+
+Model Parameter Synchronization
+---------------------------------
+
+The viewer provides methods to synchronize model parameters (``opt``, ``vis``,
+``stat``) between the simulation and the viewer's passive internal state.
+
+The primary method is :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_opt`,
+:docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_vis`,
+and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_stat`:
+
+.. code-block:: rust
+
+    viewer.with_state_lock(|mut lock| {
+        lock.sync_model_opt(data.model_opt_mut());
+        lock.sync_model_vis(data.model_vis_mut());
+        lock.sync_model_stat(data.model_stat_mut());
+    }).unwrap();
+
+When the model structure changes (e.g., different body configuration), the viewer
+detects this via model signature comparison and reloads its internal state. Changes
+made in the UI are cleared when a model change is detected.
+
+To safely modify parameters without using unsafe code, use the direct accessors
+on :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`:
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`,
 
 
 .. _mj_cpp_viewer:

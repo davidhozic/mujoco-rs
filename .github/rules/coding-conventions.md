@@ -7,7 +7,8 @@
 - **Cross-reference with MuJoCo C docs** when adding or modifying wrapper fields (see `important-context.md`).
 - **Prefer existing macros** in `src/util.rs` over writing manual accessor methods. Read `macro-system.md` for details.
 - **Verify stride against C headers**: see the verification checklist in `macro-system.md`.
-- **Update `Cargo.toml` excludes**: when adding files or directories that are not part of the published crate (e.g. CI configs, internal tooling, docs, `.context/` entries, dev scripts), add them to the `exclude` list in `Cargo.toml` so they are not included in crates.io publishes.
+- **Update `Cargo.toml` excludes**: when adding non-crate files (CI configs, dev scripts, docs),
+  add them to the `exclude` list in `Cargo.toml` to prevent crates.io publishes.
 - **Do not fix pre-existing style issues in committed code.** Only flag and fix style problems
   (e.g. RST-style double backticks in Rust doc comments) in **new, uncommitted changes**. Existing
   committed code on `develop` or `main` should be left as-is unless it contains actually invalid
@@ -15,7 +16,8 @@
 
 ## Feature flags
 - Read `Cargo.toml` to discover available features and their default state.
-- Viewer and renderer features are opt-in (not in defaults). Enable them explicitly when needed: `--features "viewer-ui renderer-winit-fallback"`.
+- Viewer and renderer features are opt-in (not in defaults). Enable them explicitly when needed:
+  `--features "viewer-ui renderer-winit-fallback"`.
 - The `cpp-viewer` feature requires static linking - do not enable it unless the static build has been set up.
 - The `ffi-regenerate` feature rebuilds `src/mujoco_c.rs` from headers. **Never trigger this feature as an agent.**
 
@@ -58,8 +60,17 @@
 - Always use ASCII characters only. Avoid non-ASCII Unicode characters (e.g., em dashes, arrows,
   smart quotes). Use `--` (double hyphen) as the ASCII substitute for em dashes. This applies to
   both source code and `.github/` rule/skill files.
-- Imports (`use`) should be sorted by line length with the longest line on top.
-- Prefer to group imports with the same parent module.
+- **Comment style**: Use `//` for regular comments and subsections. Use `/* */` for top-level
+  section headers and special formatting.
+- **Macro call alignment**: within a contiguous block of macro invocations (e.g. rows in a Grid),
+  all arguments should be column-aligned. Pad the field expression so string label arguments start
+  at the same column across all rows in the block. For rows that also have a trailing argument
+  (e.g. `speed=`, `range=`, or a map constant), pad the string label so all trailing arguments
+  also start at the same column. Rows without a trailing argument (e.g. `bool_row!`) only need
+  the field-column alignment.
+- **Import organization**: Group by module (std, external, internal), sort by line length
+  (longest first), separate groups with empty lines.
+- **Avoid crate::prelude imports**: Import from actual modules instead of `crate::prelude`.
 - Do NOT flag or fix integer truncation casts (e.g., `usize as i32`, `len() as i32`) when the
   underlying C API already validates or clamps the value (e.g., passing a count that MuJoCo itself
   allocated and therefore cannot exceed the C-side maximum). Only fix truncation casts when the
@@ -100,7 +111,7 @@
   - Mark new items with `:sup:\`new\`` (e.g. `` ``try_jac`` :sup:\`new\` ``).
   - Use `` ``double backticks`` `` for inline code (method names, types, values).
   - Use `.. code-block:: rust` for multi-line code examples in migration.rst.
-  - Keep lines within ~100 characters; continuation lines are indented to match the list item.
+  - Prefer lines below ~100 characters. Hard limit: 120 characters.
 - **Changelog section ordering.** Each version entry in `changelog.rst` uses `.. rubric::` sections
   in this fixed order: Breaking changes, Error handling, New features and improvements, Bug fixes,
   Other changes. Additional component-specific subsections (e.g. MjViewer) may appear only when a

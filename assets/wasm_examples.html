@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; worker-src blob:; connect-src 'self'" />
+  <title>MuJoCo WASM Examples</title>
+  <style>
+    body { font-family: monospace; background: #1e1e1e; color: #d4d4d4; margin: 0; padding: 1rem; }
+    h1 { color: #569cd6; }
+    .controls { margin-bottom: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    button {
+      padding: 0.4rem 1rem; cursor: pointer; border: none; border-radius: 4px;
+      background: #0e639c; color: #fff; font-size: 0.95rem;
+    }
+    button:hover { background: #1177bb; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    #output {
+      background: #252526; border: 1px solid #3c3c3c; border-radius: 6px;
+      padding: 1rem; min-height: 300px; white-space: pre-wrap; font-size: 0.9rem;
+      overflow-y: auto; max-height: 70vh;
+    }
+    .status { color: #9cdcfe; margin-bottom: 0.5rem; }
+    .err { color: #f48771; }
+    .ok  { color: #4ec9b0; }
+  </style>
+</head>
+<body>
+  <h1>MuJoCo WASM Examples</h1>
+  <div class="controls">
+    <button id="btn-basic" onclick="runExample('basic')">&gt; Run basic</button>
+  </div>
+  <div id="output"><span class="status" id="placeholder">Select an example above to run it.</span></div>
+
+  <script>
+    let running = false;
+
+    function clearOutput() {
+      const out = document.getElementById('output');
+      out.replaceChildren();
+      const span = document.createElement('span');
+      span.className = 'status';
+      span.id = 'placeholder';
+      span.textContent = 'Select an example above to run it.';
+      out.appendChild(span);
+    }
+
+    function appendLine(text, cls) {
+      const out = document.getElementById('output');
+      const span = document.createElement('span');
+      if (cls) span.className = cls;
+      span.textContent = text + '\n';
+      // Remove the initial placeholder on first real output line.
+      const placeholder = document.getElementById('placeholder');
+      if (placeholder) placeholder.remove();
+      out.appendChild(span);
+      out.scrollTop = out.scrollHeight;
+    }
+
+    function setButtons(disabled) {
+      document.getElementById('btn-basic').disabled = disabled;
+    }
+
+    async function runExample(name) {
+      if (running) return;
+      running = true;
+      setButtons(true);
+      clearOutput();
+      appendLine('=== Running ' + name + '.wasm ===', 'status');
+
+      // Each run gets a fresh Web Worker so Emscripten globals are always isolated.
+      // Output streams to the page in real time via postMessage.
+      let worker = null;
+      try {
+        await new Promise((resolve, reject) => {
+          const ts = Date.now();
+          const base = new URL('.', location.href).href;
+          const scriptUrl = base + name + '.js?t=' + ts;
+          const wasmUrl   = base + name + '.wasm?t=' + ts;
+
+          // Build the worker as a blob so no extra file is needed on the server.
+          // importScripts must receive an absolute URL because the blob: base URL
+          // would make relative paths unresolvable.
+          const workerSrc = [
+            'self.Module = {',
+            '  locateFile: function(path, prefix) {',
+            '    return path.endsWith(".wasm") ? ' + JSON.stringify(wasmUrl) + ' : prefix + path;',
+            '  },',
+            '  print:    function(t) { self.postMessage({type:"print",    text:t}); },',
+            '  printErr: function(t) { self.postMessage({type:"printErr", text:t}); },',
+            '  onExit:   function(c) { self.postMessage({type:"exit",     code:c}); },',
+            '  onAbort:  function(r) { self.postMessage({type:"abort",  reason:r}); },',
+            '};',
+            'importScripts(' + JSON.stringify(scriptUrl) + ');',
+          ].join('\n');
+
+          const blob = new Blob([workerSrc], {type: 'application/javascript'});
+          const blobUrl = URL.createObjectURL(blob);
+          worker = new Worker(blobUrl);
+          URL.revokeObjectURL(blobUrl);
+
+          worker.onmessage = function(e) {
+            const d = e.data;
+            if (d.type === 'print') {
+              appendLine(d.text);
+            } else if (d.type === 'printErr') {
+              appendLine(d.text, 'err');
+            } else if (d.type === 'exit') {
+              if (d.code === 0) appendLine('=== Done ===', 'ok');
+              else              appendLine('=== Exit code: ' + d.code + ' ===', 'err');
+              resolve();
+            } else if (d.type === 'abort') {
+              appendLine('Aborted: ' + d.reason, 'err');
+              resolve();
+            }
+          };
+
+          worker.onerror = function(e) {
+            reject(new Error('Failed to run ' + name + ': ' + e.message));
+          };
+        });
+      } catch (e) {
+        appendLine('Error: ' + e.message, 'err');
+      } finally {
+        if (worker) worker.terminate();
+        running = false;
+        setButtons(false);
+      }
+    }
+  </script>
+</body>
+</html>

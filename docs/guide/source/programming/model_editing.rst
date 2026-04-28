@@ -12,7 +12,7 @@ Model editing
 The most general way to create an |mj_model| instance is by loading an XML file
 via :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml`.
 Due to |mj_model| only allowing (some) changes to parameters and not to the actual
-geometry, MuJoCo introduced `Model Editing <https://mujoco.readthedocs.io/en/stable/programming/modeledit.html>`_.
+geometry, MuJoCo introduced `Model Editing <https://mujoco.readthedocs.io/en/3.8.0/programming/modeledit.html>`_.
 
 In MuJoCo-rs, we created a high-level wrapper around MuJoCo's C API, which provides
 safe wrappers around C structs, as well as methods. Aside from that, we try to stay faithful
@@ -166,7 +166,7 @@ can be used exactly the same as if we were to directly load an XML model (see :r
 
 Class inheritance (defaults)
 ==============================
-MuJoCo supports `default classes <https://mujoco.readthedocs.io/en/stable/XMLreference.html#default>`_,
+MuJoCo supports `default classes <https://mujoco.readthedocs.io/en/3.8.0/XMLreference.html#default>`_,
 which allow shared attribute values to be set in one place and then inherited by multiple elements.
 In MuJoCo-rs, default classes can be created with
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>add_default`.

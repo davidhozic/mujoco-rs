@@ -32,6 +32,15 @@ mod build_dependencies {
             else if info.name.starts_with("mjt") {  // enums
                 data.push("Copy".into());
             }
+            else if ["mjOption_", "mjStatistic_"].contains(&info.name) || info.name.starts_with("mjVisual") {
+                data.push("PartialEq".into());
+                if info.name == "mjStatistic_" {
+                    data.push("Default".into());
+                }
+
+                // Special synchronization requirement.
+                data.push("mujoco_rs_derive::ThreeWayMerge".into());
+            }
 
             data
         }
@@ -89,6 +98,13 @@ mod build_dependencies {
         // Replace "zero"-sized and one-sized arrays with raw pointers
         re = regex::Regex::new(r"\*\s*(const|mut)\s*\[\s*(.+?)\s*;\s*[0-1]+[A-z]+\s*\]").unwrap();
         fdata = re.replace_all(&fdata, "*$1 $2").to_string();
+
+        // Wrap ThreeWayMerge in cfg_attr so it is only derived when the viewer feature is active.
+        re = regex::Regex::new(r"(#\[derive\([^)]*?),\s*mujoco_rs_derive\s*::\s*ThreeWayMerge(\)\])").unwrap();
+        fdata = re.replace_all(
+            &fdata,
+            "#[cfg_attr(feature = \"viewer\", derive(mujoco_rs_derive::ThreeWayMerge))]\n$1$2",
+        ).to_string();
 
         fs::write(outputfile_dir, fdata).unwrap();
     }

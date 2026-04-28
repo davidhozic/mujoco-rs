@@ -61,6 +61,9 @@ pub type MjtTextureRole = mjtTextureRole;
 /// Type of color space encoding for textures.
 pub type MjtColorSpace = mjtColorSpace;
 
+/// Mode for actuator length-range computation.
+pub type MjtLRMode = mjtLRMode;
+
 /// Cube map face indices used by [`MjsTexture::set_cubefile`](super::mj_editing::MjsTexture::set_cubefile).
 ///
 /// Each variant corresponds to one face of a cube-map texture, matching the order
@@ -325,7 +328,8 @@ impl MjModel {
         MjData::try_new(self)
     }
 
-    /// Handles the pointer to the model.
+    /// Wraps a raw model pointer returned by MuJoCo load functions.
+    /// Returns an error with the C error-buffer message if the pointer is null.
     fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[c_char]) -> Result<Self, MjModelError> {
         match NonNull::new(ptr_model) {
             Some(nn) => Ok(Self(nn)),
@@ -343,7 +347,8 @@ impl MjModel {
     info_method! { Model, ffi(), actuator,
         [trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, trnid: 2, actadr: 1, actnum: 1,
         group: 1, history: 2, historyadr: 1, delay: 1, ctrllimited: 1, forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize, biasprm: mjNBIAS as usize,
-        actearly: 1, ctrlrange: 2, forcerange: 2, actrange: 2, gear: 6, cranklength: 1, acc0: 1, length0: 1,
+        actearly: 1, ctrlrange: 2, forcerange: 2, actrange: 2, damping: 1,
+        dampingpoly: mjNPOLY as usize, armature: 1, gear: 6, cranklength: 1, acc0: 1, length0: 1,
         lengthrange: 2, plugin: 1],
         [user: nuser_actuator],
         []
@@ -371,12 +376,12 @@ impl MjModel {
     info_method! { Model, ffi(), joint,
         [r#type: 1, qposadr: 1, dofadr: 1, group: 1,
         limited: 1, actfrclimited: 1, actgravcomp: 1, solref: mjNREF as usize, solimp: mjNIMP as usize,
-        pos: 3, axis: 3, stiffness: 1,
-        range: 2, actfrcrange: 2, margin: 1, bodyid: 1],
+        pos: 3, axis: 3, stiffness: 1, stiffnesspoly: mjNPOLY as usize,
+        range: 2, actfrcrange: 2, margin: 1, bodyid: 1, actuatorid: 1],
         [user: nuser_jnt],
         [qpos0: nq, qpos_spring: nq, jntid: nv,
         dof_bodyid: nv, parentid: nv, dof_treeid: nv, Madr: nv, simplenum: nv, frictionloss: nv,
-        armature: nv, damping: nv, invweight0: nv, M0: nv]
+        armature: nv, damping: nv, dampingpoly: nv * mjNPOLY as usize, invweight0: nv, M0: nv]
     }
 
 
@@ -435,7 +440,11 @@ impl MjModel {
     info_method! { Model, ffi(), mesh,
         [vertadr: 1, vertnum: 1,
         texcoordadr: 1, faceadr: 1,
-        facenum: 1, graphadr: 1],
+        facenum: 1, graphadr: 1,
+        normaladr: 1, normalnum: 1, texcoordnum: 1,
+        bvhadr: 1, bvhnum: 1, octadr: 1, octnum: 1,
+        pathadr: 1, polynum: 1, polyadr: 1,
+        scale: 3, pos: 3, quat: 4],
         [],
         []
     }
@@ -482,9 +491,11 @@ impl MjModel {
     }
 
     info_method! { Model, ffi(), tendon,
-        [adr: 1, num: 1, matid: 1, group: 1, treenum: 1, treeid: 2, limited: 1, actfrclimited: 1, width: 1,
+        [adr: 1, num: 1, matid: 1, actuatorid: 1, group: 1, treenum: 1, treeid: 2,
+        limited: 1, actfrclimited: 1, width: 1,
         solref_lim: mjNREF as usize, solimp_lim: mjNIMP as usize, solref_fri: mjNREF as usize, solimp_fri: mjNIMP as usize, range: 2, actfrcrange: 2, margin: 1,
-        stiffness: 1, damping: 1, armature: 1, frictionloss: 1, lengthspring: 2, length0: 1, invweight0: 1, J_rownnz: 1, J_rowadr: 1, rgba: 4],
+        stiffness: 1, stiffnesspoly: mjNPOLY as usize, damping: 1, dampingpoly: mjNPOLY as usize, armature: 1,
+        frictionloss: 1, lengthspring: 2, length0: 1, invweight0: 1, J_rownnz: 1, J_rowadr: 1, rgba: 4],
         [user: nuser_tendon],
         [J_colind: nJten]
     }
@@ -769,6 +780,40 @@ impl MjModel {
         unsafe { mj_setTotalmass(self.ffi_mut(), newmass) }
     }
 
+    /// Return the maximum number of contacts that can be generated between two geoms.
+    /// 
+    /// To pull margin from model, set `has_margin` to [`None`], otherwise pass `true` or `false`
+    /// inside [`Some`] (true indicating a present margin). 
+    /// 
+    /// # Panics
+    /// Panics when either `geom1` or `geom2` are equal or greater than [`MjModel::ngeom`].
+    /// Use [`MjModel::try_max_contacts`] for a fallible alternative.
+    pub fn max_contacts(&self, geom1: usize, geom2: usize, has_margin: Option<bool>) -> u32 {
+        self.try_max_contacts(geom1, geom2, has_margin).unwrap()
+    }
+
+    /// Fallible version of [`MjModel::max_contacts`].
+    /// # Errors
+    /// Returns [`MjModelError::InvalidIndex`] when either `geom1` or `geom2` are equal or greater than [`MjModel::ngeom`].
+    pub fn try_max_contacts(&self, geom1: usize, geom2: usize, has_margin: Option<bool>) -> Result<u32, MjModelError> {
+        let ngeom = self.ngeom() as usize;
+
+        if geom1 >= ngeom {
+            return Err(MjModelError::InvalidIndex(geom1, ngeom));
+        }
+
+        if geom2 >= ngeom {
+            return Err(MjModelError::InvalidIndex(geom2, ngeom));
+        }
+
+        Ok(unsafe { mj_maxContact(
+            self.ffi(),
+            geom1 as i32, geom2 as i32,
+            // if Some(...), pass 0 or 1, otherwise pull from model (-1)
+            has_margin.map(|m| m as i32).unwrap_or(-1)
+        ) as u32 })
+    }
+
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
@@ -829,6 +874,7 @@ impl MjModel {
         [ffi] nflexedge: MjtSize; "number of edges in all flexes.";
         [ffi] nflexelem: MjtSize; "number of elements in all flexes.";
         [ffi] nflexelemdata: MjtSize; "number of element vertex ids in all flexes.";
+        [ffi] nflexstiffness: MjtSize; "number of stiffness parameters in all flexes.";
         [ffi] nflexelemedge: MjtSize; "number of element edge ids in all flexes.";
         [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
         [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
@@ -948,6 +994,7 @@ impl MjModel {
         (unsafe) jnt_qposadr: &[i32; "start addr in 'qpos' for joint's data"; ffi().njnt],
         (unsafe) jnt_dofadr: &[i32; "start addr in 'qvel' for joint's data"; ffi().njnt],
         (unsafe) jnt_bodyid: &[i32; "id of joint's body"; ffi().njnt],
+        (unsafe) jnt_actuatorid: &[i32; "actuator contributing damping / armature"; ffi().njnt],
         jnt_group: &[i32; "group for visibility"; ffi().njnt],
         jnt_limited: &[bool [force]; "does joint have limits"; ffi().njnt],
         jnt_actfrclimited: &[bool [force]; "does joint have actuator force limits"; ffi().njnt],
@@ -957,6 +1004,7 @@ impl MjModel {
         jnt_pos: &[[MjtNum; 3] [force]; "local anchor position"; ffi().njnt],
         jnt_axis: &[[MjtNum; 3] [force]; "local joint axis"; ffi().njnt],
         jnt_stiffness: &[MjtNum; "stiffness coefficient"; ffi().njnt],
+        jnt_stiffnesspoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order stiffness coefficients"; ffi().njnt],
         jnt_range: &[[MjtNum; 2] [force]; "joint limits"; ffi().njnt],
         jnt_actfrcrange: &[[MjtNum; 2] [force]; "range of total actuator force"; ffi().njnt],
         jnt_margin: &[MjtNum; "min distance for limit detection"; ffi().njnt],
@@ -971,6 +1019,7 @@ impl MjModel {
         dof_frictionloss: &[MjtNum; "dof friction loss"; ffi().nv],
         dof_armature: &[MjtNum; "dof armature inertia/mass"; ffi().nv],
         dof_damping: &[MjtNum; "damping coefficient"; ffi().nv],
+        dof_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().nv],
         dof_invweight0: &[MjtNum; "diag. inverse inertia in qpos0"; ffi().nv],
         dof_M0: &[MjtNum; "diag. inertia in qpos0"; ffi().nv],
         dof_length: &[MjtNum; "linear: 1; angular: approx. length scale"; ffi().nv],
@@ -1066,6 +1115,8 @@ impl MjModel {
         (unsafe) flex_matid: &[i32; "material id for rendering"; ffi().nflex],
         flex_group: &[i32; "group for visibility"; ffi().nflex],
         (unsafe) flex_interp: &[i32; "interpolation (0: vertex, 1: nodes)"; ffi().nflex],
+        (unsafe) flex_bandwidth: &[i32; "precomputed solver bandwidth"; ffi().nflex],
+        (unsafe) flex_cellnum: &[[i32; 3] [force]; "finite cell num per dimension"; ffi().nflex],
         (unsafe) flex_nodeadr: &[i32; "first node address"; ffi().nflex],
         (unsafe) flex_nodenum: &[i32; "number of nodes"; ffi().nflex],
         (unsafe) flex_vertadr: &[i32; "first vertex address"; ffi().nflex],
@@ -1075,6 +1126,7 @@ impl MjModel {
         (unsafe) flex_elemadr: &[i32; "first element address"; ffi().nflex],
         (unsafe) flex_elemnum: &[i32; "number of elements"; ffi().nflex],
         (unsafe) flex_elemdataadr: &[i32; "first element vertex id address"; ffi().nflex],
+        (unsafe) flex_stiffnessadr: &[i32; "stiffness matrix address"; ffi().nflex],
         (unsafe) flex_elemedgeadr: &[i32; "first element edge id address"; ffi().nflex],
         (unsafe) flex_shellnum: &[i32; "number of shells"; ffi().nflex],
         (unsafe) flex_shelldataadr: &[i32; "first shell data address"; ffi().nflex],
@@ -1103,7 +1155,7 @@ impl MjModel {
         flexedge_invweight0: &[MjtNum; "edge inv. weight in qpos0"; ffi().nflexedge],
         flex_radius: &[MjtNum; "radius around primitive element"; ffi().nflex],
         flex_size: &[[MjtNum; 3] [force]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
-        flex_stiffness: &[[MjtNum; 21] [force]; "finite element stiffness matrix"; ffi().nflexelem],
+        flex_stiffness: &[MjtNum; "finite element stiffness matrix"; ffi().nflexstiffness],
         flex_bending: &[[MjtNum; 17] [force]; "bending stiffness"; ffi().nflexedge],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
@@ -1224,6 +1276,7 @@ impl MjModel {
         (unsafe) tendon_adr: &[i32; "address of first object in tendon's path"; ffi().ntendon],
         (unsafe) tendon_num: &[i32; "number of objects in tendon's path"; ffi().ntendon],
         (unsafe) tendon_matid: &[i32; "material id for rendering"; ffi().ntendon],
+        (unsafe) tendon_actuatorid: &[i32; "actuator contributing damping / armature"; ffi().ntendon],
         tendon_group: &[i32; "group for visibility"; ffi().ntendon],
         tendon_treenum: &[i32; "number of trees along tendon's path"; ffi().ntendon],
         (unsafe) tendon_treeid: &[[i32; 2] [force]; "first two trees along tendon's path"; ffi().ntendon],
@@ -1241,7 +1294,9 @@ impl MjModel {
         tendon_actfrcrange: &[[MjtNum; 2] [force]; "range of total actuator force"; ffi().ntendon],
         tendon_margin: &[MjtNum; "min distance for limit detection"; ffi().ntendon],
         tendon_stiffness: &[MjtNum; "stiffness coefficient"; ffi().ntendon],
+        tendon_stiffnesspoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order stiffness coefficients"; ffi().ntendon],
         tendon_damping: &[MjtNum; "damping coefficient"; ffi().ntendon],
+        tendon_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().ntendon],
         tendon_armature: &[MjtNum; "inertia associated with tendon velocity"; ffi().ntendon],
         tendon_frictionloss: &[MjtNum; "loss due to friction"; ffi().ntendon],
         tendon_lengthspring: &[[MjtNum; 2] [force]; "spring resting length range"; ffi().ntendon],
@@ -1272,6 +1327,9 @@ impl MjModel {
         actuator_ctrlrange: &[[MjtNum; 2] [force]; "range of controls"; ffi().nu],
         actuator_forcerange: &[[MjtNum; 2] [force]; "range of forces"; ffi().nu],
         actuator_actrange: &[[MjtNum; 2] [force]; "range of activations"; ffi().nu],
+        actuator_damping: &[MjtNum; "linear damping coefficient"; ffi().nu],
+        actuator_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().nu],
+        actuator_armature: &[MjtNum; "armature added to target"; ffi().nu],
         actuator_gear: &[[MjtNum; 6] [force]; "scale length and transmitted force"; ffi().nu],
         actuator_cranklength: &[MjtNum; "crank length for slider-crank"; ffi().nu],
         actuator_acc0: &[MjtNum; "acceleration from unit force in qpos0"; ffi().nu],
@@ -1400,6 +1458,8 @@ info_with_view!(Model, actuator,
 	 [actuator_] biasprm: MjtNum, [actuator_] actearly: bool [force],
 	 [actuator_] ctrlrange: MjtNum, [actuator_] forcerange: MjtNum,
 	 [actuator_] actrange: MjtNum, [actuator_] gear: MjtNum,
+	 [actuator_] damping: MjtNum, [actuator_] dampingpoly: MjtNum,
+	 [actuator_] armature: MjtNum,
 	 [actuator_] cranklength: MjtNum, [actuator_] acc0: MjtNum,
 	 [actuator_] length0: MjtNum, [actuator_] lengthrange: MjtNum,
 	 [actuator_] user: MjtNum,
@@ -1498,17 +1558,20 @@ info_with_view!(Model, joint,
 	 [jnt_] solref: MjtNum, [jnt_] solimp: MjtNum,
 	 [jnt_] pos: MjtNum,
      [jnt_] axis: MjtNum, [jnt_] stiffness: MjtNum,
+     [jnt_] stiffnesspoly: MjtNum,
      [jnt_] range: MjtNum, [jnt_] actfrcrange: MjtNum, [jnt_] margin: MjtNum,
      [jnt_] user: MjtNum,
      [dof_] frictionloss: MjtNum, [dof_] armature: MjtNum,
-     [dof_] damping: MjtNum, [dof_] invweight0: MjtNum,
+     [dof_] damping: MjtNum,
+     [dof_] dampingpoly: MjtNum,
+     [dof_] invweight0: MjtNum,
      [dof_] M0: MjtNum,
      [dof_] simplenum: i32],
 	[[jnt_] r#type: MjtJoint [force],
      [jnt_] qposadr: i32,
-     [jnt_] dofadr: i32, [jnt_] bodyid: i32,
-    dof_bodyid: i32, [dof_] jntid: i32,
-    [dof_] parentid: i32, dof_treeid: i32,
+     [jnt_] dofadr: i32, [jnt_] bodyid: i32, [jnt_] actuatorid: i32,
+     dof_bodyid: i32, [dof_] jntid: i32,
+     [dof_] parentid: i32, dof_treeid: i32,
      [dof_] Madr: i32],
 	[]);
 
@@ -1550,13 +1613,25 @@ info_with_view!(Model, material,
 	[]);
 
 info_with_view!(Model, mesh,
-	[],
+	[[mesh_] scale: MjtNum,
+	 [mesh_] pos: MjtNum,
+	 [mesh_] quat: MjtNum],
 	[[mesh_] vertadr: i32,
 	 [mesh_] vertnum: i32,
 	 [mesh_] texcoordadr: i32,
 	 [mesh_] faceadr: i32,
 	 [mesh_] facenum: i32,
-	 [mesh_] graphadr: i32],
+	 [mesh_] graphadr: i32,
+	 [mesh_] normaladr: i32,
+	 [mesh_] normalnum: i32,
+	 [mesh_] texcoordnum: i32,
+	 [mesh_] bvhadr: i32,
+	 [mesh_] bvhnum: i32,
+	 [mesh_] octadr: i32,
+	 [mesh_] octnum: i32,
+	 [mesh_] pathadr: i32,
+	 [mesh_] polynum: i32,
+	 [mesh_] polyadr: i32],
 	[]);
 
 info_with_view!(Model, numeric,
@@ -1633,12 +1708,16 @@ info_with_view!(Model, tendon,
 	 [tendon_] solref_lim: MjtNum, [tendon_] solimp_lim: MjtNum,
 	 [tendon_] solref_fri: MjtNum, [tendon_] solimp_fri: MjtNum,
 	 [tendon_] range: MjtNum, [tendon_] actfrcrange: MjtNum, [tendon_] margin: MjtNum,
-	 [tendon_] stiffness: MjtNum, [tendon_] damping: MjtNum, [tendon_] armature: MjtNum,
+	 [tendon_] stiffness: MjtNum,
+	 [tendon_] stiffnesspoly: MjtNum,
+	 [tendon_] damping: MjtNum,
+	 [tendon_] dampingpoly: MjtNum,
+	 [tendon_] armature: MjtNum,
 	 [tendon_] frictionloss: MjtNum, [tendon_] lengthspring: MjtNum,
 	 [tendon_] length0: MjtNum, [tendon_] invweight0: MjtNum,
 	 [tendon_] user: MjtNum, [tendon_] rgba: f32,
 	 [tendon_] treenum: i32],
-	[[tendon_] matid: i32, [tendon_] treeid: i32,
+	[[tendon_] matid: i32, [tendon_] actuatorid: i32, [tendon_] treeid: i32,
 	 [tendon_] adr: i32, [tendon_] num: i32,
      [ten_] J_rownnz: i32, [ten_] J_rowadr: i32, [ten_] J_colind: i32],
 	[]);
@@ -3615,5 +3694,87 @@ mod tests {
         assert!(result.is_err(), "loading invalid XML must return Err");
         let msg = result.unwrap_err().to_string();
         assert!(!msg.is_empty(), "error message must not be empty for invalid XML");
+    }
+
+    /// Verifies the new mesh view fields added in MuJoCo 3.8.0:
+    /// read-only index fields (`normaladr`, `normalnum`, etc.) have length 1,
+    /// and the read-write fields (`scale`, `pos`, `quat`) have the right length
+    /// and survive a roundtrip write.
+    #[test]
+    fn test_mesh_view_new_fields() {
+        const MESH_MODEL: &str = "<mujoco>\
+          <asset>\
+            <mesh name=\"cube\" vertex=\"-0.5 -0.5 -0.5  0.5 -0.5 -0.5  -0.5  0.5 -0.5  0.5  0.5 -0.5  \
+                                         -0.5 -0.5  0.5  0.5 -0.5  0.5  -0.5  0.5  0.5  0.5  0.5  0.5\"/>\
+          </asset>\
+          <worldbody>\
+            <geom type=\"mesh\" mesh=\"cube\"/>\
+          </worldbody>\
+        </mujoco>";
+
+        let mut model = MjModel::from_xml_string(MESH_MODEL).unwrap();
+        let mesh_info = model.mesh("cube").unwrap();
+
+        let view = mesh_info.view(&model);
+
+        /* Verify field dimensions for read-write fields */
+        assert_eq!(view.scale.len(), 3);
+        assert_eq!(view.pos.len(), 3);
+        assert_eq!(view.quat.len(), 4);
+
+        /* Verify field dimensions for read-only index fields */
+        assert_eq!(view.normaladr.len(), 1);
+        assert_eq!(view.normalnum.len(), 1);
+        assert_eq!(view.texcoordnum.len(), 1);
+        assert_eq!(view.bvhadr.len(), 1);
+        assert_eq!(view.bvhnum.len(), 1);
+        assert_eq!(view.octadr.len(), 1);
+        assert_eq!(view.octnum.len(), 1);
+        assert_eq!(view.pathadr.len(), 1);
+        assert_eq!(view.polynum.len(), 1);
+        assert_eq!(view.polyadr.len(), 1);
+
+        /* Verify write-read roundtrip for scale */
+        let mut view_mut = mesh_info.view_mut(&mut model);
+        view_mut.scale[0] = 2.0;
+        view_mut.scale[1] = 3.0;
+        view_mut.scale[2] = 4.0;
+
+        let view2 = mesh_info.view(&model);
+        assert_eq!(view2.scale[0], 2.0);
+        assert_eq!(view2.scale[1], 3.0);
+        assert_eq!(view2.scale[2], 4.0);
+    }
+
+    /// Verifies that `flex_bandwidth`, `flex_cellnum`, and `flex_stiffnessadr`
+    /// return empty slices when the model contains no flex bodies.
+    #[test]
+    fn test_flex_array_slices_empty_for_non_flex_model() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        assert_eq!(model.ffi().nflex, 0);
+        assert_eq!(model.flex_bandwidth().len(), 0);
+        assert_eq!(model.flex_cellnum().len(), 0);
+        assert_eq!(model.flex_stiffnessadr().len(), 0);
+    }
+
+    /// Tests the wrapper of `mj_maxContact` ([`MjModel::max_contacts`]).
+    #[test]
+    fn test_max_contacts() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let geom1 = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere").unwrap();
+        let geom2 = model.name_to_id(MjtObj::mjOBJ_GEOM, "ball2").unwrap();
+
+        let mc = model.max_contacts(geom1, geom2, None);  // pull margin from model.
+        assert_eq!(mc, 1);
+
+        let mc = model.max_contacts(geom1, geom2, Some(false));
+        assert_eq!(mc, 1);
+
+        // Spheres always have one contact, regardless of margin.
+        let mc = model.max_contacts(geom1, geom2, Some(true));
+        assert_eq!(mc, 1);
+
+        // Test invalid geom index.
+        assert!( model.try_max_contacts(999, geom2, Some(true)).is_err());
     }
 }

@@ -1,1 +1,1 @@
-The changelog is available at [main documentation](https://mujoco-rs.readthedocs.io/en/stable/changelog.html).
+The changelog is available [here](https://mujoco-rs.readthedocs.io/en/4.0.x/changelog.html).

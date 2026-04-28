@@ -29,50 +29,6 @@ For example:
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
     }
 
-
-.. warning:: **STL and OBJ mesh files require plugin libraries (MuJoCo 3.6.0+)**
-
-    Starting with MuJoCo 3.6.0, loading STL or OBJ mesh files is handled by decoder plugins
-    rather than the MuJoCo core. If your model references ``.stl`` or ``.obj`` mesh assets,
-    you must load the relevant plugin library **before** loading the model, otherwise MuJoCo
-    will report "no decoder found for mesh file".
-
-    Use
-    :docs-rs:`~mujoco_rs::wrappers::mj_plugin::<fn>load_all_plugin_libraries`
-    to load all plugins from MuJoCo's plugin directory:
-
-    .. code-block:: rust
-
-        use mujoco_rs::prelude::*;
-
-        fn main() {
-            // Load all MuJoCo plugins from the plugin directory.
-            // Adjust the path to match your MuJoCo installation.
-            load_all_plugin_libraries("path/to/mujoco/bin/mujoco_plugin", None)
-                .expect("failed to load plugin libraries");
-
-            let model = MjModel::from_xml("model.xml").expect("could not load the model");
-        }
-
-    Alternatively, use
-    :docs-rs:`~mujoco_rs::wrappers::mj_plugin::<fn>load_plugin_library`
-    to load a specific plugin, for example
-    only the STL decoder:
-
-    .. code-block:: rust
-
-        use mujoco_rs::prelude::*;
-
-        fn main() {
-            load_plugin_library("path/to/mujoco/bin/mujoco_plugin/libstl_decoder.so")
-                .expect("failed to load STL decoder plugin");
-
-            let model = MjModel::from_xml("model.xml").expect("could not load the model");
-        }
-
-    Models that use only MSH format meshes or inline ``vertex``/``face`` mesh data are
-    not affected and do not require any plugin loading.
-
 |mj_model| represents the compiled model from an XML file and contains everything from
 basic metadata to physics parameters.
 
@@ -146,7 +102,7 @@ Similarly, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ste
 :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step1` and :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step2`, respectively.
 
 For more information about specific MuJoCo functions, see the
-`MuJoCo documentation <https://mujoco.readthedocs.io/en/stable/APIreference/APIfunctions.html#mj-step>`_.
+`MuJoCo documentation <https://mujoco.readthedocs.io/en/3.8.0/APIreference/APIfunctions.html#mj-step>`_.
 
 Real-time
 ----------------------
@@ -185,7 +141,7 @@ it is beneficial to perform domain randomization [Tobin2017]_.
 .. danger::
 
     Not all parameters of |mj_model| are safe to change.
-    See `MuJoCo's documentation <https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes>`_
+    See `MuJoCo's documentation <https://mujoco.readthedocs.io/en/3.8.0/programming/simulation.html#mjmodel-changes>`_
     for a list of parameters that are safe to change.
 
 Direct mutation with ``model_mut``
