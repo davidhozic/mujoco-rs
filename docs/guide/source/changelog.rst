@@ -24,6 +24,15 @@ This means that any incompatible changes increase the major version (**Y**.x.x).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+4.0.1 (MuJoCo 3.8.0)
+======================
+.. rubric:: Bug fixes
+
+- When using the ``auto-download-mujoco`` feature, the build script now checks for existence
+  of the library before downloading it. When the library exists, its download and extraction
+  are skipped.
+
+
 4.0.0 (MuJoCo 3.8.0)
 ======================
 

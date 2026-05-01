@@ -343,75 +343,77 @@ fn main() {
                 )
             }
 
-            let download_path = download_dir.join(download_url.rsplit_once("/").unwrap().1);
             let outdirname = download_dir.join(format!("mujoco-{mujoco_version}"));
-            let download_hash_path = download_dir.join(download_hash_url.rsplit_once("/").unwrap().1);
-
-            // Download the archive.
-            let mut response = ureq::get(&download_url).call().expect("failed to download MuJoCo");
-            let mut body_reader = response.body_mut().as_reader();
-            std::fs::create_dir_all(download_path.parent().unwrap()).unwrap_or_else(
-                |err| panic!("failed to create parent directory of '{}' ({err})", download_path.display())
-            );
-            let mut file = File::create(&download_path).unwrap_or_else(
-                |err| panic!("could not save archive '{}' ({err})", download_path.display())
-            );
-            std::io::copy(&mut body_reader, &mut file).unwrap_or_else(
-                |err| panic!("failed to copy archive contents to '{}' ({err})", download_path.display())
-            );
-
-            // Download the hash file.
-            response = ureq::get(&download_hash_url).call().expect("failed to download MuJoCo's hash file");
-            body_reader = response.body_mut().as_reader();
-            let mut file = File::create(&download_hash_path).unwrap_or_else(
-                |err| panic!("could not save archive '{}' ({err})", download_hash_path.display())
-            );
-            std::io::copy(&mut body_reader, &mut file).unwrap_or_else(
-                |err| panic!("failed to copy archive contents to '{}' ({err})", download_hash_path.display())
-            );
-
-            // Verify file integrity via SHA-256.
-            let mut hashfile_data = String::new();
-            file = File::open(&download_hash_path).expect("failed to open the hash file");
-            file.read_to_string(&mut hashfile_data).expect("failed to read hash file contents");
-            let hash_official = hashfile_data.split_once(' ').unwrap().0;
-
-            file = File::open(&download_path).unwrap();
-            let mut reader = BufReader::new(file);
-            let mut buffer = [0u8; 1024];
-            let mut hasher = sha2::Sha256::new();
-            loop {
-                let n = reader.read(&mut buffer).unwrap_or_else(|err|
-                    panic!("could not read archive '{}' ({err})", download_path.display())
-                );
-                if n == 0 {
-                    break;
-                }
-                hasher.update(&buffer[..n]);
-            }
-            let result = format!("{:x}", hasher.finalize());
-            if hash_official != result {
-                panic!(
-                    "sha256sum of '{}' does not match \
-                    the one stored in the official hash file --- stopping due to security concerns!",
-                    download_path.display()
-                );
-            }
-
-            // Extract.
-            #[cfg(target_os = "linux")]
-            extract_linux(&download_path);
-            #[cfg(target_os = "windows")]
-            extract_windows(&download_path, &outdirname);
-
-            std::fs::remove_file(&download_path).unwrap_or_else(
-                |err| panic!("failed to delete archive '{}' ({err})", download_path.display())
-            );
-            std::fs::remove_file(&download_hash_path).unwrap_or_else(
-                |err| panic!("failed to delete hash file '{}' ({err})", download_hash_path.display())
-            );
-
             let libdir_path = outdirname.join("lib");
+            if !libdir_path.exists() {
+                let download_path = download_dir.join(download_url.rsplit_once("/").unwrap().1);
+                let download_hash_path = download_dir.join(download_hash_url.rsplit_once("/").unwrap().1);
+
+                // Download the archive.
+                let mut response = ureq::get(&download_url).call().expect("failed to download MuJoCo");
+                let mut body_reader = response.body_mut().as_reader();
+                std::fs::create_dir_all(download_path.parent().unwrap()).unwrap_or_else(
+                    |err| panic!("failed to create parent directory of '{}' ({err})", download_path.display())
+                );
+                let mut file = File::create(&download_path).unwrap_or_else(
+                    |err| panic!("could not save archive '{}' ({err})", download_path.display())
+                );
+                std::io::copy(&mut body_reader, &mut file).unwrap_or_else(
+                    |err| panic!("failed to copy archive contents to '{}' ({err})", download_path.display())
+                );
+
+                // Download the hash file.
+                response = ureq::get(&download_hash_url).call().expect("failed to download MuJoCo's hash file");
+                body_reader = response.body_mut().as_reader();
+                let mut file = File::create(&download_hash_path).unwrap_or_else(
+                    |err| panic!("could not save archive '{}' ({err})", download_hash_path.display())
+                );
+                std::io::copy(&mut body_reader, &mut file).unwrap_or_else(
+                    |err| panic!("failed to copy archive contents to '{}' ({err})", download_hash_path.display())
+                );
+
+                // Verify file integrity via SHA-256.
+                let mut hashfile_data = String::new();
+                file = File::open(&download_hash_path).expect("failed to open the hash file");
+                file.read_to_string(&mut hashfile_data).expect("failed to read hash file contents");
+                let hash_official = hashfile_data.split_once(' ').unwrap().0;
+
+                file = File::open(&download_path).unwrap();
+                let mut reader = BufReader::new(file);
+                let mut buffer = [0u8; 1024];
+                let mut hasher = sha2::Sha256::new();
+                loop {
+                    let n = reader.read(&mut buffer).unwrap_or_else(|err|
+                        panic!("could not read archive '{}' ({err})", download_path.display())
+                    );
+                    if n == 0 {
+                        break;
+                    }
+                    hasher.update(&buffer[..n]);
+                }
+                let result = format!("{:x}", hasher.finalize());
+                if hash_official != result {
+                    panic!(
+                        "sha256sum of '{}' does not match \
+                        the one stored in the official hash file --- stopping due to security concerns!",
+                        download_path.display()
+                    );
+                }
+
+                // Extract.
+                #[cfg(target_os = "linux")]
+                extract_linux(&download_path);
+                #[cfg(target_os = "windows")]
+                extract_windows(&download_path, &outdirname);
+
+                std::fs::remove_file(&download_path).unwrap_or_else(
+                    |err| panic!("failed to delete archive '{}' ({err})", download_path.display())
+                );
+                std::fs::remove_file(&download_hash_path).unwrap_or_else(
+                    |err| panic!("failed to delete hash file '{}' ({err})", download_hash_path.display())
+                );
+            }
+
             println!("cargo::rustc-link-search={}", libdir_path.display());
             println!("cargo::rustc-link-lib=mujoco");
         }
