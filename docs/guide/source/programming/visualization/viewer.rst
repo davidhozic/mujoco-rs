@@ -23,7 +23,7 @@ Rust-native 3D viewer
 The Rust-native 3D viewer, enabled by the ``viewer`` feature, supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
 This also includes object perturbations. Optionally, enabled by the ``viewer-ui`` feature, the viewer
 also provides a user interface, which tries to replicate the original C++ viewer as best as possible
-and thus allows control of constraints, joints, actuators, etc.
+(while simultaneously enriching it) and thus allows control of constraints, joints, actuators, etc.
 
 A screenshot of the Rust 3D viewer is shown below.
 
@@ -107,7 +107,6 @@ After synchronization, or in parallel with it, the viewer must also be rendered 
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` method.
 
 .. code-block:: rust
-    :emphasize-lines: 2, 4, 5
 
     ...
     while viewer.running() {
@@ -191,7 +190,7 @@ the actual physics simulation runs in another.
 Here's an adapted excerpt from the :gh-example:`example <rust_viewer_threaded.rs>` on how to use the viewer in a multi-threaded way:
 
 .. code-block:: rust
-    :emphasize-lines: 1, 12-13, 18-22, 30-34
+    :emphasize-lines: 12-13, 18-22, 30-34
 
     let model = Arc::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
     let mut data = MjData::new(model.clone());
@@ -361,6 +360,7 @@ and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model
         lock.sync_model_stat(data.model_stat_mut());
     }).unwrap();
 
+This requires the ``M`` bound inside |mj_data| to be ``DerefMut<Target = MjModel>`` (e.g., ``Box<MjModel>``).
 
 .. _mj_cpp_viewer:
 

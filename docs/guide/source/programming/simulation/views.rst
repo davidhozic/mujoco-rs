@@ -119,15 +119,9 @@ generated view still support mutation, but only through
         let mut model = MjModel::from_xml("model.xml").expect("could not load the model");
         let actuator_info = model.actuator("slider").unwrap();
         let mut view = actuator_info.view_mut(&mut model);
-        // SAFETY: assigning a valid enum variant for this field.
+
         unsafe {
-            view.dyntype.as_mut_slice()[0] = MjtDyn::mjDYN_FILTER;
+            view.dyntype.as_mut_slice()[0] = MjtDyn::mjDYN_NONE;
+            view.actadr.as_mut_slice()[0] = -1;
         }
     }
-
-
-Other views
-======================
-Views can be created for other types of items too, as well as for
-:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`.
-The process is exactly the same as shown above.

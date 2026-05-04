@@ -70,7 +70,7 @@ To mutably access the specification's world body, we can use the
 We can now add our ball's body, geom and joint like so:
 
 .. code-block:: rust
-    :emphasize-lines: 5-17
+    :emphasize-lines: 7-17
 
     use mujoco_rs::prelude::*;
 
