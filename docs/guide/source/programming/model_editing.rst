@@ -43,6 +43,8 @@ We start by creating an |mj_spec| instance:
 .. code-block:: rust
     :emphasize-lines: 2
 
+    use mujoco_rs::prelude::*;
+
     fn main() {
         let mut spec = MjSpec::new();
     }
@@ -58,6 +60,8 @@ To mutably access the specification's world body, we can use the
 .. code-block:: rust
     :emphasize-lines: 3
 
+    use mujoco_rs::prelude::*;
+
     fn main() {
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();       // or spec.body_mut("world").unwrap();
@@ -67,6 +71,8 @@ We can now add our ball's body, geom and joint like so:
 
 .. code-block:: rust
     :emphasize-lines: 5-15
+
+    use mujoco_rs::prelude::*;
 
     fn main() {
         let mut spec = MjSpec::new();
@@ -99,6 +105,8 @@ Finally, we can now add the base plane, like so:
 .. code-block:: rust
     :emphasize-lines: 18-20
 
+    use mujoco_rs::prelude::*;
+
     fn main() {
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();       // or spec.body_mut("world").unwrap();
@@ -128,6 +136,8 @@ The specification can also be saved directly to an MJCF (XML) file:
 
 .. code-block:: rust
     :emphasize-lines: 23-26
+
+    use mujoco_rs::prelude::*;
 
     fn main() {
         let mut spec = MjSpec::new();
@@ -175,6 +185,8 @@ A new class is created by providing its ``class_name`` and optionally a ``parent
 (for class inheritance). If no parent is given, the class inherits from the main default.
 
 .. code-block:: rust
+
+    use mujoco_rs::prelude::*;
 
     fn main() {
         let mut spec = MjSpec::new();

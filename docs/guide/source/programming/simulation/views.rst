@@ -38,6 +38,8 @@ like so:
 .. code-block:: rust
     :emphasize-lines: 4
 
+    use mujoco_rs::prelude::*;
+
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
         let mut data = MjData::new(&model);
@@ -54,6 +56,8 @@ a reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so
 
 .. code-block:: rust
     :emphasize-lines: 7
+
+    use mujoco_rs::prelude::*;
 
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
@@ -86,6 +90,8 @@ and passed a mutable reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<stru
 .. code-block:: rust
     :emphasize-lines: 7
 
+    use mujoco_rs::prelude::*;
+
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
         let mut data = MjData::new(&model);
@@ -106,6 +112,8 @@ generated view still support mutation, but only through
 :docs-rs:`mujoco_rs::util::<struct>PointerViewUnsafeMut` and explicit ``unsafe``:
 
 .. code-block:: rust
+
+    use mujoco_rs::prelude::*;
 
     let mut model = MjModel::from_xml("model.xml").expect("could not load the model");
     let mut view = model.actuator("slider").unwrap().view_mut(&mut model);

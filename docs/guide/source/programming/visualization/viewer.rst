@@ -48,6 +48,9 @@ The viewer can be launched in two ways:
 
       use std::time::Duration;
 
+      use mujoco_rs::viewer::MjViewer;
+      use mujoco_rs::prelude::*;
+
       fn main() {
           /* Initiate the physics simulation */
           let model = MjModel::from_xml("path/to/model.xml").expect("could not load the model");
@@ -79,6 +82,9 @@ The viewer can be launched in two ways:
       :emphasize-lines: 8
 
       use std::time::Duration;
+
+      use mujoco_rs::viewer::MjViewer;
+      use mujoco_rs::prelude::*;
 
       fn main() {
           let model = MjModel::from_xml("path/to/model.xml").expect("could not load the model");
@@ -263,6 +269,13 @@ The following example demonstrates how to add a custom window to the viewer:
 .. code-block:: rust
     :emphasize-lines: 8-19
 
+    use std::time::Duration;
+
+    use mujoco_rs::viewer::MjViewer;
+    use mujoco_rs::prelude::*;
+
+    const EXAMPLE_MODEL: &str = r#"<mujoco><worldbody/></mujoco>"#;
+
     fn main() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
         let mut data = MjData::new(&model);
@@ -386,6 +399,13 @@ The changes to the viewer are made to allow viewer rendering in a user-controlle
 Here is an example of using the C++ wrapper:
 
 .. code-block:: rust
+
+    use std::time::Duration;
+
+    use mujoco_rs::cpp_viewer::MjViewerCpp;
+    use mujoco_rs::prelude::*;
+
+    const EXAMPLE_MODEL: &str = r#"<mujoco><worldbody/></mujoco>"#;
 
     fn main() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");

@@ -40,6 +40,8 @@ For example:
 .. code-block:: rust
     :emphasize-lines: 3
 
+    use mujoco_rs::prelude::*;
+
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
         let mut data = MjData::new(&model);  // or model.make_data()
@@ -56,6 +58,8 @@ For example:
 
     .. code-block:: rust
         :emphasize-lines: 2
+
+        use mujoco_rs::prelude::*;
 
         fn main() {
             let model = Box::new(MjModel::from_xml("model.xml").expect("could not load the model"));
@@ -86,6 +90,8 @@ method like so:
 
 .. code-block:: rust
     :emphasize-lines: 5
+
+    use mujoco_rs::prelude::*;
 
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
@@ -121,6 +127,8 @@ for precise timing.
     use std::time::Duration;
     use std::thread;
 
+    use mujoco_rs::prelude::*;
+
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
         let mut data = MjData::new(&model);
@@ -144,34 +152,45 @@ it is beneficial to perform domain randomization [Tobin2017]_.
     See `MuJoCo's documentation <https://mujoco.readthedocs.io/en/3.8.0/programming/simulation.html#mjmodel-changes>`_
     for a list of parameters that are safe to change.
 
-Direct mutation with ``model_mut``
-------------------------------------
+Direct mutation with ``model_opt_mut`` / ``model_vis_mut`` / ``model_stat_mut``
+-------------------------------------------------------------------------------
 
 When the model-handle type ``M`` implements
 `DerefMut\<Target = MjModel\> <https://doc.rust-lang.org/std/ops/trait.DerefMut.html>`_
-(e.g., owned |mj_model|, ``Box<MjModel>``), the
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_mut` method
-gives direct mutable access to the model's physics parameters.
+(e.g., owned |mj_model|, ``Box<MjModel>``), the safe accessors
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`, and
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_stat_mut`
+give direct mutable access to the model's physics options, visualization settings,
+and statistics respectively.
 
 .. code-block:: rust
     :linenos:
     :emphasize-lines: 5, 6
 
+    use mujoco_rs::prelude::*;
+
     fn main() {
         let model = Box::new(MjModel::from_xml("model.xml").expect("could not load the model"));
         let mut data = MjData::new(model);
 
-        data.model_mut().opt_mut().timestep = 0.004;
-        data.model_mut().opt_mut().gravity[2] = -5.0;
+        data.model_opt_mut().timestep = 0.004;
+        data.model_opt_mut().gravity[2] = -5.0;
     }
 
 .. note::
 
-    ``model_mut`` is **not** available when ``M`` is a shared-ownership type
-    (e.g., ``Arc<MjModel>``, ``&MjModel``). In those cases, use ``swap_model`` below.
+    For full mutable access to the entire |mj_model| (e.g., to replace the model in-place),
+    use the ``unsafe``
+    :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_mut` method.
+    It requires ``M: DerefMut<Target = MjModel>`` and is unsafe because swapping to an
+    incompatible model can violate internal invariants.
+
+    ``model_opt_mut`` and its siblings are **not** available when ``M`` is a shared-ownership
+    type (e.g., ``Arc<MjModel>``, ``&MjModel``). In those cases, use ``swap_model`` below.
 
 See the :gh-example:`model_parameters.rs` example for a complete runnable comparison of both
-approaches (``model_mut`` and ``swap_model``).
+approaches (``model_opt_mut`` and ``swap_model``).
 
 Swapping models with ``swap_model``
 --------------------------------------
@@ -184,6 +203,8 @@ which swaps the |mj_model| owned by |mj_data| for the |mj_model| given as parame
 .. code-block:: rust
     :linenos:
     :emphasize-lines: 8
+
+    use mujoco_rs::prelude::*;
 
     fn main() {
         let mut model_template = Box::new(MjModel::from_xml("model.xml").expect("could not load the model"));
