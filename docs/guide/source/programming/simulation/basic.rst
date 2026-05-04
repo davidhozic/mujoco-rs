@@ -1,5 +1,6 @@
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
 .. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
+.. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
 
 .. _basic_sim:
 
@@ -38,7 +39,7 @@ method or through the :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel
 For example:
 
 .. code-block:: rust
-    :emphasize-lines: 3
+    :emphasize-lines: 5
 
     use mujoco_rs::prelude::*;
 
@@ -57,7 +58,6 @@ For example:
     trait (e.g., `Box\<MjModel\> <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_). For example:
 
     .. code-block:: rust
-        :emphasize-lines: 2
 
         use mujoco_rs::prelude::*;
 
@@ -89,7 +89,7 @@ Then to run/step the simulation, just call the :docs-rs:`~~mujoco_rs::wrappers::
 method like so:
 
 .. code-block:: rust
-    :emphasize-lines: 5
+    :emphasize-lines: 7
 
     use mujoco_rs::prelude::*;
 
@@ -122,7 +122,7 @@ for precise timing.
 
 
 .. code-block:: rust
-    :emphasize-lines: 7, 10, 11
+    :emphasize-lines: 9, 13
 
     use std::time::Duration;
     use std::thread;
@@ -145,6 +145,8 @@ Changing model's parameters
 ================================
 For purposes of transfer from simulation to reality in reinforcement learning
 it is beneficial to perform domain randomization [Tobin2017]_.
+This requires modifying different aspects of the environment,
+such as physics parameters --- part of |mj_model|.
 
 .. danger::
 
@@ -157,7 +159,7 @@ Direct mutation with ``model_opt_mut`` / ``model_vis_mut`` / ``model_stat_mut``
 
 When the model-handle type ``M`` implements
 `DerefMut\<Target = MjModel\> <https://doc.rust-lang.org/std/ops/trait.DerefMut.html>`_
-(e.g., owned |mj_model|, ``Box<MjModel>``), the safe accessors
+(e.g., ``Box<MjModel>``), the safe accessors
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut`,
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`, and
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_stat_mut`
@@ -166,14 +168,13 @@ and statistics respectively.
 
 .. code-block:: rust
     :linenos:
-    :emphasize-lines: 5, 6
+    :emphasize-lines: 6, 7
 
     use mujoco_rs::prelude::*;
 
     fn main() {
         let model = Box::new(MjModel::from_xml("model.xml").expect("could not load the model"));
         let mut data = MjData::new(model);
-
         data.model_opt_mut().timestep = 0.004;
         data.model_opt_mut().gravity[2] = -5.0;
     }
@@ -187,7 +188,11 @@ and statistics respectively.
     incompatible model can violate internal invariants.
 
     ``model_opt_mut`` and its siblings are **not** available when ``M`` is a shared-ownership
-    type (e.g., ``Arc<MjModel>``, ``&MjModel``). In those cases, use ``swap_model`` below.
+    type (e.g., ``Arc<MjModel>``, ``&MjModel``). In those cases,
+    use :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model`
+    or its fallible twin :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_swap_model`
+    below. The latter two methods are not unsafe as failure results in a panic
+    or in a returned error, respectively.
 
 See the :gh-example:`model_parameters.rs` example for a complete runnable comparison of both
 approaches (``model_opt_mut`` and ``swap_model``).
@@ -197,12 +202,13 @@ Swapping models with ``swap_model``
 
 When ``M`` does not support ``DerefMut`` (e.g., ``Arc<MjModel>``), or when you need to
 swap in an entirely different model instance, use the
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` method,
-which swaps the |mj_model| owned by |mj_data| for the |mj_model| given as parameter.
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` method
+or the :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_swap_model` method,
+which swap the |mj_model| owned by |mj_data| for the |mj_model| given as parameter.
 
 .. code-block:: rust
     :linenos:
-    :emphasize-lines: 8
+    :emphasize-lines: 11
 
     use mujoco_rs::prelude::*;
 
@@ -216,6 +222,10 @@ which swaps the |mj_model| owned by |mj_data| for the |mj_model| given as parame
         model_template.opt_mut().timestep = 0.004;
         model_template = data.swap_model(model_template);
     }
+
+Note that the above example uses |mj_model| as the ``model_template`` only
+as an illustration --- usually this would be something like |mj_spec|, however that
+is reserved for the :ref:`model_editing` chapter.
 
 .. [Tobin2017] J. Tobin, R. Fong, A. Ray, J. Schneider, W. Zaremba, and P. Abbeel,
    "Domain randomization for transferring deep neural networks from simulation to

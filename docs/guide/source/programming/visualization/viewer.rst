@@ -44,7 +44,7 @@ The viewer can be launched in two ways:
   full control over the viewer's settings:
 
   .. code-block:: rust
-      :emphasize-lines: 9-15
+      :emphasize-lines: 13-18
 
       use std::time::Duration;
 
@@ -79,7 +79,7 @@ The viewer can be launched in two ways:
   convenient shorthand for users who want the **default settings**:
 
   .. code-block:: rust
-      :emphasize-lines: 8
+      :emphasize-lines: 11
 
       use std::time::Duration;
 
@@ -267,7 +267,7 @@ This allows you to create custom windows, panels, and other UI elements using
 The following example demonstrates how to add a custom window to the viewer:
 
 .. code-block:: rust
-    :emphasize-lines: 8-19
+    :emphasize-lines: 15-28
 
     use std::time::Duration;
 
@@ -361,15 +361,6 @@ and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model
         lock.sync_model_stat(data.model_stat_mut());
     }).unwrap();
 
-When the model structure changes (e.g., different body configuration), the viewer
-detects this via model signature comparison and reloads its internal state. Changes
-made in the UI are cleared when a model change is detected.
-
-To safely modify parameters without using unsafe code, use the direct accessors
-on :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`:
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut`,
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`,
-
 
 .. _mj_cpp_viewer:
 
@@ -423,4 +414,6 @@ Here is an example of using the C++ wrapper:
     }
 
 
-Compared to the Rust-native viewer, the C++ wrapper doesn't take a ``data`` parameter to the :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync`.
+Unlike the Rust-native viewer, the C++ wrapper's
+:docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync` does not take a ``data``
+parameter; it uses the raw pointer passed at construction time.
