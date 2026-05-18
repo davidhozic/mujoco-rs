@@ -36,7 +36,9 @@ We will first create an info struct by calling :docs-rs:`~~mujoco_rs::wrappers::
 like so:
 
 .. code-block:: rust
-    :emphasize-lines: 4
+    :emphasize-lines: 6
+
+    use mujoco_rs::prelude::*;
 
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
@@ -53,7 +55,9 @@ To actually view the data, we will now call
 a reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so:
 
 .. code-block:: rust
-    :emphasize-lines: 7
+    :emphasize-lines: 9
+
+    use mujoco_rs::prelude::*;
 
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
@@ -84,7 +88,9 @@ The above example shows a read-only view. For mutability,
 and passed a mutable reference to :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`, like so:
 
 .. code-block:: rust
-    :emphasize-lines: 7
+    :emphasize-lines: 9
+
+    use mujoco_rs::prelude::*;
 
     fn main() {
         let model = MjModel::from_xml("model.xml").expect("could not load the model");
@@ -107,16 +113,15 @@ generated view still support mutation, but only through
 
 .. code-block:: rust
 
-    let mut model = MjModel::from_xml("model.xml").expect("could not load the model");
-    let mut view = model.actuator("slider").unwrap().view_mut(&mut model);
-    // SAFETY: assigning a valid enum variant for this field.
-    unsafe {
-        view.dyntype.as_mut_slice()[0] = MjtDyn::mjDYN_FILTER;
+    use mujoco_rs::prelude::*;
+
+    fn main() {
+        let mut model = MjModel::from_xml("model.xml").expect("could not load the model");
+        let actuator_info = model.actuator("slider").unwrap();
+        let mut view = actuator_info.view_mut(&mut model);
+
+        unsafe {
+            view.dyntype.as_mut_slice()[0] = MjtDyn::mjDYN_NONE;
+            view.actadr.as_mut_slice()[0] = -1;
+        }
     }
-
-
-Other views
-======================
-Views can be created for other types of items too, as well as for
-:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`.
-The process is exactly the same as shown above.

@@ -130,6 +130,10 @@ ones.
 
 .. code-block:: rust
 
+    // For field modification (safe accessors):
+    data.model_opt_mut().gravity[2] = half_gravity;
+
+    // For full model replacement:
     let mut old_model = data.swap_model(new_model);
 
 
@@ -273,8 +277,8 @@ The table below maps the breaking error-type changes:
 ``MjRenderer::rgb`` / ``MjRenderer::depth`` no longer return ``Result``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::rgb` and
-:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::depth` previously returned
+:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb` and
+:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer::<method>depth` previously returned
 ``io::Result`` (2.x) / ``Result<_, RendererError>`` (intermediate 3.0 dev builds).
 They now **panic** on error and return the image directly.
 Use ``try_rgb`` / ``try_depth`` for fallible alternatives.
@@ -654,8 +658,8 @@ Type changes
       let nnz = view.J_rownnz[0];
 
       // After (3.0.0) -- accessed through model
-       let view = model.tendon(0).view(&model);
-       let nnz = view.J_rownnz[0];
+      let view = model.tendon(0).view(&model);
+      let nnz = view.J_rownnz[0];
 
 
 ``MjCameraModelView::projection`` replaces ``orthographic``
@@ -932,7 +936,7 @@ it internally). If you construct ``MjrContext`` manually:
 
 When ``spec`` includes ``mjSTATE_EQ_ACTIVE``, MuJoCo writes raw ``f64`` bytes into
 the ``eq_active`` byte array without booleanization, making a subsequent call to
-``eq_active()`` undefined behaviour. Re-validate by calling ``mj_forward`` /
+``eq_active()`` undefined behavior. Re-validate by calling ``mj_forward`` /
 ``mj_step`` before reading ``eq_active()``.
 
 **Before (2.x):**

@@ -23,7 +23,7 @@ Rust-native 3D viewer
 The Rust-native 3D viewer, enabled by the ``viewer`` feature, supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
 This also includes object perturbations. Optionally, enabled by the ``viewer-ui`` feature, the viewer
 also provides a user interface, which tries to replicate the original C++ viewer as best as possible
-and thus allows control of constraints, joints, actuators, etc.
+(while simultaneously enriching it) and thus allows control of constraints, joints, actuators, etc.
 
 A screenshot of the Rust 3D viewer is shown below.
 
@@ -44,9 +44,12 @@ The viewer can be launched in two ways:
   full control over the viewer's settings:
 
   .. code-block:: rust
-      :emphasize-lines: 9-15
+      :emphasize-lines: 13-18
 
       use std::time::Duration;
+
+      use mujoco_rs::viewer::MjViewer;
+      use mujoco_rs::prelude::*;
 
       fn main() {
           /* Initiate the physics simulation */
@@ -76,9 +79,12 @@ The viewer can be launched in two ways:
   convenient shorthand for users who want the **default settings**:
 
   .. code-block:: rust
-      :emphasize-lines: 8
+      :emphasize-lines: 11
 
       use std::time::Duration;
+
+      use mujoco_rs::viewer::MjViewer;
+      use mujoco_rs::prelude::*;
 
       fn main() {
           let model = MjModel::from_xml("path/to/model.xml").expect("could not load the model");
@@ -101,7 +107,6 @@ After synchronization, or in parallel with it, the viewer must also be rendered 
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` method.
 
 .. code-block:: rust
-    :emphasize-lines: 2, 4, 5
 
     ...
     while viewer.running() {
@@ -185,7 +190,7 @@ the actual physics simulation runs in another.
 Here's an adapted excerpt from the :gh-example:`example <rust_viewer_threaded.rs>` on how to use the viewer in a multi-threaded way:
 
 .. code-block:: rust
-    :emphasize-lines: 1, 12-13, 18-22, 30-34
+    :emphasize-lines: 12-13, 18-22, 30-34
 
     let model = Arc::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
     let mut data = MjData::new(model.clone());
@@ -261,7 +266,14 @@ This allows you to create custom windows, panels, and other UI elements using
 The following example demonstrates how to add a custom window to the viewer:
 
 .. code-block:: rust
-    :emphasize-lines: 8-19
+    :emphasize-lines: 15-28
+
+    use std::time::Duration;
+
+    use mujoco_rs::viewer::MjViewer;
+    use mujoco_rs::prelude::*;
+
+    const EXAMPLE_MODEL: &str = r#"<mujoco><worldbody/></mujoco>"#;
 
     fn main() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
@@ -348,15 +360,7 @@ and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model
         lock.sync_model_stat(data.model_stat_mut());
     }).unwrap();
 
-When the model structure changes (e.g., different body configuration), the viewer
-detects this via model signature comparison and reloads its internal state. Changes
-made in the UI are cleared when a model change is detected.
-
-To safely modify parameters without using unsafe code, use the direct accessors
-on :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`:
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut`,
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`,
-
+This requires the ``M`` bound inside |mj_data| to be ``DerefMut<Target = MjModel>`` (e.g., ``Box<MjModel>``).
 
 .. _mj_cpp_viewer:
 
@@ -387,6 +391,13 @@ Here is an example of using the C++ wrapper:
 
 .. code-block:: rust
 
+    use std::time::Duration;
+
+    use mujoco_rs::cpp_viewer::MjViewerCpp;
+    use mujoco_rs::prelude::*;
+
+    const EXAMPLE_MODEL: &str = r#"<mujoco><worldbody/></mujoco>"#;
+
     fn main() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
         let mut data = MjData::new(&model);
@@ -403,4 +414,6 @@ Here is an example of using the C++ wrapper:
     }
 
 
-Compared to the Rust-native viewer, the C++ wrapper doesn't take a ``data`` parameter to the :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync`.
+Unlike the Rust-native viewer, the C++ wrapper's
+:docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync` does not take a ``data``
+parameter; it uses the raw pointer passed at construction time.

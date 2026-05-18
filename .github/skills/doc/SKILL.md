@@ -52,6 +52,33 @@ After both builds pass, verify the Sphinx documentation content is correct:
 
 Fix any issues found before considering documentation work done.
 
+## Part 4 - Compile all RST code examples
+
+Each `.. code-block:: rust` block that is a self-contained program (contains `fn main()` or
+is a coherent set of statements) must compile verbatim. Blocks containing `...` or referencing
+undefined symbols are illustrative snippets -- skip those.
+
+### How to audit
+
+1. Extract every Rust code block from `docs/guide/source/**/*.rst`.
+2. Create a temporary test harness crate at `/tmp/doc_audit/` pointing to the local
+   `mujoco-rs` path dependency.
+3. Wrap each block in its own `mod block_N { ... }` (no shared top-level imports), then
+   attempt `cargo check` (not build) to catch type errors without needing a display/GPU.
+4. For blocks requiring the `viewer` feature, add a separate `[[bin]]` with
+   `required-features = ["viewer-ui"]`. For `cpp-viewer` blocks use
+   `required-features = ["cpp-viewer"]` and use `cargo check` (link errors are expected
+   when the static C++ library is absent -- that is acceptable as long as type-checking passes).
+
+### Fix policy
+
+- **Missing imports**: Add `use mujoco_rs::prelude::*;` (and any other needed imports)
+  at the top of the block -- do **not** rewrite the block with fully-qualified paths.
+- **Deprecated / removed API**: Replace with the current equivalent, updating surrounding
+  prose if needed.
+- **Illustrative snippets** (contain `...`, use undefined vars, or are clearly not
+  standalone programs): leave unchanged; they are not expected to compile.
+
 > [!NOTE]
 > - Always run `/doc` after adding or modifying public items, doc comments, `#[cfg(docsrs)]` attributes, or any `.rst` file.
 > - `DOCS_RS=y` is required; without it, `#[cfg(docsrs)]` blocks are skipped and broken doc-links may go undetected.

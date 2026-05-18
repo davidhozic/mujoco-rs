@@ -20,7 +20,7 @@ Changelog
 Versioning
 =================
 This project uses `semantic versioning <https://semver.org/>`_.
-This means that any incompatible changes increase the major version (**Y**.x.x).
+This means that any incompatible changes increase the major version (**X**.y.z).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
@@ -70,6 +70,19 @@ update of MuJoCo alone can increase the major version.
 
 - Because the :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_mut` allows full
   model replacement in unsafe ways, it is now marked unsafe.
+
+*MjViewer::add_ui_callback closure now receives Box<MjModel>*
+
+- The passive model stored inside the viewer changed from ``Arc<MjModel>`` to
+  ``Box<MjModel>``. The closure passed to
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`
+  now receives ``&mut MjData<Box<MjModel>>``.
+
+.. rubric:: Error handling
+
+- Added a new variant for handling invalid indices in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_max_contacts`:
+  :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>InvalidIndex`.
 
 .. rubric:: New features and improvements
 
@@ -127,19 +140,10 @@ update of MuJoCo alone can increase the major version.
 - The viewer UI now features an interactive **camera tracking modal** for selecting bodies to track.
   Select "Track" in the camera panel to open a modal with a scrollable grid of body buttons.
 
-.. rubric:: Removed examples
+.. rubric:: Other changes
 
 - Removed the ``stl_mesh`` example. It existed in MuJoCo-rs 3.0.1 due to MuJoCo 3.6.0 requiring a plugin to load
   STL meshes. MuJoCo 3.7.0+ fixes this, thus the example is no longer required.
-
-.. rubric:: Error changes
-
-- Added a new variant for handling invalid indices in
-  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_max_contacts`:
-  :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>InvalidIndex`. 
-
-.. rubric:: Other changes
-
 - Reduced default width of the viewer's UI side panel to 200.0.
 - Physics options (integrator, cone, jacobian, solver) in the viewer UI display a yellow warning when
   model parameters (opt/vis/stat) are out of sync with their initial values, indicating that parameters

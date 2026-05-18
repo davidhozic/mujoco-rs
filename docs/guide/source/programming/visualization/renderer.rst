@@ -125,17 +125,17 @@ and saves both an RGB and a depth image:
 
     const MODEL: &str = r#"
     <mujoco>
-      <visual>
+    <visual>
         <global offwidth="1920" offheight="1080"/>
-      </visual>
-      <worldbody>
+    </visual>
+    <worldbody>
         <light pos="0 0 3"/>
         <body name="ball" pos="0 0 1">
             <geom type="sphere" size=".1" rgba="0 1 0 1"/>
             <joint type="free"/>
         </body>
         <geom name="floor" type="plane" size="5 5 1"/>
-      </worldbody>
+    </worldbody>
     </mujoco>
     "#;
 
@@ -150,11 +150,13 @@ and saves both an RGB and a depth image:
             .camera(MjvCamera::default())
             .build(&model).expect("failed to initialize renderer");
 
-        data.step();
+        for _ in 0..150 {
+            data.step();
+        }
+
         renderer.sync_data(&mut data).unwrap();
         renderer.render().unwrap();
 
         renderer.save_rgb("frame.png").expect("failed to save RGB");
         renderer.save_depth("depth.png", true).expect("failed to save depth");  // true = normalize to 0-65535 range.
     }
-
