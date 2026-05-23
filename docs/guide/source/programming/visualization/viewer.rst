@@ -1,3 +1,5 @@
+.. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
+
 .. _mj_rust_viewer:
 
 =======================
