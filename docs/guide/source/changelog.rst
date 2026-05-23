@@ -35,7 +35,31 @@ Unreleased
 ======================
 
 .. rubric:: Breaking changes
+
+*MjrContext::upload_texture parameter type changed*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
+  now accepts ``texture_id: usize`` instead of ``texid: u32``.
+
 .. rubric:: New features and improvements
+
+*MjrContext GPU re-upload methods*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
+  now takes ``&self`` instead of ``&mut self``, relaxing the mutability requirement.
+- |mjr_context| now provides two additional GPU asset re-upload methods:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_mesh`
+    re-uploads a mesh to the GPU by mesh ID.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_hfield`
+    re-uploads a height field to the GPU by height-field ID.
+
+*ViewerSharedState height-field update*
+
+- :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_hfields`
+  copies height-field data from an external model to the viewer's internal passive model
+  and triggers a GPU re-upload.
+
 .. rubric:: Bug fixes
 .. rubric:: Error handling
 .. rubric:: Other changes

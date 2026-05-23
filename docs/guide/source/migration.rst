@@ -19,6 +19,31 @@ This page documents the migration steps for upgrading between major versions of 
 For a full list of changes, see the :ref:`changelog`.
 
 
+.. _migrate_unreleased:
+
+Unreleased
+======================
+
+``MjrContext::upload_texture`` parameter type changed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
+now accepts ``texture_id: usize`` instead of ``texid: u32``. Update call sites to cast or
+convert the argument accordingly.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    context.upload_texture(&model, 0u32);
+
+**After:**
+
+.. code-block:: rust
+
+    context.upload_texture(&model, 0usize);
+
+
 .. _migrate_4_0_0:
 
 Migrating to 4.0.0
