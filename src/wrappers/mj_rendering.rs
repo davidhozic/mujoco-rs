@@ -151,15 +151,28 @@ impl MjrContext {
         unsafe { mjr_resizeOffscreen(width as i32, height as i32, self.ffi_mut()); }
     }
 
-    /// Upload texture to GPU, overwriting previous upload if any.
+    /// Re-upload texture to GPU, overwriting previous upload if any.
     ///
     /// # Panics
-    /// Panics if `texid >= model.ntex()`.
-    pub fn upload_texture(&mut self, model: &MjModel, texid: u32) {
-        let ntex = model.ntex();
-        assert!((texid as i64) < ntex, "texid {texid} is out of range [0, {ntex})");
-        // SAFETY: texid is bounds-checked above; model and context are valid.
-        unsafe { mjr_uploadTexture(model.ffi(), self.ffi_mut(), texid as i32); }
+    /// Panics if `texture_id >= model.ntex()`.
+    pub fn upload_texture(&self, model: &MjModel, texture_id: usize) {
+        self.upload_x(model, texture_id, mjr_uploadTexture);
+    }
+
+    /// Re-upload mesh to GPU, overwriting previous upload if any.
+    ///
+    /// # Panics
+    /// Panics if `mesh_id >= model.nmesh()`.
+    pub fn upload_mesh(&self, model: &MjModel, mesh_id: usize) {
+        self.upload_x(model, mesh_id, mjr_uploadMesh);
+    }
+
+    /// Re-upload mesh to GPU, overwriting previous upload if any.
+    ///
+    /// # Panics
+    /// Panics if `hfield_id >= model.nhfield()`.
+    pub fn upload_hfield(&self, model: &MjModel, hfield_id: usize) {
+        self.upload_x(model, hfield_id, mjr_uploadHField);
     }
 
     /// Make the context's buffer current again.
@@ -268,6 +281,19 @@ impl MjrContext {
     /// upheld by the `mujoco-rs` wrappers and cause undefined behavior.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjrContext {
         &mut self.ffi
+    }
+
+    /// Common implementation of GPU upload methods. Specific item upload is made
+    /// by giving the corresponding `mjr_uploadX` to `upload_fn`.   
+    fn upload_x(
+        &self, model: &MjModel, item_id: usize,
+        upload_fn: unsafe extern "C" fn (m: *const mjModel, con: *const mjrContext, hfieldid: ::std::ffi::c_int)
+    )
+    {
+        let nitem = model.nhfield();
+        assert!((item_id as i64) < nitem, "{item_id} is out of range [0, {nitem})");
+        // SAFETY: texid is bounds-checked above; model and context are valid.
+        unsafe { upload_fn(model.ffi(), self.ffi(), item_id as i32); }
     }
 }
 

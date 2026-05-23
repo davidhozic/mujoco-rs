@@ -24,6 +24,24 @@ This means that any incompatible changes increase the major version (**X**.y.z).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+.. Template titles
+  .. rubric:: Breaking changes
+  .. rubric:: New features and improvements
+  .. rubric:: Bug fixes
+  .. rubric:: Error handling
+  .. rubric:: Other changes
+
+Unreleased
+======================
+
+.. rubric:: Breaking changes
+.. rubric:: New features and improvements
+.. rubric:: Bug fixes
+.. rubric:: Error handling
+.. rubric:: Other changes
+
+
+
 4.0.1 (MuJoCo 3.8.0)
 ======================
 .. rubric:: Bug fixes

@@ -289,15 +289,10 @@ impl ViewerSharedState {
         &mut self.user_scene
     }
 
-    /// Performs a bidirectional three-way merge of model parameters between the
-    /// viewer's passive model and the incoming model.
+    /// Performs a bidirectional three-way merge of model's `opt`, `vis`, and `stat` parameters
+    /// between the viewer's passive model and the incoming model.
     ///
     /// Detects model changes via signature comparison and reloads internal state if needed.
-    /// After a reload, the passive model mirrors the incoming model's current defaults, so
-    /// the first merge after reload is effectively a no-op (both sides agree).
-    /// On subsequent calls, changes made by the viewer UI (e.g., modified physics options)
-    /// are propagated to the incoming model, and changes made by the simulation are
-    /// propagated back to the viewer.
     pub fn sync_model(&mut self, model: &mut MjModel) {
         // Check if model signature changed
         if model.signature() != self.data_passive.model().signature() {
@@ -339,6 +334,15 @@ impl ViewerSharedState {
     pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {
         ThreeWayMerge::merge(stat, self.data_passive.model_stat_mut(), &mut self.prev_stat);
         self.last_stat_sync_time = Instant::now();
+    }
+
+    /// Copies [`MjModel::hfield_data`] from `model` to the internal passive model,
+    /// and performs a GPU reupload.
+    /// 
+    /// # Panics
+    /// Panics when the input `model` has a different length of height-field data.
+    pub fn update_hfields(&mut self, model: &MjModel) {
+        unsafe { self.data_passive.model_mut() }.hfield_data_mut().copy_from_slice(model.hfield_data());
     }
 
     /// Returns the last time physics options (opt) were synced.
