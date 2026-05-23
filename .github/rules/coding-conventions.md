@@ -146,6 +146,19 @@
   where `v` and `x` are literal/fixed. Use these when diffing against previous releases
   (e.g. `git diff 2.3.5 HEAD`).
 
+## Examples
+- Every example in `examples/` must be registered in `Cargo.toml` with `[[example]]` and
+  `required-features` if it uses optional features (e.g. `viewer`).
+- Examples are user-facing demos. `use mujoco_rs::prelude::*` is the conventional import
+  pattern; do NOT flag it as a violation of the "avoid crate::prelude" rule.
+- Use `.unwrap()` (not `.expect("msg")`) for failures that are obvious from the function name.
+- Use `/* */` block comments for top-level section headers inside function bodies (matches the
+  established style in all other examples).
+- Only add comments that clarify non-obvious intent. Do not comment self-explanatory builder
+  chains or single-expression statements.
+- New examples should be documented in the changelog under a `.. rubric:: New examples` section,
+  referencing the file with `:gh-example:\`Display name <filename.rs>\``.
+
 ## Testing
 - When adding a new feature or fixing a bug, add a test for it if one does not already exist.
 - Tests must be **correctness tests** (verify behaviour is right), not build tests (verify it compiles).

@@ -446,24 +446,6 @@ impl ViewerSharedState {
         self.hfield_reupload_pending = true;
     }
 
-    /// Returns `true` if a texture re-upload is pending (scheduled but not yet processed
-    /// by the render thread).
-    pub fn texture_reupload_pending(&self) -> bool {
-        self.texture_reupload_pending
-    }
-
-    /// Returns `true` if a mesh re-upload is pending (scheduled but not yet processed
-    /// by the render thread).
-    pub fn mesh_reupload_pending(&self) -> bool {
-        self.mesh_reupload_pending
-    }
-
-    /// Returns `true` if a heightfield re-upload is pending (scheduled but not yet processed
-    /// by the render thread).
-    pub fn hfield_reupload_pending(&self) -> bool {
-        self.hfield_reupload_pending
-    }
-
 
     /// struct (including large Jacobian and other arrays), not just the state needed for visualization.
     ///

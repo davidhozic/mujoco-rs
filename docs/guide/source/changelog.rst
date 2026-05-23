@@ -69,11 +69,12 @@ runtime, mirroring the behaviour of MuJoCo's C++ Simulate viewer.
   :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_textures_from`,
   :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_meshes_from`, and
   :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_hfields_from`.
-  The pending-flag accessors
-  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>texture_reupload_pending`,
-  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>mesh_reupload_pending`, and
-  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>hfield_reupload_pending`
-  can be polled to check whether the render thread has processed the upload.
+
+.. rubric:: New examples
+
+- :gh-example:`Asset re-upload <asset_reupload.rs>` --- demonstrates animated heightfield,
+  texture, and mesh GPU re-uploads with active physics: a ball falls onto a rippling terrain
+  and bounces within a smooth-step wall. Physics and rendering run on separate threads.
 
 .. rubric:: Bug fixes
 .. rubric:: Error handling
