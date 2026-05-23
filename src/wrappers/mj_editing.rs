@@ -567,6 +567,56 @@ item_spec_iterator! {
     Numeric, Text, Tuple, Key, Mesh, Hfield, Skin, Texture, Material, Plugin
 }
 
+impl<'a, T: MjsElementCast> MjsSpecItemIterMut<'a, T> {
+    fn new(root: &'a mut MjSpec) -> Self {
+        let last = unsafe { mjs_firstElement(root.0.as_ptr(), T::OBJ_TYPE) };
+        Self { root, last, item_type: PhantomData }
+    }
+}
+
+impl<'a, T: MjsElementCast> MjsSpecItemIter<'a, T> {
+    fn new(root: &'a MjSpec) -> Self {
+        let last = unsafe { mjs_firstElement(root.0.as_ptr(), T::OBJ_TYPE) };
+        Self { root, last, item_type: PhantomData }
+    }
+}
+
+impl<'a, T: MjsElementCast + 'a> Iterator for MjsSpecItemIterMut<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.last.is_null() {
+            return None;
+        }
+        unsafe {
+            let out = T::cast_from_element(self.last).as_mut();
+            // Use as_ptr() instead of ffi_mut() to avoid creating &mut mjSpec,
+            // which would alias with previously yielded &mut items.
+            self.last = mjs_nextElement(self.root.0.as_ptr(), self.last);
+            out
+        }
+    }
+}
+
+impl<'a, T: MjsElementCast + 'a> Iterator for MjsSpecItemIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.last.is_null() {
+            return None;
+        }
+        unsafe {
+            let out = T::cast_from_element(self.last).as_ref();
+            self.last = mjs_nextElement(self.root.0.as_ptr(), self.last);
+            out
+        }
+    }
+}
+
+// Once self.last is null, next() always returns None.
+impl<'a, T: MjsElementCast + 'a> std::iter::FusedIterator for MjsSpecItemIterMut<'a, T> {}
+impl<'a, T: MjsElementCast + 'a> std::iter::FusedIterator for MjsSpecItemIter<'a, T> {}
+
 /// Iterator methods.
 impl MjSpec {
     spec_get_iter! {
@@ -1730,9 +1780,56 @@ pub struct MjsBodyItemIter<'a, T> {
     item_type: PhantomData<T>
 }
 
-item_body_iterator! {
-    Body, Joint, Geom, Site, Camera, Light, Frame
+impl<'a, T: MjsElementCast> MjsBodyItemIterMut<'a, T> {
+    fn new(root: &'a mut MjsBody, recurse: bool) -> Self {
+        let last = unsafe { mjs_firstChild(root, T::OBJ_TYPE, recurse.into()) };
+        Self { root, last, recurse, item_type: PhantomData }
+    }
 }
+
+impl<'a, T: MjsElementCast> MjsBodyItemIter<'a, T> {
+    fn new(root: &'a MjsBody, recurse: bool) -> Self {
+        // SAFETY: mjs_firstChild requires a *mut pointer but does not mutate
+        // the body. The const-to-mut cast is sound because no mutation occurs.
+        let last = unsafe { mjs_firstChild(root as *const _ as *mut _, T::OBJ_TYPE, recurse.into()) };
+        Self { root, last, recurse, item_type: PhantomData }
+    }
+}
+
+impl<'a, T: MjsElementCast + 'a> Iterator for MjsBodyItemIterMut<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.last.is_null() {
+            return None;
+        }
+        unsafe {
+            let out = T::cast_from_element(self.last).as_mut();
+            self.last = mjs_nextChild(self.root, self.last, self.recurse.into());
+            out
+        }
+    }
+}
+
+impl<'a, T: MjsElementCast + 'a> Iterator for MjsBodyItemIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.last.is_null() {
+            return None;
+        }
+        unsafe {
+            let out = T::cast_from_element(self.last).as_ref();
+            // SAFETY: mjs_nextChild requires *mut but does not mutate. Cast is sound.
+            self.last = mjs_nextChild(self.root as *const _ as *mut _, self.last, self.recurse.into());
+            out
+        }
+    }
+}
+
+// Once self.last is null, next() always returns None.
+impl<'a, T: MjsElementCast + 'a> std::iter::FusedIterator for MjsBodyItemIterMut<'a, T> {}
+impl<'a, T: MjsElementCast + 'a> std::iter::FusedIterator for MjsBodyItemIter<'a, T> {}
 
 /// Iterator methods.
 impl MjsBody {
