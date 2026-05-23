@@ -15,7 +15,7 @@
 //! The physics runs on a dedicated thread, maintaining real-time simulation rate.
 //! The render loop runs on the main thread, as required by OpenGL.
 //!
-//! Asset updates are queued via [`ViewerSharedState::update_hfields_from`] and friends,
+//! Asset updates are queued via [`mujoco_rs::viewer::ViewerSharedState::update_hfields_from`] and friends,
 //! then flushed to the GPU on the next [`MjViewer::render`] call.
 //!
 //! The accessor methods used here are all safe -- no `unsafe` blocks needed.

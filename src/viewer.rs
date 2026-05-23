@@ -368,9 +368,8 @@ impl ViewerSharedState {
     /// Copies texture pixel data from `model` into the viewer's internal passive model
     /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
-    /// The upload is processed asynchronously on the next call to
-    /// [`MjViewer::render`] / [`MjViewer::update_scene`], at which point all textures
-    /// will reflect the data copied here.
+    /// The upload is processed on the next call to [`MjViewer::render`], at which point
+    /// all textures will reflect the data copied here.
     ///
     /// # Panics
     /// Panics if `model`'s signature does not match the viewer's passive model (the models
@@ -394,9 +393,15 @@ impl ViewerSharedState {
     /// Copies mesh geometry data from `model` into the viewer's internal passive model
     /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
-    /// The upload is processed asynchronously on the next call to
-    /// [`MjViewer::render`] / [`MjViewer::update_scene`], at which point all meshes
-    /// will reflect the data copied here.
+    /// All data arrays read by `mjr_uploadMesh` are copied: vertex positions
+    /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
+    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
+    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
+    /// not copied because they are fixed by the model signature.
+    ///
+    /// The upload is processed on the next call to [`MjViewer::render`], at which point
+    /// all meshes will reflect the data copied here.
     ///
     /// # Panics
     /// Panics if `model`'s signature does not match the viewer's passive model (the models
@@ -407,9 +412,11 @@ impl ViewerSharedState {
             model.signature(), self.data_passive.model().signature(),
             "model signature mismatch: call sync_model / sync_data first"
         );
-        // SAFETY: We copy mesh geometry arrays (vertex positions, normals, texcoords,
-        // face indices). The model signature is verified above, so all array lengths
-        // match between source and destination.
+        // SAFETY: We overwrite all data arrays that `mjr_uploadMesh` reads from the model.
+        // The model signature is verified above, guaranteeing that all array lengths match
+        // between source and destination. The face/graph accessors are `unsafe` on `MjModel`
+        // because supplying out-of-range indices is UB; here we are only copying from one
+        // same-layout model to another, so no indices are constructed or validated.
         let passive = unsafe { self.data_passive.model_mut() };
         passive.mesh_vert_mut().copy_from_slice(model.mesh_vert());
         passive.mesh_normal_mut().copy_from_slice(model.mesh_normal());
@@ -418,6 +425,7 @@ impl ViewerSharedState {
             passive.mesh_face_mut().copy_from_slice(model.mesh_face());
             passive.mesh_facenormal_mut().copy_from_slice(model.mesh_facenormal());
             passive.mesh_facetexcoord_mut().copy_from_slice(model.mesh_facetexcoord());
+            passive.mesh_graph_mut().copy_from_slice(model.mesh_graph());
         }
         self.mesh_reupload_pending = true;
     }
@@ -425,9 +433,8 @@ impl ViewerSharedState {
     /// Copies heightfield elevation data from `model` into the viewer's internal passive model
     /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
-    /// The upload is processed asynchronously on the next call to
-    /// [`MjViewer::render`] / [`MjViewer::update_scene`], at which point all heightfields
-    /// will reflect the data copied here.
+    /// The upload is processed on the next call to [`MjViewer::render`], at which point
+    /// all heightfields will reflect the data copied here.
     ///
     /// # Panics
     /// Panics if `model`'s signature does not match the viewer's passive model (the models
