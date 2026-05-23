@@ -156,7 +156,7 @@ impl MjrContext {
     /// # Panics
     /// Panics if `texture_id >= model.ntex()`.
     pub fn upload_texture(&self, model: &MjModel, texture_id: usize) {
-        self.upload_x(model, texture_id, mjr_uploadTexture);
+        self.upload_x(model, texture_id, model.ntex() as i64, mjr_uploadTexture);
     }
 
     /// Re-upload mesh to GPU, overwriting previous upload if any.
@@ -164,15 +164,15 @@ impl MjrContext {
     /// # Panics
     /// Panics if `mesh_id >= model.nmesh()`.
     pub fn upload_mesh(&self, model: &MjModel, mesh_id: usize) {
-        self.upload_x(model, mesh_id, mjr_uploadMesh);
+        self.upload_x(model, mesh_id, model.nmesh() as i64, mjr_uploadMesh);
     }
 
-    /// Re-upload mesh to GPU, overwriting previous upload if any.
+    /// Re-upload heightfield to GPU, overwriting previous upload if any.
     ///
     /// # Panics
     /// Panics if `hfield_id >= model.nhfield()`.
     pub fn upload_hfield(&self, model: &MjModel, hfield_id: usize) {
-        self.upload_x(model, hfield_id, mjr_uploadHField);
+        self.upload_x(model, hfield_id, model.nhfield() as i64, mjr_uploadHField);
     }
 
     /// Make the context's buffer current again.
@@ -286,13 +286,12 @@ impl MjrContext {
     /// Common implementation of GPU upload methods. Specific item upload is made
     /// by giving the corresponding `mjr_uploadX` to `upload_fn`.   
     fn upload_x(
-        &self, model: &MjModel, item_id: usize,
+        &self, model: &MjModel, item_id: usize, n_items: i64,
         upload_fn: unsafe extern "C" fn (m: *const mjModel, con: *const mjrContext, hfieldid: ::std::ffi::c_int)
     )
     {
-        let nitem = model.nhfield();
-        assert!((item_id as i64) < nitem, "{item_id} is out of range [0, {nitem})");
-        // SAFETY: texid is bounds-checked above; model and context are valid.
+        assert!((item_id as i64) < n_items, "{item_id} is out of range [0, {n_items})");
+        // SAFETY: item_id is bounds-checked above; model and context are valid.
         unsafe { upload_fn(model.ffi(), self.ffi(), item_id as i32); }
     }
 }

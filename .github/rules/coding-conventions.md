@@ -117,6 +117,11 @@
   Other changes. Additional component-specific subsections (e.g. MjViewer) may appear only when a
   component has substantial standalone changes; they are placed between New features and Bug fixes.
   Not all sections are required for every release, but the relative order must be preserved.
+- **Changelog content scope.** Only document public-facing changes in the changelog. Do NOT add
+  entries for private/internal items (private fields, private methods, internal helpers) unless the
+  change is critical to understanding behaviour visible from the public API. Bug fixes should only
+  be documented if they were present in a previously released version; do not document fixes for
+  bugs that were introduced and fixed within the same (unreleased) development cycle.
 - **Migration guide entry format.** Each breaking change in `migration.rst` gets: a descriptive
   heading (RST `~` underline), a prose explanation, then **Before** and **After** code blocks using
   `.. code-block:: rust`. For simple type changes, use a `.. list-table::` with columns for

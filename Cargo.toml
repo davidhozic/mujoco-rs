@@ -119,6 +119,10 @@ name = "tendon"
 required-features = ["viewer"]
 
 [[example]]
+name = "asset_reupload"
+required-features = ["viewer"]
+
+[[example]]
 name = "terrain_generation"
 required-features = ["viewer"]
 

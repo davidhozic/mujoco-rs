@@ -214,7 +214,12 @@ pub struct ViewerSharedState {
     /* Model parameter change tracking */
     prev_opt: MjOption,
     prev_vis: MjVisual,
-    prev_stat: MjStatistic
+    prev_stat: MjStatistic,
+
+    /* Pending GPU asset re-uploads */
+    texture_reupload_pending: bool,
+    mesh_reupload_pending: bool,
+    hfield_reupload_pending: bool,
 }
 
 impl ViewerSharedState {
@@ -242,6 +247,10 @@ impl ViewerSharedState {
             prev_opt: MjOption::default(),
             prev_vis: MjVisual::default(),
             prev_stat: MjStatistic::default(),
+            /* Pending GPU asset re-uploads */
+            texture_reupload_pending: false,
+            mesh_reupload_pending: false,
+            hfield_reupload_pending: false,
         };
 
         shared_state.reload_model(&model, max_user_geom);
@@ -270,6 +279,11 @@ impl ViewerSharedState {
         self.data_state_buffer = self.data_passive_state.clone();
         self.realtime_factor_smooth = 1.0;
         self.pert = MjvPerturb::default();
+        // Clear pending re-uploads: the new context will already have the model's
+        // GPU resources loaded from scratch.
+        self.texture_reupload_pending = false;
+        self.mesh_reupload_pending = false;
+        self.hfield_reupload_pending = false;
     }
 
     /// Checks whether the viewer is still running or is supposed to run.
@@ -336,15 +350,6 @@ impl ViewerSharedState {
         self.last_stat_sync_time = Instant::now();
     }
 
-    /// Copies [`MjModel::hfield_data`] from `model` to the internal passive model,
-    /// and performs a GPU reupload.
-    /// 
-    /// # Panics
-    /// Panics when the input `model` has a different length of height-field data.
-    pub fn update_hfields(&mut self, model: &MjModel) {
-        unsafe { self.data_passive.model_mut() }.hfield_data_mut().copy_from_slice(model.hfield_data());
-    }
-
     /// Returns the last time physics options (opt) were synced.
     pub fn last_opt_sync_time(&self) -> Instant {
         self.last_opt_sync_time
@@ -360,7 +365,106 @@ impl ViewerSharedState {
         self.last_stat_sync_time
     }
 
-    /// Same as [`ViewerSharedState::sync_data`], except it copies the entire [`MjData`]
+    /// Copies texture pixel data from `model` into the viewer's internal passive model
+    /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
+    ///
+    /// The upload is processed asynchronously on the next call to
+    /// [`MjViewer::render`] / [`MjViewer::update_scene`], at which point all textures
+    /// will reflect the data copied here.
+    ///
+    /// # Panics
+    /// Panics if `model`'s signature does not match the viewer's passive model (the models
+    /// have a different structure). Call [`ViewerSharedState::sync_model`] or
+    /// [`ViewerSharedState::sync_data`] first to ensure the models are in sync.
+    pub fn update_textures_from(&mut self, model: &MjModel) {
+        assert_eq!(
+            model.signature(), self.data_passive.model().signature(),
+            "model signature mismatch: call sync_model / sync_data first"
+        );
+        // SAFETY: We only overwrite texture pixel data (`tex_data`). This array has a
+        // fixed layout determined by the model signature, which we verified above, so
+        // the sizes are guaranteed to match. No structural MuJoCo invariants are affected
+        // by changing pixel values.
+        unsafe { self.data_passive.model_mut() }
+            .tex_data_mut()
+            .copy_from_slice(model.tex_data());
+        self.texture_reupload_pending = true;
+    }
+
+    /// Copies mesh geometry data from `model` into the viewer's internal passive model
+    /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
+    ///
+    /// The upload is processed asynchronously on the next call to
+    /// [`MjViewer::render`] / [`MjViewer::update_scene`], at which point all meshes
+    /// will reflect the data copied here.
+    ///
+    /// # Panics
+    /// Panics if `model`'s signature does not match the viewer's passive model (the models
+    /// have a different structure). Call [`ViewerSharedState::sync_model`] or
+    /// [`ViewerSharedState::sync_data`] first to ensure the models are in sync.
+    pub fn update_meshes_from(&mut self, model: &MjModel) {
+        assert_eq!(
+            model.signature(), self.data_passive.model().signature(),
+            "model signature mismatch: call sync_model / sync_data first"
+        );
+        // SAFETY: We copy mesh geometry arrays (vertex positions, normals, texcoords,
+        // face indices). The model signature is verified above, so all array lengths
+        // match between source and destination.
+        let passive = unsafe { self.data_passive.model_mut() };
+        passive.mesh_vert_mut().copy_from_slice(model.mesh_vert());
+        passive.mesh_normal_mut().copy_from_slice(model.mesh_normal());
+        passive.mesh_texcoord_mut().copy_from_slice(model.mesh_texcoord());
+        unsafe {
+            passive.mesh_face_mut().copy_from_slice(model.mesh_face());
+            passive.mesh_facenormal_mut().copy_from_slice(model.mesh_facenormal());
+            passive.mesh_facetexcoord_mut().copy_from_slice(model.mesh_facetexcoord());
+        }
+        self.mesh_reupload_pending = true;
+    }
+
+    /// Copies heightfield elevation data from `model` into the viewer's internal passive model
+    /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
+    ///
+    /// The upload is processed asynchronously on the next call to
+    /// [`MjViewer::render`] / [`MjViewer::update_scene`], at which point all heightfields
+    /// will reflect the data copied here.
+    ///
+    /// # Panics
+    /// Panics if `model`'s signature does not match the viewer's passive model (the models
+    /// have a different structure). Call [`ViewerSharedState::sync_model`] or
+    /// [`ViewerSharedState::sync_data`] first to ensure the models are in sync.
+    pub fn update_hfields_from(&mut self, model: &MjModel) {
+        assert_eq!(
+            model.signature(), self.data_passive.model().signature(),
+            "model signature mismatch: call sync_model / sync_data first"
+        );
+        // SAFETY: We only overwrite heightfield elevation data (`hfield_data`). The
+        // model signature is verified above, so the array length matches.
+        unsafe { self.data_passive.model_mut() }
+            .hfield_data_mut()
+            .copy_from_slice(model.hfield_data());
+        self.hfield_reupload_pending = true;
+    }
+
+    /// Returns `true` if a texture re-upload is pending (scheduled but not yet processed
+    /// by the render thread).
+    pub fn texture_reupload_pending(&self) -> bool {
+        self.texture_reupload_pending
+    }
+
+    /// Returns `true` if a mesh re-upload is pending (scheduled but not yet processed
+    /// by the render thread).
+    pub fn mesh_reupload_pending(&self) -> bool {
+        self.mesh_reupload_pending
+    }
+
+    /// Returns `true` if a heightfield re-upload is pending (scheduled but not yet processed
+    /// by the render thread).
+    pub fn hfield_reupload_pending(&self) -> bool {
+        self.hfield_reupload_pending
+    }
+
+
     /// struct (including large Jacobian and other arrays), not just the state needed for visualization.
     ///
     /// # Panics
@@ -768,7 +872,43 @@ impl MjViewer {
         self.shared_state.lock_unpoison().sync_model_stat(stat);
     }
 
-    /// Processes the UI (when enabled), processes events, draws the scene
+    /// Copies texture pixel data from `model` into the viewer's internal passive model
+    /// and schedules a GPU re-upload for the next [`render`](Self::render) call.
+    ///
+    /// This is a proxy to [`ViewerSharedState::update_textures_from`].
+    ///
+    /// # Panics
+    /// Panics if `model`'s signature does not match the viewer's passive model.
+    /// Call [`sync_model`](Self::sync_model) or [`sync_data`](Self::sync_data) first.
+    pub fn update_textures_from(&mut self, model: &MjModel) {
+        self.shared_state.lock_unpoison().update_textures_from(model);
+    }
+
+    /// Copies mesh geometry data from `model` into the viewer's internal passive model
+    /// and schedules a GPU re-upload for the next [`render`](Self::render) call.
+    ///
+    /// This is a proxy to [`ViewerSharedState::update_meshes_from`].
+    ///
+    /// # Panics
+    /// Panics if `model`'s signature does not match the viewer's passive model.
+    /// Call [`sync_model`](Self::sync_model) or [`sync_data`](Self::sync_data) first.
+    pub fn update_meshes_from(&mut self, model: &MjModel) {
+        self.shared_state.lock_unpoison().update_meshes_from(model);
+    }
+
+    /// Copies heightfield elevation data from `model` into the viewer's internal passive model
+    /// and schedules a GPU re-upload for the next [`render`](Self::render) call.
+    ///
+    /// This is a proxy to [`ViewerSharedState::update_hfields_from`].
+    ///
+    /// # Panics
+    /// Panics if `model`'s signature does not match the viewer's passive model.
+    /// Call [`sync_model`](Self::sync_model) or [`sync_data`](Self::sync_data) first.
+    pub fn update_hfields_from(&mut self, model: &MjModel) {
+        self.shared_state.lock_unpoison().update_hfields_from(model);
+    }
+
+
     /// and swaps buffers in OpenGL.
     /// # Errors
     /// - [`MjViewerError::GlutinError`] if the OpenGL context cannot be made current or the buffer swap fails.
@@ -934,7 +1074,11 @@ impl MjViewer {
     fn update_scene(&mut self) -> Result<(), MjViewerError> {
         {
             let mut lock = self.shared_state.lock_unpoison();
-            let ViewerSharedState { data_passive, pert, user_scene, .. } = lock.deref_mut();
+            let ViewerSharedState {
+                data_passive, pert, user_scene,
+                texture_reupload_pending, mesh_reupload_pending, hfield_reupload_pending,
+                ..
+            } = lock.deref_mut();
 
             // Recreate scene when the model changes
             if data_passive.model().signature() != self.scene.signature() {
@@ -956,6 +1100,28 @@ impl MjViewer {
                 self.ncam = new_model.ffi().ncam;
                 #[cfg(feature = "viewer-ui")]
                 self.ui.update_names(new_model);
+                // reload_model already cleared the pending flags and notified waiters.
+            }
+
+            // Process any pending GPU asset re-uploads. The GL context is current here
+            // (ensured by render()). Each dirty flag is cleared after the upload.
+            if *texture_reupload_pending {
+                for id in 0..data_passive.model().ntex() as usize {
+                    self.context.upload_texture(data_passive.model(), id);
+                }
+                *texture_reupload_pending = false;
+            }
+            if *mesh_reupload_pending {
+                for id in 0..data_passive.model().nmesh() as usize {
+                    self.context.upload_mesh(data_passive.model(), id);
+                }
+                *mesh_reupload_pending = false;
+            }
+            if *hfield_reupload_pending {
+                for id in 0..data_passive.model().nhfield() as usize {
+                    self.context.upload_hfield(data_passive.model(), id);
+                }
+                *hfield_reupload_pending = false;
             }
 
             // Update and render the scene from the MjData state

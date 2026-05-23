@@ -54,11 +54,26 @@ Unreleased
   - :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_hfield`
     re-uploads a height field to the GPU by height-field ID.
 
-*ViewerSharedState height-field update*
+*Viewer GPU asset re-upload*
 
-- :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_hfields`
-  copies height-field data from an external model to the viewer's internal passive model
-  and triggers a GPU re-upload.
+The Rust viewer now supports re-uploading textures, meshes, and heightfields to the GPU at
+runtime, mirroring the behaviour of MuJoCo's C++ Simulate viewer.
+
+- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>update_textures_from`,
+  :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>update_meshes_from`, and
+  :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfields_from` copy the
+  corresponding asset data from an external model into the viewer's passive model and
+  schedule a GPU upload for the next :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>render`
+  call. The upload is complete when ``render()`` returns.
+- For multi-threaded programs the same methods are available on the shared-state guard:
+  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_textures_from`,
+  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_meshes_from`, and
+  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_hfields_from`.
+  The pending-flag accessors
+  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>texture_reupload_pending`,
+  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>mesh_reupload_pending`, and
+  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>hfield_reupload_pending`
+  can be polled to check whether the render thread has processed the upload.
 
 .. rubric:: Bug fixes
 .. rubric:: Error handling
