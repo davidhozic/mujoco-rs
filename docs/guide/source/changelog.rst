@@ -41,6 +41,8 @@ Unreleased
 - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
   now accepts ``texture_id: usize`` instead of ``texid: u32``.
 
+.. rubric:: Error handling
+
 .. rubric:: New features and improvements
 
 *MjrContext GPU re-upload methods*
@@ -59,16 +61,16 @@ Unreleased
 The Rust viewer now supports re-uploading textures, meshes, and heightfields to the GPU at
 runtime, mirroring the behaviour of MuJoCo's C++ Simulate viewer.
 
-- :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>update_textures_from`,
-  :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>update_meshes_from`, and
-  :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfields_from` copy the
+- :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_textures_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_meshes_from`, and
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfields_from` copy the
   corresponding asset data from an external model into the viewer's passive model and
-  schedule a GPU upload for the next :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer::<method>render`
+  schedule a GPU upload for the next :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`
   call. The upload is complete when ``render()`` returns.
 - For multi-threaded programs the same methods are available on the shared-state guard:
-  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_textures_from`,
-  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_meshes_from`, and
-  :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_hfields_from`.
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_textures_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_meshes_from`, and
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_hfields_from`.
 
 .. rubric:: New examples
 
@@ -77,7 +79,6 @@ runtime, mirroring the behaviour of MuJoCo's C++ Simulate viewer.
   and bounces within a smooth-step wall. Physics and rendering run on separate threads.
 
 .. rubric:: Bug fixes
-.. rubric:: Error handling
 .. rubric:: Other changes
 
 

@@ -18,9 +18,8 @@
 //! Asset updates are queued via [`mujoco_rs::viewer::ViewerSharedState::update_hfields_from`] and friends,
 //! then flushed to the GPU on the next [`MjViewer::render`] call.
 //!
-//! The accessor methods used here are all safe -- no `unsafe` blocks needed.
-//! (Only the mutable `_mut` variants of layout fields like `mesh_vertadr` are
-//! `unsafe`; the read-only variants used to initialise layout offsets are not.)
+//! Mutating asset arrays requires `unsafe { data.model_mut() }`; reading layout
+//! offsets (addresses and counts) uses safe read-only accessors.
 use std::time::Instant;
 use std::thread;
 
@@ -61,9 +60,10 @@ fn main() {
             let timer = Instant::now();
             let t = data.time() as f32;
 
-            // SAFETY: asset arrays (hfield_data, tex_data, mesh_vert) are
-            // only touched here on the physics thread. No other thread reads
-            // them until we push the changes via update_*_from below.
+            // SAFETY: `data` is moved exclusively into this thread; no other
+            // thread holds any reference to it or its embedded model. Only
+            // non-structural asset arrays are modified, leaving MjData's
+            // simulation state consistent.
             let m = unsafe { data.model_mut() };
 
             /* Heightfield: propagating ripple wave */

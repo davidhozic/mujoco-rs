@@ -454,6 +454,7 @@ impl ViewerSharedState {
     }
 
 
+    /// Same as [`ViewerSharedState::sync_data`], except it copies the entire [`MjData`]
     /// struct (including large Jacobian and other arrays), not just the state needed for visualization.
     ///
     /// # Panics
@@ -898,7 +899,9 @@ impl MjViewer {
     }
 
 
+    /// Processes the UI (when enabled), processes events, draws the scene
     /// and swaps buffers in OpenGL.
+    ///
     /// # Errors
     /// - [`MjViewerError::GlutinError`] if the OpenGL context cannot be made current or the buffer swap fails.
     /// - [`MjViewerError::SceneError`] if synchronizing user scene geoms fails (e.g. the scene is
