@@ -111,13 +111,13 @@ fn main() {
             data.step();
             {
                 let mut lock = state.lock().unwrap();
-                lock.update_hfield_from(data.model(), 0);   // model, asset (hfield) id
-                lock.update_texture_from(data.model(), 0);
-                lock.update_mesh_from(data.model(), 0);
+                lock.update_hfield_from(data.model(), 0).unwrap();   // model, asset (hfield) id
+                lock.update_texture_from(data.model(), 0).unwrap();
+                lock.update_mesh_from(data.model(), 0).unwrap();
                 // Alternatively upload and update all assets
-                // lock.update_hfields_from(data.model());
-                // lock.update_textures_from(data.model());
-                // lock.update_meshes_from(data.model());
+                // lock.update_hfields_from(data.model()).unwrap();
+                // lock.update_textures_from(data.model()).unwrap();
+                // lock.update_meshes_from(data.model()).unwrap();
                 lock.sync_data(&mut data);
                 viewer_running = lock.running();
             }

@@ -120,13 +120,13 @@ fn main() {
         }
 
         // Upload the modified assets to the GPU, then render.
-        renderer.update_hfield_from(data.model(), 0);
-        renderer.update_texture_from(data.model(), 0);
-        renderer.update_mesh_from(data.model(), 0);
+        renderer.update_hfield_from(data.model(), 0).unwrap();
+        renderer.update_texture_from(data.model(), 0).unwrap();
+        renderer.update_mesh_from(data.model(), 0).unwrap();
         // Alternatively upload all assets at once:
-        // renderer.update_hfields_from(data.model());
-        // renderer.update_textures_from(data.model());
-        // renderer.update_meshes_from(data.model());
+        // renderer.update_hfields_from(data.model()).unwrap();
+        // renderer.update_textures_from(data.model()).unwrap();
+        // renderer.update_meshes_from(data.model()).unwrap();
 
         renderer.render().unwrap();
         renderer

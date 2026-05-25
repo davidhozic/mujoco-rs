@@ -130,6 +130,16 @@ pub enum MjViewerError {
     GlInitFailed(crate::error::GlInitError),
     /// A scene operation failed (e.g. user-scene sync overflowed the geom buffer).
     SceneError(crate::error::MjSceneError),
+    /// The model's structure signature does not match the viewer's passive model.
+    /// Call [`ViewerSharedState::sync_model`] or [`ViewerSharedState::sync_data`] first.
+    SignatureMismatch,
+    /// The asset ID is out of range.
+    IndexOutOfBounds {
+        /// The ID that was supplied.
+        id: usize,
+        /// The number of assets in the model (the valid range is `0..len`).
+        len: usize,
+    },
 }
 
 /// Formats a human-readable description of the viewer error.
@@ -141,6 +151,10 @@ impl Display for MjViewerError {
             Self::PainterInitError(e) => write!(f, "failed to initialize egui painter: {e}"),
             Self::GlInitFailed(e) => write!(f, "GL initialization failed: {e}"),
             Self::SceneError(e) => write!(f, "scene error: {e}"),
+            Self::SignatureMismatch =>
+                write!(f, "model signature mismatch: call sync_model / sync_data first"),
+            Self::IndexOutOfBounds { id, len } =>
+                write!(f, "asset id {id} is out of range [0, {len})"),
         }
     }
 }
@@ -154,6 +168,7 @@ impl Error for MjViewerError {
             Self::PainterInitError(_) => None,
             Self::GlInitFailed(e) => Some(e),
             Self::SceneError(e) => Some(e),
+            Self::SignatureMismatch | Self::IndexOutOfBounds { .. } => None,
         }
     }
 }
@@ -372,47 +387,46 @@ impl ViewerSharedState {
     /// The upload is processed on the next call to [`MjViewer::render`], at which point
     /// the updated texture will be reflected in the scene.
     ///
-    /// # Panics
-    /// Panics if `texture_id` is out of range or if `model`'s signature does not match the
-    /// viewer's passive model (the models have a different structure). Call
-    /// [`ViewerSharedState::sync_model`] or [`ViewerSharedState::sync_data`] first to ensure
-    /// the models are in sync.
-    pub fn update_texture_from(&mut self, model: &MjModel, texture_id: usize) {
-        assert_eq!(
-            model.signature(), self.data_passive.model().signature(),
-            "model signature mismatch: call sync_model / sync_data first"
-        );
+    /// # Errors
+    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IndexOutOfBounds`] if `texture_id >= model.ntex()`.
+    pub fn update_texture_from(&mut self, model: &MjModel, texture_id: usize) -> Result<(), MjViewerError> {
+        if model.signature() != self.data_passive.model().signature() {
+            return Err(MjViewerError::SignatureMismatch);
+        }
+        let ntex = model.ntex() as usize;
+        if texture_id >= ntex {
+            return Err(MjViewerError::IndexOutOfBounds { id: texture_id, len: ntex });
+        }
         let tex_adr = model.tex_adr()[texture_id] as usize;
         let tex_width = model.tex_width()[texture_id] as usize;
         let tex_height = model.tex_height()[texture_id] as usize;
         let tex_nchannel = model.tex_nchannel()[texture_id] as usize;
         let tex_len = tex_width * tex_height * tex_nchannel;
-
-        // SAFETY: The model signature is verified above, so the texture layout matches.
-        // The selected texture slice is bounded by its own width/height/channel metadata.
+        // SAFETY: Signature and bounds verified above; tex_len is derived from the texture's
+        // own metadata, so the slice cannot exceed the allocation.
         unsafe { self.data_passive.model_mut() }
             .tex_data_mut()[tex_adr..tex_adr + tex_len]
             .copy_from_slice(&model.tex_data()[tex_adr..tex_adr + tex_len]);
         self.texture_reupload_pending.insert(texture_id);
+        Ok(())
     }
 
     /// Copies all textures from `model` into the viewer's internal passive model
     /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
-    /// # Panics
-    /// Panics if `model`'s signature does not match the viewer's passive model (the models
-    /// have a different structure). Call [`ViewerSharedState::sync_model`] or
-    /// [`ViewerSharedState::sync_data`] first to ensure the models are in sync.
-    pub fn update_textures_from(&mut self, model: &MjModel) {
-        assert_eq!(
-            model.signature(), self.data_passive.model().signature(),
-            "model signature mismatch: call sync_model / sync_data first"
-        );
+    /// # Errors
+    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    pub fn update_textures_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
+        if model.signature() != self.data_passive.model().signature() {
+            return Err(MjViewerError::SignatureMismatch);
+        }
         // SAFETY: Signature verified above, so tex_data layouts match exactly.
         unsafe { self.data_passive.model_mut() }
             .tex_data_mut()
             .copy_from_slice(model.tex_data());
         self.texture_reupload_pending.extend(0..model.ntex() as usize);
+        Ok(())
     }
 
     /// Copies the mesh with `mesh_id` from `model` into the viewer's internal passive model
@@ -428,17 +442,17 @@ impl ViewerSharedState {
     /// The upload is processed on the next call to [`MjViewer::render`], at which point
     /// the updated mesh will be reflected in the scene.
     ///
-    /// # Panics
-    /// Panics if `mesh_id` is out of range or if `model`'s signature does not match the
-    /// viewer's passive model (the models have a different structure). Call
-    /// [`ViewerSharedState::sync_model`] or [`ViewerSharedState::sync_data`] first to ensure
-    /// the models are in sync.
-    pub fn update_mesh_from(&mut self, model: &MjModel, mesh_id: usize) {
-        assert_eq!(
-            model.signature(), self.data_passive.model().signature(),
-            "model signature mismatch: call sync_model / sync_data first"
-        );
-
+    /// # Errors
+    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IndexOutOfBounds`] if `mesh_id >= model.nmesh()`.
+    pub fn update_mesh_from(&mut self, model: &MjModel, mesh_id: usize) -> Result<(), MjViewerError> {
+        if model.signature() != self.data_passive.model().signature() {
+            return Err(MjViewerError::SignatureMismatch);
+        }
+        let nmesh = model.nmesh() as usize;
+        if mesh_id >= nmesh {
+            return Err(MjViewerError::IndexOutOfBounds { id: mesh_id, len: nmesh });
+        }
         let vert_adr = model.mesh_vertadr()[mesh_id] as usize;
         let vert_num = model.mesh_vertnum()[mesh_id] as usize;
         let normal_adr = model.mesh_normaladr()[mesh_id] as usize;
@@ -449,9 +463,8 @@ impl ViewerSharedState {
         let face_num = model.mesh_facenum()[mesh_id] as usize;
         let graph_adr = model.mesh_graphadr()[mesh_id];
         let mesh_graph_len = optional_addr_len(model.mesh_graphadr(), mesh_id, model.mesh_graph().len());
-
-        // SAFETY: The model signature is verified above, so the mesh layout matches.
-        // Indices and counts are taken from the selected mesh's own metadata.
+        // SAFETY: Signature and bounds verified above; all offsets and counts are taken
+        // from the mesh's own metadata in a model with matching layout.
         let passive = unsafe { self.data_passive.model_mut() };
         passive.mesh_vert_mut()[vert_adr..vert_adr + vert_num]
             .copy_from_slice(&model.mesh_vert()[vert_adr..vert_adr + vert_num]);
@@ -475,6 +488,7 @@ impl ViewerSharedState {
             }
         }
         self.mesh_reupload_pending.insert(mesh_id);
+        Ok(())
     }
 
     /// Copies all meshes from `model` into the viewer's internal passive model
@@ -487,18 +501,13 @@ impl ViewerSharedState {
     /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
     /// not copied because they are fixed by the model signature.
     ///
-    /// # Panics
-    /// Panics if `model`'s signature does not match the viewer's passive model (the models
-    /// have a different structure). Call [`ViewerSharedState::sync_model`] or
-    /// [`ViewerSharedState::sync_data`] first to ensure the models are in sync.
-    pub fn update_meshes_from(&mut self, model: &MjModel) {
-        assert_eq!(
-            model.signature(), self.data_passive.model().signature(),
-            "model signature mismatch: call sync_model / sync_data first"
-        );
+    /// # Errors
+    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    pub fn update_meshes_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
+        if model.signature() != self.data_passive.model().signature() {
+            return Err(MjViewerError::SignatureMismatch);
+        }
         // SAFETY: Signature verified above, ensuring all mesh array layouts match exactly.
-        // The face/graph accessors are `unsafe` on `MjModel` because supplying out-of-range
-        // indices is UB; here we are only bulk-copying between same-layout models.
         let passive = unsafe { self.data_passive.model_mut() };
         passive.mesh_vert_mut().copy_from_slice(model.mesh_vert());
         passive.mesh_normal_mut().copy_from_slice(model.mesh_normal());
@@ -510,6 +519,7 @@ impl ViewerSharedState {
             passive.mesh_graph_mut().copy_from_slice(model.mesh_graph());
         }
         self.mesh_reupload_pending.extend(0..model.nmesh() as usize);
+        Ok(())
     }
 
     /// Copies the heightfield with `hfield_id` from `model` into the viewer's internal passive model
@@ -518,46 +528,45 @@ impl ViewerSharedState {
     /// The upload is processed on the next call to [`MjViewer::render`], at which point
     /// the updated heightfield will be reflected in the scene.
     ///
-    /// # Panics
-    /// Panics if `hfield_id` is out of range or if `model`'s signature does not match the
-    /// viewer's passive model (the models have a different structure). Call
-    /// [`ViewerSharedState::sync_model`] or [`ViewerSharedState::sync_data`] first to ensure
-    /// the models are in sync.
-    pub fn update_hfield_from(&mut self, model: &MjModel, hfield_id: usize) {
-        assert_eq!(
-            model.signature(), self.data_passive.model().signature(),
-            "model signature mismatch: call sync_model / sync_data first"
-        );
+    /// # Errors
+    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IndexOutOfBounds`] if `hfield_id >= model.nhfield()`.
+    pub fn update_hfield_from(&mut self, model: &MjModel, hfield_id: usize) -> Result<(), MjViewerError> {
+        if model.signature() != self.data_passive.model().signature() {
+            return Err(MjViewerError::SignatureMismatch);
+        }
+        let nhfield = model.nhfield() as usize;
+        if hfield_id >= nhfield {
+            return Err(MjViewerError::IndexOutOfBounds { id: hfield_id, len: nhfield });
+        }
         let hfield_adr = model.hfield_adr()[hfield_id] as usize;
         let hfield_nrow = model.hfield_nrow()[hfield_id] as usize;
         let hfield_ncol = model.hfield_ncol()[hfield_id] as usize;
         let hfield_len = hfield_nrow * hfield_ncol;
-
-        // SAFETY: The model signature is verified above, so the heightfield layout matches.
-        // The selected heightfield slice is bounded by its row/column metadata.
+        // SAFETY: Signature and bounds verified above; hfield_len is derived from the
+        // heightfield's own row/column metadata.
         unsafe { self.data_passive.model_mut() }
             .hfield_data_mut()[hfield_adr..hfield_adr + hfield_len]
             .copy_from_slice(&model.hfield_data()[hfield_adr..hfield_adr + hfield_len]);
         self.hfield_reupload_pending.insert(hfield_id);
+        Ok(())
     }
 
     /// Copies all heightfields from `model` into the viewer's internal passive model
     /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
-    /// # Panics
-    /// Panics if `model`'s signature does not match the viewer's passive model (the models
-    /// have a different structure). Call [`ViewerSharedState::sync_model`] or
-    /// [`ViewerSharedState::sync_data`] first to ensure the models are in sync.
-    pub fn update_hfields_from(&mut self, model: &MjModel) {
-        assert_eq!(
-            model.signature(), self.data_passive.model().signature(),
-            "model signature mismatch: call sync_model / sync_data first"
-        );
+    /// # Errors
+    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    pub fn update_hfields_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
+        if model.signature() != self.data_passive.model().signature() {
+            return Err(MjViewerError::SignatureMismatch);
+        }
         // SAFETY: Signature verified above, so hfield_data layouts match exactly.
         unsafe { self.data_passive.model_mut() }
             .hfield_data_mut()
             .copy_from_slice(model.hfield_data());
         self.hfield_reupload_pending.extend(0..model.nhfield() as usize);
+        Ok(())
     }
 
 
@@ -974,11 +983,11 @@ impl MjViewer {
     ///
     /// This is a proxy to [`ViewerSharedState::update_texture_from`].
     ///
-    /// # Panics
-    /// Panics if `model`'s signature does not match the viewer's passive model.
-    /// Call [`sync_model`](Self::sync_model) or [`sync_data`](Self::sync_data) first.
-    pub fn update_texture_from(&mut self, model: &MjModel, texture_id: usize) {
-        self.shared_state.lock_unpoison().update_texture_from(model, texture_id);
+    /// # Errors
+    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IndexOutOfBounds`] if `texture_id >= model.ntex()`.
+    pub fn update_texture_from(&mut self, model: &MjModel, texture_id: usize) -> Result<(), MjViewerError> {
+        self.shared_state.lock_unpoison().update_texture_from(model, texture_id)
     }
 
     /// Copies all textures from `model` into the viewer's internal passive model
@@ -986,11 +995,10 @@ impl MjViewer {
     ///
     /// This is a proxy to [`ViewerSharedState::update_textures_from`].
     ///
-    /// # Panics
-    /// Panics if `model`'s signature does not match the viewer's passive model.
-    /// Call [`sync_model`](Self::sync_model) or [`sync_data`](Self::sync_data) first.
-    pub fn update_textures_from(&mut self, model: &MjModel) {
-        self.shared_state.lock_unpoison().update_textures_from(model);
+    /// # Errors
+    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    pub fn update_textures_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
+        self.shared_state.lock_unpoison().update_textures_from(model)
     }
 
     /// Copies the mesh with `mesh_id` from `model` into the viewer's internal passive model
@@ -998,11 +1006,11 @@ impl MjViewer {
     ///
     /// This is a proxy to [`ViewerSharedState::update_mesh_from`].
     ///
-    /// # Panics
-    /// Panics if `model`'s signature does not match the viewer's passive model.
-    /// Call [`sync_model`](Self::sync_model) or [`sync_data`](Self::sync_data) first.
-    pub fn update_mesh_from(&mut self, model: &MjModel, mesh_id: usize) {
-        self.shared_state.lock_unpoison().update_mesh_from(model, mesh_id);
+    /// # Errors
+    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IndexOutOfBounds`] if `mesh_id >= model.nmesh()`.
+    pub fn update_mesh_from(&mut self, model: &MjModel, mesh_id: usize) -> Result<(), MjViewerError> {
+        self.shared_state.lock_unpoison().update_mesh_from(model, mesh_id)
     }
 
     /// Copies all meshes from `model` into the viewer's internal passive model
@@ -1010,11 +1018,10 @@ impl MjViewer {
     ///
     /// This is a proxy to [`ViewerSharedState::update_meshes_from`].
     ///
-    /// # Panics
-    /// Panics if `model`'s signature does not match the viewer's passive model.
-    /// Call [`sync_model`](Self::sync_model) or [`sync_data`](Self::sync_data) first.
-    pub fn update_meshes_from(&mut self, model: &MjModel) {
-        self.shared_state.lock_unpoison().update_meshes_from(model);
+    /// # Errors
+    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    pub fn update_meshes_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
+        self.shared_state.lock_unpoison().update_meshes_from(model)
     }
 
     /// Copies the heightfield with `hfield_id` from `model` into the viewer's internal passive model
@@ -1022,11 +1029,11 @@ impl MjViewer {
     ///
     /// This is a proxy to [`ViewerSharedState::update_hfield_from`].
     ///
-    /// # Panics
-    /// Panics if `model`'s signature does not match the viewer's passive model.
-    /// Call [`sync_model`](Self::sync_model) or [`sync_data`](Self::sync_data) first.
-    pub fn update_hfield_from(&mut self, model: &MjModel, hfield_id: usize) {
-        self.shared_state.lock_unpoison().update_hfield_from(model, hfield_id);
+    /// # Errors
+    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IndexOutOfBounds`] if `hfield_id >= model.nhfield()`.
+    pub fn update_hfield_from(&mut self, model: &MjModel, hfield_id: usize) -> Result<(), MjViewerError> {
+        self.shared_state.lock_unpoison().update_hfield_from(model, hfield_id)
     }
 
     /// Copies all heightfields from `model` into the viewer's internal passive model
@@ -1034,11 +1041,10 @@ impl MjViewer {
     ///
     /// This is a proxy to [`ViewerSharedState::update_hfields_from`].
     ///
-    /// # Panics
-    /// Panics if `model`'s signature does not match the viewer's passive model.
-    /// Call [`sync_model`](Self::sync_model) or [`sync_data`](Self::sync_data) first.
-    pub fn update_hfields_from(&mut self, model: &MjModel) {
-        self.shared_state.lock_unpoison().update_hfields_from(model);
+    /// # Errors
+    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    pub fn update_hfields_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
+        self.shared_state.lock_unpoison().update_hfields_from(model)
     }
 
 

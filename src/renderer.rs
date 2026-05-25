@@ -389,36 +389,48 @@ impl MjRenderer {
         self.option = options;
     }
 
+    fn update_x_from(
+        &self,
+        model: &MjModel,
+        id: usize,
+        len: usize,
+        upload: fn(&MjrContext, &MjModel, usize),
+    ) -> Result<(), RendererError> {
+        if model.signature() != self.scene.signature() {
+            return Err(RendererError::SignatureMismatch);
+        }
+        if id >= len {
+            return Err(RendererError::IndexOutOfBounds { id, len });
+        }
+        self.gl_state.make_current().map_err(RendererError::GlutinError)?;
+        upload(&self.context, model, id);
+        Ok(())
+    }
+
     /// Re-uploads the texture with `texture_id` from `model` to the GPU immediately.
     ///
-    /// # Panics
-    /// Panics if `texture_id` is out of range, if the OpenGL context cannot be made current,
-    /// or if `model`'s signature does not match the renderer's current scene.
-    /// Call [`MjRenderer::sync_data`] first to ensure the models are in sync.
-    pub fn update_texture_from(&self, model: &MjModel, texture_id: usize) {
-        assert_eq!(
-            model.signature(), self.scene.signature(),
-            "model signature mismatch: call sync_data first"
-        );
-        self.gl_state.make_current().unwrap();
-        self.context.upload_texture(model, texture_id);
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::IndexOutOfBounds`] if `texture_id >= model.ntex()`.
+    /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn update_texture_from(&self, model: &MjModel, texture_id: usize) -> Result<(), RendererError> {
+        self.update_x_from(model, texture_id, model.ntex() as usize, MjrContext::upload_texture)
     }
 
     /// Re-uploads all textures from `model` to the GPU immediately.
     ///
-    /// # Panics
-    /// Panics if the OpenGL context cannot be made current or if `model`'s signature does not
-    /// match the renderer's current scene.
-    /// Call [`MjRenderer::sync_data`] first to ensure the models are in sync.
-    pub fn update_textures_from(&self, model: &MjModel) {
-        assert_eq!(
-            model.signature(), self.scene.signature(),
-            "model signature mismatch: call sync_data first"
-        );
-        self.gl_state.make_current().unwrap();
-        for texture_id in 0..model.ntex() as usize {
-            self.context.upload_texture(model, texture_id);
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn update_textures_from(&self, model: &MjModel) -> Result<(), RendererError> {
+        if model.signature() != self.scene.signature() {
+            return Err(RendererError::SignatureMismatch);
         }
+        self.gl_state.make_current().map_err(RendererError::GlutinError)?;
+        for id in 0..model.ntex() as usize {
+            self.context.upload_texture(model, id);
+        }
+        Ok(())
     }
 
     /// Re-uploads the mesh with `mesh_id` from `model` to the GPU immediately.
@@ -430,73 +442,61 @@ impl MjRenderer {
     /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
     /// not copied because they are fixed by the model signature.
     ///
-    /// # Panics
-    /// Panics if `mesh_id` is out of range, if the OpenGL context cannot be made current,
-    /// or if `model`'s signature does not match the renderer's current scene.
-    /// Call [`MjRenderer::sync_data`] first to ensure the models are in sync.
-    pub fn update_mesh_from(&self, model: &MjModel, mesh_id: usize) {
-        assert_eq!(
-            model.signature(), self.scene.signature(),
-            "model signature mismatch: call sync_data first"
-        );
-        self.gl_state.make_current().unwrap();
-        self.context.upload_mesh(model, mesh_id);
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::IndexOutOfBounds`] if `mesh_id >= model.nmesh()`.
+    /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn update_mesh_from(&self, model: &MjModel, mesh_id: usize) -> Result<(), RendererError> {
+        self.update_x_from(model, mesh_id, model.nmesh() as usize, MjrContext::upload_mesh)
     }
 
     /// Re-uploads all meshes from `model` to the GPU immediately.
     ///
-    /// All data arrays read by `mjr_uploadMesh` are copied: vertex positions
+    /// All data arrays read by `mjr_uploadMesh` are bulk-uploaded: vertex positions
     /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
     /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
     /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
     /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
     /// not copied because they are fixed by the model signature.
     ///
-    /// # Panics
-    /// Panics if the OpenGL context cannot be made current or if `model`'s signature does not
-    /// match the renderer's current scene.
-    /// Call [`MjRenderer::sync_data`] first to ensure the models are in sync.
-    pub fn update_meshes_from(&self, model: &MjModel) {
-        assert_eq!(
-            model.signature(), self.scene.signature(),
-            "model signature mismatch: call sync_data first"
-        );
-        self.gl_state.make_current().unwrap();
-        for mesh_id in 0..model.nmesh() as usize {
-            self.context.upload_mesh(model, mesh_id);
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn update_meshes_from(&self, model: &MjModel) -> Result<(), RendererError> {
+        if model.signature() != self.scene.signature() {
+            return Err(RendererError::SignatureMismatch);
         }
+        self.gl_state.make_current().map_err(RendererError::GlutinError)?;
+        for id in 0..model.nmesh() as usize {
+            self.context.upload_mesh(model, id);
+        }
+        Ok(())
     }
 
     /// Re-uploads the heightfield with `hfield_id` from `model` to the GPU immediately.
     ///
-    /// # Panics
-    /// Panics if `hfield_id` is out of range, if the OpenGL context cannot be made current,
-    /// or if `model`'s signature does not match the renderer's current scene.
-    /// Call [`MjRenderer::sync_data`] first to ensure the models are in sync.
-    pub fn update_hfield_from(&self, model: &MjModel, hfield_id: usize) {
-        assert_eq!(
-            model.signature(), self.scene.signature(),
-            "model signature mismatch: call sync_data first"
-        );
-        self.gl_state.make_current().unwrap();
-        self.context.upload_hfield(model, hfield_id);
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::IndexOutOfBounds`] if `hfield_id >= model.nhfield()`.
+    /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn update_hfield_from(&self, model: &MjModel, hfield_id: usize) -> Result<(), RendererError> {
+        self.update_x_from(model, hfield_id, model.nhfield() as usize, MjrContext::upload_hfield)
     }
 
     /// Re-uploads all heightfields from `model` to the GPU immediately.
     ///
-    /// # Panics
-    /// Panics if the OpenGL context cannot be made current or if `model`'s signature does not
-    /// match the renderer's current scene.
-    /// Call [`MjRenderer::sync_data`] first to ensure the models are in sync.
-    pub fn update_hfields_from(&self, model: &MjModel) {
-        assert_eq!(
-            model.signature(), self.scene.signature(),
-            "model signature mismatch: call sync_data first"
-        );
-        self.gl_state.make_current().unwrap();
-        for hfield_id in 0..model.nhfield() as usize {
-            self.context.upload_hfield(model, hfield_id);
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn update_hfields_from(&self, model: &MjModel) -> Result<(), RendererError> {
+        if model.signature() != self.scene.signature() {
+            return Err(RendererError::SignatureMismatch);
         }
+        self.gl_state.make_current().map_err(RendererError::GlutinError)?;
+        for id in 0..model.nhfield() as usize {
+            self.context.upload_hfield(model, id);
+        }
+        Ok(())
     }
 
     /// Set the camera used for rendering.
@@ -840,6 +840,16 @@ pub enum RendererError {
     IoError(io::Error),
     /// A scene operation failed (e.g. user-scene sync overflowed the geom buffer).
     SceneError(crate::error::MjSceneError),
+    /// The model's structure signature does not match the renderer's scene.
+    /// Call [`MjRenderer::sync_data`] first.
+    SignatureMismatch,
+    /// The asset ID is out of range.
+    IndexOutOfBounds {
+        /// The ID that was supplied.
+        id: usize,
+        /// The number of assets in the model (the valid range is `0..len`).
+        len: usize,
+    },
 }
 
 /// Formats a human-readable description of the renderer error.
@@ -857,6 +867,10 @@ impl Display for RendererError {
             Self::DimensionMismatch => write!(f, "the input width and height don't match the renderer's configuration"),
             Self::IoError(e) => write!(f, "I/O error: {e}"),
             Self::SceneError(e) => write!(f, "scene error: {e}"),
+            Self::SignatureMismatch =>
+                write!(f, "model signature mismatch: call sync_data first"),
+            Self::IndexOutOfBounds { id, len } =>
+                write!(f, "asset id {id} is out of range [0, {len})"),
         }
     }
 }
