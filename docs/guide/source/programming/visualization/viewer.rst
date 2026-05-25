@@ -391,7 +391,12 @@ Both :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
   The plural methods perform one contiguous memory copy and are more efficient when the
   majority of assets of a given type are modified.
 
-Both call paths require ``model.signature()`` to match the viewer's internal passive model.
+Both call paths require ``model.signature()`` to match the viewer's internal passive model
+and return ``Result<(), MjViewerError>`` ---
+:docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>SignatureMismatch` is returned when
+the signatures differ, and
+:docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>IndexOutOfBounds` when the asset ID
+is out of range (singular methods only).
 If the model has been replaced or reloaded, call
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model` or
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` first to bring the viewer's

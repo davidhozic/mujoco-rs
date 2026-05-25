@@ -186,9 +186,16 @@ the GPU copies held by the renderer must be refreshed explicitly.
   The plural methods perform one contiguous memory copy and are more efficient when the
   majority of assets of a given type are modified.
 
-Unlike the viewer, the renderer uploads asset data **immediately** -- there is no staging or
+Unlike the viewer, the renderer uploads asset data **immediately** --- there is no staging or
 dirty-flag mechanism. The upload takes effect before the next call to
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>render`.
+All methods return ``Result<(), RendererError>`` ---
+:docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>SignatureMismatch` is returned
+when the model signature does not match the renderer's current scene,
+:docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>IndexOutOfBounds` when the asset
+ID is out of range (singular methods only), and
+:docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>GlutinError` if the OpenGL context
+cannot be made current.
 
 .. code-block:: rust
 

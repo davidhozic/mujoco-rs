@@ -43,6 +43,13 @@ Unreleased
 
 .. rubric:: Error handling
 
+New error variants in pre-existing enums:
+
+- :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError`: ``SignatureMismatch`` (model structure does
+  not match the viewer's passive model), ``IndexOutOfBounds { id, len }`` (asset ID out of range).
+- :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`: ``SignatureMismatch`` (model structure does
+  not match the renderer's current scene), ``IndexOutOfBounds { id, len }`` (asset ID out of range).
+
 .. rubric:: New features and improvements
 
 *MjrContext GPU re-upload methods*
@@ -64,11 +71,11 @@ runtime, mirroring the behaviour of MuJoCo's C++ Simulate viewer.
 - The singular methods :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_texture_from`,
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_mesh_from`, and
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfield_from` copy and mark one
-  asset at a time.
+  asset at a time. All methods return ``Result<(), MjViewerError>``.
 - The plural methods :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_textures_from`,
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_meshes_from`, and
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfields_from` copy and mark all
-  assets of that type.
+  assets of that type. All methods return ``Result<(), MjViewerError>``.
 - For multi-threaded programs the same singular and plural methods are available on the
   shared-state guard:
   :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_texture_from`,
@@ -86,17 +93,20 @@ runtime.
 - The singular methods :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_texture_from`,
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_mesh_from`, and
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfield_from` upload one
-  asset immediately.
+  asset immediately. All methods return ``Result<(), RendererError>``.
 - The plural methods :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_textures_from`,
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_meshes_from`, and
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfields_from` upload all
-  assets of that type immediately.
+  assets of that type immediately. All methods return ``Result<(), RendererError>``.
 
 .. rubric:: New examples
 
 - :gh-example:`Asset re-upload <asset_reupload.rs>` --- demonstrates animated heightfield,
   texture, and mesh GPU re-uploads with active physics: a ball falls onto a rippling terrain
   and bounces within a smooth-step wall. Physics and rendering run on separate threads.
+- :gh-example:`Renderer asset re-upload <renderer_asset_reupload.rs>` --- demonstrates the
+  same animated assets using the offscreen renderer: heightfield, texture, and mesh are
+  mutated each frame and immediately re-uploaded before rendering to PNG frames.
 
 .. rubric:: Bug fixes
 .. rubric:: Other changes
