@@ -131,6 +131,10 @@ name = "tippe_top"
 required-features = ["viewer"]
 
 [[example]]
+name = "renderer_asset_reupload"
+required-features = ["renderer"]
+
+[[example]]
 name = "touch_sensor"
 required-features = ["viewer"]
 

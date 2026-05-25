@@ -40,6 +40,7 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
 /// ```ignore
 /// let len = optional_addr_len(model.mesh_graphadr(), mesh_id, model.mesh_graph().len());
 /// ```
+#[cfg(feature = "viewer")]
 pub(crate) fn optional_addr_len(addr_array: &[i32], id: usize, data_len: usize) -> usize {
     let adr = addr_array[id];
     if adr < 0 {
