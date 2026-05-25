@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use std::ops::{Deref, DerefMut};
+use std::collections::BTreeSet;
 use std::num::NonZero;
 use std::error::Error;
 use std::fmt::Display;
@@ -217,9 +218,9 @@ pub struct ViewerSharedState {
     prev_stat: MjStatistic,
 
     /* Pending GPU asset re-uploads: contains the IDs to upload on the next render call */
-    texture_reupload_pending: Vec<usize>,
-    mesh_reupload_pending: Vec<usize>,
-    hfield_reupload_pending: Vec<usize>,
+    texture_reupload_pending: BTreeSet<usize>,
+    mesh_reupload_pending: BTreeSet<usize>,
+    hfield_reupload_pending: BTreeSet<usize>,
 }
 
 impl ViewerSharedState {
@@ -248,9 +249,9 @@ impl ViewerSharedState {
             prev_vis: MjVisual::default(),
             prev_stat: MjStatistic::default(),
             /* Pending GPU asset re-uploads */
-            texture_reupload_pending: Vec::new(),
-            mesh_reupload_pending: Vec::new(),
-            hfield_reupload_pending: Vec::new(),
+            texture_reupload_pending: BTreeSet::new(),
+            mesh_reupload_pending: BTreeSet::new(),
+            hfield_reupload_pending: BTreeSet::new(),
         };
 
         shared_state.reload_model(&model, max_user_geom);
@@ -392,7 +393,7 @@ impl ViewerSharedState {
         unsafe { self.data_passive.model_mut() }
             .tex_data_mut()[tex_adr..tex_adr + tex_len]
             .copy_from_slice(&model.tex_data()[tex_adr..tex_adr + tex_len]);
-        self.texture_reupload_pending.push(texture_id);
+        self.texture_reupload_pending.insert(texture_id);
     }
 
     /// Copies all textures from `model` into the viewer's internal passive model
@@ -473,7 +474,7 @@ impl ViewerSharedState {
                     .copy_from_slice(&model.mesh_graph()[graph_adr..graph_adr + mesh_graph_len]);
             }
         }
-        self.mesh_reupload_pending.push(mesh_id);
+        self.mesh_reupload_pending.insert(mesh_id);
     }
 
     /// Copies all meshes from `model` into the viewer's internal passive model
@@ -537,7 +538,7 @@ impl ViewerSharedState {
         unsafe { self.data_passive.model_mut() }
             .hfield_data_mut()[hfield_adr..hfield_adr + hfield_len]
             .copy_from_slice(&model.hfield_data()[hfield_adr..hfield_adr + hfield_len]);
-        self.hfield_reupload_pending.push(hfield_id);
+        self.hfield_reupload_pending.insert(hfield_id);
     }
 
     /// Copies all heightfields from `model` into the viewer's internal passive model
@@ -1238,14 +1239,14 @@ impl MjViewer {
             }
 
             // Process any pending GPU asset re-uploads. The GL context is current here
-            // (ensured by render()). Each vec is drained after uploading.
-            for id in texture_reupload_pending.drain(..) {
+            // (ensured by render()). Each set is taken (leaving an empty set) and iterated.
+            for id in std::mem::take(texture_reupload_pending) {
                 self.context.upload_texture(data_passive.model(), id);
             }
-            for id in mesh_reupload_pending.drain(..) {
+            for id in std::mem::take(mesh_reupload_pending) {
                 self.context.upload_mesh(data_passive.model(), id);
             }
-            for id in hfield_reupload_pending.drain(..) {
+            for id in std::mem::take(hfield_reupload_pending) {
                 self.context.upload_hfield(data_passive.model(), id);
             }
 

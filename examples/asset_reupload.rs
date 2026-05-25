@@ -51,7 +51,7 @@ fn main() {
     let hf_ncol      = data.model().hfield_ncol()[0] as usize;
     let hf_nrow      = data.model().hfield_nrow()[0] as usize;
 
-    let mut viewer = MjViewer::launch_passive(data.model(), 0).unwrap();
+    let mut viewer = MjViewer::builder().vsync(true).build_passive(data.model()).unwrap();
     let state = viewer.state().clone();
 
     let physics_thread = thread::spawn(move || {
@@ -111,9 +111,13 @@ fn main() {
             data.step();
             {
                 let mut lock = state.lock().unwrap();
-                lock.update_hfields_from(data.model());
-                lock.update_textures_from(data.model());
-                lock.update_meshes_from(data.model());
+                lock.update_hfield_from(data.model(), 0);   // model, asset (hfield) id
+                lock.update_texture_from(data.model(), 0);
+                lock.update_mesh_from(data.model(), 0);
+                // Alternatively upload and update all assets
+                // lock.update_hfields_from(data.model());
+                // lock.update_textures_from(data.model());
+                // lock.update_meshes_from(data.model());
                 lock.sync_data(&mut data);
                 viewer_running = lock.running();
             }
