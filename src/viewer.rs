@@ -23,11 +23,11 @@ use bitflags::bitflags;
 
 use crate::wrappers::mj_rendering::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
+use crate::util::{optional_addr_len, LockUnpoison, ThreeWayMerge};
 use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_primitive::{MjtNum, MjtSize};
 use crate::wrappers::mj_data::{MjData, MjtState};
-use crate::util::{LockUnpoison, ThreeWayMerge};
 use crate::{builder_setters, mujoco_version};
 use crate::wrappers::mj_option::MjOption;
 use crate::wrappers::mj_visualization::*;
@@ -216,10 +216,10 @@ pub struct ViewerSharedState {
     prev_vis: MjVisual,
     prev_stat: MjStatistic,
 
-    /* Pending GPU asset re-uploads */
-    texture_reupload_pending: bool,
-    mesh_reupload_pending: bool,
-    hfield_reupload_pending: bool,
+    /* Pending GPU asset re-uploads: contains the IDs to upload on the next render call */
+    texture_reupload_pending: Vec<usize>,
+    mesh_reupload_pending: Vec<usize>,
+    hfield_reupload_pending: Vec<usize>,
 }
 
 impl ViewerSharedState {
@@ -248,9 +248,9 @@ impl ViewerSharedState {
             prev_vis: MjVisual::default(),
             prev_stat: MjStatistic::default(),
             /* Pending GPU asset re-uploads */
-            texture_reupload_pending: false,
-            mesh_reupload_pending: false,
-            hfield_reupload_pending: false,
+            texture_reupload_pending: Vec::new(),
+            mesh_reupload_pending: Vec::new(),
+            hfield_reupload_pending: Vec::new(),
         };
 
         shared_state.reload_model(&model, max_user_geom);
@@ -281,9 +281,9 @@ impl ViewerSharedState {
         self.pert = MjvPerturb::default();
         // Clear pending re-uploads: the new context will already have the model's
         // GPU resources loaded from scratch.
-        self.texture_reupload_pending = false;
-        self.mesh_reupload_pending = false;
-        self.hfield_reupload_pending = false;
+        self.texture_reupload_pending.clear();
+        self.mesh_reupload_pending.clear();
+        self.hfield_reupload_pending.clear();
     }
 
     /// Checks whether the viewer is still running or is supposed to run.
@@ -365,11 +365,38 @@ impl ViewerSharedState {
         self.last_stat_sync_time
     }
 
-    /// Copies texture pixel data from `model` into the viewer's internal passive model
+    /// Copies the texture with `texture_id` from `model` into the viewer's internal passive model
     /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
     /// The upload is processed on the next call to [`MjViewer::render`], at which point
-    /// all textures will reflect the data copied here.
+    /// the updated texture will be reflected in the scene.
+    ///
+    /// # Panics
+    /// Panics if `texture_id` is out of range or if `model`'s signature does not match the
+    /// viewer's passive model (the models have a different structure). Call
+    /// [`ViewerSharedState::sync_model`] or [`ViewerSharedState::sync_data`] first to ensure
+    /// the models are in sync.
+    pub fn update_texture_from(&mut self, model: &MjModel, texture_id: usize) {
+        assert_eq!(
+            model.signature(), self.data_passive.model().signature(),
+            "model signature mismatch: call sync_model / sync_data first"
+        );
+        let tex_adr = model.tex_adr()[texture_id] as usize;
+        let tex_width = model.tex_width()[texture_id] as usize;
+        let tex_height = model.tex_height()[texture_id] as usize;
+        let tex_nchannel = model.tex_nchannel()[texture_id] as usize;
+        let tex_len = tex_width * tex_height * tex_nchannel;
+
+        // SAFETY: The model signature is verified above, so the texture layout matches.
+        // The selected texture slice is bounded by its own width/height/channel metadata.
+        unsafe { self.data_passive.model_mut() }
+            .tex_data_mut()[tex_adr..tex_adr + tex_len]
+            .copy_from_slice(&model.tex_data()[tex_adr..tex_adr + tex_len]);
+        self.texture_reupload_pending.push(texture_id);
+    }
+
+    /// Copies all textures from `model` into the viewer's internal passive model
+    /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
     /// # Panics
     /// Panics if `model`'s signature does not match the viewer's passive model (the models
@@ -380,17 +407,14 @@ impl ViewerSharedState {
             model.signature(), self.data_passive.model().signature(),
             "model signature mismatch: call sync_model / sync_data first"
         );
-        // SAFETY: We only overwrite texture pixel data (`tex_data`). This array has a
-        // fixed layout determined by the model signature, which we verified above, so
-        // the sizes are guaranteed to match. No structural MuJoCo invariants are affected
-        // by changing pixel values.
+        // SAFETY: Signature verified above, so tex_data layouts match exactly.
         unsafe { self.data_passive.model_mut() }
             .tex_data_mut()
             .copy_from_slice(model.tex_data());
-        self.texture_reupload_pending = true;
+        self.texture_reupload_pending.extend(0..model.ntex() as usize);
     }
 
-    /// Copies mesh geometry data from `model` into the viewer's internal passive model
+    /// Copies the mesh with `mesh_id` from `model` into the viewer's internal passive model
     /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
     /// All data arrays read by `mjr_uploadMesh` are copied: vertex positions
@@ -401,7 +425,66 @@ impl ViewerSharedState {
     /// not copied because they are fixed by the model signature.
     ///
     /// The upload is processed on the next call to [`MjViewer::render`], at which point
-    /// all meshes will reflect the data copied here.
+    /// the updated mesh will be reflected in the scene.
+    ///
+    /// # Panics
+    /// Panics if `mesh_id` is out of range or if `model`'s signature does not match the
+    /// viewer's passive model (the models have a different structure). Call
+    /// [`ViewerSharedState::sync_model`] or [`ViewerSharedState::sync_data`] first to ensure
+    /// the models are in sync.
+    pub fn update_mesh_from(&mut self, model: &MjModel, mesh_id: usize) {
+        assert_eq!(
+            model.signature(), self.data_passive.model().signature(),
+            "model signature mismatch: call sync_model / sync_data first"
+        );
+
+        let vert_adr = model.mesh_vertadr()[mesh_id] as usize;
+        let vert_num = model.mesh_vertnum()[mesh_id] as usize;
+        let normal_adr = model.mesh_normaladr()[mesh_id] as usize;
+        let normal_num = model.mesh_normalnum()[mesh_id] as usize;
+        let texcoord_adr = model.mesh_texcoordadr()[mesh_id];
+        let texcoord_num = model.mesh_texcoordnum()[mesh_id] as usize;
+        let face_adr = model.mesh_faceadr()[mesh_id] as usize;
+        let face_num = model.mesh_facenum()[mesh_id] as usize;
+        let graph_adr = model.mesh_graphadr()[mesh_id];
+        let mesh_graph_len = optional_addr_len(model.mesh_graphadr(), mesh_id, model.mesh_graph().len());
+
+        // SAFETY: The model signature is verified above, so the mesh layout matches.
+        // Indices and counts are taken from the selected mesh's own metadata.
+        let passive = unsafe { self.data_passive.model_mut() };
+        passive.mesh_vert_mut()[vert_adr..vert_adr + vert_num]
+            .copy_from_slice(&model.mesh_vert()[vert_adr..vert_adr + vert_num]);
+        passive.mesh_normal_mut()[normal_adr..normal_adr + normal_num]
+            .copy_from_slice(&model.mesh_normal()[normal_adr..normal_adr + normal_num]);
+        if texcoord_adr >= 0 {
+            let texcoord_adr = texcoord_adr as usize;
+            passive.mesh_texcoord_mut()[texcoord_adr..texcoord_adr + texcoord_num]
+                .copy_from_slice(&model.mesh_texcoord()[texcoord_adr..texcoord_adr + texcoord_num]);
+        }
+        unsafe {
+            passive.mesh_face_mut()[face_adr..face_adr + face_num]
+                .copy_from_slice(&model.mesh_face()[face_adr..face_adr + face_num]);
+            passive.mesh_facenormal_mut()[face_adr..face_adr + face_num]
+                .copy_from_slice(&model.mesh_facenormal()[face_adr..face_adr + face_num]);
+            passive.mesh_facetexcoord_mut()[face_adr..face_adr + face_num]
+                .copy_from_slice(&model.mesh_facetexcoord()[face_adr..face_adr + face_num]);
+            if let Some(graph_adr) = (graph_adr >= 0).then_some(graph_adr as usize) {
+                passive.mesh_graph_mut()[graph_adr..graph_adr + mesh_graph_len]
+                    .copy_from_slice(&model.mesh_graph()[graph_adr..graph_adr + mesh_graph_len]);
+            }
+        }
+        self.mesh_reupload_pending.push(mesh_id);
+    }
+
+    /// Copies all meshes from `model` into the viewer's internal passive model
+    /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
+    ///
+    /// All data arrays read by `mjr_uploadMesh` are bulk-copied: vertex positions
+    /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
+    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
+    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
+    /// not copied because they are fixed by the model signature.
     ///
     /// # Panics
     /// Panics if `model`'s signature does not match the viewer's passive model (the models
@@ -412,11 +495,9 @@ impl ViewerSharedState {
             model.signature(), self.data_passive.model().signature(),
             "model signature mismatch: call sync_model / sync_data first"
         );
-        // SAFETY: We overwrite all data arrays that `mjr_uploadMesh` reads from the model.
-        // The model signature is verified above, guaranteeing that all array lengths match
-        // between source and destination. The face/graph accessors are `unsafe` on `MjModel`
-        // because supplying out-of-range indices is UB; here we are only copying from one
-        // same-layout model to another, so no indices are constructed or validated.
+        // SAFETY: Signature verified above, ensuring all mesh array layouts match exactly.
+        // The face/graph accessors are `unsafe` on `MjModel` because supplying out-of-range
+        // indices is UB; here we are only bulk-copying between same-layout models.
         let passive = unsafe { self.data_passive.model_mut() };
         passive.mesh_vert_mut().copy_from_slice(model.mesh_vert());
         passive.mesh_normal_mut().copy_from_slice(model.mesh_normal());
@@ -427,14 +508,40 @@ impl ViewerSharedState {
             passive.mesh_facetexcoord_mut().copy_from_slice(model.mesh_facetexcoord());
             passive.mesh_graph_mut().copy_from_slice(model.mesh_graph());
         }
-        self.mesh_reupload_pending = true;
+        self.mesh_reupload_pending.extend(0..model.nmesh() as usize);
     }
 
-    /// Copies heightfield elevation data from `model` into the viewer's internal passive model
+    /// Copies the heightfield with `hfield_id` from `model` into the viewer's internal passive model
     /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
     /// The upload is processed on the next call to [`MjViewer::render`], at which point
-    /// all heightfields will reflect the data copied here.
+    /// the updated heightfield will be reflected in the scene.
+    ///
+    /// # Panics
+    /// Panics if `hfield_id` is out of range or if `model`'s signature does not match the
+    /// viewer's passive model (the models have a different structure). Call
+    /// [`ViewerSharedState::sync_model`] or [`ViewerSharedState::sync_data`] first to ensure
+    /// the models are in sync.
+    pub fn update_hfield_from(&mut self, model: &MjModel, hfield_id: usize) {
+        assert_eq!(
+            model.signature(), self.data_passive.model().signature(),
+            "model signature mismatch: call sync_model / sync_data first"
+        );
+        let hfield_adr = model.hfield_adr()[hfield_id] as usize;
+        let hfield_nrow = model.hfield_nrow()[hfield_id] as usize;
+        let hfield_ncol = model.hfield_ncol()[hfield_id] as usize;
+        let hfield_len = hfield_nrow * hfield_ncol;
+
+        // SAFETY: The model signature is verified above, so the heightfield layout matches.
+        // The selected heightfield slice is bounded by its row/column metadata.
+        unsafe { self.data_passive.model_mut() }
+            .hfield_data_mut()[hfield_adr..hfield_adr + hfield_len]
+            .copy_from_slice(&model.hfield_data()[hfield_adr..hfield_adr + hfield_len]);
+        self.hfield_reupload_pending.push(hfield_id);
+    }
+
+    /// Copies all heightfields from `model` into the viewer's internal passive model
+    /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
     /// # Panics
     /// Panics if `model`'s signature does not match the viewer's passive model (the models
@@ -445,12 +552,11 @@ impl ViewerSharedState {
             model.signature(), self.data_passive.model().signature(),
             "model signature mismatch: call sync_model / sync_data first"
         );
-        // SAFETY: We only overwrite heightfield elevation data (`hfield_data`). The
-        // model signature is verified above, so the array length matches.
+        // SAFETY: Signature verified above, so hfield_data layouts match exactly.
         unsafe { self.data_passive.model_mut() }
             .hfield_data_mut()
             .copy_from_slice(model.hfield_data());
-        self.hfield_reupload_pending = true;
+        self.hfield_reupload_pending.extend(0..model.nhfield() as usize);
     }
 
 
@@ -862,7 +968,19 @@ impl MjViewer {
         self.shared_state.lock_unpoison().sync_model_stat(stat);
     }
 
-    /// Copies texture pixel data from `model` into the viewer's internal passive model
+    /// Copies the texture with `texture_id` from `model` into the viewer's internal passive model
+    /// and schedules a GPU re-upload for the next [`render`](Self::render) call.
+    ///
+    /// This is a proxy to [`ViewerSharedState::update_texture_from`].
+    ///
+    /// # Panics
+    /// Panics if `model`'s signature does not match the viewer's passive model.
+    /// Call [`sync_model`](Self::sync_model) or [`sync_data`](Self::sync_data) first.
+    pub fn update_texture_from(&mut self, model: &MjModel, texture_id: usize) {
+        self.shared_state.lock_unpoison().update_texture_from(model, texture_id);
+    }
+
+    /// Copies all textures from `model` into the viewer's internal passive model
     /// and schedules a GPU re-upload for the next [`render`](Self::render) call.
     ///
     /// This is a proxy to [`ViewerSharedState::update_textures_from`].
@@ -874,7 +992,19 @@ impl MjViewer {
         self.shared_state.lock_unpoison().update_textures_from(model);
     }
 
-    /// Copies mesh geometry data from `model` into the viewer's internal passive model
+    /// Copies the mesh with `mesh_id` from `model` into the viewer's internal passive model
+    /// and schedules a GPU re-upload for the next [`render`](Self::render) call.
+    ///
+    /// This is a proxy to [`ViewerSharedState::update_mesh_from`].
+    ///
+    /// # Panics
+    /// Panics if `model`'s signature does not match the viewer's passive model.
+    /// Call [`sync_model`](Self::sync_model) or [`sync_data`](Self::sync_data) first.
+    pub fn update_mesh_from(&mut self, model: &MjModel, mesh_id: usize) {
+        self.shared_state.lock_unpoison().update_mesh_from(model, mesh_id);
+    }
+
+    /// Copies all meshes from `model` into the viewer's internal passive model
     /// and schedules a GPU re-upload for the next [`render`](Self::render) call.
     ///
     /// This is a proxy to [`ViewerSharedState::update_meshes_from`].
@@ -886,7 +1016,19 @@ impl MjViewer {
         self.shared_state.lock_unpoison().update_meshes_from(model);
     }
 
-    /// Copies heightfield elevation data from `model` into the viewer's internal passive model
+    /// Copies the heightfield with `hfield_id` from `model` into the viewer's internal passive model
+    /// and schedules a GPU re-upload for the next [`render`](Self::render) call.
+    ///
+    /// This is a proxy to [`ViewerSharedState::update_hfield_from`].
+    ///
+    /// # Panics
+    /// Panics if `model`'s signature does not match the viewer's passive model.
+    /// Call [`sync_model`](Self::sync_model) or [`sync_data`](Self::sync_data) first.
+    pub fn update_hfield_from(&mut self, model: &MjModel, hfield_id: usize) {
+        self.shared_state.lock_unpoison().update_hfield_from(model, hfield_id);
+    }
+
+    /// Copies all heightfields from `model` into the viewer's internal passive model
     /// and schedules a GPU re-upload for the next [`render`](Self::render) call.
     ///
     /// This is a proxy to [`ViewerSharedState::update_hfields_from`].
@@ -1096,24 +1238,15 @@ impl MjViewer {
             }
 
             // Process any pending GPU asset re-uploads. The GL context is current here
-            // (ensured by render()). Each dirty flag is cleared after the upload.
-            if *texture_reupload_pending {
-                for id in 0..data_passive.model().ntex() as usize {
-                    self.context.upload_texture(data_passive.model(), id);
-                }
-                *texture_reupload_pending = false;
+            // (ensured by render()). Each vec is drained after uploading.
+            for id in texture_reupload_pending.drain(..) {
+                self.context.upload_texture(data_passive.model(), id);
             }
-            if *mesh_reupload_pending {
-                for id in 0..data_passive.model().nmesh() as usize {
-                    self.context.upload_mesh(data_passive.model(), id);
-                }
-                *mesh_reupload_pending = false;
+            for id in mesh_reupload_pending.drain(..) {
+                self.context.upload_mesh(data_passive.model(), id);
             }
-            if *hfield_reupload_pending {
-                for id in 0..data_passive.model().nhfield() as usize {
-                    self.context.upload_hfield(data_passive.model(), id);
-                }
-                *hfield_reupload_pending = false;
+            for id in hfield_reupload_pending.drain(..) {
+                self.context.upload_hfield(data_passive.model(), id);
             }
 
             // Update and render the scene from the MjData state
@@ -1870,4 +2003,3 @@ bitflags! {
         const RIGHT = 1 << 2;
     }
 }
-

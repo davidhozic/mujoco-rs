@@ -61,16 +61,36 @@ Unreleased
 The Rust viewer now supports re-uploading textures, meshes, and heightfields to the GPU at
 runtime, mirroring the behaviour of MuJoCo's C++ Simulate viewer.
 
-- :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_textures_from`,
+- The singular methods :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_texture_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_mesh_from`, and
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfield_from` copy and mark one
+  asset at a time.
+- The plural methods :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_textures_from`,
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_meshes_from`, and
-  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfields_from` copy the
-  corresponding asset data from an external model into the viewer's passive model and
-  schedule a GPU upload for the next :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`
-  call. The upload is complete when ``render()`` returns.
-- For multi-threaded programs the same methods are available on the shared-state guard:
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfields_from` copy and mark all
+  assets of that type.
+- For multi-threaded programs the same singular and plural methods are available on the
+  shared-state guard:
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_texture_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_mesh_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_hfield_from`,
   :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_textures_from`,
   :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_meshes_from`, and
   :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_hfields_from`.
+
+*Renderer GPU asset re-upload*
+
+The Rust renderer now supports re-uploading textures, meshes, and heightfields to the GPU at
+runtime.
+
+- The singular methods :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_texture_from`,
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_mesh_from`, and
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfield_from` upload one
+  asset immediately.
+- The plural methods :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_textures_from`,
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_meshes_from`, and
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfields_from` upload all
+  assets of that type immediately.
 
 .. rubric:: New examples
 

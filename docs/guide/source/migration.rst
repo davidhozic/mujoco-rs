@@ -25,7 +25,7 @@ Unreleased
 ======================
 
 ``MjrContext::upload_texture`` parameter type changed
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------------------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
 now accepts ``texture_id: usize`` instead of ``texid: u32``. Update call sites to cast or

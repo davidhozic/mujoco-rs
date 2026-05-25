@@ -389,6 +389,116 @@ impl MjRenderer {
         self.option = options;
     }
 
+    /// Re-uploads the texture with `texture_id` from `model` to the GPU immediately.
+    ///
+    /// # Panics
+    /// Panics if `texture_id` is out of range, if the OpenGL context cannot be made current,
+    /// or if `model`'s signature does not match the renderer's current scene.
+    /// Call [`MjRenderer::sync_data`] first to ensure the models are in sync.
+    pub fn update_texture_from(&self, model: &MjModel, texture_id: usize) {
+        assert_eq!(
+            model.signature(), self.scene.signature(),
+            "model signature mismatch: call sync_data first"
+        );
+        self.gl_state.make_current().unwrap();
+        self.context.upload_texture(model, texture_id);
+    }
+
+    /// Re-uploads all textures from `model` to the GPU immediately.
+    ///
+    /// # Panics
+    /// Panics if the OpenGL context cannot be made current or if `model`'s signature does not
+    /// match the renderer's current scene.
+    /// Call [`MjRenderer::sync_data`] first to ensure the models are in sync.
+    pub fn update_textures_from(&self, model: &MjModel) {
+        assert_eq!(
+            model.signature(), self.scene.signature(),
+            "model signature mismatch: call sync_data first"
+        );
+        self.gl_state.make_current().unwrap();
+        for texture_id in 0..model.ntex() as usize {
+            self.context.upload_texture(model, texture_id);
+        }
+    }
+
+    /// Re-uploads the mesh with `mesh_id` from `model` to the GPU immediately.
+    ///
+    /// All data arrays read by `mjr_uploadMesh` are copied: vertex positions
+    /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
+    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
+    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
+    /// not copied because they are fixed by the model signature.
+    ///
+    /// # Panics
+    /// Panics if `mesh_id` is out of range, if the OpenGL context cannot be made current,
+    /// or if `model`'s signature does not match the renderer's current scene.
+    /// Call [`MjRenderer::sync_data`] first to ensure the models are in sync.
+    pub fn update_mesh_from(&self, model: &MjModel, mesh_id: usize) {
+        assert_eq!(
+            model.signature(), self.scene.signature(),
+            "model signature mismatch: call sync_data first"
+        );
+        self.gl_state.make_current().unwrap();
+        self.context.upload_mesh(model, mesh_id);
+    }
+
+    /// Re-uploads all meshes from `model` to the GPU immediately.
+    ///
+    /// All data arrays read by `mjr_uploadMesh` are copied: vertex positions
+    /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
+    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
+    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
+    /// not copied because they are fixed by the model signature.
+    ///
+    /// # Panics
+    /// Panics if the OpenGL context cannot be made current or if `model`'s signature does not
+    /// match the renderer's current scene.
+    /// Call [`MjRenderer::sync_data`] first to ensure the models are in sync.
+    pub fn update_meshes_from(&self, model: &MjModel) {
+        assert_eq!(
+            model.signature(), self.scene.signature(),
+            "model signature mismatch: call sync_data first"
+        );
+        self.gl_state.make_current().unwrap();
+        for mesh_id in 0..model.nmesh() as usize {
+            self.context.upload_mesh(model, mesh_id);
+        }
+    }
+
+    /// Re-uploads the heightfield with `hfield_id` from `model` to the GPU immediately.
+    ///
+    /// # Panics
+    /// Panics if `hfield_id` is out of range, if the OpenGL context cannot be made current,
+    /// or if `model`'s signature does not match the renderer's current scene.
+    /// Call [`MjRenderer::sync_data`] first to ensure the models are in sync.
+    pub fn update_hfield_from(&self, model: &MjModel, hfield_id: usize) {
+        assert_eq!(
+            model.signature(), self.scene.signature(),
+            "model signature mismatch: call sync_data first"
+        );
+        self.gl_state.make_current().unwrap();
+        self.context.upload_hfield(model, hfield_id);
+    }
+
+    /// Re-uploads all heightfields from `model` to the GPU immediately.
+    ///
+    /// # Panics
+    /// Panics if the OpenGL context cannot be made current or if `model`'s signature does not
+    /// match the renderer's current scene.
+    /// Call [`MjRenderer::sync_data`] first to ensure the models are in sync.
+    pub fn update_hfields_from(&self, model: &MjModel) {
+        assert_eq!(
+            model.signature(), self.scene.signature(),
+            "model signature mismatch: call sync_data first"
+        );
+        self.gl_state.make_current().unwrap();
+        for hfield_id in 0..model.nhfield() as usize {
+            self.context.upload_hfield(model, hfield_id);
+        }
+    }
+
     /// Set the camera used for rendering.
     pub fn set_camera(&mut self, camera: MjvCamera)  {
         self.camera = camera;
@@ -456,7 +566,7 @@ impl MjRenderer {
     ///
     /// # Errors
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current
-    ///   (only when the [`MjModel`] in `data` differs from the internal model).
+    ///   (only when the [`MjModel`] in `data` differs from the model that created the internal [`MjvScene`]).
     pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
         if data.model().signature() != self.scene.signature() {
             /* Model changed: preserve the extra-geom headroom and user-geom
