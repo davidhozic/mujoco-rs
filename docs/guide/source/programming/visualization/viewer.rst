@@ -384,12 +384,15 @@ Both :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
   These copy only the data for the specified asset ID and are efficient when only a small
   number of assets change per frame.
 
-- **Plural** -- upload all assets of a type in a single bulk array copy:
+- **Plural** -- upload all assets of a type in bulk:
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_textures_from`,
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_meshes_from`,
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfields_from`.
-  The plural methods perform one contiguous memory copy and are more efficient when the
-  majority of assets of a given type are modified.
+  The plural methods copy entire asset arrays (skipping per-asset offset calculations)
+  and are more efficient when the majority of assets of a given type are modified.
+  Note that mesh uploads copy multiple arrays (vertex positions, per-vertex normals,
+  UV texture coordinates, face-vertex indices, face-normal indices, face-texcoord indices,
+  and convex hull graph data), so ``update_meshes_from`` issues several array copies.
 
 Both call paths require ``model.signature()`` to match the viewer's internal passive model
 and return ``Result<(), MjViewerError>`` ---
@@ -411,19 +414,21 @@ The viewer **stages** the upload and applies it on the next call to
     use mujoco_rs::prelude::*;
 
     fn main() {
-        let mut model = MjModel::from_xml("path/to/model.xml").expect("could not load the model");
-        let mut data = MjData::new(&model);
-        let mut viewer = MjViewer::launch_passive(&model, 0).expect("could not launch the viewer");
+        // Box the model so MjData takes ownership; the viewer makes its own internal copy.
+        let model = Box::new(MjModel::from_xml("path/to/model.xml").expect("could not load the model"));
+        let mut data = MjData::new(model);
+        let mut viewer = MjViewer::launch_passive(data.model(), 0).expect("could not launch the viewer");
 
         while viewer.running() {
             viewer.sync_data(&mut data);
 
             /* Mutate texture 0 in the model, then re-upload just that texture */
-            model.tex_data_mut()[..256].fill(128);
-            viewer.update_texture_from(&model, 0).unwrap();
+            // SAFETY: only non-structural asset arrays (tex_data) are modified.
+            unsafe { data.model_mut() }.tex_data_mut()[..256].fill(128);
+            viewer.update_texture_from(data.model(), 0).unwrap();
 
-            /* Or re-upload all textures at once (single bulk copy) */
-            viewer.update_textures_from(&model).unwrap();
+            /* Or re-upload all textures at once */
+            viewer.update_textures_from(data.model()).unwrap();
 
             /* Staged uploads are applied during render() */
             viewer.render().unwrap();

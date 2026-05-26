@@ -41,14 +41,42 @@ Unreleased
 - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
   now accepts ``texture_id: usize`` instead of ``texid: u32``.
 
+*MjrContext::upload_texture is now fallible*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
+  now returns ``Result<(), MjrContextError>`` instead of ``()`` and no longer panics.
+  Pass an out-of-range ID to receive ``MjrContextError::IndexOutOfBounds { id, len }``
+  instead of a panic.
+
+*MjrContext::add_aux / set_aux error type changed*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>add_aux` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_aux`
+  previously returned ``Result<(), MjSceneError>`` (with ``MjSceneError::InvalidAuxBufferIndex``);
+  they now return ``Result<(), MjrContextError>`` (with ``MjrContextError::IndexOutOfBounds``).
+
+*MjSceneError::InvalidAuxBufferIndex removed*
+
+- ``MjSceneError::InvalidAuxBufferIndex`` has been removed from
+  :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`. Code matching on this variant will fail
+  to compile. Replace it with ``MjrContextError::IndexOutOfBounds`` (see migration guide).
+
 .. rubric:: Error handling
+
+New error types:
+
+- :docs-rs:`~mujoco_rs::error::<enum>MjrContextError`: new error enum for
+  :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext` operations, with
+  ``IndexOutOfBounds { id, len }`` (an index passed to a rendering-context operation is out of
+  range — covers GPU asset uploads and aux buffer index checks).
 
 New error variants in pre-existing enums:
 
 - :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError`: ``SignatureMismatch`` (model structure does
   not match the viewer's passive model), ``IndexOutOfBounds { id, len }`` (asset ID out of range).
 - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`: ``SignatureMismatch`` (model structure does
-  not match the renderer's current scene), ``IndexOutOfBounds { id, len }`` (asset ID out of range).
+  not match the renderer's current scene), ``ContextError(MjrContextError)`` (wraps a rendering-context error,
+  e.g. an out-of-range asset ID).
 
 .. rubric:: New features and improvements
 

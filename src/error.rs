@@ -1,7 +1,8 @@
 //! Error types for MuJoCo-rs operations.
 //!
 //! - [`MjDataError`] - physics data, view-signature, and Jacobian operations.
-//! - [`MjSceneError`] - 3-D scene and visualization operations (`MjvScene`, `MjrContext`).
+//! - [`MjSceneError`] - 3-D scene and visualization operations (`MjvScene`).
+//! - [`MjrContextError`] - GPU rendering-context operations (`MjrContext`).
 //! - [`MjEditError`] - model-specification editing operations (`MjSpec`).
 //! - [`MjModelError`] - model loading, saving, and state operations (`MjModel`).
 //! - [`MjVfsError`] - virtual file system operations (`MjVfs`).
@@ -119,7 +120,7 @@ impl std::error::Error for MjDataError {}
 
 
 /// Errors that can occur in 3-D scene and visualization operations
-/// ([`MjvScene`](crate::wrappers::MjvScene), [`MjrContext`](crate::wrappers::MjrContext)).
+/// ([`MjvScene`](crate::wrappers::MjvScene)).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MjSceneError {
@@ -137,11 +138,6 @@ pub enum MjSceneError {
         len: usize,
         /// Maximum number of bytes (excluding the NUL terminator) the buffer can hold.
         capacity: usize,
-    },
-    /// An auxiliary buffer index is out of the valid range `[0, mjNAUX)`.
-    InvalidAuxBufferIndex {
-        /// The out-of-range index that was provided.
-        index: usize,
     },
     /// A viewport has invalid (negative) dimensions.
     InvalidViewport {
@@ -207,9 +203,6 @@ impl fmt::Display for MjSceneError {
                     "label of {len} bytes exceeds the fixed buffer capacity of {capacity} bytes"
                 )
             }
-            Self::InvalidAuxBufferIndex { index } => {
-                write!(f, "aux buffer index {index} is out of range [0, mjNAUX)")
-            }
             Self::InvalidViewport { width, height } => {
                 write!(
                     f,
@@ -254,6 +247,32 @@ impl fmt::Display for MjSceneError {
 }
 
 impl std::error::Error for MjSceneError {}
+
+
+/// Errors that can occur in GPU rendering-context ([`MjrContext`](crate::wrappers::MjrContext)) operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum MjrContextError {
+    /// An index passed to a rendering-context operation is out of the valid range.
+    IndexOutOfBounds {
+        /// The index that was supplied.
+        id: usize,
+        /// Exclusive upper bound of the valid range.
+        len: usize,
+    },
+}
+
+impl fmt::Display for MjrContextError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::IndexOutOfBounds { id, len } => {
+                write!(f, "index {id} is out of range [0, {len})")
+            }
+        }
+    }
+}
+
+impl std::error::Error for MjrContextError {}
 
 
 /// Errors that can occur in model-specification editing operations

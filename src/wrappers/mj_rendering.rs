@@ -1,6 +1,6 @@
 //! Definitions related to rendering.
 use crate::{array_slice_dyn, getter_setter, mujoco_c::*};
-use crate::error::MjSceneError;
+use crate::error::{MjSceneError, MjrContextError};
 
 use super::mj_model::{MjModel, MjtTexture, MjtTextureRole};
 
@@ -135,10 +135,10 @@ impl MjrContext {
 
     /// Add Aux buffer with given index to context; free previous Aux buffer.
     /// # Errors
-    /// Returns [`MjSceneError::InvalidAuxBufferIndex`] when `index >= mjNAUX` (10).
-    pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) -> Result<(), MjSceneError> {
+    /// Returns [`MjrContextError::IndexOutOfBounds`] when `index >= mjNAUX` (10).
+    pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) -> Result<(), MjrContextError> {
         if index >= mjNAUX as usize {
-            return Err(MjSceneError::InvalidAuxBufferIndex { index });
+            return Err(MjrContextError::IndexOutOfBounds { id: index, len: mjNAUX as usize });
         }
         // SAFETY: index is bounds-checked above; self.ffi is valid.
         unsafe { mjr_addAux(index as i32, width as i32, height as i32, samples as i32, self.ffi_mut()); }
@@ -153,26 +153,26 @@ impl MjrContext {
 
     /// Re-upload texture to GPU, overwriting previous upload if any.
     ///
-    /// # Panics
-    /// Panics if `texture_id >= model.ntex()`.
-    pub fn upload_texture(&self, model: &MjModel, texture_id: usize) {
-        self.upload_x(model, texture_id, model.ntex() as usize, mjr_uploadTexture);
+    /// # Errors
+    /// Returns [`MjrContextError::IndexOutOfBounds`] if `texture_id >= model.ntex()`.
+    pub fn upload_texture(&self, model: &MjModel, texture_id: usize) -> Result<(), MjrContextError> {
+        self.upload_x(model, texture_id, model.ntex() as usize, mjr_uploadTexture)
     }
 
     /// Re-upload mesh to GPU, overwriting previous upload if any.
     ///
-    /// # Panics
-    /// Panics if `mesh_id >= model.nmesh()`.
-    pub fn upload_mesh(&self, model: &MjModel, mesh_id: usize) {
-        self.upload_x(model, mesh_id, model.nmesh() as usize, mjr_uploadMesh);
+    /// # Errors
+    /// Returns [`MjrContextError::IndexOutOfBounds`] if `mesh_id >= model.nmesh()`.
+    pub fn upload_mesh(&self, model: &MjModel, mesh_id: usize) -> Result<(), MjrContextError> {
+        self.upload_x(model, mesh_id, model.nmesh() as usize, mjr_uploadMesh)
     }
 
     /// Re-upload heightfield to GPU, overwriting previous upload if any.
     ///
-    /// # Panics
-    /// Panics if `hfield_id >= model.nhfield()`.
-    pub fn upload_hfield(&self, model: &MjModel, hfield_id: usize) {
-        self.upload_x(model, hfield_id, model.nhfield() as usize, mjr_uploadHField);
+    /// # Errors
+    /// Returns [`MjrContextError::IndexOutOfBounds`] if `hfield_id >= model.nhfield()`.
+    pub fn upload_hfield(&self, model: &MjModel, hfield_id: usize) -> Result<(), MjrContextError> {
+        self.upload_x(model, hfield_id, model.nhfield() as usize, mjr_uploadHField)
     }
 
     /// Make the context's buffer current again.
@@ -242,10 +242,10 @@ impl MjrContext {
 
     /// Set Aux buffer for custom OpenGL rendering (call restoreBuffer when done).
     /// # Errors
-    /// Returns [`MjSceneError::InvalidAuxBufferIndex`] when `index >= mjNAUX` (10).
-    pub fn set_aux(&mut self, index: usize) -> Result<(), MjSceneError> {
+    /// Returns [`MjrContextError::IndexOutOfBounds`] when `index >= mjNAUX` (10).
+    pub fn set_aux(&mut self, index: usize) -> Result<(), MjrContextError> {
         if index >= mjNAUX as usize {
-            return Err(MjSceneError::InvalidAuxBufferIndex { index });
+            return Err(MjrContextError::IndexOutOfBounds { id: index, len: mjNAUX as usize });
         }
         // SAFETY: index is bounds-checked above; self.ffi is valid.
         unsafe { mjr_setAux(index as i32, self.ffi_mut()); }
@@ -288,11 +288,14 @@ impl MjrContext {
     fn upload_x(
         &self, model: &MjModel, item_id: usize, n_items: usize,
         upload_fn: unsafe extern "C" fn (m: *const mjModel, con: *const mjrContext, hfieldid: ::std::ffi::c_int)
-    )
+    ) -> Result<(), MjrContextError>
     {
-        assert!(item_id < n_items, "{item_id} is out of range [0, {n_items})");
+        if item_id >= n_items {
+            return Err(MjrContextError::IndexOutOfBounds { id: item_id, len: n_items });
+        }
         // SAFETY: item_id is bounds-checked above; model and context are valid.
         unsafe { upload_fn(model.ffi(), self.ffi(), item_id as i32); }
+        Ok(())
     }
 }
 

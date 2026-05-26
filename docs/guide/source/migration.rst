@@ -44,6 +44,54 @@ convert the argument accordingly.
     context.upload_texture(&model, 0usize);
 
 
+``MjrContext::upload_texture`` returns ``Result``
+-------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
+now returns ``Result<(), MjrContextError>`` instead of ``()``.
+Handle or propagate the result at each call site.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    context.upload_texture(&model, id);
+
+**After:**
+
+.. code-block:: rust
+
+    context.upload_texture(&model, id)?;
+
+
+``MjrContext::add_aux`` / ``set_aux`` error type changed
+---------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>add_aux` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_aux`
+now return ``Result<(), MjrContextError>`` instead of ``Result<(), MjSceneError>``.
+The ``MjSceneError::InvalidAuxBufferIndex`` variant has been removed; use
+``MjrContextError::IndexOutOfBounds`` instead.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    match context.add_aux(index, width, height, samples) {
+        Err(MjSceneError::InvalidAuxBufferIndex { index }) => { /* … */ }
+        Ok(()) => { /* … */ }
+    }
+
+**After:**
+
+.. code-block:: rust
+
+    match context.add_aux(index, width, height, samples) {
+        Err(MjrContextError::IndexOutOfBounds { id, len }) => { /* … */ }
+        Ok(()) => { /* … */ }
+    }
+
+
 .. _migrate_4_0_0:
 
 Migrating to 4.0.0

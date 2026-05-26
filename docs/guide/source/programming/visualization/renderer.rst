@@ -179,12 +179,12 @@ the GPU copies held by the renderer must be refreshed explicitly.
   These copy only the data for the specified asset ID and are efficient when only a small
   number of assets change per frame.
 
-- **Plural** -- upload all assets of a type in a single bulk array copy:
+- **Plural** -- upload all assets of a type by iterating over every index:
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_textures_from`,
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_meshes_from`,
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfields_from`.
-  The plural methods perform one contiguous memory copy and are more efficient when the
-  majority of assets of a given type are modified.
+  The plural methods are more convenient when the majority of assets of a given type
+  are modified, avoiding repeated signature and context checks.
 
 Unlike the viewer, the renderer uploads asset data **immediately** --- there is no staging or
 dirty-flag mechanism. The upload takes effect before the next call to
@@ -192,7 +192,7 @@ dirty-flag mechanism. The upload takes effect before the next call to
 All methods return ``Result<(), RendererError>`` ---
 :docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>SignatureMismatch` is returned
 when the model signature does not match the renderer's current scene,
-:docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>IndexOutOfBounds` when the asset
+:docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>ContextError` when the asset
 ID is out of range (singular methods only), and
 :docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>GlutinError` if the OpenGL context
 cannot be made current.

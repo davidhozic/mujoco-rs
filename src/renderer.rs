@@ -393,17 +393,13 @@ impl MjRenderer {
         &self,
         model: &MjModel,
         id: usize,
-        len: usize,
-        upload: fn(&MjrContext, &MjModel, usize),
+        upload: fn(&MjrContext, &MjModel, usize) -> Result<(), crate::error::MjrContextError>,
     ) -> Result<(), RendererError> {
         if model.signature() != self.scene.signature() {
             return Err(RendererError::SignatureMismatch);
         }
-        if id >= len {
-            return Err(RendererError::IndexOutOfBounds { id, len });
-        }
         self.gl_state.make_current().map_err(RendererError::GlutinError)?;
-        upload(&self.context, model, id);
+        upload(&self.context, model, id)?;
         Ok(())
     }
 
@@ -411,10 +407,10 @@ impl MjRenderer {
     ///
     /// # Errors
     /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
-    /// - [`RendererError::IndexOutOfBounds`] if `texture_id >= model.ntex()`.
+    /// - [`RendererError::ContextError`] if `texture_id >= model.ntex()`.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_texture_from(&self, model: &MjModel, texture_id: usize) -> Result<(), RendererError> {
-        self.update_x_from(model, texture_id, model.ntex() as usize, MjrContext::upload_texture)
+        self.update_x_from(model, texture_id, MjrContext::upload_texture)
     }
 
     /// Re-uploads all textures from `model` to the GPU immediately.
@@ -428,7 +424,7 @@ impl MjRenderer {
         }
         self.gl_state.make_current().map_err(RendererError::GlutinError)?;
         for id in 0..model.ntex() as usize {
-            self.context.upload_texture(model, id);
+            self.context.upload_texture(model, id).unwrap();
         }
         Ok(())
     }
@@ -444,10 +440,10 @@ impl MjRenderer {
     ///
     /// # Errors
     /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
-    /// - [`RendererError::IndexOutOfBounds`] if `mesh_id >= model.nmesh()`.
+    /// - [`RendererError::ContextError`] if `mesh_id >= model.nmesh()`.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_mesh_from(&self, model: &MjModel, mesh_id: usize) -> Result<(), RendererError> {
-        self.update_x_from(model, mesh_id, model.nmesh() as usize, MjrContext::upload_mesh)
+        self.update_x_from(model, mesh_id, MjrContext::upload_mesh)
     }
 
     /// Re-uploads all meshes from `model` to the GPU immediately.
@@ -468,7 +464,7 @@ impl MjRenderer {
         }
         self.gl_state.make_current().map_err(RendererError::GlutinError)?;
         for id in 0..model.nmesh() as usize {
-            self.context.upload_mesh(model, id);
+            self.context.upload_mesh(model, id).unwrap();
         }
         Ok(())
     }
@@ -477,10 +473,10 @@ impl MjRenderer {
     ///
     /// # Errors
     /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
-    /// - [`RendererError::IndexOutOfBounds`] if `hfield_id >= model.nhfield()`.
+    /// - [`RendererError::ContextError`] if `hfield_id >= model.nhfield()`.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_hfield_from(&self, model: &MjModel, hfield_id: usize) -> Result<(), RendererError> {
-        self.update_x_from(model, hfield_id, model.nhfield() as usize, MjrContext::upload_hfield)
+        self.update_x_from(model, hfield_id, MjrContext::upload_hfield)
     }
 
     /// Re-uploads all heightfields from `model` to the GPU immediately.
@@ -494,7 +490,7 @@ impl MjRenderer {
         }
         self.gl_state.make_current().map_err(RendererError::GlutinError)?;
         for id in 0..model.nhfield() as usize {
-            self.context.upload_hfield(model, id);
+            self.context.upload_hfield(model, id).unwrap();
         }
         Ok(())
     }
@@ -840,16 +836,11 @@ pub enum RendererError {
     IoError(io::Error),
     /// A scene operation failed (e.g. user-scene sync overflowed the geom buffer).
     SceneError(crate::error::MjSceneError),
+    /// A rendering-context operation failed (e.g. an asset or aux-buffer ID is out of range).
+    ContextError(crate::error::MjrContextError),
     /// The model's structure signature does not match the renderer's scene.
     /// Call [`MjRenderer::sync_data`] first.
     SignatureMismatch,
-    /// The asset ID is out of range.
-    IndexOutOfBounds {
-        /// The ID that was supplied.
-        id: usize,
-        /// The number of assets in the model (the valid range is `0..len`).
-        len: usize,
-    },
 }
 
 /// Formats a human-readable description of the renderer error.
@@ -867,10 +858,9 @@ impl Display for RendererError {
             Self::DimensionMismatch => write!(f, "the input width and height don't match the renderer's configuration"),
             Self::IoError(e) => write!(f, "I/O error: {e}"),
             Self::SceneError(e) => write!(f, "scene error: {e}"),
+            Self::ContextError(e) => write!(f, "rendering context error: {e}"),
             Self::SignatureMismatch =>
                 write!(f, "model signature mismatch: call sync_data first"),
-            Self::IndexOutOfBounds { id, len } =>
-                write!(f, "asset id {id} is out of range [0, {len})"),
         }
     }
 }
@@ -886,6 +876,7 @@ impl Error for RendererError {
             Self::GlutinError(e) => Some(e),
             Self::IoError(e) => Some(e),
             Self::SceneError(e) => Some(e),
+            Self::ContextError(e) => Some(e),
             _ => None,
         }
     }
@@ -909,6 +900,13 @@ impl From<png::EncodingError> for RendererError {
 impl From<crate::error::MjSceneError> for RendererError {
     fn from(e: crate::error::MjSceneError) -> Self {
         Self::SceneError(e)
+    }
+}
+
+/// Converts an [`MjrContextError`] into [`RendererError::ContextError`].
+impl From<crate::error::MjrContextError> for RendererError {
+    fn from(e: crate::error::MjrContextError) -> Self {
+        Self::ContextError(e)
     }
 }
 

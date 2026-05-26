@@ -1247,13 +1247,13 @@ impl MjViewer {
             // Process any pending GPU asset re-uploads. The GL context is current here
             // (ensured by render()). Each set is taken (leaving an empty set) and iterated.
             for id in std::mem::take(texture_reupload_pending) {
-                self.context.upload_texture(data_passive.model(), id);
+                self.context.upload_texture(data_passive.model(), id).unwrap();
             }
             for id in std::mem::take(mesh_reupload_pending) {
-                self.context.upload_mesh(data_passive.model(), id);
+                self.context.upload_mesh(data_passive.model(), id).unwrap();
             }
             for id in std::mem::take(hfield_reupload_pending) {
-                self.context.upload_hfield(data_passive.model(), id);
+                self.context.upload_hfield(data_passive.model(), id).unwrap();
             }
 
             // Update and render the scene from the MjData state
