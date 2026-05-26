@@ -284,10 +284,10 @@ impl MjrContext {
     }
 
     /// Common implementation of GPU upload methods. Specific item upload is made
-    /// by giving the corresponding `mjr_uploadX` to `upload_fn`.   
+    /// by giving the corresponding `mjr_uploadX` to `upload_fn`.
     fn upload_x(
         &self, model: &MjModel, item_id: usize, n_items: usize,
-        upload_fn: unsafe extern "C" fn (m: *const mjModel, con: *const mjrContext, hfieldid: ::std::ffi::c_int)
+        upload_fn: unsafe extern "C" fn (m: *const mjModel, con: *const mjrContext, id: ::std::ffi::c_int)
     ) -> Result<(), MjrContextError>
     {
         if item_id >= n_items {

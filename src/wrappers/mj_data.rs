@@ -1,5 +1,4 @@
 //! MjData related.
-use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
 use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::wrappers::mj_option::MjOption;
@@ -156,17 +155,17 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
     }
 
-    info_method! { Data, model.ffi(), body, [
+    info_method! { Data, [model], body, [
         xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10,
         crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6,
         awake: 1
     ], [], []}
-    info_method! { Data, model.ffi(), camera, [xpos: 3, xmat: 9], [], []}
-    info_method! { Data, model.ffi(), geom, [xpos: 3, xmat: 9], [], []}
-    info_method! { Data, model.ffi(), site, [xpos: 3, xmat: 9], [], []}
-    info_method! { Data, model.ffi(), light, [xpos: 3, xdir: 3], [], []}
+    info_method! { Data, [model], camera, [xpos: 3, xmat: 9], [], []}
+    info_method! { Data, [model], geom, [xpos: 3, xmat: 9], [], []}
+    info_method! { Data, [model], site, [xpos: 3, xmat: 9], [], []}
+    info_method! { Data, [model], light, [xpos: 3, xdir: 3], [], []}
 
-    info_method! { Data, model.ffi(), actuator,
+    info_method! { Data, [model], actuator,
         [ctrl: 1, length: 1, velocity: 1, force: 1],
         [],
         [act: na]
@@ -178,53 +177,51 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
     pub fn joint(&self, name: &str) -> Option<MjJointDataInfo> {
-        let c_name = CString::new(name).unwrap();
-        let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_JOINT as i32, c_name.as_ptr())};
-        if id == -1 {  // not found
-            return None;
-        }
-        let model_ffi = self.model.ffi();
-        let id = id as usize;
-        unsafe {
-            let nq_range = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nq), mj_model_nx_to_nitem!(model_ffi, nq), model_ffi.nq);
-            let nv_range = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+        let model = self.model();
+        let id = model.name_to_id(MjtObj::mjOBJ_JOINT, name)?;
+        let nq_range = {
+            let slice = model.jnt_qposadr();
+            crate::util::optional_sparse_addr_range(slice, id, model.nq() as usize).unwrap_or((0, 0))
+        };
+        let nv_range = {
+            let slice = model.jnt_dofadr();
+            crate::util::optional_sparse_addr_range(slice, id, model.nv() as usize).unwrap_or((0, 0))
+        };
 
-            // $id:expr, $addr_map:expr, $njnt:expr, $max_n:expr
-            let qpos = nq_range;
-            let qvel = nv_range;
-            let qacc_warmstart = nv_range;
-            let qfrc_applied = nv_range;
-            let qacc = nv_range;
-            let xanchor = (id * 3, 3);
-            let xaxis = (id * 3, 3);
-            #[allow(non_snake_case)]
-            let qLDiagInv = nv_range;
-            let qfrc_bias = nv_range;
-            let qfrc_passive = nv_range;
-            let qfrc_actuator = nv_range;
-            let qfrc_smooth = nv_range;
-            let qacc_smooth = nv_range;
-            let qfrc_constraint = nv_range;
-            let qfrc_inverse = nv_range;
+        let qpos = nq_range;
+        let qvel = nv_range;
+        let qacc_warmstart = nv_range;
+        let qfrc_applied = nv_range;
+        let qacc = nv_range;
+        let xanchor = (id * 3, 3);
+        let xaxis = (id * 3, 3);
+        #[allow(non_snake_case)]
+        let qLDiagInv = nv_range;
+        let qfrc_bias = nv_range;
+        let qfrc_passive = nv_range;
+        let qfrc_actuator = nv_range;
+        let qfrc_smooth = nv_range;
+        let qacc_smooth = nv_range;
+        let qfrc_constraint = nv_range;
+        let qfrc_inverse = nv_range;
 
-            let qfrc_spring = nv_range;
-            let qfrc_damper = nv_range;
-            let qfrc_gravcomp = nv_range;
-            let qfrc_fluid = nv_range;
+        let qfrc_spring = nv_range;
+        let qfrc_damper = nv_range;
+        let qfrc_gravcomp = nv_range;
+        let qfrc_fluid = nv_range;
 
-            let model_signature = self.model.signature();
-            Some(MjJointDataInfo {name: name.to_string(), id: id as usize, model_signature,
-                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
-                qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_passive,
-                qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
-            })
-        }
+        let model_signature = self.model.signature();
+        Some(MjJointDataInfo {name: name.to_string(), id: id as usize, model_signature,
+            qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
+            qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_passive,
+            qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
+        })
     }
 
-    info_method! { Data, model.ffi(), sensor, [], [], [data: nsensordata] }
+    info_method! { Data, [model], sensor, [], [], [data: nsensordata] }
 
 
-    info_method! { Data, model.ffi(), tendon,
+    info_method! { Data, [model], tendon,
         [wrapadr: 1, wrapnum: 1, efcadr: 1, length: 1, velocity: 1],
         [],
         [J: nJten]

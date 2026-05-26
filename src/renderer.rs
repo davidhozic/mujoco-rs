@@ -394,12 +394,31 @@ impl MjRenderer {
         model: &MjModel,
         id: usize,
         upload: fn(&MjrContext, &MjModel, usize) -> Result<(), crate::error::MjrContextError>,
-    ) -> Result<(), RendererError> {
+    ) -> Result<(), RendererError>
+    {
+        self.prepare_upload(model)?;
+        upload(&self.context, model, id)?;
+        Ok(())
+    }
+
+    fn prepare_upload(&self, model: &MjModel) -> Result<(), RendererError> {
         if model.signature() != self.scene.signature() {
             return Err(RendererError::SignatureMismatch);
         }
-        self.gl_state.make_current().map_err(RendererError::GlutinError)?;
-        upload(&self.context, model, id)?;
+        self.gl_state.make_current().map_err(RendererError::GlutinError)
+    }
+
+    fn update_all_from_impl(
+        &self,
+        model: &MjModel,
+        n: usize,
+        upload: fn(&MjrContext, &MjModel, usize) -> Result<(), crate::error::MjrContextError>,
+    ) -> Result<(), RendererError>
+    {
+        self.prepare_upload(model)?;
+        for id in 0..n {
+            upload(&self.context, model, id)?;
+        }
         Ok(())
     }
 
@@ -419,14 +438,7 @@ impl MjRenderer {
     /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_textures_from(&self, model: &MjModel) -> Result<(), RendererError> {
-        if model.signature() != self.scene.signature() {
-            return Err(RendererError::SignatureMismatch);
-        }
-        self.gl_state.make_current().map_err(RendererError::GlutinError)?;
-        for id in 0..model.ntex() as usize {
-            self.context.upload_texture(model, id).unwrap();
-        }
-        Ok(())
+        self.update_all_from_impl(model, model.ntex() as usize, MjrContext::upload_texture)
     }
 
     /// Re-uploads the mesh with `mesh_id` from `model` to the GPU immediately.
@@ -459,14 +471,7 @@ impl MjRenderer {
     /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_meshes_from(&self, model: &MjModel) -> Result<(), RendererError> {
-        if model.signature() != self.scene.signature() {
-            return Err(RendererError::SignatureMismatch);
-        }
-        self.gl_state.make_current().map_err(RendererError::GlutinError)?;
-        for id in 0..model.nmesh() as usize {
-            self.context.upload_mesh(model, id).unwrap();
-        }
-        Ok(())
+        self.update_all_from_impl(model, model.nmesh() as usize, MjrContext::upload_mesh)
     }
 
     /// Re-uploads the heightfield with `hfield_id` from `model` to the GPU immediately.
@@ -485,14 +490,7 @@ impl MjRenderer {
     /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_hfields_from(&self, model: &MjModel) -> Result<(), RendererError> {
-        if model.signature() != self.scene.signature() {
-            return Err(RendererError::SignatureMismatch);
-        }
-        self.gl_state.make_current().map_err(RendererError::GlutinError)?;
-        for id in 0..model.nhfield() as usize {
-            self.context.upload_hfield(model, id).unwrap();
-        }
-        Ok(())
+        self.update_all_from_impl(model, model.nhfield() as usize, MjrContext::upload_hfield)
     }
 
     /// Set the camera used for rendering.
@@ -859,8 +857,7 @@ impl Display for RendererError {
             Self::IoError(e) => write!(f, "I/O error: {e}"),
             Self::SceneError(e) => write!(f, "scene error: {e}"),
             Self::ContextError(e) => write!(f, "rendering context error: {e}"),
-            Self::SignatureMismatch =>
-                write!(f, "model signature mismatch: call sync_data first"),
+            Self::SignatureMismatch => write!(f, "model signature mismatch: call sync_data first"),
         }
     }
 }

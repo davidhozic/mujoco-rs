@@ -25,39 +25,49 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
     dest[bytes.len()..].fill(0);
 }
 
-/// Returns the number of elements belonging to item `id` inside a packed data array,
-/// given an address array where each entry is either the item's start offset in the data
-/// array or `-1` (meaning the item has no data).
+/// Returns `Some((start, len))` for item `id` inside a packed data array,
+/// or `None` if the item has no data (address entry is negative).
 ///
-/// The length is determined by scanning `addr_array[id + 1..]` for the first entry that
-/// is `!= -1` (i.e., the next item that *does* have data). If no such entry exists the
-/// region extends to the end of the data array (`data_len`).
+/// Each entry in `addr_array` is either the item's start offset in the data array
+/// or a negative value (conventionally `-1`) meaning the item has no associated data.
 ///
-/// # Panics
-/// Panics if `addr_array[id]` is negative but not `-1` (malformed model data).
+/// The length is determined by scanning `addr_array[id + 1..]` for the first
+/// non-negative entry (the next item that *does* have data). If no such entry exists,
+/// the region extends to the end of the data array (`data_len`).
 ///
 /// # Examples
 /// ```ignore
-/// let len = optional_addr_len(model.mesh_graphadr(), mesh_id, model.mesh_graph().len());
+/// if let Some((graph_adr, graph_len)) = optional_sparse_addr_range(
+///     model.mesh_graphadr(), mesh_id, model.mesh_graph().len()
+/// ) {
+///     // copy mesh_graph[graph_adr..graph_adr + graph_len]
+/// }
 /// ```
-#[cfg(feature = "viewer")]
-pub(crate) fn optional_addr_len(addr_array: &[i32], id: usize, data_len: usize) -> usize {
-    let adr = addr_array[id];
+///
+/// # Panics
+/// Panics if `id >= addr_array.len()`.
+pub(crate) fn optional_sparse_addr_range<T>(addr_array: &[T], id: usize, data_len: usize) -> Option<(usize, usize)>
+where
+    T: Into<i64> + Copy,
+{
+    let adr: i64 = addr_array[id].into();
     if adr < 0 {
-        return 0;
+        return None;
     }
     let adr = adr as usize;
-    addr_array
+    let len = addr_array
         .get(id + 1..)
         .unwrap_or(&[])
         .iter()
-        .find(|&&next| next != -1)
-        .map(|&next| next as usize)
+        .find(|&&next| next.into() != -1)
+        .map(|&next| next.into() as usize)
         .unwrap_or(data_len)
-        - adr
+        - adr;
+    Some((adr, len))
 }
 
 
+/// Sets or clears a bit flag based on a boolean value.
 ///
 /// # Examples
 /// ```ignore
@@ -77,111 +87,37 @@ macro_rules! set_flag {
     };
 }
 
-/// Creates a (start, length) tuple based on
-/// lookup variables that define the mapping in MuJoCo's mjModel struct.
-/// The tuple is used to create views to correct addresses in corresponding structs.
-/// Format: item id, map from item id to index inside the array of all items' values,
-///         number of items, maximum number of elements inside the array of all items' values
-#[macro_export]
-#[doc(hidden)]
-macro_rules! mj_view_indices {
-    ($id:expr, $addr_map:expr, $njnt:expr, $max_n:expr) => {
-        {
-            let start_addr = *$addr_map.add($id) as isize;
-            if start_addr == -1 {
-                (0, 0)
-            }
-            else
-            {
-                // Some addr maps (e.g. actuator_actadr) contain -1 for items with no
-                // allocated data (stateless actuators).  Skip over those sentinels when
-                // looking for the end boundary of the current range.
-                let mut next_idx = $id + 1;
-                let end_addr: usize = loop {
-                    if next_idx >= $njnt as usize {
-                        break $max_n as usize;
-                    }
-                    let next_addr = *$addr_map.add(next_idx) as isize;
-                    if next_addr != -1 {
-                        break next_addr as usize;
-                    }
-                    next_idx += 1;
-                };
-                let n = end_addr - start_addr as usize;
-                (start_addr as usize, n)
-            }
-        }
-    };
-}
 
 /// Returns the correct address mapping based on the X in nX (nq, nv, nu, ...).
 #[macro_export]
 #[doc(hidden)]
-macro_rules! mj_model_nx_to_mapping {
-    ($model_ffi:ident, nq) => {
-        $model_ffi.jnt_qposadr
+macro_rules! mj_model_dyn_range {
+    ($model:expr, $id:expr, nq) => {
+        $crate::util::optional_sparse_addr_range($model.jnt_qposadr(), $id, $model.nq() as usize).unwrap_or((0, 0))
     };
-
-    ($model_ffi:ident, nv) => {
-        $model_ffi.jnt_dofadr
+    ($model:expr, $id:expr, nv) => {
+        $crate::util::optional_sparse_addr_range($model.jnt_dofadr(), $id, $model.nv() as usize).unwrap_or((0, 0))
     };
-
-    ($model_ffi:ident, nsensordata) => {
-        $model_ffi.sensor_adr
+    ($model:expr, $id:expr, nsensordata) => {
+        $crate::util::optional_sparse_addr_range($model.sensor_adr(), $id, $model.nsensordata() as usize).unwrap_or((0, 0))
     };
-    ($model_ffi:ident, ntupledata) => {
-        $model_ffi.tuple_adr
+    ($model:expr, $id:expr, ntupledata) => {
+        $crate::util::optional_sparse_addr_range($model.tuple_adr(), $id, $model.ntupledata() as usize).unwrap_or((0, 0))
     };
-    ($model_ffi:ident, ntexdata) => {
-        $model_ffi.tex_adr
+    ($model:expr, $id:expr, ntexdata) => {
+        $crate::util::optional_sparse_addr_range($model.tex_adr(), $id, $model.ntexdata() as usize).unwrap_or((0, 0))
     };
-    ($model_ffi:ident, nnumericdata) => {
-        $model_ffi.numeric_adr
+    ($model:expr, $id:expr, nnumericdata) => {
+        $crate::util::optional_sparse_addr_range($model.numeric_adr(), $id, $model.nnumericdata() as usize).unwrap_or((0, 0))
     };
-    ($model_ffi:ident, nhfielddata) => {
-        $model_ffi.hfield_adr
+    ($model:expr, $id:expr, nhfielddata) => {
+        $crate::util::optional_sparse_addr_range($model.hfield_adr(), $id, $model.nhfielddata() as usize).unwrap_or((0, 0))
     };
-    ($model_ffi:ident, na) => {
-        $model_ffi.actuator_actadr
+    ($model:expr, $id:expr, na) => {
+        $crate::util::optional_sparse_addr_range($model.actuator_actadr(), $id, $model.na() as usize).unwrap_or((0, 0))
     };
-    ($model_ffi:ident, nJten) => {
-        $model_ffi.ten_J_rowadr
-    };
-}
-
-
-/// Returns the correct number of items based on the X in nX (nq, nv, nu, ...).
-#[macro_export]
-#[doc(hidden)]
-macro_rules! mj_model_nx_to_nitem {
-    ($model_ffi:ident, nq) => {
-        $model_ffi.njnt
-    };
-
-    ($model_ffi:ident, nv) => {
-        $model_ffi.njnt
-    };
-
-    ($model_ffi:ident, nsensordata) => {
-        $model_ffi.nsensor
-    };
-    ($model_ffi:ident, ntupledata) => {
-        $model_ffi.ntuple
-    };
-    ($model_ffi:ident, ntexdata) => {
-        $model_ffi.ntex
-    };
-    ($model_ffi:ident, nnumericdata) => {
-        $model_ffi.nnumeric
-    };
-    ($model_ffi:ident, nhfielddata) => {
-        $model_ffi.nhfield
-    };
-    ($model_ffi:ident, na) => {
-        $model_ffi.nu
-    };
-    ($model_ffi:ident, nJten) => {
-        $model_ffi.ntendon
+    ($model:expr, $id:expr, nJten) => {
+        $crate::util::optional_sparse_addr_range($model.ten_j_rowadr(), $id, $model.n_jten() as usize).unwrap_or((0, 0))
     };
 }
 
@@ -416,7 +352,7 @@ macro_rules! view_creator {
 /// - **Fixed stride**: `attr: N`: index range is `(id * N, N)`.
 /// - **FFI stride** (with optional multiplier): `attr: ffi_field (* k)`: stride taken from
 ///   `model.ffi_field`, optionally scaled by `k`.
-/// - **Dynamic range**: `attr: nXXX (* k)`: start and length resolved via [`mj_view_indices!`],
+/// - **Dynamic range**: `attr: nXXX (* k)`: start and length resolved via [`mj_model_dyn_range!`],
 ///   where `nXXX` is the major-dimension field (e.g. `nhfielddata`, `ntexdata`).
 ///   The optional `* k` is a stride multiplier: each logical unit occupies `k` flat elements,
 ///   so both the start offset and the length are scaled by `k`. Use this when the target array
@@ -425,7 +361,13 @@ macro_rules! view_creator {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! info_method {
-    ($info_type:ident, $ffi:expr, $type_:ident, [$($attr:ident: $len:expr),*], [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*], [$($attr_dyn:ident: $ffi_len_dyn:ident $(* $offset_mult:expr)?),*]) => {
+    (
+        $info_type:ident, $([$model:ident],)?
+        $type_:ident,
+        [$($attr:ident: $len:expr),*],
+        [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*],
+        [$($attr_dyn:ident: $ffi_len_dyn:ident $(* $offset_mult:expr)?),*]
+    ) => {
         paste::paste! {
             #[doc = concat!(
                 "Returns a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] for the named ", stringify!($type_), ", ",
@@ -437,31 +379,28 @@ macro_rules! info_method {
             )]
             #[allow(non_snake_case)]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
-                let c_name = CString::new(name).unwrap();
-                let ffi = self.$ffi;
-                let id = unsafe { mj_name2id(ffi, MjtObj::[<mjOBJ_ $type_:upper>] as i32, c_name.as_ptr()) };
-                if id == -1 {
-                    return None;
-                }
+                let model_ref = self$(.$model())?;
+                let id = model_ref.name_to_id(MjtObj::[<mjOBJ_ $type_:upper>], name)?;
+                let model_ffi = model_ref.ffi();
 
                 let id = id as usize;
                 $(
                     let $attr = (id * $len, $len);
                 )*
                 $(
-                    let $attr_ffi = (id * ffi.$len_ffi as usize $( * $multiplier)*, ffi.$len_ffi as usize $( * $multiplier)*);
+                    let $attr_ffi = (
+                        id * model_ffi.$len_ffi as usize $( * $multiplier)*,
+                        model_ffi.$len_ffi as usize $( * $multiplier)*,
+                    );
                 )*
                 $(
-                    let (dyn_start, dyn_len) = unsafe { mj_view_indices!(
-                        id,
-                        mj_model_nx_to_mapping!(ffi, $ffi_len_dyn),
-                        mj_model_nx_to_nitem!(ffi, $ffi_len_dyn),
-                        ffi.$ffi_len_dyn
-                    ) };
-                    let $attr_dyn = (dyn_start $(* $offset_mult)?, dyn_len $(* $offset_mult)?);
+                    let $attr_dyn = {
+                        let (dyn_start, dyn_len) = $crate::mj_model_dyn_range!(model_ref, id, $ffi_len_dyn);
+                        (dyn_start $(* $offset_mult)?, dyn_len $(* $offset_mult)?)
+                    };
                 )*
 
-                let model_signature = ffi.signature;
+                let model_signature = model_ffi.signature;
                 Some([<Mj $type_:camel $info_type Info>] { name: name.to_string(), id, model_signature, $($attr,)* $($attr_ffi,)* $($attr_dyn),* })
             }
         }
