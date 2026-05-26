@@ -92,42 +92,33 @@ macro_rules! set_flag {
 #[macro_export]
 #[doc(hidden)]
 macro_rules! mj_model_dyn_range {
-    ($model:expr, $id:expr, nq) => {{
-        let slice = $model.jnt_qposadr();
-        $crate::util::optional_sparse_addr_range(slice, $id, $model.nq() as usize).unwrap_or((0, 0))
-    }};
-    ($model:expr, $id:expr, nv) => {{
-        let slice = $model.jnt_dofadr();
-        $crate::util::optional_sparse_addr_range(slice, $id, $model.nv() as usize).unwrap_or((0, 0))
-    }};
-    ($model:expr, $id:expr, nsensordata) => {{
-        let slice = $model.sensor_adr();
-        $crate::util::optional_sparse_addr_range(slice, $id, $model.nsensordata() as usize).unwrap_or((0, 0))
-    }};
-    ($model:expr, $id:expr, ntupledata) => {{
-        let slice = $model.tuple_adr();
-        $crate::util::optional_sparse_addr_range(slice, $id, $model.ntupledata() as usize).unwrap_or((0, 0))
-    }};
-    ($model:expr, $id:expr, ntexdata) => {{
-        let slice = $model.tex_adr();
-        $crate::util::optional_sparse_addr_range(slice, $id, $model.ntexdata() as usize).unwrap_or((0, 0))
-    }};
-    ($model:expr, $id:expr, nnumericdata) => {{
-        let slice = $model.numeric_adr();
-        $crate::util::optional_sparse_addr_range(slice, $id, $model.nnumericdata() as usize).unwrap_or((0, 0))
-    }};
-    ($model:expr, $id:expr, nhfielddata) => {{
-        let slice = $model.hfield_adr();
-        $crate::util::optional_sparse_addr_range(slice, $id, $model.nhfielddata() as usize).unwrap_or((0, 0))
-    }};
-    ($model:expr, $id:expr, na) => {{
-        let slice = $model.actuator_actadr();
-        $crate::util::optional_sparse_addr_range(slice, $id, $model.na() as usize).unwrap_or((0, 0))
-    }};
-    ($model:expr, $id:expr, nJten) => {{
-        let slice = $model.ten_j_rowadr();
-        $crate::util::optional_sparse_addr_range(slice, $id, $model.n_jten() as usize).unwrap_or((0, 0))
-    }};
+    ($model:expr, $id:expr, nq) => {
+        $crate::util::optional_sparse_addr_range($model.jnt_qposadr(), $id, $model.nq() as usize).unwrap_or((0, 0))
+    };
+    ($model:expr, $id:expr, nv) => {
+        $crate::util::optional_sparse_addr_range($model.jnt_dofadr(), $id, $model.nv() as usize).unwrap_or((0, 0))
+    };
+    ($model:expr, $id:expr, nsensordata) => {
+        $crate::util::optional_sparse_addr_range($model.sensor_adr(), $id, $model.nsensordata() as usize).unwrap_or((0, 0))
+    };
+    ($model:expr, $id:expr, ntupledata) => {
+        $crate::util::optional_sparse_addr_range($model.tuple_adr(), $id, $model.ntupledata() as usize).unwrap_or((0, 0))
+    };
+    ($model:expr, $id:expr, ntexdata) => {
+        $crate::util::optional_sparse_addr_range($model.tex_adr(), $id, $model.ntexdata() as usize).unwrap_or((0, 0))
+    };
+    ($model:expr, $id:expr, nnumericdata) => {
+        $crate::util::optional_sparse_addr_range($model.numeric_adr(), $id, $model.nnumericdata() as usize).unwrap_or((0, 0))
+    };
+    ($model:expr, $id:expr, nhfielddata) => {
+        $crate::util::optional_sparse_addr_range($model.hfield_adr(), $id, $model.nhfielddata() as usize).unwrap_or((0, 0))
+    };
+    ($model:expr, $id:expr, na) => {
+        $crate::util::optional_sparse_addr_range($model.actuator_actadr(), $id, $model.na() as usize).unwrap_or((0, 0))
+    };
+    ($model:expr, $id:expr, nJten) => {
+        $crate::util::optional_sparse_addr_range($model.ten_j_rowadr(), $id, $model.n_jten() as usize).unwrap_or((0, 0))
+    };
 }
 
 /// Provides a more direct view to a C array.
@@ -403,8 +394,10 @@ macro_rules! info_method {
                     );
                 )*
                 $(
-                    let (dyn_start, dyn_len) = $crate::mj_model_dyn_range!(model_ref, id, $ffi_len_dyn);
-                    let $attr_dyn = (dyn_start $(* $offset_mult)?, dyn_len $(* $offset_mult)?);
+                    let $attr_dyn = {
+                        let (dyn_start, dyn_len) = $crate::mj_model_dyn_range!(model_ref, id, $ffi_len_dyn);
+                        (dyn_start $(* $offset_mult)?, dyn_len $(* $offset_mult)?)
+                    };
                 )*
 
                 let model_signature = model_ffi.signature;
