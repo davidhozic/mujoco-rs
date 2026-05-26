@@ -23,8 +23,8 @@ use winit::window::Fullscreen;
 use bitflags::bitflags;
 
 use crate::wrappers::mj_rendering::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
-use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
 use crate::util::{optional_sparse_addr_range, LockUnpoison, ThreeWayMerge};
+use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
 use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_primitive::{MjtNum, MjtSize};
@@ -155,10 +155,8 @@ impl Display for MjViewerError {
             Self::GlInitFailed(e) => write!(f, "GL initialization failed: {e}"),
             Self::SceneError(e) => write!(f, "scene error: {e}"),
             Self::ContextError(e) => write!(f, "rendering context error: {e}"),
-            Self::SignatureMismatch =>
-                write!(f, "model signature mismatch: call sync_model / sync_data first"),
-            Self::IndexOutOfBounds { id, len } =>
-                write!(f, "asset id {id} is out of range [0, {len})"),
+            Self::SignatureMismatch => write!(f, "model signature mismatch: call sync_model / sync_data first"),
+            Self::IndexOutOfBounds { id, len } => write!(f, "asset id {id} is out of range [0, {len})"),
         }
     }
 }
@@ -393,6 +391,13 @@ impl ViewerSharedState {
         self.last_stat_sync_time
     }
 
+    fn check_signature(&self, model: &MjModel) -> Result<(), MjViewerError> {
+        if model.signature() != self.data_passive.model().signature() {
+            return Err(MjViewerError::SignatureMismatch);
+        }
+        Ok(())
+    }
+
     /// Copies the texture with `texture_id` from `model` into the viewer's internal passive model
     /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
@@ -403,9 +408,7 @@ impl ViewerSharedState {
     /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
     /// - [`MjViewerError::IndexOutOfBounds`] if `texture_id >= model.ntex()`.
     pub fn update_texture_from(&mut self, model: &MjModel, texture_id: usize) -> Result<(), MjViewerError> {
-        if model.signature() != self.data_passive.model().signature() {
-            return Err(MjViewerError::SignatureMismatch);
-        }
+        self.check_signature(model)?;
         let ntex = model.ntex() as usize;
         if texture_id >= ntex {
             return Err(MjViewerError::IndexOutOfBounds { id: texture_id, len: ntex });
@@ -430,9 +433,7 @@ impl ViewerSharedState {
     /// # Errors
     /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
     pub fn update_textures_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
-        if model.signature() != self.data_passive.model().signature() {
-            return Err(MjViewerError::SignatureMismatch);
-        }
+        self.check_signature(model)?;
         // SAFETY: Signature verified above, so tex_data layouts match exactly.
         unsafe { self.data_passive.model_mut() }
             .tex_data_mut()
@@ -458,9 +459,7 @@ impl ViewerSharedState {
     /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
     /// - [`MjViewerError::IndexOutOfBounds`] if `mesh_id >= model.nmesh()`.
     pub fn update_mesh_from(&mut self, model: &MjModel, mesh_id: usize) -> Result<(), MjViewerError> {
-        if model.signature() != self.data_passive.model().signature() {
-            return Err(MjViewerError::SignatureMismatch);
-        }
+        self.check_signature(model)?;
         let nmesh = model.nmesh() as usize;
         if mesh_id >= nmesh {
             return Err(MjViewerError::IndexOutOfBounds { id: mesh_id, len: nmesh });
@@ -515,9 +514,7 @@ impl ViewerSharedState {
     /// # Errors
     /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
     pub fn update_meshes_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
-        if model.signature() != self.data_passive.model().signature() {
-            return Err(MjViewerError::SignatureMismatch);
-        }
+        self.check_signature(model)?;
         // SAFETY: Signature verified above, ensuring all mesh array layouts match exactly.
         let passive = unsafe { self.data_passive.model_mut() };
         passive.mesh_vert_mut().copy_from_slice(model.mesh_vert());
@@ -543,9 +540,7 @@ impl ViewerSharedState {
     /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
     /// - [`MjViewerError::IndexOutOfBounds`] if `hfield_id >= model.nhfield()`.
     pub fn update_hfield_from(&mut self, model: &MjModel, hfield_id: usize) -> Result<(), MjViewerError> {
-        if model.signature() != self.data_passive.model().signature() {
-            return Err(MjViewerError::SignatureMismatch);
-        }
+        self.check_signature(model)?;
         let nhfield = model.nhfield() as usize;
         if hfield_id >= nhfield {
             return Err(MjViewerError::IndexOutOfBounds { id: hfield_id, len: nhfield });
@@ -569,9 +564,7 @@ impl ViewerSharedState {
     /// # Errors
     /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
     pub fn update_hfields_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
-        if model.signature() != self.data_passive.model().signature() {
-            return Err(MjViewerError::SignatureMismatch);
-        }
+        self.check_signature(model)?;
         // SAFETY: Signature verified above, so hfield_data layouts match exactly.
         unsafe { self.data_passive.model_mut() }
             .hfield_data_mut()
@@ -1259,13 +1252,13 @@ impl MjViewer {
             // Process any pending GPU asset re-uploads. The GL context is current here
             // (ensured by render()). Each set is taken (leaving an empty set) and iterated.
             for id in std::mem::take(texture_reupload_pending) {
-                self.context.upload_texture(data_passive.model(), id).unwrap();
+                self.context.upload_texture(data_passive.model(), id)?;
             }
             for id in std::mem::take(mesh_reupload_pending) {
-                self.context.upload_mesh(data_passive.model(), id).unwrap();
+                self.context.upload_mesh(data_passive.model(), id)?;
             }
             for id in std::mem::take(hfield_reupload_pending) {
-                self.context.upload_hfield(data_passive.model(), id).unwrap();
+                self.context.upload_hfield(data_passive.model(), id)?;
             }
 
             // Update and render the scene from the MjData state

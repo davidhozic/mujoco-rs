@@ -37,13 +37,18 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
 ///
 /// # Examples
 /// ```ignore
-/// if let Some((graph_adr, graph_len)) = optional_sparse_addr_range(model.mesh_graphadr(), mesh_id, model.mesh_graph().len()) {
+/// if let Some((graph_adr, graph_len)) = optional_sparse_addr_range(
+///     model.mesh_graphadr(), mesh_id, model.mesh_graph().len()
+/// ) {
 ///     // copy mesh_graph[graph_adr..graph_adr + graph_len]
 /// }
 /// ```
+///
+/// # Panics
+/// Panics if `id >= addr_array.len()`.
 pub(crate) fn optional_sparse_addr_range<T>(addr_array: &[T], id: usize, data_len: usize) -> Option<(usize, usize)>
 where
-    T: Into<i64> + Copy + PartialEq,
+    T: Into<i64> + Copy,
 {
     let adr: i64 = addr_array[id].into();
     if adr < 0 {
@@ -62,6 +67,7 @@ where
 }
 
 
+/// Sets or clears a bit flag based on a boolean value.
 ///
 /// # Examples
 /// ```ignore
@@ -364,7 +370,13 @@ macro_rules! view_creator {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! info_method {
-    ($info_type:ident, $([$model:ident],)? $type_:ident, [$($attr:ident: $len:expr),*], [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*], [$($attr_dyn:ident: $ffi_len_dyn:ident $(* $offset_mult:expr)?),*]) => {
+    (
+        $info_type:ident, $([$model:ident],)?
+        $type_:ident,
+        [$($attr:ident: $len:expr),*],
+        [$($attr_ffi:ident: $len_ffi:ident $(* $multiplier:expr)?),*],
+        [$($attr_dyn:ident: $ffi_len_dyn:ident $(* $offset_mult:expr)?),*]
+    ) => {
         paste::paste! {
             #[doc = concat!(
                 "Returns a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] for the named ", stringify!($type_), ", ",
@@ -385,7 +397,10 @@ macro_rules! info_method {
                     let $attr = (id * $len, $len);
                 )*
                 $(
-                    let $attr_ffi = (id * model_ffi.$len_ffi as usize $( * $multiplier)*, model_ffi.$len_ffi as usize $( * $multiplier)*);
+                    let $attr_ffi = (
+                        id * model_ffi.$len_ffi as usize $( * $multiplier)*,
+                        model_ffi.$len_ffi as usize $( * $multiplier)*,
+                    );
                 )*
                 $(
                     let (dyn_start, dyn_len) = $crate::mj_model_dyn_range!(model_ref, id, $ffi_len_dyn);
