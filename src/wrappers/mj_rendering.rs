@@ -1,6 +1,6 @@
 //! Definitions related to rendering.
 use crate::{array_slice_dyn, getter_setter, mujoco_c::*};
-use crate::error::{MjSceneError, MjrContextError};
+use crate::error::MjrContextError;
 
 use super::mj_model::{MjModel, MjtTexture, MjtTextureRole};
 
@@ -192,17 +192,17 @@ impl MjrContext {
     /// The `rgb` array is of size `[width * height * 3]`, while `depth` is of size `[width * height]`.
     ///
     /// # Errors
-    /// Returns [`MjSceneError::InvalidViewport`] if the viewport has negative
-    /// dimensions, or [`MjSceneError::BufferTooSmall`] if `rgb` or `depth`
+    /// Returns [`MjrContextError::InvalidViewport`] if the viewport has negative
+    /// dimensions, or [`MjrContextError::BufferTooSmall`] if `rgb` or `depth`
     /// buffers are too small.
     pub fn read_pixels(
         &self,
         rgb: Option<&mut [u8]>,
         depth: Option<&mut [f32]>,
         viewport: &MjrRectangle,
-    ) -> Result<(), MjSceneError> {
+    ) -> Result<(), MjrContextError> {
         if viewport.width < 0 || viewport.height < 0 {
-            return Err(MjSceneError::InvalidViewport {
+            return Err(MjrContextError::InvalidViewport {
                 width: viewport.width,
                 height: viewport.height,
             });
@@ -211,7 +211,7 @@ impl MjrContext {
         if let Some(buf) = rgb.as_ref() {
             let needed = size * 3;
             if buf.len() < needed {
-                return Err(MjSceneError::BufferTooSmall {
+                return Err(MjrContextError::BufferTooSmall {
                     name: "rgb",
                     got: buf.len(),
                     needed,
@@ -221,7 +221,7 @@ impl MjrContext {
         if let Some(buf) = depth.as_ref()
             && buf.len() < size
         {
-            return Err(MjSceneError::BufferTooSmall {
+            return Err(MjrContextError::BufferTooSmall {
                 name: "depth",
                 got: buf.len(),
                 needed: size,

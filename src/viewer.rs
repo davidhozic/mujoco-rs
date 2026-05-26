@@ -130,6 +130,9 @@ pub enum MjViewerError {
     GlInitFailed(crate::error::GlInitError),
     /// A scene operation failed (e.g. user-scene sync overflowed the geom buffer).
     SceneError(crate::error::MjSceneError),
+    /// A rendering-context operation failed (e.g. a pixel-read buffer is too small or the
+    /// viewport has invalid dimensions).
+    ContextError(crate::error::MjrContextError),
     /// The model's structure signature does not match the viewer's passive model.
     /// Call [`ViewerSharedState::sync_model`] or [`ViewerSharedState::sync_data`] first.
     SignatureMismatch,
@@ -151,6 +154,7 @@ impl Display for MjViewerError {
             Self::PainterInitError(e) => write!(f, "failed to initialize egui painter: {e}"),
             Self::GlInitFailed(e) => write!(f, "GL initialization failed: {e}"),
             Self::SceneError(e) => write!(f, "scene error: {e}"),
+            Self::ContextError(e) => write!(f, "rendering context error: {e}"),
             Self::SignatureMismatch =>
                 write!(f, "model signature mismatch: call sync_model / sync_data first"),
             Self::IndexOutOfBounds { id, len } =>
@@ -168,6 +172,7 @@ impl Error for MjViewerError {
             Self::PainterInitError(_) => None,
             Self::GlInitFailed(e) => Some(e),
             Self::SceneError(e) => Some(e),
+            Self::ContextError(e) => Some(e),
             Self::SignatureMismatch | Self::IndexOutOfBounds { .. } => None,
         }
     }
@@ -184,6 +189,13 @@ impl From<crate::error::MjSceneError> for MjViewerError {
 impl From<crate::error::GlInitError> for MjViewerError {
     fn from(e: crate::error::GlInitError) -> Self {
         Self::GlInitFailed(e)
+    }
+}
+
+/// Converts an [`MjrContextError`](crate::error::MjrContextError) into [`MjViewerError::ContextError`].
+impl From<crate::error::MjrContextError> for MjViewerError {
+    fn from(e: crate::error::MjrContextError) -> Self {
+        Self::ContextError(e)
     }
 }
 
@@ -1054,7 +1066,8 @@ impl MjViewer {
     /// # Errors
     /// - [`MjViewerError::GlutinError`] if the OpenGL context cannot be made current or the buffer swap fails.
     /// - [`MjViewerError::SceneError`] if synchronizing user scene geoms fails (e.g. the scene is
-    ///   full) or if reading pixels for a pending screenshot fails.
+    ///   full).
+    /// - [`MjViewerError::ContextError`] if reading pixels for a pending screenshot fails.
     pub fn render(&mut self) -> Result<(), MjViewerError> {
         let RenderBaseGlState {
             gl_context,
@@ -1118,7 +1131,7 @@ impl MjViewer {
     /// grayscale depth image is saved instead of an RGB image.
     ///
     /// # Errors
-    /// Returns [`MjViewerError::SceneError`] if reading pixels from the framebuffer fails.
+    /// Returns [`MjViewerError::ContextError`] if reading pixels from the framebuffer fails.
     fn capture_screenshot(&self, depth: bool) -> Result<(), MjViewerError> {
         let rect = &self.rect_full;
 
@@ -1137,7 +1150,7 @@ impl MjViewer {
         if depth {
             let mut depth_buf = vec![0.0f32; w * h];
             self.context.read_pixels(None, Some(&mut depth_buf), rect)
-                .map_err(MjViewerError::SceneError)?;
+                .map_err(MjViewerError::ContextError)?;
 
             // OpenGL reads bottom-up; flip for top-down PNG row order.
             flip_image_vertically(&mut depth_buf, h, w);
@@ -1180,7 +1193,7 @@ impl MjViewer {
         } else {
             let mut rgb = vec![0u8; w * h * 3];
             self.context.read_pixels(Some(&mut rgb), None, rect)
-                .map_err(MjViewerError::SceneError)?;
+                .map_err(MjViewerError::ContextError)?;
 
             // OpenGL reads bottom-up; flip for top-down PNG row order.
             flip_image_vertically(&mut rgb, h, w * 3);

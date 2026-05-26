@@ -92,6 +92,61 @@ The ``MjSceneError::InvalidAuxBufferIndex`` variant has been removed; use
     }
 
 
+``MjrContext::read_pixels`` error type changed
+-----------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels`
+now returns ``Result<…, MjrContextError>`` instead of ``Result<…, MjSceneError>``.
+``MjSceneError::InvalidViewport`` and ``MjSceneError::BufferTooSmall`` have been removed;
+use ``MjrContextError::InvalidViewport`` and ``MjrContextError::BufferTooSmall`` instead.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    match context.read_pixels(&mut buf, false, &viewport) {
+        Err(MjSceneError::InvalidViewport { .. }) => { /* … */ }
+        Err(MjSceneError::BufferTooSmall { .. }) => { /* … */ }
+        Ok(()) => { /* … */ }
+    }
+
+**After:**
+
+.. code-block:: rust
+
+    match context.read_pixels(&mut buf, false, &viewport) {
+        Err(MjrContextError::InvalidViewport { .. }) => { /* … */ }
+        Err(MjrContextError::BufferTooSmall { .. }) => { /* … */ }
+        Ok(()) => { /* … */ }
+    }
+
+
+``MjModelError::InvalidIndex`` removed
+---------------------------------------
+
+``MjModelError::InvalidIndex(usize, usize)`` has been removed. Use
+:docs-rs:`~mujoco_rs::error::<enum>MjModelError::<variant>IndexOutOfBounds`
+with named fields instead.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    match model.try_max_contacts(geom1, geom2, None) {
+        Err(MjModelError::InvalidIndex(id, len)) => { /* … */ }
+        Ok(count) => { /* … */ }
+    }
+
+**After:**
+
+.. code-block:: rust
+
+    match model.try_max_contacts(geom1, geom2, None) {
+        Err(MjModelError::IndexOutOfBounds { id, len }) => { /* … */ }
+        Ok(count) => { /* … */ }
+    }
+
+
 .. _migrate_4_0_0:
 
 Migrating to 4.0.0

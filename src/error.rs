@@ -139,22 +139,6 @@ pub enum MjSceneError {
         /// Maximum number of bytes (excluding the NUL terminator) the buffer can hold.
         capacity: usize,
     },
-    /// A viewport has invalid (negative) dimensions.
-    InvalidViewport {
-        /// The viewport width that was provided.
-        width: i32,
-        /// The viewport height that was provided.
-        height: i32,
-    },
-    /// A pixel buffer passed to a rendering operation is too small.
-    BufferTooSmall {
-        /// Descriptive name of the buffer (e.g. `"rgb"`, `"depth"`).
-        name: &'static str,
-        /// Actual length of the buffer that was provided.
-        got: usize,
-        /// Minimum length the buffer must have.
-        needed: usize,
-    },
     /// The figure's line-data buffer for a given plot is full.
     FigureBufferFull {
         /// Index of the plot whose buffer is full.
@@ -203,19 +187,6 @@ impl fmt::Display for MjSceneError {
                     "label of {len} bytes exceeds the fixed buffer capacity of {capacity} bytes"
                 )
             }
-            Self::InvalidViewport { width, height } => {
-                write!(
-                    f,
-                    "viewport dimensions must be non-negative, got {width}x{height}"
-                )
-            }
-            Self::BufferTooSmall { name, got, needed } => {
-                write!(
-                    f,
-                    "{name} buffer is too small: got {got} elements, \
-                     but need at least {needed}"
-                )
-            }
             Self::FigureBufferFull { plot_index, capacity } => {
                 write!(
                     f,
@@ -260,6 +231,22 @@ pub enum MjrContextError {
         /// Exclusive upper bound of the valid range.
         len: usize,
     },
+    /// A viewport has invalid (negative) dimensions.
+    InvalidViewport {
+        /// The viewport width that was provided.
+        width: i32,
+        /// The viewport height that was provided.
+        height: i32,
+    },
+    /// A pixel buffer passed to a rendering-context operation is too small.
+    BufferTooSmall {
+        /// Descriptive name of the buffer (e.g. `"rgb"`, `"depth"`).
+        name: &'static str,
+        /// Actual length of the buffer that was provided.
+        got: usize,
+        /// Minimum length the buffer must have.
+        needed: usize,
+    },
 }
 
 impl fmt::Display for MjrContextError {
@@ -267,6 +254,19 @@ impl fmt::Display for MjrContextError {
         match self {
             Self::IndexOutOfBounds { id, len } => {
                 write!(f, "index {id} is out of range [0, {len})")
+            }
+            Self::InvalidViewport { width, height } => {
+                write!(
+                    f,
+                    "viewport dimensions must be non-negative, got {width}x{height}"
+                )
+            }
+            Self::BufferTooSmall { name, got, needed } => {
+                write!(
+                    f,
+                    "{name} buffer is too small: got {got} elements, \
+                     but need at least {needed}"
+                )
             }
         }
     }
@@ -372,8 +372,13 @@ pub enum MjModelError {
     },
     /// A virtual-file-system operation failed while loading a model from a string.
     VfsError(MjVfsError),
-    /// The given index is invalid or out of range.
-    InvalidIndex(usize, usize),
+    /// The given index is out of range.
+    IndexOutOfBounds {
+        /// The index that was supplied.
+        id: usize,
+        /// Exclusive upper bound of the valid range.
+        len: usize,
+    },
 }
 
 impl fmt::Display for MjModelError {
@@ -404,9 +409,9 @@ impl fmt::Display for MjModelError {
                 )
             }
             Self::VfsError(e) => write!(f, "VFS error: {e}"),
-            Self::InvalidIndex(index, length) => write!(
+            Self::IndexOutOfBounds { id, len } => write!(
                 f,
-                "invalid index: {index} is out of bounds (there are {length} elements available)"
+                "index {id} is out of bounds (length is {len})"
             ),
         }
     }

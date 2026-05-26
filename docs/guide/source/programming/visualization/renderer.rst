@@ -203,7 +203,7 @@ cannot be made current.
     model.tex_data_mut()[..256].fill(128);
     renderer.update_texture_from(&model, 0).unwrap();
 
-    /* Or re-upload all textures at once (single bulk copy) */
+    /* Or re-upload all textures at once (loops over each texture) */
     renderer.update_textures_from(&model).unwrap();
 
     renderer.sync_data(&mut data).unwrap();

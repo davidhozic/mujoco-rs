@@ -55,25 +55,48 @@ Unreleased
   previously returned ``Result<(), MjSceneError>`` (with ``MjSceneError::InvalidAuxBufferIndex``);
   they now return ``Result<(), MjrContextError>`` (with ``MjrContextError::IndexOutOfBounds``).
 
-*MjSceneError::InvalidAuxBufferIndex removed*
+*MjSceneError::InvalidAuxBufferIndex / InvalidViewport / BufferTooSmall removed*
 
-- ``MjSceneError::InvalidAuxBufferIndex`` has been removed from
-  :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`. Code matching on this variant will fail
-  to compile. Replace it with ``MjrContextError::IndexOutOfBounds`` (see migration guide).
+- ``MjSceneError::InvalidAuxBufferIndex``, ``MjSceneError::InvalidViewport``, and
+  ``MjSceneError::BufferTooSmall`` have been removed from
+  :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`. Code matching on these variants will fail
+  to compile. Replace them with the corresponding
+  :docs-rs:`~mujoco_rs::error::<enum>MjrContextError` variants (see migration guide).
+
+*MjrContext::read_pixels error type changed*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels`
+  previously returned ``Result<…, MjSceneError>`` (with ``MjSceneError::InvalidViewport`` and
+  ``MjSceneError::BufferTooSmall``); it now returns ``Result<…, MjrContextError>`` (with
+  ``MjrContextError::InvalidViewport`` and ``MjrContextError::BufferTooSmall``).
+
+*MjModelError::InvalidIndex removed*
+
+- ``MjModelError::InvalidIndex(usize, usize)`` has been removed from
+  :docs-rs:`~mujoco_rs::error::<enum>MjModelError`. Code matching on this variant will fail
+  to compile. Replace it with
+  :docs-rs:`~mujoco_rs::error::<enum>MjModelError::<variant>IndexOutOfBounds`
+  (see migration guide).
 
 .. rubric:: Error handling
 
 New error types:
 
 - :docs-rs:`~mujoco_rs::error::<enum>MjrContextError`: new error enum for
-  :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext` operations, with
-  ``IndexOutOfBounds { id, len }`` (an index passed to a rendering-context operation is out of
-  range — covers GPU asset uploads and aux buffer index checks).
+  :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext` operations, with variants:
+
+  - ``IndexOutOfBounds { id, len }`` — an index passed to a rendering-context operation is out of
+    range (covers GPU asset uploads and aux buffer index checks).
+  - ``InvalidViewport { width, height }`` — the viewport dimensions are invalid for pixel read-back.
+  - ``BufferTooSmall { name, got, needed }`` — the caller-supplied buffer is too small to hold the
+    read-back data.
 
 New error variants in pre-existing enums:
 
 - :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError`: ``SignatureMismatch`` (model structure does
-  not match the viewer's passive model), ``IndexOutOfBounds { id, len }`` (asset ID out of range).
+  not match the viewer's passive model), ``IndexOutOfBounds { id, len }`` (asset ID out of range),
+  ``ContextError(MjrContextError)`` (wraps a rendering-context error, e.g. from pixel read-back
+  during screenshot capture).
 - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`: ``SignatureMismatch`` (model structure does
   not match the renderer's current scene), ``ContextError(MjrContextError)`` (wraps a rendering-context error,
   e.g. an out-of-range asset ID).
@@ -199,7 +222,7 @@ runtime.
 
 - Added a new variant for handling invalid indices in
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_max_contacts`:
-  :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>InvalidIndex`.
+  ``MjModelError::InvalidIndex``.
 
 .. rubric:: New features and improvements
 

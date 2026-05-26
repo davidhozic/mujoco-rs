@@ -771,8 +771,8 @@ impl MjRenderer {
     ///
     /// # Errors
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current.
-    /// - [`RendererError::SceneError`] if the user-scene sync overflows the geom buffer
-    ///   or if reading pixels from the framebuffer fails.
+    /// - [`RendererError::SceneError`] if the user-scene sync overflows the geom buffer.
+    /// - [`RendererError::ContextError`] if reading pixels from the framebuffer fails.
     pub fn render(&mut self) -> Result<(), RendererError> {
         /* Sync user scene geoms into the main scene before rendering */
         sync_geoms(&self.user_scene, &mut self.scene).map_err(RendererError::SceneError)?;
@@ -790,7 +790,7 @@ impl MjRenderer {
             flat_rgb,
             flat_depth,
             &vp
-        ).map_err(RendererError::SceneError)?;
+        ).map_err(RendererError::ContextError)?;
 
         /* Flip the read pixels vertically, as OpenGL reads bottom-up */
         if let Some(rgb) = self.rgb.as_deref_mut() {
@@ -903,7 +903,7 @@ impl From<crate::error::MjSceneError> for RendererError {
     }
 }
 
-/// Converts an [`MjrContextError`] into [`RendererError::ContextError`].
+/// Converts an [`crate::error::MjrContextError`] into [`RendererError::ContextError`].
 impl From<crate::error::MjrContextError> for RendererError {
     fn from(e: crate::error::MjrContextError) -> Self {
         Self::ContextError(e)
