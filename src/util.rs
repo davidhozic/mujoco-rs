@@ -25,7 +25,39 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
     dest[bytes.len()..].fill(0);
 }
 
-/// Sets or clears a bit flag based on a boolean value.
+/// Returns the number of elements belonging to item `id` inside a packed data array,
+/// given an address array where each entry is either the item's start offset in the data
+/// array or `-1` (meaning the item has no data).
+///
+/// The length is determined by scanning `addr_array[id + 1..]` for the first entry that
+/// is `!= -1` (i.e., the next item that *does* have data). If no such entry exists the
+/// region extends to the end of the data array (`data_len`).
+///
+/// # Panics
+/// Panics if `addr_array[id]` is negative but not `-1` (malformed model data).
+///
+/// # Examples
+/// ```ignore
+/// let len = optional_addr_len(model.mesh_graphadr(), mesh_id, model.mesh_graph().len());
+/// ```
+#[cfg(feature = "viewer")]
+pub(crate) fn optional_addr_len(addr_array: &[i32], id: usize, data_len: usize) -> usize {
+    let adr = addr_array[id];
+    if adr < 0 {
+        return 0;
+    }
+    let adr = adr as usize;
+    addr_array
+        .get(id + 1..)
+        .unwrap_or(&[])
+        .iter()
+        .find(|&&next| next != -1)
+        .map(|&next| next as usize)
+        .unwrap_or(data_len)
+        - adr
+}
+
+
 ///
 /// # Examples
 /// ```ignore

@@ -794,16 +794,16 @@ impl MjModel {
 
     /// Fallible version of [`MjModel::max_contacts`].
     /// # Errors
-    /// Returns [`MjModelError::InvalidIndex`] when either `geom1` or `geom2` are equal or greater than [`MjModel::ngeom`].
+    /// Returns [`MjModelError::IndexOutOfBounds`] when either `geom1` or `geom2` are equal or greater than [`MjModel::ngeom`].
     pub fn try_max_contacts(&self, geom1: usize, geom2: usize, has_margin: Option<bool>) -> Result<u32, MjModelError> {
         let ngeom = self.ngeom() as usize;
 
         if geom1 >= ngeom {
-            return Err(MjModelError::InvalidIndex(geom1, ngeom));
+            return Err(MjModelError::IndexOutOfBounds { id: geom1, len: ngeom });
         }
 
         if geom2 >= ngeom {
-            return Err(MjModelError::InvalidIndex(geom2, ngeom));
+            return Err(MjModelError::IndexOutOfBounds { id: geom2, len: ngeom });
         }
 
         Ok(unsafe { mj_maxContact(

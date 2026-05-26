@@ -19,6 +19,134 @@ This page documents the migration steps for upgrading between major versions of 
 For a full list of changes, see the :ref:`changelog`.
 
 
+.. _migrate_unreleased:
+
+Unreleased
+======================
+
+``MjrContext::upload_texture`` parameter type changed
+-----------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
+now accepts ``texture_id: usize`` instead of ``texid: u32``. Update call sites to cast or
+convert the argument accordingly.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    context.upload_texture(&model, 0u32);
+
+**After:**
+
+.. code-block:: rust
+
+    context.upload_texture(&model, 0usize);
+
+
+``MjrContext::upload_texture`` returns ``Result``
+-------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
+now returns ``Result<(), MjrContextError>`` instead of ``()``.
+Handle or propagate the result at each call site.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    context.upload_texture(&model, id);
+
+**After:**
+
+.. code-block:: rust
+
+    context.upload_texture(&model, id)?;
+
+
+``MjrContext::add_aux`` / ``set_aux`` error type changed
+---------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>add_aux` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_aux`
+now return ``Result<(), MjrContextError>`` instead of ``Result<(), MjSceneError>``.
+The ``MjSceneError::InvalidAuxBufferIndex`` variant has been removed; use
+``MjrContextError::IndexOutOfBounds`` instead.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    match context.add_aux(index, width, height, samples) {
+        Err(MjSceneError::InvalidAuxBufferIndex { index }) => { /* … */ }
+        Ok(()) => { /* … */ }
+    }
+
+**After:**
+
+.. code-block:: rust
+
+    match context.add_aux(index, width, height, samples) {
+        Err(MjrContextError::IndexOutOfBounds { id, len }) => { /* … */ }
+        Ok(()) => { /* … */ }
+    }
+
+
+``MjrContext::read_pixels`` error type changed
+-----------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels`
+now returns ``Result<…, MjrContextError>`` instead of ``Result<…, MjSceneError>``.
+``MjSceneError::InvalidViewport`` and ``MjSceneError::BufferTooSmall`` have been removed;
+use ``MjrContextError::InvalidViewport`` and ``MjrContextError::BufferTooSmall`` instead.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    match context.read_pixels(Some(&mut rgb_buf), None, &viewport) {
+        Err(MjSceneError::InvalidViewport { .. }) => { /* … */ }
+        Err(MjSceneError::BufferTooSmall { .. }) => { /* … */ }
+        Ok(()) => { /* … */ }
+    }
+
+**After:**
+
+.. code-block:: rust
+
+    match context.read_pixels(Some(&mut rgb_buf), None, &viewport) {
+        Err(MjrContextError::InvalidViewport { .. }) => { /* … */ }
+        Err(MjrContextError::BufferTooSmall { .. }) => { /* … */ }
+        Ok(()) => { /* … */ }
+    }
+
+
+``MjModelError::InvalidIndex`` removed
+---------------------------------------
+
+``MjModelError::InvalidIndex(usize, usize)`` has been removed. Use
+:docs-rs:`~mujoco_rs::error::<enum>MjModelError::<variant>IndexOutOfBounds`
+with named fields instead.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    match model.try_max_contacts(geom1, geom2, None) {
+        Err(MjModelError::InvalidIndex(id, len)) => { /* … */ }
+        Ok(count) => { /* … */ }
+    }
+
+**After:**
+
+.. code-block:: rust
+
+    match model.try_max_contacts(geom1, geom2, None) {
+        Err(MjModelError::IndexOutOfBounds { id, len }) => { /* … */ }
+        Ok(count) => { /* … */ }
+    }
+
+
 .. _migrate_4_0_0:
 
 Migrating to 4.0.0

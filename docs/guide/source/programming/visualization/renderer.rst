@@ -160,3 +160,51 @@ and saves both an RGB and a depth image:
         renderer.save_rgb("frame.png").expect("failed to save RGB");
         renderer.save_depth("depth.png", true).expect("failed to save depth");  // true = normalize to 0-65535 range.
     }
+
+
+.. _renderer_asset_reupload:
+
+Asset re-upload
+---------------
+
+When textures, meshes, or heightfields in the simulation model are mutated at runtime,
+the GPU copies held by the renderer must be refreshed explicitly.
+
+:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer` exposes two sets of methods for this:
+
+- **Singular** -- upload one asset by its zero-based index:
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_texture_from`,
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_mesh_from`,
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfield_from`.
+  These copy only the data for the specified asset ID and are efficient when only a small
+  number of assets change per frame.
+
+- **Plural** -- upload all assets of a type by iterating over every index:
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_textures_from`,
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_meshes_from`,
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfields_from`.
+  The plural methods are more convenient when the majority of assets of a given type
+  are modified, avoiding repeated signature and context checks.
+
+Unlike the viewer, the renderer uploads asset data **immediately** --- there is no staging or
+dirty-flag mechanism. The upload takes effect before the next call to
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>render`.
+All methods return ``Result<(), RendererError>`` ---
+:docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>SignatureMismatch` is returned
+when the model signature does not match the renderer's current scene,
+:docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>ContextError` when the asset
+ID is out of range (singular methods only), and
+:docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>GlutinError` if the OpenGL context
+cannot be made current.
+
+.. code-block:: rust
+
+    /* Mutate texture 0 in the model, then re-upload just that texture */
+    model.tex_data_mut()[..256].fill(128);
+    renderer.update_texture_from(&model, 0).unwrap();
+
+    /* Or re-upload all textures at once (loops over each texture) */
+    renderer.update_textures_from(&model).unwrap();
+
+    renderer.sync_data(&mut data).unwrap();
+    renderer.render().unwrap();

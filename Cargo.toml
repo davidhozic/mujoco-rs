@@ -119,12 +119,20 @@ name = "tendon"
 required-features = ["viewer"]
 
 [[example]]
+name = "asset_reupload"
+required-features = ["viewer"]
+
+[[example]]
 name = "terrain_generation"
 required-features = ["viewer"]
 
 [[example]]
 name = "tippe_top"
 required-features = ["viewer"]
+
+[[example]]
+name = "renderer_asset_reupload"
+required-features = ["renderer"]
 
 [[example]]
 name = "touch_sensor"

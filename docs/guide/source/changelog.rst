@@ -24,6 +24,146 @@ This means that any incompatible changes increase the major version (**X**.y.z).
 This also includes breaking changes that MuJoCo itself introduced, thus even an
 update of MuJoCo alone can increase the major version.
 
+.. Template titles
+  .. rubric:: Breaking changes
+  .. rubric:: Error handling
+  .. rubric:: New features and improvements
+  .. rubric:: Bug fixes
+  .. rubric:: Other changes
+
+Unreleased
+======================
+
+.. rubric:: Breaking changes
+
+*MjrContext::upload_texture parameter type changed*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
+  now accepts ``texture_id: usize`` instead of ``texid: u32``.
+
+*MjrContext::upload_texture is now fallible*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
+  now returns ``Result<(), MjrContextError>`` instead of ``()`` and no longer panics.
+  Pass an out-of-range ID to receive ``MjrContextError::IndexOutOfBounds { id, len }``
+  instead of a panic.
+
+*MjrContext::add_aux / set_aux error type changed*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>add_aux` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_aux`
+  previously returned ``Result<(), MjSceneError>`` (with ``MjSceneError::InvalidAuxBufferIndex``);
+  they now return ``Result<(), MjrContextError>`` (with ``MjrContextError::IndexOutOfBounds``).
+
+*MjSceneError::InvalidAuxBufferIndex / InvalidViewport / BufferTooSmall removed*
+
+- ``MjSceneError::InvalidAuxBufferIndex``, ``MjSceneError::InvalidViewport``, and
+  ``MjSceneError::BufferTooSmall`` have been removed from
+  :docs-rs:`~mujoco_rs::error::<enum>MjSceneError`. Code matching on these variants will fail
+  to compile. Replace them with the corresponding
+  :docs-rs:`~mujoco_rs::error::<enum>MjrContextError` variants (see migration guide).
+
+*MjrContext::read_pixels error type changed*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels`
+  previously returned ``Result<…, MjSceneError>`` (with ``MjSceneError::InvalidViewport`` and
+  ``MjSceneError::BufferTooSmall``); it now returns ``Result<…, MjrContextError>`` (with
+  ``MjrContextError::InvalidViewport`` and ``MjrContextError::BufferTooSmall``).
+
+*MjModelError::InvalidIndex removed*
+
+- ``MjModelError::InvalidIndex(usize, usize)`` has been removed from
+  :docs-rs:`~mujoco_rs::error::<enum>MjModelError`. Code matching on this variant will fail
+  to compile. Replace it with
+  :docs-rs:`~mujoco_rs::error::<enum>MjModelError::<variant>IndexOutOfBounds`
+  (see migration guide).
+
+.. rubric:: Error handling
+
+New error types:
+
+- :docs-rs:`~mujoco_rs::error::<enum>MjrContextError`: new error enum for
+  :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext` operations, with variants:
+
+  - ``IndexOutOfBounds { id, len }`` — an index passed to a rendering-context operation is out of
+    range (covers GPU asset uploads and aux buffer index checks).
+  - ``InvalidViewport { width, height }`` — the viewport dimensions are invalid for pixel read-back.
+  - ``BufferTooSmall { name, got, needed }`` — the caller-supplied buffer is too small to hold the
+    read-back data.
+
+New error variants in pre-existing enums:
+
+- :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError`: ``SignatureMismatch`` (model structure does
+  not match the viewer's passive model), ``IndexOutOfBounds { id, len }`` (asset ID out of range),
+  ``ContextError(MjrContextError)`` (wraps a rendering-context error, e.g. from pixel read-back
+  during screenshot capture).
+- :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`: ``SignatureMismatch`` (model structure does
+  not match the renderer's current scene), ``ContextError(MjrContextError)`` (wraps a rendering-context error,
+  e.g. an out-of-range asset ID).
+
+.. rubric:: New features and improvements
+
+*MjrContext GPU re-upload methods*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
+  now takes ``&self`` instead of ``&mut self``, relaxing the mutability requirement.
+- |mjr_context| now provides two additional GPU asset re-upload methods:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_mesh`
+    re-uploads a mesh to the GPU by mesh ID.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_hfield`
+    re-uploads a height field to the GPU by height-field ID.
+
+*Viewer GPU asset re-upload*
+
+The Rust viewer now supports re-uploading textures, meshes, and heightfields to the GPU at
+runtime, mirroring the behaviour of MuJoCo's C++ Simulate viewer.
+
+- The singular methods :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_texture_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_mesh_from`, and
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfield_from` copy and mark one
+  asset at a time. All methods return ``Result<(), MjViewerError>``.
+- The plural methods :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_textures_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_meshes_from`, and
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfields_from` copy and mark all
+  assets of that type. All methods return ``Result<(), MjViewerError>``.
+- For multi-threaded programs the same singular and plural methods are available on the
+  shared-state guard:
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_texture_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_mesh_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_hfield_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_textures_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_meshes_from`, and
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_hfields_from`.
+
+*Renderer GPU asset re-upload*
+
+The Rust renderer now supports re-uploading textures, meshes, and heightfields to the GPU at
+runtime.
+
+- The singular methods :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_texture_from`,
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_mesh_from`, and
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfield_from` upload one
+  asset immediately. All methods return ``Result<(), RendererError>``.
+- The plural methods :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_textures_from`,
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_meshes_from`, and
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfields_from` upload all
+  assets of that type immediately. All methods return ``Result<(), RendererError>``.
+
+.. rubric:: New examples
+
+- :gh-example:`Asset re-upload <asset_reupload.rs>` --- demonstrates animated heightfield,
+  texture, and mesh GPU re-uploads with active physics: a ball falls onto a rippling terrain
+  and bounces within a smooth-step wall. Physics and rendering run on separate threads.
+- :gh-example:`Renderer asset re-upload <renderer_asset_reupload.rs>` --- demonstrates the
+  same animated assets using the offscreen renderer: heightfield, texture, and mesh are
+  mutated each frame and immediately re-uploaded before rendering to PNG frames.
+
+.. rubric:: Bug fixes
+.. rubric:: Other changes
+
+
+
 4.0.1 (MuJoCo 3.8.0)
 ======================
 .. rubric:: Bug fixes
@@ -82,7 +222,7 @@ update of MuJoCo alone can increase the major version.
 
 - Added a new variant for handling invalid indices in
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_max_contacts`:
-  :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>InvalidIndex`.
+  ``MjModelError::InvalidIndex``.
 
 .. rubric:: New features and improvements
 

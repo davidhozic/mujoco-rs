@@ -1,3 +1,5 @@
+.. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
+
 .. _mj_rust_viewer:
 
 =======================
@@ -105,6 +107,7 @@ The above example runs until the viewer is closed (:docs-rs:`~~mujoco_rs::viewer
 and mirrors/syncs the simulation state with :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`.
 After synchronization, or in parallel with it, the viewer must also be rendered using the
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` method.
+
 
 .. code-block:: rust
 
@@ -361,6 +364,78 @@ and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model
     }).unwrap();
 
 This requires the ``M`` bound inside |mj_data| to be ``DerefMut<Target = MjModel>`` (e.g., ``Box<MjModel>``).
+
+
+.. _viewer_asset_reupload:
+
+Asset re-upload
+---------------------------------
+
+When textures, meshes, or heightfields in the simulation model are mutated at runtime,
+the GPU copies held by the viewer must be refreshed explicitly.
+
+Both :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
+:docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState` expose two sets of methods for this:
+
+- **Singular** -- upload one asset by its zero-based index:
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_texture_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_mesh_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfield_from`.
+  These copy only the data for the specified asset ID and are efficient when only a small
+  number of assets change per frame.
+
+- **Plural** -- upload all assets of a type in bulk:
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_textures_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_meshes_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfields_from`.
+  The plural methods copy entire asset arrays (skipping per-asset offset calculations)
+  and are more efficient when the majority of assets of a given type are modified.
+  Note that mesh uploads copy multiple arrays (vertex positions, per-vertex normals,
+  UV texture coordinates, face-vertex indices, face-normal indices, face-texcoord indices,
+  and convex hull graph data), so ``update_meshes_from`` issues several array copies.
+
+Both call paths require ``model.signature()`` to match the viewer's internal passive model
+and return ``Result<(), MjViewerError>`` ---
+:docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>SignatureMismatch` is returned when
+the signatures differ, and
+:docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>IndexOutOfBounds` when the asset ID
+is out of range (singular methods only).
+If the model has been replaced or reloaded, call
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model` or
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` first to bring the viewer's
+passive copy up to date before issuing any asset re-upload.
+
+The viewer **stages** the upload and applies it on the next call to
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`.
+
+.. code-block:: rust
+
+    use mujoco_rs::viewer::MjViewer;
+    use mujoco_rs::prelude::*;
+
+    fn main() {
+        // Box the model so MjData takes ownership; the viewer makes its own internal copy.
+        let model = Box::new(MjModel::from_xml("path/to/model.xml").expect("could not load the model"));
+        let mut data = MjData::new(model);
+        let mut viewer = MjViewer::launch_passive(data.model(), 0).expect("could not launch the viewer");
+
+        while viewer.running() {
+            viewer.sync_data(&mut data);
+
+            /* Mutate texture 0 in the model, then re-upload just that texture */
+            // SAFETY: only non-structural asset arrays (tex_data) are modified.
+            unsafe { data.model_mut() }.tex_data_mut()[..256].fill(128);
+            viewer.update_texture_from(data.model(), 0).unwrap();
+
+            /* Or re-upload all textures at once */
+            viewer.update_textures_from(data.model()).unwrap();
+
+            /* Staged uploads are applied during render() */
+            viewer.render().unwrap();
+            data.step();
+        }
+    }
+
 
 .. _mj_cpp_viewer:
 

@@ -117,6 +117,11 @@
   Other changes. Additional component-specific subsections (e.g. MjViewer) may appear only when a
   component has substantial standalone changes; they are placed between New features and Bug fixes.
   Not all sections are required for every release, but the relative order must be preserved.
+- **Changelog content scope.** Only document public-facing changes in the changelog. Do NOT add
+  entries for private/internal items (private fields, private methods, internal helpers) unless the
+  change is critical to understanding behaviour visible from the public API. Bug fixes should only
+  be documented if they were present in a previously released version; do not document fixes for
+  bugs that were introduced and fixed within the same (unreleased) development cycle.
 - **Migration guide entry format.** Each breaking change in `migration.rst` gets: a descriptive
   heading (RST `~` underline), a prose explanation, then **Before** and **After** code blocks using
   `.. code-block:: rust`. For simple type changes, use a `.. list-table::` with columns for
@@ -140,6 +145,19 @@
   `3.0.0`). Release branches follow the `vMajor.Minor.x` convention (e.g., `v2.3.x`, `v3.0.x`),
   where `v` and `x` are literal/fixed. Use these when diffing against previous releases
   (e.g. `git diff 2.3.5 HEAD`).
+
+## Examples
+- Every example in `examples/` must be registered in `Cargo.toml` with `[[example]]` and
+  `required-features` if it uses optional features (e.g. `viewer`).
+- Examples are user-facing demos. `use mujoco_rs::prelude::*` is the conventional import
+  pattern; do NOT flag it as a violation of the "avoid crate::prelude" rule.
+- Use `.unwrap()` (not `.expect("msg")`) for failures that are obvious from the function name.
+- Use `/* */` block comments for top-level section headers inside function bodies (matches the
+  established style in all other examples).
+- Only add comments that clarify non-obvious intent. Do not comment self-explanatory builder
+  chains or single-expression statements.
+- New examples should be documented in the changelog under a `.. rubric:: New examples` section,
+  referencing the file with `:gh-example:\`Display name <filename.rs>\``.
 
 ## Testing
 - When adding a new feature or fixing a bug, add a test for it if one does not already exist.
