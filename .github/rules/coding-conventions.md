@@ -43,6 +43,23 @@
 - **`src/wrappers/fun/` functions stay panicking**: functions in this module should panic on failure,
   not return `Result`.
 
+## Code minimality (DRY, YAGNI, KISS)
+
+- **DRY**: Every piece of logic must have a single representation. If two functions share the same
+  body differing only in a type or a minor parameter, make the function generic or extract a shared
+  helper. Never duplicate an implementation.
+- **YAGNI**: Only implement what is explicitly asked for. Do NOT add speculative parameters, extra
+  overloads, "just in case" variants, or helper types that no caller currently uses.
+- **KISS**: Prefer the simplest solution that fully solves the problem. Avoid clever or convoluted
+  designs. A longer but readable solution is better than a short but tricky one.
+- **Generics over duplication**: When two or more functions share identical logic but differ only
+  in numeric type (e.g. `i32` vs `i64`), make the function generic with an appropriate trait bound
+  (e.g. `Into<i64> + Copy`) rather than writing separate `_sz`/`_typed` variants.
+- **No redundant wrappers**: Do not create a new function that solely delegates to another function
+  of the same name with no added logic. Prefer a single function with a clear signature.
+- **No unused parameters**: Every macro and function parameter must be used. Remove any parameter
+  that was introduced speculatively but has no current caller.
+
 ## Code style
 - Read existing code in the file you're modifying to understand naming, safety, and documentation conventions.
 - Follow the existing error handling patterns used in the same file.

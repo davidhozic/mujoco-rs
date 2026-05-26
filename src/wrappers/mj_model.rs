@@ -1,7 +1,6 @@
 //! MjModel related.
 use crate::{
     view_creator, info_method, info_with_view,
-    mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem,
     array_slice_dyn, getter_setter
 };
 use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
@@ -344,7 +343,7 @@ impl MjModel {
         }
     }
 
-    info_method! { Model, ffi(), actuator,
+    info_method! { Model, actuator,
         [trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, trnid: 2, actadr: 1, actnum: 1,
         group: 1, history: 2, historyadr: 1, delay: 1, ctrllimited: 1, forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize, biasprm: mjNBIAS as usize,
         actearly: 1, ctrlrange: 2, forcerange: 2, actrange: 2, damping: 1,
@@ -354,7 +353,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), body,
+    info_method! { Model, body,
         [parentid: 1, rootid: 1, weldid: 1, mocapid: 1, jntnum: 1, jntadr: 1,
         dofnum: 1, dofadr: 1, treeid: 1, geomnum: 1, geomadr: 1, simple: 1,
         sameframe: 1, pos: 3, quat: 4, ipos: 3, iquat: 4, mass: 1, subtreemass: 1,
@@ -364,7 +363,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), camera,
+    info_method! { Model, camera,
         [mode: 1, bodyid: 1, targetbodyid: 1,
         pos: 3, quat: 4, poscom0: 3,
         pos0: 3, mat0: 9, projection: 1, fovy: 1,
@@ -373,7 +372,7 @@ impl MjModel {
         []
     }
     
-    info_method! { Model, ffi(), joint,
+    info_method! { Model, joint,
         [r#type: 1, qposadr: 1, dofadr: 1, group: 1,
         limited: 1, actfrclimited: 1, actgravcomp: 1, solref: mjNREF as usize, solimp: mjNIMP as usize,
         pos: 3, axis: 3, stiffness: 1, stiffnesspoly: mjNPOLY as usize,
@@ -385,7 +384,7 @@ impl MjModel {
     }
 
 
-    info_method! { Model, ffi(), equality,
+    info_method! { Model, equality,
         [r#type: 1, obj1id: 1,
         obj2id: 1, active0: 1,
         solref: mjNREF as usize, solimp: mjNIMP as usize,
@@ -394,13 +393,13 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), exclude,
+    info_method! { Model, exclude,
         [signature: 1],
         [],
         []
     }
 
-    info_method! { Model, ffi(), geom,
+    info_method! { Model, geom,
         [r#type: 1, contype: 1, conaffinity: 1, condim: 1, bodyid: 1, dataid: 1, matid: 1,
         group: 1, priority: 1, plugin: 1, sameframe: 1, solmix: 1, solref: mjNREF as usize, solimp: mjNIMP as usize, size: 3,
         aabb: 6, rbound: 1, pos: 3, quat: 4, friction: 3, margin: 1, gap: 1, fluid: mjNFLUID as usize, rgba: 4],
@@ -408,7 +407,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), hfield,
+    info_method! { Model, hfield,
         [size: 4,
         nrow: 1,
         ncol: 1,
@@ -418,7 +417,7 @@ impl MjModel {
         [data: nhfielddata]
     }
 
-    info_method! { Model, ffi(), light,
+    info_method! { Model, light,
         [mode: 1, bodyid: 1, targetbodyid: 1, r#type: 1, texid: 1, castshadow: 1,
         bulbradius: 1, intensity: 1, range: 1,
         active: 1, pos: 3, dir: 3, poscom0: 3, pos0: 3,
@@ -428,7 +427,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), material,
+    info_method! { Model, material,
         [texid: MjtTextureRole::mjNTEXROLE as usize, texuniform: 1,
         texrepeat: 2, emission: 1,
         specular: 1, shininess: 1,
@@ -437,7 +436,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), mesh,
+    info_method! { Model, mesh,
         [vertadr: 1, vertnum: 1,
         texcoordadr: 1, faceadr: 1,
         facenum: 1, graphadr: 1,
@@ -449,14 +448,14 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), numeric,
+    info_method! { Model, numeric,
         [adr: 1,
         size: 1],
         [],
         [data: nnumericdata]
     }
 
-    info_method! { Model, ffi(), pair,
+    info_method! { Model, pair,
         [dim: 1, geom1: 1, geom2: 1,
         signature: 1, solref: mjNREF as usize, solimp: mjNIMP as usize,
         margin: 1, gap: 1, friction: 5, solreffriction: mjNREF as usize],
@@ -464,7 +463,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), sensor,
+    info_method! { Model, sensor,
         [r#type: 1, datatype: 1, needstage: 1,
         objtype: 1, objid: 1, reftype: 1,
         refid: 1, intprm: mjNSENS as usize, dim: 1, adr: 1,
@@ -473,7 +472,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), site,
+    info_method! { Model, site,
         [r#type: 1, bodyid: 1, matid: 1,
         group: 1, sameframe: 1, size: 3,
         pos: 3, quat: 4, rgba: 4],
@@ -481,7 +480,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), skin,
+    info_method! { Model, skin,
         [matid: 1, group: 1, rgba: 4, inflate: 1,
         vertadr: 1, vertnum: 1, texcoordadr: 1,
         faceadr: 1, facenum: 1, boneadr: 1,
@@ -490,7 +489,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), tendon,
+    info_method! { Model, tendon,
         [adr: 1, num: 1, matid: 1, actuatorid: 1, group: 1, treenum: 1, treeid: 2,
         limited: 1, actfrclimited: 1, width: 1,
         solref_lim: mjNREF as usize, solimp_lim: mjNIMP as usize, solref_fri: mjNREF as usize, solimp_fri: mjNIMP as usize, range: 2, actfrcrange: 2, margin: 1,
@@ -500,7 +499,7 @@ impl MjModel {
         [J_colind: nJten]
     }
 
-    info_method! { Model, ffi(), texture,
+    info_method! { Model, texture,
         [r#type: 1, colorspace: 1, height: 1,
         width: 1, nchannel: 1,
         adr: 1, pathadr: 1],
@@ -508,7 +507,7 @@ impl MjModel {
         [data: ntexdata]
     }
 
-    info_method! { Model, ffi(), tuple,
+    info_method! { Model, tuple,
         [adr: 1,
         size: 1],
         [],
@@ -517,7 +516,7 @@ impl MjModel {
         objprm: ntupledata]
     }
 
-    info_method! { Model, ffi(), key,
+    info_method! { Model, key,
         [time: 1],
         [qpos: nq, qvel: nv,
         act: na, mpos: nmocap*3,

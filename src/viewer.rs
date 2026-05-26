@@ -24,7 +24,7 @@ use bitflags::bitflags;
 
 use crate::wrappers::mj_rendering::{MjrContext, MjrRectangle, MjtFont, MjtGridPos};
 use crate::vis_common::{sync_geoms, flip_image_vertically, write_png};
-use crate::util::{optional_addr_len, LockUnpoison, ThreeWayMerge};
+use crate::util::{optional_sparse_addr_range, LockUnpoison, ThreeWayMerge};
 use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_primitive::{MjtNum, MjtSize};
@@ -473,8 +473,7 @@ impl ViewerSharedState {
         let texcoord_num = model.mesh_texcoordnum()[mesh_id] as usize;
         let face_adr = model.mesh_faceadr()[mesh_id] as usize;
         let face_num = model.mesh_facenum()[mesh_id] as usize;
-        let graph_adr = model.mesh_graphadr()[mesh_id];
-        let mesh_graph_len = optional_addr_len(model.mesh_graphadr(), mesh_id, model.mesh_graph().len());
+        let graph_range = optional_sparse_addr_range(model.mesh_graphadr(), mesh_id, model.mesh_graph().len());
         // SAFETY: Signature and bounds verified above; all offsets and counts are taken
         // from the mesh's own metadata in a model with matching layout.
         let passive = unsafe { self.data_passive.model_mut() };
@@ -494,7 +493,7 @@ impl ViewerSharedState {
                 .copy_from_slice(&model.mesh_facenormal()[face_adr..face_adr + face_num]);
             passive.mesh_facetexcoord_mut()[face_adr..face_adr + face_num]
                 .copy_from_slice(&model.mesh_facetexcoord()[face_adr..face_adr + face_num]);
-            if let Some(graph_adr) = (graph_adr >= 0).then_some(graph_adr as usize) {
+            if let Some((graph_adr, mesh_graph_len)) = graph_range {
                 passive.mesh_graph_mut()[graph_adr..graph_adr + mesh_graph_len]
                     .copy_from_slice(&model.mesh_graph()[graph_adr..graph_adr + mesh_graph_len]);
             }
