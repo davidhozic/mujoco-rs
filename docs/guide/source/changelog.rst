@@ -155,7 +155,7 @@ runtime.
 - :gh-example:`Asset re-upload <visualization/viewer/asset_reupload.rs>` --- demonstrates animated heightfield,
   texture, and mesh GPU re-uploads with active physics: a ball falls onto a rippling terrain
   and bounces within a smooth-step wall. Physics and rendering run on separate threads.
-- :gh-example:`Renderer asset re-upload <renderer_visualization/viewer/asset_reupload.rs>` --- demonstrates the
+- :gh-example:`Renderer asset re-upload <visualization/renderer/renderer_asset_reupload.rs>` --- demonstrates the
   same animated assets using the offscreen renderer: heightfield, texture, and mesh are
   mutated each frame and immediately re-uploaded before rendering to PNG frames.
 
