@@ -78,7 +78,7 @@ For example:
 
     Using ``Box`` or ``Rc`` (instead of direct references) allows usage in environments with lifetime restrictions.
     One such example is **Python bindings** created with **PyO3**.
-    The :gh-example:`pyo3_application` example shows how to create a simple MuJoCo-rs based application
+    The :gh-example:`standalone/pyo3_application` example shows how to create a simple MuJoCo-rs based application
     for use from the Python programming language.
 
 
@@ -194,7 +194,7 @@ and statistics respectively.
     below. The latter two methods are not unsafe as failure results in a panic
     or in a returned error, respectively.
 
-See the :gh-example:`model_parameters.rs` example for a complete runnable comparison of both
+See the :gh-example:`simulation/model_parameters.rs` example for a complete runnable comparison of both
 approaches (``model_opt_mut`` and ``swap_model``).
 
 Swapping models with ``swap_model``

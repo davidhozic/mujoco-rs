@@ -152,10 +152,10 @@ runtime.
 
 .. rubric:: New examples
 
-- :gh-example:`Asset re-upload <asset_reupload.rs>` --- demonstrates animated heightfield,
+- :gh-example:`Asset re-upload <visualization/viewer/asset_reupload.rs>` --- demonstrates animated heightfield,
   texture, and mesh GPU re-uploads with active physics: a ball falls onto a rippling terrain
   and bounces within a smooth-step wall. Physics and rendering run on separate threads.
-- :gh-example:`Renderer asset re-upload <renderer_asset_reupload.rs>` --- demonstrates the
+- :gh-example:`Renderer asset re-upload <renderer_visualization/viewer/asset_reupload.rs>` --- demonstrates the
   same animated assets using the offscreen renderer: heightfield, texture, and mesh are
   mutated each frame and immediately re-uploaded before rendering to PNG frames.
 
@@ -973,10 +973,10 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   ``EventLoopError`` in both ``RendererError`` and ``MjViewerError`` had the
   same issue and was also fixed.
 - Updated enum type aliases to match MuJoCo 3.6.0 definitions.
-- Added examples: :gh-example:`tippe_top.rs`, :gh-example:`chaotic_pendulum.rs`,
-  :gh-example:`contact_forces.rs`, :gh-example:`multi_legged_creatures.rs`,
-  :gh-example:`procedural_tree.rs`, :gh-example:`miri_test.rs`,
-  :gh-example:`model_switch.rs`, :gh-example:`model_parameters.rs`.
+- Added examples: :gh-example:`simulation/tippe_top.rs`, :gh-example:`simulation/chaotic_pendulum.rs`,
+  :gh-example:`visualization/renderer/contact_forces.rs`, :gh-example:`model_editing/multi_legged_creatures.rs`,
+  :gh-example:`model_editing/procedural_tree.rs`, :gh-example:`testing/miri_test.rs`,
+  :gh-example:`visualization/viewer/model_switch.rs`, :gh-example:`simulation/model_parameters.rs`.
 
 2.3.5 (MuJoCo 3.3.7)
 ======================

@@ -190,7 +190,7 @@ the refresh rate to be equal to the simulation stepping frequency, which puts st
 To prevent slowdowns and allow V-Sync, the viewer can run in the **main thread**, while
 the actual physics simulation runs in another.
 
-Here's an adapted excerpt from the :gh-example:`example <rust_viewer_threaded.rs>` on how to use the viewer in a multi-threaded way:
+Here's an adapted excerpt from the :gh-example:`example <visualization/viewer/rust_viewer_threaded.rs>` on how to use the viewer in a multi-threaded way:
 
 .. code-block:: rust
     :emphasize-lines: 12-13, 18-22, 30-34
@@ -311,7 +311,7 @@ The following example demonstrates how to add a custom window to the viewer:
 Multiple callbacks can be registered by calling ``add_ui_callback`` multiple times.
 Each callback will be invoked during the UI rendering phase with access to the egui context.
 
-For a comprehensive example, see the :gh-example:`custom_ui_widgets.rs` example,
+For a comprehensive example, see the :gh-example:`visualization/viewer/custom_ui_widgets.rs` example,
 which demonstrates various types of UI elements including windows, side panels, and top panels.
 
 .. note::

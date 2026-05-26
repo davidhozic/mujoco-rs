@@ -256,7 +256,7 @@ Examples
 Additional examples on model editing are
 available in the repository's examples:
 
-- :gh-example:`Basic model editing <model_editing.rs>`
-- :gh-example:`Terrain generation <terrain_generation.rs>`
-- :gh-example:`Procedural tree <procedural_tree.rs>`
-- :gh-example:`Multi-legged creatures <multi_legged_creatures.rs>`
+- :gh-example:`Basic model editing <model_editing/model_editing.rs>`
+- :gh-example:`Terrain generation <model_editing/terrain_generation.rs>`
+- :gh-example:`Procedural tree <model_editing/procedural_tree.rs>`
+- :gh-example:`Multi-legged creatures <model_editing/multi_legged_creatures.rs>`
