@@ -87,6 +87,9 @@
   the field-column alignment.
 - **Import organization**: Group by module (std, external, internal), sort by line length
   (longest first), separate groups with empty lines.
+- **Opening brace placement**: When a function signature fits on one line, place `{` on the
+  same line (K&R style). When parameters are split across multiple lines, place `{` on its
+  own line (Allman style) so the body is visually separated from the signature.
 - **Avoid crate::prelude imports**: Import from actual modules instead of `crate::prelude`.
 - Do NOT flag or fix integer truncation casts (e.g., `usize as i32`, `len() as i32`) when the
   underlying C API already validates or clamps the value (e.g., passing a count that MuJoCo itself
@@ -140,7 +143,7 @@
   be documented if they were present in a previously released version; do not document fixes for
   bugs that were introduced and fixed within the same (unreleased) development cycle.
 - **Migration guide entry format.** Each breaking change in `migration.rst` gets: a descriptive
-  heading (RST `~` underline), a prose explanation, then **Before** and **After** code blocks using
+  heading (RST `-` underline, matching the second-level subsection style already established in the file), a prose explanation, then **Before** and **After** code blocks using
   `.. code-block:: rust`. For simple type changes, use a `.. list-table::` with columns for
   type/method, old signature, and new signature. Group related changes under the same heading.
 - **Verify changelog/migration after major doc changes.** After substantial edits to
