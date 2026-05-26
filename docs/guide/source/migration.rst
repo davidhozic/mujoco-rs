@@ -104,7 +104,7 @@ use ``MjrContextError::InvalidViewport`` and ``MjrContextError::BufferTooSmall``
 
 .. code-block:: rust
 
-    match context.read_pixels(&mut buf, false, &viewport) {
+    match context.read_pixels(Some(&mut rgb_buf), None, &viewport) {
         Err(MjSceneError::InvalidViewport { .. }) => { /* … */ }
         Err(MjSceneError::BufferTooSmall { .. }) => { /* … */ }
         Ok(()) => { /* … */ }
@@ -114,7 +114,7 @@ use ``MjrContextError::InvalidViewport`` and ``MjrContextError::BufferTooSmall``
 
 .. code-block:: rust
 
-    match context.read_pixels(&mut buf, false, &viewport) {
+    match context.read_pixels(Some(&mut rgb_buf), None, &viewport) {
         Err(MjrContextError::InvalidViewport { .. }) => { /* … */ }
         Err(MjrContextError::BufferTooSmall { .. }) => { /* … */ }
         Ok(()) => { /* … */ }
