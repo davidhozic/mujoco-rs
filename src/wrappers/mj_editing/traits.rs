@@ -7,23 +7,6 @@ use crate::mujoco_c::*;
 use super::default::MjsDefault;
 use super::utility::*;
 
-/// Provides the [`mjtObj`] discriminant and an element pointer cast for a spec item type.
-///
-/// Implemented for each type that can be traversed via `mjs_firstElement` / `mjs_nextElement`
-/// (spec-level iteration) or `mjs_firstChild` / `mjs_nextChild` (body-level iteration).
-/// Enables generic [`Iterator`] impls on [`super::MjsSpecItemIterMut`],
-/// [`super::MjsSpecItemIter`], [`super::MjsBodyItemIterMut`], and [`super::MjsBodyItemIter`].
-pub trait MjsElementCast: Sized {
-    /// The `mjtObj` discriminant passed to `mjs_firstElement` / `mjs_firstChild`.
-    const OBJ_TYPE: mjtObj;
-
-    /// Casts a raw `*mut mjsElement` to `*mut Self`.
-    ///
-    /// # Safety
-    /// `ptr` must point to a valid element of type `Self`.
-    unsafe fn cast_from_element(ptr: *mut mjsElement) -> *mut Self;
-}
-
 pub(crate) mod sealed {
     /// Prevents external implementations of [`SpecItem`](super::SpecItem).
     pub trait Sealed {}
@@ -174,4 +157,20 @@ pub trait SpecItem: Sized + sealed::Sealed {
             }
         }
     }
+}
+
+/// Represents a [`SpecItem`] that is a concrete object inside [`crate::wrappers::mj_model::MjModel`]
+/// after compilation of [`super::MjSpec`]. This includes all the [`SpecItem`]-s except [`MjsDefault`].
+/// 
+/// This trait is used internally by MuJoCo-rs to provide a generic casting interface from
+/// *mut mjsElement during iteration. 
+pub trait SpecObject: SpecItem {
+    /// The `mjtObj` discriminant passed to `mjs_firstElement` / `mjs_firstChild`.
+    const OBJ_TYPE: mjtObj;
+
+    /// Casts a raw `*mut mjsElement` to `*mut Self`.
+    ///
+    /// # Safety
+    /// `ptr` must point to a valid element of type `Self`.
+    unsafe fn from_element_as_ptr_mut(ptr: *mut mjsElement) -> *mut Self;
 }

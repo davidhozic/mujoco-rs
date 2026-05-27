@@ -352,8 +352,10 @@ macro_rules! find_x_method_direct {
 
 /// Creates a wrapper around a mjs$ffi_name item. It also implements the methods: `ffi()`, `ffi_mut()`
 /// and traits: [`SpecItem`](super::traits::SpecItem), [`Sync`], [`Send`].
+/// 
+/// When `[SpecObject]` is given to the right of `ffi_name`, the SpecObject trait also gets implemented.
 macro_rules! mjs_struct {
-    ($ffi_name:ident $({ $($extra_trait_methods:tt)* })?) => {paste::paste!{
+    ($ffi_name:ident $([$SpecObject:ident])? $({ $($extra_trait_methods:tt)* })?) => {paste::paste!{
         #[doc = concat!(stringify!($ffi_name), " specification. This is an alias to the FFI type [`", stringify!([<mjs $ffi_name>]), "`].")]
         pub type [<Mjs $ffi_name>] = [<mjs $ffi_name>];
 
@@ -387,6 +389,18 @@ macro_rules! mjs_struct {
             )*)?
         }
 
+
+        $(
+            impl $SpecObject for [<Mjs $ffi_name>] {
+                const OBJ_TYPE: MjtObj = MjtObj::[<mjOBJ_ $ffi_name:upper>];
+                unsafe fn from_element_as_ptr_mut(element: *mut mjsElement) -> *mut Self {
+                    // SAFETY: *const conversion to *mut is valid, because mjs_as returns mut originally,
+                    // thus the data itself is *mut.
+                    unsafe { [<mjs_as $ffi_name:camel>](element) }
+                }
+            }
+        )?
+
         // SAFETY: Mjs* types are raw pointer wrappers. All shared-reference access goes
         // through &self methods that do not mutate state. All mutation requires &mut self,
         // which guarantees no concurrent aliasing. The pointer is valid for the lifetime
@@ -395,7 +409,6 @@ macro_rules! mjs_struct {
         unsafe impl Send for [<Mjs $ffi_name>] {}
     }};
 }
-
 
 /// Implements the userdata method.
 macro_rules! userdata_method {
@@ -629,22 +642,6 @@ macro_rules! vec_vec_append {
         )*
     }};
 }
-
-/// Implements [`MjsElementCast`] for each type that can be iterated in [`super::MjSpec`].
-macro_rules! item_spec_iterator {
-    ($($iter_over: ident),*) => {paste::paste!{
-        $(
-            impl MjsElementCast for [<Mjs $iter_over>] {
-                const OBJ_TYPE: MjtObj = MjtObj::[<mjOBJ_ $iter_over:upper>];
-
-                unsafe fn cast_from_element(ptr: *mut mjsElement) -> *mut Self {
-                    unsafe { [<mjs_as $iter_over>](ptr) }
-                }
-            }
-        )*
-    }};
-}
-
 
 /// Generates methods for obtaining iterators to `$iter_over` spec items.
 macro_rules! spec_get_iter {
