@@ -547,32 +547,44 @@ impl MjSpec {
 /// Mutable iterator over items in [`MjSpec`].
 #[derive(Debug)]
 pub struct MjsSpecItemIterMut<'a, T> {
-    root: &'a mut MjSpec,
+    /// Pointer to the wrapped mjSpec pointer.
+    /// This is the FFI type wrapped inside [`MjSpec`].
+    ffi_ptr: *mut mjSpec,
+    /// Last obtained element in the iterator.
+    /// This CAN be null, and this iterator it uses the null to detect
+    /// end of iteration. 
     last: *mut mjsElement,
     /// Used for generic implementation of iterator's methods.
-    item_type: PhantomData<T>
+    item_type: PhantomData<&'a mut T>
 }
 
 /// Immutable iterator over items in [`MjSpec`].
 #[derive(Debug, Clone)]
 pub struct MjsSpecItemIter<'a, T> {
-    root: &'a MjSpec,
+    /// Pointer to the wrapped mjSpec pointer.
+    /// This is the FFI type wrapped inside [`MjSpec`].
+    ffi_ptr: *const mjSpec,
+    /// Last obtained element in the iterator.
+    /// This CAN be null, and this iterator it uses the null to detect
+    /// end of iteration. 
     last: *mut mjsElement,
     /// Used for generic implementation of iterator's methods.
-    item_type: PhantomData<T>
+    item_type: PhantomData<&'a T>
 }
 
 impl<'a, T: SpecObject> MjsSpecItemIterMut<'a, T> {
     fn new(root: &'a mut MjSpec) -> Self {
         let last = unsafe { mjs_firstElement(root.0.as_ptr(), T::OBJ_TYPE) };
-        Self { root, last, item_type: PhantomData }
+        Self { ffi_ptr: root.0.as_ptr(), last, item_type: PhantomData }
     }
 }
 
 impl<'a, T: SpecObject> MjsSpecItemIter<'a, T> {
     fn new(root: &'a MjSpec) -> Self {
+        // SAFETY: mjs_firstElement does not mutate mjsSpec, thus as_ptr is valid to be case to *mut
+        // from the const reference to its wrapper.
         let last = unsafe { mjs_firstElement(root.0.as_ptr(), T::OBJ_TYPE) };
-        Self { root, last, item_type: PhantomData }
+        Self { ffi_ptr: root.0.as_ptr(), last, item_type: PhantomData }
     }
 }
 
@@ -587,7 +599,7 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsSpecItemIterMut<'a, T> {
             let out = T::from_element_as_ptr_mut(self.last).as_mut();
             // Use as_ptr() instead of ffi_mut() to avoid creating &mut mjSpec,
             // which would alias with previously yielded &mut items.
-            self.last = mjs_nextElement(self.root.0.as_ptr(), self.last);
+            self.last = mjs_nextElement(self.ffi_ptr, self.last);
             out
         }
     }
@@ -602,7 +614,9 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsSpecItemIter<'a, T> {
         }
         unsafe {
             let out = T::from_element_as_ptr_mut(self.last).as_ref();
-            self.last = mjs_nextElement(self.root.0.as_ptr(), self.last);
+            // SAFETY: mjs_nextElement does not mutate mjsSpec, thus as_ptr is valid to be case to *mut
+            // from the const reference to its wrapper.
+            self.last = mjs_nextElement(self.ffi_ptr as *mut _, self.last);
             out
         }
     }
@@ -1758,36 +1772,21 @@ impl MjsBody {
 /// Mutable iterator over items in [`MjsBody`].
 #[derive(Debug)]
 pub struct MjsBodyItemIterMut<'a, T> {
-    root: &'a mut MjsBody,
+    /// NonNull pointer to the FFI type [`mjsBody`].
+    /// [`MjsBody`] is its alias, thus storing it plainly
+    /// would technically be UB as Rust can't see across
+    /// boundary to verify . 
+    ffi_ptr: *mut MjsBody,
     last: *mut mjsElement,
     recurse: bool,
     /// Used for generic implementation of iterator's methods.
-    item_type: PhantomData<T>
-}
-
-/// Immutable iterator over items in [`MjsBody`].
-#[derive(Debug, Clone)]
-pub struct MjsBodyItemIter<'a, T> {
-    root: &'a MjsBody,
-    last: *mut mjsElement,
-    recurse: bool,
-    /// Used for generic implementation of iterator's methods.
-    item_type: PhantomData<T>
+    item_type: PhantomData<&'a T>
 }
 
 impl<'a, T: SpecObject> MjsBodyItemIterMut<'a, T> {
     fn new(root: &'a mut MjsBody, recurse: bool) -> Self {
         let last = unsafe { mjs_firstChild(root, T::OBJ_TYPE, recurse.into()) };
-        Self { root, last, recurse, item_type: PhantomData }
-    }
-}
-
-impl<'a, T: SpecObject> MjsBodyItemIter<'a, T> {
-    fn new(root: &'a MjsBody, recurse: bool) -> Self {
-        // SAFETY: mjs_firstChild requires a *mut pointer but does not mutate
-        // the body. The const-to-mut cast is sound because no mutation occurs.
-        let last = unsafe { mjs_firstChild(root as *const _ as *mut _, T::OBJ_TYPE, recurse.into()) };
-        Self { root, last, recurse, item_type: PhantomData }
+        Self { ffi_ptr: root, last, recurse, item_type: PhantomData }
     }
 }
 
@@ -1798,11 +1797,40 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsBodyItemIterMut<'a, T> {
         if self.last.is_null() {
             return None;
         }
+
         unsafe {
             let out = T::from_element_as_ptr_mut(self.last).as_mut();
-            self.last = mjs_nextChild(self.root, self.last, self.recurse.into());
+            self.last = mjs_nextChild(self.ffi_ptr, self.last, self.recurse.into());
             out
         }
+    }
+}
+
+impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsBodyItemIterMut<'a, T> {}
+
+/// Immutable iterator over items in [`MjsBody`].
+#[derive(Debug, Clone)]
+pub struct MjsBodyItemIter<'a, T> {
+    ffi_ptr: *const MjsBody,
+    last: *const mjsElement,
+    recurse: bool,
+    /// Used for generic implementation of iterator's methods.
+    item_type: PhantomData<&'a T>
+}
+
+
+impl<'a, T: SpecObject> MjsBodyItemIter<'a, T> {
+    fn new(root: &'a MjsBody, recurse: bool) -> Self {
+        // SAFETY: mjs_firstChild requires a *mut pointer but does not mutate
+        // the body. The const-to-mut cast is sound because no mutation occurs.
+        let last = unsafe {
+            mjs_firstChild(
+                root as *const _ as *mut _,
+                T::OBJ_TYPE,
+                recurse.into()
+            )
+        };
+        Self { ffi_ptr: root, last, recurse, item_type: PhantomData }
     }
 }
 
@@ -1814,16 +1842,15 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsBodyItemIter<'a, T> {
             return None;
         }
         unsafe {
-            let out = T::from_element_as_ptr_mut(self.last).as_ref();
+            let out = T::from_element_as_ptr_mut(self.last as *mut _).as_ref();
             // SAFETY: mjs_nextChild requires *mut but does not mutate. Cast is sound.
-            self.last = mjs_nextChild(self.root as *const _ as *mut _, self.last, self.recurse.into());
+            self.last = mjs_nextChild(self.ffi_ptr as *mut _, self.last as *mut _, self.recurse.into());
             out
         }
     }
 }
 
 // Once self.last is null, next() always returns None.
-impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsBodyItemIterMut<'a, T> {}
 impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsBodyItemIter<'a, T> {}
 
 /// Iterator methods.
