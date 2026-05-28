@@ -202,6 +202,7 @@ const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
     ("Forward Inverse", MjtEnableBit::mjENBL_FWDINV),
     ("Inverse Discrete", MjtEnableBit::mjENBL_INVDISCRETE),
     ("Sleep", MjtEnableBit::mjENBL_SLEEP),
+    ("DiagExact", MjtEnableBit::mjENBL_DIAGEXACT)
 ];
 const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit_::mjNENABLE as usize);
 

@@ -37,6 +37,13 @@ Unreleased
 
 .. rubric:: Breaking changes
 
+*MuJoCo FFI upgraded to 3.9.0*
+
+- MuJoCo-rs now builds against MuJoCo 3.9.0 FFI. This is a breaking
+  dependency-level change for consumers tied to older MuJoCo C ABI details.
+  See MuJoCo's changelog for this release:
+  https://mujoco.readthedocs.io/en/3.9.0/changelog.html
+
 *MjrContext::upload_texture parameter type changed*
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
@@ -172,6 +179,12 @@ runtime.
 
 .. rubric:: Other changes
 
+- Updated bool-typed wrappers to use ``MjtBool`` where MuJoCo uses ``mjtBool``.
+  This is not a Rust API breaking change because ``MjtBool`` is a type alias to
+  ``mjtBool``, and ``mjtBool`` is ``bool`` by default. Related struct fields and
+  function parameters now avoid force-casting and use MuJoCo's bool mapping directly.
+  Fields that are ``MjtByte`` in MuJoCo remain byte-backed and are not part of the
+  ``MjtBool`` migration.
 
 
 4.0.1 (MuJoCo 3.8.0)

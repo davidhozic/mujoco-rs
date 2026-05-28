@@ -20,3 +20,8 @@ pub type MjtNum = mjtNum;
 /// Byte type (`unsigned char`) used for boolean flags and raw byte data (e.g. texture buffers) in MuJoCo.
 pub type MjtByte = mjtByte;
 
+/***********************************************************************************************************************
+** MjtBool
+***********************************************************************************************************************/
+/// Boolean type used by MuJoCo for flags in structs and function signatures.
+pub type MjtBool = mjtBool;

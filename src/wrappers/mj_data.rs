@@ -1113,7 +1113,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     #[allow(clippy::too_many_arguments)]
     pub fn multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
-        flg_static: bool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
+        flg_static: MjtBool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
     ) -> (Vec<Option<usize>>, Vec<MjtNum>) {
         self.try_multi_ray(pnt, vec, geomgroup, flg_static, bodyexclude, cutoff, normals_out).unwrap()
     }
@@ -1124,7 +1124,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     #[allow(clippy::too_many_arguments)]
     pub fn try_multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
-        flg_static: bool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
+        flg_static: MjtBool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
     ) -> Result<(Vec<Option<usize>>, Vec<MjtNum>), MjDataError> {
         let nray = vec.len();
         if let Some(buf) = &normals_out
@@ -1140,7 +1140,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             self.model.ffi(), self.ffi_mut(), pnt,
             bytemuck::cast_slice::<[MjtNum; 3], MjtNum>(vec).as_ptr(),
             geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
-            flg_static as u8, bodyexclude.map_or(-1i32, |id| id as i32), geom_id_raw.as_mut_ptr(),
+            flg_static, bodyexclude.map_or(-1i32, |id| id as i32), geom_id_raw.as_mut_ptr(),
             distance.as_mut_ptr(),
             normals_out.map_or(ptr::null_mut(), |x| bytemuck::cast_slice_mut::<[MjtNum; 3], MjtNum>(x).as_mut_ptr()),
             nray as i32, cutoff
@@ -1156,7 +1156,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// `geomgroup` and `flg_static` are as in mjvOption; pass `None` for `geomgroup` to skip group exclusion.
     pub fn ray(
         &self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
-        geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: bool, bodyexclude: Option<usize>,
+        geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: MjtBool, bodyexclude: Option<usize>,
         normal_out: Option<&mut [MjtNum; 3]>
     ) -> (Option<usize>, MjtNum) {
         // `normal_out` is a fixed-size array; nothing to validate at runtime here.
@@ -1165,7 +1165,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             self.model.ffi(), self.ffi(),
             pnt, vec,
             geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
-            flg_static as MjtByte, bodyexclude.map_or(-1i32, |id| id as i32), &mut geom_id_raw,
+            flg_static, bodyexclude.map_or(-1i32, |id| id as i32), &mut geom_id_raw,
             normal_out.map_or(ptr::null_mut(), |x| x)
         ) };
         let geom_id = if geom_id_raw == -1 { None } else { Some(geom_id_raw as usize) };
@@ -1184,7 +1184,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Use [`MjData::try_ray_flex`] for a fallible alternative.
     #[allow(clippy::too_many_arguments)]
     pub fn ray_flex(
-        &self, flex_layer: i32, flg_vert: bool, flg_edge: bool, flg_face: bool, flg_skin: bool, flexid: usize,
+        &self, flex_layer: i32, flg_vert: MjtBool, flg_edge: MjtBool, flg_face: MjtBool, flg_skin: MjtBool, flexid: usize,
         pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         vertid: Option<&mut i32>, normal_out: Option<&mut [MjtNum; 3]>
     ) -> MjtNum {
@@ -1199,7 +1199,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Use [`MjData::ray_flex`] for a panicking alternative.
     #[allow(clippy::too_many_arguments)]
     pub fn try_ray_flex(
-        &self, flex_layer: i32, flg_vert: bool, flg_edge: bool, flg_face: bool, flg_skin: bool, flexid: usize,
+        &self, flex_layer: i32, flg_vert: MjtBool, flg_edge: MjtBool, flg_face: MjtBool, flg_skin: MjtBool, flexid: usize,
         pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         vertid: Option<&mut i32>, normal_out: Option<&mut [MjtNum; 3]>
     ) -> Result<MjtNum, MjDataError> {
@@ -1209,7 +1209,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
         Ok(unsafe { mj_rayFlex(
             self.model.ffi(), self.ffi(),
-            flex_layer, flg_vert as MjtByte, flg_edge as MjtByte, flg_face as MjtByte, flg_skin as MjtByte, flexid as i32,
+            flex_layer, flg_vert, flg_edge, flg_face, flg_skin, flexid as i32,
             pnt, vec,
             vertid.map_or(ptr::null_mut(), |x| x), normal_out.map_or(ptr::null_mut(), |x| x)
         ) })
@@ -1412,10 +1412,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     ///
     /// # Safety
     /// When `spec` includes [`MjtState::mjSTATE_EQ_ACTIVE`], MuJoCo writes the raw
-    /// `mjtNum` (f64) bytes from `state` directly into the `eq_active` byte array
-    /// without booleanization. The caller must ensure that [`MjData::eq_active`] is
-    /// not accessed until the `eq_active` values have been re-validated as `0` or `1`
-    /// (e.g. by calling `mj_forward` or `mj_step`).
+    /// `mjtNum` (f64) bytes from `state` directly into the `eq_active` bool array.
+    /// The caller must ensure that [`MjData::eq_active`] is not accessed until the
+    /// values have been re-validated into valid bool representation (e.g. by calling
+    /// `mj_forward` or `mj_step`).
     pub unsafe fn set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
         let required_len = self.model.state_size(spec);
         if state.len() < required_len {
@@ -1558,10 +1558,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     ]}
 
     getter_setter! {get, [
-        [ffi] flg_energypos: bool; "has mj_energyPos been called.";
-        [ffi] flg_energyvel: bool; "has mj_energyVel been called.";
-        [ffi] flg_subtreevel: bool; "has mj_subtreeVel been called.";
-        [ffi] flg_rnepost: bool; "has mj_rnePostConstraint been called.";
+        [ffi] flg_energypos: MjtBool; "has mj_energyPos been called.";
+        [ffi] flg_energyvel: MjtBool; "has mj_energyVel been called.";
+        [ffi] flg_subtreevel: MjtBool; "has mj_subtreeVel been called.";
+        [ffi] flg_rnepost: MjtBool; "has mj_rnePostConstraint been called.";
     ]}
 
     getter_setter! {with, get, set, [[ffi, ffi_mut] time: MjtNum; "simulation time.";]}
@@ -1686,7 +1686,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         ctrl: &[MjtNum; "control"; model.ffi().nu],
         qfrc_applied: &[MjtNum; "applied generalized force"; model.ffi().nv],
         xfrc_applied: &[[MjtNum; 6] [force]; "applied Cartesian force/torque"; model.ffi().nbody],
-        eq_active: &[bool [force]; "enable/disable constraints"; model.ffi().neq],
+        eq_active: &[MjtBool; "enable/disable constraints"; model.ffi().neq],
         mocap_pos: &[[MjtNum; 3] [force]; "positions of mocap bodies"; model.ffi().nmocap],
         mocap_quat: &[[MjtNum; 4] [force]; "orientations of mocap bodies"; model.ffi().nmocap],
         qacc: &[MjtNum; "acceleration"; model.ffi().nv],
@@ -1735,7 +1735,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         M: &[MjtNum; "reduced inertia (compressed sparse row)"; model.ffi().nC],
         qLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
         qLDiagInv: &[MjtNum; "1/diag(D)"; model.ffi().nv],
-        bvh_active: &[bool [force]; "was bounding volume checked for collision"; model.ffi().nbvh],
+        bvh_active: &[MjtBool; "was bounding volume checked for collision"; model.ffi().nbvh],
         tree_awake: &[i32; "is tree awake; 0: asleep; 1: awake"; model.ffi().ntree],
         body_awake: &[MjtSleepState [force]; "body sleep state"; model.ffi().nbody],
         (unsafe) body_awake_ind: &[i32; "indices of awake and static bodies"; model.ffi().nbody],
