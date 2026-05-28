@@ -35,7 +35,7 @@ Run the codebase under Miri's experimental FFI native-lib support to detect unde
    export LD_LIBRARY_PATH=$(realpath build/lib64/) && \
    export MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-native-lib=$(realpath build/lib64/libmujoco.so.X.Y.Z) -Zmiri-permissive-provenance -Zmiri-symbolic-alignment-check" && \
    cd .. && \
-   cargo +nightly miri run --example miri_test
+   cargo +nightly miri run --example miri_test --features renderer
    ```
 
 3. **Verify results**:

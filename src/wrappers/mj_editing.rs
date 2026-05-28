@@ -547,25 +547,84 @@ impl MjSpec {
 /// Mutable iterator over items in [`MjSpec`].
 #[derive(Debug)]
 pub struct MjsSpecItemIterMut<'a, T> {
-    root: &'a mut MjSpec,
+    /// Pointer to the wrapped mjSpec pointer.
+    /// This is the FFI type wrapped inside [`MjSpec`].
+    ffi_ptr: *mut mjSpec,
+    /// Last obtained element in the iterator.
+    /// This CAN be null, and this iterator it uses the null to detect
+    /// end of iteration. 
     last: *mut mjsElement,
     /// Used for generic implementation of iterator's methods.
-    item_type: PhantomData<T>
+    item_type: PhantomData<&'a mut T>
 }
 
 /// Immutable iterator over items in [`MjSpec`].
 #[derive(Debug, Clone)]
 pub struct MjsSpecItemIter<'a, T> {
-    root: &'a MjSpec,
+    /// Pointer to the wrapped mjSpec pointer.
+    /// This is the FFI type wrapped inside [`MjSpec`].
+    ffi_ptr: *const mjSpec,
+    /// Last obtained element in the iterator.
+    /// This CAN be null, and this iterator it uses the null to detect
+    /// end of iteration. 
     last: *mut mjsElement,
     /// Used for generic implementation of iterator's methods.
-    item_type: PhantomData<T>
+    item_type: PhantomData<&'a T>
 }
 
-item_spec_iterator! {
-    Body, Geom, Joint, Site, Camera, Light, Frame, Actuator, Sensor, Flex, Pair, Equality, Exclude, Tendon,
-    Numeric, Text, Tuple, Key, Mesh, Hfield, Skin, Texture, Material, Plugin
+impl<'a, T: SpecObject> MjsSpecItemIterMut<'a, T> {
+    fn new(root: &'a mut MjSpec) -> Self {
+        let last = unsafe { mjs_firstElement(root.0.as_ptr(), T::OBJ_TYPE) };
+        Self { ffi_ptr: root.0.as_ptr(), last, item_type: PhantomData }
+    }
 }
+
+impl<'a, T: SpecObject> MjsSpecItemIter<'a, T> {
+    fn new(root: &'a MjSpec) -> Self {
+        // SAFETY: mjs_firstElement does not mutate mjsSpec, thus as_ptr is valid to be case to *mut
+        // from the const reference to its wrapper.
+        let last = unsafe { mjs_firstElement(root.0.as_ptr(), T::OBJ_TYPE) };
+        Self { ffi_ptr: root.0.as_ptr(), last, item_type: PhantomData }
+    }
+}
+
+impl<'a, T: SpecObject + 'a> Iterator for MjsSpecItemIterMut<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.last.is_null() {
+            return None;
+        }
+        unsafe {
+            let out = T::from_element_as_ptr_mut(self.last).as_mut();
+            // Use as_ptr() instead of ffi_mut() to avoid creating &mut mjSpec,
+            // which would alias with previously yielded &mut items.
+            self.last = mjs_nextElement(self.ffi_ptr, self.last);
+            out
+        }
+    }
+}
+
+impl<'a, T: SpecObject + 'a> Iterator for MjsSpecItemIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.last.is_null() {
+            return None;
+        }
+        unsafe {
+            let out = T::from_element_as_ptr_mut(self.last).as_ref();
+            // SAFETY: mjs_nextElement does not mutate mjsSpec, thus as_ptr is valid to be case to *mut
+            // from the const reference to its wrapper.
+            self.last = mjs_nextElement(self.ffi_ptr as *mut _, self.last);
+            out
+        }
+    }
+}
+
+// Once self.last is null, next() always returns None.
+impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsSpecItemIterMut<'a, T> {}
+impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsSpecItemIter<'a, T> {}
 
 /// Iterator methods.
 impl MjSpec {
@@ -603,7 +662,7 @@ impl Clone for MjSpec {
 /***************************
 ** Site specification
 ***************************/
-mjs_struct!(Site);
+mjs_struct!(Site [SpecObject]);
 impl MjsSite {
     getter_setter! {
         [&] with, get, [
@@ -633,7 +692,7 @@ impl MjsSite {
 /***************************
 ** Joint specification
 ***************************/
-mjs_struct!(Joint);
+mjs_struct!(Joint [SpecObject]);
 impl MjsJoint {
     getter_setter! {
         [&] with, get, [
@@ -688,7 +747,7 @@ impl MjsJoint {
 /***************************
 ** Geom specification
 ***************************/
-mjs_struct!(Geom);
+mjs_struct!(Geom [SpecObject]);
 impl MjsGeom {
     getter_setter! {
         [&] with, get, [
@@ -740,7 +799,7 @@ impl MjsGeom {
 /***************************
 ** Camera specification
 ***************************/
-mjs_struct!(Camera);
+mjs_struct!(Camera [SpecObject]);
 impl MjsCamera {
     getter_setter! {
         [&] with, get, [
@@ -775,7 +834,7 @@ impl MjsCamera {
 /***************************
 ** Light specification
 ***************************/
-mjs_struct!(Light);
+mjs_struct!(Light [SpecObject]);
 impl MjsLight {
     getter_setter! {
         [&] with, get, [
@@ -814,7 +873,7 @@ impl MjsLight {
 /***************************
 ** Frame specification
 ***************************/
-mjs_struct!(Frame);
+mjs_struct!(Frame [SpecObject]);
 impl MjsFrame {
     add_x_method_by_frame! { body, site, joint, geom, camera, light }
 
@@ -863,7 +922,7 @@ impl MjsFrame {
 /***************************
 ** Actuator specification
 ***************************/
-mjs_struct!(Actuator);
+mjs_struct!(Actuator [SpecObject]);
 impl MjsActuator {
     getter_setter! {
         [&] with, get, [
@@ -926,7 +985,7 @@ impl MjsActuator {
 /***************************
 ** Sensor specification
 ***************************/
-mjs_struct!(Sensor);
+mjs_struct!(Sensor [SpecObject]);
 impl MjsSensor {
     getter_setter! {
         [&] with, get, [
@@ -966,7 +1025,7 @@ impl MjsSensor {
 /***************************
 ** Flex specification
 ***************************/
-mjs_struct!(Flex);
+mjs_struct!(Flex [SpecObject]);
 impl MjsFlex {
     getter_setter! {
         [&] with, get, [
@@ -1042,7 +1101,7 @@ impl MjsFlex {
 /***************************
 ** Pair specification
 ***************************/
-mjs_struct!(Pair);
+mjs_struct!(Pair [SpecObject]);
 impl MjsPair {
     getter_setter! {
         [&] with, get, [
@@ -1070,7 +1129,7 @@ impl MjsPair {
 /***************************
 ** Exclude specification
 ***************************/
-mjs_struct!(Exclude);
+mjs_struct!(Exclude [SpecObject]);
 impl MjsExclude {
     string_set_get_with! {[&]
         bodyname1; "name of body 1.";
@@ -1081,7 +1140,7 @@ impl MjsExclude {
 /***************************
 ** Equality specification
 ***************************/
-mjs_struct!(Equality);
+mjs_struct!(Equality [SpecObject]);
 impl MjsEquality {
     getter_setter! {
         [&] with, get, [
@@ -1109,7 +1168,7 @@ impl MjsEquality {
 /***************************
 ** Tendon specification
 ***************************/
-mjs_struct!(Tendon);
+mjs_struct!(Tendon [SpecObject]);
 impl MjsTendon {
     getter_setter! {
         [&] with, get, [
@@ -1296,7 +1355,7 @@ impl MjsWrap {
 /***************************
 ** Numeric specification
 ***************************/
-mjs_struct!(Numeric);
+mjs_struct!(Numeric [SpecObject]);
 impl MjsNumeric {
     getter_setter! {
         [&] with, get, set, [
@@ -1312,7 +1371,7 @@ impl MjsNumeric {
 /***************************
 ** Text specification
 ***************************/
-mjs_struct!(Text);
+mjs_struct!(Text [SpecObject]);
 impl MjsText {
     string_set_get_with! {[&]
         data; "text string.";
@@ -1322,7 +1381,7 @@ impl MjsText {
 /***************************
 ** Tuple specification
 ***************************/
-mjs_struct!(Tuple);
+mjs_struct!(Tuple [SpecObject]);
 impl MjsTuple {
     vec_set! {
         objtype: i32; "object types.";
@@ -1340,7 +1399,7 @@ impl MjsTuple {
 /***************************
 ** Key specification
 ***************************/
-mjs_struct!(Key);
+mjs_struct!(Key [SpecObject]);
 impl MjsKey {
     getter_setter! {
         [&] with, get, set, [
@@ -1361,7 +1420,7 @@ impl MjsKey {
 /***************************
 ** Plugin specification
 ***************************/
-mjs_struct!(Plugin);
+mjs_struct!(Plugin [SpecObject]);
 impl MjsPlugin {
     string_set_get_with! {[&]
         name; "instance name.";
@@ -1380,7 +1439,7 @@ impl MjsPlugin {
 /***************************
 ** Mesh specification
 ***************************/
-mjs_struct!(Mesh);
+mjs_struct!(Mesh [SpecObject]);
 impl MjsMesh {
     getter_setter! {
         [&] with, get, [
@@ -1429,7 +1488,7 @@ impl MjsMesh {
 /***************************
 ** Hfield specification
 ***************************/
-mjs_struct!(Hfield);
+mjs_struct!(Hfield [SpecObject]);
 impl MjsHfield {
     getter_setter! {
         [&] with, get, [
@@ -1457,7 +1516,7 @@ impl MjsHfield {
 /***************************
 ** Skin specification
 ***************************/
-mjs_struct!(Skin);
+mjs_struct!(Skin [SpecObject]);
 impl MjsSkin {
     getter_setter! {
         [&] with, get, [
@@ -1498,7 +1557,7 @@ impl MjsSkin {
 /***************************
 ** Texture specification
 ***************************/
-mjs_struct!(Texture);
+mjs_struct!(Texture [SpecObject]);
 
 /// # Note -- cube-map files
 ///
@@ -1560,7 +1619,7 @@ impl MjsTexture {
 /***************************
 ** Material specification
 ***************************/
-mjs_struct!(Material);
+mjs_struct!(Material [SpecObject]);
 
 /// # Note -- texture assignment
 ///
@@ -1602,7 +1661,7 @@ impl MjsMaterial {
 /***************************
 ** Body specification
 ***************************/
-mjs_struct!(Body {
+mjs_struct!(Body [SpecObject] {
     // Override the delete method to prevent deletion of world.
     /// Delete this body from its parent spec.
     ///
@@ -1713,26 +1772,86 @@ impl MjsBody {
 /// Mutable iterator over items in [`MjsBody`].
 #[derive(Debug)]
 pub struct MjsBodyItemIterMut<'a, T> {
-    root: &'a mut MjsBody,
+    /// NonNull pointer to the FFI type [`mjsBody`].
+    /// [`MjsBody`] is its alias, thus storing it plainly
+    /// would technically be UB as Rust can't see across
+    /// boundary to verify . 
+    ffi_ptr: *mut MjsBody,
     last: *mut mjsElement,
     recurse: bool,
     /// Used for generic implementation of iterator's methods.
-    item_type: PhantomData<T>
+    item_type: PhantomData<&'a T>
 }
+
+impl<'a, T: SpecObject> MjsBodyItemIterMut<'a, T> {
+    fn new(root: &'a mut MjsBody, recurse: bool) -> Self {
+        let last = unsafe { mjs_firstChild(root, T::OBJ_TYPE, recurse.into()) };
+        Self { ffi_ptr: root, last, recurse, item_type: PhantomData }
+    }
+}
+
+impl<'a, T: SpecObject + 'a> Iterator for MjsBodyItemIterMut<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.last.is_null() {
+            return None;
+        }
+
+        unsafe {
+            let out = T::from_element_as_ptr_mut(self.last).as_mut();
+            self.last = mjs_nextChild(self.ffi_ptr, self.last, self.recurse.into());
+            out
+        }
+    }
+}
+
+impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsBodyItemIterMut<'a, T> {}
 
 /// Immutable iterator over items in [`MjsBody`].
 #[derive(Debug, Clone)]
 pub struct MjsBodyItemIter<'a, T> {
-    root: &'a MjsBody,
-    last: *mut mjsElement,
+    ffi_ptr: *const MjsBody,
+    last: *const mjsElement,
     recurse: bool,
     /// Used for generic implementation of iterator's methods.
-    item_type: PhantomData<T>
+    item_type: PhantomData<&'a T>
 }
 
-item_body_iterator! {
-    Body, Joint, Geom, Site, Camera, Light, Frame
+
+impl<'a, T: SpecObject> MjsBodyItemIter<'a, T> {
+    fn new(root: &'a MjsBody, recurse: bool) -> Self {
+        // SAFETY: mjs_firstChild requires a *mut pointer but does not mutate
+        // the body. The const-to-mut cast is sound because no mutation occurs.
+        let last = unsafe {
+            mjs_firstChild(
+                root as *const _ as *mut _,
+                T::OBJ_TYPE,
+                recurse.into()
+            )
+        };
+        Self { ffi_ptr: root, last, recurse, item_type: PhantomData }
+    }
 }
+
+impl<'a, T: SpecObject + 'a> Iterator for MjsBodyItemIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.last.is_null() {
+            return None;
+        }
+        unsafe {
+            let out = T::from_element_as_ptr_mut(self.last as *mut _).as_ref();
+            // SAFETY: mjs_nextChild requires *mut but does not mutate. Cast is sound.
+            self.last = mjs_nextChild(self.ffi_ptr as *mut _, self.last as *mut _, self.recurse.into());
+            out
+        }
+    }
+}
+
+// Once self.last is null, next() always returns None.
+impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsBodyItemIter<'a, T> {}
 
 /// Iterator methods.
 impl MjsBody {

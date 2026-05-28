@@ -352,8 +352,10 @@ macro_rules! find_x_method_direct {
 
 /// Creates a wrapper around a mjs$ffi_name item. It also implements the methods: `ffi()`, `ffi_mut()`
 /// and traits: [`SpecItem`](super::traits::SpecItem), [`Sync`], [`Send`].
+/// 
+/// When `[SpecObject]` is given to the right of `ffi_name`, the SpecObject trait also gets implemented.
 macro_rules! mjs_struct {
-    ($ffi_name:ident $({ $($extra_trait_methods:tt)* })?) => {paste::paste!{
+    ($ffi_name:ident $([$SpecObject:ident])? $({ $($extra_trait_methods:tt)* })?) => {paste::paste!{
         #[doc = concat!(stringify!($ffi_name), " specification. This is an alias to the FFI type [`", stringify!([<mjs $ffi_name>]), "`].")]
         pub type [<Mjs $ffi_name>] = [<mjs $ffi_name>];
 
@@ -387,6 +389,18 @@ macro_rules! mjs_struct {
             )*)?
         }
 
+
+        $(
+            impl $SpecObject for [<Mjs $ffi_name>] {
+                const OBJ_TYPE: MjtObj = MjtObj::[<mjOBJ_ $ffi_name:upper>];
+                unsafe fn from_element_as_ptr_mut(element: *mut mjsElement) -> *mut Self {
+                    // SAFETY: *const conversion to *mut is valid, because mjs_as returns mut originally,
+                    // thus the data itself is *mut.
+                    unsafe { [<mjs_as $ffi_name:camel>](element) }
+                }
+            }
+        )?
+
         // SAFETY: Mjs* types are raw pointer wrappers. All shared-reference access goes
         // through &self methods that do not mutate state. All mutation requires &mut self,
         // which guarantees no concurrent aliasing. The pointer is valid for the lifetime
@@ -395,7 +409,6 @@ macro_rules! mjs_struct {
         unsafe impl Send for [<Mjs $ffi_name>] {}
     }};
 }
-
 
 /// Implements the userdata method.
 macro_rules! userdata_method {
@@ -630,66 +643,6 @@ macro_rules! vec_vec_append {
     }};
 }
 
-/// Implements iterators for individual items in [MjSpec](super::MjSpec).
-macro_rules! item_spec_iterator {
-    ($($iter_over: ident),*) => {paste::paste!{
-        $(
-            impl<'a> MjsSpecItemIterMut<'a, [<Mjs $iter_over>]> {
-                fn new(root: &'a mut MjSpec) -> Self {
-                    let last = unsafe { mjs_firstElement(root.0.as_ptr(), MjtObj::[<mjOBJ_ $iter_over:upper>]) };
-                    Self { root, last, item_type: PhantomData }
-                }
-            }
-
-            impl<'a> MjsSpecItemIter<'a, [<Mjs $iter_over>]> {
-                fn new(root: &'a MjSpec) -> Self {
-                    let last = unsafe { mjs_firstElement(root.0.as_ptr(), MjtObj::[<mjOBJ_ $iter_over:upper>]) };
-                    Self { root, last, item_type: PhantomData }
-                }
-            }
-
-            impl<'a> Iterator for MjsSpecItemIterMut<'a, [<Mjs $iter_over>]> {
-                type Item = &'a mut [<Mjs $iter_over>];
-
-                fn next(&mut self) -> Option<Self::Item> {
-                    if self.last.is_null() {
-                        return None;
-                    }
-
-                    unsafe {
-                        let out = [<mjs_as $iter_over>](self.last).as_mut();
-                        // Use as_ptr() instead of ffi_mut() to avoid creating &mut mjSpec,
-                        // which would alias with previously yielded &mut items.
-                        self.last = mjs_nextElement(self.root.0.as_ptr(), self.last);
-                        out
-                    }
-                }
-            }
-
-            impl<'a> Iterator for MjsSpecItemIter<'a, [<Mjs $iter_over>]> {
-                type Item = &'a [<Mjs $iter_over>];
-
-                fn next(&mut self) -> Option<Self::Item> {
-                    if self.last.is_null() {
-                        return None;
-                    }
-
-                    unsafe {
-                        let out = [<mjs_as $iter_over>](self.last).as_ref();
-                        self.last = mjs_nextElement(self.root.0.as_ptr(), self.last);
-                        out
-                    }
-                }
-            }
-
-            // Once self.last is null, next() always returns None.
-            impl<'a> std::iter::FusedIterator for MjsSpecItemIterMut<'a, [<Mjs $iter_over>]> {}
-            impl<'a> std::iter::FusedIterator for MjsSpecItemIter<'a, [<Mjs $iter_over>]> {}
-        )*
-    }};
-}
-
-
 /// Generates methods for obtaining iterators to `$iter_over` spec items.
 macro_rules! spec_get_iter {
     ($($iter_over: ident),*) => {paste::paste!{
@@ -707,66 +660,6 @@ macro_rules! spec_get_iter {
     }};
 }
 
-
-/// Implements iterators for individual items in [MjsBody](super::MjsBody).
-macro_rules! item_body_iterator {
-    ($($iter_over: ident),*) => {paste::paste!{
-        $(
-            impl<'a> MjsBodyItemIterMut<'a, [<Mjs $iter_over>]> {
-                fn new(root: &'a mut MjsBody, recurse: bool) -> Self {
-                    let last = unsafe { mjs_firstChild(root, MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
-                    Self { root, last, recurse, item_type: PhantomData }
-                }
-            }
-
-            impl<'a> MjsBodyItemIter<'a, [<Mjs $iter_over>]> {
-                fn new(root: &'a MjsBody, recurse: bool) -> Self {
-                    // SAFETY: mjs_firstChild requires a *mut pointer but does not mutate
-                    // the body. The const-to-mut cast is sound because no mutation occurs.
-                    let last = unsafe { mjs_firstChild(root as *const _ as *mut _, MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
-                    Self { root, last, recurse, item_type: PhantomData }
-                }
-            }
-
-            impl<'a> Iterator for MjsBodyItemIterMut<'a, [<Mjs $iter_over>]> {
-                type Item = &'a mut [<Mjs $iter_over>];
-
-                fn next(&mut self) -> Option<Self::Item> {
-                    if self.last.is_null() {
-                        return None;
-                    }
-
-                    unsafe {
-                        let out = [<mjs_as $iter_over>](self.last).as_mut();
-                        self.last = mjs_nextChild(self.root, self.last, self.recurse.into());
-                        out
-                    }
-                }
-            }
-
-            impl<'a> Iterator for MjsBodyItemIter<'a, [<Mjs $iter_over>]> {
-                type Item = &'a [<Mjs $iter_over>];
-
-                fn next(&mut self) -> Option<Self::Item> {
-                    if self.last.is_null() {
-                        return None;
-                    }
-
-                    unsafe {
-                        let out = [<mjs_as $iter_over>](self.last).as_ref();
-                        // SAFETY: mjs_nextChild requires *mut but does not mutate. Cast is sound.
-                        self.last = mjs_nextChild(self.root as *const _ as *mut _, self.last, self.recurse.into());
-                        out
-                    }
-                }
-            }
-
-            // Once self.last is null, next() always returns None.
-            impl<'a> std::iter::FusedIterator for MjsBodyItemIterMut<'a, [<Mjs $iter_over>]> {}
-            impl<'a> std::iter::FusedIterator for MjsBodyItemIter<'a, [<Mjs $iter_over>]> {}
-        )*
-    }};
-}
 
 /// Generates methods for obtaining iterators to `$iter_over` body items.
 /// The $self_lf represents the iterated item's borrow and $parent_lf the lifetime of its parent.
