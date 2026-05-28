@@ -44,6 +44,11 @@ Unreleased
   See MuJoCo's changelog for this release:
   https://mujoco.readthedocs.io/en/3.9.0/changelog.html
 
+*(Potentially breaking) Changed raw pointer types of trait methods*
+- Changed raw pointer types of trait methods. For example, ``unsafe element_pointer(&self)``
+  now returns ``*const mjsElement``. This is a change that should not affect most users,
+  unless they explicitly opted in to using the C model-editing API of MuJoCo directly. 
+
 *MjrContext::upload_texture parameter type changed*
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
@@ -185,6 +190,7 @@ runtime.
   function parameters now avoid force-casting and use MuJoCo's bool mapping directly.
   Fields that are ``MjtByte`` in MuJoCo remain byte-backed and are not part of the
   ``MjtBool`` migration.
+- Added missing ``mjt*`` type aliases for recently surfaced MuJoCo enums: ``MjtMeshBuiltin``, ``MjtCTimer``.
 
 
 4.0.1 (MuJoCo 3.8.0)

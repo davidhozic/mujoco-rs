@@ -43,6 +43,9 @@ pub type MjtMeshInertia = mjtMeshInertia;
 /// Type of built-in procedural texture.
 pub type MjtBuiltin = mjtBuiltin;
 
+/// Type of built-in procedural mesh.
+pub type MjtMeshBuiltin = mjtMeshBuiltin;
+
 /// Mark type for procedural textures.
 pub type MjtMark = mjtMark;
 
@@ -57,6 +60,9 @@ pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
 
 /// Type of orientation specifier.
 pub type MjtOrientation = mjtOrientation;
+
+/// Compiler timing categories, used in `mjs_getTimer`.
+pub type MjtCTimer = mjtCTimer;
 /*******************************************************/
 
 /******************************
@@ -616,7 +622,7 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsSpecItemIter<'a, T> {
             let out = T::from_element_as_ptr_mut(self.last).as_ref();
             // SAFETY: mjs_nextElement does not mutate mjsSpec, thus as_ptr is valid to be case to *mut
             // from the const reference to its wrapper.
-            self.last = mjs_nextElement(self.ffi_ptr as *mut _, self.last);
+            self.last = mjs_nextElement(self.ffi_ptr, self.last);
             out
         }
     }
@@ -909,7 +915,7 @@ impl MjsFrame {
         // mjs_addFrame, which always calls SetParent(body).
         let parent_body = unsafe { mjs_getParent(self.element_mut_pointer()) };
         debug_assert!(!parent_body.is_null(), "mjs_getParent returned null; frame has no parent body");
-        let ptr = unsafe { mjs_addFrame(parent_body, self as *mut MjsFrame) };
+        let ptr = unsafe { mjs_addFrame(parent_body, self) };
         // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
         // pointee is properly aligned and initialized by C++ operator new, and freshly
         // allocated so no existing Rust reference aliases it for the returned lifetime.
@@ -1331,7 +1337,7 @@ impl MjsWrap {
 
     /// Return the side site element.
     pub fn side_site(&self) -> Option<&MjsSite> {
-        let ptr = unsafe { mjs_getWrapSideSite(self as *const _ as *mut _) };
+        let ptr = unsafe { mjs_getWrapSideSite(self) };
         if ptr.is_null() { None } else { Some(unsafe { &*ptr }) }
     }
 
@@ -1343,12 +1349,12 @@ impl MjsWrap {
 
     /// Return the wrap divisor.
     pub fn divisor(&self) -> f64 {
-        unsafe { mjs_getWrapDivisor(self as *const _ as *mut _) }
+        unsafe { mjs_getWrapDivisor(self) }
     }
 
     /// Return the wrap coefficient.
     pub fn coef(&self) -> f64 {
-        unsafe { mjs_getWrapCoef(self as *const _ as *mut _) }
+        unsafe { mjs_getWrapCoef(self) }
     }
 }
 
@@ -1825,7 +1831,7 @@ impl<'a, T: SpecObject> MjsBodyItemIter<'a, T> {
         // the body. The const-to-mut cast is sound because no mutation occurs.
         let last = unsafe {
             mjs_firstChild(
-                root as *const _ as *mut _,
+                root,
                 T::OBJ_TYPE,
                 recurse.into()
             )
@@ -1844,7 +1850,7 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsBodyItemIter<'a, T> {
         unsafe {
             let out = T::from_element_as_ptr_mut(self.last as *mut _).as_ref();
             // SAFETY: mjs_nextChild requires *mut but does not mutate. Cast is sound.
-            self.last = mjs_nextChild(self.ffi_ptr as *mut _, self.last as *mut _, self.recurse.into());
+            self.last = mjs_nextChild(self.ffi_ptr, self.last, self.recurse.into());
             out
         }
     }

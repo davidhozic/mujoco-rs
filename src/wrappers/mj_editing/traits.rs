@@ -24,7 +24,7 @@ pub trait SpecItem: Sized + sealed::Sealed {
     /// # Safety
     /// This borrows immutably, but returns a mutable pointer. This is done to overcome MJS's wrong
     /// use of mutable pointers in functions, such as [`mjs_getName`].
-    unsafe fn element_pointer(&self) -> *mut mjsElement;
+    unsafe fn element_pointer(&self) -> *const mjsElement;
 
     /// Same as [`SpecItem::element_pointer`], but with a mutable borrow.
     ///
@@ -33,7 +33,7 @@ pub trait SpecItem: Sized + sealed::Sealed {
     unsafe fn element_mut_pointer(&mut self) -> *mut mjsElement {
         // SAFETY: self.element is a valid non-null pointer to the C spec element
         // for the lifetime of the parent MjSpec (struct invariant).
-        unsafe { self.element_pointer() }
+        unsafe { self.element_pointer() as *mut _ }
     }
 
     /// Returns the item's name.
@@ -43,7 +43,8 @@ pub trait SpecItem: Sized + sealed::Sealed {
     fn name(&self) -> &str {
         // SAFETY: mjs_getName returns a pointer to a null-terminated string owned
         // by the spec element, valid for the element's lifetime.
-        unsafe { read_mjs_string(mjs_getName(self.element_pointer())) }
+        // It is safe to convert to *mut _ as it doesn't actually modify anything.
+        unsafe { read_mjs_string(mjs_getName(self.element_pointer() as *mut _)) }
     }
 
     /// Set a new name.
@@ -84,7 +85,7 @@ pub trait SpecItem: Sized + sealed::Sealed {
     fn set_default(&mut self, class_name: &str) -> Result<(), MjEditError> {
         /* Workaround to pass the borrow checker (we use the existing borrow) */
         let cname = CString::new(class_name).unwrap();  // class_name is always valid UTF-8.
-        let element = unsafe { self.element_mut_pointer() };
+        let element = unsafe { self.element_pointer() };
         let spec = unsafe { mjs_getSpec(element) };
         let default = unsafe { mjs_findDefault(spec, cname.as_ptr()) };
         if default.is_null() {
