@@ -7,6 +7,7 @@ Changelog
 .. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
 .. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
+.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`
 .. |mj_geomview| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjGeomDataView`
 .. |mj_geomviewmut| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjGeomDataViewMut`
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
@@ -160,6 +161,15 @@ runtime.
   mutated each frame and immediately re-uploaded before rendering to PNG frames.
 
 .. rubric:: Bug fixes
+
+- Fixed a model-editing potential undefined behavior in |mjs_body|, which occurred
+  when yielded references of body's items were not destroyed before the next entry
+  to the iterator. This was problematic if individual references of yielded items
+  were stored and later used --- technically a undefined behavior due to reuse of the |mjs_body|
+  inside the iterator. The |mjs_body| parent is now stored as a raw FFI pointer to prevent such
+  aliasing.
+
+
 .. rubric:: Other changes
 
 
