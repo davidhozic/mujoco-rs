@@ -253,7 +253,7 @@ Custom UI widgets
 The Rust-native viewer supports adding custom UI widgets through the
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` method.
 This allows you to create custom windows, panels, and other UI elements using
-`egui <https://docs.rs/egui/latest/egui/>`_.
+`egui <https://docs.rs/egui/0.33.0/egui/>`_.
 
 .. note::
 

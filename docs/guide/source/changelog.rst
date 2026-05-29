@@ -32,7 +32,7 @@ update of MuJoCo alone can increase the major version.
   .. rubric:: Bug fixes
   .. rubric:: Other changes
 
-Unreleased
+5.0.0 (MuJoCo 3.9.0)
 ======================
 
 .. rubric:: Breaking changes
@@ -178,6 +178,8 @@ runtime.
     for named child lookup.
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>id`
     for retrieving optional element IDs.
+
+- Added the missing frame-finding method to |mj_spec|: :docs-rs:`~mujoco-rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`.
 
 .. rubric:: New examples
 

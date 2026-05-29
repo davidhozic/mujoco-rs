@@ -1,6 +1,6 @@
 # MuJoCo-rs
 [![Guide](https://img.shields.io/badge/Guide-book-white)](https://mujoco-rs.readthedocs.io/en/v5.0.x/)
-[![docs.rs](https://img.shields.io/docsrs/mujoco-rs/latest)](https://docs.rs/mujoco-rs)
+[![docs.rs](https://img.shields.io/docsrs/mujoco-rs/5.0.0)](https://docs.rs/mujoco-rs/5.0.0/mujoco_rs/)
 [![CI](https://img.shields.io/github/actions/workflow/status/davidhozic/mujoco-rs/tests.yml?label=CI)](https://github.com/davidhozic/mujoco-rs/actions)
 [![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
 
@@ -16,7 +16,7 @@ bindings to a modified C++ one.
 
 ## Documentation
 More detailed documentation is available at the:
-- [**API docs**](https://docs.rs/mujoco-rs)
+- [**API docs**](https://docs.rs/mujoco-rs/5.0.0/mujoco_rs/)
 - [**Guide book**](https://mujoco-rs.readthedocs.io/en/v5.0.x/)
 
 ## MuJoCo version

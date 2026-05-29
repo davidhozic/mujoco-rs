@@ -19,9 +19,9 @@ This page documents the migration steps for upgrading between major versions of 
 For a full list of changes, see the :ref:`changelog`.
 
 
-.. _migrate_unreleased:
+.. _migrate_5_0_0:
 
-Unreleased
+Migrating to 5.0.0
 ======================
 
 ``MjrContext::upload_texture`` parameter type changed
