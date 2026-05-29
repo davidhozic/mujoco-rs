@@ -45,9 +45,11 @@ Unreleased
   https://mujoco.readthedocs.io/en/3.9.0/changelog.html
 
 *(Potentially breaking) Changed raw pointer types of trait methods*
+
 - Changed raw pointer types of trait methods. For example, ``unsafe element_pointer(&self)``
   now returns ``*const mjsElement``. This is a change that should not affect most users,
-  unless they explicitly opted in to using the C model-editing API of MuJoCo directly. 
+  unless they explicitly opted in to using the C model-editing API of MuJoCo directly, or
+  implemented/depended on the old trait method signature in advanced extension code.
 
 *MjrContext::upload_texture parameter type changed*
 
@@ -163,6 +165,20 @@ runtime.
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfields_from` upload all
   assets of that type immediately. All methods return ``Result<(), RendererError>``.
 
+*Model-editing and utility API additions*
+
+- Added :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_sym2dense` as a safe wrapper for
+  MuJoCo's sparse-to-dense conversion utility.
+- Added model-editing convenience APIs:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>timer`
+    for CTIMER values.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child` and
+    :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child_mut`
+    for named child lookup.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>id`
+    for retrieving optional element IDs.
+
 .. rubric:: New examples
 
 - :gh-example:`Asset re-upload <visualization/viewer/asset_reupload.rs>` --- demonstrates animated heightfield,
@@ -191,6 +207,7 @@ runtime.
   Fields that are ``MjtByte`` in MuJoCo remain byte-backed and are not part of the
   ``MjtBool`` migration.
 - Added missing ``mjt*`` type aliases for recently surfaced MuJoCo enums: ``MjtMeshBuiltin``, ``MjtCTimer``.
+- Added auxiliary exposed aliases: ``MjPreContact``, ``MjfCollision``, ``MjpResourceProvider``.
 
 
 4.0.1 (MuJoCo 3.8.0)
