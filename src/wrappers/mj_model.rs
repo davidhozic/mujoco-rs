@@ -875,6 +875,7 @@ impl MjModel {
         [ffi] nflexelem: MjtSize; "number of elements in all flexes.";
         [ffi] nflexelemdata: MjtSize; "number of element vertex ids in all flexes.";
         [ffi] nflexstiffness: MjtSize; "number of stiffness parameters in all flexes.";
+        [ffi] nflexbending: MjtSize; "number of bending parameters in all flexes";
         [ffi] nflexelemedge: MjtSize; "number of element edge ids in all flexes.";
         [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
         [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
@@ -1127,6 +1128,7 @@ impl MjModel {
         (unsafe) flex_elemdataadr: &[i32; "first element vertex id address"; ffi().nflex],
         (unsafe) flex_stiffnessadr: &[i32; "stiffness matrix address"; ffi().nflex],
         (unsafe) flex_elemedgeadr: &[i32; "first element edge id address"; ffi().nflex],
+        (unsafe) flex_bendingadr: &[i32; "first bending data address"; ffi().nflex],
         (unsafe) flex_shellnum: &[i32; "number of shells"; ffi().nflex],
         (unsafe) flex_shelldataadr: &[i32; "first shell data address"; ffi().nflex],
         (unsafe) flex_evpairadr: &[i32; "first evpair address"; ffi().nflex],
@@ -1155,7 +1157,7 @@ impl MjModel {
         flex_radius: &[MjtNum; "radius around primitive element"; ffi().nflex],
         flex_size: &[[MjtNum; 3] [force]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
         flex_stiffness: &[MjtNum; "finite element stiffness matrix"; ffi().nflexstiffness],
-        flex_bending: &[[MjtNum; 17] [force]; "bending stiffness"; ffi().nflexedge],
+        flex_bending: &[MjtNum; "bending stiffness"; ffi().nflexbending],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
@@ -2729,11 +2731,9 @@ mod tests {
 
         // Cross-validate with raw FFI
         for i in 0..njnt {
-            let raw_u8 = unsafe { *model.ffi().jnt_limited.add(i) };
-            assert!(raw_u8 == 0 || raw_u8 == 1,
-                "raw jnt_limited[{}]={} must be 0 or 1", i, raw_u8);
-            assert_eq!(jnt_limited[i], raw_u8 != 0,
-                "jnt_limited[{}] mismatch: bool={}, raw={}", i, jnt_limited[i], raw_u8);
+            let raw_bool = unsafe { *model.ffi().jnt_limited.add(i) };
+            assert_eq!(jnt_limited[i], raw_bool,
+                "jnt_limited[{}] mismatch: bool={}, raw={}", i, jnt_limited[i], raw_bool);
         }
 
         // "rod" joint has range="0 1" -> limited=true; "ball" is free -> limited=false
@@ -2951,7 +2951,7 @@ mod tests {
             assert_eq!(eq_objtype[i], expected_objtype);
 
             let raw_active = unsafe { *model.ffi().eq_active0.add(i) };
-            assert_eq!(eq_active0[i], raw_active != 0);
+            assert_eq!(eq_active0[i], raw_active);
         }
 
         // Verify known equality: "eq1" is a connect constraint
@@ -3042,13 +3042,13 @@ mod tests {
 
             // Bool cross-validation
             let raw_ctrllimited = unsafe { *model.ffi().actuator_ctrllimited.add(i) };
-            assert_eq!(ctrllimited[i], raw_ctrllimited != 0);
+            assert_eq!(ctrllimited[i], raw_ctrllimited);
             let raw_forcelimited = unsafe { *model.ffi().actuator_forcelimited.add(i) };
-            assert_eq!(forcelimited[i], raw_forcelimited != 0);
+            assert_eq!(forcelimited[i], raw_forcelimited);
             let raw_actlimited = unsafe { *model.ffi().actuator_actlimited.add(i) };
-            assert_eq!(actlimited[i], raw_actlimited != 0);
+            assert_eq!(actlimited[i], raw_actlimited);
             let raw_actearly = unsafe { *model.ffi().actuator_actearly.add(i) };
-            assert_eq!(actearly[i], raw_actearly != 0);
+            assert_eq!(actearly[i], raw_actearly);
         }
 
         // Verify known actuator: "slider" has biastype=affine, gaintype=fixed, ctrllimited=true
@@ -3121,7 +3121,7 @@ mod tests {
 
         for i in 0..ntendon {
             let raw_limited = unsafe { *model.ffi().tendon_limited.add(i) };
-            assert_eq!(tendon_limited[i], raw_limited != 0);
+            assert_eq!(tendon_limited[i], raw_limited);
 
             for j in 0..2 {
                 assert_eq!(tendon_range[i][j], unsafe { *model.ffi().tendon_range.add(i * 2 + j) });
@@ -3195,7 +3195,7 @@ mod tests {
 
         for i in 0..nmat {
             let raw_uniform = unsafe { *model.ffi().mat_texuniform.add(i) };
-            assert_eq!(mat_texuniform[i], raw_uniform != 0);
+            assert_eq!(mat_texuniform[i], raw_uniform);
 
             for j in 0..2 {
                 assert_eq!(mat_texrepeat[i][j], unsafe { *model.ffi().mat_texrepeat.add(i * 2 + j) });
@@ -3245,9 +3245,9 @@ mod tests {
             assert_eq!(light_type[i], unsafe { crate::util::force_cast::<_, MjtLightType>(*model.ffi().light_type.add(i)) });
 
             let raw_shadow = unsafe { *model.ffi().light_castshadow.add(i) };
-            assert_eq!(light_castshadow[i], raw_shadow != 0);
+            assert_eq!(light_castshadow[i], raw_shadow);
             let raw_active = unsafe { *model.ffi().light_active.add(i) };
-            assert_eq!(light_active[i], raw_active != 0);
+            assert_eq!(light_active[i], raw_active);
 
             for j in 0..3 {
                 assert_eq!(light_attenuation[i][j], unsafe { *model.ffi().light_attenuation.add(i * 3 + j) });
@@ -3745,15 +3745,15 @@ mod tests {
         assert_eq!(view2.scale[2], 4.0);
     }
 
-    /// Verifies that `flex_bandwidth`, `flex_cellnum`, and `flex_stiffnessadr`
+    /// Verifies that `flex_cellnum`, `flex_stiffnessadr`, and `flex_bendingadr`
     /// return empty slices when the model contains no flex bodies.
     #[test]
     fn test_flex_array_slices_empty_for_non_flex_model() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
         assert_eq!(model.ffi().nflex, 0);
-        assert_eq!(model.flex_bandwidth().len(), 0);
         assert_eq!(model.flex_cellnum().len(), 0);
         assert_eq!(model.flex_stiffnessadr().len(), 0);
+        assert_eq!(model.flex_bendingadr().len(), 0);
     }
 
     /// Tests the wrapper of `mj_maxContact` ([`MjModel::max_contacts`]).

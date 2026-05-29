@@ -187,6 +187,25 @@ pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum], n: usize) {
     unsafe { mujoco_c::mju_symmetrize(res.as_mut_ptr(), mat.as_ptr(), n as i32) }
 }
 
+/// Convert symmetric sparse matrix to dense.
+///
+/// # Panics
+/// - Panics if `res` does not have `n * n` elements.
+/// - Panics if `mat` and `colind` have different lengths.
+/// - Panics if `rownnz` or `rowadr` does not have `n` elements.
+pub fn mju_sym2dense(
+    res: &mut [MjtNum], mat: &[MjtNum], n: usize, rownnz: &[i32], rowadr: &[i32], colind: &[i32]
+) {
+    assert!(res.len() == n * n);
+    assert!(rownnz.len() == n && rowadr.len() == n);
+    assert!(mat.len() == colind.len());
+    unsafe {
+        mujoco_c::mju_sym2dense(
+            res.as_mut_ptr(), mat.as_ptr(), n as i32, rownnz.as_ptr(), rowadr.as_ptr(), colind.as_ptr(),
+        )
+    }
+}
+
 /// Set a square matrix to identity.
 ///
 /// # Panics
@@ -793,6 +812,39 @@ mod tests {
         // (M + M^T)/2 = [[1,2.5],[2.5,4]]
         assert_eq!(res, [1.0, 2.5,
                          2.5, 4.0]);
+    }
+
+    #[test]
+    fn test_mju_sym2dense() {
+        let mut dense = [0.0; 4];
+        let sym = [1.0, 2.0, 3.0];
+        let rownnz = [1, 2];
+        let rowadr = [0, 1];
+        let colind = [0, 0, 1];
+        mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind);
+        assert_eq!(dense, [1.0, 2.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_mju_sym2dense_panics_on_bad_dense_size() {
+        let mut dense = [0.0; 3];
+        let sym = [1.0, 2.0, 3.0];
+        let rownnz = [1, 2];
+        let rowadr = [0, 1];
+        let colind = [0, 0, 1];
+        mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_mju_sym2dense_panics_on_mismatched_sparse_lengths() {
+        let mut dense = [0.0; 4];
+        let sym = [1.0, 2.0, 3.0];
+        let rownnz = [1, 2];
+        let rowadr = [0, 1];
+        let colind = [0, 0];
+        mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind);
     }
 
     #[test]

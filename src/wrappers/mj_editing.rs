@@ -366,6 +366,11 @@ impl MjSpec {
         })
     }
 
+    /// Return compiler timers (`mjtCTimer` order).
+    pub fn timer(&self) -> &[f64; MjtCTimer::mjNCTIMER as usize] {
+        unsafe { &*mjs_getTimer(self.0.as_ptr()).cast() }
+    }
+
     /// Saves the spec to an XML file.
     /// # Returns
     /// `Ok(())` on success.
@@ -434,7 +439,7 @@ impl MjSpec {
 /// Children accessor methods.
 impl MjSpec {
     find_x_method! {
-        body, geom, joint, site, camera, light, actuator, sensor, flex, pair, equality, exclude, tendon,
+        body, geom, joint, site, camera, light, frame, actuator, sensor, flex, pair, equality, exclude, tendon,
         numeric, text, tuple, key, mesh, hfield, skin, texture, material, plugin
     }
 
@@ -1465,6 +1470,7 @@ impl MjsMesh {
         [&] with, get, set, [
             inertia: MjtMeshInertia;      "inertia type (convex, legacy, exact, shell).";
             maxhullvert: i32;             "maximum vertex count for the convex hull.";
+            octree_maxdepth: i32;         "max octree depth.";
         ]
     }
 
@@ -1694,6 +1700,30 @@ mjs_struct!(Body [SpecObject] {
 
 impl MjsBody {
     add_x_method! { body, site, joint, geom, camera, light }
+
+    /// Obtain an immutable reference to a child body with the given `name`.
+    ///
+    /// # Panics
+    /// When the `name` contains '\0' characters, a panic occurs.
+    pub fn child(&self, name: &str) -> Option<&MjsBody> {
+        let c_name = CString::new(name).unwrap();
+        unsafe {
+            let ptr = mjs_findChild(self, c_name.as_ptr());
+            if ptr.is_null() { None } else { ptr.as_ref() }
+        }
+    }
+
+    /// Obtain a mutable reference to a child body with the given `name`.
+    ///
+    /// # Panics
+    /// When the `name` contains '\0' characters, a panic occurs.
+    pub fn child_mut(&mut self, name: &str) -> Option<&mut MjsBody> {
+        let c_name = CString::new(name).unwrap();
+        unsafe {
+            let ptr = mjs_findChild(self, c_name.as_ptr());
+            if ptr.is_null() { None } else { ptr.as_mut() }
+        }
+    }
 
     /// Dummy mutable FFI method used to simplify access through macros.
     ///
@@ -2165,10 +2195,14 @@ mod tests {
             .with_gravcomp(10.0);
 
         world.add_frame()
+            .with_name("frame_a")
             .with_pos([0.5, 0.5, 0.05])
             .add_body()
             .add_geom()
             .with_size([1.0, 0.0, 0.0]);
+
+        assert!(spec.frame("frame_a").is_some());
+        assert!(spec.frame_mut("frame_a").is_some());
 
         spec.compile().unwrap();
     }
@@ -2196,6 +2230,25 @@ mod tests {
         spec.world_body_mut().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
 
         spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_body_child_and_id() {
+        let mut spec = MjSpec::new();
+        let parent = spec.world_body_mut().add_body().with_name("parent");
+        parent.add_body().with_name("child");
+
+        let parent_ref = spec.body("parent").unwrap();
+        assert!(parent_ref.child("child").is_some());
+        assert!(parent_ref.child("missing").is_none());
+        assert_eq!(parent_ref.id(), None);
+
+        let parent_mut = spec.body_mut("parent").unwrap();
+        assert!(parent_mut.child_mut("child").is_some());
+        assert!(parent_mut.child_mut("missing").is_none());
+
+        spec.compile().unwrap();
+        assert!(spec.body("parent").unwrap().id().is_some());
     }
 
     #[test]

@@ -77,6 +77,15 @@ pub trait SpecItem: Sized + sealed::Sealed {
         unsafe { &*mjs_getDefault(self.element_pointer()) }
     }
 
+    /// Returns the numeric id for this element, if assigned.
+    ///
+    /// MuJoCo returns `-1` when no id exists (for example before compilation);
+    /// in that case this returns `None`.
+    fn id(&self) -> Option<usize> {
+        let id = unsafe { mjs_getId(self.element_pointer()) };
+        usize::try_from(id).ok()
+    }
+
     /// Make the item inherit properties from a default class.
     /// # Errors
     /// Returns [`MjEditError::NotFound`] when the default with the `class_name` doesn't exist.

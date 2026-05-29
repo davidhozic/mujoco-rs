@@ -1547,6 +1547,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         [ffi] nl: i32; "number of limit constraints.";
         [ffi] nefc: i32; "number of constraints.";
         [ffi] nJ: i32; "number of non-zeros in constraint Jacobian.";
+        [ffi] nY: i32; "number of non-zeros in constraint inverse inertia square root.";
         [ffi] nA: i32; "number of non-zeros in constraint inverse inertia matrix.";
         [ffi] nisland: i32; "number of detected constraint islands.";
         [ffi] nidof: i32; "number of dofs in all islands.";
@@ -1819,6 +1820,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         iefc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],
         iefc_D: &[MjtNum; "constraint mass"; ffi().nefc],
         iefc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
+        (unsafe) efc_Y_rownnz: &[i32; "number of non-zeros in Y row"; ffi().nefc],
+        (unsafe) efc_Y_rowadr: &[i32; "row start address in Y colind array"; ffi().nefc],
+        (unsafe) efc_Y_colind: &[i32; "column indices in sparse Y"; ffi().nY],
+        efc_Y: &[MjtNum; "whitened Jacobian Y = J*M^(-1/2)"; ffi().nY],
         (unsafe) efc_AR_rownnz: &[i32; "number of non-zeros in AR"; ffi().nefc],
         (unsafe) efc_AR_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
         (unsafe) efc_AR_colind: &[i32; "column indices in sparse AR"; ffi().nA],
@@ -3307,8 +3312,8 @@ mod test {
         // Cross-validate with raw u8 FFI pointer
         for i in 0..neq {
             let raw_val = unsafe { *data.ffi().eq_active.add(i) };
-            assert_eq!(eq_active[i], raw_val != 0,
-                "eq_active[{}]: bool={} raw_u8={}", i, eq_active[i], raw_val);
+            assert_eq!(eq_active[i], raw_val,
+                "eq_active[{}]: bool={} raw={}", i, eq_active[i], raw_val);
         }
 
         // Disable one via mutable force-cast
@@ -3318,7 +3323,7 @@ mod test {
 
         // Verify FFI side was actually modified
         let raw_val = unsafe { *data.ffi().eq_active.add(0) };
-        assert_eq!(raw_val, 0u8, "disabling eq_active[0] must write 0 to FFI");
+        assert_eq!(raw_val, false, "disabling eq_active[0] must write false to FFI");
     }
 
     /// Verifies [force]-cast mutable roundtrip for xfrc_applied and mocap_pos.
@@ -3637,10 +3642,8 @@ mod test {
         assert_eq!(bvh_active.len(), nbvh);
 
         for i in 0..nbvh {
-            let raw_u8 = unsafe { *data.ffi().bvh_active.add(i) };
-            assert!(raw_u8 == 0 || raw_u8 == 1,
-                "raw bvh_active[{}]={} must be 0 or 1", i, raw_u8);
-            assert_eq!(bvh_active[i], raw_u8 != 0);
+            let raw_bool = unsafe { *data.ffi().bvh_active.add(i) };
+            assert_eq!(bvh_active[i], raw_bool);
         }
     }
 
@@ -4648,8 +4651,8 @@ mod test {
         // FFI cross-validation for eq_active
         assert_eq!(data.eq_active()[0], false);
         assert_eq!(data.eq_active()[1], false);
-        assert_eq!(unsafe { *data.ffi().eq_active }, 0u8);
-        assert_eq!(unsafe { *data.ffi().eq_active.add(1) }, 0u8);
+        assert_eq!(unsafe { *data.ffi().eq_active }, false);
+        assert_eq!(unsafe { *data.ffi().eq_active.add(1) }, false);
     }
 
     /// Runs step1() + step2() split stepping and verifies force-cast arrays
