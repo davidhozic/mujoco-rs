@@ -117,10 +117,16 @@ pub trait SpecItem: Sized + sealed::Sealed {
 
     /// Delete the item.
     ///
-    /// This method must be called **at most once** per item. After a successful deletion
-    /// the underlying C element is freed by MuJoCo; any further use of `self` -- including
-    /// calling `delete` again or reading any field -- is **use-after-free** undefined behavior.
-    /// If the call returns `Err`, no memory is freed and the item remains valid.
+    /// # Deprecated
+    /// This API is deprecated and will be removed in a future release.
+    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) instead.
+    ///
+    /// This method is inherently unsound: deleting one element mutates owner/ancestor graph
+    /// structures outside the borrowed `&mut self` region, so aliasing assumptions of existing
+    /// Rust references can already be violated by the call itself.
+    ///
+    /// In other words, calling this method is **undefined behavior** and should be avoided.
+    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) for deletion.
     ///
     /// # Errors
     /// - [`MjEditError::DeleteFailed`] if MuJoCo cannot delete the element.
@@ -128,11 +134,11 @@ pub trait SpecItem: Sized + sealed::Sealed {
     ///   (e.g. the world body or default classes).
     ///
     /// # Safety
-    /// The `&mut self` receiver prevents aliased mutable access at the call site, but the
-    /// Rust compiler cannot prevent the caller from retaining other references (shared or
-    /// mutable) that were obtained before this call. The caller must guarantee that no such
-    /// references remain live after a successful return, as the underlying C memory will
-    /// have been freed. Violating this invariant is **use-after-free** undefined behavior.
+    /// This legacy method is not soundly callable; it exists only for backward compatibility.
+    #[deprecated(
+        since = "5.0.0",
+        note = "unsound legacy API; use MjSpec::delete_element(element_mut_pointer())"
+    )]
     unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         unsafe { self.__delete_default__() }
     }

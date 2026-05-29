@@ -77,6 +77,10 @@ impl SpecItem for MjsDefault {
 
     /// Defaults can't be deleted.
     ///
+    /// # Deprecated
+    /// This API is deprecated and will be removed in a future release.
+    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) instead.
+    ///
     /// This override always returns [`MjEditError::UnsupportedOperation`] without performing
     /// any operation, so the post-deletion use-after-free restriction from [`SpecItem::delete`]
     /// does not apply -- `self` remains valid after an `Err` return.

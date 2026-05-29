@@ -11,3 +11,6 @@ Rules for the main agent to stay compliant with this project's conventions throu
 
 3. **Pre-compaction TODO.** When context compaction appears imminent (e.g., the conversation is very
    long), add a TODO reminder to re-read the rules immediately after compaction occurs.
+
+4. **Minimal-change enforcement.** Do not introduce non-essential edits when existing code already
+   compiles and the requested task is complete. Keep changes scoped to required correctness work.
