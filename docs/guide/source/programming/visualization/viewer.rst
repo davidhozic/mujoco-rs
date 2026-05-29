@@ -33,7 +33,7 @@ A screenshot of the Rust 3D viewer is shown below.
 
     Rust-native interactive 3D viewer.
     Showing the `Spot <https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot>`_ scene from
-    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.8.0/models.html>`_.
+    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.9.0/models.html>`_.
 
 The viewer can be launched only in **passive mode**, i.e. it won't run as a separate application,
 and needs to be periodically "synced" by the user application.
@@ -253,7 +253,7 @@ Custom UI widgets
 The Rust-native viewer supports adding custom UI widgets through the
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` method.
 This allows you to create custom windows, panels, and other UI elements using
-`egui <https://docs.rs/egui/latest/egui/>`_.
+`egui <https://docs.rs/egui/0.33.0/egui/>`_.
 
 .. note::
 

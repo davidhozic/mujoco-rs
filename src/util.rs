@@ -596,7 +596,7 @@ macro_rules! getter_setter {
         $(
             #[doc = concat!("Check ", $comment)]
             pub fn [<$name:camel:snake $($symbol)?>](&self) -> bool {
-                self$(.$ffi())?.$name == 1
+                (self$(.$ffi())?.$name as i32) != 0
             }
         )*
     }};

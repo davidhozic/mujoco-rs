@@ -32,10 +32,24 @@ update of MuJoCo alone can increase the major version.
   .. rubric:: Bug fixes
   .. rubric:: Other changes
 
-Unreleased
+5.0.0 (MuJoCo 3.9.0)
 ======================
 
 .. rubric:: Breaking changes
+
+*MuJoCo FFI upgraded to 3.9.0*
+
+- MuJoCo-rs now builds against MuJoCo 3.9.0 FFI. This is a breaking
+  dependency-level change for consumers tied to older MuJoCo C ABI details.
+  See MuJoCo's changelog for this release:
+  https://mujoco.readthedocs.io/en/3.9.0/changelog.html
+
+*(Potentially breaking) Changed raw pointer types of trait methods*
+
+- Changed raw pointer types of trait methods. For example, ``unsafe element_pointer(&self)``
+  now returns ``*const mjsElement``. This is a change that should not affect most users,
+  unless they explicitly opted in to using the C model-editing API of MuJoCo directly, or
+  implemented/depended on the old trait method signature in advanced extension code.
 
 *MjrContext::upload_texture parameter type changed*
 
@@ -151,6 +165,22 @@ runtime.
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfields_from` upload all
   assets of that type immediately. All methods return ``Result<(), RendererError>``.
 
+*Model-editing and utility API additions*
+
+- Added :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_sym2dense` as a safe wrapper for
+  MuJoCo's sparse-to-dense conversion utility.
+- Added model-editing convenience APIs:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>timer`
+    for CTIMER values.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child` and
+    :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child_mut`
+    for named child lookup.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>id`
+    for retrieving optional element IDs.
+
+- Added the missing frame-finding method to |mj_spec|: :docs-rs:`~mujoco-rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`.
+
 .. rubric:: New examples
 
 - :gh-example:`Asset re-upload <visualization/viewer/asset_reupload.rs>` --- demonstrates animated heightfield,
@@ -172,6 +202,14 @@ runtime.
 
 .. rubric:: Other changes
 
+- Updated bool-typed wrappers to use ``MjtBool`` where MuJoCo uses ``mjtBool``.
+  This is not a Rust API breaking change because ``MjtBool`` is a type alias to
+  ``mjtBool``, and ``mjtBool`` is ``bool`` by default. Related struct fields and
+  function parameters now avoid force-casting and use MuJoCo's bool mapping directly.
+  Fields that are ``MjtByte`` in MuJoCo remain byte-backed and are not part of the
+  ``MjtBool`` migration.
+- Added missing ``mjt*`` type aliases for recently surfaced MuJoCo enums: ``MjtMeshBuiltin``, ``MjtCTimer``.
+- Added auxiliary exposed aliases: ``MjPreContact``, ``MjfCollision``, ``MjpResourceProvider``.
 
 
 4.0.1 (MuJoCo 3.8.0)

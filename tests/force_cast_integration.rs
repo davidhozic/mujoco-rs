@@ -226,7 +226,7 @@ fn test_integration_eq_active_toggle_divergence() {
 
     // Verify eq_active was correctly set
     assert_eq!(data2.eq_active()[0], false);
-    assert_eq!(unsafe { *data2.ffi().eq_active }, 0u8);
+    assert_eq!(unsafe { *data2.ffi().eq_active }, false);
 
     // Positions should diverge (at least for constrained bodies)
     let hinge_body = data2.body("hinge_body").unwrap();

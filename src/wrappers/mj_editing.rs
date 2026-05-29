@@ -43,6 +43,9 @@ pub type MjtMeshInertia = mjtMeshInertia;
 /// Type of built-in procedural texture.
 pub type MjtBuiltin = mjtBuiltin;
 
+/// Type of built-in procedural mesh.
+pub type MjtMeshBuiltin = mjtMeshBuiltin;
+
 /// Mark type for procedural textures.
 pub type MjtMark = mjtMark;
 
@@ -57,6 +60,9 @@ pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
 
 /// Type of orientation specifier.
 pub type MjtOrientation = mjtOrientation;
+
+/// Compiler timing categories, used in `mjs_getTimer`.
+pub type MjtCTimer = mjtCTimer;
 /*******************************************************/
 
 /******************************
@@ -360,6 +366,11 @@ impl MjSpec {
         })
     }
 
+    /// Return compiler timers (`mjtCTimer` order).
+    pub fn timer(&self) -> &[f64; MjtCTimer::mjNCTIMER as usize] {
+        unsafe { &*mjs_getTimer(self.0.as_ptr()).cast() }
+    }
+
     /// Saves the spec to an XML file.
     /// # Returns
     /// `Ok(())` on success.
@@ -428,7 +439,7 @@ impl MjSpec {
 /// Children accessor methods.
 impl MjSpec {
     find_x_method! {
-        body, geom, joint, site, camera, light, actuator, sensor, flex, pair, equality, exclude, tendon,
+        body, geom, joint, site, camera, light, frame, actuator, sensor, flex, pair, equality, exclude, tendon,
         numeric, text, tuple, key, mesh, hfield, skin, texture, material, plugin
     }
 
@@ -616,7 +627,7 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsSpecItemIter<'a, T> {
             let out = T::from_element_as_ptr_mut(self.last).as_ref();
             // SAFETY: mjs_nextElement does not mutate mjsSpec, thus as_ptr is valid to be case to *mut
             // from the const reference to its wrapper.
-            self.last = mjs_nextElement(self.ffi_ptr as *mut _, self.last);
+            self.last = mjs_nextElement(self.ffi_ptr, self.last);
             out
         }
     }
@@ -909,7 +920,7 @@ impl MjsFrame {
         // mjs_addFrame, which always calls SetParent(body).
         let parent_body = unsafe { mjs_getParent(self.element_mut_pointer()) };
         debug_assert!(!parent_body.is_null(), "mjs_getParent returned null; frame has no parent body");
-        let ptr = unsafe { mjs_addFrame(parent_body, self as *mut MjsFrame) };
+        let ptr = unsafe { mjs_addFrame(parent_body, self) };
         // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
         // pointee is properly aligned and initialized by C++ operator new, and freshly
         // allocated so no existing Rust reference aliases it for the returned lifetime.
@@ -1331,7 +1342,7 @@ impl MjsWrap {
 
     /// Return the side site element.
     pub fn side_site(&self) -> Option<&MjsSite> {
-        let ptr = unsafe { mjs_getWrapSideSite(self as *const _ as *mut _) };
+        let ptr = unsafe { mjs_getWrapSideSite(self) };
         if ptr.is_null() { None } else { Some(unsafe { &*ptr }) }
     }
 
@@ -1343,12 +1354,12 @@ impl MjsWrap {
 
     /// Return the wrap divisor.
     pub fn divisor(&self) -> f64 {
-        unsafe { mjs_getWrapDivisor(self as *const _ as *mut _) }
+        unsafe { mjs_getWrapDivisor(self) }
     }
 
     /// Return the wrap coefficient.
     pub fn coef(&self) -> f64 {
-        unsafe { mjs_getWrapCoef(self as *const _ as *mut _) }
+        unsafe { mjs_getWrapCoef(self) }
     }
 }
 
@@ -1459,6 +1470,7 @@ impl MjsMesh {
         [&] with, get, set, [
             inertia: MjtMeshInertia;      "inertia type (convex, legacy, exact, shell).";
             maxhullvert: i32;             "maximum vertex count for the convex hull.";
+            octree_maxdepth: i32;         "max octree depth.";
         ]
     }
 
@@ -1689,6 +1701,30 @@ mjs_struct!(Body [SpecObject] {
 impl MjsBody {
     add_x_method! { body, site, joint, geom, camera, light }
 
+    /// Obtain an immutable reference to a child body with the given `name`.
+    ///
+    /// # Panics
+    /// When the `name` contains '\0' characters, a panic occurs.
+    pub fn child(&self, name: &str) -> Option<&MjsBody> {
+        let c_name = CString::new(name).unwrap();
+        unsafe {
+            let ptr = mjs_findChild(self, c_name.as_ptr());
+            if ptr.is_null() { None } else { ptr.as_ref() }
+        }
+    }
+
+    /// Obtain a mutable reference to a child body with the given `name`.
+    ///
+    /// # Panics
+    /// When the `name` contains '\0' characters, a panic occurs.
+    pub fn child_mut(&mut self, name: &str) -> Option<&mut MjsBody> {
+        let c_name = CString::new(name).unwrap();
+        unsafe {
+            let ptr = mjs_findChild(self, c_name.as_ptr());
+            if ptr.is_null() { None } else { ptr.as_mut() }
+        }
+    }
+
     /// Dummy mutable FFI method used to simplify access through macros.
     ///
     /// # Safety
@@ -1825,7 +1861,7 @@ impl<'a, T: SpecObject> MjsBodyItemIter<'a, T> {
         // the body. The const-to-mut cast is sound because no mutation occurs.
         let last = unsafe {
             mjs_firstChild(
-                root as *const _ as *mut _,
+                root,
                 T::OBJ_TYPE,
                 recurse.into()
             )
@@ -1844,7 +1880,7 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsBodyItemIter<'a, T> {
         unsafe {
             let out = T::from_element_as_ptr_mut(self.last as *mut _).as_ref();
             // SAFETY: mjs_nextChild requires *mut but does not mutate. Cast is sound.
-            self.last = mjs_nextChild(self.ffi_ptr as *mut _, self.last as *mut _, self.recurse.into());
+            self.last = mjs_nextChild(self.ffi_ptr, self.last, self.recurse.into());
             out
         }
     }
@@ -2159,10 +2195,14 @@ mod tests {
             .with_gravcomp(10.0);
 
         world.add_frame()
+            .with_name("frame_a")
             .with_pos([0.5, 0.5, 0.05])
             .add_body()
             .add_geom()
             .with_size([1.0, 0.0, 0.0]);
+
+        assert!(spec.frame("frame_a").is_some());
+        assert!(spec.frame_mut("frame_a").is_some());
 
         spec.compile().unwrap();
     }
@@ -2190,6 +2230,25 @@ mod tests {
         spec.world_body_mut().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
 
         spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_body_child_and_id() {
+        let mut spec = MjSpec::new();
+        let parent = spec.world_body_mut().add_body().with_name("parent");
+        parent.add_body().with_name("child");
+
+        let parent_ref = spec.body("parent").unwrap();
+        assert!(parent_ref.child("child").is_some());
+        assert!(parent_ref.child("missing").is_none());
+        assert_eq!(parent_ref.id(), None);
+
+        let parent_mut = spec.body_mut("parent").unwrap();
+        assert!(parent_mut.child_mut("child").is_some());
+        assert!(parent_mut.child_mut("missing").is_none());
+
+        spec.compile().unwrap();
+        assert!(spec.body("parent").unwrap().id().is_some());
     }
 
     #[test]

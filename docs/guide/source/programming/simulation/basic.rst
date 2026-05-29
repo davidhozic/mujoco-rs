@@ -108,7 +108,7 @@ Similarly, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ste
 :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step1` and :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step2`, respectively.
 
 For more information about specific MuJoCo functions, see the
-`MuJoCo documentation <https://mujoco.readthedocs.io/en/3.8.0/APIreference/APIfunctions.html#mj-step>`_.
+`MuJoCo documentation <https://mujoco.readthedocs.io/en/3.9.0/APIreference/APIfunctions.html#mj-step>`_.
 
 Real-time
 ----------------------
@@ -151,7 +151,7 @@ such as physics parameters --- part of |mj_model|.
 .. danger::
 
     Not all parameters of |mj_model| are safe to change.
-    See `MuJoCo's documentation <https://mujoco.readthedocs.io/en/3.8.0/programming/simulation.html#mjmodel-changes>`_
+    See `MuJoCo's documentation <https://mujoco.readthedocs.io/en/3.9.0/programming/simulation.html#mjmodel-changes>`_
     for a list of parameters that are safe to change.
 
 Direct mutation with ``model_opt_mut`` / ``model_vis_mut`` / ``model_stat_mut``

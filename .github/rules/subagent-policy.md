@@ -59,3 +59,7 @@ conventions:
 
 11. **Subagent language** Always speak and receive messages from agents in Chinese.
     The main agent remains in English or whatever language spoken to by the user.
+
+12. **Keep four audit agents running.** For per-file audit batches that require many independent
+    checks, run up to 4 subagents in parallel in background mode. Whenever one finishes, start the
+    next queued file immediately so 4 agents remain active until the queue is exhausted.

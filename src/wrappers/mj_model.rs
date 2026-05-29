@@ -875,6 +875,7 @@ impl MjModel {
         [ffi] nflexelem: MjtSize; "number of elements in all flexes.";
         [ffi] nflexelemdata: MjtSize; "number of element vertex ids in all flexes.";
         [ffi] nflexstiffness: MjtSize; "number of stiffness parameters in all flexes.";
+        [ffi] nflexbending: MjtSize; "number of bending parameters in all flexes";
         [ffi] nflexelemedge: MjtSize; "number of element edge ids in all flexes.";
         [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
         [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
@@ -996,9 +997,9 @@ impl MjModel {
         (unsafe) jnt_bodyid: &[i32; "id of joint's body"; ffi().njnt],
         (unsafe) jnt_actuatorid: &[i32; "actuator contributing damping / armature"; ffi().njnt],
         jnt_group: &[i32; "group for visibility"; ffi().njnt],
-        jnt_limited: &[bool [force]; "does joint have limits"; ffi().njnt],
-        jnt_actfrclimited: &[bool [force]; "does joint have actuator force limits"; ffi().njnt],
-        jnt_actgravcomp: &[bool [force]; "is gravcomp force applied via actuators"; ffi().njnt],
+        jnt_limited: &[MjtBool; "does joint have limits"; ffi().njnt],
+        jnt_actfrclimited: &[MjtBool; "does joint have actuator force limits"; ffi().njnt],
+        jnt_actgravcomp: &[MjtBool; "is gravcomp force applied via actuators"; ffi().njnt],
         jnt_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference: limit"; ffi().njnt],
         jnt_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance: limit"; ffi().njnt],
         jnt_pos: &[[MjtNum; 3] [force]; "local anchor position"; ffi().njnt],
@@ -1081,11 +1082,11 @@ impl MjModel {
         (unsafe) light_targetbodyid: &[i32; "id of targeted body; -1: none"; ffi().nlight],
         light_type: &[MjtLightType [force]; "spot, directional, etc."; ffi().nlight],
         (unsafe) light_texid: &[i32; "texture id for image lights"; ffi().nlight],
-        light_castshadow: &[bool [force]; "does light cast shadows"; ffi().nlight],
+        light_castshadow: &[MjtBool; "does light cast shadows"; ffi().nlight],
         light_bulbradius: &[f32; "light radius for soft shadows"; ffi().nlight],
         light_intensity: &[f32; "intensity, in candela"; ffi().nlight],
         light_range: &[f32; "range of effectiveness"; ffi().nlight],
-        light_active: &[bool [force]; "is light on"; ffi().nlight],
+        light_active: &[MjtBool; "is light on"; ffi().nlight],
         light_pos: &[[MjtNum; 3] [force]; "position rel. to body frame"; ffi().nlight],
         light_dir: &[[MjtNum; 3] [force]; "direction rel. to body frame"; ffi().nlight],
         light_poscom0: &[[MjtNum; 3] [force]; "global position rel. to sub-com in qpos0"; ffi().nlight],
@@ -1107,7 +1108,7 @@ impl MjModel {
         flex_friction: &[[MjtNum; 3] [force]; "friction for (slide, spin, roll)"; ffi().nflex],
         flex_margin: &[MjtNum; "detect contact if dist<margin"; ffi().nflex],
         flex_gap: &[MjtNum; "include in solver if dist<margin-gap"; ffi().nflex],
-        flex_internal: &[bool [force]; "internal flex collision enabled"; ffi().nflex],
+        flex_internal: &[MjtBool; "internal flex collision enabled"; ffi().nflex],
         flex_selfcollide: &[MjtFlexSelf [force]; "self collision mode"; ffi().nflex],
         flex_activelayers: &[i32; "number of active element layers, 3D only"; ffi().nflex],
         flex_passive: &[i32; "passive collisions enabled"; ffi().nflex],
@@ -1115,7 +1116,6 @@ impl MjModel {
         (unsafe) flex_matid: &[i32; "material id for rendering"; ffi().nflex],
         flex_group: &[i32; "group for visibility"; ffi().nflex],
         (unsafe) flex_interp: &[i32; "interpolation (0: vertex, 1: nodes)"; ffi().nflex],
-        (unsafe) flex_bandwidth: &[i32; "precomputed solver bandwidth"; ffi().nflex],
         (unsafe) flex_cellnum: &[[i32; 3] [force]; "finite cell num per dimension"; ffi().nflex],
         (unsafe) flex_nodeadr: &[i32; "first node address"; ffi().nflex],
         (unsafe) flex_nodenum: &[i32; "number of nodes"; ffi().nflex],
@@ -1128,6 +1128,7 @@ impl MjModel {
         (unsafe) flex_elemdataadr: &[i32; "first element vertex id address"; ffi().nflex],
         (unsafe) flex_stiffnessadr: &[i32; "stiffness matrix address"; ffi().nflex],
         (unsafe) flex_elemedgeadr: &[i32; "first element edge id address"; ffi().nflex],
+        (unsafe) flex_bendingadr: &[i32; "first bending data address"; ffi().nflex],
         (unsafe) flex_shellnum: &[i32; "number of shells"; ffi().nflex],
         (unsafe) flex_shelldataadr: &[i32; "first shell data address"; ffi().nflex],
         (unsafe) flex_evpairadr: &[i32; "first evpair address"; ffi().nflex],
@@ -1156,15 +1157,15 @@ impl MjModel {
         flex_radius: &[MjtNum; "radius around primitive element"; ffi().nflex],
         flex_size: &[[MjtNum; 3] [force]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
         flex_stiffness: &[MjtNum; "finite element stiffness matrix"; ffi().nflexstiffness],
-        flex_bending: &[[MjtNum; 17] [force]; "bending stiffness"; ffi().nflexedge],
+        flex_bending: &[MjtNum; "bending stiffness"; ffi().nflexbending],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
         flex_edgeequality: &[i32; "0: none, 1: edges, 2: vertices, 3: strain"; ffi().nflex],
-        flex_rigid: &[bool [force]; "are all vertices in the same body"; ffi().nflex],
-        flexedge_rigid: &[bool [force]; "are both edge vertices in same body"; ffi().nflexedge],
-        flex_centered: &[bool [force]; "are all vertex coordinates (0,0,0)"; ffi().nflex],
-        flex_flatskin: &[bool [force]; "render flex skin with flat shading"; ffi().nflex],
+        flex_rigid: &[MjtBool; "are all vertices in the same body"; ffi().nflex],
+        flexedge_rigid: &[MjtBool; "are both edge vertices in same body"; ffi().nflexedge],
+        flex_centered: &[MjtBool; "are all vertex coordinates (0,0,0)"; ffi().nflex],
+        flex_flatskin: &[MjtBool; "render flex skin with flat shading"; ffi().nflex],
         (unsafe) flex_bvhadr: &[i32; "address of bvh root; -1: no bvh"; ffi().nflex],
         (unsafe) flex_bvhnum: &[i32; "number of bounding volumes"; ffi().nflex],
         (unsafe) flexedge_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; ffi().nflexedge],
@@ -1245,7 +1246,7 @@ impl MjModel {
         tex_data: &[MjtByte; "pixel values"; ffi().ntexdata],
         (unsafe) tex_pathadr: &[i32; "address of texture asset path; -1: none"; ffi().ntex],
         (unsafe) mat_texid: &[[i32; MjtTextureRole::mjNTEXROLE as usize] [force]; "indices of textures; -1: none"; ffi().nmat],
-        mat_texuniform: &[bool [force]; "make texture cube uniform"; ffi().nmat],
+        mat_texuniform: &[MjtBool; "make texture cube uniform"; ffi().nmat],
         mat_texrepeat: &[[f32; 2] [force]; "texture repetition for 2d mapping"; ffi().nmat],
         mat_emission: &[f32; "emission (x rgb)"; ffi().nmat],
         mat_specular: &[f32; "specular (x white)"; ffi().nmat],
@@ -1269,7 +1270,7 @@ impl MjModel {
         (unsafe) eq_obj1id: &[i32; "id of object 1"; ffi().neq],
         (unsafe) eq_obj2id: &[i32; "id of object 2"; ffi().neq],
         (unsafe) eq_objtype: &[MjtObj [force]; "type of both objects"; ffi().neq],
-        eq_active0: &[bool [force]; "initial enable/disable constraint state"; ffi().neq],
+        eq_active0: &[MjtBool; "initial enable/disable constraint state"; ffi().neq],
         eq_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference"; ffi().neq],
         eq_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance"; ffi().neq],
         eq_data: &[[MjtNum; mjNEQDATA as usize] [force]; "numeric data for constraint"; ffi().neq],
@@ -1283,8 +1284,8 @@ impl MjModel {
         (unsafe) ten_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; ffi().ntendon],
         (unsafe) ten_J_rowadr: &[i32; "row start address in colind array"; ffi().ntendon],
         (unsafe) ten_J_colind: &[i32; "column indices in sparse Jacobian"; ffi().nJten],
-        tendon_limited: &[bool [force]; "does tendon have length limits"; ffi().ntendon],
-        tendon_actfrclimited: &[bool [force]; "does tendon have actuator force limits"; ffi().ntendon],
+        tendon_limited: &[MjtBool; "does tendon have length limits"; ffi().ntendon],
+        tendon_actfrclimited: &[MjtBool; "does tendon have actuator force limits"; ffi().ntendon],
         tendon_width: &[MjtNum; "width for rendering"; ffi().ntendon],
         tendon_solref_lim: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference: limit"; ffi().ntendon],
         tendon_solimp_lim: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance: limit"; ffi().ntendon],
@@ -1317,13 +1318,13 @@ impl MjModel {
         (unsafe) actuator_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nu],
         (unsafe) actuator_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nu],
         actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nu],
-        actuator_ctrllimited: &[bool [force]; "is control limited"; ffi().nu],
-        actuator_forcelimited: &[bool [force]; "is force limited"; ffi().nu],
-        actuator_actlimited: &[bool [force]; "is activation limited"; ffi().nu],
+        actuator_ctrllimited: &[MjtBool; "is control limited"; ffi().nu],
+        actuator_forcelimited: &[MjtBool; "is force limited"; ffi().nu],
+        actuator_actlimited: &[MjtBool; "is activation limited"; ffi().nu],
         actuator_dynprm: &[[MjtNum; mjNDYN as usize] [force]; "dynamics parameters"; ffi().nu],
         actuator_gainprm: &[[MjtNum; mjNGAIN as usize] [force]; "gain parameters"; ffi().nu],
         actuator_biasprm: &[[MjtNum; mjNBIAS as usize] [force]; "bias parameters"; ffi().nu],
-        actuator_actearly: &[bool [force]; "step activation before force"; ffi().nu],
+        actuator_actearly: &[MjtBool; "step activation before force"; ffi().nu],
         actuator_ctrlrange: &[[MjtNum; 2] [force]; "range of controls"; ffi().nu],
         actuator_forcerange: &[[MjtNum; 2] [force]; "range of forces"; ffi().nu],
         actuator_actrange: &[[MjtNum; 2] [force]; "range of activations"; ffi().nu],
@@ -1452,10 +1453,10 @@ impl Drop for MjModel {
 
 info_with_view!(Model, actuator,
 	[[actuator_] group: i32,
-	 [actuator_] delay: MjtNum, [actuator_] ctrllimited: bool [force],
-	 [actuator_] forcelimited: bool [force], [actuator_] actlimited: bool [force],
+	 [actuator_] delay: MjtNum, [actuator_] ctrllimited: MjtBool,
+	 [actuator_] forcelimited: MjtBool, [actuator_] actlimited: MjtBool,
 	 [actuator_] dynprm: MjtNum, [actuator_] gainprm: MjtNum,
-	 [actuator_] biasprm: MjtNum, [actuator_] actearly: bool [force],
+	 [actuator_] biasprm: MjtNum, [actuator_] actearly: MjtBool,
 	 [actuator_] ctrlrange: MjtNum, [actuator_] forcerange: MjtNum,
 	 [actuator_] actrange: MjtNum, [actuator_] gear: MjtNum,
 	 [actuator_] damping: MjtNum, [actuator_] dampingpoly: MjtNum,
@@ -1511,7 +1512,7 @@ info_with_view!(Model, camera,
 	[]);
 
 info_with_view!(Model, equality,
-	[[eq_] active0: bool [force],
+	[[eq_] active0: MjtBool,
 	 [eq_] solref: MjtNum,
 	 [eq_] solimp: MjtNum,
 	 [eq_] data: MjtNum],
@@ -1554,7 +1555,7 @@ info_with_view!(Model, hfield,
 info_with_view!(Model, joint,
 	[qpos0: MjtNum, qpos_spring: MjtNum,
      [jnt_] group: i32,
-     [jnt_] limited: bool [force], [jnt_] actfrclimited: bool [force], [jnt_] actgravcomp: bool [force],
+     [jnt_] limited: MjtBool, [jnt_] actfrclimited: MjtBool, [jnt_] actgravcomp: MjtBool,
 	 [jnt_] solref: MjtNum, [jnt_] solimp: MjtNum,
 	 [jnt_] pos: MjtNum,
      [jnt_] axis: MjtNum, [jnt_] stiffness: MjtNum,
@@ -1578,11 +1579,11 @@ info_with_view!(Model, joint,
 info_with_view!(Model, light,
 	[[light_] mode: MjtCamLight [force],
 	 [light_] r#type: MjtLightType [force],
-	 [light_] castshadow: bool [force],
+	 [light_] castshadow: MjtBool,
 	 [light_] bulbradius: f32,
 	 [light_] intensity: f32,
 	 [light_] range: f32,
-	 [light_] active: bool [force],
+	 [light_] active: MjtBool,
 	 [light_] pos: MjtNum,
 	 [light_] dir: MjtNum,
 	 [light_] poscom0: MjtNum,
@@ -1600,7 +1601,7 @@ info_with_view!(Model, light,
 	[]);
 
 info_with_view!(Model, material,
-	[[mat_] texuniform: bool [force],
+	[[mat_] texuniform: MjtBool,
 	 [mat_] texrepeat: f32,
 	 [mat_] emission: f32,
 	 [mat_] specular: f32,
@@ -1704,7 +1705,7 @@ info_with_view!(Model, skin,
 
 info_with_view!(Model, tendon,
 	[[tendon_] group: i32,
-	 [tendon_] limited: bool [force], [tendon_] actfrclimited: bool [force], [tendon_] width: MjtNum,
+	 [tendon_] limited: MjtBool, [tendon_] actfrclimited: MjtBool, [tendon_] width: MjtNum,
 	 [tendon_] solref_lim: MjtNum, [tendon_] solimp_lim: MjtNum,
 	 [tendon_] solref_fri: MjtNum, [tendon_] solimp_fri: MjtNum,
 	 [tendon_] range: MjtNum, [tendon_] actfrcrange: MjtNum, [tendon_] margin: MjtNum,
@@ -2730,11 +2731,9 @@ mod tests {
 
         // Cross-validate with raw FFI
         for i in 0..njnt {
-            let raw_u8 = unsafe { *model.ffi().jnt_limited.add(i) };
-            assert!(raw_u8 == 0 || raw_u8 == 1,
-                "raw jnt_limited[{}]={} must be 0 or 1", i, raw_u8);
-            assert_eq!(jnt_limited[i], raw_u8 != 0,
-                "jnt_limited[{}] mismatch: bool={}, raw={}", i, jnt_limited[i], raw_u8);
+            let raw_bool = unsafe { *model.ffi().jnt_limited.add(i) };
+            assert_eq!(jnt_limited[i], raw_bool,
+                "jnt_limited[{}] mismatch: bool={}, raw={}", i, jnt_limited[i], raw_bool);
         }
 
         // "rod" joint has range="0 1" -> limited=true; "ball" is free -> limited=false
@@ -2952,7 +2951,7 @@ mod tests {
             assert_eq!(eq_objtype[i], expected_objtype);
 
             let raw_active = unsafe { *model.ffi().eq_active0.add(i) };
-            assert_eq!(eq_active0[i], raw_active != 0);
+            assert_eq!(eq_active0[i], raw_active);
         }
 
         // Verify known equality: "eq1" is a connect constraint
@@ -3043,13 +3042,13 @@ mod tests {
 
             // Bool cross-validation
             let raw_ctrllimited = unsafe { *model.ffi().actuator_ctrllimited.add(i) };
-            assert_eq!(ctrllimited[i], raw_ctrllimited != 0);
+            assert_eq!(ctrllimited[i], raw_ctrllimited);
             let raw_forcelimited = unsafe { *model.ffi().actuator_forcelimited.add(i) };
-            assert_eq!(forcelimited[i], raw_forcelimited != 0);
+            assert_eq!(forcelimited[i], raw_forcelimited);
             let raw_actlimited = unsafe { *model.ffi().actuator_actlimited.add(i) };
-            assert_eq!(actlimited[i], raw_actlimited != 0);
+            assert_eq!(actlimited[i], raw_actlimited);
             let raw_actearly = unsafe { *model.ffi().actuator_actearly.add(i) };
-            assert_eq!(actearly[i], raw_actearly != 0);
+            assert_eq!(actearly[i], raw_actearly);
         }
 
         // Verify known actuator: "slider" has biastype=affine, gaintype=fixed, ctrllimited=true
@@ -3122,7 +3121,7 @@ mod tests {
 
         for i in 0..ntendon {
             let raw_limited = unsafe { *model.ffi().tendon_limited.add(i) };
-            assert_eq!(tendon_limited[i], raw_limited != 0);
+            assert_eq!(tendon_limited[i], raw_limited);
 
             for j in 0..2 {
                 assert_eq!(tendon_range[i][j], unsafe { *model.ffi().tendon_range.add(i * 2 + j) });
@@ -3196,7 +3195,7 @@ mod tests {
 
         for i in 0..nmat {
             let raw_uniform = unsafe { *model.ffi().mat_texuniform.add(i) };
-            assert_eq!(mat_texuniform[i], raw_uniform != 0);
+            assert_eq!(mat_texuniform[i], raw_uniform);
 
             for j in 0..2 {
                 assert_eq!(mat_texrepeat[i][j], unsafe { *model.ffi().mat_texrepeat.add(i * 2 + j) });
@@ -3246,9 +3245,9 @@ mod tests {
             assert_eq!(light_type[i], unsafe { crate::util::force_cast::<_, MjtLightType>(*model.ffi().light_type.add(i)) });
 
             let raw_shadow = unsafe { *model.ffi().light_castshadow.add(i) };
-            assert_eq!(light_castshadow[i], raw_shadow != 0);
+            assert_eq!(light_castshadow[i], raw_shadow);
             let raw_active = unsafe { *model.ffi().light_active.add(i) };
-            assert_eq!(light_active[i], raw_active != 0);
+            assert_eq!(light_active[i], raw_active);
 
             for j in 0..3 {
                 assert_eq!(light_attenuation[i][j], unsafe { *model.ffi().light_attenuation.add(i * 3 + j) });
@@ -3746,15 +3745,15 @@ mod tests {
         assert_eq!(view2.scale[2], 4.0);
     }
 
-    /// Verifies that `flex_bandwidth`, `flex_cellnum`, and `flex_stiffnessadr`
+    /// Verifies that `flex_cellnum`, `flex_stiffnessadr`, and `flex_bendingadr`
     /// return empty slices when the model contains no flex bodies.
     #[test]
     fn test_flex_array_slices_empty_for_non_flex_model() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
         assert_eq!(model.ffi().nflex, 0);
-        assert_eq!(model.flex_bandwidth().len(), 0);
         assert_eq!(model.flex_cellnum().len(), 0);
         assert_eq!(model.flex_stiffnessadr().len(), 0);
+        assert_eq!(model.flex_bendingadr().len(), 0);
     }
 
     /// Tests the wrapper of `mj_maxContact` ([`MjModel::max_contacts`]).
