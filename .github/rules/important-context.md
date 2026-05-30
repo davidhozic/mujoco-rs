@@ -10,6 +10,7 @@
 | Code generation | Check if `../mujoco-rs-utils` exists and run with `--help` |
 | Running tests | Use the `/test` workflow |
 | Running examples | Use the `/run-example` workflow |
+| Running Miri | Use the `/miri` workflow; apply a minimal temporary direct patch to the user-selected example if needed |
 | Feature flags | Read `Cargo.toml` `[features]` section |
 | Documentation URLs | See `project-overview.md` |
 

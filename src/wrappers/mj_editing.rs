@@ -342,6 +342,55 @@ impl MjSpec {
         unsafe { self.0.as_mut() }
     }
 
+    /// Delete an element from this specification.
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::DeleteFailed`] if MuJoCo cannot delete the element.
+    ///
+    /// # Safety
+    /// The caller must ensure:
+    /// - `element` is a valid pointer to an mjsElement
+    /// - `element` is owned by this spec
+    /// - `element` has not been previously deleted
+    /// - no Rust references derived from `element` exist
+    pub unsafe fn delete_element(&mut self, element: *mut mjsElement) -> Result<(), MjEditError> {
+        if element.is_null() {
+            return Err(MjEditError::DeleteFailed("null element pointer".to_owned()));
+        }
+
+        let spec = unsafe { self.ffi_mut() };
+        let owner = unsafe { mjs_getSpec(element) };
+        if owner != spec {
+            return Err(MjEditError::DeleteFailed("element does not belong to this spec".to_owned()));
+        }
+
+        if unsafe { (*element).elemtype } == MjtObj::mjOBJ_DEFAULT {
+            return Err(MjEditError::UnsupportedOperation);
+        }
+        if unsafe { (*element).elemtype } == MjtObj::mjOBJ_BODY {
+            let name = unsafe { read_mjs_string(mjs_getName(element)) };
+            if name == "world" {
+                return Err(MjEditError::UnsupportedOperation);
+            }
+        }
+
+        let result = unsafe { mjs_delete(spec, element) };
+        match result {
+            0 => Ok(()),
+            _ => {
+                let error_msg = unsafe {
+                    let ptr = mjs_getError(spec);
+                    if ptr.is_null() {
+                        "Unknown error".to_owned()
+                    } else {
+                        CStr::from_ptr(ptr).to_string_lossy().into_owned()
+                    }
+                };
+                Err(MjEditError::DeleteFailed(error_msg))
+            }
+        }
+    }
+
     /// Compile [`MjSpec`] to [`MjModel`].
     /// A spec can be edited and compiled multiple times,
     /// returning a new mjModel instance that takes the edits into account.
@@ -1677,19 +1726,19 @@ mjs_struct!(Body [SpecObject] {
     // Override the delete method to prevent deletion of world.
     /// Delete this body from its parent spec.
     ///
-    /// This method must be called **at most once** per body. After a successful deletion
-    /// the underlying C body and all of its children (joints, geoms, sites, etc.) are freed
-    /// by MuJoCo; any further use of `self` or of references to child elements obtained
-    /// before this call is **use-after-free** undefined behavior. If the call returns `Err`,
-    /// nothing is freed and the body remains valid.
+    /// # Deprecated
+    /// This API is deprecated and will be removed in a future release.
+    /// Use [`MjSpec::delete_element`](crate::wrappers::MjSpec::delete_element) instead.
+    ///
+    /// This method is inherently unsound: deleting a body mutates owner/ancestor graph
+    /// structures outside the borrowed `&mut self` region.
     ///
     /// # Errors
     /// - Returns [`MjEditError::UnsupportedOperation`] if this is the world body.
     /// - Returns [`MjEditError::DeleteFailed`] if MuJoCo's internal deletion fails.
     ///
     /// # Safety
-    /// The caller must guarantee that no references to this body or any of its children
-    /// remain live after a successful return, as the underlying C memory will have been freed.
+    /// This legacy method is not soundly callable; it exists only for backward compatibility.
     unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         if self.name() == "world" {
             return Err(MjEditError::UnsupportedOperation);
@@ -1994,13 +2043,19 @@ mod tests {
         body.set_name(NEW_MODEL_NAME).unwrap();
 
         /* Test normal body deletion */
-        let body = spec.body_mut(NEW_MODEL_NAME).expect("failed to obtain the body");
-        assert!(unsafe { body.delete() }.is_ok(), "failed to delete model");
+        let body_element = {
+            let body = spec.body_mut(NEW_MODEL_NAME).expect("failed to obtain the body");
+            body.element_mut_pointer()
+        };
+        assert!(unsafe { spec.delete_element(body_element) }.is_ok(), "failed to delete model");
         assert!(spec.body(NEW_MODEL_NAME).is_none(), "body was not removed from spec");
 
         /* Test world body deletion */
-        let world = spec.world_body_mut();
-        assert!(unsafe { world.delete() }.is_err(), "the world model should not be deletable");
+        let world_element = {
+            let world = spec.world_body_mut();
+            world.element_mut_pointer()
+        };
+        assert!(unsafe { spec.delete_element(world_element) }.is_err(), "the world model should not be deletable");
 
         spec.compile().unwrap();
     }
@@ -2015,8 +2070,11 @@ mod tests {
         joint.set_name(NEW_NAME).unwrap();
 
         /* Test normal body deletion */
-        let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
-        assert!(unsafe { joint.delete() }.is_ok(), "failed to delete model");
+        let joint_element = {
+            let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
+            joint.element_mut_pointer()
+        };
+        assert!(unsafe { spec.delete_element(joint_element) }.is_ok(), "failed to delete model");
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed fom spec");
 
         spec.compile().unwrap();
@@ -2031,8 +2089,11 @@ mod tests {
         hfield.set_name(NEW_NAME).unwrap();
 
         /* Test normal hfield deletion */
-        let hfield = spec.hfield_mut(NEW_NAME).expect("failed to obtain the hfield");
-        assert!(unsafe { hfield.delete() }.is_ok(), "failed to delete hfield");
+        let hfield_element = {
+            let hfield = spec.hfield_mut(NEW_NAME).expect("failed to obtain the hfield");
+            hfield.element_mut_pointer()
+        };
+        assert!(unsafe { spec.delete_element(hfield_element) }.is_ok(), "failed to delete hfield");
         assert!(spec.hfield(NEW_NAME).is_none(), "hfield was not removed from spec");
 
         spec.compile().unwrap();

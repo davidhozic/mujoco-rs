@@ -27,6 +27,7 @@ update of MuJoCo alone can increase the major version.
 
 .. Template titles
   .. rubric:: Breaking changes
+  .. rubric:: Deprecations
   .. rubric:: Error handling
   .. rubric:: New features and improvements
   .. rubric:: Bug fixes
@@ -92,6 +93,14 @@ update of MuJoCo alone can increase the major version.
   to compile. Replace it with
   :docs-rs:`~mujoco_rs::error::<enum>MjModelError::<variant>IndexOutOfBounds`
   (see migration guide).
+
+.. rubric:: Deprecations
+
+- Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
+  due to it relying on **undefined behavior**.
+  Users are expected to use
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`
+  instead.
 
 .. rubric:: Error handling
 
@@ -195,8 +204,8 @@ runtime.
 - Fixed a model-editing potential undefined behavior in |mjs_body|, which occurred
   when yielded references of body's items were not destroyed before the next entry
   to the iterator. This was problematic if individual references of yielded items
-  were stored and later used --- technically a undefined behavior due to reuse of the |mjs_body|
-  inside the iterator. The |mjs_body| parent is now stored as a raw FFI pointer to prevent such
+  were stored and later used --- technically a undefined behavior due to reuse of the ``MjsBody``
+  inside the iterator. The ``MjsBody`` parent is now stored as a raw FFI pointer to prevent such
   aliasing.
 
 
@@ -210,6 +219,9 @@ runtime.
   ``MjtBool`` migration.
 - Added missing ``mjt*`` type aliases for recently surfaced MuJoCo enums: ``MjtMeshBuiltin``, ``MjtCTimer``.
 - Added auxiliary exposed aliases: ``MjPreContact``, ``MjfCollision``, ``MjpResourceProvider``.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<tymethod>element_pointer`
+  and :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>element_mut_pointer`
+  are no longer marked ``unsafe``.
 
 
 4.0.1 (MuJoCo 3.8.0)

@@ -13,6 +13,9 @@
   (e.g. RST-style double backticks in Rust doc comments) in **new, uncommitted changes**. Existing
   committed code on `develop` or `main` should be left as-is unless it contains actually invalid
   or broken syntax.
+- **Do not make unnecessary edits to already compiling code.** If the requested task is satisfied
+  and the code compiles, avoid extra refactors, renames, or cleanup-only changes that are not
+  required for correctness.
 
 ## Feature flags
 - Read `Cargo.toml` to discover available features and their default state.

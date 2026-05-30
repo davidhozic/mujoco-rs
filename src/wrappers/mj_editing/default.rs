@@ -45,7 +45,7 @@ impl MjsDefault {
 impl super::traits::sealed::Sealed for MjsDefault {}
 
 impl SpecItem for MjsDefault {
-    unsafe fn element_pointer(&self) -> *const mjsElement {
+    fn element_pointer(&self) -> *const mjsElement {
         self.element
     }
 
@@ -76,6 +76,10 @@ impl SpecItem for MjsDefault {
     }
 
     /// Defaults can't be deleted.
+    ///
+    /// # Deprecated
+    /// This API is deprecated and will be removed in a future release.
+    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) instead.
     ///
     /// This override always returns [`MjEditError::UnsupportedOperation`] without performing
     /// any operation, so the post-deletion use-after-free restriction from [`SpecItem::delete`]

@@ -24,16 +24,16 @@ pub trait SpecItem: Sized + sealed::Sealed {
     /// # Safety
     /// This borrows immutably, but returns a mutable pointer. This is done to overcome MJS's wrong
     /// use of mutable pointers in functions, such as [`mjs_getName`].
-    unsafe fn element_pointer(&self) -> *const mjsElement;
+    fn element_pointer(&self) -> *const mjsElement;
 
     /// Same as [`SpecItem::element_pointer`], but with a mutable borrow.
     ///
     /// # Safety
     /// See [`SpecItem::element_pointer`].
-    unsafe fn element_mut_pointer(&mut self) -> *mut mjsElement {
+    fn element_mut_pointer(&mut self) -> *mut mjsElement {
         // SAFETY: self.element is a valid non-null pointer to the C spec element
         // for the lifetime of the parent MjSpec (struct invariant).
-        unsafe { self.element_pointer() as *mut _ }
+        self.element_pointer() as *mut _
     }
 
     /// Returns the item's name.
@@ -94,7 +94,7 @@ pub trait SpecItem: Sized + sealed::Sealed {
     fn set_default(&mut self, class_name: &str) -> Result<(), MjEditError> {
         /* Workaround to pass the borrow checker (we use the existing borrow) */
         let cname = CString::new(class_name).unwrap();  // class_name is always valid UTF-8.
-        let element = unsafe { self.element_pointer() };
+        let element = self.element_pointer();
         let spec = unsafe { mjs_getSpec(element) };
         let default = unsafe { mjs_findDefault(spec, cname.as_ptr()) };
         if default.is_null() {
@@ -117,10 +117,16 @@ pub trait SpecItem: Sized + sealed::Sealed {
 
     /// Delete the item.
     ///
-    /// This method must be called **at most once** per item. After a successful deletion
-    /// the underlying C element is freed by MuJoCo; any further use of `self` -- including
-    /// calling `delete` again or reading any field -- is **use-after-free** undefined behavior.
-    /// If the call returns `Err`, no memory is freed and the item remains valid.
+    /// # Deprecated
+    /// This API is deprecated and will be removed in a future release.
+    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) instead.
+    ///
+    /// This method is inherently unsound: deleting one element mutates owner/ancestor graph
+    /// structures outside the borrowed `&mut self` region, so aliasing assumptions of existing
+    /// Rust references can already be violated by the call itself.
+    ///
+    /// In other words, calling this method is **undefined behavior** and should be avoided.
+    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) for deletion.
     ///
     /// # Errors
     /// - [`MjEditError::DeleteFailed`] if MuJoCo cannot delete the element.
@@ -128,11 +134,11 @@ pub trait SpecItem: Sized + sealed::Sealed {
     ///   (e.g. the world body or default classes).
     ///
     /// # Safety
-    /// The `&mut self` receiver prevents aliased mutable access at the call site, but the
-    /// Rust compiler cannot prevent the caller from retaining other references (shared or
-    /// mutable) that were obtained before this call. The caller must guarantee that no such
-    /// references remain live after a successful return, as the underlying C memory will
-    /// have been freed. Violating this invariant is **use-after-free** undefined behavior.
+    /// This legacy method is not soundly callable; it exists only for backward compatibility.
+    #[deprecated(
+        since = "5.0.0",
+        note = "unsound legacy API; use MjSpec::delete_element(element_mut_pointer())"
+    )]
     unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         unsafe { self.__delete_default__() }
     }
@@ -149,7 +155,7 @@ pub trait SpecItem: Sized + sealed::Sealed {
     unsafe fn __delete_default__(&mut self) -> Result<(), MjEditError> {
         // SAFETY: element_mut_pointer() is valid (struct invariant); mjs_getSpec
         // returns the owning spec, also valid.
-        let element = unsafe { self.element_mut_pointer() };
+        let element = self.element_mut_pointer();
         let spec = unsafe { mjs_getSpec(element) };
         let result = unsafe { mjs_delete(spec, element) };
         match result {
