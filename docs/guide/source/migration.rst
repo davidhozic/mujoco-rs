@@ -24,6 +24,34 @@ For a full list of changes, see the :ref:`changelog`.
 Migrating to 5.0.0
 ======================
 
+Deprecated implementation of removing model-editing elements
+--------------------------------------------------------------
+Due to the :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
+method relying on undefined behavior, the said method is now deprecated.
+It's replacement --- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element` ---
+now forces the user to drop all existing references of |mj_spec| and its
+subsequent elements (geoms, joints, etc.), providing some inconvenience
+compared to the previous implementation but with a benefit of being safe.
+Consequently, the new method is also no longer marked ``unsafe``.
+
+**Before (4.x)**:
+
+.. code-block:: rust
+
+  let mut spec = MjSpec::new();
+  let body = spec.world_body_mut().add_body();  // &mut MjsBody
+  unsafe { body.delete().unwrap() } ;
+
+**After**:
+
+.. code-block:: rust
+
+  let mut spec = MjSpec::new();
+  let body = spec.world_body_mut().add_body();  // &mut MjsBody
+  let body_ptr = body.element_mut_pointer();    // *mut MjsBody (alias to FFI type *mut mjsBody)
+  spec.delete_element(body_ptr).unwrap();       // 'body' can no longer be used 
+
+
 ``MjrContext::upload_texture`` parameter type changed
 -----------------------------------------------------
 

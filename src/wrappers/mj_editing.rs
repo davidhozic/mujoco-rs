@@ -351,7 +351,7 @@ impl MjSpec {
     /// `element` must be a valid pointer to an element owned by this spec.
     /// Any Rust references derived from that element before a successful call
     /// must not be used afterward.
-    pub unsafe fn delete_element(&mut self, element: *mut mjsElement) -> Result<(), MjEditError> {
+    pub fn delete_element(&mut self, element: *mut mjsElement) -> Result<(), MjEditError> {
         if element.is_null() {
             return Err(MjEditError::DeleteFailed("null element pointer".to_owned()));
         }
