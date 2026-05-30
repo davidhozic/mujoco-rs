@@ -348,10 +348,12 @@ impl MjSpec {
     /// Returns [`MjEditError::DeleteFailed`] if MuJoCo cannot delete the element.
     ///
     /// # Safety
-    /// `element` must be a valid pointer to an element owned by this spec.
-    /// Any Rust references derived from that element before a successful call
-    /// must not be used afterward.
-    pub fn delete_element(&mut self, element: *mut mjsElement) -> Result<(), MjEditError> {
+    /// The caller must ensure:
+    /// - `element` is a valid pointer to an mjsElement
+    /// - `element` is owned by this spec
+    /// - `element` has not been previously deleted
+    /// - no Rust references derived from `element` exist
+    pub unsafe fn delete_element(&mut self, element: *mut mjsElement) -> Result<(), MjEditError> {
         if element.is_null() {
             return Err(MjEditError::DeleteFailed("null element pointer".to_owned()));
         }
@@ -2043,7 +2045,7 @@ mod tests {
         /* Test normal body deletion */
         let body_element = {
             let body = spec.body_mut(NEW_MODEL_NAME).expect("failed to obtain the body");
-            unsafe { body.element_mut_pointer() }
+            body.element_mut_pointer()
         };
         assert!(unsafe { spec.delete_element(body_element) }.is_ok(), "failed to delete model");
         assert!(spec.body(NEW_MODEL_NAME).is_none(), "body was not removed from spec");
@@ -2051,7 +2053,7 @@ mod tests {
         /* Test world body deletion */
         let world_element = {
             let world = spec.world_body_mut();
-            unsafe { world.element_mut_pointer() }
+            world.element_mut_pointer()
         };
         assert!(unsafe { spec.delete_element(world_element) }.is_err(), "the world model should not be deletable");
 
@@ -2070,7 +2072,7 @@ mod tests {
         /* Test normal body deletion */
         let joint_element = {
             let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
-            unsafe { joint.element_mut_pointer() }
+            joint.element_mut_pointer()
         };
         assert!(unsafe { spec.delete_element(joint_element) }.is_ok(), "failed to delete model");
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed fom spec");
@@ -2089,7 +2091,7 @@ mod tests {
         /* Test normal hfield deletion */
         let hfield_element = {
             let hfield = spec.hfield_mut(NEW_NAME).expect("failed to obtain the hfield");
-            unsafe { hfield.element_mut_pointer() }
+            hfield.element_mut_pointer()
         };
         assert!(unsafe { spec.delete_element(hfield_element) }.is_ok(), "failed to delete hfield");
         assert!(spec.hfield(NEW_NAME).is_none(), "hfield was not removed from spec");
