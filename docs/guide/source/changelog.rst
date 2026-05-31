@@ -208,6 +208,11 @@ runtime.
   were stored and later used --- technically a undefined behavior due to reuse of the ``MjsBody``
   inside the iterator. The ``MjsBody`` parent is now stored as a raw FFI pointer to prevent such
   aliasing.
+- Fixed an out-of-bounds read reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>frame`: a fixed
+  camera whose ``fixedcamid`` was outside the model's camera range caused MuJoCo's
+  ``mjv_cameraFrame`` to read ``cam_xpos`` / ``cam_xmat`` out of bounds. ``frame`` now validates the
+  id against the model and panics on an out-of-range fixed camera id instead.
 
 
 .. rubric:: Other changes

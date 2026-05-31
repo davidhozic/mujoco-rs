@@ -35,6 +35,32 @@ MuJoCo-rs 5.0.0 links against MuJoCo **3.9.0**. Download the matching release
 and update your library path. See :ref:`installation` for details.
 
 
+``SpecItem::element_pointer`` pointer type changed (potentially breaking)
+--------------------------------------------------------------------------
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<tymethod>element_pointer`
+now returns ``*const mjsElement`` (was ``*mut mjsElement``) and is no longer ``unsafe``. This only
+affects code that called the model-editing trait methods directly (e.g. to drive MuJoCo's C
+model-editing API). When a mutable pointer is required, use
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>element_mut_pointer`
+(also no longer ``unsafe``). Any ``unsafe`` block wrapping these calls is now redundant and can be
+removed.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    let ptr: *mut mjsElement = unsafe { item.element_pointer() };
+
+**After (5.0.0):**
+
+.. code-block:: rust
+
+    // read-only C calls take an immutable pointer:
+    let ptr: *const mjsElement = item.element_pointer();
+    // when a mutable pointer is required:
+    let ptr: *mut mjsElement = item.element_mut_pointer();
+
+
 Deprecated implementation of removing model-editing elements
 --------------------------------------------------------------
 Due to the :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
