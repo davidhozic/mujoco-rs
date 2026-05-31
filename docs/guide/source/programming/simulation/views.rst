@@ -16,8 +16,8 @@ attributes of :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` and
 
 Views borrow data and cannot be preserved across simulation steps, as that would violate
 Rust's borrow checker rules. Re-looking up names each step would also be expensive.
-To overcome this, "info" structs exist, which cache the required information for fast view
-creation after each step.
+To overcome this, "info" structs exist, which cache the resolved index ranges and the model
+signature for fast view creation after each step.
 
 .. warning::
 
@@ -79,6 +79,10 @@ fields). ``PointerView`` implements the
 `Deref <https://doc.rust-lang.org/std/ops/trait.Deref.html>`_ trait and on deref
 acts like a slice. While some fields might be scalars, we still treat those as arrays
 for implementation simplicity reasons.
+
+The same ``view`` / ``view_mut`` pattern applies to every named element type --- bodies,
+geoms, sites, actuators, sensors, and so on --- each looked up through its corresponding
+finder (e.g. ``MjData::body`` or ``MjData::geom``) and info struct.
 
 
 Writing

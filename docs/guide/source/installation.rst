@@ -201,7 +201,8 @@ we provide a modified MuJoCo repository with static linking support.
 While MuJoCo-rs already provides a :ref:`rust_native_viewer`, we understand that some projects wish
 to use the original C++ based 3D viewer (also named Simulate).
 To enable this, the modified MuJoCo repository also includes changes that support
-a safe interface between Rust and the C++ Simulate code.
+a safe interface between Rust and the C++ Simulate code. The C++ viewer is exposed through
+the ``cpp-viewer`` Cargo feature, which requires this static-linking setup.
 
 To build statically linkable libraries, perform the following steps:
 

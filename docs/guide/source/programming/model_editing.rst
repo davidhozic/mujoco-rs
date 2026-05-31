@@ -97,7 +97,7 @@ We can now add our ball's body, geom and joint like so:
     These allow method chaining.
     Alternatively, methods that have the ``set_`` prefix can be used. Field setters
     (e.g. ``set_pos``, ``set_size``) return nothing, while ``set_name`` and ``set_default``
-    return a ``Result`` (they fail on, for example, a duplicate name).
+    return a ``Result`` (``set_name`` fails on a duplicate name, ``set_default`` on an unknown class).
     Setter (``set_``) methods are available for many common fields, including strings and
     several vector/buffer fields. For nested or structured data, use getters that end with
     the ``_mut`` suffix.
@@ -240,8 +240,8 @@ A new class is created by providing its ``class_name`` and optionally a ``parent
 Elements can then reference the class via their ``childclass`` or ``class`` (``dclass``) attribute
 in the model XML.
 In Rust code, class assignment is typically done with
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_default` or
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_default`.
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>set_default` or
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>with_default`.
 Some item-specific wrappers (for example frames) also expose explicit ``childclass`` setters.
 
 

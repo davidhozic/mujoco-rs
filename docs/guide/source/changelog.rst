@@ -47,7 +47,7 @@ update of MuJoCo alone can increase the major version.
 
 *(Potentially breaking) Changed raw pointer types of trait methods*
 
-- Changed raw pointer types of trait methods. For example, ``unsafe element_pointer(&self)``
+- Changed raw pointer types of trait methods. For example, ``element_pointer(&self)``
   now returns ``*const mjsElement``. This is a change that should not affect most users,
   unless they explicitly opted in to using the C model-editing API of MuJoCo directly, or
   implemented/depended on the old trait method signature in advanced extension code.
@@ -499,13 +499,13 @@ gained new variants. See `Error handling`_ below for the full method list.
   ``destination: &mut MjData<N>`` where ``N: Deref<Target = MjModel>``. Previously
   the source and destination had to share the same ``M``.
 
-- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name`
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>set_name`
   now returns ``Result<(), MjEditError>`` instead of ``()``. Append ``?`` to call
   sites.
-  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name`
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>with_name`
   still returns ``&mut Self`` but now panics on duplicate names.
 
-- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem` is now a sealed
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem` is now a sealed
   trait. External implementations are no longer permitted.
 
 - ``MjsOrientation::switch_quat`` no longer has a type parameter. Replace
