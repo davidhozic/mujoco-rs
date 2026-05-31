@@ -24,6 +24,7 @@ documentation = "https://docs.rs/mujoco-rs/"
 rust-version.workspace = true
 
 exclude = [
+    ".claude/",
     ".context/",
     ".github/",
     ".gitignore",
