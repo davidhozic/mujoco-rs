@@ -30,6 +30,11 @@ MuJoCo-rs can be added to your project like so:
 
     cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"
 
+.. note::
+
+    On Windows and macOS the ``renderer-winit-fallback`` feature is **required** whenever the
+    ``renderer`` feature is enabled (the build fails otherwise). It is optional on Linux.
+
 See :ref:`opt-cargo-features` for information about available Cargo features.
 Visualization and rendering features are opt-in to keep compilation fast for headless use cases.
 
@@ -196,7 +201,8 @@ we provide a modified MuJoCo repository with static linking support.
 While MuJoCo-rs already provides a :ref:`rust_native_viewer`, we understand that some projects wish
 to use the original C++ based 3D viewer (also named Simulate).
 To enable this, the modified MuJoCo repository also includes changes that support
-a safe interface between Rust and the C++ Simulate code.
+a safe interface between Rust and the C++ Simulate code. The C++ viewer is exposed through
+the ``cpp-viewer`` Cargo feature, which requires this static-linking setup.
 
 To build statically linkable libraries, perform the following steps:
 

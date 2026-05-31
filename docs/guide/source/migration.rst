@@ -24,6 +24,17 @@ For a full list of changes, see the :ref:`changelog`.
 Migrating to 5.0.0
 ======================
 
+Version 5.0.0 updates MuJoCo to 3.9.0, redesigns model-editing element deletion,
+and migrates several rendering APIs to the |mjr_context| error type.
+
+
+MuJoCo upgrade
+-----------------------
+
+MuJoCo-rs 5.0.0 links against MuJoCo **3.9.0**. Download the matching release
+and update your library path. See :ref:`installation` for details.
+
+
 Deprecated implementation of removing model-editing elements
 --------------------------------------------------------------
 Due to the :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
@@ -530,12 +541,12 @@ Use ``try_add_default`` for a fallible alternative.
 Model-editing API changes
 ----------------------------
 
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name`
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>set_name`
 now returns ``Result<(), MjEditError>`` instead of ``()``.
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name`
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>with_name`
 still returns ``&mut Self`` but now panics on duplicate names.
 
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem` is now a sealed
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem` is now a sealed
 trait. External implementations are no longer permitted -- remove any
 ``impl SpecItem for MyType`` blocks from downstream code.
 

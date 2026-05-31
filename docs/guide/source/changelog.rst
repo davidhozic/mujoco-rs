@@ -47,7 +47,7 @@ update of MuJoCo alone can increase the major version.
 
 *(Potentially breaking) Changed raw pointer types of trait methods*
 
-- Changed raw pointer types of trait methods. For example, ``unsafe element_pointer(&self)``
+- Changed raw pointer types of trait methods. For example, ``element_pointer(&self)``
   now returns ``*const mjsElement``. This is a change that should not affect most users,
   unless they explicitly opted in to using the C model-editing API of MuJoCo directly, or
   implemented/depended on the old trait method signature in advanced extension code.
@@ -188,7 +188,8 @@ runtime.
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>id`
     for retrieving optional element IDs.
 
-- Added the missing frame-finding method to |mj_spec|: :docs-rs:`~mujoco-rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`.
+- Added the missing frame-finding methods to |mj_spec|: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`
+  and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame_mut`.
 
 .. rubric:: New examples
 
@@ -498,13 +499,13 @@ gained new variants. See `Error handling`_ below for the full method list.
   ``destination: &mut MjData<N>`` where ``N: Deref<Target = MjModel>``. Previously
   the source and destination had to share the same ``M``.
 
-- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name`
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>set_name`
   now returns ``Result<(), MjEditError>`` instead of ``()``. Append ``?`` to call
   sites.
-  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name`
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>with_name`
   still returns ``&mut Self`` but now panics on duplicate names.
 
-- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem` is now a sealed
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem` is now a sealed
   trait. External implementations are no longer permitted.
 
 - ``MjsOrientation::switch_quat`` no longer has a type parameter. Replace
@@ -928,16 +929,16 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   types (the fields existed in MuJoCo 3.3.7 but were not previously accessible
   via per-object view types).
 - ``MjsMaterial``:
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial::<method>set_texture` /
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial::<method>with_texture`
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsMaterial::<method>set_texture` /
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsMaterial::<method>with_texture`
   set a texture name by
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtTextureRole`, correctly targeting the
   pre-sized slot the MuJoCo renderer reads (e.g. ``mjTEXROLE_RGB``).
   The existing ``set_textures`` / ``append_textures`` methods are retained but
   should generally be avoided for role-indexed vectors.
 - ``MjsTexture``:
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>set_cubefile` /
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>with_cubefile`
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_cubefile` /
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>with_cubefile`
   set a cube-map face file by
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<enum>MjtCubeFace`.
   The existing ``set_cubefiles`` / ``append_cubefiles`` methods are retained.

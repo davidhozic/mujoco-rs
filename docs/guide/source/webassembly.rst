@@ -35,6 +35,14 @@ you need:
 
        git submodule update --init --recursive
 
+.. note::
+
+    Emscripten's tools (``emcc``, ``emcmake``, ...) must be on your ``PATH`` before building.
+    After installing emsdk, activate it in each shell session with
+    ``source /path/to/emsdk/emsdk_env.sh`` (see the
+    `emsdk documentation <https://emscripten.org/docs/getting_started/downloads.html>`_).
+    Without this step the ``emcmake`` commands below fail with "command not found".
+
 
 .. _wasm_building:
 

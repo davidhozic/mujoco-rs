@@ -95,7 +95,9 @@ We can now add our ball's body, geom and joint like so:
 
     In the above block, we used methods that have the ``with_`` prefix.
     These allow method chaining.
-    Alternatively, methods that have the ``set_`` prefix can be used, which don't return anything.
+    Alternatively, methods that have the ``set_`` prefix can be used. Field setters
+    (e.g. ``set_pos``, ``set_size``) return nothing, while ``set_name`` and ``set_default``
+    return a ``Result`` (``set_name`` fails on a duplicate name, ``set_default`` on an unknown class).
     Setter (``set_``) methods are available for many common fields, including strings and
     several vector/buffer fields. For nested or structured data, use getters that end with
     the ``_mut`` suffix.
@@ -176,6 +178,38 @@ The compiled |mj_model| can also be swapped into a running simulation using
 as described in the :ref:`basic_sim` chapter.
 
 
+Deleting elements
+======================
+Elements can be removed from a specification with
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`,
+which takes the element's raw pointer obtained from
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>element_mut_pointer`:
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn main() {
+        let mut spec = MjSpec::new();
+        let body = spec.world_body_mut().add_body().with_name("ball");
+
+        let body_ptr = body.element_mut_pointer();
+        // SAFETY: `body_ptr` refers to a live element of `spec` that has not been deleted.
+        unsafe { spec.delete_element(body_ptr).expect("failed to delete the body") };
+    }
+
+Because ``delete_element`` takes ``&mut MjSpec``, the borrow checker already invalidates any
+references obtained earlier (such as ``body`` above) --- you cannot use a reference into the
+spec across the call. The method is ``unsafe`` only because the raw element pointer itself
+cannot be validated: in particular, the caller must not pass a pointer to an element that has
+already been deleted, which would make MuJoCo operate on freed memory.
+
+.. note::
+
+    The older ``SpecItem::delete`` method is **deprecated since 5.0.0** and is unsound
+    (it relies on undefined behavior). Use ``delete_element`` instead.
+
+
 .. _model_editing_defaults:
 
 Class inheritance (defaults)
@@ -206,8 +240,8 @@ A new class is created by providing its ``class_name`` and optionally a ``parent
 Elements can then reference the class via their ``childclass`` or ``class`` (``dclass``) attribute
 in the model XML.
 In Rust code, class assignment is typically done with
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_default` or
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_default`.
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>set_default` or
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>with_default`.
 Some item-specific wrappers (for example frames) also expose explicit ``childclass`` setters.
 
 
@@ -249,6 +283,24 @@ The only difference is an additional boolean parameter, which enables recursive 
         println!("{}", body.name());
     }
     // ...
+
+
+Finding elements
+================
+Existing elements can be looked up by name. |mj_spec| exposes a finder method (and a matching
+``_mut`` variant) per item type, for example
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>body` /
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>body_mut`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>geom`, and
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`. Within a body,
+child bodies are found with
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child` /
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child_mut`.
+Every finder returns an ``Option`` that is ``None`` when no element with that name exists.
+
+After compilation, an element's numeric id in the resulting |mj_model| can be retrieved with
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>id`
+(``None`` when the element has no id yet).
 
 
 Examples
