@@ -188,7 +188,8 @@ runtime.
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>id`
     for retrieving optional element IDs.
 
-- Added the missing frame-finding method to |mj_spec|: :docs-rs:`~mujoco-rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`.
+- Added the missing frame-finding methods to |mj_spec|: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`
+  and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame_mut`.
 
 .. rubric:: New examples
 
@@ -928,16 +929,16 @@ The six new enums (all ``#[non_exhaustive]``) have the following variants:
   types (the fields existed in MuJoCo 3.3.7 but were not previously accessible
   via per-object view types).
 - ``MjsMaterial``:
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial::<method>set_texture` /
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial::<method>with_texture`
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsMaterial::<method>set_texture` /
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsMaterial::<method>with_texture`
   set a texture name by
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtTextureRole`, correctly targeting the
   pre-sized slot the MuJoCo renderer reads (e.g. ``mjTEXROLE_RGB``).
   The existing ``set_textures`` / ``append_textures`` methods are retained but
   should generally be avoided for role-indexed vectors.
 - ``MjsTexture``:
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>set_cubefile` /
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>with_cubefile`
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_cubefile` /
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>with_cubefile`
   set a cube-map face file by
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<enum>MjtCubeFace`.
   The existing ``set_cubefiles`` / ``append_cubefiles`` methods are retained.

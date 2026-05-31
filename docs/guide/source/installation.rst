@@ -30,6 +30,11 @@ MuJoCo-rs can be added to your project like so:
 
     cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"
 
+.. note::
+
+    On Windows and macOS the ``renderer-winit-fallback`` feature is **required** whenever the
+    ``renderer`` feature is enabled (the build fails otherwise). It is optional on Linux.
+
 See :ref:`opt-cargo-features` for information about available Cargo features.
 Visualization and rendering features are opt-in to keep compilation fast for headless use cases.
 

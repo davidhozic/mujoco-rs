@@ -12,13 +12,14 @@ onto an existing 3D scene.
 
 .. note::
 
-    Custom visualization requires the ``viewer`` (or ``viewer-ui``) or the ``renderer`` Cargo feature to be enabled.
+    Custom visualization requires the ``viewer`` (or ``viewer-ui``), ``renderer``, or ``cpp-viewer`` Cargo feature to be enabled.
 
 In MuJoCo-rs, drawing is done through |mjv_scene|.
-There are two things that expose a scene for drawing custom visual-only geoms:
+There are three things that expose a scene for drawing custom visual-only geoms:
 
 - :ref:`mj_rust_viewer` (:docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>user_scene_mut`).
 - :ref:`mj_renderer` (:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>user_scene_mut`).
+- :ref:`mj_cpp_viewer` (:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>user_scn_mut`).
 
 
 Drawing to a scene
