@@ -242,7 +242,21 @@ impl MjvCamera {
     }
 
     /// Get the camera coordinate frame (pos, forward, up, right).
+    ///
+    /// # Panics
+    /// Panics if this is a fixed camera (`MjtCamera::mjCAMERA_FIXED`) whose `fixedcamid` is out of range.
     pub fn frame<M: Deref<Target = MjModel>>(&self, data: &MjData<M>) -> ([MjtNum; 3], [MjtNum; 3], [MjtNum; 3], [MjtNum; 3]) {
+        // Only the fixed-camera branch of mjv_cameraFrame dereferences the per-camera arrays; the
+        // free/tracking branches derive the frame from azimuth/elevation and need no validation.
+        if self.type_ == MjtCamera::mjCAMERA_FIXED as i32 {
+            let ncam = data.model().ncam();
+            assert!(
+                self.fixedcamid >= 0 && (self.fixedcamid as i64) < ncam,
+                "fixed camera id {} is out of range for a model with {} cameras",
+                self.fixedcamid, ncam
+            );
+        }
+
         let mut headpos = [0.0; 3];
         let mut forward = [0.0; 3];
         let mut up = [0.0; 3];
@@ -984,6 +998,18 @@ mod tests {
         let label = "Hello World";
         geom.set_label(label).unwrap();
         assert_eq!(geom.label(), label);
+    }
+
+    /// A fixed camera whose id is out of range for the model must panic in `frame` instead of
+    /// triggering an out-of-bounds read in MuJoCo's `mjv_cameraFrame` (which indexes
+    /// `cam_xpos`/`cam_xmat` by `fixedcamid` without bounds checks).
+    #[test]
+    #[should_panic(expected = "out of range")]
+    fn test_camera_frame_fixed_id_out_of_range_panics() {
+        let model = load_model();          // EXAMPLE_MODEL defines no <camera>, so ncam == 0
+        let data = model.make_data();
+        let camera = MjvCamera::new_fixed(0);  // fixedcamid = 0, but ncam = 0 -> out of range
+        let _ = camera.frame(&data);
     }
 
     #[test]
