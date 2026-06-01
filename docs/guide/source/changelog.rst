@@ -192,10 +192,18 @@ runtime.
   and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame_mut`.
 
 - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator` now exposes the full family of
-  actuator-configuration helpers mirroring MuJoCo's ``mjs_setToX`` C API: ``set_to_motor``,
+  actuator-configuration helpers covering MuJoCo's ``mjs_setToX`` C API: ``set_to_motor``,
   ``set_to_positon``, ``set_to_int_velocity``, ``set_to_velocity``, ``set_to_damper``,
   ``set_to_cylinder``, ``set_to_muscle``, ``set_to_adhesion``, and ``set_to_dc_motor``. Helpers
-  that MuJoCo can reject return ``Result<(), MjEditError>``; those that cannot fail return ``()``.
+  whose C function takes nullable parameters take a dedicated ``Default``-able config struct
+  (``PositionConfig``, ``IntVelocityConfig``, ``DcMotorConfig``) in which the nullable parameters
+  are ``Option`` fields, so callers specify only the fields they need via struct-update syntax and
+  unset optionals default to ``None``. For example:
+  ``actuator.set_to_dc_motor(DcMotorConfig { motorconst: Some([1.0, 1.0]), resistance: 1.0, ..Default::default() })?``.
+  Helpers whose parameters are all mandatory keep simple positional arguments (e.g.
+  ``set_to_velocity(kv)``, ``set_to_cylinder(timeconst, bias, area, diameter)``,
+  ``set_to_muscle(...)``). Helpers that MuJoCo can reject return ``Result<(), MjEditError>``; those
+  that cannot fail return ``()``.
 
 .. rubric:: New examples
 

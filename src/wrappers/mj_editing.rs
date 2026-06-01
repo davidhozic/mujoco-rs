@@ -1059,6 +1059,69 @@ fn actuator_set_result(c_err_msg: *const c_char) -> Result<(), MjEditError> {
     }
 }
 
+/* Actuator configuration structs.
+** Each `set_to_*` method takes its own config struct. Build with struct-update syntax so only the
+** relevant fields are specified, e.g. `PositionConfig { kp: 10.0, kv: Some(2.0), ..Default::default() }`.
+** Optional fields default to `None`, leaving the corresponding actuator parameter at its MuJoCo
+** default. */
+
+/// Configuration for [`MjsActuator::set_to_positon`].
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PositionConfig {
+    /// Proportional (position) gain.
+    pub kp: f64,
+    /// Automatic range-inheritance factor (0 disables it).
+    pub inheritrange: f64,
+    /// Velocity feedback gain. Mutually exclusive with `dampratio`.
+    pub kv: Option<f64>,
+    /// Damping ratio. Mutually exclusive with `kv`.
+    pub dampratio: Option<f64>,
+    /// First-order activation-filter time constant.
+    pub timeconst: Option<f64>,
+}
+
+/// Configuration for [`MjsActuator::set_to_int_velocity`]. Same parameters as [`PositionConfig`].
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct IntVelocityConfig {
+    /// Proportional gain.
+    pub kp: f64,
+    /// Automatic range-inheritance factor (0 disables it).
+    pub inheritrange: f64,
+    /// Velocity feedback gain. Mutually exclusive with `dampratio`.
+    pub kv: Option<f64>,
+    /// Damping ratio. Mutually exclusive with `kv`.
+    pub dampratio: Option<f64>,
+    /// First-order activation-filter time constant.
+    pub timeconst: Option<f64>,
+}
+
+/// Configuration for [`MjsActuator::set_to_dc_motor`].
+///
+/// Each optional field defaults to `None`, disabling the corresponding feature.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct DcMotorConfig {
+    /// Electrical resistance.
+    pub resistance: f64,
+    /// Input mode selector.
+    pub input_mode: i32,
+    /// Torque and back-EMF constants `[Kt, Ke]`.
+    pub motorconst: Option<[f64; 2]>,
+    /// Nominal ratings `[voltage, stall_torque, no_load_speed]`.
+    pub nominal: Option<[f64; 3]>,
+    /// Saturation `[tau_max, i_max, di_dt_max]`.
+    pub saturation: Option<[f64; 3]>,
+    /// Inductance `[L, te]`.
+    pub inductance: Option<[f64; 2]>,
+    /// Cogging `[amplitude, periodicity, phase]`.
+    pub cogging: Option<[f64; 3]>,
+    /// Controller `[kp, ki, kd, slewmax, Imax, v_max]`.
+    pub controller: Option<[f64; 6]>,
+    /// Thermal `[R_th, C, tau_th, alpha, T0, T_ambient]`.
+    pub thermal: Option<[f64; 6]>,
+    /// LuGre friction `[stiffness, damping, coulomb, static, stribeck]`.
+    pub lugre: Option<[f64; 5]>,
+}
+
 impl MjsActuator {
     /// Configure the actuator to be a motor.
     pub fn set_to_motor(&mut self) {
@@ -1067,17 +1130,12 @@ impl MjsActuator {
     }
 
     /// Configure the actuator to be a positional-target motor (with a proportional regulator).
-    /// `kv` and `dampratio` are mutually exclusive damping specifications, and `timeconst`
-    /// optionally adds a first-order activation filter.
     /// # Errors
-    /// Returns [`MjEditError::InvalidParameter`] when the parameters aren't within the allowed
-    /// range, e.g. `kv` and `dampratio` are both given, a value that must be non-negative is
-    /// negative, or `inheritrange` is given together with a control range.
-    pub fn set_to_positon(
-        &mut self, kp: f64, inheritrange: f64,
-        mut kv: Option<f64>, mut dampratio: Option<f64>, mut timeconst: Option<f64>
-    ) -> Result<(), MjEditError>
-    {
+    /// Returns [`MjEditError::InvalidParameter`] when the configuration is rejected, e.g. `kv` and
+    /// `dampratio` are both set, a value that must be non-negative is negative, or `inheritrange`
+    /// is set together with a control range.
+    pub fn set_to_positon(&mut self, config: PositionConfig) -> Result<(), MjEditError> {
+        let PositionConfig { kp, inheritrange, mut kv, mut dampratio, mut timeconst } = config;
         let c_err_msg = unsafe { mjs_setToPosition(
             self, kp,
             kv.as_mut().map_or(ptr::null_mut(), |x| x),
@@ -1088,17 +1146,14 @@ impl MjsActuator {
         actuator_set_result(c_err_msg)
     }
 
-    /// Configure the actuator to be an integrated-velocity servo. This behaves like
+    /// Configure the actuator to be an integrated-velocity servo. Behaves like
     /// [`MjsActuator::set_to_positon`], but integrates the control signal into an activation
-    /// variable. See that method for the meaning of the parameters.
+    /// variable.
     /// # Errors
-    /// Returns [`MjEditError::InvalidParameter`] when `inheritrange` is given together with an
+    /// Returns [`MjEditError::InvalidParameter`] when `inheritrange` is set together with an
     /// activation range.
-    pub fn set_to_int_velocity(
-        &mut self, kp: f64, inheritrange: f64,
-        mut kv: Option<f64>, mut dampratio: Option<f64>, mut timeconst: Option<f64>
-    ) -> Result<(), MjEditError>
-    {
+    pub fn set_to_int_velocity(&mut self, config: IntVelocityConfig) -> Result<(), MjEditError> {
+        let IntVelocityConfig { kp, inheritrange, mut kv, mut dampratio, mut timeconst } = config;
         let c_err_msg = unsafe { mjs_setToIntVelocity(
             self, kp,
             kv.as_mut().map_or(ptr::null_mut(), |x| x),
@@ -1121,13 +1176,13 @@ impl MjsActuator {
     /// Returns [`MjEditError::InvalidParameter`] when `kv` is negative or the control range is
     /// negative.
     pub fn set_to_damper(&mut self, kv: f64) -> Result<(), MjEditError> {
-        let c_err_msg = unsafe { mjs_setToDamper(self, kv) };
-        actuator_set_result(c_err_msg)
+        actuator_set_result(unsafe { mjs_setToDamper(self, kv) })
     }
 
     /// Configure the actuator to be a hydraulic or pneumatic cylinder. `timeconst` is the
     /// activation filter time constant, `bias` is added to the force, and the effective area is
-    /// `area`; if `diameter` is non-negative, the area is computed from it instead.
+    /// `area`; if `diameter` is non-negative the area is computed from it instead (pass a negative
+    /// `diameter` to use `area` directly).
     pub fn set_to_cylinder(&mut self, timeconst: f64, bias: f64, area: f64, diameter: f64) {
         // mjs_setToCylinder cannot fail; it always returns an empty string.
         unsafe { mjs_setToCylinder(self, timeconst, bias, area, diameter) };
@@ -1157,32 +1212,20 @@ impl MjsActuator {
     /// Returns [`MjEditError::InvalidParameter`] when `gain` is negative or the control range is
     /// negative.
     pub fn set_to_adhesion(&mut self, gain: f64) -> Result<(), MjEditError> {
-        let c_err_msg = unsafe { mjs_setToAdhesion(self, gain) };
-        actuator_set_result(c_err_msg)
+        actuator_set_result(unsafe { mjs_setToAdhesion(self, gain) })
     }
 
-    /// Configure the actuator to be a DC motor. `resistance` and `input_mode` are required; all
-    /// array parameters are optional and a `None` value disables the corresponding feature
-    /// (`motorconst`: `[Kt, Ke]`; `nominal`: `[voltage, stall_torque, no_load_speed]`;
-    /// `saturation`: `[tau_max, i_max, di_dt_max]`; `inductance`: `[L, te]`;
-    /// `cogging`: `[amplitude, periodicity, phase]`;
-    /// `controller`: `[kp, ki, kd, slewmax, Imax, v_max]`;
-    /// `thermal`: `[R_th, C, tau_th, alpha, T0, T_ambient]`;
-    /// `lugre`: `[stiffness, damping, coulomb, static, stribeck]`).
+    /// Configure the actuator to be a DC motor.
     /// # Errors
-    /// Returns [`MjEditError::InvalidParameter`] when the derived motor constant or resistance is
-    /// not positive, or when an inductance, thermal resistance, or thermal capacitance value is
-    /// out of its allowed range.
-    #[allow(clippy::too_many_arguments)]
-    pub fn set_to_dc_motor(
-        &mut self,
-        mut motorconst: Option<[f64; 2]>, resistance: f64,
-        mut nominal: Option<[f64; 3]>, mut saturation: Option<[f64; 3]>,
-        mut inductance: Option<[f64; 2]>, mut cogging: Option<[f64; 3]>,
-        mut controller: Option<[f64; 6]>, mut thermal: Option<[f64; 6]>,
-        mut lugre: Option<[f64; 5]>, input_mode: i32
-    ) -> Result<(), MjEditError>
-    {
+    /// Returns [`MjEditError::InvalidParameter`] when MuJoCo cannot derive a positive motor
+    /// constant or resistance, or when an inductance, thermal resistance, or thermal capacitance
+    /// value is out of its allowed range.
+    pub fn set_to_dc_motor(&mut self, config: DcMotorConfig) -> Result<(), MjEditError> {
+        let DcMotorConfig {
+            resistance, input_mode,
+            mut motorconst, mut nominal, mut saturation, mut inductance,
+            mut cogging, mut controller, mut thermal, mut lugre
+        } = config;
         let c_err_msg = unsafe { mjs_setToDCMotor(
             self,
             motorconst.as_mut().map_or(ptr::null_mut(), |x| x),
@@ -2350,28 +2393,32 @@ mod tests {
         assert!(actuator.set_to_adhesion(-1.0).is_err());
         assert!(actuator.set_to_adhesion(1.0).is_ok());
 
-        /* cylinder: filter dynamics, always succeeds */
+        /* cylinder: filter dynamics, always succeeds (negative diameter keeps the area) */
         actuator.set_to_cylinder(0.1, 0.0, 1.0, -1.0);
         assert_eq!(actuator.dyntype(), MjtDyn::mjDYN_FILTER);
 
-        /* muscle: negative tausmooth is rejected, otherwise muscle gain/bias/dyn */
+        /* muscle: negative tausmooth is rejected; negative entries keep MuJoCo's defaults */
         assert!(actuator.set_to_muscle([-1.0, -1.0], -1.0, [-1.0, -1.0], -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0).is_err());
-        assert!(actuator.set_to_muscle([-1.0, -1.0], 0.0, [-1.0, -1.0], -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0).is_ok());
+        actuator.set_to_muscle([-1.0, -1.0], 0.0, [-1.0, -1.0], -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0).unwrap();
         assert_eq!(actuator.gaintype(), MjtGain::mjGAIN_MUSCLE);
         assert_eq!(actuator.biastype(), MjtBias::mjBIAS_MUSCLE);
         assert_eq!(actuator.dyntype(), MjtDyn::mjDYN_MUSCLE);
 
         /* position: kv and dampratio are mutually exclusive */
-        assert!(actuator.set_to_positon(1.0, 0.0, Some(1.0), Some(1.0), None).is_err());
-        assert!(actuator.set_to_positon(1.0, 0.0, Some(1.0), None, None).is_ok());
+        assert!(actuator.set_to_positon(
+            PositionConfig { kp: 1.0, kv: Some(1.0), dampratio: Some(1.0), ..Default::default() }
+        ).is_err());
+        actuator.set_to_positon(PositionConfig { kp: 1.0, kv: Some(1.0), ..Default::default() }).unwrap();
 
         /* integrated velocity: integrator dynamics */
-        assert!(actuator.set_to_int_velocity(1.0, 0.0, None, None, None).is_ok());
+        actuator.set_to_int_velocity(IntVelocityConfig { kp: 1.0, ..Default::default() }).unwrap();
         assert_eq!(actuator.dyntype(), MjtDyn::mjDYN_INTEGRATOR);
 
-        /* dc motor: a positive motor constant and resistance are required */
-        assert!(actuator.set_to_dc_motor(None, 0.0, None, None, None, None, None, None, None, 0).is_err());
-        assert!(actuator.set_to_dc_motor(Some([1.0, 1.0]), 1.0, None, None, None, None, None, None, None, 0).is_ok());
+        /* dc motor: without a motor constant MuJoCo cannot derive K > 0, so it is rejected */
+        assert!(actuator.set_to_dc_motor(DcMotorConfig::default()).is_err());
+        actuator.set_to_dc_motor(
+            DcMotorConfig { motorconst: Some([1.0, 1.0]), resistance: 1.0, ..Default::default() }
+        ).unwrap();
         assert_eq!(actuator.gaintype(), MjtGain::mjGAIN_DCMOTOR);
         assert_eq!(actuator.biastype(), MjtBias::mjBIAS_DCMOTOR);
         assert_eq!(actuator.dyntype(), MjtDyn::mjDYN_DCMOTOR);
