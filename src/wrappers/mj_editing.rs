@@ -1042,6 +1042,42 @@ impl MjsActuator {
     }
 }
 
+
+impl MjsActuator {
+    /// Configure the actuator to be a motor.
+    pub fn set_to_motor(&mut self) {
+        // RETURN: always returns "". 
+        unsafe { mjs_setToMotor(self) };
+    }
+
+    /// Configure the actuator to be positional-target motor (with a proportional regulator).
+    /// # Errors
+    /// Returns [`MjEditError::InvalidParameter`] when the parameters aren't
+    /// within the allowed range.
+    pub fn set_to_positon(
+        &mut self, kp: f64, inheritrange: f64,
+        kv: Option<f64>, dampratio: Option<f64>, timeconst: Option<f64>
+    ) -> Result<(), MjEditError>
+    {
+        // RETURN: always returns "". 
+        let c_err_msg = unsafe { mjs_setToPosition(
+            self, kp,
+            kv.map_or(ptr::null_mut(), |mut x| &mut x),
+            dampratio.map_or(ptr::null_mut(), |mut x| &mut x),
+            timeconst.map_or(ptr::null_mut(), |mut x| &mut x),
+            inheritrange
+        ) };
+
+        // SAFETY: MuJoCo's error messages are always NULL terminated.
+        let err_msg = unsafe { CStr::from_ptr(c_err_msg).to_string_lossy() };
+        if err_msg.len() > 0 {
+            return Err(MjEditError::InvalidParameter(err_msg.to_string()));
+        }
+
+        Ok(())
+    }
+}
+
 /***************************
 ** Sensor specification
 ***************************/
