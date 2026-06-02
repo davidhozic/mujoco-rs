@@ -191,6 +191,22 @@ runtime.
 - Added the missing frame-finding methods to |mj_spec|: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`
   and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame_mut`.
 
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator` now exposes the full family of
+  actuator-configuration helpers covering MuJoCo's ``mjs_setToX`` C API: ``set_to_motor``,
+  ``set_to_position``, ``set_to_int_velocity``, ``set_to_velocity``, ``set_to_damper``,
+  ``set_to_cylinder``, ``set_to_muscle``, ``set_to_adhesion``, and ``set_to_dc_motor``. Helpers
+  whose C function takes nullable parameters take a dedicated ``Default``-able config struct
+  (``PositionConfig``, ``IntVelocityConfig``, ``DcMotorConfig``) in which the nullable parameters
+  are ``Option`` fields. Each config can be built either with struct-update syntax or with
+  chainable ``with_*`` builder methods (which take the inner value and wrap optionals in ``Some``),
+  so callers specify only the fields they need and unset optionals default to ``None``. For example:
+  ``actuator.set_to_dc_motor(DcMotorConfig::default().with_motorconst([1.0, 1.0]).with_resistance(1.0))?``.
+  Helpers whose parameters are all mandatory keep simple positional arguments (e.g.
+  ``set_to_velocity(kv)``, ``set_to_cylinder(timeconst, bias, area, diameter)``,
+  ``set_to_muscle(...)``). Helpers that MuJoCo can reject return ``Result<(), MjEditError>`` (e.g.
+  ``set_to_damper``, ``set_to_muscle``, ``set_to_dc_motor``); those that cannot fail
+  (``set_to_motor``, ``set_to_velocity``, ``set_to_cylinder``) return ``()``.
+
 .. rubric:: New examples
 
 - :gh-example:`Asset re-upload <visualization/viewer/asset_reupload.rs>` --- demonstrates animated heightfield,

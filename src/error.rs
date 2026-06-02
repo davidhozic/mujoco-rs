@@ -309,6 +309,10 @@ pub enum MjEditError {
         /// Pass a buffer of at least `required_size + 1` bytes to retry.
         required_size: usize,
     },
+    /// Returned when the parameters to the given method/function are invalid.
+    /// This is currently only returned within [`MjsActuator`](crate::wrappers::mj_editing::MjsActuator)'s
+    /// `set_to_x` methods, where `x` is the actuator type.
+    InvalidParameter(String),
 }
 
 impl fmt::Display for MjEditError {
@@ -328,6 +332,7 @@ impl fmt::Display for MjEditError {
                 "XML output buffer too small; retry with at least {} bytes",
                 required_size + 1
             ),
+            Self::InvalidParameter(msg) => write!(f, "{msg}"),
         }
     }
 }
