@@ -331,8 +331,8 @@ config struct --- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>PositionCo
 :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>IntVelocityConfig`, and
 :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>DcMotorConfig` --- in which those nullable
 parameters are ``Option`` fields. A config is built either with struct-update syntax or with the
-chainable ``with_*`` builder methods (which take the inner value and wrap it in ``Some``), so only
-the relevant fields need to be set; everything else stays at its MuJoCo default:
+chainable ``with_*`` builder methods (which take the inner value and wrap optional fields in
+``Some``), so only the relevant fields need to be set; everything else stays at its MuJoCo default:
 
 .. code-block:: rust
 

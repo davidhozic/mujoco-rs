@@ -1067,7 +1067,7 @@ fn actuator_set_result(c_err_msg: *const c_char) -> Result<(), MjEditError> {
 ** leaving the corresponding actuator parameter at its MuJoCo default; the `with_*` setters take
 ** the inner value directly and wrap it in `Some`. */
 
-/// Configuration for [`MjsActuator::set_to_positon`].
+/// Configuration for [`MjsActuator::set_to_position`].
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct PositionConfig {
     /// Proportional (position) gain.
@@ -1177,7 +1177,7 @@ impl MjsActuator {
     /// Returns [`MjEditError::InvalidParameter`] when the configuration is rejected, e.g. `kv` and
     /// `dampratio` are both set, a value that must be non-negative is negative, or `inheritrange`
     /// is set together with a control range.
-    pub fn set_to_positon(&mut self, config: PositionConfig) -> Result<(), MjEditError> {
+    pub fn set_to_position(&mut self, config: PositionConfig) -> Result<(), MjEditError> {
         let PositionConfig { kp, inheritrange, mut kv, mut dampratio, mut timeconst } = config;
         let c_err_msg = unsafe { mjs_setToPosition(
             self, kp,
@@ -1190,7 +1190,7 @@ impl MjsActuator {
     }
 
     /// Configure the actuator to be an integrated-velocity servo. Behaves like
-    /// [`MjsActuator::set_to_positon`], but integrates the control signal into an activation
+    /// [`MjsActuator::set_to_position`], but integrates the control signal into an activation
     /// variable.
     /// # Errors
     /// Returns [`MjEditError::InvalidParameter`] when `inheritrange` is set together with an
@@ -2448,10 +2448,10 @@ mod tests {
         assert_eq!(actuator.dyntype(), MjtDyn::mjDYN_MUSCLE);
 
         /* position (builder API): kv and dampratio are mutually exclusive */
-        assert!(actuator.set_to_positon(
+        assert!(actuator.set_to_position(
             PositionConfig::default().with_kp(1.0).with_kv(1.0).with_dampratio(1.0)
         ).is_err());
-        actuator.set_to_positon(PositionConfig::default().with_kp(1.0).with_kv(1.0)).unwrap();
+        actuator.set_to_position(PositionConfig::default().with_kp(1.0).with_kv(1.0)).unwrap();
 
         /* integrated velocity: integrator dynamics */
         actuator.set_to_int_velocity(IntVelocityConfig::default().with_kp(1.0)).unwrap();
