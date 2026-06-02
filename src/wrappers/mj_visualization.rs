@@ -740,12 +740,27 @@ impl MjvScene {
     /// [`MjtCatBit::mjCAT_STATIC`], [`MjtCatBit::mjCAT_DYNAMIC`], [`MjtCatBit::mjCAT_DECOR`]).
     ///
     /// # Panics
-    /// Panics if `data` was created from a different model than this scene.
+    /// - Panics if `data` was created from a different model than this scene.
+    /// - Panics if `cam` is a fixed camera ([`MjtCamera::mjCAMERA_FIXED`]) whose `fixedcamid` is
+    ///   out of range for the model in `data`.
     pub fn update_with_catmask<M: Deref<Target = MjModel>>(
         &mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb,
         cam: &mut MjvCamera, catmask: i32,
     ) {
         self.assert_signature(data.model().signature());
+        // mjv_updateScene -> mjv_updateCamera calls mjv_cameraFrame, whose mjCAMERA_FIXED branch
+        // reads d->cam_xmat + 9*fixedcamid / d->cam_xpos + 3*fixedcamid *before* C performs its own
+        // range check, so an out-of-range id is an out-of-bounds read. Guard it here, matching the
+        // check already in MjvCamera::frame(). (The free/tracking branches derive the frame from
+        // azimuth/elevation, and the tracking body id is range-checked by C before use.)
+        if cam.type_ == MjtCamera::mjCAMERA_FIXED as i32 {
+            let ncam = data.model().ncam();
+            assert!(
+                cam.fixedcamid >= 0 && (cam.fixedcamid as i64) < ncam,
+                "fixed camera id {} is out of range for a model with {} cameras",
+                cam.fixedcamid, ncam
+            );
+        }
         unsafe {
             mjv_updateScene(
                 data.model().ffi(), data.ffi_mut(), opt, perturb,
@@ -826,7 +841,6 @@ impl MjvScene {
             mjr_render(*viewport, self.ffi_mut(), context.ffi());
         }
     }
-
 
     /// Returns the selection point based on a mouse click.
     /// This is a wrapper around `mjv_select()`.
@@ -1010,6 +1024,20 @@ mod tests {
         let data = model.make_data();
         let camera = MjvCamera::new_fixed(0);  // fixedcamid = 0, but ncam = 0 -> out of range
         let _ = camera.frame(&data);
+    }
+
+    /// `MjvScene::update` must apply the same fixed-camera range check as `frame`. Otherwise a fixed
+    /// camera with an out-of-range id reaches MuJoCo's `mjv_cameraFrame` (which reads
+    /// `cam_xmat`/`cam_xpos` indexed by `fixedcamid`) *before* C runs its own range check.
+    #[test]
+    #[should_panic(expected = "out of range")]
+    fn test_scene_update_fixed_camera_out_of_range_panics() {
+        let model = load_model();          // no <camera>, so ncam == 0
+        let mut scene = MjvScene::new(&model, 1000);
+        let mut data = model.make_data();
+        let (opt, pert) = (MjvOption::default(), MjvPerturb::default());
+        let mut camera = MjvCamera::new_fixed(9999);
+        scene.update(&mut data, &opt, &pert, &mut camera);
     }
 
     #[test]

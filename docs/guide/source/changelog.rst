@@ -94,6 +94,17 @@ update of MuJoCo alone can increase the major version.
   :docs-rs:`~mujoco_rs::error::<enum>MjModelError::<variant>IndexOutOfBounds`
   (see migration guide).
 
+*MjsTuple::set_objtype now takes ``&[MjtObj]``*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTuple::<method>set_objtype` now accepts
+  ``&[MjtObj]`` instead of ``&[i32]`` and is an ``unsafe fn``. Typing the input as ``MjtObj`` keeps
+  arbitrary integers out, but ``MjtObj`` still includes meta variants (``mjOBJ_FRAME``,
+  ``mjOBJ_DEFAULT``, ``mjOBJ_MODEL``) and ``mjNOBJECT`` itself, which are out of range for the model
+  compiler's object-list array (size ``mjNOBJECT``) and would be read out of bounds at ``compile()``
+  time. Rejecting them would require iterating the slice, so "every value is a real object type" is
+  a ``# Safety`` precondition. The conversion to the underlying C ``int`` is a zero-cost
+  reinterpretation. See the migration guide.
+
 .. rubric:: Deprecations
 
 - Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
@@ -176,8 +187,11 @@ runtime.
 
 *Model-editing and utility API additions*
 
-- Added :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_sym2dense` as a safe wrapper for
-  MuJoCo's sparse-to-dense conversion utility.
+- Added :docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_sym2dense` as a wrapper for MuJoCo's
+  sparse-to-dense conversion utility. It is an ``unsafe fn``: the C routine indexes ``mat`` /
+  ``colind`` / ``res`` from the caller-supplied sparse structure without bounds checks, and the
+  only way to validate that structure would be to iterate the index arrays, so the consistency of
+  ``rownnz`` / ``rowadr`` / ``colind`` is documented as a ``# Safety`` precondition instead.
 - Added model-editing convenience APIs:
 
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>timer`
@@ -229,6 +243,11 @@ runtime.
   camera whose ``fixedcamid`` was outside the model's camera range caused MuJoCo's
   ``mjv_cameraFrame`` to read ``cam_xpos`` / ``cam_xmat`` out of bounds. ``frame`` now validates the
   id against the model and panics on an out-of-range fixed camera id instead.
+- Extended that same fixed-camera range check to
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update`: an
+  out-of-range ``fixedcamid`` no longer reaches ``mjv_cameraFrame`` (whose ``mjCAMERA_FIXED`` branch
+  reads ``cam_xpos`` / ``cam_xmat`` *before* MuJoCo's own range check). This also closes the same
+  out-of-bounds read on the offscreen renderer and the viewer, which both update through this method.
 
 
 .. rubric:: Other changes

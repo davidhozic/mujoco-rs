@@ -211,6 +211,32 @@ with named fields instead.
     }
 
 
+``MjsTuple::set_objtype`` now takes ``&[MjtObj]``
+-------------------------------------------------
+
+``MjsTuple::set_objtype`` previously accepted ``&[i32]`` and stored the values unchecked. The model
+compiler later uses each value to index a fixed-size object-list array (size ``mjNOBJECT``) without
+a bounds check, so an out-of-range value is an out-of-bounds read at ``compile()`` time. The setter
+now takes ``&[MjtObj]`` and is an ``unsafe fn``: typing the input as ``MjtObj`` keeps arbitrary
+integers out, but ``MjtObj`` still includes meta variants (``mjOBJ_FRAME``, ``mjOBJ_DEFAULT``,
+``mjOBJ_MODEL``) and ``mjNOBJECT`` itself that are out of range. The caller must ensure every value
+is a real object type (an ``MjtObj`` discriminant ``< mjNOBJECT``); the conversion to the underlying
+C ``int`` is then a zero-cost reinterpretation.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    tuple.set_objtype(&[MjtObj::mjOBJ_BODY as i32, MjtObj::mjOBJ_GEOM as i32]);
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: mjOBJ_BODY and mjOBJ_GEOM are real object types (< mjNOBJECT).
+    unsafe { tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM]) };
+
+
 .. _migrate_4_0_0:
 
 Migrating to 4.0.0

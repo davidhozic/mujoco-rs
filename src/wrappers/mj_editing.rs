@@ -1688,7 +1688,16 @@ impl MjsText {
 mjs_struct!(Tuple [SpecObject]);
 impl MjsTuple {
     vec_set! {
-        objtype: i32; "object types.";
+        // `objtype` is stored as a raw C `int` and, at `compile()` time, used to index the model
+        // compiler's `object_lists_` array (size `mjNOBJECT`) with no bounds check. Typing the
+        // setter as `&[MjtObj]` keeps arbitrary integers out, but `MjtObj` still includes meta
+        // variants that are out of range, so the setter is `unsafe` (see the `# Safety` note).
+        objtype: MjtObj => i32;
+            "object types.";
+            "Every value must be a real object type: an `MjtObj` discriminant less than \
+             `mjNOBJECT`. Passing a meta variant (`mjOBJ_FRAME`, `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) \
+             or `mjNOBJECT` itself causes an out-of-bounds array read inside the model compiler \
+             when the spec is compiled.";
     }
 
     vec_string_set_append! {
@@ -2830,7 +2839,8 @@ mod tests {
 
         tuple.set_objname("body1 body2");
         tuple.set_objprm(&obj_param);
-        tuple.set_objtype(&[MjtObj::mjOBJ_BODY as i32, MjtObj::mjOBJ_BODY as i32]);
+        // SAFETY: mjOBJ_BODY is a real object type (< mjNOBJECT).
+        unsafe { tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_BODY]) };
 
         assert_eq!(tuple.objprm(), &obj_param);
 

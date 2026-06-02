@@ -63,6 +63,39 @@
 - **No unused parameters**: Every macro and function parameter must be used. Remove any parameter
   that was introduced speculatively but has no current caller.
 
+## Safety guards at the FFI boundary
+
+A safe (non-`unsafe`) wrapper must never be able to cause undefined behaviour for *any* input
+reachable through the safe API. When a wrapper passes a caller value to C that C uses without its
+own validation (e.g. as an unchecked array index or discriminant), pick the *cheapest sound* guard
+in this order:
+
+1. **Type / zero-cost encoding.** Choose a parameter type that cannot represent an invalid value
+   (e.g. a Rust enum instead of `i32`), so validity holds by construction with no runtime cost.
+   Beware enums that still include out-of-range discriminants for the specific C use (e.g. `MjtObj`
+   contains meta variants `>= mjNOBJECT`) -- typing alone does not make those safe.
+2. **O(1) check.** A single `assert!` (e.g. one range comparison, or a `fixedcamid < ncam` guard) is
+   fine and should stay safe. Inline it; do NOT extract a one-off validation helper function (a
+   shared helper is justified only when the same non-trivial logic recurs in three or more places).
+3. **`unsafe fn` + `# Safety`.** If the only guard would require iterating caller-supplied data, or
+   sits on a hot path (e.g. per-frame render/update), do NOT add the loop and do NOT leave the
+   method safe-but-unsound. Make the method `unsafe` and document the precondition in a `# Safety`
+   section. This is the honest contract: "there is a precondition I cannot cheaply check; the caller
+   must uphold it." It fits the crate's existing unsafe-API tier and costs nothing at runtime.
+
+Additional rules:
+
+- **Do not duplicate checks the C layer already performs.** If the C/C++ function validates or
+  clamps an argument itself, the wrapper must not re-check it (cross-reference the C source per
+  `important-context.md`). Only guard cases C reads/indexes *before* its own check.
+- **`unsafe` does not propagate soundly through a safe caller.** Marking a leaf method `unsafe` only
+  helps when the user calls it directly with their own data. If a *safe* high-level method calls it
+  internally on state the user can corrupt through another safe path (e.g. `MjViewer::render` ->
+  `MjvScene::render`, where the user can mutate geom fields via `user_scene_mut`), making the leaf
+  `unsafe` is insufficient -- the safe caller cannot uphold the precondition. Such cases need the
+  guard at the choke point (an O(1)/cheap check) or a redesign that makes the invalid state
+  unrepresentable; do not "fix" them by making the leaf `unsafe`.
+
 ## Code style
 - Read existing code in the file you're modifying to understand naming, safety, and documentation conventions.
 - Follow the existing error handling patterns used in the same file.

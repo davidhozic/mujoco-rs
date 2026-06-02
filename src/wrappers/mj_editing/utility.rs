@@ -612,6 +612,17 @@ macro_rules! vec_set_get {
 }
 
 /// Implements setters for non-string attributes.
+///
+/// Two forms are supported:
+/// - `name: Type; "comment"` -- the setter takes `&[Type]` and writes it unchanged.
+/// - `name: InputType => StoredType; "comment"; "safety"` -- generates an `unsafe` setter taking
+///   `&[InputType]` (typically a Rust enum) and storing each element as the raw C type `StoredType`
+///   via a zero-cost pointer reinterpretation (the same compile-time-checked cast the view layer
+///   uses, so no `bytemuck` trait is required on the enum). This form is for values the C side later
+///   uses without its own validation (e.g. as an unchecked array index), where the only guard would
+///   require iterating the slice; `"safety"` documents the caller's `# Safety` obligation. Typing
+///   the input as an enum keeps arbitrary integers out, but does not by itself rule out enum
+///   discriminants that are out of range for the C-side use.
 macro_rules! vec_set {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
@@ -619,6 +630,21 @@ macro_rules! vec_set {
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
                 // SAFETY: self.$name is a valid pointer for the lifetime of self.
                 unsafe { [<write_mjs_vec_ $type>](value, self.$name) };
+            }
+        )*
+    }};
+    ($($name:ident: $input_type:ty => $type:ty; $comment:expr; $safety:expr);* $(;)?) => {paste::paste!{
+        $(
+            #[doc = concat!("Set ", $comment, "\n\n# Safety\n", $safety)]
+            pub unsafe fn [<set_ $name>](&mut self, value: &[$input_type]) {
+                // Compile-time size/alignment check for the layout-compatible reinterpretation below.
+                $crate::util::assert_ptr_cast_valid::<$input_type, $type>(value.as_ptr());
+                // SAFETY: $input_type and $type are layout-compatible (asserted above) and every
+                // enum value is a valid bit pattern for its underlying integer, so reinterpreting the
+                // slice is sound and zero-cost. The caller upholds the documented value-range
+                // precondition. self.$name is a valid pointer for the lifetime of self.
+                let raw: &[$type] = unsafe { std::slice::from_raw_parts(value.as_ptr().cast(), value.len()) };
+                unsafe { [<write_mjs_vec_ $type>](raw, self.$name) };
             }
         )*
     }};

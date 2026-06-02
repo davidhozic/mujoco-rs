@@ -193,12 +193,25 @@ pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum], n: usize) {
 /// - Panics if `res` does not have `n * n` elements.
 /// - Panics if `mat` and `colind` have different lengths.
 /// - Panics if `rownnz` or `rowadr` does not have `n` elements.
-pub fn mju_sym2dense(
+///
+/// # Safety
+/// The C routine reads `mat[adr + j]` / `colind[adr + j]` for `adr = rowadr[i]`,
+/// `0 <= j < rownnz[i]`, and writes `res[i*n + col]` / `res[col*n + i]` for `col = colind[adr + j]`,
+/// all without bounds checks. The caller must guarantee a self-consistent sparse structure:
+/// - for every row `i`, `rowadr[i] >= 0`, `rownnz[i] >= 0`, and `rowadr[i] + rownnz[i] <= mat.len()`;
+/// - every column index in `colind[rowadr[i] .. rowadr[i] + rownnz[i]]` lies in `0..n`.
+///
+/// Violating either is an out-of-bounds read/write. (These checks require iterating the index
+/// arrays, so they are the caller's obligation rather than a runtime check.) A sparse matrix
+/// produced by MuJoCo itself always satisfies them.
+pub unsafe fn mju_sym2dense(
     res: &mut [MjtNum], mat: &[MjtNum], n: usize, rownnz: &[i32], rowadr: &[i32], colind: &[i32]
 ) {
     assert!(res.len() == n * n);
     assert!(rownnz.len() == n && rowadr.len() == n);
     assert!(mat.len() == colind.len());
+    // SAFETY: lengths checked above; the caller upholds the sparse-structure precondition that
+    // keeps every mat/colind read and res write performed by the C routine in bounds.
     unsafe {
         mujoco_c::mju_sym2dense(
             res.as_mut_ptr(), mat.as_ptr(), n as i32, rownnz.as_ptr(), rowadr.as_ptr(), colind.as_ptr(),
@@ -821,7 +834,8 @@ mod tests {
         let rownnz = [1, 2];
         let rowadr = [0, 1];
         let colind = [0, 0, 1];
-        mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind);
+        // SAFETY: self-consistent sparse structure (rowadr/rownnz in bounds, colind in 0..n).
+        unsafe { mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind) };
         assert_eq!(dense, [1.0, 2.0, 2.0, 3.0]);
     }
 
@@ -833,7 +847,8 @@ mod tests {
         let rownnz = [1, 2];
         let rowadr = [0, 1];
         let colind = [0, 0, 1];
-        mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind);
+        // SAFETY: structure is consistent; only the `res` length precondition (checked) is violated.
+        unsafe { mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind) };
     }
 
     #[test]
@@ -844,7 +859,8 @@ mod tests {
         let rownnz = [1, 2];
         let rowadr = [0, 1];
         let colind = [0, 0];
-        mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind);
+        // SAFETY: only the `mat.len() == colind.len()` precondition (checked) is violated.
+        unsafe { mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind) };
     }
 
     #[test]
