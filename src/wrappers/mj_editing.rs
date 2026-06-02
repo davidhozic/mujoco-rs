@@ -1060,10 +1060,12 @@ fn actuator_set_result(c_err_msg: *const c_char) -> Result<(), MjEditError> {
 }
 
 /* Actuator configuration structs.
-** Each `set_to_*` method takes its own config struct. Build with struct-update syntax so only the
-** relevant fields are specified, e.g. `PositionConfig { kp: 10.0, kv: Some(2.0), ..Default::default() }`.
-** Optional fields default to `None`, leaving the corresponding actuator parameter at its MuJoCo
-** default. */
+** Each `set_to_*` method taking optional (nullable in C) parameters has its own config struct.
+** Build either with struct-update syntax or with the chainable `with_*` builder methods, e.g.
+** `PositionConfig { kp: 10.0, kv: Some(2.0), ..Default::default() }` or
+** `PositionConfig::default().with_kp(10.0).with_kv(2.0)`. Optional fields default to `None`,
+** leaving the corresponding actuator parameter at its MuJoCo default; the `with_*` setters take
+** the inner value directly and wrap it in `Some`. */
 
 /// Configuration for [`MjsActuator::set_to_positon`].
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -1080,6 +1082,18 @@ pub struct PositionConfig {
     pub timeconst: Option<f64>,
 }
 
+impl PositionConfig {
+    getter_setter! {
+        with, [
+            kp: f64;            "the proportional (position) gain.";
+            inheritrange: f64;  "the automatic range-inheritance factor.";
+            kv: f64;            "the velocity feedback gain (mutually exclusive with dampratio).";
+            dampratio: f64;     "the damping ratio (mutually exclusive with kv).";
+            timeconst: f64;     "the first-order activation-filter time constant.";
+        ]
+    }
+}
+
 /// Configuration for [`MjsActuator::set_to_int_velocity`]. Same parameters as [`PositionConfig`].
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct IntVelocityConfig {
@@ -1093,6 +1107,18 @@ pub struct IntVelocityConfig {
     pub dampratio: Option<f64>,
     /// First-order activation-filter time constant.
     pub timeconst: Option<f64>,
+}
+
+impl IntVelocityConfig {
+    getter_setter! {
+        with, [
+            kp: f64;            "the proportional gain.";
+            inheritrange: f64;  "the automatic range-inheritance factor.";
+            kv: f64;            "the velocity feedback gain (mutually exclusive with dampratio).";
+            dampratio: f64;     "the damping ratio (mutually exclusive with kv).";
+            timeconst: f64;     "the first-order activation-filter time constant.";
+        ]
+    }
 }
 
 /// Configuration for [`MjsActuator::set_to_dc_motor`].
@@ -1120,6 +1146,23 @@ pub struct DcMotorConfig {
     pub thermal: Option<[f64; 6]>,
     /// LuGre friction `[stiffness, damping, coulomb, static, stribeck]`.
     pub lugre: Option<[f64; 5]>,
+}
+
+impl DcMotorConfig {
+    getter_setter! {
+        with, [
+            resistance: f64;       "the electrical resistance.";
+            input_mode: i32;       "the input mode selector.";
+            motorconst: [f64; 2];  "the torque and back-EMF constants [Kt, Ke].";
+            nominal: [f64; 3];     "the nominal ratings [voltage, stall_torque, no_load_speed].";
+            saturation: [f64; 3];  "the saturation [tau_max, i_max, di_dt_max].";
+            inductance: [f64; 2];  "the inductance [L, te].";
+            cogging: [f64; 3];     "the cogging [amplitude, periodicity, phase].";
+            controller: [f64; 6];  "the controller [kp, ki, kd, slewmax, Imax, v_max].";
+            thermal: [f64; 6];     "the thermal [R_th, C, tau_th, alpha, T0, T_ambient].";
+            lugre: [f64; 5];       "the LuGre friction [stiffness, damping, coulomb, static, stribeck].";
+        ]
+    }
 }
 
 impl MjsActuator {
@@ -2404,20 +2447,20 @@ mod tests {
         assert_eq!(actuator.biastype(), MjtBias::mjBIAS_MUSCLE);
         assert_eq!(actuator.dyntype(), MjtDyn::mjDYN_MUSCLE);
 
-        /* position: kv and dampratio are mutually exclusive */
+        /* position (builder API): kv and dampratio are mutually exclusive */
         assert!(actuator.set_to_positon(
-            PositionConfig { kp: 1.0, kv: Some(1.0), dampratio: Some(1.0), ..Default::default() }
+            PositionConfig::default().with_kp(1.0).with_kv(1.0).with_dampratio(1.0)
         ).is_err());
-        actuator.set_to_positon(PositionConfig { kp: 1.0, kv: Some(1.0), ..Default::default() }).unwrap();
+        actuator.set_to_positon(PositionConfig::default().with_kp(1.0).with_kv(1.0)).unwrap();
 
         /* integrated velocity: integrator dynamics */
-        actuator.set_to_int_velocity(IntVelocityConfig { kp: 1.0, ..Default::default() }).unwrap();
+        actuator.set_to_int_velocity(IntVelocityConfig::default().with_kp(1.0)).unwrap();
         assert_eq!(actuator.dyntype(), MjtDyn::mjDYN_INTEGRATOR);
 
-        /* dc motor: without a motor constant MuJoCo cannot derive K > 0, so it is rejected */
+        /* dc motor (builder API): without a motor constant MuJoCo cannot derive K > 0 */
         assert!(actuator.set_to_dc_motor(DcMotorConfig::default()).is_err());
         actuator.set_to_dc_motor(
-            DcMotorConfig { motorconst: Some([1.0, 1.0]), resistance: 1.0, ..Default::default() }
+            DcMotorConfig::default().with_motorconst([1.0, 1.0]).with_resistance(1.0)
         ).unwrap();
         assert_eq!(actuator.gaintype(), MjtGain::mjGAIN_DCMOTOR);
         assert_eq!(actuator.biastype(), MjtBias::mjBIAS_DCMOTOR);

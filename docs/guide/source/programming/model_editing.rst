@@ -8,6 +8,7 @@ Model editing
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
 .. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
 .. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`
+.. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator`
 
 The most general way to create an |mj_model| instance is by loading an XML file
 via :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml`.
@@ -34,6 +35,17 @@ After creation, we can use |mj_spec| to add items to the model, such as joints, 
 
 After procedurally creating a specification with |mj_spec|, the latter
 can either be compiled for direct use in the simulation or saved to an XML file.
+
+
+Examples
+================
+Complete, runnable examples on model editing are available in the repository's examples:
+
+- :gh-example:`Basic model editing <model_editing/model_editing.rs>`
+- :gh-example:`Terrain generation <model_editing/terrain_generation.rs>`
+- :gh-example:`Procedural tree <model_editing/procedural_tree.rs>`
+- :gh-example:`Multi-legged creatures <model_editing/multi_legged_creatures.rs>`
+
 
 Basic editing
 ======================
@@ -303,12 +315,47 @@ After compilation, an element's numeric id in the resulting |mj_model| can be re
 (``None`` when the element has no id yet).
 
 
-Examples
-================
-Additional examples on model editing are
-available in the repository's examples:
+.. _model_editing_actuators:
 
-- :gh-example:`Basic model editing <model_editing/model_editing.rs>`
-- :gh-example:`Terrain generation <model_editing/terrain_generation.rs>`
-- :gh-example:`Procedural tree <model_editing/procedural_tree.rs>`
-- :gh-example:`Multi-legged creatures <model_editing/multi_legged_creatures.rs>`
+Configuring actuators
+======================
+An actuator added with :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>add_actuator`
+can be configured into one of MuJoCo's predefined actuator types with the ``set_to_*`` family of
+methods on |mjs_actuator| (motor, position, integrated velocity, velocity, damper, cylinder,
+muscle, adhesion, and DC motor), mirroring MuJoCo's ``mjs_setToX`` C API.
+
+A method whose parameters are all mandatory takes them positionally (for example
+``set_to_velocity(kv)`` or ``set_to_cylinder(timeconst, bias, area, diameter)``). A method whose
+underlying C function accepts *nullable* parameters instead takes a dedicated ``Default``-able
+config struct --- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>PositionConfig`,
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>IntVelocityConfig`, and
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>DcMotorConfig` --- in which those nullable
+parameters are ``Option`` fields. A config is built either with struct-update syntax or with the
+chainable ``with_*`` builder methods (which take the inner value and wrap it in ``Some``), so only
+the relevant fields need to be set; everything else stays at its MuJoCo default:
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+    use mujoco_rs::wrappers::mj_editing::DcMotorConfig;
+
+    fn main() {
+        let mut spec = MjSpec::new();
+        let body = spec.world_body_mut().add_body();
+        body.add_geom().with_size([0.01, 0.0, 0.0]);
+        body.add_joint().with_name("hinge");
+
+        let actuator = spec.add_actuator().with_trntype(MjtTrn::mjTRN_JOINT);
+        actuator.set_target("hinge");
+
+        // Configure as a DC motor using the chainable builder. Struct-update syntax works too:
+        //   DcMotorConfig { motorconst: Some([1.0, 1.0]), resistance: 1.0, ..Default::default() }
+        actuator.set_to_dc_motor(
+            DcMotorConfig::default().with_motorconst([1.0, 1.0]).with_resistance(1.0)
+        ).expect("invalid DC motor parameters");
+    }
+
+Methods that MuJoCo can reject (for example a negative gain, or mutually exclusive parameters)
+return ``Result<(), MjEditError>``, and the only error variant they ever produce is
+:docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>InvalidParameter`; the parameterless or
+always-valid ones (``set_to_motor``, ``set_to_velocity``, ``set_to_cylinder``) return ``()``.
