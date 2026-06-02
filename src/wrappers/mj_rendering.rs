@@ -302,11 +302,11 @@ impl MjrContext {
 /// Array slices.
 impl MjrContext {
     array_slice_dyn! {
-        (unsafe) textureType: as_ptr as_mut_ptr &[MjtTexture [force]; "type of texture"; ffi().ntexture],
-        (unsafe) skinvertVBO: &[u32; "skin vertex position VBOs"; ffi().nskin],
-        (unsafe) skinnormalVBO: &[u32; "skin vertex normal VBOs"; ffi().nskin],
-        (unsafe) skintexcoordVBO: &[u32; "skin vertex texture coordinate VBOs"; ffi().nskin],
-        (unsafe) skinfaceVBO: &[u32; "skin face index VBOs"; ffi().nskin]
+        (mut = unsafe) textureType: as_ptr as_mut_ptr &[MjtTexture [force]; "type of texture"; ffi().ntexture],
+        (mut = unsafe) skinvertVBO: &[u32; "skin vertex position VBOs"; ffi().nskin],
+        (mut = unsafe) skinnormalVBO: &[u32; "skin vertex normal VBOs"; ffi().nskin],
+        (mut = unsafe) skintexcoordVBO: &[u32; "skin vertex texture coordinate VBOs"; ffi().nskin],
+        (mut = unsafe) skinfaceVBO: &[u32; "skin face index VBOs"; ffi().nskin]
     }
 }
 

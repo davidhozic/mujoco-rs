@@ -807,7 +807,7 @@ macro_rules! array_mut_doc {
 #[macro_export]
 macro_rules! array_slice_dyn {
     // Arrays that are of scalar variable size
-    ($($(($unsafe_mut:ident))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
+    ($($((mut = $unsafe_mut:ident))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
         paste::paste! {
             $(
                 #[doc = concat!("Immutable slice of the ", $doc," array.")]
