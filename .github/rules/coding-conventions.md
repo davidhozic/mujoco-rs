@@ -7,8 +7,13 @@
 - **Cross-reference with MuJoCo C docs** when adding or modifying wrapper fields (see `important-context.md`).
 - **Prefer existing macros** in `src/util.rs` over writing manual accessor methods. Read `macro-system.md` for details.
 - **Verify stride against C headers**: see the verification checklist in `macro-system.md`.
-- **Update `Cargo.toml` excludes**: when adding non-crate files (CI configs, dev scripts, docs),
-  add them to the `exclude` list in `Cargo.toml` to prevent crates.io publishes.
+- **Update `Cargo.toml` excludes**: when adding *permanent* non-crate files (CI configs, dev
+  scripts, docs), add them to the `exclude` list in `Cargo.toml` to prevent crates.io publishes.
+- **Never add temporary or generated files to `Cargo.toml` `exclude`** - one-off artifacts such as
+  the `/safety` audit report (`mujoco-rs-memory-safety-audit.html` / `.md`), `expanded.rs`, or other
+  generated reports must NOT be listed in `exclude`. Keep them out of the published crate by
+  `.gitignore`ing them instead (Cargo respects `.gitignore` when packaging); the `exclude` list is
+  only for files that are committed to the repository long-term.
 - **Do not fix pre-existing style issues in committed code.** Only flag and fix style problems
   (e.g. RST-style double backticks in Rust doc comments) in **new, uncommitted changes**. Existing
   committed code on `develop` or `main` should be left as-is unless it contains actually invalid
