@@ -120,6 +120,14 @@ update of MuJoCo alone can increase the major version.
   so a malformed contact can cause undefined behavior (see Bug fixes). The signature is otherwise
   unchanged; existing calls only need an ``unsafe`` block.
 
+*MjData::reset_debug is now an ``unsafe fn``*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>reset_debug` is now ``unsafe``.
+  The debug fill writes raw bytes into arrays whose accessors expose types with validity
+  invariants (``bool``, fieldless enums), so reading them afterwards can be undefined behavior
+  (see Bug fixes). The signature is otherwise unchanged; existing calls only need an ``unsafe``
+  block.
+
 .. rubric:: Deprecations
 
 - Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
@@ -283,6 +291,14 @@ runtime.
   so a malformed contact could cause out-of-bounds access from safe code. ``add_contact`` is now an
   ``unsafe fn``: the caller guarantees the contact is valid for the model. See the Breaking changes
   section and the migration guide.
+- Closed an unsoundness in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>reset_debug`, which was safe but
+  filled every buffer-resident array of the ``mjData`` with raw ``debug_value`` bytes. Arrays that
+  MuJoCo does not re-initialize after the fill kept those bytes, so safe accessors exposing types
+  with validity invariants (``bvh_active`` as ``&[bool]``, ``body_awake`` as a fieldless enum
+  slice) could materialize invalid values --- undefined behavior for any ``debug_value`` other
+  than 0 or 1. ``reset_debug`` is now an ``unsafe fn``: the caller guarantees such accessors are
+  not read before the next reset. See the Breaking changes section and the migration guide.
 - Fixed a thread-safety hole reachable from safe code in the model-editing handles. Every
   ``Mjs*`` element handle and ``MjsDefault`` carried a blanket ``unsafe impl Send``/``Sync``,
   although each is only a raw pointer into one shared ``mjSpec``/``mjCModel`` arena. Together

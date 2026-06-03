@@ -260,6 +260,32 @@ need an ``unsafe`` block.
     unsafe { data.add_contact(&contact)? };
 
 
+``MjData::reset_debug`` is now an ``unsafe fn``
+-----------------------------------------------
+
+``reset_debug`` wraps ``mj_resetDataDebug``, which fills every buffer-resident array with raw
+``debug_value`` bytes. Arrays that MuJoCo does not re-initialize afterwards keep those bytes, and
+some safe accessors expose them as types with validity invariants (``bvh_active`` as ``&[bool]``,
+``body_awake`` as a fieldless enum slice), so reading them can be undefined behavior. The method
+is now ``unsafe``; the caller must not read such accessors before the next reset unless
+``debug_value`` produces valid bit patterns for them. The signature is otherwise unchanged, so
+existing call sites only need an ``unsafe`` block.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    data.reset_debug(7);
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: no invariant-carrying accessor (bvh_active, body_awake) is read
+    // before the next reset().
+    unsafe { data.reset_debug(7) };
+
+
 .. _migrate_4_0_0:
 
 Migrating to 4.0.0

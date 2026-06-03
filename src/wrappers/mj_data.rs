@@ -307,7 +307,15 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Reset data to defaults, fill everything else with debug_value.
-    pub fn reset_debug(&mut self, debug_value: u8) {
+    ///
+    /// # Safety
+    /// `debug_value` is written as raw bytes into every buffer-resident array,
+    /// including ones whose element types have validity invariants (e.g.
+    /// [`bvh_active`](Self::bvh_active) -> `&[bool]`,
+    /// [`body_awake`](Self::body_awake) -> `&[MjtSleepState]`). The caller must
+    /// not call such accessors before a subsequent [`reset`](Self::reset) unless
+    /// `debug_value` produces valid bit patterns for them.
+    pub unsafe fn reset_debug(&mut self, debug_value: u8) {
         unsafe { mj_resetDataDebug(self.model.ffi(), self.ffi_mut(), debug_value) }
     }
 
@@ -2150,7 +2158,9 @@ mod test {
 
         // Test reset variants
         data.reset();
-        data.reset_debug(7);
+        // SAFETY: no accessor with a validity invariant (bvh_active, body_awake)
+        // is called before the data is dropped.
+        unsafe { data.reset_debug(7) };
         // MODEL has no keyframes so use reset_keyframe and check OOB behaviour.
         assert!(data.reset_keyframe(0).is_err());
     }
