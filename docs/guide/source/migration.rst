@@ -237,6 +237,29 @@ C ``int`` is then a zero-cost reinterpretation.
     unsafe { tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM]) };
 
 
+``MjData::add_contact`` is now an ``unsafe fn``
+-----------------------------------------------
+
+``add_contact`` wraps ``mj_addContact``, an advanced entry point that stores the caller-supplied
+``MjContact`` verbatim. MuJoCo later uses the stored contact without validation, so a malformed
+contact can cause undefined behavior. The method is now ``unsafe``; the caller must ensure the
+contact is valid for the model. The signature is otherwise unchanged, so existing call sites only
+need an ``unsafe`` block.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    data.add_contact(&contact)?;
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: `contact` is a valid contact for this model.
+    unsafe { data.add_contact(&contact)? };
+
+
 .. _migrate_4_0_0:
 
 Migrating to 4.0.0

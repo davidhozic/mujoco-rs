@@ -113,6 +113,13 @@ update of MuJoCo alone can increase the major version.
   sharing one across threads was unsound (see Bug fixes). Code that did so will no longer
   compile --- move or read-share the owning |mj_spec| instead, which remains ``Send + Sync``.
 
+*MjData::add_contact is now an ``unsafe fn``*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>add_contact` is now ``unsafe``.
+  It stores the caller-supplied ``MjContact`` verbatim, and MuJoCo later uses it without validation,
+  so a malformed contact can cause undefined behavior (see Bug fixes). The signature is otherwise
+  unchanged; existing calls only need an ``unsafe`` block.
+
 .. rubric:: Deprecations
 
 - Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
@@ -262,6 +269,20 @@ runtime.
   id. MuJoCo's ``mjv_updateScene`` only guards ``select <= 0`` (it has no upper-bound check) before
   indexing ``xpos`` / ``xmat`` / ``body_bvhnum`` by ``select``, so a too-large id read out of bounds.
   ``update`` now validates ``select`` against the model's ``nbody`` and panics on an out-of-range id.
+- Fixed an out-of-bounds read reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>move_` when the
+  public ``select`` field held an out-of-range body id. ``mjv_movePerturb`` dereferences
+  ``xmat`` / ``xquat`` / ``body_iquat`` indexed by ``select`` *before* its own range check (and,
+  unlike ``mjv_updateScene``, has no ``select <= 0`` early-out), so a negative or too-large id read
+  out of bounds. ``move_`` now validates ``select`` against the model's ``nbody`` and panics on an
+  out-of-range id.
+- Closed an unsoundness in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>add_contact`, which was safe but
+  copied a caller-built ``MjContact`` into the data arena without validation. MuJoCo later uses the
+  stored contact's fields without bound checks (when building constraints and when reading forces),
+  so a malformed contact could cause out-of-bounds access from safe code. ``add_contact`` is now an
+  ``unsafe fn``: the caller guarantees the contact is valid for the model. See the Breaking changes
+  section and the migration guide.
 - Fixed a thread-safety hole reachable from safe code in the model-editing handles. Every
   ``Mjs*`` element handle and ``MjsDefault`` carried a blanket ``unsafe impl Send``/``Sync``,
   although each is only a raw pointer into one shared ``mjSpec``/``mjCModel`` arena. Together

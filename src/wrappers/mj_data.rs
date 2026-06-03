@@ -770,11 +770,22 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Adds a contact to the contact list.
+    ///
+    /// This wraps `mj_addContact`, an advanced entry point intended for custom collision routines:
+    /// it copies `con` into the data arena verbatim, without validating it.
+    ///
     /// # Returns
     /// `Ok(())` on success.
+    ///
     /// # Errors
     /// Returns [`MjDataError::ContactBufferFull`] if the contact buffer is full.
-    pub fn add_contact(&mut self, con: &MjContact) -> Result<(), MjDataError> {
+    ///
+    /// # Safety
+    /// The caller must ensure `con` is a valid contact for the model in this data. MuJoCo later
+    /// indexes several of the stored contact's fields without any bounds check (when building
+    /// constraints and when reading contact forces), so a malformed contact can cause out-of-bounds
+    /// access.
+    pub unsafe fn add_contact(&mut self, con: &MjContact) -> Result<(), MjDataError> {
         match unsafe { mj_addContact(self.model.ffi(), self.ffi_mut(), con) } {
             0 => Ok(()),
             _ => Err(MjDataError::ContactBufferFull),
@@ -2225,9 +2236,11 @@ mod test {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let mut data = model.make_data();
 
-        // Add a dummy contact
-        let dummy_contact = bytemuck::Zeroable::zeroed();
-        data.add_contact(&dummy_contact).unwrap();
+        // Add a dummy contact. `add_contact` is `unsafe`: the caller guarantees the contact is
+        // valid for the model (a fully-zeroed contact is in range here).
+        let dummy_contact: MjContact = bytemuck::Zeroable::zeroed();
+        unsafe { data.add_contact(&dummy_contact).unwrap(); }
+        assert_eq!(data.ncon(), 1, "contact count should reflect the added contact");
     }
 
     #[test]

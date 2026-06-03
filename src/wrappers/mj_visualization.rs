@@ -122,7 +122,22 @@ impl MjvPerturb {
     }
 
     /// Move an object with mouse. This is a wrapper around `mjv_movePerturb`.
+    ///
+    /// # Panics
+    /// Panics if `self.select` is out of range for the model in `data` (i.e. negative or
+    /// `>= nbody`).
     pub fn move_<M: Deref<Target = MjModel>>(&mut self, data: &MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
+        // mjv_movePerturb dereferences d->xmat + 9*select (move-relative actions) and
+        // d->xquat + 4*select / m->body_iquat + 4*select (rotate actions) *before* its own
+        // sel range check, so an out-of-range id is an out-of-bounds read. Unlike the
+        // mjv_updateScene path, the C function has no `select <= 0` early-out either, so the
+        // negative case must be rejected here too.
+        let nbody = data.model().nbody();
+        assert!(
+            self.select >= 0 && (self.select as MjtSize) < nbody,
+            "selected perturbation body id {} is out of range for a model with {} bodies",
+            self.select, nbody
+        );
         unsafe { mjv_movePerturb(data.model().ffi(), data.ffi(), action as i32, dx, dy, scene.ffi(), self); }
     }
 
@@ -1046,6 +1061,21 @@ mod tests {
         let (opt, pert) = (MjvOption::default(), MjvPerturb::default());
         let mut camera = MjvCamera::new_fixed(9999);
         scene.update(&mut data, &opt, &pert, &mut camera);
+    }
+
+    /// A perturbation whose `select` is out of range for the model must panic in `move_` instead of
+    /// triggering an out-of-bounds read in MuJoCo's `mjv_movePerturb`, which dereferences
+    /// `d->xmat + 9*select` (move-relative) before any range check and has no `select <= 0`
+    /// early-out (unlike the `mjv_updateScene` path).
+    #[test]
+    #[should_panic(expected = "out of range")]
+    fn test_perturb_move_select_out_of_range_panics() {
+        let model = load_model();          // nbody == 2 (world + "ball")
+        let data = model.make_data();
+        let scene = MjvScene::new(&model, 100);
+        let mut pert = MjvPerturb::default();
+        pert.select = 1_000_000;           // far beyond nbody
+        pert.move_(&data, MjtMouse::mjMOUSE_MOVE_H_REL, 0.1, 0.1, &scene);
     }
 
     #[test]
