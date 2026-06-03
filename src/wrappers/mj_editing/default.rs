@@ -95,9 +95,8 @@ impl SpecItem for MjsDefault {
     }
 }
 
-// SAFETY: MjsDefault is a raw pointer wrapper. All shared-reference access goes
-// through &self methods that do not mutate state. All mutation requires &mut self,
-// which guarantees no concurrent aliasing. The pointer is valid for the lifetime
-// of the owning MjSpec, which must outlive any MjsDefault reference.
-unsafe impl Sync for MjsDefault {}
-unsafe impl Send for MjsDefault {}
+// MjsDefault is intentionally NEITHER Send NOR Sync, for the same reason as the Mjs*
+// element handles: it is a raw pointer into the shared mjSpec arena and its `&mut self`
+// mutators reach into model-global state. The raw-pointer field already makes it
+// auto-`!Send + !Sync`; do NOT add `unsafe impl Send`/`Sync` here. The owning `MjSpec`
+// remains `Send + Sync`, so the spec itself can still cross threads.

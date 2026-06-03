@@ -105,6 +105,14 @@ update of MuJoCo alone can increase the major version.
   a ``# Safety`` precondition. The conversion to the underlying C ``int`` is a zero-cost
   reinterpretation. See the migration guide.
 
+*(Potentially breaking) Model-editing handles are no longer ``Send`` or ``Sync``*
+
+- The ``Mjs*`` element handles (|mjs_body|, ``MjsGeom``, ...) and ``MjsDefault`` are now
+  ``!Send + !Sync``; they previously carried a blanket ``unsafe impl Send``/``Sync``. Each
+  handle is only a raw pointer into one shared ``mjSpec``/``mjCModel`` arena, so moving or
+  sharing one across threads was unsound (see Bug fixes). Code that did so will no longer
+  compile --- move or read-share the owning |mj_spec| instead, which remains ``Send + Sync``.
+
 .. rubric:: Deprecations
 
 - Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
@@ -254,6 +262,16 @@ runtime.
   id. MuJoCo's ``mjv_updateScene`` only guards ``select <= 0`` (it has no upper-bound check) before
   indexing ``xpos`` / ``xmat`` / ``body_bvhnum`` by ``select``, so a too-large id read out of bounds.
   ``update`` now validates ``select`` against the model's ``nbody`` and panics on an out-of-range id.
+- Fixed a thread-safety hole reachable from safe code in the model-editing handles. Every
+  ``Mjs*`` element handle and ``MjsDefault`` carried a blanket ``unsafe impl Send``/``Sync``,
+  although each is only a raw pointer into one shared ``mjSpec``/``mjCModel`` arena. Together
+  with the lending mutable iterators (which hand out several simultaneously-live ``&mut``
+  handles), safe code could move handles to different threads and call mutators such as
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>set_name`
+  concurrently; ``mjs_setName`` reaches model-global state (``mjCModel::CheckRepeat`` and the
+  shared error buffer), so the calls raced on the one arena -- undefined behavior. The handles
+  (and ``MjsDefault``) are now ``!Send + !Sync``, so such a mutation can no longer cross a
+  thread boundary; the owning |mj_spec| stays ``Send + Sync``.
 
 
 .. rubric:: Other changes

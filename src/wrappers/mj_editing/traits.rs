@@ -15,6 +15,20 @@ pub(crate) mod sealed {
 /// Represents all the types that [`MjSpec`](super::MjSpec) supports.
 /// This is pre-implemented for all the specification types and is not
 /// meant to be implemented by the user.
+///
+/// # Thread safety
+/// Every `Mjs*` handle borrows into a single shared `mjSpec`/`mjCModel` arena, and the
+/// mutators below reach through that arena to read siblings and write model-global state
+/// (for example [`set_name`](SpecItem::set_name) -> `mjs_setName` runs `mjCModel::CheckRepeat`).
+/// The handles are therefore deliberately `!Send + !Sync`, so a mutation cannot be moved
+/// to another thread to race on the shared model:
+/// ```compile_fail
+/// fn is_send<T: Send>() {}
+/// // Fails to compile on purpose: every `Mjs*` handle is intentionally `!Send`.
+/// is_send::<mujoco_rs::wrappers::mj_editing::MjsGeom>();
+/// ```
+/// The owning [`MjSpec`](super::MjSpec) is itself `Send + Sync`, so a whole spec can still
+/// move between threads, and a shared `&MjSpec` can be read concurrently.
 pub trait SpecItem: Sized + sealed::Sealed {
     /// Returns the internal element struct.
     /// The element struct is the C++ implementation of the

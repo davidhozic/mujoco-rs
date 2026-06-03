@@ -401,12 +401,17 @@ macro_rules! mjs_struct {
             }
         )?
 
-        // SAFETY: Mjs* types are raw pointer wrappers. All shared-reference access goes
-        // through &self methods that do not mutate state. All mutation requires &mut self,
-        // which guarantees no concurrent aliasing. The pointer is valid for the lifetime
-        // of the owning MjSpec, which must outlive any Mjs* reference.
-        unsafe impl Sync for [<Mjs $ffi_name>] {}
-        unsafe impl Send for [<Mjs $ffi_name>] {}
+        // Mjs* handles are intentionally NEITHER Send NOR Sync. Each is a thin alias over
+        // a raw pointer into a single shared mjSpec/mjCModel arena, and its `&mut self`
+        // mutators (e.g. `SpecItem::set_name` -> `mjs_setName`) reach through that pointer
+        // to read every sibling and write model-global state (`mjCModel::CheckRepeat` and
+        // the shared `errInfo`). Letting a handle --- or a reference to one --- cross a
+        // thread boundary would let two such accesses race on the one arena from safe code.
+        // The raw-pointer field already makes the type auto-`!Send + !Sync`, so we simply
+        // do not add the impls. Do NOT add `unsafe impl Send`/`Sync` here: the owning
+        // `MjSpec` is itself `Send + Sync`, so a whole spec can still move between threads
+        // and a shared `&MjSpec` can be read concurrently --- handles derived from it just
+        // stay on the thread that created them.
     }};
 }
 
