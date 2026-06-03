@@ -248,6 +248,12 @@ runtime.
   out-of-range ``fixedcamid`` no longer reaches ``mjv_cameraFrame`` (whose ``mjCAMERA_FIXED`` branch
   reads ``cam_xpos`` / ``cam_xmat`` *before* MuJoCo's own range check). This also closes the same
   out-of-bounds read on the offscreen renderer and the viewer, which both update through this method.
+- Fixed an out-of-bounds read reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update`
+  (and ``update_with_catmask``) when an active perturbation carried an out-of-range ``select`` body
+  id. MuJoCo's ``mjv_updateScene`` only guards ``select <= 0`` (it has no upper-bound check) before
+  indexing ``xpos`` / ``xmat`` / ``body_bvhnum`` by ``select``, so a too-large id read out of bounds.
+  ``update`` now validates ``select`` against the model's ``nbody`` and panics on an out-of-range id.
 
 
 .. rubric:: Other changes

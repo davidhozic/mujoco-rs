@@ -45,6 +45,12 @@
   invalid UTF-8 paths, since that is a realistic runtime condition (not a programmer error).
 - **`src/wrappers/fun/` functions stay panicking**: functions in this module should panic on failure,
   not return `Result`.
+- **`# Panics` docs state the trigger, not the reason**: a `# Panics` section must say **that** the
+  function panics and **what** triggers it (the failing precondition, e.g. "Panics if `perturb.select`
+  is out of range for the model in `data`"). Do NOT explain **why** the guard exists or what would
+  otherwise go wrong (e.g. "because MuJoCo would read `xpos`/`body_bvhnum` out of bounds") -- that
+  rationale belongs in a code comment at the guard site, not in the public panic docs. The same
+  applies to `# Errors` sections: name the condition, not the underlying mechanism.
 
 ## Code minimality (DRY, YAGNI, KISS)
 

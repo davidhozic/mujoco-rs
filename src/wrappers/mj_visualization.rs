@@ -743,6 +743,8 @@ impl MjvScene {
     /// - Panics if `data` was created from a different model than this scene.
     /// - Panics if `cam` is a fixed camera ([`MjtCamera::mjCAMERA_FIXED`]) whose `fixedcamid` is
     ///   out of range for the model in `data`.
+    /// - Panics if `perturb.select` is out of range (greater than or equal to the number of
+    ///   bodies) for the model in `data`.
     pub fn update_with_catmask<M: Deref<Target = MjModel>>(
         &mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb,
         cam: &mut MjvCamera, catmask: i32,
@@ -779,7 +781,9 @@ impl MjvScene {
     /// [`MjtCatBit::mjCAT_ALL`].
     ///
     /// # Panics
-    /// Panics if `data` was created from a different model than this scene.
+    /// Panics under the same conditions as [`update_with_catmask`](Self::update_with_catmask):
+    /// a model-signature mismatch, an out-of-range fixed-camera id, or an out-of-range
+    /// `perturb.select`.
     pub fn update<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb, cam: &mut MjvCamera) {
         self.update_with_catmask(data, opt, perturb, cam, MjtCatBit::mjCAT_ALL as i32);
     }
