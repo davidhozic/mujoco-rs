@@ -761,6 +761,10 @@ impl MjvScene {
                 cam.fixedcamid, ncam
             );
         }
+
+        // MuJoCo does no bound checking for pert->select, thus invalid IDs leads to out-of-bound reads.
+        assert!((perturb.select as MjtSize) < data.model().nbody(), "selected perturbated body ID is outside the valid range");
+
         unsafe {
             mjv_updateScene(
                 data.model().ffi(), data.ffi_mut(), opt, perturb,
