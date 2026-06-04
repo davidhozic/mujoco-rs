@@ -2118,7 +2118,7 @@ pub struct MjsBodyItemIterMut<'a, T> {
     last: *mut mjsElement,
     recurse: bool,
     /// Used for generic implementation of iterator's methods.
-    item_type: PhantomData<&'a T>
+    item_type: PhantomData<&'a mut T>
 }
 
 impl<'a, T: SpecObject> MjsBodyItemIterMut<'a, T> {
