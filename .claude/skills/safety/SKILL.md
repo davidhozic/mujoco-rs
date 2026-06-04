@@ -114,8 +114,18 @@ export LD_LIBRARY_PATH="$MUJOCO_DYNAMIC_LINK_DIR"
 
 ## Deliverable -- a single self-contained HTML report
 
-Write/refresh `mujoco-rs-memory-safety-audit.html` at the repo root (consolidate -- never scatter
-into multiple files). It must be self-contained (inline `<style>`), ASCII-only, and contain:
+Write/overwrite `mujoco-rs-memory-safety-audit.html` at the repo root. The report scope is the
+**current chat conversation**: it must include findings from ALL `/safety` runs within this chat,
+but MUST NOT carry over findings from previous chats.
+
+Concretely:
+- Do **not** read the on-disk HTML file to repopulate findings -- that file may be from a prior
+  chat and its findings must be discarded.
+- If `/safety` was already run earlier in this chat, the main loop (Claude) must pass those
+  prior findings as `args` to the Workflow so they are merged with the new run's findings.
+- If this is the first `/safety` run in this chat, start with an empty finding list.
+
+The file must be self-contained (inline `<style>`), ASCII-only, and contain:
 
 - A header and a short **method note** describing the passes and the four dimensions.
 - An **overview table**: `ID | Severity (pill) | Dimension (badge) | One-line description |
@@ -142,7 +152,7 @@ status badges (`st-open/fixed/deferred/accepted/latent`), and dimension badges.
    changes` if the public API/traits change); add a regression guard where feasible (e.g. a
    `compile_fail` doctest locking in a `!Send` guarantee); and update the known-findings memory
    so it is not re-flagged.
-3. Reflect every disposition's status in the HTML report.
+3. Reflect every disposition's status in the HTML report (current-session findings only).
 
 ## Current known findings (do NOT re-flag; reconcile with `project_known_memory_safety.md` + changelog)
 
