@@ -62,12 +62,17 @@ commands, etc.). Re-read them after any context compaction.
 4. Record the MuJoCo build env for later compile checks (see "Build env" below).
 
 ### Phase 1 -- FINDERS (parallel `agent()` calls, structured output)
-One finder per (dimension x subsystem) cell, reading only `src/` (+ relevant `mujoco/include`
-headers and `mujoco/src` C++ to understand mechanisms). Always include three specialists:
-a **thread-safety** finder that walks *every* `Send`/`Sync` site, a **mutability** finder hunting
-`&self` methods that drive C-side mutation, and a **lifetime/variance** finder. Each returns
-structured candidates: `{ dimension, location (file:line), mechanism, safe_code_trigger,
-severity, reachable_from_safe }`.
+One finder per (dimension x subsystem) cell, reading `src/` **and** the relevant
+`mujoco/include/` headers and `mujoco/src/` C++ source to confirm any claimed C/C++ behavior.
+Always include three specialists: a **thread-safety** finder that walks *every* `Send`/`Sync`
+site, a **mutability** finder hunting `&self` methods that drive C-side mutation, and a
+**lifetime/variance** finder. Each returns structured candidates: `{ dimension, location
+(file:line), mechanism, safe_code_trigger, severity, reachable_from_safe }`.
+
+**Every finder must read the actual C/C++ source** before claiming that a C function mutates
+state, performs an unchecked access, or does anything else relevant to the finding. Citing a
+function name without reading its implementation is not sufficient. If the C/C++ source was
+not read, the candidate must be dropped.
 
 ### Phase 2 -- TRIAGE / DEDUP (barrier)
 Collect all candidates; dedupe by location+mechanism; drop out-of-scope (unsafe-only-reachable;
@@ -82,6 +87,12 @@ For each candidate spawn, independently:
 Keep a finding only if it survives both (genuinely reachable + independently reproduced).
 **Confirm every mechanism against the actual C/C++ source in `mujoco/src/`** (e.g. trace
 `mjs_setName` -> `mjCModel::CheckRepeat` / `SetError`) -- do not trust summaries.
+
+**Hard rule: every claim about C/C++ behavior must cite a specific file and line number in
+`mujoco/src/` or `mujoco/include/` that was actually read.** If the agent has not read the
+relevant C/C++ source, it must either read it or drop the claim entirely. A claim like "if
+`mjv_select` were to const-cast and mutate..." that was not verified against the real
+implementation is forbidden -- that is speculation, not an audit finding.
 
 For thread-safety and other type-level claims, settle disputes with **compile-level evidence**:
 - a minimal **standalone repro** that mirrors the pattern (compile + run), and
@@ -135,9 +146,12 @@ The file must be self-contained (inline `<style>`), ASCII-only, and contain:
   suggestion. If a fix has been applied, set status `fixed` and state what was done and how it was
   verified.
 - An **"Observations & hardening recommendations"** section: faith-based invariants and latent
-  items (e.g. "`const mjModel*` => no mutation" assumption behind `MjModel: Sync`; iterator
-  traversal-injectivity assumption; native-viewer GL-thread affinity relying on `winit`
-  auto-`!Send`).
+  items that were **actually verified against `mujoco/src/` or `mujoco/include/`** (e.g.
+  "`const mjModel*` => no mutation confirmed by reading the relevant C functions"; iterator
+  traversal-injectivity; native-viewer GL-thread affinity relying on `winit` auto-`!Send`).
+  **Do NOT include any observation that was not verified against the actual C/C++ source.**
+  Unverified hypotheticals ("if X were to do Y...") are forbidden -- if the C code was not
+  read, either read it or omit the recommendation.
 - An **"Areas reviewed and found sound"** section: negative results (what was checked and is OK).
 
 Styling conventions used previously: severity pills (`sev-critical/high/medium/low/uncertain`),
