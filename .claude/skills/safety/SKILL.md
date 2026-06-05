@@ -5,16 +5,7 @@ description: Adversarial multi-agent soundness audit of the mujoco-rs SAFE API s
 
 # Safety & Soundness Audit (Claude Code only)
 
-This is a **Claude-Code-only** skill: it drives an adversarial, multi-agent audit using the
-`Workflow` tool (fan-out finders -> triage/dedup -> adversarial verification -> completeness
-critic), the `Agent` tool, and `AskUserQuestion`. It has no `.github/skills` counterpart, so the
-full instructions live here. It is **not** the `/verify` skill: `/verify` checks
-stride/length-field/type-mismatch correctness; this skill checks *soundness* (memory/thread/
-mutability/lifetime UB) reachable from safe code. Do not run `/verify` as part of this audit.
-
-Obey **all** files in `.github/rules/` at all times (ASCII-only output, never edit
-`src/mujoco_c.rs`, no `cargo expand` unless asked, import ordering, disallowed git/network
-commands, etc.). Re-read them after any context compaction.
+Obey **all** files in `.github/rules/` at all times. Re-read them after any context compaction.
 
 ## Ground rules (non-negotiable scope)
 
@@ -22,7 +13,8 @@ commands, etc.). Re-read them after any context compaction.
   a mechanism, never reported as a finding.
 - **Reachable from 100% SAFE code only.** The safe API must never cause UB for any safe input.
   Anything only reachable through an `unsafe fn` or an `unsafe` block the *caller* must write is
-  out of scope. The safe/unsafe tier is the dividing line.
+  out of scope, unless it is always a bug/UB -- regardless of how the user uses it.
+  The safe/unsafe tier is the dividing line.
 - **Stride/length/type correctness is OUT of scope** -- that is `/verify`'s job. Do not duplicate
   it.
 - **The audit is read-only.** No source files, tests, or docs are modified as part of the audit.
