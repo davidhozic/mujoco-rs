@@ -90,14 +90,7 @@ For each candidate spawn, independently:
 - an independent **re-deriver** that reconstructs the mechanism from scratch without seeing the
   finder's notes.
 Keep a finding only if it survives both (genuinely reachable + independently reproduced).
-**Confirm every mechanism against the actual C/C++ source in `mujoco/src/`** (e.g. trace
-`mjs_setName` -> `mjCModel::CheckRepeat` / `SetError`) -- do not trust summaries.
-
-**Hard rule: every claim about C/C++ behavior must cite a specific file and line number in
-`mujoco/src/` or `mujoco/include/` that was actually read.** If the agent has not read the
-relevant C/C++ source, it must either read it or drop the claim entirely. A claim like "if
-`mjv_select` were to const-cast and mutate..." that was not verified against the real
-implementation is forbidden -- that is speculation, not an audit finding.
+Apply the same C/C++ citation rule from Phase 1: read the source, cite file:line, or drop the claim.
 
 For thread-safety and other type-level claims, settle disputes with **compile-level evidence**:
 - a minimal **standalone repro** that mirrors the pattern (compile + run), and
@@ -109,19 +102,17 @@ Delete all throwaway probes afterward.
 
 ### Phase 4 -- COMPLETENESS CRITIC
 A final agent asks: "which dimension / module / `Send`-`Sync` site / claim was not covered or not
-verified?" Each gap becomes another finder round. Loop until a round is dry.
+verified?" Each gap becomes another finder round. Loop until a round produces no new candidates.
 
 Severities: Critical / High / Medium / Low / Uncertain.
-Statuses (exactly four -- do not invent others):
-- **Open** -- confirmed finding, not yet fixed.
-- **Defer (MuJoCo)** -- root cause is in MuJoCo upstream; cannot be fixed in the Rust wrapper alone.
-- **Open (latent)** -- plausible but requires conditions that are not practically triggerable today
-  (e.g. astronomically large allocations); still a real bug, just not urgently exploitable.
-- **Fixed** -- fix has been applied and verified.
+Statuses (exactly four -- do not invent others; there is NO "Accepted"):
 
-There is NO "Accepted" status. Do not silently bury findings as "accepted" -- if a finding is real
-and open, it is `Open`. If it needs an upstream fix, it is `Defer (MuJoCo)`. If it is
-theoretically possible but practically out of reach today, it is `Open (latent)`.
+| Status | When to use | Assignment rule |
+|---|---|---|
+| **Open** | Confirmed, not yet fixed | everything else |
+| **Defer (MuJoCo)** | Root cause is upstream; unfixable in the Rust wrapper alone | root cause is in MuJoCo C/C++ |
+| **Open (latent)** | Real bug, not practically triggerable today | requires e.g. >2^31 elements or similar |
+| **Fixed** | Fix applied and verified this session | changelog entry added, regression guard added where feasible |
 
 ## Build env for compile-level verification
 
@@ -176,9 +167,8 @@ Styling conventions: severity pills (`sev-critical/high/medium/low/uncertain`), 
 
 ## After the audit
 
-The workflow assigns statuses autonomously based on evidence -- do NOT pause to ask the user.
-Use these rules to assign a status to each new confirmed finding:
-- Root cause lies in MuJoCo upstream and cannot be fixed in the Rust wrapper alone → `Defer (MuJoCo)`
-- Fix was applied and verified during this run → `Fixed`; add a `docs/guide/source/changelog.rst`
-  entry under `.. rubric:: Bug fixes` (and `.. rubric:: Breaking changes` if the public API
-  changes); add a regression guard where feasible; update the known-findings memory.
+Assign statuses using the table in Phase 4 -- do NOT pause to ask the user. For `Fixed`
+findings, add a `docs/guide/source/changelog.rst` entry under `.. rubric:: Bug fixes` (and
+`.. rubric:: Breaking changes` if the public API changes), add a regression guard where
+feasible, and update the known-findings memory. Then present the overview table to the user as
+a plain-text summary. No interactive questions.
