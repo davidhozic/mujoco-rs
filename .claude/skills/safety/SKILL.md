@@ -37,6 +37,11 @@ commands, etc.). Re-read them after any context compaction.
    enum discriminant (e.g. `force_cast` of unchecked C `int*` into a fieldless `#[repr]` enum);
    use-after-free; uninitialized/stale reads; integer-overflow-driven OOB (e.g. `w*h*3` usize
    overflow defeating a buffer check); mis-sized buffers handed to C; `len() as i32` truncation.
+   **For enum/discriminant casts specifically:** only flag if a safe-code caller can supply or
+   mutate the integer value that is later cast to the enum (e.g. via a public integer setter on
+   the same field). If the integer is written exclusively by MuJoCo internals and the safe API
+   exposes no setter for it, the user cannot produce an invalid discriminant through safe code
+   and the cast is out of scope.
 2. **Thread safety** -- examine **every** `unsafe impl Send` and `unsafe impl Sync` in `src/`
    (`rg "unsafe impl (Send|Sync)" src/`). For each, decide whether the assertion is actually
    sound, then hunt for a SAFE-code path that turns an unsound impl into a data race. The classic
@@ -106,8 +111,17 @@ Delete all throwaway probes afterward.
 A final agent asks: "which dimension / module / `Send`-`Sync` site / claim was not covered or not
 verified?" Each gap becomes another finder round. Loop until a round is dry.
 
-Severities: Critical / High / Medium / Low / Uncertain. Statuses: open / fixed / deferred /
-accepted / latent.
+Severities: Critical / High / Medium / Low / Uncertain.
+Statuses (exactly four -- do not invent others):
+- **Open** -- confirmed finding, not yet fixed.
+- **Defer (MuJoCo)** -- root cause is in MuJoCo upstream; cannot be fixed in the Rust wrapper alone.
+- **Open (latent)** -- plausible but requires conditions that are not practically triggerable today
+  (e.g. astronomically large allocations); still a real bug, just not urgently exploitable.
+- **Fixed** -- fix has been applied and verified.
+
+There is NO "Accepted" status. Do not silently bury findings as "accepted" -- if a finding is real
+and open, it is `Open`. If it needs an upstream fix, it is `Defer (MuJoCo)`. If it is
+theoretically possible but practically out of reach today, it is `Open (latent)`.
 
 ## Build env for compile-level verification
 
@@ -125,62 +139,46 @@ export LD_LIBRARY_PATH="$MUJOCO_DYNAMIC_LINK_DIR"
 
 ## Deliverable -- a single self-contained HTML report
 
-Write/overwrite `mujoco-rs-memory-safety-audit.html` at the repo root. The report scope is the
-**current chat conversation**: it must include findings from ALL `/safety` runs within this chat,
-but MUST NOT carry over findings from previous chats.
+Write/overwrite `mujoco-rs-memory-safety-audit.html` at the repo root.
+
+**Scope: the current chat session.** The report accumulates findings across ALL `/safety` runs
+within this chat. Findings fixed between runs stay in the report with status `fixed` -- they
+are never silently removed. Do NOT carry over findings from a prior chat.
 
 Concretely:
-- Do **not** read the on-disk HTML file to repopulate findings -- that file may be from a prior
-  chat and its findings must be discarded.
+- Do **not** read the on-disk HTML file to repopulate findings -- it belongs to a prior chat
+  and must be discarded entirely.
 - If `/safety` was already run earlier in this chat, the main loop (Claude) must pass those
-  prior findings as `args` to the Workflow so they are merged with the new run's findings.
+  prior findings (including their current statuses) as `args` to the Workflow so the new run
+  can merge with them: update statuses where fixes were applied, add any new confirmed findings.
 - If this is the first `/safety` run in this chat, start with an empty finding list.
+- If no new findings were confirmed, say so clearly. Do NOT back-fill with findings from prior
+  chats or from memory.
 
 The file must be self-contained (inline `<style>`), ASCII-only, and contain:
 
 - A header and a short **method note** describing the passes and the four dimensions.
-- An **overview table**: `ID | Severity (pill) | Dimension (badge) | One-line description |
-  Location(s) | Reachable from safe code? (Yes/No) | Status`.
-- One **finding card** each: ID, severity, title, status badge, location(s), a **concise
+- An **overview table** of all findings accumulated this chat: `ID | Severity (pill) |
+  Dimension (badge) | One-line description | Location(s) | Reachable from safe code? | Status`.
+  Findings that were fixed this session appear with status `fixed`. If no findings exist yet,
+  the table says "No findings confirmed in this session."
+- One **finding card** per finding: ID, severity, title, status badge, location(s), a **concise
   (< 500 words)** mechanism explanation, a **"Safe-code trigger"** code snippet, and a **"Fix"**
-  suggestion. If a fix has been applied, set status `fixed` and state what was done and how it was
-  verified.
-- An **"Observations & hardening recommendations"** section: faith-based invariants and latent
-  items that were **actually verified against `mujoco/src/` or `mujoco/include/`** (e.g.
-  "`const mjModel*` => no mutation confirmed by reading the relevant C functions"; iterator
-  traversal-injectivity; native-viewer GL-thread affinity relying on `winit` auto-`!Send`).
-  **Do NOT include any observation that was not verified against the actual C/C++ source.**
-  Unverified hypotheticals ("if X were to do Y...") are forbidden -- if the C code was not
-  read, either read it or omit the recommendation.
+  suggestion. Fixed findings state what was done and how it was verified.
+- An **"Observations & hardening recommendations"** section containing ONLY items that were
+  **actually verified against `mujoco/src/` or `mujoco/include/`** during this session (cite
+  file:line). **Do NOT include any observation not verified against the actual C/C++ source.**
+  Unverified hypotheticals ("if X were to do Y...") are forbidden.
 - An **"Areas reviewed and found sound"** section: negative results (what was checked and is OK).
 
-Styling conventions used previously: severity pills (`sev-critical/high/medium/low/uncertain`),
-status badges (`st-open/fixed/deferred/accepted/latent`), and dimension badges.
+Styling conventions: severity pills (`sev-critical/high/medium/low/uncertain`), status badges
+(`st-open` / `st-fixed` / `st-defer-mujoco` / `st-open-latent`), dimension badges.
 
 ## After the audit
 
-1. Present the overview table to the user and collect a **disposition per NEW finding** with
-   `AskUserQuestion` (fix now / fix by maintainer / accept / defer / document-only).
-2. When a finding is **fixed**: add a `docs/guide/source/changelog.rst` entry under
-   `.. rubric:: Bug fixes` (plus a `(Potentially breaking)` note under `.. rubric:: Breaking
-   changes` if the public API/traits change); add a regression guard where feasible (e.g. a
-   `compile_fail` doctest locking in a `!Send` guarantee); and update the known-findings memory
-   so it is not re-flagged.
-3. Reflect every disposition's status in the HTML report (current-session findings only).
-
-## Current known findings (do NOT re-flag; reconcile with `project_known_memory_safety.md` + changelog)
-
-- **F1 (Critical)** -- `Info::view`/`view_mut` authorize indexing a different model/data by
-  comparing only `model_signature` (a structural-tree hash that omits `na`/`nuser_*`/
-  `nsensordata` ...), so two structurally-identical models with different such dims collide ->
-  non-panicking OOB. *Deferred upstream.*
-- **F2 (High)** -- `MjvPerturb.select` OOB into `mjv_updateScene`. *Fixed.*
-- **F3 (Low)** -- `len() as i32` truncation in `mjs` vector writers. *Accepted.*
-- **F4 (High)** -- blanket `unsafe impl Send`/`Sync` on `Mjs*`/`MjsDefault` + lending mutable
-  iterators let aliasing `&mut` handles into one shared spec arena cross threads -> data race in
-  `mjs_setName`. *Fixed: handles made `!Send + !Sync`; `MjSpec` stays `Send + Sync`.*
-- **F5 (Medium)** -- safe getters (`efc_state`/`iefc_state`, scalar enum getters) transmute
-  unchecked C `int*` into fieldless `#[repr]` enums with no discriminant check -> invalid-enum UB
-  on stale arena bytes. *Maintainer to fix.*
-- **F6 (Uncertain/latent)** -- 32-bit `w*h*3` usize overflow can defeat the `read_pixels` buffer
-  check; no safe-reachable OOB write confirmed. *Latent (use `checked_mul`).*
+The workflow assigns statuses autonomously based on evidence -- do NOT pause to ask the user.
+Use these rules to assign a status to each new confirmed finding:
+- Root cause lies in MuJoCo upstream and cannot be fixed in the Rust wrapper alone → `Defer (MuJoCo)`
+- Fix was applied and verified during this run → `Fixed`; add a `docs/guide/source/changelog.rst`
+  entry under `.. rubric:: Bug fixes` (and `.. rubric:: Breaking changes` if the public API
+  changes); add a regression guard where feasible; update the known-findings memory.
