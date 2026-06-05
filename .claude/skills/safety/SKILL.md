@@ -27,9 +27,9 @@ commands, etc.). Re-read them after any context compaction.
   it.
 - **Do not re-flag known/dispositioned findings.** Build the do-not-re-flag list FIRST (see
   Phase 0) from the project's known-findings memory and the changelog.
-- **The changelog is not part of the audit deliverable.** Per project convention, a changelog
-  entry is added only when a fix is actually made -- not for an open finding. The audit's output
-  is the HTML report.
+- **The audit is read-only.** No source files, tests, or docs are modified as part of the audit.
+  The only output is the HTML report. Fixes, changelog entries, and regression guards are out of
+  scope -- the audit just identifies and documents findings.
 
 ## The four dimensions
 
@@ -112,7 +112,7 @@ Statuses (exactly four -- do not invent others; there is NO "Accepted"):
 | **Open** | Confirmed, not yet fixed | everything else |
 | **Defer (MuJoCo)** | Root cause is upstream; unfixable in the Rust wrapper alone | root cause is in MuJoCo C/C++ |
 | **Open (latent)** | Real bug, not practically triggerable today | requires e.g. >2^31 elements or similar |
-| **Fixed** | Fix applied and verified this session | changelog entry added, regression guard added where feasible |
+| **Fixed** | Fix was applied outside this skill run | only when the fix already exists in the codebase |
 
 ## Build env for compile-level verification
 
@@ -155,7 +155,7 @@ The file must be self-contained (inline `<style>`), ASCII-only, and contain:
   the table says "No findings confirmed in this session."
 - One **finding card** per finding: ID, severity, title, status badge, location(s), a **concise
   (< 500 words)** mechanism explanation, a **"Safe-code trigger"** code snippet, and a **"Fix"**
-  suggestion. Fixed findings state what was done and how it was verified.
+  suggestion (description of a fix only -- do NOT implement it).
 - An **"Observations & hardening recommendations"** section containing ONLY items that were
   **actually verified against `mujoco/src/` or `mujoco/include/`** during this session (cite
   file:line). **Do NOT include any observation not verified against the actual C/C++ source.**
@@ -167,8 +167,6 @@ Styling conventions: severity pills (`sev-critical/high/medium/low/uncertain`), 
 
 ## After the audit
 
-Assign statuses using the table in Phase 4 -- do NOT pause to ask the user. For `Fixed`
-findings, add a `docs/guide/source/changelog.rst` entry under `.. rubric:: Bug fixes` (and
-`.. rubric:: Breaking changes` if the public API changes), add a regression guard where
-feasible, and update the known-findings memory. Then present the overview table to the user as
-a plain-text summary. No interactive questions.
+Assign statuses using the table in Phase 4 -- do NOT pause to ask the user. Present the
+overview table to the user as a plain-text summary. No interactive questions. Do NOT modify
+any source files, tests, docs, or the changelog -- the audit is strictly read-only.
