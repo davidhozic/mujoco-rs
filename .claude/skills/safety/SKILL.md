@@ -25,8 +25,6 @@ commands, etc.). Re-read them after any context compaction.
   out of scope. The safe/unsafe tier is the dividing line.
 - **Stride/length/type correctness is OUT of scope** -- that is `/verify`'s job. Do not duplicate
   it.
-- **Do not re-flag known/dispositioned findings.** Build the do-not-re-flag list FIRST (see
-  Phase 0) from the project's known-findings memory and the changelog.
 - **The audit is read-only.** No source files, tests, or docs are modified as part of the audit.
   The only output is the HTML report. Fixes, changelog entries, and regression guards are out of
   scope -- the audit just identifies and documents findings.
@@ -62,9 +60,7 @@ commands, etc.). Re-read them after any context compaction.
 1. Read `src/util.rs` (all macros) and glob + read `src/wrappers/**/*.rs`.
 2. Enumerate every `unsafe impl Send`/`Sync` site, every lending/mutable iterator, and every
    element-handle type (e.g. the `mjs_struct!`-generated `Mjs*` aliases).
-3. Build the **do-not-re-flag** list by reading the known-findings memory
-   (`project_known_memory_safety.md`) and `docs/guide/source/changelog.rst`.
-4. Record the MuJoCo build env for later compile checks (see "Build env" below).
+3. Record the MuJoCo build env for later compile checks (see "Build env" below).
 
 ### Phase 1 -- FINDERS (parallel `agent()` calls, structured output)
 One finder per (dimension x subsystem) cell, reading `src/` **and** the relevant
@@ -80,8 +76,8 @@ function name without reading its implementation is not sufficient. If the C/C++
 not read, the candidate must be dropped.
 
 ### Phase 2 -- TRIAGE / DEDUP (barrier)
-Collect all candidates; dedupe by location+mechanism; drop out-of-scope (unsafe-only-reachable;
-stride/length/type) and already-known items.
+Collect all candidates; dedupe by location+mechanism; drop out-of-scope items
+(unsafe-only-reachable; stride/length/type).
 
 ### Phase 3 -- ADVERSARIAL VERIFICATION (pipeline, per surviving candidate)
 For each candidate spawn, independently:
