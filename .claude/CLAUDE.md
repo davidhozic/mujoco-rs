@@ -15,12 +15,8 @@ they reference a Copilot-specific tool:
 
 | Copilot wording | Claude Code |
 |---|---|
-| `ask_user` | `AskUserQuestion` |
 | `task` tool / subagents | `Agent` tool |
 | `run_in_terminal isBackground: true`, `mode="async"` (+ `detach: true`) | `Bash` with `run_in_background: true` |
 | `await_terminal` / `get_terminal_output` | `BashOutput` |
 | `view_file` | `Read` |
 | `grep_search` | `Grep` |
-
-Never use shell-level backgrounding (`nohup`, `&`, `disown`, `setsid`) -- use the `Bash`
-tool's `run_in_background` parameter (per `.github/rules/disallowed-commands.md`).

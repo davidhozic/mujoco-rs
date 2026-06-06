@@ -401,12 +401,17 @@ macro_rules! mjs_struct {
             }
         )?
 
-        // SAFETY: Mjs* types are raw pointer wrappers. All shared-reference access goes
-        // through &self methods that do not mutate state. All mutation requires &mut self,
-        // which guarantees no concurrent aliasing. The pointer is valid for the lifetime
-        // of the owning MjSpec, which must outlive any Mjs* reference.
-        unsafe impl Sync for [<Mjs $ffi_name>] {}
-        unsafe impl Send for [<Mjs $ffi_name>] {}
+        // Mjs* handles are intentionally NEITHER Send NOR Sync. Each is a thin alias over
+        // a raw pointer into a single shared mjSpec/mjCModel arena, and its `&mut self`
+        // mutators (e.g. `SpecItem::set_name` -> `mjs_setName`) reach through that pointer
+        // to read every sibling and write model-global state (`mjCModel::CheckRepeat` and
+        // the shared `errInfo`). Letting a handle --- or a reference to one --- cross a
+        // thread boundary would let two such accesses race on the one arena from safe code.
+        // The raw-pointer field already makes the type auto-`!Send + !Sync`, so we simply
+        // do not add the impls. Do NOT add `unsafe impl Send`/`Sync` here: the owning
+        // `MjSpec` is itself `Send + Sync`, so a whole spec can still move between threads
+        // and a shared `&MjSpec` can be read concurrently --- handles derived from it just
+        // stay on the thread that created them.
     }};
 }
 
@@ -612,6 +617,17 @@ macro_rules! vec_set_get {
 }
 
 /// Implements setters for non-string attributes.
+///
+/// Two forms are supported:
+/// - `name: Type; "comment"` -- the setter takes `&[Type]` and writes it unchanged.
+/// - `name: InputType => StoredType; "comment"; "safety"` -- generates an `unsafe` setter taking
+///   `&[InputType]` (typically a Rust enum) and storing each element as the raw C type `StoredType`
+///   via a zero-cost pointer reinterpretation (the same compile-time-checked cast the view layer
+///   uses, so no `bytemuck` trait is required on the enum). This form is for values the C side later
+///   uses without its own validation (e.g. as an unchecked array index), where the only guard would
+///   require iterating the slice; `"safety"` documents the caller's `# Safety` obligation. Typing
+///   the input as an enum keeps arbitrary integers out, but does not by itself rule out enum
+///   discriminants that are out of range for the C-side use.
 macro_rules! vec_set {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
@@ -619,6 +635,21 @@ macro_rules! vec_set {
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
                 // SAFETY: self.$name is a valid pointer for the lifetime of self.
                 unsafe { [<write_mjs_vec_ $type>](value, self.$name) };
+            }
+        )*
+    }};
+    ($($name:ident: $input_type:ty => $type:ty; $comment:expr; $safety:expr);* $(;)?) => {paste::paste!{
+        $(
+            #[doc = concat!("Set ", $comment, "\n\n# Safety\n", $safety)]
+            pub unsafe fn [<set_ $name>](&mut self, value: &[$input_type]) {
+                // Compile-time size/alignment check for the layout-compatible reinterpretation below.
+                $crate::util::assert_ptr_cast_valid::<$input_type, $type>(value.as_ptr());
+                // SAFETY: $input_type and $type are layout-compatible (asserted above) and every
+                // enum value is a valid bit pattern for its underlying integer, so reinterpreting the
+                // slice is sound and zero-cost. The caller upholds the documented value-range
+                // precondition. self.$name is a valid pointer for the lifetime of self.
+                let raw: &[$type] = unsafe { std::slice::from_raw_parts(value.as_ptr().cast(), value.len()) };
+                unsafe { [<write_mjs_vec_ $type>](raw, self.$name) };
             }
         )*
     }};

@@ -211,6 +211,81 @@ with named fields instead.
     }
 
 
+``MjsTuple::set_objtype`` now takes ``&[MjtObj]``
+-------------------------------------------------
+
+``MjsTuple::set_objtype`` previously accepted ``&[i32]`` and stored the values unchecked. The model
+compiler later uses each value to index a fixed-size object-list array (size ``mjNOBJECT``) without
+a bounds check, so an out-of-range value is an out-of-bounds read at ``compile()`` time. The setter
+now takes ``&[MjtObj]`` and is an ``unsafe fn``: typing the input as ``MjtObj`` keeps arbitrary
+integers out, but ``MjtObj`` still includes meta variants (``mjOBJ_FRAME``, ``mjOBJ_DEFAULT``,
+``mjOBJ_MODEL``) and ``mjNOBJECT`` itself that are out of range. The caller must ensure every value
+is a real object type (an ``MjtObj`` discriminant ``< mjNOBJECT``); the conversion to the underlying
+C ``int`` is then a zero-cost reinterpretation.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    tuple.set_objtype(&[MjtObj::mjOBJ_BODY as i32, MjtObj::mjOBJ_GEOM as i32]);
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: mjOBJ_BODY and mjOBJ_GEOM are real object types (< mjNOBJECT).
+    unsafe { tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM]) };
+
+
+``MjData::add_contact`` is now an ``unsafe fn``
+-----------------------------------------------
+
+``add_contact`` wraps ``mj_addContact``, an advanced entry point that stores the caller-supplied
+``MjContact`` verbatim. MuJoCo later uses the stored contact without validation, so a malformed
+contact can cause undefined behavior. The method is now ``unsafe``; the caller must ensure the
+contact is valid for the model. The signature is otherwise unchanged, so existing call sites only
+need an ``unsafe`` block.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    data.add_contact(&contact)?;
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: `contact` is a valid contact for this model.
+    unsafe { data.add_contact(&contact)? };
+
+
+``MjData::reset_debug`` is now an ``unsafe fn``
+-----------------------------------------------
+
+``reset_debug`` wraps ``mj_resetDataDebug``, which fills every buffer-resident array with raw
+``debug_value`` bytes. Arrays that MuJoCo does not re-initialize afterwards keep those bytes, and
+some safe accessors expose them as types with validity invariants (``bvh_active`` as ``&[bool]``,
+``body_awake`` as a fieldless enum slice), so reading them can be undefined behavior. The method
+is now ``unsafe``; the caller must not read such accessors before the next reset unless
+``debug_value`` produces valid bit patterns for them. The signature is otherwise unchanged, so
+existing call sites only need an ``unsafe`` block.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    data.reset_debug(7);
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: no invariant-carrying accessor (bvh_active, body_awake) is read
+    // before the next reset().
+    unsafe { data.reset_debug(7) };
+
+
 .. _migrate_4_0_0:
 
 Migrating to 4.0.0

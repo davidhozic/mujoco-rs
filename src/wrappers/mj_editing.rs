@@ -839,7 +839,7 @@ impl MjsGeom {
         priority: i32;                 "contact priority.";
         solmix: f64;                   "solver mixing for contact pairs.";
         margin: f64;                   "margin for contact detection.";
-        gap: f64;                      "include in solver if dist < margin-gap.";
+        gap: f64;                      "additional contact detection buffer.";
         mass: f64;                     "used to compute density.";
         density: f64;                  "used to compute mass and inertia from volume or surface.";
         typeinertia: MjtGeomInertia;   "selects between surface and volume inertia.";
@@ -1352,7 +1352,7 @@ impl MjsFlex {
             priority: i32;                 "contact priority.";
             solmix: f64;                   "solver mixing for contact pairs.";
             margin: f64;                   "margin for contact detection.";
-            gap: f64;                      "include in solver if dist < margin-gap.";
+            gap: f64;                      "additional contact detection buffer.";
 
             dim: i32;                "element dimensionality.";
             radius: f64;             "radius around primitive element.";
@@ -1419,7 +1419,7 @@ impl MjsPair {
     getter_setter! {
         [&] with, get, set, [
             margin: f64;             "margin for contact detection.";
-            gap: f64;        "include in solver if dist<margin-gap.";
+            gap: f64;         "additional contact detection buffer.";
             condim: i32;                   "contact dimensionality.";
         ]
     }
@@ -1688,7 +1688,16 @@ impl MjsText {
 mjs_struct!(Tuple [SpecObject]);
 impl MjsTuple {
     vec_set! {
-        objtype: i32; "object types.";
+        // `objtype` is stored as a raw C `int` and, at `compile()` time, used to index the model
+        // compiler's `object_lists_` array (size `mjNOBJECT`) with no bounds check. Typing the
+        // setter as `&[MjtObj]` keeps arbitrary integers out, but `MjtObj` still includes meta
+        // variants that are out of range, so the setter is `unsafe` (see the `# Safety` note).
+        objtype: MjtObj => i32;
+            "object types.";
+            "Every value must be a real object type: an `MjtObj` discriminant less than \
+             `mjNOBJECT`. Passing a meta variant (`mjOBJ_FRAME`, `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) \
+             or `mjNOBJECT` itself causes an out-of-bounds array read inside the model compiler \
+             when the spec is compiled.";
     }
 
     vec_string_set_append! {
@@ -2109,7 +2118,7 @@ pub struct MjsBodyItemIterMut<'a, T> {
     last: *mut mjsElement,
     recurse: bool,
     /// Used for generic implementation of iterator's methods.
-    item_type: PhantomData<&'a T>
+    item_type: PhantomData<&'a mut T>
 }
 
 impl<'a, T: SpecObject> MjsBodyItemIterMut<'a, T> {
@@ -2830,7 +2839,8 @@ mod tests {
 
         tuple.set_objname("body1 body2");
         tuple.set_objprm(&obj_param);
-        tuple.set_objtype(&[MjtObj::mjOBJ_BODY as i32, MjtObj::mjOBJ_BODY as i32]);
+        // SAFETY: mjOBJ_BODY is a real object type (< mjNOBJECT).
+        unsafe { tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_BODY]) };
 
         assert_eq!(tuple.objprm(), &obj_param);
 

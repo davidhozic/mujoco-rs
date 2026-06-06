@@ -117,7 +117,7 @@ We can now add our ball's body, geom and joint like so:
 Finally, we can now add the base plane, like so:
 
 .. code-block:: rust
-    :emphasize-lines: 18-22
+    :emphasize-lines: 19-22
 
     use mujoco_rs::prelude::*;
 
@@ -149,7 +149,7 @@ We can now compile it to a model and save it to an MJB (binary) file.
 The specification can also be saved directly to an MJCF (XML) file:
 
 .. code-block:: rust
-    :emphasize-lines: 23-28
+    :emphasize-lines: 24-28
 
     use mujoco_rs::prelude::*;
 
