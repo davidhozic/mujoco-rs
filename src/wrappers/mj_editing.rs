@@ -839,7 +839,7 @@ impl MjsGeom {
         priority: i32;                 "contact priority.";
         solmix: f64;                   "solver mixing for contact pairs.";
         margin: f64;                   "margin for contact detection.";
-        gap: f64;                      "include in solver if dist < margin-gap.";
+        gap: f64;                      "additional contact detection buffer.";
         mass: f64;                     "used to compute density.";
         density: f64;                  "used to compute mass and inertia from volume or surface.";
         typeinertia: MjtGeomInertia;   "selects between surface and volume inertia.";
@@ -1352,7 +1352,7 @@ impl MjsFlex {
             priority: i32;                 "contact priority.";
             solmix: f64;                   "solver mixing for contact pairs.";
             margin: f64;                   "margin for contact detection.";
-            gap: f64;                      "include in solver if dist < margin-gap.";
+            gap: f64;                      "additional contact detection buffer.";
 
             dim: i32;                "element dimensionality.";
             radius: f64;             "radius around primitive element.";
@@ -1419,7 +1419,7 @@ impl MjsPair {
     getter_setter! {
         [&] with, get, set, [
             margin: f64;             "margin for contact detection.";
-            gap: f64;        "include in solver if dist<margin-gap.";
+            gap: f64;         "additional contact detection buffer.";
             condim: i32;                   "contact dimensionality.";
         ]
     }
