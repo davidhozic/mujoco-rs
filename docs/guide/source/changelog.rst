@@ -324,6 +324,12 @@ runtime.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<tymethod>element_pointer`
   and :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>element_mut_pointer`
   are no longer marked ``unsafe``.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_state`
+  is no longer marked ``unsafe``. MuJoCo 3.9.0 changed ``eq_active`` to ``mjtBool``
+  (C ``bool``), so writes through ``mjSTATE_EQ_ACTIVE`` are booleanized on assignment
+  and reading ``eq_active()`` afterwards can no longer cause undefined behavior.
+  Existing ``unsafe { data.set_state(...) }`` call sites keep compiling and only
+  produce an ``unused_unsafe`` warning.
 
 
 4.0.1 (MuJoCo 3.8.0)

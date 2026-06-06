@@ -1428,14 +1428,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::BufferTooSmall`] if `state` is smaller than the
     /// length required by `spec`.
-    ///
-    /// # Safety
-    /// When `spec` includes [`MjtState::mjSTATE_EQ_ACTIVE`], MuJoCo writes the raw
-    /// `mjtNum` (f64) bytes from `state` directly into the `eq_active` bool array.
-    /// The caller must ensure that [`MjData::eq_active`] is not accessed until the
-    /// values have been re-validated into valid bool representation (e.g. by calling
-    /// `mj_forward` or `mj_step`).
-    pub unsafe fn set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
+    pub fn set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
         let required_len = self.model.state_size(spec);
         if state.len() < required_len {
             return Err(MjDataError::BufferTooSmall {
@@ -4742,8 +4735,7 @@ mod test {
         assert_ne!(diverged_xpos, saved_xpos, "state should diverge after more steps");
 
         // Restore state
-        // SAFETY: saved_state was captured via mj_getState; eq_active bytes are valid (0 or 1).
-        unsafe { data.set_state(&saved_state, MjtState::mjSTATE_FULLPHYSICS as u32) }.unwrap();
+        data.set_state(&saved_state, MjtState::mjSTATE_FULLPHYSICS as u32).unwrap();
         data.forward();
 
         // Primary state (qpos) should be exactly restored

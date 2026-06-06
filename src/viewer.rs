@@ -666,10 +666,7 @@ impl ViewerSharedState {
                 }
             }
 
-            // SAFETY: data_state_buffer was filled by read_state_into using the
-            // same state spec on a compatible model, so eq_active bytes (included
-            // by mjSTATE_INTEGRATION) come from MuJoCo's own canonical encoding.
-            unsafe { data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32) }
+            data.set_state(&self.data_state_buffer, MjtState::mjSTATE_INTEGRATION as u32)
                 .unwrap();
         }
 

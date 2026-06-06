@@ -147,9 +147,7 @@ fn test_inverse_dynamics_and_state<'a>(model: &'a MjModel, data: &mut MjData<&'a
     let full_state = mjtState_::mjSTATE_FULLPHYSICS as u32;
     let state = data.state(full_state);
     assert!(!state.is_empty());
-    // SAFETY: full_state is mjSTATE_FULLPHYSICS which restores from a previously read
-    // state; eq_active bytes come from mj_getState and are always valid (0 or 1).
-    unsafe { data.set_state(&state, full_state) }.unwrap();
+    data.set_state(&state, full_state).unwrap();
 
     let mut data2 = model.make_data();
     data.copy_to(&mut data2).unwrap();
