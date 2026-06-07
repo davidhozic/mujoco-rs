@@ -401,9 +401,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Runge-Kutta explicit order-N integrator.
     ///
     /// # Panics
-    /// Panics if `n < 1`.
+    /// Panics if `n != 4`. The underlying MuJoCo C implementation only supports N=4;
+    /// any other value causes an unconditional process abort via `mjERROR`.
     pub fn runge_kutta(&mut self, n: u32) {
-        assert!(n >= 1, "Runge-Kutta order n must be >= 1, got {n}");
+        assert!(n == 4, "mj_RungeKutta only supports N=4, got {n}");
         unsafe { mj_RungeKutta(self.model.ffi(), self.ffi_mut(), n as i32) }
     }
 
