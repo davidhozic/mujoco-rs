@@ -1175,7 +1175,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
     /// `geomgroup` and `flg_static` are as in mjvOption; pass `None` for `geomgroup` to skip group exclusion.
     pub fn ray(
-        &self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
+        &mut self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: MjtBool, bodyexclude: Option<usize>,
         normal_out: Option<&mut [MjtNum; 3]>
     ) -> (Option<usize>, MjtNum) {
@@ -1294,7 +1294,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     ///
     /// Use [`MjData::try_ray_mesh`] for a fallible alternative.
     pub fn ray_mesh(
-        &self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
+        &mut self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
     ) -> MjtNum {
         self.try_ray_mesh(geom_id, pnt, vec, normal_out).unwrap()
     }
@@ -1306,7 +1306,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     ///
     /// Use [`MjData::ray_mesh`] for a panicking alternative.
     pub fn try_ray_mesh(
-        &self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
+        &mut self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
     ) -> Result<MjtNum, MjDataError> {
         let ngeom = self.model.ffi().ngeom as usize;
         if geom_id >= ngeom {
