@@ -85,7 +85,8 @@ impl ApplicationHandler for RenderBase {
                 // Request typical formats; these are hints.
                 .with_alpha_size(0)
                 .with_depth_size(24)
-                .with_stencil_size(8);
+                .with_stencil_size(8)
+                .skip_cgl_profile(true);
 
             let display_builder = DisplayBuilder::new()
                 .with_preference(ApiPreference::FallbackEgl)
