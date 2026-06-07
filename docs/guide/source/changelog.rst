@@ -128,6 +128,16 @@ update of MuJoCo alone can increase the major version.
   (see Bug fixes). The signature is otherwise unchanged; existing calls only need an ``unsafe``
   block.
 
+*MjData::ray / ray_mesh now take* ``&mut self``
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_mesh`, and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_ray_mesh` now take
+  ``&mut self`` (previously ``&self``). Their bounding-volume traversal mutates ``data.bvh_active``
+  (see Bug fixes), so callers holding a shared ``&MjData`` need an exclusive borrow instead.
+  ``ray_flex`` / ``ray_hfield`` are unaffected and remain ``&self``; ``multi_ray`` already took
+  ``&mut self``.
+
 .. rubric:: Deprecations
 
 - Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
@@ -309,6 +319,15 @@ runtime.
   shared error buffer), so the calls raced on the one arena -- undefined behavior. The handles
   (and ``MjsDefault``) are now ``!Send + !Sync``, so such a mutation can no longer cross a
   thread boundary; the owning |mj_spec| stays ``Send + Sync``.
+- Closed an unsoundness reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_mesh`, which took ``&self``
+  although their bounding-volume traversal (``mju_rayTree``) writes ``data.bvh_active`` when the
+  model's ``bvactive`` visualization flag is set. The MuJoCo C functions declare ``const mjData*``
+  yet mutate through it, so the ``&self`` signature let safe code drive shared-state mutation: with
+  ``MjData<M>: Sync`` two threads could race on ``bvh_active``, and a ``&[bool]`` borrowed from the
+  safe ``bvh_active`` accessor could be mutated while still live. ``ray``, ``ray_mesh``, and
+  ``try_ray_mesh`` now take ``&mut self``. See the Breaking changes section and the migration guide.
 
 
 .. rubric:: Other changes

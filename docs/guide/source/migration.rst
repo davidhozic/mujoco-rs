@@ -286,6 +286,32 @@ existing call sites only need an ``unsafe`` block.
     unsafe { data.reset_debug(7) };
 
 
+``MjData::ray`` / ``ray_mesh`` now take ``&mut self``
+-----------------------------------------------------
+
+``ray``, ``ray_mesh``, and ``try_ray_mesh`` now take ``&mut self`` (previously ``&self``). Their
+bounding-volume traversal (``mju_rayTree``) writes ``data.bvh_active`` when the model's ``bvactive``
+visualization flag is set, even though the underlying MuJoCo C functions are declared
+``const mjData*``. The ``&self`` signature therefore let safe code drive shared ``MjData`` mutation
+(a data race under ``MjData<M>: Sync``, or mutation of a live ``&[bool]`` obtained from the
+``bvh_active`` accessor). Callers that held a shared ``&MjData`` now need an exclusive borrow.
+``ray_flex`` and ``ray_hfield`` are unaffected; ``multi_ray`` already took ``&mut self``.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    let data = model.make_data();
+    let (geomid, dist) = data.ray(&pnt, &vec, None, false, None, None);
+
+**After:**
+
+.. code-block:: rust
+
+    let mut data = model.make_data();
+    let (geomid, dist) = data.ray(&pnt, &vec, None, false, None, None);
+
+
 .. _migrate_4_0_0:
 
 Migrating to 4.0.0
