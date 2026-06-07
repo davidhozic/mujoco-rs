@@ -150,8 +150,13 @@ The file must be self-contained (inline `<style>`), ASCII-only, and contain:
   Unverified hypotheticals ("if X were to do Y...") are forbidden.
 - An **"Areas reviewed and found sound"** section: negative results (what was checked and is OK).
 
-Styling conventions: severity pills (`sev-critical/high/medium/low/uncertain`), status badges
-(`st-open` / `st-fixed` / `st-defer-mujoco` / `st-open-latent`), dimension badges.
+Styling: reproduce the same Claude aesthetic as `mujoco-rs-memory-safety-audit.html` -- ivory
+canvas background, coral accent, warm near-black ink, Georgia serif headings, rounded pill badges,
+white finding cards on the canvas, expandable `details` elements for the "Areas reviewed and found
+sound" section, and bordered observation boxes for the hardening notes. Severity pills
+(`sev-critical/high/medium/low/uncertain`), status badges (`st-open` / `st-fixed` /
+`st-defer-mujoco` / `st-open-latent`), inline dimension badges (`dm-memory` / `dm-thread` /
+`dm-mutability` / `dm-lifetime`) styled as bordered chips rather than pills.
 
 ## After the audit
 
