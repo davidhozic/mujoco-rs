@@ -111,7 +111,8 @@ update of MuJoCo alone can increase the major version.
   ``!Send + !Sync``; they previously carried a blanket ``unsafe impl Send``/``Sync``. Each
   handle is only a raw pointer into one shared ``mjSpec``/``mjCModel`` arena, so moving or
   sharing one across threads was unsound (see Bug fixes). Code that did so will no longer
-  compile --- move or read-share the owning |mj_spec| instead, which remains ``Send + Sync``.
+  compile --- move the owning |mj_spec| instead, which remains ``Send`` (it is no longer
+  ``Sync``; see below).
 
 *MjData::add_contact is now an ``unsafe fn``*
 
@@ -184,6 +185,9 @@ New error variants in pre-existing enums:
 - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`: ``SignatureMismatch`` (model structure does
   not match the renderer's current scene), ``ContextError(MjrContextError)`` (wraps a rendering-context error,
   e.g. an out-of-range asset ID).
+- :docs-rs:`~mujoco_rs::error::<enum>MjEditError`: ``InvalidParameter(String)`` (an actuator
+  configuration helper rejected a parameter; the string is MuJoCo's rejection message). Returned by
+  the new ``set_to_*`` actuator helpers (see New features and improvements).
 
 .. rubric:: New features and improvements
 
