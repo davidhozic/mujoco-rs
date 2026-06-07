@@ -138,6 +138,22 @@ update of MuJoCo alone can increase the major version.
   ``ray_flex`` / ``ray_hfield`` are unaffected and remain ``&self``; ``multi_ray`` already took
   ``&mut self``.
 
+*MjvScene::find_selection now takes* ``&mut MjData``
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>find_selection`
+  now takes ``data: &mut MjData<M>`` (previously ``&MjData<M>``). It calls ``mjv_select`` ->
+  ``mj_ray``, whose bounding-volume traversal mutates ``data.bvh_active`` (see Bug fixes), so an
+  exclusive borrow is required. This mirrors |mjv_scene|'s ``update`` (already ``&mut MjData``) and
+  the ``ray`` / ``ray_mesh`` change above.
+
+*MjSpec is no longer* ``Sync``
+
+- |mj_spec| is now ``Send`` but no longer ``Sync`` (see Bug fixes). Several ``&self`` methods --
+  notably ``clone`` / ``try_clone`` -- drive C-side writes to the spec, so sharing a ``&MjSpec``
+  across threads is unsound. Code that required ``MjSpec: Sync`` (for example placing a ``&MjSpec``
+  in a type that demands ``Sync``) will no longer compile; transfer ownership instead, as ``MjSpec``
+  remains ``Send``.
+
 .. rubric:: Deprecations
 
 - Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
@@ -318,7 +334,7 @@ runtime.
   concurrently; ``mjs_setName`` reaches model-global state (``mjCModel::CheckRepeat`` and the
   shared error buffer), so the calls raced on the one arena -- undefined behavior. The handles
   (and ``MjsDefault``) are now ``!Send + !Sync``, so such a mutation can no longer cross a
-  thread boundary; the owning |mj_spec| stays ``Send + Sync``.
+  thread boundary; the owning |mj_spec| stays ``Send`` (it is now ``!Sync``; see below).
 - Closed an unsoundness reachable from safe code in
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray_mesh`, which took ``&self``
@@ -328,6 +344,26 @@ runtime.
   ``MjData<M>: Sync`` two threads could race on ``bvh_active``, and a ``&[bool]`` borrowed from the
   safe ``bvh_active`` accessor could be mutated while still live. ``ray``, ``ray_mesh``, and
   ``try_ray_mesh`` now take ``&mut self``. See the Breaking changes section and the migration guide.
+- Closed an unsoundness reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>find_selection`, which
+  took a shared ``&MjData`` although it calls ``mjv_select`` -> ``mj_ray``, whose bounding-volume
+  traversal writes ``data.bvh_active`` (the same ``const mjData*``-but-mutating path as ``ray``
+  above). The shared borrow let safe code drive that mutation: with ``MjData<M>: Sync`` two threads
+  could race on ``bvh_active``, and a ``&[bool]`` from the safe ``bvh_active`` accessor could be
+  mutated while still live. ``find_selection`` now takes ``&mut MjData``. See the Breaking changes
+  section and the migration guide.
+- Closed an unsoundness reachable from safe code in |mj_spec|, which carried an unconditional
+  ``unsafe impl Sync``. ``clone`` / ``try_clone`` produce a faithful, independent copy, but the C++
+  copy constructor behind ``mj_copySpec`` is not strictly ``const`` on the source: for each actuator
+  it clears two ``std::map`` keyframe-resolution caches (``ForgetKeyframes``). Those maps are empty
+  for a normally-built spec, yet ``std::map::clear`` rewrites the tree header unconditionally, so two
+  threads sharing a ``&MjSpec`` and cloning concurrently raced on those writes (no spec data is lost).
+  |mj_spec| is now ``!Sync`` (it stays ``Send``). See the Breaking changes section and the migration
+  guide.
+- Closed an out-of-bounds write reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_normalize`. On an empty slice the C function
+  computes a zero norm and then writes ``res[0] = 1`` followed by ``mju_zero(res + 1, -1)`` -- a
+  ``memset`` of ``(size_t)(-1)`` bytes, both out of bounds. The wrapper now panics on an empty slice.
 
 
 .. rubric:: Other changes

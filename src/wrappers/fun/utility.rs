@@ -110,8 +110,14 @@ pub fn mju_add_scl(res: &mut [MjtNum], vec1: &[MjtNum], vec2: &[MjtNum], scl: Mj
 }
 
 /// Normalize a vector in place and return its length before normalization.
+///
+/// # Panics
+/// Panics if `res` is empty.
 pub fn mju_normalize(res: &mut [MjtNum]) -> MjtNum {
-    // SAFETY: pointer and length derived from a valid slice.
+    // For n == 0 the C function writes res[0] = 1 and then mju_zero(res + 1, n - 1),
+    // i.e. memset with a (size_t)(-1) length, both out of bounds.
+    assert!(!res.is_empty());
+    // SAFETY: pointer and length derived from a valid, non-empty slice.
     unsafe { mujoco_c::mju_normalize(res.as_mut_ptr(), res.len() as i32) }
 }
 
@@ -755,6 +761,15 @@ mod tests {
         let len = mju_normalize(&mut a);
         assert!((len - 5.0).abs() < 1e-10);
         assert!((mju_norm(&a) - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_mju_normalize_panics_on_empty() {
+        // An empty slice would make the C function write res[0] and memset a (size_t)(-1)
+        // length, both out of bounds; the wrapper must reject it instead.
+        let mut empty = [];
+        mju_normalize(&mut empty);
     }
 
     #[test]
