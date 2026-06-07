@@ -200,8 +200,12 @@ The file must be self-contained (inline `<style>`), ASCII-only, and contain:
   `important-context.md` "MuJoCo version bump checklist" (version suffix, `mujoco-X.Y.Z/`
   directory, `build.rs`, docs) as observed during recon.
 
-Styling conventions: severity pills (`sev-critical/high/medium/low/info`), status badges,
-kind badges (one colour per catalog category).
+Styling: use the same Claude aesthetic as `mujoco-rs-memory-safety-audit.html` -- ivory canvas
+background, coral accent, warm near-black ink, Georgia serif headings, rounded pill badges, white
+finding cards on the canvas, and a hairline-border overview table. Severity pills
+(`sev-critical/high/medium/low/info`), status badges (`st-open` / `st-already-handled` /
+`st-no-action`), kind badges in distinct hues per category (added=green, removed=red,
+type/sig-changed=orange, dim-changed=purple, enum-changed=violet, semantic=grey).
 
 Statuses:
 

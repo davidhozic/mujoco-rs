@@ -225,8 +225,11 @@ The file must be self-contained (inline `<style>`), ASCII-only, and contain:
 - A **"Confirmed OK"** section listing notable items that were checked and found correct
   (file:line, what was verified, result).
 
-Styling conventions: severity pills (`sev-critical/high/medium/low/info`), status badges
-(`st-open` / `st-fixed` / `st-wont-fix`), category badges (`cat-a` through `cat-h`).
+Styling: use the same Claude aesthetic as `mujoco-rs-memory-safety-audit.html` -- ivory canvas
+background, coral accent, warm near-black ink, Georgia serif headings, rounded pill badges, white
+finding cards on the canvas, and a hairline-border overview table. Severity pills
+(`sev-critical/high/medium/low/info`), status badges (`st-open` / `st-fixed` / `st-wont-fix`),
+category badges `cat-a` through `cat-h` each in a distinct hue.
 
 Statuses:
 
