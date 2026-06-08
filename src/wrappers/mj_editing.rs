@@ -33,6 +33,22 @@ use crate::getter_setter;
 use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
 use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
 
+/* Validation helpers */
+/// Validates that an object-type value is a real object type, i.e. an [`MjtObj`] discriminant below
+/// [`MjtObj::mjNOBJECT`]. Meta variants (`mjOBJ_FRAME`, `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) and
+/// `mjNOBJECT` itself are rejected because the model compiler uses such values as an unchecked
+/// index into a `mjNOBJECT`-sized array (via `mjCModel::FindObject`), which would read out of
+/// bounds. Used for any safe setter whose value reaches `FindObject` during `compile()`.
+fn check_objtype(t: MjtObj) -> Result<(), MjEditError> {
+    if (t as i32) < (MjtObj::mjNOBJECT as i32) {
+        Ok(())
+    } else {
+        Err(MjEditError::InvalidParameter(format!(
+            "object type must be a real MjtObj below MjtObj::mjNOBJECT, got {t:?}"
+        )))
+    }
+}
+
 /* Types */
 /// Type of inertia inference.
 pub type MjtGeomInertia = mjtGeomInertia;
@@ -1313,8 +1329,10 @@ impl MjsSensor {
 
     getter_setter!([&] with, get, set, [
         type_ + _: MjtSensor;          "sensor type.";
-        objtype: MjtObj;               "object type the sensor refers to.";
-        reftype: MjtObj;               "type of referenced object.";
+        objtype: MjtObj { check_objtype } => MjEditError;
+                                       "object type the sensor refers to.\n\n# Errors\n[`set_objtype`](Self::set_objtype) returns an [`MjEditError::InvalidParameter`] (and [`with_objtype`](Self::with_objtype) panics) when the given value is not less than [`MjtObj::mjNOBJECT`].";
+        reftype: MjtObj { check_objtype } => MjEditError;
+                                       "type of referenced object.\n\n# Errors\n[`set_reftype`](Self::set_reftype) returns an [`MjEditError::InvalidParameter`] (and [`with_reftype`](Self::with_reftype) panics) when the given value is not less than [`MjtObj::mjNOBJECT`].";
         datatype: MjtDataType;         "data type.";
         cutoff: f64;                   "cutoff for real and positive datatypes.";
         noise: f64;                    "noise stdev.";
@@ -1696,15 +1714,12 @@ mjs_struct!(Tuple [SpecObject]);
 impl MjsTuple {
     vec_set! {
         // `objtype` is stored as a raw C `int` and, at `compile()` time, used to index the model
-        // compiler's `object_lists_` array (size `mjNOBJECT`) with no bounds check. Typing the
-        // setter as `&[MjtObj]` keeps arbitrary integers out, but `MjtObj` still includes meta
-        // variants that are out of range, so the setter is `unsafe` (see the `# Safety` note).
-        objtype: MjtObj => i32;
-            "object types.";
-            "Every value must be a real object type: an `MjtObj` discriminant less than \
-             `mjNOBJECT`. Passing a meta variant (`mjOBJ_FRAME`, `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) \
-             or `mjNOBJECT` itself causes an out-of-bounds array read inside the model compiler \
-             when the spec is compiled.";
+        // compiler's `object_lists_` array (size `mjNOBJECT`) with no bounds check. Validating every
+        // element against `mjNOBJECT` rules out the meta `MjtObj` variants (`mjOBJ_FRAME`,
+        // `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) that would otherwise cause an out-of-bounds read, which is
+        // what lets this setter be safe.
+        objtype: MjtObj => i32 { check_objtype } => MjEditError;
+            "object types. Every value must be a real object type (an `MjtObj` below `mjNOBJECT`).";
     }
 
     vec_string_set_append! {
@@ -2846,8 +2861,7 @@ mod tests {
 
         tuple.set_objname("body1 body2");
         tuple.set_objprm(&obj_param);
-        // SAFETY: mjOBJ_BODY is a real object type (< mjNOBJECT).
-        unsafe { tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_BODY]) };
+        tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_BODY]).unwrap();
 
         assert_eq!(tuple.objprm(), &obj_param);
 
@@ -3244,5 +3258,55 @@ mod tests {
             flex_mut.set_order(1);
         }
         assert_eq!(spec.flex("myflex").unwrap().order(), 1);
+    }
+
+    /// Verifies the sensor's objtype protection works.
+    #[test]
+    #[should_panic]
+    fn test_sensor_objtype_failure() {
+        let mut spec = MjSpec::new();
+        spec.add_sensor()
+            .with_objtype(MjtObj::mjOBJ_FRAME);
+    }
+
+    /// Verifies the sensor's reftype protection works.
+    #[test]
+    #[should_panic]
+    fn test_sensor_reftype_failure() {
+        let mut spec = MjSpec::new();
+        spec.add_sensor()
+            .with_reftype(MjtObj::mjOBJ_FRAME);
+    }
+
+    /// Verifies the fallible sensor objtype/reftype setters reject meta variants and accept real ones.
+    #[test]
+    fn test_sensor_objtype_reftype_setters() {
+        let mut spec = MjSpec::new();
+        let sensor = spec.add_sensor();
+
+        assert!(matches!(
+            sensor.set_objtype(MjtObj::mjOBJ_MODEL),
+            Err(MjEditError::InvalidParameter(_))
+        ));
+        assert!(matches!(
+            sensor.set_reftype(MjtObj::mjOBJ_DEFAULT),
+            Err(MjEditError::InvalidParameter(_))
+        ));
+        assert!(sensor.set_objtype(MjtObj::mjOBJ_SITE).is_ok());
+        assert!(sensor.set_reftype(MjtObj::mjOBJ_BODY).is_ok());
+    }
+
+    /// Verifies the tuple's objtype protection rejects meta object types and leaves the
+    /// slice unwritten, while accepting real object types.
+    #[test]
+    fn test_tuple_objtype_validation() {
+        let mut spec = MjSpec::new();
+        let tuple = spec.add_tuple();
+
+        assert!(matches!(
+            tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_FRAME]),
+            Err(MjEditError::InvalidParameter(_))
+        ));
+        assert!(tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM]).is_ok());
     }
 }

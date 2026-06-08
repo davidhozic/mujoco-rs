@@ -589,6 +589,23 @@ macro_rules! info_with_view {
 }
 
 
+/// Generates getters, setters, and builder methods for struct fields.
+///
+/// ## Optional value constraints
+///
+/// Every arm that writes a value (`set`, `with`, `[&] with`, their `force!` variants, and the
+/// `get, set` / `with, get, set` / `with, get` aggregates) accepts an **optional per-field check**
+/// for fields whose value can be invalid. Bool arms have no check (a bool is always in range).
+///
+/// - On a `set`-style field: `name: Type { check } => ErrType; "comment"` makes `set_name` return
+///   `Result<(), ErrType>`; `check` (a `Fn(Type) -> Result<(), ErrType>`) runs first and, on `Err`,
+///   the field is left unchanged.
+/// - On a `with`-style field: `name: Type { check }; "comment"` makes the builder `with_name`
+///   call `check` and **panic** (`expect`) on `Err`, since a builder must keep returning `Self`.
+/// - In the combined `with, get, set` aggregate, supply `{ check } => ErrType`; the check is wired
+///   into both the fallible `set_name` and the panicking `with_name`.
+///
+/// Omitting the check yields the plain infallible setter/builder.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! getter_setter {
@@ -629,13 +646,15 @@ macro_rules! getter_setter {
         )*
     }};
 
-    (set, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
-        paste::paste!{ 
+    (set, [$($([$ffi_mut:ident])? $name:ident: $type:ty $({$check:expr})? $(=> $err:ty)?; $comment:expr);* $(;)?]) => {
+        paste::paste!{
             $(
                 #[doc = concat!("Set ", $comment)]
-                pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
+                pub fn [<set_ $name:camel:snake>](&mut self, value: $type) $(-> Result<(), $err>)? {
+                    $(($check)(value)?;)?
                     #[allow(unused_unsafe)]
                     unsafe { self$(.$ffi_mut())?.$name = value.into() };
+                    $(Ok::<(), $err>(()))?
                 }
             )*
         }
@@ -651,24 +670,27 @@ macro_rules! getter_setter {
         )*
     }};
 
-    (force!, set, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
-        paste::paste!{ 
+    (force!, set, [$($([$ffi_mut:ident])? $name:ident: $type:ty $({$check:expr})? $(=> $err:ty)?; $comment:expr);* $(;)?]) => {
+        paste::paste!{
             $(
                 #[doc = concat!("Set ", $comment)]
-                pub fn [<set_ $name:camel:snake>](&mut self, value: $type) {
+                pub fn [<set_ $name:camel:snake>](&mut self, value: $type) $(-> Result<(), $err>)? {
+                    $(($check)(value)?;)?
                     #[allow(unused_unsafe)]
                     unsafe { self$(.$ffi_mut())?.$name = $crate::util::force_cast(value) };
+                    $(Ok::<(), $err>(()))?
                 }
             )*
         }
     };
 
     /* Builder pattern */
-    (force!, with, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
-        paste::paste!{ 
+    (force!, with, [$($([$ffi_mut:ident])? $name:ident: $type:ty $({$check:expr})?; $comment:expr);* $(;)?]) => {
+        paste::paste!{
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
                 pub fn [<with_ $name:camel:snake>](mut self, value: $type) -> Self {
+                    $(($check)(value).expect("invalid builder argument");)?
                     #[allow(unused_unsafe)]
                     unsafe { self$(.$ffi_mut())?.$name = $crate::util::force_cast(value) };
                     self
@@ -677,11 +699,12 @@ macro_rules! getter_setter {
         }
     };
 
-    (force!, [&] with, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
-        paste::paste!{ 
+    (force!, [&] with, [$($([$ffi_mut:ident])? $name:ident: $type:ty $({$check:expr})?; $comment:expr);* $(;)?]) => {
+        paste::paste!{
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
                 pub fn [<with_ $name:camel:snake>](&mut self, value: $type) -> &mut Self {
+                    $(($check)(value).expect("invalid builder argument");)?
                     #[allow(unused_unsafe)]
                     unsafe { self$(.$ffi_mut())?.$name = $crate::util::force_cast(value) };
                     self
@@ -690,11 +713,12 @@ macro_rules! getter_setter {
         }
     };
 
-    (with, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+    (with, [$($([$ffi_mut:ident])? $name:ident: $type:ty $({$check:expr})?; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
                 pub fn [<with_ $name:camel:snake>](mut self, value: $type) -> Self {
+                    $($check(value).expect("invalid builder argument");)?
                     #[allow(unused_unsafe)]
                     unsafe { self$(.$ffi_mut())?.$name = value.into() };
                     self
@@ -703,11 +727,12 @@ macro_rules! getter_setter {
         }
     };
 
-    ([&] with, [$($([$ffi_mut:ident])? $name:ident: $type:ty; $comment:expr);* $(;)?]) => {
+    ([&] with, [$($([$ffi_mut:ident])? $name:ident: $type:ty $({$check:expr})?; $comment:expr);* $(;)?]) => {
         paste::paste!{ 
             $(
                 #[doc = concat!("Builder method for setting ", $comment)]
                 pub fn [<with_ $name:camel:snake>](&mut self, value: $type) -> &mut Self {
+                    $($check(value).expect("invalid builder argument");)?
                     #[allow(unused_unsafe)]
                     unsafe { self$(.$ffi_mut())?.$name = value.into() };
                     self
@@ -718,9 +743,9 @@ macro_rules! getter_setter {
     
     /* Handling of optional arguments */
     /* Enum pass */
-    (force!, get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+    (force!, get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty $({$check:expr})? $(=> $err:ty)?; $comment:expr );* $(;)?]) => {
         $crate::getter_setter!(force!, get, [ $($([$ffi])? $name $(+ $symbol)? : $type ; $comment );* ]);
-        $crate::getter_setter!(force!, set, [ $($([$ffi_mut])? $name : $type ; $comment );* ]);
+        $crate::getter_setter!(force!, set, [ $($([$ffi_mut])? $name : $type $({$check})? $(=> $err)?; $comment );* ]);
     };
 
     (get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : bool ; $comment:expr );* $(;)?]) => {
@@ -728,9 +753,9 @@ macro_rules! getter_setter {
         $crate::getter_setter!(set, [ $($([$ffi_mut])? $name : bool ; $comment );* ]);
     };
 
-    (get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+    (get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty $({$check:expr})? $(=> $err:ty)?; $comment:expr );* $(;)?]) => {
         $crate::getter_setter!(get, [ $($([$ffi])? $name $(+ $symbol)? : $type ; $comment );* ]);
-        $crate::getter_setter!(set, [ $($([$ffi_mut])? $name : $type ; $comment );* ]);
+        $crate::getter_setter!(set, [ $($([$ffi_mut])? $name : $type $({$check})? $(=> $err)?; $comment );* ]);
     };
 
     /* Builder pattern */
@@ -740,21 +765,21 @@ macro_rules! getter_setter {
         $crate::getter_setter!($([$token])? with, [ $($([$ffi_mut])? $name : bool ; $comment );* ]);
     };
 
-    ($([$token:tt])? with, get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+    ($([$token:tt])? with, get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty $({$check:expr})? $(=> $err:ty)?; $comment:expr );* $(;)?]) => {
         $crate::getter_setter!(get, [ $($([$ffi])? $name $(+ $symbol)?: $type ; $comment );* ]);
-        $crate::getter_setter!(set, [ $($([$ffi_mut])? $name : $type ; $comment );* ]);
-        $crate::getter_setter!($([$token])? with, [ $($([$ffi_mut])? $name : $type ; $comment );* ]);
+        $crate::getter_setter!(set, [ $($([$ffi_mut])? $name : $type $({$check})? $(=> $err)?; $comment );* ]);
+        $crate::getter_setter!($([$token])? with, [ $($([$ffi_mut])? $name : $type $({$check})?; $comment );* ]);
     };
 
-    (force!, $([$token:tt])? with, get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty ; $comment:expr );* $(;)?]) => {
+    (force!, $([$token:tt])? with, get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty $({$check:expr})? $(=> $err:ty)?; $comment:expr );* $(;)?]) => {
         $crate::getter_setter!(force!, get, [$($([$ffi])? $name $(+ $symbol)? : $type ; $comment );* ]);
-        $crate::getter_setter!(force!, set, [$($([$ffi_mut])? $name : $type ; $comment );* ]);
-        $crate::getter_setter!(force!, $([$token])? with, [$($([$ffi_mut])? $name : $type ; $comment );* ]);
+        $crate::getter_setter!(force!, set, [$($([$ffi_mut])? $name : $type $({$check})? $(=> $err)?; $comment );* ]);
+        $crate::getter_setter!(force!, $([$token])? with, [$($([$ffi_mut])? $name : $type $({$check})?; $comment );* ]);
     };
 
-    ($([$token:tt])? with, get, [$( $([$ffi: ident, $ffi_mut:ident])? $((allow_mut = $allow_mut:literal))? $name:ident $(+ $symbol:tt)? : & $type:ty ; $comment:expr );* $(;)?]) => {
+    ($([$token:tt])? with, get, [$( $([$ffi: ident, $ffi_mut:ident])? $((allow_mut = $allow_mut:literal))? $name:ident $(+ $symbol:tt)? : & $type:ty $({$check:expr})? ; $comment:expr );* $(;)?]) => {
         $crate::getter_setter!(get, [ $($([$ffi, $ffi_mut])? $((allow_mut = $allow_mut))? $name $(+ $symbol)? : & $type ; $comment );* ]);
-        $crate::getter_setter!($([$token])? with, [ $( $([$ffi_mut])? $name : $type ; $comment );* ]);
+        $crate::getter_setter!($([$token])? with, [ $( $([$ffi_mut])? $name : $type $({$check})? ; $comment );* ]);
     };
 }
 
@@ -1191,46 +1216,281 @@ mod tests {
         assert!(mutex.lock().is_ok(), "mutex should no longer be poisoned");
     }
 
-    /// Exercises the three "dead" combination arms of `getter_setter!` (arms 11, 12, 13)
-    /// by instantiating each on a minimal dummy struct.
-    ///
-    /// - Arm 11: `(force!, get, set, [...])` -- force-cast getter + setter.
-    /// - Arm 12: `(get, set, [... : bool ...])` -- bool getter (field `== 1`) + setter.
-    /// - Arm 13: `(get, set, [... : $type ...])` -- `.into()` getter + setter.
+    /// A non-negative-only check used across the comprehensive arm tests below.
+    fn non_negative(v: i32) -> Result<(), &'static str> {
+        if v >= 0 { Ok(()) } else { Err("must be non-negative") }
+    }
+
+    /// An array check (first element non-negative) used by the reference-array arm tests below.
+    fn first_non_negative(a: [f64; 2]) -> Result<(), &'static str> {
+        if a[0] >= 0.0 { Ok(()) } else { Err("first must be non-negative") }
+    }
+
+    /// Comprehensively exercises **every** arm of `getter_setter!` on minimal dummy structs,
+    /// verifying both the generated method shapes and the optional `{ check }` constraint on each
+    /// arm that writes a value. Grouped by arm; a separate struct per arm avoids method-name
+    /// collisions.
     #[test]
-    fn test_getter_setter_dead_arms_11_12_13() {
-        struct ArmEleven { x: i32, y: i32 }
-        impl ArmEleven {
-            crate::getter_setter!(force!, get, set, [x: i32; "x field."; y: i32; "y field.";]);
+    #[allow(clippy::bool_assert_comparison)]
+    // Several arms generate companion methods (e.g. a `set_*` alongside the `with_*`/getter under
+    // test) that this test intentionally does not all call -- it verifies generation, not every path.
+    #[allow(dead_code)]
+    fn test_getter_setter_all_arms() {
+        use crate::getter_setter as gs;
+
+        // --- Getter arms ---------------------------------------------------------------------
+        // Arm: (get, [bool])
+        struct GetBool { flag: i32 }
+        impl GetBool { gs!(get, [flag: bool; "flag.";]); }
+        assert_eq!(GetBool { flag: 1 }.flag(), true);
+        assert_eq!(GetBool { flag: 0 }.flag(), false);
+
+        // Arm: (get, [&Type]) -- default allow_mut generates `_mut`; `allow_mut = false` omits it.
+        struct GetRef { arr: [f64; 3] }
+        impl GetRef { gs!(get, [arr: &[f64; 3]; "array.";]); }
+        let mut gr = GetRef { arr: [1.0, 2.0, 3.0] };
+        assert_eq!(gr.arr(), &[1.0, 2.0, 3.0]);
+        gr.arr_mut()[0] = 9.0;
+        assert_eq!(gr.arr(), &[9.0, 2.0, 3.0]);
+
+        struct GetRefNoMut { arr: [f64; 2] }
+        impl GetRefNoMut { gs!(get, [(allow_mut = false) arr: &[f64; 2]; "array.";]); }
+        assert_eq!(GetRefNoMut { arr: [4.0, 5.0] }.arr(), &[4.0, 5.0]);
+
+        // Arm: (get, [Type]) -- with a `+ symbol` getter-name suffix.
+        struct GetVal { val: i32 }
+        impl GetVal { gs!(get, [val + _renamed: i32; "value.";]); }
+        assert_eq!(GetVal { val: 7 }.val_renamed(), 7);
+
+        // Arm: (force!, get, [Type])
+        struct ForceGet { v: i32 }
+        impl ForceGet { gs!(force!, get, [v: i32; "v.";]); }
+        assert_eq!(ForceGet { v: 42 }.v(), 42);
+
+        // --- Setter / builder base arms ------------------------------------------------------
+        // Arm: (set, [...]) -- plain and checked.
+        struct Set { a: i32, b: i32 }
+        impl Set {
+            gs!(set, [
+                a: i32; "a.";
+                b: i32 { non_negative } => &'static str; "b.";
+            ]);
         }
+        let mut s = Set { a: 0, b: 0 };
+        s.set_a(5);
+        assert_eq!(s.a, 5);
+        assert_eq!(s.set_b(3), Ok(()));
+        assert_eq!(s.b, 3);
+        assert_eq!(s.set_b(-1), Err("must be non-negative"));
+        assert_eq!(s.b, 3); // unchanged on error
 
-        struct ArmTwelve { flag: i32 }
-        impl ArmTwelve {
-            crate::getter_setter!(get, set, [flag: bool; "flag field.";]);
+        // Arm: (force!, set, [...]) -- plain and checked.
+        struct ForceSet { a: i32, b: i32 }
+        impl ForceSet {
+            gs!(force!, set, [
+                a: i32; "a.";
+                b: i32 { non_negative } => &'static str; "b.";
+            ]);
         }
+        let mut fs = ForceSet { a: 0, b: 0 };
+        fs.set_a(8);
+        assert_eq!(fs.a, 8);
+        assert_eq!(fs.set_b(2), Ok(()));
+        assert_eq!(fs.set_b(-1), Err("must be non-negative"));
+        assert_eq!(fs.b, 2);
 
-        struct ArmThirteen { count: i32 }
-        impl ArmThirteen {
-            crate::getter_setter!(get, set, [count: i32; "count field.";]);
+        // Arm: (with, [...]) -- consuming builder, checked (valid input; panic path tested below).
+        struct With { v: i32 }
+        impl With { gs!(with, [v: i32 { non_negative }; "v.";]); }
+        assert_eq!(With { v: 0 }.with_v(6).v, 6);
+
+        // Arm: ([&] with, [...]) -- &mut builder, checked.
+        struct RefWith { v: i32 }
+        impl RefWith { gs!([&] with, [v: i32 { non_negative }; "v.";]); }
+        let mut rw = RefWith { v: 0 };
+        rw.with_v(4);
+        assert_eq!(rw.v, 4);
+
+        // Arm: (force!, with, [...]) and (force!, [&] with, [...]) -- checked.
+        struct ForceWith { v: i32 }
+        impl ForceWith { gs!(force!, with, [v: i32 { non_negative }; "v.";]); }
+        assert_eq!(ForceWith { v: 0 }.with_v(3).v, 3);
+
+        struct ForceRefWith { v: i32 }
+        impl ForceRefWith { gs!(force!, [&] with, [v: i32 { non_negative }; "v.";]); }
+        let mut frw = ForceRefWith { v: 0 };
+        frw.with_v(5);
+        assert_eq!(frw.v, 5);
+
+        // --- Aggregate arms ------------------------------------------------------------------
+        // Arm: (force!, get, set, [...]) -- plain and checked.
+        struct ForceGetSet { v: i32 }
+        impl ForceGetSet { gs!(force!, get, set, [v: i32 { non_negative } => &'static str; "v.";]); }
+        let mut fgs = ForceGetSet { v: 0 };
+        assert_eq!(fgs.set_v(11), Ok(()));
+        assert_eq!(fgs.v(), 11);
+        assert_eq!(fgs.set_v(-1), Err("must be non-negative"));
+
+        // Arm: (get, set, [bool]) and (get, set, [Type] + check).
+        struct GetSetBool { flag: i32 }
+        impl GetSetBool { gs!(get, set, [flag: bool; "flag.";]); }
+        let mut gsb = GetSetBool { flag: 1 };
+        assert_eq!(gsb.flag(), true);
+        gsb.set_flag(false);
+        assert_eq!(gsb.flag(), false);
+
+        struct GetSetVal { count: i32, checked: i32 }
+        impl GetSetVal {
+            gs!(get, set, [
+                count: i32; "count.";
+                checked: i32 { non_negative } => &'static str; "checked.";
+            ]);
         }
+        let mut gsv = GetSetVal { count: 5, checked: 0 };
+        gsv.set_count(10);
+        assert_eq!(gsv.count(), 10);
+        assert_eq!(gsv.set_checked(7), Ok(()));
+        assert_eq!(gsv.checked(), 7);
+        assert_eq!(gsv.set_checked(-1), Err("must be non-negative"));
+        assert_eq!(gsv.checked(), 7);
 
-        let mut arm11 = ArmEleven { x: 3, y: 7 };
-        assert_eq!(arm11.x(), 3);
-        assert_eq!(arm11.y(), 7);
-        arm11.set_x(9);
-        assert_eq!(arm11.x(), 9);
-        arm11.set_y(10);
-        assert_eq!(arm11.y(), 10);
+        // Arm: (with, get, set, [bool]) and ([&] with, get, set, [bool]).
+        struct WithGetSetBool { flag: i32 }
+        impl WithGetSetBool { gs!(with, get, set, [flag: bool; "flag.";]); }
+        assert_eq!(WithGetSetBool { flag: 0 }.with_flag(true).flag(), true);
 
-        let mut arm12 = ArmTwelve { flag: 1 };
-        assert!(arm12.flag());
-        arm12.set_flag(false);
-        assert!(!arm12.flag());
+        struct RefWithGetSetBool { flag: i32 }
+        impl RefWithGetSetBool { gs!([&] with, get, set, [flag: bool; "flag.";]); }
+        let mut rwgsb = RefWithGetSetBool { flag: 0 };
+        rwgsb.with_flag(true);
+        assert_eq!(rwgsb.flag(), true);
 
-        let mut arm13 = ArmThirteen { count: 5 };
-        assert_eq!(arm13.count(), 5);
-        arm13.set_count(10);
-        assert_eq!(arm13.count(), 10);
+        // Arm: (with, get, set, [Type]) and ([&] with, get, set, [Type] + check).
+        struct WithGetSetVal { v: i32 }
+        impl WithGetSetVal { gs!(with, get, set, [v: i32; "v.";]); }
+        let mut wgsv = WithGetSetVal { v: 0 }.with_v(3);
+        assert_eq!(wgsv.v(), 3);
+        wgsv.set_v(4);
+        assert_eq!(wgsv.v(), 4);
+
+        struct RefWithGetSetVal { v: i32, w: i32 }
+        impl RefWithGetSetVal {
+            gs!([&] with, get, set, [
+                v: i32; "v.";
+                w: i32 { non_negative } => &'static str; "w.";
+            ]);
+        }
+        let mut rwgsv = RefWithGetSetVal { v: 0, w: 0 };
+        rwgsv.with_v(1);
+        assert_eq!(rwgsv.v(), 1);
+        assert_eq!(rwgsv.set_w(2), Ok(()));
+        assert_eq!(rwgsv.w(), 2);
+        assert_eq!(rwgsv.set_w(-1), Err("must be non-negative"));
+
+        // Arm: (force!, with, get, set, [...]) and (force!, [&] with, get, set, [...]).
+        struct ForceWithGetSet { v: i32 }
+        impl ForceWithGetSet { gs!(force!, with, get, set, [v: i32 { non_negative } => &'static str; "v.";]); }
+        let fwgs = ForceWithGetSet { v: 0 }.with_v(9);
+        assert_eq!(fwgs.v(), 9);
+
+        struct ForceRefWithGetSet { v: i32 }
+        impl ForceRefWithGetSet { gs!(force!, [&] with, get, set, [v: i32; "v.";]); }
+        let mut frwgs = ForceRefWithGetSet { v: 0 };
+        frwgs.with_v(6);
+        assert_eq!(frwgs.v(), 6);
+
+        // Arm: (with, get, [&Type]) and ([&] with, get, [&Type]) -- array fields, plain and checked.
+        struct WithGetRef { arr: [f64; 3] }
+        impl WithGetRef { gs!(with, get, [arr: &[f64; 3]; "array.";]); }
+        let wgr = WithGetRef { arr: [0.0; 3] }.with_arr([1.0, 2.0, 3.0]);
+        assert_eq!(wgr.arr(), &[1.0, 2.0, 3.0]);
+
+        struct RefWithGetRef { arr: [f64; 2] }
+        impl RefWithGetRef { gs!([&] with, get, [arr: &[f64; 2] { first_non_negative }; "array.";]); }
+        let mut rwgr = RefWithGetRef { arr: [0.0; 2] };
+        rwgr.with_arr([5.0, 6.0]);
+        assert_eq!(rwgr.arr(), &[5.0, 6.0]);
+    }
+
+    /* `#[should_panic]` tests: a checked `with_*` builder must panic on invalid input, since a
+       builder has to keep returning `Self` and cannot surface a `Result`. One per distinct
+       check-bearing builder code path (the four base `with` arms plus each aggregate that forwards
+       a check into a builder, which also guards against an aggregate silently dropping the check). */
+
+    /// Base `(with, [...])` builder panics on a failing check.
+    #[test]
+    #[should_panic(expected = "invalid builder argument")]
+    fn test_with_check_panics() {
+        struct S { v: i32 }
+        impl S { crate::getter_setter!(with, [v: i32 { non_negative }; "v.";]); }
+        S { v: 0 }.with_v(-1);
+    }
+
+    /// Base `([&] with, [...])` builder panics on a failing check.
+    #[test]
+    #[should_panic(expected = "invalid builder argument")]
+    fn test_ref_with_check_panics() {
+        struct S { v: i32 }
+        impl S { crate::getter_setter!([&] with, [v: i32 { non_negative }; "v.";]); }
+        S { v: 0 }.with_v(-1);
+    }
+
+    /// `(force!, with, [...])` builder panics on a failing check.
+    #[test]
+    #[should_panic(expected = "invalid builder argument")]
+    fn test_force_with_check_panics() {
+        struct S { v: i32 }
+        impl S { crate::getter_setter!(force!, with, [v: i32 { non_negative }; "v.";]); }
+        S { v: 0 }.with_v(-1);
+    }
+
+    /// `(force!, [&] with, [...])` builder panics on a failing check.
+    #[test]
+    #[should_panic(expected = "invalid builder argument")]
+    fn test_force_ref_with_check_panics() {
+        struct S { v: i32 }
+        impl S { crate::getter_setter!(force!, [&] with, [v: i32 { non_negative }; "v.";]); }
+        S { v: 0 }.with_v(-1);
+    }
+
+    /// The `([&] with, get, set, [...])` aggregate forwards the check into `with_*`, which panics.
+    #[test]
+    #[should_panic(expected = "invalid builder argument")]
+    #[allow(dead_code)] // the aggregate also generates `w`/`set_w`, unused in this panic test
+    fn test_with_get_set_aggregate_check_panics() {
+        struct S { w: i32 }
+        impl S {
+            crate::getter_setter!([&] with, get, set, [
+                w: i32 { non_negative } => &'static str; "w.";
+            ]);
+        }
+        S { w: 0 }.with_w(-1);
+    }
+
+    /// The `(force!, with, get, set, [...])` aggregate forwards the check into `with_*`, which panics.
+    #[test]
+    #[should_panic(expected = "invalid builder argument")]
+    #[allow(dead_code)] // the aggregate also generates `v`/`set_v`, unused in this panic test
+    fn test_force_with_get_set_aggregate_check_panics() {
+        struct S { v: i32 }
+        impl S {
+            crate::getter_setter!(force!, with, get, set, [
+                v: i32 { non_negative } => &'static str; "v.";
+            ]);
+        }
+        S { v: 0 }.with_v(-1);
+    }
+
+    /// The `([&] with, get, [&Type])` reference-array aggregate forwards the check into `with_*`.
+    #[test]
+    #[should_panic(expected = "invalid builder argument")]
+    #[allow(dead_code)] // the aggregate also generates `arr`/`arr_mut`, unused in this panic test
+    fn test_with_get_ref_aggregate_check_panics() {
+        struct S { arr: [f64; 2] }
+        impl S {
+            crate::getter_setter!([&] with, get, [arr: &[f64; 2] { first_non_negative }; "array.";]);
+        }
+        S { arr: [0.0; 2] }.with_arr([-1.0, 0.0]);
     }
 
     /// Tests both arms of `cast_mut_info!`: without and with the optional debug expression.

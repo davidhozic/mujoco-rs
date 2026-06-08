@@ -619,14 +619,24 @@ macro_rules! vec_set_get {
 ///
 /// Two forms are supported:
 /// - `name: Type; "comment"` -- the setter takes `&[Type]` and writes it unchanged.
-/// - `name: InputType => StoredType; "comment"; "safety"` -- generates an `unsafe` setter taking
-///   `&[InputType]` (typically a Rust enum) and storing each element as the raw C type `StoredType`
-///   via a zero-cost pointer reinterpretation (the same compile-time-checked cast the view layer
-///   uses, so no `bytemuck` trait is required on the enum). This form is for values the C side later
-///   uses without its own validation (e.g. as an unchecked array index), where the only guard would
-///   require iterating the slice; `"safety"` documents the caller's `# Safety` obligation. Typing
-///   the input as an enum keeps arbitrary integers out, but does not by itself rule out enum
-///   discriminants that are out of range for the C-side use.
+/// - `name: InputType => StoredType <tail>; "comment" <tail2>` -- the setter takes `&[InputType]`
+///   (typically a Rust enum) and stores each element as the raw C type `StoredType` via a zero-cost
+///   pointer reinterpretation (the same compile-time-checked cast the view layer uses, so no
+///   `bytemuck` trait is required on the enum). The two optional tails pick the validation strategy;
+///   provide at most one:
+///   - `{ check } => ErrType` (before `;`) -- generates a **safe** setter returning
+///     `Result<(), ErrType>`. Every element is passed through `check`
+///     (a `Fn(InputType) -> Result<(), ErrType>`) before anything is written; if any element fails,
+///     nothing is written. Use this when the validation rules out the out-of-range values the C side
+///     would misuse, which is what makes the setter sound without `unsafe`.
+///   - `; unsafe "safety"` (after `"comment"`) -- generates an `unsafe` setter for values the C side
+///     later uses without its own validation (e.g. as an unchecked array index) and which cannot be
+///     cheaply validated here; `"safety"` documents the caller's `# Safety` obligation. The literal
+///     `unsafe` keyword is written at the call site and echoed onto the generated `fn`. Typing the
+///     input as an enum keeps arbitrary integers out, but does not by itself rule out enum
+///     discriminants that are out of range for the C-side use.
+///
+///   With neither tail the setter is safe and writes the reinterpreted slice unchanged.
 macro_rules! vec_set {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
@@ -637,18 +647,31 @@ macro_rules! vec_set {
             }
         )*
     }};
-    ($($name:ident: $input_type:ty => $type:ty; $comment:expr; $safety:expr);* $(;)?) => {paste::paste!{
+    ($($name:ident: $input_type:ty => $type:ty $({$check:expr} => $err:ty)?; $comment:expr $(; $unsafe_kw:tt $safety:expr)?);* $(;)?) => {paste::paste!{
         $(
-            #[doc = concat!("Set ", $comment, "\n\n# Safety\n", $safety)]
-            pub unsafe fn [<set_ $name>](&mut self, value: &[$input_type]) {
+            // One setter whose shape is driven by the supplied tail:
+            // - `{ check } => ErrType` makes it a safe `-> Result<(), ErrType>` that validates every
+            //   element first; passing validation rules out the values the C side would misuse, so the
+            //   reinterpretation is sound without `unsafe`.
+            // - `; unsafe "safety"` echoes the `unsafe` keyword onto the `fn` and documents the
+            //   caller's `# Safety` obligation (used when no cheap validation is possible).
+            #[doc = concat!("Set ", $comment
+                $(, "\n\n# Errors\nReturns an error from `", stringify!($err),
+                     "` when any element fails validation; in that case nothing is written.")?
+                $(, "\n\n# Safety\n", $safety)?
+            )]
+            pub $($unsafe_kw)? fn [<set_ $name>](&mut self, value: &[$input_type]) $(-> Result<(), $err>)? {
+                $(for &v in value { ($check)(v)?; })?
                 // Compile-time size/alignment check for the layout-compatible reinterpretation below.
                 $crate::util::assert_ptr_cast_valid::<$input_type, $type>(value.as_ptr());
-                // SAFETY: $input_type and $type are layout-compatible (asserted above) and every
-                // enum value is a valid bit pattern for its underlying integer, so reinterpreting the
-                // slice is sound and zero-cost. The caller upholds the documented value-range
-                // precondition. self.$name is a valid pointer for the lifetime of self.
+                // SAFETY: $input_type and $type are layout-compatible (asserted above) and every enum
+                // value is a valid bit pattern for its underlying integer, so reinterpreting the slice
+                // is sound and zero-cost. The value-range precondition the C side relies on is enforced
+                // by the `$check` loop above when present, or by the caller's `# Safety` contract
+                // otherwise. self.$name is a valid pointer for the lifetime of self.
                 let raw: &[$type] = unsafe { std::slice::from_raw_parts(value.as_ptr().cast(), value.len()) };
                 unsafe { [<write_mjs_vec_ $type>](raw, self.$name) };
+                $(Ok::<(), $err>(()))?
             }
         )*
     }};
