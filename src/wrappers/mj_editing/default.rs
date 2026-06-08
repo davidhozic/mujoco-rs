@@ -99,4 +99,4 @@ impl SpecItem for MjsDefault {
 // element handles: it is a raw pointer into the shared mjSpec arena and its `&mut self`
 // mutators reach into model-global state. The raw-pointer field already makes it
 // auto-`!Send + !Sync`; do NOT add `unsafe impl Send`/`Sync` here. The owning `MjSpec`
-// remains `Send + Sync`, so the spec itself can still cross threads.
+// remains `Send` (but not `Sync`), so the spec itself can still move between threads.

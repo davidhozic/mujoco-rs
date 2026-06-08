@@ -312,6 +312,61 @@ visualization flag is set, even though the underlying MuJoCo C functions are dec
     let (geomid, dist) = data.ray(&pnt, &vec, None, false, None, None);
 
 
+``MjvScene::find_selection`` now takes ``&mut MjData``
+------------------------------------------------------
+
+|mjv_scene|'s ``find_selection`` now takes ``data: &mut MjData<M>`` (previously ``&MjData<M>``).
+It calls ``mjv_select`` -> ``mj_ray``, whose bounding-volume traversal writes ``data.bvh_active``
+(the same ``const mjData*``-but-mutating path as ``ray`` above), so a shared borrow was unsound.
+Pass an exclusive borrow instead. (``MjvScene::update`` already took ``&mut MjData``.)
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    let data = model.make_data();
+    let sel = scene.find_selection(&data, &opt, aspect, relx, rely);
+
+**After:**
+
+.. code-block:: rust
+
+    let mut data = model.make_data();
+    let sel = scene.find_selection(&mut data, &opt, aspect, relx, rely);
+
+
+``MjSpec`` is no longer ``Sync``
+--------------------------------
+
+|mj_spec| is now ``Send`` but no longer ``Sync``. ``clone`` / ``try_clone`` make a faithful,
+independent copy, but the underlying C++ copy constructor is not strictly ``const`` on the source
+(it rewrites transient, normally-empty per-actuator keyframe-cache maps), so two threads cloning a
+shared ``&MjSpec`` concurrently is a data race. ``MjSpec`` still moves between threads (``Send``);
+only shared cross-thread access is removed. Code that placed a ``&MjSpec`` in a ``Sync``-requiring
+context must transfer ownership (or clone per thread) instead.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    // relied on &MjSpec being shareable across threads
+    std::thread::scope(|s| {
+        s.spawn(|| { let _ = spec.clone(); });
+        s.spawn(|| { let _ = spec.clone(); });
+    });
+
+**After:**
+
+.. code-block:: rust
+
+    // move an owned MjSpec into each thread (clone up front if needed)
+    let spec2 = spec.clone();
+    std::thread::scope(|s| {
+        s.spawn(move || { let _ = spec; });
+        s.spawn(move || { let _ = spec2; });
+    });
+
+
 .. _migrate_4_0_0:
 
 Migrating to 4.0.0

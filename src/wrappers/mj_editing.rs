@@ -146,8 +146,15 @@ impl MjsCompiler {
 #[derive(Debug)]
 pub struct MjSpec(NonNull<mjSpec>);
 
-// SAFETY: The pointer cannot be accessed without borrowing the wrapper.
-unsafe impl Sync for MjSpec {}
+// SAFETY: `MjSpec` owns its `mjSpec` exclusively, so moving it between threads transfers
+// sole ownership and cannot race.
+//
+// It is intentionally NOT `Sync`. `clone`/`try_clone` produce a faithful, independent copy, but
+// the C++ copy constructor behind `mj_copySpec` is not strictly `const` on the source: for every
+// actuator it calls `ForgetKeyframes`, which clears two `std::map` keyframe-resolution caches
+// (`act_`/`ctrl_`). Those maps are empty for a normally-built spec, yet `std::map::clear` rewrites
+// the tree header unconditionally, so two threads sharing a `&MjSpec` and cloning concurrently
+// would race on those writes (a data race, though no spec data is lost). Hence the type stays `!Sync`.
 unsafe impl Send for MjSpec {}
 
 impl MjSpec {

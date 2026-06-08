@@ -871,7 +871,7 @@ impl MjvScene {
     /// # Panics
     /// Panics if `data` was created from a different model than this scene.
     pub fn find_selection<M: Deref<Target = MjModel>>(
-        &self, data: &MjData<M>, option: &MjvOption,
+        &self, data: &mut MjData<M>, option: &MjvOption,
         aspect_ratio: MjtNum, relx: MjtNum, rely: MjtNum,
     ) -> SceneSelection {
         self.assert_signature(data.model().signature());

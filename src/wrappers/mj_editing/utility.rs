@@ -409,9 +409,8 @@ macro_rules! mjs_struct {
         // thread boundary would let two such accesses race on the one arena from safe code.
         // The raw-pointer field already makes the type auto-`!Send + !Sync`, so we simply
         // do not add the impls. Do NOT add `unsafe impl Send`/`Sync` here: the owning
-        // `MjSpec` is itself `Send + Sync`, so a whole spec can still move between threads
-        // and a shared `&MjSpec` can be read concurrently --- handles derived from it just
-        // stay on the thread that created them.
+        // `MjSpec` is itself `Send` (but `!Sync`), so a whole spec can still move between
+        // threads --- handles derived from it just stay on the thread that created them.
     }};
 }
 
