@@ -109,6 +109,22 @@ update of MuJoCo alone can increase the major version.
   ``MjEditError::InvalidParameter``. The builder counterparts ``with_objtype`` / ``with_reftype``
   keep their signature but **panic** on a rejected value. See the migration guide.
 
+*MjsNumeric::set_size is now fallible*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsNumeric::<method>set_size` now returns
+  ``Result<(), MjEditError>`` instead of ``()``, rejecting a negative size with
+  ``MjEditError::InvalidParameter`` (a negative size triggers an out-of-bounds write in the model
+  compiler). See the migration guide.
+
+*Some index/size vector setters are now ``unsafe``*
+
+- ``MjsTexture::set_nchannel`` / ``with_nchannel``, ``MjsFlex::set_elemtexcoord``,
+  ``MjsSkin::set_face`` and ``MjsMesh::set_userfacetexcoord`` are now ``unsafe fn``: each writes a
+  value the model compiler or renderer later trusts as an unchecked array index, count, or
+  ``memcpy`` length, and the correct constraint is cross-field (it cannot be checked from the
+  setter alone). Each carries a ``# Safety`` section describing the caller's obligation. See the
+  migration guide.
+
 - The ``Mjs*`` element handles (|mjs_body|, ``MjsGeom``, ...) and ``MjsDefault`` are now
   ``!Send + !Sync``; they previously carried a blanket ``unsafe impl Send``/``Sync``. Each
   handle is only a raw pointer into one shared ``mjSpec``/``mjCModel`` arena, so moving or
@@ -189,8 +205,9 @@ New error variants in pre-existing enums:
   e.g. an out-of-range asset ID).
 - :docs-rs:`~mujoco_rs::error::<enum>MjEditError`: ``InvalidParameter(String)`` (a value was
   rejected; the string describes the rejection). Returned by the new ``set_to_*`` actuator helpers
-  (see New features and improvements) and by the now-validating object/reference type setters
-  ``MjsSensor::set_objtype`` / ``set_reftype`` and ``MjsTuple::set_objtype`` (see Breaking changes).
+  (see New features and improvements) and by the now-validating setters
+  ``MjsSensor::set_objtype`` / ``set_reftype``, ``MjsTuple::set_objtype`` and
+  ``MjsNumeric::set_size`` (see Breaking changes).
 
 .. rubric:: New features and improvements
 

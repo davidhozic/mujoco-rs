@@ -255,6 +255,50 @@ rejected value.
     sensor.set_reftype(MjtObj::mjOBJ_BODY)?;
 
 
+MjsNumeric::set_size is now fallible
+------------------------------------
+
+``MjsNumeric::set_size`` previously returned ``()``; it now returns ``Result<(), MjEditError>``,
+rejecting a negative size with ``MjEditError::InvalidParameter`` (a negative size triggers an
+out-of-bounds write in the model compiler).
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    numeric.set_size(8);
+
+**After:**
+
+.. code-block:: rust
+
+    numeric.set_size(8)?;
+
+
+Some index/size vector setters are now ``unsafe``
+-------------------------------------------------
+
+``MjsTexture::set_nchannel`` / ``with_nchannel``, ``MjsFlex::set_elemtexcoord``,
+``MjsSkin::set_face`` and ``MjsMesh::set_userfacetexcoord`` are now ``unsafe fn``. Each writes a
+value the model compiler or renderer later trusts as an unchecked index/count/length, and the
+correct constraint is cross-field, so it cannot be validated from the setter. Wrap calls in
+``unsafe`` after ensuring the obligation in each method's ``# Safety`` section (e.g. for
+``set_face``, every index is in ``0..nvert`` and the length is a multiple of 3).
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    skin.set_face(&faces);
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: every index is < nvert and faces.len() is a multiple of 3.
+    unsafe { skin.set_face(&faces); }
+
+
 ``MjData::add_contact`` is now an ``unsafe fn``
 -----------------------------------------------
 

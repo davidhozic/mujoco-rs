@@ -49,6 +49,22 @@ fn check_objtype(t: MjtObj) -> Result<(), MjEditError> {
     }
 }
 
+/// Validates that a custom-numeric array size is non-negative.
+///
+/// A negative `size` slips through every guard in the model compiler's `mjCNumeric::Compile`
+/// (the `size < data_.size()` check is gated on a non-empty init array, and the zero checks treat
+/// negatives as non-zero), so it undersizes the shared `numeric_data` allocation while another
+/// numeric's zero-fill loop still runs up to its own positive size, writing out of bounds.
+fn check_numeric_size(size: i32) -> Result<(), MjEditError> {
+    if size < 0 {
+        Err(MjEditError::InvalidParameter(format!(
+            "numeric size must be non-negative, got {size}"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
 /* Types */
 /// Type of inertia inference.
 pub type MjtGeomInertia = mjtGeomInertia;
@@ -1423,7 +1439,12 @@ impl MjsFlex {
     vec_set! {
         texcoord: f32;          "vertex texture coordinates.";
         elem: i32;              "element vertex ids.";
-        elemtexcoord: i32;      "element texture coordinates.";
+    }
+
+    vec_set! {
+        elemtexcoord: i32 => i32; "element texture coordinates.";
+            "The slice must have exactly `(dim + 1) * nelem` entries and every entry must be a \
+             valid index into the flex texture coordinates." unsafe;
     }
 }
 
@@ -1688,7 +1709,7 @@ mjs_struct!(Numeric [SpecObject]);
 impl MjsNumeric {
     getter_setter! {
         [&] with, get, set, [
-            size: i32;                     "size of the numeric array.";
+            size: i32 { check_numeric_size, "[`MjEditError::InvalidParameter`] when the size is negative" } => MjEditError;     "size of the numeric array.";
         ]
     }
 
@@ -1817,7 +1838,11 @@ impl MjsMesh {
         usertexcoord: f32;           "user texcoord data.";
         userface: i32;               "user vertex indices.";
         userfacenormal: i32;         "user face normal indices.";
-        userfacetexcoord: i32;       "user texcoord indices.";
+    }
+
+    vec_set! {
+        userfacetexcoord: i32 => i32; "user texcoord indices.";
+            "Every entry must be in `0..ntexcoord` (the number of user texture coordinates)." unsafe;
     }
 }
 
@@ -1881,7 +1906,12 @@ impl MjsSkin {
         texcoord: f32;          "texture coordinates.";
         bindpos: f32;           "bind pos.";
         bindquat: f32;          "bind quat.";
-        face: i32;              "faces.";
+    }
+
+    vec_set! {
+        face: i32 => i32; "faces.";
+            "The slice length must be a multiple of 3 and every entry must be in `0..nvert` \
+             (the number of skin vertices)." unsafe;
     }
 
     vec_vec_append! {
@@ -1918,7 +1948,14 @@ impl MjsTexture {
             random: f64;                  "probability of random dots.";
             width: i32;                   "image width.";
             height: i32;                  "image height.";
-            nchannel: i32;                "number of channels.";
+        ]
+    }
+
+    getter_setter! {
+        [&] with, get, set, [
+            // unsafe: "`nchannel` must be `>= 3` whenever a builtin pattern is set \
+            //          (`builtin != MjtBuiltin::mjBUILTIN_NONE`).";
+                nchannel: i32; "number of channels.";
         ]
     }
 
@@ -3308,5 +3345,19 @@ mod tests {
             Err(MjEditError::InvalidParameter(_))
         ));
         assert!(tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM]).is_ok());
+    }
+
+    /// Verifies the numeric size setter rejects a negative size (which would undersize the
+    /// `numeric_data` allocation in the model compiler) and accepts a non-negative one.
+    #[test]
+    fn test_numeric_size_validation() {
+        let mut spec = MjSpec::new();
+        let numeric = spec.add_numeric();
+
+        assert!(matches!(
+            numeric.set_size(-1),
+            Err(MjEditError::InvalidParameter(_))
+        ));
+        assert!(numeric.set_size(4).is_ok());
     }
 }
