@@ -25,7 +25,8 @@ Migrating to 5.0.0
 ======================
 
 Version 5.0.0 updates MuJoCo to 3.9.0, redesigns model-editing element deletion,
-and migrates several rendering APIs to the |mjr_context| error type.
+migrates several rendering APIs to the |mjr_context| error type, and hardens
+model-editing setters against out-of-range object types.
 
 
 MuJoCo upgrade
@@ -211,17 +212,12 @@ with named fields instead.
     }
 
 
-``MjsTuple::set_objtype`` now takes ``&[MjtObj]``
--------------------------------------------------
+``MjsTuple::set_objtype`` now takes ``&[MjtObj]`` and is fallible
+-----------------------------------------------------------------
 
-``MjsTuple::set_objtype`` previously accepted ``&[i32]`` and stored the values unchecked. The model
-compiler later uses each value to index a fixed-size object-list array (size ``mjNOBJECT``) without
-a bounds check, so an out-of-range value is an out-of-bounds read at ``compile()`` time. The setter
-now takes ``&[MjtObj]`` and is an ``unsafe fn``: typing the input as ``MjtObj`` keeps arbitrary
-integers out, but ``MjtObj`` still includes meta variants (``mjOBJ_FRAME``, ``mjOBJ_DEFAULT``,
-``mjOBJ_MODEL``) and ``mjNOBJECT`` itself that are out of range. The caller must ensure every value
-is a real object type (an ``MjtObj`` discriminant ``< mjNOBJECT``); the conversion to the underlying
-C ``int`` is then a zero-cost reinterpretation.
+``MjsTuple::set_objtype`` previously accepted ``&[i32]`` and returned ``()``. It now takes
+``&[MjtObj]`` and returns ``Result<(), MjEditError>``: out-of-range object types are rejected with
+``MjEditError::InvalidParameter``.
 
 **Before (4.x):**
 
@@ -233,8 +229,30 @@ C ``int`` is then a zero-cost reinterpretation.
 
 .. code-block:: rust
 
-    // SAFETY: mjOBJ_BODY and mjOBJ_GEOM are real object types (< mjNOBJECT).
-    unsafe { tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM]) };
+    tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM])?;
+
+
+``MjsSensor::set_objtype`` / ``set_reftype`` are now fallible
+-------------------------------------------------------------
+
+``MjsSensor::set_objtype`` and ``set_reftype`` previously returned ``()``; they now return
+``Result<(), MjEditError>``, rejecting out-of-range object types with ``MjEditError::InvalidParameter``.
+The builder counterparts ``with_objtype`` / ``with_reftype`` keep their signature but **panic** on a
+rejected value.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    sensor.set_objtype(MjtObj::mjOBJ_SITE);
+    sensor.set_reftype(MjtObj::mjOBJ_BODY);
+
+**After:**
+
+.. code-block:: rust
+
+    sensor.set_objtype(MjtObj::mjOBJ_SITE)?;
+    sensor.set_reftype(MjtObj::mjOBJ_BODY)?;
 
 
 ``MjData::add_contact`` is now an ``unsafe fn``

@@ -94,18 +94,20 @@ update of MuJoCo alone can increase the major version.
   :docs-rs:`~mujoco_rs::error::<enum>MjModelError::<variant>IndexOutOfBounds`
   (see migration guide).
 
-*MjsTuple::set_objtype now takes ``&[MjtObj]``*
+*MjsTuple::set_objtype now takes ``&[MjtObj]`` and is fallible*
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTuple::<method>set_objtype` now accepts
-  ``&[MjtObj]`` instead of ``&[i32]`` and is an ``unsafe fn``. Typing the input as ``MjtObj`` keeps
-  arbitrary integers out, but ``MjtObj`` still includes meta variants (``mjOBJ_FRAME``,
-  ``mjOBJ_DEFAULT``, ``mjOBJ_MODEL``) and ``mjNOBJECT`` itself, which are out of range for the model
-  compiler's object-list array (size ``mjNOBJECT``) and would be read out of bounds at ``compile()``
-  time. Rejecting them would require iterating the slice, so "every value is a real object type" is
-  a ``# Safety`` precondition. The conversion to the underlying C ``int`` is a zero-cost
-  reinterpretation. See the migration guide.
+  ``&[MjtObj]`` instead of ``&[i32]`` and is a **safe** ``fn`` returning ``Result<(), MjEditError>``
+  instead of ``()``. Out-of-range object types are rejected with ``MjEditError::InvalidParameter``.
+  See the migration guide.
 
-*(Potentially breaking) Model-editing handles are no longer ``Send`` or ``Sync``*
+*MjsSensor::set_objtype / set_reftype are now fallible*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsSensor::<method>set_objtype` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsSensor::<method>set_reftype` now return
+  ``Result<(), MjEditError>`` instead of ``()``, rejecting out-of-range object types with
+  ``MjEditError::InvalidParameter``. The builder counterparts ``with_objtype`` / ``with_reftype``
+  keep their signature but **panic** on a rejected value. See the migration guide.
 
 - The ``Mjs*`` element handles (|mjs_body|, ``MjsGeom``, ...) and ``MjsDefault`` are now
   ``!Send + !Sync``; they previously carried a blanket ``unsafe impl Send``/``Sync``. Each
@@ -185,9 +187,10 @@ New error variants in pre-existing enums:
 - :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`: ``SignatureMismatch`` (model structure does
   not match the renderer's current scene), ``ContextError(MjrContextError)`` (wraps a rendering-context error,
   e.g. an out-of-range asset ID).
-- :docs-rs:`~mujoco_rs::error::<enum>MjEditError`: ``InvalidParameter(String)`` (an actuator
-  configuration helper rejected a parameter; the string is MuJoCo's rejection message). Returned by
-  the new ``set_to_*`` actuator helpers (see New features and improvements).
+- :docs-rs:`~mujoco_rs::error::<enum>MjEditError`: ``InvalidParameter(String)`` (a value was
+  rejected; the string describes the rejection). Returned by the new ``set_to_*`` actuator helpers
+  (see New features and improvements) and by the now-validating object/reference type setters
+  ``MjsSensor::set_objtype`` / ``set_reftype`` and ``MjsTuple::set_objtype`` (see Breaking changes).
 
 .. rubric:: New features and improvements
 
