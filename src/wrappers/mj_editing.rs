@@ -1329,10 +1329,10 @@ impl MjsSensor {
 
     getter_setter!([&] with, get, set, [
         type_ + _: MjtSensor;          "sensor type.";
-        objtype: MjtObj { check_objtype } => MjEditError;
-                                       "object type the sensor refers to.\n\n# Errors\n[`set_objtype`](Self::set_objtype) returns an [`MjEditError::InvalidParameter`] (and [`with_objtype`](Self::with_objtype) panics) when the given value is not less than [`MjtObj::mjNOBJECT`].";
-        reftype: MjtObj { check_objtype } => MjEditError;
-                                       "type of referenced object.\n\n# Errors\n[`set_reftype`](Self::set_reftype) returns an [`MjEditError::InvalidParameter`] (and [`with_reftype`](Self::with_reftype) panics) when the given value is not less than [`MjtObj::mjNOBJECT`].";
+        objtype: MjtObj { check_objtype, "[`MjEditError::InvalidParameter`] when the object type is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
+                                       "object type the sensor refers to.";
+        reftype: MjtObj { check_objtype, "[`MjEditError::InvalidParameter`] when the reference type is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
+                                       "type of referenced object.";
         datatype: MjtDataType;         "data type.";
         cutoff: f64;                   "cutoff for real and positive datatypes.";
         noise: f64;                    "noise stdev.";
@@ -1718,7 +1718,7 @@ impl MjsTuple {
         // element against `mjNOBJECT` rules out the meta `MjtObj` variants (`mjOBJ_FRAME`,
         // `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) that would otherwise cause an out-of-bounds read, which is
         // what lets this setter be safe.
-        objtype: MjtObj => i32 { check_objtype } => MjEditError;
+        objtype: MjtObj => i32 { check_objtype, "[`MjEditError::InvalidParameter`] when any value is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
             "object types. Every value must be a real object type (an `MjtObj` below `mjNOBJECT`).";
     }
 

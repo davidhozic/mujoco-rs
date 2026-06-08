@@ -624,11 +624,13 @@ macro_rules! vec_set_get {
 ///   pointer reinterpretation (the same compile-time-checked cast the view layer uses, so no
 ///   `bytemuck` trait is required on the enum). The two optional tails pick the validation strategy;
 ///   provide at most one:
-///   - `{ check } => ErrType` (before `;`) -- generates a **safe** setter returning
+///   - `{ check, "reason" } => ErrType` (before `;`) -- generates a **safe** setter returning
 ///     `Result<(), ErrType>`. Every element is passed through `check`
 ///     (a `Fn(InputType) -> Result<(), ErrType>`) before anything is written; if any element fails,
 ///     nothing is written. Use this when the validation rules out the out-of-range values the C side
-///     would misuse, which is what makes the setter sound without `unsafe`.
+///     would misuse, which is what makes the setter sound without `unsafe`. `"reason"` is a doc
+///     fragment in the crate's `# Errors` style (e.g. `"[`MjEditError::InvalidParameter`] when ..."`)
+///     that is reused verbatim in the generated `# Errors` section.
 ///   - `; unsafe "safety"` (after `"comment"`) -- generates an `unsafe` setter for values the C side
 ///     later uses without its own validation (e.g. as an unchecked array index) and which cannot be
 ///     cheaply validated here; `"safety"` documents the caller's `# Safety` obligation. The literal
@@ -647,17 +649,17 @@ macro_rules! vec_set {
             }
         )*
     }};
-    ($($name:ident: $input_type:ty => $type:ty $({$check:expr} => $err:ty)?; $comment:expr $(; $unsafe_kw:tt $safety:expr)?);* $(;)?) => {paste::paste!{
+    ($($name:ident: $input_type:ty => $type:ty $({$check:expr , $reason:literal} => $err:ty)?; $comment:expr $(; $unsafe_kw:tt $safety:expr)?);* $(;)?) => {paste::paste!{
         $(
             // One setter whose shape is driven by the supplied tail:
-            // - `{ check } => ErrType` makes it a safe `-> Result<(), ErrType>` that validates every
-            //   element first; passing validation rules out the values the C side would misuse, so the
-            //   reinterpretation is sound without `unsafe`.
+            // - `{ check, "reason" } => ErrType` makes it a safe `-> Result<(), ErrType>` that validates
+            //   every element first; passing validation rules out the values the C side would misuse, so
+            //   the reinterpretation is sound without `unsafe`. `"reason"` is a doc fragment naming the
+            //   error and condition, reused verbatim in the generated `# Errors` section.
             // - `; unsafe "safety"` echoes the `unsafe` keyword onto the `fn` and documents the
             //   caller's `# Safety` obligation (used when no cheap validation is possible).
             #[doc = concat!("Set ", $comment
-                $(, "\n\n# Errors\nReturns an error from `", stringify!($err),
-                     "` when any element fails validation; in that case nothing is written.")?
+                $(, "\n\n# Errors\nReturns ", $reason, " (in that case nothing is written).")?
                 $(, "\n\n# Safety\n", $safety)?
             )]
             pub $($unsafe_kw)? fn [<set_ $name>](&mut self, value: &[$input_type]) $(-> Result<(), $err>)? {
