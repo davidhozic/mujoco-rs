@@ -278,7 +278,7 @@ out-of-bounds write in the model compiler).
 Some index/size vector setters are now ``unsafe``
 -------------------------------------------------
 
-``MjsTexture::set_nchannel`` / ``with_nchannel``, ``MjsFlex::set_elemtexcoord``,
+``MjsFlex::set_elemtexcoord``,
 ``MjsSkin::set_face`` and ``MjsMesh::set_userfacetexcoord`` are now ``unsafe fn``. Each writes a
 value the model compiler or renderer later trusts as an unchecked index/count/length, and the
 correct constraint is cross-field, so it cannot be validated from the setter. Wrap calls in
