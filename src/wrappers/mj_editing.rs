@@ -155,8 +155,8 @@ impl MjsCompiler {
         settotalmass: f64;             "rescale masses and inertias; <=0: ignore.";
     ]}
 
-    getter_setter! {force!, [&] with, get, set, [
-        inertiafromgeom: MjtInertiaFromGeom;  "use geom inertias.";
+    getter_setter! {[&] with, get, set, [
+        inertiafromgeom: MjtInertiaFromGeom [force];  "use geom inertias.";
     ]}
 
     getter_setter! {[&] with, get, [
@@ -827,10 +827,10 @@ impl MjsJoint {
     ]);
 
     getter_setter! {
-        force!, [&] with, get, set, [
-            align: MjtAlignFree;       "align free joint with body com (mjtAlignFree).";
-            limited: MjtLimited;       "does joint have limits (mjtLimited).";
-            actfrclimited: MjtLimited; "are actuator forces on joint limited (mjtLimited).";
+        [&] with, get, set, [
+            align: MjtAlignFree [force];       "align free joint with body com (mjtAlignFree).";
+            limited: MjtLimited [force];       "does joint have limits (mjtLimited).";
+            actfrclimited: MjtLimited [force]; "are actuator forces on joint limited (mjtLimited).";
         ]
     }
 
@@ -1059,10 +1059,9 @@ impl MjsActuator {
     ]);
 
     getter_setter! {
-        force!, [&] with, get, set, [
-            ctrllimited: MjtLimited;        "are control limits defined.";
-            forcelimited: MjtLimited;       "are force limits defined.";
-            // actlimited: MjtLimited;         "are activation limits defined.";
+        [&] with, get, set, [
+            ctrllimited: MjtLimited [force];        "are control limits defined.";
+            forcelimited: MjtLimited [force];       "are force limits defined.";
         ]
     }
 
@@ -1423,8 +1422,8 @@ impl MjsFlex {
     }
 
     getter_setter! {
-        force!, [&] with, get, set, [
-            selfcollide: MjtFlexSelf;        "mode for flex self collision.";
+        [&] with, get, set, [
+            selfcollide: MjtFlexSelf [force];        "mode for flex self collision.";
         ]
     }
 
@@ -1550,9 +1549,9 @@ impl MjsTendon {
     ]}
 
     getter_setter! {
-        force!, [&] with, get, set, [
-            limited: MjtLimited;       "does tendon have limits (mjtLimited).";
-            actfrclimited: MjtLimited; "does tendon have actuator force limits."
+        [&] with, get, set, [
+            limited: MjtLimited [force];       "does tendon have limits (mjtLimited).";
+            actfrclimited: MjtLimited [force]; "does tendon have actuator force limits."
         ]
     }
 
@@ -1967,11 +1966,11 @@ impl MjsTexture {
     }
 
     getter_setter! {
-        force!, [&] with, get, set, [
-            type_ + _: MjtTexture;        "texture type.";
-            colorspace: MjtColorSpace;    "colorspace.";
-            builtin: MjtBuiltin;          "builtin type.";
-            mark: MjtMark;                "mark type.";
+        [&] with, get, set, [
+            type_ + _: MjtTexture [force];        "texture type.";
+            colorspace: MjtColorSpace [force];    "colorspace.";
+            builtin: MjtBuiltin [force];          "builtin type.";
+            mark: MjtMark [force];                "mark type.";
         ]
     }
 
