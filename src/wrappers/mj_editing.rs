@@ -1442,9 +1442,9 @@ impl MjsFlex {
     }
 
     vec_set! {
-        elemtexcoord: i32 => i32; "element texture coordinates.";
-            "The slice must have exactly `(dim + 1) * nelem` entries and every entry must be a \
-             valid index into the flex texture coordinates." unsafe;
+        [unsafe: "The slice must have exactly `(dim + 1) * nelem` entries and every entry \
+                  must be a valid index into the flex texture coordinates."
+        ] elemtexcoord: i32 => i32; "element texture coordinates.";
     }
 }
 
@@ -1841,8 +1841,8 @@ impl MjsMesh {
     }
 
     vec_set! {
-        userfacetexcoord: i32 => i32; "user texcoord indices.";
-            "Every entry must be in `0..ntexcoord` (the number of user texture coordinates)." unsafe;
+        [unsafe: "Every entry must be in `0..ntexcoord` (the number of user texture coordinates)."]
+            userfacetexcoord: i32 => i32; "user texcoord indices.";
     }
 }
 
@@ -1909,9 +1909,10 @@ impl MjsSkin {
     }
 
     vec_set! {
-        face: i32 => i32; "faces.";
-            "The slice length must be a multiple of 3 and every entry must be in `0..nvert` \
-             (the number of skin vertices)." unsafe;
+        [
+            unsafe:
+                "The slice length must be a multiple of 3 and every entry must be in `0..nvert`  (the number of skin vertices)."
+        ] face: i32 => i32; "faces.";
     }
 
     vec_vec_append! {

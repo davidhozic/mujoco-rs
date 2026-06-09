@@ -648,7 +648,8 @@ macro_rules! vec_set {
             }
         )*
     }};
-    ($($name:ident: $input_type:ty => $type:ty $({$check:expr , $reason:literal} => $err:ty)?; $comment:expr $(; $safety:literal $unsafe_kw:tt)?);* $(;)?) => {paste::paste!{
+
+    ($($([$unsafe_kw:ident : $safety:literal])? $name:ident: $input_type:ty => $type:ty $({$check:expr , $reason:literal} => $err:ty)?; $comment:expr);* $(;)?) => {paste::paste!{
         $(
             // One cast setter whose shape is driven by the optional check / safety tail:
             // - `{ check, "reason" } => ErrType` makes it a safe `-> Result<(), ErrType>` that
@@ -674,7 +675,7 @@ macro_rules! vec_set {
                 // is sound and zero-cost. The value-range precondition the C side relies on is enforced
                 // by the `$check` loop above when present, or by the caller's `# Safety` contract
                 // otherwise. self.$name is a valid pointer for the lifetime of self.
-                let raw: &[$type] = unsafe { std::slice::from_raw_parts(value.as_ptr().cast(), value.len()) };
+                let raw = unsafe { std::slice::from_raw_parts(value.as_ptr().cast(), value.len()) };
                 unsafe { [<write_mjs_vec_ $type>](raw, self.$name) };
                 $(Ok::<(), $err>(()))?
             }
