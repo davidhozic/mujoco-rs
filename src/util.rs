@@ -588,7 +588,6 @@ macro_rules! info_with_view {
     };
 }
 
-
 /// Generates getters, setters, and builder methods for struct fields.
 ///
 /// ## Optional value constraints
@@ -620,6 +619,19 @@ macro_rules! info_with_view {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! getter_setter {
+
+    // Helper expansions
+    /*****************************************/
+    (@cast force { $($content:tt)* } ) => {
+        $crate::util::force_cast($($content)*)
+    };
+
+    (@cast  { $($content:tt)* } ) => {
+        $($content)*.into()
+    };
+
+    // Regular arms
+    /*****************************************/
     (get, [$($([$ffi:ident])? $name:ident $(+ $symbol:tt)?: bool; $comment:expr);* $(;)?]) => {paste::paste!{
         $(
             #[doc = concat!("Check ", $comment)]
@@ -652,19 +664,19 @@ macro_rules! getter_setter {
         $(
             #[doc = concat!("Return value of ", $comment)]
             pub fn [<$name:camel:snake $($symbol)?>](&self) -> $type {
-                self$(.$ffi())?.$name.into()
+                crate::getter_setter!(@cast  { self$(.$ffi())?.$name } )
             }
         )*
     }};
 
-    (set, [$($([$ffi_mut:ident])? $name:ident: $type:ty $({$check:expr , $reason:literal})? $(=> $err:ty)?; $comment:expr);* $(;)?]) => {
+    (set, [$($([$ffi_mut:ident])? $name:ident: $type:ty $([$cast_type:tt])? $({$check:expr , $reason:literal})? $(=> $err:ty)?; $comment:expr);* $(;)?]) => {
         paste::paste!{
             $(
                 #[doc = concat!("Set ", $comment $(, "\n\n# Errors\nReturns ", $reason, ".")?)]
                 pub fn [<set_ $name:camel:snake>](&mut self, value: $type) $(-> Result<(), $err>)? {
                     $(($check)(value)?;)?
                     #[allow(unused_unsafe)]
-                    unsafe { self$(.$ffi_mut())?.$name = value.into() };
+                    unsafe { self$(.$ffi_mut())?.$name = $crate::getter_setter!(@cast $($cast_type)? { value }) };
                     $(Ok::<(), $err>(()))?
                 }
             )*
@@ -776,9 +788,9 @@ macro_rules! getter_setter {
         $crate::getter_setter!($([$token])? with, [ $($([$ffi_mut])? $name : bool ; $comment );* ]);
     };
 
-    ($([$token:tt])? with, get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty $({$check:expr , $reason:literal})? $(=> $err:ty)?; $comment:expr );* $(;)?]) => {
+    ($([$token:tt])? with, get, set, [ $($([$ffi: ident, $ffi_mut:ident])? $name:ident $(+ $symbol:tt)? : $type:ty $([$cast_type:tt])? $({$check:expr , $reason:literal})? $(=> $err:ty)?; $comment:expr );* $(;)?]) => {
         $crate::getter_setter!(get, [ $($([$ffi])? $name $(+ $symbol)?: $type ; $comment );* ]);
-        $crate::getter_setter!(set, [ $($([$ffi_mut])? $name : $type $({$check , $reason})? $(=> $err)?; $comment );* ]);
+        $crate::getter_setter!(set, [ $($([$ffi_mut])? $name : $type $([$cast_type])? $({$check , $reason})? $(=> $err)?; $comment );* ]);
         $crate::getter_setter!($([$token])? with, [ $($([$ffi_mut])? $name : $type $({$check , $reason})?; $comment );* ]);
     };
 

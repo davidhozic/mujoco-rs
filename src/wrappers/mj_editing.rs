@@ -1062,7 +1062,13 @@ impl MjsActuator {
         force!, [&] with, get, set, [
             ctrllimited: MjtLimited;        "are control limits defined.";
             forcelimited: MjtLimited;       "are force limits defined.";
-            actlimited: MjtLimited;         "are activation limits defined.";
+            // actlimited: MjtLimited;         "are activation limits defined.";
+        ]
+    }
+
+    getter_setter! {
+        [&] with, get, set, [
+            actlimited: MjtLimited [force];         "are activation limits defined.";
         ]
     }
 
