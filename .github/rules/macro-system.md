@@ -4,8 +4,7 @@ This crate uses declarative macros extensively to reduce boilerplate when wrappi
 
 ## Before modifying wrapper files
 1. **Read `src/util.rs`** first - it contains all core macro definitions. Understand their syntax before modifying any wrapper file.
-2. **Run `/expand-macros`** after any macro-related change to verify generated code.
-3. **Cross-reference with MuJoCo C API docs** (see `coding-conventions.md`) for correct field sizes and types.
+2. **Cross-reference with MuJoCo C API docs** (see `coding-conventions.md`) for correct field sizes and types.
 
 ## Finding macros
 - All macros are defined in `src/util.rs`. Search for `macro_rules!` to find them all.
@@ -120,7 +119,7 @@ Only valid when the target type has the same size and alignment as the source.
 3. **Compare** the Rust stride against the header dimension. They must match exactly.
 4. Confirm the Rust element type matches the C type: `mjtNum` is `f64`, `int` is `i32`, `mjtByte` is `u8`.
 5. Make sure a unit test exercises the new accessor on a real non-trivial model.
-6. Optionally, run `/expand-macros` and grep `expanded.rs` for the generated method body (slow).
+6. If needed, grep `src/` for existing invocations of the same macro to cross-check the generated shape.
 
 > **WARNING**: Do NOT assume the code is correct and only check the header. Always quote the actual
 > code value alongside the header value. A common failure mode is reading the header, seeing the

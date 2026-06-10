@@ -2,8 +2,7 @@
 
 ## Hard rules - MUST follow
 - **Never edit `src/mujoco_c.rs`** - it is auto-generated via bindgen. Editing it will be overwritten.
-- **Never commit `expanded.rs`** - it is a temporary artifact from `/expand-macros`.
-- **Always verify macro changes** with `/expand-macros` before considering work done (see `macro-system.md`).
+- **Never commit `expanded.rs`** - it is a temporary artifact from `cargo expand`.
 - **Cross-reference with MuJoCo C docs** when adding or modifying wrapper fields (see `important-context.md`).
 - **Prefer existing macros** in `src/util.rs` over writing manual accessor methods. Read `macro-system.md` for details.
 - **Verify stride against C headers**: see the verification checklist in `macro-system.md`.
@@ -253,6 +252,6 @@ Additional rules:
 ## Comprehensive verification
 - For deep audits (new major features, suspicions about correctness), use the `/verify` workflow.
 - `/verify` uses parallel subagents with split workloads and consensus checking.
-- Do NOT run `cargo expand` unless the user explicitly requests it -- it is very slow.
+- **Never run `cargo expand` or read expanded code** -- it is generated output, not source of truth.
 - Run `/test` as a baseline before any audit and after every fix.
 - For memory safety beyond Rust's guarantees (FFI boundary), run `/asan` and `/miri`.

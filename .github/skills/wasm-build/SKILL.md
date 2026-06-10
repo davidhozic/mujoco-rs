@@ -102,7 +102,7 @@ EXAMPLES_DIR="target/wasm32-unknown-emscripten/debug/examples"
 cp assets/wasm_examples.html "$EXAMPLES_DIR/index.html"
 ```
 
-Then start the HTTP server using the bash tool with `mode="async", detach: true`
+Then start the HTTP server using the `Bash` tool
 (see the `launch-terminal` skill for details):
 
 ```bash
