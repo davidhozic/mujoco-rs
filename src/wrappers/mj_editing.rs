@@ -1863,7 +1863,10 @@ impl MjsMesh {
                   length of the slice passed to `set_usernormal` divided by 3 (each normal is 3 \
                   `f32`: x, y, z)."]
             userfacenormal: i32 => i32; "user face normal indices.";
-        [unsafe: "Every entry must be in `0..ntexcoord` (the number of user texture coordinates)."]
+        [unsafe: "Every entry must be in `0..ntexcoord` (the number of user texture coordinates), and \
+                  the slice length must equal the length of the slice passed to `set_userface` (3 per \
+                  face). Unlike face-normal data, MuJoCo does not validate the texcoord-index length, \
+                  so an oversized slice overflows the model's face-texcoord buffer at compile time."]
             userfacetexcoord: i32 => i32; "user texcoord indices.";
     }
 }
