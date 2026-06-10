@@ -25,8 +25,8 @@ propose alternatives if a request would require running any prohibited command.
   uploading, or connecting to external hosts.
 - Package managers with remote access (`npm install`, `pip install`, etc.) when
   they would fetch from external repositories. (Dependency management should be
-  described to the user instead.) If you need to install a package, ask the user
-  about what to do. Ask by prompting the user via `ask_user` tool (multiple-choice window).
+  described to the user instead.) If you need to install a package, tell the user
+  what to run and ask them to do it.
 
 ## Server / Listener Binding
 
@@ -58,8 +58,8 @@ propose alternatives if a request would require running any prohibited command.
   sources. (Describe how the user can do testing locally instead.)
 - Starting background services or daemons using shell-level mechanisms such as
   `nohup ... &`, `setsid`, `disown`, `systemctl start`, `service`, or `docker run`.
-  Use the bash tool's `mode="async", detach: true` parameter instead when a
-  persistent server is genuinely required (see the `launch-terminal` skill).
+  Use the `Bash` tool with `run_in_background: true` when a background process is
+  genuinely required.
 
 ## Miscellaneous
 
@@ -69,7 +69,7 @@ propose alternatives if a request would require running any prohibited command.
 - `echo $SECRET` or reading environment variables containing secrets.
 
 > **Note:** This list is not exhaustive. When in doubt, err on the side of
-> caution: present the user with instructions (`ask_user` tool) rather than executing potentially
+> caution: describe the action to the user rather than executing potentially
 > harmful commands.
 
 When in doubt, ask for clarification if a requested action might violate

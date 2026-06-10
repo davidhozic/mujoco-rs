@@ -16,31 +16,25 @@ Check if a `../mujoco-rs-utils` directory exists. If it does, it is a CLI tool t
 
 ## Key macro reference
 
-### `mj_view_indices!(model_ffi, addr_field, njnt, max_n, id)`
-Computes the `(start, len)` tuple for the contiguous slice belonging to element `id` within a
-MuJoCo address-array-indexed field.
+### `mj_model_dyn_range!(model, id, nx)`
+Resolves the `(start, len)` pair for the contiguous slice owned by element `id`, where `nx`
+is a keyword selecting the address-array mapping:
 
-- `addr_field`: address array in `mjModel`, e.g. `jnt_qposadr` (i32 values; -1 means "none").
-- `njnt`: total count of items, used as the exclusive upper bound when scanning forward.
-- `max_n`: total length of the data array (e.g. `nq`, `nv`), used as the fallback end.
-- Returns `(start_addr as usize, n)` where `n = end_addr - start_addr`.
-- If `addr_field[id] == -1`, returns `(0, 0)` and the caller should treat the field as `None`.
-- For the last element, if all subsequent entries are -1 the macro falls back to `max_n`.
-
-### `mj_model_nx_to_mapping!(model_ffi, nx)` / `mj_model_nx_to_nitem!(model_ffi, nx)`
-Convenience lookups that map a total-count field name to the corresponding address/item-count fields:
-
-| `nx` | address array | item count |
+| `nx` | address array | total length |
 |---|---|---|
-| `nq` | `jnt_qposadr` | `njnt` |
-| `nv` | `jnt_dofadr` | `njnt` |
-| `nsensordata` | `sensor_adr` | `nsensor` |
-| `ntupledata` | `tuple_adr` | `ntuple` |
-| `ntexdata` | `tex_adr` | `ntex` |
-| `nnumericdata` | `numeric_adr` | `nnumeric` |
-| `nhfielddata` | `hfield_adr` | `nhfield` |
-| `na` | `actuator_actadr` | `nu` |
-| `nJten` | `ten_J_rowadr` | `ntendon` |
+| `nq` | `jnt_qposadr` | `nq` |
+| `nv` | `jnt_dofadr` | `nv` |
+| `nsensordata` | `sensor_adr` | `nsensordata` |
+| `ntupledata` | `tuple_adr` | `ntupledata` |
+| `ntexdata` | `tex_adr` | `ntexdata` |
+| `nnumericdata` | `numeric_adr` | `nnumericdata` |
+| `nhfielddata` | `hfield_adr` | `nhfielddata` |
+| `na` | `actuator_actadr` | `na` |
+| `nJten` | `ten_j_rowadr` | `n_jten()` |
+
+Returns `(start_addr, n)` where `n = end_addr - start_addr`. If the address entry for `id` is -1,
+returns `(0, 0)`. For the last element, when all subsequent address entries are -1, the macro falls
+back to the total-length field as the exclusive end.
 
 ### `array_slice_dyn!` - three variants
 Creates raw-pointer slices safely (null-pointer and zero-length guarded):
@@ -92,7 +86,7 @@ Generates `fn field(&self) -> &[T]` and the `_mut` variant by reading `(offset, 
 ### `info_method!(Kind, ffi_model, element_type, id, fields...)`
 Generates per-element accessor methods like `body()`, `joint()`, etc. on `MjModel` and `MjData`.
 Each field entry can use a static stride (e.g. `xpos: 3` produces an `id * 3` offset and a 3-element
-slice), a dynamic view through `mj_view_indices!` for variable-length ranges like dof/qpos, or a
+slice), a dynamic view through `mj_model_dyn_range!` for variable-length ranges like dof/qpos, or a
 zero stride which the accessor returns as `Option::None`.
 
 > **WARNING**: Each element type has TWO macro blocks in the wrapper file:

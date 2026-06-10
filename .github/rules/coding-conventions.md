@@ -162,7 +162,6 @@ Additional rules:
   variants that don't change existing signatures) belong in the changelog only.
 - Always make sure MuJoCo-rs's documentation in `docs/guide` stays up to date with the changes.
 - After adding or modifying public items or doc comments, run `/doc` to check for rustdoc warnings/errors.
-  See `workflows/doc.md` for the exact command.
 - All public API changes must adhere to the
   [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/). Consult
   the guidelines when adding or modifying public types, traits, methods, naming,
@@ -247,7 +246,6 @@ Additional rules:
   A test that only calls a function and asserts no panic is not sufficient on its own.
 - Keep tests concise; avoid duplicating coverage that already exists in nearby tests.
 - Run tests with `--no-default-features --features renderer` for renderer-only changes.
-  See `workflows/test.md` for the full test command.
 
 ## Comprehensive verification
 - For deep audits (new major features, suspicions about correctness), use the `/verify` workflow.
