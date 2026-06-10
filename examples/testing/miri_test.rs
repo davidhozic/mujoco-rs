@@ -265,7 +265,7 @@ fn test_utilities() {
     assert_eq!(dot, 5.0*4.0 + 5.0*5.0 + 5.0*6.0);
 
     let norm = mju_norm(&a);
-    assert!((norm - (25.0*3.0 as f64).sqrt()).abs() < 1e-9);
+    assert!((norm - (25.0*3.0_f64).sqrt()).abs() < 1e-9);
 
     let mut q = [1.0, 0.0, 0.0, 0.0];
     mju_unit_4(&mut q);

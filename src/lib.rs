@@ -151,14 +151,13 @@ mod tests {
         </mujoco>
         ";
 
-        std::hint::black_box(
-            for _ in 0..N_REPEATS {
-                let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("failed to load the model.");
-                for mut data in (0..N_ITEMS).map(|_| model.make_data()) {
-                    data.joint("sphere").unwrap().view_mut(&mut data).qpos[0] /= 2.0;
-                    data.step();
-                }
+        for _ in 0..N_REPEATS {
+            let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("failed to load the model.");
+            for mut data in (0..N_ITEMS).map(|_| model.make_data()) {
+                data.joint("sphere").unwrap().view_mut(&mut data).qpos[0] /= 2.0;
+                data.step();
+                black_box(&data);
             }
-        )
+        }
     }
 }

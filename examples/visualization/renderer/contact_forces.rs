@@ -120,7 +120,7 @@ fn main() {
 
     println!("Running {SIM_STEPS} simulation steps.");
     println!("Saving a frame every {SAVE_EVERY} steps to '{OUTPUT_DIR}'.");
-    println!("{:<8} {:<10} {}", "Step", "ncon", "Contact forces (norm)");
+    println!("{:<8} {:<10} Contact forces (norm)", "Step", "ncon");
 
     for step in 0..SIM_STEPS {
         data.step();

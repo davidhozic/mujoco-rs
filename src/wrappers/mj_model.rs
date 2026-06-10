@@ -1753,6 +1753,8 @@ info_with_view!(Model, key,
 	[]);
 
 #[cfg(test)]
+// The loop indices are needed for FFI pointer arithmetic (e.g. `ptr.add(i * stride + j)`).
+#[allow(clippy::needless_range_loop)]
 mod tests {
     use crate::assert_relative_eq;
 
@@ -1971,8 +1973,8 @@ mod tests {
         /* Test read */
         assert_eq!(view.biastype[0], MjtBias::mjBIAS_AFFINE);
         assert_eq!(&view.ctrlrange[..], [0.0, 1.0]);
-        assert_eq!(view.ctrllimited[0], true);
-        assert_eq!(view.forcelimited[0], false);
+        assert!(view.ctrllimited[0]);
+        assert!(!view.forcelimited[0]);
         assert_eq!(view.trntype[0], MjtTrn::mjTRN_JOINT);
         assert_eq!(view.gaintype[0], MjtGain::mjGAIN_FIXED);
 
@@ -2018,7 +2020,7 @@ mod tests {
         
         /* Test read */
         assert_eq!(&view.range[..], [0.0, 1.0]);
-        assert_eq!(view.limited[0], true);
+        assert!(view.limited[0]);
         assert_eq!(view.width[0], 0.005);
 
         /* Test alignment with the array slice */
@@ -2041,7 +2043,7 @@ mod tests {
         
         /* Test read */
         assert_eq!(view.r#type[0], MjtJoint::mjJNT_SLIDE);
-        assert_eq!(view.limited[0], true);
+        assert!(view.limited[0]);
         assert_eq!(&view.axis[..], [0.0, 1.0 , 0.0]);
         assert!(!view.dof_bodyid.is_empty());
         assert!(!view.dof_treeid.is_empty());
@@ -2090,7 +2092,6 @@ mod tests {
         let view = model_info.view(&model);
         
         /* Test read */
-        model.body_pos()[model_info.id];
         assert_eq!(view.pos[0], 0.5);
 
         /* Test alignment with slice */
@@ -2461,7 +2462,7 @@ mod tests {
         assert_eq!(view_eq.objtype[0], MjtObj::mjOBJ_BODY);
 
         // Check active
-        assert_eq!(view_eq.active0[0], true);
+        assert!(view_eq.active0[0]);
 
         // Check anchor position stored in eq_data
         let anchor = &view_eq.data[0..3];
@@ -2641,11 +2642,11 @@ mod tests {
 
         // extract zero-sized spec -> empty slice
         let dst = model.extract_state(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, 0u32);
-        assert_eq!(dst.len(), 0);
+        assert!(dst.is_empty());
 
         // extract_into with zero-sized spec -> writes 0 elements
-        let mut buf: &mut [f64] = &mut [];
-        let written = model.extract_state_into(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, &mut buf, 0u32);
+        let buf: &mut [f64] = &mut [];
+        let written = model.extract_state_into(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, buf, 0u32);
         assert_eq!(written, 0);
     }
 
@@ -2738,10 +2739,10 @@ mod tests {
 
         // "rod" joint has range="0 1" -> limited=true; "ball" is free -> limited=false
         let rod_jnt = model.joint("rod").unwrap();
-        assert_eq!(jnt_limited[rod_jnt.id], true);
+        assert!(jnt_limited[rod_jnt.id]);
 
         let ball_jnt = model.joint("ball").unwrap();
-        assert_eq!(jnt_limited[ball_jnt.id], false);
+        assert!(!jnt_limited[ball_jnt.id]);
     }
 
     /// Verifies [force]-cast enum for geom_type (*mut i32 -> *mut MjtGeom).
@@ -2958,7 +2959,7 @@ mod tests {
         let eq1 = model.equality("eq1").unwrap();
         assert_eq!(eq_type[eq1.id], MjtEq::mjEQ_CONNECT);
         assert_eq!(eq_objtype[eq1.id], MjtObj::mjOBJ_BODY);
-        assert_eq!(eq_active0[eq1.id], true);
+        assert!(eq_active0[eq1.id]);
     }
 
     /// Verifies [force]-cast for sensor arrays: sensor_type (MjtSensor), sensor_datatype (MjtDataType),
@@ -3055,7 +3056,7 @@ mod tests {
         let slider = model.actuator("slider").unwrap();
         assert_eq!(biastype[slider.id], MjtBias::mjBIAS_AFFINE);
         assert_eq!(gaintype[slider.id], MjtGain::mjGAIN_FIXED);
-        assert_eq!(ctrllimited[slider.id], true);
+        assert!(ctrllimited[slider.id]);
     }
 
     /// Verifies [force]-cast for actuator parameter arrays: dynprm, gainprm, biasprm, ctrlrange,
@@ -3136,7 +3137,7 @@ mod tests {
 
         // Verify known tendon: "tendon2" limited=true, range=(0,1), rgba=(0, 0.1, 1, 1)
         let ten2 = model.tendon("tendon2").unwrap();
-        assert_eq!(tendon_limited[ten2.id], true);
+        assert!(tendon_limited[ten2.id]);
         assert_eq!(tendon_range[ten2.id], [0.0, 1.0]);
         assert_relative_eq!(tendon_rgba[ten2.id][0], 0.0f32, epsilon = 1e-6);
         assert_relative_eq!(tendon_rgba[ten2.id][1], 0.1f32, epsilon = 1e-6);
@@ -3207,7 +3208,7 @@ mod tests {
 
         // "also_wood_material" has texuniform=false, texrepeat=[2,2], rgba=[0.8,0.5,0.3,1.0]
         let mat = model.material("also_wood_material").unwrap();
-        assert_eq!(mat_texuniform[mat.id], false);
+        assert!(!mat_texuniform[mat.id]);
         assert_eq!(mat_texrepeat[mat.id], [2.0f32, 2.0]);
         assert_eq!(mat_rgba[mat.id], [0.8f32, 0.5, 0.3, 1.0]);
     }
@@ -3263,7 +3264,7 @@ mod tests {
         let l2 = model.light("lamp_light2").unwrap();
         assert_eq!(light_mode[l2.id], MjtCamLight::mjCAMLIGHT_FIXED);
         assert_eq!(light_type[l2.id], MjtLightType::mjLIGHT_SPOT);
-        assert_eq!(light_castshadow[l2.id], true);
+        assert!(light_castshadow[l2.id]);
     }
 
     /// Verifies [force]-cast for the site arrays: site_type (MjtGeom), site_sameframe (MjtSameFrame),
@@ -3359,7 +3360,7 @@ mod tests {
         let rod_info = model.joint("rod").unwrap();
         let rod_view = rod_info.view(&model);
         assert_eq!(rod_view.r#type[0], MjtJoint::mjJNT_SLIDE);
-        assert_eq!(rod_view.limited[0], true);
+        assert!(rod_view.limited[0]);
 
         // Geom type via view
         let ball2_info = model.geom("ball2").unwrap();
@@ -3378,7 +3379,7 @@ mod tests {
         assert_eq!(slider_view.trntype[0], MjtTrn::mjTRN_JOINT);
         assert_eq!(slider_view.biastype[0], MjtBias::mjBIAS_AFFINE);
         assert_eq!(slider_view.gaintype[0], MjtGain::mjGAIN_FIXED);
-        assert_eq!(slider_view.ctrllimited[0], true);
+        assert!(slider_view.ctrllimited[0]);
 
         // Mutable enum roundtrip via view
         let mut slider_view_mut = slider_info.view_mut(&mut model);

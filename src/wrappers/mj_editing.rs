@@ -3022,15 +3022,10 @@ mod tests {
         let model = spec.compile().unwrap();
         let tendon_limited = model.tendon_limited();
         // After compilation, enum values resolve to bool: FALSE->false, TRUE->true, AUTO->resolved
-        assert_eq!(tendon_limited[0], false,
-            "Compiled tendon 0 limited should be false");
-        assert_eq!(tendon_limited[1], true,
-            "Compiled tendon 1 limited should be true");
-        // AUTO resolves to a concrete bool in the compiled model
-        assert!(
-            tendon_limited[2] == false || tendon_limited[2] == true,
-            "Compiled tendon 2 (AUTO) should resolve to a bool, got {:?}", tendon_limited[2]
-        );
+        assert!(!tendon_limited[0], "Compiled tendon 0 limited should be false");
+        assert!(tendon_limited[1], "Compiled tendon 1 limited should be true");
+        // AUTO resolves to a concrete bool in the compiled model (always true or false)
+        let _ = tendon_limited[2];
     }
 
     /// Test that MjsTendon `actfrclimited` correctly round-trips all three enum
@@ -3142,11 +3137,10 @@ mod tests {
         // Compile -- AUTO resolves based on range presence
         let model = spec.compile().unwrap();
         let jnt_limited = model.jnt_limited();
-        assert_eq!(jnt_limited[0], false);
-        assert_eq!(jnt_limited[1], true);
+        assert!(!jnt_limited[0]);
+        assert!(jnt_limited[1]);
         // AUTO with range present should resolve to true
-        assert_eq!(jnt_limited[2], true,
-            "Joint with limited=AUTO and range should resolve to true");
+        assert!(jnt_limited[2], "Joint with limited=AUTO and range should resolve to true");
     }
 
     /// Parsing invalid XML must return Err with a non-empty message.
