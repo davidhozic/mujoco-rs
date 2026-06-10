@@ -1,22 +1,12 @@
 # Claude Code configuration
 
-This project's conventions are shared across all AI assistants and live in `.github/`,
-which is the single source of truth. Do not duplicate its content here.
+Skills live in `.claude/skills/` (invoke as `/build`, `/test`, `/doc`, etc.).
+Rules live in `.claude/rules/` and are imported below - Claude reads them automatically.
 
-- **Rules** -- read and follow ALL files in `.github/rules/` at all times. Re-read them
-  after any context compaction.
-- **Skills** -- the workflows in `.github/skills/**/SKILL.md` are exposed as Claude skills
-  under `.claude/skills/` (invoke as `/build`, `/test`, `/doc`, etc.).
-
-## Copilot -> Claude Code tool mapping
-
-The rules and skills are authored for GitHub Copilot / VS Code. Apply this mapping wherever
-they reference a Copilot-specific tool:
-
-| Copilot wording | Claude Code |
-|---|---|
-| `task` tool / subagents | `Agent` tool |
-| `run_in_terminal isBackground: true`, `mode="async"` (+ `detach: true`) | `Bash` with `run_in_background: true` |
-| `await_terminal` / `get_terminal_output` | `BashOutput` |
-| `view_file` | `Read` |
-| `grep_search` | `Grep` |
+@.claude/rules/project-overview.md
+@.claude/rules/important-context.md
+@.claude/rules/coding-conventions.md
+@.claude/rules/macro-system.md
+@.claude/rules/disallowed-commands.md
+@.claude/rules/subagent-policy.md
+@.claude/rules/token-efficiency.md
