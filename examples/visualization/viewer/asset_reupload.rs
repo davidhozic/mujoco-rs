@@ -166,15 +166,11 @@ fn create_model() -> MjModel {
     /* Texture + material */
     // Use set_data() to ensure MuJoCo allocates exactly TEX_SIZE^2 x nchannel bytes.
     let tex = spec.add_texture();
-    // SAFETY: this is a data-backed texture (no builtin), and nchannel=3 matches the 3-channel
-    // data uploaded by `set_data` below, so the buffer sizing is consistent.
-    unsafe {
-        tex.with_name("wave_tex")
-            .with_type(MjtTexture::mjTEXTURE_2D)
-            .with_width(TEX_SIZE as i32)
-            .with_height(TEX_SIZE as i32)
-            .with_nchannel(3);
-    }
+    tex.with_name("wave_tex")
+        .with_type(MjtTexture::mjTEXTURE_2D)
+        .with_width(TEX_SIZE as i32)
+        .with_height(TEX_SIZE as i32)
+        .with_nchannel(3);
     tex.set_data(&vec![128u8; TEX_SIZE * TEX_SIZE * 3]); // grey initially
 
     let mat = spec.add_material().with_name("tex_mat");

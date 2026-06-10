@@ -216,6 +216,14 @@ Additional rules:
   links to the new method. Do not use `~`/`~~` inside the `<path>` of the display-text form; those
   prefixes only affect the auto-generated display name. Never create a `:docs-rs:` link whose target
   path resolves to a `#[deprecated]` item.
+- **Pin documentation links to a specific version, never the `latest` alias.** Links to versioned
+  resources (docs.rs API pages, GitHub `blob`/`tree` URLs, docs.rs/shields badges) must point to the
+  latest *specific* version -- a concrete version number -- not a floating alias. Do NOT use
+  `https://docs.rs/<crate>/latest/...` or a version-less `shields.io/docsrs/<crate>` badge. The
+  `:docs-rs:` and `:gh-example:` roles already pin the `Cargo.toml`-derived documentation version
+  (`X.Y.x`; see `docs/guide/source/conf.py`), so prefer them over hand-written URLs. Any hand-written
+  versioned link (e.g. the docs.rs badge in `index.rst`) must use a concrete version and be bumped on
+  release.
 - **Version tagging and branching conventions.** Git release tags use no `v` prefix (e.g., `2.3.5`,
   `3.0.0`). Release branches follow the `vMajor.Minor.x` convention (e.g., `v2.3.x`, `v3.0.x`),
   where `v` and `x` are literal/fixed. Use these when diffing against previous releases

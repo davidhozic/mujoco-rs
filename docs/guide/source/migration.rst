@@ -455,6 +455,40 @@ context must transfer ownership (or clone per thread) instead.
     });
 
 
+``Mjs*`` element handles are no longer ``Send`` / ``Sync``
+------------------------------------------------------------
+
+The ``Mjs*`` element handles (``MjsBody``, ``MjsGeom``, ...) and ``MjsDefault`` previously carried a
+blanket ``unsafe impl Send``/``Sync``. Each is only a raw pointer into one shared ``mjSpec`` /
+``mjCModel`` arena, so moving or sharing a handle across threads was unsound. They are now
+``!Send + !Sync``. Code that sent a handle to another thread will no longer compile --- move the
+owning |mj_spec| instead (it stays ``Send``; it is now ``!Sync``, see above) and derive the
+per-thread handles from it on the thread that uses them.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    // relied on Mjs* handles being Send: a handle was moved into another thread
+    let geom = body.add_geom();
+    std::thread::scope(|s| {
+        s.spawn(move || { let _ = geom.set_name("g"); });
+    });
+
+**After:**
+
+.. code-block:: rust
+
+    // move the owning MjSpec; derive handles on the thread that uses them
+    std::thread::scope(|s| {
+        s.spawn(move || {
+            let mut spec = spec;
+            let geom = spec.world_body_mut().add_geom();
+            let _ = geom.set_name("g");
+        });
+    });
+
+
 .. _migrate_4_0_0:
 
 Migrating to 4.0.0

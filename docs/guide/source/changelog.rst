@@ -132,6 +132,8 @@ update of MuJoCo alone can increase the major version.
   The signature is otherwise unchanged; existing calls only need an ``unsafe`` block. The immutable
   ``history`` accessor remains safe. See the migration guide.
 
+*Mjs element handles and MjsDefault are no longer Send/Sync*
+
 - The ``Mjs*`` element handles (|mjs_body|, ``MjsGeom``, ...) and ``MjsDefault`` are now
   ``!Send + !Sync``; they previously carried a blanket ``unsafe impl Send``/``Sync``. Each
   handle is only a raw pointer into one shared ``mjSpec``/``mjCModel`` arena, so moving or
@@ -281,6 +283,9 @@ runtime.
     for named child lookup.
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>id`
     for retrieving optional element IDs.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`
+    for deleting a spec element by its FFI pointer --- the sound replacement for the deprecated
+    ``SpecItem::delete``.
 
 - Added the missing frame-finding methods to |mj_spec|: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`
   and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame_mut`.
@@ -336,11 +341,8 @@ runtime.
   ``update`` now validates ``select`` against the model's ``nbody`` and panics on an out-of-range id.
 - Fixed an out-of-bounds read reachable from safe code in
   :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>move_` when the
-  public ``select`` field held an out-of-range body id. ``mjv_movePerturb`` dereferences
-  ``xmat`` / ``xquat`` / ``body_iquat`` indexed by ``select`` *before* its own range check (and,
-  unlike ``mjv_updateScene``, has no ``select <= 0`` early-out), so a negative or too-large id read
-  out of bounds. ``move_`` now validates ``select`` against the model's ``nbody`` and panics on an
-  out-of-range id.
+  public ``select`` field held an out-of-range body id. ``move_`` now validates ``select`` against
+  the model's ``nbody`` and panics on an out-of-range id.
 - Closed an unsoundness in
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>add_contact`, which was safe but
   copied a caller-built ``MjContact`` into the data arena without validation. MuJoCo later uses the
@@ -350,12 +352,11 @@ runtime.
   section and the migration guide.
 - Closed an unsoundness in
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>reset_debug`, which was safe but
-  filled every buffer-resident array of the ``mjData`` with raw ``debug_value`` bytes. Arrays that
-  MuJoCo does not re-initialize after the fill kept those bytes, so safe accessors exposing types
-  with validity invariants (``bvh_active`` as ``&[bool]``, ``body_awake`` as a fieldless enum
-  slice) could materialize invalid values --- undefined behavior for any ``debug_value`` other
-  than 0 or 1. ``reset_debug`` is now an ``unsafe fn``: the caller guarantees such accessors are
-  not read before the next reset. See the Breaking changes section and the migration guide.
+  filled ``mjData`` arrays with raw ``debug_value`` bytes that safe accessors could then read back
+  as invalid values for types with validity invariants (e.g. ``bool``, fieldless enums) ---
+  undefined behavior for any ``debug_value`` other than 0 or 1. ``reset_debug`` is now an
+  ``unsafe fn``: the caller guarantees such accessors are not read before the next reset. See the
+  Breaking changes section and the migration guide.
 - Fixed a thread-safety hole reachable from safe code in the model-editing handles. Every
   ``Mjs*`` element handle and ``MjsDefault`` carried a blanket ``unsafe impl Send``/``Sync``,
   although each is only a raw pointer into one shared ``mjSpec``/``mjCModel`` arena. Together
@@ -392,9 +393,8 @@ runtime.
   |mj_spec| is now ``!Sync`` (it stays ``Send``). See the Breaking changes section and the migration
   guide.
 - Closed an out-of-bounds write reachable from safe code in
-  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_normalize`. On an empty slice the C function
-  computes a zero norm and then writes ``res[0] = 1`` followed by ``mju_zero(res + 1, -1)`` -- a
-  ``memset`` of ``(size_t)(-1)`` bytes, both out of bounds. The wrapper now panics on an empty slice.
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_normalize` when called with an empty slice.
+  The wrapper now panics on an empty slice.
 - Closed an unsoundness reachable from safe code in ``MjsMesh::set_userfacenormal``, which stored
   unvalidated face-normal indices the renderer later dereferences without a bound check. It is now
   an ``unsafe fn`` with a ``# Safety`` contract. See the Breaking changes section and the migration guide.
