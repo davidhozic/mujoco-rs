@@ -1020,8 +1020,7 @@ mod tests {
 
     /* Tests setup */
     fn load_model() -> MjModel {
-        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
-        model
+        MjModel::from_xml_string(EXAMPLE_MODEL).unwrap()
     }
 
     #[test]
@@ -1073,8 +1072,7 @@ mod tests {
         let model = load_model();          // nbody == 2 (world + "ball")
         let data = model.make_data();
         let scene = MjvScene::new(&model, 100);
-        let mut pert = MjvPerturb::default();
-        pert.select = 1_000_000;           // far beyond nbody
+        let mut pert = MjvPerturb { select: 1_000_000, ..Default::default() };  // far beyond nbody
         pert.move_(&data, MjtMouse::mjMOUSE_MOVE_H_REL, 0.1, 0.1, &scene);
     }
 

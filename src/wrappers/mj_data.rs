@@ -211,7 +211,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         let qfrc_fluid = nv_range;
 
         let model_signature = self.model.signature();
-        Some(MjJointDataInfo {name: name.to_string(), id: id as usize, model_signature,
+        Some(MjJointDataInfo {name: name.to_string(), id, model_signature,
             qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
             qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_passive,
             qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
@@ -1978,6 +1978,8 @@ info_with_view!(Data, tendon,
 /**************************************************************************************************/
 
 #[cfg(test)]
+// The loop indices are needed for FFI pointer arithmetic (e.g. `ptr.add(i * stride + j)`).
+#[allow(clippy::needless_range_loop)]
 mod test {
     use crate::assert_relative_eq;
     use crate::prelude::*;
@@ -2258,7 +2260,7 @@ mod test {
         // Use a small offset point relative to the joint origin
         let point = [0.1, 0.0, 0.0];
 
-        let ball_body_id = model.body("ball").unwrap().id as usize;
+        let ball_body_id = model.body("ball").unwrap().id;
 
         // Test global point Jacobian
         let (jacp, jacr) = data.jac(true, true, &point, ball_body_id);
@@ -2280,7 +2282,7 @@ mod test {
         assert_eq!(jac_subtree.len(), expected_len);
 
         // Test geom Jacobian
-        let green_geom_id = model.geom("green_sphere").unwrap().id as usize;
+        let green_geom_id = model.geom("green_sphere").unwrap().id;
         let (jacp_geom, jacr_geom) = data.jac_geom(true, true, green_geom_id);
         assert_eq!(jacp_geom.len(), expected_len);
         assert_eq!(jacr_geom.len(), expected_len);
@@ -2435,7 +2437,7 @@ mod test {
         // sensor history via wrapper
         let times_sens: Vec<MjtNum> = (0..4).map(|i| i as MjtNum * 0.01).collect();
         // sensor dim for jointpos is 1
-        let values_sens = vec![2.718; 4 * 1];
+        let values_sens = vec![std::f64::consts::E; 4];
         data.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).unwrap();
 
         let got = data.read_sensor_fixed::<1>(0, times_sens[1], 0);
@@ -2480,7 +2482,7 @@ mod test {
         const MODIFIED_VALUE: f64 = 15.0;
 
         let model = MjModel::from_xml_string(MODEL).unwrap();
-        let name = model.id_to_name(MjtObj::mjOBJ_JOINT, BALL_INDEX as usize).unwrap();
+        let name = model.id_to_name(MjtObj::mjOBJ_JOINT, BALL_INDEX).unwrap();
 
         let mut data = MjData::new(&model);
         let ball2_joint_info = data.joint(name).unwrap();
@@ -2496,10 +2498,10 @@ mod test {
         let ptr = unsafe { data.ffi_mut().contact };
         assert!(ptr.is_aligned());
         assert!(!ptr.is_null());
-        assert_eq!(data.contact().len(), 0);
+        assert!(data.contact().is_empty());
         data.step();
 
-        assert!(data.contact().len() != 0);
+        assert!(!data.contact().is_empty());
     }
 
     #[test]
@@ -2586,7 +2588,7 @@ mod test {
         let mut data = model.make_data();
 
         let times_sens: Vec<MjtNum> = (0..4).map(|i| i as MjtNum * 0.01).collect();
-        let values_sens = vec![2.718; 4 * 1]; // dim == 1 for jointpos
+        let values_sens = vec![std::f64::consts::E; 4]; // dim == 1 for jointpos
 
         // success: times Some / None
         assert!(data.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).is_ok());
@@ -2598,7 +2600,7 @@ mod test {
         assert!(matches!(err, MjDataError::LengthMismatch { name: "times", .. }));
 
         // values length mismatch -> LengthMismatch
-        let bad_values = vec![3.14; 3];
+        let bad_values = vec![std::f64::consts::PI; 3];
         let err = data.init_sensor_history(0, Some(&times_sens), &bad_values, 0.0).unwrap_err();
         assert!(matches!(err, MjDataError::LengthMismatch { name: "values", .. }));
 
@@ -2808,7 +2810,7 @@ mod test {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let mut data = model.make_data();
         let nv = model.nv() as usize;
-        let body_id = model.body("ball").unwrap().id as usize;
+        let body_id = model.body("ball").unwrap().id;
         let mut qfrc = vec![0.0; nv];
 
         data.forward();
@@ -3021,11 +3023,11 @@ mod test {
 
         assert_relative_eq!(data.time(), 0.0, epsilon = 1e-15);
 
-        data.set_time(3.14);
-        assert_relative_eq!(data.time(), 3.14, epsilon = 1e-15);
+        data.set_time(std::f64::consts::PI);
+        assert_relative_eq!(data.time(), std::f64::consts::PI, epsilon = 1e-15);
 
-        let data2 = model.make_data().with_time(2.718);
-        assert_relative_eq!(data2.time(), 2.718, epsilon = 1e-15);
+        let data2 = model.make_data().with_time(std::f64::consts::E);
+        assert_relative_eq!(data2.time(), std::f64::consts::E, epsilon = 1e-15);
     }
 
     /// Tests that `jac` returns `IndexOutOfBounds` for invalid body IDs.
@@ -3323,8 +3325,8 @@ mod test {
         // Equality constraints are active by default
         let eq_active = data.eq_active();
         assert_eq!(eq_active.len(), neq);
-        assert_eq!(eq_active[0], true);
-        assert_eq!(eq_active[1], true);
+        assert!(eq_active[0]);
+        assert!(eq_active[1]);
 
         // Cross-validate with raw u8 FFI pointer
         for i in 0..neq {
@@ -3335,12 +3337,12 @@ mod test {
 
         // Disable one via mutable force-cast
         data.eq_active_mut()[0] = false;
-        assert_eq!(data.eq_active()[0], false);
-        assert_eq!(data.eq_active()[1], true);
+        assert!(!data.eq_active()[0]);
+        assert!(data.eq_active()[1]);
 
         // Verify FFI side was actually modified
         let raw_val = unsafe { *data.ffi().eq_active.add(0) };
-        assert_eq!(raw_val, false, "disabling eq_active[0] must write false to FFI");
+        assert!(!raw_val, "disabling eq_active[0] must write false to FFI");
     }
 
     /// Verifies [force]-cast mutable roundtrip for xfrc_applied and mocap_pos.
@@ -3696,12 +3698,12 @@ mod test {
         let data = model.make_data();
 
         // Model has no flexes, so these should be empty
-        assert_eq!(data.flexvert_xpos().len(), 0, "no flex -> empty flexvert_xpos");
-        assert_eq!(data.flexelem_aabb().len(), 0, "no flex -> empty flexelem_aabb");
-        assert_eq!(data.flexvert_j().len(), 0, "no flex -> empty flexvert_J");
-        assert_eq!(data.flexvert_length().len(), 0, "no flex -> empty flexvert_length");
-        assert_eq!(data.flexedge_j().len(), 0, "no flex -> empty flexedge_J");
-        assert_eq!(data.flexedge_length().len(), 0, "no flex -> empty flexedge_length");
+        assert!(data.flexvert_xpos().is_empty(), "no flex -> empty flexvert_xpos");
+        assert!(data.flexelem_aabb().is_empty(), "no flex -> empty flexelem_aabb");
+        assert!(data.flexvert_j().is_empty(), "no flex -> empty flexvert_J");
+        assert!(data.flexvert_length().is_empty(), "no flex -> empty flexvert_length");
+        assert!(data.flexedge_j().is_empty(), "no flex -> empty flexedge_J");
+        assert!(data.flexedge_length().is_empty(), "no flex -> empty flexedge_length");
     }
 
     /// Verifies [force]-cast for bvh_aabb_dyn (&[[MjtNum; 6]]).
@@ -4666,10 +4668,10 @@ mod test {
         }, "disabling equality constraints should change positions");
 
         // FFI cross-validation for eq_active
-        assert_eq!(data.eq_active()[0], false);
-        assert_eq!(data.eq_active()[1], false);
-        assert_eq!(unsafe { *data.ffi().eq_active }, false);
-        assert_eq!(unsafe { *data.ffi().eq_active.add(1) }, false);
+        assert!(!data.eq_active()[0]);
+        assert!(!data.eq_active()[1]);
+        assert!(!unsafe { *data.ffi().eq_active });
+        assert!(!unsafe { *data.ffi().eq_active.add(1) });
     }
 
     /// Runs step1() + step2() split stepping and verifies force-cast arrays
