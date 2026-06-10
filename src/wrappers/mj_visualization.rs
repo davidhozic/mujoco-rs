@@ -957,8 +957,8 @@ impl MjvScene {
         [ffi] flexskinopt: bool; "copy of mjVIS_FLEXSKIN mjvOption flag.";
     ]}
 
-    getter_setter! {force!, with, get, set, [
-        [ffi, ffi_mut] stereo: MjtStereo; "stereoscopic rendering.";
+    getter_setter! {with, get, set, [
+        [ffi, ffi_mut] stereo: MjtStereo [force]; "stereoscopic rendering.";
     ]}
 
     getter_setter! {with, get, set, [

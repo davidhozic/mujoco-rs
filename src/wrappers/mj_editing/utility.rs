@@ -617,16 +617,27 @@ macro_rules! vec_set_get {
 
 /// Implements setters for non-string attributes.
 ///
-/// Two forms are supported:
-/// - `name: Type; "comment"` -- the setter takes `&[Type]` and writes it unchanged.
-/// - `name: InputType => StoredType; "comment"; "safety"` -- generates an `unsafe` setter taking
-///   `&[InputType]` (typically a Rust enum) and storing each element as the raw C type `StoredType`
-///   via a zero-cost pointer reinterpretation (the same compile-time-checked cast the view layer
-///   uses, so no `bytemuck` trait is required on the enum). This form is for values the C side later
-///   uses without its own validation (e.g. as an unchecked array index), where the only guard would
-///   require iterating the slice; `"safety"` documents the caller's `# Safety` obligation. Typing
-///   the input as an enum keeps arbitrary integers out, but does not by itself rule out enum
-///   discriminants that are out of range for the C-side use.
+/// Three forms are supported:
+/// - `name: Type; "comment"` -- a **safe** setter that takes `&[Type]` and writes it unchanged.
+/// - `name: InputType => StoredType { check, "reason" } => ErrType; "comment"` -- a **safe** setter
+///   taking `&[InputType]` (typically a Rust enum) that stores each element as the raw C type
+///   `StoredType` via a zero-cost pointer reinterpretation (the same compile-time-checked cast the
+///   view layer uses, so no `bytemuck` trait is required on the enum). Every element is passed
+///   through `check` (a `Fn(InputType) -> Result<(), ErrType>`) before anything is written; if any
+///   element fails, nothing is written. Use this when the validation rules out the out-of-range
+///   values the C side would misuse, which is what makes the setter sound without `unsafe`.
+///   `"reason"` is a doc fragment in the crate's `# Errors` style (e.g.
+///   `"[`MjEditError::InvalidParameter`] when ..."`) reused verbatim in the generated `# Errors`
+///   section. The `{ check, "reason" } => ErrType` part may be omitted for a plain safe cast.
+/// - `name: InputType => StoredType; "comment"; "safety" unsafe` -- the same cast setter made
+///   **`unsafe`** (the per-element `check` omitted), for vectors the C side later uses without its
+///   own validation -- e.g. as an unchecked array index, count, or `memcpy` length -- and which
+///   cannot be cheaply validated here. The optional `; "safety" unsafe` tail flips the generated
+///   setter to `unsafe fn` and emits `"safety"` as its caller-facing `# Safety` obligation. It is a
+///   tail (not a leading marker) because a leading optional starting with the `unsafe` keyword is
+///   ambiguous with the field's own `name` ident; anchoring it after the comment with the `"safety"`
+///   literal keeps it unambiguous, and the trailing `unsafe` keyword is captured (`$unsafe_kw:tt`)
+///   and echoed verbatim onto the `fn`.
 macro_rules! vec_set {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
@@ -637,18 +648,36 @@ macro_rules! vec_set {
             }
         )*
     }};
-    ($($name:ident: $input_type:ty => $type:ty; $comment:expr; $safety:expr);* $(;)?) => {paste::paste!{
+
+    ($($([$unsafe_kw:ident : $safety:literal])? $name:ident: $input_type:ty => $type:ty $({$check:expr , $reason:literal} => $err:ty)?; $comment:expr);* $(;)?) => {paste::paste!{
         $(
-            #[doc = concat!("Set ", $comment, "\n\n# Safety\n", $safety)]
-            pub unsafe fn [<set_ $name>](&mut self, value: &[$input_type]) {
+            // One cast setter whose shape is driven by the optional check / safety tail:
+            // - `{ check, "reason" } => ErrType` makes it a safe `-> Result<(), ErrType>` that
+            //   validates every element first; passing validation rules out the values the C side
+            //   would misuse, so the reinterpretation is sound without `unsafe`. `"reason"` is a doc
+            //   fragment naming the error and condition, reused verbatim in the `# Errors` section.
+            // - `; "safety" unsafe` makes it an `unsafe fn` (no per-element check) for vectors the C
+            //   side later trusts as an unchecked index/count/length; `"safety"` documents the
+            //   caller's `# Safety` obligation. The leading `"safety"` literal keeps this tail
+            //   unambiguous from the repetition separator, and the trailing `unsafe` keyword
+            //   (`$unsafe_kw`) is echoed onto the generated `fn`.
+            // - neither tail: a plain safe cast.
+            #[doc = concat!("Set ", $comment
+                $(, "\n\n# Errors\nReturns ", $reason, " (in that case nothing is written).")?
+                $(, "\n\n# Safety\n", $safety)?
+            )]
+            pub $($unsafe_kw)? fn [<set_ $name>](&mut self, value: &[$input_type]) $(-> Result<(), $err>)? {
+                $(for &v in value { ($check)(v)?; })?
                 // Compile-time size/alignment check for the layout-compatible reinterpretation below.
                 $crate::util::assert_ptr_cast_valid::<$input_type, $type>(value.as_ptr());
-                // SAFETY: $input_type and $type are layout-compatible (asserted above) and every
-                // enum value is a valid bit pattern for its underlying integer, so reinterpreting the
-                // slice is sound and zero-cost. The caller upholds the documented value-range
-                // precondition. self.$name is a valid pointer for the lifetime of self.
-                let raw: &[$type] = unsafe { std::slice::from_raw_parts(value.as_ptr().cast(), value.len()) };
+                // SAFETY: $input_type and $type are layout-compatible (asserted above) and every enum
+                // value is a valid bit pattern for its underlying integer, so reinterpreting the slice
+                // is sound and zero-cost. The value-range precondition the C side relies on is enforced
+                // by the `$check` loop above when present, or by the caller's `# Safety` contract
+                // otherwise. self.$name is a valid pointer for the lifetime of self.
+                let raw = unsafe { std::slice::from_raw_parts(value.as_ptr().cast(), value.len()) };
                 unsafe { [<write_mjs_vec_ $type>](raw, self.$name) };
+                $(Ok::<(), $err>(()))?
             }
         )*
     }};

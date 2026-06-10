@@ -33,6 +33,38 @@ use crate::getter_setter;
 use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
 use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
 
+/* Validation helpers */
+/// Validates that an object-type value is a real object type, i.e. an [`MjtObj`] discriminant below
+/// [`MjtObj::mjNOBJECT`]. Meta variants (`mjOBJ_FRAME`, `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) and
+/// `mjNOBJECT` itself are rejected because the model compiler uses such values as an unchecked
+/// index into a `mjNOBJECT`-sized array (via `mjCModel::FindObject`), which would read out of
+/// bounds. Used for any safe setter whose value reaches `FindObject` during `compile()`.
+fn check_objtype(t: MjtObj) -> Result<(), MjEditError> {
+    if (t as i32) < (MjtObj::mjNOBJECT as i32) {
+        Ok(())
+    } else {
+        Err(MjEditError::InvalidParameter(format!(
+            "object type must be a real MjtObj below MjtObj::mjNOBJECT, got {t:?}"
+        )))
+    }
+}
+
+/// Validates that a custom-numeric array size is non-negative.
+///
+/// A negative `size` slips through every guard in the model compiler's `mjCNumeric::Compile`
+/// (the `size < data_.size()` check is gated on a non-empty init array, and the zero checks treat
+/// negatives as non-zero), so it undersizes the shared `numeric_data` allocation while another
+/// numeric's zero-fill loop still runs up to its own positive size, writing out of bounds.
+fn check_numeric_size(size: i32) -> Result<(), MjEditError> {
+    if size < 0 {
+        Err(MjEditError::InvalidParameter(format!(
+            "numeric size must be non-negative, got {size}"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
 /* Types */
 /// Type of inertia inference.
 pub type MjtGeomInertia = mjtGeomInertia;
@@ -123,8 +155,8 @@ impl MjsCompiler {
         settotalmass: f64;             "rescale masses and inertias; <=0: ignore.";
     ]}
 
-    getter_setter! {force!, [&] with, get, set, [
-        inertiafromgeom: MjtInertiaFromGeom;  "use geom inertias.";
+    getter_setter! {[&] with, get, set, [
+        inertiafromgeom: MjtInertiaFromGeom [force];  "use geom inertias.";
     ]}
 
     getter_setter! {[&] with, get, [
@@ -404,8 +436,22 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
-    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile.
+    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile, including when a
+    /// texture has a builtin pattern set while its `nchannel` is less than 3.
     pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
+        // The builtin-texture generators (`Builtin2D`/`BuiltinCube`) write a hard-coded 3 bytes per
+        // pixel, but MuJoCo only allocates `nchannel*width*height` bytes and (unlike the file/data
+        // paths) does not check `nchannel >= 3` for the builtin path, so `nchannel < 3` heap-overflows
+        // during compilation. Both setters (`set_nchannel`, `set_builtin`) are safe and independent,
+        // so this cross-field invariant can only be enforced at the compile choke point.
+        for texture in self.texture_iter() {
+            if texture.builtin() != MjtBuiltin::mjBUILTIN_NONE && texture.nchannel() < 3 {
+                return Err(MjEditError::CompileFailed(
+                    "texture with a builtin pattern requires nchannel >= 3".to_owned(),
+                ));
+            }
+        }
+
         let result = unsafe { MjModel::from_raw( mj_compile(self.0.as_ptr(), ptr::null()) ) };
         result.map_err(|_| {
             // SAFETY: The spec is still valid after failed compilation.
@@ -795,10 +841,10 @@ impl MjsJoint {
     ]);
 
     getter_setter! {
-        force!, [&] with, get, set, [
-            align: MjtAlignFree;       "align free joint with body com (mjtAlignFree).";
-            limited: MjtLimited;       "does joint have limits (mjtLimited).";
-            actfrclimited: MjtLimited; "are actuator forces on joint limited (mjtLimited).";
+        [&] with, get, set, [
+            align: MjtAlignFree [force];       "align free joint with body com (mjtAlignFree).";
+            limited: MjtLimited [force];       "does joint have limits (mjtLimited).";
+            actfrclimited: MjtLimited [force]; "are actuator forces on joint limited (mjtLimited).";
         ]
     }
 
@@ -1027,10 +1073,15 @@ impl MjsActuator {
     ]);
 
     getter_setter! {
-        force!, [&] with, get, set, [
-            ctrllimited: MjtLimited;        "are control limits defined.";
-            forcelimited: MjtLimited;       "are force limits defined.";
-            actlimited: MjtLimited;         "are activation limits defined.";
+        [&] with, get, set, [
+            ctrllimited: MjtLimited [force];        "are control limits defined.";
+            forcelimited: MjtLimited [force];       "are force limits defined.";
+        ]
+    }
+
+    getter_setter! {
+        [&] with, get, set, [
+            actlimited: MjtLimited [force];         "are activation limits defined.";
         ]
     }
 
@@ -1313,8 +1364,10 @@ impl MjsSensor {
 
     getter_setter!([&] with, get, set, [
         type_ + _: MjtSensor;          "sensor type.";
-        objtype: MjtObj;               "object type the sensor refers to.";
-        reftype: MjtObj;               "type of referenced object.";
+        objtype: MjtObj { check_objtype, "[`MjEditError::InvalidParameter`] when the object type is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
+                                       "object type the sensor refers to.";
+        reftype: MjtObj { check_objtype, "[`MjEditError::InvalidParameter`] when the reference type is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
+                                       "type of referenced object.";
         datatype: MjtDataType;         "data type.";
         cutoff: f64;                   "cutoff for real and positive datatypes.";
         noise: f64;                    "noise stdev.";
@@ -1383,8 +1436,8 @@ impl MjsFlex {
     }
 
     getter_setter! {
-        force!, [&] with, get, set, [
-            selfcollide: MjtFlexSelf;        "mode for flex self collision.";
+        [&] with, get, set, [
+            selfcollide: MjtFlexSelf [force];        "mode for flex self collision.";
         ]
     }
 
@@ -1405,7 +1458,12 @@ impl MjsFlex {
     vec_set! {
         texcoord: f32;          "vertex texture coordinates.";
         elem: i32;              "element vertex ids.";
-        elemtexcoord: i32;      "element texture coordinates.";
+    }
+
+    vec_set! {
+        [unsafe: "The slice must have exactly `(dim + 1) * nelem` entries and every entry \
+                  must be a valid index into the flex texture coordinates."
+        ] elemtexcoord: i32 => i32; "element texture coordinates.";
     }
 }
 
@@ -1505,9 +1563,9 @@ impl MjsTendon {
     ]}
 
     getter_setter! {
-        force!, [&] with, get, set, [
-            limited: MjtLimited;       "does tendon have limits (mjtLimited).";
-            actfrclimited: MjtLimited; "does tendon have actuator force limits."
+        [&] with, get, set, [
+            limited: MjtLimited [force];       "does tendon have limits (mjtLimited).";
+            actfrclimited: MjtLimited [force]; "does tendon have actuator force limits."
         ]
     }
 
@@ -1670,7 +1728,7 @@ mjs_struct!(Numeric [SpecObject]);
 impl MjsNumeric {
     getter_setter! {
         [&] with, get, set, [
-            size: i32;                     "size of the numeric array.";
+            size: i32 { check_numeric_size, "[`MjEditError::InvalidParameter`] when the size is negative" } => MjEditError;     "size of the numeric array.";
         ]
     }
 
@@ -1696,15 +1754,12 @@ mjs_struct!(Tuple [SpecObject]);
 impl MjsTuple {
     vec_set! {
         // `objtype` is stored as a raw C `int` and, at `compile()` time, used to index the model
-        // compiler's `object_lists_` array (size `mjNOBJECT`) with no bounds check. Typing the
-        // setter as `&[MjtObj]` keeps arbitrary integers out, but `MjtObj` still includes meta
-        // variants that are out of range, so the setter is `unsafe` (see the `# Safety` note).
-        objtype: MjtObj => i32;
-            "object types.";
-            "Every value must be a real object type: an `MjtObj` discriminant less than \
-             `mjNOBJECT`. Passing a meta variant (`mjOBJ_FRAME`, `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) \
-             or `mjNOBJECT` itself causes an out-of-bounds array read inside the model compiler \
-             when the spec is compiled.";
+        // compiler's `object_lists_` array (size `mjNOBJECT`) with no bounds check. Validating every
+        // element against `mjNOBJECT` rules out the meta `MjtObj` variants (`mjOBJ_FRAME`,
+        // `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) that would otherwise cause an out-of-bounds read, which is
+        // what lets this setter be safe.
+        objtype: MjtObj => i32 { check_objtype, "[`MjEditError::InvalidParameter`] when any value is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
+            "object types. Every value must be a real object type (an `MjtObj` below `mjNOBJECT`).";
     }
 
     vec_string_set_append! {
@@ -1801,8 +1856,18 @@ impl MjsMesh {
         usernormal: f32;             "user normal data.";
         usertexcoord: f32;           "user texcoord data.";
         userface: i32;               "user vertex indices.";
-        userfacenormal: i32;         "user face normal indices.";
-        userfacetexcoord: i32;       "user texcoord indices.";
+    }
+
+    vec_set! {
+        [unsafe: "Every entry must be in `0..N`, where `N` is the number of user normals: the \
+                  length of the slice passed to `set_usernormal` divided by 3 (each normal is 3 \
+                  `f32`: x, y, z)."]
+            userfacenormal: i32 => i32; "user face normal indices.";
+        [unsafe: "Every entry must be in `0..ntexcoord` (the number of user texture coordinates), and \
+                  the slice length must equal the length of the slice passed to `set_userface` (3 per \
+                  face). Unlike face-normal data, MuJoCo does not validate the texcoord-index length, \
+                  so an oversized slice overflows the model's face-texcoord buffer at compile time."]
+            userfacetexcoord: i32 => i32; "user texcoord indices.";
     }
 }
 
@@ -1866,7 +1931,13 @@ impl MjsSkin {
         texcoord: f32;          "texture coordinates.";
         bindpos: f32;           "bind pos.";
         bindquat: f32;          "bind quat.";
-        face: i32;              "faces.";
+    }
+
+    vec_set! {
+        [
+            unsafe:
+                "The slice length must be a multiple of 3 and every entry must be in `0..nvert`  (the number of skin vertices)."
+        ] face: i32 => i32; "faces.";
     }
 
     vec_vec_append! {
@@ -1903,16 +1974,24 @@ impl MjsTexture {
             random: f64;                  "probability of random dots.";
             width: i32;                   "image width.";
             height: i32;                  "image height.";
-            nchannel: i32;                "number of channels.";
         ]
     }
 
     getter_setter! {
-        force!, [&] with, get, set, [
-            type_ + _: MjtTexture;        "texture type.";
-            colorspace: MjtColorSpace;    "colorspace.";
-            builtin: MjtBuiltin;          "builtin type.";
-            mark: MjtMark;                "mark type.";
+        [&] with, get, set, [
+            // `nchannel` must be `>= 3` whenever a builtin pattern is set
+            // (`builtin != MjtBuiltin::mjBUILTIN_NONE`); this cross-field invariant is
+            // enforced at the compile choke point in `MjSpec::compile`.
+            nchannel: i32; "number of channels.";
+        ]
+    }
+
+    getter_setter! {
+        [&] with, get, set, [
+            type_ + _: MjtTexture [force];        "texture type.";
+            colorspace: MjtColorSpace [force];    "colorspace.";
+            builtin: MjtBuiltin [force];          "builtin type.";
+            mark: MjtMark [force];                "mark type.";
         ]
     }
 
@@ -2846,8 +2925,7 @@ mod tests {
 
         tuple.set_objname("body1 body2");
         tuple.set_objprm(&obj_param);
-        // SAFETY: mjOBJ_BODY is a real object type (< mjNOBJECT).
-        unsafe { tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_BODY]) };
+        tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_BODY]).unwrap();
 
         assert_eq!(tuple.objprm(), &obj_param);
 
@@ -3210,6 +3288,53 @@ mod tests {
             "RGB texture slot should be resolved (not -1)");
     }
 
+    /// A builtin texture with `nchannel < 3` must be rejected by `compile()` rather than
+    /// heap-overflowing in MuJoCo's builtin generators (which write 3 bytes per pixel).
+    #[test]
+    fn test_builtin_texture_nchannel_rejected() {
+        let mut spec = MjSpec::new();
+        spec.add_texture()
+            .with_name("badtex")
+            .with_type(MjtTexture::mjTEXTURE_2D)
+            .with_builtin(MjtBuiltin::mjBUILTIN_CHECKER)
+            .with_rgb1([0.9, 0.9, 0.9])
+            .with_rgb2([0.1, 0.1, 0.1])
+            .with_width(64)
+            .with_height(64)
+            .set_nchannel(1);
+
+        let err = spec.compile().unwrap_err();
+        assert!(matches!(&err, MjEditError::CompileFailed(msg) if msg.contains("nchannel")),
+            "compile must reject nchannel < 3 builtin texture, got {err:?}");
+
+        // nchannel == 3 (and a builtin pattern) compiles cleanly.
+        let mut ok_spec = MjSpec::new();
+        ok_spec.add_texture()
+            .with_name("goodtex")
+            .with_type(MjtTexture::mjTEXTURE_2D)
+            .with_builtin(MjtBuiltin::mjBUILTIN_CHECKER)
+            .with_rgb1([0.9, 0.9, 0.9])
+            .with_rgb2([0.1, 0.1, 0.1])
+            .with_width(64)
+            .with_height(64)
+            .set_nchannel(3);
+        assert!(ok_spec.compile().is_ok(), "nchannel == 3 builtin texture should compile");
+
+        // nchannel < 3 with NO builtin pattern must not trip this guard. Such a texture still
+        // fails to compile (it has no pixel source), but with MuJoCo's own error message rather
+        // than the nchannel guard's, proving the guard is correctly scoped to the builtin path.
+        let mut no_builtin = MjSpec::new();
+        no_builtin.add_texture()
+            .with_name("plain")
+            .with_type(MjtTexture::mjTEXTURE_2D)
+            .with_width(64)
+            .with_height(64)
+            .set_nchannel(1);
+        assert!(matches!(no_builtin.compile().unwrap_err(),
+                MjEditError::CompileFailed(msg) if !msg.contains("nchannel")),
+            "nchannel < 3 without a builtin pattern should not trip the nchannel guard");
+    }
+
     /// Verifies `MjsFlex::cellcount` (read-only `&[i32; 3]`) and `order` (read-write `i32`)
     /// by parsing a minimal flexcomp model and reading/writing through the spec.
     #[test]
@@ -3244,5 +3369,69 @@ mod tests {
             flex_mut.set_order(1);
         }
         assert_eq!(spec.flex("myflex").unwrap().order(), 1);
+    }
+
+    /// Verifies the sensor's objtype protection works.
+    #[test]
+    #[should_panic]
+    fn test_sensor_objtype_failure() {
+        let mut spec = MjSpec::new();
+        spec.add_sensor()
+            .with_objtype(MjtObj::mjOBJ_FRAME);
+    }
+
+    /// Verifies the sensor's reftype protection works.
+    #[test]
+    #[should_panic]
+    fn test_sensor_reftype_failure() {
+        let mut spec = MjSpec::new();
+        spec.add_sensor()
+            .with_reftype(MjtObj::mjOBJ_FRAME);
+    }
+
+    /// Verifies the fallible sensor objtype/reftype setters reject meta variants and accept real ones.
+    #[test]
+    fn test_sensor_objtype_reftype_setters() {
+        let mut spec = MjSpec::new();
+        let sensor = spec.add_sensor();
+
+        assert!(matches!(
+            sensor.set_objtype(MjtObj::mjOBJ_MODEL),
+            Err(MjEditError::InvalidParameter(_))
+        ));
+        assert!(matches!(
+            sensor.set_reftype(MjtObj::mjOBJ_DEFAULT),
+            Err(MjEditError::InvalidParameter(_))
+        ));
+        assert!(sensor.set_objtype(MjtObj::mjOBJ_SITE).is_ok());
+        assert!(sensor.set_reftype(MjtObj::mjOBJ_BODY).is_ok());
+    }
+
+    /// Verifies the tuple's objtype protection rejects meta object types and leaves the
+    /// slice unwritten, while accepting real object types.
+    #[test]
+    fn test_tuple_objtype_validation() {
+        let mut spec = MjSpec::new();
+        let tuple = spec.add_tuple();
+
+        assert!(matches!(
+            tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_FRAME]),
+            Err(MjEditError::InvalidParameter(_))
+        ));
+        assert!(tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM]).is_ok());
+    }
+
+    /// Verifies the numeric size setter rejects a negative size (which would undersize the
+    /// `numeric_data` allocation in the model compiler) and accepts a non-negative one.
+    #[test]
+    fn test_numeric_size_validation() {
+        let mut spec = MjSpec::new();
+        let numeric = spec.add_numeric();
+
+        assert!(matches!(
+            numeric.set_size(-1),
+            Err(MjEditError::InvalidParameter(_))
+        ));
+        assert!(numeric.set_size(4).is_ok());
     }
 }

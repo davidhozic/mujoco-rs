@@ -25,7 +25,8 @@ Migrating to 5.0.0
 ======================
 
 Version 5.0.0 updates MuJoCo to 3.9.0, redesigns model-editing element deletion,
-and migrates several rendering APIs to the |mjr_context| error type.
+migrates several rendering APIs to the |mjr_context| error type, and hardens
+model-editing setters against out-of-range object types.
 
 
 MuJoCo upgrade
@@ -211,17 +212,12 @@ with named fields instead.
     }
 
 
-``MjsTuple::set_objtype`` now takes ``&[MjtObj]``
--------------------------------------------------
+``MjsTuple::set_objtype`` now takes ``&[MjtObj]`` and is fallible
+-----------------------------------------------------------------
 
-``MjsTuple::set_objtype`` previously accepted ``&[i32]`` and stored the values unchecked. The model
-compiler later uses each value to index a fixed-size object-list array (size ``mjNOBJECT``) without
-a bounds check, so an out-of-range value is an out-of-bounds read at ``compile()`` time. The setter
-now takes ``&[MjtObj]`` and is an ``unsafe fn``: typing the input as ``MjtObj`` keeps arbitrary
-integers out, but ``MjtObj`` still includes meta variants (``mjOBJ_FRAME``, ``mjOBJ_DEFAULT``,
-``mjOBJ_MODEL``) and ``mjNOBJECT`` itself that are out of range. The caller must ensure every value
-is a real object type (an ``MjtObj`` discriminant ``< mjNOBJECT``); the conversion to the underlying
-C ``int`` is then a zero-cost reinterpretation.
+``MjsTuple::set_objtype`` previously accepted ``&[i32]`` and returned ``()``. It now takes
+``&[MjtObj]`` and returns ``Result<(), MjEditError>``: out-of-range object types are rejected with
+``MjEditError::InvalidParameter``.
 
 **Before (4.x):**
 
@@ -233,8 +229,77 @@ C ``int`` is then a zero-cost reinterpretation.
 
 .. code-block:: rust
 
-    // SAFETY: mjOBJ_BODY and mjOBJ_GEOM are real object types (< mjNOBJECT).
-    unsafe { tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM]) };
+    tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM])?;
+
+
+``MjsSensor::set_objtype`` / ``set_reftype`` are now fallible
+-------------------------------------------------------------
+
+``MjsSensor::set_objtype`` and ``set_reftype`` previously returned ``()``; they now return
+``Result<(), MjEditError>``, rejecting out-of-range object types with ``MjEditError::InvalidParameter``.
+The builder counterparts ``with_objtype`` / ``with_reftype`` keep their signature but **panic** on a
+rejected value.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    sensor.set_objtype(MjtObj::mjOBJ_SITE);
+    sensor.set_reftype(MjtObj::mjOBJ_BODY);
+
+**After:**
+
+.. code-block:: rust
+
+    sensor.set_objtype(MjtObj::mjOBJ_SITE)?;
+    sensor.set_reftype(MjtObj::mjOBJ_BODY)?;
+
+
+MjsNumeric::set_size is now fallible
+------------------------------------
+
+``MjsNumeric::set_size`` previously returned ``()``; it now returns ``Result<(), MjEditError>``,
+rejecting a negative size with ``MjEditError::InvalidParameter`` (a negative size triggers an
+out-of-bounds write in the model compiler).
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    numeric.set_size(8);
+
+**After:**
+
+.. code-block:: rust
+
+    numeric.set_size(8)?;
+
+
+Some index/size vector setters are now ``unsafe``
+-------------------------------------------------
+
+``MjsFlex::set_elemtexcoord``,
+``MjsSkin::set_face``, ``MjsMesh::set_userfacetexcoord`` and ``MjsMesh::set_userfacenormal`` are now
+``unsafe fn``. Each writes a
+value the model compiler or renderer later trusts as an unchecked index/count/length, and the
+correct constraint is cross-field, so it cannot be validated from the setter. Wrap calls in
+``unsafe`` after ensuring the obligation in each method's ``# Safety`` section (e.g. for
+``set_face``, every index is in ``0..nvert`` and the length is a multiple of 3; for
+``set_userfacenormal``, every index is in ``0..N``, where ``N`` is the ``set_usernormal`` slice
+length divided by 3).
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    skin.set_face(&faces);
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: every index is < nvert and faces.len() is a multiple of 3.
+    unsafe { skin.set_face(&faces); }
 
 
 ``MjData::add_contact`` is now an ``unsafe fn``
@@ -284,6 +349,29 @@ existing call sites only need an ``unsafe`` block.
     // SAFETY: no invariant-carrying accessor (bvh_active, body_awake) is read
     // before the next reset().
     unsafe { data.reset_debug(7) };
+
+
+``MjData::history_mut`` is now an ``unsafe fn``
+-----------------------------------------------
+
+``history_mut`` exposes the whole history buffer for mutation. Each slot stores a cursor in
+``buf[1]`` that ``mj_readSensor`` / ``mj_readCtrl`` trust as an array index without a bound check,
+so corrupting it from safe code can cause an out-of-bounds read. The method is now ``unsafe``; the
+caller must keep every slot's cursor valid. The signature is otherwise unchanged, so existing call
+sites only need an ``unsafe`` block. The immutable ``history`` accessor stays safe.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    let buf = data.history_mut();
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: every history slot's cursor (buf[1]) is kept valid.
+    let buf = unsafe { data.history_mut() };
 
 
 ``MjData::ray`` / ``ray_mesh`` now take ``&mut self``
@@ -364,6 +452,40 @@ context must transfer ownership (or clone per thread) instead.
     std::thread::scope(|s| {
         s.spawn(move || { let _ = spec; });
         s.spawn(move || { let _ = spec2; });
+    });
+
+
+``Mjs*`` element handles are no longer ``Send`` / ``Sync``
+------------------------------------------------------------
+
+The ``Mjs*`` element handles (``MjsBody``, ``MjsGeom``, ...) and ``MjsDefault`` previously carried a
+blanket ``unsafe impl Send``/``Sync``. Each is only a raw pointer into one shared ``mjSpec`` /
+``mjCModel`` arena, so moving or sharing a handle across threads was unsound. They are now
+``!Send + !Sync``. Code that sent a handle to another thread will no longer compile --- move the
+owning |mj_spec| instead (it stays ``Send``; it is now ``!Sync``, see above) and derive the
+per-thread handles from it on the thread that uses them.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    // relied on Mjs* handles being Send: a handle was moved into another thread
+    let geom = body.add_geom();
+    std::thread::scope(|s| {
+        s.spawn(move || { let _ = geom.set_name("g"); });
+    });
+
+**After:**
+
+.. code-block:: rust
+
+    // move the owning MjSpec; derive handles on the thread that uses them
+    std::thread::scope(|s| {
+        s.spawn(move || {
+            let mut spec = spec;
+            let geom = spec.world_body_mut().add_geom();
+            let _ = geom.set_name("g");
+        });
     });
 
 

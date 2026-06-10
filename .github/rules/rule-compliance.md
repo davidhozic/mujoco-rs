@@ -2,9 +2,11 @@
 
 Rules for the main agent to stay compliant with this project's conventions throughout long sessions.
 
-1. **Periodic rule re-reads.** Re-read all files in `.github/rules/` every three user prompts or
-   `ask_user` responses (whichever comes first), or sooner if responses are getting long. This
-   prevents gradual drift from conventions as context grows.
+1. **Rule re-reads (token-aware).** The rules total ~11k tokens, so re-reading them on a fixed
+   cadence is a major, recurring token cost. Read each rule file **once per session, on demand**
+   the first time it becomes relevant (e.g. read `macro-system.md` only when touching macros), and
+   do **not** re-read a file already in the current context. Re-read a specific file only if you
+   notice yourself drifting from its conventions. Do not re-read all rules on a fixed prompt count.
 
 2. **Re-read after compaction.** When context has been compacted (indicated by a summary replacing
    earlier conversation turns), re-read all files in `.github/rules/` before starting new work.

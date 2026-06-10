@@ -28,12 +28,21 @@ export MUJOCO_DYNAMIC_LINK_DIR=$(realpath mujoco-X.Y.Z/lib) && export LD_LIBRARY
 Build the Sphinx-based user guide (changelog, migration guide, installation, etc.)
 to verify RST syntax, cross-references, and custom roles like `:gh-example:`.
 
-1. Build the HTML docs:
-```bash
-cd docs/guide && make html 2>&1
-```
+The Sphinx toolchain lives in a `uv`-created virtual environment.
+(it always provides `uv` and `sphinx-build`). `sphinx-build` is typically **not** on
+the system `PATH`, so the build must go through that venv -- a bare `make html` fails
+with `sphinx-build: command not found`.
 
-2. Check the output for `WARNING:` or `ERROR:` lines. The following warning is
+1. Locate and activate the venv. By default it is `docs/guide/.venv`.
+
+2. Build the HTML docs:
+```bash
+cd docs/guide && uv run --offline make html 2>&1
+```
+   Fallbacks if `uv` is unavailable: `make html`,
+   or `. .venv/bin/activate && make html`.
+
+3. Check the output for `WARNING:` or `ERROR:` lines. The following warning is
    pre-existing and can be ignored:
    - `WARNING: html_static_path entry '_static' does not exist`
 
@@ -49,6 +58,11 @@ After both builds pass, verify the Sphinx documentation content is correct:
    signatures, or deprecated patterns that no longer exist on HEAD.
 4. **Cross-references**: Verify that `:gh-example:`, `:docs-rs:`, and RST substitutions
    (`|mj_data|`, etc.) resolve correctly.
+5. **Version-pinned links**: No documentation link may use the `latest` alias (e.g.
+   `https://docs.rs/.../latest/...`) or a version-less docs.rs/shields badge; links must point to the
+   latest *specific* version. The `:docs-rs:`/`:gh-example:` roles pin the `conf.py` documentation
+   version automatically; hand-written links (e.g. the `index.rst` badge) use a concrete version.
+   Grep for `latest` and version-less `shields.io/docsrs` and fix any hits.
 
 Fix any issues found before considering documentation work done.
 
@@ -86,4 +100,6 @@ undefined symbols are illustrative snippets -- skip those.
 > - `--all-features` ensures every conditional item (e.g. viewer, cpp-viewer) is included.
 > - The Sphinx config lives in `docs/guide/source/conf.py`; custom extensions are in
 >   `docs/guide/source/_extensions/`.
-> - To clean previous Sphinx builds: `cd docs/guide && make clean && make html 2>&1`.
+> - To clean previous Sphinx builds: `cd docs/guide && uv run --offline make clean && uv run --offline make html 2>&1`.
+> - The Sphinx venv under `docs/guide` is `uv`-managed; always invoke `sphinx-build`/`make`
+>   through it (`uv run`, or `.venv/bin/sphinx-build`), never a bare `sphinx-build`.

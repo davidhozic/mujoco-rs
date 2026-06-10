@@ -14,15 +14,18 @@ errors in macro invocations, unsafe code correctness, and potential undefined be
 
 - **`src/` only.** Verify the safe Rust wrapper. `mujoco/include/` and `mujoco/src/` are read
   *only* as the reference for field dimensions, types, and C function semantics.
-- **Correctness only.** Stride/length/type correctness, logic bugs, and lifecycle correctness.
-  Soundness (UB reachable from safe code) is **OUT of scope** -- that is `/safety`'s job.
+- **Correctness only.** Stride/length/type correctness, logic bugs, lifecycle correctness, and
+  setter/builder value-validation completeness (concern group I). Deep soundness analysis (UB
+  reachable from safe code) is **OUT of scope** -- that is `/safety`'s job. For group I, only check
+  that the existing validation *mechanism* (the optional `{ check, "reason" }` on a setter) is
+  present wherever a field's value is constrained; do not perform a full soundness audit.
 - **Quote both sides.** Every finding must quote the Rust code value AND the C header value.
   E.g., `info_method! says stride=3, header says (nbody x 3) -> OK` or `stride=4 vs (nbody x 3) -> BUG`.
   If you cannot find the Rust value, report UNCERTAIN; never assume it is correct.
 - **No fixes during scouting or verification.** All code edits happen only in Phase 5 (Fix),
   after findings are fully evaluated. Do not edit source files in any earlier phase.
 
-## The eight concern groups
+## The nine concern groups
 
 ### A. Stride / dimension correctness (`info_method!` fields)
 - Each `info_method!` field stride vs `mjmodel.h` / `mjdata.h` dimension comment.
@@ -84,6 +87,29 @@ the invalid value gracefully.
 - Test coverage gaps.
 - Build linkage correctness.
 
+### I. Setter / builder value validation (`getter_setter!` / `vec_set!` checks)
+The write-arms of `getter_setter!` (`set`, `with`, `[&] with`, their `force!` variants, and the
+`get, set` / `with, get, set` / `with, get` aggregates) and the enum-conversion form of `vec_set!`
+accept an optional check tail -- `{ check, "reason" } [=> ErrType]` -- that validates the value
+before writing it and turns `set_*` into a fallible `Result<(), ErrType>` (the builder `with_*`
+panics). For every such field, decide whether the value is **constrained** by the C side, and verify
+the check is applied iff it is needed:
+
+- **Constrained but unchecked = BUG.** A field whose value the C code later uses without its own
+  bounds/validity check -- as an array index (e.g. an `MjtObj` used to index `object_lists_[type]`),
+  a count/capacity, a discriminant switched on without a `default`, or any value with a C-side range
+  precondition -- must carry a `{ check, "reason" }`. A `set`/`with` invocation that omits it writes
+  an unvalidated value. Quote the Rust invocation (does it carry a check?) AND the C usage site.
+- **Unconstrained but checked = Low/Info.** A check on a field the C side already validates, clamps,
+  or accepts in full range (e.g. a physics scalar) is unnecessary noise; flag it as Low.
+- **Check correctness.** Where a check *is* present, the predicate must actually reject every invalid
+  value (e.g. `t < mjNOBJECT`, not `t <= mjNOBJECT`) and the `"reason"` doc fragment must name the
+  real error/condition.
+- **bool fields never need a check** (always in range); do not flag them.
+
+This group overlaps with `/safety` (a constrained-but-unchecked field is often an OOB-from-safe-code
+hole); here verify only the *presence and shape* of the check mechanism, not a full soundness proof.
+
 ## Methodology -- parallel multi-agent (drive with the `Workflow` tool)
 
 ### Phase 0 -- Inline recon (before launching Workflow)
@@ -107,8 +133,9 @@ One agent reads all source files and C headers and emits a structured, numbered 
 4. For every `info_method!`, `array_slice_dyn! { ... }` (basic form),
    `array_slice_dyn! { sublen_dep { ... } }`, `array_slice_dyn! { summed { ... } }`,
    `mj_model_dyn_range!`, unsafe block, enum dispatch, bounds check, Drop impl,
-   and `unsafe impl Send/Sync` -- emit one numbered task entry with:
-   `{ id, category (A-H), description, rust_file, rust_lines, c_header }`
+   `unsafe impl Send/Sync`, and every value-writing `getter_setter!` / `vec_set!` field
+   (for group I) -- emit one numbered task entry with:
+   `{ id, category (A-I), description, rust_file, rust_lines, c_header }`
 
 The scout returns a JSON array of tasks. The total task count typically ranges from 150-400.
 
@@ -134,8 +161,11 @@ QUOTING RULE: Quote the actual code for every item. Examples:
   "contacts() null check: present -> OK"
   "jac body_id check: >= 0 && < nbody -> OK"
   "error_buffer: [0i8; 100], mj_loadXML gets 100 -> OK"
+  "MjsSensor::objtype setter: has { check_objtype } check; C indexes object_lists_[objtype] -> OK"
+  "<field> setter: no { check }; C uses value as unguarded array index / unchecked discriminant -> BUG (group I)"
 
-If you cannot find the Rust value, say UNCERTAIN.
+For group I, the reference is the C *usage* of the field value (how the C side consumes it), not a
+dimension comment. If you cannot find the Rust value, say UNCERTAIN.
 ```
 
 Each agent returns structured findings:
@@ -215,7 +245,7 @@ Concretely:
 
 The file must be self-contained (inline `<style>`), ASCII-only, and contain:
 
-- A header and a short **method note** describing the phases and the eight concern groups (A-H).
+- A header and a short **method note** describing the phases and the nine concern groups (A-I).
 - An **overview table** of all findings accumulated this chat:
   `ID | Severity (pill) | Category (badge) | One-line description | Location | Fix applied? | Status`
   If no findings exist, the table says "No bugs confirmed in this session."
@@ -229,7 +259,7 @@ Styling: use the same Claude aesthetic as `mujoco-rs-memory-safety-audit.html` -
 background, coral accent, warm near-black ink, Georgia serif headings, rounded pill badges, white
 finding cards on the canvas, and a hairline-border overview table. Severity pills
 (`sev-critical/high/medium/low/info`), status badges (`st-open` / `st-fixed` / `st-wont-fix`),
-category badges `cat-a` through `cat-h` each in a distinct hue.
+category badges `cat-a` through `cat-i` each in a distinct hue.
 
 Statuses:
 

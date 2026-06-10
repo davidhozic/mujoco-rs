@@ -3,16 +3,19 @@
 When launching subagents (via the `task` tool or similar), ensure they also follow this project's
 conventions:
 
-1. **Include relevant rules in every subagent prompt.** Subagents are stateless and have no access
-   to prior context. Before delegating work, read the applicable rules from `.github/rules/` and
-   embed the relevant portions (or a faithful summary) in the subagent's prompt so it can follow
-   them.
+1. **Point subagents at rules; don't paste them.** Subagents are stateless, but they can read files
+   themselves. Instead of pasting full rule/skill text into the prompt (which duplicates thousands
+   of tokens per agent), tell the subagent *which* files to read (e.g. "read
+   `.github/rules/macro-system.md` before editing wrappers") and embed only the few specific
+   excerpts critical to the task. Paste full text only for short rules or when the subagent cannot
+   access the repo.
 
-2. **Include relevant skills.** If the subagent's task can benefit from a workflow defined in
-   `.github/skills/`, include the skill's content in the prompt so the subagent can use it.
+2. **Reference relevant skills by path.** If a `.github/skills/` workflow applies, name the skill
+   and its path in the prompt rather than copying its full content.
 
-3. **Minimum rule set for every subagent.** At a minimum, every subagent prompt must include:
-   - The disallowed commands list (`disallowed-commands.md`).
+3. **Minimum rule set for every subagent.** Every subagent prompt must reference (by path, to be
+   read by the subagent):
+   - The disallowed commands list (`disallowed-commands.md`) -- short; may be pasted inline.
    - The coding conventions (`coding-conventions.md`) when the subagent will read or write code.
    - The macro system guide (`macro-system.md`) when the subagent will touch wrapper files or
      `src/util.rs`.

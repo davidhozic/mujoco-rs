@@ -310,8 +310,6 @@ pub enum MjEditError {
         required_size: usize,
     },
     /// Returned when the parameters to the given method/function are invalid.
-    /// This is currently only returned within [`MjsActuator`](crate::wrappers::mj_editing::MjsActuator)'s
-    /// `set_to_x` methods, where `x` is the actuator type.
     InvalidParameter(String),
 }
 
