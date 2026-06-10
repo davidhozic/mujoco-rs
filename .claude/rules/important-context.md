@@ -66,10 +66,10 @@ If `MUJOCO_DYNAMIC_LINK_DIR` is also set, the pre-downloaded copy takes preceden
   non-null -- MuJoCo writes through it, causing UB.
 - **Return value conventions vary per function**: `mj_saveLastXML` uses 1=success/0=error, but
   `mj_addContact` uses 0=success/1=buffer-full. Always verify from the C header comment.
-- **`mj_view_indices!` last-joint edge case**: the final joint has no next address entry, so the
-  macro falls back to `$max_n` (e.g. `nq`) as the exclusive end. Double-check this path.
+- **`mj_model_dyn_range!` last-element edge case**: the final element has no next address entry, so
+  the macro falls back to the total-length field as the exclusive end. Double-check this path.
 - **Free/ball joints and nq vs njnt**: `nq != njnt` for models with free joints (7 qpos each) or
-  ball joints (4 qpos each). `mj_model_nx_to_nitem!(model, nq)` returns `njnt` not `nq`.
+  ball joints (4 qpos each). Do not use `nq` as the joint count when iterating over joints.
 - **Null pointer guards**: `PointerView::deref()` returns `&[]` for null pointers. Verify this guard
   exists in all similar patterns (contacts, array slices, etc.).
 - **Send/Sync bounds for generic wrapper types**: any `unsafe impl Send/Sync` on a generic wrapper

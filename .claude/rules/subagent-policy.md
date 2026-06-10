@@ -1,6 +1,6 @@
 # Subagent Policy
 
-When launching subagents (via the `task` tool or similar), ensure they also follow this project's
+When launching subagents (via the `Agent` tool), ensure they also follow this project's
 conventions:
 
 1. **Point subagents at rules; don't paste them.** Subagents are stateless, but they can read files
@@ -24,11 +24,7 @@ conventions:
    - Subagent prompts for long-running tasks should include an explicit instruction to re-read the
      embedded rules midway through multi-step work.
 
-5. **Ask for concurrent work after launching background subagents.** When spawning one or more
-   background subagents (mode `"background"`), immediately use `ask_user` to ask what to work on
-   while waiting for the subagents to finish. Do not sit idle.
-
-6. **Prefer system tools over agents when sufficient.** If a task can be accomplished with built-in
+5. **Prefer system tools over agents when sufficient.** If a task can be accomplished with built-in
    tools (grep, glob, view, bash, edit, etc.) in comparable time, use those directly instead of
    spawning a subagent. Reserve agents for tasks that require multi-step reasoning, synthesis across
    many files, or parallel workloads that benefit from independent context windows.
@@ -46,5 +42,3 @@ conventions:
      is a false positive (e.g. the behaviour is by design, the wording is conventional, the
      affected path is unreachable in practice).
 
-9. **Subagent language** Always speak and receive messages from agents in Chinese.
-   The main agent remains in English or whatever language spoken to by the user.
