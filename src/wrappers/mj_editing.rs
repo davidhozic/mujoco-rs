@@ -436,8 +436,22 @@ impl MjSpec {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
-    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile.
+    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile, including when a
+    /// texture has a builtin pattern set while its `nchannel` is less than 3.
     pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
+        // The builtin-texture generators (`Builtin2D`/`BuiltinCube`) write a hard-coded 3 bytes per
+        // pixel, but MuJoCo only allocates `nchannel*width*height` bytes and (unlike the file/data
+        // paths) does not check `nchannel >= 3` for the builtin path, so `nchannel < 3` heap-overflows
+        // during compilation. Both setters (`set_nchannel`, `set_builtin`) are safe and independent,
+        // so this cross-field invariant can only be enforced at the compile choke point.
+        for texture in self.texture_iter() {
+            if texture.builtin() != MjtBuiltin::mjBUILTIN_NONE && texture.nchannel() < 3 {
+                return Err(MjEditError::CompileFailed(
+                    "texture with a builtin pattern requires nchannel >= 3".to_owned(),
+                ));
+            }
+        }
+
         let result = unsafe { MjModel::from_raw( mj_compile(self.0.as_ptr(), ptr::null()) ) };
         result.map_err(|_| {
             // SAFETY: The spec is still valid after failed compilation.
@@ -1842,10 +1856,13 @@ impl MjsMesh {
         usernormal: f32;             "user normal data.";
         usertexcoord: f32;           "user texcoord data.";
         userface: i32;               "user vertex indices.";
-        userfacenormal: i32;         "user face normal indices.";
     }
 
     vec_set! {
+        [unsafe: "Every entry must be in `0..N`, where `N` is the number of user normals: the \
+                  length of the slice passed to `set_usernormal` divided by 3 (each normal is 3 \
+                  `f32`: x, y, z)."]
+            userfacenormal: i32 => i32; "user face normal indices.";
         [unsafe: "Every entry must be in `0..ntexcoord` (the number of user texture coordinates)."]
             userfacetexcoord: i32 => i32; "user texcoord indices.";
     }
@@ -1959,9 +1976,10 @@ impl MjsTexture {
 
     getter_setter! {
         [&] with, get, set, [
-            // unsafe: "`nchannel` must be `>= 3` whenever a builtin pattern is set \
-            //          (`builtin != MjtBuiltin::mjBUILTIN_NONE`).";
-                nchannel: i32; "number of channels.";
+            // `nchannel` must be `>= 3` whenever a builtin pattern is set
+            // (`builtin != MjtBuiltin::mjBUILTIN_NONE`); this cross-field invariant is
+            // enforced at the compile choke point in `MjSpec::compile`.
+            nchannel: i32; "number of channels.";
         ]
     }
 
@@ -3265,6 +3283,53 @@ mod tests {
         let tex_id = mat_view.texid;
         assert_ne!(tex_id[MjtTextureRole::mjTEXROLE_RGB as usize], -1,
             "RGB texture slot should be resolved (not -1)");
+    }
+
+    /// A builtin texture with `nchannel < 3` must be rejected by `compile()` rather than
+    /// heap-overflowing in MuJoCo's builtin generators (which write 3 bytes per pixel).
+    #[test]
+    fn test_builtin_texture_nchannel_rejected() {
+        let mut spec = MjSpec::new();
+        spec.add_texture()
+            .with_name("badtex")
+            .with_type(MjtTexture::mjTEXTURE_2D)
+            .with_builtin(MjtBuiltin::mjBUILTIN_CHECKER)
+            .with_rgb1([0.9, 0.9, 0.9])
+            .with_rgb2([0.1, 0.1, 0.1])
+            .with_width(64)
+            .with_height(64)
+            .set_nchannel(1);
+
+        let err = spec.compile().unwrap_err();
+        assert!(matches!(&err, MjEditError::CompileFailed(msg) if msg.contains("nchannel")),
+            "compile must reject nchannel < 3 builtin texture, got {err:?}");
+
+        // nchannel == 3 (and a builtin pattern) compiles cleanly.
+        let mut ok_spec = MjSpec::new();
+        ok_spec.add_texture()
+            .with_name("goodtex")
+            .with_type(MjtTexture::mjTEXTURE_2D)
+            .with_builtin(MjtBuiltin::mjBUILTIN_CHECKER)
+            .with_rgb1([0.9, 0.9, 0.9])
+            .with_rgb2([0.1, 0.1, 0.1])
+            .with_width(64)
+            .with_height(64)
+            .set_nchannel(3);
+        assert!(ok_spec.compile().is_ok(), "nchannel == 3 builtin texture should compile");
+
+        // nchannel < 3 with NO builtin pattern must not trip this guard. Such a texture still
+        // fails to compile (it has no pixel source), but with MuJoCo's own error message rather
+        // than the nchannel guard's, proving the guard is correctly scoped to the builtin path.
+        let mut no_builtin = MjSpec::new();
+        no_builtin.add_texture()
+            .with_name("plain")
+            .with_type(MjtTexture::mjTEXTURE_2D)
+            .with_width(64)
+            .with_height(64)
+            .set_nchannel(1);
+        assert!(matches!(no_builtin.compile().unwrap_err(),
+                MjEditError::CompileFailed(msg) if !msg.contains("nchannel")),
+            "nchannel < 3 without a builtin pattern should not trip the nchannel guard");
     }
 
     /// Verifies `MjsFlex::cellcount` (read-only `&[i32; 3]`) and `order` (read-write `i32`)

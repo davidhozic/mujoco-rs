@@ -189,6 +189,14 @@ Additional rules:
   change is critical to understanding behaviour visible from the public API. Bug fixes should only
   be documented if they were present in a previously released version; do not document fixes for
   bugs that were introduced and fixed within the same (unreleased) development cycle.
+- **Changelog entries are concise about WHY.** Keep each entry focused on the user-facing change:
+  name the item, what changed (e.g. "is now an `unsafe fn`", "now returns `Err(...)`"), and any
+  action the user must take. A short one-sentence note on why the change was needed is fine (e.g.
+  "which stored an unvalidated index the renderer trusted"), but do NOT include a detailed
+  mechanism/root-cause walk-through of the underlying bug (which C function indexed what out of
+  bounds, byte-overflow arithmetic, cursor-truncation behaviour, etc.). That depth belongs in a
+  code comment at the fix site, not in the changelog. (This applies to new/edited entries only; do
+  not rewrite existing committed entries.)
 - **Migration guide entry format.** Each breaking change in `migration.rst` gets: a descriptive
   heading (RST `-` underline, matching the second-level subsection style already established in the file), a prose explanation, then **Before** and **After** code blocks using
   `.. code-block:: rust`. For simple type changes, use a `.. list-table::` with columns for

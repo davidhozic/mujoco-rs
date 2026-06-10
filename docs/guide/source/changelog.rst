@@ -119,11 +119,18 @@ update of MuJoCo alone can increase the major version.
 *Some index/size vector setters are now ``unsafe``*
 
 - ``MjsFlex::set_elemtexcoord``,
-  ``MjsSkin::set_face`` and ``MjsMesh::set_userfacetexcoord`` are now ``unsafe fn``: each writes a
+  ``MjsSkin::set_face``, ``MjsMesh::set_userfacetexcoord`` and ``MjsMesh::set_userfacenormal`` are
+  now ``unsafe fn``: each writes a
   value the model compiler or renderer later trusts as an unchecked array index, count, or
   ``memcpy`` length, and the correct constraint is cross-field (it cannot be checked from the
   setter alone). Each carries a ``# Safety`` section describing the caller's obligation. See the
   migration guide.
+
+*MjData::history_mut is now an ``unsafe fn``*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>history_mut` is now ``unsafe``.
+  The signature is otherwise unchanged; existing calls only need an ``unsafe`` block. The immutable
+  ``history`` accessor remains safe. See the migration guide.
 
 - The ``Mjs*`` element handles (|mjs_body|, ``MjsGeom``, ...) and ``MjsDefault`` are now
   ``!Send + !Sync``; they previously carried a blanket ``unsafe impl Send``/``Sync``. Each
@@ -388,6 +395,17 @@ runtime.
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_normalize`. On an empty slice the C function
   computes a zero norm and then writes ``res[0] = 1`` followed by ``mju_zero(res + 1, -1)`` -- a
   ``memset`` of ``(size_t)(-1)`` bytes, both out of bounds. The wrapper now panics on an empty slice.
+- Closed an unsoundness reachable from safe code in ``MjsMesh::set_userfacenormal``, which stored
+  unvalidated face-normal indices the renderer later dereferences without a bound check. It is now
+  an ``unsafe fn`` with a ``# Safety`` contract. See the Breaking changes section and the migration guide.
+- Closed a heap overflow reachable from safe code when compiling an |mj_spec| whose texture has a
+  builtin pattern and ``nchannel < 3`` (MuJoCo's builtin generators write more bytes than such a
+  buffer holds). :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile` now
+  rejects this configuration with ``MjEditError::CompileFailed``.
+- Closed an out-of-bounds read reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>history_mut`, which exposed a
+  cursor the sensor/control read path trusts as an array index. It is now an ``unsafe fn``; the
+  immutable ``history`` accessor stays safe. See the Breaking changes section and the migration guide.
 
 
 .. rubric:: Other changes

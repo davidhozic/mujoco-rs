@@ -55,10 +55,22 @@ Obey **all** files in `.github/rules/` at all times. Re-read them after any cont
 3. Record the MuJoCo build env for later compile checks (see "Build env" below).
 
 ### Phase 1 -- FINDERS (parallel `agent()` calls, structured output)
-One finder per (dimension x subsystem) cell, reading `src/` **and** the relevant
-`mujoco/include/` headers and `mujoco/src/` C++ source to confirm any claimed C/C++ behavior.
-Always include three specialists: a **thread-safety** finder that walks *every* `Send`/`Sync`
-site, a **mutability** finder hunting `&self` methods that drive C-side mutation, and a
+**Derive the finder categories yourself from Phase 0 recon -- do NOT just reuse a fixed
+(dimension x subsystem) grid.** A `(dimension x subsystem)` split is one valid decomposition,
+but the main agent should think about what this codebase actually exposes and invent finder
+cells that cut across the surface in *complementary* ways. Categories worth deriving (illustrative,
+not exhaustive): ownership / `Drop` ordering / `Clone` / double-free; panic-unwind across the FFI
+boundary; global callback / plugin function-pointer registration; macro-generated safe code (audit
+the *expanded* output of `getter_setter!`, `array_slice_dyn!`, `view_creator!`, etc.); shared-model
+aliasing across multiple `MjData`; resource / IO / string-buffer handling; plus the classic
+per-subsystem memory sweeps. Aim for cells that minimize overlap and maximize coverage of the
+specific risks this code presents -- if you run the audit more than once, vary the decomposition
+so successive runs explore different angles.
+
+Each finder reads `src/` **and** the relevant `mujoco/include/` headers and `mujoco/src/` C++
+source to confirm any claimed C/C++ behavior. Whatever categories you derive, **always** include
+three specialists: a **thread-safety** finder that walks *every* `Send`/`Sync` site, a
+**mutability** finder hunting `&self` methods that drive C-side mutation, and a
 **lifetime/variance** finder. Each returns structured candidates: `{ dimension, location
 (file:line), mechanism, safe_code_trigger, severity, reachable_from_safe }`.
 

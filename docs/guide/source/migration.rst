@@ -279,11 +279,14 @@ Some index/size vector setters are now ``unsafe``
 -------------------------------------------------
 
 ``MjsFlex::set_elemtexcoord``,
-``MjsSkin::set_face`` and ``MjsMesh::set_userfacetexcoord`` are now ``unsafe fn``. Each writes a
+``MjsSkin::set_face``, ``MjsMesh::set_userfacetexcoord`` and ``MjsMesh::set_userfacenormal`` are now
+``unsafe fn``. Each writes a
 value the model compiler or renderer later trusts as an unchecked index/count/length, and the
 correct constraint is cross-field, so it cannot be validated from the setter. Wrap calls in
 ``unsafe`` after ensuring the obligation in each method's ``# Safety`` section (e.g. for
-``set_face``, every index is in ``0..nvert`` and the length is a multiple of 3).
+``set_face``, every index is in ``0..nvert`` and the length is a multiple of 3; for
+``set_userfacenormal``, every index is in ``0..N``, where ``N`` is the ``set_usernormal`` slice
+length divided by 3).
 
 **Before (4.x):**
 
@@ -346,6 +349,29 @@ existing call sites only need an ``unsafe`` block.
     // SAFETY: no invariant-carrying accessor (bvh_active, body_awake) is read
     // before the next reset().
     unsafe { data.reset_debug(7) };
+
+
+``MjData::history_mut`` is now an ``unsafe fn``
+-----------------------------------------------
+
+``history_mut`` exposes the whole history buffer for mutation. Each slot stores a cursor in
+``buf[1]`` that ``mj_readSensor`` / ``mj_readCtrl`` trust as an array index without a bound check,
+so corrupting it from safe code can cause an out-of-bounds read. The method is now ``unsafe``; the
+caller must keep every slot's cursor valid. The signature is otherwise unchanged, so existing call
+sites only need an ``unsafe`` block. The immutable ``history`` accessor stays safe.
+
+**Before (4.x):**
+
+.. code-block:: rust
+
+    let buf = data.history_mut();
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: every history slot's cursor (buf[1]) is kept valid.
+    let buf = unsafe { data.history_mut() };
 
 
 ``MjData::ray`` / ``ray_mesh`` now take ``&mut self``

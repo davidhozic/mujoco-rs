@@ -69,6 +69,10 @@ Additionally check all Sphinx documentation for:
 - **Factual correctness**: claims about API behavior, error types, and return types.
 - **Cross-references**: `:gh-example:`, `:docs-rs:`, and RST substitutions resolve correctly.
 - **Formatting**: RST syntax, indentation, and directive usage are correct.
+- **Changelog conciseness**: each changelog entry states WHAT changed (and any user action). A
+  short one-sentence note on WHY is fine, but flag new/edited entries that spell out a detailed
+  bug mechanism (which C function indexed what, overflow arithmetic, cursor truncation, etc.);
+  that depth belongs in a code comment at the fix site. Leave existing committed entries as-is.
 
 ## Phase 4 - Resolve and Fix
 

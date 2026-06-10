@@ -1694,7 +1694,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         qpos: &[MjtNum; "position"; model.ffi().nq],
         qvel: &[MjtNum; "velocity"; model.ffi().nv],
         act: &[MjtNum; "actuator activation"; model.ffi().na],
-        history: &[MjtNum; "history buffer"; model.ffi().nhistory],
+        (mut = unsafe) history: &[MjtNum; "history buffer"; model.ffi().nhistory],
         qacc_warmstart: &[MjtNum; "acceleration used for warmstart"; model.ffi().nv],
         plugin_state: &[MjtNum; "plugin state"; model.ffi().npluginstate],
         ctrl: &[MjtNum; "control"; model.ffi().nu],
