@@ -63,3 +63,27 @@ Run the codebase under Miri's experimental FFI native-lib support to detect unde
 > - **Provenance**: `-Zmiri-permissive-provenance` is essential because MuJoCo (a C library) manages its own memory, which Rust then accesses.
 > - **Strict provenance**: `-Zmiri-strict-provenance` is not compatible with native FFI calls; do not use it for MuJoCo-backed runs.
 > - **Target Limitation**: Miri with native libs can only run on `bin` targets or `examples`. It cannot currently run the standard Rust test harness on `lib` targets due to compiler limitations.
+
+## Deliverable -- HTML report
+
+This skill diagnoses UB; it does not apply code fixes (the temporary example edits are reverted),
+so its findings go into a self-contained HTML report, not just terminal output. Write/overwrite
+`mujoco-rs-miri-report.html` at the repo root (scope: this run). It must be standalone (inline
+`<style>`), ASCII-only, and match the shared report aesthetic used by `/verify`
+(`mujoco-rs-verify-report.html`) and `mujoco-rs-memory-safety-audit.html`: ivory canvas, coral
+accent, warm near-black ink, Georgia serif headings, rounded pill badges, white cards,
+hairline-border tables. Reuse that styling.
+
+Contents:
+
+- A header noting the nightly toolchain and the key `MIRIFLAGS` (e.g. `-Zmiri-tree-borrows`,
+  `-Zmiri-native-lib=...`, `-Zmiri-permissive-provenance`) and which example(s) were run.
+- A **run table**: `Example | Features | Result (clean / UB pill) | Notes`.
+- One **finding card** per `error: Undefined Behavior`: the UB kind (e.g. out-of-bounds access,
+  invalid use of uninitialized memory, aliasing/Tree-Borrows violation), the offending
+  `file:line`, and a concise excerpt of the Miri diagnostic and backtrace (relevant frames only,
+  not the full verbose log).
+- Note the expected, benign "sharing memory with a native function called via FFI" warning so it
+  is not mistaken for a finding. If every run is clean, state that with a `Clean` pill.
+
+After writing the file, present a brief plain-text summary (which examples were clean, which hit UB).

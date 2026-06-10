@@ -79,3 +79,26 @@ cargo +nightly run --example basic --target x86_64-unknown-linux-gnu --no-defaul
 
 ## Error Reporting
 If a memory violation occurs on either the C or Rust side (e.g., invalid reference casting, out-of-bounds array access, use-after-free), AddressSanitizer will intercept it and immediately dump a stack trace (`ERROR: AddressSanitizer: ...`) pinpointing exactly which line violated the memory rules.
+
+## Deliverable -- HTML report
+
+This skill diagnoses; it does not apply code fixes -- so its findings go into a self-contained
+HTML report, not just terminal output. Write/overwrite `mujoco-rs-asan-report.html` at the repo
+root (scope: this run). It must be standalone (inline `<style>`), ASCII-only, and match the
+shared report aesthetic used by `/verify` (`mujoco-rs-verify-report.html`) and
+`mujoco-rs-memory-safety-audit.html`: ivory canvas, coral accent, warm near-black ink, Georgia
+serif headings, rounded pill badges, white cards, hairline-border tables. Reuse that styling.
+
+Contents:
+
+- A header noting the toolchain (Clang/LLVM, nightly), the sanitizers enabled
+  (`address,undefined`), and exactly which targets were run (the test suite, the
+  `examples/miri_test.rs` example, and any other examples).
+- A **run table**: `Run (test / example) | Features | Result (clean / error pill) | Notes`.
+- One **finding card** per sanitizer error: the error kind (`heap-buffer-overflow`,
+  `use-after-free`, UBSan check, leak, etc.), the C-or-Rust side, the offending `file:line` from
+  the trace, and a concise excerpt of the stack trace (trim to the relevant frames; do not paste
+  the full dump).
+- If every run is clean, state that explicitly with a `Clean` pill and no finding cards.
+
+After writing the file, present a brief plain-text summary (which runs were clean, which errored).
