@@ -94,6 +94,11 @@ Optional Cargo features can be enabled:
 By default, no optional features are enabled. Enable the features you need explicitly
 (e.g. ``cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"``).
 
+On macOS, the visualization features (``viewer`` and ``renderer``) do not work without
+patching the ``glutin`` dependency. See
+[installation](https://mujoco-rs.readthedocs.io/en/v5.0.x/installation.html#macos-glutin-patch)
+for instructions.
+
 
 ## Example
 This example requires the ``viewer`` or the ``viewer-ui`` feature

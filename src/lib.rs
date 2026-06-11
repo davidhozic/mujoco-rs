@@ -73,6 +73,11 @@
 //! (e.g. `cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"` for support
 //! with the viewer and the viewer's extra UI, and the render with invisible window as a fallback).
 //!
+//! On macOS, the visualization features (`viewer` and `renderer`) do not work without
+//! patching the `glutin` dependency. See
+//! [installation](https://mujoco-rs.readthedocs.io/en/v5.0.x/installation.html#macos-glutin-patch)
+//! for instructions.
+//!
 //!
 use std::ffi::CStr;
 

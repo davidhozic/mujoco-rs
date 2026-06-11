@@ -10,6 +10,11 @@ MuJoCo-rs provides three main ways of visualization (requires enabling the corre
 - :ref:`mj_renderer` for offscreen rendering (array or a file) --- ``renderer`` feature
 - :ref:`mj_cpp_viewer` for onscreen visualization using MuJoCo's official C++ viewer --- ``cpp-viewer`` feature
 
+.. attention::
+
+    On macOS, visualization does not work without patching the ``glutin`` dependency.
+    See :ref:`the installation guide <macos-glutin-patch>` for instructions.
+
 
 .. toctree::
     :caption: Table of contents

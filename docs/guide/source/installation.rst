@@ -35,6 +35,19 @@ MuJoCo-rs can be added to your project like so:
     On Windows and macOS the ``renderer-winit-fallback`` feature is **required** whenever the
     ``renderer`` feature is enabled (the build fails otherwise). It is optional on Linux.
 
+.. _macos-glutin-patch:
+
+.. attention::
+
+    **macOS**: visualization (the viewer and the renderer) does not work on macOS with the
+    upstream ``glutin`` crate. To make it work, patch ``glutin`` in your project's
+    ``Cargo.toml`` with the following fork:
+
+    .. code-block:: toml
+
+        [patch.crates-io]
+        glutin = { git = "https://github.com/davidhozic/glutin", rev = "e95fe97f1857c0498ed2236c0e8d60e5a30a2854" }
+
 See :ref:`opt-cargo-features` for information about available Cargo features.
 Visualization and rendering features are opt-in to keep compilation fast for headless use cases.
 
