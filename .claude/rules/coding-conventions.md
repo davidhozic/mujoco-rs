@@ -176,6 +176,10 @@ Additional rules:
   - Mark new items with `:sup:\`new\`` (e.g. `` ``try_jac`` :sup:\`new\` ``).
   - Use `` ``double backticks`` `` for inline code (method names, types, values).
   - Use `.. code-block:: rust` for multi-line code examples in migration.rst.
+  - **Em dashes in RST use `---` (three hyphens), not `--`.** reStructuredText renders `---` as an
+    em dash and `--` as an en dash, so prose em dashes in `docs/guide/source/*.rst` must use `---`.
+    This is an RST-specific exception to the general ASCII rule (which uses `--` in Rust source and
+    `.claude/` files); `--` inside RST stays only where an en dash or a literal CLI flag is meant.
   - Prefer lines below ~100 characters. Hard limit: 120 characters.
 - **Changelog section ordering.** Each version entry in `changelog.rst` uses `.. rubric::` sections
   in this fixed order: Breaking changes, Error handling, New features and improvements, Bug fixes,

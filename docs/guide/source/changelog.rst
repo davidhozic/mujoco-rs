@@ -336,6 +336,11 @@ runtime.
 
 .. rubric:: Bug fixes
 
+- Fixed |mjs_tendon|'s ``wrap`` / ``wrap_mut``, which documented returning ``None`` for an
+  out-of-bounds index but could never do so: the underlying C ``mjs_getWrap`` aborts the process for
+  such an index and never returns null, so the ``None`` case was unreachable. The accessors now
+  reject an out-of-range index in Rust --- panicking, or returning ``MjEditError::IndexOutOfBounds``
+  via the new ``try_wrap`` / ``try_wrap_mut`` (see Breaking changes).
 - Fixed a model-editing potential undefined behavior in |mjs_body|, which occurred
   when yielded references of body's items were not destroyed before the next entry
   to the iterator. This was problematic if individual references of yielded items
