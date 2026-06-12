@@ -18,6 +18,42 @@ Work in the current branch only. Do not create branches, commit, or push.
 
 ---
 
+## Orchestration -- drive the gate run with the Workflow tool
+
+Do the recon inline (Phase 0, and the Phase 1 grep), then drive the verbose gate run
+(Phases 2-4) with the **Workflow tool** rather than firing one-off `Agent` calls or
+foreground `Bash`. A single workflow fans the gates out, keeps their bulky logs out of the
+main context, and returns one structured result object to build the Phase 5 report from.
+Author it as a two-track script:
+
+- **Track 1 -- serial cargo gates, shared `./target`.** Run build (debug + release matrix),
+  test, clippy, rustdoc, cross-arch `cargo check`, and packaging as a *sequence* of agents
+  that share the default `./target`. cargo holds a build lock per target dir, so same-target
+  invocations cannot run concurrently anyway; sequencing them keeps the dependency cache warm
+  so each gate after the first is incremental. Each agent runs its command as
+  `<cmd> > log 2>&1; echo EXIT=$?; tail -25 log` (a pipe to `tail` hides the real exit code),
+  judges pass/fail from the exit code, and returns a concise per-gate result -- never the full
+  log.
+- **Track 2 -- heavy/independent jobs, in parallel with Track 1.** The Sphinx build + RST
+  checks, the Phase 2 API-diff completeness audit, the focused source-correctness audit
+  (a scout agent emitting a task list, then ~6 parallel verify agents, then adversarial
+  confirmation of each BUG/UNCERTAIN), and the FFI sanitizers. Give every parallel cargo job
+  its **own** `CARGO_TARGET_DIR` (e.g. `target-asan`, `target-miri`) and every from-source
+  MuJoCo build its **own** build dir (e.g. `mujoco/build-asan`, `mujoco/build-miri`) so they
+  never collide with Track 1's lock or with each other. `/asan` and `/miri` reconfigure the
+  same C source differently, so run them **sequentially** (asan, then miri) inside Track 2.
+
+Have each gate agent return a uniform row `{ gate, command, result (pass|fail|skipped), notes }`
+(or a structured findings list for the audits) via a JSON `schema`, so the workflow's return
+value maps directly onto the Phase 5 gate table. The main loop stays in control: it reads the
+one returned object and writes the report. Use the gate skills' commands (below) verbatim
+inside the agent prompts -- the skill files own the correct env vars and feature flags.
+
+A patch release with no `unsafe`/FFI changes can use a smaller single-track workflow (drop the
+asan/miri/verify track); say so in the report rather than silently dropping gates.
+
+---
+
 ## Phase 0 -- Establish the release context
 
 Gather the facts the rest of the workflow depends on. Report them back before proceeding.
@@ -103,8 +139,9 @@ Fix any gaps before moving on.
 ## Phase 3 -- Build, test, lint, and doc gates
 
 Run the existing gate skills. Each already sets `MUJOCO_DYNAMIC_LINK_DIR` /
-`LD_LIBRARY_PATH` for the bundled MuJoCo. Delegate verbose runs to subagents/background so
-only summaries return to the main thread (token-efficiency rules). All must be clean.
+`LD_LIBRARY_PATH` for the bundled MuJoCo. Drive these through the Workflow tool (see
+**Orchestration** above) so only structured summaries return to the main thread
+(token-efficiency rules); do not run the verbose gates in the foreground. All must be clean.
 
 1. **`/build`** -- build the library across the feature surface, in **debug and release**
    (release matters: `debug_assert!` bounds checks compile out, so release exercises a
@@ -236,5 +273,7 @@ literal on the branch):
 >   `Cargo.toml` `version = "X.Y.Z+mj-A.B.C"`; `build.rs` and `conf.py` derive from it.
 > - Reuse the gate skills rather than re-typing their commands; they own the correct env vars
 >   and feature flags.
-> - Delegate verbose gate runs and the API-diff completeness check to subagents/background so
->   only summaries reach the main context (`.claude/rules/token-efficiency.md`).
+> - Drive the verbose gate runs and the API-diff/source audits through the **Workflow tool**
+>   (two-track script; see **Orchestration**), not foreground `Bash` or scattered `Agent`
+>   calls, so only structured summaries reach the main context
+>   (`.claude/rules/token-efficiency.md`).
