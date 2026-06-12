@@ -198,6 +198,12 @@ update of MuJoCo alone can increase the major version.
   Users are expected to use
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`
   instead.
+- Deprecated |mjs_tendon|'s ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, and
+  ``try_wrap_pulley`` --- their ``MjEditError::AllocationFailed`` arm is unreachable and an
+  allocation failure cannot be recovered soundly (MuJoCo aborts the process, or writes through the
+  null pointer before returning). Use the panicking ``wrap_site`` / ``wrap_geom`` / ``wrap_joint`` /
+  ``wrap_pulley`` instead. These methods may be undeprecated in the future if MuJoCo's upstream C++
+  code is changed to return null recoverably.
 
 .. rubric:: Error handling
 

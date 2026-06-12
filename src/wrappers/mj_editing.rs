@@ -1577,14 +1577,26 @@ impl MjsTendon {
     /// Wrap a site corresponding to `name`, using the tendon.
     ///
     /// # Panics
-    /// - When the `name` contains '\0' characters, a panic occurs.
-    /// - When MuJoCo fails to allocate the wrap element.
-    ///   Use [`MjsTendon::try_wrap_site`] for a fallible alternative.
+    /// When the `name` contains '\0' characters.
+    #[allow(deprecated)]
     pub fn wrap_site(&mut self, name: &str) -> &mut MjsWrap {
         self.try_wrap_site(name).expect("failed to wrap site")
     }
 
     /// Fallible version of [`MjsTendon::wrap_site`].
+    ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// By default, MuJoCo aborts the process on an allocation failure instead of
+    /// returning null. Under a non-default error configuration MuJoCo writes
+    /// through the null pointer on allocation failure before returning, so the
+    /// failure cannot be recovered soundly. Prefer the panicking
+    /// [`MjsTendon::wrap_site`]. This method may be undeprecated in the future
+    /// if MuJoCo's upstream C++ code is changed to return null recoverably.
+    ///
+    /// </div>
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
@@ -1592,6 +1604,10 @@ impl MjsTendon {
     ///
     /// # Panics
     /// When the `name` contains '\0' characters.
+    #[deprecated(
+        since = "5.0.0",
+        note = "allocation failure cannot be recovered soundly; use `wrap_site`"
+    )]
     pub fn try_wrap_site(&mut self, name: &str) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let wrap_ptr = unsafe { mjs_wrapSite(self, cname.as_ptr()) };
@@ -1601,14 +1617,26 @@ impl MjsTendon {
     /// Wrap a geom corresponding to `name`, using the tendon.
     ///
     /// # Panics
-    /// - When the `name` or `sidesite` contain '\0' characters, a panic occurs.
-    /// - When MuJoCo fails to allocate the wrap element.
-    ///   Use [`MjsTendon::try_wrap_geom`] for a fallible alternative.
+    /// When `name` or `sidesite` contain '\0' characters.
+    #[allow(deprecated)]
     pub fn wrap_geom(&mut self, name: &str, sidesite: &str) -> &mut MjsWrap {
         self.try_wrap_geom(name, sidesite).expect("failed to wrap geom")
     }
 
     /// Fallible version of [`MjsTendon::wrap_geom`].
+    ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// By default, MuJoCo aborts the process on an allocation failure instead of
+    /// returning null. Under a non-default error configuration MuJoCo writes
+    /// through the null pointer on allocation failure before returning, so the
+    /// failure cannot be recovered soundly. Prefer the panicking
+    /// [`MjsTendon::wrap_geom`]. This method may be undeprecated in the future
+    /// if MuJoCo's upstream C++ code is changed to return null recoverably.
+    ///
+    /// </div>
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
@@ -1616,6 +1644,10 @@ impl MjsTendon {
     ///
     /// # Panics
     /// When `name` or `sidesite` contain '\0' characters.
+    #[deprecated(
+        since = "5.0.0",
+        note = "allocation failure cannot be recovered soundly; use `wrap_geom`"
+    )]
     pub fn try_wrap_geom(&mut self, name: &str, sidesite: &str) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let csidesite = CString::new(sidesite).unwrap();
@@ -1629,14 +1661,26 @@ impl MjsTendon {
     /// Wrap a joint corresponding to `name`, using the tendon.
     ///
     /// # Panics
-    /// - When the `name` contains '\0' characters, a panic occurs.
-    /// - When MuJoCo fails to allocate the wrap element.
-    ///   Use [`MjsTendon::try_wrap_joint`] for a fallible alternative.
+    /// When `name` contains '\0' characters.
+    #[allow(deprecated)]
     pub fn wrap_joint(&mut self, name: &str, coef: f64) -> &mut MjsWrap {
         self.try_wrap_joint(name, coef).expect("failed to wrap joint")
     }
 
     /// Fallible version of [`MjsTendon::wrap_joint`].
+    ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// By default, MuJoCo aborts the process on an allocation failure instead of
+    /// returning null. Under a non-default error configuration MuJoCo writes
+    /// through the null pointer on allocation failure before returning, so the
+    /// failure cannot be recovered soundly. Prefer the panicking
+    /// [`MjsTendon::wrap_joint`]. This method may be undeprecated in the future
+    /// if MuJoCo's upstream C++ code is changed to return null recoverably.
+    ///
+    /// </div>
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
@@ -1644,6 +1688,10 @@ impl MjsTendon {
     ///
     /// # Panics
     /// When `name` contains '\0' characters.
+    #[deprecated(
+        since = "5.0.0",
+        note = "allocation failure cannot be recovered soundly; use `wrap_joint`"
+    )]
     pub fn try_wrap_joint(&mut self, name: &str, coef: f64) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let wrap_ptr = unsafe { mjs_wrapJoint(self, cname.as_ptr(), coef) };
@@ -1651,19 +1699,33 @@ impl MjsTendon {
     }
 
     /// Wrap a pulley using the tendon.
-    ///
-    /// # Panics
-    /// When MuJoCo fails to allocate the wrap element.
-    /// Use [`MjsTendon::try_wrap_pulley`] for a fallible alternative.
+    #[allow(deprecated)]
     pub fn wrap_pulley(&mut self, divisor: f64) -> &mut MjsWrap {
         self.try_wrap_pulley(divisor).expect("failed to wrap pulley")
     }
 
     /// Fallible version of [`MjsTendon::wrap_pulley`].
     ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// By default, MuJoCo aborts the process on an allocation failure instead of
+    /// returning null. Under a non-default error configuration MuJoCo writes
+    /// through the null pointer on allocation failure before returning, so the
+    /// failure cannot be recovered soundly. Prefer the panicking
+    /// [`MjsTendon::wrap_pulley`]. This method may be undeprecated in the future
+    /// if MuJoCo's upstream C++ code is changed to return null recoverably.
+    ///
+    /// </div>
+    ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
     /// pointer.
+    #[deprecated(
+        since = "5.0.0",
+        note = "allocation failure cannot be recovered soundly; use `wrap_pulley`"
+    )]
     pub fn try_wrap_pulley(&mut self, divisor: f64) -> Result<&mut MjsWrap, MjEditError> {
         let wrap_ptr = unsafe { mjs_wrapPulley(self, divisor) };
         unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)

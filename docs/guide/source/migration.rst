@@ -89,6 +89,31 @@ compared to the previous implementation.
   unsafe { spec.delete_element(body_ptr).unwrap() }
 
 
+Deprecated fallible tendon-wrap methods
+---------------------------------------
+|mjs_tendon|'s ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, and ``try_wrap_pulley``
+are now deprecated. Their ``MjEditError::AllocationFailed`` arm is unreachable: on an allocation
+failure MuJoCo aborts the process (or, under a non-default error configuration, writes through the
+null pointer before returning), so the failure cannot be recovered soundly. Switch to the panicking
+``wrap_site`` / ``wrap_geom`` / ``wrap_joint`` / ``wrap_pulley``, which return ``&mut MjsWrap``
+directly.
+
+These methods may be undeprecated in the future if MuJoCo's upstream C++ code is changed to return
+null recoverably.
+
+**Before (4.x)**:
+
+.. code-block:: rust
+
+  let wrap = tendon.try_wrap_geom("geom", "sidesite")?;
+
+**After (5.0.0)**:
+
+.. code-block:: rust
+
+  let wrap = tendon.wrap_geom("geom", "sidesite");
+
+
 ``MjrContext::upload_texture`` parameter type changed
 -----------------------------------------------------
 

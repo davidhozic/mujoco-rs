@@ -1,6 +1,6 @@
 ---
 name: doc
-description: Build rustdoc and Sphinx documentation, verifying both for warnings, broken links, and content correctness. Use this when asked to build docs, check doc comments, or verify documentation.
+description: Build rustdoc and Sphinx documentation, verifying both for warnings, broken links, content correctness, and changelog/migration completeness against the code. Use this when asked to build docs, check doc comments, or verify documentation.
 ---
 
 # Building Documentation
@@ -92,6 +92,43 @@ undefined symbols are illustrative snippets -- skip those.
   prose if needed.
 - **Illustrative snippets** (contain `...`, use undefined vars, or are clearly not
   standalone programs): leave unchanged; they are not expected to compile.
+
+## Part 5 - Changelog and migration completeness
+
+Verify the changelog and migration guide are well-formed and complete against the actual
+public-API changes since the last release.
+
+1. **Changelog well-formed.** The top entry of `docs/guide/source/changelog.rst` must use
+   `.. rubric::` sections in the fixed order: Breaking changes, Deprecations, Error handling,
+   New features and improvements, Bug fixes, Other changes (not all are required, but the
+   relative order must hold). Only public-facing changes are listed, and entries stay concise
+   about *why* (see `.claude/rules/coding-conventions.md` changelog rules).
+2. **Migration entries for breaking changes.** Every breaking change must have a
+   `docs/guide/source/migration.rst` entry with a descriptive heading, prose, and
+   `.. code-block:: rust` Before/After blocks (or a `.. list-table::` for simple signature
+   changes). The migration guide is *only* for breaking changes; non-breaking additions belong
+   in the changelog only (a non-breaking deprecation may still carry an optional migration entry).
+3. **Completeness against the real diff.** Delegate this to a subagent (it is verbose): diff the
+   public API between the most recent release tag and HEAD and confirm every public / breaking
+   change is documented. Release tags have no `v` prefix (e.g. `4.0.1`); pick the highest such
+   tag as the baseline unless the caller supplies one (e.g. `/release` passes its Phase 0
+   baseline). Work accumulates on `develop`/pre-release branches that may be ahead of `main`,
+   so diff against the **tag**, not `main`.
+
+   Subagent prompt essentials (per `.claude/rules/subagent-policy.md` -- point it at the rules,
+   do not paste them):
+   - Read `.claude/rules/coding-conventions.md` (Documentation + changelog/migration rules)
+     and `.claude/rules/disallowed-commands.md`.
+   - Run `git diff <baseline_tag> HEAD -- src/ Cargo.toml` and extract every change to a public
+     item (new/removed/renamed/re-typed `pub` fn/struct/enum/trait/variant, signature changes,
+     new `unsafe fn`, error-type changes, deprecations, feature changes).
+   - For each, confirm it appears in `changelog.rst`; for each breaking one, confirm a
+     `migration.rst` entry with valid Before/After Rust.
+   - Argue every gap from both sides (for/against) per the subagent-policy audit rule.
+   - Return a concise table: change | documented? (changelog / migration) | verdict, plus a
+     list of undocumented changes. No raw file dumps.
+
+Fix any gaps before considering documentation work done.
 
 > [!NOTE]
 > - Always run `/doc` after adding or modifying public items, doc comments, `#[cfg(docsrs)]` attributes, or any `.rst` file.
