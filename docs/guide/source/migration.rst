@@ -89,6 +89,28 @@ compared to the previous implementation.
   unsafe { spec.delete_element(body_ptr).unwrap() }
 
 
+``MjsTendon::wrap`` / ``wrap_mut`` no longer return ``Option``
+--------------------------------------------------------------
+|mjs_tendon|'s ``wrap`` and ``wrap_mut`` now return ``&MjsWrap`` / ``&mut MjsWrap`` (previously
+``Option<&MjsWrap>`` / ``Option<&mut MjsWrap>``) and panic if the index is out of bounds. The old
+signature documented ``None`` on an out-of-range index, but the underlying C ``mjs_getWrap`` aborts
+the process for such an index and never returns null, so the ``None`` arm was unreachable. Drop the
+``.unwrap()`` on existing calls and ensure the index is in range (``< wrap_num()``), or use the new
+fallible ``try_wrap`` / ``try_wrap_mut``.
+
+**Before (4.x)**:
+
+.. code-block:: rust
+
+  let wrap = tendon.wrap(i).unwrap();
+
+**After (5.0.0)**:
+
+.. code-block:: rust
+
+  let wrap = tendon.wrap(i);
+
+
 Deprecated fallible tendon-wrap methods
 ---------------------------------------
 |mjs_tendon|'s ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, and ``try_wrap_pulley``
