@@ -89,6 +89,53 @@ compared to the previous implementation.
   unsafe { spec.delete_element(body_ptr).unwrap() }
 
 
+``MjsTendon::wrap`` / ``wrap_mut`` no longer return ``Option``
+--------------------------------------------------------------
+|mjs_tendon|'s ``wrap`` and ``wrap_mut`` now return ``&MjsWrap`` / ``&mut MjsWrap`` (previously
+``Option<&MjsWrap>`` / ``Option<&mut MjsWrap>``) and panic if the index is out of bounds. The old
+signature documented ``None`` on an out-of-range index, but the underlying C ``mjs_getWrap`` aborts
+the process for such an index and never returns null, so the ``None`` arm was unreachable. Drop the
+``.unwrap()`` on existing calls and ensure the index is in range (``< wrap_num()``), or use the new
+fallible ``try_wrap`` / ``try_wrap_mut``.
+
+**Before (4.x)**:
+
+.. code-block:: rust
+
+  let wrap = tendon.wrap(i).unwrap();
+
+**After (5.0.0)**:
+
+.. code-block:: rust
+
+  let wrap = tendon.wrap(i);
+
+
+Deprecated fallible tendon-wrap methods
+---------------------------------------
+|mjs_tendon|'s ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, and ``try_wrap_pulley``
+are now deprecated. Their ``MjEditError::AllocationFailed`` arm is unreachable: on an allocation
+failure MuJoCo aborts the process (or, under a non-default error configuration, writes through the
+null pointer before returning), so the failure cannot be recovered soundly. Switch to the panicking
+``wrap_site`` / ``wrap_geom`` / ``wrap_joint`` / ``wrap_pulley``, which return ``&mut MjsWrap``
+directly.
+
+These methods may be undeprecated in the future if MuJoCo's upstream C++ code is changed to return
+null recoverably.
+
+**Before (4.x)**:
+
+.. code-block:: rust
+
+  let wrap = tendon.try_wrap_geom("geom", "sidesite")?;
+
+**After (5.0.0)**:
+
+.. code-block:: rust
+
+  let wrap = tendon.wrap_geom("geom", "sidesite");
+
+
 ``MjrContext::upload_texture`` parameter type changed
 -----------------------------------------------------
 
@@ -1614,6 +1661,30 @@ Callers must ensure the model and data remain alive and at a stable address.
 
     // SAFETY: model and data kept alive and at a stable address.
     let viewer = unsafe { MjViewerCpp::launch_passive(&model, &data, 100) };
+
+
+``MjsTendon::wrap`` / ``wrap_mut`` no longer return ``Option``
+--------------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>wrap` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>wrap_mut` now return
+``&MjsWrap`` / ``&mut MjsWrap`` instead of ``Option<&MjsWrap>`` / ``Option<&mut MjsWrap>``, and
+panic when the index is out of bounds. Drop the ``.unwrap()`` and make sure the index is
+``< wrap_num()``, or use the new fallible ``try_wrap`` / ``try_wrap_mut``.
+
+**Before:**
+
+.. code-block:: rust
+
+    let wrap = tendon.wrap(1).unwrap();
+
+**After:**
+
+.. code-block:: rust
+
+    let wrap = tendon.wrap(1);
+    // or, fallibly:
+    let wrap = tendon.try_wrap(1)?;
 
 
 Removed deprecated methods

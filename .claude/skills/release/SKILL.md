@@ -104,35 +104,19 @@ Report a table of every checked location with its current value vs the expected 
 
 ## Phase 2 -- Changelog and migration completeness
 
-1. **Changelog section exists and is well-formed.** `docs/guide/source/changelog.rst` must
-   have a top entry `X.Y.Z (MuJoCo A.B.C)`. Its `.. rubric::` sections must follow the fixed
-   order: Breaking changes, Deprecations, Error handling, New features and improvements,
-   Bug fixes, Other changes (not all are required, but order must hold). Only public-facing
-   changes; entries concise about *why* (see coding-conventions changelog rules).
-2. **Migration section exists (major bumps).** For a major bump, `migration.rst` needs a
-   `Migrating to X.Y.Z` section with a prose explanation and `.. code-block:: rust`
-   Before/After blocks (or a `list-table` for simple signature changes) for **every**
-   breaking change.
-3. **Completeness against the real diff.** Delegate this to a subagent (it is verbose): diff
-   the public API between the previous tag and HEAD and confirm every breaking/public change
-   is documented in both changelog and (if breaking) migration. Release work accumulates on
-   `develop` and the current pre-release branch, which may be ahead of `main`; diff against the
-   previous release **tag** (Phase 0 baseline), not `main`, so unmerged changes are included.
+The changelog/migration **verification** lives in `/doc` (Part 5): `.. rubric::` ordering,
+migration Before/After blocks for every breaking change, and the subagent-driven completeness
+audit of the public-API diff. `/doc` runs in Phase 3 -- pass it the Phase 0 baseline tag so the
+diff uses the correct previous release. Do not duplicate that audit here.
 
-   Subagent prompt essentials (per `.claude/rules/subagent-policy.md` -- point it at rules,
-   do not paste them):
-   - Read `.claude/rules/coding-conventions.md` (Documentation + changelog/migration rules)
-     and `.claude/rules/disallowed-commands.md`.
-   - Run `git diff <prev_tag> HEAD -- src/ Cargo.toml` and extract every change to a public
-     item (new/removed/renamed/re-typed `pub` fn/struct/enum/trait/variant, signature
-     changes, new `unsafe fn`, error-type changes, feature changes).
-   - For each, confirm it appears in `changelog.rst`; for each breaking one, confirm a
-     `migration.rst` entry with valid Before/After Rust.
-   - Argue every gap from both sides (for/against) per the subagent-policy audit rule.
-   - Return a concise table: change | documented? (changelog / migration) | verdict, plus a
-     list of undocumented changes. No raw file dumps.
+Confirm only the **release-specific** facts that `/doc` cannot infer on its own:
 
-Fix any gaps before moving on.
+1. **Top entry matches the target version.** `docs/guide/source/changelog.rst`'s top entry must
+   be `X.Y.Z (MuJoCo A.B.C)` for this exact release.
+2. **Major bump needs a `Migrating to X.Y.Z` section.** For a major bump, `migration.rst` must
+   have a `Migrating to X.Y.Z` section grouping this release's breaking changes.
+
+Fix any gaps here; the deep completeness audit itself runs inside `/doc` in Phase 3.
 
 ---
 
@@ -153,8 +137,9 @@ Run the existing gate skills. Each already sets `MUJOCO_DYNAMIC_LINK_DIR` /
 2. **`/test`** -- run the suite with `--features renderer` (and `--release` once). All green.
 3. **`/clippy`** -- lint clean (CI does not run clippy, so this gate is local-only).
 4. **`/doc`** -- rustdoc (`DOCS_RS=y ... --all-features`) and the Sphinx guide both clean,
-   plus the content-verification and RST-example-compile passes the doc skill defines. This
-   is where Phase 1/2 doc edits get validated.
+   plus the content-verification, RST-example-compile, and changelog/migration completeness
+   passes the doc skill defines. Pass the Phase 0 baseline tag so the completeness diff uses
+   the correct previous release. This is where the Phase 1/2 doc edits get validated.
 5. **FFI safety (recommended for major bumps / FFI version bumps): `/asan`, `/miri`, and the
    `/verify` audit.** A MuJoCo FFI bump changes the C ABI surface; run these to catch UB at
    the boundary. For a patch release with no `unsafe`/FFI changes they may be skipped -- say
@@ -234,8 +219,8 @@ The report must contain:
   one row per Phase 3 gate (build debug/release, test, clippy, doc, asan, miri, verify,
   cross-arch check). Skipped gates state the reason.
 - **Version-consistency table** (Phase 1): `Location | Current value | Expected value | Status`.
-- **Docs completeness** (Phase 2): changelog + migration present and complete? list any gaps as
-  cards.
+- **Docs completeness** (Phase 2 release-specific checks + `/doc` Part 5 audit): changelog +
+  migration present and complete? list any gaps as cards.
 - **Packaging** (Phase 4): `cargo package --list` clean? dry-run build result; any stray files.
 - A **"Manual maintainer steps"** section rendering the Phase 6 checklist with concrete values
   filled in (so the report is a complete hand-off artifact).

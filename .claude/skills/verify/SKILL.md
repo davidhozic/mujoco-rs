@@ -25,7 +25,7 @@ errors in macro invocations, unsafe code correctness, and potential undefined be
 - **No fixes during scouting or verification.** All code edits happen only in Phase 5 (Fix),
   after findings are fully evaluated. Do not edit source files in any earlier phase.
 
-## The nine concern groups
+## The ten concern groups
 
 ### A. Stride / dimension correctness (`info_method!` fields)
 - Each `info_method!` field stride vs `mjmodel.h` / `mjdata.h` dimension comment.
@@ -110,6 +110,34 @@ the check is applied iff it is needed:
 This group overlaps with `/safety` (a constrained-but-unchecked field is often an OOB-from-safe-code
 hole); here verify only the *presence and shape* of the check mechanism, not a full soundness proof.
 
+### J. Unreachable error / `Option` contracts (documented-but-impossible failure values)
+A wrapper method that documents returning `None`, `Err`, or a sentinel for a failure condition that
+the underlying C function makes **unreachable** -- because C calls `mju_error` (which aborts the
+process and never returns) or asserts on that condition instead of returning null / an error code.
+The documented failure value can then never be produced: the contract is a lie and the real
+behaviour is an abort, while the bound itself goes unchecked on the Rust side.
+
+For every method whose return type is `Option<T>` / `Result<T, E>` (or whose docs claim a
+`None`/`Err`/sentinel-on-failure case) that is backed by an FFI call, read the C function it calls
+and decide whether the documented failure path is actually reachable:
+
+- **Unreachable failure contract = BUG.** If the C function aborts via `mju_error` / `mju_error_v` /
+  `mju_error_raw` (or `assert`) on the documented failure condition and never returns the
+  null/sentinel, the `None`/`Err` arm is dead code and the doc is wrong (and the precondition is
+  effectively unchecked from safe Rust). The fix is to validate the precondition in Rust and either
+  panic, or use the panicking + `try_` fallible split per `coding-conventions.md`, since C provides
+  no recoverable signal. Quote the Rust return type + doc claim AND the exact C failure handling
+  (the line that calls `mju_error` vs returns null).
+- **Reachable failure contract = OK.** If the C function genuinely returns null / an error code for
+  that condition (e.g. `mj_loadXML` writing an error buffer, a getter that returns `nullptr` for a
+  missing element), the `Option`/`Result` is correct.
+
+The canonical example is `mjs_getWrap`, which calls `mju_error("Wrap index out of range...")`, so
+`MjsTendon::wrap`'s old `-> Option<&MjsWrap>` "returns `None` if out of bounds" doc was unreachable
+(fixed as T106). Look especially at `mjs_get*` / index-accessor wrappers and any wrapper returning
+`Option`/`Result` whose `None`/`Err` is documented for an out-of-range index or missing-by-name
+lookup.
+
 ## Methodology -- parallel multi-agent (drive with the `Workflow` tool)
 
 ### Phase 0 -- Inline recon (before launching Workflow)
@@ -133,9 +161,10 @@ One agent reads all source files and C headers and emits a structured, numbered 
 4. For every `info_method!`, `array_slice_dyn! { ... }` (basic form),
    `array_slice_dyn! { sublen_dep { ... } }`, `array_slice_dyn! { summed { ... } }`,
    `mj_model_dyn_range!`, unsafe block, enum dispatch, bounds check, Drop impl,
-   `unsafe impl Send/Sync`, and every value-writing `getter_setter!` / `vec_set!` field
-   (for group I) -- emit one numbered task entry with:
-   `{ id, category (A-I), description, rust_file, rust_lines, c_header }`
+   `unsafe impl Send/Sync`, every value-writing `getter_setter!` / `vec_set!` field
+   (for group I), and every FFI-backed method returning `Option`/`Result` or documenting a
+   `None`/`Err`-on-failure case (for group J) -- emit one numbered task entry with:
+   `{ id, category (A-J), description, rust_file, rust_lines, c_header }`
 
 The scout returns a JSON array of tasks. The total task count typically ranges from 150-400.
 
@@ -163,9 +192,12 @@ QUOTING RULE: Quote the actual code for every item. Examples:
   "error_buffer: [0i8; 100], mj_loadXML gets 100 -> OK"
   "MjsSensor::objtype setter: has { check_objtype } check; C indexes object_lists_[objtype] -> OK"
   "<field> setter: no { check }; C uses value as unguarded array index / unchecked discriminant -> BUG (group I)"
+  "MjsTendon::wrap -> Option: doc says None on OOB but mjs_getWrap calls mju_error (aborts) -> BUG (group J)"
 
 For group I, the reference is the C *usage* of the field value (how the C side consumes it), not a
-dimension comment. If you cannot find the Rust value, say UNCERTAIN.
+dimension comment. For group J, the reference is the C function's failure handling (does it return
+null/an error code, or call mju_error / assert and abort?). If you cannot find the Rust value, say
+UNCERTAIN.
 ```
 
 Each agent returns structured findings:
@@ -245,7 +277,7 @@ Concretely:
 
 The file must be self-contained (inline `<style>`), ASCII-only, and contain:
 
-- A header and a short **method note** describing the phases and the nine concern groups (A-I).
+- A header and a short **method note** describing the phases and the ten concern groups (A-J).
 - An **overview table** of all findings accumulated this chat:
   `ID | Severity (pill) | Category (badge) | One-line description | Location | Fix applied? | Status`
   If no findings exist, the table says "No bugs confirmed in this session."
@@ -259,7 +291,7 @@ Styling: use the same Claude aesthetic as `mujoco-rs-memory-safety-audit.html` -
 background, coral accent, warm near-black ink, Georgia serif headings, rounded pill badges, white
 finding cards on the canvas, and a hairline-border overview table. Severity pills
 (`sev-critical/high/medium/low/info`), status badges (`st-open` / `st-fixed` / `st-wont-fix`),
-category badges `cat-a` through `cat-i` each in a distinct hue.
+category badges `cat-a` through `cat-j` each in a distinct hue.
 
 Statuses:
 

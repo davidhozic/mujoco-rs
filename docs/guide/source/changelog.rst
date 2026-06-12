@@ -182,6 +182,15 @@ update of MuJoCo alone can increase the major version.
   in a type that demands ``Sync``) will no longer compile; transfer ownership instead, as ``MjSpec``
   remains ``Send``.
 
+*MjsTendon::wrap / wrap_mut no longer return* ``Option``
+
+- |mjs_tendon|'s ``wrap`` and ``wrap_mut`` now return ``&MjsWrap`` / ``&mut MjsWrap`` (previously
+  ``Option<&MjsWrap>`` / ``Option<&mut MjsWrap>``) and panic if the index is out of bounds. The old
+  signature documented ``None`` on an out-of-range index, but the underlying C ``mjs_getWrap`` aborts
+  the process for such an index and never returns null, so the ``None`` arm was unreachable. Drop the
+  ``.unwrap()`` on existing calls and ensure the index is in range (``< wrap_num()``), or use the new
+  fallible ``try_wrap`` / ``try_wrap_mut``.
+
 .. rubric:: Deprecations
 
 - Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
@@ -189,6 +198,12 @@ update of MuJoCo alone can increase the major version.
   Users are expected to use
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`
   instead.
+- Deprecated |mjs_tendon|'s ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, and
+  ``try_wrap_pulley`` --- their ``MjEditError::AllocationFailed`` arm is unreachable and an
+  allocation failure cannot be recovered soundly (MuJoCo aborts the process, or writes through the
+  null pointer before returning). Use the panicking ``wrap_site`` / ``wrap_geom`` / ``wrap_joint`` /
+  ``wrap_pulley`` instead. These methods may be undeprecated in the future if MuJoCo's upstream C++
+  code is changed to return null recoverably.
 
 .. rubric:: Error handling
 
@@ -219,6 +234,16 @@ New error variants in pre-existing enums:
   ``MjsNumeric::set_size`` (see Breaking changes).
 
 .. rubric:: New features and improvements
+
+*Fallible tendon wrap accessors*
+
+- Added :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>try_wrap` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>try_wrap_mut`, the fallible
+  counterparts of ``wrap`` / ``wrap_mut``. They return
+  ``Result<&MjsWrap, MjEditError>`` and yield ``MjEditError::IndexOutOfBounds`` for an out-of-range
+  index instead of panicking. A new
+  :docs-rs:`~mujoco_rs::error::<enum>MjEditError` ``IndexOutOfBounds`` variant carries the offending
+  index and length.
 
 *MjrContext GPU re-upload methods*
 
@@ -317,6 +342,11 @@ runtime.
 
 .. rubric:: Bug fixes
 
+- Fixed |mjs_tendon|'s ``wrap`` / ``wrap_mut``, which documented returning ``None`` for an
+  out-of-bounds index but could never do so: the underlying C ``mjs_getWrap`` aborts the process for
+  such an index and never returns null, so the ``None`` case was unreachable. The accessors now
+  reject an out-of-range index in Rust --- panicking, or returning ``MjEditError::IndexOutOfBounds``
+  via the new ``try_wrap`` / ``try_wrap_mut`` (see Breaking changes).
 - Fixed a model-editing potential undefined behavior in |mjs_body|, which occurred
   when yielded references of body's items were not destroyed before the next entry
   to the iterator. This was problematic if individual references of yielded items
