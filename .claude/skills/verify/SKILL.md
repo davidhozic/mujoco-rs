@@ -5,7 +5,7 @@ description: Systematically verify correctness of the mujoco-rs wrapper layer us
 
 # Comprehensive Codebase Verification
 
-Obey **all** files in `.github/rules/` at all times. Re-read them after any context compaction.
+Obey **all** files in `.claude/rules/` at all times. Re-read them after any context compaction.
 
 Systematically verify the mujoco-rs wrapper layer for type mismatches with MuJoCo C, stride/length
 errors in macro invocations, unsafe code correctness, and potential undefined behaviour.

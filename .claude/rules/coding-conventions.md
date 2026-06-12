@@ -122,7 +122,7 @@ Additional rules:
   call C functions.
 - Always use ASCII characters only. Avoid non-ASCII Unicode characters (e.g., em dashes, arrows,
   smart quotes). Use `--` (double hyphen) as the ASCII substitute for em dashes. This applies to
-  both source code and `.github/` rule/skill files.
+  both source code and `.claude/` rule/skill files.
 - **Comment style**: Use `//` for regular comments and subsections. Use `/* */` for top-level
   section headers and special formatting.
 - **Macro call alignment**: within a contiguous block of macro invocations (e.g. rows in a Grid),

@@ -6,11 +6,11 @@ conventions:
 1. **Point subagents at rules; don't paste them.** Subagents are stateless, but they can read files
    themselves. Instead of pasting full rule/skill text into the prompt (which duplicates thousands
    of tokens per agent), tell the subagent *which* files to read (e.g. "read
-   `.github/rules/macro-system.md` before editing wrappers") and embed only the few specific
+   `.claude/rules/macro-system.md` before editing wrappers") and embed only the few specific
    excerpts critical to the task. Paste full text only for short rules or when the subagent cannot
    access the repo.
 
-2. **Reference relevant skills by path.** If a `.github/skills/` workflow applies, name the skill
+2. **Reference relevant skills by path.** If a `.claude/skills/` workflow applies, name the skill
    and its path in the prompt rather than copying its full content.
 
 3. **Minimum rule set for every subagent.** Every subagent prompt must reference (by path, to be
