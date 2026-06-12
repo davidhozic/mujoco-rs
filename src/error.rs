@@ -311,6 +311,13 @@ pub enum MjEditError {
     },
     /// Returned when the parameters to the given method/function are invalid.
     InvalidParameter(String),
+    /// The given index is out of range.
+    IndexOutOfBounds {
+        /// The index that was supplied.
+        id: usize,
+        /// Exclusive upper bound of the valid range.
+        len: usize,
+    },
 }
 
 impl fmt::Display for MjEditError {
@@ -331,6 +338,10 @@ impl fmt::Display for MjEditError {
                 required_size + 1
             ),
             Self::InvalidParameter(msg) => write!(f, "{msg}"),
+            Self::IndexOutOfBounds { id, len } => write!(
+                f,
+                "index {id} is out of bounds (length is {len})"
+            ),
         }
     }
 }

@@ -1616,6 +1616,30 @@ Callers must ensure the model and data remain alive and at a stable address.
     let viewer = unsafe { MjViewerCpp::launch_passive(&model, &data, 100) };
 
 
+``MjsTendon::wrap`` / ``wrap_mut`` no longer return ``Option``
+--------------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>wrap` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>wrap_mut` now return
+``&MjsWrap`` / ``&mut MjsWrap`` instead of ``Option<&MjsWrap>`` / ``Option<&mut MjsWrap>``, and
+panic when the index is out of bounds. Drop the ``.unwrap()`` and make sure the index is
+``< wrap_num()``, or use the new fallible ``try_wrap`` / ``try_wrap_mut``.
+
+**Before:**
+
+.. code-block:: rust
+
+    let wrap = tendon.wrap(1).unwrap();
+
+**After:**
+
+.. code-block:: rust
+
+    let wrap = tendon.wrap(1);
+    // or, fallibly:
+    let wrap = tendon.try_wrap(1)?;
+
+
 Removed deprecated methods
 ----------------------------
 

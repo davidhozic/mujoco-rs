@@ -1674,16 +1674,50 @@ impl MjsTendon {
         unsafe { mjs_getWrapNum(self) as usize }
     }
 
-    /// Return an indexed wrap object. Returns `None` if index is out of bounds.
-    pub fn wrap(&self, i: usize) -> Option<&MjsWrap> {
-        let ptr = unsafe { mjs_getWrap(self, i as i32) };
-        unsafe { ptr.as_ref() }
+    /// Return an indexed wrap object.
+    ///
+    /// # Panics
+    /// Panics if `i >= wrap_num()`. Use [`MjsTendon::try_wrap`] for a fallible alternative.
+    pub fn wrap(&self, i: usize) -> &MjsWrap {
+        self.try_wrap(i).unwrap()
     }
 
-    /// Return a mutable indexed wrap object. Returns `None` if index is out of bounds.
-    pub fn wrap_mut(&mut self, i: usize) -> Option<&mut MjsWrap> {
+    /// Fallible version of [`MjsTendon::wrap`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::IndexOutOfBounds`] if `i >= wrap_num()`.
+    pub fn try_wrap(&self, i: usize) -> Result<&MjsWrap, MjEditError> {
+        let len = self.wrap_num();
+        // mjs_getWrap aborts the process via mju_error for an out-of-range index, so the bound is
+        // checked here and turned into a recoverable error instead.
+        if i >= len {
+            return Err(MjEditError::IndexOutOfBounds { id: i, len });
+        }
         let ptr = unsafe { mjs_getWrap(self, i as i32) };
-        unsafe { ptr.as_mut() }
+        // SAFETY: index validated above; mjs_getWrap returns a non-null pointer for in-range indices.
+        Ok(unsafe { &*ptr })
+    }
+
+    /// Return a mutable indexed wrap object.
+    ///
+    /// # Panics
+    /// Panics if `i >= wrap_num()`. Use [`MjsTendon::try_wrap_mut`] for a fallible alternative.
+    pub fn wrap_mut(&mut self, i: usize) -> &mut MjsWrap {
+        self.try_wrap_mut(i).unwrap()
+    }
+
+    /// Fallible version of [`MjsTendon::wrap_mut`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::IndexOutOfBounds`] if `i >= wrap_num()`.
+    pub fn try_wrap_mut(&mut self, i: usize) -> Result<&mut MjsWrap, MjEditError> {
+        let len = self.wrap_num();
+        if i >= len {
+            return Err(MjEditError::IndexOutOfBounds { id: i, len });
+        }
+        let ptr = unsafe { mjs_getWrap(self, i as i32) };
+        // SAFETY: see try_wrap().
+        Ok(unsafe { &mut *ptr })
     }
 }
 
@@ -2873,11 +2907,43 @@ mod tests {
 
         assert_eq!(tendon.wrap_num(), 3);
 
-        let wrap = tendon.wrap(1).unwrap();
+        let wrap = tendon.wrap(1);
         assert_eq!(wrap.coef(), 0.5);
 
-        let wrap_pulley = tendon.wrap(2).unwrap();
+        let wrap_pulley = tendon.wrap(2);
         assert_eq!(wrap_pulley.divisor(), 1.5);
+    }
+
+    #[test]
+    fn test_tendon_wrap_out_of_bounds() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_site().with_name("site1");
+
+        let tendon = spec.add_tendon();
+        tendon.wrap_site("site1");
+        assert_eq!(tendon.wrap_num(), 1);
+
+        // Index 3 is out of range; the fallible accessor reports it rather than aborting in C.
+        match tendon.try_wrap(3) {
+            Err(MjEditError::IndexOutOfBounds { id, len }) => {
+                assert_eq!(id, 3);
+                assert_eq!(len, 1);
+            }
+            _ => panic!("expected IndexOutOfBounds"),
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_tendon_wrap_out_of_bounds_panics() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_site().with_name("site1");
+
+        let tendon = spec.add_tendon();
+        tendon.wrap_site("site1");
+
+        // The panicking accessor must panic in Rust, not abort the process in C.
+        let _ = tendon.wrap(3);
     }
 
     #[test]
