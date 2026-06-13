@@ -1,5 +1,13 @@
 //! Commonly used items.
-pub use crate::error::{MjDataError, MjSceneError, MjEditError, MjModelError, MjVfsError, MjPluginError};
+pub use crate::error::{
+    MjrContextError,
+    MjPluginError,
+    MjModelError,
+    MjSceneError,
+    MjEditError,
+    MjDataError,
+    MjVfsError,
+};
 
 pub use crate::wrappers::mj_editing::{MjSpec, SpecItem};
 pub use crate::wrappers::mj_visualization::*;
