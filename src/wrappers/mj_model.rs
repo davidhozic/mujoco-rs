@@ -1,7 +1,6 @@
 //! MjModel related.
 use crate::{
     view_creator, info_method, info_with_view,
-    mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem,
     array_slice_dyn, getter_setter
 };
 use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
@@ -344,7 +343,7 @@ impl MjModel {
         }
     }
 
-    info_method! { Model, ffi(), actuator,
+    info_method! { Model, actuator,
         [trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, trnid: 2, actadr: 1, actnum: 1,
         group: 1, history: 2, historyadr: 1, delay: 1, ctrllimited: 1, forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize, biasprm: mjNBIAS as usize,
         actearly: 1, ctrlrange: 2, forcerange: 2, actrange: 2, damping: 1,
@@ -354,7 +353,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), body,
+    info_method! { Model, body,
         [parentid: 1, rootid: 1, weldid: 1, mocapid: 1, jntnum: 1, jntadr: 1,
         dofnum: 1, dofadr: 1, treeid: 1, geomnum: 1, geomadr: 1, simple: 1,
         sameframe: 1, pos: 3, quat: 4, ipos: 3, iquat: 4, mass: 1, subtreemass: 1,
@@ -364,7 +363,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), camera,
+    info_method! { Model, camera,
         [mode: 1, bodyid: 1, targetbodyid: 1,
         pos: 3, quat: 4, poscom0: 3,
         pos0: 3, mat0: 9, projection: 1, fovy: 1,
@@ -373,7 +372,7 @@ impl MjModel {
         []
     }
     
-    info_method! { Model, ffi(), joint,
+    info_method! { Model, joint,
         [r#type: 1, qposadr: 1, dofadr: 1, group: 1,
         limited: 1, actfrclimited: 1, actgravcomp: 1, solref: mjNREF as usize, solimp: mjNIMP as usize,
         pos: 3, axis: 3, stiffness: 1, stiffnesspoly: mjNPOLY as usize,
@@ -385,7 +384,7 @@ impl MjModel {
     }
 
 
-    info_method! { Model, ffi(), equality,
+    info_method! { Model, equality,
         [r#type: 1, obj1id: 1,
         obj2id: 1, active0: 1,
         solref: mjNREF as usize, solimp: mjNIMP as usize,
@@ -394,13 +393,13 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), exclude,
+    info_method! { Model, exclude,
         [signature: 1],
         [],
         []
     }
 
-    info_method! { Model, ffi(), geom,
+    info_method! { Model, geom,
         [r#type: 1, contype: 1, conaffinity: 1, condim: 1, bodyid: 1, dataid: 1, matid: 1,
         group: 1, priority: 1, plugin: 1, sameframe: 1, solmix: 1, solref: mjNREF as usize, solimp: mjNIMP as usize, size: 3,
         aabb: 6, rbound: 1, pos: 3, quat: 4, friction: 3, margin: 1, gap: 1, fluid: mjNFLUID as usize, rgba: 4],
@@ -408,7 +407,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), hfield,
+    info_method! { Model, hfield,
         [size: 4,
         nrow: 1,
         ncol: 1,
@@ -418,7 +417,7 @@ impl MjModel {
         [data: nhfielddata]
     }
 
-    info_method! { Model, ffi(), light,
+    info_method! { Model, light,
         [mode: 1, bodyid: 1, targetbodyid: 1, r#type: 1, texid: 1, castshadow: 1,
         bulbradius: 1, intensity: 1, range: 1,
         active: 1, pos: 3, dir: 3, poscom0: 3, pos0: 3,
@@ -428,7 +427,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), material,
+    info_method! { Model, material,
         [texid: MjtTextureRole::mjNTEXROLE as usize, texuniform: 1,
         texrepeat: 2, emission: 1,
         specular: 1, shininess: 1,
@@ -437,7 +436,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), mesh,
+    info_method! { Model, mesh,
         [vertadr: 1, vertnum: 1,
         texcoordadr: 1, faceadr: 1,
         facenum: 1, graphadr: 1,
@@ -449,14 +448,14 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), numeric,
+    info_method! { Model, numeric,
         [adr: 1,
         size: 1],
         [],
         [data: nnumericdata]
     }
 
-    info_method! { Model, ffi(), pair,
+    info_method! { Model, pair,
         [dim: 1, geom1: 1, geom2: 1,
         signature: 1, solref: mjNREF as usize, solimp: mjNIMP as usize,
         margin: 1, gap: 1, friction: 5, solreffriction: mjNREF as usize],
@@ -464,7 +463,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), sensor,
+    info_method! { Model, sensor,
         [r#type: 1, datatype: 1, needstage: 1,
         objtype: 1, objid: 1, reftype: 1,
         refid: 1, intprm: mjNSENS as usize, dim: 1, adr: 1,
@@ -473,7 +472,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), site,
+    info_method! { Model, site,
         [r#type: 1, bodyid: 1, matid: 1,
         group: 1, sameframe: 1, size: 3,
         pos: 3, quat: 4, rgba: 4],
@@ -481,7 +480,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), skin,
+    info_method! { Model, skin,
         [matid: 1, group: 1, rgba: 4, inflate: 1,
         vertadr: 1, vertnum: 1, texcoordadr: 1,
         faceadr: 1, facenum: 1, boneadr: 1,
@@ -490,7 +489,7 @@ impl MjModel {
         []
     }
 
-    info_method! { Model, ffi(), tendon,
+    info_method! { Model, tendon,
         [adr: 1, num: 1, matid: 1, actuatorid: 1, group: 1, treenum: 1, treeid: 2,
         limited: 1, actfrclimited: 1, width: 1,
         solref_lim: mjNREF as usize, solimp_lim: mjNIMP as usize, solref_fri: mjNREF as usize, solimp_fri: mjNIMP as usize, range: 2, actfrcrange: 2, margin: 1,
@@ -500,7 +499,7 @@ impl MjModel {
         [J_colind: nJten]
     }
 
-    info_method! { Model, ffi(), texture,
+    info_method! { Model, texture,
         [r#type: 1, colorspace: 1, height: 1,
         width: 1, nchannel: 1,
         adr: 1, pathadr: 1],
@@ -508,7 +507,7 @@ impl MjModel {
         [data: ntexdata]
     }
 
-    info_method! { Model, ffi(), tuple,
+    info_method! { Model, tuple,
         [adr: 1,
         size: 1],
         [],
@@ -517,7 +516,7 @@ impl MjModel {
         objprm: ntupledata]
     }
 
-    info_method! { Model, ffi(), key,
+    info_method! { Model, key,
         [time: 1],
         [qpos: nq, qvel: nv,
         act: na, mpos: nmocap*3,
@@ -794,16 +793,17 @@ impl MjModel {
 
     /// Fallible version of [`MjModel::max_contacts`].
     /// # Errors
-    /// Returns [`MjModelError::InvalidIndex`] when either `geom1` or `geom2` are equal or greater than [`MjModel::ngeom`].
+    /// Returns [`MjModelError::IndexOutOfBounds`] when either `geom1` or `geom2` are equal or
+    /// greater than [`MjModel::ngeom`].
     pub fn try_max_contacts(&self, geom1: usize, geom2: usize, has_margin: Option<bool>) -> Result<u32, MjModelError> {
         let ngeom = self.ngeom() as usize;
 
         if geom1 >= ngeom {
-            return Err(MjModelError::InvalidIndex(geom1, ngeom));
+            return Err(MjModelError::IndexOutOfBounds { id: geom1, len: ngeom });
         }
 
         if geom2 >= ngeom {
-            return Err(MjModelError::InvalidIndex(geom2, ngeom));
+            return Err(MjModelError::IndexOutOfBounds { id: geom2, len: ngeom });
         }
 
         Ok(unsafe { mj_maxContact(
@@ -875,6 +875,7 @@ impl MjModel {
         [ffi] nflexelem: MjtSize; "number of elements in all flexes.";
         [ffi] nflexelemdata: MjtSize; "number of element vertex ids in all flexes.";
         [ffi] nflexstiffness: MjtSize; "number of stiffness parameters in all flexes.";
+        [ffi] nflexbending: MjtSize; "number of bending parameters in all flexes";
         [ffi] nflexelemedge: MjtSize; "number of element edge ids in all flexes.";
         [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
         [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
@@ -954,17 +955,17 @@ impl MjModel {
     array_slice_dyn! {
         qpos0: &[MjtNum; "qpos values at default pose"; ffi().nq],
         qpos_spring: &[MjtNum; "reference pose for springs"; ffi().nq],
-        (unsafe) body_parentid: &[i32; "id of body's parent"; ffi().nbody],
-        (unsafe) body_rootid: &[i32; "ancestor that is direct child of world"; ffi().nbody],
-        (unsafe) body_weldid: &[i32; "top ancestor with no dofs to this body"; ffi().nbody],
-        (unsafe) body_mocapid: &[i32; "id of mocap data; -1: none"; ffi().nbody],
-        (unsafe) body_jntnum: &[i32; "number of joints for this body"; ffi().nbody],
-        (unsafe) body_jntadr: &[i32; "start addr of joints; -1: no joints"; ffi().nbody],
-        (unsafe) body_dofnum: &[i32; "number of motion degrees of freedom"; ffi().nbody],
-        (unsafe) body_dofadr: &[i32; "start addr of dofs; -1: no dofs"; ffi().nbody],
-        (unsafe) body_treeid: &[i32; "id of body's kinematic tree; -1: static"; ffi().nbody],
-        (unsafe) body_geomnum: &[i32; "number of geoms"; ffi().nbody],
-        (unsafe) body_geomadr: &[i32; "start addr of geoms; -1: no geoms"; ffi().nbody],
+        (mut = unsafe) body_parentid: &[i32; "id of body's parent"; ffi().nbody],
+        (mut = unsafe) body_rootid: &[i32; "ancestor that is direct child of world"; ffi().nbody],
+        (mut = unsafe) body_weldid: &[i32; "top ancestor with no dofs to this body"; ffi().nbody],
+        (mut = unsafe) body_mocapid: &[i32; "id of mocap data; -1: none"; ffi().nbody],
+        (mut = unsafe) body_jntnum: &[i32; "number of joints for this body"; ffi().nbody],
+        (mut = unsafe) body_jntadr: &[i32; "start addr of joints; -1: no joints"; ffi().nbody],
+        (mut = unsafe) body_dofnum: &[i32; "number of motion degrees of freedom"; ffi().nbody],
+        (mut = unsafe) body_dofadr: &[i32; "start addr of dofs; -1: no dofs"; ffi().nbody],
+        (mut = unsafe) body_treeid: &[i32; "id of body's kinematic tree; -1: static"; ffi().nbody],
+        (mut = unsafe) body_geomnum: &[i32; "number of geoms"; ffi().nbody],
+        (mut = unsafe) body_geomadr: &[i32; "start addr of geoms; -1: no geoms"; ffi().nbody],
         body_simple: &[MjtByte; "1: diag M; 2: diag M, sliders only"; ffi().nbody],
         body_sameframe: &[MjtSameFrame [force]; "same frame as inertia"; ffi().nbody],
         body_pos: &[[MjtNum; 3] [force]; "position offset rel. to parent body"; ffi().nbody],
@@ -977,28 +978,28 @@ impl MjModel {
         body_invweight0: &[[MjtNum; 2] [force]; "mean inv inert in qpos0 (trn, rot)"; ffi().nbody],
         body_gravcomp: &[MjtNum; "antigravity force, units of body weight"; ffi().nbody],
         body_margin: &[MjtNum; "MAX over all geom margins"; ffi().nbody],
-        (unsafe) body_plugin: &[i32; "plugin instance id; -1: not in use"; ffi().nbody],
+        (mut = unsafe) body_plugin: &[i32; "plugin instance id; -1: not in use"; ffi().nbody],
         body_contype: &[i32; "OR over all geom contypes"; ffi().nbody],
         body_conaffinity: &[i32; "OR over all geom conaffinities"; ffi().nbody],
-        (unsafe) body_bvhadr: &[i32; "address of bvh root"; ffi().nbody],
-        (unsafe) body_bvhnum: &[i32; "number of bounding volumes"; ffi().nbody],
+        (mut = unsafe) body_bvhadr: &[i32; "address of bvh root"; ffi().nbody],
+        (mut = unsafe) body_bvhnum: &[i32; "number of bounding volumes"; ffi().nbody],
         bvh_depth: &[i32; "depth in the bounding volume hierarchy"; ffi().nbvh],
-        (unsafe) bvh_child: &[[i32; 2] [force]; "left and right children in tree"; ffi().nbvh],
-        (unsafe) bvh_nodeid: &[i32; "geom or elem id of node; -1: non-leaf"; ffi().nbvh],
+        (mut = unsafe) bvh_child: &[[i32; 2] [force]; "left and right children in tree"; ffi().nbvh],
+        (mut = unsafe) bvh_nodeid: &[i32; "geom or elem id of node; -1: non-leaf"; ffi().nbvh],
         bvh_aabb: &[[MjtNum; 6] [force]; "local bounding box (center, size)"; ffi().nbvhstatic],
         oct_depth: &[i32; "depth in the octree"; ffi().noct],
-        (unsafe) oct_child: &[[i32; 8] [force]; "children of octree node"; ffi().noct],
+        (mut = unsafe) oct_child: &[[i32; 8] [force]; "children of octree node"; ffi().noct],
         oct_aabb: &[[MjtNum; 6] [force]; "octree node bounding box (center, size)"; ffi().noct],
         oct_coeff: &[[MjtNum; 8] [force]; "octree interpolation coefficients"; ffi().noct],
-        (unsafe) jnt_type: &[MjtJoint [force]; "type of joint"; ffi().njnt],
-        (unsafe) jnt_qposadr: &[i32; "start addr in 'qpos' for joint's data"; ffi().njnt],
-        (unsafe) jnt_dofadr: &[i32; "start addr in 'qvel' for joint's data"; ffi().njnt],
-        (unsafe) jnt_bodyid: &[i32; "id of joint's body"; ffi().njnt],
-        (unsafe) jnt_actuatorid: &[i32; "actuator contributing damping / armature"; ffi().njnt],
+        (mut = unsafe) jnt_type: &[MjtJoint [force]; "type of joint"; ffi().njnt],
+        (mut = unsafe) jnt_qposadr: &[i32; "start addr in 'qpos' for joint's data"; ffi().njnt],
+        (mut = unsafe) jnt_dofadr: &[i32; "start addr in 'qvel' for joint's data"; ffi().njnt],
+        (mut = unsafe) jnt_bodyid: &[i32; "id of joint's body"; ffi().njnt],
+        (mut = unsafe) jnt_actuatorid: &[i32; "actuator contributing damping / armature"; ffi().njnt],
         jnt_group: &[i32; "group for visibility"; ffi().njnt],
-        jnt_limited: &[bool [force]; "does joint have limits"; ffi().njnt],
-        jnt_actfrclimited: &[bool [force]; "does joint have actuator force limits"; ffi().njnt],
-        jnt_actgravcomp: &[bool [force]; "is gravcomp force applied via actuators"; ffi().njnt],
+        jnt_limited: &[MjtBool; "does joint have limits"; ffi().njnt],
+        jnt_actfrclimited: &[MjtBool; "does joint have actuator force limits"; ffi().njnt],
+        jnt_actgravcomp: &[MjtBool; "is gravcomp force applied via actuators"; ffi().njnt],
         jnt_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference: limit"; ffi().njnt],
         jnt_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance: limit"; ffi().njnt],
         jnt_pos: &[[MjtNum; 3] [force]; "local anchor position"; ffi().njnt],
@@ -1008,11 +1009,11 @@ impl MjModel {
         jnt_range: &[[MjtNum; 2] [force]; "joint limits"; ffi().njnt],
         jnt_actfrcrange: &[[MjtNum; 2] [force]; "range of total actuator force"; ffi().njnt],
         jnt_margin: &[MjtNum; "min distance for limit detection"; ffi().njnt],
-        (unsafe) dof_bodyid: &[i32; "id of dof's body"; ffi().nv],
-        (unsafe) dof_jntid: &[i32; "id of dof's joint"; ffi().nv],
-        (unsafe) dof_parentid: &[i32; "id of dof's parent; -1: none"; ffi().nv],
-        (unsafe) dof_treeid: &[i32; "id of dof's kinematic tree"; ffi().nv],
-        (unsafe) dof_Madr: &[i32; "dof address in M-diagonal"; ffi().nv],
+        (mut = unsafe) dof_bodyid: &[i32; "id of dof's body"; ffi().nv],
+        (mut = unsafe) dof_jntid: &[i32; "id of dof's joint"; ffi().nv],
+        (mut = unsafe) dof_parentid: &[i32; "id of dof's parent; -1: none"; ffi().nv],
+        (mut = unsafe) dof_treeid: &[i32; "id of dof's kinematic tree"; ffi().nv],
+        (mut = unsafe) dof_Madr: &[i32; "dof address in M-diagonal"; ffi().nv],
         dof_simplenum: &[i32; "number of consecutive simple dofs"; ffi().nv],
         dof_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference:frictionloss"; ffi().nv],
         dof_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance:frictionloss"; ffi().nv],
@@ -1023,21 +1024,21 @@ impl MjModel {
         dof_invweight0: &[MjtNum; "diag. inverse inertia in qpos0"; ffi().nv],
         dof_M0: &[MjtNum; "diag. inertia in qpos0"; ffi().nv],
         dof_length: &[MjtNum; "linear: 1; angular: approx. length scale"; ffi().nv],
-        (unsafe) tree_bodyadr: &[i32; "start addr of bodies"; ffi().ntree],
-        (unsafe) tree_bodynum: &[i32; "number of bodies in tree"; ffi().ntree],
-        (unsafe) tree_dofadr: &[i32; "start addr of dofs"; ffi().ntree],
-        (unsafe) tree_dofnum: &[i32; "number of dofs in tree"; ffi().ntree],
+        (mut = unsafe) tree_bodyadr: &[i32; "start addr of bodies"; ffi().ntree],
+        (mut = unsafe) tree_bodynum: &[i32; "number of bodies in tree"; ffi().ntree],
+        (mut = unsafe) tree_dofadr: &[i32; "start addr of dofs"; ffi().ntree],
+        (mut = unsafe) tree_dofnum: &[i32; "number of dofs in tree"; ffi().ntree],
         tree_sleep_policy: &[MjtSleepPolicy [force]; "sleep policy"; ffi().ntree],
-        (unsafe) geom_type: &[MjtGeom [force]; "geometric type"; ffi().ngeom],
+        (mut = unsafe) geom_type: &[MjtGeom [force]; "geometric type"; ffi().ngeom],
         geom_contype: &[i32; "geom contact type"; ffi().ngeom],
         geom_conaffinity: &[i32; "geom contact affinity"; ffi().ngeom],
-        (unsafe) geom_condim: &[i32; "contact dimensionality (1, 3, 4, 6)"; ffi().ngeom],
-        (unsafe) geom_bodyid: &[i32; "id of geom's body"; ffi().ngeom],
-        (unsafe) geom_dataid: &[i32; "id of geom's mesh/hfield; -1: none"; ffi().ngeom],
-        (unsafe) geom_matid: &[i32; "material id for rendering; -1: none"; ffi().ngeom],
+        (mut = unsafe) geom_condim: &[i32; "contact dimensionality (1, 3, 4, 6)"; ffi().ngeom],
+        (mut = unsafe) geom_bodyid: &[i32; "id of geom's body"; ffi().ngeom],
+        (mut = unsafe) geom_dataid: &[i32; "id of geom's mesh/hfield; -1: none"; ffi().ngeom],
+        (mut = unsafe) geom_matid: &[i32; "material id for rendering; -1: none"; ffi().ngeom],
         geom_group: &[i32; "group for visibility"; ffi().ngeom],
         geom_priority: &[i32; "geom contact priority"; ffi().ngeom],
-        (unsafe) geom_plugin: &[i32; "plugin instance id; -1: not in use"; ffi().ngeom],
+        (mut = unsafe) geom_plugin: &[i32; "plugin instance id; -1: not in use"; ffi().ngeom],
         geom_sameframe: &[MjtSameFrame [force]; "same frame as body"; ffi().ngeom],
         geom_solmix: &[MjtNum; "mixing coef for solref/imp in geom pair"; ffi().ngeom],
         geom_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference: contact"; ffi().ngeom],
@@ -1048,13 +1049,13 @@ impl MjModel {
         geom_pos: &[[MjtNum; 3] [force]; "local position offset rel. to body"; ffi().ngeom],
         geom_quat: &[[MjtNum; 4] [force]; "local orientation offset rel. to body"; ffi().ngeom],
         geom_friction: &[[MjtNum; 3] [force]; "friction for (slide, spin, roll)"; ffi().ngeom],
-        geom_margin: &[MjtNum; "detect contact if dist<margin"; ffi().ngeom],
-        geom_gap: &[MjtNum; "include in solver if dist<margin-gap"; ffi().ngeom],
+        geom_margin: &[MjtNum; "geometric inflation for contact"; ffi().ngeom],
+        geom_gap: &[MjtNum; "additional contact detection buffer"; ffi().ngeom],
         geom_fluid: &[[MjtNum; mjNFLUID as usize] [force]; "fluid interaction parameters"; ffi().ngeom],
         geom_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().ngeom],
         site_type: &[MjtGeom [force]; "geom type for rendering"; ffi().nsite],
-        (unsafe) site_bodyid: &[i32; "id of site's body"; ffi().nsite],
-        (unsafe) site_matid: &[i32; "material id for rendering; -1: none"; ffi().nsite],
+        (mut = unsafe) site_bodyid: &[i32; "id of site's body"; ffi().nsite],
+        (mut = unsafe) site_matid: &[i32; "material id for rendering; -1: none"; ffi().nsite],
         site_group: &[i32; "group for visibility"; ffi().nsite],
         site_sameframe: &[MjtSameFrame [force]; "same frame as body"; ffi().nsite],
         site_size: &[[MjtNum; 3] [force]; "geom size for rendering"; ffi().nsite],
@@ -1062,8 +1063,8 @@ impl MjModel {
         site_quat: &[[MjtNum; 4] [force]; "local orientation offset rel. to body"; ffi().nsite],
         site_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().nsite],
         cam_mode: &[MjtCamLight [force]; "camera tracking mode"; ffi().ncam],
-        (unsafe) cam_bodyid: &[i32; "id of camera's body"; ffi().ncam],
-        (unsafe) cam_targetbodyid: &[i32; "id of targeted body; -1: none"; ffi().ncam],
+        (mut = unsafe) cam_bodyid: &[i32; "id of camera's body"; ffi().ncam],
+        (mut = unsafe) cam_targetbodyid: &[i32; "id of targeted body; -1: none"; ffi().ncam],
         cam_pos: &[[MjtNum; 3] [force]; "position rel. to body frame"; ffi().ncam],
         cam_quat: &[[MjtNum; 4] [force]; "orientation rel. to body frame"; ffi().ncam],
         cam_poscom0: &[[MjtNum; 3] [force]; "global position rel. to sub-com in qpos0"; ffi().ncam],
@@ -1072,20 +1073,20 @@ impl MjModel {
         cam_projection: &[MjtProjection [force]; "projection type"; ffi().ncam],
         cam_fovy: &[MjtNum; "y field-of-view (ortho ? len : deg)"; ffi().ncam],
         cam_ipd: &[MjtNum; "inter-pupillary distance"; ffi().ncam],
-        (unsafe) cam_resolution: &[[i32; 2] [force]; "resolution: pixels [width, height]"; ffi().ncam],
+        (mut = unsafe) cam_resolution: &[[i32; 2] [force]; "resolution: pixels [width, height]"; ffi().ncam],
         cam_output: &[i32; "output types (MjtCamOutBit bit flags)"; ffi().ncam],
         cam_sensorsize: &[[f32; 2] [force]; "sensor size: length [width, height]"; ffi().ncam],
         cam_intrinsic: &[[f32; 4] [force]; "[focal length; principal point]"; ffi().ncam],
         light_mode: &[MjtCamLight [force]; "light tracking mode"; ffi().nlight],
-        (unsafe) light_bodyid: &[i32; "id of light's body"; ffi().nlight],
-        (unsafe) light_targetbodyid: &[i32; "id of targeted body; -1: none"; ffi().nlight],
+        (mut = unsafe) light_bodyid: &[i32; "id of light's body"; ffi().nlight],
+        (mut = unsafe) light_targetbodyid: &[i32; "id of targeted body; -1: none"; ffi().nlight],
         light_type: &[MjtLightType [force]; "spot, directional, etc."; ffi().nlight],
-        (unsafe) light_texid: &[i32; "texture id for image lights"; ffi().nlight],
-        light_castshadow: &[bool [force]; "does light cast shadows"; ffi().nlight],
+        (mut = unsafe) light_texid: &[i32; "texture id for image lights"; ffi().nlight],
+        light_castshadow: &[MjtBool; "does light cast shadows"; ffi().nlight],
         light_bulbradius: &[f32; "light radius for soft shadows"; ffi().nlight],
         light_intensity: &[f32; "intensity, in candela"; ffi().nlight],
         light_range: &[f32; "range of effectiveness"; ffi().nlight],
-        light_active: &[bool [force]; "is light on"; ffi().nlight],
+        light_active: &[MjtBool; "is light on"; ffi().nlight],
         light_pos: &[[MjtNum; 3] [force]; "position rel. to body frame"; ffi().nlight],
         light_dir: &[[MjtNum; 3] [force]; "direction rel. to body frame"; ffi().nlight],
         light_poscom0: &[[MjtNum; 3] [force]; "global position rel. to sub-com in qpos0"; ffi().nlight],
@@ -1099,53 +1100,53 @@ impl MjModel {
         light_specular: &[[f32; 3] [force]; "specular rgb (alpha=1)"; ffi().nlight],
         flex_contype: &[i32; "flex contact type"; ffi().nflex],
         flex_conaffinity: &[i32; "flex contact affinity"; ffi().nflex],
-        (unsafe) flex_condim: &[i32; "contact dimensionality (1, 3, 4, 6)"; ffi().nflex],
+        (mut = unsafe) flex_condim: &[i32; "contact dimensionality (1, 3, 4, 6)"; ffi().nflex],
         flex_priority: &[i32; "flex contact priority"; ffi().nflex],
         flex_solmix: &[MjtNum; "mix coef for solref/imp in contact pair"; ffi().nflex],
         flex_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference: contact"; ffi().nflex],
         flex_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance: contact"; ffi().nflex],
         flex_friction: &[[MjtNum; 3] [force]; "friction for (slide, spin, roll)"; ffi().nflex],
-        flex_margin: &[MjtNum; "detect contact if dist<margin"; ffi().nflex],
-        flex_gap: &[MjtNum; "include in solver if dist<margin-gap"; ffi().nflex],
-        flex_internal: &[bool [force]; "internal flex collision enabled"; ffi().nflex],
+        flex_margin: &[MjtNum; "geometric inflation for contact"; ffi().nflex],
+        flex_gap: &[MjtNum; "additional contact detection buffer"; ffi().nflex],
+        flex_internal: &[MjtBool; "internal flex collision enabled"; ffi().nflex],
         flex_selfcollide: &[MjtFlexSelf [force]; "self collision mode"; ffi().nflex],
         flex_activelayers: &[i32; "number of active element layers, 3D only"; ffi().nflex],
         flex_passive: &[i32; "passive collisions enabled"; ffi().nflex],
-        (unsafe) flex_dim: &[i32; "1: lines, 2: triangles, 3: tetrahedra"; ffi().nflex],
-        (unsafe) flex_matid: &[i32; "material id for rendering"; ffi().nflex],
+        (mut = unsafe) flex_dim: &[i32; "1: lines, 2: triangles, 3: tetrahedra"; ffi().nflex],
+        (mut = unsafe) flex_matid: &[i32; "material id for rendering"; ffi().nflex],
         flex_group: &[i32; "group for visibility"; ffi().nflex],
-        (unsafe) flex_interp: &[i32; "interpolation (0: vertex, 1: nodes)"; ffi().nflex],
-        (unsafe) flex_bandwidth: &[i32; "precomputed solver bandwidth"; ffi().nflex],
-        (unsafe) flex_cellnum: &[[i32; 3] [force]; "finite cell num per dimension"; ffi().nflex],
-        (unsafe) flex_nodeadr: &[i32; "first node address"; ffi().nflex],
-        (unsafe) flex_nodenum: &[i32; "number of nodes"; ffi().nflex],
-        (unsafe) flex_vertadr: &[i32; "first vertex address"; ffi().nflex],
-        (unsafe) flex_vertnum: &[i32; "number of vertices"; ffi().nflex],
-        (unsafe) flex_edgeadr: &[i32; "first edge address"; ffi().nflex],
-        (unsafe) flex_edgenum: &[i32; "number of edges"; ffi().nflex],
-        (unsafe) flex_elemadr: &[i32; "first element address"; ffi().nflex],
-        (unsafe) flex_elemnum: &[i32; "number of elements"; ffi().nflex],
-        (unsafe) flex_elemdataadr: &[i32; "first element vertex id address"; ffi().nflex],
-        (unsafe) flex_stiffnessadr: &[i32; "stiffness matrix address"; ffi().nflex],
-        (unsafe) flex_elemedgeadr: &[i32; "first element edge id address"; ffi().nflex],
-        (unsafe) flex_shellnum: &[i32; "number of shells"; ffi().nflex],
-        (unsafe) flex_shelldataadr: &[i32; "first shell data address"; ffi().nflex],
-        (unsafe) flex_evpairadr: &[i32; "first evpair address"; ffi().nflex],
-        (unsafe) flex_evpairnum: &[i32; "number of evpairs"; ffi().nflex],
-        (unsafe) flex_texcoordadr: &[i32; "address in flex_texcoord; -1: none"; ffi().nflex],
-        (unsafe) flex_nodebodyid: &[i32; "node body ids"; ffi().nflexnode],
-        (unsafe) flex_vertbodyid: &[i32; "vertex body ids"; ffi().nflexvert],
-        (unsafe) flex_vertedgeadr: &[i32; "first edge address"; ffi().nflexvert],
-        (unsafe) flex_vertedgenum: &[i32; "number of edges"; ffi().nflexvert],
-        (unsafe) flex_vertedge: &[[i32; 2] [force]; "edge indices"; ffi().nflexedge],
-        (unsafe) flex_edge: &[[i32; 2] [force]; "edge vertex ids (2 per edge)"; ffi().nflexedge],
-        (unsafe) flex_edgeflap: &[[i32; 2] [force]; "adjacent vertex ids (dim=2 only)"; ffi().nflexedge],
-        (unsafe) flex_elem: &[i32; "element vertex ids (dim+1 per elem)"; ffi().nflexelemdata],
-        (unsafe) flex_elemtexcoord: &[i32; "element texture coordinates (dim+1)"; ffi().nflexelemdata],
-        (unsafe) flex_elemedge: &[i32; "element edge ids"; ffi().nflexelemedge],
+        (mut = unsafe) flex_interp: &[i32; "interpolation (0: vertex, 1: nodes)"; ffi().nflex],
+        (mut = unsafe) flex_cellnum: &[[i32; 3] [force]; "finite cell num per dimension"; ffi().nflex],
+        (mut = unsafe) flex_nodeadr: &[i32; "first node address"; ffi().nflex],
+        (mut = unsafe) flex_nodenum: &[i32; "number of nodes"; ffi().nflex],
+        (mut = unsafe) flex_vertadr: &[i32; "first vertex address"; ffi().nflex],
+        (mut = unsafe) flex_vertnum: &[i32; "number of vertices"; ffi().nflex],
+        (mut = unsafe) flex_edgeadr: &[i32; "first edge address"; ffi().nflex],
+        (mut = unsafe) flex_edgenum: &[i32; "number of edges"; ffi().nflex],
+        (mut = unsafe) flex_elemadr: &[i32; "first element address"; ffi().nflex],
+        (mut = unsafe) flex_elemnum: &[i32; "number of elements"; ffi().nflex],
+        (mut = unsafe) flex_elemdataadr: &[i32; "first element vertex id address"; ffi().nflex],
+        (mut = unsafe) flex_stiffnessadr: &[i32; "stiffness matrix address"; ffi().nflex],
+        (mut = unsafe) flex_elemedgeadr: &[i32; "first element edge id address"; ffi().nflex],
+        (mut = unsafe) flex_bendingadr: &[i32; "first bending data address"; ffi().nflex],
+        (mut = unsafe) flex_shellnum: &[i32; "number of shells"; ffi().nflex],
+        (mut = unsafe) flex_shelldataadr: &[i32; "first shell data address"; ffi().nflex],
+        (mut = unsafe) flex_evpairadr: &[i32; "first evpair address"; ffi().nflex],
+        (mut = unsafe) flex_evpairnum: &[i32; "number of evpairs"; ffi().nflex],
+        (mut = unsafe) flex_texcoordadr: &[i32; "address in flex_texcoord; -1: none"; ffi().nflex],
+        (mut = unsafe) flex_nodebodyid: &[i32; "node body ids"; ffi().nflexnode],
+        (mut = unsafe) flex_vertbodyid: &[i32; "vertex body ids"; ffi().nflexvert],
+        (mut = unsafe) flex_vertedgeadr: &[i32; "first edge address"; ffi().nflexvert],
+        (mut = unsafe) flex_vertedgenum: &[i32; "number of edges"; ffi().nflexvert],
+        (mut = unsafe) flex_vertedge: &[[i32; 2] [force]; "edge indices"; ffi().nflexedge],
+        (mut = unsafe) flex_edge: &[[i32; 2] [force]; "edge vertex ids (2 per edge)"; ffi().nflexedge],
+        (mut = unsafe) flex_edgeflap: &[[i32; 2] [force]; "adjacent vertex ids (dim=2 only)"; ffi().nflexedge],
+        (mut = unsafe) flex_elem: &[i32; "element vertex ids (dim+1 per elem)"; ffi().nflexelemdata],
+        (mut = unsafe) flex_elemtexcoord: &[i32; "element texture coordinates (dim+1)"; ffi().nflexelemdata],
+        (mut = unsafe) flex_elemedge: &[i32; "element edge ids"; ffi().nflexelemedge],
         flex_elemlayer: &[i32; "element distance from surface, 3D only"; ffi().nflexelem],
-        (unsafe) flex_shell: &[i32; "shell fragment vertex ids (dim per frag)"; ffi().nflexshelldata],
-        (unsafe) flex_evpair: &[[i32; 2] [force]; "(element, vertex) collision pairs"; ffi().nflexevpair],
+        (mut = unsafe) flex_shell: &[i32; "shell fragment vertex ids (dim per frag)"; ffi().nflexshelldata],
+        (mut = unsafe) flex_evpair: &[[i32; 2] [force]; "(element, vertex) collision pairs"; ffi().nflexevpair],
         flex_vert: &[[MjtNum; 3] [force]; "vertex positions in local body frames"; ffi().nflexvert],
         flex_vert0: &[[MjtNum; 3] [force]; "vertex positions in qpos0 on [0, 1]^d"; ffi().nflexvert],
         flex_vertmetric: &[[MjtNum; 4] [force]; "inverse of reference shape matrix"; ffi().nflexvert],
@@ -1156,96 +1157,96 @@ impl MjModel {
         flex_radius: &[MjtNum; "radius around primitive element"; ffi().nflex],
         flex_size: &[[MjtNum; 3] [force]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
         flex_stiffness: &[MjtNum; "finite element stiffness matrix"; ffi().nflexstiffness],
-        flex_bending: &[[MjtNum; 17] [force]; "bending stiffness"; ffi().nflexedge],
+        flex_bending: &[MjtNum; "bending stiffness"; ffi().nflexbending],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
         flex_edgeequality: &[i32; "0: none, 1: edges, 2: vertices, 3: strain"; ffi().nflex],
-        flex_rigid: &[bool [force]; "are all vertices in the same body"; ffi().nflex],
-        flexedge_rigid: &[bool [force]; "are both edge vertices in same body"; ffi().nflexedge],
-        flex_centered: &[bool [force]; "are all vertex coordinates (0,0,0)"; ffi().nflex],
-        flex_flatskin: &[bool [force]; "render flex skin with flat shading"; ffi().nflex],
-        (unsafe) flex_bvhadr: &[i32; "address of bvh root; -1: no bvh"; ffi().nflex],
-        (unsafe) flex_bvhnum: &[i32; "number of bounding volumes"; ffi().nflex],
-        (unsafe) flexedge_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; ffi().nflexedge],
-        (unsafe) flexedge_J_rowadr: &[i32; "row start address in colind array"; ffi().nflexedge],
-        (unsafe) flexedge_J_colind: &[i32; "column indices in sparse Jacobian"; ffi().nJfe],
-        (unsafe) flexvert_J_rownnz: &[[i32; 2] [force]; "number of non-zeros in Jacobian row"; ffi().nflexvert],
-        (unsafe) flexvert_J_rowadr: &[[i32; 2] [force]; "row start address in colind array"; ffi().nflexvert],
-        (unsafe) flexvert_J_colind: &[[i32; 2] [force]; "column indices in sparse Jacobian"; ffi().nJfv],
+        flex_rigid: &[MjtBool; "are all vertices in the same body"; ffi().nflex],
+        flexedge_rigid: &[MjtBool; "are both edge vertices in same body"; ffi().nflexedge],
+        flex_centered: &[MjtBool; "are all vertex coordinates (0,0,0)"; ffi().nflex],
+        flex_flatskin: &[MjtBool; "render flex skin with flat shading"; ffi().nflex],
+        (mut = unsafe) flex_bvhadr: &[i32; "address of bvh root; -1: no bvh"; ffi().nflex],
+        (mut = unsafe) flex_bvhnum: &[i32; "number of bounding volumes"; ffi().nflex],
+        (mut = unsafe) flexedge_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; ffi().nflexedge],
+        (mut = unsafe) flexedge_J_rowadr: &[i32; "row start address in colind array"; ffi().nflexedge],
+        (mut = unsafe) flexedge_J_colind: &[i32; "column indices in sparse Jacobian"; ffi().nJfe],
+        (mut = unsafe) flexvert_J_rownnz: &[[i32; 2] [force]; "number of non-zeros in Jacobian row"; ffi().nflexvert],
+        (mut = unsafe) flexvert_J_rowadr: &[[i32; 2] [force]; "row start address in colind array"; ffi().nflexvert],
+        (mut = unsafe) flexvert_J_colind: &[[i32; 2] [force]; "column indices in sparse Jacobian"; ffi().nJfv],
         flex_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().nflex],
         flex_texcoord: &[[f32; 2] [force]; "vertex texture coordinates"; ffi().nflextexcoord],
-        (unsafe) mesh_vertadr: &[i32; "first vertex address"; ffi().nmesh],
-        (unsafe) mesh_vertnum: &[i32; "number of vertices"; ffi().nmesh],
-        (unsafe) mesh_faceadr: &[i32; "first face address"; ffi().nmesh],
-        (unsafe) mesh_facenum: &[i32; "number of faces"; ffi().nmesh],
-        (unsafe) mesh_bvhadr: &[i32; "address of bvh root"; ffi().nmesh],
-        (unsafe) mesh_bvhnum: &[i32; "number of bvh"; ffi().nmesh],
-        (unsafe) mesh_octadr: &[i32; "address of octree root"; ffi().nmesh],
-        (unsafe) mesh_octnum: &[i32; "number of octree nodes"; ffi().nmesh],
-        (unsafe) mesh_normaladr: &[i32; "first normal address"; ffi().nmesh],
-        (unsafe) mesh_normalnum: &[i32; "number of normals"; ffi().nmesh],
-        (unsafe) mesh_texcoordadr: &[i32; "texcoord data address; -1: no texcoord"; ffi().nmesh],
-        (unsafe) mesh_texcoordnum: &[i32; "number of texcoord"; ffi().nmesh],
-        (unsafe) mesh_graphadr: &[i32; "graph data address; -1: no graph"; ffi().nmesh],
+        (mut = unsafe) mesh_vertadr: &[i32; "first vertex address"; ffi().nmesh],
+        (mut = unsafe) mesh_vertnum: &[i32; "number of vertices"; ffi().nmesh],
+        (mut = unsafe) mesh_faceadr: &[i32; "first face address"; ffi().nmesh],
+        (mut = unsafe) mesh_facenum: &[i32; "number of faces"; ffi().nmesh],
+        (mut = unsafe) mesh_bvhadr: &[i32; "address of bvh root"; ffi().nmesh],
+        (mut = unsafe) mesh_bvhnum: &[i32; "number of bvh"; ffi().nmesh],
+        (mut = unsafe) mesh_octadr: &[i32; "address of octree root"; ffi().nmesh],
+        (mut = unsafe) mesh_octnum: &[i32; "number of octree nodes"; ffi().nmesh],
+        (mut = unsafe) mesh_normaladr: &[i32; "first normal address"; ffi().nmesh],
+        (mut = unsafe) mesh_normalnum: &[i32; "number of normals"; ffi().nmesh],
+        (mut = unsafe) mesh_texcoordadr: &[i32; "texcoord data address; -1: no texcoord"; ffi().nmesh],
+        (mut = unsafe) mesh_texcoordnum: &[i32; "number of texcoord"; ffi().nmesh],
+        (mut = unsafe) mesh_graphadr: &[i32; "graph data address; -1: no graph"; ffi().nmesh],
         mesh_vert: &[[f32; 3] [force]; "vertex positions for all meshes"; ffi().nmeshvert],
         mesh_normal: &[[f32; 3] [force]; "normals for all meshes"; ffi().nmeshnormal],
         mesh_texcoord: &[[f32; 2] [force]; "vertex texcoords for all meshes"; ffi().nmeshtexcoord],
-        (unsafe) mesh_face: &[[i32; 3] [force]; "vertex face data"; ffi().nmeshface],
-        (unsafe) mesh_facenormal: &[[i32; 3] [force]; "normal face data"; ffi().nmeshface],
-        (unsafe) mesh_facetexcoord: &[[i32; 3] [force]; "texture face data"; ffi().nmeshface],
-        (unsafe) mesh_graph: &[i32; "convex graph data"; ffi().nmeshgraph],
+        (mut = unsafe) mesh_face: &[[i32; 3] [force]; "vertex face data"; ffi().nmeshface],
+        (mut = unsafe) mesh_facenormal: &[[i32; 3] [force]; "normal face data"; ffi().nmeshface],
+        (mut = unsafe) mesh_facetexcoord: &[[i32; 3] [force]; "texture face data"; ffi().nmeshface],
+        (mut = unsafe) mesh_graph: &[i32; "convex graph data"; ffi().nmeshgraph],
         mesh_scale: &[[MjtNum; 3] [force]; "scaling applied to asset vertices"; ffi().nmesh],
         mesh_pos: &[[MjtNum; 3] [force]; "translation applied to asset vertices"; ffi().nmesh],
         mesh_quat: &[[MjtNum; 4] [force]; "rotation applied to asset vertices"; ffi().nmesh],
-        (unsafe) mesh_pathadr: &[i32; "address of asset path for mesh; -1: none"; ffi().nmesh],
-        (unsafe) mesh_polynum: &[i32; "number of polygons per mesh"; ffi().nmesh],
-        (unsafe) mesh_polyadr: &[i32; "first polygon address per mesh"; ffi().nmesh],
+        (mut = unsafe) mesh_pathadr: &[i32; "address of asset path for mesh; -1: none"; ffi().nmesh],
+        (mut = unsafe) mesh_polynum: &[i32; "number of polygons per mesh"; ffi().nmesh],
+        (mut = unsafe) mesh_polyadr: &[i32; "first polygon address per mesh"; ffi().nmesh],
         mesh_polynormal: &[[MjtNum; 3] [force]; "all polygon normals"; ffi().nmeshpoly],
-        (unsafe) mesh_polyvertadr: &[i32; "polygon vertex start address"; ffi().nmeshpoly],
-        (unsafe) mesh_polyvertnum: &[i32; "number of vertices per polygon"; ffi().nmeshpoly],
-        (unsafe) mesh_polyvert: &[i32; "all polygon vertices"; ffi().nmeshpolyvert],
-        (unsafe) mesh_polymapadr: &[i32; "first polygon address per vertex"; ffi().nmeshvert],
-        (unsafe) mesh_polymapnum: &[i32; "number of polygons per vertex"; ffi().nmeshvert],
-        (unsafe) mesh_polymap: &[i32; "vertex to polygon map"; ffi().nmeshpolymap],
-        (unsafe) skin_matid: &[i32; "skin material id; -1: none"; ffi().nskin],
+        (mut = unsafe) mesh_polyvertadr: &[i32; "polygon vertex start address"; ffi().nmeshpoly],
+        (mut = unsafe) mesh_polyvertnum: &[i32; "number of vertices per polygon"; ffi().nmeshpoly],
+        (mut = unsafe) mesh_polyvert: &[i32; "all polygon vertices"; ffi().nmeshpolyvert],
+        (mut = unsafe) mesh_polymapadr: &[i32; "first polygon address per vertex"; ffi().nmeshvert],
+        (mut = unsafe) mesh_polymapnum: &[i32; "number of polygons per vertex"; ffi().nmeshvert],
+        (mut = unsafe) mesh_polymap: &[i32; "vertex to polygon map"; ffi().nmeshpolymap],
+        (mut = unsafe) skin_matid: &[i32; "skin material id; -1: none"; ffi().nskin],
         skin_group: &[i32; "group for visibility"; ffi().nskin],
         skin_rgba: &[[f32; 4] [force]; "skin rgba"; ffi().nskin],
         skin_inflate: &[f32; "inflate skin in normal direction"; ffi().nskin],
-        (unsafe) skin_vertadr: &[i32; "first vertex address"; ffi().nskin],
-        (unsafe) skin_vertnum: &[i32; "number of vertices"; ffi().nskin],
-        (unsafe) skin_texcoordadr: &[i32; "texcoord data address; -1: no texcoord"; ffi().nskin],
-        (unsafe) skin_faceadr: &[i32; "first face address"; ffi().nskin],
-        (unsafe) skin_facenum: &[i32; "number of faces"; ffi().nskin],
-        (unsafe) skin_boneadr: &[i32; "first bone in skin"; ffi().nskin],
-        (unsafe) skin_bonenum: &[i32; "number of bones in skin"; ffi().nskin],
+        (mut = unsafe) skin_vertadr: &[i32; "first vertex address"; ffi().nskin],
+        (mut = unsafe) skin_vertnum: &[i32; "number of vertices"; ffi().nskin],
+        (mut = unsafe) skin_texcoordadr: &[i32; "texcoord data address; -1: no texcoord"; ffi().nskin],
+        (mut = unsafe) skin_faceadr: &[i32; "first face address"; ffi().nskin],
+        (mut = unsafe) skin_facenum: &[i32; "number of faces"; ffi().nskin],
+        (mut = unsafe) skin_boneadr: &[i32; "first bone in skin"; ffi().nskin],
+        (mut = unsafe) skin_bonenum: &[i32; "number of bones in skin"; ffi().nskin],
         skin_vert: &[[f32; 3] [force]; "vertex positions for all skin meshes"; ffi().nskinvert],
         skin_texcoord: &[[f32; 2] [force]; "vertex texcoords for all skin meshes"; ffi().nskintexvert],
-        (unsafe) skin_face: &[[i32; 3] [force]; "triangle faces for all skin meshes"; ffi().nskinface],
-        (unsafe) skin_bonevertadr: &[i32; "first vertex in each bone"; ffi().nskinbone],
-        (unsafe) skin_bonevertnum: &[i32; "number of vertices in each bone"; ffi().nskinbone],
+        (mut = unsafe) skin_face: &[[i32; 3] [force]; "triangle faces for all skin meshes"; ffi().nskinface],
+        (mut = unsafe) skin_bonevertadr: &[i32; "first vertex in each bone"; ffi().nskinbone],
+        (mut = unsafe) skin_bonevertnum: &[i32; "number of vertices in each bone"; ffi().nskinbone],
         skin_bonebindpos: &[[f32; 3] [force]; "bind pos of each bone"; ffi().nskinbone],
         skin_bonebindquat: &[[f32; 4] [force]; "bind quat of each bone"; ffi().nskinbone],
-        (unsafe) skin_bonebodyid: &[i32; "body id of each bone"; ffi().nskinbone],
-        (unsafe) skin_bonevertid: &[i32; "mesh ids of vertices in each bone"; ffi().nskinbonevert],
+        (mut = unsafe) skin_bonebodyid: &[i32; "body id of each bone"; ffi().nskinbone],
+        (mut = unsafe) skin_bonevertid: &[i32; "mesh ids of vertices in each bone"; ffi().nskinbonevert],
         skin_bonevertweight: &[f32; "weights of vertices in each bone"; ffi().nskinbonevert],
-        (unsafe) skin_pathadr: &[i32; "address of asset path for skin; -1: none"; ffi().nskin],
+        (mut = unsafe) skin_pathadr: &[i32; "address of asset path for skin; -1: none"; ffi().nskin],
         hfield_size: &[[MjtNum; 4] [force]; "(x, y, z_top, z_bottom)"; ffi().nhfield],
-        (unsafe) hfield_nrow: &[i32; "number of rows in grid"; ffi().nhfield],
-        (unsafe) hfield_ncol: &[i32; "number of columns in grid"; ffi().nhfield],
-        (unsafe) hfield_adr: &[i32; "address in hfield_data"; ffi().nhfield],
+        (mut = unsafe) hfield_nrow: &[i32; "number of rows in grid"; ffi().nhfield],
+        (mut = unsafe) hfield_ncol: &[i32; "number of columns in grid"; ffi().nhfield],
+        (mut = unsafe) hfield_adr: &[i32; "address in hfield_data"; ffi().nhfield],
         hfield_data: &[f32; "elevation data"; ffi().nhfielddata],
-        (unsafe) hfield_pathadr: &[i32; "address of hfield asset path; -1: none"; ffi().nhfield],
+        (mut = unsafe) hfield_pathadr: &[i32; "address of hfield asset path; -1: none"; ffi().nhfield],
         tex_type: &[MjtTexture [force]; "texture type"; ffi().ntex],
         tex_colorspace: &[MjtColorSpace [force]; "texture colorspace"; ffi().ntex],
-        (unsafe) tex_height: &[i32; "number of rows in texture image"; ffi().ntex],
-        (unsafe) tex_width: &[i32; "number of columns in texture image"; ffi().ntex],
-        (unsafe) tex_nchannel: &[i32; "number of channels in texture image"; ffi().ntex],
-        (unsafe) tex_adr: &[MjtSize; "start address in tex_data"; ffi().ntex],
+        (mut = unsafe) tex_height: &[i32; "number of rows in texture image"; ffi().ntex],
+        (mut = unsafe) tex_width: &[i32; "number of columns in texture image"; ffi().ntex],
+        (mut = unsafe) tex_nchannel: &[i32; "number of channels in texture image"; ffi().ntex],
+        (mut = unsafe) tex_adr: &[MjtSize; "start address in tex_data"; ffi().ntex],
         tex_data: &[MjtByte; "pixel values"; ffi().ntexdata],
-        (unsafe) tex_pathadr: &[i32; "address of texture asset path; -1: none"; ffi().ntex],
-        (unsafe) mat_texid: &[[i32; MjtTextureRole::mjNTEXROLE as usize] [force]; "indices of textures; -1: none"; ffi().nmat],
-        mat_texuniform: &[bool [force]; "make texture cube uniform"; ffi().nmat],
+        (mut = unsafe) tex_pathadr: &[i32; "address of texture asset path; -1: none"; ffi().ntex],
+        (mut = unsafe) mat_texid: &[[i32; MjtTextureRole::mjNTEXROLE as usize] [force]; "indices of textures; -1: none"; ffi().nmat],
+        mat_texuniform: &[MjtBool; "make texture cube uniform"; ffi().nmat],
         mat_texrepeat: &[[f32; 2] [force]; "texture repetition for 2d mapping"; ffi().nmat],
         mat_emission: &[f32; "emission (x rgb)"; ffi().nmat],
         mat_specular: &[f32; "specular (x white)"; ffi().nmat],
@@ -1254,37 +1255,37 @@ impl MjModel {
         mat_metallic: &[f32; "metallic coef"; ffi().nmat],
         mat_roughness: &[f32; "roughness coef"; ffi().nmat],
         mat_rgba: &[[f32; 4] [force]; "rgba"; ffi().nmat],
-        (unsafe) pair_dim: &[i32; "contact dimensionality"; ffi().npair],
-        (unsafe) pair_geom1: &[i32; "id of geom1"; ffi().npair],
-        (unsafe) pair_geom2: &[i32; "id of geom2"; ffi().npair],
+        (mut = unsafe) pair_dim: &[i32; "contact dimensionality"; ffi().npair],
+        (mut = unsafe) pair_geom1: &[i32; "id of geom1"; ffi().npair],
+        (mut = unsafe) pair_geom2: &[i32; "id of geom2"; ffi().npair],
         pair_signature: &[i32; "body1 << 16 + body2"; ffi().npair],
         pair_solref: &[[MjtNum; mjNREF as usize] [force]; "solver reference: contact normal"; ffi().npair],
         pair_solreffriction: &[[MjtNum; mjNREF as usize] [force]; "solver reference: contact friction"; ffi().npair],
         pair_solimp: &[[MjtNum; mjNIMP as usize] [force]; "solver impedance: contact"; ffi().npair],
-        pair_margin: &[MjtNum; "detect contact if dist<margin"; ffi().npair],
-        pair_gap: &[MjtNum; "include in solver if dist<margin-gap"; ffi().npair],
+        pair_margin: &[MjtNum; "geometric inflation for contact"; ffi().npair],
+        pair_gap: &[MjtNum; "additional contact detection buffer"; ffi().npair],
         pair_friction: &[[MjtNum; 5] [force]; "tangent1, 2, spin, roll1, 2"; ffi().npair],
         exclude_signature: &[i32; "body1 << 16 + body2"; ffi().nexclude],
-        (unsafe) eq_type: &[MjtEq [force]; "constraint type"; ffi().neq],
-        (unsafe) eq_obj1id: &[i32; "id of object 1"; ffi().neq],
-        (unsafe) eq_obj2id: &[i32; "id of object 2"; ffi().neq],
-        (unsafe) eq_objtype: &[MjtObj [force]; "type of both objects"; ffi().neq],
-        eq_active0: &[bool [force]; "initial enable/disable constraint state"; ffi().neq],
+        (mut = unsafe) eq_type: &[MjtEq [force]; "constraint type"; ffi().neq],
+        (mut = unsafe) eq_obj1id: &[i32; "id of object 1"; ffi().neq],
+        (mut = unsafe) eq_obj2id: &[i32; "id of object 2"; ffi().neq],
+        (mut = unsafe) eq_objtype: &[MjtObj [force]; "type of both objects"; ffi().neq],
+        eq_active0: &[MjtBool; "initial enable/disable constraint state"; ffi().neq],
         eq_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference"; ffi().neq],
         eq_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance"; ffi().neq],
         eq_data: &[[MjtNum; mjNEQDATA as usize] [force]; "numeric data for constraint"; ffi().neq],
-        (unsafe) tendon_adr: &[i32; "address of first object in tendon's path"; ffi().ntendon],
-        (unsafe) tendon_num: &[i32; "number of objects in tendon's path"; ffi().ntendon],
-        (unsafe) tendon_matid: &[i32; "material id for rendering"; ffi().ntendon],
-        (unsafe) tendon_actuatorid: &[i32; "actuator contributing damping / armature"; ffi().ntendon],
+        (mut = unsafe) tendon_adr: &[i32; "address of first object in tendon's path"; ffi().ntendon],
+        (mut = unsafe) tendon_num: &[i32; "number of objects in tendon's path"; ffi().ntendon],
+        (mut = unsafe) tendon_matid: &[i32; "material id for rendering"; ffi().ntendon],
+        (mut = unsafe) tendon_actuatorid: &[i32; "actuator contributing damping / armature"; ffi().ntendon],
         tendon_group: &[i32; "group for visibility"; ffi().ntendon],
         tendon_treenum: &[i32; "number of trees along tendon's path"; ffi().ntendon],
-        (unsafe) tendon_treeid: &[[i32; 2] [force]; "first two trees along tendon's path"; ffi().ntendon],
-        (unsafe) ten_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; ffi().ntendon],
-        (unsafe) ten_J_rowadr: &[i32; "row start address in colind array"; ffi().ntendon],
-        (unsafe) ten_J_colind: &[i32; "column indices in sparse Jacobian"; ffi().nJten],
-        tendon_limited: &[bool [force]; "does tendon have length limits"; ffi().ntendon],
-        tendon_actfrclimited: &[bool [force]; "does tendon have actuator force limits"; ffi().ntendon],
+        (mut = unsafe) tendon_treeid: &[[i32; 2] [force]; "first two trees along tendon's path"; ffi().ntendon],
+        (mut = unsafe) ten_J_rownnz: &[i32; "number of non-zeros in Jacobian row"; ffi().ntendon],
+        (mut = unsafe) ten_J_rowadr: &[i32; "row start address in colind array"; ffi().ntendon],
+        (mut = unsafe) ten_J_colind: &[i32; "column indices in sparse Jacobian"; ffi().nJten],
+        tendon_limited: &[MjtBool; "does tendon have length limits"; ffi().ntendon],
+        tendon_actfrclimited: &[MjtBool; "does tendon have actuator force limits"; ffi().ntendon],
         tendon_width: &[MjtNum; "width for rendering"; ffi().ntendon],
         tendon_solref_lim: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference: limit"; ffi().ntendon],
         tendon_solimp_lim: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance: limit"; ffi().ntendon],
@@ -1303,27 +1304,27 @@ impl MjModel {
         tendon_length0: &[MjtNum; "tendon length in qpos0"; ffi().ntendon],
         tendon_invweight0: &[MjtNum; "inv. weight in qpos0"; ffi().ntendon],
         tendon_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().ntendon],
-        (unsafe) wrap_type: &[MjtWrap [force]; "wrap object type"; ffi().nwrap],
-        (unsafe) wrap_objid: &[i32; "object id: geom, site, joint"; ffi().nwrap],
-        (unsafe) wrap_prm: &[MjtNum; "divisor, joint coef, or site id"; ffi().nwrap],
-        (unsafe) actuator_trntype: &[MjtTrn [force]; "transmission type"; ffi().nu],
-        (unsafe) actuator_dyntype: &[MjtDyn [force]; "dynamics type"; ffi().nu],
+        (mut = unsafe) wrap_type: &[MjtWrap [force]; "wrap object type"; ffi().nwrap],
+        (mut = unsafe) wrap_objid: &[i32; "object id: geom, site, joint"; ffi().nwrap],
+        (mut = unsafe) wrap_prm: &[MjtNum; "divisor, joint coef, or site id"; ffi().nwrap],
+        (mut = unsafe) actuator_trntype: &[MjtTrn [force]; "transmission type"; ffi().nu],
+        (mut = unsafe) actuator_dyntype: &[MjtDyn [force]; "dynamics type"; ffi().nu],
         actuator_gaintype: &[MjtGain [force]; "gain type"; ffi().nu],
         actuator_biastype: &[MjtBias [force]; "bias type"; ffi().nu],
-        (unsafe) actuator_trnid: &[[i32; 2] [force]; "transmission id: joint, tendon, site"; ffi().nu],
-        (unsafe) actuator_actadr: &[i32; "first activation address; -1: stateless"; ffi().nu],
-        (unsafe) actuator_actnum: &[i32; "number of activation variables"; ffi().nu],
+        (mut = unsafe) actuator_trnid: &[[i32; 2] [force]; "transmission id: joint, tendon, site"; ffi().nu],
+        (mut = unsafe) actuator_actadr: &[i32; "first activation address; -1: stateless"; ffi().nu],
+        (mut = unsafe) actuator_actnum: &[i32; "number of activation variables"; ffi().nu],
         actuator_group: &[i32; "group for visibility"; ffi().nu],
-        (unsafe) actuator_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nu],
-        (unsafe) actuator_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nu],
+        (mut = unsafe) actuator_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nu],
+        (mut = unsafe) actuator_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nu],
         actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nu],
-        actuator_ctrllimited: &[bool [force]; "is control limited"; ffi().nu],
-        actuator_forcelimited: &[bool [force]; "is force limited"; ffi().nu],
-        actuator_actlimited: &[bool [force]; "is activation limited"; ffi().nu],
+        actuator_ctrllimited: &[MjtBool; "is control limited"; ffi().nu],
+        actuator_forcelimited: &[MjtBool; "is force limited"; ffi().nu],
+        actuator_actlimited: &[MjtBool; "is activation limited"; ffi().nu],
         actuator_dynprm: &[[MjtNum; mjNDYN as usize] [force]; "dynamics parameters"; ffi().nu],
         actuator_gainprm: &[[MjtNum; mjNGAIN as usize] [force]; "gain parameters"; ffi().nu],
         actuator_biasprm: &[[MjtNum; mjNBIAS as usize] [force]; "bias parameters"; ffi().nu],
-        actuator_actearly: &[bool [force]; "step activation before force"; ffi().nu],
+        actuator_actearly: &[MjtBool; "step activation before force"; ffi().nu],
         actuator_ctrlrange: &[[MjtNum; 2] [force]; "range of controls"; ffi().nu],
         actuator_forcerange: &[[MjtNum; 2] [force]; "range of forces"; ffi().nu],
         actuator_actrange: &[[MjtNum; 2] [force]; "range of activations"; ffi().nu],
@@ -1335,80 +1336,80 @@ impl MjModel {
         actuator_acc0: &[MjtNum; "acceleration from unit force in qpos0"; ffi().nu],
         actuator_length0: &[MjtNum; "actuator length in qpos0"; ffi().nu],
         actuator_lengthrange: &[[MjtNum; 2] [force]; "feasible actuator length range"; ffi().nu],
-        (unsafe) actuator_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nu],
-        (unsafe) sensor_type: &[MjtSensor [force]; "sensor type"; ffi().nsensor],
+        (mut = unsafe) actuator_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nu],
+        (mut = unsafe) sensor_type: &[MjtSensor [force]; "sensor type"; ffi().nsensor],
         sensor_datatype: &[MjtDataType [force]; "numeric data type"; ffi().nsensor],
         sensor_needstage: &[MjtStage [force]; "required compute stage"; ffi().nsensor],
-        (unsafe) sensor_objtype: &[MjtObj [force]; "type of sensorized object"; ffi().nsensor],
-        (unsafe) sensor_objid: &[i32; "id of sensorized object"; ffi().nsensor],
-        (unsafe) sensor_reftype: &[MjtObj [force]; "type of reference frame"; ffi().nsensor],
-        (unsafe) sensor_refid: &[i32; "id of reference frame; -1: global frame"; ffi().nsensor],
+        (mut = unsafe) sensor_objtype: &[MjtObj [force]; "type of sensorized object"; ffi().nsensor],
+        (mut = unsafe) sensor_objid: &[i32; "id of sensorized object"; ffi().nsensor],
+        (mut = unsafe) sensor_reftype: &[MjtObj [force]; "type of reference frame"; ffi().nsensor],
+        (mut = unsafe) sensor_refid: &[i32; "id of reference frame; -1: global frame"; ffi().nsensor],
         sensor_intprm: &[[i32; mjNSENS as usize] [force]; "sensor parameters"; ffi().nsensor],
-        (unsafe) sensor_dim: &[i32; "number of scalar outputs"; ffi().nsensor],
-        (unsafe) sensor_adr: &[i32; "address in sensor array"; ffi().nsensor],
+        (mut = unsafe) sensor_dim: &[i32; "number of scalar outputs"; ffi().nsensor],
+        (mut = unsafe) sensor_adr: &[i32; "address in sensor array"; ffi().nsensor],
         sensor_cutoff: &[MjtNum; "cutoff for real and positive; 0: ignore"; ffi().nsensor],
         sensor_noise: &[MjtNum; "noise standard deviation"; ffi().nsensor],
-        (unsafe) sensor_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nsensor],
-        (unsafe) sensor_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nsensor],
+        (mut = unsafe) sensor_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nsensor],
+        (mut = unsafe) sensor_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nsensor],
         sensor_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nsensor],
         sensor_interval: &[[MjtNum; 2] [force]; "interval: [period, phase] in seconds"; ffi().nsensor],
-        (unsafe) sensor_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nsensor],
-        (unsafe) plugin: &[i32; "globally registered plugin slot number"; ffi().nplugin],
-        (unsafe) plugin_stateadr: &[i32; "address in the plugin state array"; ffi().nplugin],
-        (unsafe) plugin_statenum: &[i32; "number of states in the plugin instance"; ffi().nplugin],
-        (unsafe) plugin_attr: &[c_char; "config attributes of plugin instances"; ffi().npluginattr],
-        (unsafe) plugin_attradr: &[i32; "address to each instance's config attrib"; ffi().nplugin],
-        (unsafe) numeric_adr: &[i32; "address of field in numeric_data"; ffi().nnumeric],
-        (unsafe) numeric_size: &[i32; "size of numeric field"; ffi().nnumeric],
+        (mut = unsafe) sensor_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nsensor],
+        (mut = unsafe) plugin: &[i32; "globally registered plugin slot number"; ffi().nplugin],
+        (mut = unsafe) plugin_stateadr: &[i32; "address in the plugin state array"; ffi().nplugin],
+        (mut = unsafe) plugin_statenum: &[i32; "number of states in the plugin instance"; ffi().nplugin],
+        (mut = unsafe) plugin_attr: &[c_char; "config attributes of plugin instances"; ffi().npluginattr],
+        (mut = unsafe) plugin_attradr: &[i32; "address to each instance's config attrib"; ffi().nplugin],
+        (mut = unsafe) numeric_adr: &[i32; "address of field in numeric_data"; ffi().nnumeric],
+        (mut = unsafe) numeric_size: &[i32; "size of numeric field"; ffi().nnumeric],
         numeric_data: &[MjtNum; "array of all numeric fields"; ffi().nnumericdata],
-        (unsafe) text_adr: &[i32; "address of text in text_data"; ffi().ntext],
-        (unsafe) text_size: &[i32; "size of text field (strlen+1)"; ffi().ntext],
-        (unsafe) text_data: &[c_char; "array of all text fields (0-terminated)"; ffi().ntextdata],
-        (unsafe) tuple_adr: &[i32; "address of text in text_data"; ffi().ntuple],
-        (unsafe) tuple_size: &[i32; "number of objects in tuple"; ffi().ntuple],
+        (mut = unsafe) text_adr: &[i32; "address of text in text_data"; ffi().ntext],
+        (mut = unsafe) text_size: &[i32; "size of text field (strlen+1)"; ffi().ntext],
+        (mut = unsafe) text_data: &[c_char; "array of all text fields (0-terminated)"; ffi().ntextdata],
+        (mut = unsafe) tuple_adr: &[i32; "address of text in text_data"; ffi().ntuple],
+        (mut = unsafe) tuple_size: &[i32; "number of objects in tuple"; ffi().ntuple],
         tuple_objtype: &[MjtObj [force]; "array of object types in all tuples"; ffi().ntupledata],
-        (unsafe) tuple_objid: &[i32; "array of object ids in all tuples"; ffi().ntupledata],
+        (mut = unsafe) tuple_objid: &[i32; "array of object ids in all tuples"; ffi().ntupledata],
         tuple_objprm: &[MjtNum; "array of object params in all tuples"; ffi().ntupledata],
         key_time: &[MjtNum; "key time"; ffi().nkey],
-        (unsafe) name_bodyadr: &[i32; "body name pointers"; ffi().nbody],
-        (unsafe) name_jntadr: &[i32; "joint name pointers"; ffi().njnt],
-        (unsafe) name_geomadr: &[i32; "geom name pointers"; ffi().ngeom],
-        (unsafe) name_siteadr: &[i32; "site name pointers"; ffi().nsite],
-        (unsafe) name_camadr: &[i32; "camera name pointers"; ffi().ncam],
-        (unsafe) name_lightadr: &[i32; "light name pointers"; ffi().nlight],
-        (unsafe) name_flexadr: &[i32; "flex name pointers"; ffi().nflex],
-        (unsafe) name_meshadr: &[i32; "mesh name pointers"; ffi().nmesh],
-        (unsafe) name_skinadr: &[i32; "skin name pointers"; ffi().nskin],
-        (unsafe) name_hfieldadr: &[i32; "hfield name pointers"; ffi().nhfield],
-        (unsafe) name_texadr: &[i32; "texture name pointers"; ffi().ntex],
-        (unsafe) name_matadr: &[i32; "material name pointers"; ffi().nmat],
-        (unsafe) name_pairadr: &[i32; "geom pair name pointers"; ffi().npair],
-        (unsafe) name_excludeadr: &[i32; "exclude name pointers"; ffi().nexclude],
-        (unsafe) name_eqadr: &[i32; "equality constraint name pointers"; ffi().neq],
-        (unsafe) name_tendonadr: &[i32; "tendon name pointers"; ffi().ntendon],
-        (unsafe) name_actuatoradr: &[i32; "actuator name pointers"; ffi().nu],
-        (unsafe) name_sensoradr: &[i32; "sensor name pointers"; ffi().nsensor],
-        (unsafe) name_numericadr: &[i32; "numeric name pointers"; ffi().nnumeric],
-        (unsafe) name_textadr: &[i32; "text name pointers"; ffi().ntext],
-        (unsafe) name_tupleadr: &[i32; "tuple name pointers"; ffi().ntuple],
-        (unsafe) name_keyadr: &[i32; "keyframe name pointers"; ffi().nkey],
-        (unsafe) name_pluginadr: &[i32; "plugin instance name pointers"; ffi().nplugin],
-        (unsafe) names: &[c_char; "names of all objects, 0-terminated"; ffi().nnames],
-        (unsafe) names_map: &[i32; "internal hash map of names"; ffi().nnames_map],
-        (unsafe) paths: &[c_char; "paths to assets, 0-terminated"; ffi().npaths],
-        (unsafe) B_rownnz: &[i32; "body-dof: non-zeros in each row"; ffi().nbody],
-        (unsafe) B_rowadr: &[i32; "body-dof: row addresses"; ffi().nbody],
-        (unsafe) B_colind: &[i32; "body-dof: column indices"; ffi().nB],
-        (unsafe) M_rownnz: &[i32; "reduced inertia: non-zeros in each row"; ffi().nv],
-        (unsafe) M_rowadr: &[i32; "reduced inertia: row addresses"; ffi().nv],
-        (unsafe) M_colind: &[i32; "reduced inertia: column indices"; ffi().nC],
-        (unsafe) mapM2M: &[i32; "index mapping from qM to M"; ffi().nC],
-        (unsafe) D_rownnz: &[i32; "non-zeros in each row"; ffi().nv],
-        (unsafe) D_rowadr: &[i32; "full inertia: row addresses"; ffi().nv],
-        (unsafe) D_diag: &[i32; "full inertia: index of diagonal element"; ffi().nv],
-        (unsafe) D_colind: &[i32; "full inertia: column indices"; ffi().nD],
-        (unsafe) mapM2D: &[i32; "index mapping from M to D"; ffi().nD],
-        (unsafe) mapD2M: &[i32; "index mapping from D to M"; ffi().nC]
+        (mut = unsafe) name_bodyadr: &[i32; "body name pointers"; ffi().nbody],
+        (mut = unsafe) name_jntadr: &[i32; "joint name pointers"; ffi().njnt],
+        (mut = unsafe) name_geomadr: &[i32; "geom name pointers"; ffi().ngeom],
+        (mut = unsafe) name_siteadr: &[i32; "site name pointers"; ffi().nsite],
+        (mut = unsafe) name_camadr: &[i32; "camera name pointers"; ffi().ncam],
+        (mut = unsafe) name_lightadr: &[i32; "light name pointers"; ffi().nlight],
+        (mut = unsafe) name_flexadr: &[i32; "flex name pointers"; ffi().nflex],
+        (mut = unsafe) name_meshadr: &[i32; "mesh name pointers"; ffi().nmesh],
+        (mut = unsafe) name_skinadr: &[i32; "skin name pointers"; ffi().nskin],
+        (mut = unsafe) name_hfieldadr: &[i32; "hfield name pointers"; ffi().nhfield],
+        (mut = unsafe) name_texadr: &[i32; "texture name pointers"; ffi().ntex],
+        (mut = unsafe) name_matadr: &[i32; "material name pointers"; ffi().nmat],
+        (mut = unsafe) name_pairadr: &[i32; "geom pair name pointers"; ffi().npair],
+        (mut = unsafe) name_excludeadr: &[i32; "exclude name pointers"; ffi().nexclude],
+        (mut = unsafe) name_eqadr: &[i32; "equality constraint name pointers"; ffi().neq],
+        (mut = unsafe) name_tendonadr: &[i32; "tendon name pointers"; ffi().ntendon],
+        (mut = unsafe) name_actuatoradr: &[i32; "actuator name pointers"; ffi().nu],
+        (mut = unsafe) name_sensoradr: &[i32; "sensor name pointers"; ffi().nsensor],
+        (mut = unsafe) name_numericadr: &[i32; "numeric name pointers"; ffi().nnumeric],
+        (mut = unsafe) name_textadr: &[i32; "text name pointers"; ffi().ntext],
+        (mut = unsafe) name_tupleadr: &[i32; "tuple name pointers"; ffi().ntuple],
+        (mut = unsafe) name_keyadr: &[i32; "keyframe name pointers"; ffi().nkey],
+        (mut = unsafe) name_pluginadr: &[i32; "plugin instance name pointers"; ffi().nplugin],
+        (mut = unsafe) names: &[c_char; "names of all objects, 0-terminated"; ffi().nnames],
+        (mut = unsafe) names_map: &[i32; "internal hash map of names"; ffi().nnames_map],
+        (mut = unsafe) paths: &[c_char; "paths to assets, 0-terminated"; ffi().npaths],
+        (mut = unsafe) B_rownnz: &[i32; "body-dof: non-zeros in each row"; ffi().nbody],
+        (mut = unsafe) B_rowadr: &[i32; "body-dof: row addresses"; ffi().nbody],
+        (mut = unsafe) B_colind: &[i32; "body-dof: column indices"; ffi().nB],
+        (mut = unsafe) M_rownnz: &[i32; "reduced inertia: non-zeros in each row"; ffi().nv],
+        (mut = unsafe) M_rowadr: &[i32; "reduced inertia: row addresses"; ffi().nv],
+        (mut = unsafe) M_colind: &[i32; "reduced inertia: column indices"; ffi().nC],
+        (mut = unsafe) mapM2M: &[i32; "index mapping from qM to M"; ffi().nC],
+        (mut = unsafe) D_rownnz: &[i32; "non-zeros in each row"; ffi().nv],
+        (mut = unsafe) D_rowadr: &[i32; "full inertia: row addresses"; ffi().nv],
+        (mut = unsafe) D_diag: &[i32; "full inertia: index of diagonal element"; ffi().nv],
+        (mut = unsafe) D_colind: &[i32; "full inertia: column indices"; ffi().nD],
+        (mut = unsafe) mapM2D: &[i32; "index mapping from M to D"; ffi().nD],
+        (mut = unsafe) mapD2M: &[i32; "index mapping from D to M"; ffi().nC]
     }
 
     array_slice_dyn! {
@@ -1452,10 +1453,10 @@ impl Drop for MjModel {
 
 info_with_view!(Model, actuator,
 	[[actuator_] group: i32,
-	 [actuator_] delay: MjtNum, [actuator_] ctrllimited: bool [force],
-	 [actuator_] forcelimited: bool [force], [actuator_] actlimited: bool [force],
+	 [actuator_] delay: MjtNum, [actuator_] ctrllimited: MjtBool,
+	 [actuator_] forcelimited: MjtBool, [actuator_] actlimited: MjtBool,
 	 [actuator_] dynprm: MjtNum, [actuator_] gainprm: MjtNum,
-	 [actuator_] biasprm: MjtNum, [actuator_] actearly: bool [force],
+	 [actuator_] biasprm: MjtNum, [actuator_] actearly: MjtBool,
 	 [actuator_] ctrlrange: MjtNum, [actuator_] forcerange: MjtNum,
 	 [actuator_] actrange: MjtNum, [actuator_] gear: MjtNum,
 	 [actuator_] damping: MjtNum, [actuator_] dampingpoly: MjtNum,
@@ -1511,7 +1512,7 @@ info_with_view!(Model, camera,
 	[]);
 
 info_with_view!(Model, equality,
-	[[eq_] active0: bool [force],
+	[[eq_] active0: MjtBool,
 	 [eq_] solref: MjtNum,
 	 [eq_] solimp: MjtNum,
 	 [eq_] data: MjtNum],
@@ -1554,7 +1555,7 @@ info_with_view!(Model, hfield,
 info_with_view!(Model, joint,
 	[qpos0: MjtNum, qpos_spring: MjtNum,
      [jnt_] group: i32,
-     [jnt_] limited: bool [force], [jnt_] actfrclimited: bool [force], [jnt_] actgravcomp: bool [force],
+     [jnt_] limited: MjtBool, [jnt_] actfrclimited: MjtBool, [jnt_] actgravcomp: MjtBool,
 	 [jnt_] solref: MjtNum, [jnt_] solimp: MjtNum,
 	 [jnt_] pos: MjtNum,
      [jnt_] axis: MjtNum, [jnt_] stiffness: MjtNum,
@@ -1578,11 +1579,11 @@ info_with_view!(Model, joint,
 info_with_view!(Model, light,
 	[[light_] mode: MjtCamLight [force],
 	 [light_] r#type: MjtLightType [force],
-	 [light_] castshadow: bool [force],
+	 [light_] castshadow: MjtBool,
 	 [light_] bulbradius: f32,
 	 [light_] intensity: f32,
 	 [light_] range: f32,
-	 [light_] active: bool [force],
+	 [light_] active: MjtBool,
 	 [light_] pos: MjtNum,
 	 [light_] dir: MjtNum,
 	 [light_] poscom0: MjtNum,
@@ -1600,7 +1601,7 @@ info_with_view!(Model, light,
 	[]);
 
 info_with_view!(Model, material,
-	[[mat_] texuniform: bool [force],
+	[[mat_] texuniform: MjtBool,
 	 [mat_] texrepeat: f32,
 	 [mat_] emission: f32,
 	 [mat_] specular: f32,
@@ -1704,7 +1705,7 @@ info_with_view!(Model, skin,
 
 info_with_view!(Model, tendon,
 	[[tendon_] group: i32,
-	 [tendon_] limited: bool [force], [tendon_] actfrclimited: bool [force], [tendon_] width: MjtNum,
+	 [tendon_] limited: MjtBool, [tendon_] actfrclimited: MjtBool, [tendon_] width: MjtNum,
 	 [tendon_] solref_lim: MjtNum, [tendon_] solimp_lim: MjtNum,
 	 [tendon_] solref_fri: MjtNum, [tendon_] solimp_fri: MjtNum,
 	 [tendon_] range: MjtNum, [tendon_] actfrcrange: MjtNum, [tendon_] margin: MjtNum,
@@ -1752,6 +1753,8 @@ info_with_view!(Model, key,
 	[]);
 
 #[cfg(test)]
+// The loop indices are needed for FFI pointer arithmetic (e.g. `ptr.add(i * stride + j)`).
+#[allow(clippy::needless_range_loop)]
 mod tests {
     use crate::assert_relative_eq;
 
@@ -1970,8 +1973,8 @@ mod tests {
         /* Test read */
         assert_eq!(view.biastype[0], MjtBias::mjBIAS_AFFINE);
         assert_eq!(&view.ctrlrange[..], [0.0, 1.0]);
-        assert_eq!(view.ctrllimited[0], true);
-        assert_eq!(view.forcelimited[0], false);
+        assert!(view.ctrllimited[0]);
+        assert!(!view.forcelimited[0]);
         assert_eq!(view.trntype[0], MjtTrn::mjTRN_JOINT);
         assert_eq!(view.gaintype[0], MjtGain::mjGAIN_FIXED);
 
@@ -2017,7 +2020,7 @@ mod tests {
         
         /* Test read */
         assert_eq!(&view.range[..], [0.0, 1.0]);
-        assert_eq!(view.limited[0], true);
+        assert!(view.limited[0]);
         assert_eq!(view.width[0], 0.005);
 
         /* Test alignment with the array slice */
@@ -2040,7 +2043,7 @@ mod tests {
         
         /* Test read */
         assert_eq!(view.r#type[0], MjtJoint::mjJNT_SLIDE);
-        assert_eq!(view.limited[0], true);
+        assert!(view.limited[0]);
         assert_eq!(&view.axis[..], [0.0, 1.0 , 0.0]);
         assert!(!view.dof_bodyid.is_empty());
         assert!(!view.dof_treeid.is_empty());
@@ -2089,7 +2092,6 @@ mod tests {
         let view = model_info.view(&model);
         
         /* Test read */
-        model.body_pos()[model_info.id];
         assert_eq!(view.pos[0], 0.5);
 
         /* Test alignment with slice */
@@ -2460,7 +2462,7 @@ mod tests {
         assert_eq!(view_eq.objtype[0], MjtObj::mjOBJ_BODY);
 
         // Check active
-        assert_eq!(view_eq.active0[0], true);
+        assert!(view_eq.active0[0]);
 
         // Check anchor position stored in eq_data
         let anchor = &view_eq.data[0..3];
@@ -2640,11 +2642,11 @@ mod tests {
 
         // extract zero-sized spec -> empty slice
         let dst = model.extract_state(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, 0u32);
-        assert_eq!(dst.len(), 0);
+        assert!(dst.is_empty());
 
         // extract_into with zero-sized spec -> writes 0 elements
-        let mut buf: &mut [f64] = &mut [];
-        let written = model.extract_state_into(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, &mut buf, 0u32);
+        let buf: &mut [f64] = &mut [];
+        let written = model.extract_state_into(&state_full, MjtState::mjSTATE_FULLPHYSICS as u32, buf, 0u32);
         assert_eq!(written, 0);
     }
 
@@ -2730,19 +2732,17 @@ mod tests {
 
         // Cross-validate with raw FFI
         for i in 0..njnt {
-            let raw_u8 = unsafe { *model.ffi().jnt_limited.add(i) };
-            assert!(raw_u8 == 0 || raw_u8 == 1,
-                "raw jnt_limited[{}]={} must be 0 or 1", i, raw_u8);
-            assert_eq!(jnt_limited[i], raw_u8 != 0,
-                "jnt_limited[{}] mismatch: bool={}, raw={}", i, jnt_limited[i], raw_u8);
+            let raw_bool = unsafe { *model.ffi().jnt_limited.add(i) };
+            assert_eq!(jnt_limited[i], raw_bool,
+                "jnt_limited[{}] mismatch: bool={}, raw={}", i, jnt_limited[i], raw_bool);
         }
 
         // "rod" joint has range="0 1" -> limited=true; "ball" is free -> limited=false
         let rod_jnt = model.joint("rod").unwrap();
-        assert_eq!(jnt_limited[rod_jnt.id], true);
+        assert!(jnt_limited[rod_jnt.id]);
 
         let ball_jnt = model.joint("ball").unwrap();
-        assert_eq!(jnt_limited[ball_jnt.id], false);
+        assert!(!jnt_limited[ball_jnt.id]);
     }
 
     /// Verifies [force]-cast enum for geom_type (*mut i32 -> *mut MjtGeom).
@@ -2952,14 +2952,14 @@ mod tests {
             assert_eq!(eq_objtype[i], expected_objtype);
 
             let raw_active = unsafe { *model.ffi().eq_active0.add(i) };
-            assert_eq!(eq_active0[i], raw_active != 0);
+            assert_eq!(eq_active0[i], raw_active);
         }
 
         // Verify known equality: "eq1" is a connect constraint
         let eq1 = model.equality("eq1").unwrap();
         assert_eq!(eq_type[eq1.id], MjtEq::mjEQ_CONNECT);
         assert_eq!(eq_objtype[eq1.id], MjtObj::mjOBJ_BODY);
-        assert_eq!(eq_active0[eq1.id], true);
+        assert!(eq_active0[eq1.id]);
     }
 
     /// Verifies [force]-cast for sensor arrays: sensor_type (MjtSensor), sensor_datatype (MjtDataType),
@@ -3043,20 +3043,20 @@ mod tests {
 
             // Bool cross-validation
             let raw_ctrllimited = unsafe { *model.ffi().actuator_ctrllimited.add(i) };
-            assert_eq!(ctrllimited[i], raw_ctrllimited != 0);
+            assert_eq!(ctrllimited[i], raw_ctrllimited);
             let raw_forcelimited = unsafe { *model.ffi().actuator_forcelimited.add(i) };
-            assert_eq!(forcelimited[i], raw_forcelimited != 0);
+            assert_eq!(forcelimited[i], raw_forcelimited);
             let raw_actlimited = unsafe { *model.ffi().actuator_actlimited.add(i) };
-            assert_eq!(actlimited[i], raw_actlimited != 0);
+            assert_eq!(actlimited[i], raw_actlimited);
             let raw_actearly = unsafe { *model.ffi().actuator_actearly.add(i) };
-            assert_eq!(actearly[i], raw_actearly != 0);
+            assert_eq!(actearly[i], raw_actearly);
         }
 
         // Verify known actuator: "slider" has biastype=affine, gaintype=fixed, ctrllimited=true
         let slider = model.actuator("slider").unwrap();
         assert_eq!(biastype[slider.id], MjtBias::mjBIAS_AFFINE);
         assert_eq!(gaintype[slider.id], MjtGain::mjGAIN_FIXED);
-        assert_eq!(ctrllimited[slider.id], true);
+        assert!(ctrllimited[slider.id]);
     }
 
     /// Verifies [force]-cast for actuator parameter arrays: dynprm, gainprm, biasprm, ctrlrange,
@@ -3122,7 +3122,7 @@ mod tests {
 
         for i in 0..ntendon {
             let raw_limited = unsafe { *model.ffi().tendon_limited.add(i) };
-            assert_eq!(tendon_limited[i], raw_limited != 0);
+            assert_eq!(tendon_limited[i], raw_limited);
 
             for j in 0..2 {
                 assert_eq!(tendon_range[i][j], unsafe { *model.ffi().tendon_range.add(i * 2 + j) });
@@ -3137,7 +3137,7 @@ mod tests {
 
         // Verify known tendon: "tendon2" limited=true, range=(0,1), rgba=(0, 0.1, 1, 1)
         let ten2 = model.tendon("tendon2").unwrap();
-        assert_eq!(tendon_limited[ten2.id], true);
+        assert!(tendon_limited[ten2.id]);
         assert_eq!(tendon_range[ten2.id], [0.0, 1.0]);
         assert_relative_eq!(tendon_rgba[ten2.id][0], 0.0f32, epsilon = 1e-6);
         assert_relative_eq!(tendon_rgba[ten2.id][1], 0.1f32, epsilon = 1e-6);
@@ -3196,7 +3196,7 @@ mod tests {
 
         for i in 0..nmat {
             let raw_uniform = unsafe { *model.ffi().mat_texuniform.add(i) };
-            assert_eq!(mat_texuniform[i], raw_uniform != 0);
+            assert_eq!(mat_texuniform[i], raw_uniform);
 
             for j in 0..2 {
                 assert_eq!(mat_texrepeat[i][j], unsafe { *model.ffi().mat_texrepeat.add(i * 2 + j) });
@@ -3208,7 +3208,7 @@ mod tests {
 
         // "also_wood_material" has texuniform=false, texrepeat=[2,2], rgba=[0.8,0.5,0.3,1.0]
         let mat = model.material("also_wood_material").unwrap();
-        assert_eq!(mat_texuniform[mat.id], false);
+        assert!(!mat_texuniform[mat.id]);
         assert_eq!(mat_texrepeat[mat.id], [2.0f32, 2.0]);
         assert_eq!(mat_rgba[mat.id], [0.8f32, 0.5, 0.3, 1.0]);
     }
@@ -3246,9 +3246,9 @@ mod tests {
             assert_eq!(light_type[i], unsafe { crate::util::force_cast::<_, MjtLightType>(*model.ffi().light_type.add(i)) });
 
             let raw_shadow = unsafe { *model.ffi().light_castshadow.add(i) };
-            assert_eq!(light_castshadow[i], raw_shadow != 0);
+            assert_eq!(light_castshadow[i], raw_shadow);
             let raw_active = unsafe { *model.ffi().light_active.add(i) };
-            assert_eq!(light_active[i], raw_active != 0);
+            assert_eq!(light_active[i], raw_active);
 
             for j in 0..3 {
                 assert_eq!(light_attenuation[i][j], unsafe { *model.ffi().light_attenuation.add(i * 3 + j) });
@@ -3264,7 +3264,7 @@ mod tests {
         let l2 = model.light("lamp_light2").unwrap();
         assert_eq!(light_mode[l2.id], MjtCamLight::mjCAMLIGHT_FIXED);
         assert_eq!(light_type[l2.id], MjtLightType::mjLIGHT_SPOT);
-        assert_eq!(light_castshadow[l2.id], true);
+        assert!(light_castshadow[l2.id]);
     }
 
     /// Verifies [force]-cast for the site arrays: site_type (MjtGeom), site_sameframe (MjtSameFrame),
@@ -3360,7 +3360,7 @@ mod tests {
         let rod_info = model.joint("rod").unwrap();
         let rod_view = rod_info.view(&model);
         assert_eq!(rod_view.r#type[0], MjtJoint::mjJNT_SLIDE);
-        assert_eq!(rod_view.limited[0], true);
+        assert!(rod_view.limited[0]);
 
         // Geom type via view
         let ball2_info = model.geom("ball2").unwrap();
@@ -3379,7 +3379,7 @@ mod tests {
         assert_eq!(slider_view.trntype[0], MjtTrn::mjTRN_JOINT);
         assert_eq!(slider_view.biastype[0], MjtBias::mjBIAS_AFFINE);
         assert_eq!(slider_view.gaintype[0], MjtGain::mjGAIN_FIXED);
-        assert_eq!(slider_view.ctrllimited[0], true);
+        assert!(slider_view.ctrllimited[0]);
 
         // Mutable enum roundtrip via view
         let mut slider_view_mut = slider_info.view_mut(&mut model);
@@ -3746,15 +3746,15 @@ mod tests {
         assert_eq!(view2.scale[2], 4.0);
     }
 
-    /// Verifies that `flex_bandwidth`, `flex_cellnum`, and `flex_stiffnessadr`
+    /// Verifies that `flex_cellnum`, `flex_stiffnessadr`, and `flex_bendingadr`
     /// return empty slices when the model contains no flex bodies.
     #[test]
     fn test_flex_array_slices_empty_for_non_flex_model() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
         assert_eq!(model.ffi().nflex, 0);
-        assert_eq!(model.flex_bandwidth().len(), 0);
         assert_eq!(model.flex_cellnum().len(), 0);
         assert_eq!(model.flex_stiffnessadr().len(), 0);
+        assert_eq!(model.flex_bendingadr().len(), 0);
     }
 
     /// Tests the wrapper of `mj_maxContact` ([`MjModel::max_contacts`]).

@@ -4,7 +4,7 @@
 Installation
 =============================
 
-.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.8.0
+.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.9.0
 
 
 MuJoCo-rs
@@ -29,6 +29,24 @@ MuJoCo-rs can be added to your project like so:
   ::
 
     cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"
+
+.. note::
+
+    On Windows and macOS the ``renderer-winit-fallback`` feature is **required** whenever the
+    ``renderer`` feature is enabled (the build fails otherwise). It is optional on Linux.
+
+.. _macos-glutin-patch:
+
+.. attention::
+
+    **macOS**: visualization (the viewer and the renderer) does not work on macOS with the
+    upstream ``glutin`` crate. To make it work, patch ``glutin`` in your project's
+    ``Cargo.toml`` with the following fork:
+
+    .. code-block:: toml
+
+        [patch.crates-io]
+        glutin = { git = "https://github.com/davidhozic/glutin", rev = "e95fe97f1857c0498ed2236c0e8d60e5a30a2854" }
 
 See :ref:`opt-cargo-features` for information about available Cargo features.
 Visualization and rendering features are opt-in to keep compilation fast for headless use cases.
@@ -196,7 +214,8 @@ we provide a modified MuJoCo repository with static linking support.
 While MuJoCo-rs already provides a :ref:`rust_native_viewer`, we understand that some projects wish
 to use the original C++ based 3D viewer (also named Simulate).
 To enable this, the modified MuJoCo repository also includes changes that support
-a safe interface between Rust and the C++ Simulate code.
+a safe interface between Rust and the C++ Simulate code. The C++ viewer is exposed through
+the ``cpp-viewer`` Cargo feature, which requires this static-linking setup.
 
 To build statically linkable libraries, perform the following steps:
 

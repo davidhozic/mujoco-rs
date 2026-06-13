@@ -15,6 +15,7 @@ pub(crate) mod sealed {
 /// Represents all the types that [`MjSpec`](super::MjSpec) supports.
 /// This is pre-implemented for all the specification types and is not
 /// meant to be implemented by the user.
+///
 pub trait SpecItem: Sized + sealed::Sealed {
     /// Returns the internal element struct.
     /// The element struct is the C++ implementation of the
@@ -24,16 +25,16 @@ pub trait SpecItem: Sized + sealed::Sealed {
     /// # Safety
     /// This borrows immutably, but returns a mutable pointer. This is done to overcome MJS's wrong
     /// use of mutable pointers in functions, such as [`mjs_getName`].
-    unsafe fn element_pointer(&self) -> *mut mjsElement;
+    fn element_pointer(&self) -> *const mjsElement;
 
     /// Same as [`SpecItem::element_pointer`], but with a mutable borrow.
     ///
     /// # Safety
     /// See [`SpecItem::element_pointer`].
-    unsafe fn element_mut_pointer(&mut self) -> *mut mjsElement {
+    fn element_mut_pointer(&mut self) -> *mut mjsElement {
         // SAFETY: self.element is a valid non-null pointer to the C spec element
         // for the lifetime of the parent MjSpec (struct invariant).
-        unsafe { self.element_pointer() }
+        self.element_pointer() as *mut _
     }
 
     /// Returns the item's name.
@@ -43,7 +44,8 @@ pub trait SpecItem: Sized + sealed::Sealed {
     fn name(&self) -> &str {
         // SAFETY: mjs_getName returns a pointer to a null-terminated string owned
         // by the spec element, valid for the element's lifetime.
-        unsafe { read_mjs_string(mjs_getName(self.element_pointer())) }
+        // It is safe to convert to *mut _ as it doesn't actually modify anything.
+        unsafe { read_mjs_string(mjs_getName(self.element_pointer() as *mut _)) }
     }
 
     /// Set a new name.
@@ -76,6 +78,15 @@ pub trait SpecItem: Sized + sealed::Sealed {
         unsafe { &*mjs_getDefault(self.element_pointer()) }
     }
 
+    /// Returns the numeric id for this element, if assigned.
+    ///
+    /// MuJoCo returns `-1` when no id exists (for example before compilation);
+    /// in that case this returns `None`.
+    fn id(&self) -> Option<usize> {
+        let id = unsafe { mjs_getId(self.element_pointer()) };
+        usize::try_from(id).ok()
+    }
+
     /// Make the item inherit properties from a default class.
     /// # Errors
     /// Returns [`MjEditError::NotFound`] when the default with the `class_name` doesn't exist.
@@ -84,7 +95,7 @@ pub trait SpecItem: Sized + sealed::Sealed {
     fn set_default(&mut self, class_name: &str) -> Result<(), MjEditError> {
         /* Workaround to pass the borrow checker (we use the existing borrow) */
         let cname = CString::new(class_name).unwrap();  // class_name is always valid UTF-8.
-        let element = unsafe { self.element_mut_pointer() };
+        let element = self.element_pointer();
         let spec = unsafe { mjs_getSpec(element) };
         let default = unsafe { mjs_findDefault(spec, cname.as_ptr()) };
         if default.is_null() {
@@ -107,10 +118,16 @@ pub trait SpecItem: Sized + sealed::Sealed {
 
     /// Delete the item.
     ///
-    /// This method must be called **at most once** per item. After a successful deletion
-    /// the underlying C element is freed by MuJoCo; any further use of `self` -- including
-    /// calling `delete` again or reading any field -- is **use-after-free** undefined behavior.
-    /// If the call returns `Err`, no memory is freed and the item remains valid.
+    /// # Deprecated
+    /// This API is deprecated and will be removed in a future release.
+    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) instead.
+    ///
+    /// This method is inherently unsound: deleting one element mutates owner/ancestor graph
+    /// structures outside the borrowed `&mut self` region, so aliasing assumptions of existing
+    /// Rust references can already be violated by the call itself.
+    ///
+    /// In other words, calling this method is **undefined behavior** and should be avoided.
+    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) for deletion.
     ///
     /// # Errors
     /// - [`MjEditError::DeleteFailed`] if MuJoCo cannot delete the element.
@@ -118,11 +135,11 @@ pub trait SpecItem: Sized + sealed::Sealed {
     ///   (e.g. the world body or default classes).
     ///
     /// # Safety
-    /// The `&mut self` receiver prevents aliased mutable access at the call site, but the
-    /// Rust compiler cannot prevent the caller from retaining other references (shared or
-    /// mutable) that were obtained before this call. The caller must guarantee that no such
-    /// references remain live after a successful return, as the underlying C memory will
-    /// have been freed. Violating this invariant is **use-after-free** undefined behavior.
+    /// This legacy method is not soundly callable; it exists only for backward compatibility.
+    #[deprecated(
+        since = "5.0.0",
+        note = "unsound legacy API; use MjSpec::delete_element(element_mut_pointer())"
+    )]
     unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         unsafe { self.__delete_default__() }
     }
@@ -139,7 +156,7 @@ pub trait SpecItem: Sized + sealed::Sealed {
     unsafe fn __delete_default__(&mut self) -> Result<(), MjEditError> {
         // SAFETY: element_mut_pointer() is valid (struct invariant); mjs_getSpec
         // returns the owning spec, also valid.
-        let element = unsafe { self.element_mut_pointer() };
+        let element = self.element_mut_pointer();
         let spec = unsafe { mjs_getSpec(element) };
         let result = unsafe { mjs_delete(spec, element) };
         match result {
@@ -157,4 +174,20 @@ pub trait SpecItem: Sized + sealed::Sealed {
             }
         }
     }
+}
+
+/// Represents a [`SpecItem`] that is a concrete object inside [`crate::wrappers::mj_model::MjModel`]
+/// after compilation of [`super::MjSpec`]. This includes all the [`SpecItem`]-s except [`MjsDefault`].
+/// 
+/// This trait is used internally by MuJoCo-rs to provide a generic casting interface from
+/// *mut mjsElement during iteration. 
+pub trait SpecObject: SpecItem {
+    /// The `mjtObj` discriminant passed to `mjs_firstElement` / `mjs_firstChild`.
+    const OBJ_TYPE: mjtObj;
+
+    /// Casts a raw `*mut mjsElement` to `*mut Self`.
+    ///
+    /// # Safety
+    /// `ptr` must point to a valid element of type `Self`.
+    unsafe fn from_element_as_ptr_mut(ptr: *mut mjsElement) -> *mut Self;
 }

@@ -122,7 +122,22 @@ impl MjvPerturb {
     }
 
     /// Move an object with mouse. This is a wrapper around `mjv_movePerturb`.
+    ///
+    /// # Panics
+    /// Panics if `self.select` is out of range for the model in `data` (i.e. negative or
+    /// `>= nbody`).
     pub fn move_<M: Deref<Target = MjModel>>(&mut self, data: &MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
+        // mjv_movePerturb dereferences d->xmat + 9*select (move-relative actions) and
+        // d->xquat + 4*select / m->body_iquat + 4*select (rotate actions) *before* its own
+        // sel range check, so an out-of-range id is an out-of-bounds read. Unlike the
+        // mjv_updateScene path, the C function has no `select <= 0` early-out either, so the
+        // negative case must be rejected here too.
+        let nbody = data.model().nbody();
+        assert!(
+            self.select >= 0 && (self.select as MjtSize) < nbody,
+            "selected perturbation body id {} is out of range for a model with {} bodies",
+            self.select, nbody
+        );
         unsafe { mjv_movePerturb(data.model().ffi(), data.ffi(), action as i32, dx, dy, scene.ffi(), self); }
     }
 
@@ -242,7 +257,21 @@ impl MjvCamera {
     }
 
     /// Get the camera coordinate frame (pos, forward, up, right).
+    ///
+    /// # Panics
+    /// Panics if this is a fixed camera (`MjtCamera::mjCAMERA_FIXED`) whose `fixedcamid` is out of range.
     pub fn frame<M: Deref<Target = MjModel>>(&self, data: &MjData<M>) -> ([MjtNum; 3], [MjtNum; 3], [MjtNum; 3], [MjtNum; 3]) {
+        // Only the fixed-camera branch of mjv_cameraFrame dereferences the per-camera arrays; the
+        // free/tracking branches derive the frame from azimuth/elevation and need no validation.
+        if self.type_ == MjtCamera::mjCAMERA_FIXED as i32 {
+            let ncam = data.model().ncam();
+            assert!(
+                self.fixedcamid >= 0 && (self.fixedcamid as i64) < ncam,
+                "fixed camera id {} is out of range for a model with {} cameras",
+                self.fixedcamid, ncam
+            );
+        }
+
         let mut headpos = [0.0; 3];
         let mut forward = [0.0; 3];
         let mut up = [0.0; 3];
@@ -726,12 +755,33 @@ impl MjvScene {
     /// [`MjtCatBit::mjCAT_STATIC`], [`MjtCatBit::mjCAT_DYNAMIC`], [`MjtCatBit::mjCAT_DECOR`]).
     ///
     /// # Panics
-    /// Panics if `data` was created from a different model than this scene.
+    /// - Panics if `data` was created from a different model than this scene.
+    /// - Panics if `cam` is a fixed camera ([`MjtCamera::mjCAMERA_FIXED`]) whose `fixedcamid` is
+    ///   out of range for the model in `data`.
+    /// - Panics if `perturb.select` is out of range (greater than or equal to the number of
+    ///   bodies) for the model in `data`.
     pub fn update_with_catmask<M: Deref<Target = MjModel>>(
         &mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb,
         cam: &mut MjvCamera, catmask: i32,
     ) {
         self.assert_signature(data.model().signature());
+        // mjv_updateScene -> mjv_updateCamera calls mjv_cameraFrame, whose mjCAMERA_FIXED branch
+        // reads d->cam_xmat + 9*fixedcamid / d->cam_xpos + 3*fixedcamid *before* C performs its own
+        // range check, so an out-of-range id is an out-of-bounds read. Guard it here, matching the
+        // check already in MjvCamera::frame(). (The free/tracking branches derive the frame from
+        // azimuth/elevation, and the tracking body id is range-checked by C before use.)
+        if cam.type_ == MjtCamera::mjCAMERA_FIXED as i32 {
+            let ncam = data.model().ncam();
+            assert!(
+                cam.fixedcamid >= 0 && (cam.fixedcamid as i64) < ncam,
+                "fixed camera id {} is out of range for a model with {} cameras",
+                cam.fixedcamid, ncam
+            );
+        }
+
+        // MuJoCo does no bound checking for pert->select, thus invalid IDs leads to out-of-bound reads.
+        assert!((perturb.select as MjtSize) < data.model().nbody(), "selected perturbated body ID is outside the valid range");
+
         unsafe {
             mjv_updateScene(
                 data.model().ffi(), data.ffi_mut(), opt, perturb,
@@ -746,7 +796,9 @@ impl MjvScene {
     /// [`MjtCatBit::mjCAT_ALL`].
     ///
     /// # Panics
-    /// Panics if `data` was created from a different model than this scene.
+    /// Panics under the same conditions as [`update_with_catmask`](Self::update_with_catmask):
+    /// a model-signature mismatch, an out-of-range fixed-camera id, or an out-of-range
+    /// `perturb.select`.
     pub fn update<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb, cam: &mut MjvCamera) {
         self.update_with_catmask(data, opt, perturb, cam, MjtCatBit::mjCAT_ALL as i32);
     }
@@ -813,14 +865,13 @@ impl MjvScene {
         }
     }
 
-
     /// Returns the selection point based on a mouse click.
     /// This is a wrapper around `mjv_select()`.
     ///
     /// # Panics
     /// Panics if `data` was created from a different model than this scene.
     pub fn find_selection<M: Deref<Target = MjModel>>(
-        &self, data: &MjData<M>, option: &MjvOption,
+        &self, data: &mut MjData<M>, option: &MjvOption,
         aspect_ratio: MjtNum, relx: MjtNum, rely: MjtNum,
     ) -> SceneSelection {
         self.assert_signature(data.model().signature());
@@ -856,22 +907,22 @@ impl MjvScene {
 impl MjvScene {
     // Scalar length arrays
     array_slice_dyn! {
-        (unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; nflexedge],
+        (mut = unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; nflexedge],
         flexvert: &[[f32; 3] [force]; "flex vertices"; nflexvert],
         skinvert: &[[f32; 3] [force]; "skin vertex data"; nskinvert],
         skinnormal: &[[f32; 3] [force]; "skin normal data"; nskinvert],
-        (unsafe) geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
+        (mut = unsafe) geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
         geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
-        (unsafe) flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
-        (unsafe) flexedgenum: &[i32; "number of edges in flex"; ffi.nflex],
-        (unsafe) flexvertadr: &[i32; "address of flex vertices"; ffi.nflex],
-        (unsafe) flexvertnum: &[i32; "number of vertices in flex"; ffi.nflex],
-        (unsafe) flexfaceadr: &[i32; "address of flex faces"; ffi.nflex],
-        (unsafe) flexfacenum: &[i32; "number of flex faces allocated"; ffi.nflex],
-        (unsafe) flexfaceused: &[i32; "number of flex faces currently in use"; ffi.nflex],
-        (unsafe) skinfacenum: &[i32; "number of faces in skin"; ffi.nskin],
-        (unsafe) skinvertadr: &[i32; "address of skin vertices"; ffi.nskin],
-        (unsafe) skinvertnum: &[i32; "number of vertices in skin"; ffi.nskin],
+        (mut = unsafe) flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
+        (mut = unsafe) flexedgenum: &[i32; "number of edges in flex"; ffi.nflex],
+        (mut = unsafe) flexvertadr: &[i32; "address of flex vertices"; ffi.nflex],
+        (mut = unsafe) flexvertnum: &[i32; "number of vertices in flex"; ffi.nflex],
+        (mut = unsafe) flexfaceadr: &[i32; "address of flex faces"; ffi.nflex],
+        (mut = unsafe) flexfacenum: &[i32; "number of flex faces allocated"; ffi.nflex],
+        (mut = unsafe) flexfaceused: &[i32; "number of flex faces currently in use"; ffi.nflex],
+        (mut = unsafe) skinfacenum: &[i32; "number of faces in skin"; ffi.nskin],
+        (mut = unsafe) skinvertadr: &[i32; "address of skin vertices"; ffi.nskin],
+        (mut = unsafe) skinvertnum: &[i32; "number of vertices in skin"; ffi.nskin],
         lights: as_ptr as_mut_ptr &[MjvLight; "buffer for lights"; ffi.nlight]
     }
 
@@ -906,8 +957,8 @@ impl MjvScene {
         [ffi] flexskinopt: bool; "copy of mjVIS_FLEXSKIN mjvOption flag.";
     ]}
 
-    getter_setter! {force!, with, get, set, [
-        [ffi, ffi_mut] stereo: MjtStereo; "stereoscopic rendering.";
+    getter_setter! {with, get, set, [
+        [ffi, ffi_mut] stereo: MjtStereo [force]; "stereoscopic rendering.";
     ]}
 
     getter_setter! {with, get, set, [
@@ -969,8 +1020,7 @@ mod tests {
 
     /* Tests setup */
     fn load_model() -> MjModel {
-        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
-        model
+        MjModel::from_xml_string(EXAMPLE_MODEL).unwrap()
     }
 
     #[test]
@@ -984,6 +1034,46 @@ mod tests {
         let label = "Hello World";
         geom.set_label(label).unwrap();
         assert_eq!(geom.label(), label);
+    }
+
+    /// A fixed camera whose id is out of range for the model must panic in `frame` instead of
+    /// triggering an out-of-bounds read in MuJoCo's `mjv_cameraFrame` (which indexes
+    /// `cam_xpos`/`cam_xmat` by `fixedcamid` without bounds checks).
+    #[test]
+    #[should_panic(expected = "out of range")]
+    fn test_camera_frame_fixed_id_out_of_range_panics() {
+        let model = load_model();          // EXAMPLE_MODEL defines no <camera>, so ncam == 0
+        let data = model.make_data();
+        let camera = MjvCamera::new_fixed(0);  // fixedcamid = 0, but ncam = 0 -> out of range
+        let _ = camera.frame(&data);
+    }
+
+    /// `MjvScene::update` must apply the same fixed-camera range check as `frame`. Otherwise a fixed
+    /// camera with an out-of-range id reaches MuJoCo's `mjv_cameraFrame` (which reads
+    /// `cam_xmat`/`cam_xpos` indexed by `fixedcamid`) *before* C runs its own range check.
+    #[test]
+    #[should_panic(expected = "out of range")]
+    fn test_scene_update_fixed_camera_out_of_range_panics() {
+        let model = load_model();          // no <camera>, so ncam == 0
+        let mut scene = MjvScene::new(&model, 1000);
+        let mut data = model.make_data();
+        let (opt, pert) = (MjvOption::default(), MjvPerturb::default());
+        let mut camera = MjvCamera::new_fixed(9999);
+        scene.update(&mut data, &opt, &pert, &mut camera);
+    }
+
+    /// A perturbation whose `select` is out of range for the model must panic in `move_` instead of
+    /// triggering an out-of-bounds read in MuJoCo's `mjv_movePerturb`, which dereferences
+    /// `d->xmat + 9*select` (move-relative) before any range check and has no `select <= 0`
+    /// early-out (unlike the `mjv_updateScene` path).
+    #[test]
+    #[should_panic(expected = "out of range")]
+    fn test_perturb_move_select_out_of_range_panics() {
+        let model = load_model();          // nbody == 2 (world + "ball")
+        let data = model.make_data();
+        let scene = MjvScene::new(&model, 100);
+        let mut pert = MjvPerturb { select: 1_000_000, ..Default::default() };  // far beyond nbody
+        pert.move_(&data, MjtMouse::mjMOUSE_MOVE_H_REL, 0.1, 0.1, &scene);
     }
 
     #[test]

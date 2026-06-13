@@ -45,7 +45,7 @@ impl MjsDefault {
 impl super::traits::sealed::Sealed for MjsDefault {}
 
 impl SpecItem for MjsDefault {
-    unsafe fn element_pointer(&self) -> *mut mjsElement {
+    fn element_pointer(&self) -> *const mjsElement {
         self.element
     }
 
@@ -77,6 +77,10 @@ impl SpecItem for MjsDefault {
 
     /// Defaults can't be deleted.
     ///
+    /// # Deprecated
+    /// This API is deprecated and will be removed in a future release.
+    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) instead.
+    ///
     /// This override always returns [`MjEditError::UnsupportedOperation`] without performing
     /// any operation, so the post-deletion use-after-free restriction from [`SpecItem::delete`]
     /// does not apply -- `self` remains valid after an `Err` return.
@@ -91,9 +95,8 @@ impl SpecItem for MjsDefault {
     }
 }
 
-// SAFETY: MjsDefault is a raw pointer wrapper. All shared-reference access goes
-// through &self methods that do not mutate state. All mutation requires &mut self,
-// which guarantees no concurrent aliasing. The pointer is valid for the lifetime
-// of the owning MjSpec, which must outlive any MjsDefault reference.
-unsafe impl Sync for MjsDefault {}
-unsafe impl Send for MjsDefault {}
+// MjsDefault is intentionally NEITHER Send NOR Sync, for the same reason as the Mjs*
+// element handles: it is a raw pointer into the shared mjSpec arena and its `&mut self`
+// mutators reach into model-global state. The raw-pointer field already makes it
+// auto-`!Send + !Sync`; do NOT add `unsafe impl Send`/`Sync` here. The owning `MjSpec`
+// remains `Send` (but not `Sync`), so the spec itself can still move between threads.

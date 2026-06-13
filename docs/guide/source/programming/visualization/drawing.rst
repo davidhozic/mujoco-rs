@@ -12,13 +12,14 @@ onto an existing 3D scene.
 
 .. note::
 
-    Custom visualization requires either the ``viewer`` / ``viewer-ui`` or the ``renderer`` Cargo feature to be enabled.
+    Custom visualization requires the ``viewer`` (or ``viewer-ui``), ``renderer``, or ``cpp-viewer`` Cargo feature to be enabled.
 
 In MuJoCo-rs, drawing is done through |mjv_scene|.
-There are two things that expose a scene for drawing custom visual-only geoms:
+There are three things that expose a scene for drawing custom visual-only geoms:
 
 - :ref:`mj_rust_viewer` (:docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>user_scene_mut`).
 - :ref:`mj_renderer` (:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>user_scene_mut`).
+- :ref:`mj_cpp_viewer` (:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>user_scn_mut`).
 
 
 Drawing to a scene
@@ -36,7 +37,7 @@ To draw custom geoms to a scene inside a viewer or a renderer, applications typi
         Use ``try_create_geom`` for the fallible variant that returns ``Result``.
         Increase the configured user-geom capacity if you hit this limit.
 
-This :gh-example:`example <drawing_scene_viewer.rs>` shows how to draw a line between two balls.
+This :gh-example:`example <visualization/viewer/drawing_scene_viewer.rs>` shows how to draw a line between two balls.
 
 In the example, we start drawing by first obtaining a mutable reference to the user scene and clearing
 its geoms, which are otherwise preserved between syncs:
@@ -107,7 +108,7 @@ which calculates the values to result in the geom pointing from one point to ano
     }).unwrap();
 
 
-The following image shows the result of the above :gh-example:`example <drawing_scene_viewer.rs>`.
+The following image shows the result of the above :gh-example:`example <visualization/viewer/drawing_scene_viewer.rs>`.
 
 .. image:: ../../img/visualization-example.png
 

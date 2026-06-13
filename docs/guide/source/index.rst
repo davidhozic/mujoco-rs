@@ -3,8 +3,8 @@ MuJoCo-rs
 =======================
 
 
-.. image:: https://img.shields.io/docsrs/mujoco-rs/latest
-    :target: https://docs.rs/mujoco-rs
+.. image:: https://img.shields.io/docsrs/mujoco-rs/5.0.0
+    :target: https://docs.rs/mujoco-rs/5.0.0/mujoco_rs/
 
 
 .. image:: https://img.shields.io/crates/v/mujoco-rs.svg
@@ -41,7 +41,7 @@ The main features on top of MuJoCo include:
 - :ref:`visualization`:
 
   - :ref:`mj_renderer`: offscreen rendering to array or file (enabled by the ``renderer`` feature).
-  - :ref:`mj_rust_viewer`: onscreen visualization (enabled by the ``viewer`` and ``viewer-ui`` features).
+  - :ref:`mj_rust_viewer`: onscreen visualization (enabled by the ``viewer`` feature, or ``viewer-ui`` for an added UI).
 
     .. image:: ../../img_common/viewer_spot.png
         :width: 50%
@@ -83,6 +83,12 @@ Optional Cargo features can be enabled:
 
 By default, no optional features are enabled. Enable the features you need explicitly
 (e.g. ``cargo add mujoco-rs --features "viewer-ui renderer-winit-fallback"``).
+
+.. note::
+
+    On macOS, the visualization features (``viewer`` and ``renderer``) do not work without
+    patching the ``glutin`` dependency. See :ref:`the installation guide <macos-glutin-patch>`
+    for instructions.
 
 
 Table of contents

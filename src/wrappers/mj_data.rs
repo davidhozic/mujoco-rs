@@ -1,5 +1,4 @@
 //! MjData related.
-use crate::{mj_view_indices, mj_model_nx_to_mapping, mj_model_nx_to_nitem};
 use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
 use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::wrappers::mj_option::MjOption;
@@ -103,7 +102,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Notes
     /// This method only validates model-signature compatibility.
     /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
-    /// See [here](https://mujoco.readthedocs.io/en/3.8.0/programming/simulation.html#mjmodel-changes)
+    /// See [here](https://mujoco.readthedocs.io/en/3.9.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
     /// 
     /// If `M` implements [`DerefMut`], prefer
@@ -156,17 +155,17 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
     }
 
-    info_method! { Data, model.ffi(), body, [
+    info_method! { Data, [model], body, [
         xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10,
         crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6,
         awake: 1
     ], [], []}
-    info_method! { Data, model.ffi(), camera, [xpos: 3, xmat: 9], [], []}
-    info_method! { Data, model.ffi(), geom, [xpos: 3, xmat: 9], [], []}
-    info_method! { Data, model.ffi(), site, [xpos: 3, xmat: 9], [], []}
-    info_method! { Data, model.ffi(), light, [xpos: 3, xdir: 3], [], []}
+    info_method! { Data, [model], camera, [xpos: 3, xmat: 9], [], []}
+    info_method! { Data, [model], geom, [xpos: 3, xmat: 9], [], []}
+    info_method! { Data, [model], site, [xpos: 3, xmat: 9], [], []}
+    info_method! { Data, [model], light, [xpos: 3, xdir: 3], [], []}
 
-    info_method! { Data, model.ffi(), actuator,
+    info_method! { Data, [model], actuator,
         [ctrl: 1, length: 1, velocity: 1, force: 1],
         [],
         [act: na]
@@ -178,53 +177,51 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
     pub fn joint(&self, name: &str) -> Option<MjJointDataInfo> {
-        let c_name = CString::new(name).unwrap();
-        let id = unsafe { mj_name2id(self.model.ffi(), MjtObj::mjOBJ_JOINT as i32, c_name.as_ptr())};
-        if id == -1 {  // not found
-            return None;
-        }
-        let model_ffi = self.model.ffi();
-        let id = id as usize;
-        unsafe {
-            let nq_range = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nq), mj_model_nx_to_nitem!(model_ffi, nq), model_ffi.nq);
-            let nv_range = mj_view_indices!(id, mj_model_nx_to_mapping!(model_ffi, nv), mj_model_nx_to_nitem!(model_ffi, nv), model_ffi.nv);
+        let model = self.model();
+        let id = model.name_to_id(MjtObj::mjOBJ_JOINT, name)?;
+        let nq_range = {
+            let slice = model.jnt_qposadr();
+            crate::util::optional_sparse_addr_range(slice, id, model.nq() as usize).unwrap_or((0, 0))
+        };
+        let nv_range = {
+            let slice = model.jnt_dofadr();
+            crate::util::optional_sparse_addr_range(slice, id, model.nv() as usize).unwrap_or((0, 0))
+        };
 
-            // $id:expr, $addr_map:expr, $njnt:expr, $max_n:expr
-            let qpos = nq_range;
-            let qvel = nv_range;
-            let qacc_warmstart = nv_range;
-            let qfrc_applied = nv_range;
-            let qacc = nv_range;
-            let xanchor = (id * 3, 3);
-            let xaxis = (id * 3, 3);
-            #[allow(non_snake_case)]
-            let qLDiagInv = nv_range;
-            let qfrc_bias = nv_range;
-            let qfrc_passive = nv_range;
-            let qfrc_actuator = nv_range;
-            let qfrc_smooth = nv_range;
-            let qacc_smooth = nv_range;
-            let qfrc_constraint = nv_range;
-            let qfrc_inverse = nv_range;
+        let qpos = nq_range;
+        let qvel = nv_range;
+        let qacc_warmstart = nv_range;
+        let qfrc_applied = nv_range;
+        let qacc = nv_range;
+        let xanchor = (id * 3, 3);
+        let xaxis = (id * 3, 3);
+        #[allow(non_snake_case)]
+        let qLDiagInv = nv_range;
+        let qfrc_bias = nv_range;
+        let qfrc_passive = nv_range;
+        let qfrc_actuator = nv_range;
+        let qfrc_smooth = nv_range;
+        let qacc_smooth = nv_range;
+        let qfrc_constraint = nv_range;
+        let qfrc_inverse = nv_range;
 
-            let qfrc_spring = nv_range;
-            let qfrc_damper = nv_range;
-            let qfrc_gravcomp = nv_range;
-            let qfrc_fluid = nv_range;
+        let qfrc_spring = nv_range;
+        let qfrc_damper = nv_range;
+        let qfrc_gravcomp = nv_range;
+        let qfrc_fluid = nv_range;
 
-            let model_signature = self.model.signature();
-            Some(MjJointDataInfo {name: name.to_string(), id: id as usize, model_signature,
-                qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
-                qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_passive,
-                qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
-            })
-        }
+        let model_signature = self.model.signature();
+        Some(MjJointDataInfo {name: name.to_string(), id, model_signature,
+            qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
+            qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_passive,
+            qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
+        })
     }
 
-    info_method! { Data, model.ffi(), sensor, [], [], [data: nsensordata] }
+    info_method! { Data, [model], sensor, [], [], [data: nsensordata] }
 
 
-    info_method! { Data, model.ffi(), tendon,
+    info_method! { Data, [model], tendon,
         [wrapadr: 1, wrapnum: 1, efcadr: 1, length: 1, velocity: 1],
         [],
         [J: nJten]
@@ -310,7 +307,15 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Reset data to defaults, fill everything else with debug_value.
-    pub fn reset_debug(&mut self, debug_value: u8) {
+    ///
+    /// # Safety
+    /// `debug_value` is written as raw bytes into every buffer-resident array,
+    /// including ones whose element types have validity invariants (e.g.
+    /// [`bvh_active`](Self::bvh_active) -> `&[bool]`,
+    /// [`body_awake`](Self::body_awake) -> `&[MjtSleepState]`). The caller must
+    /// not call such accessors before a subsequent [`reset`](Self::reset) unless
+    /// `debug_value` produces valid bit patterns for them.
+    pub unsafe fn reset_debug(&mut self, debug_value: u8) {
         unsafe { mj_resetDataDebug(self.model.ffi(), self.ffi_mut(), debug_value) }
     }
 
@@ -396,9 +401,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Runge-Kutta explicit order-N integrator.
     ///
     /// # Panics
-    /// Panics if `n < 1`.
+    /// Panics if `n != 4`. The underlying MuJoCo C implementation only supports N=4;
+    /// any other value causes an unconditional process abort via `mjERROR`.
     pub fn runge_kutta(&mut self, n: u32) {
-        assert!(n >= 1, "Runge-Kutta order n must be >= 1, got {n}");
+        assert!(n == 4, "mj_RungeKutta only supports N=4, got {n}");
         unsafe { mj_RungeKutta(self.model.ffi(), self.ffi_mut(), n as i32) }
     }
 
@@ -773,11 +779,22 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Adds a contact to the contact list.
+    ///
+    /// This wraps `mj_addContact`, an advanced entry point intended for custom collision routines:
+    /// it copies `con` into the data arena verbatim, without validating it.
+    ///
     /// # Returns
     /// `Ok(())` on success.
+    ///
     /// # Errors
     /// Returns [`MjDataError::ContactBufferFull`] if the contact buffer is full.
-    pub fn add_contact(&mut self, con: &MjContact) -> Result<(), MjDataError> {
+    ///
+    /// # Safety
+    /// The caller must ensure `con` is a valid contact for the model in this data. MuJoCo later
+    /// indexes several of the stored contact's fields without any bounds check (when building
+    /// constraints and when reading contact forces), so a malformed contact can cause out-of-bounds
+    /// access.
+    pub unsafe fn add_contact(&mut self, con: &MjContact) -> Result<(), MjDataError> {
         match unsafe { mj_addContact(self.model.ffi(), self.ffi_mut(), con) } {
             0 => Ok(()),
             _ => Err(MjDataError::ContactBufferFull),
@@ -1116,7 +1133,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     #[allow(clippy::too_many_arguments)]
     pub fn multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
-        flg_static: bool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
+        flg_static: MjtBool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
     ) -> (Vec<Option<usize>>, Vec<MjtNum>) {
         self.try_multi_ray(pnt, vec, geomgroup, flg_static, bodyexclude, cutoff, normals_out).unwrap()
     }
@@ -1127,7 +1144,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     #[allow(clippy::too_many_arguments)]
     pub fn try_multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
-        flg_static: bool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
+        flg_static: MjtBool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
     ) -> Result<(Vec<Option<usize>>, Vec<MjtNum>), MjDataError> {
         let nray = vec.len();
         if let Some(buf) = &normals_out
@@ -1143,7 +1160,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             self.model.ffi(), self.ffi_mut(), pnt,
             bytemuck::cast_slice::<[MjtNum; 3], MjtNum>(vec).as_ptr(),
             geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
-            flg_static as u8, bodyexclude.map_or(-1i32, |id| id as i32), geom_id_raw.as_mut_ptr(),
+            flg_static, bodyexclude.map_or(-1i32, |id| id as i32), geom_id_raw.as_mut_ptr(),
             distance.as_mut_ptr(),
             normals_out.map_or(ptr::null_mut(), |x| bytemuck::cast_slice_mut::<[MjtNum; 3], MjtNum>(x).as_mut_ptr()),
             nray as i32, cutoff
@@ -1158,8 +1175,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
     /// `geomgroup` and `flg_static` are as in mjvOption; pass `None` for `geomgroup` to skip group exclusion.
     pub fn ray(
-        &self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
-        geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: bool, bodyexclude: Option<usize>,
+        &mut self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
+        geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: MjtBool, bodyexclude: Option<usize>,
         normal_out: Option<&mut [MjtNum; 3]>
     ) -> (Option<usize>, MjtNum) {
         // `normal_out` is a fixed-size array; nothing to validate at runtime here.
@@ -1168,7 +1185,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             self.model.ffi(), self.ffi(),
             pnt, vec,
             geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
-            flg_static as MjtByte, bodyexclude.map_or(-1i32, |id| id as i32), &mut geom_id_raw,
+            flg_static, bodyexclude.map_or(-1i32, |id| id as i32), &mut geom_id_raw,
             normal_out.map_or(ptr::null_mut(), |x| x)
         ) };
         let geom_id = if geom_id_raw == -1 { None } else { Some(geom_id_raw as usize) };
@@ -1187,7 +1204,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Use [`MjData::try_ray_flex`] for a fallible alternative.
     #[allow(clippy::too_many_arguments)]
     pub fn ray_flex(
-        &self, flex_layer: i32, flg_vert: bool, flg_edge: bool, flg_face: bool, flg_skin: bool, flexid: usize,
+        &self, flex_layer: i32, flg_vert: MjtBool, flg_edge: MjtBool, flg_face: MjtBool, flg_skin: MjtBool, flexid: usize,
         pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         vertid: Option<&mut i32>, normal_out: Option<&mut [MjtNum; 3]>
     ) -> MjtNum {
@@ -1202,7 +1219,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Use [`MjData::ray_flex`] for a panicking alternative.
     #[allow(clippy::too_many_arguments)]
     pub fn try_ray_flex(
-        &self, flex_layer: i32, flg_vert: bool, flg_edge: bool, flg_face: bool, flg_skin: bool, flexid: usize,
+        &self, flex_layer: i32, flg_vert: MjtBool, flg_edge: MjtBool, flg_face: MjtBool, flg_skin: MjtBool, flexid: usize,
         pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         vertid: Option<&mut i32>, normal_out: Option<&mut [MjtNum; 3]>
     ) -> Result<MjtNum, MjDataError> {
@@ -1212,7 +1229,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         }
         Ok(unsafe { mj_rayFlex(
             self.model.ffi(), self.ffi(),
-            flex_layer, flg_vert as MjtByte, flg_edge as MjtByte, flg_face as MjtByte, flg_skin as MjtByte, flexid as i32,
+            flex_layer, flg_vert, flg_edge, flg_face, flg_skin, flexid as i32,
             pnt, vec,
             vertid.map_or(ptr::null_mut(), |x| x), normal_out.map_or(ptr::null_mut(), |x| x)
         ) })
@@ -1277,7 +1294,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     ///
     /// Use [`MjData::try_ray_mesh`] for a fallible alternative.
     pub fn ray_mesh(
-        &self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
+        &mut self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
     ) -> MjtNum {
         self.try_ray_mesh(geom_id, pnt, vec, normal_out).unwrap()
     }
@@ -1289,7 +1306,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     ///
     /// Use [`MjData::ray_mesh`] for a panicking alternative.
     pub fn try_ray_mesh(
-        &self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
+        &mut self, geom_id: usize, pnt: &[MjtNum; 3], vec: &[MjtNum; 3], normal_out: Option<&mut [MjtNum; 3]>
     ) -> Result<MjtNum, MjDataError> {
         let ngeom = self.model.ffi().ngeom as usize;
         if geom_id >= ngeom {
@@ -1412,14 +1429,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::BufferTooSmall`] if `state` is smaller than the
     /// length required by `spec`.
-    ///
-    /// # Safety
-    /// When `spec` includes [`MjtState::mjSTATE_EQ_ACTIVE`], MuJoCo writes the raw
-    /// `mjtNum` (f64) bytes from `state` directly into the `eq_active` byte array
-    /// without booleanization. The caller must ensure that [`MjData::eq_active`] is
-    /// not accessed until the `eq_active` values have been re-validated as `0` or `1`
-    /// (e.g. by calling `mj_forward` or `mj_step`).
-    pub unsafe fn set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
+    pub fn set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
         let required_len = self.model.state_size(spec);
         if state.len() < required_len {
             return Err(MjDataError::BufferTooSmall {
@@ -1550,6 +1560,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         [ffi] nl: i32; "number of limit constraints.";
         [ffi] nefc: i32; "number of constraints.";
         [ffi] nJ: i32; "number of non-zeros in constraint Jacobian.";
+        [ffi] nY: i32; "number of non-zeros in constraint inverse inertia square root.";
         [ffi] nA: i32; "number of non-zeros in constraint inverse inertia matrix.";
         [ffi] nisland: i32; "number of detected constraint islands.";
         [ffi] nidof: i32; "number of dofs in all islands.";
@@ -1561,10 +1572,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     ]}
 
     getter_setter! {get, [
-        [ffi] flg_energypos: bool; "has mj_energyPos been called.";
-        [ffi] flg_energyvel: bool; "has mj_energyVel been called.";
-        [ffi] flg_subtreevel: bool; "has mj_subtreeVel been called.";
-        [ffi] flg_rnepost: bool; "has mj_rnePostConstraint been called.";
+        [ffi] flg_energypos: MjtBool; "has mj_energyPos been called.";
+        [ffi] flg_energyvel: MjtBool; "has mj_energyVel been called.";
+        [ffi] flg_subtreevel: MjtBool; "has mj_subtreeVel been called.";
+        [ffi] flg_rnepost: MjtBool; "has mj_rnePostConstraint been called.";
     ]}
 
     getter_setter! {with, get, set, [[ffi, ffi_mut] time: MjtNum; "simulation time.";]}
@@ -1593,7 +1604,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// (e.g., timestep, gravity) without having to rebuild the simulation.
     ///
     /// **Not all model parameters are safe to change at runtime.**
-    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.8.0/programming/simulation.html#mjmodel-changes)
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.9.0/programming/simulation.html#mjmodel-changes)
     /// for a list of parameters that are safe to change.
     ///
     /// Only available when the inner model type `M` implements
@@ -1683,20 +1694,20 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         qpos: &[MjtNum; "position"; model.ffi().nq],
         qvel: &[MjtNum; "velocity"; model.ffi().nv],
         act: &[MjtNum; "actuator activation"; model.ffi().na],
-        history: &[MjtNum; "history buffer"; model.ffi().nhistory],
+        (mut = unsafe) history: &[MjtNum; "history buffer"; model.ffi().nhistory],
         qacc_warmstart: &[MjtNum; "acceleration used for warmstart"; model.ffi().nv],
         plugin_state: &[MjtNum; "plugin state"; model.ffi().npluginstate],
         ctrl: &[MjtNum; "control"; model.ffi().nu],
         qfrc_applied: &[MjtNum; "applied generalized force"; model.ffi().nv],
         xfrc_applied: &[[MjtNum; 6] [force]; "applied Cartesian force/torque"; model.ffi().nbody],
-        eq_active: &[bool [force]; "enable/disable constraints"; model.ffi().neq],
+        eq_active: &[MjtBool; "enable/disable constraints"; model.ffi().neq],
         mocap_pos: &[[MjtNum; 3] [force]; "positions of mocap bodies"; model.ffi().nmocap],
         mocap_quat: &[[MjtNum; 4] [force]; "orientations of mocap bodies"; model.ffi().nmocap],
         qacc: &[MjtNum; "acceleration"; model.ffi().nv],
         act_dot: &[MjtNum; "time-derivative of actuator activation"; model.ffi().na],
         userdata: &[MjtNum; "user data, not touched by engine"; model.ffi().nuserdata],
         sensordata: &[MjtNum; "sensor data array"; model.ffi().nsensordata],
-        (unsafe) tree_asleep: &[i32; "<0: awake; >=0: index cycle of sleeping trees"; model.ffi().ntree],
+        (mut = unsafe) tree_asleep: &[i32; "<0: awake; >=0: index cycle of sleeping trees"; model.ffi().ntree],
         xpos: &[[MjtNum; 3] [force]; "Cartesian position of body frame"; model.ffi().nbody],
         xquat: &[[MjtNum; 4] [force]; "Cartesian orientation of body frame"; model.ffi().nbody],
         xmat: &[[MjtNum; 9] [force]; "Cartesian orientation of body frame"; model.ffi().nbody],
@@ -1722,28 +1733,28 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         flexvert_J: &[[MjtNum; 2] [force]; "flex vertex Jacobian"; model.ffi().nJfv],
         flexvert_length: &[[MjtNum; 2] [force]; "flex vertex lengths"; model.ffi().nflexvert],
         bvh_aabb_dyn: &[[MjtNum; 6] [force]; "global bounding box (center, size)"; model.ffi().nbvhdynamic],
-        (unsafe) ten_wrapadr: &[i32; "start address of tendon's path"; model.ffi().ntendon],
-        (unsafe) ten_wrapnum: &[i32; "number of wrap points in path"; model.ffi().ntendon],
+        (mut = unsafe) ten_wrapadr: &[i32; "start address of tendon's path"; model.ffi().ntendon],
+        (mut = unsafe) ten_wrapnum: &[i32; "number of wrap points in path"; model.ffi().ntendon],
         ten_J: &[MjtNum; "tendon Jacobian"; model.ffi().nJten],
         ten_length: &[MjtNum; "tendon lengths"; model.ffi().ntendon],
-        (unsafe) wrap_obj: &[[i32; 2] [force]; "geom id; -1: site; -2: pulley"; model.ffi().nwrap],
+        (mut = unsafe) wrap_obj: &[[i32; 2] [force]; "geom id; -1: site; -2: pulley"; model.ffi().nwrap],
         wrap_xpos: &[[MjtNum; 6] [force]; "Cartesian 3D points in all paths"; model.ffi().nwrap],
         actuator_length: &[MjtNum; "actuator lengths"; model.ffi().nu],
-        (unsafe) moment_rownnz: &[i32; "number of non-zeros in actuator_moment row"; model.ffi().nu],
-        (unsafe) moment_rowadr: &[i32; "row start address in colind array"; model.ffi().nu],
-        (unsafe) moment_colind: &[i32; "column indices in sparse Jacobian"; model.ffi().nJmom],
+        (mut = unsafe) moment_rownnz: &[i32; "number of non-zeros in actuator_moment row"; model.ffi().nu],
+        (mut = unsafe) moment_rowadr: &[i32; "row start address in colind array"; model.ffi().nu],
+        (mut = unsafe) moment_colind: &[i32; "column indices in sparse Jacobian"; model.ffi().nJmom],
         actuator_moment: &[MjtNum; "actuator moments"; model.ffi().nJmom],
         crb: &[[MjtNum; 10] [force]; "com-based composite inertia and mass"; model.ffi().nbody],
         qM: &[MjtNum; "inertia (sparse)"; model.ffi().nM],
         M: &[MjtNum; "reduced inertia (compressed sparse row)"; model.ffi().nC],
         qLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
         qLDiagInv: &[MjtNum; "1/diag(D)"; model.ffi().nv],
-        bvh_active: &[bool [force]; "was bounding volume checked for collision"; model.ffi().nbvh],
+        bvh_active: &[MjtBool; "was bounding volume checked for collision"; model.ffi().nbvh],
         tree_awake: &[i32; "is tree awake; 0: asleep; 1: awake"; model.ffi().ntree],
         body_awake: &[MjtSleepState [force]; "body sleep state"; model.ffi().nbody],
-        (unsafe) body_awake_ind: &[i32; "indices of awake and static bodies"; model.ffi().nbody],
-        (unsafe) parent_awake_ind: &[i32; "indices of bodies with awake or static parents"; model.ffi().nbody],
-        (unsafe) dof_awake_ind: &[i32; "indices of awake dofs"; model.ffi().nv],
+        (mut = unsafe) body_awake_ind: &[i32; "indices of awake and static bodies"; model.ffi().nbody],
+        (mut = unsafe) parent_awake_ind: &[i32; "indices of bodies with awake or static parents"; model.ffi().nbody],
+        (mut = unsafe) dof_awake_ind: &[i32; "indices of awake dofs"; model.ffi().nv],
         flexedge_velocity: &[MjtNum; "flex edge velocities"; model.ffi().nflexedge],
         ten_velocity: &[MjtNum; "tendon velocities"; model.ffi().ntendon],
         actuator_velocity: &[MjtNum; "actuator velocities"; model.ffi().nu],
@@ -1770,13 +1781,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         cacc: &[[MjtNum; 6] [force]; "com-based acceleration"; model.ffi().nbody],
         cfrc_int: &[[MjtNum; 6] [force]; "com-based interaction force with parent"; model.ffi().nbody],
         cfrc_ext: &[[MjtNum; 6] [force]; "com-based external force on body"; model.ffi().nbody],
-        (unsafe) contact: &[MjContact; "array of all detected contacts"; ffi().ncon],
-        (unsafe) efc_type: &[MjtConstraint [force]; "constraint type"; ffi().nefc],
-        (unsafe) efc_id: &[i32; "id of object of specified type"; ffi().nefc],
-        (unsafe) efc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
-        (unsafe) efc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
-        (unsafe) efc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
-        (unsafe) efc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
+        (mut = unsafe) contact: &[MjContact; "array of all detected contacts"; ffi().ncon],
+        (mut = unsafe) efc_type: &[MjtConstraint [force]; "constraint type"; ffi().nefc],
+        (mut = unsafe) efc_id: &[i32; "id of object of specified type"; ffi().nefc],
+        (mut = unsafe) efc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
+        (mut = unsafe) efc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
+        (mut = unsafe) efc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
+        (mut = unsafe) efc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
         efc_J: &[MjtNum; "constraint Jacobian"; ffi().nJ],
         efc_pos: &[MjtNum; "constraint position (equality, contact)"; ffi().nefc],
         efc_margin: &[MjtNum; "inclusion margin (contact)"; ffi().nefc],
@@ -1785,46 +1796,50 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         efc_KBIP: &[[MjtNum; 4] [force]; "stiffness, damping, impedance, imp'"; ffi().nefc],
         efc_D: &[MjtNum; "constraint mass"; ffi().nefc],
         efc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
-        (unsafe) tendon_efcadr: &[i32; "first efc address involving tendon; -1: none"; model.ffi().ntendon],
-        (unsafe) tree_island: &[i32; "island id of this tree; -1: none"; model.ffi().ntree],
-        (unsafe) island_ntree: &[i32; "number of trees in this island"; ffi().nisland],
-        (unsafe) island_itreeadr: &[i32; "island start address in itree vector"; ffi().nisland],
-        (unsafe) map_itree2tree: &[i32; "map from itree to tree"; model.ffi().ntree],
-        (unsafe) dof_island: &[i32; "island id of this dof; -1: none"; model.ffi().nv],
-        (unsafe) island_nv: &[i32; "number of dofs in this island"; ffi().nisland],
-        (unsafe) island_idofadr: &[i32; "island start address in idof vector"; ffi().nisland],
-        (unsafe) island_dofadr: &[i32; "island start address in dof vector"; ffi().nisland],
-        (unsafe) map_dof2idof: &[i32; "map from dof to idof"; model.ffi().nv],
-        (unsafe) map_idof2dof: &[i32; "map from idof to dof;  >= nidof: unconstrained"; model.ffi().nv],
+        (mut = unsafe) tendon_efcadr: &[i32; "first efc address involving tendon; -1: none"; model.ffi().ntendon],
+        (mut = unsafe) tree_island: &[i32; "island id of this tree; -1: none"; model.ffi().ntree],
+        (mut = unsafe) island_ntree: &[i32; "number of trees in this island"; ffi().nisland],
+        (mut = unsafe) island_itreeadr: &[i32; "island start address in itree vector"; ffi().nisland],
+        (mut = unsafe) map_itree2tree: &[i32; "map from itree to tree"; model.ffi().ntree],
+        (mut = unsafe) dof_island: &[i32; "island id of this dof; -1: none"; model.ffi().nv],
+        (mut = unsafe) island_nv: &[i32; "number of dofs in this island"; ffi().nisland],
+        (mut = unsafe) island_idofadr: &[i32; "island start address in idof vector"; ffi().nisland],
+        (mut = unsafe) island_dofadr: &[i32; "island start address in dof vector"; ffi().nisland],
+        (mut = unsafe) map_dof2idof: &[i32; "map from dof to idof"; model.ffi().nv],
+        (mut = unsafe) map_idof2dof: &[i32; "map from idof to dof;  >= nidof: unconstrained"; model.ffi().nv],
         ifrc_smooth: &[MjtNum; "net unconstrained force"; ffi().nidof],
         iacc_smooth: &[MjtNum; "unconstrained acceleration"; ffi().nidof],
-        (unsafe) iM_rownnz: &[i32; "inertia: non-zeros in each row"; ffi().nidof],
-        (unsafe) iM_rowadr: &[i32; "inertia: address of each row in iM_colind"; ffi().nidof],
-        (unsafe) iM_colind: &[i32; "inertia: column indices of non-zeros"; model.ffi().nC],
+        (mut = unsafe) iM_rownnz: &[i32; "inertia: non-zeros in each row"; ffi().nidof],
+        (mut = unsafe) iM_rowadr: &[i32; "inertia: address of each row in iM_colind"; ffi().nidof],
+        (mut = unsafe) iM_colind: &[i32; "inertia: column indices of non-zeros"; model.ffi().nC],
         iM: &[MjtNum; "total inertia (sparse)"; model.ffi().nC],
         iLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
         iLDiagInv: &[MjtNum; "1/diag(D)"; ffi().nidof],
         iacc: &[MjtNum; "acceleration"; ffi().nidof],
-        (unsafe) efc_island: &[i32; "island id of this constraint"; ffi().nefc],
-        (unsafe) island_ne: &[i32; "number of equality constraints in island"; ffi().nisland],
-        (unsafe) island_nf: &[i32; "number of friction constraints in island"; ffi().nisland],
-        (unsafe) island_nefc: &[i32; "number of constraints in island"; ffi().nisland],
-        (unsafe) island_iefcadr: &[i32; "start address in iefc vector"; ffi().nisland],
-        (unsafe) map_efc2iefc: &[i32; "map from efc to iefc"; ffi().nefc],
-        (unsafe) map_iefc2efc: &[i32; "map from iefc to efc"; ffi().nefc],
-        (unsafe) iefc_type: &[MjtConstraint [force]; "constraint type"; ffi().nefc],
-        (unsafe) iefc_id: &[i32; "id of object of specified type"; ffi().nefc],
-        (unsafe) iefc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
-        (unsafe) iefc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
-        (unsafe) iefc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
-        (unsafe) iefc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
+        (mut = unsafe) efc_island: &[i32; "island id of this constraint"; ffi().nefc],
+        (mut = unsafe) island_ne: &[i32; "number of equality constraints in island"; ffi().nisland],
+        (mut = unsafe) island_nf: &[i32; "number of friction constraints in island"; ffi().nisland],
+        (mut = unsafe) island_nefc: &[i32; "number of constraints in island"; ffi().nisland],
+        (mut = unsafe) island_iefcadr: &[i32; "start address in iefc vector"; ffi().nisland],
+        (mut = unsafe) map_efc2iefc: &[i32; "map from efc to iefc"; ffi().nefc],
+        (mut = unsafe) map_iefc2efc: &[i32; "map from iefc to efc"; ffi().nefc],
+        (mut = unsafe) iefc_type: &[MjtConstraint [force]; "constraint type"; ffi().nefc],
+        (mut = unsafe) iefc_id: &[i32; "id of object of specified type"; ffi().nefc],
+        (mut = unsafe) iefc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
+        (mut = unsafe) iefc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
+        (mut = unsafe) iefc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
+        (mut = unsafe) iefc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
         iefc_J: &[MjtNum; "constraint Jacobian"; ffi().nJ],
         iefc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],
         iefc_D: &[MjtNum; "constraint mass"; ffi().nefc],
         iefc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
-        (unsafe) efc_AR_rownnz: &[i32; "number of non-zeros in AR"; ffi().nefc],
-        (unsafe) efc_AR_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
-        (unsafe) efc_AR_colind: &[i32; "column indices in sparse AR"; ffi().nA],
+        (mut = unsafe) efc_Y_rownnz: &[i32; "number of non-zeros in Y row"; ffi().nefc],
+        (mut = unsafe) efc_Y_rowadr: &[i32; "row start address in Y colind array"; ffi().nefc],
+        (mut = unsafe) efc_Y_colind: &[i32; "column indices in sparse Y"; ffi().nY],
+        efc_Y: &[MjtNum; "whitened Jacobian Y = J*M^(-1/2)"; ffi().nY],
+        (mut = unsafe) efc_AR_rownnz: &[i32; "number of non-zeros in AR"; ffi().nefc],
+        (mut = unsafe) efc_AR_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
+        (mut = unsafe) efc_AR_colind: &[i32; "column indices in sparse AR"; ffi().nA],
         efc_AR: &[MjtNum; "J*inv(M)*J' + R"; ffi().nA],
         efc_vel: &[MjtNum; "velocity in constraint space: J*qvel"; ffi().nefc],
         efc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
@@ -1963,6 +1978,8 @@ info_with_view!(Data, tendon,
 /**************************************************************************************************/
 
 #[cfg(test)]
+// The loop indices are needed for FFI pointer arithmetic (e.g. `ptr.add(i * stride + j)`).
+#[allow(clippy::needless_range_loop)]
 mod test {
     use crate::assert_relative_eq;
     use crate::prelude::*;
@@ -2137,7 +2154,9 @@ mod test {
 
         // Test reset variants
         data.reset();
-        data.reset_debug(7);
+        // SAFETY: no accessor with a validity invariant (bvh_active, body_awake)
+        // is called before the data is dropped.
+        unsafe { data.reset_debug(7) };
         // MODEL has no keyframes so use reset_keyframe and check OOB behaviour.
         assert!(data.reset_keyframe(0).is_err());
     }
@@ -2223,9 +2242,11 @@ mod test {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let mut data = model.make_data();
 
-        // Add a dummy contact
-        let dummy_contact = bytemuck::Zeroable::zeroed();
-        data.add_contact(&dummy_contact).unwrap();
+        // Add a dummy contact. `add_contact` is `unsafe`: the caller guarantees the contact is
+        // valid for the model (a fully-zeroed contact is in range here).
+        let dummy_contact: MjContact = bytemuck::Zeroable::zeroed();
+        unsafe { data.add_contact(&dummy_contact).unwrap(); }
+        assert_eq!(data.ncon(), 1, "contact count should reflect the added contact");
     }
 
     #[test]
@@ -2239,7 +2260,7 @@ mod test {
         // Use a small offset point relative to the joint origin
         let point = [0.1, 0.0, 0.0];
 
-        let ball_body_id = model.body("ball").unwrap().id as usize;
+        let ball_body_id = model.body("ball").unwrap().id;
 
         // Test global point Jacobian
         let (jacp, jacr) = data.jac(true, true, &point, ball_body_id);
@@ -2261,7 +2282,7 @@ mod test {
         assert_eq!(jac_subtree.len(), expected_len);
 
         // Test geom Jacobian
-        let green_geom_id = model.geom("green_sphere").unwrap().id as usize;
+        let green_geom_id = model.geom("green_sphere").unwrap().id;
         let (jacp_geom, jacr_geom) = data.jac_geom(true, true, green_geom_id);
         assert_eq!(jacp_geom.len(), expected_len);
         assert_eq!(jacr_geom.len(), expected_len);
@@ -2416,7 +2437,7 @@ mod test {
         // sensor history via wrapper
         let times_sens: Vec<MjtNum> = (0..4).map(|i| i as MjtNum * 0.01).collect();
         // sensor dim for jointpos is 1
-        let values_sens = vec![2.718; 4 * 1];
+        let values_sens = vec![std::f64::consts::E; 4];
         data.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).unwrap();
 
         let got = data.read_sensor_fixed::<1>(0, times_sens[1], 0);
@@ -2461,7 +2482,7 @@ mod test {
         const MODIFIED_VALUE: f64 = 15.0;
 
         let model = MjModel::from_xml_string(MODEL).unwrap();
-        let name = model.id_to_name(MjtObj::mjOBJ_JOINT, BALL_INDEX as usize).unwrap();
+        let name = model.id_to_name(MjtObj::mjOBJ_JOINT, BALL_INDEX).unwrap();
 
         let mut data = MjData::new(&model);
         let ball2_joint_info = data.joint(name).unwrap();
@@ -2477,10 +2498,10 @@ mod test {
         let ptr = unsafe { data.ffi_mut().contact };
         assert!(ptr.is_aligned());
         assert!(!ptr.is_null());
-        assert_eq!(data.contact().len(), 0);
+        assert!(data.contact().is_empty());
         data.step();
 
-        assert!(data.contact().len() != 0);
+        assert!(!data.contact().is_empty());
     }
 
     #[test]
@@ -2567,7 +2588,7 @@ mod test {
         let mut data = model.make_data();
 
         let times_sens: Vec<MjtNum> = (0..4).map(|i| i as MjtNum * 0.01).collect();
-        let values_sens = vec![2.718; 4 * 1]; // dim == 1 for jointpos
+        let values_sens = vec![std::f64::consts::E; 4]; // dim == 1 for jointpos
 
         // success: times Some / None
         assert!(data.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).is_ok());
@@ -2579,7 +2600,7 @@ mod test {
         assert!(matches!(err, MjDataError::LengthMismatch { name: "times", .. }));
 
         // values length mismatch -> LengthMismatch
-        let bad_values = vec![3.14; 3];
+        let bad_values = vec![std::f64::consts::PI; 3];
         let err = data.init_sensor_history(0, Some(&times_sens), &bad_values, 0.0).unwrap_err();
         assert!(matches!(err, MjDataError::LengthMismatch { name: "values", .. }));
 
@@ -2789,7 +2810,7 @@ mod test {
         let model = MjModel::from_xml_string(MODEL).unwrap();
         let mut data = model.make_data();
         let nv = model.nv() as usize;
-        let body_id = model.body("ball").unwrap().id as usize;
+        let body_id = model.body("ball").unwrap().id;
         let mut qfrc = vec![0.0; nv];
 
         data.forward();
@@ -3002,11 +3023,11 @@ mod test {
 
         assert_relative_eq!(data.time(), 0.0, epsilon = 1e-15);
 
-        data.set_time(3.14);
-        assert_relative_eq!(data.time(), 3.14, epsilon = 1e-15);
+        data.set_time(std::f64::consts::PI);
+        assert_relative_eq!(data.time(), std::f64::consts::PI, epsilon = 1e-15);
 
-        let data2 = model.make_data().with_time(2.718);
-        assert_relative_eq!(data2.time(), 2.718, epsilon = 1e-15);
+        let data2 = model.make_data().with_time(std::f64::consts::E);
+        assert_relative_eq!(data2.time(), std::f64::consts::E, epsilon = 1e-15);
     }
 
     /// Tests that `jac` returns `IndexOutOfBounds` for invalid body IDs.
@@ -3304,24 +3325,24 @@ mod test {
         // Equality constraints are active by default
         let eq_active = data.eq_active();
         assert_eq!(eq_active.len(), neq);
-        assert_eq!(eq_active[0], true);
-        assert_eq!(eq_active[1], true);
+        assert!(eq_active[0]);
+        assert!(eq_active[1]);
 
         // Cross-validate with raw u8 FFI pointer
         for i in 0..neq {
             let raw_val = unsafe { *data.ffi().eq_active.add(i) };
-            assert_eq!(eq_active[i], raw_val != 0,
-                "eq_active[{}]: bool={} raw_u8={}", i, eq_active[i], raw_val);
+            assert_eq!(eq_active[i], raw_val,
+                "eq_active[{}]: bool={} raw={}", i, eq_active[i], raw_val);
         }
 
         // Disable one via mutable force-cast
         data.eq_active_mut()[0] = false;
-        assert_eq!(data.eq_active()[0], false);
-        assert_eq!(data.eq_active()[1], true);
+        assert!(!data.eq_active()[0]);
+        assert!(data.eq_active()[1]);
 
         // Verify FFI side was actually modified
         let raw_val = unsafe { *data.ffi().eq_active.add(0) };
-        assert_eq!(raw_val, 0u8, "disabling eq_active[0] must write 0 to FFI");
+        assert!(!raw_val, "disabling eq_active[0] must write false to FFI");
     }
 
     /// Verifies [force]-cast mutable roundtrip for xfrc_applied and mocap_pos.
@@ -3640,10 +3661,8 @@ mod test {
         assert_eq!(bvh_active.len(), nbvh);
 
         for i in 0..nbvh {
-            let raw_u8 = unsafe { *data.ffi().bvh_active.add(i) };
-            assert!(raw_u8 == 0 || raw_u8 == 1,
-                "raw bvh_active[{}]={} must be 0 or 1", i, raw_u8);
-            assert_eq!(bvh_active[i], raw_u8 != 0);
+            let raw_bool = unsafe { *data.ffi().bvh_active.add(i) };
+            assert_eq!(bvh_active[i], raw_bool);
         }
     }
 
@@ -3679,12 +3698,12 @@ mod test {
         let data = model.make_data();
 
         // Model has no flexes, so these should be empty
-        assert_eq!(data.flexvert_xpos().len(), 0, "no flex -> empty flexvert_xpos");
-        assert_eq!(data.flexelem_aabb().len(), 0, "no flex -> empty flexelem_aabb");
-        assert_eq!(data.flexvert_j().len(), 0, "no flex -> empty flexvert_J");
-        assert_eq!(data.flexvert_length().len(), 0, "no flex -> empty flexvert_length");
-        assert_eq!(data.flexedge_j().len(), 0, "no flex -> empty flexedge_J");
-        assert_eq!(data.flexedge_length().len(), 0, "no flex -> empty flexedge_length");
+        assert!(data.flexvert_xpos().is_empty(), "no flex -> empty flexvert_xpos");
+        assert!(data.flexelem_aabb().is_empty(), "no flex -> empty flexelem_aabb");
+        assert!(data.flexvert_j().is_empty(), "no flex -> empty flexvert_J");
+        assert!(data.flexvert_length().is_empty(), "no flex -> empty flexvert_length");
+        assert!(data.flexedge_j().is_empty(), "no flex -> empty flexedge_J");
+        assert!(data.flexedge_length().is_empty(), "no flex -> empty flexedge_length");
     }
 
     /// Verifies [force]-cast for bvh_aabb_dyn (&[[MjtNum; 6]]).
@@ -4649,10 +4668,10 @@ mod test {
         }, "disabling equality constraints should change positions");
 
         // FFI cross-validation for eq_active
-        assert_eq!(data.eq_active()[0], false);
-        assert_eq!(data.eq_active()[1], false);
-        assert_eq!(unsafe { *data.ffi().eq_active }, 0u8);
-        assert_eq!(unsafe { *data.ffi().eq_active.add(1) }, 0u8);
+        assert!(!data.eq_active()[0]);
+        assert!(!data.eq_active()[1]);
+        assert!(!unsafe { *data.ffi().eq_active });
+        assert!(!unsafe { *data.ffi().eq_active.add(1) });
     }
 
     /// Runs step1() + step2() split stepping and verifies force-cast arrays
@@ -4719,8 +4738,7 @@ mod test {
         assert_ne!(diverged_xpos, saved_xpos, "state should diverge after more steps");
 
         // Restore state
-        // SAFETY: saved_state was captured via mj_getState; eq_active bytes are valid (0 or 1).
-        unsafe { data.set_state(&saved_state, MjtState::mjSTATE_FULLPHYSICS as u32) }.unwrap();
+        data.set_state(&saved_state, MjtState::mjSTATE_FULLPHYSICS as u32).unwrap();
         data.forward();
 
         // Primary state (qpos) should be exactly restored

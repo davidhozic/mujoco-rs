@@ -35,6 +35,14 @@ you need:
 
        git submodule update --init --recursive
 
+.. note::
+
+    Emscripten's tools (``emcc``, ``emcmake``, ...) must be on your ``PATH`` before building.
+    After installing emsdk, activate it in each shell session with
+    ``source /path/to/emsdk/emsdk_env.sh`` (see the
+    `emsdk documentation <https://emscripten.org/docs/getting_started/downloads.html>`_).
+    Without this step the ``emcmake`` commands below fail with "command not found".
+
 
 .. _wasm_building:
 
@@ -42,7 +50,7 @@ Building MuJoCo
 =============================
 
 Use either the ``mujoco/`` submodule (already initialized in the MuJoCo-rs
-repository) or a fresh clone of the official MuJoCo ``3.8.0`` release as the
+repository) or a fresh clone of the official MuJoCo ``3.9.0`` release as the
 source directory.  The official unmodified tag is sufficient for WASM --- the
 submodule patches are only required for native/C++ features.
 
@@ -50,7 +58,7 @@ To clone the official release:
 
 ::
 
-    git clone https://github.com/google-deepmind/mujoco.git --branch 3.8.0 --depth 1
+    git clone https://github.com/google-deepmind/mujoco.git --branch 3.9.0 --depth 1
 
 Then build (replace ``mujoco`` with the path to whichever source you chose):
 

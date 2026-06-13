@@ -3,6 +3,9 @@
 //! force-cast arrays, enum slices, bool slices, view fields, and mutable
 //! roundtrips work correctly through the public interface over multiple timesteps.
 
+// The loop indices are needed for FFI pointer arithmetic (e.g. `ptr.add(i * stride + j)`).
+#![allow(clippy::needless_range_loop)]
+
 use mujoco_rs::prelude::*;
 
 /// A model with diverse joint types, bodies, constraints, actuators, and sensors
@@ -100,12 +103,12 @@ fn test_integration_view_enum_fields_across_steps() {
     let free_jnt_info = model.joint("free_jnt").unwrap();
     let free_jnt_view = free_jnt_info.view(&model);
     assert_eq!(free_jnt_view.r#type[0], MjtJoint::mjJNT_FREE);
-    assert_eq!(free_jnt_view.limited[0], false);
+    assert!(!free_jnt_view.limited[0]);
 
     let slide_jnt_info = model.joint("slide_jnt").unwrap();
     let slide_jnt_view = slide_jnt_info.view(&model);
     assert_eq!(slide_jnt_view.r#type[0], MjtJoint::mjJNT_SLIDE);
-    assert_eq!(slide_jnt_view.limited[0], true);
+    assert!(slide_jnt_view.limited[0]);
 
     let hinge_jnt_info = model.joint("hinge_jnt").unwrap();
     let hinge_jnt_view = hinge_jnt_info.view(&model);
@@ -225,8 +228,8 @@ fn test_integration_eq_active_toggle_divergence() {
     let pos_without_eq = data2.xpos().to_vec();
 
     // Verify eq_active was correctly set
-    assert_eq!(data2.eq_active()[0], false);
-    assert_eq!(unsafe { *data2.ffi().eq_active }, 0u8);
+    assert!(!data2.eq_active()[0]);
+    assert!(!unsafe { *data2.ffi().eq_active });
 
     // Positions should diverge (at least for constrained bodies)
     let hinge_body = data2.body("hinge_body").unwrap();
@@ -315,8 +318,7 @@ fn test_integration_state_save_restore_force_cast() {
     assert_ne!(data.xpos().to_vec(), saved_xpos);
 
     // Restore
-    // SAFETY: saved was captured via mj_getState; eq_active bytes are valid (0 or 1).
-    unsafe { data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32) }.unwrap();
+    data.set_state(&saved, MjtState::mjSTATE_FULLPHYSICS as u32).unwrap();
     data.forward();
 
     // Primary state must match exactly
@@ -449,9 +451,9 @@ fn test_integration_model_enum_slices() {
 
     // Joint limited bools
     let jnt_limited = model.jnt_limited();
-    assert_eq!(jnt_limited[free_jnt.id], false);
-    assert_eq!(jnt_limited[hinge_jnt.id], false);
-    assert_eq!(jnt_limited[slide_jnt.id], true);
+    assert!(!jnt_limited[free_jnt.id]);
+    assert!(!jnt_limited[hinge_jnt.id]);
+    assert!(jnt_limited[slide_jnt.id]);
 
     // Sensor types
     let sensor_type = model.sensor_type();
@@ -471,7 +473,7 @@ fn test_integration_model_enum_slices() {
     let act_trntype = model.actuator_trntype();
     let slide_motor = model.actuator("slide_motor").unwrap();
     assert_eq!(act_trntype[slide_motor.id], MjtTrn::mjTRN_JOINT);
-    assert_eq!(model.actuator_ctrllimited()[slide_motor.id], true);
+    assert!(model.actuator_ctrllimited()[slide_motor.id]);
 }
 
 /// Integration test: xfrc_applied force-cast mutation, step, and verify

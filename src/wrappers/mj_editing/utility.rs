@@ -352,8 +352,10 @@ macro_rules! find_x_method_direct {
 
 /// Creates a wrapper around a mjs$ffi_name item. It also implements the methods: `ffi()`, `ffi_mut()`
 /// and traits: [`SpecItem`](super::traits::SpecItem), [`Sync`], [`Send`].
+/// 
+/// When `[SpecObject]` is given to the right of `ffi_name`, the SpecObject trait also gets implemented.
 macro_rules! mjs_struct {
-    ($ffi_name:ident $({ $($extra_trait_methods:tt)* })?) => {paste::paste!{
+    ($ffi_name:ident $([$SpecObject:ident])? $({ $($extra_trait_methods:tt)* })?) => {paste::paste!{
         #[doc = concat!(stringify!($ffi_name), " specification. This is an alias to the FFI type [`", stringify!([<mjs $ffi_name>]), "`].")]
         pub type [<Mjs $ffi_name>] = [<mjs $ffi_name>];
 
@@ -378,7 +380,7 @@ macro_rules! mjs_struct {
         impl crate::wrappers::mj_editing::traits::sealed::Sealed for [<Mjs $ffi_name>] {}
 
         impl SpecItem for [<Mjs $ffi_name>] {
-            unsafe fn element_pointer(&self) -> *mut mjsElement {
+            fn element_pointer(&self) -> *const mjsElement {
                 self.element
             }
 
@@ -387,15 +389,30 @@ macro_rules! mjs_struct {
             )*)?
         }
 
-        // SAFETY: Mjs* types are raw pointer wrappers. All shared-reference access goes
-        // through &self methods that do not mutate state. All mutation requires &mut self,
-        // which guarantees no concurrent aliasing. The pointer is valid for the lifetime
-        // of the owning MjSpec, which must outlive any Mjs* reference.
-        unsafe impl Sync for [<Mjs $ffi_name>] {}
-        unsafe impl Send for [<Mjs $ffi_name>] {}
+
+        $(
+            impl $SpecObject for [<Mjs $ffi_name>] {
+                const OBJ_TYPE: MjtObj = MjtObj::[<mjOBJ_ $ffi_name:upper>];
+                unsafe fn from_element_as_ptr_mut(element: *mut mjsElement) -> *mut Self {
+                    // SAFETY: *const conversion to *mut is valid, because mjs_as returns mut originally,
+                    // thus the data itself is *mut.
+                    unsafe { [<mjs_as $ffi_name:camel>](element) }
+                }
+            }
+        )?
+
+        // Mjs* handles are intentionally NEITHER Send NOR Sync. Each is a thin alias over
+        // a raw pointer into a single shared mjSpec/mjCModel arena, and its `&mut self`
+        // mutators (e.g. `SpecItem::set_name` -> `mjs_setName`) reach through that pointer
+        // to read every sibling and write model-global state (`mjCModel::CheckRepeat` and
+        // the shared `errInfo`). Letting a handle --- or a reference to one --- cross a
+        // thread boundary would let two such accesses race on the one arena from safe code.
+        // The raw-pointer field already makes the type auto-`!Send + !Sync`, so we simply
+        // do not add the impls. Do NOT add `unsafe impl Send`/`Sync` here: the owning
+        // `MjSpec` is itself `Send` (but `!Sync`), so a whole spec can still move between
+        // threads --- handles derived from it just stay on the thread that created them.
     }};
 }
-
 
 /// Implements the userdata method.
 macro_rules! userdata_method {
@@ -599,6 +616,28 @@ macro_rules! vec_set_get {
 }
 
 /// Implements setters for non-string attributes.
+///
+/// Three forms are supported:
+/// - `name: Type; "comment"` -- a **safe** setter that takes `&[Type]` and writes it unchanged.
+/// - `name: InputType => StoredType { check, "reason" } => ErrType; "comment"` -- a **safe** setter
+///   taking `&[InputType]` (typically a Rust enum) that stores each element as the raw C type
+///   `StoredType` via a zero-cost pointer reinterpretation (the same compile-time-checked cast the
+///   view layer uses, so no `bytemuck` trait is required on the enum). Every element is passed
+///   through `check` (a `Fn(InputType) -> Result<(), ErrType>`) before anything is written; if any
+///   element fails, nothing is written. Use this when the validation rules out the out-of-range
+///   values the C side would misuse, which is what makes the setter sound without `unsafe`.
+///   `"reason"` is a doc fragment in the crate's `# Errors` style (e.g.
+///   `"[`MjEditError::InvalidParameter`] when ..."`) reused verbatim in the generated `# Errors`
+///   section. The `{ check, "reason" } => ErrType` part may be omitted for a plain safe cast.
+/// - `name: InputType => StoredType; "comment"; "safety" unsafe` -- the same cast setter made
+///   **`unsafe`** (the per-element `check` omitted), for vectors the C side later uses without its
+///   own validation -- e.g. as an unchecked array index, count, or `memcpy` length -- and which
+///   cannot be cheaply validated here. The optional `; "safety" unsafe` tail flips the generated
+///   setter to `unsafe fn` and emits `"safety"` as its caller-facing `# Safety` obligation. It is a
+///   tail (not a leading marker) because a leading optional starting with the `unsafe` keyword is
+///   ambiguous with the field's own `name` ident; anchoring it after the comment with the `"safety"`
+///   literal keeps it unambiguous, and the trailing `unsafe` keyword is captured (`$unsafe_kw:tt`)
+///   and echoed verbatim onto the `fn`.
 macro_rules! vec_set {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
@@ -606,6 +645,39 @@ macro_rules! vec_set {
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
                 // SAFETY: self.$name is a valid pointer for the lifetime of self.
                 unsafe { [<write_mjs_vec_ $type>](value, self.$name) };
+            }
+        )*
+    }};
+
+    ($($([$unsafe_kw:ident : $safety:literal])? $name:ident: $input_type:ty => $type:ty $({$check:expr , $reason:literal} => $err:ty)?; $comment:expr);* $(;)?) => {paste::paste!{
+        $(
+            // One cast setter whose shape is driven by the optional check / safety tail:
+            // - `{ check, "reason" } => ErrType` makes it a safe `-> Result<(), ErrType>` that
+            //   validates every element first; passing validation rules out the values the C side
+            //   would misuse, so the reinterpretation is sound without `unsafe`. `"reason"` is a doc
+            //   fragment naming the error and condition, reused verbatim in the `# Errors` section.
+            // - `; "safety" unsafe` makes it an `unsafe fn` (no per-element check) for vectors the C
+            //   side later trusts as an unchecked index/count/length; `"safety"` documents the
+            //   caller's `# Safety` obligation. The leading `"safety"` literal keeps this tail
+            //   unambiguous from the repetition separator, and the trailing `unsafe` keyword
+            //   (`$unsafe_kw`) is echoed onto the generated `fn`.
+            // - neither tail: a plain safe cast.
+            #[doc = concat!("Set ", $comment
+                $(, "\n\n# Errors\nReturns ", $reason, " (in that case nothing is written).")?
+                $(, "\n\n# Safety\n", $safety)?
+            )]
+            pub $($unsafe_kw)? fn [<set_ $name>](&mut self, value: &[$input_type]) $(-> Result<(), $err>)? {
+                $(for &v in value { ($check)(v)?; })?
+                // Compile-time size/alignment check for the layout-compatible reinterpretation below.
+                $crate::util::assert_ptr_cast_valid::<$input_type, $type>(value.as_ptr());
+                // SAFETY: $input_type and $type are layout-compatible (asserted above) and every enum
+                // value is a valid bit pattern for its underlying integer, so reinterpreting the slice
+                // is sound and zero-cost. The value-range precondition the C side relies on is enforced
+                // by the `$check` loop above when present, or by the caller's `# Safety` contract
+                // otherwise. self.$name is a valid pointer for the lifetime of self.
+                let raw = unsafe { std::slice::from_raw_parts(value.as_ptr().cast(), value.len()) };
+                unsafe { [<write_mjs_vec_ $type>](raw, self.$name) };
+                $(Ok::<(), $err>(()))?
             }
         )*
     }};
@@ -630,66 +702,6 @@ macro_rules! vec_vec_append {
     }};
 }
 
-/// Implements iterators for individual items in [MjSpec](super::MjSpec).
-macro_rules! item_spec_iterator {
-    ($($iter_over: ident),*) => {paste::paste!{
-        $(
-            impl<'a> MjsSpecItemIterMut<'a, [<Mjs $iter_over>]> {
-                fn new(root: &'a mut MjSpec) -> Self {
-                    let last = unsafe { mjs_firstElement(root.0.as_ptr(), MjtObj::[<mjOBJ_ $iter_over:upper>]) };
-                    Self { root, last, item_type: PhantomData }
-                }
-            }
-
-            impl<'a> MjsSpecItemIter<'a, [<Mjs $iter_over>]> {
-                fn new(root: &'a MjSpec) -> Self {
-                    let last = unsafe { mjs_firstElement(root.0.as_ptr(), MjtObj::[<mjOBJ_ $iter_over:upper>]) };
-                    Self { root, last, item_type: PhantomData }
-                }
-            }
-
-            impl<'a> Iterator for MjsSpecItemIterMut<'a, [<Mjs $iter_over>]> {
-                type Item = &'a mut [<Mjs $iter_over>];
-
-                fn next(&mut self) -> Option<Self::Item> {
-                    if self.last.is_null() {
-                        return None;
-                    }
-
-                    unsafe {
-                        let out = [<mjs_as $iter_over>](self.last).as_mut();
-                        // Use as_ptr() instead of ffi_mut() to avoid creating &mut mjSpec,
-                        // which would alias with previously yielded &mut items.
-                        self.last = mjs_nextElement(self.root.0.as_ptr(), self.last);
-                        out
-                    }
-                }
-            }
-
-            impl<'a> Iterator for MjsSpecItemIter<'a, [<Mjs $iter_over>]> {
-                type Item = &'a [<Mjs $iter_over>];
-
-                fn next(&mut self) -> Option<Self::Item> {
-                    if self.last.is_null() {
-                        return None;
-                    }
-
-                    unsafe {
-                        let out = [<mjs_as $iter_over>](self.last).as_ref();
-                        self.last = mjs_nextElement(self.root.0.as_ptr(), self.last);
-                        out
-                    }
-                }
-            }
-
-            // Once self.last is null, next() always returns None.
-            impl<'a> std::iter::FusedIterator for MjsSpecItemIterMut<'a, [<Mjs $iter_over>]> {}
-            impl<'a> std::iter::FusedIterator for MjsSpecItemIter<'a, [<Mjs $iter_over>]> {}
-        )*
-    }};
-}
-
-
 /// Generates methods for obtaining iterators to `$iter_over` spec items.
 macro_rules! spec_get_iter {
     ($($iter_over: ident),*) => {paste::paste!{
@@ -707,66 +719,6 @@ macro_rules! spec_get_iter {
     }};
 }
 
-
-/// Implements iterators for individual items in [MjsBody](super::MjsBody).
-macro_rules! item_body_iterator {
-    ($($iter_over: ident),*) => {paste::paste!{
-        $(
-            impl<'a> MjsBodyItemIterMut<'a, [<Mjs $iter_over>]> {
-                fn new(root: &'a mut MjsBody, recurse: bool) -> Self {
-                    let last = unsafe { mjs_firstChild(root, MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
-                    Self { root, last, recurse, item_type: PhantomData }
-                }
-            }
-
-            impl<'a> MjsBodyItemIter<'a, [<Mjs $iter_over>]> {
-                fn new(root: &'a MjsBody, recurse: bool) -> Self {
-                    // SAFETY: mjs_firstChild requires a *mut pointer but does not mutate
-                    // the body. The const-to-mut cast is sound because no mutation occurs.
-                    let last = unsafe { mjs_firstChild(root as *const _ as *mut _, MjtObj::[<mjOBJ_ $iter_over:upper>], recurse.into()) };
-                    Self { root, last, recurse, item_type: PhantomData }
-                }
-            }
-
-            impl<'a> Iterator for MjsBodyItemIterMut<'a, [<Mjs $iter_over>]> {
-                type Item = &'a mut [<Mjs $iter_over>];
-
-                fn next(&mut self) -> Option<Self::Item> {
-                    if self.last.is_null() {
-                        return None;
-                    }
-
-                    unsafe {
-                        let out = [<mjs_as $iter_over>](self.last).as_mut();
-                        self.last = mjs_nextChild(self.root, self.last, self.recurse.into());
-                        out
-                    }
-                }
-            }
-
-            impl<'a> Iterator for MjsBodyItemIter<'a, [<Mjs $iter_over>]> {
-                type Item = &'a [<Mjs $iter_over>];
-
-                fn next(&mut self) -> Option<Self::Item> {
-                    if self.last.is_null() {
-                        return None;
-                    }
-
-                    unsafe {
-                        let out = [<mjs_as $iter_over>](self.last).as_ref();
-                        // SAFETY: mjs_nextChild requires *mut but does not mutate. Cast is sound.
-                        self.last = mjs_nextChild(self.root as *const _ as *mut _, self.last, self.recurse.into());
-                        out
-                    }
-                }
-            }
-
-            // Once self.last is null, next() always returns None.
-            impl<'a> std::iter::FusedIterator for MjsBodyItemIterMut<'a, [<Mjs $iter_over>]> {}
-            impl<'a> std::iter::FusedIterator for MjsBodyItemIter<'a, [<Mjs $iter_over>]> {}
-        )*
-    }};
-}
 
 /// Generates methods for obtaining iterators to `$iter_over` body items.
 /// The $self_lf represents the iterated item's borrow and $parent_lf the lifetime of its parent.

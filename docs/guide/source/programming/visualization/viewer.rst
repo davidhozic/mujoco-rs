@@ -1,3 +1,5 @@
+.. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
+
 .. _mj_rust_viewer:
 
 =======================
@@ -23,7 +25,7 @@ Rust-native 3D viewer
 The Rust-native 3D viewer, enabled by the ``viewer`` feature, supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
 This also includes object perturbations. Optionally, enabled by the ``viewer-ui`` feature, the viewer
 also provides a user interface, which tries to replicate the original C++ viewer as best as possible
-and thus allows control of constraints, joints, actuators, etc.
+(while simultaneously enriching it) and thus allows control of constraints, joints, actuators, etc.
 
 A screenshot of the Rust 3D viewer is shown below.
 
@@ -31,7 +33,7 @@ A screenshot of the Rust 3D viewer is shown below.
 
     Rust-native interactive 3D viewer.
     Showing the `Spot <https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot>`_ scene from
-    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.8.0/models.html>`_.
+    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.9.0/models.html>`_.
 
 The viewer can be launched only in **passive mode**, i.e. it won't run as a separate application,
 and needs to be periodically "synced" by the user application.
@@ -44,9 +46,12 @@ The viewer can be launched in two ways:
   full control over the viewer's settings:
 
   .. code-block:: rust
-      :emphasize-lines: 9-15
+      :emphasize-lines: 13-18
 
       use std::time::Duration;
+
+      use mujoco_rs::viewer::MjViewer;
+      use mujoco_rs::prelude::*;
 
       fn main() {
           /* Initiate the physics simulation */
@@ -76,9 +81,12 @@ The viewer can be launched in two ways:
   convenient shorthand for users who want the **default settings**:
 
   .. code-block:: rust
-      :emphasize-lines: 8
+      :emphasize-lines: 11
 
       use std::time::Duration;
+
+      use mujoco_rs::viewer::MjViewer;
+      use mujoco_rs::prelude::*;
 
       fn main() {
           let model = MjModel::from_xml("path/to/model.xml").expect("could not load the model");
@@ -100,8 +108,8 @@ and mirrors/syncs the simulation state with :docs-rs:`~~mujoco_rs::viewer::<stru
 After synchronization, or in parallel with it, the viewer must also be rendered using the
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` method.
 
+
 .. code-block:: rust
-    :emphasize-lines: 2, 4, 5
 
     ...
     while viewer.running() {
@@ -182,10 +190,11 @@ the refresh rate to be equal to the simulation stepping frequency, which puts st
 To prevent slowdowns and allow V-Sync, the viewer can run in the **main thread**, while
 the actual physics simulation runs in another.
 
-Here's an adapted excerpt from the :gh-example:`example <rust_viewer_threaded.rs>` on how to use the viewer in a multi-threaded way:
+Here's an adapted excerpt from the :gh-example:`example <visualization/viewer/rust_viewer_threaded.rs>`
+on how to use the viewer in a multi-threaded way:
 
 .. code-block:: rust
-    :emphasize-lines: 1, 12-13, 18-22, 30-34
+    :emphasize-lines: 12-13, 18-22, 30-34
 
     let model = Arc::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
     let mut data = MjData::new(model.clone());
@@ -244,7 +253,7 @@ Custom UI widgets
 The Rust-native viewer supports adding custom UI widgets through the
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` method.
 This allows you to create custom windows, panels, and other UI elements using
-`egui <https://docs.rs/egui/latest/egui/>`_.
+`egui <https://docs.rs/egui/0.33.0/egui/>`_.
 
 .. note::
 
@@ -261,7 +270,14 @@ This allows you to create custom windows, panels, and other UI elements using
 The following example demonstrates how to add a custom window to the viewer:
 
 .. code-block:: rust
-    :emphasize-lines: 8-19
+    :emphasize-lines: 15-28
+
+    use std::time::Duration;
+
+    use mujoco_rs::viewer::MjViewer;
+    use mujoco_rs::prelude::*;
+
+    const EXAMPLE_MODEL: &str = r#"<mujoco><worldbody/></mujoco>"#;
 
     fn main() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
@@ -296,7 +312,7 @@ The following example demonstrates how to add a custom window to the viewer:
 Multiple callbacks can be registered by calling ``add_ui_callback`` multiple times.
 Each callback will be invoked during the UI rendering phase with access to the egui context.
 
-For a comprehensive example, see the :gh-example:`custom_ui_widgets.rs` example,
+For a comprehensive example, see the :gh-example:`visualization/viewer/custom_ui_widgets.rs` example,
 which demonstrates various types of UI elements including windows, side panels, and top panels.
 
 .. note::
@@ -348,14 +364,78 @@ and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model
         lock.sync_model_stat(data.model_stat_mut());
     }).unwrap();
 
-When the model structure changes (e.g., different body configuration), the viewer
-detects this via model signature comparison and reloads its internal state. Changes
-made in the UI are cleared when a model change is detected.
+This requires the ``M`` bound inside |mj_data| to be ``DerefMut<Target = MjModel>`` (e.g., ``Box<MjModel>``).
 
-To safely modify parameters without using unsafe code, use the direct accessors
-on :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`:
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut`,
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`,
+
+.. _viewer_asset_reupload:
+
+Asset re-upload
+---------------------------------
+
+When textures, meshes, or heightfields in the simulation model are mutated at runtime,
+the GPU copies held by the viewer must be refreshed explicitly.
+
+Both :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
+:docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState` expose two sets of methods for this:
+
+- **Singular** -- upload one asset by its zero-based index:
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_texture_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_mesh_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfield_from`.
+  These copy only the data for the specified asset ID and are efficient when only a small
+  number of assets change per frame.
+
+- **Plural** -- upload all assets of a type in bulk:
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_textures_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_meshes_from`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_hfields_from`.
+  The plural methods copy entire asset arrays (skipping per-asset offset calculations)
+  and are more efficient when the majority of assets of a given type are modified.
+  Note that mesh uploads copy multiple arrays (vertex positions, per-vertex normals,
+  UV texture coordinates, face-vertex indices, face-normal indices, face-texcoord indices,
+  and convex hull graph data), so ``update_meshes_from`` issues several array copies.
+
+Both call paths require ``model.signature()`` to match the viewer's internal passive model
+and return ``Result<(), MjViewerError>`` ---
+:docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>SignatureMismatch` is returned when
+the signatures differ, and
+:docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>IndexOutOfBounds` when the asset ID
+is out of range (singular methods only).
+If the model has been replaced or reloaded, call
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model` or
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` first to bring the viewer's
+passive copy up to date before issuing any asset re-upload.
+
+The viewer **stages** the upload and applies it on the next call to
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render`.
+
+.. code-block:: rust
+
+    use mujoco_rs::viewer::MjViewer;
+    use mujoco_rs::prelude::*;
+
+    fn main() {
+        // Box the model so MjData takes ownership; the viewer makes its own internal copy.
+        let model = Box::new(MjModel::from_xml("path/to/model.xml").expect("could not load the model"));
+        let mut data = MjData::new(model);
+        let mut viewer = MjViewer::launch_passive(data.model(), 0).expect("could not launch the viewer");
+
+        while viewer.running() {
+            viewer.sync_data(&mut data);
+
+            /* Mutate texture 0 in the model, then re-upload just that texture */
+            // SAFETY: only non-structural asset arrays (tex_data) are modified.
+            unsafe { data.model_mut() }.tex_data_mut()[..256].fill(128);
+            viewer.update_texture_from(data.model(), 0).unwrap();
+
+            /* Or re-upload all textures at once */
+            viewer.update_textures_from(data.model()).unwrap();
+
+            /* Staged uploads are applied during render() */
+            viewer.render().unwrap();
+            data.step();
+        }
+    }
 
 
 .. _mj_cpp_viewer:
@@ -387,6 +467,13 @@ Here is an example of using the C++ wrapper:
 
 .. code-block:: rust
 
+    use std::time::Duration;
+
+    use mujoco_rs::cpp_viewer::MjViewerCpp;
+    use mujoco_rs::prelude::*;
+
+    const EXAMPLE_MODEL: &str = r#"<mujoco><worldbody/></mujoco>"#;
+
     fn main() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
         let mut data = MjData::new(&model);
@@ -403,4 +490,6 @@ Here is an example of using the C++ wrapper:
     }
 
 
-Compared to the Rust-native viewer, the C++ wrapper doesn't take a ``data`` parameter to the :docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync`.
+Unlike the Rust-native viewer, the C++ wrapper's
+:docs-rs:`~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync` does not take a ``data``
+parameter; it uses the raw pointer passed at construction time.

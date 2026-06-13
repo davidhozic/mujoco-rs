@@ -110,8 +110,14 @@ pub fn mju_add_scl(res: &mut [MjtNum], vec1: &[MjtNum], vec2: &[MjtNum], scl: Mj
 }
 
 /// Normalize a vector in place and return its length before normalization.
+///
+/// # Panics
+/// Panics if `res` is empty.
 pub fn mju_normalize(res: &mut [MjtNum]) -> MjtNum {
-    // SAFETY: pointer and length derived from a valid slice.
+    // For n == 0 the C function writes res[0] = 1 and then mju_zero(res + 1, n - 1),
+    // i.e. memset with a (size_t)(-1) length, both out of bounds.
+    assert!(!res.is_empty());
+    // SAFETY: pointer and length derived from a valid, non-empty slice.
     unsafe { mujoco_c::mju_normalize(res.as_mut_ptr(), res.len() as i32) }
 }
 
@@ -185,6 +191,38 @@ pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum], n: usize) {
     assert!(res.len() == n * n && mat.len() == n * n);
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
     unsafe { mujoco_c::mju_symmetrize(res.as_mut_ptr(), mat.as_ptr(), n as i32) }
+}
+
+/// Convert symmetric sparse matrix to dense.
+///
+/// # Panics
+/// - Panics if `res` does not have `n * n` elements.
+/// - Panics if `mat` and `colind` have different lengths.
+/// - Panics if `rownnz` or `rowadr` does not have `n` elements.
+///
+/// # Safety
+/// The C routine reads `mat[adr + j]` / `colind[adr + j]` for `adr = rowadr[i]`,
+/// `0 <= j < rownnz[i]`, and writes `res[i*n + col]` / `res[col*n + i]` for `col = colind[adr + j]`,
+/// all without bounds checks. The caller must guarantee a self-consistent sparse structure:
+/// - for every row `i`, `rowadr[i] >= 0`, `rownnz[i] >= 0`, and `rowadr[i] + rownnz[i] <= mat.len()`;
+/// - every column index in `colind[rowadr[i] .. rowadr[i] + rownnz[i]]` lies in `0..n`.
+///
+/// Violating either is an out-of-bounds read/write. (These checks require iterating the index
+/// arrays, so they are the caller's obligation rather than a runtime check.) A sparse matrix
+/// produced by MuJoCo itself always satisfies them.
+pub unsafe fn mju_sym2dense(
+    res: &mut [MjtNum], mat: &[MjtNum], n: usize, rownnz: &[i32], rowadr: &[i32], colind: &[i32]
+) {
+    assert!(res.len() == n * n);
+    assert!(rownnz.len() == n && rowadr.len() == n);
+    assert!(mat.len() == colind.len());
+    // SAFETY: lengths checked above; the caller upholds the sparse-structure precondition that
+    // keeps every mat/colind read and res write performed by the C routine in bounds.
+    unsafe {
+        mujoco_c::mju_sym2dense(
+            res.as_mut_ptr(), mat.as_ptr(), n as i32, rownnz.as_ptr(), rowadr.as_ptr(), colind.as_ptr(),
+        )
+    }
 }
 
 /// Set a square matrix to identity.
@@ -726,6 +764,15 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn test_mju_normalize_panics_on_empty() {
+        // An empty slice would make the C function write res[0] and memset a (size_t)(-1)
+        // length, both out of bounds; the wrapper must reject it instead.
+        let mut empty = [];
+        mju_normalize(&mut empty);
+    }
+
+    #[test]
     fn test_mju_norm() {
         let a = [3.0, 4.0];
         let len = mju_norm(&a);
@@ -793,6 +840,42 @@ mod tests {
         // (M + M^T)/2 = [[1,2.5],[2.5,4]]
         assert_eq!(res, [1.0, 2.5,
                          2.5, 4.0]);
+    }
+
+    #[test]
+    fn test_mju_sym2dense() {
+        let mut dense = [0.0; 4];
+        let sym = [1.0, 2.0, 3.0];
+        let rownnz = [1, 2];
+        let rowadr = [0, 1];
+        let colind = [0, 0, 1];
+        // SAFETY: self-consistent sparse structure (rowadr/rownnz in bounds, colind in 0..n).
+        unsafe { mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind) };
+        assert_eq!(dense, [1.0, 2.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_mju_sym2dense_panics_on_bad_dense_size() {
+        let mut dense = [0.0; 3];
+        let sym = [1.0, 2.0, 3.0];
+        let rownnz = [1, 2];
+        let rowadr = [0, 1];
+        let colind = [0, 0, 1];
+        // SAFETY: structure is consistent; only the `res` length precondition (checked) is violated.
+        unsafe { mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind) };
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_mju_sym2dense_panics_on_mismatched_sparse_lengths() {
+        let mut dense = [0.0; 4];
+        let sym = [1.0, 2.0, 3.0];
+        let rownnz = [1, 2];
+        let rowadr = [0, 1];
+        let colind = [0, 0];
+        // SAFETY: only the `mat.len() == colind.len()` precondition (checked) is violated.
+        unsafe { mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind) };
     }
 
     #[test]

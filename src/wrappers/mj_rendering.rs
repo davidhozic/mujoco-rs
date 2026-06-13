@@ -1,6 +1,6 @@
 //! Definitions related to rendering.
 use crate::{array_slice_dyn, getter_setter, mujoco_c::*};
-use crate::error::MjSceneError;
+use crate::error::MjrContextError;
 
 use super::mj_model::{MjModel, MjtTexture, MjtTextureRole};
 
@@ -135,10 +135,10 @@ impl MjrContext {
 
     /// Add Aux buffer with given index to context; free previous Aux buffer.
     /// # Errors
-    /// Returns [`MjSceneError::InvalidAuxBufferIndex`] when `index >= mjNAUX` (10).
-    pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) -> Result<(), MjSceneError> {
+    /// Returns [`MjrContextError::IndexOutOfBounds`] when `index >= mjNAUX` (10).
+    pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) -> Result<(), MjrContextError> {
         if index >= mjNAUX as usize {
-            return Err(MjSceneError::InvalidAuxBufferIndex { index });
+            return Err(MjrContextError::IndexOutOfBounds { id: index, len: mjNAUX as usize });
         }
         // SAFETY: index is bounds-checked above; self.ffi is valid.
         unsafe { mjr_addAux(index as i32, width as i32, height as i32, samples as i32, self.ffi_mut()); }
@@ -151,15 +151,28 @@ impl MjrContext {
         unsafe { mjr_resizeOffscreen(width as i32, height as i32, self.ffi_mut()); }
     }
 
-    /// Upload texture to GPU, overwriting previous upload if any.
+    /// Re-upload texture to GPU, overwriting previous upload if any.
     ///
-    /// # Panics
-    /// Panics if `texid >= model.ntex()`.
-    pub fn upload_texture(&mut self, model: &MjModel, texid: u32) {
-        let ntex = model.ntex();
-        assert!((texid as i64) < ntex, "texid {texid} is out of range [0, {ntex})");
-        // SAFETY: texid is bounds-checked above; model and context are valid.
-        unsafe { mjr_uploadTexture(model.ffi(), self.ffi_mut(), texid as i32); }
+    /// # Errors
+    /// Returns [`MjrContextError::IndexOutOfBounds`] if `texture_id >= model.ntex()`.
+    pub fn upload_texture(&self, model: &MjModel, texture_id: usize) -> Result<(), MjrContextError> {
+        self.upload_x(model, texture_id, model.ntex() as usize, mjr_uploadTexture)
+    }
+
+    /// Re-upload mesh to GPU, overwriting previous upload if any.
+    ///
+    /// # Errors
+    /// Returns [`MjrContextError::IndexOutOfBounds`] if `mesh_id >= model.nmesh()`.
+    pub fn upload_mesh(&self, model: &MjModel, mesh_id: usize) -> Result<(), MjrContextError> {
+        self.upload_x(model, mesh_id, model.nmesh() as usize, mjr_uploadMesh)
+    }
+
+    /// Re-upload heightfield to GPU, overwriting previous upload if any.
+    ///
+    /// # Errors
+    /// Returns [`MjrContextError::IndexOutOfBounds`] if `hfield_id >= model.nhfield()`.
+    pub fn upload_hfield(&self, model: &MjModel, hfield_id: usize) -> Result<(), MjrContextError> {
+        self.upload_x(model, hfield_id, model.nhfield() as usize, mjr_uploadHField)
     }
 
     /// Make the context's buffer current again.
@@ -179,17 +192,17 @@ impl MjrContext {
     /// The `rgb` array is of size `[width * height * 3]`, while `depth` is of size `[width * height]`.
     ///
     /// # Errors
-    /// Returns [`MjSceneError::InvalidViewport`] if the viewport has negative
-    /// dimensions, or [`MjSceneError::BufferTooSmall`] if `rgb` or `depth`
+    /// Returns [`MjrContextError::InvalidViewport`] if the viewport has negative
+    /// dimensions, or [`MjrContextError::BufferTooSmall`] if `rgb` or `depth`
     /// buffers are too small.
     pub fn read_pixels(
         &self,
         rgb: Option<&mut [u8]>,
         depth: Option<&mut [f32]>,
         viewport: &MjrRectangle,
-    ) -> Result<(), MjSceneError> {
+    ) -> Result<(), MjrContextError> {
         if viewport.width < 0 || viewport.height < 0 {
-            return Err(MjSceneError::InvalidViewport {
+            return Err(MjrContextError::InvalidViewport {
                 width: viewport.width,
                 height: viewport.height,
             });
@@ -198,7 +211,7 @@ impl MjrContext {
         if let Some(buf) = rgb.as_ref() {
             let needed = size * 3;
             if buf.len() < needed {
-                return Err(MjSceneError::BufferTooSmall {
+                return Err(MjrContextError::BufferTooSmall {
                     name: "rgb",
                     got: buf.len(),
                     needed,
@@ -208,7 +221,7 @@ impl MjrContext {
         if let Some(buf) = depth.as_ref()
             && buf.len() < size
         {
-            return Err(MjSceneError::BufferTooSmall {
+            return Err(MjrContextError::BufferTooSmall {
                 name: "depth",
                 got: buf.len(),
                 needed: size,
@@ -229,10 +242,10 @@ impl MjrContext {
 
     /// Set Aux buffer for custom OpenGL rendering (call restoreBuffer when done).
     /// # Errors
-    /// Returns [`MjSceneError::InvalidAuxBufferIndex`] when `index >= mjNAUX` (10).
-    pub fn set_aux(&mut self, index: usize) -> Result<(), MjSceneError> {
+    /// Returns [`MjrContextError::IndexOutOfBounds`] when `index >= mjNAUX` (10).
+    pub fn set_aux(&mut self, index: usize) -> Result<(), MjrContextError> {
         if index >= mjNAUX as usize {
-            return Err(MjSceneError::InvalidAuxBufferIndex { index });
+            return Err(MjrContextError::IndexOutOfBounds { id: index, len: mjNAUX as usize });
         }
         // SAFETY: index is bounds-checked above; self.ffi is valid.
         unsafe { mjr_setAux(index as i32, self.ffi_mut()); }
@@ -269,16 +282,31 @@ impl MjrContext {
     pub unsafe fn ffi_mut(&mut self) -> &mut mjrContext {
         &mut self.ffi
     }
+
+    /// Common implementation of GPU upload methods. Specific item upload is made
+    /// by giving the corresponding `mjr_uploadX` to `upload_fn`.
+    fn upload_x(
+        &self, model: &MjModel, item_id: usize, n_items: usize,
+        upload_fn: unsafe extern "C" fn (m: *const mjModel, con: *const mjrContext, id: ::std::ffi::c_int)
+    ) -> Result<(), MjrContextError>
+    {
+        if item_id >= n_items {
+            return Err(MjrContextError::IndexOutOfBounds { id: item_id, len: n_items });
+        }
+        // SAFETY: item_id is bounds-checked above; model and context are valid.
+        unsafe { upload_fn(model.ffi(), self.ffi(), item_id as i32); }
+        Ok(())
+    }
 }
 
 /// Array slices.
 impl MjrContext {
     array_slice_dyn! {
-        (unsafe) textureType: as_ptr as_mut_ptr &[MjtTexture [force]; "type of texture"; ffi().ntexture],
-        (unsafe) skinvertVBO: &[u32; "skin vertex position VBOs"; ffi().nskin],
-        (unsafe) skinnormalVBO: &[u32; "skin vertex normal VBOs"; ffi().nskin],
-        (unsafe) skintexcoordVBO: &[u32; "skin vertex texture coordinate VBOs"; ffi().nskin],
-        (unsafe) skinfaceVBO: &[u32; "skin face index VBOs"; ffi().nskin]
+        (mut = unsafe) textureType: as_ptr as_mut_ptr &[MjtTexture [force]; "type of texture"; ffi().ntexture],
+        (mut = unsafe) skinvertVBO: &[u32; "skin vertex position VBOs"; ffi().nskin],
+        (mut = unsafe) skinnormalVBO: &[u32; "skin vertex normal VBOs"; ffi().nskin],
+        (mut = unsafe) skintexcoordVBO: &[u32; "skin vertex texture coordinate VBOs"; ffi().nskin],
+        (mut = unsafe) skinfaceVBO: &[u32; "skin face index VBOs"; ffi().nskin]
     }
 }
 
@@ -354,4 +382,3 @@ impl Drop for MjrContext {
         }
     }
 }
-

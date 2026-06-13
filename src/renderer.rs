@@ -389,6 +389,110 @@ impl MjRenderer {
         self.option = options;
     }
 
+    fn update_x_from(
+        &self,
+        model: &MjModel,
+        id: usize,
+        upload: fn(&MjrContext, &MjModel, usize) -> Result<(), crate::error::MjrContextError>,
+    ) -> Result<(), RendererError>
+    {
+        self.prepare_upload(model)?;
+        upload(&self.context, model, id)?;
+        Ok(())
+    }
+
+    fn prepare_upload(&self, model: &MjModel) -> Result<(), RendererError> {
+        if model.signature() != self.scene.signature() {
+            return Err(RendererError::SignatureMismatch);
+        }
+        self.gl_state.make_current().map_err(RendererError::GlutinError)
+    }
+
+    fn update_all_from_impl(
+        &self,
+        model: &MjModel,
+        n: usize,
+        upload: fn(&MjrContext, &MjModel, usize) -> Result<(), crate::error::MjrContextError>,
+    ) -> Result<(), RendererError>
+    {
+        self.prepare_upload(model)?;
+        for id in 0..n {
+            upload(&self.context, model, id)?;
+        }
+        Ok(())
+    }
+
+    /// Re-uploads the texture with `texture_id` from `model` to the GPU immediately.
+    ///
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::ContextError`] if `texture_id >= model.ntex()`.
+    /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn update_texture_from(&self, model: &MjModel, texture_id: usize) -> Result<(), RendererError> {
+        self.update_x_from(model, texture_id, MjrContext::upload_texture)
+    }
+
+    /// Re-uploads all textures from `model` to the GPU immediately.
+    ///
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn update_textures_from(&self, model: &MjModel) -> Result<(), RendererError> {
+        self.update_all_from_impl(model, model.ntex() as usize, MjrContext::upload_texture)
+    }
+
+    /// Re-uploads the mesh with `mesh_id` from `model` to the GPU immediately.
+    ///
+    /// All data arrays read by `mjr_uploadMesh` are copied: vertex positions
+    /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
+    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
+    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
+    /// not copied because they are fixed by the model signature.
+    ///
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::ContextError`] if `mesh_id >= model.nmesh()`.
+    /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn update_mesh_from(&self, model: &MjModel, mesh_id: usize) -> Result<(), RendererError> {
+        self.update_x_from(model, mesh_id, MjrContext::upload_mesh)
+    }
+
+    /// Re-uploads all meshes from `model` to the GPU immediately.
+    ///
+    /// All data arrays read by `mjr_uploadMesh` are bulk-uploaded: vertex positions
+    /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
+    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
+    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
+    /// not copied because they are fixed by the model signature.
+    ///
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn update_meshes_from(&self, model: &MjModel) -> Result<(), RendererError> {
+        self.update_all_from_impl(model, model.nmesh() as usize, MjrContext::upload_mesh)
+    }
+
+    /// Re-uploads the heightfield with `hfield_id` from `model` to the GPU immediately.
+    ///
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::ContextError`] if `hfield_id >= model.nhfield()`.
+    /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn update_hfield_from(&self, model: &MjModel, hfield_id: usize) -> Result<(), RendererError> {
+        self.update_x_from(model, hfield_id, MjrContext::upload_hfield)
+    }
+
+    /// Re-uploads all heightfields from `model` to the GPU immediately.
+    ///
+    /// # Errors
+    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
+    pub fn update_hfields_from(&self, model: &MjModel) -> Result<(), RendererError> {
+        self.update_all_from_impl(model, model.nhfield() as usize, MjrContext::upload_hfield)
+    }
+
     /// Set the camera used for rendering.
     pub fn set_camera(&mut self, camera: MjvCamera)  {
         self.camera = camera;
@@ -456,7 +560,7 @@ impl MjRenderer {
     ///
     /// # Errors
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current
-    ///   (only when the [`MjModel`] in `data` differs from the internal model).
+    ///   (only when the [`MjModel`] in `data` differs from the model that created the internal [`MjvScene`]).
     pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
         if data.model().signature() != self.scene.signature() {
             /* Model changed: preserve the extra-geom headroom and user-geom
@@ -665,8 +769,8 @@ impl MjRenderer {
     ///
     /// # Errors
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current.
-    /// - [`RendererError::SceneError`] if the user-scene sync overflows the geom buffer
-    ///   or if reading pixels from the framebuffer fails.
+    /// - [`RendererError::SceneError`] if the user-scene sync overflows the geom buffer.
+    /// - [`RendererError::ContextError`] if reading pixels from the framebuffer fails.
     pub fn render(&mut self) -> Result<(), RendererError> {
         /* Sync user scene geoms into the main scene before rendering */
         sync_geoms(&self.user_scene, &mut self.scene).map_err(RendererError::SceneError)?;
@@ -684,7 +788,7 @@ impl MjRenderer {
             flat_rgb,
             flat_depth,
             &vp
-        ).map_err(RendererError::SceneError)?;
+        ).map_err(RendererError::ContextError)?;
 
         /* Flip the read pixels vertically, as OpenGL reads bottom-up */
         if let Some(rgb) = self.rgb.as_deref_mut() {
@@ -730,6 +834,11 @@ pub enum RendererError {
     IoError(io::Error),
     /// A scene operation failed (e.g. user-scene sync overflowed the geom buffer).
     SceneError(crate::error::MjSceneError),
+    /// A rendering-context operation failed (e.g. an asset or aux-buffer ID is out of range).
+    ContextError(crate::error::MjrContextError),
+    /// The model's structure signature does not match the renderer's scene.
+    /// Call [`MjRenderer::sync_data`] first.
+    SignatureMismatch,
 }
 
 /// Formats a human-readable description of the renderer error.
@@ -747,6 +856,8 @@ impl Display for RendererError {
             Self::DimensionMismatch => write!(f, "the input width and height don't match the renderer's configuration"),
             Self::IoError(e) => write!(f, "I/O error: {e}"),
             Self::SceneError(e) => write!(f, "scene error: {e}"),
+            Self::ContextError(e) => write!(f, "rendering context error: {e}"),
+            Self::SignatureMismatch => write!(f, "model signature mismatch: call sync_data first"),
         }
     }
 }
@@ -762,6 +873,7 @@ impl Error for RendererError {
             Self::GlutinError(e) => Some(e),
             Self::IoError(e) => Some(e),
             Self::SceneError(e) => Some(e),
+            Self::ContextError(e) => Some(e),
             _ => None,
         }
     }
@@ -785,6 +897,13 @@ impl From<png::EncodingError> for RendererError {
 impl From<crate::error::MjSceneError> for RendererError {
     fn from(e: crate::error::MjSceneError) -> Self {
         Self::SceneError(e)
+    }
+}
+
+/// Converts an [`crate::error::MjrContextError`] into [`RendererError::ContextError`].
+impl From<crate::error::MjrContextError> for RendererError {
+    fn from(e: crate::error::MjrContextError) -> Self {
+        Self::ContextError(e)
     }
 }
 

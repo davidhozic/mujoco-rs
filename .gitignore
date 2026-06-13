@@ -30,3 +30,9 @@ settings.json
 # Ignore local MuJoCo downloads
 mujoco-3.*
 MUJOCO_LOG.TXT
+
+# Generated workflow reports (audit / verify / release / asan / miri).
+# Kept out of git and the published crate via .gitignore -- never list these in Cargo exclude.
+/mujoco-rs-*-report.html
+/mujoco-rs-*-audit.html
+/mujoco-rs-*-audit.md

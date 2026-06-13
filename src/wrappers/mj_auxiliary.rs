@@ -32,6 +32,12 @@ impl Default for MjVisual {
 pub type MjStatistic = mjStatistic;
 
 /***********************************************************************************************************************
+** MjPreContact
+***********************************************************************************************************************/
+/// Contact parameters set by narrowphase collision functions.
+pub type MjPreContact = mjPreContact;
+
+/***********************************************************************************************************************
 ** MjContact
 ***********************************************************************************************************************/
 /// Contact point data (position, frame, friction/solver parameters, geom/flex ids, etc.).
@@ -39,6 +45,18 @@ pub type MjContact = mjContact;
 
 // SAFETY: mjContact_ contains only f64 and c_int fields, which are all zero-valid.
 unsafe impl bytemuck::Zeroable for mjContact_ {}
+
+/***********************************************************************************************************************
+** MjfCollision
+***********************************************************************************************************************/
+/// Collision callback type.
+pub type MjfCollision = mjfCollision;
+
+/***********************************************************************************************************************
+** MjpResourceProvider
+***********************************************************************************************************************/
+/// Resource provider callbacks and opaque provider data.
+pub type MjpResourceProvider = mjpResourceProvider;
 
 /***********************************************************************************************************************
 ** MjLROpt

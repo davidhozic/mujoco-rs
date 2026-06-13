@@ -28,15 +28,18 @@ SOFTWARE.
 from docutils.transforms import Transform
 from docutils import nodes
 
+import os
 import re
 
 config = {}
+repo_root = None
 
 def setup(app):
-    global config
+    global config, repo_root
     app.add_role('gh-example', link_docs_rs)
     app.add_post_transform(StripSpecifiers)
     config = app.config
+    repo_root = os.path.abspath(os.path.join(app.confdir, '../../..'))
     return {'version': '0.1'}
 
 
@@ -47,6 +50,15 @@ def link_docs_rs(name, rawtext, text: str, lineno, inliner, options={}, content=
         text, link = link_text.split("<", 1)
         link_text = link[:-1]  # -1 to remove '>'
         text = text.strip()
+
+    local_path = os.path.join(repo_root, 'examples', link_text)
+    if not os.path.exists(local_path):
+        msg = inliner.reporter.error(
+            f":gh-example: path does not exist: examples/{link_text}",
+            line=lineno,
+        )
+        prob = inliner.problematic(rawtext, rawtext, msg)
+        return [prob], [msg]
 
     release = config["release"]
     repository = "mujoco-rs"
