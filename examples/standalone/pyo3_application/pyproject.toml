@@ -2,7 +2,7 @@
 name = "pyo3_application"
 version = "0.1.0"
 description = "A Python extension, written in Rust."
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 
 [tool.maturin]
 # Optionally enable manylinux compatibility (example here shows GLIBC version 2.31)

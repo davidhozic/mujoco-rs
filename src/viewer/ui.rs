@@ -680,9 +680,9 @@ impl ViewerUI {
                                 ui.horizontal_wrapped(|ui| {
                                     for i in 0..mjNGROUP as usize {
                                         let mask = 1 << i;
-                                        let mut is_enabled = (options.disableactuator & (mask as i32)) == 0;
+                                        let mut is_enabled = (options.disableactuator & mask) == 0;
                                         if ui.toggle_value(&mut is_enabled, format!("Act Group {i}")).changed() {
-                                            set_flag!(options.disableactuator, mask as i32, !is_enabled);
+                                            set_flag!(options.disableactuator, mask, !is_enabled);
                                         }
                                     }
                                 });

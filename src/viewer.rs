@@ -1948,7 +1948,7 @@ impl MjViewerBuilder {
 
         // User interface
         #[cfg(feature = "viewer-ui")]
-        let ui = ui::ViewerUI::new(&*model, window, &gl_surface.display())?;
+        let ui = ui::ViewerUI::new(&model, window, &gl_surface.display())?;
         #[cfg(feature = "viewer-ui")]
         let mut status = ViewerStatusBit::UI;
         #[cfg(not(feature = "viewer-ui"))]
