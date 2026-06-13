@@ -81,7 +81,7 @@ impl MjViewerCpp {
     pub unsafe fn launch_passive<M: Deref<Target = MjModel> + Clone + Send + Sync>(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut cam = Box::new(MjvCamera::default());
-        let mut opt: Box<MjvOption> = Box::new(MjvOption::default());
+        let mut opt = Box::new(MjvOption::default());
         let mut pert = Box::new(MjvPerturb::default());
         let mut user_scn = Box::new(MjvScene::new(model.clone(), max_user_geom));
 
