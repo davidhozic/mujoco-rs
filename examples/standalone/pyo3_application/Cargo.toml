@@ -6,7 +6,8 @@ edition = "2024"
 [lib]
 crate-type = ["cdylib"]
 
+[workspace]
 
 [dependencies]
-mujoco-rs = {path = "../../", features = ["viewer-ui"]}
+mujoco-rs = {path = "../../../", features = ["viewer-ui"]}
 pyo3 = { version = "0.29.0", features = ["abi3-py39", "extension-module"] }
