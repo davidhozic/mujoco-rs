@@ -94,7 +94,7 @@ impl GlState {
 
 
 /// A builder for [`MjRenderer`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MjRendererBuilder {
     width: u32,
     height: u32,
