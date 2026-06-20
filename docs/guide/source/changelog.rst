@@ -33,6 +33,17 @@ update of MuJoCo alone can increase the major version.
   .. rubric:: Bug fixes
   .. rubric:: Other changes
 
+Unreleased
+======================
+
+.. rubric:: New features and improvements
+
+*Cloneable renderer builder*
+
+- :docs-rs:`~mujoco_rs::renderer::<struct>MjRendererBuilder` now derives ``Clone``,
+  so a configured builder can be duplicated before ``build``. It already implemented ``Debug``
+  and ``Default``, so all builder types now provide ``Debug`` + ``Clone`` + ``Default``.
+
 5.0.0 (MuJoCo 3.9.0)
 ======================
 
