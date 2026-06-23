@@ -43,7 +43,7 @@ impl<T> ::std::cmp::PartialEq for __BindgenUnionField<T> {
     }
 }
 impl<T> ::std::cmp::Eq for __BindgenUnionField<T> {}
-pub const mjVERSION_HEADER: u32 = 3009000;
+pub const mjVERSION_HEADER: u32 = 3010000;
 pub const mjMINVAL: f64 = 0.000000000000001;
 pub const mjPI: f64 = 3.141592653589793;
 pub const mjMAXVAL: f64 = 10000000000.0;
@@ -65,7 +65,6 @@ pub const mjNPOLY: u32 = 2;
 pub const mjNSENS: u32 = 3;
 pub const mjNSOLVER: u32 = 200;
 pub const mjNISLAND: u32 = 20;
-pub const mjMAXTHREAD: u32 = 128;
 pub const mjNGROUP: u32 = 6;
 pub const mjMAXLIGHT: u32 = 100;
 pub const mjMAXOVERLAY: u32 = 500;
@@ -627,6 +626,50 @@ pub enum mjtSleepState_ {
     mjS_AWAKE = 1,
 }
 pub use self::mjtSleepState_ as mjtSleepState;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
+pub enum mjtLogLevel_ {
+    mjLOG_DEBUG = 0,
+    mjLOG_INFO = 1,
+    mjLOG_WARNING = 2,
+    mjLOG_ERROR = 3,
+}
+pub use self::mjtLogLevel_ as mjtLogLevel;
+impl mjtLogTopic_ {
+    pub const mjNTOPIC: mjtLogTopic_ = mjtLogTopic_::mjTOPIC_SLEEP;
+}
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
+pub enum mjtLogTopic_ {
+    mjTOPIC_NONE = 0,
+    mjTOPIC_TIME_STP = 1,
+    mjTOPIC_TIME_CMP = 2,
+    mjTOPIC_SLEEP = 3,
+}
+pub use self::mjtLogTopic_ as mjtLogTopic;
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct mjLogMessage_ {
+    pub level: ::std::os::raw::c_int,
+    pub topic: ::std::os::raw::c_int,
+    pub subject: [::std::os::raw::c_char; 1024usize],
+    pub body: *const ::std::os::raw::c_char,
+    pub func: *const ::std::os::raw::c_char,
+    pub file: *const ::std::os::raw::c_char,
+    pub line: ::std::os::raw::c_int,
+    pub timestamp: mjtBool,
+}
+pub type mjLogMessage = mjLogMessage_;
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct mjLogConfig_ {
+    pub logto_console: mjtBool,
+    pub logto_file: mjtBool,
+    pub logfile: [::std::os::raw::c_char; 1024usize],
+    pub topics: ::std::os::raw::c_int,
+}
+pub type mjLogConfig = mjLogConfig_;
+pub type mjfLogHandler = ::std::option::Option<unsafe extern "C" fn(arg1: *const mjLogMessage)>;
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct mjLROpt_ {
@@ -1392,31 +1435,6 @@ pub struct mjModel_ {
     pub signature: u64,
 }
 pub type mjModel = mjModel_;
-#[repr(u32)]
-#[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtTaskStatus_ {
-    mjTASK_NEW = 0,
-    mjTASK_QUEUED = 1,
-    mjTASK_COMPLETED = 2,
-}
-pub use self::mjtTaskStatus_ as mjtTaskStatus;
-pub type mjfTask = ::std::option::Option<
-    unsafe extern "C" fn(arg1: *mut ::std::os::raw::c_void) -> *mut ::std::os::raw::c_void,
->;
-#[repr(C)]
-#[derive(Debug, Clone)]
-pub struct mjThreadPool_ {
-    pub nworker: ::std::os::raw::c_int,
-}
-pub type mjThreadPool = mjThreadPool_;
-#[repr(C)]
-#[derive(Debug, Clone)]
-pub struct mjTask_ {
-    pub func: mjfTask,
-    pub args: *mut ::std::os::raw::c_void,
-    pub status: ::std::os::raw::c_int,
-}
-pub type mjTask = mjTask_;
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct mjPreContact_ {
@@ -1485,8 +1503,9 @@ pub struct mjData_ {
     pub pstack: usize,
     pub pbase: usize,
     pub parena: usize,
+    pub threadpool: usize,
+    pub threadlock: mjtBool,
     pub maxuse_stack: mjtSize,
-    pub maxuse_threadstack: [mjtSize; 128usize],
     pub maxuse_arena: mjtSize,
     pub maxuse_con: ::std::os::raw::c_int,
     pub maxuse_efc: ::std::os::raw::c_int,
@@ -1621,7 +1640,7 @@ pub struct mjData_ {
     pub efc_pos: *mut mjtNum,
     pub efc_margin: *mut mjtNum,
     pub efc_frictionloss: *mut mjtNum,
-    pub efc_diagApprox: *mut mjtNum,
+    pub efc_diagA: *mut mjtNum,
     pub efc_KBIP: *mut mjtNum,
     pub efc_D: *mut mjtNum,
     pub efc_R: *mut mjtNum,
@@ -1638,12 +1657,6 @@ pub struct mjData_ {
     pub map_idof2dof: *mut ::std::os::raw::c_int,
     pub ifrc_smooth: *mut mjtNum,
     pub iacc_smooth: *mut mjtNum,
-    pub iM_rownnz: *mut ::std::os::raw::c_int,
-    pub iM_rowadr: *mut ::std::os::raw::c_int,
-    pub iM_colind: *mut ::std::os::raw::c_int,
-    pub iM: *mut mjtNum,
-    pub iLD: *mut mjtNum,
-    pub iLDiagInv: *mut mjtNum,
     pub iacc: *mut mjtNum,
     pub efc_island: *mut ::std::os::raw::c_int,
     pub island_ne: *mut ::std::os::raw::c_int,
@@ -1654,11 +1667,6 @@ pub struct mjData_ {
     pub map_iefc2efc: *mut ::std::os::raw::c_int,
     pub iefc_type: *mut ::std::os::raw::c_int,
     pub iefc_id: *mut ::std::os::raw::c_int,
-    pub iefc_J_rownnz: *mut ::std::os::raw::c_int,
-    pub iefc_J_rowadr: *mut ::std::os::raw::c_int,
-    pub iefc_J_rowsuper: *mut ::std::os::raw::c_int,
-    pub iefc_J_colind: *mut ::std::os::raw::c_int,
-    pub iefc_J: *mut mjtNum,
     pub iefc_frictionloss: *mut mjtNum,
     pub iefc_D: *mut mjtNum,
     pub iefc_R: *mut mjtNum,
@@ -1679,7 +1687,6 @@ pub struct mjData_ {
     pub efc_state: *mut ::std::os::raw::c_int,
     pub efc_force: *mut mjtNum,
     pub ifrc_constraint: *mut mjtNum,
-    pub threadpool: usize,
     pub signature: u64,
 }
 pub type mjData = mjData_;
@@ -1801,6 +1808,14 @@ pub enum mjtOrientation_ {
 pub use self::mjtOrientation_ as mjtOrientation;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
+pub enum mjtConflict_ {
+    mjCONFLICT_WARNING = 0,
+    mjCONFLICT_MERGE = 1,
+    mjCONFLICT_ERROR = 2,
+}
+pub use self::mjtConflict_ as mjtConflict;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
 pub enum mjtCTimer_ {
     mjCTIMER_TOTAL = 0,
     mjCTIMER_ASSETS = 1,
@@ -1839,11 +1854,28 @@ pub struct mjsCompiler_ {
     pub(crate) inertiagrouprange: [::std::os::raw::c_int; 2usize],
     pub(crate) saveinertial: mjtByte,
     pub(crate) alignfree: ::std::os::raw::c_int,
+    pub(crate) conflict: ::std::os::raw::c_int,
     pub(crate) LRopt: mjLROpt,
     pub(crate) meshdir: *mut mjString,
     pub(crate) texturedir: *mut mjString,
+    pub(crate) authored: u64,
 }
 pub type mjsCompiler = mjsCompiler_;
+#[repr(C)]
+#[derive(Debug)]
+pub struct mjsAuthored_ {
+    pub(crate) option: u64,
+    pub(crate) disableflags: ::std::os::raw::c_int,
+    pub(crate) enableflags: ::std::os::raw::c_int,
+    pub(crate) disableactuator: ::std::os::raw::c_int,
+    pub(crate) visual_global: u64,
+    pub(crate) visual_quality: u64,
+    pub(crate) visual_headlight: u64,
+    pub(crate) visual_map: u64,
+    pub(crate) visual_scale: u64,
+    pub(crate) visual_rgba: u64,
+}
+pub type mjsAuthored = mjsAuthored_;
 #[repr(C)]
 #[derive(Debug)]
 pub struct mjSpec_ {
@@ -1872,6 +1904,7 @@ pub struct mjSpec_ {
     pub comment: *mut mjString,
     pub modelfiledir: *mut mjString,
     pub hasImplicitPluginElem: mjtByte,
+    pub authored: mjsAuthored,
 }
 pub type mjSpec = mjSpec_;
 #[repr(C)]
@@ -2968,6 +3001,51 @@ pub enum mjtFont_ {
     mjFONT_BIG = 2,
 }
 pub use self::mjtFont_ as mjtFont;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, )]
+pub enum mjrPixelFormat_ {
+    mjPIXEL_FORMAT_UNKNOWN = 0,
+    mjPIXEL_FORMAT_R8 = 1,
+    mjPIXEL_FORMAT_RGB8 = 2,
+    mjPIXEL_FORMAT_RGBA8 = 3,
+    mjPIXEL_FORMAT_R32F = 4,
+    mjPIXEL_FORMAT_DEPTH32F = 5,
+    mjPIXEL_FORMAT_KTX = 6,
+}
+pub use self::mjrPixelFormat_ as mjrPixelFormat;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, )]
+pub enum mjrVertexAttributeUsage_ {
+    mjVERTEX_ATTRIBUTE_USAGE_POSITION = 0,
+    mjVERTEX_ATTRIBUTE_USAGE_NORMAL = 1,
+    mjVERTEX_ATTRIBUTE_USAGE_TANGENTS = 2,
+    mjVERTEX_ATTRIBUTE_USAGE_UV = 3,
+    mjVERTEX_ATTRIBUTE_USAGE_COLOR = 4,
+}
+pub use self::mjrVertexAttributeUsage_ as mjrVertexAttributeUsage;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, )]
+pub enum mjrVertexAttributeType_ {
+    mjVERTEX_ATTRIBUTE_TYPE_FLOAT2 = 0,
+    mjVERTEX_ATTRIBUTE_TYPE_FLOAT3 = 1,
+    mjVERTEX_ATTRIBUTE_TYPE_FLOAT4 = 2,
+    mjVERTEX_ATTRIBUTE_TYPE_UBYTE4 = 3,
+}
+pub use self::mjrVertexAttributeType_ as mjrVertexAttributeType;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, )]
+pub enum mjrIndexType_ {
+    mjINDEX_TYPE_U16 = 0,
+    mjINDEX_TYPE_U32 = 1,
+}
+pub use self::mjrIndexType_ as mjrIndexType;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, )]
+pub enum mjrMeshPrimitiveType_ {
+    mjMESH_PRIMITIVE_TYPE_TRIANGLES = 0,
+    mjMESH_PRIMITIVE_TYPE_LINES = 1,
+}
+pub use self::mjrMeshPrimitiveType_ as mjrMeshPrimitiveType;
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct mjrRect_ {
@@ -2977,6 +3055,18 @@ pub struct mjrRect_ {
     pub height: ::std::os::raw::c_int,
 }
 pub type mjrRect = mjrRect_;
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct mjrVertexAttribute_ {
+    pub bytes: *const ::std::os::raw::c_void,
+    pub usage: ::std::os::raw::c_int,
+    pub type_: ::std::os::raw::c_int,
+}
+pub type mjrVertexAttribute = mjrVertexAttribute_;
+pub use self::mjtColorSpace as mjrColorSpace;
+pub use self::mjtLightType as mjrLightType;
+pub use self::mjtTexture as mjrSamplerType;
+pub type mjrCamera = mjvGLCamera;
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct mjrContext_ {
@@ -3288,20 +3378,20 @@ pub struct mjuiDef_ {
 }
 pub type mjuiDef = mjuiDef_;
 unsafe extern "C" {
-    pub static mut mju_user_error:
-        ::std::option::Option<unsafe extern "C" fn(arg1: *const ::std::os::raw::c_char)>;
-}
-unsafe extern "C" {
-    pub static mut mju_user_warning:
-        ::std::option::Option<unsafe extern "C" fn(arg1: *const ::std::os::raw::c_char)>;
-}
-unsafe extern "C" {
     pub static mut mju_user_malloc:
         ::std::option::Option<unsafe extern "C" fn(arg1: usize) -> *mut ::std::os::raw::c_void>;
 }
 unsafe extern "C" {
     pub static mut mju_user_free:
         ::std::option::Option<unsafe extern "C" fn(arg1: *mut ::std::os::raw::c_void)>;
+}
+unsafe extern "C" {
+    pub static mut mju_user_error:
+        ::std::option::Option<unsafe extern "C" fn(arg1: *const ::std::os::raw::c_char)>;
+}
+unsafe extern "C" {
+    pub static mut mju_user_warning:
+        ::std::option::Option<unsafe extern "C" fn(arg1: *const ::std::os::raw::c_char)>;
 }
 unsafe extern "C" {
     pub static mut mjcb_passive: mjfGeneric;
@@ -3350,6 +3440,9 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub static mut mjRNDSTRING: [[*const ::std::os::raw::c_char; 3usize]; 11usize];
+}
+unsafe extern "C" {
+    pub static mut mjTOPICSTRING: [*const ::std::os::raw::c_char; 3usize];
 }
 unsafe extern "C" {
     pub fn mj_defaultVFS(vfs: *mut mjVFS);
@@ -4076,7 +4169,7 @@ unsafe extern "C" {
     ) -> *const ::std::os::raw::c_char;
 }
 unsafe extern "C" {
-    pub fn mj_fullM(m: *const mjModel, dst: *mut mjtNum, M: *const mjtNum);
+    pub fn mj_fullM(m: *const mjModel, d: *const mjData, dst: *mut mjtNum);
 }
 unsafe extern "C" {
     pub fn mj_mulM(m: *const mjModel, d: *const mjData, res: *mut mjtNum, vec: *const mjtNum);
@@ -4689,22 +4782,25 @@ unsafe extern "C" {
     pub fn mju_error(msg: *const ::std::os::raw::c_char, ...);
 }
 unsafe extern "C" {
-    pub fn mju_error_i(msg: *const ::std::os::raw::c_char, i: ::std::os::raw::c_int);
-}
-unsafe extern "C" {
-    pub fn mju_error_s(msg: *const ::std::os::raw::c_char, text: *const ::std::os::raw::c_char);
-}
-unsafe extern "C" {
     pub fn mju_warning(msg: *const ::std::os::raw::c_char, ...);
 }
 unsafe extern "C" {
-    pub fn mju_warning_i(msg: *const ::std::os::raw::c_char, i: ::std::os::raw::c_int);
-}
-unsafe extern "C" {
-    pub fn mju_warning_s(msg: *const ::std::os::raw::c_char, text: *const ::std::os::raw::c_char);
-}
-unsafe extern "C" {
     pub fn mju_clearHandlers();
+}
+unsafe extern "C" {
+    pub fn mju_setLogHandler(handler: mjfLogHandler) -> mjfLogHandler;
+}
+unsafe extern "C" {
+    pub fn mju_getLogConfig() -> mjLogConfig;
+}
+unsafe extern "C" {
+    pub fn mju_setLogConfig(config: mjLogConfig);
+}
+unsafe extern "C" {
+    pub fn mju_info(topic: ::std::os::raw::c_int, msg: *const ::std::os::raw::c_char, ...);
+}
+unsafe extern "C" {
+    pub fn mju_message(msg: *const mjLogMessage);
 }
 unsafe extern "C" {
     pub fn mju_malloc(size: usize) -> *mut ::std::os::raw::c_void;
@@ -4726,6 +4822,15 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mjs_isWarning(s: *mut mjSpec) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjs_numWarnings(spec: *const mjSpec) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjs_getWarning(
+        spec: *const mjSpec,
+        index: ::std::os::raw::c_int,
+    ) -> *const ::std::os::raw::c_char;
 }
 unsafe extern "C" {
     pub fn mju_zero3(res: *mut [mjtNum; 3usize]);
@@ -5497,22 +5602,7 @@ unsafe extern "C" {
     ) -> *mut mjSpec;
 }
 unsafe extern "C" {
-    pub fn mju_threadPoolCreate(number_of_threads: usize) -> *mut mjThreadPool;
-}
-unsafe extern "C" {
-    pub fn mju_bindThreadPool(d: *mut mjData, thread_pool: *mut ::std::os::raw::c_void);
-}
-unsafe extern "C" {
-    pub fn mju_threadPoolEnqueue(thread_pool: *mut mjThreadPool, task: *mut mjTask);
-}
-unsafe extern "C" {
-    pub fn mju_threadPoolDestroy(thread_pool: *mut mjThreadPool);
-}
-unsafe extern "C" {
-    pub fn mju_defaultTask(task: *mut mjTask);
-}
-unsafe extern "C" {
-    pub fn mju_taskJoin(task: *mut mjTask);
+    pub fn mju_threadpool(d: *mut mjData, nthread: ::std::os::raw::c_int);
 }
 unsafe extern "C" {
     pub fn mjs_attach(
@@ -5557,6 +5647,31 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mjs_addFlex(s: *mut mjSpec) -> *mut mjsFlex;
+}
+unsafe extern "C" {
+    pub fn mjs_makeFlex(
+        body: *mut mjsBody,
+        name: *const ::std::os::raw::c_char,
+        type_: *const ::std::os::raw::c_char,
+        dim: ::std::os::raw::c_int,
+        dof: *const ::std::os::raw::c_char,
+        count: *const [::std::os::raw::c_int; 3usize],
+        cellcount: *const [::std::os::raw::c_int; 3usize],
+        spacing: *const [f64; 3usize],
+        scale: *const [f64; 3usize],
+        radius: f64,
+        mass: f64,
+        inertiabox: f64,
+        equality: ::std::os::raw::c_int,
+        rigid: ::std::os::raw::c_int,
+        flatskin: ::std::os::raw::c_int,
+        elastic2d: ::std::os::raw::c_int,
+        pos: *const [f64; 3usize],
+        quat: *const [f64; 4usize],
+        origin: *const [f64; 3usize],
+        file: *const ::std::os::raw::c_char,
+        vfs: *const mjVFS,
+    ) -> *mut mjsFlex;
 }
 unsafe extern "C" {
     pub fn mjs_addPair(s: *mut mjSpec, def: *const mjsDefault) -> *mut mjsPair;
