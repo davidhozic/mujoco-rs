@@ -66,6 +66,8 @@ Unreleased
   authored-field tracking bitmasks (read-only) introduced in MuJoCo 3.10.0.
 - Added ``MjLogConfig`` and ``MjLogMessage`` wrappers (with ``MjtLogLevel`` and
   ``MjtLogTopic``) for the new unified logging API's structured types.
+- Added ``MjtConflict`` and the ``MjsCompiler::conflict()`` accessor, exposing the
+  attach-time conflict-resolution policy introduced in MuJoCo 3.10.0.
 
 *Cloneable renderer builder*
 
