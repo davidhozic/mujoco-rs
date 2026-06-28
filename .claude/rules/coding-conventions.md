@@ -108,43 +108,99 @@ Additional rules:
 
 ## Generated struct field visibility
 
-Bindgen emits every field as `pub` by default. During regeneration (`ffi-regenerate` feature)
-`build.rs` demotes selected fields to `pub(crate)` so the safe API cannot expose a value that a
-user could set to something the C side then trusts. **Decide visibility per field, not per
-struct** -- do NOT blanket every field of a struct to `pub(crate)` when only some of them need it.
+Bindgen emits every field as `pub`. During regeneration (`ffi-regenerate` feature) `build.rs`
+**keeps fields public by default** -- most FFI structs are plain data (numbers, bools, proper
+enums) that C reads as-is, so direct field access is sound and many structs (e.g. `mjsAuthored`)
+are pure plain structs with no accessors at all.
 
-A field MUST be `pub(crate)` when *any* of these holds:
+**The only test that forces mediation is memory safety.** A struct "needs mediation" only when at
+least one of its fields, given *any* value a user could write through the public field, could cause
+**memory unsafety** (undefined behaviour: an out-of-bounds read/write, a dereference of an
+attacker-chosen address, etc.). A field that "looks wrong" but cannot cause a memory problem at any
+value -- because the C/C++ code validates it, clamps it, branches safely on it, or simply produces
+incorrect-but-memory-safe results when it is invalid -- does **NOT** force mediation. Such a struct
+is treated as a **plain struct**: all of its fields stay `pub` and it gets **no accessors** (raw
+field access is sound, even if less ergonomic or less type-safe).
+
+**Visibility is decided per struct, not per field.** When a struct needs mediation, **all** of its
+fields are demoted to `pub(crate)` together -- not just the offending field. This keeps the access
+pattern uniform: every field of such a struct is reached through a wrapper accessor, rather than
+mixing direct field access with accessors on the same type (which is inconsistent and surprising). A
+struct in which **no** field can cause memory unsafety keeps **all** of its fields `pub`.
+
+A field forces mediation when *any* of these holds (each is a concrete way a value causes UB):
 
 1. **Raw pointer.** The field is a `*const T` / `*mut T`. A public raw pointer lets a user
-   substitute an arbitrary address that C will dereference. This case is handled automatically (see
-   below) -- you do not list pointer fields by hand.
-2. **Pointer-like buffer.** The field is a fixed character array used as a string (e.g.
-   `[c_char; N]`). Direct writes can leave it non-NUL-terminated or otherwise malformed; expose it
-   through a `c_str_as_str_method!` wrapper instead.
-3. **Enum stored as a raw integer.** The wrapper presents the field as an enum but the C field is a
-   plain `int`. A public raw field would let a user write an out-of-range discriminant that C then
-   treats as a valid variant. (A `bool` exposed from an `mjtBool` is fine and stays public -- every
-   integer value is a valid boolean, so no validation is needed.)
-4. **Needs value validation.** C/C++ consumes the value as an unchecked index, discriminant, or
-   member of a constrained set without validating it itself (see "Safety guards at the FFI
-   boundary"). Restrict it so the only write path is a wrapper that can validate.
+   substitute an arbitrary address that C will dereference. Pointer fields are detected
+   automatically (see below) -- you do not list them by hand.
+2. **Char buffer read as a NUL-terminated string.** The field is a fixed character array (e.g.
+   `[c_char; N]`) that C reads via `strlen`/`printf("%s", ...)`/etc. A direct write can leave it
+   non-NUL-terminated, so C reads off the end of the buffer (out-of-bounds read). Expose it through
+   a `c_str_as_str_method!` wrapper instead. (A `[c_char; N]` that C never reads as a string -- e.g.
+   an opaque byte blob -- does not qualify.)
+3. **Value used by C for an unchecked memory access.** C/C++ uses the field's value as an array
+   index, length, offset, or discriminant that selects a memory access, *without* validating or
+   clamping it first. This is the dangerous case of an enum-stored-as-int: it forces mediation
+   **only** when C indexes memory with the raw value (e.g. `table[opt->field]` with no bounds
+   check). An enum-as-int that C merely `switch`es on (with a `default`, or where an unknown value
+   just selects no/identity behaviour) is memory-safe and does **NOT** force mediation.
 
-A field stays **public** only when its C type already equals its logical type AND it needs no value
-validation (e.g. a plain `int` line number or an `mjtNum` scalar that C reads as-is). A
-pointer-heavy struct whose every field meets one of the criteria above (e.g. the `mjs*`
-model-editing structs) may be restricted wholesale, but that is the result of applying the
-per-field test to each field, not a shortcut for skipping it.
+Important: an enum-stored-as-int, a char buffer, or a constrained-set integer is **not** mediated
+merely for being one -- it is mediated only when, per the criteria above, some value would actually
+cause a memory-safety problem. When in doubt, **cross-reference the MuJoCo C/C++ source** (per
+`important-context.md`) to confirm whether an invalid value is validated/clamped/switched safely
+(plain struct) or fed into an unchecked memory access (mediate).
 
-`build.rs` enforces this in two places:
+**Wrapped FFI structs are exempt.** A struct that has a dedicated safe wrapper -- a separate Rust
+type in `src/wrappers/` that owns the raw struct (holds it as a `Box<mjX>` / `*mut mjX` field, or
+embeds it) and mediates every access through its own methods -- keeps *all* its fields public,
+pointers included. Users reach those fields only through the wrapper, never the raw struct, so the
+criteria above are not applied. Identify the wrapped set yourself: grep `src/wrappers/` for a
+`pub struct MjX { ... }` (or similar) that stores the `mjX` FFI struct, as opposed to a bare
+`pub type MjX = mjX` alias (an alias is *not* a wrapper -- aliased structs are exposed directly and
+their fields are subject to the criteria). Do **not** rely on a hardcoded list; the wrapper set can
+change as wrappers are added or removed, so re-derive it from the source each time.
 
-- **Raw pointers (criterion 1) are demoted automatically** by a text pass in `generate_ffi()` that
-  rewrites every `pub <name>: *const/*mut ...` struct field to `pub(crate)`. This is done on the
-  generated text, not in the callback, because bindgen's `field_visibility` callback reports an
-  anonymous type name (`None`) for both pointers and arrays and so cannot tell them apart.
-- **All other restricted fields (criteria 2-4) go in the `field_visibility` callback**, written as
-  nested `match` blocks: the outer arm matches the struct `type_name`, the inner arm matches the
-  `field_name`. A whole pointer-heavy struct can be restricted with a single `name.starts_with(...)`
-  guard arm instead.
+**Structs not exposed in the safe API stay fully public.** FFI structs that have no `pub type`
+alias and no dedicated wrapper in `src/wrappers/` (e.g. the `mjui*` UI types, `mjResource_`,
+`mjpPlugin_`, `mjSDF_`, `mjCache_`) are internal-only. All their fields -- pointers included --
+stay `pub` because they are only reachable through unsafe FFI code. The demotion criteria apply
+only to structs that users can reach through the safe API.
+
+A **bare `pub type` alias does not by itself make a struct a safe-API surface.** An alias only
+names the type; it is "exposed" for demotion purposes only when the safe API actually lets a user
+*operate* on an instance -- i.e. some safe function takes or returns the struct, or it carries
+accessors. A struct whose alias merely names it, with no safe function consuming/producing it and
+no accessors (so its only real consumers are `unsafe extern "C"` FFI functions), is internal-only:
+demoting its fields buys no safety and only renders the alias unconstructable. Such structs keep
+all fields `pub`, pointers included.
+
+`build.rs` enforces this with a single text pass in `generate_ffi()` (the wrapped, internal, and
+`CONFIG_DEMOTE` sets are hardcoded *there*, in code -- keep them in sync with the wrappers, but do
+not copy them into this rule). For each `pub struct`, it decides whether the struct is exposed
+(not wrapped, not internal, not a `mjui*`/`mjUI*` UI type) and whether it needs mediation, then
+demotes the struct accordingly:
+
+- **A struct needs mediation if it contains a raw pointer** (detected by matching
+  `pub <name>: *const/*mut ...` in the struct body) **or if it is listed in `CONFIG_DEMOTE`.**
+  `CONFIG_DEMOTE` holds the exposed *pointer-free* structs that still have a memory-unsafe field
+  (criterion 2 or 3: a char buffer C reads as a string, or a value C uses as an unchecked memory
+  index) -- those field kinds are not reliably detectable from the generated text, so they are named
+  explicitly. An exposed struct whose rule-breaking fields are all memory-safe (e.g. an enum-as-int
+  C only `switch`es on) is a plain struct and is **not** listed. The decision is made on the
+  generated text (not the bindgen `field_visibility` callback) because the callback reports the same
+  anonymous type name for pointers and arrays and because the per-struct decision must see the whole
+  struct body at once.
+- **When a struct needs mediation, every `pub <field>:` line in its body is rewritten to
+  `pub(crate)`.** (Use brace-delimited group refs `${1}` in the replacement string: the regex crate
+  reads `$1pub` as a capture group named `1pub`.)
+
+**Provide an accessor for every field of a demoted struct.** When a struct is demoted, each of its
+fields must remain reachable through a wrapper so prior direct read/write access is preserved:
+`getter_setter!` for scalars and arrays (with a `[force]` cast for enum-as-int fields, the bool arm
+for `mjtByte` flags, and the `[&] ... : &[T; N]` reference form for arrays); `c_str_as_str_method!`
+for char buffers. Per the builder convention this yields a `with_<field>` method as well as
+`<field>()`/`set_<field>()` (and a `<field>_mut()` for array references).
 
 Regenerating the bindings afterward is normally a developer-only step (agents must not run
 `ffi-regenerate` unless the user explicitly overrides that rule).

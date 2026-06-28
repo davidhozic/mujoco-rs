@@ -90,6 +90,9 @@ pub type MjtAlignFree = mjtAlignFree;
 /// Whether to infer body inertias from child geoms.
 pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
 
+/// Conflict-resolution policy used when attaching specifications.
+pub type MjtConflict = mjtConflict;
+
 /// Type of orientation specifier.
 pub type MjtOrientation = mjtOrientation;
 
@@ -157,6 +160,7 @@ impl MjsCompiler {
 
     getter_setter! {[&] with, get, set, [
         inertiafromgeom: MjtInertiaFromGeom [force];  "use geom inertias.";
+        conflict: MjtConflict [force];                "conflict-resolution policy for attach.";
     ]}
 
     getter_setter! {[&] with, get, [

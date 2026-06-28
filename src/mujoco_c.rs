@@ -650,23 +650,23 @@ pub use self::mjtLogTopic_ as mjtLogTopic;
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct mjLogMessage_ {
-    pub level: ::std::os::raw::c_int,
-    pub topic: ::std::os::raw::c_int,
-    pub subject: [::std::os::raw::c_char; 1024usize],
-    pub body: *const ::std::os::raw::c_char,
-    pub func: *const ::std::os::raw::c_char,
-    pub file: *const ::std::os::raw::c_char,
-    pub line: ::std::os::raw::c_int,
-    pub timestamp: mjtBool,
+    pub(crate) level: ::std::os::raw::c_int,
+    pub(crate) topic: ::std::os::raw::c_int,
+    pub(crate) subject: [::std::os::raw::c_char; 1024usize],
+    pub(crate) body: *const ::std::os::raw::c_char,
+    pub(crate) func: *const ::std::os::raw::c_char,
+    pub(crate) file: *const ::std::os::raw::c_char,
+    pub(crate) line: ::std::os::raw::c_int,
+    pub(crate) timestamp: mjtBool,
 }
 pub type mjLogMessage = mjLogMessage_;
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct mjLogConfig_ {
-    pub logto_console: mjtBool,
-    pub logto_file: mjtBool,
-    pub logfile: [::std::os::raw::c_char; 1024usize],
-    pub topics: ::std::os::raw::c_int,
+    pub(crate) logto_console: mjtBool,
+    pub(crate) logto_file: mjtBool,
+    pub(crate) logfile: [::std::os::raw::c_char; 1024usize],
+    pub(crate) topics: ::std::os::raw::c_int,
 }
 pub type mjLogConfig = mjLogConfig_;
 pub type mjfLogHandler = ::std::option::Option<unsafe extern "C" fn(arg1: *const mjLogMessage)>;
@@ -1832,8 +1832,8 @@ pub use self::mjtCTimer_ as mjtCTimer;
 #[repr(C)]
 #[derive(Debug)]
 pub struct mjsElement_ {
-    pub(crate) elemtype: mjtObj,
-    pub(crate) signature: u64,
+    pub elemtype: mjtObj,
+    pub signature: u64,
 }
 pub type mjsElement = mjsElement_;
 #[repr(C)]
@@ -1864,16 +1864,16 @@ pub type mjsCompiler = mjsCompiler_;
 #[repr(C)]
 #[derive(Debug)]
 pub struct mjsAuthored_ {
-    pub(crate) option: u64,
-    pub(crate) disableflags: ::std::os::raw::c_int,
-    pub(crate) enableflags: ::std::os::raw::c_int,
-    pub(crate) disableactuator: ::std::os::raw::c_int,
-    pub(crate) visual_global: u64,
-    pub(crate) visual_quality: u64,
-    pub(crate) visual_headlight: u64,
-    pub(crate) visual_map: u64,
-    pub(crate) visual_scale: u64,
-    pub(crate) visual_rgba: u64,
+    pub option: u64,
+    pub disableflags: ::std::os::raw::c_int,
+    pub enableflags: ::std::os::raw::c_int,
+    pub disableactuator: ::std::os::raw::c_int,
+    pub visual_global: u64,
+    pub visual_quality: u64,
+    pub visual_headlight: u64,
+    pub visual_map: u64,
+    pub visual_scale: u64,
+    pub visual_rgba: u64,
 }
 pub type mjsAuthored = mjsAuthored_;
 #[repr(C)]
@@ -1910,11 +1910,11 @@ pub type mjSpec = mjSpec_;
 #[repr(C)]
 #[derive(Debug)]
 pub struct mjsOrientation_ {
-    pub(crate) type_: mjtOrientation,
-    pub(crate) axisangle: [f64; 4usize],
-    pub(crate) xyaxes: [f64; 6usize],
-    pub(crate) zaxis: [f64; 3usize],
-    pub(crate) euler: [f64; 3usize],
+    pub type_: mjtOrientation,
+    pub axisangle: [f64; 4usize],
+    pub xyaxes: [f64; 6usize],
+    pub zaxis: [f64; 3usize],
+    pub euler: [f64; 3usize],
 }
 pub type mjsOrientation = mjsOrientation_;
 #[repr(C)]
