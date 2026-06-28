@@ -19,6 +19,54 @@ This page documents the migration steps for upgrading between major versions of 
 For a full list of changes, see the :ref:`changelog`.
 
 
+Unreleased
+======================
+
+The unreleased version updates MuJoCo to 3.10.0, which removed and renamed several
+|mj_data| fields.
+
+
+MuJoCo upgrade
+-----------------------
+
+This release links against MuJoCo **3.10.0**. Download the matching release and
+update your library path. See :ref:`installation` for details.
+
+
+``MjData::efc_diagApprox`` renamed to ``efc_diagA``
+---------------------------------------------------
+MuJoCo renamed the ``efc_diagApprox`` field to ``efc_diagA``, since it can now hold either
+the exact or the approximate diagonal of the :math:`A` matrix. The |mj_data| accessor was
+renamed to match.
+
+**Before:**
+
+.. code-block:: rust
+
+    let diag = data.efc_diagApprox();
+
+**After:**
+
+.. code-block:: rust
+
+    let diag = data.efc_diagA();
+
+
+Removed island matrix |mj_data| accessors
+-----------------------------------------
+MuJoCo moved the island-specific inertia and Jacobian matrices off the arena onto the stack,
+so they are no longer exposed as ``mjData`` fields. The following |mj_data| accessors were
+removed with no replacement: ``iM_rownnz``, ``iM_rowadr``, ``iM_colind``, ``iM``, ``iLD``,
+``iLDiagInv``, ``iefc_J_rownnz``, ``iefc_J_rowadr``, ``iefc_J_rowsuper``, ``iefc_J_colind``,
+and ``iefc_J``.
+
+
+Removed ``MjData::maxuse_threadstack`` accessor
+-----------------------------------------------
+The legacy engine threading API was removed upstream, taking the per-thread stack-usage
+statistic with it. The ``maxuse_threadstack`` accessor was removed with no replacement.
+
+
 .. _migrate_5_0_0:
 
 Migrating to 5.0.0

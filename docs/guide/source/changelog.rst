@@ -36,7 +36,36 @@ update of MuJoCo alone can increase the major version.
 Unreleased
 ======================
 
+.. rubric:: Breaking changes
+
+*MuJoCo FFI upgraded to 3.10.0*
+
+- MuJoCo-rs now builds against MuJoCo 3.10.0 FFI. This is a breaking
+  dependency-level change for consumers tied to older MuJoCo C ABI details.
+  See MuJoCo's changelog for this release:
+  https://mujoco.readthedocs.io/en/3.10.0/changelog.html
+
+*Removed and renamed* |mj_data| *accessors*
+
+- The |mj_data| accessor ``efc_diagApprox`` was renamed to ``efc_diagA``,
+  following the upstream field rename (it can now hold either the exact or
+  approximate diagonal of the :math:`A` matrix).
+- Removed the island-specific inertia accessors ``iM_rownnz``, ``iM_rowadr``,
+  ``iM_colind``, ``iM``, ``iLD``, ``iLDiagInv``, and the island Jacobian
+  accessors ``iefc_J_rownnz``, ``iefc_J_rowadr``, ``iefc_J_rowsuper``,
+  ``iefc_J_colind``, ``iefc_J``. Upstream moved these matrices off the arena
+  onto the stack, so they are no longer reachable as ``mjData`` fields.
+- Removed the ``maxuse_threadstack`` accessor; the old per-thread stack
+  statistic was removed together with the legacy engine threading API.
+
 .. rubric:: New features and improvements
+
+*New accessors for 3.10.0 structs*
+
+- Added ``MjsAuthored`` and the |mj_spec| ``authored()`` accessor, exposing the
+  authored-field tracking bitmasks (read-only) introduced in MuJoCo 3.10.0.
+- Added ``MjLogConfig`` and ``MjLogMessage`` wrappers (with ``MjtLogLevel`` and
+  ``MjtLogTopic``) for the new unified logging API's structured types.
 
 *Cloneable renderer builder*
 

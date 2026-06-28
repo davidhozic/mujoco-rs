@@ -106,6 +106,49 @@ Additional rules:
   guard at the choke point (an O(1)/cheap check) or a redesign that makes the invalid state
   unrepresentable; do not "fix" them by making the leaf `unsafe`.
 
+## Generated struct field visibility
+
+Bindgen emits every field as `pub` by default. During regeneration (`ffi-regenerate` feature)
+`build.rs` demotes selected fields to `pub(crate)` so the safe API cannot expose a value that a
+user could set to something the C side then trusts. **Decide visibility per field, not per
+struct** -- do NOT blanket every field of a struct to `pub(crate)` when only some of them need it.
+
+A field MUST be `pub(crate)` when *any* of these holds:
+
+1. **Raw pointer.** The field is a `*const T` / `*mut T`. A public raw pointer lets a user
+   substitute an arbitrary address that C will dereference. This case is handled automatically (see
+   below) -- you do not list pointer fields by hand.
+2. **Pointer-like buffer.** The field is a fixed character array used as a string (e.g.
+   `[c_char; N]`). Direct writes can leave it non-NUL-terminated or otherwise malformed; expose it
+   through a `c_str_as_str_method!` wrapper instead.
+3. **Enum stored as a raw integer.** The wrapper presents the field as an enum but the C field is a
+   plain `int`. A public raw field would let a user write an out-of-range discriminant that C then
+   treats as a valid variant. (A `bool` exposed from an `mjtBool` is fine and stays public -- every
+   integer value is a valid boolean, so no validation is needed.)
+4. **Needs value validation.** C/C++ consumes the value as an unchecked index, discriminant, or
+   member of a constrained set without validating it itself (see "Safety guards at the FFI
+   boundary"). Restrict it so the only write path is a wrapper that can validate.
+
+A field stays **public** only when its C type already equals its logical type AND it needs no value
+validation (e.g. a plain `int` line number or an `mjtNum` scalar that C reads as-is). A
+pointer-heavy struct whose every field meets one of the criteria above (e.g. the `mjs*`
+model-editing structs) may be restricted wholesale, but that is the result of applying the
+per-field test to each field, not a shortcut for skipping it.
+
+`build.rs` enforces this in two places:
+
+- **Raw pointers (criterion 1) are demoted automatically** by a text pass in `generate_ffi()` that
+  rewrites every `pub <name>: *const/*mut ...` struct field to `pub(crate)`. This is done on the
+  generated text, not in the callback, because bindgen's `field_visibility` callback reports an
+  anonymous type name (`None`) for both pointers and arrays and so cannot tell them apart.
+- **All other restricted fields (criteria 2-4) go in the `field_visibility` callback**, written as
+  nested `match` blocks: the outer arm matches the struct `type_name`, the inner arm matches the
+  `field_name`. A whole pointer-heavy struct can be restricted with a single `name.starts_with(...)`
+  guard arm instead.
+
+Regenerating the bindings afterward is normally a developer-only step (agents must not run
+`ffi-regenerate` unless the user explicitly overrides that rule).
+
 ## Code style
 - Read existing code in the file you're modifying to understand naming, safety, and documentation conventions.
 - Follow the existing error handling patterns used in the same file.

@@ -1586,7 +1586,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     getter_setter! {
         get, [
-            [ffi] (allow_mut = false) maxuse_threadstack: &[MjtSize; mjMAXTHREAD as usize]; "maximum stack allocation per thread in bytes.";
             [ffi, ffi_mut] solver: &[MjSolverStat; mjNISLAND as usize * mjNSOLVER as usize]; "solver statistics per island, per iteration.";
             [ffi, ffi_mut] solver_niter: &[i32; mjNISLAND as usize]; "number of solver iterations, per island.";
             [ffi, ffi_mut] solver_nnz: &[i32; mjNISLAND as usize]; "number of nonzeros in Hessian or efc_AR, per island.";
@@ -1792,7 +1791,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         efc_pos: &[MjtNum; "constraint position (equality, contact)"; ffi().nefc],
         efc_margin: &[MjtNum; "inclusion margin (contact)"; ffi().nefc],
         efc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],
-        efc_diagApprox: &[MjtNum; "approximation to diagonal of A"; ffi().nefc],
+        efc_diagA: &[MjtNum; "diagonal of A matrix, approximate or exact"; ffi().nefc],
         efc_KBIP: &[[MjtNum; 4] [force]; "stiffness, damping, impedance, imp'"; ffi().nefc],
         efc_D: &[MjtNum; "constraint mass"; ffi().nefc],
         efc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
@@ -1809,12 +1808,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         (mut = unsafe) map_idof2dof: &[i32; "map from idof to dof;  >= nidof: unconstrained"; model.ffi().nv],
         ifrc_smooth: &[MjtNum; "net unconstrained force"; ffi().nidof],
         iacc_smooth: &[MjtNum; "unconstrained acceleration"; ffi().nidof],
-        (mut = unsafe) iM_rownnz: &[i32; "inertia: non-zeros in each row"; ffi().nidof],
-        (mut = unsafe) iM_rowadr: &[i32; "inertia: address of each row in iM_colind"; ffi().nidof],
-        (mut = unsafe) iM_colind: &[i32; "inertia: column indices of non-zeros"; model.ffi().nC],
-        iM: &[MjtNum; "total inertia (sparse)"; model.ffi().nC],
-        iLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
-        iLDiagInv: &[MjtNum; "1/diag(D)"; ffi().nidof],
         iacc: &[MjtNum; "acceleration"; ffi().nidof],
         (mut = unsafe) efc_island: &[i32; "island id of this constraint"; ffi().nefc],
         (mut = unsafe) island_ne: &[i32; "number of equality constraints in island"; ffi().nisland],
@@ -4970,20 +4963,5 @@ mod test {
             assert_eq!(data.map_dof2idof()[i], unsafe { *data.ffi().map_dof2idof.add(i) });
             assert_eq!(data.dof_awake_ind()[i], unsafe { *data.ffi().dof_awake_ind.add(i) });
         }
-    }
-
-    /// Exercises the `eval_or_expand! @eval false` path via
-    /// `MjData::maxuse_threadstack()`, which uses `(allow_mut = false)` and
-    /// therefore suppresses the `_mut` accessor.
-    #[test]
-    fn test_maxuse_threadstack_eval_or_expand_false() {
-        let model = MjModel::from_xml_string(MODEL).expect("model load failed");
-        let data = model.make_data();
-        let stack: &[MjtSize; crate::mujoco_c::mjMAXTHREAD as usize] = data.maxuse_threadstack();
-        assert_eq!(
-            stack.len(),
-            crate::mujoco_c::mjMAXTHREAD as usize,
-            "maxuse_threadstack must have mjMAXTHREAD elements"
-        );
     }
 }

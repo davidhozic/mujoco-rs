@@ -1,9 +1,10 @@
 //! MuJoCo's auxiliary structs.
-use std::ffi::{c_void, CString};
+use std::ffi::{c_void, CStr, CString};
 use std::mem::MaybeUninit;
 use std::path::Path;
 use std::ptr;
 
+use crate::{c_str_as_str_method, getter_setter};
 use crate::error::MjVfsError;
 use crate::mujoco_c::*;
 
@@ -76,10 +77,77 @@ impl Default for MjLROpt {
 }
 
 /***********************************************************************************************************************
-** MjTask
+** Logging types
 ***********************************************************************************************************************/
-// wrapper_with_default!(mjTask);
+/// Severity level of a [`MjLogMessage`].
+pub type MjtLogLevel = mjtLogLevel;
 
+/// Topic of an informational [`MjLogMessage`].
+pub type MjtLogTopic = mjtLogTopic;
+
+/// Default configuration of the built-in log handler.
+pub type MjLogConfig = mjLogConfig;
+impl MjLogConfig {
+    getter_setter! {with, get, set, [
+        logto_console: bool;    "whether messages are printed to the console.";
+        logto_file: bool;       "whether messages are printed to the log file.";
+        topics: i32;            "enabled info topic bitmask.";
+    ]}
+
+    c_str_as_str_method! {with, get, set {
+        logfile;    "the log file path.";
+    }}
+}
+
+/// A structured log message passed to a log handler.
+pub type MjLogMessage = mjLogMessage;
+impl MjLogMessage {
+    getter_setter! {get, [
+        level: MjtLogLevel [force];     "the severity level of the message.";
+        topic: MjtLogTopic [force];     "the topic of the message (`mjTOPIC_NONE` for error/warning/user).";
+        line: i32;                      "the source line number, or 0.";
+        timestamp: bool;                "whether a timestamp is prepended to the output.";
+    ]}
+
+    c_str_as_str_method! {get {
+        subject;    "the message subject (one-line summary).";
+    }}
+
+    /// Returns the message body (multi-line detail), or `None` if there is none.
+    ///
+    /// # Panics
+    /// Panics if the body is not valid UTF-8.
+    pub fn body(&self) -> Option<&str> {
+        Self::opt_cstr(self.body)
+    }
+
+    /// Returns the originating function name, or `None` if unavailable.
+    ///
+    /// # Panics
+    /// Panics if the value is not valid UTF-8.
+    pub fn func(&self) -> Option<&str> {
+        Self::opt_cstr(self.func)
+    }
+
+    /// Returns the originating source file name, or `None` if unavailable.
+    ///
+    /// # Panics
+    /// Panics if the value is not valid UTF-8.
+    pub fn file(&self) -> Option<&str> {
+        Self::opt_cstr(self.file)
+    }
+
+    /// Borrows a nullable C string field as `&str`, returning `None` for a null pointer.
+    fn opt_cstr<'a>(ptr: *const std::ffi::c_char) -> Option<&'a str> {
+        if ptr.is_null() {
+            None
+        } else {
+            // SAFETY: the pointer is non-null and, per MuJoCo's contract, points to a valid
+            // NUL-terminated string that outlives the borrowing message.
+            Some(unsafe { CStr::from_ptr(ptr) }.to_str().unwrap())
+        }
+    }
+}
 
 /***********************************************************************************************************************
 ** MjVfs
@@ -559,5 +627,57 @@ mod tests {
         assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
 
         fs::remove_file(FILE).expect("could not clean up temp file");
+    }
+
+    #[test]
+    fn test_log_config_accessors() {
+        let mut cfg = MjLogConfig { logto_console: false, logto_file: true, logfile: [0; 1024], topics: 0 };
+        assert!(!cfg.logto_console());
+        assert!(cfg.logto_file());
+
+        cfg.set_logto_console(true);
+        cfg.set_topics(5);
+        cfg.set_logfile("/tmp/mylog.txt");
+        assert!(cfg.logto_console());
+        assert_eq!(cfg.topics(), 5);
+        assert_eq!(cfg.logfile(), "/tmp/mylog.txt");
+
+        // Builder methods consume and return Self.
+        let cfg2 = MjLogConfig { logto_console: false, logto_file: false, logfile: [0; 1024], topics: 0 }
+            .with_logto_file(true)
+            .with_topics(2)
+            .with_logfile("a.txt");
+        assert!(cfg2.logto_file());
+        assert_eq!(cfg2.topics(), 2);
+        assert_eq!(cfg2.logfile(), "a.txt");
+    }
+
+    #[test]
+    fn test_log_message_accessors() {
+        let body = CString::new("detailed body").unwrap();
+        let mut subject = [0 as std::ffi::c_char; 1024];
+        for (dst, src) in subject.iter_mut().zip(b"hello") {
+            *dst = *src as std::ffi::c_char;
+        }
+
+        let msg = MjLogMessage {
+            level: MjtLogLevel::mjLOG_WARNING as i32,
+            topic: MjtLogTopic::mjTOPIC_NONE as i32,
+            subject,
+            body: body.as_ptr(),
+            func: ptr::null(),
+            file: ptr::null(),
+            line: 42,
+            timestamp: true,
+        };
+
+        assert_eq!(msg.level(), MjtLogLevel::mjLOG_WARNING);
+        assert_eq!(msg.topic(), MjtLogTopic::mjTOPIC_NONE);
+        assert_eq!(msg.subject(), "hello");
+        assert_eq!(msg.body(), Some("detailed body"));
+        assert_eq!(msg.func(), None);
+        assert_eq!(msg.file(), None);
+        assert_eq!(msg.line(), 42);
+        assert!(msg.timestamp());
     }
 }

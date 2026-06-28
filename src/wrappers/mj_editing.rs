@@ -171,6 +171,28 @@ impl MjsCompiler {
     }
 }
 
+/// Authored-field tracking bitmasks for [`mjModel`] structs.
+///
+/// Each field records, as a bitmask, which attributes of the corresponding
+/// section were explicitly authored (set) in the specification. These are
+/// maintained by the compiler and used to resolve conflicts during attachment;
+/// they are exposed read-only.
+pub type MjsAuthored = mjsAuthored;
+impl MjsAuthored {
+    getter_setter! {get, [
+        option: u64;                "authored mjOption fields.";
+        disableflags: i32;          "individual authored disable flags.";
+        enableflags: i32;           "individual authored enable flags.";
+        disableactuator: i32;       "individual authored actuator groups.";
+        visual_global: u64;         "authored visual.global fields.";
+        visual_quality: u64;        "authored visual.quality fields.";
+        visual_headlight: u64;      "authored visual.headlight fields.";
+        visual_map: u64;            "authored visual.map fields.";
+        visual_scale: u64;          "authored visual.scale fields.";
+        visual_rgba: u64;           "authored visual.rgba fields.";
+    ]}
+}
+
 /***************************
 ** Model Specification
 ***************************/
@@ -576,6 +598,12 @@ impl MjSpec {
             [ffi, ffi_mut] stat: &MjStatistic; "statistic overrides.";
             [ffi, ffi_mut] visual: &MjVisual; "visualization options.";
             [ffi, ffi_mut] option: &MjOption; "simulation options.";
+        ]
+    }
+
+    getter_setter! {
+        get, [
+            [ffi] (allow_mut = false) authored: &MjsAuthored; "authored-field tracking bitmasks.";
         ]
     }
 
@@ -2400,6 +2428,48 @@ mod tests {
     <geom name=\"floor1\" type=\"plane\" size=\"10 10 1\" solref=\"0.004 1.0\"/>
   </worldbody>
 </mujoco>";
+
+    #[test]
+    fn test_spec_authored_accessor() {
+        use crate::mujoco_c::{mjtDisableBit, mjtEnableBit};
+
+        // A model that explicitly authors option flags: disables the contact flag,
+        // enables the energy flag, and disables actuator group 3.
+        const AUTHORED: &str = "\
+<mujoco>
+  <option actuatorgroupdisable=\"3\">
+    <flag contact=\"disable\" energy=\"enable\"/>
+  </option>
+  <worldbody>
+    <light ambient=\"0.2 0.2 0.2\"/>
+    <body name=\"ball\" pos=\".2 .2 .1\">
+        <geom name=\"green_sphere\" size=\".1\" rgba=\"0 1 0 1\"/>
+        <joint name=\"ball\" type=\"free\"/>
+    </body>
+  </worldbody>
+</mujoco>";
+
+        let contact = mjtDisableBit::mjDSBL_CONTACT as i32;
+        let gravity = mjtDisableBit::mjDSBL_GRAVITY as i32;
+        let energy = mjtEnableBit::mjENBL_ENERGY as i32;
+
+        let spec = MjSpec::from_xml_string(AUTHORED).unwrap();
+        let authored = spec.authored();
+
+        // Flags that were explicitly set must be marked authored at the matching bit...
+        assert_eq!(authored.disableflags() & contact, contact, "contact disable must be authored");
+        assert_eq!(authored.enableflags() & energy, energy, "energy enable must be authored");
+        assert_eq!(authored.disableactuator() & (1 << 3), 1 << 3, "actuator group 3 must be authored");
+        // ...while flags that were never touched must stay unauthored.
+        assert_eq!(authored.disableflags() & gravity, 0, "gravity was never authored");
+
+        // A model that authors none of these leaves the bitmasks clear.
+        let plain = MjSpec::from_xml_string(MODEL).unwrap();
+        let plain_authored = plain.authored();
+        assert_eq!(plain_authored.disableflags(), 0);
+        assert_eq!(plain_authored.enableflags(), 0);
+        assert_eq!(plain_authored.disableactuator(), 0);
+    }
 
     #[test]
     fn test_parse_xml_string() {
