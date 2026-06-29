@@ -19,10 +19,12 @@ This page documents the migration steps for upgrading between major versions of 
 For a full list of changes, see the :ref:`changelog`.
 
 
-Unreleased
+.. _migrate_6_0_0:
+
+Migrating to 6.0.0
 ======================
 
-The unreleased version updates MuJoCo to 3.10.0, which removed and renamed several
+Version 6.0.0 updates MuJoCo to 3.10.0, which removed and renamed several
 |mj_data| fields.
 
 

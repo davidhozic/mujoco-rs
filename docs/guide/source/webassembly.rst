@@ -50,7 +50,7 @@ Building MuJoCo
 =============================
 
 Use either the ``mujoco/`` submodule (already initialized in the MuJoCo-rs
-repository) or a fresh clone of the official MuJoCo ``3.9.0`` release as the
+repository) or a fresh clone of the official MuJoCo ``3.10.0`` release as the
 source directory.  The official unmodified tag is sufficient for WASM --- the
 submodule patches are only required for native/C++ features.
 
@@ -58,7 +58,7 @@ To clone the official release:
 
 ::
 
-    git clone https://github.com/google-deepmind/mujoco.git --branch 3.9.0 --depth 1
+    git clone https://github.com/google-deepmind/mujoco.git --branch 3.10.0 --depth 1
 
 Then build (replace ``mujoco`` with the path to whichever source you chose):
 

@@ -33,7 +33,7 @@ update of MuJoCo alone can increase the major version.
   .. rubric:: Bug fixes
   .. rubric:: Other changes
 
-Unreleased
+6.0.0 (MuJoCo 3.10.0)
 ======================
 
 .. rubric:: Breaking changes
