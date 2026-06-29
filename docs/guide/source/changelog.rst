@@ -63,7 +63,8 @@ Unreleased
 *New accessors for 3.10.0 structs*
 
 - Added ``MjsAuthored`` and the |mj_spec| ``authored()`` accessor, exposing the
-  authored-field tracking bitmasks (read-only) introduced in MuJoCo 3.10.0.
+  authored-field tracking bitmasks introduced in MuJoCo 3.10.0. ``MjsAuthored`` is a
+  plain-data struct; its bitmask fields are read directly (e.g. ``authored.disableflags``).
 - Added ``MjLogConfig`` and ``MjLogMessage`` wrappers (with ``MjtLogLevel`` and
   ``MjtLogTopic``) for the new unified logging API's structured types.
 - Added free functions ``log_config``, ``set_log_config``, ``log_message``, ``log_info``,

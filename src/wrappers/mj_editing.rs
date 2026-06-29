@@ -182,24 +182,11 @@ impl MjsCompiler {
 /// Authored-field tracking bitmasks for [`mjModel`] structs.
 ///
 /// Each field records, as a bitmask, which attributes of the corresponding
-/// section were explicitly authored (set) in the specification. These are
-/// maintained by the compiler and used to resolve conflicts during attachment;
-/// they are exposed read-only.
+/// section were explicitly authored (set) in the specification. They are
+/// maintained by the compiler and used to resolve conflicts during attachment.
+/// This is a plain-data struct: every field is a public bitmask read directly
+/// (e.g. `authored.disableflags`).
 pub type MjsAuthored = mjsAuthored;
-impl MjsAuthored {
-    getter_setter! {get, [
-        option: u64;                "authored mjOption fields.";
-        disableflags: i32;          "individual authored disable flags.";
-        enableflags: i32;           "individual authored enable flags.";
-        disableactuator: i32;       "individual authored actuator groups.";
-        visual_global: u64;         "authored visual.global fields.";
-        visual_quality: u64;        "authored visual.quality fields.";
-        visual_headlight: u64;      "authored visual.headlight fields.";
-        visual_map: u64;            "authored visual.map fields.";
-        visual_scale: u64;          "authored visual.scale fields.";
-        visual_rgba: u64;           "authored visual.rgba fields.";
-    ]}
-}
 
 /***************************
 ** Model Specification
@@ -2484,18 +2471,18 @@ mod tests {
         let authored = spec.authored();
 
         // Flags that were explicitly set must be marked authored at the matching bit...
-        assert_eq!(authored.disableflags() & contact, contact, "contact disable must be authored");
-        assert_eq!(authored.enableflags() & energy, energy, "energy enable must be authored");
-        assert_eq!(authored.disableactuator() & (1 << 3), 1 << 3, "actuator group 3 must be authored");
+        assert_eq!(authored.disableflags & contact, contact, "contact disable must be authored");
+        assert_eq!(authored.enableflags & energy, energy, "energy enable must be authored");
+        assert_eq!(authored.disableactuator & (1 << 3), 1 << 3, "actuator group 3 must be authored");
         // ...while flags that were never touched must stay unauthored.
-        assert_eq!(authored.disableflags() & gravity, 0, "gravity was never authored");
+        assert_eq!(authored.disableflags & gravity, 0, "gravity was never authored");
 
         // A model that authors none of these leaves the bitmasks clear.
         let plain = MjSpec::from_xml_string(MODEL).unwrap();
         let plain_authored = plain.authored();
-        assert_eq!(plain_authored.disableflags(), 0);
-        assert_eq!(plain_authored.enableflags(), 0);
-        assert_eq!(plain_authored.disableactuator(), 0);
+        assert_eq!(plain_authored.disableflags, 0);
+        assert_eq!(plain_authored.enableflags, 0);
+        assert_eq!(plain_authored.disableactuator, 0);
     }
 
     #[test]

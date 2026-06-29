@@ -122,6 +122,26 @@ incorrect-but-memory-safe results when it is invalid -- does **NOT** force media
 is treated as a **plain struct**: all of its fields stay `pub` and it gets **no accessors** (raw
 field access is sound, even if less ergonomic or less type-safe).
 
+**A plain struct gets no accessors at all -- not even type-improving ones.** Because a plain
+struct's fields are already `pub`, a getter that merely echoes a field (`x() -> i32` returning
+`self.x`) adds nothing over `instance.x`; it is redundant API surface that violates YAGNI and must
+not be written. Raw field access is the interface.
+
+**Never add a `[force]` (or any narrowing/reinterpreting) conversion accessor to a plain struct --
+it can cause UB.** A `[force]` getter reinterprets the raw integer as a Rust enum (and the bool arm
+reinterprets an `mjtByte`, etc.). On a plain struct the backing field is `pub`, so a user can write
+*any* value into it directly and then call the getter -- converting an out-of-range integer to an
+enum discriminant is undefined behaviour. Such a type-narrowing accessor is sound **only** on a
+**mediated (demoted)** struct, where the field is `pub(crate)` and the validating enum-typed setter
+is the *only* write path, guaranteeing the stored value is always a valid discriminant.
+
+Therefore the wish to expose a field as a Rust enum / `bool` / `&str` is itself a **mediation
+trigger**: demote the struct (it becomes `pub(crate)` + accessors) rather than bolting a `[force]`
+accessor onto a plain struct. Concretely -- if an exposed pointer-free struct has a field you want
+to surface as an enum, add it to `CONFIG_DEMOTE` in `build.rs` so the whole struct is demoted; then
+the `[force]` accessor is sound. (Demoted structs are the opposite case: every field is `pub(crate)`
+and therefore *requires* an accessor, and a `[force]` enum accessor on them is correct.)
+
 **Visibility is decided per struct, not per field.** When a struct needs mediation, **all** of its
 fields are demoted to `pub(crate)` together -- not just the offending field. This keeps the access
 pattern uniform: every field of such a struct is reached through a wrapper accessor, rather than
