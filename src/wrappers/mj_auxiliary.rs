@@ -79,41 +79,41 @@ impl Default for MjLROpt {
 /***********************************************************************************************************************
 ** Logging types
 ***********************************************************************************************************************/
-/// Severity level of a [`MjLogMessage`].
+/// Log message severity.
 pub type MjtLogLevel = mjtLogLevel;
 
-/// Topic of an informational [`MjLogMessage`].
+/// Log topic identifiers.
 pub type MjtLogTopic = mjtLogTopic;
 
-/// Default configuration of the built-in log handler.
+/// Log handler default configuration.
 pub type MjLogConfig = mjLogConfig;
 impl MjLogConfig {
     getter_setter! {with, get, set, [
-        logto_console: bool;    "whether messages are printed to the console.";
-        logto_file: bool;       "whether messages are printed to the log file.";
-        topics: i32;            "enabled info topic bitmask.";
+        logto_console: bool;    "print to console (default: true).";
+        logto_file: bool;       "print to log file (default: true).";
+        topics: i32;            "enabled info topic bitmask (default: 0).";
     ]}
 
     c_str_as_str_method! {with, get, set {
-        logfile;    "the log file path.";
+        logfile;    "log file path (default: `MUJOCO_LOG.TXT`).";
     }}
 }
 
-/// A structured log message passed to a log handler.
+/// Structured log message.
 pub type MjLogMessage = mjLogMessage;
 impl MjLogMessage {
     getter_setter! {get, [
-        level: MjtLogLevel [force];     "the severity level of the message.";
-        topic: MjtLogTopic [force];     "the topic of the message (`mjTOPIC_NONE` for error/warning/user).";
-        line: i32;                      "the source line number, or 0.";
-        timestamp: bool;                "whether a timestamp is prepended to the output.";
+        level: MjtLogLevel [force];     "severity level of the message.";
+        topic: MjtLogTopic [force];     "topic of the message (`mjTOPIC_NONE` for error/warning/user).";
+        line: i32;                      "`__LINE__` or 0.";
+        timestamp: bool;                "prepend timestamp to output.";
     ]}
 
     c_str_as_str_method! {get {
-        subject;    "the message subject (one-line summary).";
+        subject;    "message subject (one-liner, printf-formatted).";
     }}
 
-    /// Returns the message body (multi-line detail), or `None` if there is none.
+    /// Returns the message body (multi-line detail), or `None`.
     ///
     /// # Panics
     /// Panics if the body is not valid UTF-8.
@@ -121,7 +121,7 @@ impl MjLogMessage {
         Self::opt_cstr(self.body)
     }
 
-    /// Returns the originating function name, or `None` if unavailable.
+    /// Returns `__func__`, or `None` if unavailable.
     ///
     /// # Panics
     /// Panics if the value is not valid UTF-8.
@@ -129,7 +129,7 @@ impl MjLogMessage {
         Self::opt_cstr(self.func)
     }
 
-    /// Returns the originating source file name, or `None` if unavailable.
+    /// Returns `__FILE__`, or `None` if unavailable.
     ///
     /// # Panics
     /// Panics if the value is not valid UTF-8.
@@ -147,6 +147,60 @@ impl MjLogMessage {
             Some(unsafe { CStr::from_ptr(ptr) }.to_str().unwrap())
         }
     }
+}
+
+/// Get default handler configuration. Wraps [`mju_getLogConfig`].
+pub fn log_config() -> MjLogConfig {
+    // SAFETY: mju_getLogConfig returns a plain struct by value; no allocation.
+    unsafe { mju_getLogConfig() }
+}
+
+/// Set default handler configuration. Wraps [`mju_setLogConfig`].
+pub fn set_log_config(config: MjLogConfig) {
+    // SAFETY: mju_setLogConfig copies the struct by value; no aliasing.
+    unsafe { mju_setLogConfig(config) }
+}
+
+/// Dispatch a structured log message to the active handler. Wraps [`mju_message`].
+pub fn log_message(msg: &MjLogMessage) {
+    // SAFETY: `msg` is a valid reference; mju_message reads it and does not retain the pointer.
+    unsafe { mju_message(msg as *const MjLogMessage) }
+}
+
+/// Log an info message with optional topic filtering. Wraps [`mju_info`].
+///
+/// # Panics
+/// Panics if `msg` contains interior `\0` characters.
+pub fn log_info(topic: MjtLogTopic, msg: &str) {
+    // Escape '%' so the message is safe to pass as a printf format string.
+    let escaped = msg.replace('%', "%%");
+    let c_msg = CString::new(escaped).unwrap();
+    // SAFETY: the escaped string contains no unmatched '%' format specifiers,
+    // so passing it as the sole format argument to mju_info is well-defined.
+    unsafe { mju_info(topic as _, c_msg.as_ptr()) }
+}
+
+/// Main error function; does not return to caller. Wraps [`mju_error`].
+///
+/// # Panics
+/// Panics if `msg` contains interior `\0` characters.
+pub fn log_error(msg: &str) -> ! {
+    let escaped = msg.replace('%', "%%");
+    let c_msg = CString::new(escaped).unwrap();
+    // SAFETY: the escaped string contains no unmatched '%' format specifiers.
+    unsafe { mju_error(c_msg.as_ptr()) }
+    unreachable!()  // safety net, in case mju_error returns.
+}
+
+/// Main warning function; returns to caller. Wraps [`mju_warning`].
+///
+/// # Panics
+/// Panics if `msg` contains interior `\0` characters.
+pub fn log_warning(msg: &str) {
+    let escaped = msg.replace('%', "%%");
+    let c_msg = CString::new(escaped).unwrap();
+    // SAFETY: the escaped string contains no unmatched '%' format specifiers.
+    unsafe { mju_warning(c_msg.as_ptr()) }
 }
 
 /***********************************************************************************************************************

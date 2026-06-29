@@ -66,14 +66,38 @@ Unreleased
   authored-field tracking bitmasks (read-only) introduced in MuJoCo 3.10.0.
 - Added ``MjLogConfig`` and ``MjLogMessage`` wrappers (with ``MjtLogLevel`` and
   ``MjtLogTopic``) for the new unified logging API's structured types.
+- Added free functions ``log_config``, ``set_log_config``, ``log_message``, ``log_info``,
+  ``log_error``, and ``log_warning`` wrapping ``mju_getLogConfig``, ``mju_setLogConfig``,
+  ``mju_message``, ``mju_info``, ``mju_error``, and ``mju_warning`` respectively.
 - Added ``MjtConflict`` and the ``MjsCompiler::conflict()`` accessor, exposing the
   attach-time conflict-resolution policy introduced in MuJoCo 3.10.0.
+- Added ``MjsCompiler::authored()`` (read-only), exposing the bitmask of which
+  compiler fields were explicitly set by the user.
+- Added |mj_spec| ``num_warnings()`` and ``warning(index)`` accessors, wrapping
+  ``mjs_numWarnings`` and ``mjs_getWarning`` to query compilation warnings.
+
+*New* |mj_data| *methods*
+
+- |mj_data|:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>full_m`, converting the
+    sparse inertia matrix into a dense ``nv x nv`` matrix; wraps ``mj_fullM``. Returns
+    ``Err(MjDataError::BufferTooSmall)`` when ``dst`` is shorter than ``nv * nv``.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_threadpool`, creating a
+    worker thread pool with ``nthread`` threads for parallel simulation; wraps ``mju_threadpool``.
 
 *Cloneable renderer builder*
 
 - :docs-rs:`~mujoco_rs::renderer::<struct>MjRendererBuilder` now derives ``Clone``,
   so a configured builder can be duplicated before ``build``. It already implemented ``Debug``
   and ``Default``, so all builder types now provide ``Debug`` + ``Clone`` + ``Default``.
+
+.. rubric:: Other changes
+
+- Following the reworked FFI struct field-visibility rules, the fields of
+  ``MjsOrientation`` (``type_``, ``axisangle``, ``xyaxes``, ``zaxis``, ``euler``) and of
+  the raw ``mjsElement`` handle (``elemtype``, ``signature``) are now ``pub`` again,
+  classifying them as plain-data structs and allowing direct field access.
 
 5.0.0 (MuJoCo 3.9.0)
 ======================

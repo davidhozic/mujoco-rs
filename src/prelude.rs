@@ -9,7 +9,11 @@ pub use crate::error::{
     MjVfsError,
 };
 
-pub use crate::wrappers::mj_editing::{MjSpec, SpecItem};
+pub use crate::wrappers::mj_auxiliary::{
+    MjLogConfig, MjLogMessage, MjtLogLevel, MjtLogTopic,
+    log_config, log_error, log_info, log_message, log_warning, set_log_config,
+};
+pub use crate::wrappers::mj_editing::{MjSpec, MjtConflict, SpecItem};
 pub use crate::wrappers::mj_visualization::*;
 pub use crate::wrappers::mj_rendering::*;
 pub use crate::wrappers::mj_plugin::*;

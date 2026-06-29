@@ -1445,6 +1445,25 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
 
+    /// Convert sparse inertia matrix into full (i.e. dense) matrix. Wraps [`mj_fullM`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::BufferTooSmall`] if `dst.len() < nv * nv`.
+    pub fn full_m(&self, dst: &mut [MjtNum]) -> Result<(), MjDataError> {
+        let nv = self.model.ffi().nv as usize;
+        let needed = nv * nv;
+        if dst.len() < needed {
+            return Err(MjDataError::BufferTooSmall { name: "dst", got: dst.len(), needed });
+        }
+        unsafe { mj_fullM(self.model.ffi(), self.ffi(), dst.as_mut_ptr()) };
+        Ok(())
+    }
+
+    /// Create a thread pool with `nthread` worker threads. Wraps [`mju_threadpool`].
+    pub fn set_threadpool(&mut self, nthread: i32) {
+        unsafe { mju_threadpool(self.ffi_mut(), nthread) }
+    }
+
     /// Copy [`MjData`] to `destination`, skipping large computed arrays not required for
     /// visualization: mass matrices and constraint arrays (`efc_*`, `iefc_*`, including
     /// constraint Jacobians).

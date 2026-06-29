@@ -173,6 +173,10 @@ impl MjsCompiler {
         meshdir;        "mesh and hfield directory.";
         texturedir;     "texture directory.";
     }
+
+    getter_setter! { get, [
+        authored: u64; "bitmask of authored compiler fields.";
+    ]}
 }
 
 /// Authored-field tracking bitmasks for [`mjModel`] structs.
@@ -497,6 +501,25 @@ impl MjSpec {
     /// Return compiler timers (`mjtCTimer` order).
     pub fn timer(&self) -> &[f64; MjtCTimer::mjNCTIMER as usize] {
         unsafe { &*mjs_getTimer(self.0.as_ptr()).cast() }
+    }
+
+    /// Get number of warnings accumulated in the spec. Wraps [`mjs_numWarnings`].
+    pub fn num_warnings(&self) -> i32 {
+        // SAFETY: self.0 is a valid non-null mjSpec pointer.
+        unsafe { mjs_numWarnings(self.0.as_ptr()) }
+    }
+
+    /// Get the i-th warning message, or `None` if the index is out of bounds. Wraps [`mjs_getWarning`].
+    pub fn warning(&self, index: i32) -> Option<&str> {
+        // SAFETY: mjs_getWarning returns a pointer to a NUL-terminated C string owned
+        // by the spec, valid as long as self is alive and not mutated. We return a &str
+        // with the same lifetime as &self, which is sound.
+        let ptr = unsafe { mjs_getWarning(self.0.as_ptr(), index) };
+        if ptr.is_null() {
+            None
+        } else {
+            unsafe { CStr::from_ptr(ptr) }.to_str().ok()
+        }
     }
 
     /// Saves the spec to an XML file.
