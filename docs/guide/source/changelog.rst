@@ -96,6 +96,16 @@ update of MuJoCo alone can increase the major version.
   so a configured builder can be duplicated before ``build``. It already implemented ``Debug``
   and ``Default``, so all builder types now provide ``Debug`` + ``Clone`` + ``Default``.
 
+*Procedural flex creation*
+
+- |mjs_body|:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>add_flexcomp` :sup:`new` (and the
+    fallible ``try_add_flexcomp``), wrapping ``mjs_makeFlex`` to procedurally create a flex with
+    auto-generated bodies, joints, and optional equality constraints (the programmatic equivalent of
+    the ``flexcomp`` element). The generation is configured through the new
+    :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjFlexcompConfig` :sup:`new` builder.
+
 .. rubric:: Other changes
 
 - Following the reworked FFI struct field-visibility rules, the fields of

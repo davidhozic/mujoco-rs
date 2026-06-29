@@ -9,6 +9,7 @@ Model editing
 .. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
 .. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`
 .. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator`
+.. |mjs_flex| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsFlex`
 
 The most general way to create an |mj_model| instance is by loading an XML file
 via :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml`.
@@ -359,3 +360,40 @@ Methods that MuJoCo can reject (for example a negative gain, or mutually exclusi
 return ``Result<(), MjEditError>``, and the only error variant they ever produce is
 :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>InvalidParameter`; the parameterless or
 always-valid ones (``set_to_motor``, ``set_to_velocity``, ``set_to_cylinder``) return ``()``.
+
+
+.. _model_editing_flexcomp:
+
+Procedural flex generation
+==========================
+A `flexcomp <https://mujoco.readthedocs.io/en/3.10.0/XMLreference.html#body-flexcomp>`_ procedurally
+generates a deformable |mjs_flex| together with its supporting bodies, joints, and optional
+equality constraints --- handy for cloth, ropes, and soft volumes. In MuJoCo-rs it is created with
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>add_flexcomp` (or the fallible
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>try_add_flexcomp`).
+
+The generation is configured through a ``Default``-able
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjFlexcompConfig`, using the same ``with_*``
+builder pattern as the actuator configs above: only the fields you set deviate from MuJoCo's
+defaults, and unset optional fields fall back to the compiler's own defaults. ``add_flexcomp``
+returns the created |mjs_flex|, which can be tweaked further (for example its self-collision mode).
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn main() {
+        let mut spec = MjSpec::new();
+
+        // A 5x5 cloth-like 2D grid, held together by edge equality constraints.
+        let config = MjFlexcompConfig::default()
+            .with_type("grid")
+            .with_dim(2)
+            .with_count([5, 5, 1])
+            .with_spacing([0.1, 0.1, 0.1])
+            .with_mass(1.0)
+            .with_equality(1);  // 0 none, 1 edge, 2 vertex, 3 strain
+
+        spec.world_body_mut().add_flexcomp("cloth", &config);
+        spec.compile().expect("failed to compile");
+    }

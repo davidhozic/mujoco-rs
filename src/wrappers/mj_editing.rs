@@ -2288,6 +2288,189 @@ impl MjsBody {
     }
 }
 
+/* ----------------------------------------------------------------------------
+** Procedural flex creation (mjs_makeFlex)
+** ------------------------------------------------------------------------- */
+
+/// Configuration for [`MjsBody::add_flexcomp`], mirroring the `flexcomp` element.
+///
+/// Every field is optional. Unset array, string, and VFS fields are passed to MuJoCo as
+/// null, which makes the compiler fall back to its own defaults. Build one with struct-update
+/// syntax or the chainable `with_*` methods, starting from [`MjFlexcompConfig::default`]. Field
+/// documentation is adapted from MuJoCo's `flexcomp` XML reference.
+///
+/// # Example
+/// ```
+/// # use mujoco_rs::prelude::*;
+/// let mut spec = MjSpec::new();
+///
+/// // Configure a 3x3 cloth-like 2D grid flex.
+/// let config = MjFlexcompConfig::default()
+///     .with_type("grid")
+///     .with_dim(2)
+///     .with_count([3, 3, 1])
+///     .with_spacing([0.1, 0.1, 0.1])
+///     .with_mass(1.0);
+///
+/// let flex = spec.world_body_mut().add_flexcomp("cloth", &config);
+/// assert_eq!(flex.dim(), 2);
+///
+/// // The configured flex is now part of the model and it compiles.
+/// spec.compile().unwrap();
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct MjFlexcompConfig<'a> {
+    /// Flexcomp type: "grid", "box", "cylinder", "ellipsoid", "disc", "circle", "mesh", "gmsh",
+    /// or "direct" (default "grid").
+    pub r#type: Option<&'a str>,
+    /// Dimensionality of the flex object (1, 2, or 3); ignored for types that imply it.
+    pub dim: u8,
+    /// Dof parametrization: "full", "radial", "trilinear", "quadratic", or "2d" (default "full").
+    pub dof: Option<&'a str>,
+    /// Number of generated points in each dimension (grid/box/cylinder/ellipsoid).
+    pub count: Option<[u16; 3]>,
+    /// Number of interpolation-grid cells in each dimension (trilinear/quadratic dofs).
+    pub cellcount: Option<[u16; 3]>,
+    /// Spacing between generated points in each dimension.
+    pub spacing: Option<[f64; 3]>,
+    /// Scaling of all point coordinates (applied after the pose transformation).
+    pub scale: Option<[f64; 3]>,
+    /// Radius of the flex elements.
+    pub radius: f64,
+    /// Total mass, divided evenly over the generated points. A value of 0 keeps MuJoCo's default.
+    pub mass: f64,
+    /// Equivalent-inertia box size used to set each body's rotational inertia. A value of 0 keeps
+    /// MuJoCo's default.
+    pub inertiabox: f64,
+    /// Edge equality constraint: 0 none, 1 edge, 2 vertex, 3 strain.
+    pub equality: u8,
+    /// Whether all points are vertices in the parent body (no new bodies created).
+    pub rigid: bool,
+    /// Whether to render the flex skin with flat shading.
+    pub flatskin: bool,
+    /// 2D passive force mode: 0 none, 1 bending, 2 stretching, 3 both.
+    pub elastic2d: u8,
+    /// Translation of all points relative to the parent body frame.
+    pub pos: Option<[f64; 3]>,
+    /// Quaternion rotation of all points around the position offset.
+    pub quat: Option<[f64; 4]>,
+    /// Flexcomp origin used to build a volumetric mesh from a surface mesh.
+    pub origin: Option<[f64; 3]>,
+    /// File to load the surface or volumetric mesh from.
+    pub file: Option<&'a str>,
+    /// Virtual file system used to resolve the mesh file.
+    pub vfs: Option<&'a MjVfs>,
+}
+
+impl<'a> MjFlexcompConfig<'a> {
+    // Builders are macro-generated. Optional fields are `Option`, so `.into()` wraps the
+    // value in `Some` via the std `From<T> for Option<T>` impl.
+    getter_setter! {
+        with, [
+            r#type: &'a str;      "the flexcomp type: \"grid\", \"box\", \"cylinder\", \"ellipsoid\", \"disc\", \"circle\", \"mesh\", \"gmsh\", or \"direct\" (default \"grid\").";
+            dim: u8;              "the dimensionality of the flex object (1, 2, or 3); ignored for types that imply it.";
+            dof: &'a str;         "the dof parametrization: \"full\", \"radial\", \"trilinear\", \"quadratic\", or \"2d\" (default \"full\").";
+            count: [u16; 3];      "the number of generated points in each dimension (grid/box/cylinder/ellipsoid).";
+            cellcount: [u16; 3];  "the number of interpolation-grid cells in each dimension (trilinear/quadratic dofs).";
+            spacing: [f64; 3];    "the spacing between generated points in each dimension.";
+            scale: [f64; 3];      "the scaling of all point coordinates (applied after the pose transformation).";
+            radius: f64;          "the radius of the flex elements.";
+            mass: f64;            "the total mass, divided evenly over the generated points.";
+            inertiabox: f64;      "the equivalent-inertia box size used to set each body's rotational inertia.";
+            equality: u8;         "the edge equality constraint: 0 none, 1 edge, 2 vertex, 3 strain.";
+            rigid: bool;          "whether all points are vertices in the parent body (no new bodies created).";
+            flatskin: bool;       "whether to render the flex skin with flat shading.";
+            elastic2d: u8;        "the 2D passive force mode: 0 none, 1 bending, 2 stretching, 3 both.";
+            pos: [f64; 3];        "the translation of all points relative to the parent body frame.";
+            quat: [f64; 4];       "the quaternion rotation of all points around the position offset.";
+            origin: [f64; 3];     "the flexcomp origin used to build a volumetric mesh from a surface mesh.";
+            file: &'a str;        "the file to load the surface or volumetric mesh from.";
+            vfs: &'a MjVfs;       "the virtual file system used to resolve the mesh file.";
+        ]
+    }
+}
+
+impl MjsBody {
+    /// Add and return a child [`MjsFlex`].
+    ///
+    /// Creates a flex with auto-generated bodies, joints, and optional equality constraints -- the
+    /// programmatic equivalent of the `flexcomp` element -- configured via
+    /// [`MjFlexcompConfig`]. Wraps [`mjs_makeFlex`].
+    ///
+    /// Delegates to [`Self::try_add_flexcomp`] and panics if creation fails.
+    ///
+    /// # Panics
+    /// Panics if MuJoCo fails to create the flex, or if `name` or any string in
+    /// `config` contains an interior NUL byte.
+    pub fn add_flexcomp(&mut self, name: &str, config: &MjFlexcompConfig) -> &mut MjsFlex {
+        self.try_add_flexcomp(name, config).expect("mjs_makeFlex returned null")
+    }
+
+    /// Fallible version of [`Self::add_flexcomp`]. Wraps [`mjs_makeFlex`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to create the
+    /// flex (returns null).
+    ///
+    /// # Panics
+    /// Panics if `name` or any string in `config` contains an interior NUL byte.
+    pub fn try_add_flexcomp(&mut self, name: &str, config: &MjFlexcompConfig)
+        -> Result<&mut MjsFlex, MjEditError>
+    {
+        // Owned C strings must outlive the FFI call below.
+        let c_name = CString::new(name).unwrap();
+        let c_type = config.r#type.map(|s| CString::new(s).unwrap());
+        let c_dof = config.dof.map(|s| CString::new(s).unwrap());
+        let c_file = config.file.map(|s| CString::new(s).unwrap());
+
+        // Widen the small count types to C ints; the locals must outlive the FFI call.
+        let count = config.count.map(|c| c.map(|v| v as c_int));
+        let cellcount = config.cellcount.map(|c| c.map(|v| v as c_int));
+        let count_ptr = count.as_ref().map_or(ptr::null(), |a| a as *const [c_int; 3]);
+        let cellcount_ptr = cellcount.as_ref().map_or(ptr::null(), |a| a as *const [c_int; 3]);
+        let spacing_ptr = config.spacing.as_ref().map_or(ptr::null(), |a| a as *const [f64; 3]);
+        let scale_ptr = config.scale.as_ref().map_or(ptr::null(), |a| a as *const [f64; 3]);
+        let pos_ptr = config.pos.as_ref().map_or(ptr::null(), |a| a as *const [f64; 3]);
+        let quat_ptr = config.quat.as_ref().map_or(ptr::null(), |a| a as *const [f64; 4]);
+        let origin_ptr = config.origin.as_ref().map_or(ptr::null(), |a| a as *const [f64; 3]);
+
+        // SAFETY: ffi_mut() yields self as a valid *mut mjsBody. Every array/string
+        // pointer either references `config`, the local CStrings, or the widened count
+        // arrays (all of which outlive the call), or is null, which mjs_makeFlex
+        // documents as "use default". `name` is non-null as the C function requires.
+        // mjs_makeFlex copies the strings (name/file into std::string, type/dof read
+        // into enums) and retains no pointers, so call-duration validity is sufficient.
+        let ptr = unsafe {
+            mjs_makeFlex(
+                self.ffi_mut(),
+                c_name.as_ptr(),
+                c_type.as_ref().map_or(ptr::null(), |c| c.as_ptr()),
+                config.dim as c_int,
+                c_dof.as_ref().map_or(ptr::null(), |c| c.as_ptr()),
+                count_ptr,
+                cellcount_ptr,
+                spacing_ptr,
+                scale_ptr,
+                config.radius,
+                config.mass,
+                config.inertiabox,
+                config.equality as c_int,
+                config.rigid as c_int,
+                config.flatskin as c_int,
+                config.elastic2d as c_int,
+                pos_ptr,
+                quat_ptr,
+                origin_ptr,
+                c_file.as_ref().map_or(ptr::null(), |c| c.as_ptr()),
+                config.vfs.map_or(ptr::null(), |v| v.ffi() as *const mjVFS),
+            )
+        };
+        // SAFETY: null maps to None (reported as AllocationFailed); a non-null pointer
+        // is a freshly allocated, initialized mjsFlex with no aliasing Rust references.
+        unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
+    }
+}
+
 impl MjsBody {
     // Complex types with mutable and immutable reference returns.
     getter_setter! {
@@ -3575,6 +3758,35 @@ mod tests {
             flex_mut.set_order(1);
         }
         assert_eq!(spec.flex("myflex").unwrap().order(), 1);
+    }
+
+    /// Verifies procedural flex creation via [`MjsBody::add_flexcomp`] (wraps `mjs_makeFlex`):
+    /// the returned flex reflects the requested config, is registered in the spec, and the
+    /// spec still compiles into a valid model.
+    #[test]
+    fn test_add_flexcomp() {
+        let mut spec = MjSpec::new();
+
+        let config = MjFlexcompConfig::default()
+            .with_type("grid")
+            .with_dim(2)
+            .with_count([3, 3, 1])
+            .with_spacing([0.1, 0.1, 0.1])
+            .with_radius(0.001)
+            .with_mass(1.0);
+
+        {
+            let flex = spec.world_body_mut().add_flexcomp("genflex", &config);
+            assert_eq!(flex.dim(), 2);
+            assert!((flex.radius() - 0.001).abs() < 1e-12);
+        }
+
+        /* The generated flex is registered in the spec and addressable by name. */
+        let flex = spec.flex("genflex").expect("generated flex not found in spec");
+        assert_eq!(flex.cellcount().len(), 3);
+
+        /* The spec with the generated flex still compiles into a valid model. */
+        spec.compile().expect("spec with generated flex failed to compile");
     }
 
     /// Verifies the sensor's objtype protection works.
