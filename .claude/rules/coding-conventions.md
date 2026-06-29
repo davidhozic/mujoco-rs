@@ -202,8 +202,8 @@ for `mjtByte` flags, and the `[&] ... : &[T; N]` reference form for arrays); `c_
 for char buffers. Per the builder convention this yields a `with_<field>` method as well as
 `<field>()`/`set_<field>()` (and a `<field>_mut()` for array references).
 
-Regenerating the bindings afterward is normally a developer-only step (agents must not run
-`ffi-regenerate` unless the user explicitly overrides that rule).
+Regenerating the bindings afterward is a developer-only step (see the `ffi-regenerate`
+prohibition under "Feature flags").
 
 ## Code style
 - Read existing code in the file you're modifying to understand naming, safety, and documentation conventions.
@@ -267,7 +267,10 @@ Regenerating the bindings afterward is normally a developer-only step (agents mu
 - The migration guide is **only for breaking changes**. New non-breaking additions (e.g. new `try_`
   variants that don't change existing signatures) belong in the changelog only.
 - Always make sure MuJoCo-rs's documentation in `docs/guide` stays up to date with the changes.
-- After adding or modifying public items or doc comments, run `/doc` to check for rustdoc warnings/errors.
+- Run `/doc` after any change to public items, doc comments, or `.rst` files under
+  `docs/guide/source/`. It verifies both the rustdoc and Sphinx builds are clean, catching rustdoc
+  warnings/errors as well as RST syntax errors, broken cross-references, and invalid custom roles
+  that rustdoc alone cannot detect.
 - All public API changes must adhere to the
   [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/). Consult
   the guidelines when adding or modifying public types, traits, methods, naming,
@@ -278,7 +281,22 @@ Regenerating the bindings afterward is normally a developer-only step (agents mu
   `:gh-example:\`My example <my_example.rs>\``.
 - **RST/Sphinx formatting conventions** for `docs/guide/source/`:
   - Use `.. |name| replace::` substitutions (defined at the top of each file) when referencing
-    common types like `MjData`, `MjModel`, `MjSpec`. Use `|mj_data|` not `` ``MjData`` ``.
+    common types like `MjData`, `MjModel`, `MjSpec`. Use `|mj_data|` not `` ``MjData`` ``. This
+    also applies to written-out `:docs-rs:` links: when a substitution is already defined for the
+    exact `:docs-rs:` target you would otherwise write, use the substitution instead of repeating
+    the role (e.g. a parent bullet naming `MjData` is `|mj_data|`, not the full `:docs-rs:` link).
+  - **New-method changelog entries: link fully-qualified and group by type.** When a changelog
+    entry introduces newly added methods, reference each method with a fully-qualified `:docs-rs:`
+    link (`~module::<struct>Type::<method>name`) rather than plain `` ``backticks`` ``, and nest
+    the method bullets under a parent bullet that names the owning type (using that type's
+    `replace::` substitution when one is defined). Keep the single `~` on each method link so it
+    renders as the bare method name without the `Type::` prefix -- the parent bullet already shows
+    the type. For example::
+
+      - |mj_data|:
+
+        - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>full_m`, <description>.
+        - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_threadpool`, <description>.
   - Mark new items with `:sup:\`new\`` (e.g. `` ``try_jac`` :sup:\`new\` ``).
   - Use `` ``double backticks`` `` for inline code (method names, types, values).
   - Use `.. code-block:: rust` for multi-line code examples in migration.rst.
@@ -288,8 +306,8 @@ Regenerating the bindings afterward is normally a developer-only step (agents mu
     `.claude/` files); `--` inside RST stays only where an en dash or a literal CLI flag is meant.
   - Prefer lines below ~100 characters. Hard limit: 120 characters.
 - **Changelog section ordering.** Each version entry in `changelog.rst` uses `.. rubric::` sections
-  in this fixed order: Breaking changes, Error handling, New features and improvements, Bug fixes,
-  Other changes. Additional component-specific subsections (e.g. MjViewer) may appear only when a
+  in this fixed order: Breaking changes, Deprecations, Error handling, New features and improvements,
+  Bug fixes, Other changes. Additional component-specific subsections (e.g. MjViewer) may appear only when a
   component has substantial standalone changes; they are placed between New features and Bug fixes.
   Not all sections are required for every release, but the relative order must be preserved.
 - **Changelog content scope.** Only document public-facing changes in the changelog. Do NOT add
@@ -314,9 +332,6 @@ Regenerating the bindings afterward is normally a developer-only step (agents mu
   on HEAD and the previous release tag) before considering the work done. This includes verifying
   that all `.. code-block:: rust` blocks contain syntactically valid Rust with correct method names,
   types, and signatures matching the actual code.
-- **Run `/doc` after RST changes.** After editing any `.rst` file under `docs/guide/source/`,
-  run `/doc` to verify both rustdoc and Sphinx builds are clean. This catches RST syntax errors,
-  broken cross-references, and invalid custom roles that rustdoc cannot detect.
 - **docs-rs links must point to non-deprecated items.** When referencing an API item in RST/Sphinx
   documentation via `:docs-rs:`, always link to the current (non-deprecated) target path. When the
   display text needs to show the old/deprecated name, use the `display text <path>` form:

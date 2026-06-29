@@ -21,8 +21,8 @@ Keep token consumption low. These practices apply to the main agent and every su
    context and only a concise summary returns.
 6. **Require concise, structured summaries from subagents** (findings + file:line, not raw file
    content). If a subagent must return large content, the task is scoped too broadly -- split it.
-7. **Don't spawn a subagent for what a direct tool call does faster** (a single grep/read/edit).
-   Reserve agents for multi-file synthesis or parallel workloads.
+7. **Don't spawn a subagent for what a direct tool call does faster** -- see `subagent-policy.md`
+   rule 5 for the full tool-vs-agent decision criterion.
 
 ## Output & session
 8. **Keep responses concise.** Don't recap code already shown or narrate options you won't pursue.

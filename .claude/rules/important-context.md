@@ -44,7 +44,8 @@ If `MUJOCO_DYNAMIC_LINK_DIR` is also set, the pre-downloaded copy takes preceden
 - **Stride / length cross-reference**: whenever you add or review an `info_method!` or
   `array_slice_dyn!` invocation, look up the field in `mujoco/include/mujoco/mjmodel.h` or `mjdata.h`
   and check its dimension comment. E.g., `body_xpos` is `(nbody x 3)` so stride = 3.
-  This is the most common source of silent bugs.
+  This is the most common source of silent bugs. Follow the full step-by-step verification
+  checklists in `macro-system.md` (canonical) when checking strides, lengths, and cast dimensions.
 - **Array slice length expressions**: `array_slice_dyn!` uses an FFI field as length (e.g.,
   `ffi().nbody`). A wrong field (e.g. `ngeom` for a body array) causes silent out-of-bounds reads.
 - **Cast types in array slices**: when `array_slice_dyn!` casts to `[MjtNum; N]`, `N` must match the
