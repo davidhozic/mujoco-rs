@@ -62,29 +62,32 @@ Unreleased
 
 *New accessors for 3.10.0 structs*
 
-- Added ``MjsAuthored`` and the |mj_spec| ``authored()`` accessor, exposing the
+- Added ``MjsAuthored`` :sup:`new` and the |mj_spec| ``authored()`` :sup:`new` accessor, exposing the
   authored-field tracking bitmasks introduced in MuJoCo 3.10.0. ``MjsAuthored`` is a
   plain-data struct; its bitmask fields are read directly (e.g. ``authored.disableflags``).
-- Added ``MjLogConfig`` and ``MjLogMessage`` wrappers (with ``MjtLogLevel`` and
-  ``MjtLogTopic``) for the new unified logging API's structured types.
-- Added free functions ``log_config``, ``set_log_config``, ``log_message``, ``log_info``,
-  ``log_error``, and ``log_warning`` wrapping ``mju_getLogConfig``, ``mju_setLogConfig``,
-  ``mju_message``, ``mju_info``, ``mju_error``, and ``mju_warning`` respectively.
-- Added ``MjtConflict`` and the ``MjsCompiler::conflict()`` accessor, exposing the
+- Added ``MjLogConfig`` :sup:`new` and ``MjLogMessage`` :sup:`new` wrappers (with ``MjtLogLevel`` :sup:`new`
+  and ``MjtLogTopic`` :sup:`new`) for the new unified logging API's structured types.
+  ``MjLogMessage`` is constructable via ``MjLogMessage::new`` plus builder methods (``with_body``,
+  ``with_func``, ``with_file``, etc.), where the string-pointer fields take ``&'static CStr``.
+- Added free functions ``log_config`` :sup:`new`, ``set_log_config`` :sup:`new`, ``log_message`` :sup:`new`,
+  ``log_info`` :sup:`new`, ``log_error`` :sup:`new`, and ``log_warning`` :sup:`new` wrapping
+  ``mju_getLogConfig``, ``mju_setLogConfig``, ``mju_message``, ``mju_info``, ``mju_error``, and
+  ``mju_warning`` respectively.
+- Added ``MjtConflict`` :sup:`new` and the ``MjsCompiler::conflict()`` :sup:`new` accessor, exposing the
   attach-time conflict-resolution policy introduced in MuJoCo 3.10.0.
-- Added ``MjsCompiler::authored()`` (read-only), exposing the bitmask of which
+- Added ``MjsCompiler::authored()`` :sup:`new` (read-only), exposing the bitmask of which
   compiler fields were explicitly set by the user.
-- Added |mj_spec| ``num_warnings()`` and ``warning(index)`` accessors, wrapping
+- Added |mj_spec| ``num_warnings()`` :sup:`new` and ``warning(index)`` :sup:`new` accessors, wrapping
   ``mjs_numWarnings`` and ``mjs_getWarning`` to query compilation warnings.
 
 *New* |mj_data| *methods*
 
 - |mj_data|:
 
-  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>full_m`, converting the
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>full_m` :sup:`new`, converting the
     sparse inertia matrix into a dense ``nv x nv`` matrix; wraps ``mj_fullM``. Returns
     ``Err(MjDataError::BufferTooSmall)`` when ``dst`` is shorter than ``nv * nv``.
-  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_threadpool`, creating a
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_threadpool` :sup:`new`, creating a
     worker thread pool with ``nthread`` threads for parallel simulation; wraps ``mju_threadpool``.
 
 *Cloneable renderer builder*

@@ -99,19 +99,88 @@ impl MjLogConfig {
     }}
 }
 
-/// Structured log message.
+/// Structured log message passed to a log handler.
+///
+/// Build one with [`MjLogMessage::new`] plus the builder methods. The optional `body`, `func`,
+/// and `file` fields are stored as raw C string pointers, so they take `&'static CStr`
+/// (NUL-terminated and valid for the whole program); pass a `c"..."` literal, or leak a
+/// `CString` for a string built at runtime.
 pub type MjLogMessage = mjLogMessage;
 impl MjLogMessage {
-    getter_setter! {get, [
+    /// Creates a structured log message with the given `level`, `topic`, and `subject`.
+    ///
+    /// The optional `body`, `func`, `file`, `line`, and `timestamp` fields start empty/zero and
+    /// can be set with the builder methods (e.g. [`with_body`](Self::with_body)).
+    ///
+    /// # Panics
+    /// Panics if `subject` contains invalid ASCII, an interior NUL byte, or is too long for the
+    /// 1024-byte buffer.
+    pub fn new(level: MjtLogLevel, topic: MjtLogTopic, subject: &str) -> Self {
+        let msg = mjLogMessage {
+            level: 0,
+            topic: 0,
+            subject: [0; 1024],
+            body: ptr::null(),
+            func: ptr::null(),
+            file: ptr::null(),
+            line: 0,
+            timestamp: false,
+        };
+        msg.with_level(level).with_topic(topic).with_subject(subject)
+    }
+
+    getter_setter! {with, get, set, [
         level: MjtLogLevel [force];     "severity level of the message.";
         topic: MjtLogTopic [force];     "topic of the message (`mjTOPIC_NONE` for error/warning/user).";
         line: i32;                      "`__LINE__` or 0.";
         timestamp: bool;                "prepend timestamp to output.";
     ]}
 
-    c_str_as_str_method! {get {
+    c_str_as_str_method! {with, get, set {
         subject;    "message subject (one-liner, printf-formatted).";
     }}
+
+    /// Builder method for setting the message body (multi-line detail); `None` clears it.
+    pub fn with_body(mut self, body: Option<&'static CStr>) -> Self {
+        self.body = Self::cstr_ptr(body);
+        self
+    }
+
+    /// Sets the message body (multi-line detail); `None` clears it.
+    pub fn set_body(&mut self, body: Option<&'static CStr>) {
+        self.body = Self::cstr_ptr(body);
+    }
+
+    /// Builder method for setting `__func__`; `None` clears it.
+    pub fn with_func(mut self, func: Option<&'static CStr>) -> Self {
+        self.func = Self::cstr_ptr(func);
+        self
+    }
+
+    /// Sets `__func__`; `None` clears it.
+    pub fn set_func(&mut self, func: Option<&'static CStr>) {
+        self.func = Self::cstr_ptr(func);
+    }
+
+    /// Builder method for setting `__FILE__`; `None` clears it.
+    pub fn with_file(mut self, file: Option<&'static CStr>) -> Self {
+        self.file = Self::cstr_ptr(file);
+        self
+    }
+
+    /// Sets `__FILE__`; `None` clears it.
+    pub fn set_file(&mut self, file: Option<&'static CStr>) {
+        self.file = Self::cstr_ptr(file);
+    }
+
+    /// Maps a nullable caller-owned `&'static CStr` to the raw pointer stored in the message.
+    ///
+    /// The `'static CStr` bound is what keeps the stored pointer sound: the data is
+    /// NUL-terminated (C reads `body`/`func`/`file` as C strings) and lives for the whole
+    /// program, so the pointer can never dangle and C never reads out of bounds.
+    fn cstr_ptr(s: Option<&'static CStr>) -> *const std::ffi::c_char {
+        s.map_or(ptr::null(), CStr::as_ptr)
+    }
 
     /// Returns the message body (multi-line detail), or `None`.
     ///
@@ -708,30 +777,26 @@ mod tests {
 
     #[test]
     fn test_log_message_accessors() {
-        let body = CString::new("detailed body").unwrap();
-        let mut subject = [0 as std::ffi::c_char; 1024];
-        for (dst, src) in subject.iter_mut().zip(b"hello") {
-            *dst = *src as std::ffi::c_char;
-        }
-
-        let msg = MjLogMessage {
-            level: MjtLogLevel::mjLOG_WARNING as i32,
-            topic: MjtLogTopic::mjTOPIC_NONE as i32,
-            subject,
-            body: body.as_ptr(),
-            func: ptr::null(),
-            file: ptr::null(),
-            line: 42,
-            timestamp: true,
-        };
+        // Built entirely through the public constructor + builder API.
+        let msg = MjLogMessage::new(MjtLogLevel::mjLOG_WARNING, MjtLogTopic::mjTOPIC_NONE, "hello")
+            .with_body(Some(c"detailed body"))
+            .with_line(42)
+            .with_timestamp(true);
 
         assert_eq!(msg.level(), MjtLogLevel::mjLOG_WARNING);
         assert_eq!(msg.topic(), MjtLogTopic::mjTOPIC_NONE);
         assert_eq!(msg.subject(), "hello");
         assert_eq!(msg.body(), Some("detailed body"));
-        assert_eq!(msg.func(), None);
+        assert_eq!(msg.func(), None); // unset stays null
         assert_eq!(msg.file(), None);
         assert_eq!(msg.line(), 42);
         assert!(msg.timestamp());
+
+        // Setters mutate in place; `None` clears a previously set pointer field.
+        let mut msg = msg;
+        msg.set_func(Some(c"my_func"));
+        msg.set_body(None);
+        assert_eq!(msg.func(), Some("my_func"));
+        assert_eq!(msg.body(), None);
     }
 }
