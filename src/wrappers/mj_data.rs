@@ -1597,7 +1597,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         [ffi] flg_rnepost: MjtBool; "has mj_rnePostConstraint been called.";
     ]}
 
-    getter_setter! {with, get, set, [[ffi, ffi_mut] time: MjtNum; "simulation time.";]}
+    getter_setter! {with, get, set, [
+        [ffi, ffi_mut] time: MjtNum; "simulation time.";
+        [ffi, ffi_mut] threadlock: MjtBool; "disable stack freeing during threaded execution.";
+    ]}
 
     getter_setter! {with, get, [
         [ffi, ffi_mut] energy: &[MjtNum; 2]; "potential, kinetic energy.";

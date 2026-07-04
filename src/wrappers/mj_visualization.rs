@@ -318,6 +318,11 @@ impl Default for MjvCamera {
 /// OpenGL camera parameters (position, forward/up vectors, frustum planes).
 pub type MjvGLCamera = mjvGLCamera;
 
+/// OpenGL camera parameters (position, forward/up vectors, frustum planes).
+/// This is the same as [`MjvGLCamera`]; this alias follows MuJoCo's internal
+/// type alias convention.
+pub type MjrCamera = mjrCamera;
+
 impl MjvGLCamera {
     /// Average the current MjvGLCamera with the `other` MjvGLCamera.
     pub fn average_camera(&self, other: &Self) -> Self {
