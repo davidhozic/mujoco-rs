@@ -89,6 +89,9 @@ update of MuJoCo alone can increase the major version.
     ``Err(MjDataError::BufferTooSmall)`` when ``dst`` is shorter than ``nv * nv``.
   - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_threadpool` :sup:`new`, creating a
     worker thread pool with ``nthread`` threads for parallel simulation; wraps ``mju_threadpool``.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>threadlock` :sup:`new` (and
+    ``set_threadlock``, ``with_threadlock``), exposing the new ``threadlock`` field that disables
+    stack freeing during threaded execution.
 
 *Cloneable renderer builder*
 
@@ -105,6 +108,11 @@ update of MuJoCo alone can increase the major version.
     auto-generated bodies, joints, and optional equality constraints (the programmatic equivalent of
     the ``flexcomp`` element). The generation is configured through the new
     :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjFlexcompConfig` :sup:`new` builder.
+
+*New type aliases*
+
+- Added ``MjrCamera`` :sup:`new` as a type alias for ``MjvGLCamera``, matching MuJoCo's own
+  ``mjrCamera`` alias convention.
 
 .. rubric:: Other changes
 
