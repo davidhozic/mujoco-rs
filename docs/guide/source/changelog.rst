@@ -33,16 +33,93 @@ update of MuJoCo alone can increase the major version.
   .. rubric:: Bug fixes
   .. rubric:: Other changes
 
-Unreleased
+6.0.0 (MuJoCo 3.10.0)
 ======================
 
+.. rubric:: Breaking changes
+
+*MuJoCo FFI upgraded to 3.10.0*
+
+- MuJoCo-rs now builds against MuJoCo 3.10.0 FFI. This is a breaking
+  dependency-level change for consumers tied to older MuJoCo C ABI details.
+  See MuJoCo's changelog for this release:
+  https://mujoco.readthedocs.io/en/3.10.0/changelog.html
+
+*Removed and renamed* |mj_data| *accessors*
+
+- The |mj_data| accessor ``efc_diagApprox`` was renamed to ``efc_diagA``,
+  following the upstream field rename (it can now hold either the exact or
+  approximate diagonal of the :math:`A` matrix).
+- Removed the island-specific inertia accessors ``iM_rownnz``, ``iM_rowadr``,
+  ``iM_colind``, ``iM``, ``iLD``, ``iLDiagInv``, and the island Jacobian
+  accessors ``iefc_J_rownnz``, ``iefc_J_rowadr``, ``iefc_J_rowsuper``,
+  ``iefc_J_colind``, ``iefc_J``. Upstream moved these matrices off the arena
+  onto the stack, so they are no longer reachable as ``mjData`` fields.
+- Removed the ``maxuse_threadstack`` accessor; the old per-thread stack
+  statistic was removed together with the legacy engine threading API.
+
 .. rubric:: New features and improvements
+
+*New accessors for 3.10.0 structs*
+
+- Added ``MjsAuthored`` :sup:`new` and the |mj_spec| ``authored()`` :sup:`new` accessor, exposing the
+  authored-field tracking bitmasks introduced in MuJoCo 3.10.0. ``MjsAuthored`` is a
+  plain-data struct; its bitmask fields are read directly (e.g. ``authored.disableflags``).
+- Added ``MjLogConfig`` :sup:`new` and ``MjLogMessage`` :sup:`new` wrappers (with ``MjtLogLevel`` :sup:`new`
+  and ``MjtLogTopic`` :sup:`new`) for the new unified logging API's structured types.
+  ``MjLogMessage`` is constructable via ``MjLogMessage::new`` plus builder methods (``with_body``,
+  ``with_func``, ``with_file``, etc.), where the string-pointer fields take ``&'static CStr``.
+- Added free functions ``log_config`` :sup:`new`, ``set_log_config`` :sup:`new`, ``log_message`` :sup:`new`,
+  ``log_info`` :sup:`new`, ``log_error`` :sup:`new`, and ``log_warning`` :sup:`new` wrapping
+  ``mju_getLogConfig``, ``mju_setLogConfig``, ``mju_message``, ``mju_info``, ``mju_error``, and
+  ``mju_warning`` respectively.
+- Added ``MjtConflict`` :sup:`new` and the ``MjsCompiler::conflict()`` :sup:`new` accessor, exposing the
+  attach-time conflict-resolution policy introduced in MuJoCo 3.10.0.
+- Added ``MjsCompiler::authored()`` :sup:`new` (read-only), exposing the bitmask of which
+  compiler fields were explicitly set by the user.
+- Added |mj_spec| ``num_warnings()`` :sup:`new` and ``warning(index)`` :sup:`new` accessors, wrapping
+  ``mjs_numWarnings`` and ``mjs_getWarning`` to query compilation warnings.
+
+*New* |mj_data| *methods*
+
+- |mj_data|:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>full_m` :sup:`new`, converting the
+    sparse inertia matrix into a dense ``nv x nv`` matrix; wraps ``mj_fullM``. Returns
+    ``Err(MjDataError::BufferTooSmall)`` when ``dst`` is shorter than ``nv * nv``.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_threadpool` :sup:`new`, creating a
+    worker thread pool with ``nthread`` threads for parallel simulation; wraps ``mju_threadpool``.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>threadlock` :sup:`new` (and
+    ``set_threadlock``, ``with_threadlock``), exposing the new ``threadlock`` field that disables
+    stack freeing during threaded execution.
 
 *Cloneable renderer builder*
 
 - :docs-rs:`~mujoco_rs::renderer::<struct>MjRendererBuilder` now derives ``Clone``,
   so a configured builder can be duplicated before ``build``. It already implemented ``Debug``
   and ``Default``, so all builder types now provide ``Debug`` + ``Clone`` + ``Default``.
+
+*Procedural flex creation*
+
+- |mjs_body|:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>add_flexcomp` :sup:`new` (and the
+    fallible ``try_add_flexcomp``), wrapping ``mjs_makeFlex`` to procedurally create a flex with
+    auto-generated bodies, joints, and optional equality constraints (the programmatic equivalent of
+    the ``flexcomp`` element). The generation is configured through the new
+    :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjFlexcompConfig` :sup:`new` builder.
+
+*New type aliases*
+
+- Added ``MjrCamera`` :sup:`new` as a type alias for ``MjvGLCamera``, matching MuJoCo's own
+  ``mjrCamera`` alias convention.
+
+.. rubric:: Other changes
+
+- Following the reworked FFI struct field-visibility rules, the fields of
+  ``MjsOrientation`` (``type_``, ``axisangle``, ``xyaxes``, ``zaxis``, ``euler``) and of
+  the raw ``mjsElement`` handle (``elemtype``, ``signature``) are now ``pub`` again,
+  classifying them as plain-data structs and allowing direct field access.
 
 5.0.0 (MuJoCo 3.9.0)
 ======================

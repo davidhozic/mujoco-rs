@@ -45,26 +45,26 @@ Creates raw-pointer slices safely (null-pointer and zero-length guarded):
 | `sublen_dep` | `array_slice_dyn!(sublen_dep => ptr, outer, inner)` | `outer * inner` |
 | `summed` | `array_slice_dyn!(summed => ptr, len_array)` | sum of `len_array` entries |
 
-#### Mutable field safety -- `(unsafe)` and `(allow_mut = false)`
+#### Mutable field safety -- `(mut = unsafe)` and `(allow_mut = false)`
 Fields are mutable by default (both `field()` and `field_mut()` accessors are generated).
 Two prefixes restrict mutability, each belonging to a **different macro**:
 
-- `(unsafe)`: used in **`array_slice_dyn!`** -- generates `unsafe fn field_mut()`. The caller must
-  use an `unsafe` block and takes responsibility for maintaining C-side invariants.
+- `(mut = unsafe)`: used in **`array_slice_dyn!`** -- generates `unsafe fn field_mut()`. The caller
+  must use an `unsafe` block and takes responsibility for maintaining C-side invariants.
 - `(allow_mut = false)`: used in **`getter_setter!`** -- suppresses `field_mut()` entirely via the
   `eval_or_expand!` helper macro. No mutation path exists.
 
 > **Important**: these prefixes belong to **different macros** and cannot be combined in the same
 > invocation. `array_slice_dyn!` does not support `(allow_mut = false)`, and `getter_setter!` does
-> not support `(unsafe)`. If full suppression is needed for an array field, the `array_slice_dyn!`
-> macro itself would need to be extended.
+> not support `(mut = unsafe)`. If full suppression is needed for an array field, the
+> `array_slice_dyn!` macro itself would need to be extended.
 
 **Safety criterion**: A field whose VALUES are used by C code as unguarded array INDICES into
 other arrays (e.g., `arr[field[i]]` without an upper-bound check against `max_n`) must use
-`(unsafe)` at minimum. Pure numeric / float data (forces, positions, velocities, matrices) is
+`(mut = unsafe)` at minimum. Pure numeric / float data (forces, positions, velocities, matrices) is
 always safe to mutate and needs neither prefix.
 
-**Known `(unsafe)` fields** (in `array_slice_dyn!`) -- mutation is gated behind `unsafe`:
+**Known `(mut = unsafe)` fields** (in `array_slice_dyn!`) -- mutation is gated behind `unsafe`:
 - `contact` in `mj_data.rs`: `mj_sensorAcc()` uses `contact[i].geom[0]` as an index into
   `geom_bodyid[]` with only a `>= 0` guard (no upper-bound check against `ngeom`).
 - `flexedge` in `mj_visualization.rs`: `render_gl3.c` uses `flexedge[2*e]` as a vertex index with
@@ -72,7 +72,7 @@ always safe to mutate and needs neither prefix.
 - `geoms` in `mj_visualization.rs`: `render_gl3.c` uses `geom->matid`, `geom->objid`, and
   `geom->dataid` as indices into multiple arrays without upper-bound checks.
 
-**Known safe mutable fields** (must NOT have `(unsafe)` or `(allow_mut = false)`):
+**Known safe mutable fields** (must NOT have `(mut = unsafe)` or `(allow_mut = false)`):
 - `geomorder` in `mj_visualization.rs`: `mjr_render()` always repopulates `geomorder[0..nt-1]`
   with fresh valid indices before reading them, so user modifications are always overwritten first.
 

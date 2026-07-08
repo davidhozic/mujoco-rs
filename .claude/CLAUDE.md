@@ -9,4 +9,5 @@ Rules live in `.claude/rules/` and are imported below - Claude reads them automa
 @.claude/rules/macro-system.md
 @.claude/rules/disallowed-commands.md
 @.claude/rules/subagent-policy.md
+@.claude/rules/workflow-reliability.md
 @.claude/rules/token-efficiency.md

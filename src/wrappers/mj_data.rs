@@ -102,7 +102,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Notes
     /// This method only validates model-signature compatibility.
     /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
-    /// See [here](https://mujoco.readthedocs.io/en/3.9.0/programming/simulation.html#mjmodel-changes)
+    /// See [here](https://mujoco.readthedocs.io/en/3.10.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
     /// 
     /// If `M` implements [`DerefMut`], prefer
@@ -1445,6 +1445,25 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
 
+    /// Convert sparse inertia matrix into full (i.e. dense) matrix. Wraps [`mj_fullM`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::BufferTooSmall`] if `dst.len() < nv * nv`.
+    pub fn full_m(&self, dst: &mut [MjtNum]) -> Result<(), MjDataError> {
+        let nv = self.model.ffi().nv as usize;
+        let needed = nv * nv;
+        if dst.len() < needed {
+            return Err(MjDataError::BufferTooSmall { name: "dst", got: dst.len(), needed });
+        }
+        unsafe { mj_fullM(self.model.ffi(), self.ffi(), dst.as_mut_ptr()) };
+        Ok(())
+    }
+
+    /// Create a thread pool with `nthread` worker threads. Wraps [`mju_threadpool`].
+    pub fn set_threadpool(&mut self, nthread: i32) {
+        unsafe { mju_threadpool(self.ffi_mut(), nthread) }
+    }
+
     /// Copy [`MjData`] to `destination`, skipping large computed arrays not required for
     /// visualization: mass matrices and constraint arrays (`efc_*`, `iefc_*`, including
     /// constraint Jacobians).
@@ -1578,7 +1597,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         [ffi] flg_rnepost: MjtBool; "has mj_rnePostConstraint been called.";
     ]}
 
-    getter_setter! {with, get, set, [[ffi, ffi_mut] time: MjtNum; "simulation time.";]}
+    getter_setter! {with, get, set, [
+        [ffi, ffi_mut] time: MjtNum; "simulation time.";
+        [ffi, ffi_mut] threadlock: MjtBool; "disable stack freeing during threaded execution.";
+    ]}
 
     getter_setter! {with, get, [
         [ffi, ffi_mut] energy: &[MjtNum; 2]; "potential, kinetic energy.";
@@ -1586,7 +1608,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     getter_setter! {
         get, [
-            [ffi] (allow_mut = false) maxuse_threadstack: &[MjtSize; mjMAXTHREAD as usize]; "maximum stack allocation per thread in bytes.";
             [ffi, ffi_mut] solver: &[MjSolverStat; mjNISLAND as usize * mjNSOLVER as usize]; "solver statistics per island, per iteration.";
             [ffi, ffi_mut] solver_niter: &[i32; mjNISLAND as usize]; "number of solver iterations, per island.";
             [ffi, ffi_mut] solver_nnz: &[i32; mjNISLAND as usize]; "number of nonzeros in Hessian or efc_AR, per island.";
@@ -1604,7 +1625,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// (e.g., timestep, gravity) without having to rebuild the simulation.
     ///
     /// **Not all model parameters are safe to change at runtime.**
-    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.9.0/programming/simulation.html#mjmodel-changes)
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.10.0/programming/simulation.html#mjmodel-changes)
     /// for a list of parameters that are safe to change.
     ///
     /// Only available when the inner model type `M` implements
@@ -1792,7 +1813,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         efc_pos: &[MjtNum; "constraint position (equality, contact)"; ffi().nefc],
         efc_margin: &[MjtNum; "inclusion margin (contact)"; ffi().nefc],
         efc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],
-        efc_diagApprox: &[MjtNum; "approximation to diagonal of A"; ffi().nefc],
+        efc_diagA: &[MjtNum; "diagonal of A matrix, approximate or exact"; ffi().nefc],
         efc_KBIP: &[[MjtNum; 4] [force]; "stiffness, damping, impedance, imp'"; ffi().nefc],
         efc_D: &[MjtNum; "constraint mass"; ffi().nefc],
         efc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
@@ -1809,12 +1830,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         (mut = unsafe) map_idof2dof: &[i32; "map from idof to dof;  >= nidof: unconstrained"; model.ffi().nv],
         ifrc_smooth: &[MjtNum; "net unconstrained force"; ffi().nidof],
         iacc_smooth: &[MjtNum; "unconstrained acceleration"; ffi().nidof],
-        (mut = unsafe) iM_rownnz: &[i32; "inertia: non-zeros in each row"; ffi().nidof],
-        (mut = unsafe) iM_rowadr: &[i32; "inertia: address of each row in iM_colind"; ffi().nidof],
-        (mut = unsafe) iM_colind: &[i32; "inertia: column indices of non-zeros"; model.ffi().nC],
-        iM: &[MjtNum; "total inertia (sparse)"; model.ffi().nC],
-        iLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
-        iLDiagInv: &[MjtNum; "1/diag(D)"; ffi().nidof],
         iacc: &[MjtNum; "acceleration"; ffi().nidof],
         (mut = unsafe) efc_island: &[i32; "island id of this constraint"; ffi().nefc],
         (mut = unsafe) island_ne: &[i32; "number of equality constraints in island"; ffi().nisland],
@@ -1825,11 +1840,6 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         (mut = unsafe) map_iefc2efc: &[i32; "map from iefc to efc"; ffi().nefc],
         (mut = unsafe) iefc_type: &[MjtConstraint [force]; "constraint type"; ffi().nefc],
         (mut = unsafe) iefc_id: &[i32; "id of object of specified type"; ffi().nefc],
-        (mut = unsafe) iefc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
-        (mut = unsafe) iefc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
-        (mut = unsafe) iefc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
-        (mut = unsafe) iefc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
-        iefc_J: &[MjtNum; "constraint Jacobian"; ffi().nJ],
         iefc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],
         iefc_D: &[MjtNum; "constraint mass"; ffi().nefc],
         iefc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
@@ -4975,20 +4985,5 @@ mod test {
             assert_eq!(data.map_dof2idof()[i], unsafe { *data.ffi().map_dof2idof.add(i) });
             assert_eq!(data.dof_awake_ind()[i], unsafe { *data.ffi().dof_awake_ind.add(i) });
         }
-    }
-
-    /// Exercises the `eval_or_expand! @eval false` path via
-    /// `MjData::maxuse_threadstack()`, which uses `(allow_mut = false)` and
-    /// therefore suppresses the `_mut` accessor.
-    #[test]
-    fn test_maxuse_threadstack_eval_or_expand_false() {
-        let model = MjModel::from_xml_string(MODEL).expect("model load failed");
-        let data = model.make_data();
-        let stack: &[MjtSize; crate::mujoco_c::mjMAXTHREAD as usize] = data.maxuse_threadstack();
-        assert_eq!(
-            stack.len(),
-            crate::mujoco_c::mjMAXTHREAD as usize,
-            "maxuse_threadstack must have mjMAXTHREAD elements"
-        );
     }
 }

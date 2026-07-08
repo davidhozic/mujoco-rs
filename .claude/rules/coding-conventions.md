@@ -106,6 +106,125 @@ Additional rules:
   guard at the choke point (an O(1)/cheap check) or a redesign that makes the invalid state
   unrepresentable; do not "fix" them by making the leaf `unsafe`.
 
+## Generated struct field visibility
+
+Bindgen emits every field as `pub`. During regeneration (`ffi-regenerate` feature) `build.rs`
+**keeps fields public by default** -- most FFI structs are plain data (numbers, bools, proper
+enums) that C reads as-is, so direct field access is sound and many structs (e.g. `mjsAuthored`)
+are pure plain structs with no accessors at all.
+
+**The only test that forces mediation is memory safety.** A struct "needs mediation" only when at
+least one of its fields, given *any* value a user could write through the public field, could cause
+**memory unsafety** (undefined behaviour: an out-of-bounds read/write, a dereference of an
+attacker-chosen address, etc.). A field that "looks wrong" but cannot cause a memory problem at any
+value -- because the C/C++ code validates it, clamps it, branches safely on it, or simply produces
+incorrect-but-memory-safe results when it is invalid -- does **NOT** force mediation. Such a struct
+is treated as a **plain struct**: all of its fields stay `pub` and it gets **no accessors** (raw
+field access is sound, even if less ergonomic or less type-safe).
+
+**A plain struct gets no accessors at all -- not even type-improving ones.** Because a plain
+struct's fields are already `pub`, a getter that merely echoes a field (`x() -> i32` returning
+`self.x`) adds nothing over `instance.x`; it is redundant API surface that violates YAGNI and must
+not be written. Raw field access is the interface.
+
+**Never add a `[force]` (or any narrowing/reinterpreting) conversion accessor to a plain struct --
+it can cause UB.** A `[force]` getter reinterprets the raw integer as a Rust enum (and the bool arm
+reinterprets an `mjtByte`, etc.). On a plain struct the backing field is `pub`, so a user can write
+*any* value into it directly and then call the getter -- converting an out-of-range integer to an
+enum discriminant is undefined behaviour. Such a type-narrowing accessor is sound **only** on a
+**mediated (demoted)** struct, where the field is `pub(crate)` and the validating enum-typed setter
+is the *only* write path, guaranteeing the stored value is always a valid discriminant.
+
+Therefore the wish to expose a field as a Rust enum / `bool` / `&str` is itself a **mediation
+trigger**: demote the struct (it becomes `pub(crate)` + accessors) rather than bolting a `[force]`
+accessor onto a plain struct. Concretely -- if an exposed pointer-free struct has a field you want
+to surface as an enum, add it to `CONFIG_DEMOTE` in `build.rs` so the whole struct is demoted; then
+the `[force]` accessor is sound. (Demoted structs are the opposite case: every field is `pub(crate)`
+and therefore *requires* an accessor, and a `[force]` enum accessor on them is correct.)
+
+**Visibility is decided per struct, not per field.** When a struct needs mediation, **all** of its
+fields are demoted to `pub(crate)` together -- not just the offending field. This keeps the access
+pattern uniform: every field of such a struct is reached through a wrapper accessor, rather than
+mixing direct field access with accessors on the same type (which is inconsistent and surprising). A
+struct in which **no** field can cause memory unsafety keeps **all** of its fields `pub`.
+
+A field forces mediation when *any* of these holds (each is a concrete way a value causes UB):
+
+1. **Raw pointer.** The field is a `*const T` / `*mut T`. A public raw pointer lets a user
+   substitute an arbitrary address that C will dereference. Pointer fields are detected
+   automatically (see below) -- you do not list them by hand.
+2. **Char buffer read as a NUL-terminated string.** The field is a fixed character array (e.g.
+   `[c_char; N]`) that C reads via `strlen`/`printf("%s", ...)`/etc. A direct write can leave it
+   non-NUL-terminated, so C reads off the end of the buffer (out-of-bounds read). Expose it through
+   a `c_str_as_str_method!` wrapper instead. (A `[c_char; N]` that C never reads as a string -- e.g.
+   an opaque byte blob -- does not qualify.)
+3. **Value used by C for an unchecked memory access.** C/C++ uses the field's value as an array
+   index, length, offset, or discriminant that selects a memory access, *without* validating or
+   clamping it first. This is the dangerous case of an enum-stored-as-int: it forces mediation
+   **only** when C indexes memory with the raw value (e.g. `table[opt->field]` with no bounds
+   check). An enum-as-int that C merely `switch`es on (with a `default`, or where an unknown value
+   just selects no/identity behaviour) is memory-safe and does **NOT** force mediation.
+
+Important: an enum-stored-as-int, a char buffer, or a constrained-set integer is **not** mediated
+merely for being one -- it is mediated only when, per the criteria above, some value would actually
+cause a memory-safety problem. When in doubt, **cross-reference the MuJoCo C/C++ source** (per
+`important-context.md`) to confirm whether an invalid value is validated/clamped/switched safely
+(plain struct) or fed into an unchecked memory access (mediate).
+
+**Wrapped FFI structs are exempt.** A struct that has a dedicated safe wrapper -- a separate Rust
+type in `src/wrappers/` that owns the raw struct (holds it as a `Box<mjX>` / `*mut mjX` field, or
+embeds it) and mediates every access through its own methods -- keeps *all* its fields public,
+pointers included. Users reach those fields only through the wrapper, never the raw struct, so the
+criteria above are not applied. Identify the wrapped set yourself: grep `src/wrappers/` for a
+`pub struct MjX { ... }` (or similar) that stores the `mjX` FFI struct, as opposed to a bare
+`pub type MjX = mjX` alias (an alias is *not* a wrapper -- aliased structs are exposed directly and
+their fields are subject to the criteria). Do **not** rely on a hardcoded list; the wrapper set can
+change as wrappers are added or removed, so re-derive it from the source each time.
+
+**Structs not exposed in the safe API stay fully public.** FFI structs that have no `pub type`
+alias and no dedicated wrapper in `src/wrappers/` (e.g. the `mjui*` UI types, `mjResource_`,
+`mjpPlugin_`, `mjSDF_`, `mjCache_`) are internal-only. All their fields -- pointers included --
+stay `pub` because they are only reachable through unsafe FFI code. The demotion criteria apply
+only to structs that users can reach through the safe API.
+
+A **bare `pub type` alias does not by itself make a struct a safe-API surface.** An alias only
+names the type; it is "exposed" for demotion purposes only when the safe API actually lets a user
+*operate* on an instance -- i.e. some safe function takes or returns the struct, or it carries
+accessors. A struct whose alias merely names it, with no safe function consuming/producing it and
+no accessors (so its only real consumers are `unsafe extern "C"` FFI functions), is internal-only:
+demoting its fields buys no safety and only renders the alias unconstructable. Such structs keep
+all fields `pub`, pointers included.
+
+`build.rs` enforces this with a single text pass in `generate_ffi()` (the wrapped, internal, and
+`CONFIG_DEMOTE` sets are hardcoded *there*, in code -- keep them in sync with the wrappers, but do
+not copy them into this rule). For each `pub struct`, it decides whether the struct is exposed
+(not wrapped, not internal, not a `mjui*`/`mjUI*` UI type) and whether it needs mediation, then
+demotes the struct accordingly:
+
+- **A struct needs mediation if it contains a raw pointer** (detected by matching
+  `pub <name>: *const/*mut ...` in the struct body) **or if it is listed in `CONFIG_DEMOTE`.**
+  `CONFIG_DEMOTE` holds the exposed *pointer-free* structs that still have a memory-unsafe field
+  (criterion 2 or 3: a char buffer C reads as a string, or a value C uses as an unchecked memory
+  index) -- those field kinds are not reliably detectable from the generated text, so they are named
+  explicitly. An exposed struct whose rule-breaking fields are all memory-safe (e.g. an enum-as-int
+  C only `switch`es on) is a plain struct and is **not** listed. The decision is made on the
+  generated text (not the bindgen `field_visibility` callback) because the callback reports the same
+  anonymous type name for pointers and arrays and because the per-struct decision must see the whole
+  struct body at once.
+- **When a struct needs mediation, every `pub <field>:` line in its body is rewritten to
+  `pub(crate)`.** (Use brace-delimited group refs `${1}` in the replacement string: the regex crate
+  reads `$1pub` as a capture group named `1pub`.)
+
+**Provide an accessor for every field of a demoted struct.** When a struct is demoted, each of its
+fields must remain reachable through a wrapper so prior direct read/write access is preserved:
+`getter_setter!` for scalars and arrays (with a `[force]` cast for enum-as-int fields, the bool arm
+for `mjtByte` flags, and the `[&] ... : &[T; N]` reference form for arrays); `c_str_as_str_method!`
+for char buffers. Per the builder convention this yields a `with_<field>` method as well as
+`<field>()`/`set_<field>()` (and a `<field>_mut()` for array references).
+
+Regenerating the bindings afterward is a developer-only step (see the `ffi-regenerate`
+prohibition under "Feature flags").
+
 ## Code style
 - Read existing code in the file you're modifying to understand naming, safety, and documentation conventions.
 - Follow the existing error handling patterns used in the same file.
@@ -120,6 +239,13 @@ Additional rules:
 - **Type aliases (`pub type`) are not wrappers.** Do NOT write "Wraps `X`" in doc comments for type
   aliases. Just describe what the type represents. "Wraps" language is fine for struct methods that
   call C functions.
+- **Every method that wraps a C function must say so.** Append `Wraps [\`c_function_name\`].` as a
+  standalone sentence in the doc comment -- either on the same line as the summary (if it fits) or
+  as a second sentence. Use the bare linked form `[\`func\`]`; if rustdoc reports an unresolved
+  link warning, fall back to the explicit path form `[\`func\`](crate::mujoco_c::func)`. This
+  applies to all public methods (and `pub(crate)` methods with doc comments) that delegate to a
+  specific C API function. Field accessors generated by macros (`getter_setter!`,
+  `array_slice_dyn!`, `c_str_as_str_method!`) are exempt.
 - Always use ASCII characters only. Avoid non-ASCII Unicode characters (e.g., em dashes, arrows,
   smart quotes). Use `--` (double hyphen) as the ASCII substitute for em dashes. This applies to
   both source code and `.claude/` rule/skill files.
@@ -161,7 +287,10 @@ Additional rules:
 - The migration guide is **only for breaking changes**. New non-breaking additions (e.g. new `try_`
   variants that don't change existing signatures) belong in the changelog only.
 - Always make sure MuJoCo-rs's documentation in `docs/guide` stays up to date with the changes.
-- After adding or modifying public items or doc comments, run `/doc` to check for rustdoc warnings/errors.
+- Run `/doc` after any change to public items, doc comments, or `.rst` files under
+  `docs/guide/source/`. It verifies both the rustdoc and Sphinx builds are clean, catching rustdoc
+  warnings/errors as well as RST syntax errors, broken cross-references, and invalid custom roles
+  that rustdoc alone cannot detect.
 - All public API changes must adhere to the
   [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/). Consult
   the guidelines when adding or modifying public types, traits, methods, naming,
@@ -172,7 +301,22 @@ Additional rules:
   `:gh-example:\`My example <my_example.rs>\``.
 - **RST/Sphinx formatting conventions** for `docs/guide/source/`:
   - Use `.. |name| replace::` substitutions (defined at the top of each file) when referencing
-    common types like `MjData`, `MjModel`, `MjSpec`. Use `|mj_data|` not `` ``MjData`` ``.
+    common types like `MjData`, `MjModel`, `MjSpec`. Use `|mj_data|` not `` ``MjData`` ``. This
+    also applies to written-out `:docs-rs:` links: when a substitution is already defined for the
+    exact `:docs-rs:` target you would otherwise write, use the substitution instead of repeating
+    the role (e.g. a parent bullet naming `MjData` is `|mj_data|`, not the full `:docs-rs:` link).
+  - **New-method changelog entries: link fully-qualified and group by type.** When a changelog
+    entry introduces newly added methods, reference each method with a fully-qualified `:docs-rs:`
+    link (`~module::<struct>Type::<method>name`) rather than plain `` ``backticks`` ``, and nest
+    the method bullets under a parent bullet that names the owning type (using that type's
+    `replace::` substitution when one is defined). Keep the single `~` on each method link so it
+    renders as the bare method name without the `Type::` prefix -- the parent bullet already shows
+    the type. For example::
+
+      - |mj_data|:
+
+        - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>full_m`, <description>.
+        - :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_threadpool`, <description>.
   - Mark new items with `:sup:\`new\`` (e.g. `` ``try_jac`` :sup:\`new\` ``).
   - Use `` ``double backticks`` `` for inline code (method names, types, values).
   - Use `.. code-block:: rust` for multi-line code examples in migration.rst.
@@ -182,8 +326,8 @@ Additional rules:
     `.claude/` files); `--` inside RST stays only where an en dash or a literal CLI flag is meant.
   - Prefer lines below ~100 characters. Hard limit: 120 characters.
 - **Changelog section ordering.** Each version entry in `changelog.rst` uses `.. rubric::` sections
-  in this fixed order: Breaking changes, Error handling, New features and improvements, Bug fixes,
-  Other changes. Additional component-specific subsections (e.g. MjViewer) may appear only when a
+  in this fixed order: Breaking changes, Deprecations, Error handling, New features and improvements,
+  Bug fixes, Other changes. Additional component-specific subsections (e.g. MjViewer) may appear only when a
   component has substantial standalone changes; they are placed between New features and Bug fixes.
   Not all sections are required for every release, but the relative order must be preserved.
 - **Changelog content scope.** Only document public-facing changes in the changelog. Do NOT add
@@ -208,9 +352,6 @@ Additional rules:
   on HEAD and the previous release tag) before considering the work done. This includes verifying
   that all `.. code-block:: rust` blocks contain syntactically valid Rust with correct method names,
   types, and signatures matching the actual code.
-- **Run `/doc` after RST changes.** After editing any `.rst` file under `docs/guide/source/`,
-  run `/doc` to verify both rustdoc and Sphinx builds are clean. This catches RST syntax errors,
-  broken cross-references, and invalid custom roles that rustdoc cannot detect.
 - **docs-rs links must point to non-deprecated items.** When referencing an API item in RST/Sphinx
   documentation via `:docs-rs:`, always link to the current (non-deprecated) target path. When the
   display text needs to show the old/deprecated name, use the `display text <path>` form:
