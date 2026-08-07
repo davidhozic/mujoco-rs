@@ -13,7 +13,7 @@
 //!
 //! ## MuJoCo version
 //!
-//! MuJoCo-rs relies on MuJoCo [3.10.0](https://github.com/google-deepmind/mujoco/releases/tag/3.10.0).
+//! MuJoCo-rs relies on MuJoCo [3.11.0](https://github.com/google-deepmind/mujoco/releases/tag/3.11.0).
 //!
 //! ## Documentation
 //! A more guided documentation can be obtained [here](https://mujoco-rs.readthedocs.io/en/v6.0.x/).
