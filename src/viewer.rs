@@ -605,8 +605,8 @@ impl ViewerSharedState {
     /// which skips large computed arrays not required for visualization.
     /// The viewer's passive copy will therefore **not** contain:
     ///
-    /// - mass matrices (``M``, ``qLD``, ``qLDiagInv``, ``qLU``);
-    /// - constraint arrays (``efc_*``, ``iefc_*``, including constraint Jacobians).
+    /// - mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``);
+    /// - the sparse constraint Jacobian blocks (``efc_J_*``, ``efc_Y_*``, ``efc_AR_*``).
     ///
     /// In UI callbacks these fields will be absent unless
     /// [`ViewerSharedState::sync_data_full`] is used or they are recomputed explicitly
@@ -907,8 +907,8 @@ impl MjViewer {
     /// which skips large computed arrays not required for visualization.
     /// The viewer's passive copy will therefore **not** contain:
     ///
-    /// - mass matrices (``M``, ``qLD``, ``qLDiagInv``, ``qLU``);
-    /// - constraint arrays (``efc_*``, ``iefc_*``, including constraint Jacobians).
+    /// - mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``);
+    /// - the sparse constraint Jacobian blocks (``efc_J_*``, ``efc_Y_*``, ``efc_AR_*``).
     ///
     /// In UI callbacks these fields will be absent unless
     /// [`MjViewer::sync_data_full`] is used or they are recomputed explicitly

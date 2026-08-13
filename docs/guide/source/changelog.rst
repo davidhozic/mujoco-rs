@@ -86,6 +86,26 @@ update of MuJoCo alone can increase the major version.
 - Removed the ``maxuse_threadstack`` accessor; the old per-thread stack
   statistic was removed together with the legacy engine threading API.
 
+*Removed the legacy engine threading raw FFI*
+
+- Following the upstream removal of ``mjthread.h``, the raw FFI types
+  ``mjThreadPool``, ``mjTask``, ``mjtTaskStatus`` and ``mjfTask``, the constant
+  ``mjMAXTHREAD`` and the functions ``mju_threadPoolCreate``, ``mju_bindThreadPool``,
+  ``mju_threadPoolEnqueue``, ``mju_threadPoolDestroy``, ``mju_defaultTask`` and
+  ``mju_taskJoin`` no longer exist in ``mujoco_c``. Use |mj_data|
+  ``set_threadpool`` (wrapping ``mju_threadpool``) instead.
+
+*Removed and changed raw FFI functions*
+
+- ``mju_error_i``, ``mju_error_s``, ``mju_warning_i`` and ``mju_warning_s``
+  were removed upstream in MuJoCo 3.10.0, superseded by the unified logging API.
+- The raw ``mj_fullM`` signature changed from ``mj_fullM(m, dst, M)`` to
+  ``mj_fullM(m, d, dst)`` as part of the upstream ``mjData.qM`` removal.
+- ``mj_encode`` and the ``mjfEncode`` plugin callback now return ``mjtSize``
+  instead of ``c_int``, and ``mjpResourceProvider`` gained a ``write`` callback
+  field (``mjfWriteResource``) for resource writing, which breaks struct-literal
+  construction of the provider.
+
 .. rubric:: New features and improvements
 
 *New accessors for 3.11.0 fields*
@@ -126,6 +146,9 @@ update of MuJoCo alone can increase the major version.
   field, so it has ``surfacevel_mut()``/``with_surfacevel()`` instead of ``set_surfacevel()``).
 - Added ``MjtCtrlChart`` :sup:`new` as an alias for the new ``mjtCtrlChart`` enum
   (values of ``m->actuator_ctrlspec``).
+- The raw FFI structs ``mjContact`` and ``mjvGeom`` gained the public fields
+  ``adhesion`` and ``texid``/``texuniform``/``texrepeat`` respectively,
+  following the upstream struct changes.
 
 *MIMO-aware actuator dimensions*
 

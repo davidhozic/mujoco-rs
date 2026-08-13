@@ -133,6 +133,30 @@ The legacy engine threading API was removed upstream, taking the per-thread stac
 statistic with it. The ``maxuse_threadstack`` accessor was removed with no replacement.
 
 
+MIMO-aware actuator dimensions
+------------------------------
+Actuators now have separate control and output dimensions: ``nu`` is the total number of
+scalar controls, ``nout`` the total number of force outputs, and ``nactuator`` the number of
+actuators (previously all three coincided as ``nu``). Actuator-indexed |mj_model| array
+accessors are now sized by ``nactuator``, ``actuator_gear``/``actuator_acc0``/
+``actuator_length0``/``actuator_lengthrange`` by ``nout``, while the per-control
+``actuator_ctrllimited`` and ``actuator_ctrlrange`` remain sized by ``nu``. The |mj_data|
+accessors ``actuator_length``, ``moment_rownnz``, ``moment_rowadr``, ``actuator_velocity``
+and ``actuator_force`` are now sized by ``nout``. The per-actuator views for control- and
+output-indexed fields (``ctrl``, ``length``, ``velocity``, ``force``; ``ctrllimited``,
+``ctrlrange``, ``gear``, ``acc0``, ``length0``, ``lengthrange``) changed from fixed-size
+views to dynamic ranges based on ``actuator_ctrladr``/``actuator_ctrlnum`` and
+``actuator_outadr``/``actuator_outnum``. For single-input single-output actuators
+``nactuator == nu == nout``, so models without MIMO actuators are unaffected.
+
+
+Shifted ``MjtGain``/``MjtBias`` discriminants
+---------------------------------------------
+``MjtGain`` and ``MjtBias`` gained the ``mjGAIN_SO3``/``mjBIAS_SO3`` variants, shifting the
+raw values of ``mjGAIN_USER`` and ``mjBIAS_USER`` from 4 to 5. Code that persists or compares
+raw discriminants (rather than the enum variants) needs to be updated.
+
+
 .. _migrate_5_0_0:
 
 Migrating to 5.0.0

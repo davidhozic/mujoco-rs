@@ -594,13 +594,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
     /// `values`: control values slice of length `nsample`.
     /// # Errors
-    /// - [`MjDataError::IndexOutOfBounds`] if `id >= nu`.
+    /// - [`MjDataError::IndexOutOfBounds`] if `id >= nactuator`.
     /// - [`MjDataError::NoHistoryBuffer`] if the actuator has no history buffer.
     /// - [`MjDataError::LengthMismatch`] if `times` or `values` have the wrong length.
     pub fn init_ctrl_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum]) -> Result<(), MjDataError> {
-        let nu = self.model.ffi().nu as usize;
-        if id >= nu {
-            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nu });
+        let nactuator = self.model.ffi().nactuator as usize;
+        if id >= nactuator {
+            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nactuator });
         }
 
         let nsample = self.model.actuator_history()[id][0];
@@ -674,18 +674,18 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reads the control history value for actuator `id` at `time`
     /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
     /// # Panics
-    /// Panics when `id >= nu`. Use [`MjData::try_read_ctrl`] for a fallible alternative.
+    /// Panics when `id >= nactuator`. Use [`MjData::try_read_ctrl`] for a fallible alternative.
     pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> MjtNum {
         self.try_read_ctrl(id, time, interp).unwrap()
     }
 
     /// Fallible version of [`MjData::read_ctrl`].
     /// # Errors
-    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nu`.
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nactuator`.
     pub fn try_read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> Result<MjtNum, MjDataError> {
-        let nu = self.model.ffi().nu as usize;
-        if id >= nu {
-            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nu });
+        let nactuator = self.model.ffi().nactuator as usize;
+        if id >= nactuator {
+            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nactuator });
         }
         let val = unsafe { mj_readCtrl(self.model.ffi(), self.ffi(), id as i32, time, interp) };
         Ok(val)
@@ -2122,10 +2122,11 @@ mod test {
         assert!(actuator_view.act.is_none());
 
         // Test if indexing corresponds to exact data structure mapping
+        let outadr = model.actuator_outadr()[actuator_info.id] as usize;
         unsafe {
-            assert_relative_eq!(actuator_view.length[0], *data.ffi().actuator_length.add(actuator_info.id), epsilon=1e-9);
-            assert_relative_eq!(actuator_view.velocity[0], *data.ffi().actuator_velocity.add(actuator_info.id), epsilon=1e-9);
-            assert_relative_eq!(actuator_view.force[0], *data.ffi().actuator_force.add(actuator_info.id), epsilon=1e-9);
+            assert_relative_eq!(actuator_view.length[0], *data.ffi().actuator_length.add(outadr), epsilon=1e-9);
+            assert_relative_eq!(actuator_view.velocity[0], *data.ffi().actuator_velocity.add(outadr), epsilon=1e-9);
+            assert_relative_eq!(actuator_view.force[0], *data.ffi().actuator_force.add(outadr), epsilon=1e-9);
         }
     }
 
@@ -4432,8 +4433,9 @@ mod test {
         assert_eq!(ctrl[0], 5.0);
 
         // actuator_force should be nonzero
+        let nout = model.ffi().nout as usize;
         let act_force = data.actuator_force();
-        assert_eq!(act_force.len(), nu);
+        assert_eq!(act_force.len(), nout);
         assert!(act_force[0].abs() > 1e-12,
             "actuator_force should be nonzero with ctrl=5.0, got {}", act_force[0]);
 

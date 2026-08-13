@@ -3039,9 +3039,10 @@ mod tests {
     #[test]
     fn test_force_cast_actuator_model_enums_and_bools() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nactuator = model.ffi().nactuator as usize;
         let nu = model.ffi().nu as usize;
 
-        if nu == 0 {
+        if nactuator == 0 {
             return;
         }
 
@@ -3054,16 +3055,16 @@ mod tests {
         let actlimited = model.actuator_actlimited();
         let actearly = model.actuator_actearly();
 
-        assert_eq!(trntype.len(), nu);
-        assert_eq!(dyntype.len(), nu);
-        assert_eq!(gaintype.len(), nu);
-        assert_eq!(biastype.len(), nu);
+        assert_eq!(trntype.len(), nactuator);
+        assert_eq!(dyntype.len(), nactuator);
+        assert_eq!(gaintype.len(), nactuator);
+        assert_eq!(biastype.len(), nactuator);
         assert_eq!(ctrllimited.len(), nu);
-        assert_eq!(forcelimited.len(), nu);
-        assert_eq!(actlimited.len(), nu);
-        assert_eq!(actearly.len(), nu);
+        assert_eq!(forcelimited.len(), nactuator);
+        assert_eq!(actlimited.len(), nactuator);
+        assert_eq!(actearly.len(), nactuator);
 
-        for i in 0..nu {
+        for i in 0..nactuator {
             // Enum cross-validation
             assert_eq!(trntype[i], unsafe { crate::util::force_cast::<_, MjtTrn>(*model.ffi().actuator_trntype.add(i)) });
             assert_eq!(dyntype[i], unsafe { crate::util::force_cast::<_, MjtDyn>(*model.ffi().actuator_dyntype.add(i)) });
@@ -3093,6 +3094,8 @@ mod tests {
     #[test]
     fn test_force_cast_actuator_param_arrays() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nactuator = model.ffi().nactuator as usize;
+        let nout = model.ffi().nout as usize;
         let nu = model.ffi().nu as usize;
 
         let dynprm = model.actuator_dynprm();
@@ -3100,10 +3103,10 @@ mod tests {
         let gear = model.actuator_gear();
         let trnid = model.actuator_trnid();
 
-        assert_eq!(dynprm.len(), nu);
+        assert_eq!(dynprm.len(), nactuator);
         assert_eq!(ctrlrange.len(), nu);
-        assert_eq!(gear.len(), nu);
-        assert_eq!(trnid.len(), nu);
+        assert_eq!(gear.len(), nout);
+        assert_eq!(trnid.len(), nactuator);
 
         // Verify "slider" dynprm and ctrlrange
         let slider = model.actuator("slider").unwrap();
@@ -3114,13 +3117,19 @@ mod tests {
         let slider2 = model.actuator("slider2").unwrap();
         assert_eq!(dynprm[slider2.id][0..10], [10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]);
 
-        // Cross-validate FFI for gear (stride 6)
-        for i in 0..nu {
+        // Cross-validate FFI for gear (stride 6), trnid (stride 2) and ctrlrange (stride 2)
+        for i in 0..nout {
             for j in 0..6 {
                 assert_eq!(gear[i][j], unsafe { *model.ffi().actuator_gear.add(i * 6 + j) });
             }
+        }
+        for i in 0..nactuator {
             for j in 0..2 {
                 assert_eq!(trnid[i][j], unsafe { *model.ffi().actuator_trnid.add(i * 2 + j) });
+            }
+        }
+        for i in 0..nu {
+            for j in 0..2 {
                 assert_eq!(ctrlrange[i][j], unsafe { *model.ffi().actuator_ctrlrange.add(i * 2 + j) });
             }
         }
