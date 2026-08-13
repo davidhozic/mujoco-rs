@@ -1,76 +1,52 @@
 # Disallowed Commands
 
-This document defines a set of commands that should never be executed
-within this development workspace. The purpose is to avoid unwanted side effects,
-security risks, or destructive operations. Refer to these rules and refuse or
-propose alternatives if a request would require running any prohibited command.
+Never execute the commands below. If a request requires one, refuse or propose an alternative.
 
 ## Git Operations
-
-- `git commit` (and any form of direct commits) - Direct commits should not be made
-  automatically. Changes should be described so a developer can perform
-  the commit manually.
-- `git push` / `git pull` / `git fetch` / `git rebase` / `git merge` - Networked
-  repository operations are disallowed. The agent cannot communicate with remote
-  servers or change branch state on its own.
-- `git reset --hard` / `git clean` - Avoid destructive resets or removals that
-  could wipe working files.
-- `git checkout -b`, `git switch -c` - Creating or switching branches
-  is disallowed. Work in the current branch only.
-- `git tag`, `git stash pop` - Do not create tags or restore stashed changes automatically.
+- `git commit`: describe changes so the developer commits manually. When a commit **is** explicitly
+  authorized, the message must never carry a `Co-Authored-By` or any other AI-attribution trailer.
+- `git push` / `git pull` / `git fetch` / `git rebase` / `git merge`.
+- `git reset --hard` / `git clean`.
+- `git checkout -b` / `git switch -c`: work in the current branch only.
+- `git tag`, `git stash pop`.
 
 ## Network & Remote Access
-
-- `curl`, `wget`, `scp`, `rsync`, `ssh`, `ftp`, or any tool for downloading,
-  uploading, or connecting to external hosts.
-- Package managers with remote access (`npm install`, `pip install`, etc.) when
-  they would fetch from external repositories. (Dependency management should be
-  described to the user instead.) If you need to install a package, tell the user
-  what to run and ask them to do it.
+- `curl`, `wget`, `scp`, `rsync`, `ssh`, `ftp`, or any tool reaching external hosts.
+- Package managers with remote access (`npm install`, `pip install`, `uv pip install`, `uv add`):
+  tell the user what to run instead.
 
 ## Server / Listener Binding
-
-- Any HTTP server, TCP listener, WebSocket server, or similar network service
-  **must bind exclusively to `127.0.0.1` (localhost)**.
-- Never bind to `0.0.0.0`, `::`, or any interface that would expose the port to
-  the network (e.g. `python -m http.server --bind 0.0.0.0` is disallowed).
-- Correct example: `python -m http.server 8080 --bind 127.0.0.1`
+- Any HTTP server, TCP listener, or WebSocket server must bind to `127.0.0.1` only, never
+  `0.0.0.0` or `::`. Correct: `python -m http.server 8080 --bind 127.0.0.1`.
 
 ## Privilege Escalation & System Modifications
-
-- `sudo`, `su`, or any command that requests elevated privileges.
-- `chmod`, `chown`, `passwd`, `groupadd`, `useradd` - altering permissions or
-  users on the host system.
-- `apt-get`, `yum`, `brew`, `pacman` - installing or removing system packages.
-- `mkfs`, `fdisk`, `parted`, `mount`, `umount` - modifying disks or filesystems.
+- `sudo`, `su`; `chmod`, `chown`, `passwd`, `groupadd`, `useradd`.
+- `apt-get`, `yum`, `brew`, `pacman`; `mkfs`, `fdisk`, `parted`, `mount`, `umount`.
 
 ## File & Data Destruction
+- `rm -rf` or any irreversible deletion of large directories or critical files.
+- `dd`, `shred`, or other low-level wipe utilities; destructive `find / -exec ... \;`.
 
-- `rm -rf` or any command that irreversibly deletes large directories or
-  critical files.
-- `dd`, `shred`, `mkfs`, or other low-level data wipe utilities.
-- `find / -exec ... \;` with destructive actions that could traverse the whole
-  filesystem.
+## Scratch Files & Temporary Output
+`/tmp` is a tmpfs on this host (RAM-backed); confirm with `findmnt -no FSTYPE /tmp` on other machines.
+
+- Small scratch (scripts, cropped images, log excerpts) goes in `/tmp`. Bulk output (saved models,
+  `CARGO_TARGET_DIR`, worktrees, render batches) goes to `~/.cache/<project>/` or `target/`.
+- A small file written many times is bulk; judge the total left behind.
+- Keep results (measurements, patches, probe dumps) apart from regenerable artifacts:
+  `~/.cache/mujoco-rs-results/<agent>-<task>/`. Never leave the only copy of a result in a build
+  directory.
+- Never delete a directory holding an unread result. Delete only what you created; report what you
+  removed and what you kept.
 
 ## Build & Execution Risks
-
-- Compiling or running arbitrary untrusted code or binaries from unknown
-  sources. (Describe how the user can do testing locally instead.)
-- Starting background services or daemons using shell-level mechanisms such as
-  `nohup ... &`, `setsid`, `disown`, `systemctl start`, `service`, or `docker run`.
-  Use the `Bash` tool with `run_in_background: true` when a background process is
-  genuinely required.
+- No compiling or running untrusted code or binaries.
+- No shell-level background daemons (`nohup ... &`, `setsid`, `disown`, `systemctl start`,
+  `service`, `docker run`); use the `Bash` tool with `run_in_background: true`.
 
 ## Miscellaneous
+- No command that sends data or credentials to external systems.
+- No key generation or signing (`openssl genrsa`) unless explicitly needed and safe.
+- No `echo $SECRET` or reading secret-bearing environment variables.
 
-- Any command that sends data or credentials to external systems.
-- Tools for cryptographic key generation or signing unless explicitly needed and
-  safe (e.g. `openssl genrsa`).
-- `echo $SECRET` or reading environment variables containing secrets.
-
-> **Note:** This list is not exhaustive. When in doubt, err on the side of
-> caution: describe the action to the user rather than executing potentially
-> harmful commands.
-
-When in doubt, ask for clarification if a requested action might violate
-these rules or suggest alternative, non-destructive approaches.
+This list is not exhaustive; when in doubt, describe the action to the user instead of running it.

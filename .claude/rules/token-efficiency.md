@@ -1,32 +1,29 @@
 # Token Efficiency
 
-Keep token consumption low. These practices apply to the main agent and every subagent.
+Keep token consumption low. Cost is `context size x number of requests`: each tool call re-sends the
+whole context, and every tool result stays in the prefix permanently.
 
 ## Reading & searching
-1. **Read targeted ranges, not whole files.** Use `Read` with `offset`/`limit`, or `Bash` with grep to locate
-   the relevant lines first, then read only that section. Avoid dumping large files, full logs, or
-   whole directories. (`src/util.rs` is large -- read the relevant macro, not all of it.)
-2. **Scope every search.** Search for specific symbols/paths instead of broad whole-repo scans.
-   Vague tasks trigger expensive exploration; phrase work concretely ("fix `jac()` bounds check in
-   `src/wrappers/...`").
-3. **Never re-read a file already in context.** The harness tracks file state; re-reading after your
-   own edit, or content you already loaded, is wasted tokens.
-4. **Cap command output.** Pipe long-running/verbose commands (test runs, `cargo build`, greps over
-   generated code) through `tail`/`head`/`grep`, or delegate them to a subagent so only the summary
-   returns to the main thread.
+1. **Read targeted ranges, not whole files** (`Read` with `offset`/`limit`, grep first). E.g. read
+   the relevant macro in `src/util.rs`, not all of it.
+2. **Scope every search** to a specific symbol or path; phrase tasks concretely.
+3. **Never re-read a file already in context.**
+4. **Cap command output** (`tail`/`head`/`grep`); never print a whole log or diff to decide one fact.
+5. **Never `Read` a file under `.claude/`**; the rules are already in context.
+
+## Requests
+6. **Send independent tool calls in one message.**
+7. **Never poll a running job**: a blocking `Bash` call with an explicit `timeout` is the wait.
+   Background only when you have other work to interleave.
 
 ## Delegation
-5. **Delegate verbose work to subagents.** Test/build runs, doc fetches, and log processing produce
-   bulky output -- run them in a subagent (or background `Bash`) so the noise stays out of the main
-   context and only a concise summary returns.
-6. **Require concise, structured summaries from subagents** (findings + file:line, not raw file
-   content). If a subagent must return large content, the task is scoped too broadly -- split it.
-7. **Don't spawn a subagent for what a direct tool call does faster** -- see `subagent-policy.md`
-   rule 5 for the full tool-vs-agent decision criterion.
+8. **Delegate verbose work to subagents** (test runs, doc fetches, log scans).
+9. **Require concise, structured summaries** (findings + file:line); a subagent returning bulk
+   content is scoped too broadly.
+10. **Don't spawn a subagent for what one tool call does** (`subagent-policy.md` rule 5).
 
 ## Output & session
-8. **Keep responses concise.** Don't recap code already shown or narrate options you won't pursue.
-9. **Match `/effort` to task difficulty.** Use low effort for mechanical edits; reserve high effort
-   for genuinely complex reasoning (thinking bills as output tokens).
-10. **Preserve the cached prefix.** Rules and CLAUDE.md form a byte-stable cached prefix. Don't
-    churn rule files mid-session or re-read them on a fixed cadence -- both add cost without benefit.
+11. **Keep responses concise**; no recaps of shown code or rejected options.
+12. **State a measurement once, as a table**; never raw CSV or sweep logs.
+13. **Match `/effort` to task difficulty.**
+14. **Preserve the cached prefix**: do not churn rule files mid-session or re-read them on a cadence.
