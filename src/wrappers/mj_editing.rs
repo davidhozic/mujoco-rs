@@ -2298,10 +2298,12 @@ impl MjsBody {
 
 /// Configuration for [`MjsBody::add_flexcomp`], mirroring the `flexcomp` element.
 ///
-/// Every field is optional. Unset array, string, and VFS fields are passed to MuJoCo as
-/// null, which makes the compiler fall back to its own defaults. Build one with struct-update
-/// syntax or the chainable `with_*` methods, starting from [`MjFlexcompConfig::default`]. Field
-/// documentation is adapted from MuJoCo's `flexcomp` XML reference.
+/// Unset array, string, and VFS fields are passed to MuJoCo as null, which makes the compiler
+/// fall back to its own defaults; the scalar fields default to MuJoCo's own defaults (so `dim`
+/// is 2, `radius` is 0.005, and the rest are their zero values, which match MuJoCo's defaults).
+/// Build one with struct-update syntax or the chainable `with_*` methods, starting from
+/// [`MjFlexcompConfig::default`]. Field documentation is adapted from MuJoCo's `flexcomp`
+/// XML reference.
 ///
 /// # Example
 /// ```
@@ -2322,12 +2324,13 @@ impl MjsBody {
 /// // The configured flex is now part of the model and it compiles.
 /// spec.compile().unwrap();
 /// ```
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MjFlexcompConfig<'a> {
     /// Flexcomp type: "grid", "box", "cylinder", "ellipsoid", "disc", "circle", "mesh", "gmsh",
     /// or "direct" (default "grid").
     pub r#type: Option<&'a str>,
     /// Dimensionality of the flex object (1, 2, or 3); ignored for types that imply it.
+    /// Defaults to MuJoCo's default (2).
     pub dim: u8,
     /// Dof parametrization: "full", "radial", "trilinear", "quadratic", or "2d" (default "full").
     pub dof: Option<&'a str>,
@@ -2339,7 +2342,7 @@ pub struct MjFlexcompConfig<'a> {
     pub spacing: Option<[f64; 3]>,
     /// Scaling of all point coordinates (applied after the pose transformation).
     pub scale: Option<[f64; 3]>,
-    /// Radius of the flex elements.
+    /// Radius of the flex elements. Defaults to MuJoCo's default (0.005).
     pub radius: f64,
     /// Total mass, divided evenly over the generated points. A value of 0 keeps MuJoCo's default.
     pub mass: f64,
@@ -2364,6 +2367,36 @@ pub struct MjFlexcompConfig<'a> {
     pub file: Option<&'a str>,
     /// Virtual file system used to resolve the mesh file.
     pub vfs: Option<&'a MjVfs>,
+}
+
+// `dim` and `radius` must default to MuJoCo's own defaults (2 and 0.005), not zero:
+// `mjs_makeFlex` applies both unconditionally, so a zero `dim` would fail compilation
+// ("Invalid dim, must be between 1 and 3") and a zero `radius` would silently override
+// MuJoCo's default element radius.
+impl Default for MjFlexcompConfig<'_> {
+    fn default() -> Self {
+        Self {
+            r#type: None,
+            dim: 2,
+            dof: None,
+            count: None,
+            cellcount: None,
+            spacing: None,
+            scale: None,
+            radius: 0.005,
+            mass: 0.0,
+            inertiabox: 0.0,
+            equality: 0,
+            rigid: false,
+            flatskin: false,
+            elastic2d: 0,
+            pos: None,
+            quat: None,
+            origin: None,
+            file: None,
+            vfs: None,
+        }
+    }
 }
 
 impl<'a> MjFlexcompConfig<'a> {
@@ -3792,6 +3825,28 @@ mod tests {
 
         /* The spec with the generated flex still compiles into a valid model. */
         spec.compile().expect("spec with generated flex failed to compile");
+    }
+
+    /// Verifies [`MjFlexcompConfig::default`] carries MuJoCo's own defaults for `dim` and
+    /// `radius`, which `mjs_makeFlex` applies unconditionally: a config that sets only the
+    /// required structural fields must still compile, with the flex keeping MuJoCo's
+    /// default dim (2) and radius (0.005).
+    #[test]
+    fn test_flexcomp_config_defaults() {
+        let mut spec = MjSpec::new();
+
+        let config = MjFlexcompConfig::default()
+            .with_count([3, 3, 1])
+            .with_spacing([0.1, 0.1, 0.1])
+            .with_mass(1.0);
+
+        {
+            let flex = spec.world_body_mut().add_flexcomp("genflex", &config);
+            assert_eq!(flex.dim(), 2);
+            assert!((flex.radius() - 0.005).abs() < 1e-12);
+        }
+
+        spec.compile().expect("spec with defaulted flex failed to compile");
     }
 
     /// Verifies the sensor's objtype protection works.

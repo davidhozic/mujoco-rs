@@ -300,9 +300,21 @@ impl ViewerUI {
 
         self.actuator_display_info = (0..model.nu()).map(|i| {
             let idx = i as usize;
-            let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, idx) {
+            // Map the control index to its owning actuator: MIMO actuators own
+            // actuator_ctrlnum() consecutive controls starting at actuator_ctrladr(),
+            // so control and actuator indices no longer coincide.
+            let (act, sub) = (0..model.nactuator() as usize).find_map(|a| {
+                let start = model.actuator_ctrladr()[a] as usize;
+                (start..start + model.actuator_ctrlnum()[a] as usize)
+                    .contains(&idx)
+                    .then_some((a, idx - start))
+            }).unwrap_or((idx, 0));
+            let base = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, act) {
                 name.to_string()
-            } else { format!("Actuator {i}") };
+            } else { format!("Actuator {act}") };
+            let name = if model.actuator_ctrlnum()[act] > 1 {
+                format!("{base}[{sub}]")
+            } else { base };
             let limited = model.actuator_ctrllimited()[idx];
             let range   = model.actuator_ctrlrange()[idx];
             (name, limited, range)

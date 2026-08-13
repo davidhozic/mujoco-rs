@@ -117,7 +117,7 @@ pub type MjtGain = mjtGain;
 /// Actuator bias types. These values are used in `m->actuator_biastype`.
 pub type MjtBias = mjtBias;
 
-/// Control chart types. These values are used in `m->actuator_ctrlspec`.
+/// Orientation input charts of so3 actuators. These values are used in `m->actuator_ctrlspec`.
 pub type MjtCtrlChart = mjtCtrlChart;
 
 /// MuJoCo object types. These are used, for example, in the support functions `mj_name2id` and
@@ -881,6 +881,8 @@ impl MjModel {
         [ffi] nflexelemdata: MjtSize; "number of element vertex ids in all flexes.";
         [ffi] nflexstiffness: MjtSize; "number of stiffness parameters in all flexes.";
         [ffi] nflexbending: MjtSize; "number of bending parameters in all flexes";
+        [ffi] nefm0dof: MjtSize; "number of dofs covered by the constant metric factor.";
+        [ffi] nefm0L: MjtSize; "number of non-zeros in the constant metric factor.";
         [ffi] nflexelemedge: MjtSize; "number of element edge ids in all flexes.";
         [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
         [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
@@ -987,7 +989,7 @@ impl MjModel {
         body_inertia: &[[MjtNum; 3] [force]; "diagonal inertia in ipos/iquat frame"; ffi().nbody],
         body_invweight0: &[[MjtNum; 2] [force]; "mean inv inert in qpos0 (trn, rot)"; ffi().nbody],
         body_gravcomp: &[MjtNum; "antigravity force, units of body weight"; ffi().nbody],
-        body_margin: &[MjtNum; "MAX over all geom margins"; ffi().nbody],
+        body_margin: &[MjtNum; "MAX over all geom margins+gaps"; ffi().nbody],
         (mut = unsafe) body_plugin: &[i32; "plugin instance id; -1: not in use"; ffi().nbody],
         body_contype: &[i32; "OR over all geom contypes"; ffi().nbody],
         body_conaffinity: &[i32; "OR over all geom conaffinities"; ffi().nbody],
@@ -1170,6 +1172,11 @@ impl MjModel {
         flex_size: &[[MjtNum; 3] [force]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
         flex_stiffness: &[MjtNum; "finite element stiffness matrix"; ffi().nflexstiffness],
         flex_bending: &[MjtNum; "bending stiffness"; ffi().nflexbending],
+        (mut = unsafe) efm0_dofid: &[i32; "constant metric factor row->dof address"; ffi().nefm0dof],
+        (mut = unsafe) efm0_L_rownnz: &[i32; "constant metric factor row nonzeros"; ffi().nefm0dof],
+        (mut = unsafe) efm0_L_rowadr: &[i32; "constant metric factor row addresses"; ffi().nefm0dof],
+        (mut = unsafe) efm0_L_colind: &[i32; "constant metric factor column indices"; ffi().nefm0L],
+        efm0_L: &[MjtNum; "factor of M + (dt^2+dt*d)*K_bend"; ffi().nefm0L],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],

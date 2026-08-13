@@ -60,11 +60,13 @@ update of MuJoCo alone can increase the major version.
 
 *Raw FFI enum types renamed*
 
-- The raw FFI enums from ``mjtype.h``/``mjmodel.h`` in ``mujoco_c`` are now emitted without
-  the trailing underscore (e.g. ``mjtObj_`` is now ``mjtObj``, ``mjtState_`` is now
-  ``mjtState``). The un-suffixed names, which previously existed as aliases, remain valid;
-  only code that referenced the underscored names breaks. The wrapper-level ``MjtX``
-  aliases are unaffected.
+- The raw FFI enums from ``mjtype.h``/``mjmodel.h``/``mjui.h`` in ``mujoco_c`` are now emitted
+  without the trailing underscore (e.g. ``mjtObj_`` is now ``mjtObj``, ``mjtState_`` is now
+  ``mjtState``, ``mjtButton_`` is now ``mjtButton``). The un-suffixed names, which previously
+  existed as aliases, remain valid; only code that referenced the underscored names breaks.
+  The visualization and renderer enums (``mjtCatBit``, ``mjtMouse``, ``mjtCamera``,
+  ``mjtGridPos``, etc.) keep their underscored definitions plus aliases, and the
+  wrapper-level ``MjtX`` aliases are unaffected.
 
 *Shifted ``MjtGain``/``MjtBias`` discriminants*
 
@@ -98,6 +100,11 @@ update of MuJoCo alone can increase the major version.
     MIMO actuator layout (the actuator views gained matching fields).
   - ``nactuator`` :sup:`new`, ``nout`` :sup:`new`, ``npolygonmax`` :sup:`new` and
     ``nmeshdegmax`` :sup:`new` size accessors.
+  - ``nefm0dof`` :sup:`new` and ``nefm0L`` :sup:`new` size accessors, and the
+    ``efm0_dofid`` :sup:`new`, ``efm0_L_rownnz`` :sup:`new`, ``efm0_L_rowadr`` :sup:`new`,
+    ``efm0_L_colind`` :sup:`new` and ``efm0_L`` :sup:`new` array accessors for the constant
+    part of the implicit effective-metric factorization (matching the |mj_data| ``efm_*``
+    accessors).
   - ``flg_gravcomp`` :sup:`new`, ``flg_surfacevel`` :sup:`new` and ``flg_adhesion`` :sup:`new`
     flag accessors.
 
@@ -115,7 +122,8 @@ update of MuJoCo alone can increase the major version.
 - Model-editing (``MjSpec``) accessors: ``MjsBody::simple()`` :sup:`new`,
   ``MjsGeom::surfacevel()`` :sup:`new`, ``MjsGeom::adhesion()`` :sup:`new`,
   ``MjsPair::adhesion()`` :sup:`new` and ``MjsActuator::ctrlspec()`` :sup:`new`
-  (with the matching ``set_``/``with_`` methods).
+  (with the matching ``set_``/``with_`` methods; ``surfacevel`` is a fixed-size array
+  field, so it has ``surfacevel_mut()``/``with_surfacevel()`` instead of ``set_surfacevel()``).
 - Added ``MjtCtrlChart`` :sup:`new` as an alias for the new ``mjtCtrlChart`` enum
   (values of ``m->actuator_ctrlspec``).
 

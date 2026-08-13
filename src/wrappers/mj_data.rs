@@ -1615,7 +1615,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         get, [
             [ffi, ffi_mut] solver: &[MjSolverStat; mjNISLAND as usize * mjNSOLVER as usize]; "solver statistics per island, per iteration.";
             [ffi, ffi_mut] solver_niter: &[i32; mjNISLAND as usize]; "number of solver iterations, per island.";
-            [ffi, ffi_mut] solver_nnz: &[i32; mjNISLAND as usize]; "number of nonzeros in Hessian or efc_AR, per island.";
+            [ffi, ffi_mut] solver_nnz: &[i32; mjNISLAND as usize]; "number of nonzeros in solver matrix, per island.";
             [ffi, ffi_mut] solver_fwdinv: &[MjtNum; 2]; "forward-inverse comparison: qfrc, efc.";
             [ffi, ffi_mut] warning: &[MjWarningStat; MjtWarning::mjNWARNING as usize]; "warning statistics (mutable).";
             [ffi, ffi_mut] timer: &[MjTimerStat; MjtTimer::mjNTIMER as usize]; "timer statistics.";
@@ -1800,7 +1800,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         qDeriv: &[MjtNum; "d (passive + actuator - bias) / d qvel"; model.ffi().nD],
         qLU: &[MjtNum; "sparse LU of (M - dt*qDeriv)"; model.ffi().nD],
         actuator_force: &[MjtNum; "actuator force in actuation space"; model.ffi().nout],
-        qfrc_actuator: &[MjtNum; "actuator force"; model.ffi().nv],
+        qfrc_actuator: &[MjtNum; "actuator force in joint space"; model.ffi().nv],
         qfrc_smooth: &[MjtNum; "net unconstrained force"; model.ffi().nv],
         qacc_smooth: &[MjtNum; "unconstrained acceleration"; model.ffi().nv],
         qfrc_constraint: &[MjtNum; "constraint force"; model.ffi().nv],

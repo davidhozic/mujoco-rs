@@ -330,7 +330,7 @@ which demonstrates various types of UI elements including windows, side panels, 
     (added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`)
     will **not** contain:
 
-    - mass matrices (``qM``, ``qLD``, ``qLDiagInv``, ``qLU``);
+    - mass matrices (``M``, ``qLD``, ``qLDiagInv``, ``qLU``);
     - constraint arrays (``efc_*``, ``iefc_*``, including constraint Jacobians).
 
     If you require those in a UI callback, either call an appropriate method on the passed

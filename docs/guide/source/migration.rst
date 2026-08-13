@@ -79,10 +79,12 @@ parameter was dropped from |mjv_camera| ``move_``.
 
 Raw FFI enum types renamed
 --------------------------
-The raw FFI enums from ``mjtype.h``/``mjmodel.h`` in the ``mujoco_c`` module are now emitted
-without the trailing underscore. The un-suffixed names, which previously existed as aliases,
-remain valid; only code referencing the underscored names needs updating. The wrapper-level
-``MjtX`` aliases are unaffected.
+The raw FFI enums from ``mjtype.h``/``mjmodel.h``/``mjui.h`` in the ``mujoco_c`` module are now
+emitted without the trailing underscore. The un-suffixed names, which previously existed as
+aliases, remain valid; only code referencing the underscored names needs updating. The
+visualization and renderer enums (``mjtCatBit``, ``mjtMouse``, ``mjtCamera``, ``mjtGridPos``,
+etc.) keep their underscored definitions plus aliases, and the wrapper-level ``MjtX`` aliases
+are unaffected.
 
 **Before:**
 
