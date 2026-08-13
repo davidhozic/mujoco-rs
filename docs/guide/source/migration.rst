@@ -25,7 +25,8 @@ Migrating to 6.0.0
 ======================
 
 Version 6.0.0 updates MuJoCo to 3.11.0, which removed and renamed several
-|mj_data| fields and changed a few visualization and model signatures.
+|mj_data| fields, reworked the actuator dimensions for MIMO actuators, and
+changed a few visualization and model signatures.
 
 
 MuJoCo upgrade
@@ -77,28 +78,6 @@ parameter was dropped from |mjv_camera| ``move_``.
     camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -1.0);
 
 
-Raw FFI enum types renamed
---------------------------
-The raw FFI enums from ``mjtype.h``/``mjmodel.h``/``mjui.h`` in the ``mujoco_c`` module are now
-emitted without the trailing underscore. The un-suffixed names, which previously existed as
-aliases, remain valid; only code referencing the underscored names needs updating. The
-visualization and renderer enums (``mjtCatBit``, ``mjtMouse``, ``mjtCamera``, ``mjtGridPos``,
-etc.) keep their underscored definitions plus aliases, and the wrapper-level ``MjtX`` aliases
-are unaffected.
-
-**Before:**
-
-.. code-block:: rust
-
-    use mujoco_rs::mujoco_c::mjtState_;
-
-**After:**
-
-.. code-block:: rust
-
-    use mujoco_rs::mujoco_c::mjtState;
-
-
 ``MjData::efc_diagApprox`` renamed to ``efc_diagA``
 ---------------------------------------------------
 MuJoCo renamed the ``efc_diagApprox`` field to ``efc_diagA``, since it can now hold either
@@ -148,6 +127,32 @@ output-indexed fields (``ctrl``, ``length``, ``velocity``, ``force``; ``ctrllimi
 views to dynamic ranges based on ``actuator_ctrladr``/``actuator_ctrlnum`` and
 ``actuator_outadr``/``actuator_outnum``. For single-input single-output actuators
 ``nactuator == nu == nout``, so models without MIMO actuators are unaffected.
+
+**Before:**
+
+.. code-block:: rust
+
+    for id in 0..model.nu() as usize {
+        let trntype = model.actuator_trntype()[id];
+        let gear = model.actuator_gear()[id];
+        let range = model.actuator_ctrlrange()[id];
+    }
+
+**After:**
+
+.. code-block:: rust
+
+    for id in 0..model.nactuator() as usize {
+        let out = model.actuator_outadr()[id] as usize;
+        let ctrl = model.actuator_ctrladr()[id] as usize;
+
+        let trntype = model.actuator_trntype()[id];    // actuator-indexed
+        let gear = model.actuator_gear()[out];         // output-indexed
+        let range = model.actuator_ctrlrange()[ctrl];  // control-indexed
+    }
+
+The |mj_data| control-history readers follow the same rule: ``read_ctrl`` and ``try_read_ctrl``
+now take an actuator index bounded by ``nactuator``, not a control index bounded by ``nu``.
 
 
 Shifted ``MjtGain``/``MjtBias`` discriminants

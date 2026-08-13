@@ -1466,8 +1466,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Copy [`MjData`] to `destination`, skipping large computed arrays not required for
-    /// visualization: mass matrices and constraint arrays (`efc_*`, `iefc_*`, including
-    /// constraint Jacobians).
+    /// visualization: the mass and factorization matrices (`crb`, `M`, `qLD`, `qH`, `qDeriv`,
+    /// `qLU`) and the sparse constraint Jacobian blocks (`efc_J_*`, `efc_Y_*`, `efc_AR_*`).
     /// This is a wrapper for [`mjv_copyData`].
     ///
     /// # Errors

@@ -60,18 +60,20 @@ update of MuJoCo alone can increase the major version.
 
 *Raw FFI enum types renamed*
 
-- The raw FFI enums from ``mjtype.h``/``mjmodel.h``/``mjui.h`` in ``mujoco_c`` are now emitted
+- The raw FFI enums from ``mjtype.h`` and ``mjui.h`` in ``mujoco_c`` are now emitted
   without the trailing underscore (e.g. ``mjtObj_`` is now ``mjtObj``, ``mjtState_`` is now
   ``mjtState``, ``mjtButton_`` is now ``mjtButton``). The un-suffixed names, which previously
   existed as aliases, remain valid; only code that referenced the underscored names breaks.
-  The visualization and renderer enums (``mjtCatBit``, ``mjtMouse``, ``mjtCamera``,
-  ``mjtGridPos``, etc.) keep their underscored definitions plus aliases, and the
-  wrapper-level ``MjtX`` aliases are unaffected.
+  The visualization, renderer and plugin enums (``mjtCatBit``, ``mjtMouse``, ``mjtCamera``,
+  ``mjtGridPos``, ``mjtPluginCapabilityBit``, etc.) keep their underscored definitions plus
+  aliases, and the wrapper-level ``MjtX`` aliases are unaffected.
 
-*Shifted ``MjtGain``/``MjtBias`` discriminants*
+*Shifted ``MjtGain``/``MjtBias`` discriminants and a new ``MjtTrn`` variant*
 
 - ``MjtGain`` and ``MjtBias`` gained the ``mjGAIN_SO3``/``mjBIAS_SO3`` variants, shifting
   the values of ``mjGAIN_USER`` and ``mjBIAS_USER`` from 4 to 5.
+- ``MjtTrn`` gained ``mjTRN_SO3`` (value 6) for the new so3 transmission. The existing values
+  are unchanged, but an exhaustive ``match`` on ``MjtTrn`` no longer compiles.
 
 *Removed and renamed* |mj_data| *accessors*
 
@@ -105,6 +107,24 @@ update of MuJoCo alone can increase the major version.
   instead of ``c_int``, and ``mjpResourceProvider`` gained a ``write`` callback
   field (``mjfWriteResource``) for resource writing, which breaks struct-literal
   construction of the provider.
+
+*MIMO-aware actuator dimensions*
+
+- Actuator-indexed accessors changed length: code that iterates them by ``nu`` still compiles,
+  but reads the wrong range on MIMO models. Actuator-indexed |mj_model| array accessors are now
+  sized by ``nactuator`` (previously ``nu``),
+  ``actuator_gear``/``actuator_acc0``/``actuator_length0``/``actuator_lengthrange`` by ``nout``,
+  and the per-control ``actuator_ctrllimited``/``actuator_ctrlrange`` remain sized by ``nu``.
+  The |mj_data| accessors ``actuator_length``, ``moment_rownnz``, ``moment_rowadr``,
+  ``actuator_velocity`` and ``actuator_force`` are now sized by ``nout``. The per-actuator
+  views for control- and output-indexed fields (``ctrl``, ``length``, ``velocity``, ``force``;
+  ``ctrllimited``, ``ctrlrange``, ``gear``, ``acc0``, ``length0``, ``lengthrange``) now use
+  dynamic ranges based on ``actuator_ctrladr``/``actuator_ctrlnum`` and
+  ``actuator_outadr``/``actuator_outnum``. For single-input single-output actuators
+  ``nactuator == nu == nout`` and behavior is unchanged.
+- |mj_data| ``read_ctrl``/``try_read_ctrl`` now take an actuator index bounded by ``nactuator``
+  (previously a control index bounded by ``nu``), because the control history is stored per
+  actuator.
 
 .. rubric:: New features and improvements
 
@@ -150,19 +170,6 @@ update of MuJoCo alone can increase the major version.
   ``adhesion`` and ``texid``/``texuniform``/``texrepeat`` respectively,
   following the upstream struct changes.
 
-*MIMO-aware actuator dimensions*
-
-- Actuator-indexed |mj_model| array accessors are now sized by ``nactuator`` (previously ``nu``),
-  ``actuator_gear``/``actuator_acc0``/``actuator_length0``/``actuator_lengthrange`` by ``nout``,
-  and the per-control ``actuator_ctrllimited``/``actuator_ctrlrange`` remain sized by ``nu``.
-  The |mj_data| accessors ``actuator_length``, ``moment_rownnz``, ``moment_rowadr``,
-  ``actuator_velocity`` and ``actuator_force`` are now sized by ``nout``. The per-actuator
-  views for control- and output-indexed fields (``ctrl``, ``length``, ``velocity``, ``force``;
-  ``ctrllimited``, ``ctrlrange``, ``gear``, ``acc0``, ``length0``, ``lengthrange``) now use
-  dynamic ranges based on ``actuator_ctrladr``/``actuator_ctrlnum`` and
-  ``actuator_outadr``/``actuator_outnum``. For single-input single-output actuators
-  ``nactuator == nu == nout`` and behavior is unchanged.
-
 *New accessors for 3.10.0 structs*
 
 - Added ``MjsAuthored`` :sup:`new` and the |mj_spec| ``authored()`` :sup:`new` accessor, exposing the
@@ -171,17 +178,25 @@ update of MuJoCo alone can increase the major version.
 - Added ``MjLogConfig`` :sup:`new` and ``MjLogMessage`` :sup:`new` wrappers (with ``MjtLogLevel`` :sup:`new`
   and ``MjtLogTopic`` :sup:`new`) for the new unified logging API's structured types.
   ``MjLogMessage`` is constructable via ``MjLogMessage::new`` plus builder methods (``with_body``,
-  ``with_func``, ``with_file``, etc.), where the string-pointer fields take ``&'static CStr``.
-- Added free functions ``log_config`` :sup:`new`, ``set_log_config`` :sup:`new`, ``log_message`` :sup:`new`,
-  ``log_info`` :sup:`new`, ``log_error`` :sup:`new`, and ``log_warning`` :sup:`new` wrapping
-  ``mju_getLogConfig``, ``mju_setLogConfig``, ``mju_message``, ``mju_info``, ``mju_error``, and
-  ``mju_warning`` respectively.
+  ``with_func``, ``with_file``, etc.), where the string-pointer fields take
+  ``Option<&'static CStr>`` (``None`` writes a null pointer).
+- Added the free logging functions
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_config` :sup:`new` (``mju_getLogConfig``),
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>set_log_config` :sup:`new` (``mju_setLogConfig``),
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_message` :sup:`new` (``mju_message``),
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_info` :sup:`new` (``mju_info``),
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_warning` :sup:`new` (``mju_warning``) and
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_error` :sup:`new` (``mju_error``), which
+  diverges (``-> !``) because ``mju_error`` never returns.
 - Added ``MjtConflict`` :sup:`new` and the ``MjsCompiler::conflict()`` :sup:`new` accessor, exposing the
   attach-time conflict-resolution policy introduced in MuJoCo 3.10.0.
 - Added ``MjsCompiler::authored()`` :sup:`new` (read-only), exposing the bitmask of which
   compiler fields were explicitly set by the user.
-- Added |mj_spec| ``num_warnings()`` :sup:`new` and ``warning(index)`` :sup:`new` accessors, wrapping
-  ``mjs_numWarnings`` and ``mjs_getWarning`` to query compilation warnings.
+- |mj_spec| gained two compilation-warning accessors, wrapping ``mjs_numWarnings`` and
+  ``mjs_getWarning``:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>num_warnings` :sup:`new`
+    and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>warning` :sup:`new`.
 
 *New* |mj_data| *methods*
 

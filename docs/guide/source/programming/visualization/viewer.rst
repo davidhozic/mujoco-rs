@@ -135,7 +135,8 @@ This is optional and can be removed or reduced to run the simulation faster than
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` copies only the fields
     of :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` required for visualization
     (kinematics, contacts, sensor data, etc.), skipping large computed arrays
-    (mass matrices, constraint arrays ``efc_*``/``iefc_*`` including constraint Jacobians). This is faster.
+    (the mass and factorization matrices ``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``,
+    and the sparse constraint Jacobian blocks ``efc_J_*``, ``efc_Y_*``, ``efc_AR_*``). This is faster.
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full` copies the **entire**
     ``MjData`` struct and should only be used when those large arrays are needed inside the
     viewer (for example, when using
@@ -330,8 +331,8 @@ which demonstrates various types of UI elements including windows, side panels, 
     (added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`)
     will **not** contain:
 
-    - mass matrices (``M``, ``qLD``, ``qLDiagInv``, ``qLU``);
-    - constraint arrays (``efc_*``, ``iefc_*``, including constraint Jacobians).
+    - the mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``);
+    - the sparse constraint Jacobian blocks (``efc_J_*``, ``efc_Y_*``, ``efc_AR_*``).
 
     If you require those in a UI callback, either call an appropriate method on the passed
     :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` instance

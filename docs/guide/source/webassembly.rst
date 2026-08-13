@@ -133,3 +133,20 @@ Replace ``<version>`` with the directory name found under
 ``/path/to/emsdk/node/`` (e.g. ``22.16.0_64bit``).
 
 Expected output: ``Step 0`` through ``Step 999``.
+
+
+Running in a browser
+=============================
+
+The repository ships a small browser runner at ``assets/wasm_examples.html``. Copy it next to
+the compiled artifacts as ``index.html``, then serve that directory:
+
+::
+
+    cp assets/wasm_examples.html \
+        target/wasm32-unknown-emscripten/debug/examples/index.html
+    python3 -m http.server 8080 --bind 127.0.0.1 \
+        --directory target/wasm32-unknown-emscripten/debug/examples
+
+Open http://127.0.0.1:8080/ and start the ``basic`` example from the page. Reload the page
+between two runs, because the Emscripten globals keep the state of the previous run.
