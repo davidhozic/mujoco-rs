@@ -605,7 +605,7 @@ impl ViewerSharedState {
     /// which skips large computed arrays not required for visualization.
     /// The viewer's passive copy will therefore **not** contain:
     ///
-    /// - mass matrices (``qM``, ``qLD``, ``qLDiagInv``, ``qLU``);
+    /// - mass matrices (``M``, ``qLD``, ``qLDiagInv``, ``qLU``);
     /// - constraint arrays (``efc_*``, ``iefc_*``, including constraint Jacobians).
     ///
     /// In UI callbacks these fields will be absent unless
@@ -907,7 +907,7 @@ impl MjViewer {
     /// which skips large computed arrays not required for visualization.
     /// The viewer's passive copy will therefore **not** contain:
     ///
-    /// - mass matrices (``qM``, ``qLD``, ``qLDiagInv``, ``qLU``);
+    /// - mass matrices (``M``, ``qLD``, ``qLDiagInv``, ``qLU``);
     /// - constraint arrays (``efc_*``, ``iefc_*``, including constraint Jacobians).
     ///
     /// In UI callbacks these fields will be absent unless
@@ -1713,7 +1713,7 @@ impl MjViewer {
         self.camera.move_(
             MjtMouse::mjMOUSE_ZOOM,
             self.shared_state.lock_unpoison().data_passive.model(),
-            0.0, -0.05 * change, &self.scene
+            0.0, -0.05 * change
         );
     }
 
@@ -1759,7 +1759,7 @@ impl MjViewer {
             self.camera.move_(
                 action,
                 data_passive.model(),
-                dx / height, dy / height, &self.scene
+                dx / height, dy / height
             );
         }
         else {  // When the perturbation is active, move apply the perturbation.

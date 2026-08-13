@@ -84,7 +84,7 @@ mod build_dependencies {
         fdata = re.replace_all(&fdata, "#[derive($1, $2)]").to_string();
 
         // Make mjtSameFrame be MjtByte as used in all fields.
-        re = regex::Regex::new(r"#\[repr\(u32\)\]\n(.*\npub enum mjtSameFrame_)").unwrap();
+        re = regex::Regex::new(r"#\[repr\(u32\)\]\n(.*\npub enum mjtSameFrame \{)").unwrap();
         fdata = re.replace(&fdata, "#[repr(u8)]\n$1").to_string();
 
         // Replace "zero"-sized and one-sized arrays with raw pointers

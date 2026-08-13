@@ -915,6 +915,7 @@ impl MjsGeom {
             friction: &[f64; 3];                    "one-sided friction coefficients: slide, roll, spin.";
             solref: &[MjtNum; mjNREF as usize];     "solver reference.";
             solimp: &[MjtNum; mjNIMP as usize];     "solver impedance.";
+            surfacevel: &[f64; 6];                  "surface velocity in local frame: linear, angular.";
             fluid_coefs: &[MjtNum; 5];              "ellipsoid-fluid interaction coefs."
         ]
     }
@@ -935,6 +936,7 @@ impl MjsGeom {
         solmix: f64;                   "solver mixing for contact pairs.";
         margin: f64;                   "margin for contact detection.";
         gap: f64;                      "additional contact detection buffer.";
+        adhesion: f64;                 "adhesive force of contacts.";
         mass: f64;                     "used to compute density.";
         density: f64;                  "used to compute mass and inertia from volume or surface.";
         typeinertia: MjtGeomInertia;   "selects between surface and volume inertia.";
@@ -1112,6 +1114,7 @@ impl MjsActuator {
         nsample: i32;                  "number of samples in history buffer.";
         interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
         delay: f64;                    "delay time in seconds; 0: no delay.";
+        ctrlspec: i32;                 "input signature, scoped by gaintype; 0: type default.";
     ]);
 
     getter_setter! {
@@ -1527,6 +1530,7 @@ impl MjsPair {
         [&] with, get, set, [
             margin: f64;             "margin for contact detection.";
             gap: f64;         "additional contact detection buffer.";
+            adhesion: f64;           "adhesive force of contacts.";
             condim: i32;                   "contact dimensionality.";
         ]
     }
@@ -2508,6 +2512,7 @@ impl MjsBody {
         [&] with, get, set, [
             mocap: bool;                   "whether this is a mocap body.";
             explicitinertial: bool;        "whether to save the body with explicit inertial clause.";
+            simple: bool;                  "simple body optimization (false: disabled, true: auto).";
         ]
     }
 
@@ -3379,7 +3384,7 @@ mod tests {
     /// (FALSE, TRUE, AUTO), which would fail if the field were `bool`.
     #[test]
     fn test_tendon_limited_tristate() {
-        use crate::mujoco_c::mjtLimited_::*;
+        use crate::mujoco_c::mjtLimited::*;
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
@@ -3427,7 +3432,7 @@ mod tests {
     /// states (FALSE, TRUE, AUTO).
     #[test]
     fn test_tendon_actfrclimited_tristate() {
-        use crate::mujoco_c::mjtLimited_::*;
+        use crate::mujoco_c::mjtLimited::*;
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
@@ -3470,7 +3475,7 @@ mod tests {
     /// (FALSE, TRUE, AUTO), which would fail if the field were `i32`.
     #[test]
     fn test_joint_align_tristate() {
-        use crate::mujoco_c::mjtAlignFree_::*;
+        use crate::mujoco_c::mjtAlignFree::*;
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
@@ -3506,7 +3511,7 @@ mod tests {
     /// since it was also changed to MjtLimited.
     #[test]
     fn test_joint_limited_tristate() {
-        use crate::mujoco_c::mjtLimited_::*;
+        use crate::mujoco_c::mjtLimited::*;
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();

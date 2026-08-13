@@ -252,8 +252,8 @@ impl MjvCamera {
     }
 
     /// Move camera with mouse.
-    pub fn move_(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
-        unsafe { mjv_moveCamera(model.ffi(), action as i32, dx, dy, scene.ffi(), self); };
+    pub fn move_(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum) {
+        unsafe { mjv_moveCamera(model.ffi(), action as i32, dx, dy, self); };
     }
 
     /// Get the camera coordinate frame (pos, forward, up, right).

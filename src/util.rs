@@ -116,6 +116,12 @@ macro_rules! mj_model_dyn_range {
     ($model:expr, $id:expr, na) => {
         $crate::util::optional_sparse_addr_range($model.actuator_actadr(), $id, $model.na() as usize).unwrap_or((0, 0))
     };
+    ($model:expr, $id:expr, nu) => {
+        $crate::util::optional_sparse_addr_range($model.actuator_ctrladr(), $id, $model.nu() as usize).unwrap_or((0, 0))
+    };
+    ($model:expr, $id:expr, nout) => {
+        $crate::util::optional_sparse_addr_range($model.actuator_outadr(), $id, $model.nout() as usize).unwrap_or((0, 0))
+    };
     ($model:expr, $id:expr, nJten) => {
         $crate::util::optional_sparse_addr_range($model.ten_j_rowadr(), $id, $model.n_jten() as usize).unwrap_or((0, 0))
     };

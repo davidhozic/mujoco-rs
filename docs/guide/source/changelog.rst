@@ -33,17 +33,43 @@ update of MuJoCo alone can increase the major version.
   .. rubric:: Bug fixes
   .. rubric:: Other changes
 
-6.0.0 (MuJoCo 3.10.0)
+6.0.0 (MuJoCo 3.11.0)
 ======================
 
 .. rubric:: Breaking changes
 
-*MuJoCo FFI upgraded to 3.10.0*
+*MuJoCo FFI upgraded to 3.11.0*
 
-- MuJoCo-rs now builds against MuJoCo 3.10.0 FFI. This is a breaking
+- MuJoCo-rs now builds against MuJoCo 3.11.0 FFI. This is a breaking
   dependency-level change for consumers tied to older MuJoCo C ABI details.
   See MuJoCo's changelog for this release:
-  https://mujoco.readthedocs.io/en/3.10.0/changelog.html
+  https://mujoco.readthedocs.io/en/3.11.0/changelog.html
+
+*Removed the* |mj_data| ``qM`` *accessor*
+
+- MuJoCo 3.11.0 removed the legacy sparse ancestor-walk inertia matrix ``mjData.qM``; the
+  joint-space inertia matrix is now stored exclusively in the compressed sparse row (CSR)
+  format ``mjData.M``. The |mj_data| ``qM()``/``qM_mut()`` accessors were removed; use
+  ``M()`` (with the |mj_model| ``M_rownnz``/``M_rowadr``/``M_colind`` index arrays) or
+  :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>full_m` for a dense copy.
+
+*``MjvCamera::move_`` no longer takes a scene*
+
+- |mjv_camera| ``move_`` lost its ``scene: &MjvScene`` parameter, following the upstream
+  removal of the unneeded ``mjvScene`` argument from ``mjv_moveCamera``.
+
+*Raw FFI enum types renamed*
+
+- The raw FFI enums from ``mjtype.h``/``mjmodel.h`` in ``mujoco_c`` are now emitted without
+  the trailing underscore (e.g. ``mjtObj_`` is now ``mjtObj``, ``mjtState_`` is now
+  ``mjtState``). The un-suffixed names, which previously existed as aliases, remain valid;
+  only code that referenced the underscored names breaks. The wrapper-level ``MjtX``
+  aliases are unaffected.
+
+*Shifted ``MjtGain``/``MjtBias`` discriminants*
+
+- ``MjtGain`` and ``MjtBias`` gained the ``mjGAIN_SO3``/``mjBIAS_SO3`` variants, shifting
+  the values of ``mjGAIN_USER`` and ``mjBIAS_USER`` from 4 to 5.
 
 *Removed and renamed* |mj_data| *accessors*
 
@@ -59,6 +85,52 @@ update of MuJoCo alone can increase the major version.
   statistic was removed together with the legacy engine threading API.
 
 .. rubric:: New features and improvements
+
+*New accessors for 3.11.0 fields*
+
+- |mj_model|:
+
+  - ``geom_surfacevel`` :sup:`new`, ``geom_adhesion`` :sup:`new` and ``pair_adhesion`` :sup:`new`
+    array accessors for the new surface-velocity and contact-adhesion model fields (the geom and
+    pair views gained matching ``surfacevel``/``adhesion`` fields).
+  - ``actuator_ctrladr`` :sup:`new`, ``actuator_ctrlnum`` :sup:`new`, ``actuator_ctrlspec`` :sup:`new`,
+    ``actuator_outadr`` :sup:`new` and ``actuator_outnum`` :sup:`new` array accessors for the new
+    MIMO actuator layout (the actuator views gained matching fields).
+  - ``nactuator`` :sup:`new`, ``nout`` :sup:`new`, ``npolygonmax`` :sup:`new` and
+    ``nmeshdegmax`` :sup:`new` size accessors.
+  - ``flg_gravcomp`` :sup:`new`, ``flg_surfacevel`` :sup:`new` and ``flg_adhesion`` :sup:`new`
+    flag accessors.
+
+- |mj_data|:
+
+  - ``qfrc_adhesion`` :sup:`new` (passive contact adhesion force; also available in the joint
+    views) and ``flexelem_krot`` :sup:`new` array accessors.
+  - ``efm_c`` :sup:`new`, ``efm_K_rownnz`` :sup:`new`, ``efm_K_rowadr`` :sup:`new`,
+    ``efm_K_colind`` :sup:`new`, ``efm_K_val`` :sup:`new`, ``efm_dofid`` :sup:`new`,
+    ``efm_L_rownnz`` :sup:`new`, ``efm_L_rowadr`` :sup:`new`, ``efm_L_colind`` :sup:`new` and
+    ``efm_L`` :sup:`new` array accessors, plus the ``efm_active`` :sup:`new`, ``nefmK`` :sup:`new`,
+    ``nefmdof`` :sup:`new` and ``nefmL`` :sup:`new` scalar accessors, exposing the implicit
+    effective-metric (M+K) solver state.
+
+- Model-editing (``MjSpec``) accessors: ``MjsBody::simple()`` :sup:`new`,
+  ``MjsGeom::surfacevel()`` :sup:`new`, ``MjsGeom::adhesion()`` :sup:`new`,
+  ``MjsPair::adhesion()`` :sup:`new` and ``MjsActuator::ctrlspec()`` :sup:`new`
+  (with the matching ``set_``/``with_`` methods).
+- Added ``MjtCtrlChart`` :sup:`new` as an alias for the new ``mjtCtrlChart`` enum
+  (values of ``m->actuator_ctrlspec``).
+
+*MIMO-aware actuator dimensions*
+
+- Actuator-indexed |mj_model| array accessors are now sized by ``nactuator`` (previously ``nu``),
+  ``actuator_gear``/``actuator_acc0``/``actuator_length0``/``actuator_lengthrange`` by ``nout``,
+  and the per-control ``actuator_ctrllimited``/``actuator_ctrlrange`` remain sized by ``nu``.
+  The |mj_data| accessors ``actuator_length``, ``moment_rownnz``, ``moment_rowadr``,
+  ``actuator_velocity`` and ``actuator_force`` are now sized by ``nout``. The per-actuator
+  views for control- and output-indexed fields (``ctrl``, ``length``, ``velocity``, ``force``;
+  ``ctrllimited``, ``ctrlrange``, ``gear``, ``acc0``, ``length0``, ``lengthrange``) now use
+  dynamic ranges based on ``actuator_ctrladr``/``actuator_ctrlnum`` and
+  ``actuator_outadr``/``actuator_outnum``. For single-input single-output actuators
+  ``nactuator == nu == nout`` and behavior is unchanged.
 
 *New accessors for 3.10.0 structs*
 

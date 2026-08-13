@@ -24,15 +24,77 @@ For a full list of changes, see the :ref:`changelog`.
 Migrating to 6.0.0
 ======================
 
-Version 6.0.0 updates MuJoCo to 3.10.0, which removed and renamed several
-|mj_data| fields.
+Version 6.0.0 updates MuJoCo to 3.11.0, which removed and renamed several
+|mj_data| fields and changed a few visualization and model signatures.
 
 
 MuJoCo upgrade
 -----------------------
 
-This release links against MuJoCo **3.10.0**. Download the matching release and
+This release links against MuJoCo **3.11.0**. Download the matching release and
 update your library path. See :ref:`installation` for details.
+
+
+Removed ``MjData::qM`` accessor
+-------------------------------
+MuJoCo removed the legacy sparse ``mjData.qM`` inertia matrix; the joint-space inertia matrix
+is now stored exclusively in the CSR format ``mjData.M``. Use the ``M`` accessor together with
+the |mj_model| ``M_rownnz``/``M_rowadr``/``M_colind`` index arrays, or ``full_m`` for a dense copy.
+
+**Before:**
+
+.. code-block:: rust
+
+    let inertia = data.qM();
+
+**After:**
+
+.. code-block:: rust
+
+    let inertia = data.M();  // CSR values; indices in model.M_rownnz()/M_rowadr()/M_colind()
+
+    // or, for a dense nv x nv matrix:
+    let nv = model.nv() as usize;
+    let mut dense = vec![0.0; nv * nv];
+    data.full_m(&mut dense).unwrap();
+
+
+``MjvCamera::move_`` no longer takes a scene
+--------------------------------------------
+The ``mjvScene`` argument was removed from ``mjv_moveCamera`` upstream, so the ``scene``
+parameter was dropped from |mjv_camera| ``move_``.
+
+**Before:**
+
+.. code-block:: rust
+
+    camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -1.0, renderer.scene());
+
+**After:**
+
+.. code-block:: rust
+
+    camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -1.0);
+
+
+Raw FFI enum types renamed
+--------------------------
+The raw FFI enums from ``mjtype.h``/``mjmodel.h`` in the ``mujoco_c`` module are now emitted
+without the trailing underscore. The un-suffixed names, which previously existed as aliases,
+remain valid; only code referencing the underscored names needs updating. The wrapper-level
+``MjtX`` aliases are unaffected.
+
+**Before:**
+
+.. code-block:: rust
+
+    use mujoco_rs::mujoco_c::mjtState_;
+
+**After:**
+
+.. code-block:: rust
+
+    use mujoco_rs::mujoco_c::mjtState;
 
 
 ``MjData::efc_diagApprox`` renamed to ``efc_diagA``

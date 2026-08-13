@@ -193,7 +193,7 @@ const DISABLE_FLAGS: &[(&str, MjtDisableBit)] = &[
     ("Island", MjtDisableBit::mjDSBL_ISLAND),
     ("Multi CCD", MjtDisableBit::mjDSBL_MULTICCD),
 ];
-const _: () = assert!(DISABLE_FLAGS.len() == crate::mujoco_c::mjtDisableBit_::mjNDISABLE as usize);
+const _: () = assert!(DISABLE_FLAGS.len() == crate::mujoco_c::mjtDisableBit::mjNDISABLE as usize);
 
 /// Maps MuJoCo enable flag bits to their string representations
 const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
@@ -204,7 +204,7 @@ const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
     ("Sleep", MjtEnableBit::mjENBL_SLEEP),
     ("DiagExact", MjtEnableBit::mjENBL_DIAGEXACT)
 ];
-const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit_::mjNENABLE as usize);
+const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit::mjNENABLE as usize);
 
 /// Type alias for a user-provided UI callback function.
 pub(crate) type UiCallback = Box<dyn FnMut(&egui::Context, &mut MjData<Box<MjModel>>)>;
