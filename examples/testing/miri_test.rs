@@ -14,7 +14,7 @@ use mujoco_rs::prelude::{MjSpec, SpecItem};
 use mujoco_rs::wrappers::{MjModel, MjData, MjtObj, MjtGeom, MjtJoint, MjtTrn, MjtSensor};
 use mujoco_rs::wrappers::mj_editing::MjtLimited;
 use mujoco_rs::wrappers::fun::*;
-use mujoco_rs::mujoco_c::mjtState_;
+use mujoco_rs::mujoco_c::mjtState;
 
 fn build_model() -> MjModel {
     let mut spec = MjSpec::new();
@@ -144,7 +144,7 @@ fn test_inverse_dynamics_and_state<'a>(model: &'a MjModel, data: &mut MjData<&'a
     
     data.inverse();
 
-    let full_state = mjtState_::mjSTATE_FULLPHYSICS as u32;
+    let full_state = mjtState::mjSTATE_FULLPHYSICS as u32;
     let state = data.state(full_state);
     assert!(!state.is_empty());
     data.set_state(&state, full_state).unwrap();

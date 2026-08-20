@@ -114,8 +114,8 @@ fn main() {
     // Position the camera so we can see the whole scene.
     let mut camera = MjvCamera::new_free(&model);
     // Zoom out a little and elevate the viewpoint.
-    camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -0.5, renderer.scene());
-    camera.move_(MjtMouse::mjMOUSE_ROTATE_V, &model, 0.0, -0.1, renderer.scene());
+    camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -0.5);
+    camera.move_(MjtMouse::mjMOUSE_ROTATE_V, &model, 0.0, -0.1);
     renderer.set_camera(camera);
 
     println!("Running {SIM_STEPS} simulation steps.");

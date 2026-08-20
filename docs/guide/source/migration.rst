@@ -24,15 +24,58 @@ For a full list of changes, see the :ref:`changelog`.
 Migrating to 6.0.0
 ======================
 
-Version 6.0.0 updates MuJoCo to 3.10.0, which removed and renamed several
-|mj_data| fields.
+Version 6.0.0 updates MuJoCo to 3.11.0, which removed and renamed several
+|mj_data| fields, reworked the actuator dimensions for MIMO actuators, and
+changed a few visualization and model signatures.
 
 
 MuJoCo upgrade
 -----------------------
 
-This release links against MuJoCo **3.10.0**. Download the matching release and
+This release links against MuJoCo **3.11.0**. Download the matching release and
 update your library path. See :ref:`installation` for details.
+
+
+Removed ``MjData::qM`` accessor
+-------------------------------
+MuJoCo removed the legacy sparse ``mjData.qM`` inertia matrix; the joint-space inertia matrix
+is now stored exclusively in the CSR format ``mjData.M``. Use the ``M`` accessor together with
+the |mj_model| ``M_rownnz``/``M_rowadr``/``M_colind`` index arrays, or ``full_m`` for a dense copy.
+
+**Before:**
+
+.. code-block:: rust
+
+    let inertia = data.qM();
+
+**After:**
+
+.. code-block:: rust
+
+    let inertia = data.M();  // CSR values; indices in model.M_rownnz()/M_rowadr()/M_colind()
+
+    // or, for a dense nv x nv matrix:
+    let nv = model.nv() as usize;
+    let mut dense = vec![0.0; nv * nv];
+    data.full_m(&mut dense).unwrap();
+
+
+``MjvCamera::move_`` no longer takes a scene
+--------------------------------------------
+The ``mjvScene`` argument was removed from ``mjv_moveCamera`` upstream, so the ``scene``
+parameter was dropped from |mjv_camera| ``move_``.
+
+**Before:**
+
+.. code-block:: rust
+
+    camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -1.0, renderer.scene());
+
+**After:**
+
+.. code-block:: rust
+
+    camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -1.0);
 
 
 ``MjData::efc_diagApprox`` renamed to ``efc_diagA``
@@ -67,6 +110,56 @@ Removed ``MjData::maxuse_threadstack`` accessor
 -----------------------------------------------
 The legacy engine threading API was removed upstream, taking the per-thread stack-usage
 statistic with it. The ``maxuse_threadstack`` accessor was removed with no replacement.
+
+
+MIMO-aware actuator dimensions
+------------------------------
+Actuators now have separate control and output dimensions: ``nu`` is the total number of
+scalar controls, ``nout`` the total number of force outputs, and ``nactuator`` the number of
+actuators (previously all three coincided as ``nu``). Actuator-indexed |mj_model| array
+accessors are now sized by ``nactuator``, ``actuator_gear``/``actuator_acc0``/
+``actuator_length0``/``actuator_lengthrange`` by ``nout``, while the per-control
+``actuator_ctrllimited`` and ``actuator_ctrlrange`` remain sized by ``nu``. The |mj_data|
+accessors ``actuator_length``, ``moment_rownnz``, ``moment_rowadr``, ``actuator_velocity``
+and ``actuator_force`` are now sized by ``nout``. The per-actuator views for control- and
+output-indexed fields (``ctrl``, ``length``, ``velocity``, ``force``; ``ctrllimited``,
+``ctrlrange``, ``gear``, ``acc0``, ``length0``, ``lengthrange``) changed from fixed-size
+views to dynamic ranges based on ``actuator_ctrladr``/``actuator_ctrlnum`` and
+``actuator_outadr``/``actuator_outnum``. For single-input single-output actuators
+``nactuator == nu == nout``, so models without MIMO actuators are unaffected.
+
+**Before:**
+
+.. code-block:: rust
+
+    for id in 0..model.nu() as usize {
+        let trntype = model.actuator_trntype()[id];
+        let gear = model.actuator_gear()[id];
+        let range = model.actuator_ctrlrange()[id];
+    }
+
+**After:**
+
+.. code-block:: rust
+
+    for id in 0..model.nactuator() as usize {
+        let out = model.actuator_outadr()[id] as usize;
+        let ctrl = model.actuator_ctrladr()[id] as usize;
+
+        let trntype = model.actuator_trntype()[id];    // actuator-indexed
+        let gear = model.actuator_gear()[out];         // output-indexed
+        let range = model.actuator_ctrlrange()[ctrl];  // control-indexed
+    }
+
+The |mj_data| control-history readers follow the same rule: ``read_ctrl`` and ``try_read_ctrl``
+now take an actuator index bounded by ``nactuator``, not a control index bounded by ``nu``.
+
+
+Shifted ``MjtGain``/``MjtBias`` discriminants
+---------------------------------------------
+``MjtGain`` and ``MjtBias`` gained the ``mjGAIN_SO3``/``mjBIAS_SO3`` variants, shifting the
+raw values of ``mjGAIN_USER`` and ``mjBIAS_USER`` from 4 to 5. Code that persists or compares
+raw discriminants (rather than the enum variants) needs to be updated.
 
 
 .. _migrate_5_0_0:

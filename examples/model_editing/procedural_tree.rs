@@ -9,7 +9,7 @@
 use std::time::Duration;
 use mujoco_rs::prelude::*;
 use mujoco_rs::wrappers::mj_editing::MjsBody;
-use mujoco_rs::mujoco_c::mjtDisableBit_;
+use mujoco_rs::mujoco_c::mjtDisableBit;
 use mujoco_rs::viewer::MjViewer;
 
 const MAX_DEPTH:    usize = 4;
@@ -91,7 +91,7 @@ fn build_tree() -> MjModel {
     opt.timestep      = 0.002;
     opt.density       = 1.294;  // air density - required for aerodynamic drag
     opt.wind[0]       = 0.0;    // wind in +x
-    opt.disableflags |= mjtDisableBit_::mjDSBL_CONSTRAINT as i32;
+    opt.disableflags |= mjtDisableBit::mjDSBL_CONSTRAINT as i32;
 
     // Give the viewer a sensible default camera framing.
     let stat = spec.stat_mut();

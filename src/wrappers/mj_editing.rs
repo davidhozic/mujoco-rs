@@ -915,6 +915,7 @@ impl MjsGeom {
             friction: &[f64; 3];                    "one-sided friction coefficients: slide, roll, spin.";
             solref: &[MjtNum; mjNREF as usize];     "solver reference.";
             solimp: &[MjtNum; mjNIMP as usize];     "solver impedance.";
+            surfacevel: &[f64; 6];                  "surface velocity in local frame: linear, angular.";
             fluid_coefs: &[MjtNum; 5];              "ellipsoid-fluid interaction coefs."
         ]
     }
@@ -935,6 +936,7 @@ impl MjsGeom {
         solmix: f64;                   "solver mixing for contact pairs.";
         margin: f64;                   "margin for contact detection.";
         gap: f64;                      "additional contact detection buffer.";
+        adhesion: f64;                 "adhesive force of contacts.";
         mass: f64;                     "used to compute density.";
         density: f64;                  "used to compute mass and inertia from volume or surface.";
         typeinertia: MjtGeomInertia;   "selects between surface and volume inertia.";
@@ -1112,6 +1114,7 @@ impl MjsActuator {
         nsample: i32;                  "number of samples in history buffer.";
         interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
         delay: f64;                    "delay time in seconds; 0: no delay.";
+        ctrlspec: i32;                 "input signature, scoped by gaintype; 0: type default.";
     ]);
 
     getter_setter! {
@@ -1527,6 +1530,7 @@ impl MjsPair {
         [&] with, get, set, [
             margin: f64;             "margin for contact detection.";
             gap: f64;         "additional contact detection buffer.";
+            adhesion: f64;           "adhesive force of contacts.";
             condim: i32;                   "contact dimensionality.";
         ]
     }
@@ -2294,10 +2298,12 @@ impl MjsBody {
 
 /// Configuration for [`MjsBody::add_flexcomp`], mirroring the `flexcomp` element.
 ///
-/// Every field is optional. Unset array, string, and VFS fields are passed to MuJoCo as
-/// null, which makes the compiler fall back to its own defaults. Build one with struct-update
-/// syntax or the chainable `with_*` methods, starting from [`MjFlexcompConfig::default`]. Field
-/// documentation is adapted from MuJoCo's `flexcomp` XML reference.
+/// Unset array, string, and VFS fields are passed to MuJoCo as null, which makes the compiler
+/// fall back to its own defaults; the scalar fields default to MuJoCo's own defaults (so `dim`
+/// is 2, `radius` is 0.005, and the rest are their zero values, which match MuJoCo's defaults).
+/// Build one with struct-update syntax or the chainable `with_*` methods, starting from
+/// [`MjFlexcompConfig::default`]. Field documentation is adapted from MuJoCo's `flexcomp`
+/// XML reference.
 ///
 /// # Example
 /// ```
@@ -2318,12 +2324,13 @@ impl MjsBody {
 /// // The configured flex is now part of the model and it compiles.
 /// spec.compile().unwrap();
 /// ```
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MjFlexcompConfig<'a> {
     /// Flexcomp type: "grid", "box", "cylinder", "ellipsoid", "disc", "circle", "mesh", "gmsh",
     /// or "direct" (default "grid").
     pub r#type: Option<&'a str>,
     /// Dimensionality of the flex object (1, 2, or 3); ignored for types that imply it.
+    /// Defaults to MuJoCo's default (2).
     pub dim: u8,
     /// Dof parametrization: "full", "radial", "trilinear", "quadratic", or "2d" (default "full").
     pub dof: Option<&'a str>,
@@ -2335,7 +2342,7 @@ pub struct MjFlexcompConfig<'a> {
     pub spacing: Option<[f64; 3]>,
     /// Scaling of all point coordinates (applied after the pose transformation).
     pub scale: Option<[f64; 3]>,
-    /// Radius of the flex elements.
+    /// Radius of the flex elements. Defaults to MuJoCo's default (0.005).
     pub radius: f64,
     /// Total mass, divided evenly over the generated points. A value of 0 keeps MuJoCo's default.
     pub mass: f64,
@@ -2360,6 +2367,36 @@ pub struct MjFlexcompConfig<'a> {
     pub file: Option<&'a str>,
     /// Virtual file system used to resolve the mesh file.
     pub vfs: Option<&'a MjVfs>,
+}
+
+// `dim` and `radius` must default to MuJoCo's own defaults (2 and 0.005), not zero:
+// `mjs_makeFlex` applies both unconditionally, so a zero `dim` would fail compilation
+// ("Invalid dim, must be between 1 and 3") and a zero `radius` would silently override
+// MuJoCo's default element radius.
+impl Default for MjFlexcompConfig<'_> {
+    fn default() -> Self {
+        Self {
+            r#type: None,
+            dim: 2,
+            dof: None,
+            count: None,
+            cellcount: None,
+            spacing: None,
+            scale: None,
+            radius: 0.005,
+            mass: 0.0,
+            inertiabox: 0.0,
+            equality: 0,
+            rigid: false,
+            flatskin: false,
+            elastic2d: 0,
+            pos: None,
+            quat: None,
+            origin: None,
+            file: None,
+            vfs: None,
+        }
+    }
 }
 
 impl<'a> MjFlexcompConfig<'a> {
@@ -2508,6 +2545,7 @@ impl MjsBody {
         [&] with, get, set, [
             mocap: bool;                   "whether this is a mocap body.";
             explicitinertial: bool;        "whether to save the body with explicit inertial clause.";
+            simple: bool;                  "simple body optimization (false: disabled, true: auto).";
         ]
     }
 
@@ -3379,7 +3417,7 @@ mod tests {
     /// (FALSE, TRUE, AUTO), which would fail if the field were `bool`.
     #[test]
     fn test_tendon_limited_tristate() {
-        use crate::mujoco_c::mjtLimited_::*;
+        use crate::mujoco_c::mjtLimited::*;
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
@@ -3427,7 +3465,7 @@ mod tests {
     /// states (FALSE, TRUE, AUTO).
     #[test]
     fn test_tendon_actfrclimited_tristate() {
-        use crate::mujoco_c::mjtLimited_::*;
+        use crate::mujoco_c::mjtLimited::*;
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
@@ -3470,7 +3508,7 @@ mod tests {
     /// (FALSE, TRUE, AUTO), which would fail if the field were `i32`.
     #[test]
     fn test_joint_align_tristate() {
-        use crate::mujoco_c::mjtAlignFree_::*;
+        use crate::mujoco_c::mjtAlignFree::*;
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
@@ -3506,7 +3544,7 @@ mod tests {
     /// since it was also changed to MjtLimited.
     #[test]
     fn test_joint_limited_tristate() {
-        use crate::mujoco_c::mjtLimited_::*;
+        use crate::mujoco_c::mjtLimited::*;
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
@@ -3787,6 +3825,28 @@ mod tests {
 
         /* The spec with the generated flex still compiles into a valid model. */
         spec.compile().expect("spec with generated flex failed to compile");
+    }
+
+    /// Verifies [`MjFlexcompConfig::default`] carries MuJoCo's own defaults for `dim` and
+    /// `radius`, which `mjs_makeFlex` applies unconditionally: a config that sets only the
+    /// required structural fields must still compile, with the flex keeping MuJoCo's
+    /// default dim (2) and radius (0.005).
+    #[test]
+    fn test_flexcomp_config_defaults() {
+        let mut spec = MjSpec::new();
+
+        let config = MjFlexcompConfig::default()
+            .with_count([3, 3, 1])
+            .with_spacing([0.1, 0.1, 0.1])
+            .with_mass(1.0);
+
+        {
+            let flex = spec.world_body_mut().add_flexcomp("genflex", &config);
+            assert_eq!(flex.dim(), 2);
+            assert!((flex.radius() - 0.005).abs() < 1e-12);
+        }
+
+        spec.compile().expect("spec with defaulted flex failed to compile");
     }
 
     /// Verifies the sensor's objtype protection works.

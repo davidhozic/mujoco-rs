@@ -33,17 +33,47 @@ update of MuJoCo alone can increase the major version.
   .. rubric:: Bug fixes
   .. rubric:: Other changes
 
-6.0.0 (MuJoCo 3.10.0)
+6.0.0 (MuJoCo 3.11.0)
 ======================
 
 .. rubric:: Breaking changes
 
-*MuJoCo FFI upgraded to 3.10.0*
+*MuJoCo FFI upgraded to 3.11.0*
 
-- MuJoCo-rs now builds against MuJoCo 3.10.0 FFI. This is a breaking
+- MuJoCo-rs now builds against MuJoCo 3.11.0 FFI. This is a breaking
   dependency-level change for consumers tied to older MuJoCo C ABI details.
   See MuJoCo's changelog for this release:
-  https://mujoco.readthedocs.io/en/3.10.0/changelog.html
+  https://mujoco.readthedocs.io/en/3.11.0/changelog.html
+
+*Removed the* |mj_data| ``qM`` *accessor*
+
+- MuJoCo 3.11.0 removed the legacy sparse ancestor-walk inertia matrix ``mjData.qM``; the
+  joint-space inertia matrix is now stored exclusively in the compressed sparse row (CSR)
+  format ``mjData.M``. The |mj_data| ``qM()``/``qM_mut()`` accessors were removed; use
+  ``M()`` (with the |mj_model| ``M_rownnz``/``M_rowadr``/``M_colind`` index arrays) or
+  :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>full_m` for a dense copy.
+
+*``MjvCamera::move_`` no longer takes a scene*
+
+- |mjv_camera| ``move_`` lost its ``scene: &MjvScene`` parameter, following the upstream
+  removal of the unneeded ``mjvScene`` argument from ``mjv_moveCamera``.
+
+*Raw FFI enum types renamed*
+
+- The raw FFI enums from ``mjtype.h`` and ``mjui.h`` in ``mujoco_c`` are now emitted
+  without the trailing underscore (e.g. ``mjtObj_`` is now ``mjtObj``, ``mjtState_`` is now
+  ``mjtState``, ``mjtButton_`` is now ``mjtButton``). The un-suffixed names, which previously
+  existed as aliases, remain valid; only code that referenced the underscored names breaks.
+  The visualization, renderer and plugin enums (``mjtCatBit``, ``mjtMouse``, ``mjtCamera``,
+  ``mjtGridPos``, ``mjtPluginCapabilityBit``, etc.) keep their underscored definitions plus
+  aliases, and the wrapper-level ``MjtX`` aliases are unaffected.
+
+*Shifted ``MjtGain``/``MjtBias`` discriminants and a new ``MjtTrn`` variant*
+
+- ``MjtGain`` and ``MjtBias`` gained the ``mjGAIN_SO3``/``mjBIAS_SO3`` variants, shifting
+  the values of ``mjGAIN_USER`` and ``mjBIAS_USER`` from 4 to 5.
+- ``MjtTrn`` gained ``mjTRN_SO3`` (value 6) for the new so3 transmission. The existing values
+  are unchanged, but an exhaustive ``match`` on ``MjtTrn`` no longer compiles.
 
 *Removed and renamed* |mj_data| *accessors*
 
@@ -58,7 +88,87 @@ update of MuJoCo alone can increase the major version.
 - Removed the ``maxuse_threadstack`` accessor; the old per-thread stack
   statistic was removed together with the legacy engine threading API.
 
+*Removed the legacy engine threading raw FFI*
+
+- Following the upstream removal of ``mjthread.h``, the raw FFI types
+  ``mjThreadPool``, ``mjTask``, ``mjtTaskStatus`` and ``mjfTask``, the constant
+  ``mjMAXTHREAD`` and the functions ``mju_threadPoolCreate``, ``mju_bindThreadPool``,
+  ``mju_threadPoolEnqueue``, ``mju_threadPoolDestroy``, ``mju_defaultTask`` and
+  ``mju_taskJoin`` no longer exist in ``mujoco_c``. Use |mj_data|
+  ``set_threadpool`` (wrapping ``mju_threadpool``) instead.
+
+*Removed and changed raw FFI functions*
+
+- ``mju_error_i``, ``mju_error_s``, ``mju_warning_i`` and ``mju_warning_s``
+  were removed upstream in MuJoCo 3.10.0, superseded by the unified logging API.
+- The raw ``mj_fullM`` signature changed from ``mj_fullM(m, dst, M)`` to
+  ``mj_fullM(m, d, dst)`` as part of the upstream ``mjData.qM`` removal.
+- ``mj_encode`` and the ``mjfEncode`` plugin callback now return ``mjtSize``
+  instead of ``c_int``, and ``mjpResourceProvider`` gained a ``write`` callback
+  field (``mjfWriteResource``) for resource writing, which breaks struct-literal
+  construction of the provider.
+
+*MIMO-aware actuator dimensions*
+
+- Actuator-indexed accessors changed length: code that iterates them by ``nu`` still compiles,
+  but reads the wrong range on MIMO models. Actuator-indexed |mj_model| array accessors are now
+  sized by ``nactuator`` (previously ``nu``),
+  ``actuator_gear``/``actuator_acc0``/``actuator_length0``/``actuator_lengthrange`` by ``nout``,
+  and the per-control ``actuator_ctrllimited``/``actuator_ctrlrange`` remain sized by ``nu``.
+  The |mj_data| accessors ``actuator_length``, ``moment_rownnz``, ``moment_rowadr``,
+  ``actuator_velocity`` and ``actuator_force`` are now sized by ``nout``. The per-actuator
+  views for control- and output-indexed fields (``ctrl``, ``length``, ``velocity``, ``force``;
+  ``ctrllimited``, ``ctrlrange``, ``gear``, ``acc0``, ``length0``, ``lengthrange``) now use
+  dynamic ranges based on ``actuator_ctrladr``/``actuator_ctrlnum`` and
+  ``actuator_outadr``/``actuator_outnum``. For single-input single-output actuators
+  ``nactuator == nu == nout`` and behavior is unchanged.
+- |mj_data| ``read_ctrl``/``try_read_ctrl`` now take an actuator index bounded by ``nactuator``
+  (previously a control index bounded by ``nu``), because the control history is stored per
+  actuator.
+
 .. rubric:: New features and improvements
+
+*New accessors for 3.11.0 fields*
+
+- |mj_model|:
+
+  - ``geom_surfacevel`` :sup:`new`, ``geom_adhesion`` :sup:`new` and ``pair_adhesion`` :sup:`new`
+    array accessors for the new surface-velocity and contact-adhesion model fields (the geom and
+    pair views gained matching ``surfacevel``/``adhesion`` fields).
+  - ``actuator_ctrladr`` :sup:`new`, ``actuator_ctrlnum`` :sup:`new`, ``actuator_ctrlspec`` :sup:`new`,
+    ``actuator_outadr`` :sup:`new` and ``actuator_outnum`` :sup:`new` array accessors for the new
+    MIMO actuator layout (the actuator views gained matching fields).
+  - ``nactuator`` :sup:`new`, ``nout`` :sup:`new`, ``npolygonmax`` :sup:`new` and
+    ``nmeshdegmax`` :sup:`new` size accessors.
+  - ``nefm0dof`` :sup:`new` and ``nefm0L`` :sup:`new` size accessors, and the
+    ``efm0_dofid`` :sup:`new`, ``efm0_L_rownnz`` :sup:`new`, ``efm0_L_rowadr`` :sup:`new`,
+    ``efm0_L_colind`` :sup:`new` and ``efm0_L`` :sup:`new` array accessors for the constant
+    part of the implicit effective-metric factorization (matching the |mj_data| ``efm_*``
+    accessors).
+  - ``flg_gravcomp`` :sup:`new`, ``flg_surfacevel`` :sup:`new` and ``flg_adhesion`` :sup:`new`
+    flag accessors.
+
+- |mj_data|:
+
+  - ``qfrc_adhesion`` :sup:`new` (passive contact adhesion force; also available in the joint
+    views) and ``flexelem_krot`` :sup:`new` array accessors.
+  - ``efm_c`` :sup:`new`, ``efm_K_rownnz`` :sup:`new`, ``efm_K_rowadr`` :sup:`new`,
+    ``efm_K_colind`` :sup:`new`, ``efm_K_val`` :sup:`new`, ``efm_dofid`` :sup:`new`,
+    ``efm_L_rownnz`` :sup:`new`, ``efm_L_rowadr`` :sup:`new`, ``efm_L_colind`` :sup:`new` and
+    ``efm_L`` :sup:`new` array accessors, plus the ``efm_active`` :sup:`new`, ``nefmK`` :sup:`new`,
+    ``nefmdof`` :sup:`new` and ``nefmL`` :sup:`new` scalar accessors, exposing the implicit
+    effective-metric (M+K) solver state.
+
+- Model-editing (``MjSpec``) accessors: ``MjsBody::simple()`` :sup:`new`,
+  ``MjsGeom::surfacevel()`` :sup:`new`, ``MjsGeom::adhesion()`` :sup:`new`,
+  ``MjsPair::adhesion()`` :sup:`new` and ``MjsActuator::ctrlspec()`` :sup:`new`
+  (with the matching ``set_``/``with_`` methods; ``surfacevel`` is a fixed-size array
+  field, so it has ``surfacevel_mut()``/``with_surfacevel()`` instead of ``set_surfacevel()``).
+- Added ``MjtCtrlChart`` :sup:`new` as an alias for the new ``mjtCtrlChart`` enum
+  (values of ``m->actuator_ctrlspec``).
+- The raw FFI structs ``mjContact`` and ``mjvGeom`` gained the public fields
+  ``adhesion`` and ``texid``/``texuniform``/``texrepeat`` respectively,
+  following the upstream struct changes.
 
 *New accessors for 3.10.0 structs*
 
@@ -68,17 +178,25 @@ update of MuJoCo alone can increase the major version.
 - Added ``MjLogConfig`` :sup:`new` and ``MjLogMessage`` :sup:`new` wrappers (with ``MjtLogLevel`` :sup:`new`
   and ``MjtLogTopic`` :sup:`new`) for the new unified logging API's structured types.
   ``MjLogMessage`` is constructable via ``MjLogMessage::new`` plus builder methods (``with_body``,
-  ``with_func``, ``with_file``, etc.), where the string-pointer fields take ``&'static CStr``.
-- Added free functions ``log_config`` :sup:`new`, ``set_log_config`` :sup:`new`, ``log_message`` :sup:`new`,
-  ``log_info`` :sup:`new`, ``log_error`` :sup:`new`, and ``log_warning`` :sup:`new` wrapping
-  ``mju_getLogConfig``, ``mju_setLogConfig``, ``mju_message``, ``mju_info``, ``mju_error``, and
-  ``mju_warning`` respectively.
+  ``with_func``, ``with_file``, etc.), where the string-pointer fields take
+  ``Option<&'static CStr>`` (``None`` writes a null pointer).
+- Added the free logging functions
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_config` :sup:`new` (``mju_getLogConfig``),
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>set_log_config` :sup:`new` (``mju_setLogConfig``),
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_message` :sup:`new` (``mju_message``),
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_info` :sup:`new` (``mju_info``),
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_warning` :sup:`new` (``mju_warning``) and
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_error` :sup:`new` (``mju_error``), which
+  diverges (``-> !``) because ``mju_error`` never returns.
 - Added ``MjtConflict`` :sup:`new` and the ``MjsCompiler::conflict()`` :sup:`new` accessor, exposing the
   attach-time conflict-resolution policy introduced in MuJoCo 3.10.0.
 - Added ``MjsCompiler::authored()`` :sup:`new` (read-only), exposing the bitmask of which
   compiler fields were explicitly set by the user.
-- Added |mj_spec| ``num_warnings()`` :sup:`new` and ``warning(index)`` :sup:`new` accessors, wrapping
-  ``mjs_numWarnings`` and ``mjs_getWarning`` to query compilation warnings.
+- |mj_spec| gained two compilation-warning accessors, wrapping ``mjs_numWarnings`` and
+  ``mjs_getWarning``:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>num_warnings` :sup:`new`
+    and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>warning` :sup:`new`.
 
 *New* |mj_data| *methods*
 

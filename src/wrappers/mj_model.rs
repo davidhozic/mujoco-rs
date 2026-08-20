@@ -117,6 +117,9 @@ pub type MjtGain = mjtGain;
 /// Actuator bias types. These values are used in `m->actuator_biastype`.
 pub type MjtBias = mjtBias;
 
+/// Orientation input charts of so3 actuators. These values are used in `m->actuator_ctrlspec`.
+pub type MjtCtrlChart = mjtCtrlChart;
+
 /// MuJoCo object types. These are used, for example, in the support functions `mj_name2id` and
 /// `mj_id2name` to convert between object names and integer ids.
 pub type MjtObj = mjtObj;
@@ -159,23 +162,23 @@ pub type MjtCamOutBit = mjtCamOutBit;
 // This lets `info_with_view!`'s `zero()` method use the safe `Zeroable::zeroed()`
 // instead of `unsafe { std::mem::zeroed() }`, providing a compile-time guarantee
 // that only safe-to-zero types are used in views.
-unsafe impl bytemuck::Zeroable for mjtTrn_ {}
-unsafe impl bytemuck::Zeroable for mjtDyn_ {}
-unsafe impl bytemuck::Zeroable for mjtGain_ {}
-unsafe impl bytemuck::Zeroable for mjtBias_ {}
-unsafe impl bytemuck::Zeroable for mjtObj_ {}
-unsafe impl bytemuck::Zeroable for mjtSameFrame_ {}
-unsafe impl bytemuck::Zeroable for mjtCamLight_ {}
-unsafe impl bytemuck::Zeroable for mjtProjection_ {}
-unsafe impl bytemuck::Zeroable for mjtEq_ {}
-unsafe impl bytemuck::Zeroable for mjtGeom_ {}
-unsafe impl bytemuck::Zeroable for mjtJoint_ {}
-unsafe impl bytemuck::Zeroable for mjtLightType_ {}
-unsafe impl bytemuck::Zeroable for mjtSensor_ {}
-unsafe impl bytemuck::Zeroable for mjtDataType_ {}
-unsafe impl bytemuck::Zeroable for mjtStage_ {}
-unsafe impl bytemuck::Zeroable for mjtTexture_ {}
-unsafe impl bytemuck::Zeroable for mjtColorSpace_ {}
+unsafe impl bytemuck::Zeroable for mjtTrn {}
+unsafe impl bytemuck::Zeroable for mjtDyn {}
+unsafe impl bytemuck::Zeroable for mjtGain {}
+unsafe impl bytemuck::Zeroable for mjtBias {}
+unsafe impl bytemuck::Zeroable for mjtObj {}
+unsafe impl bytemuck::Zeroable for mjtSameFrame {}
+unsafe impl bytemuck::Zeroable for mjtCamLight {}
+unsafe impl bytemuck::Zeroable for mjtProjection {}
+unsafe impl bytemuck::Zeroable for mjtEq {}
+unsafe impl bytemuck::Zeroable for mjtGeom {}
+unsafe impl bytemuck::Zeroable for mjtJoint {}
+unsafe impl bytemuck::Zeroable for mjtLightType {}
+unsafe impl bytemuck::Zeroable for mjtSensor {}
+unsafe impl bytemuck::Zeroable for mjtDataType {}
+unsafe impl bytemuck::Zeroable for mjtStage {}
+unsafe impl bytemuck::Zeroable for mjtTexture {}
+unsafe impl bytemuck::Zeroable for mjtColorSpace {}
 
 /*******************************************/
 
@@ -344,13 +347,13 @@ impl MjModel {
     }
 
     info_method! { Model, actuator,
-        [trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, trnid: 2, actadr: 1, actnum: 1,
-        group: 1, history: 2, historyadr: 1, delay: 1, ctrllimited: 1, forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize, biasprm: mjNBIAS as usize,
-        actearly: 1, ctrlrange: 2, forcerange: 2, actrange: 2, damping: 1,
-        dampingpoly: mjNPOLY as usize, armature: 1, gear: 6, cranklength: 1, acc0: 1, length0: 1,
-        lengthrange: 2, plugin: 1],
+        [trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, ctrladr: 1, ctrlnum: 1, ctrlspec: 1,
+        outadr: 1, outnum: 1, trnid: 2, actadr: 1, actnum: 1,
+        group: 1, history: 2, historyadr: 1, delay: 1, forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize, biasprm: mjNBIAS as usize,
+        actearly: 1, forcerange: 2, actrange: 2, damping: 1,
+        dampingpoly: mjNPOLY as usize, armature: 1, cranklength: 1, plugin: 1],
         [user: nuser_actuator],
-        []
+        [ctrllimited: nu, ctrlrange: nu * 2, gear: nout * 6, acc0: nout, length0: nout, lengthrange: nout * 2]
     }
 
     info_method! { Model, body,
@@ -402,7 +405,7 @@ impl MjModel {
     info_method! { Model, geom,
         [r#type: 1, contype: 1, conaffinity: 1, condim: 1, bodyid: 1, dataid: 1, matid: 1,
         group: 1, priority: 1, plugin: 1, sameframe: 1, solmix: 1, solref: mjNREF as usize, solimp: mjNIMP as usize, size: 3,
-        aabb: 6, rbound: 1, pos: 3, quat: 4, friction: 3, margin: 1, gap: 1, fluid: mjNFLUID as usize, rgba: 4],
+        aabb: 6, rbound: 1, pos: 3, quat: 4, friction: 3, margin: 1, gap: 1, surfacevel: 6, adhesion: 1, fluid: mjNFLUID as usize, rgba: 4],
         [user: nuser_geom],
         []
     }
@@ -458,7 +461,7 @@ impl MjModel {
     info_method! { Model, pair,
         [dim: 1, geom1: 1, geom2: 1,
         signature: 1, solref: mjNREF as usize, solimp: mjNIMP as usize,
-        margin: 1, gap: 1, friction: 5, solreffriction: mjNREF as usize],
+        margin: 1, gap: 1, adhesion: 1, friction: 5, solreffriction: mjNREF as usize],
         [],
         []
     }
@@ -851,7 +854,9 @@ impl MjModel {
     getter_setter! {get, [
         [ffi] nq: MjtSize; "number of generalized coordinates = dim(qpos).";
         [ffi] nv: MjtSize; "number of degrees of freedom = dim(qvel).";
-        [ffi] nu: MjtSize; "number of actuators/controls = dim(ctrl).";
+        [ffi] nu: MjtSize; "number of scalar controls = dim(ctrl).";
+        [ffi] nactuator: MjtSize; "number of actuators.";
+        [ffi] nout: MjtSize; "number of force outputs, derived from transmission type.";
         [ffi] na: MjtSize; "number of activation states = dim(act).";
         [ffi] nbody: MjtSize; "number of bodies.";
         [ffi] nbvh: MjtSize; "number of total bounding volumes in all bodies.";
@@ -876,6 +881,8 @@ impl MjModel {
         [ffi] nflexelemdata: MjtSize; "number of element vertex ids in all flexes.";
         [ffi] nflexstiffness: MjtSize; "number of stiffness parameters in all flexes.";
         [ffi] nflexbending: MjtSize; "number of bending parameters in all flexes";
+        [ffi] nefm0dof: MjtSize; "number of dofs covered by the constant metric factor.";
+        [ffi] nefm0L: MjtSize; "number of non-zeros in the constant metric factor.";
         [ffi] nflexelemedge: MjtSize; "number of element edge ids in all flexes.";
         [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
         [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
@@ -935,12 +942,17 @@ impl MjModel {
         [ffi] nemax: MjtSize; "number of potential equality-constraint rows.";
         [ffi] njmax: MjtSize; "number of available rows in constraint Jacobian (legacy).";
         [ffi] nconmax: MjtSize; "number of potential contacts in contact list (legacy).";
+        [ffi] npolygonmax: MjtSize; "maximum number of vertices in a mesh polygon.";
+        [ffi] nmeshdegmax: MjtSize; "maximum number of edges adjacent to a mesh vertex.";
         [ffi] nuserdata: MjtSize; "number of mjtNums reserved for the user.";
         [ffi] nsensordata: MjtSize; "number of mjtNums in sensor data vector.";
         [ffi] npluginstate: MjtSize; "number of mjtNums in plugin state vector.";
         [ffi] nhistory: MjtSize; "number of mjtNums in history buffer.";
         [ffi] narena: MjtSize; "number of bytes in the mjData arena (inclusive of stack).";
         [ffi] nbuffer: MjtSize; "number of bytes in buffer.";
+        [ffi] flg_gravcomp: MjtBool; "whether any body has nonzero gravcomp.";
+        [ffi] flg_surfacevel: MjtBool; "whether any geom has nonzero surfacevel.";
+        [ffi] flg_adhesion: MjtBool; "whether any geom or pair has nonzero adhesion.";
     ]}
 
     getter_setter! {get, [
@@ -977,7 +989,7 @@ impl MjModel {
         body_inertia: &[[MjtNum; 3] [force]; "diagonal inertia in ipos/iquat frame"; ffi().nbody],
         body_invweight0: &[[MjtNum; 2] [force]; "mean inv inert in qpos0 (trn, rot)"; ffi().nbody],
         body_gravcomp: &[MjtNum; "antigravity force, units of body weight"; ffi().nbody],
-        body_margin: &[MjtNum; "MAX over all geom margins"; ffi().nbody],
+        body_margin: &[MjtNum; "MAX over all geom margins+gaps"; ffi().nbody],
         (mut = unsafe) body_plugin: &[i32; "plugin instance id; -1: not in use"; ffi().nbody],
         body_contype: &[i32; "OR over all geom contypes"; ffi().nbody],
         body_conaffinity: &[i32; "OR over all geom conaffinities"; ffi().nbody],
@@ -1051,6 +1063,8 @@ impl MjModel {
         geom_friction: &[[MjtNum; 3] [force]; "friction for (slide, spin, roll)"; ffi().ngeom],
         geom_margin: &[MjtNum; "geometric inflation for contact"; ffi().ngeom],
         geom_gap: &[MjtNum; "additional contact detection buffer"; ffi().ngeom],
+        geom_surfacevel: &[[MjtNum; 6] [force]; "surface velocity in local frame: lin,ang"; ffi().ngeom],
+        geom_adhesion: &[MjtNum; "adhesive force of contacts"; ffi().ngeom],
         geom_fluid: &[[MjtNum; mjNFLUID as usize] [force]; "fluid interaction parameters"; ffi().ngeom],
         geom_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().ngeom],
         site_type: &[MjtGeom [force]; "geom type for rendering"; ffi().nsite],
@@ -1158,6 +1172,11 @@ impl MjModel {
         flex_size: &[[MjtNum; 3] [force]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
         flex_stiffness: &[MjtNum; "finite element stiffness matrix"; ffi().nflexstiffness],
         flex_bending: &[MjtNum; "bending stiffness"; ffi().nflexbending],
+        (mut = unsafe) efm0_dofid: &[i32; "constant metric factor row->dof address"; ffi().nefm0dof],
+        (mut = unsafe) efm0_L_rownnz: &[i32; "constant metric factor row nonzeros"; ffi().nefm0dof],
+        (mut = unsafe) efm0_L_rowadr: &[i32; "constant metric factor row addresses"; ffi().nefm0dof],
+        (mut = unsafe) efm0_L_colind: &[i32; "constant metric factor column indices"; ffi().nefm0L],
+        efm0_L: &[MjtNum; "factor of M + (dt^2+dt*d)*K_bend"; ffi().nefm0L],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
@@ -1264,6 +1283,7 @@ impl MjModel {
         pair_solimp: &[[MjtNum; mjNIMP as usize] [force]; "solver impedance: contact"; ffi().npair],
         pair_margin: &[MjtNum; "geometric inflation for contact"; ffi().npair],
         pair_gap: &[MjtNum; "additional contact detection buffer"; ffi().npair],
+        pair_adhesion: &[MjtNum; "adhesive force of contacts"; ffi().npair],
         pair_friction: &[[MjtNum; 5] [force]; "tangent1, 2, spin, roll1, 2"; ffi().npair],
         exclude_signature: &[i32; "body1 << 16 + body2"; ffi().nexclude],
         (mut = unsafe) eq_type: &[MjtEq [force]; "constraint type"; ffi().neq],
@@ -1307,36 +1327,41 @@ impl MjModel {
         (mut = unsafe) wrap_type: &[MjtWrap [force]; "wrap object type"; ffi().nwrap],
         (mut = unsafe) wrap_objid: &[i32; "object id: geom, site, joint"; ffi().nwrap],
         (mut = unsafe) wrap_prm: &[MjtNum; "divisor, joint coef, or site id"; ffi().nwrap],
-        (mut = unsafe) actuator_trntype: &[MjtTrn [force]; "transmission type"; ffi().nu],
-        (mut = unsafe) actuator_dyntype: &[MjtDyn [force]; "dynamics type"; ffi().nu],
-        actuator_gaintype: &[MjtGain [force]; "gain type"; ffi().nu],
-        actuator_biastype: &[MjtBias [force]; "bias type"; ffi().nu],
-        (mut = unsafe) actuator_trnid: &[[i32; 2] [force]; "transmission id: joint, tendon, site"; ffi().nu],
-        (mut = unsafe) actuator_actadr: &[i32; "first activation address; -1: stateless"; ffi().nu],
-        (mut = unsafe) actuator_actnum: &[i32; "number of activation variables"; ffi().nu],
-        actuator_group: &[i32; "group for visibility"; ffi().nu],
-        (mut = unsafe) actuator_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nu],
-        (mut = unsafe) actuator_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nu],
-        actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nu],
+        (mut = unsafe) actuator_trntype: &[MjtTrn [force]; "transmission type"; ffi().nactuator],
+        (mut = unsafe) actuator_dyntype: &[MjtDyn [force]; "dynamics type"; ffi().nactuator],
+        actuator_gaintype: &[MjtGain [force]; "gain type"; ffi().nactuator],
+        actuator_biastype: &[MjtBias [force]; "bias type"; ffi().nactuator],
+        (mut = unsafe) actuator_ctrladr: &[i32; "address of first control"; ffi().nactuator],
+        (mut = unsafe) actuator_ctrlnum: &[i32; "number of controls"; ffi().nactuator],
+        actuator_ctrlspec: &[i32; "input signature, scoped by gaintype"; ffi().nactuator],
+        (mut = unsafe) actuator_outadr: &[i32; "address of first force output"; ffi().nactuator],
+        (mut = unsafe) actuator_outnum: &[i32; "number of force outputs, from trntype"; ffi().nactuator],
+        (mut = unsafe) actuator_trnid: &[[i32; 2] [force]; "transmission id: joint, tendon, site"; ffi().nactuator],
+        (mut = unsafe) actuator_actadr: &[i32; "first activation address; -1: stateless"; ffi().nactuator],
+        (mut = unsafe) actuator_actnum: &[i32; "number of activation variables"; ffi().nactuator],
+        actuator_group: &[i32; "group for visibility"; ffi().nactuator],
+        (mut = unsafe) actuator_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nactuator],
+        (mut = unsafe) actuator_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nactuator],
+        actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nactuator],
         actuator_ctrllimited: &[MjtBool; "is control limited"; ffi().nu],
-        actuator_forcelimited: &[MjtBool; "is force limited"; ffi().nu],
-        actuator_actlimited: &[MjtBool; "is activation limited"; ffi().nu],
-        actuator_dynprm: &[[MjtNum; mjNDYN as usize] [force]; "dynamics parameters"; ffi().nu],
-        actuator_gainprm: &[[MjtNum; mjNGAIN as usize] [force]; "gain parameters"; ffi().nu],
-        actuator_biasprm: &[[MjtNum; mjNBIAS as usize] [force]; "bias parameters"; ffi().nu],
-        actuator_actearly: &[MjtBool; "step activation before force"; ffi().nu],
+        actuator_forcelimited: &[MjtBool; "is force limited"; ffi().nactuator],
+        actuator_actlimited: &[MjtBool; "is activation limited"; ffi().nactuator],
+        actuator_dynprm: &[[MjtNum; mjNDYN as usize] [force]; "dynamics parameters"; ffi().nactuator],
+        actuator_gainprm: &[[MjtNum; mjNGAIN as usize] [force]; "gain parameters"; ffi().nactuator],
+        actuator_biasprm: &[[MjtNum; mjNBIAS as usize] [force]; "bias parameters"; ffi().nactuator],
+        actuator_actearly: &[MjtBool; "step activation before force"; ffi().nactuator],
         actuator_ctrlrange: &[[MjtNum; 2] [force]; "range of controls"; ffi().nu],
-        actuator_forcerange: &[[MjtNum; 2] [force]; "range of forces"; ffi().nu],
-        actuator_actrange: &[[MjtNum; 2] [force]; "range of activations"; ffi().nu],
-        actuator_damping: &[MjtNum; "linear damping coefficient"; ffi().nu],
-        actuator_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().nu],
-        actuator_armature: &[MjtNum; "armature added to target"; ffi().nu],
-        actuator_gear: &[[MjtNum; 6] [force]; "scale length and transmitted force"; ffi().nu],
-        actuator_cranklength: &[MjtNum; "crank length for slider-crank"; ffi().nu],
-        actuator_acc0: &[MjtNum; "acceleration from unit force in qpos0"; ffi().nu],
-        actuator_length0: &[MjtNum; "actuator length in qpos0"; ffi().nu],
-        actuator_lengthrange: &[[MjtNum; 2] [force]; "feasible actuator length range"; ffi().nu],
-        (mut = unsafe) actuator_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nu],
+        actuator_forcerange: &[[MjtNum; 2] [force]; "range of forces"; ffi().nactuator],
+        actuator_actrange: &[[MjtNum; 2] [force]; "range of activations"; ffi().nactuator],
+        actuator_damping: &[MjtNum; "linear damping coefficient"; ffi().nactuator],
+        actuator_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().nactuator],
+        actuator_armature: &[MjtNum; "armature added to target (joint, tendon)"; ffi().nactuator],
+        actuator_gear: &[[MjtNum; 6] [force]; "scale length and transmitted force"; ffi().nout],
+        actuator_cranklength: &[MjtNum; "crank length for slider-crank"; ffi().nactuator],
+        actuator_acc0: &[MjtNum; "acceleration from unit force in qpos0"; ffi().nout],
+        actuator_length0: &[MjtNum; "actuator length in qpos0"; ffi().nout],
+        actuator_lengthrange: &[[MjtNum; 2] [force]; "feasible actuator length range"; ffi().nout],
+        (mut = unsafe) actuator_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nactuator],
         (mut = unsafe) sensor_type: &[MjtSensor [force]; "sensor type"; ffi().nsensor],
         sensor_datatype: &[MjtDataType [force]; "numeric data type"; ffi().nsensor],
         sensor_needstage: &[MjtStage [force]; "required compute stage"; ffi().nsensor],
@@ -1387,7 +1412,7 @@ impl MjModel {
         (mut = unsafe) name_excludeadr: &[i32; "exclude name pointers"; ffi().nexclude],
         (mut = unsafe) name_eqadr: &[i32; "equality constraint name pointers"; ffi().neq],
         (mut = unsafe) name_tendonadr: &[i32; "tendon name pointers"; ffi().ntendon],
-        (mut = unsafe) name_actuatoradr: &[i32; "actuator name pointers"; ffi().nu],
+        (mut = unsafe) name_actuatoradr: &[i32; "actuator name pointers"; ffi().nactuator],
         (mut = unsafe) name_sensoradr: &[i32; "sensor name pointers"; ffi().nsensor],
         (mut = unsafe) name_numericadr: &[i32; "numeric name pointers"; ffi().nnumeric],
         (mut = unsafe) name_textadr: &[i32; "text name pointers"; ffi().ntext],
@@ -1422,7 +1447,7 @@ impl MjModel {
             key_ctrl: &[[MjtNum; ffi().nu] [force]; "key control"; ffi().nkey],
 
             sensor_user: &[[MjtNum; ffi().nuser_sensor] [force]; "user data"; ffi().nsensor],
-            actuator_user: &[[MjtNum; ffi().nuser_actuator] [force]; "user data"; ffi().nu],
+            actuator_user: &[[MjtNum; ffi().nuser_actuator] [force]; "user data"; ffi().nactuator],
             tendon_user: &[[MjtNum; ffi().nuser_tendon] [force]; "user data"; ffi().ntendon],
             cam_user: &[[MjtNum; ffi().nuser_cam] [force]; "user data"; ffi().ncam],
             site_user: &[[MjtNum; ffi().nuser_site] [force]; "user data"; ffi().nsite],
@@ -1463,10 +1488,12 @@ info_with_view!(Model, actuator,
 	 [actuator_] armature: MjtNum,
 	 [actuator_] cranklength: MjtNum, [actuator_] acc0: MjtNum,
 	 [actuator_] length0: MjtNum, [actuator_] lengthrange: MjtNum,
-	 [actuator_] user: MjtNum,
+	 [actuator_] ctrlspec: i32, [actuator_] user: MjtNum,
 	 [actuator_] gaintype: MjtGain [force], [actuator_] biastype: MjtBias [force],
 	 [actuator_] plugin: i32],
 	[[actuator_] trntype: MjtTrn [force], [actuator_] dyntype: MjtDyn [force],
+	 [actuator_] ctrladr: i32, [actuator_] ctrlnum: i32,
+	 [actuator_] outadr: i32, [actuator_] outnum: i32,
 	 [actuator_] trnid: i32, [actuator_] actadr: i32,
 	 [actuator_] actnum: i32, [actuator_] history: i32,
 	 [actuator_] historyadr: i32],
@@ -1537,7 +1564,8 @@ info_with_view!(Model, geom,
 	 [geom_] aabb: MjtNum,
 	 [geom_] rbound: MjtNum, [geom_] pos: MjtNum,
 	 [geom_] quat: MjtNum, [geom_] friction: MjtNum,
-	 [geom_] margin: MjtNum, [geom_] gap: MjtNum, [geom_] fluid: MjtNum,
+	 [geom_] margin: MjtNum, [geom_] gap: MjtNum,
+	 [geom_] surfacevel: MjtNum, [geom_] adhesion: MjtNum, [geom_] fluid: MjtNum,
 	 [geom_] user: MjtNum, [geom_] rgba: f32],
 	[[geom_] r#type: MjtGeom [force], [geom_] condim: i32,
 	 [geom_] bodyid: i32, [geom_] dataid: i32,
@@ -1646,6 +1674,7 @@ info_with_view!(Model, pair,
 	 [pair_] solimp: MjtNum,
 	 [pair_] margin: MjtNum,
 	 [pair_] gap: MjtNum,
+	 [pair_] adhesion: MjtNum,
 	 [pair_] friction: MjtNum,
      [pair_] solreffriction: MjtNum,
 	 [pair_] signature: i32],
@@ -3010,9 +3039,10 @@ mod tests {
     #[test]
     fn test_force_cast_actuator_model_enums_and_bools() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nactuator = model.ffi().nactuator as usize;
         let nu = model.ffi().nu as usize;
 
-        if nu == 0 {
+        if nactuator == 0 {
             return;
         }
 
@@ -3025,16 +3055,16 @@ mod tests {
         let actlimited = model.actuator_actlimited();
         let actearly = model.actuator_actearly();
 
-        assert_eq!(trntype.len(), nu);
-        assert_eq!(dyntype.len(), nu);
-        assert_eq!(gaintype.len(), nu);
-        assert_eq!(biastype.len(), nu);
+        assert_eq!(trntype.len(), nactuator);
+        assert_eq!(dyntype.len(), nactuator);
+        assert_eq!(gaintype.len(), nactuator);
+        assert_eq!(biastype.len(), nactuator);
         assert_eq!(ctrllimited.len(), nu);
-        assert_eq!(forcelimited.len(), nu);
-        assert_eq!(actlimited.len(), nu);
-        assert_eq!(actearly.len(), nu);
+        assert_eq!(forcelimited.len(), nactuator);
+        assert_eq!(actlimited.len(), nactuator);
+        assert_eq!(actearly.len(), nactuator);
 
-        for i in 0..nu {
+        for i in 0..nactuator {
             // Enum cross-validation
             assert_eq!(trntype[i], unsafe { crate::util::force_cast::<_, MjtTrn>(*model.ffi().actuator_trntype.add(i)) });
             assert_eq!(dyntype[i], unsafe { crate::util::force_cast::<_, MjtDyn>(*model.ffi().actuator_dyntype.add(i)) });
@@ -3064,6 +3094,8 @@ mod tests {
     #[test]
     fn test_force_cast_actuator_param_arrays() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nactuator = model.ffi().nactuator as usize;
+        let nout = model.ffi().nout as usize;
         let nu = model.ffi().nu as usize;
 
         let dynprm = model.actuator_dynprm();
@@ -3071,10 +3103,10 @@ mod tests {
         let gear = model.actuator_gear();
         let trnid = model.actuator_trnid();
 
-        assert_eq!(dynprm.len(), nu);
+        assert_eq!(dynprm.len(), nactuator);
         assert_eq!(ctrlrange.len(), nu);
-        assert_eq!(gear.len(), nu);
-        assert_eq!(trnid.len(), nu);
+        assert_eq!(gear.len(), nout);
+        assert_eq!(trnid.len(), nactuator);
 
         // Verify "slider" dynprm and ctrlrange
         let slider = model.actuator("slider").unwrap();
@@ -3085,13 +3117,19 @@ mod tests {
         let slider2 = model.actuator("slider2").unwrap();
         assert_eq!(dynprm[slider2.id][0..10], [10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]);
 
-        // Cross-validate FFI for gear (stride 6)
-        for i in 0..nu {
+        // Cross-validate FFI for gear (stride 6), trnid (stride 2) and ctrlrange (stride 2)
+        for i in 0..nout {
             for j in 0..6 {
                 assert_eq!(gear[i][j], unsafe { *model.ffi().actuator_gear.add(i * 6 + j) });
             }
+        }
+        for i in 0..nactuator {
             for j in 0..2 {
                 assert_eq!(trnid[i][j], unsafe { *model.ffi().actuator_trnid.add(i * 2 + j) });
+            }
+        }
+        for i in 0..nu {
+            for j in 0..2 {
                 assert_eq!(ctrlrange[i][j], unsafe { *model.ffi().actuator_ctrlrange.add(i * 2 + j) });
             }
         }

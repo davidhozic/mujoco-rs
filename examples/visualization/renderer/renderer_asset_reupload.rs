@@ -55,7 +55,7 @@ fn main() {
         .expect("failed to initialise renderer");
 
     let mut camera = MjvCamera::new_free(model);
-    camera.move_(MjtMouse::mjMOUSE_ZOOM, model,-10.0, 0.0, renderer.scene());
+    camera.move_(MjtMouse::mjMOUSE_ZOOM, model,-10.0, 0.0);
     renderer.set_camera(camera);
 
     let mut frames_processed = 0;

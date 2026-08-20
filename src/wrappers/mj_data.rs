@@ -102,7 +102,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Notes
     /// This method only validates model-signature compatibility.
     /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
-    /// See [here](https://mujoco.readthedocs.io/en/3.10.0/programming/simulation.html#mjmodel-changes)
+    /// See [here](https://mujoco.readthedocs.io/en/3.11.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
     /// 
     /// If `M` implements [`DerefMut`], prefer
@@ -166,9 +166,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     info_method! { Data, [model], light, [xpos: 3, xdir: 3], [], []}
 
     info_method! { Data, [model], actuator,
-        [ctrl: 1, length: 1, velocity: 1, force: 1],
         [],
-        [act: na]
+        [],
+        [ctrl: nu, length: nout, velocity: nout, force: nout, act: na]
     }
 
     /// Obtains a [`MjJointDataInfo`] struct containing information about the name, id, and
@@ -209,11 +209,12 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         let qfrc_damper = nv_range;
         let qfrc_gravcomp = nv_range;
         let qfrc_fluid = nv_range;
+        let qfrc_adhesion = nv_range;
 
         let model_signature = self.model.signature();
         Some(MjJointDataInfo {name: name.to_string(), id, model_signature,
             qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
-            qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_passive,
+            qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_adhesion, qfrc_passive,
             qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
         })
     }
@@ -593,13 +594,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
     /// `values`: control values slice of length `nsample`.
     /// # Errors
-    /// - [`MjDataError::IndexOutOfBounds`] if `id >= nu`.
+    /// - [`MjDataError::IndexOutOfBounds`] if `id >= nactuator`.
     /// - [`MjDataError::NoHistoryBuffer`] if the actuator has no history buffer.
     /// - [`MjDataError::LengthMismatch`] if `times` or `values` have the wrong length.
     pub fn init_ctrl_history(&mut self, id: usize, times: Option<&[MjtNum]>, values: &[MjtNum]) -> Result<(), MjDataError> {
-        let nu = self.model.ffi().nu as usize;
-        if id >= nu {
-            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nu });
+        let nactuator = self.model.ffi().nactuator as usize;
+        if id >= nactuator {
+            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nactuator });
         }
 
         let nsample = self.model.actuator_history()[id][0];
@@ -673,18 +674,18 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reads the control history value for actuator `id` at `time`
     /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
     /// # Panics
-    /// Panics when `id >= nu`. Use [`MjData::try_read_ctrl`] for a fallible alternative.
+    /// Panics when `id >= nactuator`. Use [`MjData::try_read_ctrl`] for a fallible alternative.
     pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> MjtNum {
         self.try_read_ctrl(id, time, interp).unwrap()
     }
 
     /// Fallible version of [`MjData::read_ctrl`].
     /// # Errors
-    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nu`.
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nactuator`.
     pub fn try_read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> Result<MjtNum, MjDataError> {
-        let nu = self.model.ffi().nu as usize;
-        if id >= nu {
-            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nu });
+        let nactuator = self.model.ffi().nactuator as usize;
+        if id >= nactuator {
+            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nactuator });
         }
         let val = unsafe { mj_readCtrl(self.model.ffi(), self.ffi(), id as i32, time, interp) };
         Ok(val)
@@ -1465,8 +1466,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Copy [`MjData`] to `destination`, skipping large computed arrays not required for
-    /// visualization: mass matrices and constraint arrays (`efc_*`, `iefc_*`, including
-    /// constraint Jacobians).
+    /// visualization: the mass and factorization matrices (`crb`, `M`, `qLD`, `qH`, `qDeriv`,
+    /// `qLU`) and the sparse constraint Jacobian blocks (`efc_J_*`, `efc_Y_*`, `efc_AR_*`).
     /// This is a wrapper for [`mjv_copyData`].
     ///
     /// # Errors
@@ -1579,6 +1580,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         [ffi] nl: i32; "number of limit constraints.";
         [ffi] nefc: i32; "number of constraints.";
         [ffi] nJ: i32; "number of non-zeros in constraint Jacobian.";
+        [ffi] efm_active: i32; "implicit effective metric M+K: 0 inactive, 1 active, 2 active + preconditioner exact.";
+        [ffi] nefmK: i32; "number of non-zeros in effective-stiffness CSR.";
+        [ffi] nefmdof: i32; "number of rows in effective-metric factor.";
+        [ffi] nefmL: i32; "number of non-zeros in the effective-metric factor.";
         [ffi] nY: i32; "number of non-zeros in constraint inverse inertia square root.";
         [ffi] nA: i32; "number of non-zeros in constraint inverse inertia matrix.";
         [ffi] nisland: i32; "number of detected constraint islands.";
@@ -1610,7 +1615,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         get, [
             [ffi, ffi_mut] solver: &[MjSolverStat; mjNISLAND as usize * mjNSOLVER as usize]; "solver statistics per island, per iteration.";
             [ffi, ffi_mut] solver_niter: &[i32; mjNISLAND as usize]; "number of solver iterations, per island.";
-            [ffi, ffi_mut] solver_nnz: &[i32; mjNISLAND as usize]; "number of nonzeros in Hessian or efc_AR, per island.";
+            [ffi, ffi_mut] solver_nnz: &[i32; mjNISLAND as usize]; "number of nonzeros in solver matrix, per island.";
             [ffi, ffi_mut] solver_fwdinv: &[MjtNum; 2]; "forward-inverse comparison: qfrc, efc.";
             [ffi, ffi_mut] warning: &[MjWarningStat; MjtWarning::mjNWARNING as usize]; "warning statistics (mutable).";
             [ffi, ffi_mut] timer: &[MjTimerStat; MjtTimer::mjNTIMER as usize]; "timer statistics.";
@@ -1625,7 +1630,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// (e.g., timestep, gravity) without having to rebuild the simulation.
     ///
     /// **Not all model parameters are safe to change at runtime.**
-    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.10.0/programming/simulation.html#mjmodel-changes)
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.11.0/programming/simulation.html#mjmodel-changes)
     /// for a list of parameters that are safe to change.
     ///
     /// Only available when the inner model type `M` implements
@@ -1749,6 +1754,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         cinert: &[[MjtNum; 10] [force]; "com-based body inertia and mass"; model.ffi().nbody],
         flexvert_xpos: &[[MjtNum; 3] [force]; "Cartesian flex vertex positions"; model.ffi().nflexvert],
         flexelem_aabb: &[[MjtNum; 6] [force]; "flex element bounding boxes (center, size)"; model.ffi().nflexelem],
+        flexelem_krot: &[MjtNum; "corotated element stiffness (implicit only)"; model.ffi().nflexstiffness],
         flexedge_J: &[MjtNum; "flex edge Jacobian"; model.ffi().nJfe],
         flexedge_length: &[MjtNum; "flex edge lengths"; model.ffi().nflexedge],
         flexvert_J: &[[MjtNum; 2] [force]; "flex vertex Jacobian"; model.ffi().nJfv],
@@ -1760,14 +1766,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         ten_length: &[MjtNum; "tendon lengths"; model.ffi().ntendon],
         (mut = unsafe) wrap_obj: &[[i32; 2] [force]; "geom id; -1: site; -2: pulley"; model.ffi().nwrap],
         wrap_xpos: &[[MjtNum; 6] [force]; "Cartesian 3D points in all paths"; model.ffi().nwrap],
-        actuator_length: &[MjtNum; "actuator lengths"; model.ffi().nu],
-        (mut = unsafe) moment_rownnz: &[i32; "number of non-zeros in actuator_moment row"; model.ffi().nu],
-        (mut = unsafe) moment_rowadr: &[i32; "row start address in colind array"; model.ffi().nu],
+        actuator_length: &[MjtNum; "actuator lengths, one per force output"; model.ffi().nout],
+        (mut = unsafe) moment_rownnz: &[i32; "number of non-zeros in actuator_moment row"; model.ffi().nout],
+        (mut = unsafe) moment_rowadr: &[i32; "row start address in colind array"; model.ffi().nout],
         (mut = unsafe) moment_colind: &[i32; "column indices in sparse Jacobian"; model.ffi().nJmom],
         actuator_moment: &[MjtNum; "actuator moments"; model.ffi().nJmom],
         crb: &[[MjtNum; 10] [force]; "com-based composite inertia and mass"; model.ffi().nbody],
-        qM: &[MjtNum; "inertia (sparse)"; model.ffi().nM],
-        M: &[MjtNum; "reduced inertia (compressed sparse row)"; model.ffi().nC],
+        M: &[MjtNum; "inertia (compressed sparse row)"; model.ffi().nC],
         qLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
         qLDiagInv: &[MjtNum; "1/diag(D)"; model.ffi().nv],
         bvh_active: &[MjtBool; "was bounding volume checked for collision"; model.ffi().nbvh],
@@ -1778,7 +1783,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         (mut = unsafe) dof_awake_ind: &[i32; "indices of awake dofs"; model.ffi().nv],
         flexedge_velocity: &[MjtNum; "flex edge velocities"; model.ffi().nflexedge],
         ten_velocity: &[MjtNum; "tendon velocities"; model.ffi().ntendon],
-        actuator_velocity: &[MjtNum; "actuator velocities"; model.ffi().nu],
+        actuator_velocity: &[MjtNum; "actuator velocities, one per force output"; model.ffi().nout],
         cvel: &[[MjtNum; 6] [force]; "com-based velocity (rot:lin)"; model.ffi().nbody],
         cdof_dot: &[[MjtNum; 6] [force]; "time-derivative of cdof (rot:lin)"; model.ffi().nv],
         qfrc_bias: &[MjtNum; "C(qpos,qvel)"; model.ffi().nv],
@@ -1786,15 +1791,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         qfrc_damper: &[MjtNum; "passive damper force"; model.ffi().nv],
         qfrc_gravcomp: &[MjtNum; "passive gravity compensation force"; model.ffi().nv],
         qfrc_fluid: &[MjtNum; "passive fluid force"; model.ffi().nv],
+        qfrc_adhesion: &[MjtNum; "passive contact adhesion force"; model.ffi().nv],
         qfrc_passive: &[MjtNum; "total passive force"; model.ffi().nv],
         subtree_linvel: &[[MjtNum; 3] [force]; "linear velocity of subtree com"; model.ffi().nbody],
         subtree_angmom: &[[MjtNum; 3] [force]; "angular momentum about subtree com"; model.ffi().nbody],
         qH: &[MjtNum; "L'*D*L factorization of modified M"; model.ffi().nC],
         qHDiagInv: &[MjtNum; "1/diag(D) of modified M"; model.ffi().nv],
         qDeriv: &[MjtNum; "d (passive + actuator - bias) / d qvel"; model.ffi().nD],
-        qLU: &[MjtNum; "sparse LU of (qM - dt*qDeriv)"; model.ffi().nD],
-        actuator_force: &[MjtNum; "actuator force in actuation space"; model.ffi().nu],
-        qfrc_actuator: &[MjtNum; "actuator force"; model.ffi().nv],
+        qLU: &[MjtNum; "sparse LU of (M - dt*qDeriv)"; model.ffi().nD],
+        actuator_force: &[MjtNum; "actuator force in actuation space"; model.ffi().nout],
+        qfrc_actuator: &[MjtNum; "actuator force in joint space"; model.ffi().nv],
         qfrc_smooth: &[MjtNum; "net unconstrained force"; model.ffi().nv],
         qacc_smooth: &[MjtNum; "unconstrained acceleration"; model.ffi().nv],
         qfrc_constraint: &[MjtNum; "constraint force"; model.ffi().nv],
@@ -1853,6 +1859,16 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         efc_AR: &[MjtNum; "J*inv(M)*J' + R"; ffi().nA],
         efc_vel: &[MjtNum; "velocity in constraint space: J*qvel"; ffi().nefc],
         efc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
+        efm_c: &[MjtNum; "smooth-force shift h*K*qvel"; model.ffi().nv],
+        (mut = unsafe) efm_K_rownnz: &[i32; "effective-stiffness CSR row nonzeros"; model.ffi().nv],
+        (mut = unsafe) efm_K_rowadr: &[i32; "effective-stiffness CSR row addresses"; model.ffi().nv],
+        (mut = unsafe) efm_K_colind: &[i32; "effective-stiffness CSR column indices"; ffi().nefmK],
+        efm_K_val: &[MjtNum; "effective-stiffness CSR values"; ffi().nefmK],
+        (mut = unsafe) efm_dofid: &[i32; "factor row -> dof address"; ffi().nefmdof],
+        (mut = unsafe) efm_L_rownnz: &[i32; "factor row nonzeros"; ffi().nefmdof],
+        (mut = unsafe) efm_L_rowadr: &[i32; "factor row addresses"; ffi().nefmdof],
+        (mut = unsafe) efm_L_colind: &[i32; "factor column indices"; ffi().nefmL],
+        efm_L: &[MjtNum; "Cholesky factor of diag(M)+K, covered dofs"; ffi().nefmL],
         efc_b: &[MjtNum; "linear cost term: J*qacc_smooth - aref"; ffi().nefc],
         iefc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
         iefc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
@@ -1948,6 +1964,7 @@ info_with_view!(Data, joint,
      qfrc_damper: MjtNum,
      qfrc_gravcomp: MjtNum,
      qfrc_fluid: MjtNum,
+     qfrc_adhesion: MjtNum,
      qfrc_passive: MjtNum,
      qfrc_actuator: MjtNum,
      qfrc_smooth: MjtNum,
@@ -2105,10 +2122,11 @@ mod test {
         assert!(actuator_view.act.is_none());
 
         // Test if indexing corresponds to exact data structure mapping
+        let outadr = model.actuator_outadr()[actuator_info.id] as usize;
         unsafe {
-            assert_relative_eq!(actuator_view.length[0], *data.ffi().actuator_length.add(actuator_info.id), epsilon=1e-9);
-            assert_relative_eq!(actuator_view.velocity[0], *data.ffi().actuator_velocity.add(actuator_info.id), epsilon=1e-9);
-            assert_relative_eq!(actuator_view.force[0], *data.ffi().actuator_force.add(actuator_info.id), epsilon=1e-9);
+            assert_relative_eq!(actuator_view.length[0], *data.ffi().actuator_length.add(outadr), epsilon=1e-9);
+            assert_relative_eq!(actuator_view.velocity[0], *data.ffi().actuator_velocity.add(outadr), epsilon=1e-9);
+            assert_relative_eq!(actuator_view.force[0], *data.ffi().actuator_force.add(outadr), epsilon=1e-9);
         }
     }
 
@@ -4415,8 +4433,9 @@ mod test {
         assert_eq!(ctrl[0], 5.0);
 
         // actuator_force should be nonzero
+        let nout = model.ffi().nout as usize;
         let act_force = data.actuator_force();
-        assert_eq!(act_force.len(), nu);
+        assert_eq!(act_force.len(), nout);
         assert!(act_force[0].abs() > 1e-12,
             "actuator_force should be nonzero with ctrl=5.0, got {}", act_force[0]);
 

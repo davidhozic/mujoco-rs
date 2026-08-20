@@ -193,7 +193,7 @@ const DISABLE_FLAGS: &[(&str, MjtDisableBit)] = &[
     ("Island", MjtDisableBit::mjDSBL_ISLAND),
     ("Multi CCD", MjtDisableBit::mjDSBL_MULTICCD),
 ];
-const _: () = assert!(DISABLE_FLAGS.len() == crate::mujoco_c::mjtDisableBit_::mjNDISABLE as usize);
+const _: () = assert!(DISABLE_FLAGS.len() == crate::mujoco_c::mjtDisableBit::mjNDISABLE as usize);
 
 /// Maps MuJoCo enable flag bits to their string representations
 const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
@@ -204,7 +204,7 @@ const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
     ("Sleep", MjtEnableBit::mjENBL_SLEEP),
     ("DiagExact", MjtEnableBit::mjENBL_DIAGEXACT)
 ];
-const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit_::mjNENABLE as usize);
+const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit::mjNENABLE as usize);
 
 /// Type alias for a user-provided UI callback function.
 pub(crate) type UiCallback = Box<dyn FnMut(&egui::Context, &mut MjData<Box<MjModel>>)>;
@@ -300,9 +300,21 @@ impl ViewerUI {
 
         self.actuator_display_info = (0..model.nu()).map(|i| {
             let idx = i as usize;
-            let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, idx) {
+            // Map the control index to its owning actuator: MIMO actuators own
+            // actuator_ctrlnum() consecutive controls starting at actuator_ctrladr(),
+            // so control and actuator indices no longer coincide.
+            let (act, sub) = (0..model.nactuator() as usize).find_map(|a| {
+                let start = model.actuator_ctrladr()[a] as usize;
+                (start..start + model.actuator_ctrlnum()[a] as usize)
+                    .contains(&idx)
+                    .then_some((a, idx - start))
+            }).unwrap_or((idx, 0));
+            let base = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, act) {
                 name.to_string()
-            } else { format!("Actuator {i}") };
+            } else { format!("Actuator {act}") };
+            let name = if model.actuator_ctrlnum()[act] > 1 {
+                format!("{base}[{sub}]")
+            } else { base };
             let limited = model.actuator_ctrllimited()[idx];
             let range   = model.actuator_ctrlrange()[idx];
             (name, limited, range)

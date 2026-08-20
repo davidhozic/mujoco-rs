@@ -4,7 +4,7 @@
 Installation
 =============================
 
-.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.10.0
+.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.11.0
 
 
 MuJoCo-rs
@@ -72,6 +72,14 @@ Dynamic linking (official MuJoCo build)
 
 When the goal is to provide MuJoCo as a dynamic dependency,
 you can either tell MuJoCo-rs to download MuJoCo automatically or you can download MuJoCo yourself.
+
+.. note::
+
+    Cross-OS builds (for example a Windows target from a Linux host) support neither the
+    automatic download nor pkg-config, because both give the host's binaries. Such a build
+    fails unless ``MUJOCO_DYNAMIC_LINK_DIR`` or ``MUJOCO_STATIC_LINK_DIR`` points to a MuJoCo
+    build for the target. Cross-compilation within the same OS (for example Linux x86_64 to
+    Linux aarch64) is not affected.
 
 .. tabs::
 
