@@ -1011,6 +1011,7 @@ impl MjsLight {
         intensity: f32;                "intensity, in candelas.";
         range: f32;                    "range of effectiveness.";
         cutoff: f32;                   "OpenGL cutoff.";
+        softness: f32;                 "spotlight edge softness.";
         exponent: f32;                 "OpenGL exponent.";
     ]);
 
@@ -1090,6 +1091,8 @@ impl MjsActuator {
             lengthrange: &[f64; 2];                     "transmission length range.";
             damping: &[f64; mjNPOLY as usize + 1];      "damping coefficient.";
             ctrlrange: &[f64; 2];                       "control range.";
+            velrange: &[f64; 2];                        "range of the velocity-setpoint input (pid).";
+            ffrange: &[f64; 2];                         "range of the feedforward input (pid).";
             forcerange: &[f64; 2];                      "force range.";
             actrange: &[f64; 2];                        "activation range.";
         ]
@@ -3095,9 +3098,9 @@ mod tests {
   <worldbody>
     <body>
       <geom size=\"0.01\"/>
-      <site pos=\"0 0 0\"/>
-      <camera pos=\"0 0 0\"/>
-      <light pos=\"0 0 0\" dir=\"0 0 -1\"/>
+      <site/>
+      <camera/>
+      <light/>
     </body>
   </worldbody>
 </mujoco>

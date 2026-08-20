@@ -16,6 +16,8 @@ Changelog
 .. |mjs_wrap| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsWrap`
 .. |mjv_camera| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`
 .. |mjr_context| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`
+.. |mjs_light| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsLight`
+.. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator`
 
 
 Versioning
@@ -126,6 +128,20 @@ update of MuJoCo alone can increase the major version.
   (previously a control index bounded by ``nu``), because the control history is stored per
   actuator.
 
+*Stricter* |mjr_context| *accessor types*
+
+- ``glInitialized``, ``windowAvailable``, ``windowStereo`` and ``windowDoublebuffer`` now read as
+  ``bool`` instead of ``i32``; MuJoCo stores only 0 or 1 in them.
+- ``fontScale`` and ``readDepthMap`` now read as ``MjtFontScale`` and ``MjtDepthMap`` instead of
+  ``i32``; MuJoCo stores only declared enum variants in them.
+
+*Mutable access to* |mj_model| ``actuator_gaintype`` *and* ``actuator_ctrlspec``
+
+- Both fields now need ``unsafe`` to mutate, and moved to the read-only actuator view. MuJoCo
+  3.12.0 added ``mjGAIN_SO3``, which writes three output elements without consulting
+  ``actuator_outnum``, while ``ctrlspec`` selects how many ``ctrl`` elements the engine reads, so
+  a safe write to either can overrun an array.
+
 .. rubric:: New features and improvements
 
 *New accessors for 3.11.0 fields*
@@ -153,8 +169,7 @@ update of MuJoCo alone can increase the major version.
   - ``qfrc_adhesion`` :sup:`new` (passive contact adhesion force; also available in the joint
     views) and ``flexelem_krot`` :sup:`new` array accessors.
   - ``efm_c`` :sup:`new`, ``efm_K_rownnz`` :sup:`new`, ``efm_K_rowadr`` :sup:`new`,
-    ``efm_K_colind`` :sup:`new`, ``efm_K_val`` :sup:`new`, ``efm_dofid`` :sup:`new`,
-    ``efm_L_rownnz`` :sup:`new`, ``efm_L_rowadr`` :sup:`new`, ``efm_L_colind`` :sup:`new` and
+    ``efm_K_colind`` :sup:`new`, ``efm_K_val`` :sup:`new`, ``efm_dofid`` :sup:`new` and
     ``efm_L`` :sup:`new` array accessors, plus the ``efm_active`` :sup:`new`, ``nefmK`` :sup:`new`,
     ``nefmdof`` :sup:`new` and ``nefmL`` :sup:`new` scalar accessors, exposing the implicit
     effective-metric (M+K) solver state.
@@ -231,6 +246,19 @@ update of MuJoCo alone can increase the major version.
 
 - Added ``MjrCamera`` :sup:`new` as a type alias for ``MjvGLCamera``, matching MuJoCo's own
   ``mjrCamera`` alias convention.
+
+*New accessors for 3.12.0 fields*
+
+- |mj_model|: ``light_softness`` :sup:`new` and ``mesh_extrema`` :sup:`new` array accessors, with
+  matching ``softness`` and ``extrema`` fields in the light and mesh info views.
+- |mjs_light|: ``softness`` :sup:`new`.
+- |mjs_actuator|: ``velrange`` :sup:`new` and ``ffrange`` :sup:`new`.
+
+*Relaxed mutability on fields that cannot cause a memory fault*
+
+- Mutating |mj_model| ``paths`` and |mjr_context| ``textureType`` no longer needs ``unsafe``,
+  because a write can at worst give wrong rendering, never a memory fault.
+- |mj_data| ``body_awake`` moved into the mutable body view, which matches its array accessor.
 
 .. rubric:: Other changes
 

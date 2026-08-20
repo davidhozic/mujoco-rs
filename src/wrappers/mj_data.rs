@@ -1580,10 +1580,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         [ffi] nl: i32; "number of limit constraints.";
         [ffi] nefc: i32; "number of constraints.";
         [ffi] nJ: i32; "number of non-zeros in constraint Jacobian.";
-        [ffi] efm_active: i32; "implicit effective metric M+K: 0 inactive, 1 active, 2 active + preconditioner exact.";
         [ffi] nefmK: i32; "number of non-zeros in effective-stiffness CSR.";
-        [ffi] nefmdof: i32; "number of rows in effective-metric factor.";
-        [ffi] nefmL: i32; "number of non-zeros in the effective-metric factor.";
+        [ffi] nefmdof: i32; "number of 3x3 blocks in the effective-metric preconditioner.";
+        [ffi] nefmL: i32; "size of the effective-metric block storage (9*nefmdof).";
         [ffi] nY: i32; "number of non-zeros in constraint inverse inertia square root.";
         [ffi] nA: i32; "number of non-zeros in constraint inverse inertia matrix.";
         [ffi] nisland: i32; "number of detected constraint islands.";
@@ -1593,6 +1592,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         [ffi] nparent_awake: i32; "number of bodies with awake parents.";
         [ffi] nv_awake: i32; "number of awake dofs.";
         [ffi] signature: u64; "compilation signature.";
+    ]}
+
+    getter_setter! {get, [
+        [ffi] efm_active: bool; "whether the implicit effective metric M+K is active.";
     ]}
 
     getter_setter! {get, [
@@ -1864,11 +1867,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         (mut = unsafe) efm_K_rowadr: &[i32; "effective-stiffness CSR row addresses"; model.ffi().nv],
         (mut = unsafe) efm_K_colind: &[i32; "effective-stiffness CSR column indices"; ffi().nefmK],
         efm_K_val: &[MjtNum; "effective-stiffness CSR values"; ffi().nefmK],
-        (mut = unsafe) efm_dofid: &[i32; "factor row -> dof address"; ffi().nefmdof],
-        (mut = unsafe) efm_L_rownnz: &[i32; "factor row nonzeros"; ffi().nefmdof],
-        (mut = unsafe) efm_L_rowadr: &[i32; "factor row addresses"; ffi().nefmdof],
-        (mut = unsafe) efm_L_colind: &[i32; "factor column indices"; ffi().nefmL],
-        efm_L: &[MjtNum; "Cholesky factor of diag(M)+K, covered dofs"; ffi().nefmL],
+        (mut = unsafe) efm_dofid: &[i32; "block k -> dof address of its vertex triple"; ffi().nefmdof],
+        efm_L: &[MjtNum; "factored 3x3 diagonal blocks of M+K"; ffi().nefmL],
         efc_b: &[MjtNum; "linear cost term: J*qacc_smooth - aref"; ffi().nefc],
         iefc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
         iefc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
@@ -1934,8 +1934,9 @@ info_with_view!(Data, body,
      subtree_angmom: MjtNum,
      cacc: MjtNum,
      cfrc_int: MjtNum,
-     cfrc_ext: MjtNum],
-    [[body_] awake: MjtSleepState [force]],
+     cfrc_ext: MjtNum,
+     [body_] awake: MjtSleepState [force]],
+    [],
     [], M: Deref<Target = MjModel>);
 
 info_with_view!(Data, camera,
