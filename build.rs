@@ -439,7 +439,11 @@ fn main() {
                 let mut hashfile_data = String::new();
                 file = File::open(&download_hash_path).expect("failed to open the hash file");
                 file.read_to_string(&mut hashfile_data).expect("failed to read hash file contents");
-                let hash_official = hashfile_data.split_once(' ').unwrap().0;
+                // The official hash files disagree per platform: 'sha256sum' output ('<hash>  <file>')
+                // on Linux, a bare hash on Windows, and neither guarantees the hex case.
+                let hash_official = hashfile_data.split_whitespace().next().unwrap_or_else(||
+                    panic!("hash file '{}' holds no hash", download_hash_path.display())
+                );
 
                 file = File::open(&download_path).unwrap();
                 let mut reader = BufReader::new(file);
@@ -455,7 +459,7 @@ fn main() {
                     hasher.update(&buffer[..n]);
                 }
                 let result = format!("{:x}", hasher.finalize());
-                if hash_official != result {
+                if !hash_official.eq_ignore_ascii_case(&result) {
                     panic!(
                         "sha256sum of '{}' does not match \
                         the one stored in the official hash file --- stopping due to security concerns!",
