@@ -1,9 +1,9 @@
 //! Definitions related to model editing.
 use std::ffi::{c_char, c_int, CStr, CString};
-use std::marker::PhantomData;
-use std::ptr::{self, NonNull};
-use std::path::Path;
 use crate::error::MjEditError;
+use std::ptr::{self, NonNull};
+use std::marker::PhantomData;
+use std::path::Path;
 
 #[macro_use]
 mod utility;
@@ -1231,8 +1231,9 @@ impl IntVelocityConfig {
 pub struct DcMotorConfig {
     /// Electrical resistance.
     pub resistance: f64,
-    /// Input mode selector.
-    pub input_mode: i32,
+    /// Input signature: a bitmask of
+    /// [`MjtCtrlInput`](crate::wrappers::mj_model::MjtCtrlInput) values.
+    pub ctrlspec: i32,
     /// Torque and back-EMF constants `[Kt, Ke]`.
     pub motorconst: Option<[f64; 2]>,
     /// Nominal ratings `[voltage, stall_torque, no_load_speed]`.
@@ -1255,7 +1256,7 @@ impl DcMotorConfig {
     getter_setter! {
         with, [
             resistance: f64;       "the electrical resistance.";
-            input_mode: i32;       "the input mode selector.";
+            ctrlspec: i32;         "the input signature bitmask ([`MjtCtrlInput`](crate::wrappers::mj_model::MjtCtrlInput)).";
             motorconst: [f64; 2];  "the torque and back-EMF constants [Kt, Ke].";
             nominal: [f64; 3];     "the nominal ratings [voltage, stall_torque, no_load_speed].";
             saturation: [f64; 3];  "the saturation [tau_max, i_max, di_dt_max].";
@@ -1264,6 +1265,72 @@ impl DcMotorConfig {
             controller: [f64; 6];  "the controller [kp, ki, kd, slewmax, Imax, v_max].";
             thermal: [f64; 6];     "the thermal [R_th, C, tau_th, alpha, T0, T_ambient].";
             lugre: [f64; 5];       "the LuGre friction [stiffness, damping, coulomb, static, stribeck].";
+        ]
+    }
+}
+
+/// Configuration for [`MjsActuator::set_to_pid`].
+///
+/// Each optional field defaults to `None`, disabling the corresponding feature.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PidConfig {
+    /// Proportional (position) gain.
+    pub kp: f64,
+    /// Velocity feedback gain. Mutually exclusive with `dampratio`.
+    pub kv: Option<f64>,
+    /// Damping ratio. Mutually exclusive with `kv`.
+    pub dampratio: Option<f64>,
+    /// Integral gain on the position error.
+    pub ki: Option<f64>,
+    /// Anti-windup limit on the integral state.
+    pub imax: Option<f64>,
+    /// Slew rate limit of the position setpoint.
+    pub slewmax: Option<f64>,
+    /// Automatic range-inheritance factor for the position-setpoint range (0 disables it).
+    pub inheritrange: f64,
+    /// Input signature: a bitmask of
+    /// [`MjtCtrlInput`](crate::wrappers::mj_model::MjtCtrlInput) values.
+    pub ctrlspec: i32,
+}
+
+impl PidConfig {
+    getter_setter! {
+        with, [
+            kp: f64;            "the proportional (position) gain.";
+            kv: f64;            "the velocity feedback gain (mutually exclusive with dampratio).";
+            dampratio: f64;     "the damping ratio (mutually exclusive with kv).";
+            ki: f64;            "the integral gain on the position error.";
+            imax: f64;          "the anti-windup limit on the integral state.";
+            slewmax: f64;       "the position-setpoint slew rate limit.";
+            inheritrange: f64;  "the automatic range-inheritance factor.";
+            ctrlspec: i32;      "the input signature bitmask ([`MjtCtrlInput`](crate::wrappers::mj_model::MjtCtrlInput)).";
+        ]
+    }
+}
+
+/// Configuration for [`MjsActuator::set_to_orientation`].
+///
+/// Each optional field defaults to `None`, disabling the corresponding feature.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct OrientationConfig {
+    /// Proportional gain, in torque per radian of geodesic error.
+    pub kp: f64,
+    /// Damping, per force output. Mutually exclusive with `dampratio`.
+    pub kv: Option<f64>,
+    /// Damping ratio. Mutually exclusive with `kv`.
+    pub dampratio: Option<f64>,
+    /// Chart of the commanded orientation
+    /// ([`MjtCtrlChart`](crate::wrappers::mj_model::MjtCtrlChart)).
+    pub ctrlspec: i32,
+}
+
+impl OrientationConfig {
+    getter_setter! {
+        with, [
+            kp: f64;         "the proportional gain, in torque per radian of geodesic error.";
+            kv: f64;         "the velocity feedback gain (mutually exclusive with dampratio).";
+            dampratio: f64;  "the damping ratio (mutually exclusive with kv).";
+            ctrlspec: i32;   "the chart of the commanded orientation ([`MjtCtrlChart`](crate::wrappers::mj_model::MjtCtrlChart)).";
         ]
     }
 }
@@ -1368,7 +1435,7 @@ impl MjsActuator {
     /// value is out of its allowed range.
     pub fn set_to_dc_motor(&mut self, config: DcMotorConfig) -> Result<(), MjEditError> {
         let DcMotorConfig {
-            resistance, input_mode,
+            resistance, ctrlspec,
             mut motorconst, mut nominal, mut saturation, mut inductance,
             mut cogging, mut controller, mut thermal, mut lugre
         } = config;
@@ -1383,8 +1450,58 @@ impl MjsActuator {
             controller.as_mut().map_or(ptr::null_mut(), |x| x),
             thermal.as_mut().map_or(ptr::null_mut(), |x| x),
             lugre.as_mut().map_or(ptr::null_mut(), |x| x),
-            input_mode
+            ctrlspec
         ) };
+        actuator_set_result(c_err_msg)
+    }
+
+    /// Configure the actuator to be a PID controller on a single force output. The force is
+    /// `kp * (u_pos - length) + kv * (u_vel - velocity) + ki * integral + ff`.
+    /// # Errors
+    /// Returns [`MjEditError::InvalidParameter`] when `kv` and `dampratio` are both set, when
+    /// `kv`, `dampratio` or `slewmax` is negative, or when `inheritrange` is set together with a
+    /// position-setpoint range.
+    pub fn set_to_pid(&mut self, config: PidConfig) -> Result<(), MjEditError> {
+        let PidConfig {
+            kp, mut kv, mut dampratio, mut ki,
+            mut imax, mut slewmax, inheritrange, ctrlspec
+        } = config;
+
+        let c_err_msg = unsafe {
+            mjs_setToPID(
+                self,
+                kp,
+                kv.as_mut().map_or(ptr::null_mut(), |x| x),
+                dampratio.as_mut().map_or(ptr::null_mut(), |x| x),
+                ki.as_mut().map_or(ptr::null_mut(), |x| x),
+                imax.as_mut().map_or(ptr::null_mut(), |x| x),
+                slewmax.as_mut().map_or(ptr::null_mut(), |x| x),
+                inheritrange, ctrlspec
+            )
+        };
+        actuator_set_result(c_err_msg)
+    }
+
+    /// Configure the actuator to be an orientation servo: a geodesic PD controller on a ball
+    /// joint or a site with a reference site. The three force outputs carry the torque
+    /// `kp * log(q^-1 * q_target) - kv * omega`, in the frame of the transmission target.
+    /// # Errors
+    /// Returns [`MjEditError::InvalidParameter`] when `kv` and `dampratio` are both set, or when
+    /// `kv` or `dampratio` is negative.
+    pub fn set_to_orientation(&mut self, config: OrientationConfig) -> Result<(), MjEditError> {
+        let OrientationConfig {
+            kp, mut kv, mut dampratio, ctrlspec
+        } = config;
+
+        let c_err_msg = unsafe {
+            mjs_setToOrientation(
+                self,
+                kp,
+                kv.as_mut().map_or(ptr::null_mut(), |x| x),
+                dampratio.as_mut().map_or(ptr::null_mut(), |x| x),
+                ctrlspec
+            )
+        };
         actuator_set_result(c_err_msg)
     }
 }

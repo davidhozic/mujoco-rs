@@ -120,6 +120,10 @@ pub type MjtBias = mjtBias;
 /// Orientation input charts of so3 actuators. These values are used in `m->actuator_ctrlspec`.
 pub type MjtCtrlChart = mjtCtrlChart;
 
+/// Input signature bits of servo-family (`pid`, `dcmotor`) actuators. These values are OR-ed into
+/// `m->actuator_ctrlspec`.
+pub type MjtCtrlInput = mjtCtrlInput;
+
 /// MuJoCo object types. These are used, for example, in the support functions `mj_name2id` and
 /// `mj_id2name` to convert between object names and integer ids.
 pub type MjtObj = mjtObj;
