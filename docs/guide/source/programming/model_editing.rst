@@ -14,7 +14,7 @@ Model editing
 The most general way to create an |mj_model| instance is by loading an XML file
 via :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml`.
 Due to |mj_model| only allowing (some) changes to parameters and not to the actual
-geometry, MuJoCo introduced `Model Editing <https://mujoco.readthedocs.io/en/3.11.0/programming/modeledit.html>`_.
+geometry, MuJoCo introduced `Model Editing <https://mujoco.readthedocs.io/en/3.12.0/programming/modeledit.html>`_.
 
 In MuJoCo-rs, we created a high-level wrapper around MuJoCo's C API, which provides
 safe wrappers around C structs, as well as methods. Aside from that, we try to stay faithful
@@ -108,9 +108,10 @@ We can now add our ball's body, geom and joint like so:
 
     In the above block, we used methods that have the ``with_`` prefix.
     These allow method chaining.
-    Alternatively, methods that have the ``set_`` prefix can be used. Field setters
-    (e.g. ``set_pos``, ``set_size``) return nothing, while ``set_name`` and ``set_default``
-    return a ``Result`` (``set_name`` fails on a duplicate name, ``set_default`` on an unknown class).
+    Alternatively, methods that have the ``set_`` prefix can be used. A plain field setter
+    (e.g. ``set_group``, ``set_mass``) returns nothing, while a validated setter returns a
+    ``Result`` (``set_name`` fails on a duplicate name, ``set_default`` on an unknown class, and
+    ``MjsNumeric::set_size`` on a negative size).
     Setter (``set_``) methods are available for many common fields, including strings and
     several vector/buffer fields. For nested or structured data, use getters that end with
     the ``_mut`` suffix.
@@ -227,7 +228,7 @@ already been deleted, which would make MuJoCo operate on freed memory.
 
 Class inheritance (defaults)
 ==============================
-MuJoCo supports `default classes <https://mujoco.readthedocs.io/en/3.11.0/XMLreference.html#default>`_,
+MuJoCo supports `default classes <https://mujoco.readthedocs.io/en/3.12.0/XMLreference.html#default>`_,
 which allow shared attribute values to be set in one place and then inherited by multiple elements.
 In MuJoCo-rs, default classes can be created with
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>add_default`.
@@ -323,14 +324,16 @@ Configuring actuators
 An actuator added with :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>add_actuator`
 can be configured into one of MuJoCo's predefined actuator types with the ``set_to_*`` family of
 methods on |mjs_actuator| (motor, position, integrated velocity, velocity, damper, cylinder,
-muscle, adhesion, and DC motor), mirroring MuJoCo's ``mjs_setToX`` C API.
+muscle, adhesion, DC motor, PID, and orientation), mirroring MuJoCo's ``mjs_setToX`` C API.
 
 A method whose parameters are all mandatory takes them positionally (for example
 ``set_to_velocity(kv)`` or ``set_to_cylinder(timeconst, bias, area, diameter)``). A method whose
 underlying C function accepts *nullable* parameters instead takes a dedicated ``Default``-able
 config struct --- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>PositionConfig`,
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>IntVelocityConfig`, and
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>DcMotorConfig` --- in which those nullable
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>IntVelocityConfig`,
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>DcMotorConfig`,
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>PidConfig`, and
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>OrientationConfig` --- in which those nullable
 parameters are ``Option`` fields. A config is built either with struct-update syntax or with the
 chainable ``with_*`` builder methods (which take the inner value and wrap optional fields in
 ``Some``), so only the relevant fields need to be set; everything else stays at its MuJoCo default:
@@ -366,7 +369,7 @@ always-valid ones (``set_to_motor``, ``set_to_velocity``, ``set_to_cylinder``) r
 
 Procedural flex generation
 ==========================
-A `flexcomp <https://mujoco.readthedocs.io/en/3.11.0/XMLreference.html#body-flexcomp>`_ procedurally
+A `flexcomp <https://mujoco.readthedocs.io/en/3.12.0/XMLreference.html#body-flexcomp>`_ procedurally
 generates a deformable |mjs_flex| together with its supporting bodies, joints, and optional
 equality constraints --- handy for cloth, ropes, and soft volumes. In MuJoCo-rs it is created with
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>add_flexcomp` (or the fallible

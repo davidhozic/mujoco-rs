@@ -33,7 +33,7 @@ A screenshot of the Rust 3D viewer is shown below.
 
     Rust-native interactive 3D viewer.
     Showing the `Spot <https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot>`_ scene from
-    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.11.0/models.html>`_.
+    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.12.0/models.html>`_.
 
 The viewer can be launched only in **passive mode**, i.e. it won't run as a separate application,
 and needs to be periodically "synced" by the user application.
@@ -136,7 +136,8 @@ This is optional and can be removed or reduced to run the simulation faster than
     of :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` required for visualization
     (kinematics, contacts, sensor data, etc.), skipping large computed arrays
     (the mass and factorization matrices ``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``,
-    and the sparse constraint Jacobian blocks ``efc_J_*``, ``efc_Y_*``, ``efc_AR_*``). This is faster.
+    and the sparse constraint Jacobian blocks ``efc_J``, ``efc_Y``, ``efc_AR`` and their index
+    arrays). This is faster.
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full` copies the **entire**
     ``MjData`` struct and should only be used when those large arrays are needed inside the
     viewer (for example, when using
@@ -151,12 +152,14 @@ This is optional and can be removed or reduced to run the simulation faster than
     such as:
 
     - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`;
-    - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running`;
+    - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model`;
     - etc.;
 
     internally acquire a mutex lock to the shared state.
     Sequential calls to more than one of these can consequently
     hurt performance.
+    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running` is an exception: it reads
+    an atomic flag and never locks.
 
     A more optimized way to use these methods is to call their equivalents on the shared
     state directly. The shared state can be accessed mainly through:
@@ -174,7 +177,7 @@ This is optional and can be removed or reduced to run the simulation faster than
     .. code-block:: rust
 
         viewer.with_state_lock(|mut lock| {
-            lock.sync_data(&mut data);  // both calls share one lock
+            lock.sync_data(&mut data);  // one lock for the whole closure
             viewer_running = lock.running();
         }).unwrap();
 
@@ -261,6 +264,8 @@ This allows you to create custom windows, panels, and other UI elements using
     Callbacks added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`
     receive the passive simulation state (:docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`).
     This requires locking the mutex to the shared state, which may slow down the program.
+    The lock is held for the whole callback, so the callback must not lock the shared state
+    again; that deadlocks the viewer thread.
 
     To avoid unnecessary locks when the simulation state is not required in the UI,
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback_detached`
@@ -332,7 +337,8 @@ which demonstrates various types of UI elements including windows, side panels, 
     will **not** contain:
 
     - the mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``);
-    - the sparse constraint Jacobian blocks (``efc_J_*``, ``efc_Y_*``, ``efc_AR_*``).
+    - the sparse constraint Jacobian blocks (``efc_J``, ``efc_Y``, ``efc_AR`` and their index
+      arrays).
 
     If you require those in a UI callback, either call an appropriate method on the passed
     :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` instance
@@ -343,6 +349,9 @@ which demonstrates various types of UI elements including windows, side panels, 
     equality constraints) back to the user's ``data`` via the integration state. If your
     code relies on derived quantities such as previously-computed Jacobians, recompute them
     after each :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` call.
+
+    Each sync also applies the mouse perturbation, which unconditionally zeroes
+    ``data.xfrc_applied``. Set your own external forces after the sync, not before it.
 
 
 .. _model_parameter_sync:

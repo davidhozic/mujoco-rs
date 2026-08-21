@@ -24,7 +24,7 @@ For a full list of changes, see the :ref:`changelog`.
 Migrating to 6.0.0
 ======================
 
-Version 6.0.0 updates MuJoCo to 3.11.0, which removed and renamed several
+Version 6.0.0 updates MuJoCo to 3.12.0, which removed and renamed several
 |mj_data| fields, reworked the actuator dimensions for MIMO actuators, and
 changed a few visualization and model signatures.
 
@@ -32,27 +32,27 @@ changed a few visualization and model signatures.
 MuJoCo upgrade
 -----------------------
 
-This release links against MuJoCo **3.11.0**. Download the matching release and
+This release links against MuJoCo **3.12.0**. Download the matching release and
 update your library path. See :ref:`installation` for details.
 
 
-Removed ``MjData::qM`` accessor
--------------------------------
+Removed ``MjData::q_m`` accessor
+---------------------------------
 MuJoCo removed the legacy sparse ``mjData.qM`` inertia matrix; the joint-space inertia matrix
-is now stored exclusively in the CSR format ``mjData.M``. Use the ``M`` accessor together with
-the |mj_model| ``M_rownnz``/``M_rowadr``/``M_colind`` index arrays, or ``full_m`` for a dense copy.
+is now stored exclusively in the CSR format ``mjData.M``. Use the ``m`` accessor together with
+the |mj_model| ``m_rownnz``/``m_rowadr``/``m_colind`` index arrays, or ``full_m`` for a dense copy.
 
 **Before:**
 
 .. code-block:: rust
 
-    let inertia = data.qM();
+    let inertia = data.q_m();
 
 **After:**
 
 .. code-block:: rust
 
-    let inertia = data.M();  // CSR values; indices in model.M_rownnz()/M_rowadr()/M_colind()
+    let inertia = data.m();  // CSR values; indices in model.m_rownnz()/m_rowadr()/m_colind()
 
     // or, for a dense nv x nv matrix:
     let nv = model.nv() as usize;
@@ -78,8 +78,8 @@ parameter was dropped from |mjv_camera| ``move_``.
     camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -1.0);
 
 
-``MjData::efc_diagApprox`` renamed to ``efc_diagA``
----------------------------------------------------
+``MjData::efc_diag_approx`` renamed to ``efc_diag_a``
+------------------------------------------------------
 MuJoCo renamed the ``efc_diagApprox`` field to ``efc_diagA``, since it can now hold either
 the exact or the approximate diagonal of the :math:`A` matrix. The |mj_data| accessor was
 renamed to match.
@@ -88,22 +88,22 @@ renamed to match.
 
 .. code-block:: rust
 
-    let diag = data.efc_diagApprox();
+    let diag = data.efc_diag_approx();
 
 **After:**
 
 .. code-block:: rust
 
-    let diag = data.efc_diagA();
+    let diag = data.efc_diag_a();
 
 
 Removed island matrix |mj_data| accessors
 -----------------------------------------
 MuJoCo moved the island-specific inertia and Jacobian matrices off the arena onto the stack,
 so they are no longer exposed as ``mjData`` fields. The following |mj_data| accessors were
-removed with no replacement: ``iM_rownnz``, ``iM_rowadr``, ``iM_colind``, ``iM``, ``iLD``,
-``iLDiagInv``, ``iefc_J_rownnz``, ``iefc_J_rowadr``, ``iefc_J_rowsuper``, ``iefc_J_colind``,
-and ``iefc_J``.
+removed with no replacement: ``i_m_rownnz``, ``i_m_rowadr``, ``i_m_colind``, ``i_m``, ``i_ld``,
+``i_ldiag_inv``, ``iefc_j_rownnz``, ``iefc_j_rowadr``, ``iefc_j_rowsuper``, ``iefc_j_colind``,
+and ``iefc_j``.
 
 
 Removed ``MjData::maxuse_threadstack`` accessor
@@ -151,15 +151,102 @@ views to dynamic ranges based on ``actuator_ctrladr``/``actuator_ctrlnum`` and
         let range = model.actuator_ctrlrange()[ctrl];  // control-indexed
     }
 
-The |mj_data| control-history readers follow the same rule: ``read_ctrl`` and ``try_read_ctrl``
-now take an actuator index bounded by ``nactuator``, not a control index bounded by ``nu``.
+The |mj_data| control-history methods follow the same rule: ``read_ctrl``, ``try_read_ctrl`` and
+``init_ctrl_history`` now take an actuator index bounded by ``nactuator``, not a control index
+bounded by ``nu``.
 
 
-Shifted ``MjtGain``/``MjtBias`` discriminants
----------------------------------------------
-``MjtGain`` and ``MjtBias`` gained the ``mjGAIN_SO3``/``mjBIAS_SO3`` variants, shifting the
-raw values of ``mjGAIN_USER`` and ``mjBIAS_USER`` from 4 to 5. Code that persists or compares
-raw discriminants (rather than the enum variants) needs to be updated.
+Shifted actuator enum discriminants
+-------------------------------------
+``MjtGain``, ``MjtBias``, ``MjtDyn`` and ``MjtTrn`` gained new variants, so an exhaustive
+``match`` on any of them no longer compiles. The raw value of ``mjGAIN_USER`` moved from 4 to 6,
+``mjBIAS_USER`` from 4 to 5 and ``mjDYN_USER`` from 6 to 7, so code that stores or compares raw
+discriminants (rather than the enum variants) needs the new values.
+
+
+Stricter |mjr_context| accessor types
+---------------------------------------
+The |mjr_context| flags ``gl_initialized``, ``window_available``, ``window_stereo`` and
+``window_doublebuffer`` now read as ``bool``, and ``font_scale`` and ``read_depth_map`` now read
+as ``MjtFontScale`` and ``MjtDepthMap``, instead of ``i32``.
+
+**Before:**
+
+.. code-block:: rust
+
+    if context.gl_initialized() != 0 && context.window_doublebuffer() != 0 {
+        let scale: i32 = context.font_scale();
+        let depth: i32 = context.read_depth_map();
+    }
+
+**After:**
+
+.. code-block:: rust
+
+    if context.gl_initialized() && context.window_doublebuffer() {
+        let scale: MjtFontScale = context.font_scale();
+        let depth: MjtDepthMap = context.read_depth_map();
+    }
+
+
+Unsafe mutation of |mj_model| ``actuator_gaintype``
+-----------------------------------------------------
+``actuator_gaintype_mut`` is now an ``unsafe fn``, and ``MjActuatorModelViewMut::gaintype``
+became a ``PointerViewUnsafeMut``, so a write through the view needs ``as_mut_slice`` inside
+``unsafe``. A wrong gain type makes the engine write more force outputs than the actuator owns.
+
+**Before:**
+
+.. code-block:: rust
+
+    model.actuator_gaintype_mut()[id] = MjtGain::mjGAIN_AFFINE;
+    view.gaintype[0] = MjtGain::mjGAIN_AFFINE;
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: mjGAIN_AFFINE writes exactly one force output, which this actuator owns.
+    unsafe { model.actuator_gaintype_mut()[id] = MjtGain::mjGAIN_AFFINE };
+    unsafe { view.gaintype.as_mut_slice()[0] = MjtGain::mjGAIN_AFFINE };
+
+
+Renamed ``DcMotorConfig`` input field
+---------------------------------------
+The public field ``DcMotorConfig::input_mode`` is now ``ctrlspec`` and the builder
+``with_input_mode`` is now ``with_ctrlspec``. The value is a bitmask of ``MjtCtrlInput`` values
+instead of a single mode selector.
+
+**Before:**
+
+.. code-block:: rust
+
+    let config = DcMotorConfig::default().with_input_mode(0);
+
+**After:**
+
+.. code-block:: rust
+
+    let config = DcMotorConfig::default()
+        .with_ctrlspec(MjtCtrlInput::mjINPUT_VOLTAGE as i32);
+
+
+Relaxed |mj_data| ``body_awake`` view mutability
+--------------------------------------------------
+``MjBodyDataViewMut::awake`` became a ``PointerViewMut``, so a write through the view no longer
+needs ``as_mut_slice`` inside ``unsafe``.
+
+**Before:**
+
+.. code-block:: rust
+
+    unsafe { view.awake.as_mut_slice()[0] = MjtSleepState::mjS_AWAKE };
+
+**After:**
+
+.. code-block:: rust
+
+    view.awake[0] = MjtSleepState::mjS_AWAKE;
 
 
 .. _migrate_5_0_0:
