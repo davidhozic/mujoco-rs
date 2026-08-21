@@ -1,4 +1,4 @@
-//! Example on how to create a MuJoCo-rs application in for Python using PyO3.
+//! Example on how to create a MuJoCo-rs application for Python using PyO3.
 use mujoco_rs::{prelude::*, viewer::MjViewer};
 use pyo3::prelude::*;
 use std::{rc::Rc, time::Instant};

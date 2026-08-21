@@ -12,7 +12,7 @@ use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
 
 
-/// A free-falling sphere with a vertical thruster.
+/// A free-falling sphere with a horizontal and a vertical thruster.
 const MODEL_BALL: &str = stringify! {
 <mujoco>
   <worldbody>

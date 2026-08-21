@@ -34,8 +34,9 @@ After creation, we can use |mj_spec| to add items to the model, such as joints, 
 **Non-structured** items can be added through |mj_spec| itself (e.g., actuators, sensors, meshes, etc.).
 **Structured** items can be added through |mjs_body| (e.g., bodies, geoms, joints, etc.).
 
-After procedurally creating a specification with |mj_spec|, the latter
-can either be compiled for direct use in the simulation or saved to an XML file.
+After procedurally creating a specification with |mj_spec|, compile it with
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile`. The compiled model
+runs in the simulation, and the compiled specification can also be saved to an XML file.
 
 
 Examples
@@ -148,7 +149,9 @@ Finally, we can now add the base plane, like so:
 
 This concludes the specification's definition.
 We can now compile it to a model and save it to an MJB (binary) file.
-The specification can also be saved directly to an MJCF (XML) file:
+The specification can also be saved to an MJCF (XML) file. MuJoCo writes MJCF only from a
+compiled specification, so ``save_xml`` and ``save_xml_string`` return
+:docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>SaveFailed` when ``compile`` did not run:
 
 .. code-block:: rust
     :emphasize-lines: 24-28
@@ -189,15 +192,22 @@ can be used exactly the same as if we were to directly load an XML model (see :r
 The compiled |mj_model| can also be swapped into a running simulation using
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` or
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_swap_model`,
-as described in the :ref:`basic_sim` chapter.
+as described in the :ref:`basic_sim` chapter. The swap keeps the existing |mj_data|, so it accepts
+only a model with the same signature. The signature covers the element tree, the ``nq`` of each
+joint and the type of each sensor. Most attribute changes therefore keep it, while an added or
+deleted element, a joint type change that alters ``nq`` (for example ``hinge`` to ``ball``) or a
+changed sensor type changes it; ``swap_model`` then panics and ``try_swap_model`` returns
+``MjDataError::SignatureMismatch``.
 
 
 Deleting elements
 ======================
-Elements can be removed from a specification with
+Most elements can be removed from a specification with
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`,
 which takes the element's raw pointer obtained from
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>element_mut_pointer`:
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>element_mut_pointer`.
+The world body and default classes cannot be removed; ``delete_element`` returns
+:docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>UnsupportedOperation` for them.
 
 .. code-block:: rust
 
@@ -251,12 +261,16 @@ A new class is created by providing its ``class_name`` and optionally a ``parent
         spec.add_default("small-red", Some("red"));
     }
 
-Elements can then reference the class via their ``childclass`` or ``class`` (``dclass``) attribute
+Elements can then reference the class via their ``childclass`` or ``class`` attribute
 in the model XML.
-In Rust code, class assignment is typically done with
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>set_default` or
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>with_default`.
-Some item-specific wrappers (for example frames) also expose explicit ``childclass`` setters.
+In Rust code, class assignment is done with
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_default` or
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_default`.
+MuJoCo copies the values of a class into an element when the element is **created**, so set the
+class on the parent body before you add its children. A call on an element that already exists
+only records the class name: the saved XML then carries ``class="..."``, but the next ``compile``
+keeps the old values. Some item-specific wrappers (for example frames) also expose explicit
+``childclass`` setters, with the same limitation.
 
 
 Iterators
@@ -307,9 +321,10 @@ Existing elements can be looked up by name. |mj_spec| exposes a finder method (a
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>body_mut`,
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>geom`, and
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`. Within a body,
-child bodies are found with
+a body of its subtree is found with
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child` /
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child_mut`.
+The search is recursive, and it returns the body itself when its own name matches.
 Every finder returns an ``Option`` that is ``None`` when no element with that name exists.
 
 After compilation, an element's numeric id in the resulting |mj_model| can be retrieved with

@@ -318,13 +318,15 @@ impl ViewerSharedState {
     }
 
     /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
-    /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`].
+    /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`],
+    /// but a sync that detects a model change discards them.
     pub fn user_scene(&self) -> &MjvScene {
         &self.user_scene
     }
 
     /// Returns a mutable reference to a user scene for drawing custom visual-only geoms.
-    /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`].
+    /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`],
+    /// but a sync that detects a model change discards them.
     pub fn user_scene_mut(&mut self) -> &mut MjvScene {
         &mut self.user_scene
     }
@@ -350,7 +352,9 @@ impl ViewerSharedState {
     /// passive model and the provided option struct.
     ///
     /// Changes made by the viewer UI are written to `opt`; changes made to `opt` externally
-    /// are written back to the viewer's passive model.
+    /// are written back to the viewer's passive model. The merge runs per field, and an array
+    /// counts as one field: a change made to `opt` outside the viewer is lost only when the viewer
+    /// changed that same field since the previous sync.
     pub fn sync_model_opt(&mut self, opt: &mut MjOption) {
         ThreeWayMerge::merge(opt, self.data_passive.model_opt_mut(), &mut self.prev_opt);
         self.last_opt_sync_time = Instant::now();
@@ -360,7 +364,9 @@ impl ViewerSharedState {
     /// passive model and the provided visual struct.
     ///
     /// Changes made by the viewer UI are written to `vis`; changes made to `vis` externally
-    /// are written back to the viewer's passive model.
+    /// are written back to the viewer's passive model. The merge runs per field, and an array
+    /// counts as one field: a change made to `vis` outside the viewer is lost only when the viewer
+    /// changed that same field since the previous sync.
     pub fn sync_model_vis(&mut self, vis: &mut MjVisual) {
         ThreeWayMerge::merge(vis, self.data_passive.model_vis_mut(), &mut self.prev_vis);
         self.last_vis_sync_time = Instant::now();
@@ -370,7 +376,9 @@ impl ViewerSharedState {
     /// passive model and the provided statistic struct.
     ///
     /// Changes made by the viewer UI are written to `stat`; changes made to `stat` externally
-    /// are written back to the viewer's passive model.
+    /// are written back to the viewer's passive model. The merge runs per field, and an array
+    /// counts as one field: a change made to `stat` outside the viewer is lost only when the viewer
+    /// changed that same field since the previous sync.
     pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {
         ThreeWayMerge::merge(stat, self.data_passive.model_stat_mut(), &mut self.prev_stat);
         self.last_stat_sync_time = Instant::now();
@@ -578,7 +586,8 @@ impl ViewerSharedState {
     /// struct (including large Jacobian and other arrays), not just the state needed for visualization.
     ///
     /// # Panics
-    /// Panics if the internal data copy fails due to an inconsistent model state (indicates a bug).
+    /// Panics if the internal data copy or state merge fails due to an inconsistent model
+    /// state (indicates a bug).
     pub fn sync_data_full<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         self._sync_data(data, true);
     }
@@ -602,14 +611,17 @@ impl ViewerSharedState {
     ///
     /// <div class="warning">
     /// The user's data is copied into the viewer's internal passive copy via ``mjv_copyData``,
-    /// which skips large computed arrays not required for visualization.
-    /// The viewer's passive copy will therefore **not** contain:
+    /// which skips large computed arrays not required for visualization. In the viewer's passive
+    /// copy:
     ///
-    /// - mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``);
+    /// - the mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``,
+    ///   ``qLU``) keep the values of the previous copy, because they live in the fixed buffer
+    ///   that ``mjv_copyData`` does not overwrite;
     /// - the sparse constraint Jacobian blocks (``efc_J``, ``efc_Y``, ``efc_AR`` and their
-    ///   index arrays).
+    ///   index arrays) are empty, because they live in the arena, which the copy leaves
+    ///   unallocated.
     ///
-    /// In UI callbacks these fields will be absent unless
+    /// In UI callbacks these fields are therefore stale or empty unless
     /// [`ViewerSharedState::sync_data_full`] is used or they are recomputed explicitly
     /// (e.g. via `data.forward()`).
     ///
@@ -716,8 +728,10 @@ impl ViewerSharedState {
 /// - I: inertia,
 /// - E: constraint.
 /// 
-/// # Safety
-/// Due to the nature of OpenGL, this should only be run in the **main thread**.
+/// With the `viewer-ui` feature, `X` toggles the side UI panel.
+/// 
+/// # Panic
+/// Panics when initialized outside the main thread.
 #[derive(Debug)]
 pub struct MjViewer {
     /* MuJoCo rendering */
@@ -783,6 +797,8 @@ impl MjViewer {
     /// - [`MjViewerError::GlutinError`] if a glutin operation fails.
     /// - [`MjViewerError::PainterInitError`] if the UI painter fails to initialize
     ///   (feature `viewer-ui`).
+    /// # Panics
+    /// Panics if the GL display reports no usable configuration.
     pub fn launch_passive<M: Deref<Target = MjModel>>(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
         MjViewerBuilder::new()
             .max_user_geoms(max_user_geom)
@@ -886,7 +902,8 @@ impl MjViewer {
     /// This is a proxy to [`ViewerSharedState::sync_data_full`].
     ///
     /// # Panics
-    /// Panics if the internal data copy fails due to an inconsistent model state (indicates a bug).
+    /// Panics if the internal data copy or state merge fails due to an inconsistent model
+    /// state (indicates a bug).
     pub fn sync_data_full<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
         self.shared_state.lock_unpoison().sync_data_full(data);
     }
@@ -905,14 +922,17 @@ impl MjViewer {
     /// 
     /// <div class="warning">
     /// The user's data is copied into the viewer's internal passive copy via ``mjv_copyData``,
-    /// which skips large computed arrays not required for visualization.
-    /// The viewer's passive copy will therefore **not** contain:
+    /// which skips large computed arrays not required for visualization. In the viewer's passive
+    /// copy:
     ///
-    /// - mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``);
+    /// - the mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``,
+    ///   ``qLU``) keep the values of the previous copy, because they live in the fixed buffer
+    ///   that ``mjv_copyData`` does not overwrite;
     /// - the sparse constraint Jacobian blocks (``efc_J``, ``efc_Y``, ``efc_AR`` and their
-    ///   index arrays).
+    ///   index arrays) are empty, because they live in the arena, which the copy leaves
+    ///   unallocated.
     ///
-    /// In UI callbacks these fields will be absent unless
+    /// In UI callbacks these fields are therefore stale or empty unless
     /// [`MjViewer::sync_data_full`] is used or they are recomputed explicitly
     /// (e.g. via `data.forward()`).
     ///
@@ -1245,7 +1265,7 @@ impl MjViewer {
                 self.ncam = new_model.ffi().ncam;
                 #[cfg(feature = "viewer-ui")]
                 self.ui.update_names(new_model);
-                // reload_model already cleared the pending flags and notified waiters.
+                // reload_model already cleared the pending re-upload sets.
             }
 
             // Process any pending GPU asset re-uploads. The GL context is current here
@@ -1905,6 +1925,8 @@ impl MjViewerBuilder {
     /// - [`MjViewerError::GlutinError`] if a glutin operation fails.
     /// - [`MjViewerError::PainterInitError`] if the UI painter fails to initialize
     ///   (feature `viewer-ui`).
+    /// # Panics
+    /// Panics if the GL display reports no usable configuration.
     pub fn build_passive<M: Deref<Target = MjModel>>(&self, model: M) -> Result<MjViewer, MjViewerError> {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
         let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
@@ -1994,7 +2016,7 @@ impl Default for MjViewerBuilder {
 }
 
 bitflags! {
-    /// Internal bit-flags that track the visibility state of various on-screen overlays.
+    /// Internal bit-flags that track the on-screen overlays, the side panel and the vsync mode.
     #[derive(Debug)]
     struct ViewerStatusBit: u8 {
         const HELP = 1 << 0;

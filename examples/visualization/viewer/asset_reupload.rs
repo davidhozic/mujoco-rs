@@ -2,11 +2,11 @@
 //!
 //! Three types of animated assets are rendered in the same scene:
 //!
-//! - **Heightfield** -- elevation data is rewritten each frame, creating a propagating
+//! - **Heightfield**: elevation data is rewritten each frame, creating a propagating
 //!   ripple wave across the terrain.
-//! - **Texture** -- pixel data is rewritten each frame, producing a shifting colour
+//! - **Texture**: pixel data is rewritten each frame, producing a shifting colour
 //!   gradient across the surface of the ball.
-//! - **Mesh** -- vertex Z positions are rewritten each frame, making a flat grid mesh
+//! - **Mesh**: vertex Z positions are rewritten each frame, making a flat grid mesh
 //!   deform into a wave surface.
 //!
 //! A ball with a free joint is dropped under gravity onto the animated terrain,
@@ -146,7 +146,7 @@ fn create_model() -> MjModel {
     hf.set_ncol(HF_N as i32);
     // size = [x_half, y_half, z_top_scale, z_bottom_thickness]
     hf.with_size([4.0, 4.0, 1.0, 0.1]);
-    // Flat initial elevation (0.5 = mid-height in [0, 1]).
+    // Elevation is in [0, 1]: 0 = Z 0 (top of the base), 1 = Z z_top_scale.
     // Smooth wall: inner 60% is pure ripple; outer 40% transitions to a full-height wall.
     let initial: Vec<f32> = (0..HF_N)
         .flat_map(|row| {

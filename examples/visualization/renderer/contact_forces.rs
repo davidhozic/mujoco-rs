@@ -10,7 +10,7 @@
 //! The model consists of a combined box-and-sphere body (free-floating) that
 //! falls onto a flat floor.  The simulation runs for a fixed number of steps
 //! while the renderer periodically saves frames that show:
-//!   - red markers at contact points (`mjVIS_CONTACTPOINT`),
+//!   - orange markers at contact points (`mjVIS_CONTACTPOINT`),
 //!   - arrows representing contact forces (`mjVIS_CONTACTFORCE`), and
 //!   - a transparent body so that the contact markers inside remain visible
 //!     (`mjVIS_TRANSPARENT`).
@@ -99,7 +99,7 @@ fn main() {
     // Enable contact visualisation on the renderer.
     //
     // MjtVisFlag values used:
-    //   mjVIS_CONTACTPOINT = 14  -> red dots at contact points
+    //   mjVIS_CONTACTPOINT = 14  -> orange dots at contact points
     //   mjVIS_CONTACTFORCE = 16  -> arrows showing contact force direction
     //   mjVIS_TRANSPARENT  = 18  -> make geoms semi-transparent so that
     //                               markers inside them remain visible

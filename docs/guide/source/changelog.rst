@@ -88,35 +88,41 @@ update of MuJoCo alone can increase the major version.
   ``actuator_gear``/``actuator_acc0``/``actuator_length0``/``actuator_lengthrange`` by ``nout``,
   and the per-control ``actuator_ctrllimited``/``actuator_ctrlrange`` remain sized by ``nu``.
   The |mj_data| accessors ``actuator_length``, ``moment_rownnz``, ``moment_rowadr``,
-  ``actuator_velocity`` and ``actuator_force`` are now sized by ``nout``. The per-actuator
-  views for control- and output-indexed fields (``ctrl``, ``length``, ``velocity``, ``force``;
-  ``ctrllimited``, ``ctrlrange``, ``gear``, ``acc0``, ``length0``, ``lengthrange``) now use
-  dynamic ranges based on ``actuator_ctrladr``/``actuator_ctrlnum`` and
-  ``actuator_outadr``/``actuator_outnum``. For single-input single-output actuators
+  ``actuator_velocity`` and ``actuator_force`` are now sized by ``nout``. The per-actuator views
+  are affected the same way: they now use dynamic ranges based on
+  ``actuator_ctrladr``/``actuator_ctrlnum`` and ``actuator_outadr``/``actuator_outnum``.
+  For single-input single-output actuators
   ``nactuator == nu == nout`` and behavior is unchanged.
-- |mj_data| ``read_ctrl``/``try_read_ctrl`` and ``init_ctrl_history`` now take an actuator index
-  bounded by ``nactuator`` (previously a control index bounded by ``nu``), because the control
-  history is stored per actuator.
+- |mj_data| ``read_ctrl``/``try_read_ctrl`` and ``init_ctrl_history`` now bound the actuator index
+  by ``nactuator`` instead of ``nu``, because the control history is stored per actuator.
 
 *Stricter* |mjr_context| *accessor types*
 
 - ``gl_initialized``, ``window_available``, ``window_stereo`` and ``window_doublebuffer`` now
   read as ``bool`` instead of ``i32``; MuJoCo stores only 0 or 1 in them.
 - ``font_scale`` and ``read_depth_map`` now read as ``MjtFontScale`` and ``MjtDepthMap`` instead
-  of ``i32``; MuJoCo stores only declared enum variants in them.
+  of ``i32``. ``mjr_defaultContext`` leaves ``fontScale`` zeroed, which is not an
+  ``MjtFontScale`` variant, but the safe API cannot reach that state, because ``MjrContext::new``
+  and ``ffi_mut`` are ``unsafe`` and ``change_font`` takes the enum.
 
-*Mutable access to* |mj_model| ``actuator_gaintype`` *and* ``actuator_ctrlspec``
+*Unsafe mutation of* |mj_model| ``actuator_gaintype``
 
-- Both fields now need ``unsafe`` to mutate, and moved to the read-only actuator view. MuJoCo
-  3.11.0 added ``mjGAIN_SO3``, which writes three output elements without consulting
-  ``actuator_outnum``, while ``ctrlspec`` selects how many ``ctrl`` elements the engine reads, so
-  a safe write to either can overrun an array.
+- ``actuator_gaintype_mut`` is now an ``unsafe fn``; the actuator views are affected the same
+  way, so a write through a view needs ``as_mut_slice`` inside ``unsafe``. MuJoCo 3.11.0 added
+  ``mjGAIN_SO3``, which writes three output elements without consulting ``actuator_outnum``, so a
+  safe write could overrun ``actuator_force``.
 
 *Renamed* ``DcMotorConfig`` *input field*
 
 - The public field ``DcMotorConfig::input_mode`` is now ``ctrlspec`` and the builder
   ``with_input_mode`` is now ``with_ctrlspec``, following the renamed C field. The value is now
   a bitmask of ``MjtCtrlInput`` values instead of a single mode selector.
+
+*Relaxed* |mj_data| ``body_awake`` *view mutability*
+
+- The body views now hold ``awake`` as a ``PointerViewMut``, which matches the array accessor,
+  already safe to mutate. Code that wrote through ``as_mut_slice`` must drop the call and the
+  surrounding ``unsafe``.
 
 .. rubric:: New features and improvements
 
@@ -129,7 +135,9 @@ update of MuJoCo alone can increase the major version.
     pair views gained matching ``surfacevel``/``adhesion`` fields).
   - ``actuator_ctrladr`` :sup:`new`, ``actuator_ctrlnum`` :sup:`new`, ``actuator_ctrlspec`` :sup:`new`,
     ``actuator_outadr`` :sup:`new` and ``actuator_outnum`` :sup:`new` array accessors for the new
-    MIMO actuator layout (the actuator views gained matching fields).
+    MIMO actuator layout (the actuator views gained matching fields). Mutating any of
+    them needs ``unsafe``, because the engine uses their values as unchecked addresses and
+    counts into ``ctrl`` and ``actuator_force``.
   - ``nactuator`` :sup:`new`, ``nout`` :sup:`new`, ``npolygonmax`` :sup:`new` and
     ``nmeshdegmax`` :sup:`new` size accessors.
   - ``nefm0dof`` :sup:`new` and ``nefm0_l`` :sup:`new` size accessors, and the
@@ -163,7 +171,7 @@ update of MuJoCo alone can increase the major version.
 - Added ``MjsAuthored`` :sup:`new` and the |mj_spec| ``authored()`` :sup:`new` accessor, exposing the
   authored-field tracking bitmasks introduced in MuJoCo 3.10.0. ``MjsAuthored`` is a
   plain-data struct; its bitmask fields are read directly (e.g. ``authored.disableflags``).
-- Added ``MjLogConfig`` :sup:`new` and ``MjLogMessage`` :sup:`new` wrappers (with ``MjtLogLevel`` :sup:`new`
+- Added ``MjLogConfig`` :sup:`new` and ``MjLogMessage`` :sup:`new` aliases (with ``MjtLogLevel`` :sup:`new`
   and ``MjtLogTopic`` :sup:`new`) for the new unified logging API's structured types.
   ``MjLogMessage`` is constructable via ``MjLogMessage::new`` plus builder methods (``with_body``,
   ``with_func``, ``with_file``, etc.), where the string-pointer fields take
@@ -175,9 +183,11 @@ update of MuJoCo alone can increase the major version.
   :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_info` :sup:`new` (``mju_info``),
   :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_warning` :sup:`new` (``mju_warning``) and
   :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_error` :sup:`new` (``mju_error``), which
-  diverges (``-> !``) because ``mju_error`` never returns.
-- Added ``MjtConflict`` :sup:`new` and the ``MjsCompiler::conflict()`` :sup:`new` accessor, exposing the
-  attach-time conflict-resolution policy introduced in MuJoCo 3.10.0.
+  diverges (``-> !``); the default handler ends the process, and the wrapper panics if a custom log
+  handler or a legacy error callback makes ``mju_error`` return.
+- Added ``MjtConflict`` :sup:`new` and the ``MjsCompiler::conflict()`` :sup:`new` accessor (with the
+  matching ``set_``/``with_`` methods), exposing the attach-time conflict-resolution policy
+  introduced in MuJoCo 3.10.0.
 - Added ``MjsCompiler::authored()`` :sup:`new` (read-only), exposing the bitmask of which
   compiler fields were explicitly set by the user.
 - |mj_spec| gained two compilation-warning accessors, wrapping ``mjs_numWarnings`` and
@@ -244,9 +254,10 @@ update of MuJoCo alone can increase the major version.
 
 *Relaxed mutability on fields that cannot cause a memory fault*
 
-- Mutating |mj_model| ``paths`` and |mjr_context| ``texture_type`` no longer needs ``unsafe``,
-  because a write can at worst give wrong rendering, never a memory fault.
-- |mj_data| ``body_awake`` moved into the mutable body view, which matches its array accessor.
+- Mutating |mj_model| ``paths`` and |mjr_context| ``texture_type`` no longer needs ``unsafe``.
+  MuJoCo fills ``paths`` during the compile step and never reads it back, and it only compares
+  ``textureType`` against ``mjtTexture`` variants, so a write can at worst give a wrong asset
+  path or wrong rendering, never a memory fault.
 
 .. rubric:: Other changes
 
@@ -415,7 +426,7 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: Deprecations
 
-- Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
+- Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>delete`
   due to it relying on **undefined behavior**.
   Users are expected to use
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`
@@ -528,7 +539,7 @@ runtime.
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child` and
     :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child_mut`
     for named child lookup.
-  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>id`
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>id`
     for retrieving optional element IDs.
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`
     for deleting a spec element by its FFI pointer --- the sound replacement for the deprecated
@@ -614,7 +625,7 @@ runtime.
   although each is only a raw pointer into one shared ``mjSpec``/``mjCModel`` arena. Together
   with the lending mutable iterators (which hand out several simultaneously-live ``&mut``
   handles), safe code could move handles to different threads and call mutators such as
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>set_name`
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name`
   concurrently; ``mjs_setName`` reaches model-global state (``mjCModel::CheckRepeat`` and the
   shared error buffer), so the calls raced on the one arena -- undefined behavior. The handles
   (and ``MjsDefault``) are now ``!Send + !Sync``, so such a mutation can no longer cross a
@@ -670,8 +681,8 @@ runtime.
   ``MjtBool`` migration.
 - Added missing ``mjt*`` type aliases for recently surfaced MuJoCo enums: ``MjtMeshBuiltin``, ``MjtCTimer``.
 - Added auxiliary exposed aliases: ``MjPreContact``, ``MjfCollision``, ``MjpResourceProvider``.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<tymethod>element_pointer`
-  and :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>element_mut_pointer`
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<tymethod>element_pointer`
+  and :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>element_mut_pointer`
   are no longer marked ``unsafe``.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_state`
   is no longer marked ``unsafe``. MuJoCo 3.9.0 changed ``eq_active`` to ``mjtBool``
@@ -776,8 +787,9 @@ runtime.
   - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_vis`, and
   - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_stat`
   
-  allow syncing model physics options, visualization parameters, and statistics individually from
-  the viewer's passive state to external structures without requiring ``unsafe`` access.
+  allow syncing model physics options, visualization parameters, and statistics individually.
+  Each performs a bidirectional three-way merge between the viewer's passive model and the
+  supplied struct, without requiring ``unsafe`` access.
   
   Corresponding getter methods :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>last_opt_sync_time`,
   :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState::<method>last_vis_sync_time`, and
@@ -955,13 +967,13 @@ gained new variants. See `Error handling`_ below for the full method list.
   ``destination: &mut MjData<N>`` where ``N: Deref<Target = MjModel>``. Previously
   the source and destination had to share the same ``M``.
 
-- :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>set_name`
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name`
   now returns ``Result<(), MjEditError>`` instead of ``()``. Append ``?`` to call
   sites.
-  :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>with_name`
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name`
   still returns ``&mut Self`` but now panics on duplicate names.
 
-- :docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem` is now a sealed
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem` is now a sealed
   trait. External implementations are no longer permitted.
 
 - ``MjsOrientation::switch_quat`` no longer has a type parameter. Replace

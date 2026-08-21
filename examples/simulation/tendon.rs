@@ -1,4 +1,4 @@
-//! Example of using using a tendon model.
+//! Example of using a tendon model.
 //! 
 //! This example uses the viewer in single-threaded fashion.
 use std::time::Duration;

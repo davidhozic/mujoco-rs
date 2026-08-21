@@ -58,7 +58,7 @@ fn main() {
             state_lock.sync_data(&mut data);
 
             /* Prepare the scene */
-            let scene = state_lock.user_scene_mut();  // obtain a mutable reference to the user scene. The method name mirrors the C++ viewer.
+            let scene = state_lock.user_scene_mut();  // obtain a mutable reference to the user scene
             scene.clear_geom();  // clear existing geoms
 
             /* Create a line, that (visually) connects the two balls we have in the example model */

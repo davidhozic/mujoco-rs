@@ -191,9 +191,9 @@ as ``MjtFontScale`` and ``MjtDepthMap``, instead of ``i32``.
 
 Unsafe mutation of |mj_model| ``actuator_gaintype``
 -----------------------------------------------------
-``actuator_gaintype_mut`` is now an ``unsafe fn``, and ``MjActuatorModelViewMut::gaintype``
-became a ``PointerViewUnsafeMut``, so a write through the view needs ``as_mut_slice`` inside
-``unsafe``. A wrong gain type makes the engine write more force outputs than the actuator owns.
+``actuator_gaintype_mut`` is now an ``unsafe fn``; the actuator views are affected the same way,
+so a write through a view needs ``as_mut_slice`` inside ``unsafe``. A wrong gain type makes the
+engine write more force outputs than the actuator owns.
 
 **Before:**
 
@@ -233,8 +233,8 @@ instead of a single mode selector.
 
 Relaxed |mj_data| ``body_awake`` view mutability
 --------------------------------------------------
-``MjBodyDataViewMut::awake`` became a ``PointerViewMut``, so a write through the view no longer
-needs ``as_mut_slice`` inside ``unsafe``.
+``body_awake`` was already safe to mutate through its array accessor, and the body views now
+match it, so a write through a view no longer needs ``as_mut_slice`` inside ``unsafe``.
 
 **Before:**
 
@@ -268,11 +268,11 @@ and update your library path. See :ref:`installation` for details.
 
 ``SpecItem::element_pointer`` pointer type changed (potentially breaking)
 --------------------------------------------------------------------------
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<tymethod>element_pointer`
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<tymethod>element_pointer`
 now returns ``*const mjsElement`` (was ``*mut mjsElement``) and is no longer ``unsafe``. This only
 affects code that called the model-editing trait methods directly (e.g. to drive MuJoCo's C
 model-editing API). When a mutable pointer is required, use
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>element_mut_pointer`
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>element_mut_pointer`
 (also no longer ``unsafe``). Any ``unsafe`` block wrapping these calls is now redundant and can be
 removed.
 
@@ -294,7 +294,7 @@ removed.
 
 Deprecated implementation of removing model-editing elements
 --------------------------------------------------------------
-Due to the :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
+Due to the :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>delete`
 method relying on undefined behavior, the said method is now deprecated.
 It's replacement --- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element` ---
 now forces the user to drop all existing references of |mj_spec| and its
@@ -1122,12 +1122,12 @@ Use ``try_add_default`` for a fallible alternative.
 Model-editing API changes
 ----------------------------
 
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>set_name`
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name`
 now returns ``Result<(), MjEditError>`` instead of ``()``.
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>with_name`
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name`
 still returns ``&mut Self`` but now panics on duplicate names.
 
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem` is now a sealed
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem` is now a sealed
 trait. External implementations are no longer permitted -- remove any
 ``impl SpecItem for MyType`` blocks from downstream code.
 

@@ -19,8 +19,7 @@ use crate::error::GlInitError;
 use std::collections::VecDeque;
 
 
-/// Base struct for rendering through Glutin.
-/// This is a proxy since Glutin only allows event processing through callbacks, which this implements.
+/// Window, OpenGL context and drawing surface, created when the event loop resumes.
 #[derive(Debug)]
 pub(crate) struct RenderBaseGlState {
     pub(crate) window: Window,
@@ -28,6 +27,8 @@ pub(crate) struct RenderBaseGlState {
     pub(crate) gl_surface: Surface<WindowSurface>,
 }
 
+/// Base struct for rendering through Glutin.
+/// This is a proxy since Glutin only allows event processing through callbacks, which this implements.
 #[derive(Debug)]
 pub(crate) struct RenderBase {
     pub(crate) state: Option<RenderBaseGlState>,
@@ -92,8 +93,8 @@ impl ApplicationHandler for RenderBase {
                 .with_window_attributes(Some(window_attrs));
 
             // Select the config with most samples.
-            // The config-picker callback must return a Config (not Result), so the
-            // expect inside it stays: if build() succeeds, at least one config exists.
+            // The config-picker callback must return a Config (not Result), so the expect
+            // inside it stays; glutin hands it the raw find_configs list, which can be empty.
             let (maybe_window, gl_config) = display_builder
                 .build(event_loop, template, |configs| {
                     configs.into_iter().reduce(|current, cfg|

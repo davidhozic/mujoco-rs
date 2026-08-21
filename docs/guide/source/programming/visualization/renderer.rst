@@ -23,7 +23,7 @@ By default, RGB rendering is enabled, while depth rendering is disabled.
     let mut renderer = MjRenderer::builder()
         .width(0).height(0)  // set to width(0) and height(0) to set automatically based on <global offwidth="1920" offheight="1080"/>
         .num_visual_user_geom(5)  // maximum number of visual-only geoms as a result of the user
-        .num_visual_internal_geom(0)  // maximum number of visual-only geoms not as a result of the user
+        .num_visual_internal_geom(100)  // headroom for MuJoCo's own decor geoms
         .font_scale(MjtFontScale::mjFONTSCALE_100)  // scale of the font drawn by OpenGL
         .rgb(true)  // rgb rendering
         .depth(true)  // depth rendering
@@ -76,9 +76,10 @@ After rendering, :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>tr
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>try_depth` can be used to obtain
 a reference to the rendered image in the correct 2D shape. The shape must be specified via
 the method's const generic parameters (``WIDTH`` and ``HEIGHT``), and the methods return
-``Result<_, RendererError>`` --- an error is returned if the requested dimensions don't match the
-renderer's actual resolution, or when the corresponding rendering mode (RGB/depth) is currently
-disabled. The panicking variants
+``Result<_, RendererError>`` --- an error is returned if ``WIDTH * HEIGHT`` differs from the
+renderer's pixel count, or when the corresponding rendering mode (RGB/depth) is currently
+disabled. Only the total pixel count is checked, so a swapped pair such as ``<HEIGHT, WIDTH>``
+passes the check and gives a transposed image. The panicking variants
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb` and
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth` are also available for
 convenience when the dimensions are known at compile time.
@@ -110,7 +111,8 @@ The PNG compression level used by ``save_rgb`` and ``save_depth`` can be control
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRendererBuilder::<method>png_compression`
 builder setter. The default is ``png::Compression::NoCompression`` (fastest encoding, largest files).
 Use ``png::Compression::Balanced`` or ``png::Compression::High`` to trade encoding time for
-smaller files.
+smaller files. The ``png`` crate is re-exported from ``mujoco_rs::renderer::png``, so no extra
+dependency is needed.
 
 
 End-to-end example
@@ -199,12 +201,16 @@ cannot be made current.
 
 .. code-block:: rust
 
-    /* Mutate texture 0 in the model, then re-upload just that texture */
-    model.tex_data_mut()[..256].fill(128);
-    renderer.update_texture_from(&model, 0).unwrap();
+    /* Mutate texture 0 in the model, then re-upload just that texture.
+    // SAFETY: only asset data is changed; the layout (address and count) fields are untouched.
+    unsafe { data.model_mut() }.tex_data_mut()[..256].fill(128);
+    renderer.update_texture_from(data.model(), 0).unwrap();
 
     /* Or re-upload all textures at once (loops over each texture) */
-    renderer.update_textures_from(&model).unwrap();
+    renderer.update_textures_from(data.model()).unwrap();
 
     renderer.sync_data(&mut data).unwrap();
     renderer.render().unwrap();
+
+The :gh-example:`example <visualization/renderer/renderer_asset_reupload.rs>` animates a heightfield,
+a texture and a mesh, and saves every frame as a PNG.

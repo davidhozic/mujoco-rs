@@ -289,7 +289,8 @@ impl ViewerUI {
         Ok(viewer_ui)
     }
 
-    /// Rebuilds all model-dependent cached state (name lists).
+    /// Rebuilds all model-dependent cached state: names, control and joint limits with
+    /// their ranges, and joint qpos addresses.
     /// Must be called whenever the active model changes.
     pub(crate) fn update_names(&mut self, model: &MjModel) {
         self.camera_names = (0..model.ncam()).map(|i| {
@@ -356,7 +357,8 @@ impl ViewerUI {
         once_fn(&mut self.egui_ctx)
     }
 
-    /// Draws the UI to the viewport.
+    /// Draws the UI to the viewport. Returns the width in physical pixels that the left side
+    /// panel reserves, or `0.0` when the panel is hidden.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn process(
         &mut self,
@@ -772,7 +774,7 @@ impl ViewerUI {
                                             self.show_tracking_modal = true;
                                         }
 
-                                        // Separator for fixed cameras
+                                        // Fixed cameras of the model.
                                         for (pos, name) in self.camera_names.iter().enumerate() {
                                             if ui.selectable_value(&mut camera_choice, name.to_string(), name).clicked() {
                                                 *camera = MjvCamera::new_fixed(pos);
@@ -820,7 +822,7 @@ impl ViewerUI {
 
                             ui.add_space(5.0);
 
-                            // Copy camera state to clipboard as XML
+                            // Print the camera state as MJCF to stdout.
                             if ui.add(egui::Button::new(
                                 RichText::new("Print camera").font(MAIN_FONT)
                             ).corner_radius(BUTTON_ROUNDING)).clicked() {
@@ -1638,8 +1640,8 @@ impl ViewerUI {
     }
 
     /// Adds a user-defined UI callback that will be invoked during UI rendering.
-    /// The callback receives the egui context and can be used to create custom windows,
-    /// panels, or other UI elements.
+    /// The callback receives the egui context and the passive [`MjData`] instance of the shared
+    /// state, and can be used to create custom windows, panels, or other UI elements.
     pub(crate) fn add_ui_callback<F>(&mut self, callback: F)
     where
         F: FnMut(&egui::Context, &mut MjData<Box<MjModel>>) + 'static

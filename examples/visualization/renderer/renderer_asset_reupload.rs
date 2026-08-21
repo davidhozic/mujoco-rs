@@ -2,11 +2,11 @@
 //!
 //! Three types of animated assets are rendered across multiple frames, each saved as a PNG:
 //!
-//! - **Heightfield** -- elevation data is rewritten each frame, creating a propagating
+//! - **Heightfield**: elevation data is rewritten each frame, creating a propagating
 //!   ripple wave across the terrain.
-//! - **Texture** -- pixel data is rewritten each frame, producing a shifting colour
+//! - **Texture**: pixel data is rewritten each frame, producing a shifting colour
 //!   gradient across the surface of the ball.
-//! - **Mesh** -- vertex Z positions are rewritten each frame, making a flat grid mesh
+//! - **Mesh**: vertex Z positions are rewritten each frame, making a flat grid mesh
 //!   deform into a wave surface.
 //!
 //! After modifying the raw asset arrays directly on the `MjData`'s embedded model, the
@@ -26,7 +26,7 @@ const HF_N: usize = 32;
 const MESH_N: usize = 10;
 /// Number of frames to render.
 const NUM_FRAMES: usize = 60;
-/// Number of frames between renders.
+/// Number of simulation steps between two rendered frames.
 const FRAME_SKIP: usize = 100;
 /// Output directory for saved images.
 const OUTPUT_DIR: &str = "./output_renderer_asset_reupload/";
@@ -141,13 +141,13 @@ fn main() {
 
 /// Builds an [`MjModel`] containing a heightfield, a textured ball, and a wave mesh.
 ///
-/// The offscreen buffer is sized to 1280×720 via the spec's `visual.global` settings so
+/// The offscreen buffer is sized to 1280x720 via the spec's `visual.global` settings so
 /// that callers can construct an [`MjRenderer`] with `width(0).height(0)` to inherit the
 /// model's configured resolution.
 fn create_model() -> MjModel {
     let mut spec = MjSpec::new();
 
-    // Configure offscreen resolution: 1280 × 720.
+    // Configure offscreen resolution: 1280 x 720.
     let visual = spec.visual_mut();
     visual.global.offwidth  = 1280;
     visual.global.offheight = 720;

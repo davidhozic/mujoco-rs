@@ -32,7 +32,7 @@ pub enum MjDataError {
     AllocationFailed,
     /// A buffer passed to the operation is too small for the required data.
     BufferTooSmall {
-        /// Descriptive name of the buffer (e.g. `"destination"`, `"rgb"`).
+        /// Descriptive name of the buffer (e.g. `"destination"`, `"state"`).
         name: &'static str,
         /// Actual length of the buffer that was provided.
         got: usize,
@@ -280,13 +280,14 @@ impl std::error::Error for MjrContextError {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MjEditError {
-    /// MuJoCo failed to allocate the requested model element.
+    /// MuJoCo failed to allocate the requested spec or model element.
     AllocationFailed,
     /// A filesystem path argument contains invalid UTF-8.
     InvalidUtf8Path,
     /// MuJoCo failed to parse the XML (or other format) input.
     ParseFailed(String),
-    /// MuJoCo failed to compile the spec into a model.
+    /// Compiling the spec into a model failed. Carries MuJoCo's error message, or the reason the
+    /// wrapper rejected the spec before the compile step.
     CompileFailed(String),
     /// MuJoCo failed to save the spec to XML.
     SaveFailed(String),
@@ -296,7 +297,8 @@ pub enum MjEditError {
     AlreadyExists,
     /// This operation is not supported for the current element.
     UnsupportedOperation,
-    /// MuJoCo returned an error while attempting to delete the element.
+    /// Deleting the element failed. Carries MuJoCo's error message, or the reason the wrapper
+    /// rejected the element.
     DeleteFailed(String),
     /// The output buffer passed to [`MjSpec::save_xml_string`](crate::wrappers::mj_editing::MjSpec::save_xml_string)
     /// was too small to hold the XML.
@@ -451,11 +453,11 @@ impl From<MjVfsError> for MjModelError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MjVfsError {
-    /// A file or mount with the same name already exists.
+    /// A file with the same name already exists in the VFS.
     AlreadyExists,
     /// MuJoCo failed to load the file or register the buffer.
     LoadFailed,
-    /// The specified file or directory was not found in the VFS.
+    /// The specified file was not found in the VFS.
     NotFound,
     /// The provided path contains invalid UTF-8.
     InvalidUtf8Path,

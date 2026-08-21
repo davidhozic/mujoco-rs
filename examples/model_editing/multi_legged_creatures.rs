@@ -165,7 +165,7 @@ fn build_scene() -> MjModel {
         .with_size([2.0, 2.0, 0.1])
         .with_material("floor");
 
-    // Two directional lights as in the Python example.
+    // Two spot lights as in the Python example.
     let world = spec.world_body_mut();
     world.add_light()
         .with_pos([-2.0, -1.0, 3.0])
