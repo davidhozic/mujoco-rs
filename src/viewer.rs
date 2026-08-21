@@ -606,7 +606,8 @@ impl ViewerSharedState {
     /// The viewer's passive copy will therefore **not** contain:
     ///
     /// - mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``);
-    /// - the sparse constraint Jacobian blocks (``efc_J_*``, ``efc_Y_*``, ``efc_AR_*``).
+    /// - the sparse constraint Jacobian blocks (``efc_J``, ``efc_Y``, ``efc_AR`` and their
+    ///   index arrays).
     ///
     /// In UI callbacks these fields will be absent unless
     /// [`ViewerSharedState::sync_data_full`] is used or they are recomputed explicitly
@@ -908,7 +909,8 @@ impl MjViewer {
     /// The viewer's passive copy will therefore **not** contain:
     ///
     /// - mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``);
-    /// - the sparse constraint Jacobian blocks (``efc_J_*``, ``efc_Y_*``, ``efc_AR_*``).
+    /// - the sparse constraint Jacobian blocks (``efc_J``, ``efc_Y``, ``efc_AR`` and their
+    ///   index arrays).
     ///
     /// In UI callbacks these fields will be absent unless
     /// [`MjViewer::sync_data_full`] is used or they are recomputed explicitly

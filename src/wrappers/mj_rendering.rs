@@ -302,7 +302,7 @@ impl MjrContext {
 /// Array slices.
 impl MjrContext {
     array_slice_dyn! {
-        (mut = unsafe) textureType: as_ptr as_mut_ptr &[MjtTexture [force]; "type of texture"; ffi().ntexture],
+        textureType: as_ptr as_mut_ptr &[MjtTexture [force]; "type of texture"; ffi().ntexture],
         (mut = unsafe) skinvertVBO: &[u32; "skin vertex position VBOs"; ffi().nskin],
         (mut = unsafe) skinnormalVBO: &[u32; "skin vertex normal VBOs"; ffi().nskin],
         (mut = unsafe) skintexcoordVBO: &[u32; "skin vertex texture coordinate VBOs"; ffi().nskin],
@@ -321,7 +321,9 @@ impl MjrContext {
         [ffi] offWidth: i32; "width of offscreen buffer.";
         [ffi] offHeight: i32; "height of offscreen buffer.";
         [ffi] offSamples: i32; "number of offscreen buffer multisamples.";
-        [ffi] fontScale: i32; "font scale.";
+        // The zeroed state that mjr_defaultContext leaves has no mjtFontScale variant, but only
+        // Drop can reach it: new() and ffi_mut() are unsafe and change_font() takes the enum.
+        [ffi] fontScale: MjtFontScale [force]; "font scale.";
         [ffi] offFBO: u32; "offscreen framebuffer object.";
         [ffi] offFBO_r: u32; "offscreen framebuffer for resolving multisamples.";
         [ffi] offColor: u32; "offscreen color buffer.";
@@ -346,14 +348,17 @@ impl MjrContext {
         [ffi] nskin: i32; "number of skins.";
         [ffi] charHeight: i32; "character heights: normal and shadow.";
         [ffi] charHeightBig: i32; "character heights: big.";
-        [ffi] glInitialized: i32; "is OpenGL initialized.";
-        [ffi] windowAvailable: i32; "is default/window framebuffer available.";
         [ffi] windowSamples: i32; "number of samples for default/window framebuffer.";
-        [ffi] windowStereo: i32; "is stereo available for default/window framebuffer.";
-        [ffi] windowDoublebuffer: i32; "is default/window framebuffer double buffered.";
         [ffi] currentBuffer: i32; "currently active framebuffer: mjFB_WINDOW or mjFB_OFFSCREEN.";
         [ffi] readPixelFormat: i32; "default color pixel format for mjr_readPixels.";
-        [ffi] readDepthMap: i32; "depth mapping: mjDEPTH_ZERONEAR or mjDEPTH_ZEROFAR.";
+        [ffi] readDepthMap: MjtDepthMap [force]; "depth mapping.";
+    ]}
+
+    getter_setter! {get, [
+        [ffi] glInitialized: bool; "whether OpenGL is initialized.";
+        [ffi] windowAvailable: bool; "whether the default/window framebuffer is available.";
+        [ffi] windowStereo: bool; "whether stereo is available for the default/window framebuffer.";
+        [ffi] windowDoublebuffer: bool; "whether the default/window framebuffer is double buffered.";
     ]}
 
     getter_setter! {get, [

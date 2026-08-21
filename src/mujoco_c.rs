@@ -43,7 +43,7 @@ impl<T> ::std::cmp::PartialEq for __BindgenUnionField<T> {
     }
 }
 impl<T> ::std::cmp::Eq for __BindgenUnionField<T> {}
-pub const mjVERSION_HEADER: u32 = 3011000;
+pub const mjVERSION_HEADER: u32 = 3012000;
 pub const mjMINVAL: f64 = 0.000000000000001;
 pub const mjPI: f64 = 3.141592653589793;
 pub const mjMAXVAL: f64 = 10000000000.0;
@@ -306,7 +306,8 @@ pub enum mjtDyn {
     mjDYN_FILTEREXACT = 3,
     mjDYN_MUSCLE = 4,
     mjDYN_DCMOTOR = 5,
-    mjDYN_USER = 6,
+    mjDYN_PID = 6,
+    mjDYN_USER = 7,
 }
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
@@ -316,7 +317,8 @@ pub enum mjtGain {
     mjGAIN_MUSCLE = 2,
     mjGAIN_DCMOTOR = 3,
     mjGAIN_SO3 = 4,
-    mjGAIN_USER = 5,
+    mjGAIN_PID = 5,
+    mjGAIN_USER = 6,
 }
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
@@ -333,6 +335,15 @@ pub enum mjtBias {
 pub enum mjtCtrlChart {
     mjCHART_EXPMAP = 1,
     mjCHART_QUAT = 2,
+}
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
+pub enum mjtCtrlInput {
+    mjINPUT_POS = 1,
+    mjINPUT_VEL = 2,
+    mjINPUT_FF = 4,
+    mjINPUT_VOLTAGE = 8,
+    mjINPUT_NONE = 16,
 }
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
@@ -1087,6 +1098,7 @@ pub struct mjModel_ {
     pub light_dir0: *mut mjtNum,
     pub light_attenuation: *mut f32,
     pub light_cutoff: *mut f32,
+    pub light_softness: *mut f32,
     pub light_exponent: *mut f32,
     pub light_ambient: *mut f32,
     pub light_diffuse: *mut f32,
@@ -1187,6 +1199,7 @@ pub struct mjModel_ {
     pub mesh_texcoordadr: *mut ::std::os::raw::c_int,
     pub mesh_texcoordnum: *mut ::std::os::raw::c_int,
     pub mesh_graphadr: *mut ::std::os::raw::c_int,
+    pub mesh_extrema: *mut ::std::os::raw::c_int,
     pub mesh_vert: *mut f32,
     pub mesh_normal: *mut f32,
     pub mesh_texcoord: *mut f32,
@@ -1683,9 +1696,6 @@ pub struct mjData_ {
     pub efm_K_colind: *mut ::std::os::raw::c_int,
     pub efm_K_val: *mut mjtNum,
     pub efm_dofid: *mut ::std::os::raw::c_int,
-    pub efm_L_rownnz: *mut ::std::os::raw::c_int,
-    pub efm_L_rowadr: *mut ::std::os::raw::c_int,
-    pub efm_L_colind: *mut ::std::os::raw::c_int,
     pub efm_L: *mut mjtNum,
     pub efc_b: *mut mjtNum,
     pub iefc_aref: *mut mjtNum,
@@ -2084,6 +2094,7 @@ pub struct mjsLight_ {
     pub(crate) range: f32,
     pub(crate) attenuation: [f32; 3usize],
     pub(crate) cutoff: f32,
+    pub(crate) softness: f32,
     pub(crate) exponent: f32,
     pub(crate) ambient: [f32; 3usize],
     pub(crate) diffuse: [f32; 3usize],
@@ -2323,6 +2334,8 @@ pub struct mjsActuator_ {
     pub(crate) dynprm: [f64; 10usize],
     pub(crate) actdim: ::std::os::raw::c_int,
     pub(crate) ctrlspec: ::std::os::raw::c_int,
+    pub(crate) velrange: [f64; 2usize],
+    pub(crate) ffrange: [f64; 2usize],
     pub(crate) actearly: mjtBool,
     pub(crate) trntype: mjtTrn,
     pub(crate) gear: [f64; 6usize],
@@ -2662,6 +2675,7 @@ pub struct mjvLight_ {
     pub bulbradius: f32,
     pub intensity: f32,
     pub range: f32,
+    pub softness: f32,
 }
 pub type mjvLight = mjvLight_;
 #[repr(C)]
@@ -2771,6 +2785,7 @@ pub struct mjResource_ {
     pub vfs: *mut mjVFS,
     pub timestamp: [::std::os::raw::c_char; 512usize],
     pub provider: *const mjpResourceProvider,
+    pub args: *const ::std::os::raw::c_char,
 }
 pub type mjResource = mjResource_;
 pub type mjfOpenResource =
@@ -4509,6 +4524,13 @@ unsafe extern "C" {
     pub fn mjv_averageCamera(cam1: *const mjvGLCamera, cam2: *const mjvGLCamera) -> mjvGLCamera;
 }
 unsafe extern "C" {
+    pub fn mjv_camera2GLCamera(
+        model: *const mjModel,
+        data: *const mjData,
+        mjv_camera: *const mjvCamera,
+    ) -> mjvGLCamera;
+}
+unsafe extern "C" {
     pub fn mjv_select(
         m: *const mjModel,
         d: *const mjData,
@@ -5807,6 +5829,19 @@ unsafe extern "C" {
     ) -> *const ::std::os::raw::c_char;
 }
 unsafe extern "C" {
+    pub fn mjs_setToPID(
+        actuator: *mut mjsActuator,
+        kp: f64,
+        kv: *mut f64,
+        dampratio: *mut f64,
+        ki: *mut f64,
+        imax: *mut f64,
+        slewmax: *mut f64,
+        inheritrange: f64,
+        ctrlspec: ::std::os::raw::c_int,
+    ) -> *const ::std::os::raw::c_char;
+}
+unsafe extern "C" {
     pub fn mjs_setToDamper(actuator: *mut mjsActuator, kv: f64) -> *const ::std::os::raw::c_char;
 }
 unsafe extern "C" {
@@ -5851,7 +5886,7 @@ unsafe extern "C" {
         controller: *mut [f64; 6usize],
         thermal: *mut [f64; 6usize],
         lugre: *mut [f64; 5usize],
-        input_mode: ::std::os::raw::c_int,
+        ctrlspec: ::std::os::raw::c_int,
     ) -> *const ::std::os::raw::c_char;
 }
 unsafe extern "C" {

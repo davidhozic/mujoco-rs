@@ -120,6 +120,10 @@ pub type MjtBias = mjtBias;
 /// Orientation input charts of so3 actuators. These values are used in `m->actuator_ctrlspec`.
 pub type MjtCtrlChart = mjtCtrlChart;
 
+/// Input signature bits of servo-family (`pid`, `dcmotor`) actuators. These values are OR-ed into
+/// `m->actuator_ctrlspec`.
+pub type MjtCtrlInput = mjtCtrlInput;
+
 /// MuJoCo object types. These are used, for example, in the support functions `mj_name2id` and
 /// `mj_id2name` to convert between object names and integer ids.
 pub type MjtObj = mjtObj;
@@ -157,7 +161,7 @@ pub type MjtRayDataField = mjtRayDataField;
 /// Camera output type bitflags.
 pub type MjtCamOutBit = mjtCamOutBit;
 
-// SAFETY: All MuJoCo C enums below are `#[repr(u32)]` (or `#[repr(u8)]`) and each
+// SAFETY: All MuJoCo C enums below are fieldless with an explicit integer repr, and each
 // has a variant with discriminant 0, so the all-zeros bit pattern is a valid value.
 // This lets `info_with_view!`'s `zero()` method use the safe `Zeroable::zeroed()`
 // instead of `unsafe { std::mem::zeroed() }`, providing a compile-time guarantee
@@ -179,6 +183,22 @@ unsafe impl bytemuck::Zeroable for mjtDataType {}
 unsafe impl bytemuck::Zeroable for mjtStage {}
 unsafe impl bytemuck::Zeroable for mjtTexture {}
 unsafe impl bytemuck::Zeroable for mjtColorSpace {}
+unsafe impl bytemuck::Zeroable for mjtAlignFree {}
+unsafe impl bytemuck::Zeroable for mjtBuiltin {}
+unsafe impl bytemuck::Zeroable for mjtConflict {}
+unsafe impl bytemuck::Zeroable for mjtConstraint {}
+unsafe impl bytemuck::Zeroable for mjtConstraintState {}
+unsafe impl bytemuck::Zeroable for mjtDepthMap {}
+unsafe impl bytemuck::Zeroable for mjtFlexSelf {}
+unsafe impl bytemuck::Zeroable for mjtInertiaFromGeom {}
+unsafe impl bytemuck::Zeroable for mjtLimited {}
+unsafe impl bytemuck::Zeroable for mjtLogLevel {}
+unsafe impl bytemuck::Zeroable for mjtLogTopic {}
+unsafe impl bytemuck::Zeroable for mjtMark {}
+unsafe impl bytemuck::Zeroable for mjtSleepPolicy {}
+unsafe impl bytemuck::Zeroable for mjtSleepState {}
+unsafe impl bytemuck::Zeroable for mjtStereo {}
+unsafe impl bytemuck::Zeroable for mjtWrap {}
 
 /*******************************************/
 
@@ -424,7 +444,7 @@ impl MjModel {
         [mode: 1, bodyid: 1, targetbodyid: 1, r#type: 1, texid: 1, castshadow: 1,
         bulbradius: 1, intensity: 1, range: 1,
         active: 1, pos: 3, dir: 3, poscom0: 3, pos0: 3,
-        dir0: 3, attenuation: 3, cutoff: 1, exponent: 1, ambient: 3,
+        dir0: 3, attenuation: 3, cutoff: 1, softness: 1, exponent: 1, ambient: 3,
         diffuse: 3, specular: 3],
         [],
         []
@@ -442,7 +462,7 @@ impl MjModel {
     info_method! { Model, mesh,
         [vertadr: 1, vertnum: 1,
         texcoordadr: 1, faceadr: 1,
-        facenum: 1, graphadr: 1,
+        facenum: 1, graphadr: 1, extrema: 27,
         normaladr: 1, normalnum: 1, texcoordnum: 1,
         bvhadr: 1, bvhnum: 1, octadr: 1, octnum: 1,
         pathadr: 1, polynum: 1, polyadr: 1,
@@ -969,7 +989,7 @@ impl MjModel {
         qpos_spring: &[MjtNum; "reference pose for springs"; ffi().nq],
         (mut = unsafe) body_parentid: &[i32; "id of body's parent"; ffi().nbody],
         (mut = unsafe) body_rootid: &[i32; "ancestor that is direct child of world"; ffi().nbody],
-        (mut = unsafe) body_weldid: &[i32; "top ancestor with no dofs to this body"; ffi().nbody],
+        (mut = unsafe) body_weldid: &[i32; "top dof-less ancestor; mocap: own root"; ffi().nbody],
         (mut = unsafe) body_mocapid: &[i32; "id of mocap data; -1: none"; ffi().nbody],
         (mut = unsafe) body_jntnum: &[i32; "number of joints for this body"; ffi().nbody],
         (mut = unsafe) body_jntadr: &[i32; "start addr of joints; -1: no joints"; ffi().nbody],
@@ -1108,6 +1128,7 @@ impl MjModel {
         light_dir0: &[[MjtNum; 3] [force]; "global direction in qpos0"; ffi().nlight],
         light_attenuation: &[[f32; 3] [force]; "OpenGL attenuation (quadratic model)"; ffi().nlight],
         light_cutoff: &[f32; "OpenGL cutoff"; ffi().nlight],
+        light_softness: &[f32; "spotlight edge softness"; ffi().nlight],
         light_exponent: &[f32; "OpenGL exponent"; ffi().nlight],
         light_ambient: &[[f32; 3] [force]; "ambient rgb (alpha=1)"; ffi().nlight],
         light_diffuse: &[[f32; 3] [force]; "diffuse rgb (alpha=1)"; ffi().nlight],
@@ -1208,6 +1229,7 @@ impl MjModel {
         (mut = unsafe) mesh_texcoordadr: &[i32; "texcoord data address; -1: no texcoord"; ffi().nmesh],
         (mut = unsafe) mesh_texcoordnum: &[i32; "number of texcoord"; ffi().nmesh],
         (mut = unsafe) mesh_graphadr: &[i32; "graph data address; -1: no graph"; ffi().nmesh],
+        (mut = unsafe) mesh_extrema: &[[i32; 27] [force]; "extremum vertices in 3x3x3 directions"; ffi().nmesh],
         mesh_vert: &[[f32; 3] [force]; "vertex positions for all meshes"; ffi().nmeshvert],
         mesh_normal: &[[f32; 3] [force]; "normals for all meshes"; ffi().nmeshnormal],
         mesh_texcoord: &[[f32; 2] [force]; "vertex texcoords for all meshes"; ffi().nmeshtexcoord],
@@ -1329,11 +1351,11 @@ impl MjModel {
         (mut = unsafe) wrap_prm: &[MjtNum; "divisor, joint coef, or site id"; ffi().nwrap],
         (mut = unsafe) actuator_trntype: &[MjtTrn [force]; "transmission type"; ffi().nactuator],
         (mut = unsafe) actuator_dyntype: &[MjtDyn [force]; "dynamics type"; ffi().nactuator],
-        actuator_gaintype: &[MjtGain [force]; "gain type"; ffi().nactuator],
+        (mut = unsafe) actuator_gaintype: &[MjtGain [force]; "gain type"; ffi().nactuator],
         actuator_biastype: &[MjtBias [force]; "bias type"; ffi().nactuator],
         (mut = unsafe) actuator_ctrladr: &[i32; "address of first control"; ffi().nactuator],
         (mut = unsafe) actuator_ctrlnum: &[i32; "number of controls"; ffi().nactuator],
-        actuator_ctrlspec: &[i32; "input signature, scoped by gaintype"; ffi().nactuator],
+        (mut = unsafe) actuator_ctrlspec: &[i32; "input signature, scoped by gaintype"; ffi().nactuator],
         (mut = unsafe) actuator_outadr: &[i32; "address of first force output"; ffi().nactuator],
         (mut = unsafe) actuator_outnum: &[i32; "number of force outputs, from trntype"; ffi().nactuator],
         (mut = unsafe) actuator_trnid: &[[i32; 2] [force]; "transmission id: joint, tendon, site"; ffi().nactuator],
@@ -1421,7 +1443,7 @@ impl MjModel {
         (mut = unsafe) name_pluginadr: &[i32; "plugin instance name pointers"; ffi().nplugin],
         (mut = unsafe) names: &[c_char; "names of all objects, 0-terminated"; ffi().nnames],
         (mut = unsafe) names_map: &[i32; "internal hash map of names"; ffi().nnames_map],
-        (mut = unsafe) paths: &[c_char; "paths to assets, 0-terminated"; ffi().npaths],
+        paths: &[c_char; "paths to assets, 0-terminated"; ffi().npaths],
         (mut = unsafe) B_rownnz: &[i32; "body-dof: non-zeros in each row"; ffi().nbody],
         (mut = unsafe) B_rowadr: &[i32; "body-dof: row addresses"; ffi().nbody],
         (mut = unsafe) B_colind: &[i32; "body-dof: column indices"; ffi().nB],
@@ -1488,11 +1510,11 @@ info_with_view!(Model, actuator,
 	 [actuator_] armature: MjtNum,
 	 [actuator_] cranklength: MjtNum, [actuator_] acc0: MjtNum,
 	 [actuator_] length0: MjtNum, [actuator_] lengthrange: MjtNum,
-	 [actuator_] ctrlspec: i32, [actuator_] user: MjtNum,
-	 [actuator_] gaintype: MjtGain [force], [actuator_] biastype: MjtBias [force],
+	 [actuator_] user: MjtNum, [actuator_] biastype: MjtBias [force],
 	 [actuator_] plugin: i32],
 	[[actuator_] trntype: MjtTrn [force], [actuator_] dyntype: MjtDyn [force],
-	 [actuator_] ctrladr: i32, [actuator_] ctrlnum: i32,
+	 [actuator_] ctrladr: i32, [actuator_] ctrlnum: i32, [actuator_] ctrlspec: i32,
+	 [actuator_] gaintype: MjtGain [force],
 	 [actuator_] outadr: i32, [actuator_] outnum: i32,
 	 [actuator_] trnid: i32, [actuator_] actadr: i32,
 	 [actuator_] actnum: i32, [actuator_] history: i32,
@@ -1619,6 +1641,7 @@ info_with_view!(Model, light,
 	 [light_] dir0: MjtNum,
 	 [light_] attenuation: f32,
 	 [light_] cutoff: f32,
+	 [light_] softness: f32,
 	 [light_] exponent: f32,
 	 [light_] ambient: f32,
 	 [light_] diffuse: f32,
@@ -1651,6 +1674,7 @@ info_with_view!(Model, mesh,
 	 [mesh_] faceadr: i32,
 	 [mesh_] facenum: i32,
 	 [mesh_] graphadr: i32,
+	 [mesh_] extrema: i32,
 	 [mesh_] normaladr: i32,
 	 [mesh_] normalnum: i32,
 	 [mesh_] texcoordnum: i32,
@@ -2012,15 +2036,34 @@ mod tests {
 
         /* Test write */
         let mut view_mut = actuator_model_info.view_mut(&mut model);
-        view_mut.gaintype[0] = MjtGain::mjGAIN_AFFINE;
+        view_mut.biastype[0] = MjtBias::mjBIAS_USER;
         view_mut.delay[0] = 3.0;
 
-        assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_AFFINE);
+        assert_eq!(view_mut.biastype[0], MjtBias::mjBIAS_USER);
         assert_eq!(view_mut.delay[0], 3.0);
         view_mut.zero();
 
         assert_eq!(view_mut.delay[0], 0.0);
-        assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_FIXED);
+        assert_eq!(view_mut.biastype[0], MjtBias::mjBIAS_NONE);
+    }
+
+    /// `light_softness` must expose the per-light `softness`, not one of the arrays that bracket
+    /// it in `mjModel` (`light_cutoff` before it, `light_exponent` after it).
+    #[test]
+    fn test_light_softness() {
+        const XML: &str = stringify!(
+            <mujoco>
+                <worldbody>
+                    <light name="spot1" type="spot" cutoff="45" softness="0.25" exponent="2"/>
+                    <light name="spot2" type="spot" cutoff="60" softness="0.75" exponent="3"/>
+                </worldbody>
+            </mujoco>
+        );
+        let model = MjModel::from_xml_string(XML).unwrap();
+        assert_eq!(model.light_softness(), [0.25, 0.75]);
+
+        let info = model.light("spot2").unwrap();
+        assert_eq!(info.view(&model).softness[0], 0.75);
     }
 
     #[test]
@@ -3421,9 +3464,9 @@ mod tests {
 
         // Mutable enum roundtrip via view
         let mut slider_view_mut = slider_info.view_mut(&mut model);
-        slider_view_mut.gaintype[0] = MjtGain::mjGAIN_AFFINE;
+        slider_view_mut.biastype[0] = MjtBias::mjBIAS_NONE;
         let slider_view2 = slider_info.view(&model);
-        assert_eq!(slider_view2.gaintype[0], MjtGain::mjGAIN_AFFINE);
+        assert_eq!(slider_view2.biastype[0], MjtBias::mjBIAS_NONE);
     }
 
     /// Verifies mutable model-array roundtrip via info views.
