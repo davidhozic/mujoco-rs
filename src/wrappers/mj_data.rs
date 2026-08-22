@@ -1957,9 +1957,9 @@ impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
 }
 
 impl<M: Deref<Target = MjModel> + Clone> Clone for MjData<M> {
-    /// # Panics
-    /// Panics if MuJoCo fails to allocate the cloned data.
-    /// Use [`MjData::try_clone`] for a fallible alternative.
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when an allocation fails, so this never fails.
+    #[expect(deprecated, reason = "try_clone keeps the implementation until it is removed")]
     fn clone(&self) -> Self {
         self.try_clone().expect("not enough space to clone data")
     }
@@ -1968,9 +1968,24 @@ impl<M: Deref<Target = MjModel> + Clone> Clone for MjData<M> {
 impl<M: Deref<Target = MjModel> + Clone> MjData<M> {
     /// Fallible version of [`Clone::clone`].
     ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// MuJoCo cannot report a failure here: `mj_copyData` raises `mjERROR` when an allocation
+    /// fails, and the default error handler exits the process, so this method never returns
+    /// `Err`. Prefer [`Clone::clone`]. This method may be undeprecated in the future if MuJoCo's
+    /// upstream C code is changed to report the failure recoverably.
+    ///
+    /// </div>
+    ///
     /// # Errors
     /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
     /// the copy.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `clone`"
+    )]
     pub fn try_clone(&self) -> Result<Self, MjDataError> {
         let raw = unsafe { mj_copyData(ptr::null_mut(), self.model.ffi(), self.ffi()) };
         NonNull::new(raw)

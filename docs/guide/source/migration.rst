@@ -12,6 +12,8 @@ Migration guide
 .. |mjv_camera| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`
 .. |mjr_context| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`
 .. |mjs_joint| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsJoint`
+.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`
+.. |mjs_frame| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsFrame`
 .. |mjs_tendon| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsTendon`
 
 
@@ -305,6 +307,36 @@ sensor, flex, exclude, numeric, text, tuple, key, plugin, hfield, skin, texture 
 .. code-block:: rust
 
     let class = body.default().unwrap();
+
+
+Deprecated fallible allocation methods
+--------------------------------------
+|mj_model|'s ``try_clone``, |mj_data|'s ``try_clone``, |mj_spec|'s ``try_new``, and every
+``try_add_*`` element constructor on |mj_spec|, |mjs_body| and |mjs_frame| are now deprecated.
+Their ``AllocationFailed`` arm is unreachable. ``mj_copyModel`` and ``mj_copyData`` raise
+``mjERROR``, whose default handler exits the process. ``mj_makeSpec`` and the ``mjs_addX`` functions
+allocate with C++ ``new``, which throws instead of returning null; the official MuJoCo binary
+bundles its own C++ runtime, so the exception cannot cross the C API and no handler in the calling
+program can catch it. Switch to ``clone``, ``new`` and the panicking ``add_*`` methods.
+
+These methods may be undeprecated in the future if MuJoCo's upstream code is changed to report the
+failure recoverably.
+
+**Before (5.x)**:
+
+.. code-block:: rust
+
+  let mut spec = MjSpec::try_new()?;
+  let body = spec.world_body_mut().try_add_body()?;
+  let data_copy = data.try_clone()?;
+
+**After (6.0.0)**:
+
+.. code-block:: rust
+
+  let mut spec = MjSpec::new();
+  let body = spec.world_body_mut().add_body();
+  let data_copy = data.clone();
 
 
 .. _migrate_5_0_0:

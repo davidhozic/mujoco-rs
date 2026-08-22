@@ -209,11 +209,24 @@ impl MjSpec {
     ///
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    #[expect(deprecated, reason = "try_new keeps the implementation until it is removed")]
     pub fn new() -> Self {
         Self::try_new().expect("MuJoCo failed to allocate MjSpec")
     }
 
     /// Fallible version of [`MjSpec::new`].
+    ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// MuJoCo cannot report a failure here: `mj_makeSpec` allocates the spec with C++ `new`,
+    /// which throws instead of returning null, and then returns the address of the spec it just
+    /// created, so this method never returns `Err`. An allocation failure ends the process: the
+    /// exception cannot cross the C API. Prefer [`MjSpec::new`]. This method may be undeprecated
+    /// in the future if MuJoCo's upstream C++ code is changed to report the failure recoverably.
+    ///
+    /// </div>
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
@@ -221,6 +234,10 @@ impl MjSpec {
     ///
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `new`"
+    )]
     pub fn try_new() -> Result<Self, MjEditError> {
         assert_mujoco_version();
         // SAFETY: mj_makeSpec allocates a new MjSpec; returns null on allocation
@@ -1056,16 +1073,35 @@ impl MjsFrame {
 
     /// Add and return a child frame.
     ///
-    /// Delegates to [`Self::try_add_frame`].
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails, so this never fails.
+    #[expect(deprecated, reason = "try_add_frame keeps the implementation until it is removed")]
     pub fn add_frame(&mut self) -> &mut MjsFrame {
         self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
     }
 
     /// Fallible version of [`Self::add_frame`].
     ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// MuJoCo cannot report a failure here: `mjs_addFrame` allocates the frame with C++ `new`,
+    /// which throws instead of returning null, and then returns the address of the frame it just
+    /// added, so this method never returns `Err`. An allocation failure ends the process: the
+    /// exception cannot cross the C API. Prefer the panicking [`Self::add_frame`]. This method
+    /// may be undeprecated in the future if MuJoCo's upstream C++ code is changed to report the
+    /// failure recoverably.
+    ///
+    /// </div>
+    ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
     /// the frame, instead of panicking.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `add_frame`"
+    )]
     pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
         // SAFETY: element_mut_pointer() reads `self.element`, valid for any live MjsFrame.
         // mjs_getParent returns non-null because every Rust-API MjsFrame was created via
@@ -2418,16 +2454,35 @@ impl MjsBody {
     // Special case
     /// Add and return a child frame.
     ///
-    /// Delegates to [`Self::try_add_frame`].
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails, so this never fails.
+    #[expect(deprecated, reason = "try_add_frame keeps the implementation until it is removed")]
     pub fn add_frame(&mut self) -> &mut MjsFrame {
         self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
     }
 
     /// Fallible version of [`Self::add_frame`].
     ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// MuJoCo cannot report a failure here: `mjs_addFrame` allocates the frame with C++ `new`,
+    /// which throws instead of returning null, and then returns the address of the frame it just
+    /// added, so this method never returns `Err`. An allocation failure ends the process: the
+    /// exception cannot cross the C API. Prefer the panicking [`Self::add_frame`]. This method
+    /// may be undeprecated in the future if MuJoCo's upstream C++ code is changed to report the
+    /// failure recoverably.
+    ///
+    /// </div>
+    ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
     /// the frame, instead of panicking.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `add_frame`"
+    )]
     pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
         // SAFETY: ffi_mut() returns self unchanged; the coercion to *mut mjsBody is safe.
         // ptr::null_mut() for parentframe is valid: the MuJoCo API accepts null to mean

@@ -152,8 +152,10 @@ macro_rules! add_x_method {
         $(
             #[doc = concat!(
                 "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
-                "Delegates to [`Self::try_add_", stringify!($name), "`]."
+                "# Note\n",
+                "MuJoCo ends the process when the allocation fails, so this never fails."
             )]
+            #[expect(deprecated, reason = "try_add_* keeps the implementation until it is removed")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 self.[<try_add_ $name>]()
                     .expect(concat!("mjs_add", stringify!([<$name:camel>]), " returned null; allocation failed"))
@@ -161,9 +163,23 @@ macro_rules! add_x_method {
 
             #[doc = concat!(
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "# Note\n\n",
+                "<div class=\"warning\">\n\n",
+                "MuJoCo cannot report a failure here: `mjs_add", stringify!([<$name:camel>]),
+                "` allocates the element with C++ `new`, which throws instead of returning null, ",
+                "and then returns the address of the element it just added, so this method never ",
+                "returns `Err`. An allocation failure ends the process: the exception cannot ",
+                "cross the C API. Prefer the panicking [`Self::add_", stringify!($name), "`]. ",
+                "This method may be undeprecated in the future if MuJoCo's upstream C++ code is ",
+                "changed to report the failure recoverably.\n\n",
+                "</div>\n\n",
                 "# Errors\n",
                 "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate ",
                 "the element, instead of panicking."
+            )]
+            #[deprecated(
+                since = "6.0.0",
+                note = "always returns Ok; use the panicking variant"
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.ffi_mut(), ptr::null()) };
@@ -182,8 +198,10 @@ macro_rules! add_x_method_by_frame {
         $(
             #[doc = concat!(
                 "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
-                "Delegates to [`Self::try_add_", stringify!($name), "`]."
+                "# Note\n",
+                "MuJoCo ends the process when the allocation fails, so this never fails."
             )]
+            #[expect(deprecated, reason = "try_add_* keeps the implementation until it is removed")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 self.[<try_add_ $name>]()
                     .expect(concat!("mjs_add", stringify!([<$name:camel>]), " returned null; allocation failed"))
@@ -191,8 +209,22 @@ macro_rules! add_x_method_by_frame {
 
             #[doc = concat!(
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "# Note\n\n",
+                "<div class=\"warning\">\n\n",
+                "MuJoCo cannot report a failure here: `mjs_add", stringify!([<$name:camel>]),
+                "` allocates the element with C++ `new`, which throws instead of returning null, ",
+                "and then returns the address of the element it just added, so this method never ",
+                "returns `Err`. An allocation failure ends the process: the exception cannot ",
+                "cross the C API. Prefer the panicking [`Self::add_", stringify!($name), "`]. ",
+                "This method may be undeprecated in the future if MuJoCo's upstream C++ code is ",
+                "changed to report the failure recoverably.\n\n",
+                "</div>\n\n",
                 "# Errors\n",
                 "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate the element."
+            )]
+            #[deprecated(
+                since = "6.0.0",
+                note = "always returns Ok; use the panicking variant"
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 // SAFETY:
@@ -231,8 +263,10 @@ macro_rules! add_x_method_no_default {
         $(
             #[doc = concat!(
                 "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
-                "Delegates to [`Self::try_add_", stringify!($name), "`]."
+                "# Note\n",
+                "MuJoCo ends the process when the allocation fails, so this never fails."
             )]
+            #[expect(deprecated, reason = "try_add_* keeps the implementation until it is removed")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 self.[<try_add_ $name>]()
                     .expect(concat!("mjs_add", stringify!([<$name:camel>]), " returned null; allocation failed"))
@@ -240,9 +274,23 @@ macro_rules! add_x_method_no_default {
 
             #[doc = concat!(
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "# Note\n\n",
+                "<div class=\"warning\">\n\n",
+                "MuJoCo cannot report a failure here: `mjs_add", stringify!([<$name:camel>]),
+                "` allocates the element with C++ `new`, which throws instead of returning null, ",
+                "and then returns the address of the element it just added, so this method never ",
+                "returns `Err`. An allocation failure ends the process: the exception cannot ",
+                "cross the C API. Prefer the panicking [`Self::add_", stringify!($name), "`]. ",
+                "This method may be undeprecated in the future if MuJoCo's upstream C++ code is ",
+                "changed to report the failure recoverably.\n\n",
+                "</div>\n\n",
                 "# Errors\n",
                 "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate ",
                 "the element, instead of panicking."
+            )]
+            #[deprecated(
+                since = "6.0.0",
+                note = "always returns Ok; use the panicking variant"
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.0.as_ptr()) };

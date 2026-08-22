@@ -8,6 +8,7 @@ Changelog
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
 .. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
 .. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`
+.. |mjs_frame| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsFrame`
 .. |mj_geomview| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjGeomDataView`
 .. |mj_geomviewmut| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjGeomDataViewMut`
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
@@ -142,6 +143,17 @@ update of MuJoCo alone can increase the major version.
 - Deprecated |mj_model|'s ``try_clone`` --- its ``MjModelError::AllocationFailed`` arm is
   unreachable, because ``mj_copyModel`` raises ``mjERROR`` and the default handler exits the process
   instead of returning null. Use ``clone`` instead.
+
+- Deprecated |mj_data|'s ``try_clone`` --- ``mj_copyData`` raises ``mjERROR`` in the same way, so
+  its ``MjDataError::AllocationFailed`` arm is unreachable. Use ``clone`` instead.
+
+- Deprecated |mj_spec|'s ``try_new``, ``try_add_frame`` on |mjs_body| and |mjs_frame|, and every
+  macro-generated ``try_add_*`` element constructor on |mj_spec|, |mjs_body| and |mjs_frame| ---
+  ``mj_makeSpec`` and the ``mjs_addX`` functions allocate with C++ ``new``, which throws instead of
+  returning null, so their ``MjEditError::AllocationFailed`` arm is unreachable. An allocation
+  failure ends the process, because the exception cannot cross the C API. Use ``new`` and the
+  panicking ``add_*`` methods instead. ``try_add_default`` and ``try_add_flexcomp`` keep their
+  ``Result``: MuJoCo does report a duplicate class name and a failed flex build.
 
 .. rubric:: New features and improvements
 
