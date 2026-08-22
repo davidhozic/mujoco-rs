@@ -79,7 +79,7 @@ the method's const generic parameters (``WIDTH`` and ``HEIGHT``), and the method
 ``Result<_, RendererError>`` --- an error is returned if ``WIDTH * HEIGHT`` differs from the
 renderer's pixel count, or when the corresponding rendering mode (RGB/depth) is currently
 disabled. Only the total pixel count is checked, so a swapped pair such as ``<HEIGHT, WIDTH>``
-passes the check and gives a transposed image. The panicking variants
+passes the check and gives a sheared image. The panicking variants
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>rgb` and
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>depth` are also available for
 convenience when the dimensions are known at compile time.
@@ -201,7 +201,7 @@ cannot be made current.
 
 .. code-block:: rust
 
-    /* Mutate texture 0 in the model, then re-upload just that texture.
+    /* Mutate texture 0 in the model, then re-upload just that texture. */
     // SAFETY: only asset data is changed; the layout (address and count) fields are untouched.
     unsafe { data.model_mut() }.tex_data_mut()[..256].fill(128);
     renderer.update_texture_from(data.model(), 0).unwrap();

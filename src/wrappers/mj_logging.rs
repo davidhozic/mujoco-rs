@@ -164,6 +164,8 @@ pub fn set_log_config(config: MjLogConfig) {
 }
 
 /// Dispatch a structured log message to the active handler. Wraps [`mju_message`].
+///
+/// A message with level `mjLOG_ERROR` can end the process; see [`log_error`].
 pub fn log_message(msg: &MjLogMessage) {
     // SAFETY: `msg` is a valid reference; mju_message reads it and does not retain the pointer.
     unsafe { mju_message(msg as *const MjLogMessage) }
@@ -185,7 +187,8 @@ pub fn log_info(topic: MjtLogTopic, msg: &str) {
 /// Main error function; does not return to caller. Wraps [`mju_error`].
 ///
 /// # Panics
-/// Panics if `msg` contains interior `\0` characters.
+/// Panics if `msg` contains interior `\0` characters, or if a custom log handler or a legacy
+/// `mju_user_error` callback makes `mju_error` return.
 pub fn log_error(msg: &str) -> ! {
     let escaped = msg.replace('%', "%%");
     let c_msg = CString::new(escaped).unwrap();

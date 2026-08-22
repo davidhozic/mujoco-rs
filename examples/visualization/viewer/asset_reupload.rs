@@ -67,7 +67,7 @@ fn main() {
             let m = unsafe { data.model_mut() };
 
             /* Heightfield: propagating ripple wave */
-            // Values must be in [0, 1]; 0 = z_bottom, 1 = z_top (from the `size` parameter).
+            // Values must be in [0, 1]: 0 = Z 0 (top of the base), 1 = Z z_top_scale.
             let hf = m.hfield_data_mut();
             for row in 0..hf_nrow {
                 for col in 0..hf_ncol {

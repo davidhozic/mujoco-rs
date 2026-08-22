@@ -66,6 +66,10 @@ unsafe impl<M: Deref<Target = MjModel> + Sync> Sync for MjData<M> {}
 impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Creates a new [`MjData`] linked to `model`.
     ///
+    /// # Note
+    /// When the model has history buffers (`nhistory > 0`), its `timestep` must be positive;
+    /// otherwise MuJoCo reports an error and stops the process.
+    ///
     /// # Panics
     /// Panics if MuJoCo fails to allocate the data structure.
     /// Use [`MjData::try_new`] for a fallible alternative.
@@ -303,11 +307,19 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /* Partially auto-generated */
 
     /// Reset data to defaults.
+    ///
+    /// # Note
+    /// When the model has history buffers (`nhistory > 0`), its `timestep` must be positive;
+    /// otherwise MuJoCo reports an error and stops the process.
     pub fn reset(&mut self) {
         unsafe { mj_resetData(self.model.ffi(), self.ffi_mut()) }
     }
 
     /// Reset data to defaults, fill everything else with debug_value.
+    ///
+    /// # Note
+    /// When the model has history buffers (`nhistory > 0`), its `timestep` must be positive;
+    /// otherwise MuJoCo reports an error and stops the process.
     ///
     /// # Safety
     /// `debug_value` is written as raw bytes into every buffer-resident array,
@@ -321,6 +333,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Reset data to keyframe `key` (zero-based index).
+    ///
+    /// # Note
+    /// When the model has history buffers (`nhistory > 0`), its `timestep` must be positive;
+    /// otherwise MuJoCo reports an error and stops the process.
     ///
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] if `key >= nkey`.
@@ -619,6 +635,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Initializes the actuator history buffer for actuator `id` (wraps `mj_initCtrlHistory`).
     /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
     /// `values`: control values slice of length `nsample`.
+    /// # Note
+    /// The timestamps must be strictly increasing, whether they come from `times` or from the
+    /// existing buffer; otherwise MuJoCo reports an error and stops the process.
     /// # Errors
     /// - [`MjDataError::IndexOutOfBounds`] if `id >= nactuator`.
     /// - [`MjDataError::NoHistoryBuffer`] if the actuator has no history buffer.
@@ -659,6 +678,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
     /// `values`: sensor values slice of length `nsample * dim`.
     /// `phase`: time phase offset.
+    /// # Note
+    /// The timestamps must be strictly increasing, whether they come from `times` or from the
+    /// existing buffer; otherwise MuJoCo reports an error and stops the process.
     /// # Errors
     /// - [`MjDataError::IndexOutOfBounds`] if `id >= nsensor`.
     /// - [`MjDataError::NoHistoryBuffer`] if the sensor has no history buffer.
@@ -1102,7 +1124,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(result)
     }
 
-    /// Returns smallest signed distance between two geoms and optionally the contact segment.
+    /// Returns smallest signed distance between two geoms and optionally the segment from geom1 to geom2.
     /// # Panics
     /// Panics when either geom id is `>= ngeom`. Use [`MjData::try_geom_distance`] for a fallible alternative.
     pub fn geom_distance(&mut self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
@@ -1286,6 +1308,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Intersect ray with hfield.
     /// Returns the distance to the intersection, or -1.0 if no intersection.
+    /// # Note
     /// The geom must be of type `mjGEOM_HFIELD`; for any other type MuJoCo reports an error and
     /// stops the process.
     ///
@@ -1300,6 +1323,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Intersect ray with hfield, returning the distance or -1.0 if no intersection.
+    /// # Note
     /// The geom must be of type `mjGEOM_HFIELD`; for any other type MuJoCo reports an error and
     /// stops the process.
     ///
@@ -1321,6 +1345,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Intersect ray with mesh.
     /// Returns the distance to the intersection, or -1.0 if no intersection.
+    /// # Note
     /// The geom must be of type `mjGEOM_MESH`; for any other type MuJoCo reports an error and
     /// stops the process.
     ///
@@ -1335,6 +1360,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Intersect ray with mesh, returning the distance or -1.0 if no intersection.
+    /// # Note
     /// The geom must be of type `mjGEOM_MESH`; for any other type MuJoCo reports an error and
     /// stops the process.
     ///
@@ -1506,6 +1532,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// `qLU`) and the sparse constraint Jacobian blocks (`efc_J_*`, `efc_Y_*`, `efc_AR_*`).
     /// This is a wrapper for [`mjv_copyData`].
     ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when this data's stack is in use.
+    ///
     /// # Errors
     /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
     /// from a different model.
@@ -1526,6 +1555,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Copy [`MjData`] to `destination` in full.
     /// This is a wrapper for [`mj_copyData`].
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when this data's stack is in use.
     ///
     /// # Errors
     /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
@@ -3378,7 +3410,7 @@ mod test {
         }
     }
 
-    /// Verifies [force]-cast bool conversion: eq_active (*mut u8 -> *mut bool).
+    /// Verifies that the eq_active bool slice matches the raw FFI pointer values.
     #[test]
     fn test_force_cast_eq_active_bool() {
         let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
@@ -3393,7 +3425,7 @@ mod test {
         assert!(eq_active[0]);
         assert!(eq_active[1]);
 
-        // Cross-validate with raw u8 FFI pointer
+        // Cross-validate with the raw FFI pointer
         for i in 0..neq {
             let raw_val = unsafe { *data.ffi().eq_active.add(i) };
             assert_eq!(eq_active[i], raw_val,
@@ -3711,8 +3743,7 @@ mod test {
         }
     }
 
-    /// Verifies [force]-cast for bvh_active (*mut u8 -> *mut bool) and that
-    /// the result is valid (true or false, no garbage).
+    /// Verifies that the bvh_active bool slice matches the raw FFI pointer values.
     #[test]
     fn test_force_cast_bvh_active_bool() {
         let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
@@ -4449,8 +4480,8 @@ mod test {
         }
     }
 
-    /// Simulates with an actuator active and verifies force-cast arrays (ctrl, qfrc_actuator,
-    /// actuator_force) reflect the control input after multiple steps.
+    /// Simulates with an actuator active and verifies that ctrl, qfrc_actuator and
+    /// actuator_force reflect the control input after multiple steps.
     #[test]
     fn test_force_cast_multi_step_actuator_ctrl() {
         let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
@@ -4662,7 +4693,7 @@ mod test {
     }
 
     /// Verifies that sensor data changes across multiple simulation steps.
-    /// Exercises the force-cast sensordata flat array after physics evolves.
+    /// Exercises the sensordata flat slice after physics evolves.
     #[test]
     fn test_force_cast_multi_step_sensor_data_evolves() {
         let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
@@ -4694,8 +4725,8 @@ mod test {
         }
     }
 
-    /// Multi-step test with eq_active force-cast bool: disable an equality
-    /// constraint mid-simulation, verify dynamics change.
+    /// Multi-step test with the eq_active bool slice: disable both equality
+    /// constraints after a reset, verify dynamics change.
     #[test]
     fn test_force_cast_multi_step_eq_active_toggle() {
         let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
@@ -4962,12 +4993,36 @@ mod test {
     fn test_energy_ref_getter_arms() {
         let model = MjModel::from_xml_string(MODEL).expect("model load failed");
         let mut data = model.make_data();
+        data.forward();
         data.energy_pos();
         data.energy_vel();
+
+        // The balls stand above the floor and nothing moves yet, so the potential slot is
+        // nonzero and the kinetic slot is exactly zero. An accessor that reads a wrong offset,
+        // or that swaps the two slots, fails one of the two.
         let energy: &[MjtNum; 2] = data.energy();
-        assert_eq!(energy.len(), 2);
-        assert!(energy[0].is_finite(), "potential energy must be finite");
-        assert!(energy[1].is_finite(), "kinetic energy must be finite");
+        assert_ne!(energy[0], 0.0, "potential energy at rest above the floor");
+        assert_eq!(energy[1], 0.0, "kinetic energy at rest");
+
+        // Independent derivation: kinetic energy is 0.5 * qvel' * M * qvel.
+        let nv = model.nv() as usize;
+        data.qvel_mut()[0] = 0.5;
+        data.qvel_mut()[7] = -0.25;
+        data.forward();
+        data.energy_vel();
+        let mut mass = vec![0.0; nv * nv];
+        data.full_m(&mut mass).unwrap();
+        let qvel = data.qvel();
+        let expected = 0.5 * (0..nv)
+            .map(|i| qvel[i] * (0..nv).map(|j| mass[i * nv + j] * qvel[j]).sum::<MjtNum>())
+            .sum::<MjtNum>();
+        // Guards the comparison against passing on two zeroes, which is what a `qvel_mut()`
+        // that writes to a wrong offset would produce.
+        assert!(expected > 0.0, "the derived kinetic energy must be positive");
+        assert!(
+            (data.energy()[1] - expected).abs() < 1e-12,
+            "kinetic energy {} does not match 0.5 * qvel' M qvel = {expected}", data.energy()[1]
+        );
     }
 
     /// Exercises the `eval_or_expand! @eval true` path via `MjData::energy_mut()`,

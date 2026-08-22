@@ -124,6 +124,25 @@ update of MuJoCo alone can increase the major version.
   already safe to mutate. Code that wrote through ``as_mut_slice`` must drop the call and the
   surrounding ``unsafe``.
 
+*``SpecItem::default`` returns an* ``Option``
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>default` now returns
+  ``Option<&MjsDefault>``. MuJoCo's ``mjs_getDefault`` returns null for an element added without a
+  default class (a frame, sensor, flex, exclude, numeric, text, tuple, key, plugin, hfield, skin,
+  texture or wrap), so the old ``&MjsDefault`` dereferenced a null pointer. Handle the ``None``
+  case.
+
+*MjrContext::set_buffer parameter type changed*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_buffer` now
+  accepts ``framebuffer: MjtFramebuffer`` instead of ``i32``.
+
+.. rubric:: Deprecations
+
+- Deprecated |mj_model|'s ``try_clone`` --- its ``MjModelError::AllocationFailed`` arm is
+  unreachable, because ``mj_copyModel`` raises ``mjERROR`` and the default handler exits the process
+  instead of returning null. Use ``clone`` instead.
+
 .. rubric:: New features and improvements
 
 *New accessors for 3.11.0 fields*
@@ -209,6 +228,11 @@ update of MuJoCo alone can increase the major version.
     ``set_threadlock``, ``with_threadlock``), exposing the new ``threadlock`` field that disables
     stack freeing during threaded execution.
 
+*RNE into a caller buffer*
+
+- Added :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>rne_into` :sup:`new` and
+  :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_rne_into` :sup:`new`.
+
 *Cloneable renderer builder*
 
 - :docs-rs:`~mujoco_rs::renderer::<struct>MjRendererBuilder` now derives ``Clone``,
@@ -259,6 +283,71 @@ update of MuJoCo alone can increase the major version.
   ``textureType`` against ``mjtTexture`` variants, so a write can at worst give a wrong asset
   path or wrong rendering, never a memory fault.
 
+*Unsafe geom creation on* |mjv_scene|
+
+- |mjv_scene| ``create_geom`` and ``try_create_geom`` are now ``unsafe fn``. The renderer reads the
+  returned geom's ``matid``, ``texid`` and, on a flex or a skin geom, ``objid`` as unchecked indices
+  into the context and the scene arrays, and no check at creation time can hold, because the caller
+  writes the fields afterwards.
+
+.. rubric:: Bug fixes
+
+- Closed an out-of-bounds read reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>frame` for a tracking
+  camera: MuJoCo indexes ``subtree_com`` by ``trackbodyid`` after testing only that it is not
+  negative. ``frame`` now validates the id against the model and panics on an out-of-range one.
+- Closed a division by zero and a non-terminating loop reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_halton`: MuJoCo divides by ``base`` without
+  checking it, so ``base = 0`` divided by zero and ``base = 1`` never returned. The wrapper now
+  panics unless ``base`` is 2 or more.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>id` now returns ``None``
+  for a default class. ``mjs_getId`` casts to ``mjCBase``, which ``mjCDef`` does not derive from,
+  so the call read an unrelated offset instead of an id.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element` now reports
+  ``UnsupportedOperation`` for a default class of this spec, instead of ``DeleteFailed``, and no
+  longer panics on an element whose stored name is not valid UTF-8. It also reports
+  ``UnsupportedOperation`` for a frame and for a tendon wrap. A frame's element type lies outside
+  MuJoCo's element-list array, so the deletion indexed past the end of it, and a wrap's slot in that
+  array is empty, so the deletion reported success while the element stayed in its owner's list and
+  the spec then released it twice.
+- Closed an out-of-bounds read reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>start`: MuJoCo scales
+  the local mass by ``flex_edgenum[flexselect]`` after testing only that the id is not negative.
+  ``start`` now validates ``flexselect`` against the model and panics on an out-of-range id.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>create_geom` now
+  writes every field that ``mjv_initGeom`` leaves unwritten over uninitialized memory: ``objtype``
+  becomes ``mjOBJ_UNKNOWN``, ``objid`` becomes ``-1``, ``category`` becomes ``mjCAT_DECOR``,
+  ``segid`` becomes the geom's own index, and ``label``, ``camdist`` and ``transparent`` are
+  cleared. The renderer uses ``objid`` as an unchecked index into the skin and flex arrays, and it
+  casts no shadow for a ``mjCAT_DECOR`` geom.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>set_at` now treats a
+  negative ``linepnt`` entry as an empty plot. The count is public, and casting a negative value to
+  ``usize`` made the range test pass, so the call wrote outside the plot's data range.
+- :docs-rs:`~mujoco_rs::vis_common::<fn>sync_geoms` now panics when the two scenes were created for
+  models with different signatures. A copied geom keeps its ``objid``, which the renderer uses as
+  an unchecked index into the destination scene's flex and skin arrays.
+- :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` no longer rebuilds the window
+  and the OpenGL context when it is called after the window closed. winit re-emits ``Resumed`` on
+  the first call after the event loop exited, and the rebuild destroyed the context that the live
+  ``mjrContext`` holds its objects in.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels` no longer
+  wraps when ``width * height * 3`` overflows ``usize`` on a 32-bit target, which let a short
+  ``rgb`` buffer pass the size check; it reports ``InvalidViewport`` instead.
+- Closed a crash reachable from safe code when naming a tendon wrap. ``mjCWrap`` leaves its element
+  type at ``mjOBJ_UNKNOWN``, which makes MuJoCo's duplicate-name check index a null list, so
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name` on a |mjs_wrap|
+  now reports ``UnsupportedOperation`` and ``with_name`` panics. A wrap carries no name of its own:
+  ``name`` reports the wrapped object's name.
+- Closed an out-of-bounds read reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>render`: the
+  renderer uploads one vertex buffer per scene skin, indexing an array that the context sizes by
+  its own model's skin count, which is null when that model has none. ``render`` now panics when
+  the context holds fewer skins than the scene.
+- :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new` no longer truncates its
+  ``width``, ``height`` and ``max_user_geom`` arguments, which turned a value above ``u32::MAX``
+  into a small valid one, so the renderer used a size or a geom capacity the caller never asked
+  for. The three arguments now saturate at ``u32::MAX``.
+
 .. rubric:: Other changes
 
 - Following the reworked FFI struct field-visibility rules, the fields of
@@ -289,11 +378,6 @@ update of MuJoCo alone can increase the major version.
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
   now accepts ``texture_id: usize`` instead of ``texid: u32``.
-
-*MjrContext::set_buffer parameter type changed*
-
-- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_buffer` now
-  accepts ``framebuffer: MjtFramebuffer`` instead of ``i32``.
 
 *MjrContext::upload_texture is now fallible*
 
@@ -436,9 +520,6 @@ update of MuJoCo alone can increase the major version.
   Users are expected to use
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`
   instead.
-- Deprecated |mj_model|'s ``try_clone`` --- its ``MjModelError::AllocationFailed`` arm is
-  unreachable, because ``mj_copyModel`` raises ``mjERROR`` and the default handler exits the process
-  instead of returning null. Use ``clone`` instead.
 - Deprecated |mjs_tendon|'s ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, and
   ``try_wrap_pulley`` --- their ``MjEditError::AllocationFailed`` arm is unreachable and an
   allocation failure cannot be recovered soundly (MuJoCo aborts the process, or writes through the
@@ -485,11 +566,6 @@ New error variants in pre-existing enums:
   index instead of panicking. A new
   :docs-rs:`~mujoco_rs::error::<enum>MjEditError` ``IndexOutOfBounds`` variant carries the offending
   index and length.
-
-*RNE into a caller buffer*
-
-- Added :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>rne_into` and
-  :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_rne_into`.
 
 *MjrContext GPU re-upload methods*
 
@@ -1033,8 +1109,7 @@ gained new variants. See `Error handling`_ below for the full method list.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>runge_kutta`
     now takes ``n: u32`` (was ``i32``) and panics if ``n < 1``
     (previously passed negative or zero values silently to C).
-  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>maxuse_threadstack`
-    returns ``&[MjtSize; mjMAXTHREAD]`` (was ``&[MjtSize]``).
+  - ``MjData::maxuse_threadstack`` returns ``&[MjtSize; mjMAXTHREAD]`` (was ``&[MjtSize]``).
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac`,
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_body`,
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_body_com`,

@@ -79,11 +79,14 @@ fn main() {
             /* Draw a line between the ball and the box */
             scene = renderer.user_scene_mut();
             scene.clear_geom();
-            scene.create_geom(
-                MjtGeom::mjGEOM_LINE,
-                None, None, None,
-                Some([1.0, 1.0, 1.0, 1.0])
-            ).connect(0.05, from, to);  // adjust size, pos and mat to make the line connect the ball and the box.
+            // SAFETY: the geom keeps the material, texture and object ids that create_geom sets to none.
+            unsafe {
+                scene.create_geom(
+                    MjtGeom::mjGEOM_LINE,
+                    None, None, None,
+                    Some([1.0, 1.0, 1.0, 1.0])
+                )
+            }.connect(0.05, from, to);  // adjust size, pos and mat to make the line connect the ball and the box.
 
             renderer.sync_data(&mut data).unwrap();
             renderer.render().unwrap();

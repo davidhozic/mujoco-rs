@@ -181,6 +181,9 @@ which can be configured at the top of the model's XML like so:
     }
 
     /// Builds a [`MjRenderer`].
+    ///
+    /// This creates the rendering context, which can stop the process; see [`MjrContext::new`].
+    ///
     /// # Returns
     /// On success, returns [`Ok`] variant containing the [`MjRenderer`].
     /// # Errors
@@ -331,8 +334,12 @@ impl MjRenderer {
     /// Panics if the GL display reports no framebuffer configuration for the fallback window
     /// (feature `renderer-winit-fallback`).
     pub fn new<M: Deref<Target = MjModel>>(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
+        // Saturate instead of truncating: `as u32` would turn an over-large value into a small
+        // valid one, so the renderer would silently use dimensions the caller never asked for.
         MjRendererBuilder::new()
-            .width(width as u32).height(height as u32).num_visual_user_geom(max_user_geom as u32)
+            .width(width.try_into().unwrap_or(u32::MAX))
+            .height(height.try_into().unwrap_or(u32::MAX))
+            .num_visual_user_geom(max_user_geom.try_into().unwrap_or(u32::MAX))
             .build(model)
     }
 
@@ -458,10 +465,9 @@ impl MjRenderer {
     ///
     /// All data arrays read by `mjr_uploadMesh` are copied: vertex positions
     /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
-    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
-    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
-    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
-    /// not copied because they are fixed by the model signature.
+    /// (`mesh_texcoord`), face-vertex indices (`mesh_face`), face-normal indices
+    /// (`mesh_facenormal`), face-texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`).
     ///
     /// # Errors
     /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
@@ -475,10 +481,9 @@ impl MjRenderer {
     ///
     /// All data arrays read by `mjr_uploadMesh` are bulk-uploaded: vertex positions
     /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
-    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
-    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
-    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
-    /// not copied because they are fixed by the model signature.
+    /// (`mesh_texcoord`), face-vertex indices (`mesh_face`), face-normal indices
+    /// (`mesh_facenormal`), face-texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`).
     ///
     /// # Errors
     /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
@@ -570,13 +575,15 @@ impl MjRenderer {
     /// Update the scene with new data from data.
     /// When `data`'s model has a different signature than the renderer's scene, the internal
     /// scene, the user scene and the rendering context are recreated for the new model.
+    /// Recreating the context can stop the process; see [`MjrContext::new`].
     ///
     /// # Errors
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current
     ///   (only when the signature of the [`MjModel`] in `data` differs from the internal [`MjvScene`]).
     ///
     /// # Panics
-    /// Panics if the renderer's camera is a fixed camera whose id is not below the model's `ncam`.
+    /// Panics if the renderer's camera is a fixed camera whose `fixedcamid` is out of range for
+    /// `data`'s model.
     pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
         if data.model().signature() != self.scene.signature() {
             /* Model changed: preserve the extra-geom headroom and user-geom
@@ -649,7 +656,8 @@ impl MjRenderer {
     }
 
     /// Return a flattened depth image of the scene: the distance from the camera in metres,
-    /// between the model's `znear` and `zfar`.
+    /// between the near and far clip planes (`vis().map.znear * stat().extent` and
+    /// `vis().map.zfar * stat().extent`).
     pub fn depth_flat(&self) -> Option<&[f32]> {
         self.depth.as_deref()
     }
@@ -785,6 +793,10 @@ impl MjRenderer {
 
     /// Draws the scene to internal arrays.
     /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image.
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when the scene holds geoms but
+    /// [`MjRenderer::sync_data`] was never called, which leaves `frustum_near` at zero.
     ///
     /// # Errors
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current.
@@ -946,7 +958,7 @@ bitflags! {
 
 
 
-/// Ensures the OpenGL context is current before GPU resources are freed.
+/// Makes the OpenGL context current, when it can, before GPU resources are freed.
 impl Drop for MjRenderer {
     fn drop(&mut self) {
         // Ensure the GL context is current before the implicit field drops

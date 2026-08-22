@@ -21,8 +21,7 @@ pub type MjtFramebuffer = mjtFramebuffer;
 /// `znear` to `zfar`.
 pub type MjtDepthMap = mjtDepthMap;
 
-/// These are the possible font sizes. The fonts are predefined bitmaps stored in the dynamic library at three different
-/// sizes.
+/// These are the possible font sizes.
 pub type MjtFontScale = mjtFontScale;
 
 /// These are the possible font types.
@@ -92,6 +91,12 @@ impl MjrContext {
     /// Creates and initializes a new rendering context for `model`.
     /// The font scale defaults to 100 %.
     ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when the OpenGL driver cannot allocate the
+    /// offscreen or the shadow framebuffer for the sizes `model` requests, or when `model` declares
+    /// more than `mjMAXTEXTURE` (1000) textures or more than `mjMAXMATERIAL - 2` (998) materials,
+    /// one less with a skybox texture.
+    ///
     /// # Safety
     /// A valid OpenGL context must exist and be current in the calling thread before calling
     /// this function. Calling without an active GL context causes MuJoCo to abort the process.
@@ -128,6 +133,11 @@ impl MjrContext {
     }
 
     /// Add Aux buffer with given index to context; free previous Aux buffer.
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when `width` or `height` is above the OpenGL
+    /// implementation's maximum renderbuffer size. A zero `width` or `height` creates no buffer.
+    ///
     /// # Errors
     /// Returns [`MjrContextError::IndexOutOfBounds`] when `index >= mjNAUX` (10).
     pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) -> Result<(), MjrContextError> {
@@ -204,7 +214,11 @@ impl MjrContext {
         }
         let size = viewport.width as usize * viewport.height as usize;
         if let Some(buf) = rgb.as_ref() {
-            let needed = size * 3;
+            // The product can wrap on a 32-bit target, which would let a short buffer pass.
+            let needed = size.checked_mul(3).ok_or(MjrContextError::InvalidViewport {
+                width: viewport.width,
+                height: viewport.height,
+            })?;
             if buf.len() < needed {
                 return Err(MjrContextError::BufferTooSmall {
                     name: "rgb",
@@ -236,6 +250,11 @@ impl MjrContext {
     }
 
     /// Set Aux buffer for custom OpenGL rendering (call restoreBuffer when done).
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when no Aux buffer exists at `index`; create
+    /// it with [`MjrContext::add_aux`] first.
+    ///
     /// # Errors
     /// Returns [`MjrContextError::IndexOutOfBounds`] when `index >= mjNAUX` (10).
     pub fn set_aux(&mut self, index: usize) -> Result<(), MjrContextError> {

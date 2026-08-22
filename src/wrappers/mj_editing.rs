@@ -182,10 +182,8 @@ impl MjsCompiler {
 /// Authored-field tracking bitmasks for [`mjModel`] structs.
 ///
 /// Each field records, as a bitmask, which attributes of the corresponding
-/// section were explicitly authored (set) in the specification. They are
-/// maintained by the compiler and used to resolve conflicts during attachment.
-/// This is a plain-data struct: every field is a public bitmask read directly
-/// (e.g. `authored.disableflags`).
+/// section were explicitly authored (set) in the specification. MuJoCo's XML
+/// parser sets them and the attachment step uses them to resolve conflicts.
 pub type MjsAuthored = mjsAuthored;
 
 /***************************
@@ -210,9 +208,7 @@ impl MjSpec {
     /// Creates an empty [`MjSpec`].
     ///
     /// # Panics
-    /// - When the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    /// - When MuJoCo fails to allocate the specification.
-    ///   Use [`MjSpec::try_new`] for a fallible alternative.
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
     pub fn new() -> Self {
         Self::try_new().expect("MuJoCo failed to allocate MjSpec")
     }
@@ -403,7 +399,8 @@ impl MjSpec {
     /// # Errors
     /// - [`MjEditError::DeleteFailed`] if `element` is null, does not belong to this spec, or
     ///   MuJoCo refuses the deletion.
-    /// - [`MjEditError::UnsupportedOperation`] if `element` is a default class or the world body.
+    /// - [`MjEditError::UnsupportedOperation`] if `element` is a default class, a frame, a tendon
+    ///   wrap, or the world body.
     ///
     /// # Safety
     /// The caller must ensure:
@@ -415,18 +412,26 @@ impl MjSpec {
             return Err(MjEditError::DeleteFailed("null element pointer".to_owned()));
         }
 
+        // mjCDef is not an mjCBase, so this precedes mjs_getSpec. Deleting a frame indexes
+        // `object_lists_` past its `mjNOBJECT` end, and deleting a wrap hits its null slot.
+        if matches!(
+            unsafe { (*element).elemtype },
+            MjtObj::mjOBJ_DEFAULT | MjtObj::mjOBJ_FRAME | MjtObj::mjOBJ_UNKNOWN
+        ) {
+            return Err(MjEditError::UnsupportedOperation);
+        }
+
         let spec = unsafe { self.ffi_mut() };
         let owner = unsafe { mjs_getSpec(element) };
         if owner != spec {
             return Err(MjEditError::DeleteFailed("element does not belong to this spec".to_owned()));
         }
 
-        if unsafe { (*element).elemtype } == MjtObj::mjOBJ_DEFAULT {
-            return Err(MjEditError::UnsupportedOperation);
-        }
         if unsafe { (*element).elemtype } == MjtObj::mjOBJ_BODY {
-            let name = unsafe { read_mjs_string(mjs_getName(element)) };
-            if name == "world" {
+            // Compare the raw bytes: a name loaded from a file need not be valid UTF-8, and the
+            // &str conversion panics on it.
+            let name = unsafe { mjs_getString(mjs_getName(element)) };
+            if !name.is_null() && unsafe { CStr::from_ptr(name) }.to_bytes() == b"world" {
                 return Err(MjEditError::UnsupportedOperation);
             }
         }
@@ -738,8 +743,8 @@ impl<'a, T: SpecObject> MjsSpecItemIterMut<'a, T> {
 
 impl<'a, T: SpecObject> MjsSpecItemIter<'a, T> {
     fn new(root: &'a MjSpec) -> Self {
-        // SAFETY: mjs_firstElement does not mutate mjsSpec, thus as_ptr is valid to be case to *mut
-        // from the const reference to its wrapper.
+        // SAFETY: mjs_firstElement takes a *const mjSpec; the borrow of root keeps the spec
+        // alive for the call.
         let last = unsafe { mjs_firstElement(root.0.as_ptr(), T::OBJ_TYPE) };
         Self { ffi_ptr: root.0.as_ptr(), last, item_type: PhantomData }
     }
@@ -771,8 +776,8 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsSpecItemIter<'a, T> {
         }
         unsafe {
             let out = T::from_element_as_ptr_mut(self.last).as_ref();
-            // SAFETY: mjs_nextElement does not mutate mjsSpec, thus as_ptr is valid to be case to *mut
-            // from the const reference to its wrapper.
+            // SAFETY: mjs_nextElement takes *const pointers; ffi_ptr and last stay valid while
+            // the iterator borrows the spec.
             self.last = mjs_nextElement(self.ffi_ptr, self.last);
             out
         }
@@ -809,7 +814,7 @@ impl Clone for MjSpec {
     /// Creates a deep copy of this [`MjSpec`].
     ///
     /// # Panics
-    /// Panics if MuJoCo fails to allocate the cloned spec.
+    /// Panics if MuJoCo raises an error while it copies the spec.
     /// Use [`MjSpec::try_clone`] for a fallible alternative.
     fn clone(&self) -> Self {
         self.try_clone().expect("MuJoCo failed to clone MjSpec")
@@ -1051,9 +1056,7 @@ impl MjsFrame {
 
     /// Add and return a child frame.
     ///
-    /// Delegates to [`Self::try_add_frame`] and panics if allocation fails.
-    /// # Panics
-    /// Panics if MuJoCo fails to allocate the frame.
+    /// Delegates to [`Self::try_add_frame`].
     pub fn add_frame(&mut self) -> &mut MjsFrame {
         self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
     }
@@ -1954,7 +1957,25 @@ impl MjsTendon {
 /***************************
 ** Wrap specification
 ***************************/
-mjs_struct!(Wrap);
+mjs_struct!(Wrap {
+    /// A wrap carries no name of its own; [`SpecItem::name`] reports the wrapped object's name.
+    ///
+    /// # Errors
+    /// Always returns [`MjEditError::UnsupportedOperation`].
+    fn set_name(&mut self, _name: &str) -> Result<(), MjEditError> {
+        // mjCWrap leaves elemtype at mjOBJ_UNKNOWN, and mjs_setName hands that to
+        // mjCModel::CheckRepeat, which indexes object_lists_ and dereferences its null slot 0.
+        Err(MjEditError::UnsupportedOperation)
+    }
+
+    /// A wrap carries no name of its own.
+    ///
+    /// # Panics
+    /// Always panics.
+    fn with_name(&mut self, _name: &str) -> &mut Self {
+        panic!("a wrap carries no name of its own")
+    }
+});
 impl MjsWrap {
     getter_setter! {
         [&] with, get, set, [
@@ -2220,7 +2241,7 @@ impl MjsSkin {
 ***************************/
 mjs_struct!(Texture [SpecObject]);
 
-/// # Note -- cube-map files
+/// # Note: cube-map files
 ///
 /// The `cubefiles` field is a **pre-sized** string vector (6 entries, one per cube face).
 /// Use [`set_cubefile`](Self::set_cubefile) with a [`MjtCubeFace`] variant to assign a
@@ -2290,7 +2311,7 @@ impl MjsTexture {
 ***************************/
 mjs_struct!(Material [SpecObject]);
 
-/// # Note -- texture assignment
+/// # Note: texture assignment
 ///
 /// The `textures` field is a **pre-sized** string vector (`mjNTEXROLE` entries, one per
 /// [`MjtTextureRole`]). Use [`set_texture`](Self::set_texture) to assign a texture name
@@ -2397,9 +2418,7 @@ impl MjsBody {
     // Special case
     /// Add and return a child frame.
     ///
-    /// Delegates to [`Self::try_add_frame`] and panics if allocation fails.
-    /// # Panics
-    /// Panics if MuJoCo fails to allocate the frame.
+    /// Delegates to [`Self::try_add_frame`].
     pub fn add_frame(&mut self) -> &mut MjsFrame {
         self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
     }
@@ -2535,7 +2554,7 @@ impl<'a> MjFlexcompConfig<'a> {
     // value in `Some` via the std `From<T> for Option<T>` impl.
     getter_setter! {
         with, [
-            r#type: &'a str;      "the flexcomp type: \"grid\", \"box\", \"cylinder\", \"ellipsoid\", \"disc\", \"circle\", \"mesh\", \"gmsh\", or \"direct\" (default \"grid\").";
+            r#type: &'a str;      "the flexcomp type: \"grid\", \"box\", \"cylinder\", \"ellipsoid\", \"square\", \"disc\", \"circle\", \"mesh\", \"gmsh\", or \"direct\" (default \"grid\").";
             dim: u8;              "the dimensionality of the flex object (1, 2, or 3); ignored for types that imply it.";
             dof: &'a str;         "the dof parametrization: \"full\", \"radial\", \"trilinear\", \"quadratic\", or \"2d\" (default \"full\").";
             count: [u16; 3];      "the number of generated points in each dimension (grid/box/cylinder/ellipsoid).";
@@ -2561,8 +2580,8 @@ impl<'a> MjFlexcompConfig<'a> {
 impl MjsBody {
     /// Add and return a child [`MjsFlex`].
     ///
-    /// Creates a flex with auto-generated bodies, joints, and optional equality constraints -- the
-    /// programmatic equivalent of the `flexcomp` element -- configured via
+    /// Creates a flex with auto-generated bodies, joints, and optional equality constraints, the
+    /// programmatic equivalent of the `flexcomp` element, configured via
     /// [`MjFlexcompConfig`]. Wraps [`mjs_makeFlex`].
     ///
     /// Delegates to [`Self::try_add_flexcomp`] and panics if creation fails.
@@ -2735,8 +2754,8 @@ pub struct MjsBodyItemIter<'a, T> {
 
 impl<'a, T: SpecObject> MjsBodyItemIter<'a, T> {
     fn new(root: &'a MjsBody, recurse: bool) -> Self {
-        // SAFETY: mjs_firstChild requires a *mut pointer but does not mutate
-        // the body. The const-to-mut cast is sound because no mutation occurs.
+        // SAFETY: mjs_firstChild takes a *const mjsBody; the borrow of root keeps the body
+        // alive for the call.
         let last = unsafe {
             mjs_firstChild(
                 root,
@@ -2757,7 +2776,8 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsBodyItemIter<'a, T> {
         }
         unsafe {
             let out = T::from_element_as_ptr_mut(self.last as *mut _).as_ref();
-            // SAFETY: mjs_nextChild requires *mut but does not mutate. Cast is sound.
+            // SAFETY: mjs_nextChild takes *const pointers; ffi_ptr and last stay valid while
+            // the iterator borrows the body.
             self.last = mjs_nextChild(self.ffi_ptr, self.last, self.recurse.into());
             out
         }
@@ -3531,7 +3551,7 @@ mod tests {
         assert_eq!(model.ffi().ntendon, 1, "expected one tendon");
         assert_eq!(model.ffi().nwrap, 2, "expected two wrap elements");
 
-        // Verify wrap types are mjWRAP_SITE (= 1)
+        // Verify wrap types are mjWRAP_SITE
         let wrap_types = model.wrap_type();
         assert_eq!(wrap_types[0], MjtWrap::mjWRAP_SITE);
         assert_eq!(wrap_types[1], MjtWrap::mjWRAP_SITE);
@@ -4042,5 +4062,81 @@ mod tests {
             Err(MjEditError::InvalidParameter(_))
         ));
         assert!(numeric.set_size(4).is_ok());
+    }
+
+    /// A frame carries no default class name, so `default()` must report that instead of
+    /// dereferencing the null pointer `mjs_getDefault` returns for it. A geom and a body are
+    /// added with a default class, so they must still yield one.
+    #[test]
+    fn test_frame_has_no_default() {
+        let mut spec = MjSpec::new();
+        assert!(spec.world_body_mut().add_frame().default().is_none());
+        assert!(spec.world_body_mut().add_geom().default().is_some());
+        assert!(spec.world_body_mut().default().is_some());
+    }
+
+    /// `mjs_getId` casts to `mjCBase`, which `mjCDef` does not derive from, so a default class
+    /// must report no id instead of the value read at that offset.
+    #[test]
+    fn test_default_has_no_id() {
+        assert!(MjSpec::new().add_default("cls", None).id().is_none());
+    }
+
+    /// `mjs_getSpec` casts to `mjCBase` too, so the default check must run before the owner check
+    /// for `delete_element` to reject a default of this very spec as unsupported.
+    #[test]
+    fn test_delete_element_rejects_default() {
+        let mut spec = MjSpec::new();
+        let element = spec.add_default("cls", None).element_mut_pointer();
+        assert!(matches!(unsafe { spec.delete_element(element) }, Err(MjEditError::UnsupportedOperation)));
+    }
+
+    /// A name that MuJoCo parses need not be valid UTF-8, so `delete_element` compares the raw
+    /// bytes; a `&str` conversion would panic instead of deleting the body.
+    #[test]
+    fn test_delete_element_non_utf8_name() {
+        // tinyxml2 encodes a character reference without validating it, so the surrogate U+D800
+        // becomes the three bytes ED A0 80, which no UTF-8 string may hold.
+        let mut spec = MjSpec::from_xml_string(
+            "<mujoco><worldbody><body name=\"a&#xD800;b\"/></worldbody></mujoco>"
+        ).unwrap();
+
+        let element = spec.body_iter_mut().nth(1).unwrap().element_mut_pointer();
+        // SAFETY: the spec owns the name string for as long as the element lives.
+        let name = unsafe { CStr::from_ptr(mjs_getString(mjs_getName(element))) };
+        assert!(
+            std::str::from_utf8(name.to_bytes()).is_err(), "the test needs a non-UTF-8 name"
+        );
+
+        unsafe { spec.delete_element(element) }.unwrap();
+        assert_eq!(spec.body_iter().count(), 1);
+    }
+
+    /// `mjCWrap` leaves its elemtype at `mjOBJ_UNKNOWN`, which makes MuJoCo's duplicate-name check
+    /// index a null list and crash, so naming a wrap must be rejected before the FFI call.
+    #[test]
+    fn test_wrap_set_name_rejected() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_site().with_name("s0");
+        let wrap = spec.add_tendon().wrap_site("s0");
+        assert!(matches!(wrap.set_name("w0"), Err(MjEditError::UnsupportedOperation)));
+        assert_eq!(wrap.name(), "s0");
+    }
+
+    /// A frame's element type lies past the end of MuJoCo's element-list array, and a wrap's slot
+    /// in that array is empty, so `mjs_delete` corrupts the spec and still reports success.
+    #[test]
+    fn test_delete_element_rejects_frame_and_wrap() {
+        let mut spec = MjSpec::new();
+        let frame = spec.world_body_mut().add_frame().element_mut_pointer();
+        assert!(matches!(
+            unsafe { spec.delete_element(frame) }, Err(MjEditError::UnsupportedOperation)
+        ));
+
+        spec.world_body_mut().add_site().with_name("s0");
+        let wrap = spec.add_tendon().wrap_site("s0").element_mut_pointer();
+        assert!(matches!(
+            unsafe { spec.delete_element(wrap) }, Err(MjEditError::UnsupportedOperation)
+        ));
     }
 }

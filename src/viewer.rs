@@ -338,7 +338,7 @@ impl ViewerSharedState {
     pub fn sync_model(&mut self, model: &mut MjModel) {
         // Check if model signature changed
         if model.signature() != self.data_passive.model().signature() {
-            // Model changed: reload internal state, skip parameter sync
+            // Model changed: reload internal state.
             let max_user_geom = self.user_scene.maxgeom() as usize;
             self.reload_model(model, max_user_geom);
         }
@@ -455,10 +455,9 @@ impl ViewerSharedState {
     ///
     /// All data arrays read by `mjr_uploadMesh` are copied: vertex positions
     /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
-    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
-    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
-    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
-    /// not copied because they are fixed by the model signature.
+    /// (`mesh_texcoord`), face-vertex indices (`mesh_face`), face-normal indices
+    /// (`mesh_facenormal`), face-texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`).
     ///
     /// The upload is processed on the next call to [`MjViewer::render`], at which point
     /// the updated mesh will be reflected in the scene.
@@ -481,8 +480,7 @@ impl ViewerSharedState {
         let face_adr = model.mesh_faceadr()[mesh_id] as usize;
         let face_num = model.mesh_facenum()[mesh_id] as usize;
         let graph_range = optional_sparse_addr_range(model.mesh_graphadr(), mesh_id, model.mesh_graph().len());
-        // SAFETY: Signature and bounds verified above; all offsets and counts are taken
-        // from the mesh's own metadata in a model with matching layout.
+        // SAFETY: no model swap happens here; only mesh values change.
         let passive = unsafe { self.data_passive.model_mut() };
         passive.mesh_vert_mut()[vert_adr..vert_adr + vert_num]
             .copy_from_slice(&model.mesh_vert()[vert_adr..vert_adr + vert_num]);
@@ -514,16 +512,15 @@ impl ViewerSharedState {
     ///
     /// All data arrays read by `mjr_uploadMesh` are bulk-copied: vertex positions
     /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
-    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
-    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
-    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
-    /// not copied because they are fixed by the model signature.
+    /// (`mesh_texcoord`), face-vertex indices (`mesh_face`), face-normal indices
+    /// (`mesh_facenormal`), face-texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`).
     ///
     /// # Errors
     /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
     pub fn update_meshes_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
         self.check_signature(model)?;
-        // SAFETY: Signature verified above, ensuring all mesh array layouts match exactly.
+        // SAFETY: no model swap happens here; only mesh values change.
         let passive = unsafe { self.data_passive.model_mut() };
         passive.mesh_vert_mut().copy_from_slice(model.mesh_vert());
         passive.mesh_normal_mut().copy_from_slice(model.mesh_normal());
@@ -557,8 +554,7 @@ impl ViewerSharedState {
         let hfield_nrow = model.hfield_nrow()[hfield_id] as usize;
         let hfield_ncol = model.hfield_ncol()[hfield_id] as usize;
         let hfield_len = hfield_nrow * hfield_ncol;
-        // SAFETY: Signature and bounds verified above; hfield_len is derived from the
-        // heightfield's own row/column metadata.
+        // SAFETY: no model swap happens here; only hfield_data values change.
         unsafe { self.data_passive.model_mut() }
             .hfield_data_mut()[hfield_adr..hfield_adr + hfield_len]
             .copy_from_slice(&model.hfield_data()[hfield_adr..hfield_adr + hfield_len]);
@@ -573,7 +569,7 @@ impl ViewerSharedState {
     /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
     pub fn update_hfields_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
         self.check_signature(model)?;
-        // SAFETY: Signature verified above, so hfield_data layouts match exactly.
+        // SAFETY: no model swap happens here; only hfield_data values change.
         unsafe { self.data_passive.model_mut() }
             .hfield_data_mut()
             .copy_from_slice(model.hfield_data());
@@ -730,7 +726,7 @@ impl ViewerSharedState {
 /// 
 /// With the `viewer-ui` feature, `X` toggles the side UI panel.
 /// 
-/// # Panic
+/// # Panics
 /// Panics when initialized outside the main thread.
 #[derive(Debug)]
 pub struct MjViewer {
@@ -841,7 +837,10 @@ impl MjViewer {
     ///     .build_passive(&model).unwrap();
     /// viewer.with_state_lock(|mut lock| {
     ///     let scene = lock.user_scene_mut();
-    ///     scene.create_geom(MjtGeom::mjGEOM_BOX, Some([1.0, 1.0, 1.0]), Some([0.0, 0.0, 0.0]), None, None);
+    ///     // SAFETY: the geom keeps the material, texture and object ids that `create_geom` zeroes.
+    ///     unsafe {
+    ///         scene.create_geom(MjtGeom::mjGEOM_BOX, Some([1.0, 1.0, 1.0]), Some([0.0, 0.0, 0.0]), None, None);
+    ///     }
     /// }).unwrap();
     /// ```
     pub fn with_state_lock<F, R>(&self, fun: F) -> Result<R, PoisonError<MutexGuard<'_, ViewerSharedState>>>
@@ -1894,7 +1893,7 @@ pub struct MjViewerBuilder {
     /// Start the viewer with warnings enabled for non-realtime synchronization.
     /// When this is enabled and the simulation state isn't synced in realtime, an overlay will be displayed
     /// in the bottom right corner indicating the realtime percentage.
-    /// The warning will only be shown if the deviation is 2 % from realtime or more.
+    /// The warning will only be shown if the deviation from realtime is larger than 2 %.
     warn_non_realtime: bool,
 }
 

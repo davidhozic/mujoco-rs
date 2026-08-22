@@ -7,7 +7,8 @@
 //! These two structs (and some others) wrap the C structure in order to achieve memory safety.
 //!
 //! Their fields aren't publicly exposed and can instead be manipulated through views
-//! (e.g., [`MjData::joint`](wrappers::mj_data::MjData::joint) and then [`wrappers::mj_data::MjJointDataInfo::view`]).
+//! (e.g., [`MjData::joint`](wrappers::mj_data::MjData::joint) and then
+//! [`wrappers::mj_data::MjJointDataInfo::view_mut`]).
 //! To access the wrapped attributes directly, call the corresponding `ffi()` methods
 //! (e.g., [`MjData::ffi`](wrappers::MjData::ffi)).
 //!

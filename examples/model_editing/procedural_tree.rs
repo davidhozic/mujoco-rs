@@ -38,7 +38,7 @@ fn normalize(v: [f64; 3]) -> [f64; 3] {
 
 // Grow a branch as a child of `parent`, attached at height `attach_z` along the
 // parent capsule.  Child branches are themselves distributed from 60% to 100% of
-// their own length, matching the Python linspace distribution.
+// this branch's length, matching the Python linspace distribution.
 fn grow(parent: &mut MjsBody, depth: usize, len: f64, r: f64, dir: [f64; 3], attach_z: f64) {
     let d = normalize(dir);
 

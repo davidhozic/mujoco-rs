@@ -26,7 +26,8 @@ The Rust-native 3D viewer, enabled by the ``viewer`` feature, supports visualiza
 Press ``F1`` in the viewer window to show or hide the list of mouse and keyboard shortcuts.
 This also includes object perturbations. Optionally, enabled by the ``viewer-ui`` feature, the viewer
 also provides a user interface, which tries to replicate the original C++ viewer as best as possible
-(while simultaneously enriching it) and thus allows control of constraints, joints, actuators, etc.
+(while simultaneously enriching it) and thus allows control of constraints and actuators,
+inspection of joint state, and much more.
 
 A screenshot of the Rust 3D viewer is shown below.
 
@@ -336,11 +337,12 @@ which demonstrates various types of UI elements including windows, side panels, 
     skips large computed arrays not required for visualization. As a result, the
     :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` passed to UI callbacks
     (added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`)
-    will **not** contain:
+    will **not** hold current values in:
 
-    - the mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``);
+    - the mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``,
+      ``qLU``), which keep the values of the previous copy and are therefore stale;
     - the sparse constraint Jacobian blocks (``efc_J``, ``efc_Y``, ``efc_AR`` and their index
-      arrays).
+      arrays), which are empty.
 
     If you require those in a UI callback, either call an appropriate method on the passed
     :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` instance

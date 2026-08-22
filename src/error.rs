@@ -26,7 +26,7 @@ pub enum MjDataError {
     },
     /// The provided MuJoCo object type is not supported by this operation.
     ///
-    /// Contains the raw MuJoCo C object-type code (`mjOBJ_*`) that was not recognized.
+    /// Contains the raw MuJoCo C object-type code (`mjOBJ_*`).
     UnsupportedObjectType(i32),
     /// MuJoCo failed to allocate the requested structure.
     AllocationFailed,
@@ -325,7 +325,7 @@ pub enum MjEditError {
 impl fmt::Display for MjEditError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::AllocationFailed => write!(f, "MuJoCo failed to allocate the model element"),
+            Self::AllocationFailed => write!(f, "MuJoCo failed to allocate the spec or model element"),
             Self::InvalidUtf8Path => write!(f, "path contains invalid UTF-8"),
             Self::ParseFailed(msg) => write!(f, "parse failed: {msg}"),
             Self::CompileFailed(msg) => write!(f, "compilation failed: {msg}"),
@@ -513,7 +513,8 @@ impl std::error::Error for MjPluginError {}
 pub enum GlInitError {
     /// The windowing / display builder failed to initialize.
     DisplayBuild(String),
-    /// The display builder succeeded but did not produce a window.
+    /// No window was produced: the display builder returned no window, or the event loop never
+    /// resumed.
     NoWindow,
     /// Failed to obtain the native window handle.
     WindowHandle(String),

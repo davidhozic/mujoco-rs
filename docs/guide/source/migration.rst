@@ -229,6 +229,27 @@ engine write more force outputs than the actuator owns.
     unsafe { view.gaintype.as_mut_slice()[0] = MjtGain::mjGAIN_AFFINE };
 
 
+Unsafe geom creation on |mjv_scene|
+-------------------------------------
+``create_geom`` and ``try_create_geom`` are now ``unsafe fn``. The renderer reads the returned
+geom's ``matid``, ``texid`` and, on a flex or a skin geom, ``objid`` as unchecked indices, so the
+caller keeps each one below the count of the model that the rendering context was created for.
+Both methods write ``-1`` into ``matid`` and ``texid``, which means no material and no texture.
+
+**Before:**
+
+.. code-block:: rust
+
+    let geom = scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None);
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: the geom keeps the ids that create_geom sets to none.
+    let geom = unsafe { scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None) };
+
+
 Renamed ``DcMotorConfig`` input field
 ---------------------------------------
 The public field ``DcMotorConfig::input_mode`` is now ``ctrlspec`` and the builder
@@ -265,6 +286,25 @@ match it, so a write through a view no longer needs ``as_mut_slice`` inside ``un
 .. code-block:: rust
 
     view.awake[0] = MjtSleepState::mjS_AWAKE;
+
+
+``SpecItem::default`` returns an ``Option``
+---------------------------------------------
+MuJoCo's ``mjs_getDefault`` returns null for an element added without a default class (a frame,
+sensor, flex, exclude, numeric, text, tuple, key, plugin, hfield, skin, texture or wrap), so the old
+``&MjsDefault`` return dereferenced a null pointer. The method now returns ``Option<&MjsDefault>``.
+
+**Before:**
+
+.. code-block:: rust
+
+    let class = body.default();
+
+**After:**
+
+.. code-block:: rust
+
+    let class = body.default().unwrap();
 
 
 .. _migrate_5_0_0:

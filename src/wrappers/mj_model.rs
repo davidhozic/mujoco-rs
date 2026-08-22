@@ -142,7 +142,7 @@ pub type MjtDataType = mjtDataType;
 pub type MjtConDataField = mjtConDataField;
 
 /// Types of frame alignment of elements with their parent bodies. Used as shortcuts during `mj_kinematics` in the
-/// last argument to `mj_local2global`.
+/// last argument to `mj_local2Global`.
 pub type MjtSameFrame = mjtSameFrame;
 
 /// Sleep policy associated with a tree. The compiler automatically chooses between `NEVER` and `ALLOWED`, but the user
@@ -673,7 +673,7 @@ impl MjModel {
     }
 
     /// Return size of state specification. The bits of the integer spec correspond to element fields of [`MjtState`](crate::wrappers::mj_data::MjtState).
-    /// # Panics
+    /// # Note
     /// MuJoCo aborts the process through `mjERROR` when `spec` is not below `1 << mjNSTATE`.
     pub fn state_size(&self, spec: u32) -> usize {
         unsafe { mj_stateSize(self.ffi(), spec as i32) as usize }
@@ -682,6 +682,10 @@ impl MjModel {
     /// Extract the subset of components specified by `dst_spec` from a state `src`
     /// previously obtained via [`MjData::read_state_into`] or [`MjData::state`]
     /// with components specified by `src_spec`.
+    ///
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
+    /// `1 << mjNSTATE`.
     ///
     /// # Panics
     /// - When `src.len()` does not equal the size required by `src_spec`.
@@ -693,6 +697,10 @@ impl MjModel {
     }
 
     /// Fallible version of [`MjModel::extract_state`].
+    ///
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
+    /// `1 << mjNSTATE`.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the extracted state.
     /// # Errors
@@ -730,6 +738,10 @@ impl MjModel {
     /// previously obtained via [`MjData::read_state_into`] or [`MjData::state`]
     /// with components specified by `src_spec`.
     ///
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
+    /// `1 << mjNSTATE`.
+    ///
     /// # Panics
     /// - When `src.len()` does not equal the size required by `src_spec`.
     /// - When `dst_spec` is not a subset of `src_spec`.
@@ -741,6 +753,10 @@ impl MjModel {
     }
 
     /// Fallible version of [`MjModel::extract_state_into`].
+    ///
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
+    /// `1 << mjNSTATE`.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the number of elements written to `dst`.
     /// # Errors
@@ -785,7 +801,8 @@ impl MjModel {
         unsafe { mj_isSparse(self.ffi()) == 1 }
     }
 
-    /// Determine type of solver. Returns `true` if dual (PGS), `false` if primal (CG or Newton).
+    /// Determine type of solver. Returns `true` for a dual solver: PGS, or any solver with
+    /// `noslip_iterations > 0`.
     pub fn is_dual(&self) -> bool {
         unsafe { mj_isDual(self.ffi()) == 1 }
     }
@@ -793,16 +810,15 @@ impl MjModel {
     /// Get name of object with the specified [`MjtObj`] type and id, returns `None` if name not found.
     /// Wraps `mj_id2name`.
     /// # Panics
-    /// Panics if MuJoCo internally returns a C string that is not valid UTF-8. In practice
-    /// MuJoCo names are always valid ASCII (and therefore UTF-8), so this should not occur.
+    /// Panics if MuJoCo internally returns a C string that is not valid UTF-8.
     pub fn id_to_name(&self, type_: MjtObj, id: usize) -> Option<&str> {
         let ptr = unsafe { mj_id2name(self.ffi(), type_ as i32, id as i32) };
         if ptr.is_null() {
             None
         }
         else {
-            // SAFETY: ptr was checked non-null above; MuJoCo guarantees the pointed-to string is
-            // valid UTF-8 and lives as long as the model.
+            // SAFETY: ptr was checked non-null above; MuJoCo NUL-terminates the names blob and it
+            // lives as long as the model.
             let cstr = unsafe { CStr::from_ptr(ptr).to_str().unwrap() };
             Some(cstr)
         }
@@ -1497,9 +1513,8 @@ impl MjModel {
 }
 
 impl Clone for MjModel {
-    /// # Panics
-    /// Panics if MuJoCo returns a null model. MuJoCo aborts the process through `mjERROR` when an
-    /// allocation fails, so this panic is not observed in practice.
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when an allocation fails, so this never fails.
     #[expect(deprecated, reason = "try_clone keeps the implementation until it is removed")]
     fn clone(&self) -> Self {
         self.try_clone().expect("failed to clone model")

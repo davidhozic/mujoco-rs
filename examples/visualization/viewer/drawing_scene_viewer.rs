@@ -62,13 +62,16 @@ fn main() {
             scene.clear_geom();  // clear existing geoms
 
             /* Create a line, that (visually) connects the two balls we have in the example model */
-            let new_geom = scene.create_geom(
-                MjtGeom::mjGEOM_LINE,  // type of geom to draw.
-                None,  // size, ignore here as we set it below.
-                None,   // position: ignore here as we set it below.
-                None,   // rotational matrix: ignore here as we set it below.
-                Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
-            );
+            // SAFETY: the geom keeps the material, texture and object ids that create_geom sets to none.
+            let new_geom = unsafe {
+                scene.create_geom(
+                    MjtGeom::mjGEOM_LINE,  // type of geom to draw.
+                    None,  // size, ignore here as we set it below.
+                    None,   // position: ignore here as we set it below.
+                    None,   // rotational matrix: ignore here as we set it below.
+                    Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
+                )
+            };
 
             /* Read X, Y and Z coordinates of both balls. */
             let ball1_position = ball1_joint_info.view(&data).qpos[..3]

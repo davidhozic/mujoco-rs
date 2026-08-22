@@ -739,7 +739,7 @@ impl ViewerUI {
                                 let combo_width = ui.available_width().min(MAX_SPAN_WIDTH);
 
                                 let Ok(enumerated) = camera.type_.try_into() else {
-                                    // Unknown camera type - skip the camera row rather than panic.
+                                    // Unknown camera type - skip the whole selector grid rather than panic.
                                     ui.label(format!("Unknown camera type {}", camera.type_));
                                     ui.end_row();
                                     return;
@@ -1570,7 +1570,7 @@ impl ViewerUI {
             }
         });
 
-        // Prevent window interactions when covering egui widgets
+        // Apply egui's platform output (cursor icon, clipboard, IME).
         self.state.handle_platform_output(window, full_output.platform_output);
 
         // Tessellate

@@ -80,7 +80,7 @@ impl MjViewerCpp {
     /// mutably borrowed by the viewer, and must not access them while [`MjViewerCpp::sync`] runs.
     ///
     /// # Panics
-    /// Panics if `mujoco_cSimulate_create` returns a null pointer, or if the load thread panics.
+    /// Panics if the load thread panics.
     pub unsafe fn launch_passive<M: Deref<Target = MjModel> + Clone + Send + Sync>(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut cam = Box::new(MjvCamera::default());

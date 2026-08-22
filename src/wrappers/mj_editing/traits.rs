@@ -28,8 +28,6 @@ pub trait SpecItem: Sized + sealed::Sealed {
 
     /// Same as [`SpecItem::element_pointer`], but with a mutable borrow and a mutable pointer.
     fn element_mut_pointer(&mut self) -> *mut mjsElement {
-        // SAFETY: self.element is a valid non-null pointer to the C spec element
-        // for the lifetime of the parent MjSpec (struct invariant).
         self.element_pointer() as *mut _
     }
 
@@ -66,12 +64,18 @@ pub trait SpecItem: Sized + sealed::Sealed {
         self
     }
 
-    /// Returns the used default.
-    fn default(&self) -> &MjsDefault {
-        // SAFETY: mjs_getDefault indexes into mjCModel::def_map which always
-        // contains the element's classname (inserted at construction), so the
-        // returned pointer is never null.
-        unsafe { &*mjs_getDefault(self.element_pointer()) }
+    /// Returns the used default, or `None` when the element carries no default class name.
+    ///
+    /// Only an element that MuJoCo adds with a default class carries one: body, joint, geom, site,
+    /// camera, light, actuator, pair, equality, tendon, mesh and material. Every other element,
+    /// a frame included, returns `None`.
+    fn default(&self) -> Option<&MjsDefault> {
+        // mjs_getDefault looks the element's classname up in mjCModel::def_map and returns null on
+        // a miss. An element added without a default class keeps the empty classname it starts
+        // with.
+        let ptr = unsafe { mjs_getDefault(self.element_pointer()) };
+        // SAFETY: a non-null return points to the mjsDefault owned by a live mjCDef of the spec.
+        (!ptr.is_null()).then(|| unsafe { &*ptr })
     }
 
     /// Returns the numeric id for this element, if assigned.
@@ -148,7 +152,9 @@ pub trait SpecItem: Sized + sealed::Sealed {
     ///
     /// # Safety
     /// Same contract as [`SpecItem::delete`]: must be called at most once per item; any use
-    /// of `self` after a successful call is **use-after-free** undefined behavior.
+    /// of `self` after a successful call is **use-after-free** undefined behavior. The item must
+    /// not be a [`MjsDefault`]: `mjs_getSpec` casts to `mjCBase`, which `mjCDef` does not derive
+    /// from, so it would read the spec pointer at an unrelated offset.
     unsafe fn __delete_default__(&mut self) -> Result<(), MjEditError> {
         // SAFETY: element_mut_pointer() is valid (struct invariant); mjs_getSpec
         // returns the owning spec, also valid.
@@ -173,7 +179,8 @@ pub trait SpecItem: Sized + sealed::Sealed {
 }
 
 /// Represents a [`SpecItem`] that is a concrete object inside [`crate::wrappers::mj_model::MjModel`]
-/// after compilation of [`super::MjSpec`]. This includes all the [`SpecItem`]-s except [`MjsDefault`].
+/// after compilation of [`super::MjSpec`]. This includes all the [`SpecItem`]-s except
+/// [`MjsDefault`] and [`MjsWrap`](super::MjsWrap).
 /// 
 /// This trait is used internally by MuJoCo-rs to provide a generic casting interface from
 /// *mut mjsElement during iteration. 

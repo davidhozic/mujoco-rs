@@ -28,7 +28,7 @@ pub(crate) struct RenderBaseGlState {
 }
 
 /// Base struct for rendering through Glutin.
-/// This is a proxy since Glutin only allows event processing through callbacks, which this implements.
+/// This is a proxy since winit only allows event processing through callbacks, which this implements.
 #[derive(Debug)]
 pub(crate) struct RenderBase {
     pub(crate) state: Option<RenderBaseGlState>,
@@ -76,6 +76,12 @@ impl RenderBase {
 
 impl ApplicationHandler for RenderBase {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // winit emits `Resumed` again on the first `pump_app_events` call after the loop exited,
+        // and a rebuild would destroy the GL context that the live `mjrContext` has objects in.
+        if self.state.is_some() {
+            return;
+        }
+
         let result = (|| -> Result<RenderBaseGlState, GlInitError> {
             let window_attrs = Window::default_attributes()
                 .with_title(&self.title)
@@ -117,6 +123,8 @@ impl ApplicationHandler for RenderBase {
                 .build(raw_window_handle);
 
             let gl_display = gl_config.display();
+            // SAFETY: both calls below need a window handle that is valid at call time.
+            // raw_window_handle and attrs carry the handle of `window`, which is alive here.
             let not_current = unsafe {
                 gl_display
                     .create_context(&gl_config, &context_attrs)
