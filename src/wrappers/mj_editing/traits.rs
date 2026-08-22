@@ -22,15 +22,11 @@ pub trait SpecItem: Sized + sealed::Sealed {
     /// actual item, which is hidden from the user, but is needed
     /// in some functions.
     /// 
-    /// # Safety
-    /// This borrows immutably, but returns a mutable pointer. This is done to overcome MJS's wrong
-    /// use of mutable pointers in functions, such as [`mjs_getName`].
+    /// The returned pointer is const. Callers that must satisfy MJS's wrong use of mutable
+    /// pointers, such as [`mjs_getName`], cast it at the call site.
     fn element_pointer(&self) -> *const mjsElement;
 
-    /// Same as [`SpecItem::element_pointer`], but with a mutable borrow.
-    ///
-    /// # Safety
-    /// See [`SpecItem::element_pointer`].
+    /// Same as [`SpecItem::element_pointer`], but with a mutable borrow and a mutable pointer.
     fn element_mut_pointer(&mut self) -> *mut mjsElement {
         // SAFETY: self.element is a valid non-null pointer to the C spec element
         // for the lifetime of the parent MjSpec (struct invariant).
@@ -87,14 +83,14 @@ pub trait SpecItem: Sized + sealed::Sealed {
         usize::try_from(id).ok()
     }
 
-    /// Make the item inherit properties from a default class.
+    /// Assign the item to a default class.
     /// # Errors
     /// Returns [`MjEditError::NotFound`] when the default with the `class_name` doesn't exist.
     /// # Panics
     /// When the `class_name` contains '\0' characters, a panic occurs.
     fn set_default(&mut self, class_name: &str) -> Result<(), MjEditError> {
         /* Workaround to pass the borrow checker (we use the existing borrow) */
-        let cname = CString::new(class_name).unwrap();  // class_name is always valid UTF-8.
+        let cname = CString::new(class_name).unwrap();  // panics on interior NUL bytes only.
         let element = self.element_pointer();
         let spec = unsafe { mjs_getSpec(element) };
         let default = unsafe { mjs_findDefault(spec, cname.as_ptr()) };

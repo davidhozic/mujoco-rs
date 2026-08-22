@@ -24,7 +24,7 @@ pub struct SceneSelection {
     pub flex_id: Option<usize>,
     /// Selected skin id, or `None` if nothing was selected.
     pub skin_id: Option<usize>,
-    /// 3D world coordinates of the selection point.
+    /// 3D world coordinates of the selection point; `[0.0; 3]` when nothing was selected.
     pub point: [MjtNum; 3],
 }
 
@@ -41,12 +41,12 @@ impl Default for SceneSelection {
 }
 
 /* Types */
-/// These are the available categories of geoms in the abstract visualizer. The bitmask can be used in the function
-/// `mjr_render` to specify which categories should be rendered.
+/// These are the available categories of geoms in the abstract visualizer. The bitmask selects the
+/// categories that [`MjvScene::update_with_catmask`] adds to the scene.
 pub type MjtCatBit = mjtCatBit;
 
 /// These are the mouse actions that the abstract visualizer recognizes. It is up to the user to intercept mouse events
-/// and translate them into these actions, as illustrated in `simulate.cc <saSimulate>`.
+/// and translate them into these actions, as illustrated in MuJoCo's `simulate` application.
 pub type MjtMouse = mjtMouse;
 
 /// These bitmasks enable the translational and rotational components of the mouse perturbation. For the regular mouse,
@@ -186,7 +186,8 @@ impl MjvPerturb {
 /***********************************************************************************************************************
 ** MjvCamera
 ***********************************************************************************************************************/
-/// Abstract camera parameters (type, fixed/tracking ids, lookat, distance, azimuth, elevation, orthographic mode).
+/// Abstract camera parameters (type, fixed/tracking ids, lookat, distance, azimuth and elevation
+/// in degrees, orthographic mode).
 pub type MjvCamera = mjvCamera;
 impl MjvCamera {
     /// Creates a new free camera.
@@ -258,11 +259,14 @@ impl MjvCamera {
 
     /// Get the camera coordinate frame (pos, forward, up, right).
     ///
+    /// MuJoCo raises a fatal error, which ends the process, when `self.type_` is
+    /// [`MjtCamera::mjCAMERA_USER`].
+    ///
     /// # Panics
     /// Panics if this is a fixed camera (`MjtCamera::mjCAMERA_FIXED`) whose `fixedcamid` is out of range.
     pub fn frame<M: Deref<Target = MjModel>>(&self, data: &MjData<M>) -> ([MjtNum; 3], [MjtNum; 3], [MjtNum; 3], [MjtNum; 3]) {
         // Only the fixed-camera branch of mjv_cameraFrame dereferences the per-camera arrays; the
-        // free/tracking branches derive the frame from azimuth/elevation and need no validation.
+        // free branch uses azimuth/elevation, and the tracking branch only tests trackbodyid >= 0.
         if self.type_ == MjtCamera::mjCAMERA_FIXED as i32 {
             let ncam = data.model().ncam();
             assert!(
@@ -286,6 +290,9 @@ impl MjvCamera {
     }
 
     /// Compute the `frustum` (zver, zhor, zclip) suitable for rendering.
+
+    /// MuJoCo raises a fatal error, which ends the process, when `self.type_` is
+    /// [`MjtCamera::mjCAMERA_USER`], or when `self.fixedcamid` is out of range for `model`.
     pub fn frustum(&self, model: &MjModel) -> ([f32; 2], [f32; 2], [f32; 2]) {
         let mut zver = [0.0; 2];
         let mut zhor = [0.0; 2];
@@ -338,13 +345,16 @@ pub type MjvGeom = mjvGeom;
 
 impl MjvGeom {
     /// Sets the geom so that it acts as a connector (line, arrow, etc.) between
-    /// two 3D points.
+    /// two 3D points. `width` is the connector radius in length units, or its width in pixels for
+    /// `mjGEOM_LINE`.
     ///
     /// This is a wrapper around MuJoCo's `mjv_connector`. The connector type
     /// is taken from the geom's current [`type_`](MjvGeom::type_) field, so
     /// set it to the desired connector type (e.g. `mjGEOM_LINE`, `mjGEOM_ARROW`)
     /// **before** calling this method, or initialize the geom
-    /// with that type via [`MjvScene::create_geom`].
+    /// with that type via [`MjvScene::create_geom`]. MuJoCo raises a fatal error, which ends the
+    /// process, for any type other than `mjGEOM_CAPSULE`, `mjGEOM_CYLINDER`, `mjGEOM_ARROW`,
+    /// `mjGEOM_ARROW1`, `mjGEOM_ARROW2` or `mjGEOM_LINE`.
     pub fn connect(&mut self, width: MjtNum, from: [MjtNum; 3], to: [MjtNum; 3]) {
         unsafe {
             mjv_connector(self, self.type_, width, &from, &to);
@@ -759,6 +769,11 @@ impl MjvScene {
     /// (e.g., [`MjtCatBit::mjCAT_ALL`] for everything, or a bitwise OR of
     /// [`MjtCatBit::mjCAT_STATIC`], [`MjtCatBit::mjCAT_DYNAMIC`], [`MjtCatBit::mjCAT_DECOR`]).
     ///
+    /// The call resets `ngeom` to 0, so it drops every geom that [`MjvScene::create_geom`] added;
+    /// create such geoms after the update. Unless `cam` is of type
+    /// [`MjtCamera::mjCAMERA_USER`], it also overwrites the scene cameras and clears
+    /// `enabletransform`, and it moves `cam.lookat` onto the tracked body for a tracking camera.
+    ///
     /// # Panics
     /// - Panics if `data` was created from a different model than this scene.
     /// - Panics if `cam` is a fixed camera ([`MjtCamera::mjCAMERA_FIXED`]) whose `fixedcamid` is
@@ -872,6 +887,9 @@ impl MjvScene {
 
     /// Returns the selection point based on a mouse click.
     /// This is a wrapper around `mjv_select()`.
+    ///
+    /// `aspect_ratio` is the viewport width divided by its height. `relx` and `rely` are the cursor
+    /// position as fractions of the viewport in `[0, 1]`, measured from the left and bottom edges.
     ///
     /// # Panics
     /// Panics if `data` was created from a different model than this scene.
@@ -997,10 +1015,10 @@ impl Drop for MjvScene {
     }
 }
 
-// SAFETY: MjvScene exclusively owns the heap allocation behind Box<mjvScene>.
-// The raw pointers inside mjvScene (geoms, lights, etc.) point into memory owned
-// by the same allocation, so no aliasing with other threads is possible. All
-// mutation requires &mut self, so &MjvScene sharing across threads is safe.
+// SAFETY: MjvScene exclusively owns the Box<mjvScene> and every buffer that mjv_makeScene
+// allocated for it (geoms, geomorder, the flex and skin arrays), all of which mjv_freeScene
+// releases in Drop, so no aliasing with other threads is possible. All mutation requires
+// &mut self, so &MjvScene sharing across threads is safe.
 unsafe impl Send for MjvScene {}
 unsafe impl Sync for MjvScene {}
 

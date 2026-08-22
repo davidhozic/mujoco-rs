@@ -3,7 +3,7 @@ use crate::wrappers::mj_primitive::*;
 use crate::mujoco_c;
 use std::ptr;
 
-/// Derivatives of mju_subQuat.
+/// Derivatives of [`mju_sub_quat`](super::utility::mju_sub_quat).
 /// Nullable: Da, Db.
 /// Db = -Da^T
 pub fn mjd_sub_quat(qa: &[MjtNum; 4], qb: &[MjtNum; 4], da: Option<&mut [MjtNum; 9]>, db: Option<&mut [MjtNum; 9]>)  {
@@ -15,7 +15,7 @@ pub fn mjd_sub_quat(qa: &[MjtNum; 4], qb: &[MjtNum; 4], da: Option<&mut [MjtNum;
     ) }
 }
 
-/// Derivatives of mju_quatIntegrate.
+/// Derivatives of [`mju_quat_integrate`](super::utility::mju_quat_integrate).
 /// Nullable: Dquat, Dvel, Dscale.
 pub fn mjd_quat_integrate(vel: &[MjtNum; 3], scale: MjtNum, dquat: Option<&mut [MjtNum; 9]>, dvel: Option<&mut [MjtNum; 9]>, dscale: Option<&mut [MjtNum; 3]>)  {
     // SAFETY: all arguments are valid references; nullable parameters use null when None.

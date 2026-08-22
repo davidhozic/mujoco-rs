@@ -193,7 +193,8 @@ pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum], n: usize) {
     unsafe { mujoco_c::mju_symmetrize(res.as_mut_ptr(), mat.as_ptr(), n as i32) }
 }
 
-/// Convert symmetric sparse matrix to dense.
+/// Convert a lower-triangular symmetric CSR matrix to a full dense matrix.
+/// Entries whose column index is above the row index are ignored.
 ///
 /// # Panics
 /// - Panics if `res` does not have `n * n` elements.
@@ -460,7 +461,8 @@ pub fn mju_mul_quat_axis(res: &mut [MjtNum; 4], quat: &[MjtNum; 4], axis: &[MjtN
     unsafe { mujoco_c::mju_mulQuatAxis(res, quat, axis) }
 }
 
-/// Convert axisAngle to quaternion.
+/// Convert axisAngle to quaternion. `angle` is in radians, and `axis` must be a unit vector,
+/// because the result is not normalized.
 pub fn mju_axis_angle_2_quat(res: &mut [MjtNum; 4], axis: &[MjtNum; 3], angle: MjtNum)  {
     // SAFETY: all arguments are valid references with correct sizes.
     unsafe { mujoco_c::mju_axisAngle2Quat(res, axis, angle) }
@@ -540,6 +542,10 @@ pub fn mju_band_diag(i: i32, ntotal: i32, nband: i32, ndense: i32) -> i32  {
 }
 
 /// Eigenvalue decomposition of symmetric 3x3 matrix, mat = eigvec * diag(eigval) * eigvec'.
+/// The eigenvalues come out in decreasing order.
+///
+/// # Returns
+/// The number of Jacobi iterations, at most 500.
 pub fn mju_eig_3(eigval: &mut [MjtNum; 3], eigvec: &mut [MjtNum; 9], quat: &mut [MjtNum; 4], mat: &[MjtNum; 9]) -> i32  {
     // SAFETY: all arguments are valid references with correct sizes.
     unsafe { mujoco_c::mju_eig3(eigval, eigvec, quat, mat) }

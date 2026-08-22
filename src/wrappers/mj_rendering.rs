@@ -16,7 +16,7 @@ pub type MjtGridPos = mjtGridPos;
 /// These are the possible framebuffers. They are used as an argument to the function `mjr_setBuffer`.
 pub type MjtFramebuffer = mjtFramebuffer;
 
-/// These are the depth mapping options. They are used as a value for the `readPixelDepth` attribute of the
+/// These are the depth mapping options. They are used as a value for the `readDepthMap` attribute of the
 /// `mjrContext` struct, to control how the depth returned by `mjr_readPixels` is mapped from
 /// `znear` to `zfar`.
 pub type MjtDepthMap = mjtDepthMap;
@@ -111,19 +111,13 @@ impl MjrContext {
 
     /// Set OpenGL framebuffer for rendering to mjFB_OFFSCREEN.
     pub fn offscreen(&mut self) -> &mut Self {
-        // SAFETY: self.ffi is a valid, fully initialized mjrContext.
-        unsafe {
-            mjr_setBuffer(MjtFramebuffer::mjFB_OFFSCREEN as i32, self.ffi.as_mut());
-        }
+        self.set_buffer(MjtFramebuffer::mjFB_OFFSCREEN);
         self
     }
 
     /// Set OpenGL framebuffer for rendering to mjFB_WINDOW.
     pub fn window(&mut self) -> &mut Self {
-        // SAFETY: self.ffi is a valid, fully initialized mjrContext.
-        unsafe {
-            mjr_setBuffer(MjtFramebuffer::mjFB_WINDOW as i32, self.ffi.as_mut());
-        }
+        self.set_buffer(MjtFramebuffer::mjFB_WINDOW);
         self
     }
 
@@ -181,15 +175,16 @@ impl MjrContext {
         unsafe { mjr_restoreBuffer(self.ffi_mut()); }
     }
 
-    /// Sets the active OpenGL framebuffer to the given raw `framebuffer` id.
+    /// Sets the active OpenGL framebuffer to one of MuJoCo's two framebuffers.
     /// Prefer [`MjrContext::offscreen`] or [`MjrContext::window`] for the common cases.
-    pub fn set_buffer(&mut self, framebuffer: i32) {
+    pub fn set_buffer(&mut self, framebuffer: MjtFramebuffer) {
         // SAFETY: self.ffi is a valid, fully initialized mjrContext.
-        unsafe { mjr_setBuffer(framebuffer, self.ffi_mut()); }
+        unsafe { mjr_setBuffer(framebuffer as i32, self.ffi_mut()); }
     }
 
-    /// Read pixels from current OpenGL framebuffer to client buffer.
-    /// The `rgb` array is of size `[width * height * 3]`, while `depth` is of size `[width * height]`.
+    /// Read pixels from current OpenGL framebuffer to client buffer. The `rgb` array is of size
+    /// `[viewport.width * viewport.height * 3]`, while `depth` is of size
+    /// `[viewport.width * viewport.height]`.
     ///
     /// # Errors
     /// Returns [`MjrContextError::InvalidViewport`] if the viewport has negative

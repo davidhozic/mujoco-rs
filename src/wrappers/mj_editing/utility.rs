@@ -117,7 +117,7 @@ pub(crate) unsafe fn write_mjs_vec_string(source: &str, destination: *mut mjStri
     }
 }
 
-/// Split `source` to entries and append to `destination` (C++).
+/// Appends `source` as a single entry to `destination` (C++).
 ///
 /// # Safety
 /// `destination` must point to a valid `mjStringVec` object.
@@ -262,8 +262,7 @@ macro_rules! add_x_method_no_default {
 }
 
 
-/// Creates a `get_$name` method for finding items in spec / body.
-/// Also sets the default to null();
+/// Creates `$item` and `$item_mut` methods that look an item up by name through `mjs_findElement`.
 macro_rules! find_x_method {
     ($($item:ident),*) => {paste::paste! {
         $(
@@ -350,8 +349,9 @@ macro_rules! find_x_method_direct {
 }
 
 
-/// Creates a wrapper around a mjs$ffi_name item. It also implements the methods: `ffi()`, `ffi_mut()`
-/// and traits: [`SpecItem`](super::traits::SpecItem), [`Sync`], [`Send`].
+/// Creates a wrapper around a mjs$ffi_name item. It also implements the methods `info()` and
+/// `set_info()`, and the traits `Sealed` and [`SpecItem`](super::traits::SpecItem).
+/// The handles are deliberately neither [`Send`] nor [`Sync`].
 /// 
 /// When `[SpecObject]` is given to the right of `ffi_name`, the SpecObject trait also gets implemented.
 macro_rules! mjs_struct {
@@ -454,7 +454,7 @@ macro_rules! vec_string_set_append {
             }
 
             #[doc = concat!(
-                "Splits the `", stringify!($name), "` and append the split text to ", $comment,
+                "Appends `", stringify!($name), "` as a single entry to ", $comment,
                 "\n",
                 "# Panics\n",
                 "When the `value` contains '\\0' characters, a panic occurs."
@@ -474,9 +474,9 @@ macro_rules! vec_string_set_append {
             "Sets the entry at index `role` in `", stringify!($name), "` to `name`. ",
             $comment,
             "\n\n",
-            "The `", stringify!($name), "` vector is pre-sized by MuJoCo (one slot per ",
-            "[`", stringify!($role_ty), "`] variant); this method writes directly into ",
-            "the correct slot.\n",
+            "The `", stringify!($name), "` vector is pre-sized by MuJoCo with one slot per ",
+            "[`", stringify!($role_ty), "`] value. An index with no slot makes MuJoCo call ",
+            "`mju_error`, which ends the process under the default log handler.\n",
             "\n",
             "# Panics\n",
             "When `name` contains '\\0' characters, a panic occurs."
@@ -506,7 +506,7 @@ macro_rules! vec_string_set_append {
             "<div class=\"warning\">\n\n",
             "This replaces the pre-sized vector. Prefer [`set_",
             stringify!($singular), "`](Self::set_", stringify!($singular),
-            "`) to set individual entries by role.\n\n",
+            ") to set individual entries by role.\n\n",
             "</div>\n\n",
             "# Panics\n",
             "When the `value` contains '\\0' characters, a panic occurs."
@@ -523,7 +523,7 @@ macro_rules! vec_string_set_append {
             "<div class=\"warning\">\n\n",
             "Appending extends past the pre-sized vector. Prefer [`set_",
             stringify!($singular), "`](Self::set_", stringify!($singular),
-            "`) to set individual entries by role.\n\n",
+            ") to set individual entries by role.\n\n",
             "</div>\n\n",
             "# Panics\n",
             "When the `value` contains '\\0' characters, a panic occurs."

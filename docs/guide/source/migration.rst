@@ -189,6 +189,24 @@ as ``MjtFontScale`` and ``MjtDepthMap``, instead of ``i32``.
     }
 
 
+``MjrContext::set_buffer`` takes ``MjtFramebuffer``
+----------------------------------------------------
+``set_buffer`` took a raw ``i32``, so any integer reached ``mjr_setBuffer``. It now takes
+``MjtFramebuffer``.
+
+**Before:**
+
+.. code-block:: rust
+
+    context.set_buffer(MjtFramebuffer::mjFB_OFFSCREEN as i32);
+
+**After:**
+
+.. code-block:: rust
+
+    context.set_buffer(MjtFramebuffer::mjFB_OFFSCREEN);
+
+
 Unsafe mutation of |mj_model| ``actuator_gaintype``
 -----------------------------------------------------
 ``actuator_gaintype_mut`` is now an ``unsafe fn``; the actuator views are affected the same way,

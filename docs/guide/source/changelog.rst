@@ -290,6 +290,11 @@ update of MuJoCo alone can increase the major version.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
   now accepts ``texture_id: usize`` instead of ``texid: u32``.
 
+*MjrContext::set_buffer parameter type changed*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_buffer` now
+  accepts ``framebuffer: MjtFramebuffer`` instead of ``i32``.
+
 *MjrContext::upload_texture is now fallible*
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>upload_texture`
@@ -431,6 +436,9 @@ update of MuJoCo alone can increase the major version.
   Users are expected to use
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`
   instead.
+- Deprecated |mj_model|'s ``try_clone`` --- its ``MjModelError::AllocationFailed`` arm is
+  unreachable, because ``mj_copyModel`` raises ``mjERROR`` and the default handler exits the process
+  instead of returning null. Use ``clone`` instead.
 - Deprecated |mjs_tendon|'s ``try_wrap_site``, ``try_wrap_geom``, ``try_wrap_joint``, and
   ``try_wrap_pulley`` --- their ``MjEditError::AllocationFailed`` arm is unreachable and an
   allocation failure cannot be recovered soundly (MuJoCo aborts the process, or writes through the
@@ -477,6 +485,11 @@ New error variants in pre-existing enums:
   index instead of panicking. A new
   :docs-rs:`~mujoco_rs::error::<enum>MjEditError` ``IndexOutOfBounds`` variant carries the offending
   index and length.
+
+*RNE into a caller buffer*
+
+- Added :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>rne_into` and
+  :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_rne_into`.
 
 *MjrContext GPU re-upload methods*
 

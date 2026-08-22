@@ -429,7 +429,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         unsafe { mj_invConstraint(self.model.ffi(), self.ffi_mut()) }
     }
 
-    /// Compare forward and inverse dynamics, save results in fwdinv.
+    /// Compare forward and inverse dynamics, save results in `solver_fwdinv`.
     pub fn compare_fwd_inv(&mut self) {
         unsafe { mj_compareFwdInv(self.model.ffi(), self.ffi_mut()) }
     }
@@ -535,13 +535,39 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// RNE: compute M(qpos)*qacc + C(qpos,qvel); flg_acc=false removes inertial term.
+    /// Returns a newly allocated vector of `nv` elements. Wraps [`mj_rne`].
     pub fn rne(&mut self, flg_acc: bool) -> Vec<MjtNum> {
         let mut out = vec![0.0; self.model.ffi().nv as usize];
-        unsafe { mj_rne(self.model.ffi(), self.ffi_mut(), flg_acc as i32, out.as_mut_ptr()) };
+        self.rne_into(flg_acc, &mut out);
         out
     }
 
+    /// Same as [`MjData::rne`], except it writes the `nv` elements into `result`.
+    /// Elements of `result` above index `nv` keep their previous values.
+    ///
+    /// # Panics
+    /// Panics if `result` holds fewer than `nv` elements.
+    /// Use [`MjData::try_rne_into`] for a fallible alternative.
+    pub fn rne_into(&mut self, flg_acc: bool, result: &mut [MjtNum]) {
+        self.try_rne_into(flg_acc, result).unwrap()
+    }
+
+    /// Fallible version of [`MjData::rne_into`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::BufferTooSmall`] if `result.len() < nv`.
+    pub fn try_rne_into(&mut self, flg_acc: bool, result: &mut [MjtNum]) -> Result<(), MjDataError> {
+        let nv = self.model.ffi().nv as usize;
+        if result.len() < nv {
+            return Err(MjDataError::BufferTooSmall { name: "result", got: result.len(), needed: nv });
+        }
+        // SAFETY: the guard above proves result holds at least the nv elements that mj_rne writes.
+        unsafe { mj_rne(self.model.ffi(), self.ffi_mut(), flg_acc as i32, result.as_mut_ptr()) };
+        Ok(())
+    }
+
     /// RNE with complete data: compute cacc, cfrc_ext, cfrc_int.
+    /// Wraps [`mj_rnePostConstraint`].
     pub fn rne_post_constraint(&mut self) {
         unsafe { mj_rnePostConstraint(self.model.ffi(), self.ffi_mut()) }
     }
@@ -671,8 +697,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Reads the control history value for actuator `id` at `time`
-    /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
+    /// Reads the control value for actuator `id` at `time`: the current `ctrl` entry when the
+    /// actuator has no history buffer, otherwise the value from the history buffer
+    /// (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear, 2=cubic).
     /// # Panics
     /// Panics when `id >= nactuator`. Use [`MjData::try_read_ctrl`] for a fallible alternative.
     pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> MjtNum {
@@ -691,7 +718,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(val)
     }
 
-    /// Reads sensor `id` at `time` into `dst` (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
+    /// Reads sensor `id` at `time` into `dst` (`interp`: -1=use the model's `interp` setting,
+    /// 0=ZOH, 1=linear, 2=cubic).
     /// `dst` must be exactly `sensor_dim[id]` elements long.
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
@@ -715,7 +743,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Reads sensor `id` at `time` into a stack-allocated `[MjtNum; N]`
-    /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic). `N` must match `sensor_dim[id]`.
+    /// (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear, 2=cubic). `N` must match `sensor_dim[id]`.
     /// See also [`read_sensor`](Self::read_sensor), [`read_sensor_into`](Self::read_sensor_into).
     /// # Panics
     /// Panics when `id >= nsensor` or `N != sensor_dim[id]`.
@@ -747,7 +775,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(out)
     }
 
-    /// Reads sensor `id` at `time` (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
+    /// Reads sensor `id` at `time` (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear, 2=cubic).
     ///
     /// Returns [`Cow::Borrowed`] (zero-copy) for exact matches, ZOH, and extrapolation.
     /// Returns [`Cow::Owned`] for linear/cubic interpolation.
@@ -1258,6 +1286,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Intersect ray with hfield.
     /// Returns the distance to the intersection, or -1.0 if no intersection.
+    /// The geom must be of type `mjGEOM_HFIELD`; for any other type MuJoCo reports an error and
+    /// stops the process.
     ///
     /// # Panics
     /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
@@ -1270,6 +1300,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Intersect ray with hfield, returning the distance or -1.0 if no intersection.
+    /// The geom must be of type `mjGEOM_HFIELD`; for any other type MuJoCo reports an error and
+    /// stops the process.
     ///
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] if `geom_id >= ngeom`.
@@ -1289,6 +1321,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Intersect ray with mesh.
     /// Returns the distance to the intersection, or -1.0 if no intersection.
+    /// The geom must be of type `mjGEOM_MESH`; for any other type MuJoCo reports an error and
+    /// stops the process.
     ///
     /// # Panics
     /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
@@ -1301,6 +1335,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Intersect ray with mesh, returning the distance or -1.0 if no intersection.
+    /// The geom must be of type `mjGEOM_MESH`; for any other type MuJoCo reports an error and
+    /// stops the process.
     ///
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] if `geom_id >= ngeom`.
@@ -2246,7 +2282,7 @@ mod test {
             data.step();
         }
 
-        // mj_rne returns a scalar as result
+        // mj_rne writes an nv-element vector, which the wrapper returns as a Vec
         data.rne(true);
 
         data.rne_post_constraint();
@@ -2949,7 +2985,7 @@ mod test {
     #[test]
     fn test_act_mixed_stateful_stateless() {
         // muscle at id=0 (stateful, actnum=1), motor at id=1 (stateless, actnum=0)
-        // This tests mj_view_indices! with na path: actadr[0]=0, actadr[1]=-1
+        // This tests mj_model_dyn_range! with na path: actadr[0]=0, actadr[1]=-1
         // If bug exists: end_addr = (-1i32) as usize = usize::MAX -> overflow
         let xml = "<mujoco><option timestep=\"0.002\"/>\
 <worldbody><body name=\"b\"><joint name=\"j1\" type=\"slide\" range=\"-1 1\" limited=\"true\"/>\
@@ -2973,7 +3009,7 @@ mod test {
         assert!(view_m2.act.is_none(), "motor must have no act view");
     }
 
-    /// Tests `mj_view_indices!` with mixed joint types (free/ball/slide),
+    /// Tests `mj_model_dyn_range!` with mixed joint types (free/ball/slide),
     /// verifying that qpos and qvel view lengths match per-joint DOF counts.
     #[test]
     fn test_view_indices_mixed_joint_types() {
@@ -4896,8 +4932,8 @@ mod test {
         assert_eq!(data.model().opt().timestep, NEW_TIMESTEP);
     }
 
-    /// Exercises the `nsensordata` arm of `mj_model_nx_to_mapping!` and
-    /// `mj_model_nx_to_nitem!` by calling `data.sensor("jp")` on a model
+    /// Exercises the `nsensordata` arm of `mj_model_dyn_range!` by calling
+    /// `data.sensor("jp")` on a model
     /// that contains a single `jointpos` sensor.
     #[test]
     fn test_sensor_info_nsensordata_arm() {
@@ -4920,10 +4956,10 @@ mod test {
         assert_eq!(view.data.len(), 1, "jointpos sensor must produce 1 sensordata element");
     }
 
-    /// Exercises `getter_setter!` arm 2 (`get, [... & $type ...]`) and arm 17
-    /// (`with, get, [...]`) via `MjData::energy()`, which returns `&[MjtNum; 2]`.
+    /// Exercises the `get, [... & $type ...]` and `with, get, [...]` arms of `getter_setter!`
+    /// via `MjData::energy()`, which returns `&[MjtNum; 2]`.
     #[test]
-    fn test_energy_ref_getter_arms_2_and_17() {
+    fn test_energy_ref_getter_arms() {
         let model = MjModel::from_xml_string(MODEL).expect("model load failed");
         let mut data = model.make_data();
         data.energy_pos();
