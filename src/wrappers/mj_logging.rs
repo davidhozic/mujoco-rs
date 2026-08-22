@@ -152,6 +152,9 @@ impl MjLogMessage {
 ** Free logging functions
 ***********************************************************************************************************************/
 /// Get default handler configuration. Wraps [`mju_getLogConfig`].
+///
+/// The `topics` bitmask starts at the value that the `MUJOCO_LOG_TOPICS` environment variable
+/// selects: a comma-separated list of topic names, lowercase and without the `mjTOPIC_` prefix.
 pub fn log_config() -> MjLogConfig {
     // SAFETY: mju_getLogConfig returns a plain struct by value; no allocation.
     unsafe { mju_getLogConfig() }
@@ -172,6 +175,9 @@ pub fn log_message(msg: &MjLogMessage) {
 }
 
 /// Log an info message with optional topic filtering. Wraps [`mju_info`].
+///
+/// The default handler prints the message only when `topic` is `mjTOPIC_NONE`, or when the topic
+/// is enabled in the `topics` bitmask of [`log_config`]. It drops every other info message.
 ///
 /// # Panics
 /// Panics if `msg` contains interior `\0` characters.

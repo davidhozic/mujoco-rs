@@ -137,7 +137,7 @@ impl MjvPerturb {
         self.active = type_ as i32;
     }
 
-    /// Move an object with mouse. This is a wrapper around `mjv_movePerturb`.
+    /// Move an object with mouse. Wraps [`mjv_movePerturb`].
     ///
     /// # Note
     /// MuJoCo reports an error and stops the process when `action` is not one of
@@ -397,7 +397,7 @@ impl MjvGeom {
     /// two 3D points. `width` is the connector radius in length units, or its width in pixels for
     /// `mjGEOM_LINE`.
     ///
-    /// This is a wrapper around MuJoCo's `mjv_connector`. The connector type
+    /// Wraps [`mjv_connector`]. The connector type
     /// is taken from the geom's current [`type_`](MjvGeom::type_) field, so
     /// set it to the desired connector type (e.g. `mjGEOM_LINE`, `mjGEOM_ARROW`)
     /// **before** calling this method, or initialize the geom
@@ -1007,7 +1007,7 @@ impl MjvScene {
     }
 
     /// Returns the selection point based on a mouse click.
-    /// This is a wrapper around `mjv_select()`.
+    /// Wraps [`mjv_select`].
     ///
     /// `aspect_ratio` is the viewport width divided by its height. `relx` and `rely` are the cursor
     /// position as fractions of the viewport in `[0, 1]`, measured from the left and bottom edges.

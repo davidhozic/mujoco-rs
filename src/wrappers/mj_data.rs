@@ -240,7 +240,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Runs the first phase of a simulation step: computes kinematics and sensor data,
-    /// before the user sets controls. This is a wrapper around `mj_step1`.
+    /// before the user sets controls. Wraps [`mj_step1`].
     pub fn step1(&mut self) {
         unsafe {
             mj_step1(self.model.ffi(), self.ffi_mut());
@@ -248,39 +248,35 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Runs the second phase of a simulation step: computes dynamics and integrates forward
-    /// in time, after the user sets controls. This is a wrapper around `mj_step2`.
+    /// in time, after the user sets controls. Wraps [`mj_step2`].
     pub fn step2(&mut self) {
         unsafe {
             mj_step2(self.model.ffi(), self.ffi_mut());
         }
     }
 
-    /// Forward dynamics: same as mj_step but do not integrate in time.
-    /// This is a wrapper around `mj_forward`.
+    /// Forward dynamics: same as [`mj_step`] but do not integrate in time. Wraps [`mj_forward`].
     pub fn forward(&mut self) {
         unsafe {
             mj_forward(self.model.ffi(), self.ffi_mut());
         }
     }
 
-    /// [`MjData::forward`] dynamics with skip.
-    /// This is a wrapper around `mj_forwardSkip`.
+    /// [`MjData::forward`] dynamics with skip. Wraps [`mj_forwardSkip`].
     pub fn forward_skip(&mut self, skipstage: MjtStage, skipsensor: bool) {
         unsafe {
             mj_forwardSkip(self.model.ffi(), self.ffi_mut(), skipstage as i32, skipsensor as i32);
         }
     }
 
-    /// Inverse dynamics: qacc must be set before calling this function.
-    /// This is a wrapper around `mj_inverse`.
+    /// Inverse dynamics: qacc must be set before calling this function. Wraps [`mj_inverse`].
     pub fn inverse(&mut self) {
         unsafe {
             mj_inverse(self.model.ffi(), self.ffi_mut());
         }
     }
 
-    /// [`MjData::inverse`] dynamics with skip; skipstage is [`MjtStage`].
-    /// This is a wrapper around `mj_inverseSkip`.
+    /// [`MjData::inverse`] dynamics with skip; skipstage is [`MjtStage`]. Wraps [`mj_inverseSkip`].
     pub fn inverse_skip(&mut self, skipstage: MjtStage, skipsensor: bool) {
         unsafe {
             mj_inverseSkip(self.model.ffi(), self.ffi_mut(), skipstage as i32, skipsensor as i32);
@@ -289,8 +285,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Extracts the contact force in the contact frame for the given `contact_id`.
     /// The `contact_id` matches the index of the contact when iterating
-    /// via [`MjData::contact`].
-    /// Calls `mj_contactForce` internally.
+    /// via [`MjData::contact`]. Wraps [`mj_contactForce`].
+    ///
     /// # Note
     /// When `contact_id >= ncon`, `[0; 6]` is returned.
     pub fn contact_force(&self, contact_id: usize) -> [MjtNum; 6] {
@@ -1419,7 +1415,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reads data's state into `destination`. The `spec` parameter is a bit mask of [`MjtState`] elements,
     /// which controls what state gets copied. The `destination` parameter is a mutable
     /// slice to the location into which the state will be written.
-    /// This is a wrapper around [`mj_getState`].
+    /// Wraps [`mj_getState`].
     ///
     /// # Note
     /// The `destination` buffer is allowed to be larger than the
@@ -1480,7 +1476,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         self.state(spec)
     }
 
-    /// Sets the `state` to [`MjData`]. This is a wrapper around [`mj_setState`].
+    /// Sets the `state` to [`MjData`]. Wraps [`mj_setState`].
     /// The `state` is an array containing the state to write, based on the `spec`
     /// bitmask of elements [`MjtState`].
     ///
@@ -1530,7 +1526,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Copy [`MjData`] to `destination`, skipping large computed arrays not required for
     /// visualization: the mass and factorization matrices (`crb`, `M`, `qLD`, `qH`, `qDeriv`,
     /// `qLU`) and the sparse constraint Jacobian blocks (`efc_J_*`, `efc_Y_*`, `efc_AR_*`).
-    /// This is a wrapper for [`mjv_copyData`].
+    /// Wraps [`mjv_copyData`].
     ///
     /// # Note
     /// MuJoCo reports an error and stops the process when this data's stack is in use.
@@ -1554,7 +1550,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Copy [`MjData`] to `destination` in full.
-    /// This is a wrapper for [`mj_copyData`].
+    /// Wraps [`mj_copyData`].
     ///
     /// # Note
     /// MuJoCo reports an error and stops the process when this data's stack is in use.
