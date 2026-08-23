@@ -193,7 +193,8 @@ pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum], n: usize) {
     unsafe { mujoco_c::mju_symmetrize(res.as_mut_ptr(), mat.as_ptr(), n as i32) }
 }
 
-/// Convert symmetric sparse matrix to dense.
+/// Convert a lower-triangular symmetric CSR matrix to a full dense matrix.
+/// Entries whose column index is above the row index are ignored.
 ///
 /// # Panics
 /// - Panics if `res` does not have `n * n` elements.
@@ -301,6 +302,10 @@ pub fn mju_sqr_mat_td(res: &mut [MjtNum], mat: &[MjtNum], diag: Option<&[MjtNum]
 /*******************************/
 /// Intersect ray with pure geom, return nearest distance or -1 if no intersection.
 /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
+///
+/// # Note
+/// MuJoCo raises a fatal error, which ends the process, when `geomtype` is not a plane, sphere,
+/// capsule, ellipsoid, cylinder or box.
 pub fn mju_ray_geom(pos: &[MjtNum; 3], mat: &[MjtNum; 9], size: &[MjtNum; 3], pnt: &[MjtNum; 3], vec: &[MjtNum; 3], geomtype: MjtGeom, normal_out: Option<&mut [MjtNum; 3]>) -> MjtNum  {
     // SAFETY: all arguments are valid references; nullable parameters use null when None.
     unsafe { mujoco_c::mju_rayGeom(pos, mat, size, pnt, vec, geomtype as i32, normal_out.map_or(ptr::null_mut(), |x| x)) }
@@ -460,7 +465,8 @@ pub fn mju_mul_quat_axis(res: &mut [MjtNum; 4], quat: &[MjtNum; 4], axis: &[MjtN
     unsafe { mujoco_c::mju_mulQuatAxis(res, quat, axis) }
 }
 
-/// Convert axisAngle to quaternion.
+/// Convert axisAngle to quaternion. `angle` is in radians, and `axis` must be a unit vector,
+/// because the result is not normalized.
 pub fn mju_axis_angle_2_quat(res: &mut [MjtNum; 4], axis: &[MjtNum; 3], angle: MjtNum)  {
     // SAFETY: all arguments are valid references with correct sizes.
     unsafe { mujoco_c::mju_axisAngle2Quat(res, axis, angle) }
@@ -540,6 +546,10 @@ pub fn mju_band_diag(i: i32, ntotal: i32, nband: i32, ndense: i32) -> i32  {
 }
 
 /// Eigenvalue decomposition of symmetric 3x3 matrix, mat = eigvec * diag(eigval) * eigvec'.
+/// The eigenvalues come out in decreasing order.
+///
+/// # Returns
+/// The number of Jacobi iterations, at most 500.
 pub fn mju_eig_3(eigval: &mut [MjtNum; 3], eigvec: &mut [MjtNum; 9], quat: &mut [MjtNum; 4], mat: &[MjtNum; 9]) -> i32  {
     // SAFETY: all arguments are valid references with correct sizes.
     unsafe { mujoco_c::mju_eig3(eigval, eigvec, quat, mat) }
@@ -606,7 +616,12 @@ pub fn mju_is_bad(x: MjtNum) -> bool  {
 }
 
 /// Generate Halton sequence.
+///
+/// # Panics
+/// Panics if `base` is less than 2.
 pub fn mju_halton(index: i32, base: i32) -> MjtNum  {
+    // MuJoCo divides by base without checking it: 0 divides by zero and 1 never terminates.
+    assert!(base >= 2, "halton base must be 2 or more, got {base}");
     // SAFETY: pure scalar FFI call with no pointer arguments.
     unsafe { mujoco_c::mju_Halton(index, base) }
 }
@@ -1006,5 +1021,20 @@ mod tests {
         assert_relative_eq!(res[0], vec[0], epsilon = 1e-9);
         assert_relative_eq!(res[1], vec[1], epsilon = 1e-9);
         assert_relative_eq!(res[2], vec[2], epsilon = 1e-9);
+    }
+
+    /// The radical inverse in base 2 of 1, 2, 3 is 1/2, 1/4, 3/4.
+    #[test]
+    fn test_mju_halton() {
+        assert_relative_eq!(mju_halton(1, 2), 0.5, epsilon = 1e-12);
+        assert_relative_eq!(mju_halton(2, 2), 0.25, epsilon = 1e-12);
+        assert_relative_eq!(mju_halton(3, 2), 0.75, epsilon = 1e-12);
+    }
+
+    /// Base 1 makes MuJoCo's loop run forever, so the wrapper must reject it before the FFI call.
+    #[test]
+    #[should_panic(expected = "base must be 2 or more")]
+    fn test_mju_halton_base_one_panics() {
+        let _ = mju_halton(1, 1);
     }
 }

@@ -76,7 +76,7 @@ fn create_model() -> MjModel {
         for j in -2..2 {
             direction = if rand::random_bool(0.5) { 1 } else { -1 };
 
-            // Generate each step
+            // Generate one stair region per grid cell
             stairs(&mut spec, [i as f64 * 2.0 * 2.0, j as f64 * 2.0 * 2.0], 4, direction, &format!("{base_name}{i}_{j}"));
         }
     }

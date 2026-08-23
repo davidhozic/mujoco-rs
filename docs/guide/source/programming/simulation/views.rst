@@ -80,7 +80,7 @@ fields). ``PointerView`` implements the
 acts like a slice. While some fields might be scalars, we still treat those as arrays
 for implementation simplicity reasons.
 
-The same ``view`` / ``view_mut`` pattern applies to every named element type --- bodies,
+The same ``view`` / ``view_mut`` pattern applies to most named element types --- bodies,
 geoms, sites, actuators, sensors, and so on --- each looked up through its corresponding
 finder (e.g. ``MjData::body`` or ``MjData::geom``) and info struct.
 
@@ -126,6 +126,7 @@ generated view still support mutation, but only through
 
         unsafe {
             view.dyntype.as_mut_slice()[0] = MjtDyn::mjDYN_NONE;
+            view.actnum.as_mut_slice()[0] = 0;
             view.actadr.as_mut_slice()[0] = -1;
         }
     }

@@ -152,6 +152,9 @@ impl MjLogMessage {
 ** Free logging functions
 ***********************************************************************************************************************/
 /// Get default handler configuration. Wraps [`mju_getLogConfig`].
+///
+/// The `topics` bitmask starts at the value that the `MUJOCO_LOG_TOPICS` environment variable
+/// selects: a comma-separated list of topic names, lowercase and without the `mjTOPIC_` prefix.
 pub fn log_config() -> MjLogConfig {
     // SAFETY: mju_getLogConfig returns a plain struct by value; no allocation.
     unsafe { mju_getLogConfig() }
@@ -164,12 +167,17 @@ pub fn set_log_config(config: MjLogConfig) {
 }
 
 /// Dispatch a structured log message to the active handler. Wraps [`mju_message`].
+///
+/// A message with level `mjLOG_ERROR` can end the process; see [`log_error`].
 pub fn log_message(msg: &MjLogMessage) {
     // SAFETY: `msg` is a valid reference; mju_message reads it and does not retain the pointer.
     unsafe { mju_message(msg as *const MjLogMessage) }
 }
 
 /// Log an info message with optional topic filtering. Wraps [`mju_info`].
+///
+/// The default handler prints the message only when `topic` is `mjTOPIC_NONE`, or when the topic
+/// is enabled in the `topics` bitmask of [`log_config`]. It drops every other info message.
 ///
 /// # Panics
 /// Panics if `msg` contains interior `\0` characters.
@@ -185,7 +193,8 @@ pub fn log_info(topic: MjtLogTopic, msg: &str) {
 /// Main error function; does not return to caller. Wraps [`mju_error`].
 ///
 /// # Panics
-/// Panics if `msg` contains interior `\0` characters.
+/// Panics if `msg` contains interior `\0` characters, or if a custom log handler or a legacy
+/// `mju_user_error` callback makes `mju_error` return.
 pub fn log_error(msg: &str) -> ! {
     let escaped = msg.replace('%', "%%");
     let c_msg = CString::new(escaped).unwrap();

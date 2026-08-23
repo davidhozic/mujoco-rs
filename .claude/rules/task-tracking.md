@@ -11,3 +11,10 @@ visible to the user. Not in prose, not in a scratch file.
   out.
 - Do not close a task the evidence does not close; a blocked task says so.
 - Prune finished or obsolete tasks.
+
+## When the tool is missing
+
+The task tools ship with Claude Code, but a setting gates them. If they are not in your tool list,
+ask the user to switch them on: set `"todoFeatureEnabled": true` in `~/.claude/settings.json`, or
+run `/config` and enable the todo / task tracking panel. The tools appear in the next session, not
+in the current one.

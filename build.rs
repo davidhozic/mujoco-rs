@@ -91,14 +91,15 @@ mod build_dependencies {
         re = regex::Regex::new(r"\*\s*(const|mut)\s*\[\s*(.+?)\s*;\s*[0-1]+[A-z]+\s*\]").unwrap();
         fdata = re.replace_all(&fdata, "*$1 $2").to_string();
 
-        // Per-struct field visibility. A struct exposed in the safe API (via a pub type
-        // alias or a dedicated wrapper) "needs mediation" when at least one of its fields
-        // requires the safe API to validate writes: a raw pointer (a public one would let
-        // a user substitute an arbitrary address that C dereferences), a fixed char buffer
-        // (must stay NUL-terminated), or an int that encodes a constrained enum. When a
-        // struct needs mediation, ALL of its fields are demoted to pub(crate) together --
-        // a per-struct rule, so the access pattern is uniform (every field reached through
-        // a wrapper accessor) rather than mixing direct field access with accessors.
+        // Per-struct field visibility. A struct that the safe API exposes directly (through
+        // a bare pub type alias, with no dedicated wrapper) "needs mediation" when at least
+        // one of its fields requires the safe API to validate writes: a raw pointer (a public
+        // one would let a user substitute an arbitrary address that C dereferences), a fixed
+        // char buffer (must stay NUL-terminated), or a value C uses as an unchecked memory
+        // index. When a struct needs mediation, ALL of its fields are demoted to pub(crate)
+        // together -- a per-struct rule, so the access pattern is uniform (every field
+        // reached through a wrapper accessor) rather than mixing direct field access with
+        // accessors.
         //
         // Demotion is applied as a text pass (rather than the field_visibility callback)
         // because bindgen reports the same anonymous type name for pointers and arrays and
@@ -308,7 +309,7 @@ fn main() {
             );
         }
 
-        // ---- Native builds only below this point ----
+        // ---- Same-OS builds only below this point ----
 
         // Try pkg-config (unix hosts only).
         #[cfg(unix)]
@@ -359,7 +360,7 @@ fn main() {
             false
         };
 
-        // Auto-download MuJoCo (Linux and Windows native builds only).
+        // Auto-download MuJoCo (Linux and Windows, same-OS builds only).
         #[cfg(not(target_os = "macos"))]
         #[cfg(feature = "auto-download-mujoco")]
         if !found {

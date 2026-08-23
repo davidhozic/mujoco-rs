@@ -135,14 +135,14 @@ pub type MjtSensor = mjtSensor;
 /// `mj_inverseSkip`.
 pub type MjtStage = mjtStage;
 
-/// These are the possible sensor data types, used in `mjData.sensor_datatype`.
+/// These are the possible sensor data types, used in [`MjModel::sensor_datatype`].
 pub type MjtDataType = mjtDataType;
 
 /// Types of data fields returned by contact sensors.
 pub type MjtConDataField = mjtConDataField;
 
 /// Types of frame alignment of elements with their parent bodies. Used as shortcuts during `mj_kinematics` in the
-/// last argument to `mj_local2global`.
+/// last argument to `mj_local2Global`.
 pub type MjtSameFrame = mjtSameFrame;
 
 /// Sleep policy associated with a tree. The compiler automatically chooses between `NEVER` and `ALLOWED`, but the user
@@ -563,9 +563,23 @@ impl MjModel {
 
     /// Fallible version of [`Clone::clone`].
     ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// MuJoCo cannot report a failure here: `mj_copyModel` raises `mjERROR` when it cannot make
+    /// the model, and the default error handler exits the process, so this method never returns
+    /// `Err`. Prefer [`Clone::clone`]. This method may be undeprecated in the future if MuJoCo's
+    /// upstream C code is changed to report the failure recoverably.
+    ///
+    /// </div>
+    ///
     /// # Errors
-    /// Returns [`MjModelError::AllocationFailed`] if MuJoCo fails to allocate
-    /// the copy.
+    /// Returns [`MjModelError::AllocationFailed`] if MuJoCo returns a null model.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `clone`"
+    )]
     pub fn try_clone(&self) -> Result<MjModel, MjModelError> {
         let ptr = unsafe { mj_copyModel(ptr::null_mut(), self.ffi()) };
         NonNull::new(ptr)
@@ -659,6 +673,8 @@ impl MjModel {
     }
 
     /// Return size of state specification. The bits of the integer spec correspond to element fields of [`MjtState`](crate::wrappers::mj_data::MjtState).
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `spec` is not below `1 << mjNSTATE`.
     pub fn state_size(&self, spec: u32) -> usize {
         unsafe { mj_stateSize(self.ffi(), spec as i32) as usize }
     }
@@ -666,6 +682,10 @@ impl MjModel {
     /// Extract the subset of components specified by `dst_spec` from a state `src`
     /// previously obtained via [`MjData::read_state_into`] or [`MjData::state`]
     /// with components specified by `src_spec`.
+    ///
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
+    /// `1 << mjNSTATE`.
     ///
     /// # Panics
     /// - When `src.len()` does not equal the size required by `src_spec`.
@@ -677,6 +697,10 @@ impl MjModel {
     }
 
     /// Fallible version of [`MjModel::extract_state`].
+    ///
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
+    /// `1 << mjNSTATE`.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the extracted state.
     /// # Errors
@@ -714,6 +738,10 @@ impl MjModel {
     /// previously obtained via [`MjData::read_state_into`] or [`MjData::state`]
     /// with components specified by `src_spec`.
     ///
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
+    /// `1 << mjNSTATE`.
+    ///
     /// # Panics
     /// - When `src.len()` does not equal the size required by `src_spec`.
     /// - When `dst_spec` is not a subset of `src_spec`.
@@ -725,6 +753,10 @@ impl MjModel {
     }
 
     /// Fallible version of [`MjModel::extract_state_into`].
+    ///
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
+    /// `1 << mjNSTATE`.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the number of elements written to `dst`.
     /// # Errors
@@ -769,7 +801,8 @@ impl MjModel {
         unsafe { mj_isSparse(self.ffi()) == 1 }
     }
 
-    /// Determine type of solver. Returns `true` if dual (PGS), `false` if primal (CG or Newton).
+    /// Determine type of solver. Returns `true` for a dual solver: PGS, or any solver with
+    /// `noslip_iterations > 0`.
     pub fn is_dual(&self) -> bool {
         unsafe { mj_isDual(self.ffi()) == 1 }
     }
@@ -777,16 +810,15 @@ impl MjModel {
     /// Get name of object with the specified [`MjtObj`] type and id, returns `None` if name not found.
     /// Wraps `mj_id2name`.
     /// # Panics
-    /// Panics if MuJoCo internally returns a C string that is not valid UTF-8. In practice
-    /// MuJoCo names are always valid ASCII (and therefore UTF-8), so this should not occur.
+    /// Panics if MuJoCo internally returns a C string that is not valid UTF-8.
     pub fn id_to_name(&self, type_: MjtObj, id: usize) -> Option<&str> {
         let ptr = unsafe { mj_id2name(self.ffi(), type_ as i32, id as i32) };
         if ptr.is_null() {
             None
         }
         else {
-            // SAFETY: ptr was checked non-null above; MuJoCo guarantees the pointed-to string is
-            // valid UTF-8 and lives as long as the model.
+            // SAFETY: ptr was checked non-null above; MuJoCo NUL-terminates the names blob and it
+            // lives as long as the model.
             let cstr = unsafe { CStr::from_ptr(ptr).to_str().unwrap() };
             Some(cstr)
         }
@@ -1036,7 +1068,7 @@ impl MjModel {
         jnt_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance: limit"; ffi().njnt],
         jnt_pos: &[[MjtNum; 3] [force]; "local anchor position"; ffi().njnt],
         jnt_axis: &[[MjtNum; 3] [force]; "local joint axis"; ffi().njnt],
-        jnt_stiffness: &[MjtNum; "stiffness coefficient"; ffi().njnt],
+        jnt_stiffness: &[MjtNum; "linear stiffness coefficient"; ffi().njnt],
         jnt_stiffnesspoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order stiffness coefficients"; ffi().njnt],
         jnt_range: &[[MjtNum; 2] [force]; "joint limits"; ffi().njnt],
         jnt_actfrcrange: &[[MjtNum; 2] [force]; "range of total actuator force"; ffi().njnt],
@@ -1051,7 +1083,7 @@ impl MjModel {
         dof_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance:frictionloss"; ffi().nv],
         dof_frictionloss: &[MjtNum; "dof friction loss"; ffi().nv],
         dof_armature: &[MjtNum; "dof armature inertia/mass"; ffi().nv],
-        dof_damping: &[MjtNum; "damping coefficient"; ffi().nv],
+        dof_damping: &[MjtNum; "linear damping coefficient"; ffi().nv],
         dof_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().nv],
         dof_invweight0: &[MjtNum; "diag. inverse inertia in qpos0"; ffi().nv],
         dof_M0: &[MjtNum; "diag. inertia in qpos0"; ffi().nv],
@@ -1336,9 +1368,9 @@ impl MjModel {
         tendon_range: &[[MjtNum; 2] [force]; "tendon length limits"; ffi().ntendon],
         tendon_actfrcrange: &[[MjtNum; 2] [force]; "range of total actuator force"; ffi().ntendon],
         tendon_margin: &[MjtNum; "min distance for limit detection"; ffi().ntendon],
-        tendon_stiffness: &[MjtNum; "stiffness coefficient"; ffi().ntendon],
+        tendon_stiffness: &[MjtNum; "linear stiffness coefficient"; ffi().ntendon],
         tendon_stiffnesspoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order stiffness coefficients"; ffi().ntendon],
-        tendon_damping: &[MjtNum; "damping coefficient"; ffi().ntendon],
+        tendon_damping: &[MjtNum; "linear damping coefficient"; ffi().ntendon],
         tendon_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().ntendon],
         tendon_armature: &[MjtNum; "inertia associated with tendon velocity"; ffi().ntendon],
         tendon_frictionloss: &[MjtNum; "loss due to friction"; ffi().ntendon],
@@ -1412,7 +1444,7 @@ impl MjModel {
         (mut = unsafe) text_adr: &[i32; "address of text in text_data"; ffi().ntext],
         (mut = unsafe) text_size: &[i32; "size of text field (strlen+1)"; ffi().ntext],
         (mut = unsafe) text_data: &[c_char; "array of all text fields (0-terminated)"; ffi().ntextdata],
-        (mut = unsafe) tuple_adr: &[i32; "address of text in text_data"; ffi().ntuple],
+        (mut = unsafe) tuple_adr: &[i32; "address of tuple in tuple_objtype/objid/objprm"; ffi().ntuple],
         (mut = unsafe) tuple_size: &[i32; "number of objects in tuple"; ffi().ntuple],
         tuple_objtype: &[MjtObj [force]; "array of object types in all tuples"; ffi().ntupledata],
         (mut = unsafe) tuple_objid: &[i32; "array of object ids in all tuples"; ffi().ntupledata],
@@ -1451,7 +1483,7 @@ impl MjModel {
         (mut = unsafe) M_rowadr: &[i32; "reduced inertia: row addresses"; ffi().nv],
         (mut = unsafe) M_colind: &[i32; "reduced inertia: column indices"; ffi().nC],
         (mut = unsafe) mapM2M: &[i32; "index mapping from qM to M"; ffi().nC],
-        (mut = unsafe) D_rownnz: &[i32; "non-zeros in each row"; ffi().nv],
+        (mut = unsafe) D_rownnz: &[i32; "full inertia: non-zeros in each row"; ffi().nv],
         (mut = unsafe) D_rowadr: &[i32; "full inertia: row addresses"; ffi().nv],
         (mut = unsafe) D_diag: &[i32; "full inertia: index of diagonal element"; ffi().nv],
         (mut = unsafe) D_colind: &[i32; "full inertia: column indices"; ffi().nD],
@@ -1481,9 +1513,9 @@ impl MjModel {
 }
 
 impl Clone for MjModel {
-    /// # Panics
-    /// Panics if MuJoCo fails to allocate the cloned model.
-    /// Use [`MjModel::try_clone`] for a fallible alternative.
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when an allocation fails, so this never fails.
+    #[expect(deprecated, reason = "try_clone keeps the implementation until it is removed")]
     fn clone(&self) -> Self {
         self.try_clone().expect("failed to clone model")
     }
@@ -2233,7 +2265,7 @@ mod tests {
     fn test_id_2name_valid() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
 
-        // Body with id=1 should exist ("box")
+        // Body with id=1 should exist ("ball")
         let name = model.id_to_name(MjtObj::mjOBJ_BODY, 1);
         assert_eq!(name, Some("ball"));
     }
@@ -2547,7 +2579,7 @@ mod tests {
     fn test_hfield_view() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
 
-        // Access first height field
+        // Access the second height field
         let info_hf = model.hfield("hf2").unwrap();
         let view_hf = info_hf.view(&model);
 

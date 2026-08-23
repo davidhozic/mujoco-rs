@@ -30,7 +30,7 @@ macro_rules! default_accessor_wrapper {
 }
 
 // This is implemented manually since we can't directly borrow check if something is using the default.
-// We also override the delete method to panic instead of deleting.
+// We also override the delete method to return an error instead of deleting.
 
 /// Default specification. This is a type alias to [`mjsDefault`].
 pub type MjsDefault = mjsDefault;
@@ -49,8 +49,17 @@ impl SpecItem for MjsDefault {
         self.element
     }
 
-    fn default(&self) -> &MjsDefault {
-        self
+    fn default(&self) -> Option<&MjsDefault> {
+        Some(self)
+    }
+
+    /// MuJoCo exposes no id accessor for a default class.
+    ///
+    /// Always returns `None`.
+    fn id(&self) -> Option<usize> {
+        // mjs_getId casts to mjCBase, but mjCDef derives from mjsElement directly, so the cast
+        // would read an unrelated offset instead of an id.
+        None
     }
 
     /// `MjsDefault` cannot be assigned to a named default class.
@@ -75,7 +84,7 @@ impl SpecItem for MjsDefault {
         Err(MjEditError::UnsupportedOperation)
     }
 
-    /// Defaults can't be deleted.
+    /// This crate does not delete a default class through the item itself.
     ///
     /// # Deprecated
     /// This API is deprecated and will be removed in a future release.
@@ -83,7 +92,7 @@ impl SpecItem for MjsDefault {
     ///
     /// This override always returns [`MjEditError::UnsupportedOperation`] without performing
     /// any operation, so the post-deletion use-after-free restriction from [`SpecItem::delete`]
-    /// does not apply -- `self` remains valid after an `Err` return.
+    /// does not apply; `self` remains valid after an `Err` return.
     ///
     /// # Errors
     /// This will always error with [`MjEditError::UnsupportedOperation`].

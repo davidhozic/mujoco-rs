@@ -1,11 +1,11 @@
 //! Modifying [`MjModel`] physics parameters at runtime.
 //!
 //! Shows two ways to change the gravity of a model already attached to
-//! [`MjData`]: in-place via [`MjData::model_mut`] and by swapping via
+//! [`MjData`]: in-place via [`MjData::model_opt_mut`] and by swapping via
 //! [`MjData::swap_model`].
 //!
 //! Not all model parameters are safe to change at runtime.
-//! See [MuJoCo's docs](https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes)
+//! See [MuJoCo's docs](https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#mjmodel-changes)
 //! for the full list.
 
 use mujoco_rs::prelude::*;
@@ -40,7 +40,7 @@ fn main() {
     let z_baseline = data.qpos()[2];
     println!("baseline   z={z_baseline:.4}  (gravity={default_gravity:.2})");
 
-    // model_mut: direct in-place mutation (requires M: DerefMut).
+    // model_opt_mut: direct in-place mutation (requires M: DerefMut).
     data.reset();
     let half_gravity = default_gravity / 2.0;
     data.model_opt_mut().gravity[2] = half_gravity;
@@ -48,7 +48,7 @@ fn main() {
         data.step();
     }
     let z_mut = data.qpos()[2];
-    println!("model_mut  z={z_mut:.4}  (gravity={half_gravity:.2})");
+    println!("model_opt_mut z={z_mut:.4}  (gravity={half_gravity:.2})");
 
     // Restore gravity for the next method.
     data.model_opt_mut().gravity[2] = default_gravity;

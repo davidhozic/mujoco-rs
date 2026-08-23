@@ -10,7 +10,7 @@
 //! The model consists of a combined box-and-sphere body (free-floating) that
 //! falls onto a flat floor.  The simulation runs for a fixed number of steps
 //! while the renderer periodically saves frames that show:
-//!   - red markers at contact points (`mjVIS_CONTACTPOINT`),
+//!   - orange markers at contact points (`mjVIS_CONTACTPOINT`),
 //!   - arrows representing contact forces (`mjVIS_CONTACTFORCE`), and
 //!   - a transparent body so that the contact markers inside remain visible
 //!     (`mjVIS_TRANSPARENT`).
@@ -54,9 +54,8 @@ const EXAMPLE_MODEL: &str = r#"
     <geom name="floor" type="plane" size="0 0 .05" material="grid"/>
 
     <!--
-      The body is rotated 30 deg around z so the box lands on a corner,
-      producing multiple simultaneous contact points and making
-      the force visualisation more interesting.
+      The box lands flat on the floor, which produces multiple simultaneous
+      contact points and makes the force visualisation more interesting.
     -->
     <body name="box_and_sphere" pos="0 0 0.5" euler="0 0 -30">
       <freejoint/>
@@ -99,7 +98,7 @@ fn main() {
     // Enable contact visualisation on the renderer.
     //
     // MjtVisFlag values used:
-    //   mjVIS_CONTACTPOINT = 14  -> red dots at contact points
+    //   mjVIS_CONTACTPOINT = 14  -> orange dots at contact points
     //   mjVIS_CONTACTFORCE = 16  -> arrows showing contact force direction
     //   mjVIS_TRANSPARENT  = 18  -> make geoms semi-transparent so that
     //                               markers inside them remain visible
@@ -113,7 +112,7 @@ fn main() {
 
     // Position the camera so we can see the whole scene.
     let mut camera = MjvCamera::new_free(&model);
-    // Zoom out a little and elevate the viewpoint.
+    // Zoom out a little and lower the viewpoint.
     camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -0.5);
     camera.move_(MjtMouse::mjMOUSE_ROTATE_V, &model, 0.0, -0.1);
     renderer.set_camera(camera);

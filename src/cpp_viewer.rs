@@ -74,10 +74,13 @@ impl MjViewerCpp {
     /// The caller must ensure that both `model` and `data` remain alive and at a stable memory
     /// address for the entire lifetime of the returned [`MjViewerCpp`]. Dropping or moving the
     /// underlying [`MjModel`] or [`MjData`] while the viewer is alive is undefined behavior.
-    /// Calls to [`MjViewerCpp::render`] must be done only on the **main** thread.
+    /// [`MjViewerCpp::launch_passive`] itself performs the OpenGL initialization and render
+    /// steps, so it and [`MjViewerCpp::render`] must be called only on the **main** thread.
+    /// The viewer writes through both pointers, so the caller must treat `model` and `data` as
+    /// mutably borrowed by the viewer, and must not access them while [`MjViewerCpp::sync`] runs.
     ///
     /// # Panics
-    /// Panics if `mujoco_cSimulate_create` returns a null pointer, or if the load thread panics.
+    /// Panics if the load thread panics.
     pub unsafe fn launch_passive<M: Deref<Target = MjModel> + Clone + Send + Sync>(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut cam = Box::new(MjvCamera::default());
@@ -141,7 +144,7 @@ impl MjViewerCpp {
         Ok(())
     }
 
-    /// Syncs the simulation state with the viewer.
+    /// Syncs the simulation state with the viewer. The transfer runs in both directions.
     pub fn sync(&mut self) {
         if !self.running {
             return;
@@ -166,8 +169,8 @@ impl Drop for MjViewerCpp {
 }
 
 /// # Safety
-/// Rendering must only be performed on the main thread. `Send` is provided so
-/// the viewer handle can be moved to the main thread after construction.
+/// Rendering must only be performed on the main thread. `Send` is provided so the viewer handle
+/// can be moved to another thread that only calls [`MjViewerCpp::sync`].
 unsafe impl Send for MjViewerCpp {}
 /// # Safety
 /// The viewer is safe to share across threads for syncing, but rendering must

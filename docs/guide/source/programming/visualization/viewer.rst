@@ -23,9 +23,11 @@ Rust-native 3D viewer
     (or ``viewer-ui`` for UI support).
 
 The Rust-native 3D viewer, enabled by the ``viewer`` feature, supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
+Press ``F1`` in the viewer window to show or hide the list of mouse and keyboard shortcuts.
 This also includes object perturbations. Optionally, enabled by the ``viewer-ui`` feature, the viewer
 also provides a user interface, which tries to replicate the original C++ viewer as best as possible
-(while simultaneously enriching it) and thus allows control of constraints, joints, actuators, etc.
+(while simultaneously enriching it) and thus allows control of constraints and actuators,
+inspection of joint state, and much more.
 
 A screenshot of the Rust 3D viewer is shown below.
 
@@ -63,7 +65,7 @@ The viewer can be launched in two ways:
           let mut viewer = MjViewer::builder()
               .window_name("My Simulation")    // text shown in the window title bar.
               .max_user_geoms(0)               // maximum additional geoms drawn by the user.
-              .vsync(false)                    // vertical synchronization (use true when rendering in a separate thread).
+              .vsync(false)                    // vertical synchronization (use true with a separate simulation thread).
               .warn_non_realtime(false)        // show an overlay when the simulation lags behind realtime.
               .build_passive(&model).expect("could not launch the viewer");
           while viewer.running() {
@@ -191,8 +193,8 @@ This can slow down the simulation as :docs-rs:`~~mujoco_rs::viewer::<struct>MjVi
 is relatively expensive to call. Additionally, synchronous usage with the simulation causes
 the refresh rate to be equal to the simulation stepping frequency, which puts strain on the GPU.
 
-To prevent slowdowns and allow V-Sync, the viewer can run in the **main thread**, while
-the actual physics simulation runs in another.
+To prevent slowdowns and allow V-Sync, run the physics simulation in a second thread. The viewer
+must stay in the **main thread**, because it owns the window event loop and the OpenGL context.
 
 Here's an adapted excerpt from the :gh-example:`example <visualization/viewer/rust_viewer_threaded.rs>`
 on how to use the viewer in a multi-threaded way:
@@ -240,7 +242,8 @@ on how to use the viewer in a multi-threaded way:
 The example mainly differs from the synchronous one in the highlighted lines:
 
 - :docs-rs:`mujoco_rs::wrappers::mj_model::<struct>MjModel` is wrapped into
-  `Arc <https://doc.rust-lang.org/std/sync/struct.Arc.html>`_,
+  `Arc <https://doc.rust-lang.org/std/sync/struct.Arc.html>`_
+  (it could also be wrapped into `Box <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_ ),
 - Data is synced through :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_data`;
 
   - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState` is obtained through
@@ -334,11 +337,12 @@ which demonstrates various types of UI elements including windows, side panels, 
     skips large computed arrays not required for visualization. As a result, the
     :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` passed to UI callbacks
     (added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`)
-    will **not** contain:
+    will **not** hold current values in:
 
-    - the mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``);
+    - the mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``,
+      ``qLU``), which keep the values of the previous copy and are therefore stale;
     - the sparse constraint Jacobian blocks (``efc_J``, ``efc_Y``, ``efc_AR`` and their index
-      arrays).
+      arrays), which are empty.
 
     If you require those in a UI callback, either call an appropriate method on the passed
     :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` instance
@@ -362,7 +366,9 @@ Model Parameter Synchronization
 The viewer provides methods to synchronize model parameters (``opt``, ``vis``,
 ``stat``) between the simulation and the viewer's passive internal state.
 
-The primary method is :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_opt`,
+Each method merges in both directions: a change made in the viewer UI is written to the value you
+pass, and a change you made yourself is written to the viewer's passive model. The per-field methods
+are :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_opt`,
 :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_vis`,
 and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_stat`:
 
@@ -375,6 +381,10 @@ and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model
     }).unwrap();
 
 This requires the ``M`` bound inside |mj_data| to be ``DerefMut<Target = MjModel>`` (e.g., ``Box<MjModel>``).
+
+:docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model` does all three in one
+call and also reloads the viewer's internal state when the model's ``signature()`` changed. It takes
+``&mut MjModel``, so the caller passes ``unsafe { data.model_mut() }``.
 
 
 .. _viewer_asset_reupload:
@@ -446,6 +456,9 @@ The viewer **stages** the upload and applies it on the next call to
             data.step();
         }
     }
+
+The :gh-example:`example <visualization/viewer/asset_reupload.rs>` animates a heightfield, a texture
+and a mesh from a physics thread.
 
 
 .. _mj_cpp_viewer:

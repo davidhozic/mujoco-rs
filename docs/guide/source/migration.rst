@@ -12,6 +12,8 @@ Migration guide
 .. |mjv_camera| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`
 .. |mjr_context| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`
 .. |mjs_joint| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsJoint`
+.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`
+.. |mjs_frame| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsFrame`
 .. |mjs_tendon| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsTendon`
 
 
@@ -97,8 +99,8 @@ renamed to match.
     let diag = data.efc_diag_a();
 
 
-Removed island matrix |mj_data| accessors
------------------------------------------
+Removed island matrix ``MjData`` accessors
+------------------------------------------
 MuJoCo moved the island-specific inertia and Jacobian matrices off the arena onto the stack,
 so they are no longer exposed as ``mjData`` fields. The following |mj_data| accessors were
 removed with no replacement: ``i_m_rownnz``, ``i_m_rowadr``, ``i_m_colind``, ``i_m``, ``i_ld``,
@@ -124,9 +126,9 @@ accessors ``actuator_length``, ``moment_rownnz``, ``moment_rowadr``, ``actuator_
 and ``actuator_force`` are now sized by ``nout``. The per-actuator views for control- and
 output-indexed fields (``ctrl``, ``length``, ``velocity``, ``force``; ``ctrllimited``,
 ``ctrlrange``, ``gear``, ``acc0``, ``length0``, ``lengthrange``) changed from fixed-size
-views to dynamic ranges based on ``actuator_ctrladr``/``actuator_ctrlnum`` and
-``actuator_outadr``/``actuator_outnum``. For single-input single-output actuators
-``nactuator == nu == nout``, so models without MIMO actuators are unaffected.
+views to dynamic ranges based on ``actuator_ctrladr`` and ``actuator_outadr``. For
+single-input single-output actuators ``nactuator == nu == nout``, so models without MIMO
+actuators are unaffected.
 
 **Before:**
 
@@ -164,8 +166,8 @@ Shifted actuator enum discriminants
 discriminants (rather than the enum variants) needs the new values.
 
 
-Stricter |mjr_context| accessor types
----------------------------------------
+Stricter ``MjrContext`` accessor types
+--------------------------------------
 The |mjr_context| flags ``gl_initialized``, ``window_available``, ``window_stereo`` and
 ``window_doublebuffer`` now read as ``bool``, and ``font_scale`` and ``read_depth_map`` now read
 as ``MjtFontScale`` and ``MjtDepthMap``, instead of ``i32``.
@@ -189,11 +191,29 @@ as ``MjtFontScale`` and ``MjtDepthMap``, instead of ``i32``.
     }
 
 
-Unsafe mutation of |mj_model| ``actuator_gaintype``
------------------------------------------------------
-``actuator_gaintype_mut`` is now an ``unsafe fn``, and ``MjActuatorModelViewMut::gaintype``
-became a ``PointerViewUnsafeMut``, so a write through the view needs ``as_mut_slice`` inside
-``unsafe``. A wrong gain type makes the engine write more force outputs than the actuator owns.
+``MjrContext::set_buffer`` takes ``MjtFramebuffer``
+----------------------------------------------------
+``set_buffer`` took a raw ``i32``, so any integer reached ``mjr_setBuffer``. It now takes
+``MjtFramebuffer``.
+
+**Before:**
+
+.. code-block:: rust
+
+    context.set_buffer(MjtFramebuffer::mjFB_OFFSCREEN as i32);
+
+**After:**
+
+.. code-block:: rust
+
+    context.set_buffer(MjtFramebuffer::mjFB_OFFSCREEN);
+
+
+Unsafe mutation of ``MjModel`` ``actuator_gaintype``
+----------------------------------------------------
+``actuator_gaintype_mut`` is now an ``unsafe fn``; the actuator views are affected the same way,
+so a write through a view needs ``as_mut_slice`` inside ``unsafe``. A wrong gain type makes the
+engine write more force outputs than the actuator owns.
 
 **Before:**
 
@@ -209,6 +229,28 @@ became a ``PointerViewUnsafeMut``, so a write through the view needs ``as_mut_sl
     // SAFETY: mjGAIN_AFFINE writes exactly one force output, which this actuator owns.
     unsafe { model.actuator_gaintype_mut()[id] = MjtGain::mjGAIN_AFFINE };
     unsafe { view.gaintype.as_mut_slice()[0] = MjtGain::mjGAIN_AFFINE };
+
+
+Unsafe geom creation on ``MjvScene``
+------------------------------------
+``create_geom`` and ``try_create_geom`` are now ``unsafe fn``. The renderer reads the returned
+geom's ``matid``, ``texid`` and, on a flex or a skin geom, ``objid`` as unchecked indices. The
+caller keeps ``matid`` and ``texid`` below the counts of the model that the rendering context was
+created for, and ``objid`` below the scene's flex or skin count. All three ids start at ``-1``,
+which means no material, no texture and no object.
+
+**Before:**
+
+.. code-block:: rust
+
+    let geom = scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None);
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: the geom keeps the ids that create_geom sets to none.
+    let geom = unsafe { scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None) };
 
 
 Renamed ``DcMotorConfig`` input field
@@ -231,10 +273,10 @@ instead of a single mode selector.
         .with_ctrlspec(MjtCtrlInput::mjINPUT_VOLTAGE as i32);
 
 
-Relaxed |mj_data| ``body_awake`` view mutability
---------------------------------------------------
-``MjBodyDataViewMut::awake`` became a ``PointerViewMut``, so a write through the view no longer
-needs ``as_mut_slice`` inside ``unsafe``.
+Relaxed ``MjData`` ``body_awake`` view mutability
+-------------------------------------------------
+``body_awake`` was already safe to mutate through its array accessor, and the body views now
+match it, so a write through a view no longer needs ``as_mut_slice`` inside ``unsafe``.
 
 **Before:**
 
@@ -247,6 +289,57 @@ needs ``as_mut_slice`` inside ``unsafe``.
 .. code-block:: rust
 
     view.awake[0] = MjtSleepState::mjS_AWAKE;
+
+
+``SpecItem::default`` returns an ``Option``
+---------------------------------------------
+MuJoCo's ``mjs_getDefault`` returns null for an element added without a default class (a frame,
+sensor, flex, exclude, numeric, text, tuple, key, plugin, hfield, skin, texture or wrap), so the old
+``&MjsDefault`` return dereferenced a null pointer. The method now returns ``Option<&MjsDefault>``.
+
+**Before:**
+
+.. code-block:: rust
+
+    let class = body.default();
+
+**After:**
+
+.. code-block:: rust
+
+    let class = body.default().unwrap();
+
+
+Deprecated fallible allocation methods
+--------------------------------------
+|mj_model|'s ``try_clone``, |mj_data|'s ``try_clone``, |mj_spec|'s ``try_new``, ``try_add_frame``
+on |mjs_body| and |mjs_frame|, and every macro-generated ``try_add_*`` element constructor on
+|mj_spec|, |mjs_body| and |mjs_frame| are now deprecated. Their ``AllocationFailed`` arm is
+unreachable. ``try_add_default`` and ``try_add_flexcomp`` keep their ``Result``: MuJoCo does report
+a duplicate class name and a failed flex build. ``mj_copyModel`` and ``mj_copyData`` raise
+``mjERROR``, whose default handler exits the process. ``mj_makeSpec`` and the ``mjs_addX`` functions
+allocate with C++ ``new``, which throws instead of returning null; the official MuJoCo binary
+bundles its own C++ runtime, so the exception cannot cross the C API and no handler in the calling
+program can catch it. Switch to ``clone``, ``new`` and the panicking ``add_*`` methods.
+
+These methods may be undeprecated in the future if MuJoCo's upstream code is changed to report the
+failure recoverably.
+
+**Before (5.x)**:
+
+.. code-block:: rust
+
+  let mut spec = MjSpec::try_new()?;
+  let body = spec.world_body_mut().try_add_body()?;
+  let data_copy = data.try_clone()?;
+
+**After (6.0.0)**:
+
+.. code-block:: rust
+
+  let mut spec = MjSpec::new();
+  let body = spec.world_body_mut().add_body();
+  let data_copy = data.clone();
 
 
 .. _migrate_5_0_0:
@@ -268,11 +361,11 @@ and update your library path. See :ref:`installation` for details.
 
 ``SpecItem::element_pointer`` pointer type changed (potentially breaking)
 --------------------------------------------------------------------------
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<tymethod>element_pointer`
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<tymethod>element_pointer`
 now returns ``*const mjsElement`` (was ``*mut mjsElement``) and is no longer ``unsafe``. This only
 affects code that called the model-editing trait methods directly (e.g. to drive MuJoCo's C
 model-editing API). When a mutable pointer is required, use
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>element_mut_pointer`
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>element_mut_pointer`
 (also no longer ``unsafe``). Any ``unsafe`` block wrapping these calls is now redundant and can be
 removed.
 
@@ -294,7 +387,7 @@ removed.
 
 Deprecated implementation of removing model-editing elements
 --------------------------------------------------------------
-Due to the :docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>delete`
+Due to the :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>delete`
 method relying on undefined behavior, the said method is now deprecated.
 It's replacement --- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element` ---
 now forces the user to drop all existing references of |mj_spec| and its
@@ -1122,12 +1215,12 @@ Use ``try_add_default`` for a fallible alternative.
 Model-editing API changes
 ----------------------------
 
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>set_name`
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name`
 now returns ``Result<(), MjEditError>`` instead of ``()``.
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>with_name`
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name`
 still returns ``&mut Self`` but now panics on duplicate names.
 
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem` is now a sealed
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem` is now a sealed
 trait. External implementations are no longer permitted -- remove any
 ``impl SpecItem for MyType`` blocks from downstream code.
 

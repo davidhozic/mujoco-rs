@@ -6,7 +6,7 @@ use std::ptr;
 
 use super::mj_rendering::{MjrContext, MjrRectangle};
 use super::mj_primitive::{MjtNum, MjtByte, MjtSize};
-use super::mj_model::{MjModel, MjtGeom};
+use super::mj_model::{MjModel, MjtGeom, MjtObj};
 use super::mj_data::MjData;
 use crate::{array_slice_dyn, c_str_as_str_method};
 use crate::error::MjSceneError;
@@ -24,7 +24,7 @@ pub struct SceneSelection {
     pub flex_id: Option<usize>,
     /// Selected skin id, or `None` if nothing was selected.
     pub skin_id: Option<usize>,
-    /// 3D world coordinates of the selection point.
+    /// 3D world coordinates of the selection point; `[0.0; 3]` when nothing was selected.
     pub point: [MjtNum; 3],
 }
 
@@ -41,12 +41,12 @@ impl Default for SceneSelection {
 }
 
 /* Types */
-/// These are the available categories of geoms in the abstract visualizer. The bitmask can be used in the function
-/// `mjr_render` to specify which categories should be rendered.
+/// These are the available categories of geoms in the abstract visualizer. The bitmask selects the
+/// categories that [`MjvScene::update_with_catmask`] adds to the scene.
 pub type MjtCatBit = mjtCatBit;
 
 /// These are the mouse actions that the abstract visualizer recognizes. It is up to the user to intercept mouse events
-/// and translate them into these actions, as illustrated in `simulate.cc <saSimulate>`.
+/// and translate them into these actions, as illustrated in MuJoCo's `simulate` application.
 pub type MjtMouse = mjtMouse;
 
 /// These bitmasks enable the translational and rotational components of the mouse perturbation. For the regular mouse,
@@ -115,13 +115,37 @@ impl Default for MjvPerturb {
 impl MjvPerturb {
     /// Initializes the perturbation state for mouse interaction of the given `type_`.
     /// Must be called before [`MjvPerturb::move_`].
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when `self.select` names a body
+    /// (`0 < select < nbody`) and the cameras of `scene` were never filled by
+    /// [`MjvScene::update`], which leaves `frustum_near` at zero.
+    ///
+    /// # Panics
+    /// Panics if `self.flexselect` is greater than or equal to the number of flexes in the model
+    /// of `data`.
     pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, data: &mut MjData<M>, scene: &MjvScene) {
+        // mjv_initPerturb indexes flex_rigid, flex_edgenum and flex_vertnum by flexselect after
+        // testing only that it is not negative.
+        let nflex = data.model().nflex();
+        assert!(
+            (self.flexselect as MjtSize) < nflex,
+            "selected flex id {} is out of range for a model with {nflex} flexes", self.flexselect
+        );
         let model_ffi = data.model().ffi();
         unsafe { mjv_initPerturb(model_ffi, data.ffi_mut(), scene.ffi(), self); }
         self.active = type_ as i32;
     }
 
-    /// Move an object with mouse. This is a wrapper around `mjv_movePerturb`.
+    /// Move an object with mouse. Wraps [`mjv_movePerturb`].
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when `action` is not one of
+    /// [`MjtMouse::mjMOUSE_MOVE_V`], [`MjtMouse::mjMOUSE_MOVE_H`],
+    /// [`MjtMouse::mjMOUSE_MOVE_V_REL`], [`MjtMouse::mjMOUSE_MOVE_H_REL`],
+    /// [`MjtMouse::mjMOUSE_ROTATE_V`], [`MjtMouse::mjMOUSE_ROTATE_H`] or
+    /// [`MjtMouse::mjMOUSE_ZOOM`], and when the cameras of `scene` were never filled by
+    /// [`MjvScene::update`], which leaves `frustum_near` at zero.
     ///
     /// # Panics
     /// Panics if `self.select` is out of range for the model in `data` (i.e. negative or
@@ -186,7 +210,8 @@ impl MjvPerturb {
 /***********************************************************************************************************************
 ** MjvCamera
 ***********************************************************************************************************************/
-/// Abstract camera parameters (type, fixed/tracking ids, lookat, distance, azimuth, elevation, orthographic mode).
+/// Abstract camera parameters (type, fixed/tracking ids, lookat, distance, azimuth and elevation
+/// in degrees, orthographic mode).
 pub type MjvCamera = mjvCamera;
 impl MjvCamera {
     /// Creates a new free camera.
@@ -252,23 +277,45 @@ impl MjvCamera {
     }
 
     /// Move camera with mouse.
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when `action` is not one of
+    /// [`MjtMouse::mjMOUSE_ROTATE_V`], [`MjtMouse::mjMOUSE_ROTATE_H`],
+    /// [`MjtMouse::mjMOUSE_MOVE_V`], [`MjtMouse::mjMOUSE_MOVE_H`], [`MjtMouse::mjMOUSE_TURN_V`],
+    /// [`MjtMouse::mjMOUSE_TURN_H`], [`MjtMouse::mjMOUSE_ZOOM`], [`MjtMouse::mjMOUSE_MOVE_V_REL`]
+    /// or [`MjtMouse::mjMOUSE_MOVE_H_REL`]. A camera of type [`MjtCamera::mjCAMERA_FIXED`] returns
+    /// early, before that point.
     pub fn move_(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum) {
         unsafe { mjv_moveCamera(model.ffi(), action as i32, dx, dy, self); };
     }
 
     /// Get the camera coordinate frame (pos, forward, up, right).
     ///
+    /// # Note
+    /// MuJoCo raises a fatal error, which ends the process, when `self.type_` is not
+    /// [`MjtCamera::mjCAMERA_FREE`], [`MjtCamera::mjCAMERA_TRACKING`] or
+    /// [`MjtCamera::mjCAMERA_FIXED`].
+    ///
     /// # Panics
-    /// Panics if this is a fixed camera (`MjtCamera::mjCAMERA_FIXED`) whose `fixedcamid` is out of range.
+    /// Panics if this is a fixed camera (`MjtCamera::mjCAMERA_FIXED`) whose `fixedcamid` is out of
+    /// range, or a tracking camera (`MjtCamera::mjCAMERA_TRACKING`) whose `trackbodyid` is greater
+    /// than or equal to the number of bodies.
     pub fn frame<M: Deref<Target = MjModel>>(&self, data: &MjData<M>) -> ([MjtNum; 3], [MjtNum; 3], [MjtNum; 3], [MjtNum; 3]) {
-        // Only the fixed-camera branch of mjv_cameraFrame dereferences the per-camera arrays; the
-        // free/tracking branches derive the frame from azimuth/elevation and need no validation.
+        // mjv_cameraFrame indexes cam_xmat/cam_xpos by fixedcamid and subtree_com by trackbodyid
+        // without an upper bound; no other branch indexes a model or data array.
         if self.type_ == MjtCamera::mjCAMERA_FIXED as i32 {
             let ncam = data.model().ncam();
             assert!(
                 self.fixedcamid >= 0 && (self.fixedcamid as i64) < ncam,
                 "fixed camera id {} is out of range for a model with {} cameras",
                 self.fixedcamid, ncam
+            );
+        } else if self.type_ == MjtCamera::mjCAMERA_TRACKING as i32 && self.trackbodyid >= 0 {
+            let nbody = data.model().nbody();
+            assert!(
+                (self.trackbodyid as i64) < nbody,
+                "tracked body id {} is out of range for a model with {} bodies",
+                self.trackbodyid, nbody
             );
         }
 
@@ -286,6 +333,11 @@ impl MjvCamera {
     }
 
     /// Compute the `frustum` (zver, zhor, zclip) suitable for rendering.
+    ///
+    /// # Note
+    /// MuJoCo raises a fatal error, which ends the process, when `self.type_` is not
+    /// [`MjtCamera::mjCAMERA_FREE`], [`MjtCamera::mjCAMERA_TRACKING`] or
+    /// [`MjtCamera::mjCAMERA_FIXED`], or when `self.fixedcamid` is out of range for `model`.
     pub fn frustum(&self, model: &MjModel) -> ([f32; 2], [f32; 2], [f32; 2]) {
         let mut zver = [0.0; 2];
         let mut zhor = [0.0; 2];
@@ -325,6 +377,10 @@ pub type MjrCamera = mjrCamera;
 
 impl MjvGLCamera {
     /// Average the current MjvGLCamera with the `other` MjvGLCamera.
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when `self.orthographic` and
+    /// `other.orthographic` differ.
     pub fn average_camera(&self, other: &Self) -> Self {
         unsafe { mjv_averageCamera (self, other) }
     }
@@ -338,13 +394,19 @@ pub type MjvGeom = mjvGeom;
 
 impl MjvGeom {
     /// Sets the geom so that it acts as a connector (line, arrow, etc.) between
-    /// two 3D points.
+    /// two 3D points. `width` is the connector radius in length units, or its width in pixels for
+    /// `mjGEOM_LINE`.
     ///
-    /// This is a wrapper around MuJoCo's `mjv_connector`. The connector type
+    /// Wraps [`mjv_connector`]. The connector type
     /// is taken from the geom's current [`type_`](MjvGeom::type_) field, so
     /// set it to the desired connector type (e.g. `mjGEOM_LINE`, `mjGEOM_ARROW`)
     /// **before** calling this method, or initialize the geom
     /// with that type via [`MjvScene::create_geom`].
+    ///
+    /// # Note
+    /// MuJoCo raises a fatal error, which ends the process, for any type other than
+    /// `mjGEOM_CAPSULE`, `mjGEOM_CYLINDER`, `mjGEOM_ARROW`, `mjGEOM_ARROW1`, `mjGEOM_ARROW2` or
+    /// `mjGEOM_LINE`.
     pub fn connect(&mut self, width: MjtNum, from: [MjtNum; 3], to: [MjtNum; 3]) {
         unsafe {
             mjv_connector(self, self.type_, width, &from, &to);
@@ -543,6 +605,11 @@ impl MjvFigure {
 
     /// Overrides existing data with a new data point at a specific `point_index` for specific plot with `plot_index`.
     ///
+    /// # Panics
+    /// Panics if `point_index` is at or above the plot capacity of
+    /// `linedata[plot_index].len() / 2` points, which `linepnt[plot_index]` allows when it is
+    /// itself above the capacity.
+    ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
     /// Returns [`MjSceneError::FigureIndexOutOfBounds`] if `point_index` is
@@ -557,7 +624,8 @@ impl MjvFigure {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
-        let current_len = self.linepnt[plot_index] as usize;
+        // Clamped because a negative entry would cast to usize::MAX and pass the test below.
+        let current_len = self.linepnt[plot_index].max(0) as usize;
         if point_index >= current_len {
             return Err(MjSceneError::FigureIndexOutOfBounds {
                 plot_index,
@@ -590,7 +658,8 @@ impl MjvFigure {
     /// Returns `Some((x, y))` when the plot contains any elements, otherwise `None` is returned.
     ///
     /// # Panics
-    /// Panics if `plot_index >= mjMAXLINE`.
+    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is above the plot
+    /// capacity of `linedata[plot_index].len() / 2` points.
     ///
     /// Use [`MjvFigure::try_pop_front`] for a fallible alternative.
     pub fn pop_front(&mut self, plot_index: usize) -> Option<(f32, f32)> {
@@ -598,6 +667,10 @@ impl MjvFigure {
     }
 
     /// Pops the first element from the plot data of plot with `plot_index`.
+    ///
+    /// # Panics
+    /// Panics if `linepnt[plot_index]` is above the plot capacity of
+    /// `linedata[plot_index].len() / 2` points.
     ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
@@ -626,7 +699,8 @@ impl MjvFigure {
     /// Returns `Some((x, y))` when the plot contains any elements, otherwise `None` is returned.
     ///
     /// # Panics
-    /// Panics if `plot_index >= mjMAXLINE`.
+    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is above the plot
+    /// capacity of `linedata[plot_index].len() / 2` points.
     ///
     /// Use [`MjvFigure::try_pop_back`] for a fallible alternative.
     pub fn pop_back(&mut self, plot_index: usize) -> Option<(f32, f32)> {
@@ -634,6 +708,10 @@ impl MjvFigure {
     }
 
     /// Pops the last element from the plot data of plot with `plot_index`.
+    ///
+    /// # Panics
+    /// Panics if `linepnt[plot_index]` is above the plot capacity of
+    /// `linedata[plot_index].len() / 2` points.
     ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
@@ -658,6 +736,10 @@ impl MjvFigure {
     /// Cuts the first `n` elements from the plot data of plot with `plot_index`.
     ///
     /// If `n` exceeds the current length, this is a no-op.
+    ///
+    /// # Panics
+    /// Panics if `linepnt[plot_index]` is above the plot capacity of
+    /// `linedata[plot_index].len() / 2` points.
     ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
@@ -759,6 +841,16 @@ impl MjvScene {
     /// (e.g., [`MjtCatBit::mjCAT_ALL`] for everything, or a bitwise OR of
     /// [`MjtCatBit::mjCAT_STATIC`], [`MjtCatBit::mjCAT_DYNAMIC`], [`MjtCatBit::mjCAT_DECOR`]).
     ///
+    /// The call resets `ngeom` to 0, so it drops every geom that [`MjvScene::create_geom`] added;
+    /// create such geoms after the update. Unless `cam` is of type
+    /// [`MjtCamera::mjCAMERA_USER`], it also overwrites the scene cameras and clears
+    /// `enabletransform`, and it moves `cam.lookat` onto the tracked body for a tracking camera.
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when `cam` is a tracking camera
+    /// ([`MjtCamera::mjCAMERA_TRACKING`]) whose `trackbodyid` is negative or not below the number
+    /// of bodies.
+    ///
     /// # Panics
     /// - Panics if `data` was created from a different model than this scene.
     /// - Panics if `cam` is a fixed camera ([`MjtCamera::mjCAMERA_FIXED`]) whose `fixedcamid` is
@@ -800,6 +892,10 @@ impl MjvScene {
     /// This is equivalent to calling [`update_with_catmask`](Self::update_with_catmask) with
     /// [`MjtCatBit::mjCAT_ALL`].
     ///
+    /// # Note
+    /// MuJoCo stops the process under the same conditions as
+    /// [`update_with_catmask`](Self::update_with_catmask).
+    ///
     /// # Panics
     /// Panics under the same conditions as [`update_with_catmask`](Self::update_with_catmask):
     /// a model-signature mismatch, an out-of-range fixed-camera id, or an out-of-range
@@ -811,21 +907,35 @@ impl MjvScene {
     /// Creates a new [`MjvGeom`] in this scene, returning a mutable reference to it.
     /// The geom reference is valid for the duration of the `&mut self` borrow.
     ///
+    /// # Safety
+    /// The caller must keep the returned geom's `matid`, `texid` and, on a flex or a skin geom,
+    /// `objid` below the count of the model that the rendering context was created for (`matid`
+    /// and `texid` also accept `-1` for none). The renderer reads all three as unchecked indices
+    /// into the context and the scene arrays, so a larger value makes [`MjvScene::render`] read
+    /// out of bounds. A flex or a skin geom needs its own `objid`: the geom starts at `-1`, which
+    /// indexes neither array.
+    ///
     /// # Panics
     /// Panics when `ngeom >= maxgeom` (the scene's geom buffer is full).
     ///
     /// Use [`MjvScene::try_create_geom`] for a fallible alternative.
-    pub fn create_geom(
+    pub unsafe fn create_geom(
         &mut self, geom_type: MjtGeom, size: Option<[MjtNum; 3]>,
         pos: Option<[MjtNum; 3]>, mat: Option<[MjtNum; 9]>, rgba: Option<[f32; 4]>
     ) -> &mut MjvGeom {
-        self.try_create_geom(geom_type, size, pos, mat, rgba).expect("create_geom failed: scene full")
+        // SAFETY: the caller upholds the index contract of `try_create_geom`.
+        unsafe { self.try_create_geom(geom_type, size, pos, mat, rgba) }
+            .expect("create_geom failed: scene full")
     }
 
     /// Fallible version of [`MjvScene::create_geom`].
+    ///
+    /// # Safety
+    /// The caller upholds the same index contract as in [`MjvScene::create_geom`].
+    ///
     /// # Errors
     /// Returns [`MjSceneError::SceneFull`] when `ngeom >= maxgeom`.
-    pub fn try_create_geom(
+    pub unsafe fn try_create_geom(
         &mut self, geom_type: MjtGeom, size: Option<[MjtNum; 3]>,
         pos: Option<[MjtNum; 3]>, mat: Option<[MjtNum; 9]>, rgba: Option<[f32; 4]>
     ) -> Result<&mut MjvGeom, MjSceneError> {
@@ -838,12 +948,23 @@ impl MjvScene {
         let mat_ptr  = mat.as_ref().map_or(ptr::null(), |x| x);
         let rgba_ptr = rgba.as_ref().map_or(ptr::null(), |x| x);
 
-        // SAFETY: ngeom < maxgeom guarantees we are within the allocated buffer.
+        // SAFETY: ngeom < maxgeom guarantees we are within the allocated buffer, and p_geom is
+        // non-null because mjv_makeScene allocated it. mjv_initGeom writes every other field, so
+        // the assignments below leave no byte of the mju_malloc slot uninitialized.
         unsafe {
             let p_geom = self.ffi.geoms.add(self.ffi.ngeom as usize);
             mjv_initGeom(p_geom, geom_type as i32, size_ptr, pos_ptr, mat_ptr, rgba_ptr);
+            // A created geom decorates the scene and belongs to no model element, so it carries
+            // the "none" ids. mjv_initGeom writes only the first byte of label, and mjr_render
+            // recomputes camdist and transparent before it reads them.
+            (*p_geom).objtype     = MjtObj::mjOBJ_UNKNOWN as i32;
+            (*p_geom).objid       = -1;
+            (*p_geom).category    = MjtCatBit::mjCAT_DECOR as i32;
+            (*p_geom).segid       = self.ffi.ngeom;
+            (*p_geom).label       = [0; 100];
+            (*p_geom).camdist     = 0.0;
+            (*p_geom).transparent = 0;
             self.ffi.ngeom += 1;
-            // Safety: p_geom is guaranteed non-null (allocated by mjv_makeScene).
             Ok(&mut *p_geom)
         }
     }
@@ -863,15 +984,37 @@ impl MjvScene {
         self.ffi.ngeom -= 1;
     }
 
-    /// Renders the scene to the screen. This does not automatically make the OpenGL context current.
+    /// Renders the scene into the buffer that `context` currently targets. This does not
+    /// automatically make the OpenGL context current.
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when the scene holds geoms but its cameras
+    /// were never filled by [`MjvScene::update`], which leaves `frustum_near` at zero. With no
+    /// geoms the call returns without drawing.
+    ///
+    /// # Panics
+    /// Panics if `context` holds fewer skins than the scene.
     pub fn render(&mut self, viewport: &MjrRectangle, context: &MjrContext){
+        // mjr_render uploads every skin of the scene into context.skinvertVBO[i], an array with
+        // one entry per skin of the model the context was built for, and null when it has none.
+        assert!(
+            self.nskin() <= context.nskin(),
+            "the context was created for a model with fewer skins"
+        );
         unsafe {
             mjr_render(*viewport, self.ffi_mut(), context.ffi());
         }
     }
 
     /// Returns the selection point based on a mouse click.
-    /// This is a wrapper around `mjv_select()`.
+    /// Wraps [`mjv_select`].
+    ///
+    /// `aspect_ratio` is the viewport width divided by its height. `relx` and `rely` are the cursor
+    /// position as fractions of the viewport in `[0, 1]`, measured from the left and bottom edges.
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when the scene cameras were never filled by
+    /// [`MjvScene::update`], which leaves `frustum_near` at zero.
     ///
     /// # Panics
     /// Panics if `data` was created from a different model than this scene.
@@ -997,10 +1140,10 @@ impl Drop for MjvScene {
     }
 }
 
-// SAFETY: MjvScene exclusively owns the heap allocation behind Box<mjvScene>.
-// The raw pointers inside mjvScene (geoms, lights, etc.) point into memory owned
-// by the same allocation, so no aliasing with other threads is possible. All
-// mutation requires &mut self, so &MjvScene sharing across threads is safe.
+// SAFETY: MjvScene exclusively owns the Box<mjvScene> and every buffer that mjv_makeScene
+// allocated for it (geoms, geomorder, the flex and skin arrays), all of which mjv_freeScene
+// releases in Drop, so no aliasing with other threads is possible. All mutation requires
+// &mut self, so &MjvScene sharing across threads is safe.
 unsafe impl Send for MjvScene {}
 unsafe impl Sync for MjvScene {}
 
@@ -1035,7 +1178,8 @@ mod tests {
         let mut scene = MjvScene::new(&model, 1000);
         
         /* Test label handling. Other things are trivial one-liners. */
-        let geom = scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
+        // SAFETY: the test never writes a material, texture or object id.
+        let geom = unsafe { scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None) };
         let label = "Hello World";
         geom.set_label(label).unwrap();
         assert_eq!(geom.label(), label);
@@ -1050,6 +1194,18 @@ mod tests {
         let model = load_model();          // EXAMPLE_MODEL defines no <camera>, so ncam == 0
         let data = model.make_data();
         let camera = MjvCamera::new_fixed(0);  // fixedcamid = 0, but ncam = 0 -> out of range
+        let _ = camera.frame(&data);
+    }
+
+    /// A tracking camera whose body id is out of range must panic in `frame` instead of triggering
+    /// an out-of-bounds read in MuJoCo's `mjv_cameraFrame`, which indexes `subtree_com` by
+    /// `trackbodyid` after testing only `trackbodyid >= 0`.
+    #[test]
+    #[should_panic(expected = "out of range")]
+    fn test_camera_frame_tracking_id_out_of_range_panics() {
+        let model = load_model();          // nbody == 2 (world + "ball")
+        let data = model.make_data();
+        let camera = MjvCamera::new_tracking(9999);
         let _ = camera.frame(&data);
     }
 
@@ -1081,6 +1237,49 @@ mod tests {
         pert.move_(&data, MjtMouse::mjMOUSE_MOVE_H_REL, 0.1, 0.1, &scene);
     }
 
+    /// `mjv_initPerturb` scales `localmass` by `flex_edgenum[flexselect]` after testing only that
+    /// the id is not negative, so the wrapper must reject an out-of-range flex id.
+    #[test]
+    #[should_panic(expected = "out of range for a model with")]
+    fn test_perturb_start_flexselect_out_of_range_panics() {
+        let model = load_model();
+        let mut data = model.make_data();
+        let scene = MjvScene::new(&model, 100);
+        let mut pert = MjvPerturb { select: 1, flexselect: 1_000_000, ..Default::default() };
+        pert.start(MjtPertBit::mjPERT_TRANSLATE, &mut data, &scene);
+    }
+
+    /// `mjv_initGeom` leaves `objtype`, `objid`, `category` and `segid` unwritten over the
+    /// uninitialized buffer, and the renderer indexes the skin and flex arrays by `objid`, so a
+    /// created geom must start with the "none" ids and with `segid` set to its own index.
+    #[test]
+    fn test_create_geom_fields_initialized() {
+        const N_GEOM: usize = 8;
+
+        let model = load_model();
+        let mut scene = MjvScene::new(&model, N_GEOM);
+
+        // Dirty every slot first, so that reusing them proves the assignment rather than relying
+        // on whatever the allocator happened to leave behind.
+        // SAFETY: the scene is never rendered, so the dirty ids below stay unread.
+        for _ in 0..N_GEOM {
+            let geom = unsafe { scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None) };
+            geom.objid = 12345;
+            geom.objtype = 678;
+            geom.category = 9;
+        }
+        scene.clear_geom();
+
+        for i in 0..N_GEOM {
+            let geom = unsafe { scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None) };
+            assert_eq!(
+                (geom.objtype, geom.objid, geom.category),
+                (MjtObj::mjOBJ_UNKNOWN as i32, -1, MjtCatBit::mjCAT_DECOR as i32)
+            );
+            assert_eq!(geom.segid, i as i32);
+        }
+    }
+
     #[test]
     fn test_scene_geom_pop() {
         const N_GEOM: usize = 10;
@@ -1089,8 +1288,9 @@ mod tests {
         let model = load_model();
         let mut scene = MjvScene::new(&model, 1000);
 
+        // SAFETY: the test never writes a material, texture or object id.
         for _ in 0..N_GEOM {
-            scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
+            unsafe { scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None) };
         }
 
         assert_eq!(scene.geoms().len(), N_GEOM);
@@ -1181,12 +1381,16 @@ mod tests {
         let model = load_model();
         let mut scene = MjvScene::new(&model, 2);
 
-        // Fill to capacity
-        scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
-        scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
+        // SAFETY: the test never writes a material, texture or object id.
+        unsafe {
+            // Fill to capacity
+            scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
+            scene.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None);
+        }
 
         // Next should fail
-        let err = scene.try_create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None).unwrap_err();
+        let err = unsafe { scene.try_create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None) }
+            .unwrap_err();
         assert!(matches!(err, MjSceneError::SceneFull { capacity: 2 }));
     }
 
@@ -1196,7 +1400,8 @@ mod tests {
     fn test_geom_label_boundary() {
         let model = load_model();
         let mut scene = MjvScene::new(&model, 10);
-        let geom = scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None);
+        // SAFETY: the test never writes a material, texture or object id.
+        let geom = unsafe { scene.create_geom(MjtGeom::mjGEOM_BOX, None, None, None, None) };
 
         // Determine capacity (buffer len - 1 for NUL)
         let capacity = geom.label.len() - 1;
@@ -1239,6 +1444,21 @@ mod tests {
         assert!(!fig.full(plot));
         fig.push(plot, 99.0, 99.0).unwrap();
         assert!(fig.full(plot));
+    }
+
+    /// A negative `linepnt`, which safe code can write because the field is public, must read as
+    /// an empty plot in `set_at`, exactly as the pop and cut methods already treat it.
+    #[test]
+    fn test_figure_set_at_negative_linepnt() {
+        let mut fig = MjvFigure::new_boxed();
+        let plot = 0;
+        fig.push(plot, 1.0, 2.0).unwrap();
+        fig.linepnt[plot] = -1;
+
+        let err = fig.set_at(plot, 5, 3.0, 4.0).unwrap_err();
+        assert!(matches!(err, MjSceneError::FigureIndexOutOfBounds { current_len: 0, .. }), "{err:?}");
+        // The rejected call must not have written anything.
+        assert_eq!(fig.linedata[plot][10], 0.0);
     }
 
     /// Verifies the getter and setter generated by `c_str_as_str_method!`

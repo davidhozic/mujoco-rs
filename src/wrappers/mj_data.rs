@@ -66,6 +66,10 @@ unsafe impl<M: Deref<Target = MjModel> + Sync> Sync for MjData<M> {}
 impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Creates a new [`MjData`] linked to `model`.
     ///
+    /// # Note
+    /// When the model has history buffers (`nhistory > 0`), its `timestep` must be positive;
+    /// otherwise MuJoCo reports an error and stops the process.
+    ///
     /// # Panics
     /// Panics if MuJoCo fails to allocate the data structure.
     /// Use [`MjData::try_new`] for a fallible alternative.
@@ -236,7 +240,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Runs the first phase of a simulation step: computes kinematics and sensor data,
-    /// before the user sets controls. This is a wrapper around `mj_step1`.
+    /// before the user sets controls. Wraps [`mj_step1`].
     pub fn step1(&mut self) {
         unsafe {
             mj_step1(self.model.ffi(), self.ffi_mut());
@@ -244,39 +248,35 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Runs the second phase of a simulation step: computes dynamics and integrates forward
-    /// in time, after the user sets controls. This is a wrapper around `mj_step2`.
+    /// in time, after the user sets controls. Wraps [`mj_step2`].
     pub fn step2(&mut self) {
         unsafe {
             mj_step2(self.model.ffi(), self.ffi_mut());
         }
     }
 
-    /// Forward dynamics: same as mj_step but do not integrate in time.
-    /// This is a wrapper around `mj_forward`.
+    /// Forward dynamics: same as [`mj_step`] but do not integrate in time. Wraps [`mj_forward`].
     pub fn forward(&mut self) {
         unsafe {
             mj_forward(self.model.ffi(), self.ffi_mut());
         }
     }
 
-    /// [`MjData::forward`] dynamics with skip.
-    /// This is a wrapper around `mj_forwardSkip`.
+    /// [`MjData::forward`] dynamics with skip. Wraps [`mj_forwardSkip`].
     pub fn forward_skip(&mut self, skipstage: MjtStage, skipsensor: bool) {
         unsafe {
             mj_forwardSkip(self.model.ffi(), self.ffi_mut(), skipstage as i32, skipsensor as i32);
         }
     }
 
-    /// Inverse dynamics: qacc must be set before calling this function.
-    /// This is a wrapper around `mj_inverse`.
+    /// Inverse dynamics: qacc must be set before calling this function. Wraps [`mj_inverse`].
     pub fn inverse(&mut self) {
         unsafe {
             mj_inverse(self.model.ffi(), self.ffi_mut());
         }
     }
 
-    /// [`MjData::inverse`] dynamics with skip; skipstage is [`MjtStage`].
-    /// This is a wrapper around `mj_inverseSkip`.
+    /// [`MjData::inverse`] dynamics with skip; skipstage is [`MjtStage`]. Wraps [`mj_inverseSkip`].
     pub fn inverse_skip(&mut self, skipstage: MjtStage, skipsensor: bool) {
         unsafe {
             mj_inverseSkip(self.model.ffi(), self.ffi_mut(), skipstage as i32, skipsensor as i32);
@@ -285,8 +285,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Extracts the contact force in the contact frame for the given `contact_id`.
     /// The `contact_id` matches the index of the contact when iterating
-    /// via [`MjData::contact`].
-    /// Calls `mj_contactForce` internally.
+    /// via [`MjData::contact`]. Wraps [`mj_contactForce`].
+    ///
     /// # Note
     /// When `contact_id >= ncon`, `[0; 6]` is returned.
     pub fn contact_force(&self, contact_id: usize) -> [MjtNum; 6] {
@@ -303,11 +303,19 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /* Partially auto-generated */
 
     /// Reset data to defaults.
+    ///
+    /// # Note
+    /// When the model has history buffers (`nhistory > 0`), its `timestep` must be positive;
+    /// otherwise MuJoCo reports an error and stops the process.
     pub fn reset(&mut self) {
         unsafe { mj_resetData(self.model.ffi(), self.ffi_mut()) }
     }
 
     /// Reset data to defaults, fill everything else with debug_value.
+    ///
+    /// # Note
+    /// When the model has history buffers (`nhistory > 0`), its `timestep` must be positive;
+    /// otherwise MuJoCo reports an error and stops the process.
     ///
     /// # Safety
     /// `debug_value` is written as raw bytes into every buffer-resident array,
@@ -321,6 +329,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Reset data to keyframe `key` (zero-based index).
+    ///
+    /// # Note
+    /// When the model has history buffers (`nhistory > 0`), its `timestep` must be positive;
+    /// otherwise MuJoCo reports an error and stops the process.
     ///
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] if `key >= nkey`.
@@ -429,7 +441,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         unsafe { mj_invConstraint(self.model.ffi(), self.ffi_mut()) }
     }
 
-    /// Compare forward and inverse dynamics, save results in fwdinv.
+    /// Compare forward and inverse dynamics, save results in `solver_fwdinv`.
     pub fn compare_fwd_inv(&mut self) {
         unsafe { mj_compareFwdInv(self.model.ffi(), self.ffi_mut()) }
     }
@@ -535,13 +547,39 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// RNE: compute M(qpos)*qacc + C(qpos,qvel); flg_acc=false removes inertial term.
+    /// Returns a newly allocated vector of `nv` elements. Wraps [`mj_rne`].
     pub fn rne(&mut self, flg_acc: bool) -> Vec<MjtNum> {
         let mut out = vec![0.0; self.model.ffi().nv as usize];
-        unsafe { mj_rne(self.model.ffi(), self.ffi_mut(), flg_acc as i32, out.as_mut_ptr()) };
+        self.rne_into(flg_acc, &mut out);
         out
     }
 
+    /// Same as [`MjData::rne`], except it writes the `nv` elements into `result`.
+    /// Elements of `result` above index `nv` keep their previous values.
+    ///
+    /// # Panics
+    /// Panics if `result` holds fewer than `nv` elements.
+    /// Use [`MjData::try_rne_into`] for a fallible alternative.
+    pub fn rne_into(&mut self, flg_acc: bool, result: &mut [MjtNum]) {
+        self.try_rne_into(flg_acc, result).unwrap()
+    }
+
+    /// Fallible version of [`MjData::rne_into`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::BufferTooSmall`] if `result.len() < nv`.
+    pub fn try_rne_into(&mut self, flg_acc: bool, result: &mut [MjtNum]) -> Result<(), MjDataError> {
+        let nv = self.model.ffi().nv as usize;
+        if result.len() < nv {
+            return Err(MjDataError::BufferTooSmall { name: "result", got: result.len(), needed: nv });
+        }
+        // SAFETY: the guard above proves result holds at least the nv elements that mj_rne writes.
+        unsafe { mj_rne(self.model.ffi(), self.ffi_mut(), flg_acc as i32, result.as_mut_ptr()) };
+        Ok(())
+    }
+
     /// RNE with complete data: compute cacc, cfrc_ext, cfrc_int.
+    /// Wraps [`mj_rnePostConstraint`].
     pub fn rne_post_constraint(&mut self) {
         unsafe { mj_rnePostConstraint(self.model.ffi(), self.ffi_mut()) }
     }
@@ -593,6 +631,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Initializes the actuator history buffer for actuator `id` (wraps `mj_initCtrlHistory`).
     /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
     /// `values`: control values slice of length `nsample`.
+    /// # Note
+    /// The timestamps must be strictly increasing, whether they come from `times` or from the
+    /// existing buffer; otherwise MuJoCo reports an error and stops the process.
     /// # Errors
     /// - [`MjDataError::IndexOutOfBounds`] if `id >= nactuator`.
     /// - [`MjDataError::NoHistoryBuffer`] if the actuator has no history buffer.
@@ -633,6 +674,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
     /// `values`: sensor values slice of length `nsample * dim`.
     /// `phase`: time phase offset.
+    /// # Note
+    /// The timestamps must be strictly increasing, whether they come from `times` or from the
+    /// existing buffer; otherwise MuJoCo reports an error and stops the process.
     /// # Errors
     /// - [`MjDataError::IndexOutOfBounds`] if `id >= nsensor`.
     /// - [`MjDataError::NoHistoryBuffer`] if the sensor has no history buffer.
@@ -671,8 +715,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(())
     }
 
-    /// Reads the control history value for actuator `id` at `time`
-    /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
+    /// Reads the control value for actuator `id` at `time`: the current `ctrl` entry when the
+    /// actuator has no history buffer, otherwise the value from the history buffer
+    /// (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear, 2=cubic).
     /// # Panics
     /// Panics when `id >= nactuator`. Use [`MjData::try_read_ctrl`] for a fallible alternative.
     pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> MjtNum {
@@ -691,7 +736,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(val)
     }
 
-    /// Reads sensor `id` at `time` into `dst` (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
+    /// Reads sensor `id` at `time` into `dst` (`interp`: -1=use the model's `interp` setting,
+    /// 0=ZOH, 1=linear, 2=cubic).
     /// `dst` must be exactly `sensor_dim[id]` elements long.
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
@@ -715,7 +761,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Reads sensor `id` at `time` into a stack-allocated `[MjtNum; N]`
-    /// (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic). `N` must match `sensor_dim[id]`.
+    /// (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear, 2=cubic). `N` must match `sensor_dim[id]`.
     /// See also [`read_sensor`](Self::read_sensor), [`read_sensor_into`](Self::read_sensor_into).
     /// # Panics
     /// Panics when `id >= nsensor` or `N != sensor_dim[id]`.
@@ -747,7 +793,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(out)
     }
 
-    /// Reads sensor `id` at `time` (`interp`: -1=stored, 0=ZOH, 1=linear, 2=cubic).
+    /// Reads sensor `id` at `time` (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear, 2=cubic).
     ///
     /// Returns [`Cow::Borrowed`] (zero-copy) for exact matches, ZOH, and extrapolation.
     /// Returns [`Cow::Owned`] for linear/cubic interpolation.
@@ -1074,7 +1120,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         Ok(result)
     }
 
-    /// Returns smallest signed distance between two geoms and optionally the contact segment.
+    /// Returns smallest signed distance between two geoms and optionally the segment from geom1 to geom2.
     /// # Panics
     /// Panics when either geom id is `>= ngeom`. Use [`MjData::try_geom_distance`] for a fallible alternative.
     pub fn geom_distance(&mut self, geom1_id: usize, geom2_id: usize, dist_max: MjtNum, fromto: Option<&mut [MjtNum; 6]>) -> MjtNum {
@@ -1258,6 +1304,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Intersect ray with hfield.
     /// Returns the distance to the intersection, or -1.0 if no intersection.
+    /// # Note
+    /// The geom must be of type `mjGEOM_HFIELD`; for any other type MuJoCo reports an error and
+    /// stops the process.
     ///
     /// # Panics
     /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
@@ -1270,6 +1319,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Intersect ray with hfield, returning the distance or -1.0 if no intersection.
+    /// # Note
+    /// The geom must be of type `mjGEOM_HFIELD`; for any other type MuJoCo reports an error and
+    /// stops the process.
     ///
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] if `geom_id >= ngeom`.
@@ -1289,6 +1341,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
     /// Intersect ray with mesh.
     /// Returns the distance to the intersection, or -1.0 if no intersection.
+    /// # Note
+    /// The geom must be of type `mjGEOM_MESH`; for any other type MuJoCo reports an error and
+    /// stops the process.
     ///
     /// # Panics
     /// Panics if `geom_id` is out of bounds (must be `0 <= geom_id < ngeom`).
@@ -1301,6 +1356,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Intersect ray with mesh, returning the distance or -1.0 if no intersection.
+    /// # Note
+    /// The geom must be of type `mjGEOM_MESH`; for any other type MuJoCo reports an error and
+    /// stops the process.
     ///
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] if `geom_id >= ngeom`.
@@ -1357,7 +1415,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Reads data's state into `destination`. The `spec` parameter is a bit mask of [`MjtState`] elements,
     /// which controls what state gets copied. The `destination` parameter is a mutable
     /// slice to the location into which the state will be written.
-    /// This is a wrapper around [`mj_getState`].
+    /// Wraps [`mj_getState`].
     ///
     /// # Note
     /// The `destination` buffer is allowed to be larger than the
@@ -1418,7 +1476,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         self.state(spec)
     }
 
-    /// Sets the `state` to [`MjData`]. This is a wrapper around [`mj_setState`].
+    /// Sets the `state` to [`MjData`]. Wraps [`mj_setState`].
     /// The `state` is an array containing the state to write, based on the `spec`
     /// bitmask of elements [`MjtState`].
     ///
@@ -1468,7 +1526,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Copy [`MjData`] to `destination`, skipping large computed arrays not required for
     /// visualization: the mass and factorization matrices (`crb`, `M`, `qLD`, `qH`, `qDeriv`,
     /// `qLU`) and the sparse constraint Jacobian blocks (`efc_J_*`, `efc_Y_*`, `efc_AR_*`).
-    /// This is a wrapper for [`mjv_copyData`].
+    /// Wraps [`mjv_copyData`].
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when this data's stack is in use.
     ///
     /// # Errors
     /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
@@ -1489,7 +1550,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 
     /// Copy [`MjData`] to `destination` in full.
-    /// This is a wrapper for [`mj_copyData`].
+    /// Wraps [`mj_copyData`].
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when this data's stack is in use.
     ///
     /// # Errors
     /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
@@ -1889,9 +1953,9 @@ impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
 }
 
 impl<M: Deref<Target = MjModel> + Clone> Clone for MjData<M> {
-    /// # Panics
-    /// Panics if MuJoCo fails to allocate the cloned data.
-    /// Use [`MjData::try_clone`] for a fallible alternative.
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when an allocation fails, so this never fails.
+    #[expect(deprecated, reason = "try_clone keeps the implementation until it is removed")]
     fn clone(&self) -> Self {
         self.try_clone().expect("not enough space to clone data")
     }
@@ -1900,9 +1964,24 @@ impl<M: Deref<Target = MjModel> + Clone> Clone for MjData<M> {
 impl<M: Deref<Target = MjModel> + Clone> MjData<M> {
     /// Fallible version of [`Clone::clone`].
     ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// MuJoCo cannot report a failure here: `mj_copyData` raises `mjERROR` when an allocation
+    /// fails, and the default error handler exits the process, so this method never returns
+    /// `Err`. Prefer [`Clone::clone`]. This method may be undeprecated in the future if MuJoCo's
+    /// upstream C code is changed to report the failure recoverably.
+    ///
+    /// </div>
+    ///
     /// # Errors
     /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate
     /// the copy.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `clone`"
+    )]
     pub fn try_clone(&self) -> Result<Self, MjDataError> {
         let raw = unsafe { mj_copyData(ptr::null_mut(), self.model.ffi(), self.ffi()) };
         NonNull::new(raw)
@@ -2246,7 +2325,7 @@ mod test {
             data.step();
         }
 
-        // mj_rne returns a scalar as result
+        // mj_rne writes an nv-element vector, which the wrapper returns as a Vec
         data.rne(true);
 
         data.rne_post_constraint();
@@ -2949,7 +3028,7 @@ mod test {
     #[test]
     fn test_act_mixed_stateful_stateless() {
         // muscle at id=0 (stateful, actnum=1), motor at id=1 (stateless, actnum=0)
-        // This tests mj_view_indices! with na path: actadr[0]=0, actadr[1]=-1
+        // This tests mj_model_dyn_range! with na path: actadr[0]=0, actadr[1]=-1
         // If bug exists: end_addr = (-1i32) as usize = usize::MAX -> overflow
         let xml = "<mujoco><option timestep=\"0.002\"/>\
 <worldbody><body name=\"b\"><joint name=\"j1\" type=\"slide\" range=\"-1 1\" limited=\"true\"/>\
@@ -2973,7 +3052,7 @@ mod test {
         assert!(view_m2.act.is_none(), "motor must have no act view");
     }
 
-    /// Tests `mj_view_indices!` with mixed joint types (free/ball/slide),
+    /// Tests `mj_model_dyn_range!` with mixed joint types (free/ball/slide),
     /// verifying that qpos and qvel view lengths match per-joint DOF counts.
     #[test]
     fn test_view_indices_mixed_joint_types() {
@@ -3342,7 +3421,7 @@ mod test {
         }
     }
 
-    /// Verifies [force]-cast bool conversion: eq_active (*mut u8 -> *mut bool).
+    /// Verifies that the eq_active bool slice matches the raw FFI pointer values.
     #[test]
     fn test_force_cast_eq_active_bool() {
         let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
@@ -3357,7 +3436,7 @@ mod test {
         assert!(eq_active[0]);
         assert!(eq_active[1]);
 
-        // Cross-validate with raw u8 FFI pointer
+        // Cross-validate with the raw FFI pointer
         for i in 0..neq {
             let raw_val = unsafe { *data.ffi().eq_active.add(i) };
             assert_eq!(eq_active[i], raw_val,
@@ -3675,8 +3754,7 @@ mod test {
         }
     }
 
-    /// Verifies [force]-cast for bvh_active (*mut u8 -> *mut bool) and that
-    /// the result is valid (true or false, no garbage).
+    /// Verifies that the bvh_active bool slice matches the raw FFI pointer values.
     #[test]
     fn test_force_cast_bvh_active_bool() {
         let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
@@ -4413,8 +4491,8 @@ mod test {
         }
     }
 
-    /// Simulates with an actuator active and verifies force-cast arrays (ctrl, qfrc_actuator,
-    /// actuator_force) reflect the control input after multiple steps.
+    /// Simulates with an actuator active and verifies that ctrl, qfrc_actuator and
+    /// actuator_force reflect the control input after multiple steps.
     #[test]
     fn test_force_cast_multi_step_actuator_ctrl() {
         let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
@@ -4626,7 +4704,7 @@ mod test {
     }
 
     /// Verifies that sensor data changes across multiple simulation steps.
-    /// Exercises the force-cast sensordata flat array after physics evolves.
+    /// Exercises the sensordata flat slice after physics evolves.
     #[test]
     fn test_force_cast_multi_step_sensor_data_evolves() {
         let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
@@ -4658,8 +4736,8 @@ mod test {
         }
     }
 
-    /// Multi-step test with eq_active force-cast bool: disable an equality
-    /// constraint mid-simulation, verify dynamics change.
+    /// Multi-step test with the eq_active bool slice: disable both equality
+    /// constraints after a reset, verify dynamics change.
     #[test]
     fn test_force_cast_multi_step_eq_active_toggle() {
         let model = MjModel::from_xml_string(FORCE_MODEL).unwrap();
@@ -4896,8 +4974,8 @@ mod test {
         assert_eq!(data.model().opt().timestep, NEW_TIMESTEP);
     }
 
-    /// Exercises the `nsensordata` arm of `mj_model_nx_to_mapping!` and
-    /// `mj_model_nx_to_nitem!` by calling `data.sensor("jp")` on a model
+    /// Exercises the `nsensordata` arm of `mj_model_dyn_range!` by calling
+    /// `data.sensor("jp")` on a model
     /// that contains a single `jointpos` sensor.
     #[test]
     fn test_sensor_info_nsensordata_arm() {
@@ -4920,18 +4998,42 @@ mod test {
         assert_eq!(view.data.len(), 1, "jointpos sensor must produce 1 sensordata element");
     }
 
-    /// Exercises `getter_setter!` arm 2 (`get, [... & $type ...]`) and arm 17
-    /// (`with, get, [...]`) via `MjData::energy()`, which returns `&[MjtNum; 2]`.
+    /// Exercises the `get, [... & $type ...]` and `with, get, [...]` arms of `getter_setter!`
+    /// via `MjData::energy()`, which returns `&[MjtNum; 2]`.
     #[test]
-    fn test_energy_ref_getter_arms_2_and_17() {
+    fn test_energy_ref_getter_arms() {
         let model = MjModel::from_xml_string(MODEL).expect("model load failed");
         let mut data = model.make_data();
+        data.forward();
         data.energy_pos();
         data.energy_vel();
+
+        // The balls stand above the floor and nothing moves yet, so the potential slot is
+        // nonzero and the kinetic slot is exactly zero. An accessor that reads a wrong offset,
+        // or that swaps the two slots, fails one of the two.
         let energy: &[MjtNum; 2] = data.energy();
-        assert_eq!(energy.len(), 2);
-        assert!(energy[0].is_finite(), "potential energy must be finite");
-        assert!(energy[1].is_finite(), "kinetic energy must be finite");
+        assert_ne!(energy[0], 0.0, "potential energy at rest above the floor");
+        assert_eq!(energy[1], 0.0, "kinetic energy at rest");
+
+        // Independent derivation: kinetic energy is 0.5 * qvel' * M * qvel.
+        let nv = model.nv() as usize;
+        data.qvel_mut()[0] = 0.5;
+        data.qvel_mut()[7] = -0.25;
+        data.forward();
+        data.energy_vel();
+        let mut mass = vec![0.0; nv * nv];
+        data.full_m(&mut mass).unwrap();
+        let qvel = data.qvel();
+        let expected = 0.5 * (0..nv)
+            .map(|i| qvel[i] * (0..nv).map(|j| mass[i * nv + j] * qvel[j]).sum::<MjtNum>())
+            .sum::<MjtNum>();
+        // Guards the comparison against passing on two zeroes, which is what a `qvel_mut()`
+        // that writes to a wrong offset would produce.
+        assert!(expected > 0.0, "the derived kinetic energy must be positive");
+        assert!(
+            (data.energy()[1] - expected).abs() < 1e-12,
+            "kinetic energy {} does not match 0.5 * qvel' M qvel = {expected}", data.energy()[1]
+        );
     }
 
     /// Exercises the `eval_or_expand! @eval true` path via `MjData::energy_mut()`,

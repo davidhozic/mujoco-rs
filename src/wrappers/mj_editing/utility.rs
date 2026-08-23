@@ -23,8 +23,7 @@ pub(crate) unsafe fn read_mjs_string<'a>(string: *const mjString) -> &'a str {
         ""
     } else {
         // SAFETY: `ptr` points into the internal buffer of the C++ std::string
-        // referenced by `string`, which is valid for lifetime 'a. MuJoCo
-        // strings are always valid UTF-8 (ASCII), so to_str() cannot fail.
+        // referenced by `string`, which is valid for lifetime 'a.
         unsafe { CStr::from_ptr(ptr) }.to_str().unwrap()
     }
 }
@@ -117,7 +116,7 @@ pub(crate) unsafe fn write_mjs_vec_string(source: &str, destination: *mut mjStri
     }
 }
 
-/// Split `source` to entries and append to `destination` (C++).
+/// Appends `source` as a single entry to `destination` (C++).
 ///
 /// # Safety
 /// `destination` must point to a valid `mjStringVec` object.
@@ -153,10 +152,10 @@ macro_rules! add_x_method {
         $(
             #[doc = concat!(
                 "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
-                "Delegates to [`Self::try_add_", stringify!($name), "`] and panics if allocation fails.\n",
-                "# Panics\n",
-                "Panics if MuJoCo fails to allocate the element."
+                "# Note\n",
+                "MuJoCo ends the process when the allocation fails, so this never fails."
             )]
+            #[expect(deprecated, reason = "try_add_* keeps the implementation until it is removed")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 self.[<try_add_ $name>]()
                     .expect(concat!("mjs_add", stringify!([<$name:camel>]), " returned null; allocation failed"))
@@ -164,9 +163,23 @@ macro_rules! add_x_method {
 
             #[doc = concat!(
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "# Note\n\n",
+                "<div class=\"warning\">\n\n",
+                "MuJoCo cannot report a failure here: `mjs_add", stringify!([<$name:camel>]),
+                "` allocates the element with C++ `new`, which throws instead of returning null, ",
+                "and then returns the address of the element it just added, so this method never ",
+                "returns `Err`. An allocation failure ends the process: the exception cannot ",
+                "cross the C API. Prefer the panicking [`Self::add_", stringify!($name), "`]. ",
+                "This method may be undeprecated in the future if MuJoCo's upstream C++ code is ",
+                "changed to report the failure recoverably.\n\n",
+                "</div>\n\n",
                 "# Errors\n",
                 "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate ",
                 "the element, instead of panicking."
+            )]
+            #[deprecated(
+                since = "6.0.0",
+                note = "always returns Ok; use the panicking variant"
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.ffi_mut(), ptr::null()) };
@@ -185,10 +198,10 @@ macro_rules! add_x_method_by_frame {
         $(
             #[doc = concat!(
                 "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
-                "Delegates to [`Self::try_add_", stringify!($name), "`] and panics on failure.\n",
-                "# Panics\n",
-                "Panics if MuJoCo fails to allocate the element."
+                "# Note\n",
+                "MuJoCo ends the process when the allocation fails, so this never fails."
             )]
+            #[expect(deprecated, reason = "try_add_* keeps the implementation until it is removed")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 self.[<try_add_ $name>]()
                     .expect(concat!("mjs_add", stringify!([<$name:camel>]), " returned null; allocation failed"))
@@ -196,19 +209,31 @@ macro_rules! add_x_method_by_frame {
 
             #[doc = concat!(
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "# Note\n\n",
+                "<div class=\"warning\">\n\n",
+                "MuJoCo cannot report a failure here: `mjs_add", stringify!([<$name:camel>]),
+                "` allocates the element with C++ `new`, which throws instead of returning null, ",
+                "and then returns the address of the element it just added, so this method never ",
+                "returns `Err`. An allocation failure ends the process: the exception cannot ",
+                "cross the C API. Prefer the panicking [`Self::add_", stringify!($name), "`]. ",
+                "This method may be undeprecated in the future if MuJoCo's upstream C++ code is ",
+                "changed to report the failure recoverably.\n\n",
+                "</div>\n\n",
                 "# Errors\n",
                 "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate the element."
+            )]
+            #[deprecated(
+                since = "6.0.0",
+                note = "always returns Ok; use the panicking variant"
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 // SAFETY:
                 // - element_mut_pointer() reads `self.element`, a field always valid after construction.
                 // - body_ptr is non-null for any MjsFrame reachable through the Rust API because
-                //   mjs_addFrame always calls SetParent(body); the debug_assert catches violations.
+                //   mjs_addFrame always calls SetParent(body).
                 // - The is_null() guard is defensive; mjs_addXxx functions do not perform
                 //   null-check error handling internally, so under current MuJoCo the
                 //   pointer is always non-null.
-                // - ptr.cast() is safe: mjs structs embed mjsElement as their first field, so
-                //   *mut mjsXxx and *mut mjsElement share the same address.
                 // - mjs_setFrame: both dest and frame are non-null and valid; failure for a
                 //   freshly-created element is treated as a bug via debug_assert.
                 // - `&mut *ptr`: ptr is confirmed non-null by the guard above, properly aligned
@@ -238,10 +263,10 @@ macro_rules! add_x_method_no_default {
         $(
             #[doc = concat!(
                 "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
-                "Delegates to [`Self::try_add_", stringify!($name), "`] and panics if allocation fails.\n",
-                "# Panics\n",
-                "Panics if MuJoCo fails to allocate the element."
+                "# Note\n",
+                "MuJoCo ends the process when the allocation fails, so this never fails."
             )]
+            #[expect(deprecated, reason = "try_add_* keeps the implementation until it is removed")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 self.[<try_add_ $name>]()
                     .expect(concat!("mjs_add", stringify!([<$name:camel>]), " returned null; allocation failed"))
@@ -249,9 +274,23 @@ macro_rules! add_x_method_no_default {
 
             #[doc = concat!(
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
+                "# Note\n\n",
+                "<div class=\"warning\">\n\n",
+                "MuJoCo cannot report a failure here: `mjs_add", stringify!([<$name:camel>]),
+                "` allocates the element with C++ `new`, which throws instead of returning null, ",
+                "and then returns the address of the element it just added, so this method never ",
+                "returns `Err`. An allocation failure ends the process: the exception cannot ",
+                "cross the C API. Prefer the panicking [`Self::add_", stringify!($name), "`]. ",
+                "This method may be undeprecated in the future if MuJoCo's upstream C++ code is ",
+                "changed to report the failure recoverably.\n\n",
+                "</div>\n\n",
                 "# Errors\n",
                 "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate ",
                 "the element, instead of panicking."
+            )]
+            #[deprecated(
+                since = "6.0.0",
+                note = "always returns Ok; use the panicking variant"
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.0.as_ptr()) };
@@ -262,8 +301,7 @@ macro_rules! add_x_method_no_default {
 }
 
 
-/// Creates a `get_$name` method for finding items in spec / body.
-/// Also sets the default to null();
+/// Creates `$item` and `$item_mut` methods that look an item up by name through `mjs_findElement`.
 macro_rules! find_x_method {
     ($($item:ident),*) => {paste::paste! {
         $(
@@ -350,8 +388,9 @@ macro_rules! find_x_method_direct {
 }
 
 
-/// Creates a wrapper around a mjs$ffi_name item. It also implements the methods: `ffi()`, `ffi_mut()`
-/// and traits: [`SpecItem`](super::traits::SpecItem), [`Sync`], [`Send`].
+/// Creates a wrapper around a mjs$ffi_name item. It also implements the methods `info()` and
+/// `set_info()`, and the traits `Sealed` and [`SpecItem`](super::traits::SpecItem).
+/// The handles are deliberately neither [`Send`] nor [`Sync`].
 /// 
 /// When `[SpecObject]` is given to the right of `ffi_name`, the SpecObject trait also gets implemented.
 macro_rules! mjs_struct {
@@ -454,7 +493,7 @@ macro_rules! vec_string_set_append {
             }
 
             #[doc = concat!(
-                "Splits the `", stringify!($name), "` and append the split text to ", $comment,
+                "Appends `", stringify!($name), "` as a single entry to ", $comment,
                 "\n",
                 "# Panics\n",
                 "When the `value` contains '\\0' characters, a panic occurs."
@@ -474,9 +513,10 @@ macro_rules! vec_string_set_append {
             "Sets the entry at index `role` in `", stringify!($name), "` to `name`. ",
             $comment,
             "\n\n",
-            "The `", stringify!($name), "` vector is pre-sized by MuJoCo (one slot per ",
-            "[`", stringify!($role_ty), "`] variant); this method writes directly into ",
-            "the correct slot.\n",
+            "# Note\n",
+            "The `", stringify!($name), "` vector is pre-sized by MuJoCo with one slot per ",
+            "[`", stringify!($role_ty), "`] value. An index with no slot makes MuJoCo call ",
+            "`mju_error`, which ends the process under the default log handler.\n",
             "\n",
             "# Panics\n",
             "When `name` contains '\\0' characters, a panic occurs."
@@ -492,7 +532,11 @@ macro_rules! vec_string_set_append {
             "returning `&mut Self` for chaining. ",
             $comment,
             "\n\n",
-            "Equivalent to [`set_", stringify!($singular), "`](Self::set_", stringify!($singular), ")."
+            "Equivalent to [`set_", stringify!($singular), "`](Self::set_",
+            stringify!($singular), ").\n",
+            "\n",
+            "# Panics\n",
+            "When `name` contains '\\0' characters, a panic occurs."
         )]
         pub fn [<with_ $singular>](&mut self, role: $role_ty, name: &str) -> &mut Self {
             self.[<set_ $singular>](role, name);
@@ -506,7 +550,7 @@ macro_rules! vec_string_set_append {
             "<div class=\"warning\">\n\n",
             "This replaces the pre-sized vector. Prefer [`set_",
             stringify!($singular), "`](Self::set_", stringify!($singular),
-            "`) to set individual entries by role.\n\n",
+            ") to set individual entries by role.\n\n",
             "</div>\n\n",
             "# Panics\n",
             "When the `value` contains '\\0' characters, a panic occurs."
@@ -523,7 +567,7 @@ macro_rules! vec_string_set_append {
             "<div class=\"warning\">\n\n",
             "Appending extends past the pre-sized vector. Prefer [`set_",
             stringify!($singular), "`](Self::set_", stringify!($singular),
-            "`) to set individual entries by role.\n\n",
+            ") to set individual entries by role.\n\n",
             "</div>\n\n",
             "# Panics\n",
             "When the `value` contains '\\0' characters, a panic occurs."
@@ -542,8 +586,7 @@ macro_rules! string_set_get_with {
             "Return ", $comment,
             "\n",
             "# Panics\n",
-            "Panics if the stored string is not valid UTF-8, which can only happen on internal memory corruption \
-            -- MuJoCo only uses ASCII values."
+            "Panics if the stored string is not valid UTF-8."
         )]
         pub fn $name(&self) -> &str {
                 // SAFETY: the mjString field is valid for the lifetime of self.
@@ -618,8 +661,8 @@ macro_rules! vec_set_get {
 /// Implements setters for non-string attributes.
 ///
 /// Three forms are supported:
-/// - `name: Type; "comment"` -- a **safe** setter that takes `&[Type]` and writes it unchanged.
-/// - `name: InputType => StoredType { check, "reason" } => ErrType; "comment"` -- a **safe** setter
+/// - `name: Type; "comment"`: a **safe** setter that takes `&[Type]` and writes it unchanged.
+/// - `name: InputType => StoredType { check, "reason" } => ErrType; "comment"`: a **safe** setter
 ///   taking `&[InputType]` (typically a Rust enum) that stores each element as the raw C type
 ///   `StoredType` via a zero-cost pointer reinterpretation (the same compile-time-checked cast the
 ///   view layer uses, so no `bytemuck` trait is required on the enum). Every element is passed
@@ -629,15 +672,13 @@ macro_rules! vec_set_get {
 ///   `"reason"` is a doc fragment in the crate's `# Errors` style (e.g.
 ///   `"[`MjEditError::InvalidParameter`] when ..."`) reused verbatim in the generated `# Errors`
 ///   section. The `{ check, "reason" } => ErrType` part may be omitted for a plain safe cast.
-/// - `name: InputType => StoredType; "comment"; "safety" unsafe` -- the same cast setter made
+/// - `[unsafe: "safety"] name: InputType => StoredType; "comment"`: the same cast setter made
 ///   **`unsafe`** (the per-element `check` omitted), for vectors the C side later uses without its
-///   own validation -- e.g. as an unchecked array index, count, or `memcpy` length -- and which
-///   cannot be cheaply validated here. The optional `; "safety" unsafe` tail flips the generated
-///   setter to `unsafe fn` and emits `"safety"` as its caller-facing `# Safety` obligation. It is a
-///   tail (not a leading marker) because a leading optional starting with the `unsafe` keyword is
-///   ambiguous with the field's own `name` ident; anchoring it after the comment with the `"safety"`
-///   literal keeps it unambiguous, and the trailing `unsafe` keyword is captured (`$unsafe_kw:tt`)
-///   and echoed verbatim onto the `fn`.
+///   own validation (e.g. as an unchecked array index, count, or `memcpy` length) and which
+///   cannot be cheaply validated here. The optional leading `[unsafe: "safety"]` marker flips the
+///   generated setter to `unsafe fn` and emits `"safety"` as its caller-facing `# Safety`
+///   obligation. The brackets keep the `unsafe` keyword unambiguous with the field's own `name`
+///   ident, and the keyword is captured (`$unsafe_kw:ident`) and echoed verbatim onto the `fn`.
 macro_rules! vec_set {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
@@ -656,12 +697,12 @@ macro_rules! vec_set {
             //   validates every element first; passing validation rules out the values the C side
             //   would misuse, so the reinterpretation is sound without `unsafe`. `"reason"` is a doc
             //   fragment naming the error and condition, reused verbatim in the `# Errors` section.
-            // - `; "safety" unsafe` makes it an `unsafe fn` (no per-element check) for vectors the C
-            //   side later trusts as an unchecked index/count/length; `"safety"` documents the
-            //   caller's `# Safety` obligation. The leading `"safety"` literal keeps this tail
-            //   unambiguous from the repetition separator, and the trailing `unsafe` keyword
+            // - a leading `[unsafe: "safety"]` marker makes it an `unsafe fn` (no per-element
+            //   check) for vectors the C side later trusts as an unchecked index/count/length;
+            //   `"safety"` documents the caller's `# Safety` obligation. The brackets keep the
+            //   marker unambiguous with the field's own `name` ident, and the `unsafe` keyword
             //   (`$unsafe_kw`) is echoed onto the generated `fn`.
-            // - neither tail: a plain safe cast.
+            // - neither: a plain safe cast.
             #[doc = concat!("Set ", $comment
                 $(, "\n\n# Errors\nReturns ", $reason, " (in that case nothing is written).")?
                 $(, "\n\n# Safety\n", $safety)?
@@ -721,7 +762,6 @@ macro_rules! spec_get_iter {
 
 
 /// Generates methods for obtaining iterators to `$iter_over` body items.
-/// The $self_lf represents the iterated item's borrow and $parent_lf the lifetime of its parent.
 macro_rules! body_get_iter {
     ([$($iter_over: ident),*]) => {paste::paste!{
         $(

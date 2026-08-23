@@ -4,11 +4,6 @@
 //! data simulation, state extract/apply, querying jacobians, contact info,
 //! sensor info) to ensure they are memory-safe and free of undefined behavior
 //! when run under Miri.
-//!
-//! Run under Miri:
-//! ```bash
-//! cargo +nightly miri run --example miri_test
-//! ```
 
 use mujoco_rs::prelude::{MjSpec, SpecItem};
 use mujoco_rs::wrappers::{MjModel, MjData, MjtObj, MjtGeom, MjtJoint, MjtTrn, MjtSensor};
@@ -237,7 +232,7 @@ fn test_iterators_and_views(model: &MjModel, data: &mut MjData<&MjModel>) {
     let mut spec = MjSpec::new();
     spec.world_body_mut().add_body().with_name("spec_body");
     let mut count = 0;
-    // spec.body_iter() iterates over top-level bodies
+    // spec.body_iter() iterates over every body in the spec, world body included
     for body in spec.body_iter() {
         if body.name() == "spec_body" {
             count += 1;

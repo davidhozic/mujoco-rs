@@ -45,7 +45,7 @@ fn main() {
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
     let mut data = MjData::new(&model);  // or model.make_data()
 
-    /* Renderer for rendering at 1280x720 px (width x height) */
+    /* Renderer for rendering at 1920x1080 px (width x height) */
     let mut renderer = MjRenderer::builder()
         .width(0).height(0)  // set to width(0) and height(0) to set automatically based on <global offwidth="1920" offheight="1080"/>
         .num_visual_user_geom(5)  // maximum number of visual-only geoms as result of the user
@@ -79,11 +79,14 @@ fn main() {
             /* Draw a line between the ball and the box */
             scene = renderer.user_scene_mut();
             scene.clear_geom();
-            scene.create_geom(
-                MjtGeom::mjGEOM_LINE,
-                None, None, None,
-                Some([1.0, 1.0, 1.0, 1.0])
-            ).connect(0.05, from, to);  // adjust size, pos and mat to make the line connect the ball and the box.
+            // SAFETY: the geom keeps the material, texture and object ids that create_geom sets to none.
+            unsafe {
+                scene.create_geom(
+                    MjtGeom::mjGEOM_LINE,
+                    None, None, None,
+                    Some([1.0, 1.0, 1.0, 1.0])
+                )
+            }.connect(0.05, from, to);  // adjust size, pos and mat to make the line connect the ball and the box.
 
             renderer.sync_data(&mut data).unwrap();
             renderer.render().unwrap();

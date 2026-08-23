@@ -1,7 +1,8 @@
 //! Procedural tree using recursive model editing.
 //!
 //! Builds a branching tree programmatically via MjSpec's body/joint/geom API.
-//! Ball joints with spring-stiffness make branches sway under an animated wind gust.
+//! Ball joints with spring-stiffness let the branches sag and settle under gravity.
+//! Set `opt.wind` in `build_tree` to a non-zero value to make them sway.
 //!
 //! Adapted from the MuJoCo mjspec tutorial:
 //! https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb
@@ -37,7 +38,7 @@ fn normalize(v: [f64; 3]) -> [f64; 3] {
 
 // Grow a branch as a child of `parent`, attached at height `attach_z` along the
 // parent capsule.  Child branches are themselves distributed from 60% to 100% of
-// their own length, matching the Python linspace distribution.
+// this branch's length, matching the Python linspace distribution.
 fn grow(parent: &mut MjsBody, depth: usize, len: f64, r: f64, dir: [f64; 3], attach_z: f64) {
     let d = normalize(dir);
 
@@ -77,8 +78,8 @@ fn grow(parent: &mut MjsBody, depth: usize, len: f64, r: f64, dir: [f64; 3], att
 }
 
 fn build_tree() -> MjModel {
-    // Start from a spec with joint spring defaults.  MjsJoint doesn't yet expose
-    // stiffness/damping setters directly, so we embed them in the default class.
+    // Start from a spec with joint spring defaults. MjsJoint exposes with_springdamper
+    // per joint; the default class is used here so every joint inherits one value.
     let mut spec = MjSpec::from_xml_string(
         r#"<mujoco>
              <default>

@@ -182,10 +182,8 @@ impl MjsCompiler {
 /// Authored-field tracking bitmasks for [`mjModel`] structs.
 ///
 /// Each field records, as a bitmask, which attributes of the corresponding
-/// section were explicitly authored (set) in the specification. They are
-/// maintained by the compiler and used to resolve conflicts during attachment.
-/// This is a plain-data struct: every field is a public bitmask read directly
-/// (e.g. `authored.disableflags`).
+/// section were explicitly authored (set) in the specification. MuJoCo's XML
+/// parser sets them and the attachment step uses them to resolve conflicts.
 pub type MjsAuthored = mjsAuthored;
 
 /***************************
@@ -210,14 +208,25 @@ impl MjSpec {
     /// Creates an empty [`MjSpec`].
     ///
     /// # Panics
-    /// - When the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    /// - When MuJoCo fails to allocate the specification.
-    ///   Use [`MjSpec::try_new`] for a fallible alternative.
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    #[expect(deprecated, reason = "try_new keeps the implementation until it is removed")]
     pub fn new() -> Self {
         Self::try_new().expect("MuJoCo failed to allocate MjSpec")
     }
 
     /// Fallible version of [`MjSpec::new`].
+    ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// MuJoCo cannot report a failure here: `mj_makeSpec` allocates the spec with C++ `new`,
+    /// which throws instead of returning null, and then returns the address of the spec it just
+    /// created, so this method never returns `Err`. An allocation failure ends the process: the
+    /// exception cannot cross the C API. Prefer [`MjSpec::new`]. This method may be undeprecated
+    /// in the future if MuJoCo's upstream C++ code is changed to report the failure recoverably.
+    ///
+    /// </div>
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
@@ -225,6 +234,10 @@ impl MjSpec {
     ///
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `new`"
+    )]
     pub fn try_new() -> Result<Self, MjEditError> {
         assert_mujoco_version();
         // SAFETY: mj_makeSpec allocates a new MjSpec; returns null on allocation
@@ -401,17 +414,28 @@ impl MjSpec {
     /// Delete an element from this specification.
     ///
     /// # Errors
-    /// Returns [`MjEditError::DeleteFailed`] if MuJoCo cannot delete the element.
+    /// - [`MjEditError::DeleteFailed`] if `element` is null, does not belong to this spec, or
+    ///   MuJoCo refuses the deletion.
+    /// - [`MjEditError::UnsupportedOperation`] if `element` is a default class, a frame, a tendon
+    ///   wrap, or the world body.
     ///
     /// # Safety
     /// The caller must ensure:
     /// - `element` is a valid pointer to an mjsElement
-    /// - `element` is owned by this spec
     /// - `element` has not been previously deleted
     /// - no Rust references derived from `element` exist
     pub unsafe fn delete_element(&mut self, element: *mut mjsElement) -> Result<(), MjEditError> {
         if element.is_null() {
             return Err(MjEditError::DeleteFailed("null element pointer".to_owned()));
+        }
+
+        // mjCDef is not an mjCBase, so this precedes mjs_getSpec. Deleting a frame indexes
+        // `object_lists_` past its `mjNOBJECT` end, and deleting a wrap hits its null slot.
+        if matches!(
+            unsafe { (*element).elemtype },
+            MjtObj::mjOBJ_DEFAULT | MjtObj::mjOBJ_FRAME | MjtObj::mjOBJ_UNKNOWN
+        ) {
+            return Err(MjEditError::UnsupportedOperation);
         }
 
         let spec = unsafe { self.ffi_mut() };
@@ -420,12 +444,11 @@ impl MjSpec {
             return Err(MjEditError::DeleteFailed("element does not belong to this spec".to_owned()));
         }
 
-        if unsafe { (*element).elemtype } == MjtObj::mjOBJ_DEFAULT {
-            return Err(MjEditError::UnsupportedOperation);
-        }
         if unsafe { (*element).elemtype } == MjtObj::mjOBJ_BODY {
-            let name = unsafe { read_mjs_string(mjs_getName(element)) };
-            if name == "world" {
+            // Compare the raw bytes: a name loaded from a file need not be valid UTF-8, and the
+            // &str conversion panics on it.
+            let name = unsafe { mjs_getString(mjs_getName(element)) };
+            if !name.is_null() && unsafe { CStr::from_ptr(name) }.to_bytes() == b"world" {
                 return Err(MjEditError::UnsupportedOperation);
             }
         }
@@ -485,7 +508,7 @@ impl MjSpec {
         })
     }
 
-    /// Return compiler timers (`mjtCTimer` order).
+    /// Return the compiler timers, in seconds, in `mjtCTimer` order.
     pub fn timer(&self) -> &[f64; MjtCTimer::mjNCTIMER as usize] {
         unsafe { &*mjs_getTimer(self.0.as_ptr()).cast() }
     }
@@ -496,7 +519,8 @@ impl MjSpec {
         unsafe { mjs_numWarnings(self.0.as_ptr()) }
     }
 
-    /// Get the i-th warning message, or `None` if the index is out of bounds. Wraps [`mjs_getWarning`].
+    /// Get the i-th warning message. Returns `None` if the index is out of bounds, or if the
+    /// message is not valid UTF-8. Wraps [`mjs_getWarning`].
     pub fn warning(&self, index: i32) -> Option<&str> {
         // SAFETY: mjs_getWarning returns a pointer to a NUL-terminated C string owned
         // by the spec, valid as long as self is alive and not mutated. We return a &str
@@ -702,7 +726,7 @@ impl MjSpec {
 /// Mutable iterator over items in [`MjSpec`].
 #[derive(Debug)]
 pub struct MjsSpecItemIterMut<'a, T> {
-    /// Pointer to the wrapped mjSpec pointer.
+    /// Copy of the raw `mjSpec` pointer that [`MjSpec`] wraps.
     /// This is the FFI type wrapped inside [`MjSpec`].
     ffi_ptr: *mut mjSpec,
     /// Last obtained element in the iterator.
@@ -716,7 +740,7 @@ pub struct MjsSpecItemIterMut<'a, T> {
 /// Immutable iterator over items in [`MjSpec`].
 #[derive(Debug, Clone)]
 pub struct MjsSpecItemIter<'a, T> {
-    /// Pointer to the wrapped mjSpec pointer.
+    /// Copy of the raw `mjSpec` pointer that [`MjSpec`] wraps.
     /// This is the FFI type wrapped inside [`MjSpec`].
     ffi_ptr: *const mjSpec,
     /// Last obtained element in the iterator.
@@ -736,8 +760,8 @@ impl<'a, T: SpecObject> MjsSpecItemIterMut<'a, T> {
 
 impl<'a, T: SpecObject> MjsSpecItemIter<'a, T> {
     fn new(root: &'a MjSpec) -> Self {
-        // SAFETY: mjs_firstElement does not mutate mjsSpec, thus as_ptr is valid to be case to *mut
-        // from the const reference to its wrapper.
+        // SAFETY: mjs_firstElement takes a *const mjSpec; the borrow of root keeps the spec
+        // alive for the call.
         let last = unsafe { mjs_firstElement(root.0.as_ptr(), T::OBJ_TYPE) };
         Self { ffi_ptr: root.0.as_ptr(), last, item_type: PhantomData }
     }
@@ -769,8 +793,8 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsSpecItemIter<'a, T> {
         }
         unsafe {
             let out = T::from_element_as_ptr_mut(self.last).as_ref();
-            // SAFETY: mjs_nextElement does not mutate mjsSpec, thus as_ptr is valid to be case to *mut
-            // from the const reference to its wrapper.
+            // SAFETY: mjs_nextElement takes *const pointers; ffi_ptr and last stay valid while
+            // the iterator borrows the spec.
             self.last = mjs_nextElement(self.ffi_ptr, self.last);
             out
         }
@@ -807,7 +831,7 @@ impl Clone for MjSpec {
     /// Creates a deep copy of this [`MjSpec`].
     ///
     /// # Panics
-    /// Panics if MuJoCo fails to allocate the cloned spec.
+    /// Panics if MuJoCo raises an error while it copies the spec.
     /// Use [`MjSpec::try_clone`] for a fallible alternative.
     fn clone(&self) -> Self {
         self.try_clone().expect("MuJoCo failed to clone MjSpec")
@@ -858,7 +882,7 @@ impl MjsJoint {
             springdamper: &[f64; 2];    "timeconst, dampratio.";
 
             // stiffness
-            stiffness: &[f64; mjNPOLY as usize + 1];            "stiffness coefficient.";
+            stiffness: &[f64; mjNPOLY as usize + 1];            "stiffness coefficients.";
 
             // limits
             range:   &[f64; 2];         "joint limits.";
@@ -867,7 +891,7 @@ impl MjsJoint {
             actfrcrange: &[f64; 2];     "actuator force limits.";
 
             // dof properties
-            damping: &[f64; mjNPOLY as usize + 1];                 "damping coefficient.";
+            damping: &[f64; mjNPOLY as usize + 1];                 "damping coefficients.";
             solref_friction: &[MjtNum; mjNREF as usize]; "solver reference: dof friction.";
             solimp_friction: &[MjtNum; mjNIMP as usize]; "solver impedance: dof friction.";
         ]
@@ -912,7 +936,7 @@ impl MjsGeom {
             fromto: &[f64; 6];                      "alternative for capsule, cylinder, box, ellipsoid.";
             size: &[f64; 3];                        "geom size.";
             rgba: &[f32; 4];                        "rgba when material is omitted.";
-            friction: &[f64; 3];                    "one-sided friction coefficients: slide, roll, spin.";
+            friction: &[f64; 3];                    "one-sided friction coefficients: slide, spin, roll.";
             solref: &[MjtNum; mjNREF as usize];     "solver reference.";
             solimp: &[MjtNum; mjNIMP as usize];     "solver impedance.";
             surfacevel: &[f64; 6];                  "surface velocity in local frame: linear, angular.";
@@ -1049,18 +1073,35 @@ impl MjsFrame {
 
     /// Add and return a child frame.
     ///
-    /// Delegates to [`Self::try_add_frame`] and panics if allocation fails.
-    /// # Panics
-    /// Panics if MuJoCo fails to allocate the frame.
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails, so this never fails.
+    #[expect(deprecated, reason = "try_add_frame keeps the implementation until it is removed")]
     pub fn add_frame(&mut self) -> &mut MjsFrame {
         self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
     }
 
     /// Fallible version of [`Self::add_frame`].
     ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// MuJoCo cannot report a failure here: `mjs_addFrame` allocates the frame with C++ `new`,
+    /// which throws instead of returning null, and then returns the address of the frame it just
+    /// added, so this method never returns `Err`. An allocation failure ends the process: the
+    /// exception cannot cross the C API. Prefer the panicking [`Self::add_frame`]. This method
+    /// may be undeprecated in the future if MuJoCo's upstream C++ code is changed to report the
+    /// failure recoverably.
+    ///
+    /// </div>
+    ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
     /// the frame, instead of panicking.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `add_frame`"
+    )]
     pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
         // SAFETY: element_mut_pointer() reads `self.element`, valid for any live MjsFrame.
         // mjs_getParent returns non-null because every Rust-API MjsFrame was created via
@@ -1089,7 +1130,7 @@ impl MjsActuator {
             biasprm: &[f64; mjNBIAS as usize];          "bias parameters.";
             dynprm: &[f64; mjNDYN as usize];            "dynamic parameters.";
             lengthrange: &[f64; 2];                     "transmission length range.";
-            damping: &[f64; mjNPOLY as usize + 1];      "damping coefficient.";
+            damping: &[f64; mjNPOLY as usize + 1];      "damping coefficients.";
             ctrlrange: &[f64; 2];                       "control range.";
             velrange: &[f64; 2];                        "range of the velocity-setpoint input (pid).";
             ffrange: &[f64; 2];                         "range of the feedforward input (pid).";
@@ -1559,9 +1600,9 @@ impl MjsFlex {
     getter_setter! {
         [&] with, get, [
             rgba: &[f32; 4];                                "rgba when material is omitted.";
-            friction: &[f64; 3];                            "contact friction vector.";
-            solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
-            solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
+            friction: &[f64; 3];                            "one-sided friction coefficients: slide, spin, roll.";
+            solref: &[MjtNum; mjNREF as usize];             "solver reference.";
+            solimp: &[MjtNum; mjNIMP as usize];             "solver impedance.";
             size: &[f64; 3];                                "vertex bounding box half sizes in qpos0.";
             cellcount: &[i32; 3];                           "grid cell count for finite cell method.";
         ]
@@ -1569,7 +1610,7 @@ impl MjsFlex {
 
     getter_setter! {
         [&] with, get, set, [
-            young: f64;                    "elastic stiffness.";
+            young: f64;                    "Young's modulus, in units of pressure (force/area).";
             group: i32;                    "group.";
             contype: i32;                  "contact type.";
             conaffinity: i32;              "contact affinity.";
@@ -1639,8 +1680,8 @@ mjs_struct!(Pair [SpecObject]);
 impl MjsPair {
     getter_setter! {
         [&] with, get, [
-            friction: &[f64; 5];                            "contact friction vector.";
-            solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
+            friction: &[f64; 5];                            "contact friction: slide1, slide2, spin, roll1, roll2.";
+            solref: &[MjtNum; mjNREF as usize];             "solver reference, normal direction.";
             solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
             solreffriction: &[MjtNum; mjNREF as usize];     "solver reference, frictional directions.";
         ]
@@ -1707,8 +1748,8 @@ mjs_struct!(Tendon [SpecObject]);
 impl MjsTendon {
     getter_setter! {
         [&] with, get, [
-            damping: &[f64; mjNPOLY as usize + 1];       "damping coefficient.";
-            stiffness: &[f64; mjNPOLY as usize + 1];     "stiffness coefficient.";
+            damping: &[f64; mjNPOLY as usize + 1];       "damping coefficients.";
+            stiffness: &[f64; mjNPOLY as usize + 1];     "stiffness coefficients.";
             springlength: &[f64; 2];                    "spring length.";
             solref_friction: &[f64; mjNREF as usize];   "solver reference: tendon friction.";
             solimp_friction: &[f64; mjNIMP as usize];   "solver impedance: tendon friction.";
@@ -1755,12 +1796,12 @@ impl MjsTendon {
     ///
     /// <div class="warning">
     ///
-    /// By default, MuJoCo aborts the process on an allocation failure instead of
-    /// returning null. Under a non-default error configuration MuJoCo writes
-    /// through the null pointer on allocation failure before returning, so the
-    /// failure cannot be recovered soundly. Prefer the panicking
-    /// [`MjsTendon::wrap_site`]. This method may be undeprecated in the future
-    /// if MuJoCo's upstream C++ code is changed to return null recoverably.
+    /// MuJoCo cannot report a failure here: it allocates the wrap object with
+    /// C++ `new`, which throws instead of returning null, and then returns
+    /// the address of the wrap it just added, so this method never returns
+    /// `Err`. Prefer the panicking [`MjsTendon::wrap_site`]. This method may be undeprecated
+    /// in the future if MuJoCo's upstream C++ code is changed to report the
+    /// failure recoverably.
     ///
     /// </div>
     ///
@@ -1772,7 +1813,7 @@ impl MjsTendon {
     /// When the `name` contains '\0' characters.
     #[deprecated(
         since = "5.0.0",
-        note = "allocation failure cannot be recovered soundly; use `wrap_site`"
+        note = "always returns Ok; use `wrap_site`"
     )]
     pub fn try_wrap_site(&mut self, name: &str) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
@@ -1795,12 +1836,12 @@ impl MjsTendon {
     ///
     /// <div class="warning">
     ///
-    /// By default, MuJoCo aborts the process on an allocation failure instead of
-    /// returning null. Under a non-default error configuration MuJoCo writes
-    /// through the null pointer on allocation failure before returning, so the
-    /// failure cannot be recovered soundly. Prefer the panicking
-    /// [`MjsTendon::wrap_geom`]. This method may be undeprecated in the future
-    /// if MuJoCo's upstream C++ code is changed to return null recoverably.
+    /// MuJoCo cannot report a failure here: it allocates the wrap object with
+    /// C++ `new`, which throws instead of returning null, and then returns
+    /// the address of the wrap it just added, so this method never returns
+    /// `Err`. Prefer the panicking [`MjsTendon::wrap_geom`]. This method may be undeprecated
+    /// in the future if MuJoCo's upstream C++ code is changed to report the
+    /// failure recoverably.
     ///
     /// </div>
     ///
@@ -1812,7 +1853,7 @@ impl MjsTendon {
     /// When `name` or `sidesite` contain '\0' characters.
     #[deprecated(
         since = "5.0.0",
-        note = "allocation failure cannot be recovered soundly; use `wrap_geom`"
+        note = "always returns Ok; use `wrap_geom`"
     )]
     pub fn try_wrap_geom(&mut self, name: &str, sidesite: &str) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
@@ -1839,12 +1880,12 @@ impl MjsTendon {
     ///
     /// <div class="warning">
     ///
-    /// By default, MuJoCo aborts the process on an allocation failure instead of
-    /// returning null. Under a non-default error configuration MuJoCo writes
-    /// through the null pointer on allocation failure before returning, so the
-    /// failure cannot be recovered soundly. Prefer the panicking
-    /// [`MjsTendon::wrap_joint`]. This method may be undeprecated in the future
-    /// if MuJoCo's upstream C++ code is changed to return null recoverably.
+    /// MuJoCo cannot report a failure here: it allocates the wrap object with
+    /// C++ `new`, which throws instead of returning null, and then returns
+    /// the address of the wrap it just added, so this method never returns
+    /// `Err`. Prefer the panicking [`MjsTendon::wrap_joint`]. This method may be undeprecated
+    /// in the future if MuJoCo's upstream C++ code is changed to report the
+    /// failure recoverably.
     ///
     /// </div>
     ///
@@ -1856,7 +1897,7 @@ impl MjsTendon {
     /// When `name` contains '\0' characters.
     #[deprecated(
         since = "5.0.0",
-        note = "allocation failure cannot be recovered soundly; use `wrap_joint`"
+        note = "always returns Ok; use `wrap_joint`"
     )]
     pub fn try_wrap_joint(&mut self, name: &str, coef: f64) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
@@ -1876,12 +1917,12 @@ impl MjsTendon {
     ///
     /// <div class="warning">
     ///
-    /// By default, MuJoCo aborts the process on an allocation failure instead of
-    /// returning null. Under a non-default error configuration MuJoCo writes
-    /// through the null pointer on allocation failure before returning, so the
-    /// failure cannot be recovered soundly. Prefer the panicking
-    /// [`MjsTendon::wrap_pulley`]. This method may be undeprecated in the future
-    /// if MuJoCo's upstream C++ code is changed to return null recoverably.
+    /// MuJoCo cannot report a failure here: it allocates the wrap object with
+    /// C++ `new`, which throws instead of returning null, and then returns
+    /// the address of the wrap it just added, so this method never returns
+    /// `Err`. Prefer the panicking [`MjsTendon::wrap_pulley`]. This method may be undeprecated
+    /// in the future if MuJoCo's upstream C++ code is changed to report the
+    /// failure recoverably.
     ///
     /// </div>
     ///
@@ -1890,7 +1931,7 @@ impl MjsTendon {
     /// pointer.
     #[deprecated(
         since = "5.0.0",
-        note = "allocation failure cannot be recovered soundly; use `wrap_pulley`"
+        note = "always returns Ok; use `wrap_pulley`"
     )]
     pub fn try_wrap_pulley(&mut self, divisor: f64) -> Result<&mut MjsWrap, MjEditError> {
         let wrap_ptr = unsafe { mjs_wrapPulley(self, divisor) };
@@ -1952,7 +1993,25 @@ impl MjsTendon {
 /***************************
 ** Wrap specification
 ***************************/
-mjs_struct!(Wrap);
+mjs_struct!(Wrap {
+    /// A wrap carries no name of its own; [`SpecItem::name`] reports the wrapped object's name.
+    ///
+    /// # Errors
+    /// Always returns [`MjEditError::UnsupportedOperation`].
+    fn set_name(&mut self, _name: &str) -> Result<(), MjEditError> {
+        // mjCWrap leaves elemtype at mjOBJ_UNKNOWN, and mjs_setName hands that to
+        // mjCModel::CheckRepeat, which indexes object_lists_ and dereferences its null slot 0.
+        Err(MjEditError::UnsupportedOperation)
+    }
+
+    /// A wrap carries no name of its own.
+    ///
+    /// # Panics
+    /// Always panics.
+    fn with_name(&mut self, _name: &str) -> &mut Self {
+        panic!("a wrap carries no name of its own")
+    }
+});
 impl MjsWrap {
     getter_setter! {
         [&] with, get, set, [
@@ -1960,24 +2019,29 @@ impl MjsWrap {
         ]
     }
 
-    /// Return the side site element.
+    /// Return the side site element. Returns `None` when the wrap is not a sphere or cylinder
+    /// wrap, when it holds no side site, or when the named site is missing from the spec (MuJoCo
+    /// logs a warning in that last case).
     pub fn side_site(&self) -> Option<&MjsSite> {
         let ptr = unsafe { mjs_getWrapSideSite(self) };
         if ptr.is_null() { None } else { Some(unsafe { &*ptr }) }
     }
 
-    /// Return the side site element mutably.
+    /// Return the side site element mutably. Returns `None` under the same conditions as
+    /// [`MjsWrap::side_site`].
     pub fn side_site_mut(&mut self) -> Option<&mut MjsSite> {
         let ptr = unsafe { mjs_getWrapSideSite(self) };
         if ptr.is_null() { None } else { Some(unsafe { &mut *ptr }) }
     }
 
-    /// Return the wrap divisor.
+    /// Return the wrap divisor. For a wrap whose type is not [`MjtWrap::mjWRAP_PULLEY`], MuJoCo
+    /// logs a warning and this returns 1.0.
     pub fn divisor(&self) -> f64 {
         unsafe { mjs_getWrapDivisor(self) }
     }
 
-    /// Return the wrap coefficient.
+    /// Return the wrap coefficient. For a wrap whose type is not [`MjtWrap::mjWRAP_JOINT`],
+    /// MuJoCo logs a warning and this returns 1.0.
     pub fn coef(&self) -> f64 {
         unsafe { mjs_getWrapCoef(self) }
     }
@@ -2213,7 +2277,7 @@ impl MjsSkin {
 ***************************/
 mjs_struct!(Texture [SpecObject]);
 
-/// # Note -- cube-map files
+/// # Note: cube-map files
 ///
 /// The `cubefiles` field is a **pre-sized** string vector (6 entries, one per cube face).
 /// Use [`set_cubefile`](Self::set_cubefile) with a [`MjtCubeFace`] variant to assign a
@@ -2283,7 +2347,7 @@ impl MjsTexture {
 ***************************/
 mjs_struct!(Material [SpecObject]);
 
-/// # Note -- texture assignment
+/// # Note: texture assignment
 ///
 /// The `textures` field is a **pre-sized** string vector (`mjNTEXROLE` entries, one per
 /// [`MjtTextureRole`]). Use [`set_texture`](Self::set_texture) to assign a texture name
@@ -2351,7 +2415,8 @@ mjs_struct!(Body [SpecObject] {
 impl MjsBody {
     add_x_method! { body, site, joint, geom, camera, light }
 
-    /// Obtain an immutable reference to a child body with the given `name`.
+    /// Obtain an immutable reference to a body with the given `name` in this body's subtree.
+    /// The search is recursive and returns this body when its own name matches.
     ///
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
@@ -2363,7 +2428,8 @@ impl MjsBody {
         }
     }
 
-    /// Obtain a mutable reference to a child body with the given `name`.
+    /// Obtain a mutable reference to a body with the given `name` in this body's subtree.
+    /// The search is recursive and returns this body when its own name matches.
     ///
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
@@ -2388,18 +2454,35 @@ impl MjsBody {
     // Special case
     /// Add and return a child frame.
     ///
-    /// Delegates to [`Self::try_add_frame`] and panics if allocation fails.
-    /// # Panics
-    /// Panics if MuJoCo fails to allocate the frame.
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails, so this never fails.
+    #[expect(deprecated, reason = "try_add_frame keeps the implementation until it is removed")]
     pub fn add_frame(&mut self) -> &mut MjsFrame {
         self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
     }
 
     /// Fallible version of [`Self::add_frame`].
     ///
+    /// # Note
+    ///
+    /// <div class="warning">
+    ///
+    /// MuJoCo cannot report a failure here: `mjs_addFrame` allocates the frame with C++ `new`,
+    /// which throws instead of returning null, and then returns the address of the frame it just
+    /// added, so this method never returns `Err`. An allocation failure ends the process: the
+    /// exception cannot cross the C API. Prefer the panicking [`Self::add_frame`]. This method
+    /// may be undeprecated in the future if MuJoCo's upstream C++ code is changed to report the
+    /// failure recoverably.
+    ///
+    /// </div>
+    ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
     /// the frame, instead of panicking.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `add_frame`"
+    )]
     pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
         // SAFETY: ffi_mut() returns self unchanged; the coercion to *mut mjsBody is safe.
         // ptr::null_mut() for parentframe is valid: the MuJoCo API accepts null to mean
@@ -2420,7 +2503,8 @@ impl MjsBody {
 ///
 /// Unset array, string, and VFS fields are passed to MuJoCo as null, which makes the compiler
 /// fall back to its own defaults; the scalar fields default to MuJoCo's own defaults (so `dim`
-/// is 2, `radius` is 0.005, and the rest are their zero values, which match MuJoCo's defaults).
+/// is 2 and `radius` is 0.005). `mass` and `inertiabox` stay 0, which makes MuJoCo keep its own
+/// defaults of 1 and 0.005; every other scalar is zero, which is also MuJoCo's default.
 /// Build one with struct-update syntax or the chainable `with_*` methods, starting from
 /// [`MjFlexcompConfig::default`]. Field documentation is adapted from MuJoCo's `flexcomp`
 /// XML reference.
@@ -2446,8 +2530,8 @@ impl MjsBody {
 /// ```
 #[derive(Debug, Clone)]
 pub struct MjFlexcompConfig<'a> {
-    /// Flexcomp type: "grid", "box", "cylinder", "ellipsoid", "disc", "circle", "mesh", "gmsh",
-    /// or "direct" (default "grid").
+    /// Flexcomp type: "grid", "box", "cylinder", "ellipsoid", "square", "disc", "circle", "mesh",
+    /// "gmsh" or "direct". MuJoCo falls back to "grid" for `None` and for any other string.
     pub r#type: Option<&'a str>,
     /// Dimensionality of the flex object (1, 2, or 3); ignored for types that imply it.
     /// Defaults to MuJoCo's default (2).
@@ -2473,7 +2557,8 @@ pub struct MjFlexcompConfig<'a> {
     pub equality: u8,
     /// Whether all points are vertices in the parent body (no new bodies created).
     pub rigid: bool,
-    /// Whether to render the flex skin with flat shading.
+    /// Whether to render the flex skin with flat shading. MuJoCo forces this on for the "box" and
+    /// "cylinder" types and for a 3D "grid".
     pub flatskin: bool,
     /// 2D passive force mode: 0 none, 1 bending, 2 stretching, 3 both.
     pub elastic2d: u8,
@@ -2524,7 +2609,7 @@ impl<'a> MjFlexcompConfig<'a> {
     // value in `Some` via the std `From<T> for Option<T>` impl.
     getter_setter! {
         with, [
-            r#type: &'a str;      "the flexcomp type: \"grid\", \"box\", \"cylinder\", \"ellipsoid\", \"disc\", \"circle\", \"mesh\", \"gmsh\", or \"direct\" (default \"grid\").";
+            r#type: &'a str;      "the flexcomp type: \"grid\", \"box\", \"cylinder\", \"ellipsoid\", \"square\", \"disc\", \"circle\", \"mesh\", \"gmsh\", or \"direct\" (default \"grid\").";
             dim: u8;              "the dimensionality of the flex object (1, 2, or 3); ignored for types that imply it.";
             dof: &'a str;         "the dof parametrization: \"full\", \"radial\", \"trilinear\", \"quadratic\", or \"2d\" (default \"full\").";
             count: [u16; 3];      "the number of generated points in each dimension (grid/box/cylinder/ellipsoid).";
@@ -2536,7 +2621,7 @@ impl<'a> MjFlexcompConfig<'a> {
             inertiabox: f64;      "the equivalent-inertia box size used to set each body's rotational inertia.";
             equality: u8;         "the edge equality constraint: 0 none, 1 edge, 2 vertex, 3 strain.";
             rigid: bool;          "whether all points are vertices in the parent body (no new bodies created).";
-            flatskin: bool;       "whether to render the flex skin with flat shading.";
+            flatskin: bool;       "render flex skin with flat shading.";
             elastic2d: u8;        "the 2D passive force mode: 0 none, 1 bending, 2 stretching, 3 both.";
             pos: [f64; 3];        "the translation of all points relative to the parent body frame.";
             quat: [f64; 4];       "the quaternion rotation of all points around the position offset.";
@@ -2550,8 +2635,8 @@ impl<'a> MjFlexcompConfig<'a> {
 impl MjsBody {
     /// Add and return a child [`MjsFlex`].
     ///
-    /// Creates a flex with auto-generated bodies, joints, and optional equality constraints -- the
-    /// programmatic equivalent of the `flexcomp` element -- configured via
+    /// Creates a flex with auto-generated bodies, joints, and optional equality constraints, the
+    /// programmatic equivalent of the `flexcomp` element, configured via
     /// [`MjFlexcompConfig`]. Wraps [`mjs_makeFlex`].
     ///
     /// Delegates to [`Self::try_add_flexcomp`] and panics if creation fails.
@@ -2675,7 +2760,7 @@ impl MjsBody {
 /// Mutable iterator over items in [`MjsBody`].
 #[derive(Debug)]
 pub struct MjsBodyItemIterMut<'a, T> {
-    /// NonNull pointer to the FFI type [`mjsBody`].
+    /// Raw pointer to the FFI type [`mjsBody`].
     /// [`MjsBody`] is its alias, thus storing it plainly
     /// would technically be UB as Rust can't see across
     /// boundary to verify . 
@@ -2724,8 +2809,8 @@ pub struct MjsBodyItemIter<'a, T> {
 
 impl<'a, T: SpecObject> MjsBodyItemIter<'a, T> {
     fn new(root: &'a MjsBody, recurse: bool) -> Self {
-        // SAFETY: mjs_firstChild requires a *mut pointer but does not mutate
-        // the body. The const-to-mut cast is sound because no mutation occurs.
+        // SAFETY: mjs_firstChild takes a *const mjsBody; the borrow of root keeps the body
+        // alive for the call.
         let last = unsafe {
             mjs_firstChild(
                 root,
@@ -2746,7 +2831,8 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsBodyItemIter<'a, T> {
         }
         unsafe {
             let out = T::from_element_as_ptr_mut(self.last as *mut _).as_ref();
-            // SAFETY: mjs_nextChild requires *mut but does not mutate. Cast is sound.
+            // SAFETY: mjs_nextChild takes *const pointers; ffi_ptr and last stay valid while
+            // the iterator borrows the body.
             self.last = mjs_nextChild(self.ffi_ptr, self.last, self.recurse.into());
             out
         }
@@ -3520,7 +3606,7 @@ mod tests {
         assert_eq!(model.ffi().ntendon, 1, "expected one tendon");
         assert_eq!(model.ffi().nwrap, 2, "expected two wrap elements");
 
-        // Verify wrap types are mjWRAP_SITE (= 1)
+        // Verify wrap types are mjWRAP_SITE
         let wrap_types = model.wrap_type();
         assert_eq!(wrap_types[0], MjtWrap::mjWRAP_SITE);
         assert_eq!(wrap_types[1], MjtWrap::mjWRAP_SITE);
@@ -4031,5 +4117,81 @@ mod tests {
             Err(MjEditError::InvalidParameter(_))
         ));
         assert!(numeric.set_size(4).is_ok());
+    }
+
+    /// A frame carries no default class name, so `default()` must report that instead of
+    /// dereferencing the null pointer `mjs_getDefault` returns for it. A geom and a body are
+    /// added with a default class, so they must still yield one.
+    #[test]
+    fn test_frame_has_no_default() {
+        let mut spec = MjSpec::new();
+        assert!(spec.world_body_mut().add_frame().default().is_none());
+        assert!(spec.world_body_mut().add_geom().default().is_some());
+        assert!(spec.world_body_mut().default().is_some());
+    }
+
+    /// `mjs_getId` casts to `mjCBase`, which `mjCDef` does not derive from, so a default class
+    /// must report no id instead of the value read at that offset.
+    #[test]
+    fn test_default_has_no_id() {
+        assert!(MjSpec::new().add_default("cls", None).id().is_none());
+    }
+
+    /// `mjs_getSpec` casts to `mjCBase` too, so the default check must run before the owner check
+    /// for `delete_element` to reject a default of this very spec as unsupported.
+    #[test]
+    fn test_delete_element_rejects_default() {
+        let mut spec = MjSpec::new();
+        let element = spec.add_default("cls", None).element_mut_pointer();
+        assert!(matches!(unsafe { spec.delete_element(element) }, Err(MjEditError::UnsupportedOperation)));
+    }
+
+    /// A name that MuJoCo parses need not be valid UTF-8, so `delete_element` compares the raw
+    /// bytes; a `&str` conversion would panic instead of deleting the body.
+    #[test]
+    fn test_delete_element_non_utf8_name() {
+        // tinyxml2 encodes a character reference without validating it, so the surrogate U+D800
+        // becomes the three bytes ED A0 80, which no UTF-8 string may hold.
+        let mut spec = MjSpec::from_xml_string(
+            "<mujoco><worldbody><body name=\"a&#xD800;b\"/></worldbody></mujoco>"
+        ).unwrap();
+
+        let element = spec.body_iter_mut().nth(1).unwrap().element_mut_pointer();
+        // SAFETY: the spec owns the name string for as long as the element lives.
+        let name = unsafe { CStr::from_ptr(mjs_getString(mjs_getName(element))) };
+        assert!(
+            std::str::from_utf8(name.to_bytes()).is_err(), "the test needs a non-UTF-8 name"
+        );
+
+        unsafe { spec.delete_element(element) }.unwrap();
+        assert_eq!(spec.body_iter().count(), 1);
+    }
+
+    /// `mjCWrap` leaves its elemtype at `mjOBJ_UNKNOWN`, which makes MuJoCo's duplicate-name check
+    /// index a null list and crash, so naming a wrap must be rejected before the FFI call.
+    #[test]
+    fn test_wrap_set_name_rejected() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_site().with_name("s0");
+        let wrap = spec.add_tendon().wrap_site("s0");
+        assert!(matches!(wrap.set_name("w0"), Err(MjEditError::UnsupportedOperation)));
+        assert_eq!(wrap.name(), "s0");
+    }
+
+    /// A frame's element type lies past the end of MuJoCo's element-list array, and a wrap's slot
+    /// in that array is empty, so `mjs_delete` corrupts the spec and still reports success.
+    #[test]
+    fn test_delete_element_rejects_frame_and_wrap() {
+        let mut spec = MjSpec::new();
+        let frame = spec.world_body_mut().add_frame().element_mut_pointer();
+        assert!(matches!(
+            unsafe { spec.delete_element(frame) }, Err(MjEditError::UnsupportedOperation)
+        ));
+
+        spec.world_body_mut().add_site().with_name("s0");
+        let wrap = spec.add_tendon().wrap_site("s0").element_mut_pointer();
+        assert!(matches!(
+            unsafe { spec.delete_element(wrap) }, Err(MjEditError::UnsupportedOperation)
+        ));
     }
 }

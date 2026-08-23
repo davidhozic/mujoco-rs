@@ -35,6 +35,7 @@ use universal::GlStateWinit;
 mod egl;
 
 
+/// Default headroom of internal visual-only geom slots, added on top of the model's `ngeom`.
 const EXTRA_INTERNAL_VISUAL_GEOMS: u32 = 100;
 
 /// Compute the depth near/far clip planes in metres from the model.
@@ -111,7 +112,9 @@ pub struct MjRendererBuilder {
 impl MjRendererBuilder {
     /// Create a builder with default configuration.
     /// Defaults are:
-    /// - `width` and `height`: use offwidth and offheight of MuJoCo's visual/global settings from the model,
+    /// - `width` and `height`: `0`. When *both* stay `0`, the model's `offwidth` and `offheight`
+    ///   (visual/global settings) are used; setting only one of them gives
+    ///   [`RendererError::ZeroDimension`],
     /// - `num_visual_internal_geom`: 100,
     /// - `num_visual_user_geom`: 0,
     /// - `rgb`: true,
@@ -178,15 +181,22 @@ which can be configured at the top of the model's XML like so:
     }
 
     /// Builds a [`MjRenderer`].
+    ///
+    /// This creates the rendering context, which can stop the process; see [`MjrContext::new`].
+    ///
     /// # Returns
     /// On success, returns [`Ok`] variant containing the [`MjRenderer`].
     /// # Errors
-    /// - [`RendererError::ZeroDimension`] if the width or height is zero.
+    /// - [`RendererError::ZeroDimension`] if only one of `width` and `height` is zero, or if both
+    ///   are zero and the model's `offwidth` or `offheight` is zero.
     /// - [`RendererError::GlutinError`] if OpenGL initialization fails.
-    /// - [`RendererError::EventLoopError`] if the event loop fails to initialize
-    ///   (feature `renderer-winit-fallback`).
-    /// - [`RendererError::GlInitFailed`] if the fallback window initialization fails
-    ///   (feature `renderer-winit-fallback`).
+    /// - [`RendererError::EventLoopError`] if the event loop fails to initialize, and
+    ///   [`RendererError::GlInitFailed`] if the fallback window initialization fails (feature
+    ///   `renderer-winit-fallback`, targets other than Linux).
+    ///
+    /// # Panics
+    /// Panics if the GL display reports no framebuffer configuration for the fallback window
+    /// (feature `renderer-winit-fallback`).
     pub fn build<M: Deref<Target = MjModel>>(self, model: M) -> Result<MjRenderer, RendererError> {
         // Assume model's maximum should be used
         let mut height = self.height;
@@ -311,15 +321,25 @@ impl MjRenderer {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the [`MjRenderer`].
     /// # Errors
-    /// - [`RendererError::ZeroDimension`] if the width or height is zero.
-    /// - [`RendererError::GlutinError`] if OpenGL initialization fails.
-    /// - [`RendererError::EventLoopError`] if the event loop fails to initialize
-    ///   (feature `renderer-winit-fallback`).
-    /// - [`RendererError::GlInitFailed`] if the fallback window initialization fails
-    ///   (feature `renderer-winit-fallback`).
+    /// - [`RendererError::ZeroDimension`] if only one of `width` and `height` is zero, or if both
+    ///   are zero and the model's `offwidth` or `offheight` is zero.
+    /// - [`RendererError::GlutinError`] if OpenGL initialization fails. On Linux this also reports
+    ///   a failed winit fallback, because the initializer keeps the EGL error and drops the
+    ///   fallback's own error.
+    /// - [`RendererError::EventLoopError`] if the event loop fails to initialize, and
+    ///   [`RendererError::GlInitFailed`] if the fallback window initialization fails (feature
+    ///   `renderer-winit-fallback`, targets other than Linux).
+    ///
+    /// # Panics
+    /// Panics if the GL display reports no framebuffer configuration for the fallback window
+    /// (feature `renderer-winit-fallback`).
     pub fn new<M: Deref<Target = MjModel>>(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
+        // Saturate instead of truncating: `as u32` would turn an over-large value into a small
+        // valid one, so the renderer would silently use dimensions the caller never asked for.
         MjRendererBuilder::new()
-            .width(width as u32).height(height as u32).num_visual_user_geom(max_user_geom as u32)
+            .width(width.try_into().unwrap_or(u32::MAX))
+            .height(height.try_into().unwrap_or(u32::MAX))
+            .num_visual_user_geom(max_user_geom.try_into().unwrap_or(u32::MAX))
             .build(model)
     }
 
@@ -445,10 +465,9 @@ impl MjRenderer {
     ///
     /// All data arrays read by `mjr_uploadMesh` are copied: vertex positions
     /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
-    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
-    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
-    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
-    /// not copied because they are fixed by the model signature.
+    /// (`mesh_texcoord`), face-vertex indices (`mesh_face`), face-normal indices
+    /// (`mesh_facenormal`), face-texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`).
     ///
     /// # Errors
     /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
@@ -462,10 +481,9 @@ impl MjRenderer {
     ///
     /// All data arrays read by `mjr_uploadMesh` are bulk-uploaded: vertex positions
     /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
-    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
-    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
-    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
-    /// not copied because they are fixed by the model signature.
+    /// (`mesh_texcoord`), face-vertex indices (`mesh_face`), face-normal indices
+    /// (`mesh_facenormal`), face-texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`).
     ///
     /// # Errors
     /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
@@ -555,12 +573,17 @@ impl MjRenderer {
     }
 
     /// Update the scene with new data from data.
-    /// When `data` was created from a different model than the renderer,
-    /// the internal scene is automatically recreated for the new model.
+    /// When `data`'s model has a different signature than the renderer's scene, the internal
+    /// scene, the user scene and the rendering context are recreated for the new model.
+    /// Recreating the context can stop the process; see [`MjrContext::new`].
     ///
     /// # Errors
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current
-    ///   (only when the [`MjModel`] in `data` differs from the model that created the internal [`MjvScene`]).
+    ///   (only when the signature of the [`MjModel`] in `data` differs from the internal [`MjvScene`]).
+    ///
+    /// # Panics
+    /// Panics if the renderer's camera is a fixed camera whose `fixedcamid` is out of range for
+    /// `data`'s model.
     pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
         if data.model().signature() != self.scene.signature() {
             /* Model changed: preserve the extra-geom headroom and user-geom
@@ -608,7 +631,7 @@ impl MjRenderer {
     /// that define the shape of the output slice.
     ///
     /// # Panics
-    /// - If the image size doesn't match the required dimensions.
+    /// - If `WIDTH * HEIGHT` doesn't match the rendered pixel count.
     /// - If RGB rendering is disabled.
     ///
     /// Use [`MjRenderer::try_rgb`] for a fallible alternative.
@@ -620,7 +643,7 @@ impl MjRenderer {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the rendered RGB image.
     /// # Errors
-    /// - [`RendererError::DimensionMismatch`] if the image size doesn't match the required dimensions.
+    /// - [`RendererError::DimensionMismatch`] if `WIDTH * HEIGHT` doesn't match the rendered pixel count .
     /// - [`RendererError::RgbDisabled`] if RGB rendering is disabled.
     pub fn try_rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[[u8; 3]; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.rgb_flat() {
@@ -632,7 +655,9 @@ impl MjRenderer {
         }
     }
 
-    /// Return a flattened depth image of the scene.
+    /// Return a flattened depth image of the scene: the distance from the camera in metres,
+    /// between the near and far clip planes (`vis().map.znear * stat().extent` and
+    /// `vis().map.zfar * stat().extent`).
     pub fn depth_flat(&self) -> Option<&[f32]> {
         self.depth.as_deref()
     }
@@ -641,7 +666,8 @@ impl MjRenderer {
     /// that define the shape of the output slice.
     ///
     /// # Panics
-    /// - If the image size doesn't match the required dimensions.
+    /// - If `WIDTH * HEIGHT` doesn't match the rendered pixel count. Only the product is checked,
+    ///   so swapped dimensions pass and return a sheared image.
     /// - If depth rendering is disabled.
     ///
     /// Use [`MjRenderer::try_depth`] for a fallible alternative.
@@ -653,7 +679,8 @@ impl MjRenderer {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the rendered depth image.
     /// # Errors
-    /// - [`RendererError::DimensionMismatch`] if the image size doesn't match the required dimensions.
+    /// - [`RendererError::DimensionMismatch`] if `WIDTH * HEIGHT` doesn't match the rendered pixel
+    ///   count (only the product is checked).
     /// - [`RendererError::DepthDisabled`] if depth rendering is disabled.
     pub fn try_depth<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[f32; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.depth_flat() {
@@ -767,6 +794,10 @@ impl MjRenderer {
     /// Draws the scene to internal arrays.
     /// Use [`MjRenderer::rgb`] or [`MjRenderer::depth`] to obtain the rendered image.
     ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when the scene holds geoms but
+    /// [`MjRenderer::sync_data`] was never called, which leaves `frustum_near` at zero.
+    ///
     /// # Errors
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current.
     /// - [`RendererError::SceneError`] if the user-scene sync overflows the geom buffer.
@@ -819,7 +850,8 @@ pub enum RendererError {
     EventLoopError(winit::error::EventLoopError),
     /// A glutin operation failed.
     GlutinError(glutin::error::Error),
-    /// The supplied width or height was zero; MuJoCo requires positive dimensions.
+    /// The supplied width or height was zero; the offscreen GL surface requires positive
+    /// dimensions.
     ZeroDimension,
     /// OpenGL / window initialization failed.
     #[cfg(feature = "renderer-winit-fallback")]
@@ -926,7 +958,7 @@ bitflags! {
 
 
 
-/// Ensures the OpenGL context is current before GPU resources are freed.
+/// Makes the OpenGL context current, when it can, before GPU resources are freed.
 impl Drop for MjRenderer {
     fn drop(&mut self) {
         // Ensure the GL context is current before the implicit field drops

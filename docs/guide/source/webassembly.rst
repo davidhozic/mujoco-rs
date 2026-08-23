@@ -19,8 +19,10 @@ MuJoCo-rs can be compiled to `WebAssembly <https://webassembly.org/>`_ via
 Additional prerequisites for MuJoCo-rs
 ========================================
 
-In addition to the emsdk prerequisites described in MuJoCo's documentation,
-you need:
+In addition to the emsdk prerequisites described in MuJoCo's
+`WebAssembly bindings README
+<https://github.com/google-deepmind/mujoco/blob/3.12.0/wasm/README.md#prerequisites>`_,
+which pins emsdk 4.0.10, you need:
 
 1. **Rust wasm32-unknown-emscripten target**
 
@@ -104,8 +106,9 @@ Memory growth for complex models
 =================================
 
 The Emscripten WASM heap defaults to 16 MB.  Complex models (e.g. many geoms,
-tendons, or connected bodies) can exceed this limit during ``mj_compile()`` and
-will panic with ``"Could not allocate memory"``.  Add
+tendons, or connected bodies) can exceed this limit during ``mj_compile()``.  MuJoCo's
+allocator then reports ``"Could not allocate memory"``, and its default error handler exits
+the process; this is not a Rust panic, so it cannot be caught.  Add
 ``-sALLOW_MEMORY_GROWTH=1`` as a linker argument via ``RUSTFLAGS``:
 
 ::

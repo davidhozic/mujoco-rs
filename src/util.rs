@@ -29,11 +29,11 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
 /// or `None` if the item has no data (address entry is negative).
 ///
 /// Each entry in `addr_array` is either the item's start offset in the data array
-/// or a negative value (conventionally `-1`) meaning the item has no associated data.
+/// or `-1`, meaning the item has no associated data.
 ///
-/// The length is determined by scanning `addr_array[id + 1..]` for the first
-/// non-negative entry (the next item that *does* have data). If no such entry exists,
-/// the region extends to the end of the data array (`data_len`).
+/// The length is determined by scanning `addr_array[id + 1..]` for the first entry that is not
+/// `-1` (the next item that *does* have data). If no such entry exists, the region extends to the
+/// end of the data array (`data_len`).
 ///
 /// # Examples
 /// ```ignore
@@ -88,7 +88,10 @@ macro_rules! set_flag {
 }
 
 
-/// Returns the correct address mapping based on the X in nX (nq, nv, nu, ...).
+/// Resolves the `(start, len)` pair of the packed range that element `$id` owns; the `nX` token
+/// (`nq`, `nv`, `nu`, `nout`, `na`, `nsensordata`, ...) selects both the address array and the
+/// total length of the data array. Returns `(0, 0)` when the element's address entry is `-1`, and
+/// ends the range at the total length when no later element owns data.
 #[macro_export]
 #[doc(hidden)]
 macro_rules! mj_model_dyn_range {
@@ -297,10 +300,13 @@ macro_rules! eval_or_expand {
 ///
 /// - `$field` list uses `$ptr_view` (read-write in `ViewMut`, read-only in `View`).
 /// - `$field_ro` list uses `$ptr_view_ro` (`PointerViewUnsafeMut` in `ViewMut`, `PointerView` in `View`).
-/// - `$opt_field` list uses `$ptr_view`, wrapped in `Option`.
+/// - `$opt_field` list uses `$ptr_view`, wrapped in `Option`; the field is `None` when the
+///   recorded length is zero.
 ///
 /// # Safety
-/// Caller must ensure the data pointers remain valid for the lifetime of the view.
+/// Caller must ensure the data pointers remain valid for the lifetime of the view, and that every
+/// `(offset, len)` pair in `$self` lies inside its array: the expansion offsets each pointer with
+/// `add(offset)`.
 #[macro_export]
 #[doc(hidden)]
 macro_rules! view_creator {
@@ -348,7 +354,8 @@ macro_rules! view_creator {
 
 
 /// Generates a lookup method `$type_(&self, name: &str) -> Option<Mj{Type}{InfoType}Info>` on
-/// a wrapper.
+/// a wrapper. The optional `[$model]` token names the accessor that reaches the model (`[model]`
+/// on `MjData`); omit it when `self` is the model.
 ///
 /// The returned `Info` struct stores the name, id, and index ranges needed to
 /// create views into the corresponding `MjData` or `MjModel` arrays.
@@ -359,10 +366,11 @@ macro_rules! view_creator {
 /// - **FFI stride** (with optional multiplier): `attr: ffi_field (* k)`: stride taken from
 ///   `model.ffi_field`, optionally scaled by `k`.
 /// - **Dynamic range**: `attr: nXXX (* k)`: start and length resolved via [`mj_model_dyn_range!`],
-///   where `nXXX` is the major-dimension field (e.g. `nhfielddata`, `ntexdata`).
+///   where `nXXX` is the total-length field of the packed data array (e.g. `nhfielddata`,
+///   `ntexdata`), which also selects the address array.
 ///   The optional `* k` is a stride multiplier: each logical unit occupies `k` flat elements,
 ///   so both the start offset and the length are scaled by `k`. Use this when the target array
-///   stores `k` flat values per logical unit (e.g. `dof_dampingpoly (nv × mjNPOLY)` viewed as
+///   stores `k` flat values per logical unit (e.g. `dof_dampingpoly (nv x mjNPOLY)` viewed as
 ///   a flat `MjtNum` slice: offset = `dof_start * mjNPOLY`, length = `n_dofs * mjNPOLY`).
 #[doc(hidden)]
 #[macro_export]
@@ -377,7 +385,8 @@ macro_rules! info_method {
         paste::paste! {
             #[doc = concat!(
                 "Returns a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] for the named ", stringify!($type_), ", ",
-                "containing the indices required to create views into [`Mj", stringify!($info_type), "`] arrays.\n\n",
+                "containing the indices required to create views into [`Mj", stringify!($info_type), "`] arrays, ",
+                "or `None` when the model holds no ", stringify!($type_), " with that name.\n\n",
                 "Call [`view`](", stringify!([<Mj $type_:camel $info_type Info>]), "::view) or ",
                 "[`try_view`](", stringify!([<Mj $type_:camel $info_type Info>]), "::try_view) on the result to obtain the actual view.\n\n",
                 "# Panics\n",
@@ -415,13 +424,16 @@ macro_rules! info_method {
 
 
 /// Generates `Info`, `ViewMut`, and `View` types for a named MuJoCo object, along with
-/// `view`, `try_view`, `view_mut`, and `try_view_mut` methods on the `Info` type.
+/// `view`, `try_view`, `view_mut`, `try_view_mut` and `model_signature` on the `Info` type and
+/// `zero` on `ViewMut`. A trailing `, Generic: Bound` (`M: Deref<Target = MjModel>`) is required
+/// when the target wrapper is generic, as `MjData<M>` is.
 ///
 /// # Field lists
 ///
 /// - **`[rw fields]`**: read-write: `PointerViewMut` in `ViewMut`, `PointerView` in `View`.
 /// - **`[ro fields]`**: read as `PointerViewUnsafeMut` in `ViewMut` (unsafe to mutate), `PointerView` in `View`.
-/// - **`[opt fields]`**: optional read-write: `Option<PointerViewMut>` / `Option<PointerView>`.
+/// - **`[opt fields]`**: optional read-write: `Option<PointerViewMut>` / `Option<PointerView>`;
+///   `None` when the element owns no entries in that array (a stateless actuator's `act`, say).
 ///
 /// # Field entry syntax
 ///
@@ -554,7 +566,7 @@ macro_rules! info_with_view {
                     pub $attr_ro: $crate::util::PointerViewUnsafeMut<'d, $type_ro>,
                 )*
                 $(
-                    #[doc = concat!("Optional mutable view of `", stringify!($opt_attr), "`.")]
+                    #[doc = concat!("Optional mutable view of `", stringify!($opt_attr), "`. `None` when this element owns no entries in the array.")]
                     pub $opt_attr: Option<$crate::util::PointerViewMut<'d, $type_opt>>,
                 )*
             }
@@ -586,7 +598,7 @@ macro_rules! info_with_view {
                     pub $attr_ro: $crate::util::PointerView<'d, $type_ro>,
                 )*
                 $(
-                    #[doc = concat!("Optional view of `", stringify!($opt_attr), "`.")]
+                    #[doc = concat!("Optional view of `", stringify!($opt_attr), "`. `None` when this element owns no entries in the array.")]
                     pub $opt_attr: Option<$crate::util::PointerView<'d, $type_opt>>,
                 )*
             }
@@ -598,7 +610,7 @@ macro_rules! info_with_view {
 ///
 /// ## Optional value constraints
 ///
-/// Every arm that writes a value (`set`, `with`, `[&] with`, their `force!` variants, and the
+/// Every arm that writes a value (`set`, `with`, `[&] with`, their `[force]` cast variants, and the
 /// `get, set` / `with, get, set` / `with, get` aggregates) accepts an **optional per-field check**
 /// for fields whose value can be invalid. Bool arms have no check (a bool is always in range).
 ///
@@ -619,7 +631,7 @@ macro_rules! info_with_view {
 ///
 /// The `"comment"` describes the field itself and is shared verbatim by the getter, setter, and
 /// builder; the getter never gets an `# Errors`/`# Panics` section, so do **not** hand-write
-/// error/panic notes into `"comment"` — put them in the check `"reason"` instead.
+/// error/panic notes into `"comment"`; put them in the check `"reason"` instead.
 ///
 /// Omitting the check yields the plain infallible setter/builder.
 #[doc(hidden)]
@@ -787,6 +799,12 @@ macro_rules! array_mut_doc {
 ///         ],
 ///         ...
 ///     }
+/// Syntax for arrays whose second dimension is itself a variable:
+///     sublen_dep {
+///         attribute: &[[datatype; code to access the inner length]; documentation;
+///                      code to access the outer length]
+///     }
+/// The accessor generated by `sublen_dep` returns a flat slice of `outer * inner` elements.
 ///
 #[doc(hidden)]
 #[macro_export]
@@ -898,14 +916,19 @@ macro_rules! array_slice_dyn {
 
 /// Generates getter and setter methods for converting between Rust's &str type and C's char arrays.
 ///
-/// # Safety
-/// The generated getters blindly interpret a `char` array as a C string; the
-/// array must be NUL-terminated and contain valid UTF-8. Setters validate
-/// ASCII encoding and will **panic** if the value exceeds the buffer length.
-/// The macro works by first specifying the methods to create (get = getter, set = setter) --- c_str_as_str_method {get, set, {...}} ---
-/// and then providing the rest of the parameters.
-/// 
-/// The rest of the parameters are recursive and are as follows:
+/// The first tokens select the methods to create (`get` = getter, `set` = setter, `with` =
+/// builder) in one of the accepted orders (`get`, `set`, `with`, `get, set`, `with, set`,
+/// `with, get`, `with, get, set`), followed directly by the parameter group, with no comma in
+/// between:
+/// `c_str_as_str_method! {with, get, set { ... }}`.
+///
+/// # Panics
+/// The generated getters panic if the `char` buffer holds no NUL terminator, or if the bytes
+/// before it are not valid UTF-8. The generated setters and builders panic if the value is not
+/// ASCII, holds an interior NUL byte, or does not fit in the buffer. A generated method that
+/// takes a sub-index panics if that index is out of range.
+///
+/// The parameters are recursive and are as follows:
 /// - ffi (optional): name of the method that returns some lower-level struct,
 ///                   which contains the actual attributes we want to read;
 /// - name: the attribute name;
@@ -919,7 +942,7 @@ macro_rules! array_slice_dyn {
 macro_rules! c_str_as_str_method {
     (get {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {
         $(
-            #[doc = concat!("Returns ", $comment, "\n\n# Panics", "\nPanics if the buffer has no NUL terminator or if the resulting string contains invalid UTF-8.")]
+            #[doc = concat!("Returns ", $comment, "\n\n# Panics", "\nPanics if the buffer has no NUL terminator or if the resulting string contains invalid UTF-8.", $("\nPanics if `", stringify!($sub_index_name), "` is out of range.",)?)]
             pub fn $name(&self $(, $sub_index_name: $sub_index_type)? ) -> &str {
                 let bytes: &[u8] = bytemuck::cast_slice(&self$(.$ffi())?.$name$([$sub_index_name])?[..]);
                 std::ffi::CStr::from_bytes_until_nul(bytes)
@@ -931,7 +954,7 @@ macro_rules! c_str_as_str_method {
 
     (set {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {paste::paste!{
         $(
-            #[doc = concat!("Sets ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII, an interior NUL byte, or is too long.")]
+            #[doc = concat!("Sets ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII, an interior NUL byte, or is too long.", $("\nPanics if `", stringify!($sub_index_name), "` is out of range.",)?)]
             pub fn [<set_ $name>](&mut self, $($sub_index_name: $sub_index_type,)? $name: &str) {
                 $crate::util::write_ascii_to_buf(
                     &mut self$(.$ffi())?.$name$([$sub_index_name])?,
@@ -943,7 +966,7 @@ macro_rules! c_str_as_str_method {
 
     (with {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {paste::paste!{
         $(
-            #[doc = concat!("Builder method for setting ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII, an interior NUL byte, or is too long.")]
+            #[doc = concat!("Builder method for setting ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII, an interior NUL byte, or is too long.", $("\nPanics if `", stringify!($sub_index_name), "` is out of range.",)?)]
             pub fn [<with_ $name>](mut self, $($sub_index_name: $sub_index_type,)? $name: &str) -> Self {
                 $crate::util::write_ascii_to_buf(
                     &mut self$(.$ffi())?.$name$([$sub_index_name])?,

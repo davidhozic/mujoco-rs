@@ -4,7 +4,7 @@
 //! - Constructing simulation state by directly setting joint velocities via
 //!   the joint view API ([`MjJointDataInfo::view_mut`]).
 //! - Computing and printing mechanical energy using [`MjData::energy_pos`] and
-//!   [`MjData::energy_vel`] (requires `<flag energy="enable"/>` in the model).
+//!   [`MjData::energy_vel`], which write into `data.energy()` on demand.
 //! - The butterfly effect: two simulations started with nearly identical initial
 //!   conditions diverge rapidly.
 //!
@@ -192,8 +192,8 @@ fn main() {
         viewer.sync_data(&mut data);
         viewer.render().unwrap();
 
-        // The timestep is 0.001 s -> no sleep needed to remain near real-time here;
-        // rendering itself takes longer than 1 ms per frame.
+        // Yield for one timestep between frames. Rendering already costs more than the 1 ms
+        // step, so the loop runs slower than real-time.
         std::thread::sleep(Duration::from_secs_f64(model.opt().timestep));
     }
 

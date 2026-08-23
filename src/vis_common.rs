@@ -21,7 +21,18 @@ use std::path::Path;
 ///
 /// Returns [`MjSceneError::SceneFull`] if the combined geom count would
 /// exceed the destination scene's `maxgeom` capacity.
+///
+/// # Panics
+/// Panics if `src` and `dst` were created for models with different signatures.
 pub fn sync_geoms(src: &MjvScene, dst: &mut MjvScene) -> Result<(), MjSceneError> {
+    // A copied mjvGeom keeps its objid, which the renderer uses as an unchecked index into the
+    // DESTINATION scene's flex and skin arrays; those are sized by the model the scene was built
+    // for, and are null when that model has none.
+    assert_eq!(
+        src.signature(), dst.signature(),
+        "the two scenes were created for different models"
+    );
+
     let ffi_src = src.ffi();
     let ffi_dst = unsafe { dst.ffi_mut() };
 
@@ -108,7 +119,7 @@ pub fn flip_image_vertically<T>(buffer: &mut [T], height: usize, row_len: usize)
 /// * `height`      - Image height in pixels.
 /// * `color_type`  - PNG colour model (e.g., `png::ColorType::Rgb`).
 /// * `bit_depth`   - Bits per channel (e.g., `png::BitDepth::Eight`).
-/// * `compression` - PNG compression level (e.g., `png::Compression::Default`).
+/// * `compression` - PNG compression level (e.g., `png::Compression::Balanced`).
 ///
 /// # Errors
 ///
@@ -137,4 +148,28 @@ pub fn write_png<P: AsRef<Path>>(
         .write_image_data(data)
         .map_err(io::Error::other)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wrappers::mj_model::{MjModel, MjtGeom};
+
+    /// A copied geom keeps its `objid`, which the renderer uses as an unchecked index into the
+    /// destination scene's flex and skin arrays, so the two scenes must belong to one model.
+    #[test]
+    #[should_panic(expected = "different models")]
+    fn test_sync_geoms_cross_model_panics() {
+        let with_body = MjModel::from_xml_string(
+            "<mujoco><worldbody><body><geom size=\"0.1\"/></body></worldbody></mujoco>").unwrap();
+        let world_only = MjModel::from_xml_string(
+            "<mujoco><worldbody><geom size=\"0.1\"/></worldbody></mujoco>").unwrap();
+
+        let mut source = MjvScene::new(&with_body, 8);
+        let mut destination = MjvScene::new(&world_only, 8);
+        // SAFETY: the test never writes a material, texture or object id.
+        unsafe { source.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None) };
+
+        let _ = sync_geoms(&source, &mut destination);
+    }
 }

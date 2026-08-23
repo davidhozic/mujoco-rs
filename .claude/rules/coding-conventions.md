@@ -210,6 +210,11 @@ UB:
   walk-throughs; no entries for private items or same-cycle fixes; new methods as fully-qualified
   `:docs-rs:` links nested under the owning type's `replace::` substitution; mark new items
   `:sup:\`new\``.
+- **One entry per field, not one per surface.** A field that a view or an `Info` also exposes gets
+  a single entry, written on the field or its array accessor, plus a short clause noting that the
+  change also affects the views. Never describe the view change a second time in parallel, and
+  never repeat the field list. Same rule for `migration.rst` prose; a Before/After block may still
+  show view code when that is what the user must edit.
 - RST: `|name|` substitutions for common types (`|mj_data|`, not `` ``MjData`` ``); double backticks
   for inline code; `---` for an em dash, `--` only as en dash or literal flag; lines under ~100
   (hard limit 120); `:gh-example:` for example references.

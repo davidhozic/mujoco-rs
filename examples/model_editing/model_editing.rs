@@ -50,7 +50,7 @@ fn create_model() -> MjModel {
 
     // Create a ball
     let ball_body = world.add_body()
-        .with_gravcomp(0.981)  // make it like in space.
+        .with_gravcomp(1.0)  // compensate 100% of the body weight.
         .with_name("ball");
 
     ball_body.add_geom()

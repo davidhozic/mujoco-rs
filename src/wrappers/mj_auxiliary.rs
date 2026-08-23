@@ -207,7 +207,8 @@ impl MjVfs {
         }
     }
 
-    /// Check if file exists in VFS in the given directory.
+    /// Check if file exists in VFS. MuJoCo keeps only the last path element of
+    /// `directory`/`name` for the lookup, so `directory` does not restrict the search.
     /// 
     /// A mutable borrow is required due to the internal mutex. 
     /// 
@@ -234,8 +235,6 @@ impl MjVfs {
     }
 
     /// Check if file exists in VFS.
-    /// 
-    /// Use [`MjVfs::contains_file_in`] to search within a directory.
     /// 
     /// A mutable borrow is required due to the internal mutex. 
     /// 

@@ -244,11 +244,15 @@ To build statically linkable libraries, perform the following steps:
 
    .. seealso::
 
-        See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/main/Dockerfile.ubuntu>`_ for a reproducible
-        build environment which, to our knowledge, matches MuJoCo's official build environment.
+        See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/v6.0.x/Dockerfile.ubuntu>`_
+        for a reproducible build environment which, to our knowledge, matches MuJoCo's official
+        build environment.
         The Dockerfile includes commented-out commands for installing the Rust toolchain and
         for using clang-13/clang++-13 as the compiler. Our testing showed that static libraries
-        built in the container also work outside of the container, even on the rust-lld linker.
+        built in the container also work outside of the container. The Dockerfile's cmake command
+        enables interprocedural optimization (``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON``),
+        so a library built with it needs the system linker; see the attention block below. Set the
+        flag to ``OFF`` to keep the rust-lld linker usable.
 
         The Dockerfile defines a container running Ubuntu 22.04 and installs clang-13 alongside
         build-essential. See the commented-out cmake commands in the Dockerfile for the recommended
