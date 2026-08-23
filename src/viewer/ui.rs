@@ -1629,8 +1629,8 @@ impl ViewerUI {
     }
 
     /// Adds a user-defined UI callback that will be invoked during UI rendering.
-    /// The callback receives the egui context and the passive [`MjData`] instance of the shared
-    /// state, and can be used to create custom windows, panels, or other UI elements.
+    /// The callback receives the root [`egui::Ui`] and the viewer's shared state ([`ViewerSharedState`]),
+    /// and can be used to create custom windows, panels, or other UI elements.
     pub(crate) fn add_ui_callback<F>(&mut self, callback: F)
     where
         F: FnMut(&mut egui::Ui, &Arc<Mutex<ViewerSharedState>>) + 'static

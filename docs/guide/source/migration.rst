@@ -346,12 +346,11 @@ egui 0.36 and the new UI callback signature
 -------------------------------------------
 The :ref:`mj_rust_viewer` builds against ``egui`` 0.36, so the closure passed to
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` receives a
-``&mut egui::Ui`` instead of a ``&egui::Context``. The second parameter changed from the locked
-passive |mj_data| to the unlocked ``&Arc<Mutex<ViewerSharedState>>``, so the closure decides when
-to take the lock.
+`&mut egui::Ui <https://docs.rs/egui/0.36.1/egui/struct.Ui.html>`_ instead of a
+`&egui::Context <https://docs.rs/egui/0.36.1/egui/struct.Context.html>`_. The second parameter changed from the locked passive |mj_data| to the
+``&Arc<Mutex<ViewerSharedState>>`` (:docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState`), so the closure decides when to take the lock.
 
-``MjViewer::add_ui_callback_detached`` was removed: a closure that needs no simulation state never
-locks the mutex, which is exactly what the detached variant existed for.
+``MjViewer::add_ui_callback_detached`` was removed.
 
 **Before (5.x)**:
 

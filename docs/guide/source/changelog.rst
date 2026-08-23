@@ -53,7 +53,7 @@ update of MuJoCo alone can increase the major version.
   see :ref:`migrate_6_0_0`. For the upstream changes, see egui's changelog:
   https://github.com/emilk/egui/blob/main/CHANGELOG.md
 
-*UI callbacks receive a* ``Ui`` *and the shared state*
+*UI callbacks receive a* `egui::Ui <https://docs.rs/egui/0.36.1/egui/struct.Ui.html>`_ *and the shared state*
 
 - The closure passed to
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` now receives
