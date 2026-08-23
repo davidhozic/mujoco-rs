@@ -408,6 +408,14 @@ update of MuJoCo alone can increase the major version.
   the raw ``mjsElement`` handle (``elemtype``, ``signature``) are now ``pub`` again,
   classifying them as plain-data structs and allowing direct field access.
 
+
+*Viewer-UI side-panel is now natively collapsible*
+
+- In the past, the viewer's UI side-panel could be toggled by pressing the 'X' keyboard key.
+  This is still possible now, however, it can also be done by dragging the side-panel to and out of
+  the left screen-edge.
+  Additionally, this change adds an animation to the side-panel when it is being toggled. 
+
 5.0.0 (MuJoCo 3.9.0)
 ======================
 
