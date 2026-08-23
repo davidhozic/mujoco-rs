@@ -23,7 +23,7 @@ More detailed documentation is available at the:
 This library uses FFI bindings to MuJoCo **3.12.0**.
 
 ## Minimum Rust version
-Rust version 1.88 or newer is required.
+Rust version 1.95 or newer is required.
 
 ## Installation
 For installation, see the [**guide book**](https://mujoco-rs.readthedocs.io/en/v6.0.x/installation.html).

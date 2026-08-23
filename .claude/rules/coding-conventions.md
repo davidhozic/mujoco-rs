@@ -172,15 +172,35 @@ UB:
   implementation itself guarantees; never a side-effecting call inside `debug_assert!`; allocation
   checks use `assert!` or `Result`.
 
-## Modern Rust (edition 2024, MSRV 1.88)
+## Modern Rust (edition 2024, MSRV 1.95)
 - A returned `impl Trait` captures all in-scope lifetimes automatically; no `<'a>` + `+ 'a` plumbing
   (`use<..>` only to narrow). Named borrowing return types still spell the lifetime.
-- `let ... else` for bind-or-bail; let-chains (`if let ... && ...`) over nesting.
+- `let ... else` for bind-or-bail; let-chains (`if let ... && ...`) over nesting; `if let` guards
+  (`Some(id) if let Some(x) = lookup(id) =>`) over an `if let` nested in the arm body. If the guard
+  fails, the arm does not match and a later arm runs. Keep the nested `if` when the arm must consume
+  the value and then do nothing.
 - std helpers over hand-expanded formulas: `f64::midpoint`, `hypot`, `powi(2)`, `to_radians()`,
   `div_ceil`.
 - Float ordering: `f64::total_cmp`, never `partial_cmp(..).unwrap()`.
 - `is_some_and` / `is_none_or` over `map_or`.
 - `LazyLock` / `OnceLock`, never `once_cell`/`lazy_static` or `static mut`.
+- `cfg_select!` for a mutually exclusive platform or feature choice; each arm holds one expression
+  or one braced block of items. Never the `cfg-if` crate. A match arm and a struct field keep their
+  own `#[cfg(..)]`, because a macro cannot expand to either one.
+- Fixed-length views over `slice[..N].try_into()`: `first_chunk::<N>()` / `first_chunk_mut::<N>()`
+  for a prefix, `as_array::<N>()` / `as_mut_array::<N>()` only when the length is exactly `N`. A
+  stride view is usually longer than `N` (a free joint `qpos` is 7), so `first_chunk` fits it.
+  `[T; _]` works in a `let` annotation or a call, never in an item signature. An item signature
+  includes a parameter, a return type, a struct field, a constant, a `static` and a type alias.
+- Index and count math that must not wrap: `strict_add` / `strict_sub` / `strict_mul` over
+  `checked_*(..).unwrap()`; they panic in release too. Keep `checked_*` where the overflow becomes
+  a `Result`.
+- Element position: `as_flattened()` + `element_offset()` over an `unsafe` `offset_from` on two
+  element pointers.
+- Honour the pointer and lifetime lints instead of silencing them: `dangling_pointers_from_locals`,
+  `integer_to_ptr_transmutes` (use `ptr::with_exposed_provenance`), `function_casts_as_integer`,
+  `mismatched_lifetime_syntaxes`. The first three mark a real defect, the last one an unclear
+  signature; fix the cause.
 
 ## Module structure
 - Siblings are different concerns; faces of one abstraction nest under a parent that names it and

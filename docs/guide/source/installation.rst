@@ -12,7 +12,7 @@ MuJoCo-rs
 
 .. note::
 
-    MuJoCo-rs requires **Rust 1.88** or newer (MSRV).  Run ``rustup update stable``
+    MuJoCo-rs requires **Rust 1.95** or newer (MSRV).  Run ``rustup update stable``
     to ensure you are on a supported toolchain.
 
 
@@ -278,7 +278,7 @@ To build statically linkable libraries, perform the following steps:
 
     Above CMake configuration command **disables** link-time optimization (LTO). This results in worse performance
     but allows the compiled code to be used with the rust-lld linker, which is the default linker
-    since Rust 1.90.0 on the **x86_64-unknown-linux-gnu** target.
+    on the **x86_64-unknown-linux-gnu** target.
 
     If performance is critical for you, link-time optimization of MuJoCo code can be enabled during configuration:
 
