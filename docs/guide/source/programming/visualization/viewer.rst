@@ -142,8 +142,7 @@ This is optional and can be removed or reduced to run the simulation faster than
     arrays). This is faster.
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full` copies the **entire**
     ``MjData`` struct and should only be used when those large arrays are needed inside the
-    viewer (for example, when using
-    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` to access them).
+    viewer.
 
 .. admonition:: Performance tip
 
@@ -260,26 +259,18 @@ Custom UI widgets
 The Rust-native viewer supports adding custom UI widgets through the
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` method.
 This allows you to create custom windows, panels, and other UI elements using
-`egui <https://docs.rs/egui/0.33.0/egui/>`_.
+`egui <https://docs.rs/egui/0.36.1/egui/>`_.
 
 .. note::
 
     Callbacks added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`
-    receive the passive simulation state (:docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`).
-    This requires locking the mutex to the shared state, which may slow down the program.
-    The lock is held for the whole callback, so the callback must not lock the shared state
-    again; that deadlocks the viewer thread.
-
-    To avoid unnecessary locks when the simulation state is not required in the UI,
-    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback_detached`
-    can be used instead, which only accepts the
-    `egui::Context <https://docs.rs/egui/0.33.0/egui/struct.Context.html>`_ as a parameter.
-
+    receive the root `egui::Ui <https://docs.rs/egui/0.36.1/egui/struct.Ui.html>`__ and the viewer's shared state
+    (``Arc<Mutex<T>>``, ``T`` being :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState`).
 
 The following example demonstrates how to add a custom window to the viewer:
 
 .. code-block:: rust
-    :emphasize-lines: 15-28
+    :emphasize-lines: 15-27
 
     use std::time::Duration;
 
@@ -296,12 +287,11 @@ The following example demonstrates how to add a custom window to the viewer:
             .build_passive(&model).expect("could not launch the viewer");
 
         /* Add a custom UI window */
-        // viewer.add_ui_callback(|ctx, data| {...}) or
-        viewer.add_ui_callback_detached(|ctx| {
+        viewer.add_ui_callback(|ui, _state| {
             use mujoco_rs::viewer::egui;
             egui::Window::new("Custom controls")
                 .scroll(true)
-                .show(ctx, |ui| {
+                .show(ui, |ui| {
                     ui.heading("My Custom Widget");
                     ui.label("This is a custom UI element!");
                     if ui.button("Click me").clicked() {
@@ -319,7 +309,8 @@ The following example demonstrates how to add a custom window to the viewer:
     }
 
 Multiple callbacks can be registered by calling ``add_ui_callback`` multiple times.
-Each callback will be invoked during the UI rendering phase with access to the egui context.
+Each callback will be invoked during the UI rendering phase with access to the root
+`egui::Ui <https://docs.rs/egui/0.36.1/egui/struct.Ui.html>`__.
 
 For a comprehensive example, see the :gh-example:`visualization/viewer/custom_ui_widgets.rs` example,
 which demonstrates various types of UI elements including windows, side panels, and top panels.
@@ -334,20 +325,16 @@ which demonstrates various types of UI elements including windows, side panels, 
 
     When :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` is called, the
     user's data is copied into the viewer's internal passive copy via ``mjv_copyData``, which
-    skips large computed arrays not required for visualization. As a result, the
-    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` passed to UI callbacks
-    (added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`)
-    will **not** hold current values in:
+    skips large computed arrays not required for visualization. The passive copy will therefore
+    **not** hold current values in:
 
     - the mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``,
       ``qLU``), which keep the values of the previous copy and are therefore stale;
     - the sparse constraint Jacobian blocks (``efc_J``, ``efc_Y``, ``efc_AR`` and their index
       arrays), which are empty.
 
-    If you require those in a UI callback, either call an appropriate method on the passed
-    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` instance
-    (e.g., :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward`),
-    or switch to :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full`.
+    Use :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full` when the viewer
+    needs those arrays.
 
     Additionally, the viewer writes any UI-driven state changes (e.g. actuator controls,
     equality constraints) back to the user's ``data`` via the integration state. If your

@@ -33,7 +33,7 @@ fn main() {
 
     /* Add a custom UI window */
     let mut opened = true;  // gets moved into the callback
-    viewer.add_ui_callback_detached(move |ctx| {
+    viewer.add_ui_callback(move |ctx, _| {
         use mujoco_rs::viewer::egui;
         egui::Window::new("Custom controls")
             .scroll(true)

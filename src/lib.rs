@@ -50,7 +50,7 @@
 //! - `viewer`: enables the Rust-native MuJoCo viewer.
 //!
 //!   - `viewer-ui`: enables the (additional) user UI within the viewer.
-//!     This also allows users to add custom [`egui`](https://docs.rs/egui/0.33/egui/) widgets to the viewer.
+//!     This also allows users to add custom [`egui`](https://docs.rs/egui/0.36.1/egui/) widgets to the viewer.
 //!
 //! - `cpp-viewer`: enables the Rust wrapper around the C++ MuJoCo viewer.
 //!   This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/v6.0.x/installation.html#static-linking).

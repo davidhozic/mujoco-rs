@@ -194,8 +194,8 @@ export MUJOCO_DYNAMIC_LINK_DIR=$(realpath mujoco-A.B.C/lib) && export LD_LIBRARY
    build as the packaging evidence.
 4. **Cargo.lock** -- `Cargo.lock` is `.gitignore`d for this crate; no action unless that
    changes. Note its status rather than assuming.
-5. **MSRV** -- `rust-version` (workspace) is `1.88`; confirm no newer-than-MSRV syntax slipped
-   in. If a `1.88` toolchain is installed, a `cargo +1.88 check` is the strongest signal;
+5. **MSRV** -- `rust-version` (workspace) is `1.95`; confirm no newer-than-MSRV syntax slipped
+   in. If a `1.95` toolchain is installed, a `cargo +1.95 check` is the strongest signal;
    otherwise note MSRV was not re-verified.
 
 ---

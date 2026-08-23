@@ -3666,9 +3666,9 @@ mod tests {
         assert_ne!(jnt_solref[0].as_ptr(), jnt_solref[1].as_ptr());
         assert_ne!(std::ptr::addr_of!(jnt_type[0]), std::ptr::addr_of!(jnt_type[1]));
 
-        // Pointer stride should be exactly mjNREF elements apart
-        let ptr_diff = unsafe { jnt_solref[1].as_ptr().offset_from(jnt_solref[0].as_ptr()) };
-        assert_eq!(ptr_diff, mjNREF as isize,
+        // Stride must be exactly mjNREF elements
+        let stride = jnt_solref.as_flattened().element_offset(&jnt_solref[1][0]).unwrap();
+        assert_eq!(stride, mjNREF as usize,
             "jnt_solref stride must be mjNREF={}", mjNREF);
     }
 

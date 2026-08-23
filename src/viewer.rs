@@ -724,7 +724,8 @@ impl ViewerSharedState {
 /// - I: inertia,
 /// - E: constraint.
 /// 
-/// With the `viewer-ui` feature, `X` toggles the side UI panel.
+/// With the `viewer-ui` feature, `X` toggles the side UI panel. The side panel also closes and
+/// opens by a drag of its inner edge to and from the screen edge.
 /// 
 /// # Panics
 /// Panics when initialized outside the main thread.
@@ -850,16 +851,13 @@ impl MjViewer {
     }
 
     /// Adds a user-defined UI callback for custom widgets in the viewer's UI.
-    /// The callback receives an [`egui::Context`] reference and can be used to create
-    /// custom windows, panels, or other UI elements.
-    /// It also receives a mutable reference to [`MjData`], which can be used to read
-    /// and modify simulation state. Note that the model can be accessed through [`MjData::model`].
+    /// The callback receives the root [`egui::Ui`], which creates custom windows, panels or
+    /// other UI elements, and the viewer's [`ViewerSharedState`] (An [`Arc`] `<`[`Mutex`]`>` of it),
+    /// which the callback locks only when it needs the state.
     ///
     /// # Note
-    /// The viewer's internal shared-state [`Mutex`] is **held for the entire
-    /// duration of the callback** (because `data` is a live borrow of the guarded
-    /// `data_passive` field). Do **not** attempt to lock the shared state again from
-    /// within the callback as that will deadlock the viewer thread.
+    /// If you need the shared-state of the viewer, keep the lock short, because a simulation thread
+    /// that calls [`MjViewer::sync_data`] waits for the same [`Mutex`].
     ///
     /// # Example
     /// ```no_run
@@ -867,33 +865,21 @@ impl MjViewer {
     /// # use mujoco_rs::viewer::MjViewer;
     /// # let model = MjModel::from_xml_string("<mujoco/>").unwrap();
     /// # let mut viewer = MjViewer::launch_passive(&model, 0).unwrap();
-    /// viewer.add_ui_callback(|ctx, data| {
+    /// viewer.add_ui_callback(|ui, state| {
     ///     use mujoco_rs::viewer::egui;
     ///     egui::Window::new("Custom controls")
     ///         .scroll(true)
-    ///         .show(ctx, |ui| {
-    ///             ui.label("Custom UI element");
+    ///         .show(ui, |ui| {
+    ///             ui.label(format!("running: {}", state.lock().unwrap().running()));
     ///         });
     /// });
     /// ```
     #[cfg(feature = "viewer-ui")]
     pub fn add_ui_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&egui::Context, &mut MjData<Box<MjModel>>) + 'static
+        F: FnMut(&mut egui::Ui, &Arc<Mutex<ViewerSharedState>>) + 'static
     {
         self.ui.add_ui_callback(callback);
-    }
-
-    /// Same as [`MjViewer::add_ui_callback`], except the `callback` does
-    /// not receive the passive [`MjData`] instance of the viewer.
-    /// Consequently, the mutex of the viewer's shared state doesn't need to
-    /// be locked, yielding better performance.
-    #[cfg(feature = "viewer-ui")]
-    pub fn add_ui_callback_detached<F>(&mut self, callback: F)
-    where
-        F: FnMut(&egui::Context) + 'static
-    {
-        self.ui.add_ui_callback_detached(callback);
     }
 
     /// Same as [`MjViewer::sync_data`], except it copies the entire [`MjData`]
@@ -1972,10 +1958,10 @@ impl MjViewerBuilder {
         // User interface
         #[cfg(feature = "viewer-ui")]
         let ui = ui::ViewerUI::new(&model, window, &gl_surface.display())?;
-        #[cfg(feature = "viewer-ui")]
-        let mut status = ViewerStatusBit::UI;
-        #[cfg(not(feature = "viewer-ui"))]
-        let mut status = ViewerStatusBit::HELP;
+        let mut status = cfg_select! {
+            feature = "viewer-ui" => ViewerStatusBit::UI,
+            _ => ViewerStatusBit::HELP,
+        };
 
         status.set(ViewerStatusBit::VSYNC, self.vsync);
         status.set(ViewerStatusBit::WARN_REALTIME, self.warn_non_realtime);
