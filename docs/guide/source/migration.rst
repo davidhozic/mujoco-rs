@@ -99,8 +99,8 @@ renamed to match.
     let diag = data.efc_diag_a();
 
 
-Removed island matrix |mj_data| accessors
------------------------------------------
+Removed island matrix ``MjData`` accessors
+------------------------------------------
 MuJoCo moved the island-specific inertia and Jacobian matrices off the arena onto the stack,
 so they are no longer exposed as ``mjData`` fields. The following |mj_data| accessors were
 removed with no replacement: ``i_m_rownnz``, ``i_m_rowadr``, ``i_m_colind``, ``i_m``, ``i_ld``,
@@ -126,9 +126,9 @@ accessors ``actuator_length``, ``moment_rownnz``, ``moment_rowadr``, ``actuator_
 and ``actuator_force`` are now sized by ``nout``. The per-actuator views for control- and
 output-indexed fields (``ctrl``, ``length``, ``velocity``, ``force``; ``ctrllimited``,
 ``ctrlrange``, ``gear``, ``acc0``, ``length0``, ``lengthrange``) changed from fixed-size
-views to dynamic ranges based on ``actuator_ctrladr``/``actuator_ctrlnum`` and
-``actuator_outadr``/``actuator_outnum``. For single-input single-output actuators
-``nactuator == nu == nout``, so models without MIMO actuators are unaffected.
+views to dynamic ranges based on ``actuator_ctrladr`` and ``actuator_outadr``. For
+single-input single-output actuators ``nactuator == nu == nout``, so models without MIMO
+actuators are unaffected.
 
 **Before:**
 
@@ -166,8 +166,8 @@ Shifted actuator enum discriminants
 discriminants (rather than the enum variants) needs the new values.
 
 
-Stricter |mjr_context| accessor types
----------------------------------------
+Stricter ``MjrContext`` accessor types
+--------------------------------------
 The |mjr_context| flags ``gl_initialized``, ``window_available``, ``window_stereo`` and
 ``window_doublebuffer`` now read as ``bool``, and ``font_scale`` and ``read_depth_map`` now read
 as ``MjtFontScale`` and ``MjtDepthMap``, instead of ``i32``.
@@ -209,8 +209,8 @@ as ``MjtFontScale`` and ``MjtDepthMap``, instead of ``i32``.
     context.set_buffer(MjtFramebuffer::mjFB_OFFSCREEN);
 
 
-Unsafe mutation of |mj_model| ``actuator_gaintype``
------------------------------------------------------
+Unsafe mutation of ``MjModel`` ``actuator_gaintype``
+----------------------------------------------------
 ``actuator_gaintype_mut`` is now an ``unsafe fn``; the actuator views are affected the same way,
 so a write through a view needs ``as_mut_slice`` inside ``unsafe``. A wrong gain type makes the
 engine write more force outputs than the actuator owns.
@@ -231,12 +231,13 @@ engine write more force outputs than the actuator owns.
     unsafe { view.gaintype.as_mut_slice()[0] = MjtGain::mjGAIN_AFFINE };
 
 
-Unsafe geom creation on |mjv_scene|
--------------------------------------
+Unsafe geom creation on ``MjvScene``
+------------------------------------
 ``create_geom`` and ``try_create_geom`` are now ``unsafe fn``. The renderer reads the returned
-geom's ``matid``, ``texid`` and, on a flex or a skin geom, ``objid`` as unchecked indices, so the
-caller keeps each one below the count of the model that the rendering context was created for.
-Both methods write ``-1`` into ``matid`` and ``texid``, which means no material and no texture.
+geom's ``matid``, ``texid`` and, on a flex or a skin geom, ``objid`` as unchecked indices. The
+caller keeps ``matid`` and ``texid`` below the counts of the model that the rendering context was
+created for, and ``objid`` below the scene's flex or skin count. All three ids start at ``-1``,
+which means no material, no texture and no object.
 
 **Before:**
 
@@ -272,8 +273,8 @@ instead of a single mode selector.
         .with_ctrlspec(MjtCtrlInput::mjINPUT_VOLTAGE as i32);
 
 
-Relaxed |mj_data| ``body_awake`` view mutability
---------------------------------------------------
+Relaxed ``MjData`` ``body_awake`` view mutability
+-------------------------------------------------
 ``body_awake`` was already safe to mutate through its array accessor, and the body views now
 match it, so a write through a view no longer needs ``as_mut_slice`` inside ``unsafe``.
 
@@ -311,9 +312,11 @@ sensor, flex, exclude, numeric, text, tuple, key, plugin, hfield, skin, texture 
 
 Deprecated fallible allocation methods
 --------------------------------------
-|mj_model|'s ``try_clone``, |mj_data|'s ``try_clone``, |mj_spec|'s ``try_new``, and every
-``try_add_*`` element constructor on |mj_spec|, |mjs_body| and |mjs_frame| are now deprecated.
-Their ``AllocationFailed`` arm is unreachable. ``mj_copyModel`` and ``mj_copyData`` raise
+|mj_model|'s ``try_clone``, |mj_data|'s ``try_clone``, |mj_spec|'s ``try_new``, ``try_add_frame``
+on |mjs_body| and |mjs_frame|, and every macro-generated ``try_add_*`` element constructor on
+|mj_spec|, |mjs_body| and |mjs_frame| are now deprecated. Their ``AllocationFailed`` arm is
+unreachable. ``try_add_default`` and ``try_add_flexcomp`` keep their ``Result``: MuJoCo does report
+a duplicate class name and a failed flex build. ``mj_copyModel`` and ``mj_copyData`` raise
 ``mjERROR``, whose default handler exits the process. ``mj_makeSpec`` and the ``mjs_addX`` functions
 allocate with C++ ``new``, which throws instead of returning null; the official MuJoCo binary
 bundles its own C++ runtime, so the exception cannot cross the C API and no handler in the calling
