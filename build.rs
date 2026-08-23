@@ -459,7 +459,8 @@ fn main() {
                     }
                     hasher.update(&buffer[..n]);
                 }
-                let result = format!("{:x}", hasher.finalize());
+                let result: String = hasher.finalize()
+                    .iter().map(|byte| format!("{byte:02x}")).collect();
                 if !hash_official.eq_ignore_ascii_case(&result) {
                     panic!(
                         "sha256sum of '{}' does not match \

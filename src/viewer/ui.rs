@@ -1555,7 +1555,7 @@ impl ViewerUI {
             /* User-defined UI callbacks */
             // Callbacks that receive the egui context and MjData passive instance
             for callback in self.user_ui_callbacks.iter_mut() {
-                callback(ui, &shared_viewer_state);
+                callback(ui, shared_viewer_state);
             }
         });
 
