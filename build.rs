@@ -290,15 +290,13 @@ fn main() {
     else {
         let mujoco_version = env!("CARGO_PKG_VERSION").split_once("mj-").unwrap().1;
 
-        // In build.rs, #[cfg(target_os)] evaluates against the HOST, not the target.
-        #[cfg(target_os = "linux")]
-        const HOST_OS: &str = "linux";
-        #[cfg(target_os = "windows")]
-        const HOST_OS: &str = "windows";
-        #[cfg(target_os = "macos")]
-        const HOST_OS: &str = "macos";
-        #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-        compile_error!("unsupported host OS");
+        // In build.rs, a target_os predicate evaluates against the HOST, not the target.
+        const HOST_OS: &str = cfg_select! {
+            target_os = "linux"   => "linux",
+            target_os = "windows" => "windows",
+            target_os = "macos"   => "macos",
+            _ => compile_error!("unsupported host OS"),
+        };
 
         // Cross-OS builds require explicit library paths; neither pkg-config
         // (queries host packages) nor auto-download (extracts host binaries) can help.

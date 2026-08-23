@@ -1958,10 +1958,10 @@ impl MjViewerBuilder {
         // User interface
         #[cfg(feature = "viewer-ui")]
         let ui = ui::ViewerUI::new(&model, window, &gl_surface.display())?;
-        #[cfg(feature = "viewer-ui")]
-        let mut status = ViewerStatusBit::UI;
-        #[cfg(not(feature = "viewer-ui"))]
-        let mut status = ViewerStatusBit::HELP;
+        let mut status = cfg_select! {
+            feature = "viewer-ui" => ViewerStatusBit::UI,
+            _ => ViewerStatusBit::HELP,
+        };
 
         status.set(ViewerStatusBit::VSYNC, self.vsync);
         status.set(ViewerStatusBit::WARN_REALTIME, self.warn_non_realtime);
