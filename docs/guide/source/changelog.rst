@@ -41,6 +41,31 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: Breaking changes
 
+*Minimum-supported Rust version (MSRV) raised to 1.95*
+
+- ``egui`` 0.36 requires Rust 1.95, so the MSRV rose from 1.88 to 1.95. This also applies to any
+  program that extends the :ref:`mj_rust_viewer`'s UI.
+
+*egui upgraded to 0.36*
+
+- The :ref:`mj_rust_viewer` now builds against ``egui`` 0.36, which it re-exports as
+  ``mujoco_rs::viewer::egui``. Custom UI code must be ported to the new ``egui`` API,
+  see :ref:`migrate_6_0_0`. For the upstream changes, see egui's changelog:
+  https://github.com/emilk/egui/blob/main/CHANGELOG.md
+
+*UI callbacks receive a* ``Ui`` *and the shared state*
+
+- The closure passed to
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` now receives
+  ``&mut egui::Ui`` and ``&Arc<Mutex<ViewerSharedState>>``, instead of ``&egui::Context`` and
+  ``&mut MjData<Box<MjModel>>``.
+
+*Removed* ``MjViewer::add_ui_callback_detached``
+
+- The detached variant existed only to avoid the mutex lock. The remaining callback receives the
+  shared state unlocked, so a closure that needs no simulation state simply never locks it. Use
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`.
+
 *MuJoCo FFI upgraded to 3.12.0*
 
 - MuJoCo-rs now builds against MuJoCo 3.12.0 FFI, which rolls up the upstream 3.10.0,

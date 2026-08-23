@@ -342,6 +342,57 @@ failure recoverably.
   let data_copy = data.clone();
 
 
+egui 0.36 and the new UI callback signature
+-------------------------------------------
+The :ref:`mj_rust_viewer` builds against ``egui`` 0.36, so the closure passed to
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` receives a
+``&mut egui::Ui`` instead of a ``&egui::Context``. The second parameter changed from the locked
+passive |mj_data| to the unlocked ``&Arc<Mutex<ViewerSharedState>>``, so the closure decides when
+to take the lock.
+
+``MjViewer::add_ui_callback_detached`` was removed: a closure that needs no simulation state never
+locks the mutex, which is exactly what the detached variant existed for.
+
+**Before (5.x)**:
+
+.. code-block:: rust
+
+    viewer.add_ui_callback(|ctx, data| {
+        egui::SidePanel::right("custom_panel").show(ctx, |ui| {
+            ui.heading("Custom Panel");
+            if ui.button("Zero the controls").clicked() {
+                data.ctrl_mut().fill(0.0);
+            }
+        });
+    });
+
+    viewer.add_ui_callback_detached(|ctx| {
+        egui::TopBottomPanel::top("custom_top_panel").show(ctx, |ui| {
+            ui.label("Custom Top Bar");
+        });
+    });
+
+**After (6.0.0)**:
+
+.. code-block:: rust
+
+    viewer.add_ui_callback(|ui, state| {
+        egui::Panel::right("custom_panel").show(ui, |ui| {
+            ui.heading("Custom Panel");
+            ui.label(format!("running: {}", state.lock().unwrap().running()));
+        });
+    });
+
+    viewer.add_ui_callback(|ui, _| {
+        egui::Panel::top("custom_top_panel").show(ui, |ui| {
+            ui.label("Custom Top Bar");
+        });
+    });
+
+Port the widgets themselves against egui's changelog:
+https://github.com/emilk/egui/blob/main/CHANGELOG.md
+
+
 .. _migrate_5_0_0:
 
 Migrating to 5.0.0

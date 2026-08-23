@@ -80,7 +80,7 @@ impl CustomSimulation {
                 });
 
                 // Create a side panel, with a button to toggle the window.
-                egui::SidePanel::right("custom_panel")
+                egui::Panel::right("custom_panel")
                     .show(ctx, |ui| {
                         ui.heading("Custom Panel");
                         ui.separator();
@@ -108,13 +108,13 @@ impl CustomSimulation {
         viewer.add_ui_callback({
             // Clone the reference counter so that the closure below moves the clone, not the original.
             let storage = storage.clone();
-            move |ctx, _| {
+            move |ui, _| {
                 use mujoco_rs::viewer::egui;
 
                 // Since we're using Rc, we need RefCell to dynamically borrow.
                 let storage_borrow = storage.borrow();
-                egui::TopBottomPanel::top("custom_top_panel")
-                    .show(ctx, |ui| {
+                egui::Panel::top("custom_top_panel")
+                    .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             ui.label("Custom Top Bar");
                             ui.separator();

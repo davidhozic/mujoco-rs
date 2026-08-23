@@ -879,21 +879,9 @@ impl MjViewer {
     #[cfg(feature = "viewer-ui")]
     pub fn add_ui_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&egui::Context, &mut MjData<Box<MjModel>>) + 'static
+        F: FnMut(&mut egui::Ui, &Arc<Mutex<ViewerSharedState>>) + 'static
     {
         self.ui.add_ui_callback(callback);
-    }
-
-    /// Same as [`MjViewer::add_ui_callback`], except the `callback` does
-    /// not receive the passive [`MjData`] instance of the viewer.
-    /// Consequently, the mutex of the viewer's shared state doesn't need to
-    /// be locked, yielding better performance.
-    #[cfg(feature = "viewer-ui")]
-    pub fn add_ui_callback_detached<F>(&mut self, callback: F)
-    where
-        F: FnMut(&egui::Context) + 'static
-    {
-        self.ui.add_ui_callback_detached(callback);
     }
 
     /// Same as [`MjViewer::sync_data`], except it copies the entire [`MjData`]

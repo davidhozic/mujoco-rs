@@ -17,7 +17,6 @@ use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint, MjtDisableBit, MjtEna
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjtCamera, MjvScene};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_primitive::MjtNum;
-use crate::wrappers::mj_data::MjData;
 use crate::{cast_mut_info, set_flag};
 use crate::mujoco_c::mjNGROUP;
 use crate::util::LockUnpoison;
@@ -31,7 +30,6 @@ const HEADING_POST_SPACE: f32 = 5.0;
 const BUTTON_SPACING_X: f32 = 10.0;
 const BUTTON_SPACING_Y: f32 = 5.0;
 const BUTTON_ROUNDING: f32 = 50.0;
-const SIDE_PANEL_DEFAULT_WIDTH: f32 = 200.0;
 const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
 const SIDE_PANEL_PAD: f32 = 10.0;
 const MAX_SPAN_WIDTH: f32 = 350.0;
@@ -207,10 +205,7 @@ const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
 const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit::mjNENABLE as usize);
 
 /// Type alias for a user-provided UI callback function.
-pub(crate) type UiCallback = Box<dyn FnMut(&egui::Context, &mut MjData<Box<MjModel>>)>;
-
-/// Type alias for a detached (from state) user-provided UI callback function.
-pub(crate) type UiCallbackDetached = Box<dyn FnMut(&egui::Context)>;
+pub(crate) type UiCallback = Box<dyn FnMut(&mut egui::Ui, &Arc<Mutex<ViewerSharedState>>)>;
 
 /// Viewer user interface context.
 pub(crate) struct ViewerUI {
@@ -224,7 +219,6 @@ pub(crate) struct ViewerUI {
     joint_display_info: Vec<(String, bool, [MjtNum; 2], usize)>,
     equality_names: Vec<String>,
     user_ui_callbacks: Vec<UiCallback>,
-    user_ui_callbacks_detached: Vec<UiCallbackDetached>,
 
     // Window toggles.
     // Note that these are bool for easier integration with egui.
@@ -275,7 +269,6 @@ impl ViewerUI {
             joint_display_info: Vec::new(),
             equality_names: Vec::new(),
             user_ui_callbacks: Vec::new(),
-            user_ui_callbacks_detached: Vec::new(),
             actuator_window: false,
             joint_window: false,
             equality_window: false,
@@ -373,16 +366,16 @@ impl ViewerUI {
 
         // Process the UI
         let raw_input = self.state.take_egui_input(window);
-        let full_output = self.egui_ctx.run(raw_input, |ctx| {
+        let mut full_output = self.egui_ctx.run_ui(raw_input, |ui| {
             if status.contains(ViewerStatusBit::UI) {
-                egui::SidePanel::new(egui::panel::Side::Left,"interface_panel")
+                egui::Panel::left("interface_panel")
                     .resizable(true)
-                    .default_width(SIDE_PANEL_DEFAULT_WIDTH)
-                    .show(ctx, |ui|
+                    .show(ui, |ui|
                 {                  
                     // The menu
                     egui::ScrollArea::vertical()
                         .max_height(ui.available_height() - (TOGGLE_LABEL_HEIGHT_EXTRA_SPACE + HEADING_POST_SPACE + HEADING_FONT.size))
+                        .scroll_source(egui::scroll_area::ScrollSource::ALL)
                         .show(ui, |ui|
                     {
                         // Make buttons have more space in the width
@@ -1392,7 +1385,7 @@ impl ViewerUI {
             egui::Window::new("Actuator")
                 .scroll(true)
                 .open(&mut self.actuator_window)
-                .show(ctx, |ui|
+                .show(ui, |ui|
             {
                 let mut lock = shared_viewer_state.lock_unpoison();
                 let ctrl_mut = lock.data_passive.ctrl_mut();
@@ -1428,7 +1421,7 @@ impl ViewerUI {
             egui::Window::new("Joint")
                 .scroll(true)
                 .open(&mut self.joint_window)
-                .show(ctx, |ui|
+                .show(ui, |ui|
             {
                 egui::Grid::new("joint_grid").show(ui, |ui| {
                     let lock = shared_viewer_state.lock_unpoison();
@@ -1457,7 +1450,7 @@ impl ViewerUI {
             egui::Window::new("Equality")
                 .scroll(true)
                 .open(&mut self.equality_window)
-                .show(ctx, |ui|
+                .show(ui, |ui|
             {
                 ui.horizontal_wrapped(|ui| {
                     let data = &mut shared_viewer_state.lock_unpoison().data_passive;
@@ -1475,7 +1468,7 @@ impl ViewerUI {
 
             egui::Window::new("Group")
                 .open(&mut self.group_window)
-                .show(ctx, |ui|
+                .show(ui, |ui|
             {
                 egui::Grid::new("group_grid").show(ui, |ui| {
                     for i in 0..mjNGROUP as usize {
@@ -1494,7 +1487,7 @@ impl ViewerUI {
             /* Camera Tracking Modal */
             if self.show_tracking_modal {
                 let modal = egui::Modal::new(Id::new("select_body_tracking"))
-                    .show(ctx, |ui|
+                    .show(ui, |ui|
                 {
                         ui.heading("Select the body to track");
                         ui.separator();
@@ -1562,11 +1555,7 @@ impl ViewerUI {
             /* User-defined UI callbacks */
             // Callbacks that receive the egui context and MjData passive instance
             for callback in self.user_ui_callbacks.iter_mut() {
-                callback(ctx, &mut shared_viewer_state.lock_unpoison().data_passive);
-            }
-            // Callbacks that only receive the egui context
-            for callback in self.user_ui_callbacks_detached.iter_mut() {
-                callback(ctx);
+                callback(ui, &shared_viewer_state);
             }
         });
 
@@ -1575,7 +1564,7 @@ impl ViewerUI {
 
         // Tessellate
         let pixels_per_point = full_output.pixels_per_point;
-        let textures_delta = &full_output.textures_delta;
+        let textures_delta = &mut full_output.textures_delta;
         let clipped_primitives = self.egui_ctx.tessellate(full_output.shapes, pixels_per_point);
 
         // Paint the menu
@@ -1596,7 +1585,7 @@ impl ViewerUI {
 
     /// Checks whether the mouse is over the UI.
     pub(crate) fn covered(&self) -> bool {
-        self.egui_ctx.is_pointer_over_area()
+        self.egui_ctx.is_pointer_over_egui()
     }
 
     /// Checks whether the UI is currently being dragged.
@@ -1644,19 +1633,9 @@ impl ViewerUI {
     /// state, and can be used to create custom windows, panels, or other UI elements.
     pub(crate) fn add_ui_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&egui::Context, &mut MjData<Box<MjModel>>) + 'static
+        F: FnMut(&mut egui::Ui, &Arc<Mutex<ViewerSharedState>>) + 'static
     {
         self.user_ui_callbacks.push(Box::new(callback));
-    }
-
-    /// Adds a detached user-defined UI callback that will be invoked during UI rendering.
-    /// Unlike [`ViewerUI::add_ui_callback`], this method does not pass in the passive [`MjData`]
-    /// instance, located in the shared state, thus avoiding mutex locking when not necessary.
-    pub(crate) fn add_ui_callback_detached<F>(&mut self, callback: F)
-    where
-        F: FnMut(&egui::Context) + 'static
-    {
-        self.user_ui_callbacks_detached.push(Box::new(callback));
     }
 
     /// Release OpenGL resources held by the egui painter.
