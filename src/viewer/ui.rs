@@ -370,8 +370,8 @@ impl ViewerUI {
             let mut is_expanded = status.contains(ViewerStatusBit::UI);
             egui::Panel::left("interface_panel")
                 .resizable(true)
-                .show_collapsible(ui,  &mut is_expanded, |ui|
-            {                  
+                .show_collapsible(ui, &mut is_expanded, |ui|
+            {
                 // The menu
                 egui::ScrollArea::vertical()
                     .max_height(ui.available_height() - (TOGGLE_LABEL_HEIGHT_EXTRA_SPACE + HEADING_POST_SPACE + HEADING_FONT.size))

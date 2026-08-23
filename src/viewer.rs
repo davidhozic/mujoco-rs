@@ -724,7 +724,8 @@ impl ViewerSharedState {
 /// - I: inertia,
 /// - E: constraint.
 /// 
-/// With the `viewer-ui` feature, `X` toggles the side UI panel.
+/// With the `viewer-ui` feature, `X` toggles the side UI panel. The side panel also closes and
+/// opens by a drag of its inner edge to and from the screen edge.
 /// 
 /// # Panics
 /// Panics when initialized outside the main thread.

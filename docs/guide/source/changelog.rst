@@ -192,6 +192,12 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: New features and improvements
 
+*Viewer-UI side-panel is now natively collapsible*
+
+- The viewer's UI side-panel now also opens and closes by a drag of its inner edge to and from
+  the left screen-edge, so the panel no longer needs the keyboard. The ``X`` key still toggles
+  it. The panel now slides with an animation when it opens or closes.
+
 *New accessors for 3.11.0 fields*
 
 - |mj_model|:
@@ -407,14 +413,6 @@ update of MuJoCo alone can increase the major version.
   ``MjsOrientation`` (``type_``, ``axisangle``, ``xyaxes``, ``zaxis``, ``euler``) and of
   the raw ``mjsElement`` handle (``elemtype``, ``signature``) are now ``pub`` again,
   classifying them as plain-data structs and allowing direct field access.
-
-
-*Viewer-UI side-panel is now natively collapsible*
-
-- In the past, the viewer's UI side-panel could be toggled by pressing the 'X' keyboard key.
-  This is still possible now, however, it can also be done by dragging the side-panel to and out of
-  the left screen-edge.
-  Additionally, this change adds an animation to the side-panel when it is being toggled. 
 
 5.0.0 (MuJoCo 3.9.0)
 ======================
