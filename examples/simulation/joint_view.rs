@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 
 
 const EXAMPLE_MODEL: &str = "
@@ -26,6 +27,11 @@ const EXAMPLE_MODEL: &str = "
 ";
 
 fn main() {
+    /* Initialize the log backend and send MuJoCo messages to it */
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // The hook sends MuJoCo's messages to the `log` crate, instead of directly to the console.
+    install_logging_hook();
+
     /* Load the model and create data */
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
     let mut data = MjData::new(&model);  // or model.make_data()
@@ -44,7 +50,7 @@ fn main() {
 
         /* Obtain the view and access first three variables of `qpos` (x, y, z) */
         let xyz = &ball_info.view(&data).qpos[..3];
-        println!("The ball's position is: {xyz:.2?}");
+        log::info!("The ball's position is: {xyz:.2?}");
 
         std::thread::sleep(Duration::from_secs_f64(0.002));
     }

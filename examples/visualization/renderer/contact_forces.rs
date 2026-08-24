@@ -24,6 +24,7 @@ use std::fs;
 
 use mujoco_rs::prelude::*;
 use mujoco_rs::renderer::MjRenderer;
+use env_logger::Env;
 
 // ---------------------------------------------------------------------------
 // Model XML
@@ -74,6 +75,10 @@ const SAVE_EVERY: usize = 50;
 const OUTPUT_DIR: &str = "./output_contact_forces/";
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // The hook sends MuJoCo's messages to the `log` crate, instead of directly to the console.
+    install_logging_hook();
+
     // Create output directory.
     fs::create_dir_all(OUTPUT_DIR).expect("failed to create output directory");
 
@@ -117,9 +122,9 @@ fn main() {
     camera.move_(MjtMouse::mjMOUSE_ROTATE_V, &model, 0.0, -0.1);
     renderer.set_camera(camera);
 
-    println!("Running {SIM_STEPS} simulation steps.");
-    println!("Saving a frame every {SAVE_EVERY} steps to '{OUTPUT_DIR}'.");
-    println!("{:<8} {:<10} Contact forces (norm)", "Step", "ncon");
+    log::info!("Running {SIM_STEPS} simulation steps.");
+    log::info!("Saving a frame every {SAVE_EVERY} steps to '{OUTPUT_DIR}'.");
+    log::info!("{:<8} {:<10} Contact forces (norm)", "Step", "ncon");
 
     for step in 0..SIM_STEPS {
         data.step();
@@ -140,7 +145,7 @@ fn main() {
                     format!("{norm:.2}")
                 })
                 .collect();
-            println!(
+            log::info!(
                 "{:<8} {:<10} [{}]",
                 step,
                 ncon,
@@ -154,9 +159,9 @@ fn main() {
             renderer.render().unwrap();
             let path = format!("{OUTPUT_DIR}/frame_{step:04}.png");
             renderer.save_rgb(&path).expect("failed to save RGB image");
-            println!("  -> saved {path}");
+            log::info!("saved {path}");
         }
     }
 
-    println!("Done. Images are in '{OUTPUT_DIR}'.");
+    log::info!("Done. Images are in '{OUTPUT_DIR}'.");
 }

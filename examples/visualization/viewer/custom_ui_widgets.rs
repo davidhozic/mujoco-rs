@@ -11,6 +11,7 @@ use std::rc::Rc;
 
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 
 const EXAMPLE_MODEL: &str = "
 <mujoco>
@@ -72,7 +73,7 @@ impl CustomSimulation {
                     for event in reader.events.iter() {
                         match event {
                             egui::Event::Key { key, pressed: true, ..} => {
-                                println!("A new key has been pressed: {}", key.name());
+                                log::info!("A new key has been pressed: {}", key.name());
                             }
                             _ => {}
                         }
@@ -142,6 +143,10 @@ impl CustomSimulation {
 
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // The hook sends MuJoCo's messages to the `log` crate, instead of directly to the console.
+    install_logging_hook();
+
     let mut simulation = CustomSimulation::new(EXAMPLE_MODEL);
     
     // Run the simulation

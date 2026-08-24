@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 
 
 /// A free-falling sphere with a horizontal and a vertical thruster.
@@ -58,6 +59,10 @@ const MODEL_PENDULUM: &str = stringify! {
 const SWITCH_INTERVAL: Duration = Duration::from_secs(5);
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // The hook sends MuJoCo's messages to the `log` crate, instead of directly to the console.
+    install_logging_hook();
+
     let model_ball = Arc::new(
         MjModel::from_xml_string(MODEL_BALL).expect("failed to load ball model"),
     );
@@ -111,7 +116,7 @@ fn main() {
             if last_switch.elapsed() >= SWITCH_INTERVAL {
                 use_ball = !use_ball;
                 last_switch = Instant::now();
-                println!(
+                log::info!(
                     "Switched to: {}",
                     if use_ball { "ball" } else { "pendulum" }
                 );

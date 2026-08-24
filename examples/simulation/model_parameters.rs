@@ -9,6 +9,7 @@
 //! for the full list.
 
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 
 
 const MODEL_XML: &str = r#"
@@ -27,6 +28,10 @@ const MODEL_XML: &str = r#"
 const STEPS: usize = 500;
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // The hook sends MuJoCo's messages to the `log` crate, instead of directly to the console.
+    install_logging_hook();
+
     let model = Box::new(
         MjModel::from_xml_string(MODEL_XML).expect("could not load the model"),
     );
@@ -38,7 +43,7 @@ fn main() {
         data.step();
     }
     let z_baseline = data.qpos()[2];
-    println!("baseline   z={z_baseline:.4}  (gravity={default_gravity:.2})");
+    log::info!("baseline   z={z_baseline:.4}  (gravity={default_gravity:.2})");
 
     // model_opt_mut: direct in-place mutation (requires M: DerefMut).
     data.reset();
@@ -48,7 +53,7 @@ fn main() {
         data.step();
     }
     let z_mut = data.qpos()[2];
-    println!("model_opt_mut z={z_mut:.4}  (gravity={half_gravity:.2})");
+    log::info!("model_opt_mut z={z_mut:.4}  (gravity={half_gravity:.2})");
 
     // Restore gravity for the next method.
     data.model_opt_mut().gravity[2] = default_gravity;
@@ -66,5 +71,5 @@ fn main() {
         data.step();
     }
     let z_swap = data.qpos()[2];
-    println!("swap_model z={z_swap:.4}  (gravity={half_gravity:.2})");
+    log::info!("swap_model z={z_swap:.4}  (gravity={half_gravity:.2})");
 }
