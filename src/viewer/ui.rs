@@ -1623,6 +1623,7 @@ impl ViewerUI {
 
             egui::Window::new("Group")
                 .open(&mut self.group_window)
+                .resizable(false)
                 .show(ui, |ui|
             {
                 egui::Grid::new("group_grid").show(ui, |ui| {
