@@ -35,7 +35,7 @@ const EXAMPLE_MODEL: &str = "
 fn main() {
     /* Initialize the log backend and send MuJoCo messages to it */
     env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
-    // The hook sends MuJoCo's messages to the `log` crate, instead of directly to the console.
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
     install_logging_hook();
 
     /* Load the model and create data */

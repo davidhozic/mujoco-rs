@@ -8,6 +8,9 @@
 //!    `mujoco` for `mjTOPIC_NONE`, `mujoco::sleep` for `mjTOPIC_SLEEP`.
 //! 3. A custom handler, which receives the structured `MjLogMessage`.
 //!
+//! A program installs one of them, and `set_log_handler` installs the hook on its own. The example
+//! replaces each handler with the next one, to show all three.
+//!
 //! The application keeps logging with the `log` macros. Once the hook is installed, the messages of
 //! MuJoCo join them in the same backend. Note that `log_error` ends the process, while
 //! `log::error!` returns.
@@ -37,7 +40,7 @@ fn main() {
     log_warning("the model defines no actuator");                    // Target "mujoco".
     log_info(MjtLogTopic::mjTOPIC_SLEEP, "the island fell asleep");   // Target "mujoco::sleep".
 
-    /* Custom handler: the hook calls it instead of the log backend */
+    /* Custom handler: replaces the routing above, and needs no `install_logging_hook` call */
     set_log_handler(custom_handler);
     log_message(
         &MjLogMessage::new(MjtLogLevel::mjLOG_WARNING, MjtLogTopic::mjTOPIC_NONE, "a full message")

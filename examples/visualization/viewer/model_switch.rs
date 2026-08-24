@@ -60,7 +60,7 @@ const SWITCH_INTERVAL: Duration = Duration::from_secs(5);
 
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
-    // The hook sends MuJoCo's messages to the `log` crate, instead of directly to the console.
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
     install_logging_hook();
 
     let model_ball = Arc::new(

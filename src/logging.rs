@@ -1,10 +1,9 @@
 //! The bridge between MuJoCo's logging and the [`log`] facade.
 //!
-//! [`install_logging_hook`] makes MuJoCo send every message to the [`log`] backend, and
-//! [`set_log_handler`] registers a handler that receives the message instead.
-//! 
-//! [`install_logging_hook`] needs to be called regardless for [`set_log_handler`] to work as [`set_log_handler`]
-//! does not directly register the logger to MuJoCo.
+//! [`install_logging_hook`] makes MuJoCo send every message to the [`log`] backend.
+//! [`set_log_handler`] installs the same MuJoCo hook, but sends every message to a handler of the
+//! program instead. Call one of the two: [`set_log_handler`] when the program needs the structured
+//! [`MjLogMessage`], [`install_logging_hook`] otherwise.
 //! 
 //! The wrappers of MuJoCo's own logging API (the message and the configuration types, and the functions that emit
 //! a message) live in [`crate::wrappers::mj_logging`].
@@ -27,8 +26,9 @@
 //! /* Use through MuJoCo wrappers */
 //! log_warning("the log backend receives this, with the target 'mujoco'");
 //!
+//! /* A program that needs the structured message calls this instead of the hook above */
 //! set_log_handler(handler);
-//! log_warning("the handler receives this instead");
+//! log_warning("the handler receives this, and the `log` backend receives nothing");
 //! ```
 use std::sync::Mutex;
 use std::process;
@@ -48,11 +48,8 @@ static USER_LOG_HANDLER: Mutex<Option<fn(&MjLogMessage)>> = Mutex::new(None);
 
 /// Sets a user-defined log handler that receives every MuJoCo message.
 ///
-/// The handler replaces the built-in [`log`] routing of [`install_logging_hook`].
-/// 
-/// The [`install_logging_hook`] must be called regardless (once at the start of the program)
-/// as the handler is also responsible for converting raw pointes of [`MjLogMessage`] into
-/// regular references.
+/// Call this instead of [`install_logging_hook`], not after it: the function installs the same
+/// MuJoCo hook, but `handler` replaces the built-in [`log`] routing of that hook.
 ///
 /// # Note
 /// The handler receives every message, because [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) configures the default MuJoCo
@@ -65,13 +62,17 @@ static USER_LOG_HANDLER: Mutex<Option<fn(&MjLogMessage)>> = Mutex::new(None);
 /// </div>
 /// 
 pub fn set_log_handler(handler: fn(&MjLogMessage)) {
-    USER_LOG_HANDLER.lock_unpoison().replace(handler);
+    // One critical section, so that no thread can observe the hook without the handler behind it.
+    let mut current = USER_LOG_HANDLER.lock_unpoison();
+    current.replace(handler);
+    set_mujoco_handler();
 }
 
 /// Installs the internal MuJoCo log handler. Wraps [`mju_setLogHandler`].
 ///
-/// The hook sends every MuJoCo message to the handler of [`set_log_handler`], or, when there is
-/// none, to the [`log`] facade. It maps the message like this:
+/// The hook sends every MuJoCo message to the [`log`] facade. A program that needs the structured
+/// [`MjLogMessage`] calls [`set_log_handler`] instead, which installs the same hook. The hook maps
+/// the message like this:
 ///
 /// | MuJoCo field | [`log`] record |
 /// |---|---|
@@ -85,6 +86,16 @@ pub fn set_log_handler(handler: fn(&MjLogMessage)) {
 ///
 /// [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) configures the default MuJoCo handler only, so it has no effect on the hook.
 pub fn install_logging_hook() {
+    let _handler = USER_LOG_HANDLER.lock_unpoison();
+    set_mujoco_handler();
+}
+
+/// Registers [`logging_hook`] as the MuJoCo log handler.
+///
+/// The caller holds the [`USER_LOG_HANDLER`] lock, which serializes the write to the non-atomic
+/// global of MuJoCo. `mju_setLogHandler` only assigns that global, so it cannot re-enter the
+/// handler and deadlock on the lock.
+fn set_mujoco_handler() {
     // SAFETY: `logging_hook` is a valid handler for the whole program. The user is assumed to not
     // install another handler through the C FFI at the same time.
     unsafe { mju_setLogHandler(Some(logging_hook)) };

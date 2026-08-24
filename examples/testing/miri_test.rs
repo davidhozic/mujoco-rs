@@ -10,6 +10,8 @@ use mujoco_rs::wrappers::{MjModel, MjData, MjtObj, MjtGeom, MjtJoint, MjtTrn, Mj
 use mujoco_rs::wrappers::mj_editing::MjtLimited;
 use mujoco_rs::wrappers::fun::*;
 use mujoco_rs::mujoco_c::mjtState;
+use mujoco_rs::logging::install_logging_hook;
+use env_logger::Env;
 
 fn build_model() -> MjModel {
     let mut spec = MjSpec::new();
@@ -23,21 +25,21 @@ fn build_model() -> MjModel {
         .with_type(MjtGeom::mjGEOM_PLANE)
         .with_size([10.0, 10.0, 1.0])
         .with_rgba([0.8, 0.9, 0.8, 1.0]);
-    println!("  Added floor");
+    log::info!("  Added floor");
         
     // Body 1: Free box
     let body1 = world.add_body().with_name("box1").with_pos([0.0, 0.0, 0.5]);
     body1.add_joint().with_name("box1_joint").with_type(MjtJoint::mjJNT_FREE);
     body1.add_geom().with_name("box1_geom").with_type(MjtGeom::mjGEOM_BOX).with_size([0.2, 0.2, 0.2]).with_rgba([1.0, 0.0, 0.0, 1.0]).with_mass(1.0);
     body1.add_site().with_name("box1_site").with_pos([0.0, 0.0, 0.2]);
-    println!("  Added box1");
+    log::info!("  Added box1");
   
     // Body 2: Sliding box
     let body2 = world.add_body().with_name("box2").with_pos([0.0, 0.0, 1.5]);
     body2.add_joint().with_name("box2_joint").with_type(MjtJoint::mjJNT_SLIDE).with_axis([0.0, 0.0, 1.0]);
     body2.add_geom().with_name("box2_geom").with_type(MjtGeom::mjGEOM_BOX).with_size([0.1, 0.1, 0.1]).with_rgba([0.0, 1.0, 0.0, 1.0]).with_mass(0.5);
     body2.add_site().with_name("box2_site").with_pos([0.0, 0.0, 0.0]);
-    println!("  Added box2");
+    log::info!("  Added box2");
   
     // Actuators
     spec.add_actuator()
@@ -46,7 +48,7 @@ fn build_model() -> MjModel {
         .with_target("box2_joint")
         .with_ctrllimited(MjtLimited::mjLIMITED_TRUE)
         .with_ctrlrange([-10.0, 10.0]);
-    println!("  Added actuator");
+    log::info!("  Added actuator");
       
     // Sensors
     spec.add_sensor()
@@ -70,7 +72,7 @@ fn build_model() -> MjModel {
 }
 
 fn test_basic_getters(model: &MjModel) {
-    println!("Testing basic getters...");
+    log::info!("Testing basic getters...");
     // Access FFI fields directly to ensure visibility under Miri
     assert_eq!(model.ffi().nq, 8);
     assert_eq!(model.ffi().nv, 7);
@@ -87,7 +89,7 @@ fn test_basic_getters(model: &MjModel) {
 }
 
 fn test_simulation_and_sensors<'a>(model: &'a MjModel, data: &mut MjData<&'a MjModel>) {
-    println!("Stepping simulation and testing sensors...");
+    log::info!("Stepping simulation and testing sensors...");
     let motor_id = model.name_to_id(MjtObj::mjOBJ_ACTUATOR, "box2_motor").unwrap();
     for _ in 0..10 {
         data.ctrl_mut()[motor_id] = 1.0;
@@ -102,7 +104,7 @@ fn test_simulation_and_sensors<'a>(model: &'a MjModel, data: &mut MjData<&'a MjM
 }
 
 fn test_kinematics_and_jacobians<'a>(model: &'a MjModel, data: &mut MjData<&'a MjModel>) {
-    println!("Testing kinematics and Jacobians...");
+    log::info!("Testing kinematics and Jacobians...");
     data.kinematics();
     data.com_pos();
     
@@ -116,7 +118,7 @@ fn test_kinematics_and_jacobians<'a>(model: &'a MjModel, data: &mut MjData<&'a M
     let (jacp_body, _) = data.jac_body_com(true, false, box1_body_id);
     assert_eq!(jacp_body.len(), 3 * model.ffi().nv as usize);
 
-    println!("Testing object velocity/acceleration...");
+    log::info!("Testing object velocity/acceleration...");
     let vel = data.object_velocity(MjtObj::mjOBJ_BODY, box1_body_id, false);
     assert_eq!(vel.len(), 6);
     
@@ -132,10 +134,10 @@ fn test_kinematics_and_jacobians<'a>(model: &'a MjModel, data: &mut MjData<&'a M
 }
 
 fn test_inverse_dynamics_and_state<'a>(model: &'a MjModel, data: &mut MjData<&'a MjModel>) {
-    println!("Testing collisions, inverse dynamics, and state management...");
+    log::info!("Testing collisions, inverse dynamics, and state management...");
     data.collision();
     let contacts = data.contact();
-    println!("Detected {} contacts.", contacts.len());
+    log::info!("Detected {} contacts.", contacts.len());
     
     data.inverse();
 
@@ -150,7 +152,7 @@ fn test_inverse_dynamics_and_state<'a>(model: &'a MjModel, data: &mut MjData<&'a
 }
 
 fn test_vfs_raycasting<'a>(_model: &'a MjModel, data: &mut MjData<&'a MjModel>) {
-    println!("Testing VFS and raycasting...");
+    log::info!("Testing VFS and raycasting...");
     use mujoco_rs::wrappers::MjVfs;
     let mut vfs = MjVfs::new();
     let xml_content = "<mujoco><worldbody/></mujoco>";
@@ -160,11 +162,11 @@ fn test_vfs_raycasting<'a>(_model: &'a MjModel, data: &mut MjData<&'a MjModel>) 
     let pnt = [0.0, 0.0, 5.0];
     let vec = [0.0, 0.0, -1.0];
     let geomid = data.ray(&pnt, &vec, None, false, None, None);
-    println!("Ray hit result: {:?}", geomid);
+    log::info!("Ray hit result: {:?}", geomid);
 }
 
 fn test_renderer<'a>(model: &'a MjModel, data: &mut MjData<&'a MjModel>) {
-    println!("Testing Renderer...");
+    log::info!("Testing Renderer...");
     use mujoco_rs::renderer::MjRenderer;
     use mujoco_rs::wrappers::MjtFontScale;
     use std::panic::AssertUnwindSafe;
@@ -189,21 +191,21 @@ fn test_renderer<'a>(model: &'a MjModel, data: &mut MjData<&'a MjModel>) {
             
             let temp_image = "/tmp/miri_test_render.png";
             renderer.save_rgb(temp_image).expect("Failed to save RGB image");
-            println!("Saved rendered image to {}", temp_image);
+            log::info!("Saved rendered image to {}", temp_image);
         }
         Ok(Err(e)) => {
-            println!("Warning: Renderer failed to initialize: {e:?}");
-            println!("Skipping full render test (expected in Miri/headless environments)");
+            log::warn!("Renderer failed to initialize: {e:?}");
+            log::warn!("Skipping full render test (expected in Miri/headless environments)");
         }
         Err(_) => {
-            println!("Warning: Renderer panicked during initialization (expected in some Miri/headless environments)");
-            println!("Skipping full render test...");
+            log::warn!("Renderer panicked during initialization (expected in some Miri/headless environments)");
+            log::warn!("Skipping full render test...");
         }
     }
 }
 
 fn test_iterators_and_views(model: &MjModel, data: &mut MjData<&MjModel>) {
-    println!("Testing iterators and views...");
+    log::info!("Testing iterators and views...");
     
     // MjModel "iteration" via indices
     for i in 0..model.ffi().nbody {
@@ -242,7 +244,7 @@ fn test_iterators_and_views(model: &MjModel, data: &mut MjData<&MjModel>) {
 }
 
 fn test_utilities() {
-    println!("Testing mju_* utility wrappers...");
+    log::info!("Testing mju_* utility wrappers...");
     let mut a = [1.0, 2.0, 3.0];
     let b = [4.0, 5.0, 6.0];
     let mut c = [0.0; 3];
@@ -268,7 +270,7 @@ fn test_utilities() {
 }
 
 fn test_derivatives() {
-    println!("Testing mjd_* derivative wrappers...");
+    log::info!("Testing mjd_* derivative wrappers...");
     let qa = [1.0, 0.0, 0.0, 0.0];
     let qb = [0.0, 1.0, 0.0, 0.0];
     let mut da = [0.0; 9];
@@ -279,7 +281,7 @@ fn test_derivatives() {
 }
 
 fn test_auxiliary(model: &MjModel) {
-    println!("Testing auxiliary wrappers (MjVisual, MjStatistic, etc.)...");
+    log::info!("Testing auxiliary wrappers (MjVisual, MjStatistic, etc.)...");
     let vis = model.vis();
     assert!(vis.map.stiffness > 0.0);
     
@@ -292,7 +294,11 @@ fn test_auxiliary(model: &MjModel) {
 
 #[cfg(not(miri))]
 fn main() {
-    println!("Loading procedurally generated model...");
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    install_logging_hook();
+
+    log::info!("Loading procedurally generated model...");
     let model = build_model();
     let mut data = model.make_data();
 
@@ -306,15 +312,19 @@ fn main() {
     test_derivatives();
     test_auxiliary(&model);
 
-    println!("Comprehensive test completed successfully (core physics and utilities)!");
+    log::info!("Comprehensive test completed successfully (core physics and utilities)!");
 
     test_renderer(&model, &mut data);
 
-    println!("Full suite (including renderer) completed successfully!");
+    log::info!("Full suite (including renderer) completed successfully!");
 }
 
 #[cfg(miri)]
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    install_logging_hook();
+
     unsafe extern "C" {
         fn setup_miri_bump_allocator(buffer: *mut u8, size: usize);
     }
@@ -323,13 +333,13 @@ fn main() {
     let bump_layout = std::alloc::Layout::from_size_align(bump_size, 64).unwrap();
     let bump_buffer = unsafe { std::alloc::alloc_zeroed(bump_layout) };
     
-    println!("RUST_LOG: bump_buffer = {:p}", bump_buffer);
+    log::info!("RUST_LOG: bump_buffer = {:p}", bump_buffer);
 
     unsafe {
         setup_miri_bump_allocator(bump_buffer, bump_size);
     }
 
-    println!("Loading procedurally generated model...");
+    log::info!("Loading procedurally generated model...");
     let model = build_model();
     let mut data = model.make_data();
 
@@ -346,12 +356,12 @@ fn main() {
     test_derivatives();
     test_auxiliary(&model);
 
-    println!("Comprehensive Miri test completed successfully (core physics and utilities)!");
+    log::info!("Comprehensive Miri test completed successfully (core physics and utilities)!");
 
     // Renderer verification last because it may abort Miri process due to EGL dependencies in Miri environment
     test_renderer(&model, &mut data);
 
-    println!("Full suite (including renderer) completed successfully!");
+    log::info!("Full suite (including renderer) completed successfully!");
 
     // Drop MuJoCo structures *before* deallocating their backing memory buffer!
     drop(data);

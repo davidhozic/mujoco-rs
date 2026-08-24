@@ -21,6 +21,9 @@ Changelog
 .. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator`
 
 
+This page contains the summary of changes made throughout different releases of the MuJoCo-rs crate.
+Ony the last 5 major/minor versions are shown in detail.
+
 Versioning
 =================
 This project uses `semantic versioning <https://semver.org/>`_.
@@ -295,10 +298,11 @@ update of MuJoCo alone can increase the major version.
   target (``mujoco``, or ``mujoco::sleep`` and the other topics), ``func``/``subject``/``body`` onto
   the message text, and ``file``/``line`` onto the record location; a message with level
   ``mjLOG_ERROR`` ends the process, as the default MuJoCo handler does.
-  :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler` :sup:`new` registers a handler
-  that receives the ``MjLogMessage`` instead of the ``log`` routing. Both replace the default MuJoCo
-  handler, which is the only reader of ``MjLogConfig``, so console output, file output and topic
-  filtering no longer apply once a handler is installed. The crate now depends on ``log``.
+  :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler` :sup:`new` registers a handler that receives
+  the ``MjLogMessage`` instead of the ``log`` routing, and installs the hook itself, so a program
+  calls one of the two. Both replace the default MuJoCo handler, which is the only reader of
+  ``MjLogConfig``, so console output, file output and topic filtering no longer apply once a
+  handler is installed. The crate now depends on ``log``.
 - Added ``MjtConflict`` :sup:`new` and the ``MjsCompiler::conflict()`` :sup:`new` accessor (with the
   matching ``set_``/``with_`` methods), exposing the attach-time conflict-resolution policy
   introduced in MuJoCo 3.10.0.
