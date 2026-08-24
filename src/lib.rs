@@ -83,6 +83,7 @@
 use std::ffi::CStr;
 
 pub mod wrappers;
+pub mod logging;
 pub mod prelude;
 pub mod util;
 pub mod error;

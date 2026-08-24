@@ -287,6 +287,18 @@ update of MuJoCo alone can increase the major version.
   diverges (``-> !``); the default handler ends the process, and the wrapper panics if a custom log
   handler or a legacy error callback makes ``mju_error`` return. The logging types and functions
   live in the new ``wrappers::mj_logging`` module, and the prelude re-exports them.
+- Added the new top-level ``logging`` module, which bridges MuJoCo's messages to the
+  `log <https://docs.rs/log/0.4.34/log/>`_ facade.
+  :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` :sup:`new` (``mju_setLogHandler``) makes
+  MuJoCo send every message to the ``log`` backend, so that MuJoCo output reaches the same backend
+  as the rest of the application. The hook maps the level onto ``log::Level``, the topic onto the
+  target (``mujoco``, or ``mujoco::sleep`` and the other topics), ``func``/``subject``/``body`` onto
+  the message text, and ``file``/``line`` onto the record location; a message with level
+  ``mjLOG_ERROR`` ends the process, as the default MuJoCo handler does.
+  :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler` :sup:`new` registers a handler
+  that receives the ``MjLogMessage`` instead of the ``log`` routing. Both replace the default MuJoCo
+  handler, which is the only reader of ``MjLogConfig``, so console output, file output and topic
+  filtering no longer apply once a handler is installed. The crate now depends on ``log``.
 - Added ``MjtConflict`` :sup:`new` and the ``MjsCompiler::conflict()`` :sup:`new` accessor (with the
   matching ``set_``/``with_`` methods), exposing the attach-time conflict-resolution policy
   introduced in MuJoCo 3.10.0.
@@ -386,6 +398,9 @@ update of MuJoCo alone can increase the major version.
   ``orientation`` actuator, an actuator without a name, and an actuator without control inputs.
   The model also holds a limited ball joint, an unlimited ball joint and a free joint, for the
   sliders of the "Joint" window.
+- :gh-example:`Logging <simulation/logging.rs>` --- shows the three ways to receive a MuJoCo
+  message: the default handler with its ``MjLogConfig``, the logging hook next to ``env_logger``
+  (with the target that carries the topic), and a custom handler that reads the ``MjLogMessage``.
 
 .. rubric:: Bug fixes
 

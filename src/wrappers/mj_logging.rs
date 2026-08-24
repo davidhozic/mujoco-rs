@@ -1,4 +1,6 @@
 //! MuJoCo's unified logging API.
+//!
+//! [`crate::logging`] holds the bridge that sends a MuJoCo message to the [`log`] facade.
 use std::ffi::{CStr, CString};
 use std::ptr;
 
