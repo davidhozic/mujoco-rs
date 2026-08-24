@@ -54,6 +54,11 @@ name = "model_parameters"
 path = "examples/simulation/model_parameters.rs"
 
 [[example]]
+name = "actuator_inputs"
+path = "examples/visualization/viewer/actuator_inputs.rs"
+required-features = ["viewer-ui"]
+
+[[example]]
 name = "cpp_viewer"
 path = "examples/visualization/viewer/cpp_viewer.rs"
 required-features = ["cpp-viewer"]

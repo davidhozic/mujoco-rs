@@ -1466,7 +1466,7 @@ impl MjViewer {
 
                 // if the UI has an active input focus, ignore all keyboard events
                 if let WindowEvent::KeyboardInput { .. } = &window_event
-                    && self.ui.focused()
+                    && self.ui.is_focused()
                 {
                     continue;
                 }
@@ -1478,8 +1478,16 @@ impl MjViewer {
                     let is_pressed = state == ElementState::Pressed;
                     
                     #[cfg(feature = "viewer-ui")]
-                    if self.ui.covered() && is_pressed {
-                        continue;
+                    if is_pressed {
+                        // A press outside the UI windows (scene or side panel) takes the
+                        // selection away from them.
+                        if !self.ui.is_window_covered() {
+                            self.ui.deselect_windows();
+                        }
+
+                        if self.ui.is_covered() {
+                            continue;
+                        }
                     }
 
                     let index = match button {
@@ -1502,7 +1510,7 @@ impl MjViewer {
                     // of a (popup) window. This might seem like an ad-hoc solution, but is at the time the
                     // shortest and most efficient one.
                     #[cfg(feature = "viewer-ui")]
-                    if self.ui.dragged() {
+                    if self.ui.is_dragged() {
                         continue;
                     }
 
@@ -1672,7 +1680,7 @@ impl MjViewer {
                 // Zoom in/out
                 WindowEvent::MouseWheel {delta, ..} => {
                     #[cfg(feature = "viewer-ui")]
-                    if self.ui.covered() {
+                    if self.ui.is_covered() {
                         continue;
                     }
 

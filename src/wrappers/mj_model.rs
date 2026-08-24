@@ -869,6 +869,24 @@ impl MjModel {
         ) as u32 })
     }
 
+    /// Returns the name that the type of actuator `id` gives to its control input `input`, an
+    /// index into the control block of the actuator. For example, an orientation servo on the
+    /// exponential-map chart names its first input `"rx"`.
+    /// Wraps [`mj_actuatorInputName`].
+    /// # Returns
+    /// [`None`] when the actuator type defines no input names, or when `id` or `input` is out of
+    /// range.
+    /// # Panics
+    /// Panics if the reported name is not valid UTF-8.
+    pub fn actuator_input_name(&self, id: usize, input: usize) -> Option<&'static str> {
+        // SAFETY: id and input are checked inside the function. When c_ptr is not null, it is
+        // always an ASCII static C string constant, so the UTF-8 check cannot fail.
+        unsafe {
+            let c_ptr = mj_actuatorInputName(self.ffi(), id as i32, input as i32);
+            (!c_ptr.is_null()).then(|| CStr::from_ptr(c_ptr).to_str().unwrap())
+        }
+    }
+
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
