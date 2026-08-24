@@ -1,11 +1,16 @@
-//! Example of the actuator controls in the viewer UI.
+//! Example of the actuator and joint controls in the viewer UI.
 //! The model holds one actuator of every input flavour: actuators whose type defines no input
 //! names (motor, position), actuators whose control block holds several named inputs (pid,
 //! dcmotor, orientation), an actuator without a name, an actuator without control inputs, and
-//! control ranges that differ between the inputs of one actuator.
+//! control ranges that differ between the inputs of one actuator. It also holds a limited ball
+//! joint, an unlimited ball joint and a free joint.
 //!
 //! Open the "Actuator" window in the viewer. Each actuator holds one slider for each of its
 //! control inputs, labelled with the input name that MuJoCo reports for the actuator type.
+//!
+//! Open the "Joint" window in the viewer. Each slider writes one position component of the
+//! joint, and a free joint takes a numeric input for each component. A limited ball joint also
+//! shows its rotation angle against the limit.
 use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
@@ -59,6 +64,16 @@ const EXAMPLE_MODEL: &str = stringify! {
     <body name="quat_box" pos="2.3 0 .4">
       <joint name="quat_ball" type="ball"/>
       <geom type="box" size=".09 .06 .04" rgba=".4 .5 .9 1"/>
+    </body>
+
+    <body name="limited_ball_box" pos="2.8 0 .4">
+      <joint name="limited_ball" type="ball" limited="true" range="0 60"/>
+      <geom type="box" size=".09 .06 .04" rgba=".5 .8 .5 1"/>
+    </body>
+
+    <body name="free_box" pos="3.3 0 .4">
+      <freejoint name="free"/>
+      <geom type="box" size=".06 .06 .06" rgba=".8 .8 .4 1"/>
     </body>
   </worldbody>
 

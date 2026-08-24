@@ -116,8 +116,7 @@ update of MuJoCo alone can increase the major version.
   The |mj_data| accessors ``actuator_length``, ``moment_rownnz``, ``moment_rowadr``,
   ``actuator_velocity`` and ``actuator_force`` are now sized by ``nout``. The per-actuator views
   are affected the same way: they now use dynamic ranges based on ``actuator_ctrladr`` and
-  ``actuator_outadr``. The viewer labels the sliders of a multi-control actuator
-  ``<name>[<index>]``. For single-input single-output actuators ``nactuator == nu == nout`` and
+  ``actuator_outadr``. For single-input single-output actuators ``nactuator == nu == nout`` and
   behavior is unchanged.
 - |mj_data| ``read_ctrl``/``try_read_ctrl`` and ``init_ctrl_history`` now bound the actuator index
   by ``nactuator`` instead of ``nu``, because the control history is stored per actuator.
@@ -201,8 +200,26 @@ update of MuJoCo alone can increase the major version.
   actuator in the "Actuator" window. A ball joint and a free joint show all their position
   components in one horizontal row, named ``x``, ``y``, ``z`` and ``qw``, ``qx``, ``qy``, ``qz``.
   The window listed a slide joint and a hinge joint only before.
+- Each component of the "Joint" window now writes ``qpos``, so the window moves the model. The
+  window was read-only before. A limited joint gets the joint limit as its slider range. Without
+  a limit, a slide joint spans -1 to 1 and a hinge joint spans -pi to pi, as in MuJoCo's own
+  viewer. A quaternion component spans -1 to 1, and the window normalizes the quaternion after an
+  edit. A free joint holds no natural range, so each of its components takes a numeric input
+  instead of a slider.
+- A limited ball joint now shows its rotation angle against the limit, because MuJoCo limits the
+  angle of a ball joint and not one quaternion component. Every component of a ball joint reported
+  "no limit" before, even when the joint was limited.
+- The "Actuator" window now holds one collapsible section for each actuator, with one slider for
+  each control input of the actuator. A multi-input actuator labels each slider with the input
+  name that MuJoCo reports for the actuator type, for example ``pos``, ``vel`` and ``ff`` for a
+  ``pid`` actuator. An actuator without control inputs shows "no inputs". The window showed one
+  flat slider for each control before, labelled ``<name>[<index>]``.
+- A defined ``ctrlrange`` now sets the range of an actuator slider, even when MuJoCo does not
+  clamp the control to it. The slider spanned -1 to 1 unless ``actuator_ctrllimited`` was set
+  before.
 - A press on the scene now takes the selection away from every viewer window, so no window keeps a
   highlighted title bar while the pointer works in the scene.
+
 *New accessors for 3.11.0 fields*
 
 - |mj_model|:
@@ -324,10 +341,18 @@ update of MuJoCo alone can increase the major version.
 
 *New accessors for 3.12.0 fields*
 
-- |mj_model|: ``light_softness`` :sup:`new` and ``mesh_extrema`` :sup:`new` array accessors, with
-  matching ``softness`` and ``extrema`` fields in the light and mesh info views. Mutating
-  ``mesh_extrema`` needs ``unsafe``, in the array accessor and through the mesh view, because
-  MuJoCo uses its values as unchecked vertex indices.
+- |mj_model|:
+
+  - ``light_softness`` :sup:`new` and ``mesh_extrema`` :sup:`new` array accessors, with
+    matching ``softness`` and ``extrema`` fields in the light and mesh info views. Mutating
+    ``mesh_extrema`` needs ``unsafe``, in the array accessor and through the mesh view, because
+    MuJoCo uses its values as unchecked vertex indices.
+  - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_input_name`
+    :sup:`new`, wrapping ``mj_actuatorInputName``, gives the name of one control input of an
+    actuator, for example ``pos`` for a ``pid`` actuator or ``rx`` for an ``orientation``
+    actuator on the exponential-map chart. It returns ``None`` when the actuator type defines
+    no input names.
+
 - |mjs_light|: ``softness`` :sup:`new`.
 - |mjs_actuator|: ``velrange`` :sup:`new` and ``ffrange`` :sup:`new`.
 - Added ``MjtCtrlInput`` :sup:`new` as an alias for the new ``mjtCtrlInput`` enum, whose values
@@ -359,9 +384,14 @@ update of MuJoCo alone can increase the major version.
   controls of the :ref:`mj_rust_viewer` for every input flavour: actuator types that define no
   input names, the named multi-input control blocks of a ``pid``, a ``dcmotor`` and an
   ``orientation`` actuator, an actuator without a name, and an actuator without control inputs.
+  The model also holds a limited ball joint, an unlimited ball joint and a free joint, for the
+  sliders of the "Joint" window.
 
 .. rubric:: Bug fixes
 
+- The viewer no longer clamps ``ctrl`` to the range of its slider. While the "Actuator" window
+  was open, it wrote the clamped control back on every frame, so a program that set a control
+  outside the slider range lost that value.
 - Closed an out-of-bounds read reachable from safe code in
   :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>frame` for a tracking
   camera: MuJoCo indexes ``subtree_com`` by ``trackbodyid`` after testing only that it is not
