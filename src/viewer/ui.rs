@@ -1,8 +1,10 @@
 //! Implementation of the interface for use in the viewer.
 
 use std::collections::VecDeque;
+use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
 use std::ffi::CString;
+use std::borrow::Cow;
 use std::fmt::Debug;
 
 use glutin::display::{Display, GlDisplay};
@@ -204,8 +206,51 @@ const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
 ];
 const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit::mjNENABLE as usize);
 
+/// Names of the position components of a free joint, in `qpos` order.
+const FREE_JOINT_COMPONENTS: [&str; 7] = ["x", "y", "z", "qw", "qx", "qy", "qz"];
+
+/// Names of the position components of a ball joint, in `qpos` order.
+const BALL_JOINT_COMPONENTS: [&str; 4] = ["qw", "qx", "qy", "qz"];
+
 /// Type alias for a user-provided UI callback function.
 pub(crate) type UiCallback = Box<dyn FnMut(&mut egui::Ui, &Arc<Mutex<ViewerSharedState>>)>;
+
+/// Cached display information about one input (one control) of an actuator.
+struct ActuatorInputDisplayInfo {
+    /// Name of the input, or the input index when the actuator type defines no input names and
+    /// the actuator has more than one input. [`None`] when the input needs no label.
+    label: Option<Cow<'static, str>>,
+    /// Range of the slider: the control range when the control is limited, else -1 to 1.
+    range: RangeInclusive<MjtNum>,
+}
+
+/// Cached display information about one actuator.
+struct ActuatorDisplayInfo {
+    /// Name of the actuator, or a generated name when the model defines none.
+    name: String,
+    /// Address of the first control of the actuator inside `ctrl`.
+    ctrl_start: usize,
+    /// Display information of each input of the actuator, in control order.
+    inputs: Box<[ActuatorInputDisplayInfo]>,
+}
+
+/// Cached display information about one position component (one `qpos` entry) of a joint.
+struct JointComponentDisplayInfo {
+    /// Name of the component. [`None`] when the joint holds one component, which needs no label.
+    label: Option<&'static str>,
+    /// Range of the component, or [`None`] when the component has no limit.
+    range: Option<RangeInclusive<MjtNum>>,
+}
+
+/// Cached display information about one joint.
+struct JointDisplayInfo {
+    /// Name of the joint, or a generated name when the model defines none.
+    name: String,
+    /// Address of the first position component of the joint inside `qpos`.
+    qpos_start: usize,
+    /// Display information of each position component of the joint, in `qpos` order.
+    components: Box<[JointComponentDisplayInfo]>,
+}
 
 /// Viewer user interface context.
 pub(crate) struct ViewerUI {
@@ -215,8 +260,8 @@ pub(crate) struct ViewerUI {
     gl: Arc<egui_glow::glow::Context>,
     events: VecDeque<UiEvent>,
     camera_names: Vec<String>,
-    actuator_display_info: Vec<(String, bool, [MjtNum; 2])>,
-    joint_display_info: Vec<(String, bool, [MjtNum; 2], usize)>,
+    actuator_info: Vec<ActuatorDisplayInfo>,
+    joint_info: Vec<JointDisplayInfo>,
     equality_names: Vec<String>,
     user_ui_callbacks: Vec<UiCallback>,
 
@@ -265,8 +310,8 @@ impl ViewerUI {
         let mut viewer_ui = Self {
             egui_ctx, state, painter, gl, events: VecDeque::new(),
             camera_names: Vec::new(),
-            actuator_display_info: Vec::new(),
-            joint_display_info: Vec::new(),
+            actuator_info: Vec::new(),
+            joint_info: Vec::new(),
             equality_names: Vec::new(),
             user_ui_callbacks: Vec::new(),
             actuator_window: false,
@@ -292,42 +337,62 @@ impl ViewerUI {
             } else { format!("Camera {i}") }
         }).collect();
 
-        self.actuator_display_info = (0..model.nu()).map(|i| {
-            let idx = i as usize;
-            // Map the control index to its owning actuator: MIMO actuators own
-            // actuator_ctrlnum() consecutive controls starting at actuator_ctrladr(),
-            // so control and actuator indices no longer coincide.
-            let (act, sub) = (0..model.nactuator() as usize).find_map(|a| {
-                let start = model.actuator_ctrladr()[a] as usize;
-                (start..start + model.actuator_ctrlnum()[a] as usize)
-                    .contains(&idx)
-                    .then_some((a, idx - start))
-            }).unwrap_or((idx, 0));
-            let base = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, act) {
-                name.to_string()
-            } else { format!("Actuator {act}") };
-            let name = if model.actuator_ctrlnum()[act] > 1 {
-                format!("{base}[{sub}]")
-            } else { base };
-            let limited = model.actuator_ctrllimited()[idx];
-            let range   = model.actuator_ctrlrange()[idx];
-            (name, limited, range)
+        self.actuator_info = (0..model.nactuator() as usize).map(|idx_actuator| {
+            let input_limited = model.actuator_ctrllimited();
+            let input_limits = model.actuator_ctrlrange();
+            let ctrl_start = model.actuator_ctrladr()[idx_actuator] as usize;
+            let num_inputs = model.actuator_ctrlnum()[idx_actuator] as usize;
+
+            let name = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, idx_actuator)
+                .map(|name| name.to_string())
+                .unwrap_or_else(|| format!("Actuator {idx_actuator}"));
+
+            let inputs = (0..num_inputs)
+                .map(|idx_in| {
+                    // Most actuator types define no input names. An actuator with more than one
+                    // input then shows the input index, an actuator with one input shows no label.
+                    let label = model.actuator_input_name(idx_actuator, idx_in)
+                        .map(Cow::Borrowed)
+                        .or_else(|| (num_inputs > 1).then(|| Cow::Owned(idx_in.to_string())));
+
+                    // The limit arrays hold one entry for each control, not for each actuator.
+                    let idx_ctrl = ctrl_start + idx_in;
+                    let range = if input_limited[idx_ctrl] {
+                        let [low, high] = input_limits[idx_ctrl];
+                        low..=high
+                    } else { -1.0..=1.0 };
+
+                    ActuatorInputDisplayInfo { label, range }
+                }).collect();
+
+            ActuatorDisplayInfo { name, ctrl_start, inputs }
         }).collect();
 
-        self.joint_display_info = (0..model.njnt()).filter_map(|i| {
-            let idx = i as usize;
-            match model.jnt_type()[idx] {
-                MjtJoint::mjJNT_SLIDE | MjtJoint::mjJNT_HINGE => {
-                    let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, idx) {
-                        name.to_string()
-                    } else { format!("Joint {i}") };
-                    let limited  = model.jnt_limited()[idx];
-                    let range    = model.jnt_range()[idx];
-                    let qpos_adr = model.jnt_qposadr()[idx] as usize;
-                    Some((name, limited, range, qpos_adr))
+        self.joint_info = (0..model.njnt() as usize).map(|idx_joint| {
+            let name = model.id_to_name(MjtObj::mjOBJ_JOINT, idx_joint)
+                .map(|name| name.to_string())
+                .unwrap_or_else(|| format!("Joint {idx_joint}"));
+
+            let qpos_start = model.jnt_qposadr()[idx_joint] as usize;
+
+            // The limit of a ball or a free joint applies to the rotation angle, not to a single
+            // position component, so a named component shows no range.
+            let named_component = |label| JointComponentDisplayInfo { label: Some(label), range: None };
+            let components = match model.jnt_type()[idx_joint] {
+                MjtJoint::mjJNT_FREE => FREE_JOINT_COMPONENTS.map(named_component).into(),
+                MjtJoint::mjJNT_BALL => BALL_JOINT_COMPONENTS.map(named_component).into(),
+
+                // A slide or a hinge joint holds one position component, which the limit applies to.
+                _ => {
+                    let range = model.jnt_limited()[idx_joint].then(|| {
+                        let [low, high] = model.jnt_range()[idx_joint];
+                        low..=high
+                    });
+                    [JointComponentDisplayInfo { label: None, range }].into()
                 }
-                _ => None
-            }
+            };
+
+            JointDisplayInfo { name, qpos_start, components }
         }).collect();
 
         self.equality_names = (0..model.neq()).map(|i| {
@@ -1384,32 +1449,33 @@ impl ViewerUI {
             // Controls window
             egui::Window::new("Actuator")
                 .scroll(true)
+                .drag_to_scroll(egui::scroll_area::DragScroll::Always)
                 .open(&mut self.actuator_window)
                 .show(ui, |ui|
             {
                 let mut lock = shared_viewer_state.lock_unpoison();
                 let ctrl_mut = lock.data_passive.ctrl_mut();
-                egui::Grid::new("ctrl_grid").show(ui, |ui| {
-                    debug_assert_eq!(
-                        self.actuator_display_info.len(), ctrl_mut.len(),
-                        "actuator names don't match num of actuators in model. This is a bug!"
-                    );
-                    for ((name, limited, range), ctrl) in self.actuator_display_info.iter()
-                        .zip(ctrl_mut.iter_mut())
-                    {
-                        ui.label(RichText::new(name).font(MAIN_FONT));
-
-                        let range_inc = if *limited {
-                            range[0]..=range[1]
-                        } else { -1.0..=1.0 };
-
-                        ui.add(
-                            egui::Slider::new(ctrl, range_inc)
-                            .update_while_editing(false)
-                        );
-                        ui.end_row();
-                    }
-                });
+                debug_assert_eq!(
+                    self.actuator_info.iter().map(|info| info.inputs.len()).sum::<usize>(),
+                    ctrl_mut.len(),
+                    "actuator inputs don't match num of controls in model. This is a bug!"
+                );
+                for ActuatorDisplayInfo { name, ctrl_start, inputs } in &self.actuator_info {
+                    let actuator_ctrl = &mut ctrl_mut[*ctrl_start..*ctrl_start + inputs.len()];
+                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
+                        ui.horizontal(|ui| {
+                            for (input, ctrl) in inputs.iter().zip(actuator_ctrl) {
+                                if let Some(label) = &input.label {
+                                    ui.label(RichText::new(&**label).font(MAIN_FONT));
+                                }
+                                ui.add(
+                                    egui::Slider::new(ctrl, input.range.clone())
+                                    .update_while_editing(false)
+                                );
+                            }
+                        });
+                    });
+                }
 
                 // Clear all actuator controls by setting them to 0
                 if ui.button(RichText::new("Clear").font(MAIN_FONT)).clicked() {
@@ -1420,35 +1486,42 @@ impl ViewerUI {
             // Joints window
             egui::Window::new("Joint")
                 .scroll(true)
+                .drag_to_scroll(egui::scroll_area::DragScroll::Always)
                 .open(&mut self.joint_window)
                 .show(ui, |ui|
             {
-                egui::Grid::new("joint_grid").show(ui, |ui| {
-                    let lock = shared_viewer_state.lock_unpoison();
-                    let qpos = lock.data_passive.qpos();
-                    for (name, limited, range, qpos_adr) in &self.joint_display_info
-                    {
-                        ui.label(RichText::new(name).font(MAIN_FONT));
-                        let mut value = qpos[*qpos_adr];
-                        ui.add_enabled(false, egui::DragValue::new(&mut value));
+                let lock = shared_viewer_state.lock_unpoison();
+                let qpos = lock.data_passive.qpos();
+                for JointDisplayInfo { name, qpos_start, components } in &self.joint_info {
+                    let joint_qpos = &qpos[*qpos_start..*qpos_start + components.len()];
+                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
+                        ui.horizontal(|ui| {
+                            for (component, value) in components.iter().zip(joint_qpos) {
+                                if let Some(label) = component.label {
+                                    ui.label(RichText::new(label).font(MAIN_FONT));
+                                }
 
-                        if *limited {
-                            let [low, high] = *range;
-                            let value_scaled = ((value - low) / (high - low)).clamp(0.0, 1.0);
-                            ui.add(egui::ProgressBar::new(value_scaled as f32));
-                        }
-                        else {
-                            ui.label("no limit");
-                        }
+                                let mut value = *value;
+                                ui.add_enabled(false, egui::DragValue::new(&mut value));
 
-                        ui.end_row();
-                    }
-                });
+                                if let Some(range) = &component.range {
+                                    let (low, high) = (*range.start(), *range.end());
+                                    let value_scaled = ((value - low) / (high - low)).clamp(0.0, 1.0);
+                                    ui.add(egui::ProgressBar::new(value_scaled as f32));
+                                }
+                                else {
+                                    ui.label("no limit");
+                                }
+                            }
+                        });
+                    });
+                }
             });
 
             // Equalities window
             egui::Window::new("Equality")
                 .scroll(true)
+                .drag_to_scroll(egui::scroll_area::DragScroll::Always)
                 .open(&mut self.equality_window)
                 .show(ui, |ui|
             {

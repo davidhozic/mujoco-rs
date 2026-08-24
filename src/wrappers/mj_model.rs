@@ -869,6 +869,21 @@ impl MjModel {
         ) as u32 })
     }
 
+    /// Determine the name for the actuator input. For example, an orientation servo will return
+    /// "rx" for `input_idx = 0` when its actuator_ctrlspec is not quaternion.
+    /// Wraps [`mj_actuatorInputName`].
+    /// # Returns
+    /// [`Some`] with a static string when the actuator type defines a name for the input.
+    /// [`None`] when the type defines no input names, or when `id` or `input_idx` is out of range.
+    pub fn actuator_input_name(&self, id: usize, input_idx: usize) -> Option<&'static str> {
+        // SAFETY: id and input_idx are checked inside the function. When c_ptr is not null, it is
+        // always an ASCII static C string constant.
+        unsafe {
+            let c_ptr = mj_actuatorInputName(self.ffi(), id as i32, input_idx as i32);
+            (!c_ptr.is_null()).then(|| CStr::from_ptr(c_ptr).to_str().unwrap())
+        }
+    }
+
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {

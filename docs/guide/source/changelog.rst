@@ -198,6 +198,13 @@ update of MuJoCo alone can increase the major version.
   the left screen-edge, so the panel no longer needs the keyboard. The ``X`` key still toggles
   it. The panel now slides with an animation when it opens or closes.
 
+*The viewer "Joint" window shows a ball joint and a free joint*
+
+- The "Joint" window of the viewer now lists every joint, and each joint is a collapsible section
+  like an actuator in the "Actuator" window. A ball joint and a free joint show all their position
+  components in one horizontal row, named ``x``, ``y``, ``z`` and ``qw``, ``qx``, ``qy``, ``qz``.
+  The window listed a slide joint and a hinge joint only before.
+
 *New accessors for 3.11.0 fields*
 
 - |mj_model|:
@@ -347,6 +354,13 @@ update of MuJoCo alone can increase the major version.
   MuJoCo fills ``paths`` during the compile step and never reads it back, and it only compares
   ``textureType`` against ``mjtTexture`` variants, so a write can at worst give a wrong asset
   path or wrong rendering, never a memory fault.
+
+.. rubric:: New examples
+
+- :gh-example:`Actuator inputs <visualization/viewer/actuator_inputs.rs>` --- shows the actuator
+  controls of the :ref:`mj_rust_viewer` for every input flavour: actuator types that define no
+  input names, the named multi-input control blocks of a ``pid``, a ``dcmotor`` and an
+  ``orientation`` actuator, an actuator without a name, and an actuator without control inputs.
 
 .. rubric:: Bug fixes
 
