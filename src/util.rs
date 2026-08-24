@@ -1,7 +1,7 @@
 //! Utility types and macros used throughout the crate.
 use std::{marker::PhantomData, ops::{Deref, DerefMut}};
 use std::sync::{Mutex, MutexGuard};
-use std::ffi::c_char;
+use std::ffi::{CString, c_char};
 
 use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 
@@ -23,6 +23,15 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
     let dest: &mut [u8] = bytemuck::cast_slice_mut(buf);
     dest[..bytes.len()].copy_from_slice(&bytes);
     dest[bytes.len()..].fill(0);
+}
+
+/// Returns `msg` as a C string that escapes every `%`, so it is sound to pass as the format
+/// string of a `printf`-family C function (`mju_error`, `mju_warning`, `mju_info`).
+///
+/// # Panics
+/// Panics if `msg` contains interior `\0` characters.
+pub(crate) fn printf_safe_cstring(msg: &str) -> CString {
+    CString::new(msg.replace('%', "%%")).unwrap()
 }
 
 /// Returns `Some((start, len))` for item `id` inside a packed data array,

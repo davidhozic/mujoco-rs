@@ -46,21 +46,18 @@ use crate::util::LockUnpoison;
 /// calls this handler.
 static USER_LOG_HANDLER: Mutex<Option<fn(&MjLogMessage)>> = Mutex::new(None);
 
-/// Sets a user-defined log handler that receives every MuJoCo message.
+/// Sets a user-defined log handler that receives every MuJoCo message. Wraps
+/// [`mju_setLogHandler`].
 ///
-/// Call this instead of [`install_logging_hook`], not after it: the function installs the same
-/// MuJoCo hook, but `handler` replaces the built-in [`log`] routing of that hook.
-///
-/// # Note
-/// The handler receives every message, because [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) configures the default MuJoCo
-/// handler only.
+/// The function installs the same MuJoCo hook as [`install_logging_hook`], but `handler` replaces
+/// the built-in [`log`] routing of that hook. A later [`install_logging_hook`] call clears
+/// `handler`.
 ///
 /// <div class="warning">
 /// A message with level `mjLOG_ERROR` ends the process with exit code 1 after the handler returns,
 /// because MuJoCo must not continue after an error. A panic inside the handler aborts the process,
 /// because the handler runs across an FFI boundary.
 /// </div>
-/// 
 pub fn set_log_handler(handler: fn(&MjLogMessage)) {
     // One critical section, so that no thread can observe the hook without the handler behind it.
     let mut current = USER_LOG_HANDLER.lock_unpoison();
@@ -70,7 +67,9 @@ pub fn set_log_handler(handler: fn(&MjLogMessage)) {
 
 /// Installs the internal MuJoCo log handler. Wraps [`mju_setLogHandler`].
 ///
-/// The hook sends every MuJoCo message to the [`log`] facade. A program that needs the structured
+/// The hook sends every MuJoCo message to the [`log`] facade.\
+/// Also clears the handler set by [`set_log_handler`].
+/// A program that needs the structured
 /// [`MjLogMessage`] calls [`set_log_handler`] instead, which installs the same hook. The hook maps
 /// the message like this:
 ///
@@ -84,24 +83,32 @@ pub fn set_log_handler(handler: fn(&MjLogMessage)) {
 /// A [`log`] backend matches a target by prefix, so the directives
 /// `RUST_LOG=mujoco=warn,mujoco::sleep=debug` enable the sleep topic alone.
 ///
-/// [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) configures the default MuJoCo handler only, so it has no effect on the hook.
+/// [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) configures the default MuJoCo handler
+/// only, so it has no effect on the hook.
 pub fn install_logging_hook() {
-    let _handler = USER_LOG_HANDLER.lock_unpoison();
+    let mut current = USER_LOG_HANDLER.lock_unpoison();
+    *current = None;
     set_mujoco_handler();
 }
 
 /// Registers [`logging_hook`] as the MuJoCo log handler.
 ///
-/// The caller holds the [`USER_LOG_HANDLER`] lock, which serializes the write to the non-atomic
-/// global of MuJoCo. `mju_setLogHandler` only assigns that global, so it cannot re-enter the
-/// handler and deadlock on the lock.
+/// The caller holds the [`USER_LOG_HANDLER`] lock, which serializes the writers of this crate to
+/// the non-atomic global of MuJoCo. `mju_setLogHandler` only assigns that global, so it cannot
+/// re-enter the handler and deadlock on the lock.
 fn set_mujoco_handler() {
     // SAFETY: `logging_hook` is a valid handler for the whole program. The user is assumed to not
     // install another handler through the C FFI at the same time.
+    // The returned previous handler is dropped: a safe API cannot hand out a callable
+    // mjfLogHandler.
     unsafe { mju_setLogHandler(Some(logging_hook)) };
 }
 
 /// The MuJoCo log handler that [`install_logging_hook`] registers.
+///
+/// # Safety
+/// `raw_message` must be non-null and must point to an `mjLogMessage` that stays valid for the
+/// whole call.
 unsafe extern "C" fn logging_hook(raw_message: *const MjLogMessage) {
     // SAFETY: MuJoCo never calls the handler with a null pointer, and the message stays valid for
     // the whole call.
@@ -124,9 +131,6 @@ unsafe extern "C" fn logging_hook(raw_message: *const MjLogMessage) {
 
 /// Sends a MuJoCo message to the [`log`] facade, in the mapping that [`install_logging_hook`]
 /// documents.
-///
-/// # Panics
-/// Panics if `subject`, `func`, `file` or `body` contains invalid UTF-8.
 fn log_to_facade(message: &MjLogMessage) {
     let level = match message.level() {
         MjtLogLevel::mjLOG_DEBUG   => Level::Debug,
@@ -135,8 +139,9 @@ fn log_to_facade(message: &MjLogMessage) {
         MjtLogLevel::mjLOG_ERROR   => Level::Error,
     };
 
-    // Both guards are what the log macros do: the cheap global level first, the backend second.
-    if level > log::max_level() {
+    // The three guards of the log macros: the compile-time cap, the cheap global level, then the
+    // backend.
+    if level > log::STATIC_MAX_LEVEL || level > log::max_level() {
         return;
     }
     let metadata = Metadata::builder().level(level).target(topic_target(message.topic())).build();
@@ -147,16 +152,19 @@ fn log_to_facade(message: &MjLogMessage) {
 
     // MuJoCo reports an unknown location as line 0, and prints the file only with a line.
     let line = u32::try_from(message.line()).ok().filter(|&line| line != 0);
+    // The hook runs across an FFI boundary, so it must not panic on a text that MuJoCo
+    // truncated in the middle of a UTF-8 sequence.
     let function = message.func().unwrap_or_default();
     let body = message.body().unwrap_or_default();
     let function_separator = if function.is_empty() { "" } else { ": " };
     let body_separator = if body.is_empty() { "" } else { "\n" };
     let subject = message.subject();
+    let file = message.file();
 
     logger.log(
         &Record::builder()
             .metadata(metadata)
-            .file(line.and(message.file()))
+            .file(line.and(file))
             .line(line)
             .args(format_args!("{function}{function_separator}{subject}{body_separator}{body}"))
             .build(),

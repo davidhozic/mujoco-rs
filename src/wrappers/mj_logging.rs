@@ -1,10 +1,11 @@
 //! MuJoCo's unified logging API.
 //!
 //! [`crate::logging`] holds the bridge that sends a MuJoCo message to the [`log`] facade.
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, c_char};
 use std::ptr;
 
 use crate::{c_str_as_str_method, getter_setter};
+use crate::util::printf_safe_cstring;
 use crate::mujoco_c::*;
 
 
@@ -110,7 +111,7 @@ impl MjLogMessage {
     /// The `'static CStr` bound is what keeps the stored pointer sound: the data is
     /// NUL-terminated (C reads `body`/`func`/`file` as C strings) and lives for the whole
     /// program, so the pointer can never dangle and C never reads out of bounds.
-    fn cstr_ptr(s: Option<&'static CStr>) -> *const std::ffi::c_char {
+    fn cstr_ptr(s: Option<&'static CStr>) -> *const c_char {
         s.map_or(ptr::null(), CStr::as_ptr)
     }
 
@@ -119,7 +120,7 @@ impl MjLogMessage {
     /// # Panics
     /// Panics if the body is not valid UTF-8.
     pub fn body(&self) -> Option<&str> {
-        Self::opt_cstr(self.body)
+        self.opt_cstr(self.body)
     }
 
     /// Returns `__func__`, or `None` if unavailable.
@@ -127,7 +128,7 @@ impl MjLogMessage {
     /// # Panics
     /// Panics if the value is not valid UTF-8.
     pub fn func(&self) -> Option<&str> {
-        Self::opt_cstr(self.func)
+        self.opt_cstr(self.func)
     }
 
     /// Returns `__FILE__`, or `None` if unavailable.
@@ -135,16 +136,16 @@ impl MjLogMessage {
     /// # Panics
     /// Panics if the value is not valid UTF-8.
     pub fn file(&self) -> Option<&str> {
-        Self::opt_cstr(self.file)
+        self.opt_cstr(self.file)
     }
 
     /// Borrows a nullable C string field as `&str`, returning `None` for a null pointer.
-    fn opt_cstr<'a>(ptr: *const std::ffi::c_char) -> Option<&'a str> {
+    fn opt_cstr(&self, ptr: *const c_char) -> Option<&str> {
         if ptr.is_null() {
             None
         } else {
-            // SAFETY: the pointer is non-null and, per MuJoCo's contract, points to a valid
-            // NUL-terminated string that outlives the borrowing message.
+            // SAFETY: a non-null pointer comes from a builder method (a `&'static CStr`), or
+            // from MuJoCo, which keeps the string alive for the handler call; `self` spans both.
             Some(unsafe { CStr::from_ptr(ptr) }.to_str().unwrap())
         }
     }
@@ -173,7 +174,7 @@ pub fn set_log_config(config: MjLogConfig) {
 /// A message with level `mjLOG_ERROR` can end the process; see [`log_error`].
 pub fn log_message(msg: &MjLogMessage) {
     // SAFETY: `msg` is a valid reference; mju_message reads it and does not retain the pointer.
-    unsafe { mju_message(msg as *const MjLogMessage) }
+    unsafe { mju_message(msg) }
 }
 
 /// Log an info message with optional topic filtering. Wraps [`mju_info`].
@@ -184,25 +185,23 @@ pub fn log_message(msg: &MjLogMessage) {
 /// # Panics
 /// Panics if `msg` contains interior `\0` characters.
 pub fn log_info(topic: MjtLogTopic, msg: &str) {
-    // Escape '%' so the message is safe to pass as a printf format string.
-    let escaped = msg.replace('%', "%%");
-    let c_msg = CString::new(escaped).unwrap();
-    // SAFETY: the escaped string contains no unmatched '%' format specifiers,
-    // so passing it as the sole format argument to mju_info is well-defined.
-    unsafe { mju_info(topic as _, c_msg.as_ptr()) }
+    let c_msg = printf_safe_cstring(msg);
+    // SAFETY: `c_msg` holds no unmatched '%' format specifier, so it is well-defined as the sole
+    // format argument of mju_info.
+    unsafe { mju_info(topic as i32, c_msg.as_ptr()) }
 }
 
 /// Main error function; does not return to caller. Wraps [`mju_error`].
 ///
 /// # Panics
-/// Panics if `msg` contains interior `\0` characters, or if a custom log handler or a legacy
-/// `mju_user_error` callback makes `mju_error` return.
+/// Panics if `msg` contains interior `\0` characters. Panics if `mju_error` returns: a custom log
+/// handler or a legacy `mju_user_error` callback returned, or a log handler called this function
+/// and the recursion guard of MuJoCo dropped the message.
 pub fn log_error(msg: &str) -> ! {
-    let escaped = msg.replace('%', "%%");
-    let c_msg = CString::new(escaped).unwrap();
-    // SAFETY: the escaped string contains no unmatched '%' format specifiers.
+    let c_msg = printf_safe_cstring(msg);
+    // SAFETY: `c_msg` holds no unmatched '%' format specifier.
     unsafe { mju_error(c_msg.as_ptr()) }
-    unreachable!()  // safety net, in case mju_error returns.
+    panic!("mju_error returned instead of ending the process")
 }
 
 /// Main warning function; returns to caller. Wraps [`mju_warning`].
@@ -210,8 +209,7 @@ pub fn log_error(msg: &str) -> ! {
 /// # Panics
 /// Panics if `msg` contains interior `\0` characters.
 pub fn log_warning(msg: &str) {
-    let escaped = msg.replace('%', "%%");
-    let c_msg = CString::new(escaped).unwrap();
-    // SAFETY: the escaped string contains no unmatched '%' format specifiers.
+    let c_msg = printf_safe_cstring(msg);
+    // SAFETY: `c_msg` holds no unmatched '%' format specifier.
     unsafe { mju_warning(c_msg.as_ptr()) }
 }

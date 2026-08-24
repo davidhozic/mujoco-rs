@@ -628,7 +628,7 @@ pub enum mjtLogTopic {
     mjTOPIC_SLEEP = 3,
 }
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct mjLogMessage_ {
     pub(crate) level: ::std::os::raw::c_int,
     pub(crate) topic: ::std::os::raw::c_int,
