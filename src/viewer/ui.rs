@@ -10,7 +10,7 @@ use std::fmt::Debug;
 use glutin::display::{Display, GlDisplay};
 use egui_winit::winit::event::WindowEvent;
 use egui_glow::glow::{self, HasContext};
-use egui::{FontId, RichText, Id};
+use egui::{FontId, RichText, LayerId, Order, Id};
 use egui_winit::winit::window::Window;
 use egui_winit::egui;
 use egui_winit;
@@ -1664,6 +1664,12 @@ impl ViewerUI {
     /// Checks whether the UI is currently being dragged.
     pub(crate) fn dragged(&self) -> bool {
         self.egui_ctx.dragged_id().is_some()
+    }
+
+    /// Takes the selection away from every UI window.
+    pub(crate) fn deselect_windows(&self) {
+        let scene_layer = LayerId::new(Order::Middle, Id::new("mujoco_scene"));
+        self.egui_ctx.memory_mut(|memory| memory.areas_mut().move_to_top(scene_layer));
     }
 
     /// Prepares OpenGL for drawing 2D overlays.

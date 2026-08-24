@@ -192,19 +192,17 @@ update of MuJoCo alone can increase the major version.
 
 .. rubric:: New features and improvements
 
-*Viewer-UI side-panel is now natively collapsible*
+*Viewer improvements*
 
 - The viewer's UI side-panel now also opens and closes by a drag of its inner edge to and from
   the left screen-edge, so the panel no longer needs the keyboard. The ``X`` key still toggles
   it. The panel now slides with an animation when it opens or closes.
-
-*The viewer "Joint" window shows a ball joint and a free joint*
-
-- The "Joint" window of the viewer now lists every joint, and each joint is a collapsible section
-  like an actuator in the "Actuator" window. A ball joint and a free joint show all their position
+- The "Joint" window now lists every joint, and each joint is a collapsible section like an
+  actuator in the "Actuator" window. A ball joint and a free joint show all their position
   components in one horizontal row, named ``x``, ``y``, ``z`` and ``qw``, ``qx``, ``qy``, ``qz``.
   The window listed a slide joint and a hinge joint only before.
-
+- A press on the scene now takes the selection away from every viewer window, so no window keeps a
+  highlighted title bar while the pointer works in the scene.
 *New accessors for 3.11.0 fields*
 
 - |mj_model|:

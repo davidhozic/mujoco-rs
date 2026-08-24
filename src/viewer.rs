@@ -1478,8 +1478,13 @@ impl MjViewer {
                     let is_pressed = state == ElementState::Pressed;
                     
                     #[cfg(feature = "viewer-ui")]
-                    if self.ui.covered() && is_pressed {
-                        continue;
+                    if is_pressed {
+                        if self.ui.covered() {
+                            continue;
+                        }
+
+                        // A press on the scene takes the selection away from the UI windows.
+                        self.ui.deselect_windows();
                     }
 
                     let index = match button {
