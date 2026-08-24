@@ -1734,17 +1734,27 @@ impl ViewerUI {
     }
 
     /// Checks whether the UI is focused (e.g., typing).
-    pub(crate) fn focused(&self) -> bool {
+    pub(crate) fn is_focused(&self) -> bool {
         self.egui_ctx.memory(|ui| ui.focused().is_some())
     }
 
     /// Checks whether the mouse is over the UI.
-    pub(crate) fn covered(&self) -> bool {
+    pub(crate) fn is_covered(&self) -> bool {
         self.egui_ctx.is_pointer_over_egui()
     }
 
+    /// Checks whether the mouse is over one of UI's windows (side panels do not count).
+    pub(crate) fn is_window_covered(&self) -> bool {
+        let Some(position) = self.egui_ctx.pointer_interact_pos() else {
+            return false;
+        };
+
+        // The side panels share the background layer with the scene; windows and popups do not.
+        self.egui_ctx.layer_id_at(position).is_some_and(|layer| layer.order != Order::Background)
+    }
+
     /// Checks whether the UI is currently being dragged.
-    pub(crate) fn dragged(&self) -> bool {
+    pub(crate) fn is_dragged(&self) -> bool {
         self.egui_ctx.dragged_id().is_some()
     }
 
