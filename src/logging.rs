@@ -36,9 +36,13 @@ use std::sync::Once;
 
 use log::{Level, Metadata, Record};
 
-use crate::wrappers::mj_logging::{MjLogMessage, MjtLogLevel, MjtLogTopic};
+use crate::wrappers::mj_logging::{MjLogMessage, MjtLogLevel, MjtLogTopic, log_config, set_log_config};
 use crate::mujoco_c::mju_setLogHandler;
 
+
+/// The `topics` bitmask of [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) that enables
+/// every filterable topic.
+pub const ALL_LOG_TOPICS: i32 = (1 << MjtLogTopic::mjNTOPIC as i32) - 1;
 
 /// A logging handler function type.
 type LoggingHandler = fn(&MjLogMessage);
@@ -96,20 +100,27 @@ pub fn set_log_handler(handler: LoggingHandler) {
 ///
 /// [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) configures the default MuJoCo handler
 /// only, so it has no effect on the hook.
+/// 
+/// This hook also enables all the topics on the MuJoCo side.
+/// This is needed to bypass the mjDEBUG macro's topic checks, allowing [`log`] to configure the
+/// targets/topics entirely.
 pub fn install_logging_hook() {
     USER_LOG_HANDLER.store(ptr::null_mut(), Ordering::Release);
     set_mujoco_handler();
 }
 
-/// Registers [`logging_hook`] as the MuJoCo log handler, at most once per program.
+/// Registers [`logging_hook`] as the MuJoCo log handler, at most once per program, and enables
+/// every topic of the producer-side filter.
 ///
 /// The caller stores [`USER_LOG_HANDLER`] first, so the hook always finds the routing it must use.
 fn set_mujoco_handler() {
-    // SAFETY: `logging_hook` is a valid handler for the whole program. The user is assumed to not
-    // install another handler through the C FFI at the same time.
-    // The returned previous handler is dropped: a safe API cannot hand out a callable
-    // mjfLogHandler.
-    LOGGING_HOOK_INSTALLED.call_once(|| unsafe { mju_setLogHandler(Some(logging_hook)); });
+    LOGGING_HOOK_INSTALLED.call_once(|| {
+        set_log_config(log_config().with_topics(ALL_LOG_TOPICS));
+
+        // SAFETY: `logging_hook` is a valid handler for the whole program. The user is assumed to
+        // not install another handler through the C FFI at the same time.
+        unsafe { mju_setLogHandler(Some(logging_hook)); }
+    });
 }
 
 /// The MuJoCo log handler that [`install_logging_hook`] registers.
