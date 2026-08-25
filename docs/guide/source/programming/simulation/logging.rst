@@ -18,9 +18,9 @@ and others. All of these wrappers can be configured via
 Rust ecosystem integration
 ===========================
 Rust has a de facto standard of doing logging, which is done via the `log <https://docs.rs/log/0.4.34/log/>`__ crate.
-We provide a hook for integrating the MuJoCo logging with the ``log`` crate, which can be installed by calling 
-:docs-rs:`mujoco_rs::logging::<fn>install_logging_hook` once at the start of the program.
-
+We provide a hook for integrating the MuJoCo logging with the ``log`` crate.
+The hook can be installed by calling :docs-rs:`mujoco_rs::logging::<fn>install_logging_hook` once
+at the start of the program.
 
 An example (using the `env_logger <https://docs.rs/env_logger/0.11.11/env_logger/>`__ backend):
 
@@ -31,11 +31,42 @@ An example (using the `env_logger <https://docs.rs/env_logger/0.11.11/env_logger
    install_logging_hook();
 
    // log's logging function
-   log::warn!(target: "example_program::main", "this is an example warning!");
+   log::warn!("this is an example warning!");
 
    // MuJoCo's logging function
    log_warning("the log backend receives this, with the target 'mujoco'");
 
+
+In the above example, the ``log``'s target is set to the Rust-module path when called from the user's code.
+The message is displayed in the following format:
+
+   [WARN  <module path>] this is an example warning!
+
+When calling ``log_warning`` from the user's program, or MuJoCo tries to log internally, the message
+is displayed in the following format:
+
+   [WARN  mujoco<:: optional sub-target>] the log backend receives this, with the target 'mujoco'
+
+Most MuJoCo logging messages will have no specific sub-topic, thus the format will be something like:
+
+   [WARN  mujoco] ...
+
+The translation from a MuJoCo logging topic (:docs-rs:`~mujoco_rs::wrappers::mj_logging::<type>MjtLogTopic`)
+to the ``log`` target is as follows:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Topic
+     - ``log`` target
+   * - ``mjTOPIC_NONE``
+     - ``mujoco``
+   * - ``mjTOPIC_TIME_STP``
+     - ``mujoco::time_stp``
+   * - ``mjTOPIC_TIME_CMP``
+     - ``mujoco::time_cmp``
+   * - ``mjTOPIC_SLEEP``
+     - ``mujoco::sleep``
 
 Custom logging callback
 -----------------------
@@ -46,10 +77,13 @@ the requested message to log.
 
 The user callback function can be registered via :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler`.
 Note that this is **not** a wrapper around :docs-rs:`~mujoco_rs::mujoco_c::<fn>mju_setLogHandler` but merely a setter
-to a global (thread-safe) static. The :docs-rs:`~mujoco_rs::mujoco_c::<fn>mju_setLogHandler` function is actually set
-to the same logging hook as with :docs-rs:`mujoco_rs::logging::<fn>install_logging_hook`, except it redirects to the
-user callback instead of the ``log`` facade. There is no need to call :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` because the
-:docs-rs:`~mujoco_rs::logging::<fn>set_log_handler` already does it internally.
+to a global static inside MuJoCo-rs (not MuJoCo). The actual MuJoCo handler set by ``mju_setLogHandler``
+is defined internally inside MuJoCo-rs, and is responsible for both calling the global user-set Rust logging handler
+and providing a facade to the ``log`` crate when no user-set Rust logging handler is set.
+
+When setting a custom logging callback inside MuJoCo-rs, there is no need to call
+:docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` separately,
+because the :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler` does it automatically.
 
 All ``log_`` methods calls (and internal MuJoCo calls) will now be redirected to the handler:
 
