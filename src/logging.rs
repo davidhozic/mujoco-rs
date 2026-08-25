@@ -162,8 +162,8 @@ fn log_to_facade(message: &MjLogMessage) {
 
     // MuJoCo reports an unknown location as line 0, and prints the file only with a line.
     let line = u32::try_from(message.line()).ok().filter(|&line| line != 0);
-    // The hook runs across an FFI boundary, so it must not panic on a text that MuJoCo
-    // truncated in the middle of a UTF-8 sequence.
+    // Invalid UTF-8 in the text fields panics, which aborts the process at this `extern "C"`
+    // boundary. Only caller-supplied text can be invalid; MuJoCo formats its own with ASCII.
     let function = message.func().unwrap_or_default();
     let body = message.body().unwrap_or_default();
     let function_separator = if function.is_empty() { "" } else { ": " };
