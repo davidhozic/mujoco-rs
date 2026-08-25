@@ -29,7 +29,8 @@ fn custom_handler(message: &MjLogMessage) {
 
 fn main() {
     /* Default handler: MuJoCo writes to the console and to MUJOCO_LOG.TXT */
-    // MjLogConfig configures the default handler only; the hook below ignores it.
+    // MjLogConfig configures the default handler only.
+    // The config has no effect after the `install_logging_hook` below is used.
     set_log_config(log_config().with_logto_file(false));
     log_warning("the default handler prints this to the console");
 

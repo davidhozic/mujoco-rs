@@ -1,12 +1,12 @@
 //! The bridge between MuJoCo's logging and the [`log`] facade.
 //!
-//! [`install_logging_hook`] makes MuJoCo send every message to the [`log`] backend.
+//! [`install_logging_hook`] makes MuJoCo send every message to the [`log`] facade.
 //! [`set_log_handler`] installs the same MuJoCo hook, but sends every message to a handler of the
 //! program instead. Call one of the two: [`set_log_handler`] when the program needs the structured
 //! [`MjLogMessage`], [`install_logging_hook`] otherwise.
-//! 
-//! The wrappers of MuJoCo's own logging API (the message and the configuration types, and the functions that emit
-//! a message) live in [`crate::wrappers::mj_logging`].
+//!
+//! The wrappers of MuJoCo's own logging API (the message and the configuration types, and the
+//! functions that emit a message) live in [`crate::wrappers::mj_logging`].
 //!
 //! # Example
 //! ```
@@ -26,7 +26,7 @@
 //! /* Use through MuJoCo wrappers */
 //! log_warning("the log backend receives this, with the target 'mujoco'");
 //!
-//! /* A program that needs the structured message calls this instead of the hook above */
+//! /* Replace the facade routing with a structured handler */
 //! set_log_handler(handler);
 //! log_warning("the handler receives this, and the `log` backend receives nothing");
 //! ```
@@ -36,7 +36,9 @@ use std::sync::Once;
 
 use log::{Level, Metadata, Record};
 
-use crate::wrappers::mj_logging::{MjLogMessage, MjtLogLevel, MjtLogTopic, log_config, set_log_config};
+use crate::wrappers::mj_logging::{
+    MjLogMessage, MjtLogLevel, MjtLogTopic, log_config, set_log_config,
+};
 use crate::mujoco_c::mju_setLogHandler;
 
 
@@ -70,9 +72,10 @@ static LOGGING_HOOK_INSTALLED: Once = Once::new();
 /// A message with level `mjLOG_ERROR` ends the process with exit code 1 after the handler returns,
 /// because MuJoCo must not continue after an error. A panic inside the handler aborts the process,
 /// because the handler runs across an FFI boundary.
-/// 
+///
+/// The handler must be thread-safe.
 /// The handler must not call [`log_error`](crate::wrappers::mj_logging::log_error),
-/// as it would cause infinite recursion. 
+/// as it would cause infinite recursion.
 /// </div>
 pub fn set_log_handler(handler: LoggingHandler) {
     // Release, and Acquire in the hook: no thread observes the hook without the handler behind it.
@@ -80,30 +83,27 @@ pub fn set_log_handler(handler: LoggingHandler) {
     set_mujoco_handler();
 }
 
-/// Installs the internal MuJoCo log handler. Wraps [`mju_setLogHandler`].
+/// Installs a hook for routing MuJoCo logging messages to the [`log`] facade.
+/// Wraps [`mju_setLogHandler`].
 ///
-/// The hook sends every MuJoCo message to the [`log`] facade.\
 /// Also clears the handler set by [`set_log_handler`].
-/// A program that needs the structured
-/// [`MjLogMessage`] calls [`set_log_handler`] instead, which installs the same hook. The hook maps
-/// the message like this:
+/// For  structured [`MjLogMessage`] calls use [`set_log_handler`] instead,
+/// which installs the same hook and redirects messages to the user handler instead of the `log` facade.
+/// The hook maps the message like this:
 ///
 /// | MuJoCo field | [`log`] record |
 /// |---|---|
 /// | `level` | [`Level`] (`mjLOG_DEBUG` -> `Debug`, `mjLOG_WARNING` -> `Warn`, ...) |
 /// | `topic` | target: `mujoco` for `mjTOPIC_NONE`, else `mujoco::<topic>` (e.g. `mujoco::sleep`) |
 /// | `func`, `subject`, `body` | message text `func: subject\nbody` (empty parts are dropped) |
-/// | `file`, `line` | record file and line (only when `line` is not 0) |
+/// | `file`, `line` | record file and line (only when `line` is positive) |
 ///
-/// A [`log`] backend matches a target by prefix, so the directives
-/// `RUST_LOG=mujoco=warn,mujoco::sleep=debug` enable the sleep topic alone.
+/// # Notes
+/// A message with level [`MjtLogLevel::mjLOG_ERROR`] will exit the program with code 1, just like the default MuJoCo
+/// handler does, to prevent undefined behaviors that would arise due to MuJoCo erroring system
+/// assumptions.
 ///
-/// [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) configures the default MuJoCo handler
-/// only, so it has no effect on the hook.
-/// 
-/// This hook also enables all the topics on the MuJoCo side.
-/// This is needed to bypass the mjDEBUG macro's topic checks, allowing [`log`] to configure the
-/// targets/topics entirely.
+/// [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) has no effect when this logging hook is installed.
 pub fn install_logging_hook() {
     USER_LOG_HANDLER.store(ptr::null_mut(), Ordering::Release);
     set_mujoco_handler();

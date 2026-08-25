@@ -226,42 +226,28 @@
 - Added ``MjtCtrlChart`` :sup:`new` as an alias for the new ``mjtCtrlChart`` enum (the
   ``m->actuator_ctrlspec`` value of an so3 actuator, because the field is scoped by ``gaintype``).
 
-*New accessors for 3.10.0 structs*
+*Unified logging API*
 
-- Added ``MjsAuthored`` :sup:`new` and the |mj_spec| ``authored()`` :sup:`new` accessor, exposing the
-  authored-field tracking bitmasks introduced in MuJoCo 3.10.0. ``MjsAuthored`` is a
-  plain-data struct; its bitmask fields are read directly (e.g. ``authored.disableflags``).
-- Added ``MjLogConfig`` :sup:`new` and ``MjLogMessage`` :sup:`new` aliases (with ``MjtLogLevel`` :sup:`new`
-  and ``MjtLogTopic`` :sup:`new`) for the new unified logging API's structured types.
-  ``MjLogMessage`` is constructable via ``MjLogMessage::new`` plus builder methods (``with_body``,
-  ``with_func``, ``with_file``, etc.), where the string-pointer fields take
-  ``Option<&'static CStr>`` (``None`` writes a null pointer). The matching ``body``, ``func``
-  and ``file`` getters return ``Option<&str>``. ``MjLogConfig`` carries
-  ``logto_console``, ``logto_file``, ``topics`` and ``logfile`` accessors (each with a ``set_``
-  and a ``with_`` form), which build the argument of ``set_log_config``.
+- Added ``MjLogConfig`` :sup:`new` and ``MjLogMessage`` :sup:`new` aliases (with ``MjtLogLevel``
+  :sup:`new` and ``MjtLogTopic`` :sup:`new`) for the unified logging API of MuJoCo 3.10.0.
 - Added the free logging functions
   :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_config` :sup:`new` (``mju_getLogConfig``),
   :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>set_log_config` :sup:`new` (``mju_setLogConfig``),
   :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_message` :sup:`new` (``mju_message``),
   :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_info` :sup:`new` (``mju_info``),
   :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_warning` :sup:`new` (``mju_warning``) and
-  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_error` :sup:`new` (``mju_error``), which
-  diverges (``-> !``); the default handler ends the process, and the wrapper panics if a custom log
-  handler or a legacy error callback makes ``mju_error`` return. The logging types and functions
-  live in the new ``wrappers::mj_logging`` module, and the prelude re-exports them.
-- Added the new top-level ``logging`` module, which bridges MuJoCo's messages to the
-  `log <https://docs.rs/log/0.4.34/log/>`_ facade.
-  :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` :sup:`new` (``mju_setLogHandler``) makes
-  MuJoCo send every message to the ``log`` backend, so that MuJoCo output reaches the same backend
-  as the rest of the application. The hook maps the level onto ``log::Level``, the topic onto the
-  target (``mujoco``, or ``mujoco::sleep`` and the other topics), ``func``/``subject``/``body`` onto
-  the message text, and ``file``/``line`` onto the record location; a message with level
-  ``mjLOG_ERROR`` ends the process, as the default MuJoCo handler does.
-  :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler` :sup:`new` registers a handler that receives
-  the ``MjLogMessage`` instead of the ``log`` routing, and installs the hook itself, so a program
-  calls one of the two. Both replace the default MuJoCo handler, which is the only reader of
-  ``MjLogConfig``, so console output, file output and topic filtering no longer apply once a
-  handler is installed. The crate now depends on ``log``.
+  :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_error` :sup:`new` (``mju_error``).
+- Added the new top-level ``logging`` module, which sends MuJoCo's messages to the
+  `log <https://docs.rs/log/0.4.34/log/>`_ facade, so they reach the same backend as the rest of the
+  application. :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` :sup:`new`
+  installs a hook for ``log`` routing.
+  :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler` :sup:`new` registers a user handler.
+
+*New accessors for 3.10.0 structs*
+
+- Added ``MjsAuthored`` :sup:`new` and the |mj_spec| ``authored()`` :sup:`new` accessor, exposing the
+  authored-field tracking bitmasks introduced in MuJoCo 3.10.0. ``MjsAuthored`` is a
+  plain-data struct; its bitmask fields are read directly (e.g. ``authored.disableflags``).
 - Added ``MjtConflict`` :sup:`new` and the ``MjsCompiler::conflict()`` :sup:`new` accessor (with the
   matching ``set_``/``with_`` methods), exposing the attach-time conflict-resolution policy
   introduced in MuJoCo 3.10.0.
