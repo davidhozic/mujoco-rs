@@ -7,5 +7,6 @@ This section describes how to use MuJoCo-rs for controlling the simulation.
 .. toctree::
 
     basic
+    logging
     views
     ffi
