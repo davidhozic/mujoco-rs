@@ -1,6 +1,6 @@
-//! The bridge between MuJoCo's logging and the [`log`] facade.
+//! The bridge between MuJoCo's logging and the [`log`] crate.
 //!
-//! [`install_logging_hook`] makes MuJoCo send every message to the [`log`] facade.
+//! [`install_logging_hook`] makes MuJoCo send every message to the [`log`] crate.
 //! [`set_log_handler`] installs the same MuJoCo hook, but sends every message to a handler of the
 //! program instead. Call one of the two: [`set_log_handler`] when the program needs the structured
 //! [`MjLogMessage`], [`install_logging_hook`] otherwise.
@@ -26,7 +26,7 @@
 //! /* Use through MuJoCo wrappers */
 //! log_warning("the log backend receives this, with the target 'mujoco'");
 //!
-//! /* Replace the facade routing with a structured handler */
+//! /* Replace the `log` routing with a structured handler */
 //! set_log_handler(handler);
 //! log_warning("the handler receives this, and the `log` backend receives nothing");
 //! ```
@@ -50,7 +50,7 @@ pub const ALL_LOG_TOPICS: i32 = (1 << MjtLogTopic::mjNTOPIC as i32) - 1;
 type LoggingHandler = fn(&MjLogMessage);
 
 /// The log handler that [`set_log_handler`] registers, cast to a data pointer, or null when
-/// [`install_logging_hook`] routes to the [`log`] facade instead.
+/// [`install_logging_hook`] routes to the [`log`] crate instead.
 ///
 /// The MuJoCo handler is [`logging_hook`], which builds the [`MjLogMessage`] reference and then
 /// calls this handler. A [`LoggingHandler`] is a plain function pointer, so it fits in a pointer
@@ -83,12 +83,12 @@ pub fn set_log_handler(handler: LoggingHandler) {
     set_mujoco_handler();
 }
 
-/// Installs a hook for routing MuJoCo logging messages to the [`log`] facade.
+/// Installs a hook for routing MuJoCo logging messages to the [`log`] crate.
 /// Wraps [`mju_setLogHandler`].
 ///
 /// Also clears the handler set by [`set_log_handler`].
 /// For  structured [`MjLogMessage`] calls use [`set_log_handler`] instead,
-/// which installs the same hook and redirects messages to the user handler instead of the `log` facade.
+/// which installs the same hook and redirects messages to the user handler instead of the `log` crate.
 /// The hook maps the message like this:
 ///
 /// | MuJoCo field | [`log`] record |
@@ -136,7 +136,7 @@ unsafe extern "C" fn logging_hook(raw_message: *const MjLogMessage) {
     // Read the handler once, so that a concurrent replacement cannot split the two branches.
     let user_handler = USER_LOG_HANDLER.load(Ordering::Acquire);
     if user_handler.is_null() {
-        log_to_facade(message);
+        send_to_log(message);
     } else {
         // SAFETY: a non-null `USER_LOG_HANDLER` holds a `LoggingHandler` that `set_log_handler`
         // cast to a data pointer, so the transmute reproduces that function pointer. The value is
@@ -153,9 +153,9 @@ unsafe extern "C" fn logging_hook(raw_message: *const MjLogMessage) {
     }
 }
 
-/// Sends a MuJoCo message to the [`log`] facade, in the mapping that [`install_logging_hook`]
+/// Sends a MuJoCo message to the [`log`] crate, in the mapping that [`install_logging_hook`]
 /// documents.
-fn log_to_facade(message: &MjLogMessage) {
+fn send_to_log(message: &MjLogMessage) {
     let level = match message.level() {
         MjtLogLevel::mjLOG_DEBUG   => Level::Debug,
         MjtLogLevel::mjLOG_INFO    => Level::Info,

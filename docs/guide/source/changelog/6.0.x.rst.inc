@@ -238,7 +238,7 @@
   :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_warning` :sup:`new` (``mju_warning``) and
   :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>log_error` :sup:`new` (``mju_error``).
 - Added the new top-level ``logging`` module, which sends MuJoCo's messages to the
-  `log <https://docs.rs/log/0.4.34/log/>`_ facade, so they reach the same backend as the rest of the
+  `log <https://docs.rs/log/0.4.34/log/>`_ crate, so they reach the same backend as the rest of the
   application. :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` :sup:`new`
   installs a hook for ``log`` routing.
   :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler` :sup:`new` registers a user handler.
