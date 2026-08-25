@@ -223,6 +223,18 @@ UB:
 - Link what you name (C-LINK). Pin concrete versions, never `latest` aliases or deprecated targets
   (use `display text <path>` to show an old name); the `:docs-rs:` and `:gh-example:` roles already
   pin the version.
+- **Link every item at its first mention.** The first time a page or a changelog entry names a
+  struct, enum, trait, type alias, function, method, field or variant, write it as a `:docs-rs:`
+  link, or as a `|substitution|` that holds one. This covers a `mujoco_c` function and type as
+  well. A crate we depend on, and a type of that crate, take an upstream link with a pinned
+  version at their own first mention (`egui`, `log`, `env_logger`). Later mentions stay plain
+  ``literals``. Three cases take no link: a `std` item, an item the release removes (its page is
+  gone, so link the owning type instead), and a MuJoCo data field, XML attribute or C++ internal
+  class that the prose only names (``qpos``, ``ctrlrange``, ``flexcomp``, ``mjCWrap``).
+- **Keep the sentence, add the link.** When the item sits inside a compound literal
+  (``Err(MjDataError::BufferTooSmall)``, a signature), use the role's `display text <path>` form,
+  or put the link in a short parenthesis after the literal. Do not rewrite the sentence around the
+  link.
 - A doc does not mention less-visible items; make the item visible or drop the mention.
   (`crate::mujoco_c` is public.)
 - Changelog conventions: rubric order Breaking changes, Deprecations, Error handling, New features
