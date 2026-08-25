@@ -9,8 +9,8 @@
 //! 3. A custom handler, which receives the structured `MjLogMessage`.
 //!
 //! A program installs one of them, and `set_log_handler` installs the hook on its own. The example
-//! replaces each handler with the next one, to show all three, then calls
-//! `restore_default_log_handler` to get the default handler back.
+//! replaces each handler with the next one, to show all three. The crate installs the MuJoCo hook
+//! once, so the default handler does not come back.
 //!
 //! The application keeps logging with the `log` macros. Once the hook is installed, the messages of
 //! MuJoCo join them in the same backend. Note that `log_error` ends the process, while
@@ -23,7 +23,7 @@ use log::LevelFilter;
 fn custom_handler(message: &MjLogMessage) {
     println!(
         "custom handler: level = {:?}, topic = {:?}, subject = {:?}, body = {:?}",
-        message.level(), message.topic(), message.subject_lossy(), message.body_lossy(),
+        message.level(), message.topic(), message.subject(), message.body(),
     );
 }
 
@@ -49,7 +49,4 @@ fn main() {
             .with_body(Some(c"the body holds the multi-line detail")),
     );
 
-    /* Default handler again: MjLogConfig applies once more */
-    restore_default_log_handler();
-    log_warning("the default handler prints this to the console again");
 }

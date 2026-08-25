@@ -30,21 +30,30 @@
 //! set_log_handler(handler);
 //! log_warning("the handler receives this, and the `log` backend receives nothing");
 //! ```
-use std::sync::Mutex;
-use std::process;
+use std::sync::atomic::{AtomicPtr, Ordering};
+use std::{mem, process, ptr};
+use std::sync::Once;
 
 use log::{Level, Metadata, Record};
 
 use crate::wrappers::mj_logging::{MjLogMessage, MjtLogLevel, MjtLogTopic};
 use crate::mujoco_c::mju_setLogHandler;
-use crate::util::LockUnpoison;
 
 
-/// The log handler that [`set_log_handler`] registers.
+/// A logging handler function type.
+type LoggingHandler = fn(&MjLogMessage);
+
+/// The log handler that [`set_log_handler`] registers, cast to a data pointer, or null when
+/// [`install_logging_hook`] routes to the [`log`] facade instead.
 ///
 /// The MuJoCo handler is [`logging_hook`], which builds the [`MjLogMessage`] reference and then
-/// calls this handler.
-static USER_LOG_HANDLER: Mutex<Option<fn(&MjLogMessage)>> = Mutex::new(None);
+/// calls this handler. A [`LoggingHandler`] is a plain function pointer, so it fits in a pointer
+/// and needs no allocation.
+static USER_LOG_HANDLER: AtomicPtr<()> = AtomicPtr::new(ptr::null_mut());
+
+/// Guards the single [`mju_setLogHandler`] call, so that repeated installs do not race on the
+/// non-atomic global of MuJoCo.
+static LOGGING_HOOK_INSTALLED: Once = Once::new();
 
 /// Sets a user-defined log handler that receives every MuJoCo message. Wraps
 /// [`mju_setLogHandler`].
@@ -58,10 +67,9 @@ static USER_LOG_HANDLER: Mutex<Option<fn(&MjLogMessage)>> = Mutex::new(None);
 /// because MuJoCo must not continue after an error. A panic inside the handler aborts the process,
 /// because the handler runs across an FFI boundary.
 /// </div>
-pub fn set_log_handler(handler: fn(&MjLogMessage)) {
-    // One critical section, so that no thread can observe the hook without the handler behind it.
-    let mut current = USER_LOG_HANDLER.lock_unpoison();
-    current.replace(handler);
+pub fn set_log_handler(handler: LoggingHandler) {
+    // Release, and Acquire in the hook: no thread observes the hook without the handler behind it.
+    USER_LOG_HANDLER.store(handler as *mut (), Ordering::Release);
     set_mujoco_handler();
 }
 
@@ -86,22 +94,19 @@ pub fn set_log_handler(handler: fn(&MjLogMessage)) {
 /// [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) configures the default MuJoCo handler
 /// only, so it has no effect on the hook.
 pub fn install_logging_hook() {
-    let mut current = USER_LOG_HANDLER.lock_unpoison();
-    *current = None;
+    USER_LOG_HANDLER.store(ptr::null_mut(), Ordering::Release);
     set_mujoco_handler();
 }
 
-/// Registers [`logging_hook`] as the MuJoCo log handler.
+/// Registers [`logging_hook`] as the MuJoCo log handler, at most once per program.
 ///
-/// The caller holds the [`USER_LOG_HANDLER`] lock, which serializes the writers of this crate to
-/// the non-atomic global of MuJoCo. `mju_setLogHandler` only assigns that global, so it cannot
-/// re-enter the handler and deadlock on the lock.
+/// The caller stores [`USER_LOG_HANDLER`] first, so the hook always finds the routing it must use.
 fn set_mujoco_handler() {
     // SAFETY: `logging_hook` is a valid handler for the whole program. The user is assumed to not
     // install another handler through the C FFI at the same time.
     // The returned previous handler is dropped: a safe API cannot hand out a callable
     // mjfLogHandler.
-    unsafe { mju_setLogHandler(Some(logging_hook)) };
+    LOGGING_HOOK_INSTALLED.call_once(|| unsafe { mju_setLogHandler(Some(logging_hook)); });
 }
 
 /// The MuJoCo log handler that [`install_logging_hook`] registers.
@@ -114,11 +119,16 @@ unsafe extern "C" fn logging_hook(raw_message: *const MjLogMessage) {
     // the whole call.
     let message = unsafe { &*raw_message };
 
-    // Copy the handler out of the mutex, so that the handler itself can lock the mutex again.
-    let user_handler = *USER_LOG_HANDLER.lock_unpoison();
-    match user_handler {
-        Some(handler) => handler(message),
-        None => log_to_facade(message),
+    // Read the handler once, so that a concurrent replacement cannot split the two branches.
+    let user_handler = USER_LOG_HANDLER.load(Ordering::Acquire);
+    if user_handler.is_null() {
+        log_to_facade(message);
+    } else {
+        // SAFETY: a non-null `USER_LOG_HANDLER` holds a `LoggingHandler` that `set_log_handler`
+        // cast to a data pointer, so the transmute reproduces that function pointer. The value is
+        // not dereferenced: it is the address of the function itself.
+        let handler: LoggingHandler = unsafe { mem::transmute(user_handler) };
+        handler(message);
     }
 
     // MuJoCo expects the handler of an error to never return; the C code continues in a broken
