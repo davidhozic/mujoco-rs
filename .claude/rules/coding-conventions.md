@@ -250,8 +250,10 @@ UB:
   choice (`unsafe fn`, an enum instead of `i32`), an API shape, a deprecation, a bug fix, viewer
   and example work. A wrapper-defined item that a caller names by hand stays, even when upstream
   forced the change (`MjvCamera::move_` losing its `scene` parameter). The FFI-upgrade entry
-  states the bump itself, and `migration.rst` carries every upstream breakage with Before/After
-  code.
+  states the bump itself and points at MuJoCo's changelog. `migration.rst` follows the same
+  split: it carries our decisions with Before/After code, and gives no section for an accessor
+  that only mirrors a renamed, a removed or a resized upstream field, or for a shifted enum
+  discriminant.
 - **No mechanics in an entry.** State the change and what the reader must do. Do not explain how
   the C layer reaches a fault (which array a function indexes, which field it leaves unwritten,
   which cast made a test pass), do not list the fields of a struct or the variants of an enum, do
