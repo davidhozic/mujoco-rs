@@ -230,6 +230,24 @@ UB:
   walk-throughs; no entries for private items or same-cycle fixes; new methods as fully-qualified
   `:docs-rs:` links nested under the owning type's `replace::` substitution; mark new items
   `:sup:\`new\``.
+- **Only our decisions get a changelog entry.** A change that follows mechanically from a MuJoCo
+  version bump gets none: an accessor added, removed or renamed because upstream changed the
+  field, a shifted enum discriminant, an alias for a new upstream enum or struct, a new
+  getter/setter pair, an accessor length that follows a new upstream layout. An entry records what
+  we decided: a wrapper we wrote over a C function (with its config builder), a safety or type
+  choice (`unsafe fn`, an enum instead of `i32`), an API shape, a deprecation, a bug fix, viewer
+  and example work. A wrapper-defined item that a caller names by hand stays, even when upstream
+  forced the change (`MjvCamera::move_` losing its `scene` parameter). The FFI-upgrade entry
+  states the bump itself, and `migration.rst` carries every upstream breakage with Before/After
+  code.
+- **No mechanics in an entry.** State the change and what the reader must do. Do not explain how
+  the C layer reaches a fault (which array a function indexes, which field it leaves unwritten,
+  which cast made a test pass), do not list the fields of a struct or the variants of an enum, do
+  not give per-type examples of a returned value, do not restate what the item already had, and do
+  not argue that the wrapper is sound. A reason survives only when the reader acts on it (an
+  unreachable error arm, a value that now differs, a range that changed without a compile error).
+- **When trimming an existing doc, delete; do not reword.** The surviving sentences stay
+  byte-identical, apart from the grammar fix that the deletion forces.
 - **One entry per field, not one per surface.** A field that a view or an `Info` also exposes gets
   a single entry, written on the field or its array accessor, plus a short clause noting that the
   change also affects the views. Never describe the view change a second time in parallel, and
