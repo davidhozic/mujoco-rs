@@ -66,6 +66,9 @@ static LOGGING_HOOK_INSTALLED: Once = Once::new();
 /// A message with level `mjLOG_ERROR` ends the process with exit code 1 after the handler returns,
 /// because MuJoCo must not continue after an error. A panic inside the handler aborts the process,
 /// because the handler runs across an FFI boundary.
+/// 
+/// The handler must not call [`log_error`](crate::wrappers::mj_logging::log_error),
+/// as it would cause infinite recursion. 
 /// </div>
 pub fn set_log_handler(handler: LoggingHandler) {
     // Release, and Acquire in the hook: no thread observes the hook without the handler behind it.

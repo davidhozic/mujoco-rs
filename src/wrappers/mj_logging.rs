@@ -24,7 +24,7 @@ impl MjLogConfig {
     getter_setter! {with, get, set, [
         logto_console: bool;    "print to console (default: true).";
         logto_file: bool;       "print to log file (default: true).";
-        topics: i32;            "enabled info topic bitmask (default: 0).";
+        topics: i32;            "enabled info topic bitmask (default: 0); topic `t` uses bit `1 << (t - 1)`.";
     ]}
 
     c_str_as_str_method! {with, get, set {
