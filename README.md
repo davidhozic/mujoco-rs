@@ -48,6 +48,7 @@ The main features on top of MuJoCo include:
 - Methods as function wrappers.
 - Easy manipulation of simulation data via attribute views.
 - High-level model editing.
+- Integration of MuJoCo's logging with [`log`](https://docs.rs/log/0.4.34/log/).
 - Visualization:
 
   - Renderer: offscreen rendering to array or file.

@@ -223,13 +223,46 @@ UB:
 - Link what you name (C-LINK). Pin concrete versions, never `latest` aliases or deprecated targets
   (use `display text <path>` to show an old name); the `:docs-rs:` and `:gh-example:` roles already
   pin the version.
+- **Link every item at its first mention.** The first time a page or a changelog entry names a
+  struct, enum, trait, type alias, function, method, field or variant, write it as a `:docs-rs:`
+  link, or as a `|substitution|` that holds one. This covers a `mujoco_c` function and type as
+  well. A crate we depend on, and a type of that crate, take an upstream link with a pinned
+  version at their own first mention (`egui`, `log`, `env_logger`). Later mentions stay plain
+  ``literals``. Three cases take no link: a `std` item, an item the release removes (its page is
+  gone, so link the owning type instead), and a MuJoCo data field, XML attribute or C++ internal
+  class that the prose only names (``qpos``, ``ctrlrange``, ``flexcomp``, ``mjCWrap``).
+- **Keep the sentence, add the link.** When the item sits inside a compound literal
+  (``Err(MjDataError::BufferTooSmall)``, a signature), use the role's `display text <path>` form,
+  or put the link in a short parenthesis after the literal. Do not rewrite the sentence around the
+  link.
 - A doc does not mention less-visible items; make the item visible or drop the mention.
   (`crate::mujoco_c` is public.)
-- Changelog conventions: rubric order Breaking changes, Deprecations, Error handling, New features
-  and improvements, Bug fixes, Other changes; one concise WHY sentence per entry, no root-cause
+- Changelog conventions: rubric order Breaking changes, New dependencies, Deprecations, Error
+  handling, New features and improvements, Bug fixes, Other changes; one concise WHY sentence per
+  entry, no root-cause
   walk-throughs; no entries for private items or same-cycle fixes; new methods as fully-qualified
   `:docs-rs:` links nested under the owning type's `replace::` substitution; mark new items
   `:sup:\`new\``.
+- **Only our decisions get a changelog entry.** A change that follows mechanically from a MuJoCo
+  version bump gets none: an accessor added, removed or renamed because upstream changed the
+  field, a shifted enum discriminant, an alias for a new upstream enum or struct, a new
+  getter/setter pair, an accessor length that follows a new upstream layout. An entry records what
+  we decided: a wrapper we wrote over a C function (with its config builder), a safety or type
+  choice (`unsafe fn`, an enum instead of `i32`), an API shape, a deprecation, a bug fix, viewer
+  and example work. A wrapper-defined item that a caller names by hand stays, even when upstream
+  forced the change (`MjvCamera::move_` losing its `scene` parameter). The FFI-upgrade entry
+  states the bump itself and points at MuJoCo's changelog. `migration.rst` follows the same
+  split: it carries our decisions with Before/After code, and gives no section for an accessor
+  that only mirrors a renamed, a removed or a resized upstream field, or for a shifted enum
+  discriminant.
+- **No mechanics in an entry.** State the change and what the reader must do. Do not explain how
+  the C layer reaches a fault (which array a function indexes, which field it leaves unwritten,
+  which cast made a test pass), do not list the fields of a struct or the variants of an enum, do
+  not give per-type examples of a returned value, do not restate what the item already had, and do
+  not argue that the wrapper is sound. A reason survives only when the reader acts on it (an
+  unreachable error arm, a value that now differs, a range that changed without a compile error).
+- **When trimming an existing doc, delete; do not reword.** The surviving sentences stay
+  byte-identical, apart from the grammar fix that the deletion forces.
 - **One entry per field, not one per surface.** A field that a view or an `Info` also exposes gets
   a single entry, written on the field or its array accessor, plus a short clause noting that the
   change also affects the views. Never describe the view change a second time in parallel, and

@@ -20,7 +20,9 @@ mod build_dependencies {
             // pointer-containing types is unsound -- clones share aliased raw
             // pointers and can cause data races across thread boundaries.
             // mjSpec_ has the same issue (contains *mut mjsElement etc.).
-            if info.name.starts_with("mjs") || info.name == "mjSpec_" {
+            // mjLogMessage_: MuJoCo builds `body` on the stack of the caller, so a clone that a
+            // log handler keeps alive would outlive the string and read freed memory.
+            if info.name.starts_with("mjs") || ["mjSpec_", "mjLogMessage_"].contains(&info.name) {
                 return vec![];
             }
 

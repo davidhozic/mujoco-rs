@@ -10,6 +10,7 @@ use crate::builder_setters;
 use crate::prelude::*;
 
 use bitflags::bitflags;
+use log::{debug, warn};
 
 use std::io::{self, BufWriter, Write};
 use std::fmt::Display;
@@ -68,7 +69,11 @@ impl GlState {
 
         #[cfg(feature = "renderer-winit-fallback")]
         match GlStateWinit::new(width, height) {
-            Ok(winit_state) => return Ok(Self::Winit(winit_state)),
+            Ok(winit_state) => {
+                #[cfg(target_os = "linux")]
+                warn!("offscreen rendering is not available ({egl_err}), using an invisible window");
+                return Ok(Self::Winit(winit_state));
+            },
             #[cfg(not(target_os = "linux"))]
             Err(e) => {
                 return Err(e);
@@ -243,6 +248,7 @@ which can be configured at the top of the model's XML like so:
             .with_rgb_rendering(self.rgb)
             .with_depth_rendering(self.depth);
 
+        debug!("created an offscreen renderer of {width}x{height}");
         Ok(renderer)
     }
 }

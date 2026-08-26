@@ -54,6 +54,10 @@ name = "model_parameters"
 path = "examples/simulation/model_parameters.rs"
 
 [[example]]
+name = "logging"
+path = "examples/simulation/logging.rs"
+
+[[example]]
 name = "actuator_inputs"
 path = "examples/visualization/viewer/actuator_inputs.rs"
 required-features = ["viewer-ui"]
@@ -198,6 +202,7 @@ egui_glow = {version = "0.36.1", features = ["x11", "winit", "wayland", "egui-wi
 egui = {version = "0.36.1", optional = true}
 
 mujoco-rs-derive = { version = "0.1.0", path = "mujoco-rs-derive", optional = true }
+log = "0.4.34"
 
 [build-dependencies]
 bindgen = {version = "0.72.1", optional = true}
@@ -218,6 +223,7 @@ zip = {version = "8.6.0", default-features = false, features = ["deflate"], opti
 pkg-config = "0.3"
 
 [dev-dependencies]
+env_logger = { version = "0.11.11", default-features = false }
 rand = "0.10.2"
 
 [lints]

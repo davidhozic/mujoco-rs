@@ -21,6 +21,7 @@ use std::time::Duration;
 
 use mujoco_rs::prelude::*;
 use mujoco_rs::viewer::MjViewer;
+use env_logger::Env;
 
 // ---------------------------------------------------------------------------
 // Model XML
@@ -77,6 +78,10 @@ const EXAMPLE_MODEL: &str = r#"
 const DURATION_SECS: f64 = 20.0;
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    install_logging_hook();
+
     // Load the model and create simulation data.
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
     let mut data = MjData::new(&model);
@@ -89,7 +94,7 @@ fn main() {
     let mut viewer = MjViewer::launch_passive(&model, 0)
         .expect("could not launch the viewer");
 
-    println!(
+    log::info!(
         "Simulating tippe-top with the {} integrator.",
         if model.opt().integrator == MjtIntegrator::mjINT_RK4 as i32 {
             "RK4"
@@ -97,8 +102,8 @@ fn main() {
             "Euler"
         }
     );
-    println!("Press [ / ] to cycle cameras (try the 'closeup' camera).");
-    println!("Running for {DURATION_SECS} seconds of simulation time ...");
+    log::info!("Press [ / ] to cycle cameras (try the 'closeup' camera).");
+    log::info!("Running for {DURATION_SECS} seconds of simulation time ...");
 
     while viewer.running() && data.time() < DURATION_SECS {
         data.step();
@@ -109,5 +114,5 @@ fn main() {
         std::thread::sleep(Duration::from_secs_f64(model.opt().timestep));
     }
 
-    println!("Simulation finished at t = {:.3} s.", data.time());
+    log::info!("Simulation finished at t = {:.3} s.", data.time());
 }

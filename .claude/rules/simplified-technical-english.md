@@ -10,6 +10,9 @@ Rust comments and `///` docs are exempt; they follow `coding-conventions.md`.
   at most 6 sentences.
 - Active voice ("the solver updates each body"). Simple present or simple past only.
 - One word per meaning, one meaning per word: a "checkpoint" is never a "snapshot" or a "save".
+- Name a thing by what it is, never by a design pattern or a metaphor: "the `log` crate", not
+  "the `log` facade". Keep a term for one referent: "backend" is the sink that receives the
+  records.
 - Simple verbs, not verbs turned into nouns ("the step advances the simulation").
 - Keep articles and relative pronouns ("the state that the buffer holds").
 - At most three nouns in a cluster ("the limit value of the contact solver iterations").

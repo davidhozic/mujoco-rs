@@ -17,6 +17,7 @@ use std::fs;
 
 use mujoco_rs::renderer::MjRenderer;
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 
 /// Width and height of the 2-D texture in pixels.
 const TEX_SIZE: usize = 64;
@@ -32,6 +33,10 @@ const FRAME_SKIP: usize = 100;
 const OUTPUT_DIR: &str = "./output_renderer_asset_reupload/";
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    install_logging_hook();
+
     fs::create_dir_all(OUTPUT_DIR).unwrap();
 
     let model = Box::new(create_model());
@@ -136,7 +141,7 @@ fn main() {
         frames_processed += 1;
     }
 
-    println!("Saved {NUM_FRAMES} frames to {OUTPUT_DIR}");
+    log::info!("Saved {NUM_FRAMES} frames to {OUTPUT_DIR}");
 }
 
 /// Builds an [`MjModel`] containing a heightfield, a textured ball, and a wave mesh.

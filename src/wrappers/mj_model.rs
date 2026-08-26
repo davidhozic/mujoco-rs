@@ -12,6 +12,8 @@ use crate::mujoco_c::*;
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
 use super::mj_primitive::*;
 
+use log::debug;
+
 use std::ffi::{c_char, CStr, CString, c_int, c_void};
 use std::ptr::{self, NonNull};
 use std::path::Path;
@@ -253,6 +255,7 @@ impl MjModel {
         ) };
 
         Self::check_raw_model(raw_ptr, &error_buffer)
+            .inspect(|_| debug!("loaded the model from \"{path_str}\""))
     }
 
     /// Loads the model from an XML string.
@@ -319,7 +322,10 @@ impl MjModel {
             error.as_mut_ptr(), error.len() as i32
         ) };
         match result {
-            1 => Ok(()),
+            1 => {
+                debug!("saved the last loaded XML to \"{path_str}\"");
+                Ok(())
+            },
             _ => {
                 // SAFETY: error is zero-initialised and MuJoCo NUL-terminates the message it
                 // writes into it; the resulting CStr borrows the stack buffer and is consumed
@@ -606,6 +612,7 @@ impl MjModel {
             self.ffi(), c_filename.as_ptr(),
             ptr::null_mut(), 0
         ) };
+        debug!("saved the model to \"{path_str}\"");
         Ok(())
     }
 

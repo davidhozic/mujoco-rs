@@ -6,9 +6,14 @@ use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    install_logging_hook();
+
     // Create the model programmatically.
     let model = create_model();
 
@@ -62,13 +67,13 @@ fn create_model() -> MjModel {
 
     // Iterate all the sub-bodies of the world body recursively.
     for body in world.body_iter_mut(true) {  // body_iter(recurse: true)
-        println!("Sub-body of world: {}", body.name());
+        log::info!("Sub-body of world: {}", body.name());
     }
 
     // Iterate all bodies recursively through MjSpec.
     // Also prints out the world body.
     for body in spec.body_iter_mut() {
-        println!("Body: {}", body.name());
+        log::info!("Body: {}", body.name());
     }
 
     // Compile the model (required for saving)

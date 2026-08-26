@@ -25,6 +25,7 @@ use std::time::Duration;
 
 use mujoco_rs::prelude::*;
 use mujoco_rs::viewer::MjViewer;
+use env_logger::Env;
 
 // ---------------------------------------------------------------------------
 // Model XML
@@ -94,6 +95,10 @@ const ENERGY_PRINT_INTERVAL: usize = 100;
 
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    install_logging_hook();
+
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
 
     // ------------------------------------------------------------------
@@ -101,7 +106,7 @@ fn main() {
     // Run two simulations that start with nearly identical initial
     // conditions and find the step at which their root angles diverge.
     // ------------------------------------------------------------------
-    println!("=== Phase 1: Butterfly Effect ===");
+    log::info!("=== Phase 1: Butterfly Effect ===");
 
     let mut data_a = MjData::new(&model);
     let mut data_b = MjData::new(&model);
@@ -114,11 +119,11 @@ fn main() {
     root_info.view_mut(&mut data_a).qvel[0] = ROOT_VEL;
     root_info.view_mut(&mut data_b).qvel[0] = ROOT_VEL + PERTURBATION;
 
-    println!(
+    log::info!(
         "Trajectory A: root_vel = {:.6} rad/s",
         root_info.view(&data_a).qvel[0]
     );
-    println!(
+    log::info!(
         "Trajectory B: root_vel = {:.6} rad/s  (delta = {:+e})",
         root_info.view(&data_b).qvel[0],
         PERTURBATION
@@ -135,7 +140,7 @@ fn main() {
 
         if (angle_a - angle_b).abs() > DIVERGE_THRESHOLD && diverge_step.is_none() {
             diverge_step = Some(step);
-            println!(
+            log::info!(
                 "Trajectories diverged at step {} (t = {:.3} s), |dangle| = {:.3} rad",
                 step,
                 data_a.time(),
@@ -146,7 +151,7 @@ fn main() {
     }
 
     if diverge_step.is_none() {
-        println!(
+        log::info!(
             "Trajectories did NOT diverge within {CHAOS_STEPS} steps \
              (final |dangle| = {:.3e} rad).",
             (root_info.view(&data_a).qpos[0] - root_info.view(&data_b).qpos[0]).abs()
@@ -158,9 +163,9 @@ fn main() {
     // Run a fresh simulation, printing total mechanical energy every
     // ENERGY_PRINT_INTERVAL steps to confirm near-conservation.
     // ------------------------------------------------------------------
-    println!("\n=== Phase 2: Energy Tracking + Viewer ===");
-    println!("Opening interactive viewer. Total energy is printed every {ENERGY_PRINT_INTERVAL} steps.");
-    println!("Press Ctrl+Q or close the window to stop.");
+    log::info!("=== Phase 2: Energy Tracking + Viewer ===");
+    log::info!("Opening the viewer. Total energy is logged every {ENERGY_PRINT_INTERVAL} steps.");
+    log::info!("Press Ctrl+Q or close the window to stop.");
 
     let mut data = MjData::new(&model);
     root_info.view_mut(&mut data).qvel[0] = ROOT_VEL;
@@ -179,7 +184,7 @@ fn main() {
             data.energy_vel();  // compute kinetic energy   -> data.energy()[1]
             let e_pot = data.energy()[0];
             let e_kin = data.energy()[1];
-            println!(
+            log::info!(
                 "t = {:6.3} s | E_pot = {:+.4e} | E_kin = {:+.4e} | E_total = {:+.4e}",
                 data.time(),
                 e_pot,
@@ -197,5 +202,5 @@ fn main() {
         std::thread::sleep(Duration::from_secs_f64(model.opt().timestep));
     }
 
-    println!("Simulation finished at t = {:.3} s.", data.time());
+    log::info!("Simulation finished at t = {:.3} s.", data.time());
 }

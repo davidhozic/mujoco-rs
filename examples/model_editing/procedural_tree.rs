@@ -12,6 +12,7 @@ use mujoco_rs::prelude::*;
 use mujoco_rs::wrappers::mj_editing::MjsBody;
 use mujoco_rs::mujoco_c::mjtDisableBit;
 use mujoco_rs::viewer::MjViewer;
+use env_logger::Env;
 
 const MAX_DEPTH:    usize = 4;
 const SCALE:        f64   = 0.6;
@@ -129,9 +130,13 @@ fn build_tree() -> MjModel {
 }
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    install_logging_hook();
+
     let model = build_tree();
     let mut data = MjData::new(&model);
-    println!("tree: {} bodies, {} DOFs", model.ffi().nbody, model.ffi().nv);
+    log::info!("tree: {} bodies, {} DOFs", model.ffi().nbody, model.ffi().nv);
 
     let mut viewer = MjViewer::launch_passive(&model, 0).expect("failed to launch viewer");
     let dt = model.opt().timestep;
