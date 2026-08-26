@@ -197,7 +197,7 @@ only a model with the same signature. The signature covers the element tree, the
 joint and the type of each sensor. Most attribute changes therefore keep it, while an added or
 deleted element, a joint type change that alters ``nq`` (for example ``hinge`` to ``ball``) or a
 changed sensor type changes it; ``swap_model`` then panics and ``try_swap_model`` returns
-``MjDataError::SignatureMismatch``.
+:docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>SignatureMismatch`.
 
 
 Deleting elements

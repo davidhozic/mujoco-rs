@@ -44,7 +44,7 @@ use crate::mujoco_c::mju_setLogHandler;
 
 /// The `topics` bitmask of [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) that enables
 /// every filterable topic.
-pub const ALL_LOG_TOPICS: i32 = (1 << MjtLogTopic::mjNTOPIC as i32) - 1;
+const ALL_LOG_TOPICS: i32 = (1 << MjtLogTopic::mjNTOPIC as i32) - 1;
 
 /// A logging handler function type.
 type LoggingHandler = fn(&MjLogMessage);
