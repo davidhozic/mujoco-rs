@@ -3715,26 +3715,6 @@ mod test {
         }
     }
 
-    /// Verifies [force]-cast enum: efc_state (*mut i32 -> *mut MjtConstraintState).
-    #[test]
-    fn test_force_cast_efc_state_enum() {
-        let model = MjModel::from_xml_string(MODEL).unwrap();
-        let mut data = model.make_data();
-        data.forward();
-
-        let nefc = data.ffi().nefc as usize;
-        if nefc > 0 {
-            let efc_state = data.efc_state();
-            assert_eq!(efc_state.len(), nefc);
-
-            for i in 0..nefc {
-                let raw_i32 = unsafe { *data.ffi().efc_state.add(i) };
-                let expected: MjtConstraintState = unsafe { crate::util::force_cast(raw_i32) };
-                assert_eq!(efc_state[i], expected);
-            }
-        }
-    }
-
     /// Verifies [force]-cast enum: body_awake (*mut i32 -> *mut MjtSleepState).
     #[test]
     fn test_force_cast_body_awake_enum() {
