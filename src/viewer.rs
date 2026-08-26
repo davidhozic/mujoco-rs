@@ -16,6 +16,7 @@ use winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDe
 use winit::platform::pump_events::EventLoopExtPumpEvents;
 use glutin::prelude::PossiblyCurrentGlContext;
 use winit::keyboard::{KeyCode, PhysicalKey};
+use log::{debug, error, info, warn};
 use winit::event_loop::EventLoop;
 use winit::dpi::PhysicalPosition;
 use glutin::surface::GlSurface;
@@ -1182,9 +1183,9 @@ impl MjViewer {
                 &path, &encoded, w as u32, h as u32,
                 png::ColorType::Grayscale, png::BitDepth::Sixteen, png::Compression::High
             ) {
-                eprintln!("depth screenshot failed: {e}");
+                error!("depth screenshot failed: {e}");
             } else {
-                eprintln!("depth screenshot saved to {path} (min={min:.4}, max={max:.4})");
+                info!("depth screenshot saved to {path} (min={min:.4}, max={max:.4})");
             }
         } else {
             let mut rgb = vec![0u8; w * h * 3];
@@ -1199,9 +1200,9 @@ impl MjViewer {
                 &path, &rgb, w as u32, h as u32,
                 png::ColorType::Rgb, png::BitDepth::Eight, png::Compression::High
             ) {
-                eprintln!("screenshot failed: {e}");
+                error!("screenshot failed: {e}");
             } else {
-                eprintln!("screenshot saved to {path}");
+                info!("screenshot saved to {path}");
             }
         }
         Ok(())
@@ -1232,6 +1233,7 @@ impl MjViewer {
 
             // Recreate scene when the model changes
             if data_passive.model().signature() != self.scene.signature() {
+                debug!("the model changed, rebuilding the viewer scene and the render context");
                 let new_model = data_passive.model();
                 let ngeom = new_model.ffi().ngeom as usize;
                 let max_user_geom = user_scene.maxgeom() as usize;
@@ -1431,14 +1433,14 @@ impl MjViewer {
             if let Err(e) = gl_surface.set_swap_interval(
                 gl_context, glutin::surface::SwapInterval::Wait(NonZero::<u32>::MIN)
             ) {
-                eprintln!("failed to enable vsync: {e}");
+                warn!("failed to enable vsync: {e}");
                 self.status.set(ViewerStatusBit::VSYNC, false);
             }
         } else {
             if let Err(e) = gl_surface.set_swap_interval(
                 gl_context, glutin::surface::SwapInterval::DontWait
             ) {
-                eprintln!("failed to disable vsync: {e}");
+                warn!("failed to disable vsync: {e}");
                 self.status.set(ViewerStatusBit::VSYNC, true);
             }
         }
@@ -1528,7 +1530,10 @@ impl MjViewer {
                 }
 
                 // Also set the viewer's state to pending exit if the window no longer exists.
-                WindowEvent::CloseRequested => { self.running_flag.store(false, Ordering::Relaxed) }
+                WindowEvent::CloseRequested => {
+                    debug!("the user closed the viewer window");
+                    self.running_flag.store(false, Ordering::Relaxed);
+                }
 
                 // Free the camera from tracking.
                 WindowEvent::KeyboardInput {
@@ -1973,6 +1978,9 @@ impl MjViewerBuilder {
 
         status.set(ViewerStatusBit::VSYNC, self.vsync);
         status.set(ViewerStatusBit::WARN_REALTIME, self.warn_non_realtime);
+
+        let size = adapter.state.as_ref().unwrap().window.inner_size();
+        debug!("opened the viewer window \"{}\" ({}x{})", self.window_name, size.width, size.height);
 
         Ok(MjViewer {
             scene,

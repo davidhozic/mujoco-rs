@@ -45,6 +45,12 @@
 //! the [`mujoco_c`] module. Note that to access the lower-level ffi structs inside wrappers,
 //! `ffi()` or `ffi_mut()` must be called (e.g., [`MjData::ffi`](wrappers::MjData::ffi) and [`MjModel::ffi`](wrappers::MjModel::ffi)).
 //!
+//! ## Logging
+//! MuJoCo-rs sends its own events to the [`log`] crate, with the
+//! emitting module path as the target. [`logging::install_logging_hook`] routes MuJoCo's own
+//! messages to the same crate, and [`logging::set_log_handler`] routes them to a handler of the
+//! program instead.
+//!
 //! # Cargo features
 //! This crate has the following public features:
 //! - `viewer`: enables the Rust-native MuJoCo viewer.

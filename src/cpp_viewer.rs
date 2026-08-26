@@ -7,6 +7,8 @@ use crate::mujoco_c::*;
 use std::ffi::CString;
 use std::ops::Deref;
 
+use log::{debug, warn};
+
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
@@ -116,11 +118,13 @@ impl MjViewerCpp {
             let running = unsafe { mujoco_cSimulate_RenderStep(sim) };
             if running == 0 {
                 // Window closed during model load; stop rendering.
+                warn!("the C++ viewer window closed while the model was loading");
                 break;
             }
         }
         load_thread.join().unwrap();
 
+        debug!("started the C++ viewer");
         Self {sim, running: true, user_scn, _cam: cam, _opt: opt, _pert: pert}
     }
 

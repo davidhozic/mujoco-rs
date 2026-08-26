@@ -15,6 +15,7 @@ use egui::{FontId, RichText, LayerId, Order, Id};
 use egui_winit::winit::window::Window;
 use egui_winit::egui;
 use egui_winit;
+use log::info;
 
 use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint, MjtDisableBit, MjtEnableBit};
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjtCamera, MjvScene};
@@ -941,7 +942,7 @@ impl ViewerUI {
                                 (gl_cams[0].pos[2] + gl_cams[1].pos[2]) / 2.0,
                             ];
 
-                            println!(
+                            info!(
                                 "<camera pos=\"{:.3} {:.3} {:.3}\" \
                                 xyaxes=\"{:.3} {:.3} {:.3} {:.3} {:.3} {:.3}\"/>",
                                 pos[0], pos[1], pos[2],
