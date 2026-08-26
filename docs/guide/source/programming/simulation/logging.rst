@@ -119,3 +119,13 @@ All ``log_`` function calls (and internal MuJoCo calls) will now be redirected t
         set_log_handler(handler);
         log_warning("the handler receives this, and the `log` backend receives nothing");
     }
+
+.. attention::
+
+    Setting a custom handler using only ``set_log_handler`` only redirects **MuJoCo** messages
+    to the user handler.
+    
+    Any message emitted using ``log::`` invocations bypass the handler. This also applies
+    to the internal invocations of MuJoCo-rs as well. For a custom callback of that, `a custom
+    logger <https://docs.rs/log/0.4.34/log/#implementing-a-logger>`__ can be defined. Such logger
+    can also process the messages from MuJoCo itself, provided ``set_log_handler`` **is not used**.

@@ -184,6 +184,8 @@
     :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` :sup:`new` installs a hook for
     ``log`` routing.
     :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler` :sup:`new` registers a user handler.
+  - MuJoCo-rs now reports its own events to the ``log`` crate as well, on the ``Info``, ``Warn``
+    and ``Error`` levels, with the emitting module path as the target.
 
 *New compilation-warning accessors*
 
