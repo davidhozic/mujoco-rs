@@ -1792,6 +1792,16 @@ impl MjViewer {
         let modifier_state = self.modifiers.state();
         let mut lock = self.shared_state.lock_unpoison();
         let ViewerSharedState {data_passive, pert, ..} = lock.deref_mut();
+
+        // When `ViewerSharedState::sync_data/sync_data_full` is called, the passive model is switched when its signature
+        // mismatches the input `MjData`. Such switch can happen after call to `MjViewer::update_scene` and before
+        // call to `process_left_click`. Not having this check, could cause a panic inside `MjvPerturb::start`
+        // or `MjvScene::find_selection`. This isn't the most idiomatic fix, however, it does prevent the Mutex from
+        // being locked during fairly slow UI and event processing.
+        if data_passive.model().signature() != self.scene.signature() {
+            return;
+        }
+
         match state {
             ElementState::Pressed => {
                 // Clicking and holding applies perturbation

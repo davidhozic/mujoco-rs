@@ -318,6 +318,9 @@
   models with different signatures.
 - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` no longer rebuilds the window
   and the OpenGL context when it is called after the window closed.
+- The viewer can no longer panic on a double click that arrives in the same frame as a model swap
+  through :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`. The click is dropped
+  while the scene still follows the previous model.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels` no longer
   wraps when the ``rgb`` byte count (the pixel count times 3) overflows ``usize`` on a 32-bit
   target, which let a short ``rgb`` buffer pass the size check; it reports
