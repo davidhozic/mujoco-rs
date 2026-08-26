@@ -61,13 +61,17 @@ static USER_LOG_HANDLER: AtomicPtr<()> = AtomicPtr::new(ptr::null_mut());
 /// non-atomic global of MuJoCo.
 static LOGGING_HOOK_INSTALLED: Once = Once::new();
 
-/// Sets a user-defined log handler that receives every MuJoCo message. Wraps
-/// [`mju_setLogHandler`].
+/// Sets a user-defined log handler that receives every MuJoCo message.
 ///
 /// The function installs the same MuJoCo hook as [`install_logging_hook`], but `handler` replaces
-/// the built-in [`log`] routing of that hook. A later [`install_logging_hook`] call clears
-/// `handler`.
+/// the built-in [`log`] routing of that hook.
+/// 
+/// 
+/// # Clearing a handler
+/// To clear the user handler and restore routing to [`log`],
+/// call [`install_logging_hook`].
 ///
+/// # Note
 /// <div class="warning">
 /// A message with level `mjLOG_ERROR` ends the process with exit code 1 after the handler returns,
 /// because MuJoCo must not continue after an error. A panic inside the handler aborts the process,
