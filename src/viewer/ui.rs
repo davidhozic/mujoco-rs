@@ -469,6 +469,9 @@ impl ViewerUI {
         // This way MuJoCo won't draw over the UI.
         let mut left = 0.0;
 
+        // Check for a dirty exit if a model switch happened during mutex not being locked.
+        let frame_signature = scene.signature();
+
         // Process the UI
         let raw_input = self.state.take_egui_input(window);
         let mut full_output = self.egui_ctx.run_ui(raw_input, |ui| {
@@ -824,7 +827,11 @@ impl ViewerUI {
                                 ui.end_row();
                             });
                         });
-                        *shared_viewer_state.lock_unpoison().data_passive.model_opt_mut() = options;
+                        let mut lock = shared_viewer_state.lock_unpoison();
+                        if lock.data_passive.model().signature() != frame_signature {
+                            return;
+                        }
+                        *lock.data_passive.model_opt_mut() = options;
                     });
 
                     /* Visualization options */
@@ -844,6 +851,9 @@ impl ViewerUI {
                             };
                             let enumerated: MjtCamera = enumerated;
                             let lock = shared_viewer_state.lock_unpoison();
+                            if lock.data_passive.model().signature() != frame_signature {
+                                return;
+                            }
                             let model = lock.data_passive.model();
                             let mut camera_choice = match enumerated {
                                 MjtCamera::mjCAMERA_FIXED => self.camera_names[camera.fixedcamid as usize].to_string(),
@@ -1465,6 +1475,9 @@ impl ViewerUI {
                     // Write modified vis and stat back to model
                     {
                         let mut lock = shared_viewer_state.lock_unpoison();
+                        if lock.data_passive.model().signature() != frame_signature {
+                            return;
+                        }
                         *lock.data_passive.model_vis_mut() = vis;
                         *lock.data_passive.model_stat_mut() = stat;
                     }
@@ -1494,6 +1507,9 @@ impl ViewerUI {
                 .show(ui, |ui|
             {
                 let mut lock = shared_viewer_state.lock_unpoison();
+                if lock.data_passive.model().signature() != frame_signature {
+                    return;
+                }
                 let ctrl_mut = lock.data_passive.ctrl_mut();
                 debug_assert_eq!(
                     self.actuator_info.iter().map(|info| info.inputs.len()).sum::<usize>(),
@@ -1537,6 +1553,9 @@ impl ViewerUI {
                 .show(ui, |ui|
             {
                 let mut lock = shared_viewer_state.lock_unpoison();
+                if lock.data_passive.model().signature() != frame_signature {
+                    return;
+                }
                 let qpos = lock.data_passive.qpos_mut();
                 for JointDisplayInfo { name, qpos_start, components, quat } in &self.joint_info {
                     let joint_qpos = &mut qpos[*qpos_start..*qpos_start + components.len()];
@@ -1609,7 +1628,11 @@ impl ViewerUI {
                 .show(ui, |ui|
             {
                 ui.horizontal_wrapped(|ui| {
-                    let data = &mut shared_viewer_state.lock_unpoison().data_passive;
+                    let mut lock = shared_viewer_state.lock_unpoison();
+                    if lock.data_passive.model().signature() != frame_signature {
+                        return;
+                    }
+                    let data = &mut lock.data_passive;
                     debug_assert_eq!(
                         self.equality_names.len(), data.eq_active_mut().len(),
                         "equality names length don't match the number of equalities found in model. This is a bug!"
@@ -1653,6 +1676,9 @@ impl ViewerUI {
                             .max_height(CAMERA_MODAL_MAX_HEIGHT)
                             .show(ui, |ui| {
                                 let lock = shared_viewer_state.lock_unpoison();
+                                if lock.data_passive.model().signature() != frame_signature {
+                                    return;
+                                }
                                 let model = lock.data_passive.model();
                                 let nbody = model.nbody();
 

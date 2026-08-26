@@ -281,27 +281,32 @@
 
 .. rubric:: Bug fixes
 
+*Viewer*
+
 - The viewer no longer clamps ``ctrl`` to the range of its slider. While the "Actuator" window
   was open, it wrote the clamped control back on every frame, so a program that set a control
   outside the slider range lost that value.
+- :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` no longer rebuilds the window
+  and the OpenGL context when it is called after the window closed.
+- The viewer can no longer panic on a double click that arrives in the same frame as a model swap
+  through :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`. The click is dropped
+  while the scene still follows the previous model.
+- The viewer's side panel and its windows can no longer panic, or write to the wrong actuator,
+  joint or equality, when a model swap through ``sync_data`` arrives in the same frame. Each
+  section now draws and writes only while the viewer still holds the model that the frame's
+  widgets belong to, and the next frame rebuilds it against the new model.
+
+*Visualization*
+
 - Closed an out-of-bounds read reachable from safe code in
   :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>frame` for a tracking
   camera: ``frame`` now validates the id against the model and panics on an out-of-range one.
-- Closed a division by zero and a non-terminating loop reachable from safe code in
-  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_halton`: MuJoCo divides by ``base`` without
-  checking it, so ``base = 0`` divided by zero and ``base = 1`` never returned. The wrapper now
-  panics unless ``base`` is 2 or more.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>id` now returns ``None``
-  for a default class.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element` now reports
-  :docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>UnsupportedOperation` for a default
-  class of this spec, instead of
-  :docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>DeleteFailed`, and no
-  longer panics on an element whose stored name is not valid UTF-8. It also reports
-  ``UnsupportedOperation`` for a frame and for a tendon wrap.
 - Closed an out-of-bounds read reachable from safe code in
   :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvPerturb::<method>start`:
   ``start`` now validates ``flexselect`` against the model and panics on an out-of-range id.
+- Closed an out-of-bounds read reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>render`:
+  ``render`` now panics when the context holds fewer skins than the scene.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>create_geom` now
   writes every field that :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjv_initGeom` leaves unwritten over
   uninitialized memory: ``objtype`` becomes
@@ -316,15 +321,28 @@
   ``usize`` made the range test pass, so the call wrote outside the plot's data range.
 - :docs-rs:`~mujoco_rs::vis_common::<fn>sync_geoms` now panics when the two scenes were created for
   models with different signatures.
-- :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` no longer rebuilds the window
-  and the OpenGL context when it is called after the window closed.
-- The viewer can no longer panic on a double click that arrives in the same frame as a model swap
-  through :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`. The click is dropped
-  while the scene still follows the previous model.
+
+*Rendering*
+
 - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels` no longer
   wraps when the ``rgb`` byte count (the pixel count times 3) overflows ``usize`` on a 32-bit
   target, which let a short ``rgb`` buffer pass the size check; it reports
   :docs-rs:`~mujoco_rs::error::<enum>MjrContextError::<variant>InvalidViewport` instead.
+- :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new` no longer truncates its
+  ``width``, ``height`` and ``max_user_geom`` arguments, which turned a value above ``u32::MAX``
+  into a small valid one, so the renderer used a size or a geom capacity the caller never asked
+  for. The three arguments now saturate at ``u32::MAX``.
+
+*Model editing*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>id` now returns ``None``
+  for a default class.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element` now reports
+  :docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>UnsupportedOperation` for a default
+  class of this spec, instead of
+  :docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>DeleteFailed`, and no
+  longer panics on an element whose stored name is not valid UTF-8. It also reports
+  ``UnsupportedOperation`` for a frame and for a tendon wrap.
 - Closed a crash reachable from safe code when naming a tendon wrap. ``mjCWrap`` leaves its element
   type at ``mjOBJ_UNKNOWN``, which makes MuJoCo's duplicate-name check index a null list, so
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name` on a |mjs_wrap|
@@ -333,13 +351,13 @@
   carries no name of its own:
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>name` reports the wrapped
   object's name.
-- Closed an out-of-bounds read reachable from safe code in
-  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>render`:
-  ``render`` now panics when the context holds fewer skins than the scene.
-- :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new` no longer truncates its
-  ``width``, ``height`` and ``max_user_geom`` arguments, which turned a value above ``u32::MAX``
-  into a small valid one, so the renderer used a size or a geom capacity the caller never asked
-  for. The three arguments now saturate at ``u32::MAX``.
+
+*Utility functions*
+
+- Closed a division by zero and a non-terminating loop reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_halton`: MuJoCo divides by ``base`` without
+  checking it, so ``base = 0`` divided by zero and ``base = 1`` never returned. The wrapper now
+  panics unless ``base`` is 2 or more.
 
 .. rubric:: Other changes
 
