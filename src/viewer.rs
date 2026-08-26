@@ -860,6 +860,17 @@ impl MjViewer {
     /// If you need the shared-state of the viewer, keep the lock short, because a simulation thread
     /// that calls [`MjViewer::sync_data`] waits for the same [`Mutex`].
     ///
+    /// # Model swaps
+    /// Callbacks runs inside [`MjViewer::render`]. A sync on another
+    /// thread through [`ViewerSharedState::sync_data`] with `data`'s [`MjData::model`] being a different
+    /// model than the model used to create the viewer, or through [`ViewerSharedState::sync_model`],
+    /// can cause the contents of [`ViewerSharedState`]'s (the `state` parameter) to change when it isn't locked.
+    ///
+    /// If you rely on the shared state to stay the same during the callback, either:
+    /// - don't swap the model without reopening the viewer or
+    /// - lock the shared-state throughout entire callback (but be careful to not create deadlocks) or
+    /// - compare [`MjModel::signature`] against the signature of the expected model.
+    ///
     /// # Example
     /// ```no_run
     /// # use mujoco_rs::prelude::*;
