@@ -179,7 +179,7 @@ fn main() {
         data.step();
 
         // Compute and print energy at regular intervals.
-        if step_count % ENERGY_PRINT_INTERVAL == 0 {
+        if step_count.is_multiple_of(ENERGY_PRINT_INTERVAL) {
             data.energy_pos();  // compute potential energy -> data.energy()[0]
             data.energy_vel();  // compute kinetic energy   -> data.energy()[1]
             let e_pot = data.energy()[0];

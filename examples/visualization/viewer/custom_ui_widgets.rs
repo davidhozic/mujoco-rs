@@ -71,11 +71,8 @@ impl CustomSimulation {
                 // Process input events.
                 ctx.input(|reader| {
                     for event in reader.events.iter() {
-                        match event {
-                            egui::Event::Key { key, pressed: true, ..} => {
-                                log::info!("A new key has been pressed: {}", key.name());
-                            }
-                            _ => {}
+                        if let egui::Event::Key { key, pressed: true, ..} = event {
+                            log::info!("A new key has been pressed: {}", key.name());
                         }
                     }
                 });

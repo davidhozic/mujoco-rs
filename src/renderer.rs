@@ -10,7 +10,9 @@ use crate::builder_setters;
 use crate::prelude::*;
 
 use bitflags::bitflags;
-use log::{debug, warn};
+#[cfg(all(feature = "renderer-winit-fallback", target_os = "linux"))]
+use log::warn;
+use log::debug;
 
 use std::io::{self, BufWriter, Write};
 use std::fmt::Display;

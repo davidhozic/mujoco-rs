@@ -24,6 +24,7 @@ const GREEN: [f32; 4] = [0.0, 0.7,  0.2, 1.0];
 
 // Five branch directions on a ~45 degree cone (phi = pi/4), evenly spaced in theta.
 // sin(pi/4) approx 0.7071;  theta = k * 72 degree.
+#[expect(clippy::approx_constant, reason = "0.7071 is a tabulated direction component, not FRAC_1_SQRT_2")]
 const DIRS: [[f64; 3]; NUM_BRANCHES] = [
     [ 0.7071, 0.0000, 0.7071],
     [ 0.2190, 0.6756, 0.7071],
