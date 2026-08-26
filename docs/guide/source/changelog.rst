@@ -33,6 +33,7 @@ update of MuJoCo alone can increase the major version.
 
 .. Template titles
   .. rubric:: Breaking changes
+  .. rubric:: New dependencies
   .. rubric:: Deprecations
   .. rubric:: Error handling
   .. rubric:: New features and improvements

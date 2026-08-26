@@ -94,10 +94,10 @@ that takes a regular Rust reference to the
 log.
 
 The user callback function can be registered via :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler`.
-Note that this is **not** a thin wrapper around
-:docs-rs:`~mujoco_rs::mujoco_c::<fn>mju_setLogHandler`, but merely a setter to a global static
-inside MuJoCo-rs (not MuJoCo). The actual MuJoCo handler set by ``mju_setLogHandler``
-is defined internally inside MuJoCo-rs, and is responsible for both calling the global user-set Rust logging handler
+Note that the callback does **not** go to
+:docs-rs:`~mujoco_rs::mujoco_c::<fn>mju_setLogHandler` directly. MuJoCo-rs stores it in a global
+static inside MuJoCo-rs (not MuJoCo), and gives ``mju_setLogHandler`` its own handler.
+That handler is responsible for both calling the global user-set Rust logging handler
 and routing the message to the ``log`` crate when no user-set Rust logging handler is set.
 
 When setting a custom logging callback inside MuJoCo-rs, there is no need to call

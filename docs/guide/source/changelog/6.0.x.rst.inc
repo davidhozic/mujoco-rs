@@ -96,6 +96,10 @@
   accepts ``framebuffer: MjtFramebuffer``
   (:docs-rs:`~mujoco_rs::wrappers::mj_rendering::<type>MjtFramebuffer`) instead of ``i32``.
 
+.. rubric:: New dependencies
+
+- Added `log <https://docs.rs/log/0.4.34/log/>`__ as a mandatory dependency.
+
 .. rubric:: Deprecations
 
 - Deprecated |mj_model|'s
@@ -176,9 +180,9 @@
 - Standard logging integration
 
   - Added the new top-level :docs-rs:`~mujoco_rs::logging` module, which sends MuJoCo's messages to
-    the `log <https://docs.rs/log/0.4.34/log/>`_ crate, so they reach the same backend as the rest of
-    the application. :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` :sup:`new`
-    installs a hook for ``log`` routing.
+    the ``log`` crate, so they reach the same backend as the rest of the application.
+    :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` :sup:`new` installs a hook for
+    ``log`` routing.
     :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler` :sup:`new` registers a user handler.
 
 *New compilation-warning accessors*

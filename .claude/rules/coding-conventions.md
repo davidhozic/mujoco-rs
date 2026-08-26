@@ -237,8 +237,9 @@ UB:
   link.
 - A doc does not mention less-visible items; make the item visible or drop the mention.
   (`crate::mujoco_c` is public.)
-- Changelog conventions: rubric order Breaking changes, Deprecations, Error handling, New features
-  and improvements, Bug fixes, Other changes; one concise WHY sentence per entry, no root-cause
+- Changelog conventions: rubric order Breaking changes, New dependencies, Deprecations, Error
+  handling, New features and improvements, Bug fixes, Other changes; one concise WHY sentence per
+  entry, no root-cause
   walk-throughs; no entries for private items or same-cycle fixes; new methods as fully-qualified
   `:docs-rs:` links nested under the owning type's `replace::` substitution; mark new items
   `:sup:\`new\``.
