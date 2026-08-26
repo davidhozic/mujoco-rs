@@ -8,5 +8,6 @@ Programming
 
     changes
     simulation/simulation
+    logging
     visualization/visualization
     model_editing
