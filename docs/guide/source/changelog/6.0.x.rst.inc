@@ -156,7 +156,11 @@
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`
   :sup:`new` reports whether another |mj_model| can take the place of this one in an |mj_data| or
   in a cached ``Info``. It compares the signature, every size that fixes an ``mjData`` buffer or a
-  packed ``mjModel`` array, and the per-flex and plugin tables.
+  packed ``mjModel`` array, and the per-flex, per-element and plugin tables that place an element
+  inside one of those arrays.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_asset_compatible_with_model`
+  :sup:`new` is the weaker test the asset-upload methods need: it compares the mesh, texture and
+  heightfield memory alone.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_model`
   :sup:`new` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_scene`
@@ -344,11 +348,14 @@
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_state_from_data` and in
   every ``Info`` view method. All of them compared the model signature alone, which pins the
   element tree but no ``mjData`` buffer size, so a model with a larger ``nuserdata``, ``na`` or
-  ``nout`` passed the test. They now compare the whole model layout through
-  ``MjModel::is_compatible_with_model``.
-- The viewer and the renderer decide the same way: ``MjViewer::sync_data``, ``MjViewer::sync_model``
-  and the asset-upload methods of both now test compatibility instead of the signature, so a model
-  that needs different buffers triggers a reload rather than a copy into the wrong sizes.
+  ``nout`` passed the test. The ``MjData`` methods now test
+  ``MjModel::is_compatible_with_model``, which also compares the per-element address tables; an
+  ``Info`` view method compares the model layout it cached.
+- The viewer and the renderer no longer test the signature either. ``MjViewer::sync_data`` and
+  ``MjViewer::sync_model`` test model compatibility, so a model that needs different buffers
+  triggers a reload rather than a copy into the wrong sizes. The viewer's asset-upload methods
+  test the mesh, texture and heightfield memory alone, which is all a copy that overrides an asset
+  reads, so they accept a model whose ``mjData`` sizes differ.
 
 *Visualization*
 

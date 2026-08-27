@@ -400,8 +400,10 @@ impl ViewerSharedState {
         self.last_stat_sync_time
     }
 
-    fn check_compatible(&self, model: &MjModel) -> Result<(), MjViewerError> {
-        if !self.data_passive.model().is_compatible_with_model(model) {
+    /// Tests the asset memory alone: an update below overrides the asset data, and reaches no
+    /// `mjData` buffer, so a model that only sizes its data differently still fits.
+    fn check_asset_compatible(&self, model: &MjModel) -> Result<(), MjViewerError> {
+        if !self.data_passive.model().is_asset_compatible_with_model(model) {
             return Err(MjViewerError::IncompatibleModel);
         }
         Ok(())
@@ -417,7 +419,7 @@ impl ViewerSharedState {
     /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     /// - [`MjViewerError::IndexOutOfBounds`] if `texture_id >= model.ntex()`.
     pub fn update_texture_from(&mut self, model: &MjModel, texture_id: usize) -> Result<(), MjViewerError> {
-        self.check_compatible(model)?;
+        self.check_asset_compatible(model)?;
         let ntex = model.ntex() as usize;
         if texture_id >= ntex {
             return Err(MjViewerError::IndexOutOfBounds { id: texture_id, len: ntex });
@@ -427,8 +429,8 @@ impl ViewerSharedState {
         let tex_height = model.tex_height()[texture_id] as usize;
         let tex_nchannel = model.tex_nchannel()[texture_id] as usize;
         let tex_len = tex_width * tex_height * tex_nchannel;
-        // SAFETY: Signature and bounds verified above; tex_len is derived from the texture's
-        // own metadata, so the slice cannot exceed the allocation.
+        // SAFETY: the asset memory and the bounds are verified above; tex_len is derived from
+        // the texture's own metadata, so the slice cannot exceed the allocation.
         unsafe { self.data_passive.model_mut() }
             .tex_data_mut()[tex_adr..tex_adr + tex_len]
             .copy_from_slice(&model.tex_data()[tex_adr..tex_adr + tex_len]);
@@ -442,8 +444,8 @@ impl ViewerSharedState {
     /// # Errors
     /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     pub fn update_textures_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
-        self.check_compatible(model)?;
-        // SAFETY: Signature verified above, so tex_data layouts match exactly.
+        self.check_asset_compatible(model)?;
+        // SAFETY: the asset memory is verified above, so the tex_data layouts match exactly.
         unsafe { self.data_passive.model_mut() }
             .tex_data_mut()
             .copy_from_slice(model.tex_data());
@@ -467,7 +469,7 @@ impl ViewerSharedState {
     /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     /// - [`MjViewerError::IndexOutOfBounds`] if `mesh_id >= model.nmesh()`.
     pub fn update_mesh_from(&mut self, model: &MjModel, mesh_id: usize) -> Result<(), MjViewerError> {
-        self.check_compatible(model)?;
+        self.check_asset_compatible(model)?;
         let nmesh = model.nmesh() as usize;
         if mesh_id >= nmesh {
             return Err(MjViewerError::IndexOutOfBounds { id: mesh_id, len: nmesh });
@@ -520,7 +522,7 @@ impl ViewerSharedState {
     /// # Errors
     /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     pub fn update_meshes_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
-        self.check_compatible(model)?;
+        self.check_asset_compatible(model)?;
         // SAFETY: no model swap happens here; only mesh values change.
         let passive = unsafe { self.data_passive.model_mut() };
         passive.mesh_vert_mut().copy_from_slice(model.mesh_vert());
@@ -546,7 +548,7 @@ impl ViewerSharedState {
     /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     /// - [`MjViewerError::IndexOutOfBounds`] if `hfield_id >= model.nhfield()`.
     pub fn update_hfield_from(&mut self, model: &MjModel, hfield_id: usize) -> Result<(), MjViewerError> {
-        self.check_compatible(model)?;
+        self.check_asset_compatible(model)?;
         let nhfield = model.nhfield() as usize;
         if hfield_id >= nhfield {
             return Err(MjViewerError::IndexOutOfBounds { id: hfield_id, len: nhfield });
@@ -569,7 +571,7 @@ impl ViewerSharedState {
     /// # Errors
     /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     pub fn update_hfields_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
-        self.check_compatible(model)?;
+        self.check_asset_compatible(model)?;
         // SAFETY: no model swap happens here; only hfield_data values change.
         unsafe { self.data_passive.model_mut() }
             .hfield_data_mut()

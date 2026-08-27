@@ -226,10 +226,6 @@ pub(crate) struct MjModelLayout {
        raises mjERROR when the destination and the source disagree. */
     narena: MjtSize,
 
-    /* Total byte size of the packed mjModel arrays. It moves with any array length that no
-       other field here names. */
-    nbuffer: MjtSize,
-
     /* Totals of the packed mjModel arrays that an `Info` or an asset copy caches a range into. */
     nhfielddata: MjtSize,    ntexdata: MjtSize,       nnumeric: MjtSize,      nnumericdata: MjtSize,
     ntuple: MjtSize,         ntupledata: MjtSize,     nmeshvert: MjtSize,     nmeshnormal: MjtSize,
@@ -258,7 +254,7 @@ impl From<&MjModel> for MjModelLayout {
             nbvhdynamic: m.nbvhdynamic, nflexvert: m.nflexvert, nflexedge: m.nflexedge, nflexelem: m.nflexelem,
             nflexstiffness: m.nflexstiffness, nJmom: m.nJmom, nJten: m.nJten, nJfe: m.nJfe,
             nJfv: m.nJfv, nC: m.nC,
-            narena: m.narena, nbuffer: m.nbuffer,
+            narena: m.narena,
             nhfielddata: m.nhfielddata, ntexdata: m.ntexdata, nnumeric: m.nnumeric, nnumericdata: m.nnumericdata,
             ntuple: m.ntuple, ntupledata: m.ntupledata, nmeshvert: m.nmeshvert, nmeshnormal: m.nmeshnormal,
             nmeshtexcoord: m.nmeshtexcoord, nmeshface: m.nmeshface, nmeshgraph: m.nmeshgraph,
@@ -998,7 +994,7 @@ impl MjModel {
     /// built: an [`MjData`], and the index ranges an `Info` caches.
     ///
     /// The test covers the compilation signature, every size that fixes an `mjData` buffer or a
-    /// packed `mjModel` array, and the per-flex, per-asset and plugin tables whose entries a
+    /// packed `mjModel` array, and the per-flex, per-element and plugin tables whose entries a
     /// caller resolves as index ranges. [`MjModel::signature`] alone pins none of these sizes, so
     /// it is not a sufficient test on its own.
     pub fn is_compatible_with_model(&self, other: &MjModel) -> bool {
@@ -1010,15 +1006,51 @@ impl MjModel {
             && self.flex_vertnum() == other.flex_vertnum()
             && self.flex_elemnum() == other.flex_elemnum()
             && self.plugin() == other.plugin()
+            && self.has_same_element_split(other)
+    }
+
+    /// Reports whether `other` keeps its mesh, texture and heightfield data in the same memory
+    /// as this model: the same totals, the same local addresses and the same shapes.
+    pub fn is_asset_compatible_with_model(&self, other: &MjModel) -> bool {
+        self.nmeshvert() == other.nmeshvert()
+            && self.nmeshnormal() == other.nmeshnormal()
+            && self.nmeshtexcoord() == other.nmeshtexcoord()
+            && self.nmeshface() == other.nmeshface()
+            && self.nmeshgraph() == other.nmeshgraph()
+            && self.ntexdata() == other.ntexdata()
+            && self.nhfielddata() == other.nhfielddata()
             && self.has_same_asset_split(other)
+    }
+
+    /// Reports whether the per-element address tables of `other` match this model's entry for
+    /// entry.
+    ///
+    /// Two models can hold the same element count and the same data total and still split that
+    /// total differently. A caller that resolves one element through a range read from `other`
+    /// then reads or writes the neighbouring element, and no length ever disagrees. The joint
+    /// tables need no test: the signature hashes each joint's `nq` in tree order, which fixes
+    /// `jnt_qposadr` and `jnt_dofadr`.
+    fn has_same_element_split(&self, other: &MjModel) -> bool {
+        self.has_same_asset_split(other)
+            && self.sensor_adr() == other.sensor_adr()
+            && self.sensor_dim() == other.sensor_dim()
+            && self.numeric_adr() == other.numeric_adr()
+            && self.numeric_size() == other.numeric_size()
+            && self.tuple_adr() == other.tuple_adr()
+            && self.tuple_size() == other.tuple_size()
+            && self.actuator_actadr() == other.actuator_actadr()
+            && self.actuator_actnum() == other.actuator_actnum()
+            && self.actuator_ctrladr() == other.actuator_ctrladr()
+            && self.actuator_ctrlnum() == other.actuator_ctrlnum()
+            && self.actuator_outadr() == other.actuator_outadr()
+            && self.actuator_outnum() == other.actuator_outnum()
+            // A tendon Info caches its Jacobian row, which ten_J_rowadr places inside nJten.
+            && self.ten_j_rowadr() == other.ten_j_rowadr()
+            && self.ten_j_rownnz() == other.ten_j_rownnz()
     }
 
     /// Reports whether the per-mesh, per-texture and per-heightfield address tables of `other`
     /// match this model's entry for entry.
-    ///
-    /// Two models can hold the same asset count and the same data totals and still split those
-    /// totals differently. A caller that copies one asset with a range read from `other` then
-    /// writes over a neighbouring asset, and no length ever disagrees.
     fn has_same_asset_split(&self, other: &MjModel) -> bool {
         self.mesh_vertadr() == other.mesh_vertadr()
             && self.mesh_vertnum() == other.mesh_vertnum()
@@ -2406,6 +2438,61 @@ mod tests {
         assert_ne!(model.mesh_vertadr(), swapped.mesh_vertadr());
         assert!(!model.is_compatible_with_model(&swapped));
         assert!(model.is_compatible_with_model(&mesh_model(TET, CUBE)));
+    }
+
+    #[test]
+    fn test_is_compatible_with_model_accepts_a_renamed_element() {
+        const LONG_NAME: &str = "name='a_body_name_long_enough_to_cross_the_model_buffer_padding_boundary'";
+        let model = compat_model("", "<motor joint='j'/>");
+        let renamed = MjModel::from_xml_string(
+            &COMPAT_MODEL.replace("{extra}", "").replace("{actuator}", "<motor joint='j'/>")
+                         .replace("name='b1'", LONG_NAME)
+        ).unwrap();
+
+        assert_eq!(model.signature(), renamed.signature(), "the pair must share a signature");
+        assert_ne!(model.nbuffer(), renamed.nbuffer(), "the rename must move nbuffer");
+        assert_eq!(model.narena(), renamed.narena(), "no mjData buffer may follow the name");
+        assert!(model.is_compatible_with_model(&renamed));
+    }
+
+    #[test]
+    fn test_is_compatible_with_model_rejects_a_different_sensor_split() {
+        let sensor_model = |first: u32, second: u32| MjModel::from_xml_string(&format!(
+            "<mujoco><worldbody><body name='b1'><joint name='j' type='hinge'/><geom size='0.1'/>\
+             </body></worldbody><sensor><user name='u1' dim='{first}' objtype='body' objname='b1'/>\
+             <user name='u2' dim='{second}' objtype='body' objname='b1'/></sensor></mujoco>"
+        )).unwrap();
+
+        let model = sensor_model(3, 1);
+        let swapped = sensor_model(1, 3);
+        assert_eq!(model.signature(), swapped.signature(), "the pair must share a signature");
+        assert_eq!(model.nsensordata(), swapped.nsensordata(), "the data totals must agree");
+        assert_ne!(model.sensor_adr(), swapped.sensor_adr());
+        assert!(!model.is_compatible_with_model(&swapped));
+        assert!(model.is_compatible_with_model(&sensor_model(3, 1)));
+    }
+
+    /// An asset copy overrides the asset data and reaches no `mjData` buffer, so it accepts a
+    /// model that only sizes its data differently. A moved asset it still rejects.
+    #[test]
+    fn test_is_asset_compatible_with_model_ignores_the_data_sizes() {
+        const TET: &str = "0 0 0  1 0 0  0 1 0  0 0 1";
+        const CUBE: &str = "0 0 0  1 0 0  1 1 0  0 1 0  0 0 1  1 0 1  1 1 1  0 1 1";
+        let asset_model = |extra: &str, first: &str, second: &str| MjModel::from_xml_string(&format!(
+            "<mujoco>{extra}<asset><mesh name='m1' vertex='{first}'/><mesh name='m2' vertex='{second}'/>\
+             </asset><worldbody><body name='b'><joint name='j' type='hinge'/>\
+             <geom type='mesh' mesh='m1'/><geom type='mesh' mesh='m2'/></body></worldbody></mujoco>"
+        )).unwrap();
+
+        let model = asset_model("", TET, CUBE);
+        let more_userdata = asset_model("<size nuserdata='2000'/>", TET, CUBE);
+        assert!(!model.is_compatible_with_model(&more_userdata), "the mjData buffers differ");
+        assert!(model.is_asset_compatible_with_model(&more_userdata));
+
+        // The same total, split the other way round: the copy would write the neighbouring mesh.
+        let swapped = asset_model("", CUBE, TET);
+        assert_eq!(model.nmeshvert(), swapped.nmeshvert(), "the vertex totals must agree");
+        assert!(!model.is_asset_compatible_with_model(&swapped));
     }
 
     #[test]
