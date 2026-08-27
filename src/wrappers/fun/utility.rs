@@ -193,9 +193,12 @@ pub fn mju_transpose(res: &mut [MjtNum], mat: &[MjtNum], nr: usize, nc: usize) {
 
 /// Symmetrize a square matrix: `res = (mat + mat^T)/2`.
 ///
+/// The order `n` is `res.len().isqrt()`.
+///
 /// # Panics
-/// Panics if `res` or `mat` does not have `n * n` elements.
-pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum], n: usize) {
+/// Panics if `res` is not a perfect square in length, or if `mat` has a different length.
+pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum]) {
+    let n = res.len().isqrt();
     assert!(res.len() == n * n && mat.len() == n * n);
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
     unsafe { mujoco_c::mju_symmetrize(res.as_mut_ptr(), mat.as_ptr(), n as i32) }
@@ -205,9 +208,10 @@ pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum], n: usize) {
 /// Entries whose column index is above the row index are ignored.
 ///
 /// # Panics
-/// - Panics if `res` does not have `n * n` elements.
+/// - Panics if `res` does not have `n * n` elements, for `n = rownnz.len()`.
 /// - Panics if `mat` and `colind` have different lengths.
-/// - Panics if `rownnz` or `rowadr` does not have `n` elements.
+/// - Panics if `rowadr` and `rownnz` have different lengths.
+/// - Panics if `res` has more than [`i32::MAX`] elements.
 ///
 /// # Safety
 /// The C routine reads `mat[adr + j]` / `colind[adr + j]` for `adr = rowadr[i]`,
@@ -220,10 +224,13 @@ pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum], n: usize) {
 /// arrays, so they are the caller's obligation rather than a runtime check.) A sparse matrix
 /// produced by MuJoCo itself always satisfies them.
 pub unsafe fn mju_sym2dense(
-    res: &mut [MjtNum], mat: &[MjtNum], n: usize, rownnz: &[i32], rowadr: &[i32], colind: &[i32]
+    res: &mut [MjtNum], mat: &[MjtNum], rownnz: &[i32], rowadr: &[i32], colind: &[i32]
 ) {
+    let n = rownnz.len();
     assert!(res.len() == n * n);
-    assert!(rownnz.len() == n && rowadr.len() == n);
+    // C clears the n*n elements of res, so the product is the count that must fit.
+    checked_c_len::<i32>(res.len());
+    assert!(rowadr.len() == n);
     assert!(mat.len() == colind.len());
     // SAFETY: lengths checked above; the caller upholds the sparse-structure precondition that
     // keeps every mat/colind read and res write performed by the C routine in bounds.
@@ -236,10 +243,13 @@ pub unsafe fn mju_sym2dense(
 
 /// Set a square matrix to identity.
 ///
+/// The order `n` is `mat.len().isqrt()`.
+///
 /// # Panics
-/// - Panics if `mat` does not have `n * n` elements.
+/// - Panics if `mat` is not a perfect square in length.
 /// - Panics if `mat` has more than [`i32::MAX`] elements.
-pub fn mju_eye(mat: &mut [MjtNum], n: usize) {
+pub fn mju_eye(mat: &mut [MjtNum]) {
+    let n = mat.len().isqrt();
     assert!(mat.len() == n * n);
     // C clears the n*n elements of mat, so the product is the count that must fit.
     checked_c_len::<i32>(mat.len());
@@ -297,14 +307,18 @@ pub fn mju_mul_mat_t_mat(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r
 
 /// Compute `res = mat^T * diag * mat` if `diag` is Some, else `res = mat^T * mat`.
 ///
+/// The column count `nc` is `res.len().isqrt()`.
+///
 /// # Panics
+/// - Panics if `res` is not a perfect square in length.
 /// - Panics if `mat` does not have `nr * nc` elements.
-/// - Panics if `res` does not have `nc * nc` elements.
 /// - Panics if `diag` is `Some` and does not have `nr` elements.
 /// - Panics if `res` has more than [`i32::MAX`] elements.
-pub fn mju_sqr_mat_td(res: &mut [MjtNum], mat: &[MjtNum], diag: Option<&[MjtNum]>, nr: usize, nc: usize) {
-    assert!(mat.len() == nr * nc);
+pub fn mju_sqr_mat_td(res: &mut [MjtNum], mat: &[MjtNum], diag: Option<&[MjtNum]>, nr: usize) {
+    let nc = res.len().isqrt();
+    // Without this the caller loses the non-square rejection that the old `nc` parameter gave.
     assert!(res.len() == nc * nc);
+    assert!(mat.len() == nr * nc);
     // C clears the nc*nc elements of res, so the product is the count that must fit.
     checked_c_len::<i32>(res.len());
     if let Some(d) = diag {
@@ -871,7 +885,7 @@ mod tests {
         let mat = [1.0, 2.0,
                    3.0, 4.0]; // 2x2
         let mut res = [0.0; 4];
-        mju_symmetrize(&mut res, &mat, 2);
+        mju_symmetrize(&mut res, &mat);
         // (M + M^T)/2 = [[1,2.5],[2.5,4]]
         assert_eq!(res, [1.0, 2.5,
                          2.5, 4.0]);
@@ -885,7 +899,7 @@ mod tests {
         let rowadr = [0, 1];
         let colind = [0, 0, 1];
         // SAFETY: self-consistent sparse structure (rowadr/rownnz in bounds, colind in 0..n).
-        unsafe { mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind) };
+        unsafe { mju_sym2dense(&mut dense, &sym, &rownnz, &rowadr, &colind) };
         assert_eq!(dense, [1.0, 2.0, 2.0, 3.0]);
     }
 
@@ -898,7 +912,7 @@ mod tests {
         let rowadr = [0, 1];
         let colind = [0, 0, 1];
         // SAFETY: structure is consistent; only the `res` length precondition (checked) is violated.
-        unsafe { mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind) };
+        unsafe { mju_sym2dense(&mut dense, &sym, &rownnz, &rowadr, &colind) };
     }
 
     #[test]
@@ -910,13 +924,44 @@ mod tests {
         let rowadr = [0, 1];
         let colind = [0, 0];
         // SAFETY: only the `mat.len() == colind.len()` precondition (checked) is violated.
-        unsafe { mju_sym2dense(&mut dense, &sym, 2, &rownnz, &rowadr, &colind) };
+        unsafe { mju_sym2dense(&mut dense, &sym, &rownnz, &rowadr, &colind) };
+    }
+
+    /// `n` is now derived, so a length that is not a perfect square must still be rejected
+    /// instead of being silently rounded down to the nearest square.
+    #[test]
+    #[should_panic]
+    fn test_mju_eye_panics_on_non_square() {
+        let mut mat = [0.0; 5];
+        mju_eye(&mut mat);
+    }
+
+    /// `nc` is now derived from `res`, so a non-square `res` must still be rejected.
+    #[test]
+    #[should_panic]
+    fn test_mju_sqr_mat_td_panics_on_non_square_res() {
+        let mat = [1.0; 6];
+        let mut res = [0.0; 5];
+        mju_sqr_mat_td(&mut res, &mat, None, 3);
+    }
+
+    /// `n` is now `rownnz.len()`, so `rowadr` is the one length still checked against it.
+    #[test]
+    #[should_panic]
+    fn test_mju_sym2dense_panics_on_short_rowadr() {
+        let mut dense = [0.0; 4];
+        let sym = [1.0, 2.0, 3.0];
+        let rownnz = [1, 2];
+        let rowadr = [0];
+        let colind = [0, 0, 1];
+        // SAFETY: only the `rowadr.len() == n` precondition (checked) is violated.
+        unsafe { mju_sym2dense(&mut dense, &sym, &rownnz, &rowadr, &colind) };
     }
 
     #[test]
     fn test_mju_eye() {
         let mut mat = [0.0; 9];
-        mju_eye(&mut mat, 3);
+        mju_eye(&mut mat);
         assert_eq!(mat, [1.0, 0.0, 0.0,
                          0.0, 1.0, 0.0,
                          0.0, 0.0, 1.0]);
@@ -971,7 +1016,7 @@ mod tests {
                    3.0, 4.0,
                    5.0, 6.0]; // 3x2
         let mut res = [0.0; 4]; // 2x2
-        mju_sqr_mat_td(&mut res, &mat, None, 3, 2);
+        mju_sqr_mat_td(&mut res, &mat, None, 3);
         assert_eq!(res, [35.0, 44.0,
                          44.0, 56.0]);
     }
@@ -984,7 +1029,7 @@ mod tests {
                 5.0, 6.0]; // 3x2
         let diag = [1.0, 2.0, 3.0];
         let mut res = [0.0; 4]; // 2x2
-        mju_sqr_mat_td(&mut res, &mat, Some(&diag), 3, 2);
+        mju_sqr_mat_td(&mut res, &mat, Some(&diag), 3);
         assert_eq!(res, [94.0, 116.0,
                         116.0, 144.0]);
     }

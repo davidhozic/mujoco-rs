@@ -106,6 +106,15 @@
   accepts ``framebuffer: MjtFramebuffer``
   (:docs-rs:`~mujoco_rs::wrappers::mj_rendering::<type>MjtFramebuffer`) instead of ``i32``.
 
+*Redundant dimension parameters removed*
+
+- :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_eye`,
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_symmetrize`,
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sqr_mat_td` and
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sym2dense` each dropped a dimension that
+  the slices they already take determine. Drop the argument at the call site, see
+  :ref:`migrate_6_0_0`.
+
 .. rubric:: New dependencies
 
 - Added `log <https://docs.rs/log/0.4.34/log/>`__ as a mandatory dependency.
@@ -413,12 +422,22 @@
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_mul_mat_t_vec`,
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_eye`,
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_mul_mat_mat`,
-  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_mul_mat_t_mat` and
-  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sqr_mat_td`. Each of them reaches a C
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_mul_mat_t_mat`,
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sqr_mat_td` and
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sym2dense`. Each of them reaches a C
   ``memset`` whose byte count comes from a signed ``int``, so a destination above ``i32::MAX``
   elements truncated to a negative count and cleared far past the buffer. They now panic on such a
   destination. The other wrappers in the module take the length in a loop counter, where a
   truncated count only shortens the work, and they are unchanged.
+- Closed a heap buffer overflow reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsHfield::<method>set_userdata` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`. Both give the
+  slice length to C++ as a signed ``int``, and a slice above ``i32::MAX`` elements truncated to a
+  negative count, which C++ turned into an out-of-range pointer or an enormous allocation. They now
+  panic on such a slice.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>new` now checks
+  ``max_geom`` in a release build as well. The check was a ``debug_assert!``, so a release build
+  passed a truncated capacity to MuJoCo and allocated a smaller scene than the caller asked for.
 
 .. rubric:: Other changes
 

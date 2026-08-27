@@ -1,5 +1,7 @@
 //! Utilities for model editing purposes.
 use std::ffi::{CStr, CString};
+
+use crate::util::checked_c_len;
 use crate::mujoco_c::*;
 
 
@@ -56,9 +58,12 @@ pub(crate) unsafe fn read_mjs_vec_f64<'a>(array: *const mjDoubleVec) -> &'a [f64
 ///
 /// # Safety
 /// `destination` must point to a valid `mjDoubleVec` object.
+///
+/// # Panics
+/// Panics if `source` has more than [`i32::MAX`] elements.
 pub(crate) unsafe fn write_mjs_vec_f64(source: &[f64], destination: *mut mjDoubleVec) {
     unsafe {
-        mjs_setDouble(destination, source.as_ptr(), source.len() as i32);
+        mjs_setDouble(destination, source.as_ptr(), checked_c_len(source.len()));
     }
 }
 
@@ -66,9 +71,12 @@ pub(crate) unsafe fn write_mjs_vec_f64(source: &[f64], destination: *mut mjDoubl
 ///
 /// # Safety
 /// `destination` must point to a valid `mjFloatVec` object.
+///
+/// # Panics
+/// Panics if `source` has more than [`i32::MAX`] elements.
 pub(crate) unsafe fn write_mjs_vec_f32(source: &[f32], destination: *mut mjFloatVec) {
     unsafe {
-        mjs_setFloat(destination, source.as_ptr(), source.len() as i32);
+        mjs_setFloat(destination, source.as_ptr(), checked_c_len(source.len()));
     }
 }
 
@@ -76,9 +84,12 @@ pub(crate) unsafe fn write_mjs_vec_f32(source: &[f32], destination: *mut mjFloat
 ///
 /// # Safety
 /// `destination` must point to a valid `mjFloatVecVec` object.
+///
+/// # Panics
+/// Panics if `source` has more than [`i32::MAX`] elements.
 pub(crate) unsafe fn append_mjs_vec_vec_f32(source: &[f32], destination: *mut mjFloatVecVec) {
     unsafe {
-        mjs_appendFloatVec(destination, source.as_ptr(), source.len() as i32);
+        mjs_appendFloatVec(destination, source.as_ptr(), checked_c_len(source.len()));
     }
 }
 
@@ -86,9 +97,12 @@ pub(crate) unsafe fn append_mjs_vec_vec_f32(source: &[f32], destination: *mut mj
 ///
 /// # Safety
 /// `destination` must point to a valid `mjIntVec` object.
+///
+/// # Panics
+/// Panics if `source` has more than [`i32::MAX`] elements.
 pub(crate) unsafe fn write_mjs_vec_i32(source: &[i32], destination: *mut mjIntVec) {
     unsafe {
-        mjs_setInt(destination, source.as_ptr(), source.len() as i32);
+        mjs_setInt(destination, source.as_ptr(), checked_c_len(source.len()));
     }
 }
 
@@ -96,9 +110,12 @@ pub(crate) unsafe fn write_mjs_vec_i32(source: &[i32], destination: *mut mjIntVe
 ///
 /// # Safety
 /// `destination` must point to a valid `mjIntVecVec` object.
+///
+/// # Panics
+/// Panics if `source` has more than [`i32::MAX`] elements.
 pub(crate) unsafe fn append_mjs_vec_vec_i32(source: &[i32], destination: *mut mjIntVecVec) {
     unsafe {
-        mjs_appendIntVec(destination, source.as_ptr(), source.len() as i32);
+        mjs_appendIntVec(destination, source.as_ptr(), checked_c_len(source.len()));
     }
 }
 
@@ -134,10 +151,13 @@ pub(crate) unsafe fn append_mjs_vec_string(source: &str, destination: *mut mjStr
 ///
 /// # Safety
 /// `destination` must point to a valid `mjByteVec` object.
+///
+/// # Panics
+/// Panics if `source` occupies more than [`i32::MAX`] bytes.
 pub(crate) unsafe fn write_mjs_vec_byte<T: bytemuck::NoUninit>(source: &[T], destination: *mut mjByteVec) {
     let bytes: &[u8] = bytemuck::cast_slice(source);
     unsafe {
-        mjs_setBuffer(destination, bytes.as_ptr().cast(), bytes.len() as i32);
+        mjs_setBuffer(destination, bytes.as_ptr().cast(), checked_c_len(bytes.len()));
     }
 }
 

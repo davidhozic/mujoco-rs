@@ -16,6 +16,30 @@ For these changes, see MuJoCo's changelog for this release (and prior changelogs
 https://mujoco.readthedocs.io/en/3.12.0/changelog.html
 
 
+Redundant dimension parameters removed
+---------------------------------------------------------
+Four utility wrappers took a dimension that the slices they already take fix. Drop the argument;
+the wrapper derives it and still panics when the slice lengths disagree.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 50 50
+
+   * - Before
+     - After
+   * - ``mju_eye(&mut mat, n)``
+     - ``mju_eye(&mut mat)``
+   * - ``mju_symmetrize(&mut res, &mat, n)``
+     - ``mju_symmetrize(&mut res, &mat)``
+   * - ``mju_sqr_mat_td(&mut res, &mat, diag, nr, nc)``
+     - ``mju_sqr_mat_td(&mut res, &mat, diag, nr)``
+   * - ``mju_sym2dense(&mut res, &mat, n, &rownnz, &rowadr, &colind)``
+     - ``mju_sym2dense(&mut res, &mat, &rownnz, &rowadr, &colind)``
+
+:docs-rs:`~mujoco_rs::wrappers::fun::utility::<fn>mju_sqr_mat_td` keeps ``nr``, because a zero
+``nc`` leaves ``nr`` free.
+
+
 ``SignatureMismatch`` is renamed to ``IncompatibleModel``
 ---------------------------------------------------------
 The variant is renamed in :docs-rs:`~mujoco_rs::error::<enum>MjDataError`,

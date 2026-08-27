@@ -9,6 +9,7 @@ use super::mj_primitive::{MjtNum, MjtByte, MjtSize};
 use super::mj_model::{MjModel, MjtGeom, MjtObj};
 use super::mj_data::MjData;
 use crate::{array_slice_dyn, c_str_as_str_method};
+use crate::util::checked_c_len;
 use crate::error::MjSceneError;
 use crate::getter_setter;
 use crate::mujoco_c::*;
@@ -831,9 +832,8 @@ impl MjvScene {
     /// Creates a new scene for `model`, allocating space for up to `max_geom` geoms.
     ///
     /// # Panics
-    /// In debug builds, panics if `max_geom` exceeds `i32::MAX`.
+    /// Panics if `max_geom` exceeds [`i32::MAX`].
     pub fn new<M: Deref<Target = MjModel>>(model: M, max_geom: usize) -> Self {
-        debug_assert!(max_geom <= i32::MAX as usize, "max_geom exceeds i32::MAX");
         let model_ffi = model.ffi();
         let layout = MjvSceneLayout::from(&*model);
 
@@ -842,7 +842,7 @@ impl MjvScene {
         let scene = unsafe {
             let mut t = Box::new_uninit();
             mjv_defaultScene(t.as_mut_ptr());
-            mjv_makeScene(model_ffi, t.as_mut_ptr(), max_geom as i32);
+            mjv_makeScene(model_ffi, t.as_mut_ptr(), checked_c_len(max_geom));
             t.assume_init()
         };
 
