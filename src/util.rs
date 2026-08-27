@@ -2,6 +2,7 @@
 use std::{marker::PhantomData, ops::{Deref, DerefMut}};
 use std::sync::{Mutex, MutexGuard};
 use std::ffi::{CString, c_char};
+use std::any::type_name;
 
 use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 
@@ -73,6 +74,16 @@ where
         .unwrap_or(data_len)
         - adr;
     Some((adr, len))
+}
+
+/// Converts a buffer length into the element count type `T` that MuJoCo takes.
+///
+/// # Panics
+/// Panics if `len` does not fit in `T`.
+pub(crate) fn checked_c_len<T: TryFrom<usize>>(len: usize) -> T {
+    T::try_from(len).unwrap_or_else(
+        |_| panic!("length {len} exceeds the MuJoCo {} element count", type_name::<T>())
+    )
 }
 
 
@@ -1184,7 +1195,21 @@ impl<T: Copy + PartialEq> ThreeWayMerge for T {
 mod tests {
     use std::sync::{Arc, Mutex};
     use std::ffi::c_char;
-    use super::LockUnpoison;
+    use super::{LockUnpoison, checked_c_len};
+
+    #[test]
+    fn test_checked_c_len_accepts_the_boundary() {
+        // The C count is a signed int, so i32::MAX itself is still exact.
+        assert_eq!(checked_c_len::<i32>(i32::MAX as usize), i32::MAX);
+        // A wider count type must accept what the narrower one rejects.
+        assert_eq!(checked_c_len::<i64>(i32::MAX as usize + 1), i32::MAX as i64 + 1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_checked_c_len_rejects_above_the_boundary() {
+        checked_c_len::<i32>(i32::MAX as usize + 1);
+    }
 
     /// Verifies that `lock_unpoison` recovers a poisoned mutex and preserves the inner value.
     #[test]

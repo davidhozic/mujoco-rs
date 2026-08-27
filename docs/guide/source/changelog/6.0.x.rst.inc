@@ -359,6 +359,10 @@
   ``segid`` becomes the geom's own index, and ``label``, ``camdist`` and ``transparent`` are
   cleared. The renderer uses ``objid`` as an unchecked index into the skin and flex arrays, and it
   casts no shadow for a ``mjCAT_DECOR`` geom.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>new` now clears the
+  geom, flex and skin buffers that :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjv_makeScene` allocates but
+  never writes. The scene's slice accessors are safe, so a read before the first render returned
+  uninitialized memory; it now returns zeros.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>set_at` now treats a
   negative ``linepnt`` entry as an empty plot. The count is public, and casting a negative value to
   ``usize`` made the range test pass, so the call wrote outside the plot's data range.
@@ -402,6 +406,19 @@
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_halton`: MuJoCo divides by ``base`` without
   checking it, so ``base = 0`` divided by zero and ``base = 1`` never returned. The wrapper now
   panics unless ``base`` is 2 or more.
+- Closed a heap buffer overflow reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_zero`,
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_copy`,
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_normalize`,
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_mul_mat_t_vec`,
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_eye`,
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_mul_mat_mat`,
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_mul_mat_t_mat` and
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sqr_mat_td`. Each of them reaches a C
+  ``memset`` whose byte count comes from a signed ``int``, so a destination above ``i32::MAX``
+  elements truncated to a negative count and cleared far past the buffer. They now panic on such a
+  destination. The other wrappers in the module take the length in a loop counter, where a
+  truncated count only shortens the work, and they are unchanged.
 
 .. rubric:: Other changes
 
