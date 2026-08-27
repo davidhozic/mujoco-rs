@@ -837,16 +837,47 @@ impl MjvScene {
         let model_ffi = model.ffi();
         let layout = MjvSceneLayout::from(&*model);
 
-        // SAFETY: mjv_defaultScene + mjv_makeScene initialize the struct and allocate
-        // internal geom buffers; model pointer is valid for the duration of this call.
-        let scn = unsafe {
+        // SAFETY: The struct memory gets initialized properly before assumed initialized.
+        // The uninitialized memory, not part of the struct, gets zeroed below this unsafe block.
+        let scene = unsafe {
             let mut t = Box::new_uninit();
             mjv_defaultScene(t.as_mut_ptr());
             mjv_makeScene(model_ffi, t.as_mut_ptr(), max_geom as i32);
             t.assume_init()
         };
 
-        Self { ffi: scn, layout }
+        // Zero uninitialized memory that `mjv_makeScene` allocated.
+        let nflex = scene.nflex as usize;
+        let nface = if scene.flexfacenum.is_null() {
+            0
+        } else {
+            // SAFETY: scene.flexfacenum is non-null and scene.nflex is guaranteed
+            // correct by MuJoCo code.
+            unsafe { std::slice::from_raw_parts(scene.flexfacenum, nflex) }
+            .iter().map(|&n| n as usize).sum()
+        };
+        let nflexvert = layout.nflexvert as usize;
+        let nskinvert = layout.nskinvert as usize;
+        let maxgeom = scene.maxgeom as usize;
+        let buffers: [(*mut u8, usize); 9] = [
+            (scene.geoms.cast(),        maxgeom * size_of::<mjvGeom>()),
+            (scene.geomorder.cast(),    maxgeom * size_of::<i32>()),
+            (scene.flexfaceused.cast(), nflex * size_of::<i32>()),
+            (scene.flexvert.cast(),     3 * nflexvert * size_of::<f32>()),
+            (scene.flexface.cast(),     9 * nface * size_of::<f32>()),
+            (scene.flexnormal.cast(),   9 * nface * size_of::<f32>()),
+            (scene.flextexcoord.cast(), 6 * nface * size_of::<f32>()),
+            (scene.skinvert.cast(),     3 * nskinvert * size_of::<f32>()),
+            (scene.skinnormal.cast(),   3 * nskinvert * size_of::<f32>()),
+        ];
+        for (pointer, bytes) in buffers {
+            if !pointer.is_null() && bytes != 0 {
+                // SAFETY: destination pointer is non-null and bytes > 0.
+                unsafe { ptr::write_bytes(pointer, 0, bytes); }
+            }
+        }
+
+        Self { ffi: scene, layout }
     }
 
     /// Returns the model signature this scene was created for.
@@ -1233,6 +1264,43 @@ mod tests {
 </worldbody><deformable>{flex}</deformable></mujoco>"
         );
         MjModel::from_xml_string(&xml).unwrap()
+    }
+
+    /// `mjv_makeScene` allocates the flex vertex and face buffers with `mju_malloc` and never
+    /// writes them, so a fresh scene must not expose that memory through its safe accessors.
+    #[test]
+    fn test_new_scene_zeroes_the_uninitialized_flex_buffers() {
+        let model = flex_model(
+            "<flex name='f' dim='2' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 2'/>"
+        );
+        let scene = MjvScene::new(&model, 100);
+
+        // An all-zero test over an empty slice would pass for the wrong reason.
+        assert!(!scene.flexvert().is_empty(), "the model must allocate flex vertices");
+        assert!(!scene.flexface().is_empty(), "the model must allocate flex faces");
+
+        assert!(scene.flexvert().iter().all(|vertex| *vertex == [0.0; 3]));
+        assert!(scene.flexface().iter().all(|face| *face == [0.0; 9]));
+        assert!(scene.flexnormal().iter().all(|normal| *normal == [0.0; 9]));
+        assert!(scene.flextexcoord().iter().all(|texcoord| *texcoord == [0.0; 6]));
+        assert!(scene.flexfaceused().iter().all(|used| *used == 0));
+    }
+
+    /// `mjv_makeScene` allocates `geomorder` with `mju_malloc`, and only `mjr_render` writes it,
+    /// and then only the transparent prefix. An updated but unrendered scene must therefore not
+    /// expose that memory through its safe accessor.
+    #[test]
+    fn test_new_scene_zeroes_the_geom_order_buffer() {
+        let model = load_model();
+        let mut scene = MjvScene::new(&model, 100);
+        let mut data = model.make_data();
+        let (opt, pert) = (MjvOption::default(), MjvPerturb::default());
+        let mut camera = MjvCamera::default();
+        scene.update(&mut data, &opt, &pert, &mut camera);
+
+        // An all-zero test over an empty slice would pass for the wrong reason.
+        assert!(!scene.geomorder().is_empty(), "the update must add geoms");
+        assert!(scene.geomorder().iter().all(|order| *order == 0));
     }
 
     #[test]
