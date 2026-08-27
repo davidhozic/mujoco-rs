@@ -204,8 +204,8 @@ unsafe impl bytemuck::Zeroable for mjtWrap {}
 
 /*******************************************/
 
-/// Snapshot of the [`MjModel`] sizes that fix the length of every `mjData` buffer, and of every
-/// packed `mjModel` array that a cached index range reaches.
+/// Snapshot of the [`MjModel`] sizes that fix the length of every `mjData` buffer, the byte size
+/// of its arena, and every packed `mjModel` array that a cached index range reaches.
 ///
 /// [`MjModel::signature`] pins the element tree (`nbody`, `nq`, `nv`, `ngeom`, ...) but none of
 /// the sizes below, so a compatibility test needs both.
@@ -222,9 +222,18 @@ pub(crate) struct MjModelLayout {
     nflexstiffness: MjtSize, nJmom: MjtSize,          nJten: MjtSize,         nJfe: MjtSize,
     nJfv: MjtSize,           nC: MjtSize,
 
-    /* Totals of the packed mjModel arrays that an `Info` caches a range into. */
+    /* Byte size of the mjData arena. mjData inherits it from the model, and mj_copyDataVisual
+       raises mjERROR when the destination and the source disagree. */
+    narena: MjtSize,
+
+    /* Total byte size of the packed mjModel arrays. It moves with any array length that no
+       other field here names. */
+    nbuffer: MjtSize,
+
+    /* Totals of the packed mjModel arrays that an `Info` or an asset copy caches a range into. */
     nhfielddata: MjtSize,    ntexdata: MjtSize,       nnumeric: MjtSize,      nnumericdata: MjtSize,
-    ntuple: MjtSize,         ntupledata: MjtSize,
+    ntuple: MjtSize,         ntupledata: MjtSize,     nmeshvert: MjtSize,     nmeshnormal: MjtSize,
+    nmeshtexcoord: MjtSize,  nmeshface: MjtSize,      nmeshgraph: MjtSize,
 
     /* Strides of the per-element user arrays. */
     nuser_body: MjtSize,     nuser_jnt: MjtSize,      nuser_geom: MjtSize,    nuser_site: MjtSize,
@@ -249,8 +258,10 @@ impl From<&MjModel> for MjModelLayout {
             nbvhdynamic: m.nbvhdynamic, nflexvert: m.nflexvert, nflexedge: m.nflexedge, nflexelem: m.nflexelem,
             nflexstiffness: m.nflexstiffness, nJmom: m.nJmom, nJten: m.nJten, nJfe: m.nJfe,
             nJfv: m.nJfv, nC: m.nC,
+            narena: m.narena, nbuffer: m.nbuffer,
             nhfielddata: m.nhfielddata, ntexdata: m.ntexdata, nnumeric: m.nnumeric, nnumericdata: m.nnumericdata,
-            ntuple: m.ntuple, ntupledata: m.ntupledata,
+            ntuple: m.ntuple, ntupledata: m.ntupledata, nmeshvert: m.nmeshvert, nmeshnormal: m.nmeshnormal,
+            nmeshtexcoord: m.nmeshtexcoord, nmeshface: m.nmeshface, nmeshgraph: m.nmeshgraph,
             nuser_body: m.nuser_body, nuser_jnt: m.nuser_jnt, nuser_geom: m.nuser_geom, nuser_site: m.nuser_site,
             nuser_cam: m.nuser_cam, nuser_tendon: m.nuser_tendon, nuser_actuator: m.nuser_actuator,
             nuser_sensor: m.nuser_sensor,
@@ -987,9 +998,9 @@ impl MjModel {
     /// built: an [`MjData`], and the index ranges an `Info` caches.
     ///
     /// The test covers the compilation signature, every size that fixes an `mjData` buffer or a
-    /// packed `mjModel` array, and the per-flex and plugin tables whose entries an `mjData`
-    /// stores as indices. [`MjModel::signature`] alone pins none of these sizes, so it is not a
-    /// sufficient test on its own.
+    /// packed `mjModel` array, and the per-flex, per-asset and plugin tables whose entries a
+    /// caller resolves as index ranges. [`MjModel::signature`] alone pins none of these sizes, so
+    /// it is not a sufficient test on its own.
     pub fn is_compatible_with_model(&self, other: &MjModel) -> bool {
         // The flex and plugin tables are compared element by element: an mjData contact holds a
         // flex element index that C resolves through flex_elemdataadr, which the per-flex split
@@ -999,6 +1010,32 @@ impl MjModel {
             && self.flex_vertnum() == other.flex_vertnum()
             && self.flex_elemnum() == other.flex_elemnum()
             && self.plugin() == other.plugin()
+            && self.has_same_asset_split(other)
+    }
+
+    /// Reports whether the per-mesh, per-texture and per-heightfield address tables of `other`
+    /// match this model's entry for entry.
+    ///
+    /// Two models can hold the same asset count and the same data totals and still split those
+    /// totals differently. A caller that copies one asset with a range read from `other` then
+    /// writes over a neighbouring asset, and no length ever disagrees.
+    fn has_same_asset_split(&self, other: &MjModel) -> bool {
+        self.mesh_vertadr() == other.mesh_vertadr()
+            && self.mesh_vertnum() == other.mesh_vertnum()
+            && self.mesh_normaladr() == other.mesh_normaladr()
+            && self.mesh_normalnum() == other.mesh_normalnum()
+            && self.mesh_texcoordadr() == other.mesh_texcoordadr()
+            && self.mesh_texcoordnum() == other.mesh_texcoordnum()
+            && self.mesh_faceadr() == other.mesh_faceadr()
+            && self.mesh_facenum() == other.mesh_facenum()
+            && self.mesh_graphadr() == other.mesh_graphadr()
+            && self.tex_adr() == other.tex_adr()
+            && self.tex_width() == other.tex_width()
+            && self.tex_height() == other.tex_height()
+            && self.tex_nchannel() == other.tex_nchannel()
+            && self.hfield_adr() == other.hfield_adr()
+            && self.hfield_nrow() == other.hfield_nrow()
+            && self.hfield_ncol() == other.hfield_ncol()
     }
 
     /// Returns the memory layout snapshot of this model.
@@ -2338,6 +2375,37 @@ mod tests {
         assert_eq!(plain.signature(), stateful.signature(), "the pair must share a signature");
         assert_ne!(plain.na(), stateful.na());
         assert!(!plain.is_compatible_with_model(&stateful));
+    }
+
+    #[test]
+    fn test_is_compatible_with_model_rejects_a_different_arena_size() {
+        let plain = compat_model("", "<motor joint='j'/>");
+
+        // mjData inherits narena from the model, and mj_copyDataVisual raises mjERROR on a
+        // mismatch, which ends the process.
+        let small = compat_model("<size memory='4M'/>", "<motor joint='j'/>");
+        assert_eq!(plain.signature(), small.signature(), "the pair must share a signature");
+        assert_ne!(plain.narena(), small.narena());
+        assert!(!plain.is_compatible_with_model(&small));
+    }
+
+    #[test]
+    fn test_is_compatible_with_model_rejects_a_different_mesh_split() {
+        const TET: &str = "0 0 0  1 0 0  0 1 0  0 0 1";
+        const CUBE: &str = "0 0 0  1 0 0  1 1 0  0 1 0  0 0 1  1 0 1  1 1 1  0 1 1";
+        let mesh_model = |first: &str, second: &str| MjModel::from_xml_string(&format!(
+            "<mujoco><asset><mesh name='m1' vertex='{first}'/><mesh name='m2' vertex='{second}'/>\
+             </asset><worldbody><body name='b'><joint name='j' type='hinge'/>\
+             <geom type='mesh' mesh='m1'/><geom type='mesh' mesh='m2'/></body></worldbody></mujoco>"
+        )).unwrap();
+
+        let model = mesh_model(TET, CUBE);
+        let swapped = mesh_model(CUBE, TET);
+        assert_eq!(model.signature(), swapped.signature(), "the pair must share a signature");
+        assert_eq!(model.nmeshvert(), swapped.nmeshvert(), "the vertex totals must agree");
+        assert_ne!(model.mesh_vertadr(), swapped.mesh_vertadr());
+        assert!(!model.is_compatible_with_model(&swapped));
+        assert!(model.is_compatible_with_model(&mesh_model(TET, CUBE)));
     }
 
     #[test]

@@ -106,6 +106,13 @@
   accepts ``framebuffer: MjtFramebuffer``
   (:docs-rs:`~mujoco_rs::wrappers::mj_rendering::<type>MjtFramebuffer`) instead of ``i32``.
 
+*Control-history methods take an actuator index*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_ctrl`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_read_ctrl` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>init_ctrl_history` now bound
+  ``id`` by ``nactuator`` instead of ``nu``.
+
 *Redundant dimension parameters removed*
 
 - :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_eye`,
