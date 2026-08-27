@@ -1243,7 +1243,7 @@ impl MjViewer {
             } = lock.deref_mut();
 
             // Recreate scene when the model changes
-            if data_passive.model().signature() != self.scene.signature() {
+            if !self.scene.is_compatible(data_passive.model()) {
                 debug!("the model changed, rebuilding the viewer scene and the render context");
                 let new_model = data_passive.model();
                 let ngeom = new_model.ffi().ngeom as usize;
@@ -1804,12 +1804,12 @@ impl MjViewer {
         let mut lock = self.shared_state.lock_unpoison();
         let ViewerSharedState {data_passive, pert, ..} = lock.deref_mut();
 
-        // When `ViewerSharedState::sync_data/sync_data_full` is called, the passive model is switched when its signature
-        // mismatches the input `MjData`. Such switch can happen after call to `MjViewer::update_scene` and before
+        // When `ViewerSharedState::sync_data/sync_data_full` is called, the passive model is switched when it
+        // is incompatible with the input `MjData`. Such switch can happen after call to `MjViewer::update_scene` and before
         // call to `process_left_click`. Not having this check, could cause a panic inside `MjvPerturb::start`
         // or `MjvScene::find_selection`. This isn't the most idiomatic fix, however, it does prevent the Mutex from
         // being locked during fairly slow UI and event processing.
-        if data_passive.model().signature() != self.scene.signature() {
+        if !self.scene.is_compatible(data_passive.model()) {
             return;
         }
 

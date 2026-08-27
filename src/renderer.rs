@@ -587,13 +587,13 @@ impl MjRenderer {
     ///
     /// # Errors
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current
-    ///   (only when the signature of the [`MjModel`] in `data` differs from the internal [`MjvScene`]).
+    ///   (only when the [`MjModel`] in `data` is incompatible with the internal [`MjvScene`]).
     ///
     /// # Panics
     /// Panics if the renderer's camera is a fixed camera whose `fixedcamid` is out of range for
     /// `data`'s model.
     pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
-        if data.model().signature() != self.scene.signature() {
+        if !self.scene.is_compatible(data.model()) {
             /* Model changed: preserve the extra-geom headroom and user-geom
              * capacity, only substitute the per-model ngeom base count. */
             // Ensure the GL context is current before dropping old GPU resources

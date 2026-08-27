@@ -307,6 +307,11 @@
 - Closed an out-of-bounds read reachable from safe code in
   :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>render`:
   ``render`` now panics when the context holds fewer skins than the scene.
+- Closed a heap buffer overflow reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>find_selection`:
+  both now compare the flex and skin sizes as well as the model signature, and panic when the
+  model in the given |mj_data| needs larger scene buffers.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>create_geom` now
   writes every field that :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjv_initGeom` leaves unwritten over
   uninitialized memory: ``objtype`` becomes
