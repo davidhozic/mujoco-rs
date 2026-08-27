@@ -204,6 +204,61 @@ unsafe impl bytemuck::Zeroable for mjtWrap {}
 
 /*******************************************/
 
+/// Snapshot of the [`MjModel`] sizes that fix the length of every `mjData` buffer, and of every
+/// packed `mjModel` array that a cached index range reaches.
+///
+/// [`MjModel::signature`] pins the element tree (`nbody`, `nq`, `nv`, `ngeom`, ...) but none of
+/// the sizes below, so a compatibility test needs both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(non_snake_case, reason = "the fields keep the MuJoCo size symbol names")]
+pub(crate) struct MjModelLayout {
+    signature: u64,
+
+    /* Row lengths of MJDATA_POINTERS and MJDATA_ARENA_POINTERS. */
+    na: MjtSize,             nu: MjtSize,             nout: MjtSize,          nmocap: MjtSize,
+    nuserdata: MjtSize,      nsensordata: MjtSize,    nhistory: MjtSize,      nplugin: MjtSize,
+    npluginstate: MjtSize,   nwrap: MjtSize,          neq: MjtSize,           nbvh: MjtSize,
+    nbvhdynamic: MjtSize,    nflexvert: MjtSize,      nflexedge: MjtSize,     nflexelem: MjtSize,
+    nflexstiffness: MjtSize, nJmom: MjtSize,          nJten: MjtSize,         nJfe: MjtSize,
+    nJfv: MjtSize,           nC: MjtSize,
+
+    /* Totals of the packed mjModel arrays that an `Info` caches a range into. */
+    nhfielddata: MjtSize,    ntexdata: MjtSize,       nnumeric: MjtSize,      nnumericdata: MjtSize,
+    ntuple: MjtSize,         ntupledata: MjtSize,
+
+    /* Strides of the per-element user arrays. */
+    nuser_body: MjtSize,     nuser_jnt: MjtSize,      nuser_geom: MjtSize,    nuser_site: MjtSize,
+    nuser_cam: MjtSize,      nuser_tendon: MjtSize,   nuser_actuator: MjtSize, nuser_sensor: MjtSize,
+}
+
+impl MjModelLayout {
+    /// Returns the compilation signature of the model this layout came from.
+    pub(crate) fn signature(&self) -> u64 {
+        self.signature
+    }
+}
+
+impl From<&MjModel> for MjModelLayout {
+    fn from(model: &MjModel) -> Self {
+        let m = model.ffi();
+        Self {
+            signature: m.signature,
+            na: m.na, nu: m.nu, nout: m.nout, nmocap: m.nmocap,
+            nuserdata: m.nuserdata, nsensordata: m.nsensordata, nhistory: m.nhistory, nplugin: m.nplugin,
+            npluginstate: m.npluginstate, nwrap: m.nwrap, neq: m.neq, nbvh: m.nbvh,
+            nbvhdynamic: m.nbvhdynamic, nflexvert: m.nflexvert, nflexedge: m.nflexedge, nflexelem: m.nflexelem,
+            nflexstiffness: m.nflexstiffness, nJmom: m.nJmom, nJten: m.nJten, nJfe: m.nJfe,
+            nJfv: m.nJfv, nC: m.nC,
+            nhfielddata: m.nhfielddata, ntexdata: m.ntexdata, nnumeric: m.nnumeric, nnumericdata: m.nnumericdata,
+            ntuple: m.ntuple, ntupledata: m.ntupledata,
+            nuser_body: m.nuser_body, nuser_jnt: m.nuser_jnt, nuser_geom: m.nuser_geom, nuser_site: m.nuser_site,
+            nuser_cam: m.nuser_cam, nuser_tendon: m.nuser_tendon, nuser_actuator: m.nuser_actuator,
+            nuser_sensor: m.nuser_sensor,
+        }
+    }
+}
+
+
 /// A Rust-safe wrapper around mjModel.
 /// Automatically clean after itself on destruction.
 #[derive(Debug)]
@@ -926,6 +981,29 @@ impl MjModel {
     /// Compilation signature.
     pub fn signature(&self) -> u64 {
         self.ffi().signature
+    }
+
+    /// Reports whether `other` can take the place of this model in every object that this model
+    /// built: an [`MjData`], and the index ranges an `Info` caches.
+    ///
+    /// The test covers the compilation signature, every size that fixes an `mjData` buffer or a
+    /// packed `mjModel` array, and the per-flex and plugin tables whose entries an `mjData`
+    /// stores as indices. [`MjModel::signature`] alone pins none of these sizes, so it is not a
+    /// sufficient test on its own.
+    pub fn is_compatible_with_model(&self, other: &MjModel) -> bool {
+        // The flex and plugin tables are compared element by element: an mjData contact holds a
+        // flex element index that C resolves through flex_elemdataadr, which the per-flex split
+        // fixes, and mj_resetData relays a plugin instance to the slot in m->plugin.
+        self.layout() == other.layout()
+            && self.flex_dim() == other.flex_dim()
+            && self.flex_vertnum() == other.flex_vertnum()
+            && self.flex_elemnum() == other.flex_elemnum()
+            && self.plugin() == other.plugin()
+    }
+
+    /// Returns the memory layout snapshot of this model.
+    pub(crate) fn layout(&self) -> MjModelLayout {
+        MjModelLayout::from(self)
     }
 
     getter_setter! {get, [
@@ -2233,6 +2311,43 @@ mod tests {
         assert_eq!(view_mut.pos[0], 1.0);
     }
 
+
+    /// XML of a hinge body with one motor; `{extra}` adds a size or actuator difference that
+    /// `mjCModel::Signature` does not hash.
+    const COMPAT_MODEL: &str = "<mujoco>{extra}\
+<worldbody><body name='b1'><joint name='j' type='hinge'/><geom size='0.1'/></body></worldbody>\
+<actuator>{actuator}</actuator></mujoco>";
+
+    fn compat_model(extra: &str, actuator: &str) -> MjModel {
+        let xml = COMPAT_MODEL.replace("{extra}", extra).replace("{actuator}", actuator);
+        MjModel::from_xml_string(&xml).unwrap()
+    }
+
+    #[test]
+    fn test_is_compatible_with_model_rejects_unpinned_size() {
+        let plain = compat_model("", "<motor joint='j'/>");
+
+        // nuserdata sizes mjData::userdata; the signature does not hash it.
+        let userdata = compat_model("<size nuserdata='2000'/>", "<motor joint='j'/>");
+        assert_eq!(plain.signature(), userdata.signature(), "the pair must share a signature");
+        assert_ne!(plain.nuserdata(), userdata.nuserdata());
+        assert!(!plain.is_compatible_with_model(&userdata));
+
+        // na sizes mjData::act; the actuator tag carries no dynamics type.
+        let stateful = compat_model("", "<general joint='j' dyntype='integrator'/>");
+        assert_eq!(plain.signature(), stateful.signature(), "the pair must share a signature");
+        assert_ne!(plain.na(), stateful.na());
+        assert!(!plain.is_compatible_with_model(&stateful));
+    }
+
+    #[test]
+    fn test_is_compatible_with_model_accepts_parameter_change() {
+        let light = compat_model("", "<motor joint='j' gear='1'/>");
+        let heavy = compat_model("", "<motor joint='j' gear='7'/>");
+        assert!(light.is_compatible_with_model(&heavy));
+        assert!(light.is_compatible_with_model(&light));
+    }
+
     #[test]
     fn test_try_view_model_signature_mismatch() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint type='free'/><geom size='0.1'/></body></worldbody></mujoco>").unwrap();
@@ -2242,25 +2357,25 @@ mod tests {
 
         let err = body_info.try_view(&model2).unwrap_err();
         match err {
-            MjModelError::SignatureMismatch { source, destination } => {
+            MjModelError::IncompatibleModel { source, destination } => {
                 assert_eq!(source, model1.signature());
                 assert_eq!(destination, model2.signature());
             }
-            other => panic!("expected SignatureMismatch, got {other:?}"),
+            other => panic!("expected IncompatibleModel, got {other:?}"),
         }
 
         let err = body_info.try_view_mut(&mut model2).unwrap_err();
         match err {
-            MjModelError::SignatureMismatch { source, destination } => {
+            MjModelError::IncompatibleModel { source, destination } => {
                 assert_eq!(source, model1.signature());
                 assert_eq!(destination, model2.signature());
             }
-            other => panic!("expected SignatureMismatch, got {other:?}"),
+            other => panic!("expected IncompatibleModel, got {other:?}"),
         }
     }
 
     #[test]
-    #[should_panic(expected = "model signature mismatch")]
+    #[should_panic(expected = "the model is not compatible")]
     fn test_view_mut_model_signature_mismatch_panics() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint type='free'/><geom size='0.1'/></body></worldbody></mujoco>").unwrap();
         let mut model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint type='free'/><geom size='0.1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();

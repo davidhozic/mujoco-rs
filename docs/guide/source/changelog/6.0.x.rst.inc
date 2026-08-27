@@ -25,6 +25,16 @@
   ``&mut MjData<Box<MjModel>>`` (|mj_data|, |mj_model|).
   ``MjViewer::add_ui_callback_detached`` is removed as ``add_ui_callback`` now handles both cases.
 
+*The signature-mismatch error variants are renamed*
+
+- ``SignatureMismatch`` becomes ``IncompatibleModel`` in
+  :docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>IncompatibleModel`,
+  :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>IncompatibleModel`,
+  :docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>IncompatibleModel` and
+  :docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>IncompatibleModel`. The guard
+  behind each of them now tests the whole model memory layout instead of the incomplete
+  signature only.
+
 *MuJoCo FFI upgraded to 3.12.0*
 
 - MuJoCo-rs now builds against MuJoCo 3.12.0 FFI, which rolls up the upstream 3.10.0,
@@ -124,6 +134,18 @@
   ``Result``: MuJoCo does report a duplicate class name and a failed flex build.
 
 .. rubric:: New features and improvements
+
+*Model and scene compatibility*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`
+  :sup:`new` reports whether another |mj_model| can take the place of this one in an |mj_data| or
+  in a cached ``Info``. It compares the signature, every size that fixes an ``mjData`` buffer or a
+  packed ``mjModel`` array, and the per-flex and plugin tables.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_model`
+  :sup:`new` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_scene`
+  :sup:`new` report whether a model, or a second |mjv_scene|, matches the buffers this scene
+  holds. Use them to decide whether a scene needs to be rebuilt before an update or a merge.
 
 *Viewer improvements*
 
@@ -296,6 +318,22 @@
   section now draws and writes only while the viewer still holds the model that the frame's
   widgets belong to, and the next frame rebuilds it against the new model.
 
+*Model and data pairing*
+
+- Closed a set of out-of-bounds accesses reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_swap_model`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_state_from_data` and in
+  every ``Info`` view method. All of them compared the model signature alone, which pins the
+  element tree but no ``mjData`` buffer size, so a model with a larger ``nuserdata``, ``na`` or
+  ``nout`` passed the test. They now compare the whole model layout through
+  ``MjModel::is_compatible_with_model``.
+- The viewer and the renderer decide the same way: ``MjViewer::sync_data``, ``MjViewer::sync_model``
+  and the asset-upload methods of both now test compatibility instead of the signature, so a model
+  that needs different buffers triggers a reload rather than a copy into the wrong sizes.
+
 *Visualization*
 
 - Closed an out-of-bounds read reachable from safe code in
@@ -310,8 +348,8 @@
 - Closed a heap buffer overflow reachable from safe code in
   :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>find_selection`:
-  both now compare the flex and skin sizes as well as the model signature, and panic when the
-  model in the given |mj_data| needs larger scene buffers.
+  both now test the model with ``MjvScene::is_compatible_with_model`` instead of the signature
+  alone, and panic when the model in the given |mj_data| needs larger scene buffers.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>create_geom` now
   writes every field that :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjv_initGeom` leaves unwritten over
   uninitialized memory: ``objtype`` becomes
@@ -325,7 +363,8 @@
   negative ``linepnt`` entry as an empty plot. The count is public, and casting a negative value to
   ``usize`` made the range test pass, so the call wrote outside the plot's data range.
 - :docs-rs:`~mujoco_rs::vis_common::<fn>sync_geoms` now panics when the two scenes were created for
-  models with different signatures.
+  models that are not compatible. A copied geom keeps its ``objid``, which the renderer uses as an
+  unchecked index into the destination scene's flex and skin arrays.
 
 *Rendering*
 

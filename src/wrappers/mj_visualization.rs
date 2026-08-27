@@ -780,24 +780,51 @@ impl MjvFigure {
 /***********************************************************************************************************************
 ** MjvScene
 ***********************************************************************************************************************/
-/// 3D scene visualization.
-/// This struct provides a way to render visual-only geometry.
+/// Snapshot of the [`MjModel`] quantities that fix the size of every buffer that
+/// [`MjvScene::new`] allocates.
 ///
-/// The scene does not hold a reference to the model.
-/// Trying to use an existing scene with an incompatible model (see [`MjvScene::is_compatible`])
-/// will result in a panic.
-/// [`MjvScene::find_selection`] will panic.
-#[derive(Debug)]
-pub struct MjvScene {
-    ffi: Box<mjvScene>,
+/// The flex tables are kept whole: `mjv_makeScene` sizes the flex face buffer from `flex_dim`,
+/// `flex_elemnum`, `flex_shellnum` and `flex_elemlayer` together, so no scalar total replaces
+/// them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MjvSceneLayout {
     signature: u64,
-    // Extra fields for compability checks between a model and the scene.
     nflexedge: MjtSize,
     nflexvert: MjtSize,
     nskinvert: MjtSize,
     flex_dim: Vec<i32>,
     flex_elemnum: Vec<i32>,
     flex_shellnum: Vec<i32>,
+    flex_elemlayer: Vec<i32>,
+}
+
+impl From<&MjModel> for MjvSceneLayout {
+    fn from(model: &MjModel) -> Self {
+        let ffi = model.ffi();
+        Self {
+            signature: model.signature(),
+            nflexedge: ffi.nflexedge,
+            nflexvert: ffi.nflexvert,
+            nskinvert: ffi.nskinvert,
+            flex_dim: model.flex_dim().to_vec(),
+            flex_elemnum: model.flex_elemnum().to_vec(),
+            flex_shellnum: model.flex_shellnum().to_vec(),
+            flex_elemlayer: model.flex_elemlayer().to_vec(),
+        }
+    }
+}
+
+
+/// 3D scene visualization.
+/// This struct provides a way to render visual-only geometry.
+///
+/// The scene does not hold a reference to the model.
+/// Trying to use an existing scene with an incompatible model (see
+/// [`MjvScene::is_compatible_with_model`]) will result in a panic.
+#[derive(Debug)]
+pub struct MjvScene {
+    ffi: Box<mjvScene>,
+    layout: MjvSceneLayout,
 }
 
 impl MjvScene {
@@ -808,13 +835,8 @@ impl MjvScene {
     pub fn new<M: Deref<Target = MjModel>>(model: M, max_geom: usize) -> Self {
         debug_assert!(max_geom <= i32::MAX as usize, "max_geom exceeds i32::MAX");
         let model_ffi = model.ffi();
-        let nflexedge = model_ffi.nflexedge;
-        let nflexvert = model_ffi.nflexvert;
-        let nskinvert = model_ffi.nskinvert;
-        let signature = model.signature();
-        let flex_dim = model.flex_dim().to_vec();
-        let flex_elemnum = model.flex_elemnum().to_vec();
-        let flex_shellnum = model.flex_shellnum().to_vec();
+        let layout = MjvSceneLayout::from(&*model);
+
         // SAFETY: mjv_defaultScene + mjv_makeScene initialize the struct and allocate
         // internal geom buffers; model pointer is valid for the duration of this call.
         let scn = unsafe {
@@ -824,49 +846,40 @@ impl MjvScene {
             t.assume_init()
         };
 
-        Self {
-            ffi: scn, signature, nflexedge, nflexvert, nskinvert,
-            flex_dim, flex_elemnum, flex_shellnum,
-        }
+        Self { ffi: scn, layout }
     }
 
     /// Returns the model signature this scene was created for.
     pub fn signature(&self) -> u64 {
-        self.signature
+        self.layout.signature
     }
 
-    /// Checks whether `model` is compatible with the original model
-    /// that created the scene. A `model` is compatible when it has
-    /// the same signature, and the same flex and skin structure.
-    pub(crate) fn is_compatible(&self, model: &MjModel) -> bool {
-        self.signature == model.signature()
-            && self.nflexedge == model.nflexedge()
-            && self.nflexvert == model.nflexvert()
-            && self.nskinvert == model.nskinvert()
-            && self.flex_dim == model.flex_dim()
-            && self.flex_elemnum == model.flex_elemnum()
-            && self.flex_shellnum == model.flex_shellnum()
+    /// Reports whether `model` can take the place of the model that created this scene.
+    ///
+    /// The scene buffers hold one entry per flex face, flex vertex, flex edge and skin vertex of
+    /// the model that created them, and `mjv_updateScene` refills them with the counts of the
+    /// model it receives. The test therefore covers the compilation signature and every count
+    /// that sizes such a buffer.
+    pub fn is_compatible_with_model(&self, model: &MjModel) -> bool {
+        self.layout == MjvSceneLayout::from(model)
+    }
+
+    /// Reports whether `other` was created for a model that is compatible with this scene's
+    /// model.
+    ///
+    /// A geom that moves between two scenes keeps its `objid`, which the renderer uses as an
+    /// unchecked index into the destination scene's flex and skin arrays.
+    pub fn is_compatible_with_scene(&self, other: &MjvScene) -> bool {
+        self.layout == other.layout
     }
 
     /// Panics if `model` is not compatible with the model used to create the scene.
-    /// A model is incompatible when its signature, flex or skin structure differs from the
-    /// one of the original model.
-    fn assert_signature(&self, model: &MjModel) {
-        // Regular signature check.
-        let data_sig = model.signature();
-        assert_eq!(
-            self.signature, data_sig,
-            "model signature mismatch: scene {:#X}, data model {:#X}",
-            self.signature, data_sig
+    fn assert_compatible(&self, model: &MjModel) {
+        assert!(
+            self.is_compatible_with_model(model),
+            "the model is not compatible with the scene: scene signature {:#X}, model signature {:#X}",
+            self.layout.signature, model.signature()
         );
-
-        // Report the first quantity that differs; is_compatible states why each one is needed.
-        assert_eq!(self.nflexedge, model.nflexedge(), "model signature mismatch (nflexedge)");
-        assert_eq!(self.nflexvert, model.nflexvert(), "model signature mismatch (nflexvert)");
-        assert_eq!(self.nskinvert, model.nskinvert(), "model signature mismatch (nskinvert)");
-        assert_eq!(self.flex_dim, model.flex_dim(), "model signature mismatch (flex_dim)");
-        assert_eq!(self.flex_elemnum, model.flex_elemnum(), "model signature mismatch (flex_elemnum)");
-        assert_eq!(self.flex_shellnum, model.flex_shellnum(), "model signature mismatch (flex_shellnum)");
     }
 
     /// Updates the scene from the current simulation state in `data`.
@@ -886,8 +899,8 @@ impl MjvScene {
     /// of bodies.
     ///
     /// # Panics
-    /// - Panics if `data` was created from a model that is incompatible with this scene
-    ///   (a different signature, flex structure or skin structure).
+    /// - Panics if `data` was created from a model that is not compatible with this scene
+    ///   (see [`MjvScene::is_compatible_with_model`]).
     /// - Panics if `cam` is a fixed camera ([`MjtCamera::mjCAMERA_FIXED`]) whose `fixedcamid` is
     ///   out of range for the model in `data`.
     /// - Panics if `perturb.select` is out of range (greater than or equal to the number of
@@ -896,7 +909,7 @@ impl MjvScene {
         &mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb,
         cam: &mut MjvCamera, catmask: i32,
     ) {
-        self.assert_signature(data.model());
+        self.assert_compatible(data.model());
 
         // mjv_updateScene -> mjv_updateCamera calls mjv_cameraFrame, whose mjCAMERA_FIXED branch
         // reads d->cam_xmat + 9*fixedcamid / d->cam_xpos + 3*fixedcamid *before* C performs its own
@@ -1053,13 +1066,13 @@ impl MjvScene {
     /// [`MjvScene::update`], which leaves `frustum_near` at zero.
     ///
     /// # Panics
-    /// Panics if `data` was created from a model that is incompatible with this scene
-    /// (a different signature, flex structure or skin structure).
+    /// Panics if `data` was created from a model that is not compatible with this scene
+    /// (see [`MjvScene::is_compatible_with_model`]).
     pub fn find_selection<M: Deref<Target = MjModel>>(
         &self, data: &mut MjData<M>, option: &MjvOption,
         aspect_ratio: MjtNum, relx: MjtNum, rely: MjtNum,
     ) -> SceneSelection {
-        self.assert_signature(data.model());
+        self.assert_compatible(data.model());
         let (mut geom_id, mut flex_id, mut skin_id) = (-1 , -1, -1);
         let mut selpnt = [0.0; 3];
         let body_id = unsafe {
@@ -1092,10 +1105,10 @@ impl MjvScene {
 impl MjvScene {
     // Scalar length arrays
     array_slice_dyn! {
-        (mut = unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; nflexedge],
-        flexvert: &[[f32; 3] [force]; "flex vertices"; nflexvert],
-        skinvert: &[[f32; 3] [force]; "skin vertex data"; nskinvert],
-        skinnormal: &[[f32; 3] [force]; "skin normal data"; nskinvert],
+        (mut = unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; layout.nflexedge],
+        flexvert: &[[f32; 3] [force]; "flex vertices"; layout.nflexvert],
+        skinvert: &[[f32; 3] [force]; "skin vertex data"; layout.nskinvert],
+        skinnormal: &[[f32; 3] [force]; "skin normal data"; layout.nskinvert],
         (mut = unsafe) geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
         geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
         (mut = unsafe) flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
@@ -1208,6 +1221,43 @@ mod tests {
         MjModel::from_xml_string(EXAMPLE_MODEL).unwrap()
     }
 
+
+    /// The three bodies are the same in both models, so `mjCModel::Signature` is the same; only
+    /// the number of flex vertices differs, and that number sizes `mjvScene::flexvert`.
+    fn flex_model(flex: &str) -> MjModel {
+        let xml = format!(
+            "<mujoco><worldbody>\
+<body name='v0' pos='0 0 0'><freejoint/><geom size='0.01'/></body>\
+<body name='v1' pos='0.1 0 0'><freejoint/><geom size='0.01'/></body>\
+<body name='v2' pos='0.2 0 0'><freejoint/><geom size='0.01'/></body>\
+</worldbody><deformable>{flex}</deformable></mujoco>"
+        );
+        MjModel::from_xml_string(&xml).unwrap()
+    }
+
+    #[test]
+    fn test_scene_is_compatible_with_model() {
+        let three = flex_model("<flex name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>");
+        let two = flex_model("<flex name='f' dim='1' body='v0 v1' vertex='0 0 0 0 0 0' element='0 1'/>");
+        assert_eq!(three.signature(), two.signature(), "the pair must share a signature");
+        assert_ne!(three.nflexvert(), two.nflexvert());
+
+        let scene = MjvScene::new(&three, 100);
+        assert!(scene.is_compatible_with_model(&three));
+        assert!(!scene.is_compatible_with_model(&two));
+    }
+
+    #[test]
+    fn test_scene_is_compatible_with_scene() {
+        let three = flex_model("<flex name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>");
+        let two = flex_model("<flex name='f' dim='1' body='v0 v1' vertex='0 0 0 0 0 0' element='0 1'/>");
+
+        let scene = MjvScene::new(&three, 100);
+        let same = MjvScene::new(&three, 10);
+        let other = MjvScene::new(&two, 100);
+        assert!(scene.is_compatible_with_scene(&same), "maxgeom must not affect compatibility");
+        assert!(!scene.is_compatible_with_scene(&other));
+    }
     #[test]
     #[allow(non_snake_case)]
     fn test_MjvGeom() {

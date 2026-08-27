@@ -16,6 +16,55 @@ For these changes, see MuJoCo's changelog for this release (and prior changelogs
 https://mujoco.readthedocs.io/en/3.12.0/changelog.html
 
 
+``SignatureMismatch`` is renamed to ``IncompatibleModel``
+---------------------------------------------------------
+The variant is renamed in :docs-rs:`~mujoco_rs::error::<enum>MjDataError`,
+:docs-rs:`~mujoco_rs::error::<enum>MjModelError`,
+:docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError` and
+:docs-rs:`~mujoco_rs::renderer::<enum>RendererError`. It now also fires for two models that share
+a signature but need different buffer sizes, so a program that treated an equal signature as
+"safe to pair" must handle the error on that path too.
+
+**Before:**
+
+.. code-block:: rust
+
+    match data.copy_to(&mut destination) {
+        Err(MjDataError::SignatureMismatch { source, destination }) => { /* ... */ }
+        other => other.unwrap(),
+    }
+
+**After:**
+
+.. code-block:: rust
+
+    match data.copy_to(&mut destination) {
+        Err(MjDataError::IncompatibleModel { source, destination }) => { /* ... */ }
+        other => other.unwrap(),
+    }
+
+A test of your own that compared signatures directly should call
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`, or
+:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_model`
+for a scene.
+
+**Before:**
+
+.. code-block:: rust
+
+    if model.signature() == other.signature() {
+        data.swap_model(other);
+    }
+
+**After:**
+
+.. code-block:: rust
+
+    if model.is_compatible_with_model(&other) {
+        data.swap_model(other);
+    }
+
+
 ``MjvCamera::move_`` no longer takes a scene
 --------------------------------------------
 The ``scene`` parameter was dropped from |mjv_camera| ``move_``.

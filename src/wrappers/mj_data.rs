@@ -6,7 +6,7 @@ use crate::{getter_setter, mujoco_c::*};
 use crate::error::MjDataError;
 
 use super::mj_statistic::{MjWarningStat, MjTimerStat, MjSolverStat};
-use super::mj_model::{MjModel, MjtSameFrame, MjtObj, MjtStage};
+use super::mj_model::{MjModel, MjModelLayout, MjtSameFrame, MjtObj, MjtStage};
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
 
@@ -98,13 +98,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// This can be done by keeping a clone of the model, which is then modified and swapped.
     /// 
     /// # Panics
-    /// Panics if the signature of `model` does not match the signature of the model
-    /// this data belongs to.
+    /// Panics if `model` is not compatible with the model this data belongs to
+    /// (see [`MjModel::is_compatible_with_model`]).
     /// 
     /// Use [`MjData::try_swap_model`] for a fallible alternative.
     /// 
     /// # Notes
-    /// This method only validates model-signature compatibility.
+    /// This method only validates the model memory layout.
     /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
     /// See [here](https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
@@ -126,19 +126,20 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// model_template = data.swap_model(model_template);
     /// ```
     pub fn swap_model(&mut self, model: M) -> M {
-        self.try_swap_model(model).expect("swap_model failed: model signature mismatch")
+        self.try_swap_model(model).expect("swap_model failed: the model is not compatible")
     }
 
     /// Fallible version of [`MjData::swap_model`].
     ///
     /// # Errors
-    /// Returns [`MjDataError::SignatureMismatch`] if the new model's signature
-    /// does not match the current one.
+    /// Returns [`MjDataError::IncompatibleModel`] if `model` is not compatible with the model
+    /// this data belongs to (see [`MjModel::is_compatible_with_model`]).
     pub fn try_swap_model(&mut self, model: M) -> Result<M, MjDataError> {
-        let new_signature = model.signature();
-        let current_signature = self.model.signature();
-        if new_signature != current_signature {
-            return Err(MjDataError::SignatureMismatch { source: new_signature, destination: current_signature });
+        if !self.model.is_compatible_with_model(&model) {
+            return Err(MjDataError::IncompatibleModel {
+                source: model.signature(),
+                destination: self.model.signature(),
+            });
         }
 
         Ok(std::mem::replace(&mut self.model, model))
@@ -215,8 +216,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         let qfrc_fluid = nv_range;
         let qfrc_adhesion = nv_range;
 
-        let model_signature = self.model.signature();
-        Some(MjJointDataInfo {name: name.to_string(), id, model_signature,
+        let model_layout = self.model.layout();
+        Some(MjJointDataInfo {name: name.to_string(), id, model_layout,
             qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
             qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_adhesion, qfrc_passive,
             qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
@@ -1285,15 +1286,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Copies data state from `src` to `self` based on the specified `spec` combination of `mjtState` flags.
     ///
     /// # Errors
-    /// Returns [`MjDataError::SignatureMismatch`] if `src` was created from
-    /// a different model.
+    /// Returns [`MjDataError::IncompatibleModel`] if `src` was created from a model that is not
+    /// compatible with this data's model (see [`MjModel::is_compatible_with_model`]).
     pub fn copy_state_from_data<N: Deref<Target = MjModel>>(&mut self, src: &MjData<N>, spec: u32) -> Result<(), MjDataError> {
-        let src_sig = src.model.signature();
-        let dst_sig = self.model.signature();
-        if src_sig != dst_sig {
-            return Err(MjDataError::SignatureMismatch {
-                source: src_sig,
-                destination: dst_sig,
+        if !self.model.is_compatible_with_model(&src.model) {
+            return Err(MjDataError::IncompatibleModel {
+                source: src.model.signature(),
+                destination: self.model.signature(),
             });
         }
         unsafe {
@@ -1532,15 +1531,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// MuJoCo reports an error and stops the process when this data's stack is in use.
     ///
     /// # Errors
-    /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
-    /// from a different model.
+    /// Returns [`MjDataError::IncompatibleModel`] if `destination` was created from a model that
+    /// is not compatible with this data's model (see [`MjModel::is_compatible_with_model`]).
     pub fn copy_visual_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
-        let src_sig = self.model.signature();
-        let dst_sig = destination.model.signature();
-        if src_sig != dst_sig {
-            return Err(MjDataError::SignatureMismatch {
-                source: src_sig,
-                destination: dst_sig,
+        if !self.model.is_compatible_with_model(&destination.model) {
+            return Err(MjDataError::IncompatibleModel {
+                source: self.model.signature(),
+                destination: destination.model.signature(),
             });
         }
         unsafe {
@@ -1556,15 +1553,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// MuJoCo reports an error and stops the process when this data's stack is in use.
     ///
     /// # Errors
-    /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
-    /// from a different model.
+    /// Returns [`MjDataError::IncompatibleModel`] if `destination` was created from a model that
+    /// is not compatible with this data's model (see [`MjModel::is_compatible_with_model`]).
     pub fn copy_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
-        let src_sig = self.model.signature();
-        let dst_sig = destination.model.signature();
-        if src_sig != dst_sig {
-            return Err(MjDataError::SignatureMismatch {
-                source: src_sig,
-                destination: dst_sig,
+        if !self.model.is_compatible_with_model(&destination.model) {
+            return Err(MjDataError::IncompatibleModel {
+                source: self.model.signature(),
+                destination: destination.model.signature(),
             });
         }
         unsafe {
@@ -1658,6 +1653,15 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         [ffi] signature: u64; "compilation signature.";
     ]}
 
+    /// Returns the memory layout snapshot of the model this data belongs to.
+    ///
+    /// The buffers were allocated for the model that created this data. That model and
+    /// [`MjData::model`] share one layout, because [`MjData::try_swap_model`] rejects a model
+    /// that does not.
+    pub(crate) fn layout(&self) -> MjModelLayout {
+        self.model.layout()
+    }
+
     getter_setter! {get, [
         [ffi] efm_active: bool; "whether the implicit effective metric M+K is active.";
     ]}
@@ -1710,8 +1714,8 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// This method is marked unsafe as the owned model can be swapped entirely without any compatibility
     /// checks.
     /// 
-    /// It is the caller's responsibility to ensure the internal [`MjModel::signature`] matches the
-    /// swapped model's signature in case of a swap.
+    /// It is the caller's responsibility to ensure that a swapped model is compatible with the
+    /// model this data belongs to, as [`MjModel::is_compatible_with_model`] defines.
     /// 
     /// For safe swapping consider [`MjData::swap_model`] or [`MjData::try_swap_model`] for a fallible alternative.
     ///
@@ -2944,7 +2948,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "model signature mismatch")]
+    #[should_panic(expected = "the model is not compatible")]
     fn test_signature_mismatch_panics() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
         let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();
@@ -2958,7 +2962,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "model signature mismatch")]
+    #[should_panic(expected = "the model is not compatible")]
     fn test_signature_mismatch_reversed_joints() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='b2'><joint name='j2' type='ball'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
         let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j2' type='ball'/><geom size='0.1' mass='1'/></body><body name='b2'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
@@ -2972,7 +2976,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "model signature mismatch")]
+    #[should_panic(expected = "the model is not compatible")]
     fn test_signature_mismatch_view_mut_panics() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
         let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();
@@ -2982,6 +2986,28 @@ mod test {
 
         let mut data2 = model2.make_data();
         let _view = joint_info1.view_mut(&mut data2);
+    }
+
+
+    /// Two models that differ only in `nuserdata` share a signature, and `nuserdata` sizes
+    /// `mjData::userdata`. The swap must fail, or `userdata()` returns a slice past the buffer.
+    #[test]
+    fn test_try_swap_model_rejects_unpinned_size() {
+        const BODY: &str = "<worldbody><body name='b1'><joint type='free'/><geom size='0.1'/></body></worldbody>";
+        let plain = Box::new(MjModel::from_xml_string(&format!("<mujoco>{BODY}</mujoco>")).unwrap());
+        let userdata = Box::new(
+            MjModel::from_xml_string(&format!("<mujoco><size nuserdata='2000'/>{BODY}</mujoco>")).unwrap()
+        );
+        assert_eq!(plain.signature(), userdata.signature(), "the pair must share a signature");
+
+        let mut data = MjData::new(plain);
+        let buffer_len = data.userdata().len();
+        let err = data.try_swap_model(userdata).unwrap_err();
+        match err {
+            MjDataError::IncompatibleModel { source, destination } => assert_eq!(source, destination),
+            other => panic!("expected IncompatibleModel, got {other:?}"),
+        }
+        assert_eq!(data.userdata().len(), buffer_len);
     }
 
     #[test]
@@ -2995,20 +3021,20 @@ mod test {
 
         let err = joint_info1.try_view(&data2).unwrap_err();
         match err {
-            MjDataError::SignatureMismatch { source, destination } => {
+            MjDataError::IncompatibleModel { source, destination } => {
                 assert_eq!(source, data1.signature());
                 assert_eq!(destination, data2.signature());
             }
-            other => panic!("expected SignatureMismatch, got {other:?}"),
+            other => panic!("expected IncompatibleModel, got {other:?}"),
         }
 
         let err = joint_info1.try_view_mut(&mut data2).unwrap_err();
         match err {
-            MjDataError::SignatureMismatch { source, destination } => {
+            MjDataError::IncompatibleModel { source, destination } => {
                 assert_eq!(source, data1.signature());
                 assert_eq!(destination, data2.signature());
             }
-            other => panic!("expected SignatureMismatch, got {other:?}"),
+            other => panic!("expected IncompatibleModel, got {other:?}"),
         }
     }
 
@@ -3185,7 +3211,7 @@ mod test {
         assert_relative_eq!(jinfo.view(&data).qvel[0], original_qvel0, epsilon = 1e-15);
     }
 
-    /// Tests `copy_state_from_data` returns `SignatureMismatch` for mismatched models.
+    /// Tests `copy_state_from_data` returns `IncompatibleModel` for mismatched models.
     #[test]
     fn test_copy_state_signature_mismatch() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body><joint type='free'/><geom size='0.1'/></body></worldbody></mujoco>").unwrap();
@@ -3196,10 +3222,10 @@ mod test {
 
         let err = data2.copy_state_from_data(&data1, MjtState::mjSTATE_FULLPHYSICS as u32).unwrap_err();
         match err {
-            MjDataError::SignatureMismatch { source, destination } => {
+            MjDataError::IncompatibleModel { source, destination } => {
                 assert_ne!(source, destination);
             }
-            other => panic!("expected SignatureMismatch, got {:?}", other),
+            other => panic!("expected IncompatibleModel, got {:?}", other),
         }
     }
 

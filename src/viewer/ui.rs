@@ -470,7 +470,7 @@ impl ViewerUI {
         let mut left = 0.0;
 
         // Check for a dirty exit if a model switch happened during mutex not being locked.
-        let frame_signature = scene.signature();
+        let frame_layout = shared_viewer_state.lock_unpoison().data_passive.model().layout();
 
         // Process the UI
         let raw_input = self.state.take_egui_input(window);
@@ -828,7 +828,7 @@ impl ViewerUI {
                             });
                         });
                         let mut lock = shared_viewer_state.lock_unpoison();
-                        if lock.data_passive.model().signature() != frame_signature {
+                        if lock.data_passive.model().layout() != frame_layout {
                             return;
                         }
                         *lock.data_passive.model_opt_mut() = options;
@@ -851,7 +851,7 @@ impl ViewerUI {
                             };
                             let enumerated: MjtCamera = enumerated;
                             let lock = shared_viewer_state.lock_unpoison();
-                            if lock.data_passive.model().signature() != frame_signature {
+                            if lock.data_passive.model().layout() != frame_layout {
                                 return;
                             }
                             let model = lock.data_passive.model();
@@ -1475,7 +1475,7 @@ impl ViewerUI {
                     // Write modified vis and stat back to model
                     {
                         let mut lock = shared_viewer_state.lock_unpoison();
-                        if lock.data_passive.model().signature() != frame_signature {
+                        if lock.data_passive.model().layout() != frame_layout {
                             return;
                         }
                         *lock.data_passive.model_vis_mut() = vis;
@@ -1507,7 +1507,7 @@ impl ViewerUI {
                 .show(ui, |ui|
             {
                 let mut lock = shared_viewer_state.lock_unpoison();
-                if lock.data_passive.model().signature() != frame_signature {
+                if lock.data_passive.model().layout() != frame_layout {
                     return;
                 }
                 let ctrl_mut = lock.data_passive.ctrl_mut();
@@ -1553,7 +1553,7 @@ impl ViewerUI {
                 .show(ui, |ui|
             {
                 let mut lock = shared_viewer_state.lock_unpoison();
-                if lock.data_passive.model().signature() != frame_signature {
+                if lock.data_passive.model().layout() != frame_layout {
                     return;
                 }
                 let qpos = lock.data_passive.qpos_mut();
@@ -1629,7 +1629,7 @@ impl ViewerUI {
             {
                 ui.horizontal_wrapped(|ui| {
                     let mut lock = shared_viewer_state.lock_unpoison();
-                    if lock.data_passive.model().signature() != frame_signature {
+                    if lock.data_passive.model().layout() != frame_layout {
                         return;
                     }
                     let data = &mut lock.data_passive;
@@ -1676,7 +1676,7 @@ impl ViewerUI {
                             .max_height(CAMERA_MODAL_MAX_HEIGHT)
                             .show(ui, |ui| {
                                 let lock = shared_viewer_state.lock_unpoison();
-                                if lock.data_passive.model().signature() != frame_signature {
+                                if lock.data_passive.model().layout() != frame_layout {
                                     return;
                                 }
                                 let model = lock.data_passive.model();

@@ -23,14 +23,15 @@ use std::path::Path;
 /// exceed the destination scene's `maxgeom` capacity.
 ///
 /// # Panics
-/// Panics if `src` and `dst` were created for models with different signatures.
+/// Panics if `src` and `dst` were created for models that are not compatible
+/// (see [`MjvScene::is_compatible_with_scene`]).
 pub fn sync_geoms(src: &MjvScene, dst: &mut MjvScene) -> Result<(), MjSceneError> {
     // A copied mjvGeom keeps its objid, which the renderer uses as an unchecked index into the
     // DESTINATION scene's flex and skin arrays; those are sized by the model the scene was built
     // for, and are null when that model has none.
-    assert_eq!(
-        src.signature(), dst.signature(),
-        "the two scenes were created for different models"
+    assert!(
+        src.is_compatible_with_scene(dst),
+        "the two scenes were created for models that are not compatible"
     );
 
     let ffi_src = src.ffi();
@@ -158,7 +159,7 @@ mod tests {
     /// A copied geom keeps its `objid`, which the renderer uses as an unchecked index into the
     /// destination scene's flex and skin arrays, so the two scenes must belong to one model.
     #[test]
-    #[should_panic(expected = "different models")]
+    #[should_panic(expected = "models that are not compatible")]
     fn test_sync_geoms_cross_model_panics() {
         let with_body = MjModel::from_xml_string(
             "<mujoco><worldbody><body><geom size=\"0.1\"/></body></worldbody></mujoco>").unwrap();

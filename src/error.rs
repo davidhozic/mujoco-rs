@@ -48,11 +48,11 @@ pub enum MjDataError {
         /// Actual length that was provided.
         got: usize,
     },
-    /// Two model-signature-bound objects were created from different models.
+    /// Two model-bound objects were created from models that are not compatible.
     ///
-    /// This is returned by APIs that require matching model signatures,
+    /// This is returned by APIs that require a matching model memory layout,
     /// including data-copy operations and info-view accessors.
-    SignatureMismatch {
+    IncompatibleModel {
         /// Model signature of the source object.
         source: u64,
         /// Model signature of the destination object.
@@ -90,11 +90,11 @@ impl fmt::Display for MjDataError {
                      but need at least {needed}"
                 )
             }
-            Self::SignatureMismatch { source, destination } => {
+            Self::IncompatibleModel { source, destination } => {
                 write!(
                     f,
-                    "model signature mismatch: source {source:#X}, \
-                     destination {destination:#X}"
+                    "incompatible model: source signature {source:#X}, \
+                     destination signature {destination:#X}"
                 )
             }
             Self::LengthMismatch { name, expected, got } => {
@@ -379,8 +379,8 @@ pub enum MjModelError {
         /// Actual number of elements available.
         available: usize,
     },
-    /// Two model-signature-bound objects were created from different models.
-    SignatureMismatch {
+    /// Two model-bound objects were created from models that are not compatible.
+    IncompatibleModel {
         /// Model signature of the source object.
         source: u64,
         /// Model signature of the destination object.
@@ -417,11 +417,11 @@ impl fmt::Display for MjModelError {
                      but need at least {needed}"
                 )
             }
-            Self::SignatureMismatch { source, destination } => {
+            Self::IncompatibleModel { source, destination } => {
                 write!(
                     f,
-                    "model signature mismatch: source {source:#X}, \
-                     destination {destination:#X}"
+                    "incompatible model: source signature {source:#X}, \
+                     destination signature {destination:#X}"
                 )
             }
             Self::VfsError(e) => write!(f, "VFS error: {e}"),

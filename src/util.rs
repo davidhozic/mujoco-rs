@@ -405,6 +405,7 @@ macro_rules! info_method {
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let model_ref = self$(.$model())?;
                 let id = model_ref.name_to_id(MjtObj::[<mjOBJ_ $type_:upper>], name)?;
+                #[allow(unused)]
                 let model_ffi = model_ref.ffi();
 
                 let id = id as usize;
@@ -424,8 +425,8 @@ macro_rules! info_method {
                     };
                 )*
 
-                let model_signature = model_ffi.signature;
-                Some([<Mj $type_:camel $info_type Info>] { name: name.to_string(), id, model_signature, $($attr,)* $($attr_ffi,)* $($attr_dyn),* })
+                let model_layout = model_ref.layout();
+                Some([<Mj $type_:camel $info_type Info>] { name: name.to_string(), id, model_layout, $($attr,)* $($attr_ffi,)* $($attr_dyn),* })
             }
         }
     }
@@ -472,7 +473,7 @@ macro_rules! info_with_view {
                 pub name: String,
                 /// Index of the element.
                 pub id: usize,
-                model_signature: u64,
+                model_layout: $crate::wrappers::mj_model::MjModelLayout,
                 $(
                     $attr: (usize, usize),
                 )*
@@ -487,7 +488,7 @@ macro_rules! info_with_view {
             impl [<Mj $name:camel $info_type Info>] {
                 /// Returns the model signature this `Info` was created from.
                 pub fn model_signature(&self) -> u64 {
-                    self.model_signature
+                    self.model_layout.signature()
                 }
 
                 #[doc = concat!(
@@ -495,15 +496,15 @@ macro_rules! info_with_view {
                     "Fields listed as read-only use [`PointerViewUnsafeMut`](crate::util::PointerViewUnsafeMut): ",
                     "read is safe, mutation requires [`as_mut_slice`](crate::util::PointerViewUnsafeMut::as_mut_slice) and `unsafe`.\n\n",
                     "# Errors\n",
-                    "Returns [`SignatureMismatch`](", stringify!([<Mj $info_type Error>]), "::SignatureMismatch) if `",
-                    stringify!($info_type), "` was built from a different model than this `Info`."
+                    "Returns [`IncompatibleModel`](", stringify!([<Mj $info_type Error>]), "::IncompatibleModel) if `",
+                    stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model."
                 )]
                 pub fn try_view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> Result<[<Mj $name:camel $info_type ViewMut>]<'p>, $crate::error::[<Mj $info_type Error>]> {
-                    let destination_signature = [<$info_type:lower>].signature();
-                    if self.model_signature != destination_signature {
-                        return Err($crate::error::[<Mj $info_type Error>]::SignatureMismatch {
-                            source: self.model_signature,
-                            destination: destination_signature,
+                    let destination_layout = [<$info_type:lower>].layout();
+                    if self.model_layout != destination_layout {
+                        return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
+                            source: self.model_layout.signature(),
+                            destination: destination_layout.signature(),
                         });
                     }
                     Ok(view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(),
@@ -519,25 +520,25 @@ macro_rules! info_with_view {
                     "Fields listed as read-only use [`PointerViewUnsafeMut`](crate::util::PointerViewUnsafeMut): ",
                     "read is safe, mutation requires [`as_mut_slice`](crate::util::PointerViewUnsafeMut::as_mut_slice) and `unsafe`.\n\n",
                     "# Panics\n",
-                    "Panics if `", stringify!($info_type), "` was built from a different model than this `Info`. ",
+                    "Panics if `", stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model. ",
                     "Use [`try_view_mut`](Self::try_view_mut) to handle this as a `Result`."
                 )]
                 pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
-                    self.try_view_mut([<$info_type:lower>]).unwrap_or_else(|_| panic!("model signature mismatch"))
+                    self.try_view_mut([<$info_type:lower>]).unwrap_or_else(|_| panic!("the model is not compatible"))
                 }
 
                 #[doc = concat!(
                     "Returns an immutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
                     "# Errors\n",
-                    "Returns [`SignatureMismatch`](", stringify!([<Mj $info_type Error>]), "::SignatureMismatch) if `",
-                    stringify!($info_type), "` was built from a different model than this `Info`."
+                    "Returns [`IncompatibleModel`](", stringify!([<Mj $info_type Error>]), "::IncompatibleModel) if `",
+                    stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model."
                 )]
                 pub fn try_view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> Result<[<Mj $name:camel $info_type View>]<'p>, $crate::error::[<Mj $info_type Error>]> {
-                    let destination_signature = [<$info_type:lower>].signature();
-                    if self.model_signature != destination_signature {
-                        return Err($crate::error::[<Mj $info_type Error>]::SignatureMismatch {
-                            source: self.model_signature,
-                            destination: destination_signature,
+                    let destination_layout = [<$info_type:lower>].layout();
+                    if self.model_layout != destination_layout {
+                        return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
+                            source: self.model_layout.signature(),
+                            destination: destination_layout.signature(),
                         });
                     }
                     Ok(view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(),
@@ -551,11 +552,11 @@ macro_rules! info_with_view {
                 #[doc = concat!(
                     "Returns an immutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
                     "# Panics\n",
-                    "Panics if `", stringify!($info_type), "` was built from a different model than this `Info`. ",
+                    "Panics if `", stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model. ",
                     "Use [`try_view`](Self::try_view) to handle this as a `Result`."
                 )]
                 pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
-                    self.try_view([<$info_type:lower>]).unwrap_or_else(|_| panic!("model signature mismatch"))
+                    self.try_view([<$info_type:lower>]).unwrap_or_else(|_| panic!("the model is not compatible"))
                 }
             }
 
