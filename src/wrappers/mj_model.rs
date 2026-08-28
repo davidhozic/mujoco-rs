@@ -12,9 +12,12 @@ use crate::mujoco_c::*;
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
 use super::mj_primitive::*;
 
+use bytemuck::must_cast_slice;
 use log::debug;
 
 use std::ffi::{c_char, CStr, CString, c_int, c_void};
+use std::fmt::{Formatter, Debug, Result as FmtResult};
+use std::sync::{OnceLock, Arc};
 use std::ptr::{self, NonNull};
 use std::path::Path;
 
@@ -211,10 +214,16 @@ unsafe impl bytemuck::Zeroable for mjtWrap {}
 ///
 /// [`MjModel::signature`] pins the element tree (`nbody`, `nq`, `nv`, `ngeom`, ...) but none of
 /// the sizes below, so a compatibility test needs both.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// `Eq` also selects the pointer shortcut in `PartialEq for Arc`, which is what makes a view gate
+// against the model's own snapshot a pointer comparison. Losing `Eq` would silently cost that.
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[expect(non_snake_case, reason = "the fields keep the MuJoCo size symbol names")]
 pub(crate) struct MjModelLayout {
     signature: u64,
+
+    /* Per-element count tables, byte for byte. The totals below fix the length of each packed
+       array, but not the split of that array between the elements. */
+    split: MjSplitTables,
 
     /* Row lengths of MJDATA_POINTERS and MJDATA_ARENA_POINTERS. */
     na: MjtSize,             nu: MjtSize,             nout: MjtSize,          nmocap: MjtSize,
@@ -243,6 +252,11 @@ impl MjModelLayout {
     pub(crate) fn signature(&self) -> u64 {
         self.signature
     }
+
+    /// Returns the packed mesh, texture and heightfield tables.
+    fn asset_split(&self) -> &[u8] {
+        &self.split.bytes[..self.split.asset_len]
+    }
 }
 
 impl From<&MjModel> for MjModelLayout {
@@ -250,6 +264,7 @@ impl From<&MjModel> for MjModelLayout {
         let m = model.ffi();
         Self {
             signature: m.signature,
+            split: model.split_tables(),
             na: m.na, nu: m.nu, nout: m.nout, nmocap: m.nmocap,
             nuserdata: m.nuserdata, nsensordata: m.nsensordata, nhistory: m.nhistory, nplugin: m.nplugin,
             npluginstate: m.npluginstate, nwrap: m.nwrap, neq: m.neq, nbvh: m.nbvh,
@@ -268,10 +283,36 @@ impl From<&MjModel> for MjModelLayout {
 }
 
 
+/// Count tables of an [`MjModel`], packed as raw bytes so that a comparison stays exact.
+///
+/// The asset tables occupy the first `asset_len` bytes, which lets an asset-only test read a
+/// prefix of the same buffer.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct MjSplitTables {
+    asset_len: usize,
+    bytes: Box<[u8]>,
+}
+
+impl Debug for MjSplitTables {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("MjSplitTables")
+            .field("asset_len", &self.asset_len)
+            .field("len", &self.bytes.len())
+            .finish_non_exhaustive()
+    }
+}
+
+
 /// A Rust-safe wrapper around mjModel.
 /// Automatically clean after itself on destruction.
 #[derive(Debug)]
-pub struct MjModel(NonNull<mjModel>);
+pub struct MjModel {
+    ptr: NonNull<mjModel>,
+    /// Snapshot of the sizes and of the element split, computed once on first use and shared with
+    /// every `Info` this model builds. Only an `unsafe` write through [`MjModel::ffi_mut`] can
+    /// make it stale.
+    layout: OnceLock<Arc<MjModelLayout>>,
+}
 
 // SAFETY: MjModel owns its mjModel heap allocation exclusively. The data is not shared
 // outside of Rust, except in the C++ code which is synchronized via wrapper APIs.
@@ -424,7 +465,7 @@ impl MjModel {
     /// Returns an error with the C error-buffer message if the pointer is null.
     fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[c_char]) -> Result<Self, MjModelError> {
         match NonNull::new(ptr_model) {
-            Some(nn) => Ok(Self(nn)),
+            Some(nn) => Ok(Self { ptr: nn, layout: OnceLock::new() }),
             None => {
                 // SAFETY: error_buffer is zero-initialised and MuJoCo always
                 // NUL-terminates the message it writes into it.
@@ -653,7 +694,8 @@ impl MjModel {
     pub fn try_clone(&self) -> Result<MjModel, MjModelError> {
         let ptr = unsafe { mj_copyModel(ptr::null_mut(), self.ffi()) };
         NonNull::new(ptr)
-            .map(MjModel)
+            // The copy holds the same sizes and the same tables, so it reuses the snapshot.
+            .map(|ptr| MjModel { ptr, layout: self.layout.clone() })
             .ok_or(MjModelError::AllocationFailed)
     }
 
@@ -961,9 +1003,9 @@ impl MjModel {
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
-        // SAFETY: self.0 is a valid non-null mjModel pointer for the lifetime of self
+        // SAFETY: self.ptr is a valid non-null mjModel pointer for the lifetime of self
         // (struct invariant).
-        unsafe { self.0.as_ref() }
+        unsafe { self.ptr.as_ref() }
     }
 
     /// Returns a mutable reference to the wrapped FFI struct.
@@ -972,15 +1014,17 @@ impl MjModel {
     /// The caller must ensure that any modifications to the underlying struct preserve
     /// the invariants that MuJoCo expects (e.g. do not corrupt computed fields or
     /// break index relationships). Violating these invariants can cause undefined behavior.
+    /// A write that changes a size or an address table also leaves the cached layout stale, so
+    /// [`MjModel::is_compatible_with_model`] then answers for the model as it was loaded.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjModel {
-        unsafe { self.0.as_mut() }
+        unsafe { self.ptr.as_mut() }
     }
 
     /// Returns a direct mutable pointer to the underlying C model struct.
     /// Only for internal use by viewer code that passes the pointer to C++ FFI.
     #[cfg(feature = "cpp-viewer")]
     pub(crate) fn as_raw_ptr(&self) -> *mut mjModel {
-        self.0.as_ptr()
+        self.ptr.as_ptr()
     }
 }
 
@@ -996,23 +1040,15 @@ impl MjModel {
     /// built: an [`MjData`], and the index ranges an `Info` caches.
     ///
     /// The test covers the compilation signature, every size that fixes an `mjData` buffer or a
-    /// packed `mjModel` array, and the per-flex, per-element and plugin tables whose entries a
-    /// caller resolves as index ranges. [`MjModel::signature`] alone pins none of these sizes, so
-    /// it is not a sufficient test on its own.
+    /// packed `mjModel` array, and the per-flex, per-element and plugin count tables that fix
+    /// where each element starts inside such an array. [`MjModel::signature`] alone pins none of
+    /// these sizes, so it is not a sufficient test on its own.
     pub fn is_compatible_with_model(&self, other: &MjModel) -> bool {
-        // The flex and plugin tables are compared element by element: an mjData contact holds a
-        // flex element index that C resolves through flex_elemdataadr, which the per-flex split
-        // fixes, and mj_resetData relays a plugin instance to the slot in m->plugin.
         self.layout() == other.layout()
-            && self.flex_dim() == other.flex_dim()
-            && self.flex_vertnum() == other.flex_vertnum()
-            && self.flex_elemnum() == other.flex_elemnum()
-            && self.plugin() == other.plugin()
-            && self.has_same_element_split(other)
     }
 
     /// Reports whether `other` keeps its mesh, texture and heightfield data in the same memory
-    /// as this model: the same totals, the same local addresses and the same shapes.
+    /// as this model: the same totals and the same shape for every asset.
     pub fn is_asset_compatible_with_model(&self, other: &MjModel) -> bool {
         self.nmeshvert() == other.nmeshvert()
             && self.nmeshnormal() == other.nmeshnormal()
@@ -1021,60 +1057,65 @@ impl MjModel {
             && self.nmeshgraph() == other.nmeshgraph()
             && self.ntexdata() == other.ntexdata()
             && self.nhfielddata() == other.nhfielddata()
-            && self.has_same_asset_split(other)
+            && self.layout().asset_split() == other.layout().asset_split()
     }
 
-    /// Reports whether the per-element address tables of `other` match this model's entry for
-    /// entry.
+    /// Returns the per-sensor, per-numeric, per-tuple, per-actuator, per-tendon, per-flex and
+    /// plugin count tables, as raw bytes in a fixed order.
     ///
     /// Two models can hold the same element count and the same data total and still split that
-    /// total differently. A caller that resolves one element through a range read from `other`
-    /// then reads or writes the neighbouring element, and no length ever disagrees. The joint
-    /// tables need no test: the signature hashes each joint's `nq` in tree order, which fixes
-    /// `jnt_qposadr` and `jnt_dofadr`.
-    fn has_same_element_split(&self, other: &MjModel) -> bool {
-        self.has_same_asset_split(other)
-            && self.sensor_adr() == other.sensor_adr()
-            && self.sensor_dim() == other.sensor_dim()
-            && self.numeric_adr() == other.numeric_adr()
-            && self.numeric_size() == other.numeric_size()
-            && self.tuple_adr() == other.tuple_adr()
-            && self.tuple_size() == other.tuple_size()
-            && self.actuator_actadr() == other.actuator_actadr()
-            && self.actuator_actnum() == other.actuator_actnum()
-            && self.actuator_ctrladr() == other.actuator_ctrladr()
-            && self.actuator_ctrlnum() == other.actuator_ctrlnum()
-            && self.actuator_outadr() == other.actuator_outadr()
-            && self.actuator_outnum() == other.actuator_outnum()
-            // A tendon Info caches its Jacobian row, which ten_J_rowadr places inside nJten.
-            && self.ten_j_rowadr() == other.ten_j_rowadr()
-            && self.ten_j_rownnz() == other.ten_j_rownnz()
+    /// total differently. A caller that resolves one element through a range read from the other
+    /// model then reads or writes the neighbouring element, and no length ever disagrees. Each
+    /// address table is the running prefix sum of the count table beside it, so the counts pin
+    /// the addresses and the address tables need no entry. The joint tables need none either:
+    /// the signature hashes each joint's `nq` in tree order, which fixes `jnt_qposadr` and
+    /// `jnt_dofadr`.
+    fn element_split_tables(&self) -> impl Iterator<Item = &[u8]> {
+        [
+            must_cast_slice(self.sensor_dim()),         must_cast_slice(self.numeric_size()),
+            must_cast_slice(self.tuple_size()),         must_cast_slice(self.actuator_actnum()),
+            must_cast_slice(self.actuator_ctrlnum()),   must_cast_slice(self.actuator_outnum()),
+            // A tendon Info caches its Jacobian row, which ten_J_rownnz sizes inside nJten.
+            must_cast_slice(self.ten_j_rownnz()),
+            // An mjData contact holds a flex element index that C resolves through
+            // flex_elemdataadr, and mj_resetData relays a plugin instance to the slot in m->plugin.
+            must_cast_slice(self.flex_dim()),           must_cast_slice(self.flex_vertnum()),
+            must_cast_slice(self.flex_elemnum()),       must_cast_slice(self.plugin()),
+        ].into_iter()
     }
 
-    /// Reports whether the per-mesh, per-texture and per-heightfield address tables of `other`
-    /// match this model's entry for entry.
-    fn has_same_asset_split(&self, other: &MjModel) -> bool {
-        self.mesh_vertadr() == other.mesh_vertadr()
-            && self.mesh_vertnum() == other.mesh_vertnum()
-            && self.mesh_normaladr() == other.mesh_normaladr()
-            && self.mesh_normalnum() == other.mesh_normalnum()
-            && self.mesh_texcoordadr() == other.mesh_texcoordadr()
-            && self.mesh_texcoordnum() == other.mesh_texcoordnum()
-            && self.mesh_faceadr() == other.mesh_faceadr()
-            && self.mesh_facenum() == other.mesh_facenum()
-            && self.mesh_graphadr() == other.mesh_graphadr()
-            && self.tex_adr() == other.tex_adr()
-            && self.tex_width() == other.tex_width()
-            && self.tex_height() == other.tex_height()
-            && self.tex_nchannel() == other.tex_nchannel()
-            && self.hfield_adr() == other.hfield_adr()
-            && self.hfield_nrow() == other.hfield_nrow()
-            && self.hfield_ncol() == other.hfield_ncol()
+    /// Returns the per-mesh, per-texture and per-heightfield count tables, as raw bytes in a
+    /// fixed order.
+    fn asset_split_tables(&self) -> impl Iterator<Item = &[u8]> {
+        [
+            must_cast_slice(self.mesh_vertnum()),       must_cast_slice(self.mesh_normalnum()),
+            must_cast_slice(self.mesh_texcoordnum()),   must_cast_slice(self.mesh_facenum()),
+            // mesh_graphadr travels as an address: its length is the size of the convex hull that
+            // qhull builds, and mjModel holds no count for it.
+            must_cast_slice(self.mesh_graphadr()),
+            must_cast_slice(self.tex_width()),          must_cast_slice(self.tex_height()),
+            must_cast_slice(self.tex_nchannel()),
+            must_cast_slice(self.hfield_nrow()),        must_cast_slice(self.hfield_ncol()),
+        ].into_iter()
+    }
+
+    /// Packs the asset tables and then the element tables into one buffer.
+    fn split_tables(&self) -> MjSplitTables {
+        let mut bytes = Vec::new();
+        for table in self.asset_split_tables() {
+            bytes.extend_from_slice(table);
+        }
+        let asset_len = bytes.len();
+        for table in self.element_split_tables() {
+            bytes.extend_from_slice(table);
+        }
+
+        MjSplitTables { asset_len, bytes: bytes.into_boxed_slice() }
     }
 
     /// Returns the memory layout snapshot of this model.
-    pub(crate) fn layout(&self) -> MjModelLayout {
-        MjModelLayout::from(self)
+    pub(crate) fn layout(&self) -> &Arc<MjModelLayout> {
+        self.layout.get_or_init(|| Arc::new(MjModelLayout::from(self)))
     }
 
     getter_setter! {get, [
@@ -1697,9 +1738,9 @@ impl Clone for MjModel {
 
 impl Drop for MjModel {
     fn drop(&mut self) {
-        // SAFETY: self.0 is a valid non-null mjModel pointer; called exactly once in Drop.
+        // SAFETY: self.ptr is a valid non-null mjModel pointer; called exactly once in Drop.
         unsafe {
-            mj_deleteModel(self.0.as_ptr());
+            mj_deleteModel(self.ptr.as_ptr());
         }
     }
 }
@@ -2439,6 +2480,8 @@ mod tests {
         assert_eq!(model.nmeshvert(), swapped.nmeshvert(), "the vertex totals must agree");
         assert_ne!(model.mesh_vertadr(), swapped.mesh_vertadr());
         assert!(!model.is_compatible_with_model(&swapped));
+        // An `Info` gate compares layouts alone, so the layout must carry the split.
+        assert_ne!(model.layout(), swapped.layout());
         assert!(model.is_compatible_with_model(&mesh_model(TET, CUBE)));
     }
 
@@ -2474,6 +2517,34 @@ mod tests {
         assert!(model.is_compatible_with_model(&sensor_model(3, 1)));
     }
 
+    /// A view gate compares the layout alone, so the per-flex split must reach the layout: a
+    /// contact holds a flex element index that C resolves through the per-flex tables.
+    #[test]
+    fn test_layout_rejects_a_different_flex_split() {
+        let flex = |name: &str, bodies: &str, nvert: usize, element: &str| format!(
+            "<flex name='{name}' dim='1' body='{bodies}' vertex='{}' element='{element}'/>",
+            "0 0 0 ".repeat(nvert)
+        );
+        let flex_model = |first: String, second: String| MjModel::from_xml_string(&format!(
+            "<mujoco><worldbody>\
+             <body name='v0'><freejoint/><geom size='0.01'/></body>\
+             <body name='v1' pos='0.1 0 0'><freejoint/><geom size='0.01'/></body>\
+             <body name='v2' pos='0.2 0 0'><freejoint/><geom size='0.01'/></body>\
+             <body name='v3' pos='0.3 0 0'><freejoint/><geom size='0.01'/></body>\
+             <body name='v4' pos='0.4 0 0'><freejoint/><geom size='0.01'/></body>\
+             </worldbody><deformable>{first}{second}</deformable></mujoco>"
+        )).unwrap();
+
+        // The same five vertices and three elements, divided the other way round between f1 and f2.
+        let model = flex_model(flex("f1", "v0 v1 v2", 3, "0 1 1 2"), flex("f2", "v3 v4", 2, "0 1"));
+        let swapped = flex_model(flex("f1", "v0 v1", 2, "0 1"), flex("f2", "v2 v3 v4", 3, "0 1 1 2"));
+        assert_eq!(model.signature(), swapped.signature(), "the pair must share a signature");
+        assert_eq!(model.nflexvert(), swapped.nflexvert(), "the vertex totals must agree");
+        assert_ne!(model.flex_vertnum(), swapped.flex_vertnum());
+        assert!(!model.is_compatible_with_model(&swapped));
+        assert_ne!(model.layout(), swapped.layout());
+    }
+
     /// An asset copy overrides the asset data and reaches no `mjData` buffer, so it accepts a
     /// model that only sizes its data differently. A moved asset it still rejects.
     #[test]
@@ -2495,6 +2566,11 @@ mod tests {
         let swapped = asset_model("", CUBE, TET);
         assert_eq!(model.nmeshvert(), swapped.nmeshvert(), "the vertex totals must agree");
         assert!(!model.is_asset_compatible_with_model(&swapped));
+
+        // A sensor moves no asset, so the asset test must read the asset tables alone.
+        let sensor = asset_model("<sensor><user dim='4' objtype='body' objname='b'/></sensor>", TET, CUBE);
+        assert!(!model.is_compatible_with_model(&sensor), "the element tables differ");
+        assert!(model.is_asset_compatible_with_model(&sensor));
     }
 
     #[test]

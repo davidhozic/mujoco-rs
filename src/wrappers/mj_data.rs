@@ -8,10 +8,12 @@ use crate::error::MjDataError;
 use super::mj_statistic::{MjWarningStat, MjTimerStat, MjSolverStat};
 use super::mj_model::{MjModel, MjModelLayout, MjtSameFrame, MjtObj, MjtStage};
 use super::mj_model::traits::{ModelTypeMut, ModelType};
+use super::fun::utility::mju_norm_3;
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
 
 use std::ptr::{self, NonNull};
+use std::sync::Arc;
 use std::ffi::CString;
 use std::borrow::Cow;
 use std::path::Path;
@@ -216,7 +218,7 @@ impl<M: ModelType> MjData<M> {
         let qfrc_fluid = nv_range;
         let qfrc_adhesion = nv_range;
 
-        let model_layout = self.model.layout();
+        let model_layout = self.model.layout().clone();
         Some(MjJointDataInfo {name: name.to_string(), id, model_layout,
             qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
             qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_adhesion, qfrc_passive,
@@ -1201,7 +1203,9 @@ impl<M: ModelType> MjData<M> {
             return Err(MjDataError::LengthMismatch { name: "normals_out", expected: nray, got: buf.len() });
         }
 
-        let mut geom_id_raw = vec![0i32; nray];
+        // mj_multiRay leaves geomid unwritten for a ray shorter than mjMINVAL, so the buffer
+        // starts at the "no intersection" id.
+        let mut geom_id_raw = vec![-1i32; nray];
         let mut distance = vec![0.0; nray];
 
         unsafe { mj_multiRay(
@@ -1222,11 +1226,21 @@ impl<M: ModelType> MjData<M> {
     /// Returns `(geomid, distance)` where distance is -1 if no intersection.
     /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
     /// `geomgroup` and `flg_static` are as in mjvOption; pass `None` for `geomgroup` to skip group exclusion.
+    /// A `vec` shorter than `mjMINVAL` reports no intersection, as [`MjData::multi_ray`] does.
     pub fn ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: MjtBool, bodyexclude: Option<usize>,
         normal_out: Option<&mut [MjtNum; 3]>
     ) -> (Option<usize>, MjtNum) {
+        // mj_ray raises mjERROR, which ends the process, before it reads anything else. mj_multiRay
+        // answers the same direction with "no intersection", which this returns instead.
+        if mju_norm_3(vec) < mjMINVAL {
+            if let Some(normal) = normal_out {
+                *normal = [0.0; 3];
+            }
+            return (None, -1.0);
+        }
+
         // `normal_out` is a fixed-size array; nothing to validate at runtime here.
         let mut geom_id_raw = -1i32;
         let dist = unsafe { mj_ray(
@@ -1658,7 +1672,7 @@ impl<M: ModelType> MjData<M> {
     /// The buffers were allocated for the model that created this data. That model and
     /// [`MjData::model`] share one layout, because [`MjData::try_swap_model`] rejects a model
     /// that does not.
-    pub(crate) fn layout(&self) -> MjModelLayout {
+    pub(crate) fn layout(&self) -> &Arc<MjModelLayout> {
         self.model.layout()
     }
 
@@ -3035,6 +3049,45 @@ mod test {
             }
             other => panic!("expected IncompatibleModel, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_try_view_rejects_a_different_sensor_split() {
+        let sensor_model = |first: u32, second: u32| MjModel::from_xml_string(&format!(
+            "<mujoco><worldbody><body name='b1'><joint name='j' type='hinge'/><geom size='0.1'/>\
+             </body></worldbody><sensor><user name='u1' dim='{first}' objtype='body' objname='b1'/>\
+             <user name='u2' dim='{second}' objtype='body' objname='b1'/></sensor></mujoco>"
+        )).unwrap();
+
+        let model = sensor_model(3, 1);
+        let swapped = sensor_model(1, 3);
+        assert_eq!(model.signature(), swapped.signature(), "the pair must share a signature");
+        assert_eq!(model.nsensordata(), swapped.nsensordata(), "the data totals must agree");
+
+        let data = model.make_data();
+        let info = data.sensor("u1").unwrap();
+        assert_eq!(info.view(&data).data.len(), 3);
+
+        // In `swapped` the first sensor owns one element, so this range would reach the second.
+        let mut other = swapped.make_data();
+        assert!(info.try_view(&other).is_err());
+        assert!(info.try_view_mut(&mut other).is_err());
+    }
+
+    #[test]
+    fn test_ray_zero_direction_reports_no_intersection() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let mut normal = [1.0; 3];
+        let (geom_id, distance) = data.ray(&[0.0; 3], &[0.0; 3], None, false, None, Some(&mut normal));
+        assert_eq!(geom_id, None);
+        assert_eq!(distance, -1.0);
+        assert_eq!(normal, [0.0; 3]);
+
+        let (geom_ids, distances) = data.multi_ray(&[0.0; 3], &[[0.0; 3]], None, false, None, 10.0, None);
+        assert_eq!(geom_ids, vec![None]);
+        assert_eq!(distances, vec![-1.0]);
     }
 
     #[test]

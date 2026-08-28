@@ -190,7 +190,7 @@ default = []
 bitflags = {version = "2.13.1", optional = true}
 png = {version = "0.18.1", optional = true}
 paste = "1.0.15"
-bytemuck = {version = "1.25.2", features = ["min_const_generics"]}
+bytemuck = {version = "1.25.2", features = ["min_const_generics", "must_cast"]}
 
 # Rendering dependencies
 glutin = {version = "0.32.3", optional = true}

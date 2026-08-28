@@ -376,6 +376,17 @@
   test the mesh, texture and heightfield memory alone, which is all a copy that overrides an asset
   reads, so they accept a model whose ``mjData`` sizes differ.
 
+*Ray casting*
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` no longer ends the process
+  for a direction shorter than ``mjMINVAL``. It now reports no intersection, which is what
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray` reports for the same
+  direction.
+- ``multi_ray`` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_multi_ray` no longer report
+  geom ``0`` for such a direction. MuJoCo leaves the id unwritten, so the returned id was the
+  initial value of the buffer; it is now ``None``.
+
 *Visualization*
 
 - Closed an out-of-bounds read reachable from safe code in

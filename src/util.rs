@@ -436,7 +436,7 @@ macro_rules! info_method {
                     };
                 )*
 
-                let model_layout = model_ref.layout();
+                let model_layout = model_ref.layout().clone();
                 Some([<Mj $type_:camel $info_type Info>] { name: name.to_string(), id, model_layout, $($attr,)* $($attr_ffi,)* $($attr_dyn),* })
             }
         }
@@ -484,7 +484,7 @@ macro_rules! info_with_view {
                 pub name: String,
                 /// Index of the element.
                 pub id: usize,
-                model_layout: $crate::wrappers::mj_model::MjModelLayout,
+                model_layout: std::sync::Arc<$crate::wrappers::mj_model::MjModelLayout>,
                 $(
                     $attr: (usize, usize),
                 )*
@@ -508,11 +508,15 @@ macro_rules! info_with_view {
                     "read is safe, mutation requires [`as_mut_slice`](crate::util::PointerViewUnsafeMut::as_mut_slice) and `unsafe`.\n\n",
                     "# Errors\n",
                     "Returns [`IncompatibleModel`](", stringify!([<Mj $info_type Error>]), "::IncompatibleModel) if `",
-                    stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model."
+                    stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model.",
+                    "\n\n# Note\n",
+                    "Every call tests the model layout. While this `Info` and the given [`Mj", stringify!($info_type), "`] ",
+                    "name the same model, that test is a pointer comparison; otherwise it compares the whole layout ",
+                    "snapshot. Re-fetch the `Info` after a model swap to restore the pointer comparison."
                 )]
                 pub fn try_view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> Result<[<Mj $name:camel $info_type ViewMut>]<'p>, $crate::error::[<Mj $info_type Error>]> {
                     let destination_layout = [<$info_type:lower>].layout();
-                    if self.model_layout != destination_layout {
+                    if self.model_layout != *destination_layout {
                         return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
                             source: self.model_layout.signature(),
                             destination: destination_layout.signature(),
@@ -532,7 +536,11 @@ macro_rules! info_with_view {
                     "read is safe, mutation requires [`as_mut_slice`](crate::util::PointerViewUnsafeMut::as_mut_slice) and `unsafe`.\n\n",
                     "# Panics\n",
                     "Panics if `", stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model. ",
-                    "Use [`try_view_mut`](Self::try_view_mut) to handle this as a `Result`."
+                    "Use [`try_view_mut`](Self::try_view_mut) to handle this as a `Result`.",
+                    "\n\n# Note\n",
+                    "Every call tests the model layout. While this `Info` and the given [`Mj", stringify!($info_type), "`] ",
+                    "name the same model, that test is a pointer comparison; otherwise it compares the whole layout ",
+                    "snapshot. Re-fetch the `Info` after a model swap to restore the pointer comparison."
                 )]
                 pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
                     self.try_view_mut([<$info_type:lower>]).unwrap_or_else(|_| panic!("the model is not compatible"))
@@ -542,11 +550,15 @@ macro_rules! info_with_view {
                     "Returns an immutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
                     "# Errors\n",
                     "Returns [`IncompatibleModel`](", stringify!([<Mj $info_type Error>]), "::IncompatibleModel) if `",
-                    stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model."
+                    stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model.",
+                    "\n\n# Note\n",
+                    "Every call tests the model layout. While this `Info` and the given [`Mj", stringify!($info_type), "`] ",
+                    "name the same model, that test is a pointer comparison; otherwise it compares the whole layout ",
+                    "snapshot. Re-fetch the `Info` after a model swap to restore the pointer comparison."
                 )]
                 pub fn try_view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> Result<[<Mj $name:camel $info_type View>]<'p>, $crate::error::[<Mj $info_type Error>]> {
                     let destination_layout = [<$info_type:lower>].layout();
-                    if self.model_layout != destination_layout {
+                    if self.model_layout != *destination_layout {
                         return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
                             source: self.model_layout.signature(),
                             destination: destination_layout.signature(),
@@ -564,7 +576,11 @@ macro_rules! info_with_view {
                     "Returns an immutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
                     "# Panics\n",
                     "Panics if `", stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model. ",
-                    "Use [`try_view`](Self::try_view) to handle this as a `Result`."
+                    "Use [`try_view`](Self::try_view) to handle this as a `Result`.",
+                    "\n\n# Note\n",
+                    "Every call tests the model layout. While this `Info` and the given [`Mj", stringify!($info_type), "`] ",
+                    "name the same model, that test is a pointer comparison; otherwise it compares the whole layout ",
+                    "snapshot. Re-fetch the `Info` after a model swap to restore the pointer comparison."
                 )]
                 pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
                     self.try_view([<$info_type:lower>]).unwrap_or_else(|_| panic!("the model is not compatible"))
