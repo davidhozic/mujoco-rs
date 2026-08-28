@@ -304,6 +304,10 @@ impl ViewerSharedState {
         let user_scene = MjvScene::new(model_passive, max_user_geom);
         let state_size = model_passive.state_size(MjtState::mjSTATE_INTEGRATION as u32);
         let mut data_passive_state = vec![0.0; state_size].into_boxed_slice();
+        let prev_opt = model_passive.opt().clone();
+        let prev_vis = model_passive.vis().clone();
+        let prev_stat = model_passive.stat().clone();
+
         // Read the actual initial state (qpos0 may be non-zero) so that data_passive_state_old
         // matches data_passive_state from the start, preventing a spurious write-back of the
         // default pose to the incoming data on the first sync after a model change.
@@ -317,6 +321,9 @@ impl ViewerSharedState {
         self.data_passive_state = data_passive_state;
         self.data_passive = data_passive;
         self.user_scene = user_scene;
+        self.prev_opt = prev_opt;  // opt, vis and state would be resyced using the three-way-merge.
+        self.prev_vis = prev_vis;
+        self.prev_stat = prev_stat;
         self.realtime_factor_smooth = 1.0;
         self.pert = MjvPerturb::default();
         // Clear pending re-uploads: the new context will already have the model's
@@ -2073,5 +2080,53 @@ bitflags! {
         const LEFT = 1 << 0;
         const MIDDLE = 1 << 1;
         const RIGHT = 1 << 2;
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A model with a free joint, whose `qpos0` holds a unit quaternion.
+    const MODEL_FREE: &str =
+        "<mujoco><worldbody><body><freejoint/><geom size=\"0.1\"/></body></worldbody></mujoco>";
+    /// A model with one hinge joint and a gravity that `MODEL_FREE` does not share.
+    const MODEL_HINGE: &str =
+        "<mujoco><option gravity=\"0 0 -1\"/><worldbody><body><joint type=\"hinge\"/>\
+         <geom size=\"0.1\"/></body></worldbody></mujoco>";
+
+    /// A reload replaces the passive model, so the merge shadow must describe the new one. A stale
+    /// shadow makes the next `sync_model` read the difference between the two models as a change
+    /// the viewer made, and write it over the caller's own edit.
+    #[test]
+    fn test_reload_refreshes_the_model_merge_shadow() {
+        let mut model_hinge = MjModel::from_xml_string(MODEL_HINGE).unwrap();
+        let mut model_free = MjModel::from_xml_string(MODEL_FREE).unwrap();
+        let mut state = ViewerSharedState::new(&model_hinge, 0);
+
+        // Fill the shadow with the first model's own gravity, which the second model does not
+        // share. Without this the shadow holds MuJoCo's defaults, which already match.
+        state.sync_model(&mut model_hinge);
+
+        // A data sync reloads the passive model, and it never merges the options itself.
+        {
+            let mut data_free = MjData::new(&model_free);
+            state.sync_data(&mut data_free);
+        }
+
+        // The caller edits its own model after the reload. The viewer changed nothing since, so
+        // the edit must reach the passive model instead of being overwritten by it.
+        let expected = -5.0;
+        model_free.opt_mut().gravity[2] = expected;
+        state.sync_model(&mut model_free);
+        assert_eq!(
+            model_free.ffi().opt.gravity[2], expected,
+            "the caller's edit must survive the first sync_model after a reload"
+        );
+        assert_eq!(
+            state.data_passive.model().ffi().opt.gravity[2], expected,
+            "the edit must also reach the passive model"
+        );
     }
 }
