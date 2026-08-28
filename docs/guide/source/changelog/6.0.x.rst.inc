@@ -337,6 +337,15 @@
   joint or equality, when a model swap through ``sync_data`` arrives in the same frame. Each
   section now draws and writes only while the viewer still holds the model that the frame's
   widgets belong to, and the next frame rebuilds it against the new model.
+- A model swap no longer discards the change that a program makes to the new model's ``opt``,
+  ``vis`` or ``stat`` before the next
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model`. The viewer
+  measured such a change against the parameters of the model it held before the swap, so it read
+  the difference between the two models as its own edit and wrote that back over the program's
+  value.
+- The viewer no longer applies a pending camera tracking selection to a body of the previous model
+  after a model swap. A selection that the "Track" dialog left open held a body id that addresses
+  a different body in the new model, so the camera followed that one instead.
 
 *Model and data pairing*
 
