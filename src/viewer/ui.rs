@@ -341,14 +341,14 @@ impl ViewerUI {
             show_tracking_modal: false,
             tracking_selected_body: None,
         };
-        viewer_ui.update_names(model);
+        viewer_ui.update_caches(model);
         Ok(viewer_ui)
     }
 
     /// Rebuilds all model-dependent cached state: names, control and joint limits with
     /// their ranges, and joint qpos addresses.
     /// Must be called whenever the active model changes.
-    pub(crate) fn update_names(&mut self, model: &MjModel) {
+    pub(crate) fn update_caches(&mut self, model: &MjModel) {
         self.camera_names = (0..model.ncam()).map(|i| {
             if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i as usize) {
                 name.to_string()
@@ -440,6 +440,10 @@ impl ViewerUI {
                 name.to_string()
             } else { format!("Equality {i}") }
         }).collect();
+
+        // The pending selection is a body ID of the previous model, which addresses a different
+        // body in the new one.
+        self.tracking_selected_body = None;
     }
 
     /// Handles winit input events.
@@ -468,9 +472,6 @@ impl ViewerUI {
         // Viewport reservations, which will be excluded from MuJoCo's viewport.
         // This way MuJoCo won't draw over the UI.
         let mut left = 0.0;
-
-        // Check for a dirty exit if a model switch happened during mutex not being locked.
-        let frame_layout = shared_viewer_state.lock_unpoison().data_passive.model().layout();
 
         // Process the UI
         let raw_input = self.state.take_egui_input(window);
@@ -828,7 +829,7 @@ impl ViewerUI {
                             });
                         });
                         let mut lock = shared_viewer_state.lock_unpoison();
-                        if lock.data_passive.model().layout() != frame_layout {
+                        if lock.model_reloaded {
                             return;
                         }
                         *lock.data_passive.model_opt_mut() = options;
@@ -851,7 +852,7 @@ impl ViewerUI {
                             };
                             let enumerated: MjtCamera = enumerated;
                             let lock = shared_viewer_state.lock_unpoison();
-                            if lock.data_passive.model().layout() != frame_layout {
+                            if lock.model_reloaded {
                                 return;
                             }
                             let model = lock.data_passive.model();
@@ -1475,7 +1476,7 @@ impl ViewerUI {
                     // Write modified vis and stat back to model
                     {
                         let mut lock = shared_viewer_state.lock_unpoison();
-                        if lock.data_passive.model().layout() != frame_layout {
+                        if lock.model_reloaded {
                             return;
                         }
                         *lock.data_passive.model_vis_mut() = vis;
@@ -1507,7 +1508,7 @@ impl ViewerUI {
                 .show(ui, |ui|
             {
                 let mut lock = shared_viewer_state.lock_unpoison();
-                if lock.data_passive.model().layout() != frame_layout {
+                if lock.model_reloaded {
                     return;
                 }
                 let ctrl_mut = lock.data_passive.ctrl_mut();
@@ -1553,7 +1554,7 @@ impl ViewerUI {
                 .show(ui, |ui|
             {
                 let mut lock = shared_viewer_state.lock_unpoison();
-                if lock.data_passive.model().layout() != frame_layout {
+                if lock.model_reloaded {
                     return;
                 }
                 let qpos = lock.data_passive.qpos_mut();
@@ -1629,7 +1630,7 @@ impl ViewerUI {
             {
                 ui.horizontal_wrapped(|ui| {
                     let mut lock = shared_viewer_state.lock_unpoison();
-                    if lock.data_passive.model().layout() != frame_layout {
+                    if lock.model_reloaded {
                         return;
                     }
                     let data = &mut lock.data_passive;
@@ -1676,7 +1677,7 @@ impl ViewerUI {
                             .max_height(CAMERA_MODAL_MAX_HEIGHT)
                             .show(ui, |ui| {
                                 let lock = shared_viewer_state.lock_unpoison();
-                                if lock.data_passive.model().layout() != frame_layout {
+                                if lock.model_reloaded {
                                     return;
                                 }
                                 let model = lock.data_passive.model();

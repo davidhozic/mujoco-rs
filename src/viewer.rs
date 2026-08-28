@@ -247,6 +247,10 @@ pub struct ViewerSharedState {
     texture_reupload_pending: BTreeSet<usize>,
     mesh_reupload_pending: BTreeSet<usize>,
     hfield_reupload_pending: BTreeSet<usize>,
+
+    /// Used to skip processing until a new scene has been created inside [`MjViewer::update_scene`].
+    /// The latter method clears this dirty flag.
+    model_reloaded: bool,
 }
 
 impl ViewerSharedState {
@@ -278,9 +282,13 @@ impl ViewerSharedState {
             texture_reupload_pending: BTreeSet::new(),
             mesh_reupload_pending: BTreeSet::new(),
             hfield_reupload_pending: BTreeSet::new(),
+            model_reloaded: false,
         };
 
         shared_state.reload_model(&model, max_user_geom);
+        // The caller builds its scene, render context, camera and UI caches from the same model,
+        // so the first frame has nothing to rebuild.
+        shared_state.model_reloaded = false;
         shared_state
     }
 
@@ -288,22 +296,27 @@ impl ViewerSharedState {
     /// Called on construction and whenever [`_sync_data`](Self::_sync_data) or
     /// [`sync_model`](Self::sync_model) detects a model change.
     fn reload_model(&mut self, model: &MjModel, max_user_geom: usize) {
-        let model_passive = Box::new(model.clone());
-        self.data_passive = MjData::new(model_passive);
-        let model_passive = self.data_passive.model();
-
-        self.user_scene = MjvScene::new(model_passive, max_user_geom);
+        // Build every model-dependent value before the first assignment. A panic part-way then
+        // leaves the previous generation whole, instead of a mix of two models that a later sync
+        // accepts because the sizes happen to agree again.
+        let data_passive = MjData::new(Box::new(model.clone()));
+        let model_passive = data_passive.model();
+        let user_scene = MjvScene::new(model_passive, max_user_geom);
         let state_size = model_passive.state_size(MjtState::mjSTATE_INTEGRATION as u32);
-        self.data_passive_state = vec![0.0; state_size].into_boxed_slice();
+        let mut data_passive_state = vec![0.0; state_size].into_boxed_slice();
         // Read the actual initial state (qpos0 may be non-zero) so that data_passive_state_old
         // matches data_passive_state from the start, preventing a spurious write-back of the
         // default pose to the incoming data on the first sync after a model change.
-        self.data_passive.read_state_into(
+        data_passive.read_state_into(
             MjtState::mjSTATE_INTEGRATION as u32,
-            &mut self.data_passive_state,
+            &mut data_passive_state,
         );
-        self.data_passive_state_old = self.data_passive_state.clone();
-        self.data_state_buffer = self.data_passive_state.clone();
+
+        self.data_passive_state_old = data_passive_state.clone();
+        self.data_state_buffer = data_passive_state.clone();
+        self.data_passive_state = data_passive_state;
+        self.data_passive = data_passive;
+        self.user_scene = user_scene;
         self.realtime_factor_smooth = 1.0;
         self.pert = MjvPerturb::default();
         // Clear pending re-uploads: the new context will already have the model's
@@ -311,6 +324,7 @@ impl ViewerSharedState {
         self.texture_reupload_pending.clear();
         self.mesh_reupload_pending.clear();
         self.hfield_reupload_pending.clear();
+        self.model_reloaded = true;
     }
 
     /// Checks whether the viewer is still running or is supposed to run.
@@ -1240,12 +1254,12 @@ impl MjViewer {
             let mut lock = self.shared_state.lock_unpoison();
             let ViewerSharedState {
                 data_passive, pert, user_scene,
-                texture_reupload_pending, mesh_reupload_pending, hfield_reupload_pending,
-                ..
+                texture_reupload_pending, mesh_reupload_pending,
+                hfield_reupload_pending, model_reloaded, ..
             } = lock.deref_mut();
 
             // Recreate scene when the model changes
-            if !self.scene.is_compatible_with_model(data_passive.model()) {
+            if *model_reloaded {
                 debug!("the model changed, rebuilding the viewer scene and the render context");
                 let new_model = data_passive.model();
                 let ngeom = new_model.ffi().ngeom as usize;
@@ -1264,12 +1278,18 @@ impl MjViewer {
                 self.context = unsafe { MjrContext::new(new_model) };
                 self.ncam = new_model.ffi().ncam;
                 #[cfg(feature = "viewer-ui")]
-                self.ui.update_names(new_model);
+                self.ui.update_caches(new_model);
                 // reload_model already cleared the pending re-upload sets.
+
+                // The scene has been recreated after a model has been changed.
+                // Thus, the scene is now permitted to be used again.
+                *model_reloaded = false;
             }
 
-            // Process any pending GPU asset re-uploads. The GL context is current here
-            // (ensured by render()). Each set is taken (leaving an empty set) and iterated.
+            // Update and render the scene from the MjData state
+            self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
+
+            // Upload pending assets.
             for id in std::mem::take(texture_reupload_pending) {
                 self.context.upload_texture(data_passive.model(), id)?;
             }
@@ -1279,9 +1299,6 @@ impl MjViewer {
             for id in std::mem::take(hfield_reupload_pending) {
                 self.context.upload_hfield(data_passive.model(), id)?;
             }
-
-            // Update and render the scene from the MjData state
-            self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
 
             // Draw geoms drawn through the user scene.
             sync_geoms(user_scene, &mut self.scene)?;
@@ -1804,14 +1821,12 @@ impl MjViewer {
     fn process_left_click(&mut self, state: ElementState) {
         let modifier_state = self.modifiers.state();
         let mut lock = self.shared_state.lock_unpoison();
-        let ViewerSharedState {data_passive, pert, ..} = lock.deref_mut();
+        let ViewerSharedState {data_passive, pert, model_reloaded, ..} = lock.deref_mut();
 
-        // When `ViewerSharedState::sync_data/sync_data_full` is called, the passive model is switched when it
-        // is incompatible with the input `MjData`. Such switch can happen after call to `MjViewer::update_scene` and before
-        // call to `process_left_click`. Not having this check, could cause a panic inside `MjvPerturb::start`
-        // or `MjvScene::find_selection`. This isn't the most idiomatic fix, however, it does prevent the Mutex from
-        // being locked during fairly slow UI and event processing.
-        if !self.scene.is_compatible_with_model(data_passive.model()) {
+        // For a reduced mutex contention, the mutex locks are skipped during part
+        // of the render thread. In the case of the model being reloaded, we defer
+        // all operations until synced again in update_scene.
+        if *model_reloaded {
             return;
         }
 
