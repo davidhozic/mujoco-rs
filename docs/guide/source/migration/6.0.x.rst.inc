@@ -356,3 +356,60 @@ Port the widgets themselves against egui's changelog:
 https://github.com/emilk/egui/blob/main/CHANGELOG.md
 
 
+Model handles are bound by ``ModelType``
+----------------------------------------
+The model-handle generic ``M`` is bound by
+:docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelType` instead of
+``Deref<Target = MjModel>``, and the model-mutating methods by
+:docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut` instead of
+``DerefMut<Target = MjModel>``. Both markers hold the guarantee that the handle always derefs to
+the same model, which the wrappers rely on but ``Deref`` alone does not give.
+
+``&MjModel``, ``&mut MjModel``, ``Box<MjModel>``, ``Rc<MjModel>``, ``Arc<MjModel>``,
+``Ref<MjModel>``, ``RefMut<MjModel>``, ``MutexGuard<MjModel>``, ``RwLockReadGuard<MjModel>`` and
+``RwLockWriteGuard<MjModel>`` implement the markers. Rename the bound in your own generic code, and
+claim the marker for a hand-written handle.
+
+**Before:**
+
+.. code-block:: rust
+
+    use std::ops::Deref;
+    use mujoco_rs::prelude::*;
+
+    fn step_all<M: Deref<Target = MjModel>>(datas: &mut [MjData<M>]) {
+        for data in datas {
+            data.step();
+        }
+    }
+
+    struct MyHandle(Box<MjModel>);
+
+    impl Deref for MyHandle {
+        type Target = MjModel;
+        fn deref(&self) -> &MjModel { &self.0 }
+    }
+
+**After:**
+
+.. code-block:: rust
+
+    use mujoco_rs::wrappers::mj_model::traits::ModelType;
+    use std::ops::Deref;
+    use mujoco_rs::prelude::*;
+
+    fn step_all<M: ModelType>(datas: &mut [MjData<M>]) {
+        for data in datas {
+            data.step();
+        }
+    }
+
+    struct MyHandle(Box<MjModel>);
+
+    impl Deref for MyHandle {
+        type Target = MjModel;
+        fn deref(&self) -> &MjModel { &self.0 }
+    }
+
+    // SAFETY: deref returns the model that the handle owns, for every call.
+    unsafe impl ModelType for MyHandle {}

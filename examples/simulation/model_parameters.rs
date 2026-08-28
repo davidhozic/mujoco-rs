@@ -45,7 +45,7 @@ fn main() {
     let z_baseline = data.qpos()[2];
     log::info!("baseline   z={z_baseline:.4}  (gravity={default_gravity:.2})");
 
-    // model_opt_mut: direct in-place mutation (requires M: DerefMut).
+    // model_opt_mut: direct in-place mutation (requires M: ModelTypeMut).
     data.reset();
     let half_gravity = default_gravity / 2.0;
     data.model_opt_mut().gravity[2] = half_gravity;

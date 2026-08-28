@@ -4,8 +4,8 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
-use std::ops::{Deref, DerefMut};
 use std::collections::BTreeSet;
+use std::ops::DerefMut;
 use std::num::NonZero;
 use std::error::Error;
 use std::fmt::Display;
@@ -30,6 +30,7 @@ use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_primitive::{MjtNum, MjtSize};
 use crate::wrappers::mj_data::{MjData, MjtState};
+use crate::wrappers::mj_model::traits::ModelType;
 use crate::{builder_setters, mujoco_version};
 use crate::wrappers::mj_option::MjOption;
 use crate::wrappers::mj_visualization::*;
@@ -254,7 +255,7 @@ pub struct ViewerSharedState {
 }
 
 impl ViewerSharedState {
-    fn new<M: Deref<Target = MjModel>>(model: M, max_user_geom: usize) -> Self {
+    fn new<M: ModelType>(model: M, max_user_geom: usize) -> Self {
         // Empty values to avoid unnecessary double creation
         let empty: Box<[MjtNum]> = vec![].into_boxed_slice();
         let empty_model = Box::new(MjSpec::new().compile().unwrap());
@@ -608,7 +609,7 @@ impl ViewerSharedState {
     /// # Panics
     /// Panics if the internal data copy or state merge fails due to an inconsistent model
     /// state (indicates a bug).
-    pub fn sync_data_full<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+    pub fn sync_data_full<M: ModelType>(&mut self, data: &mut MjData<M>) {
         self._sync_data(data, true);
     }
 
@@ -653,12 +654,12 @@ impl ViewerSharedState {
     /// # Panics
     /// Panics if the internal data copy or state merge fails due to an inconsistent model
     /// state (indicates a bug).
-    pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+    pub fn sync_data<M: ModelType>(&mut self, data: &mut MjData<M>) {
         self._sync_data(data, false);
     }
 
     /// Data sync implementation.
-    fn _sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, full_sync: bool) {
+    fn _sync_data<M: ModelType>(&mut self, data: &mut MjData<M>, full_sync: bool) {
         // Recreate internal data and user scene when the model changes
         if !self.data_passive.model().is_compatible_with_model(data.model()) {
             let max_user_geom = self.user_scene.maxgeom() as usize;
@@ -820,7 +821,7 @@ impl MjViewer {
     ///   (feature `viewer-ui`).
     /// # Panics
     /// Panics if the GL display reports no usable configuration.
-    pub fn launch_passive<M: Deref<Target = MjModel>>(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
+    pub fn launch_passive<M: ModelType>(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
         MjViewerBuilder::new()
             .max_user_geoms(max_user_geom)
             .build_passive(model)
@@ -924,7 +925,7 @@ impl MjViewer {
     /// # Panics
     /// Panics if the internal data copy or state merge fails due to an inconsistent model
     /// state (indicates a bug).
-    pub fn sync_data_full<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+    pub fn sync_data_full<M: ModelType>(&mut self, data: &mut MjData<M>) {
         self.shared_state.lock_unpoison().sync_data_full(data);
     }
 
@@ -975,7 +976,7 @@ impl MjViewer {
     /// viewer.sync_data(&mut data);  // sync the data
     /// viewer.render().unwrap();  // render the scene and process the user interface
     /// ```
-    pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+    pub fn sync_data<M: ModelType>(&mut self, data: &mut MjData<M>) {
         self.shared_state.lock_unpoison().sync_data(data);
     }
 
@@ -1970,7 +1971,7 @@ impl MjViewerBuilder {
     ///   (feature `viewer-ui`).
     /// # Panics
     /// Panics if the GL display reports no usable configuration.
-    pub fn build_passive<M: Deref<Target = MjModel>>(&self, model: M) -> Result<MjViewer, MjViewerError> {
+    pub fn build_passive<M: ModelType>(&self, model: M) -> Result<MjViewer, MjViewerError> {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
         let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
         let adapter = RenderBase::new(

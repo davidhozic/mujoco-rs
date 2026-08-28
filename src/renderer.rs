@@ -1,4 +1,5 @@
 //! Module related to implementation of the [`MjRenderer`].
+use crate::wrappers::mj_model::traits::ModelType;
 use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_rendering::MjrContext;
 
@@ -18,7 +19,6 @@ use std::io::{self, BufWriter, Write};
 use std::fmt::Display;
 use std::error::Error;
 use std::num::NonZero;
-use std::ops::Deref;
 use std::path::Path;
 use std::fs::File;
 
@@ -204,7 +204,7 @@ which can be configured at the top of the model's XML like so:
     /// # Panics
     /// Panics if the GL display reports no framebuffer configuration for the fallback window
     /// (feature `renderer-winit-fallback`).
-    pub fn build<M: Deref<Target = MjModel>>(self, model: M) -> Result<MjRenderer, RendererError> {
+    pub fn build<M: ModelType>(self, model: M) -> Result<MjRenderer, RendererError> {
         // Assume model's maximum should be used
         let mut height = self.height;
         let mut width = self.width;
@@ -341,7 +341,7 @@ impl MjRenderer {
     /// # Panics
     /// Panics if the GL display reports no framebuffer configuration for the fallback window
     /// (feature `renderer-winit-fallback`).
-    pub fn new<M: Deref<Target = MjModel>>(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
+    pub fn new<M: ModelType>(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
         // Saturate instead of truncating: `as u32` would turn an over-large value into a small
         // valid one, so the renderer would silently use dimensions the caller never asked for.
         MjRendererBuilder::new()
@@ -592,7 +592,7 @@ impl MjRenderer {
     /// # Panics
     /// Panics if the renderer's camera is a fixed camera whose `fixedcamid` is out of range for
     /// `data`'s model.
-    pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
+    pub fn sync_data<M: ModelType>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
         if !self.scene.is_compatible_with_model(data.model()) {
             /* Model changed: preserve the extra-geom headroom and user-geom
              * capacity, only substitute the per-model ngeom base count. */
@@ -625,7 +625,7 @@ impl MjRenderer {
     /// context cannot be made current). Use [`MjRenderer::sync_data`] + [`MjRenderer::render`]
     /// instead.
     #[deprecated(note = "replaced with sync_data + render", since = "3.0.0")]
-    pub fn sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+    pub fn sync<M: ModelType>(&mut self, data: &mut MjData<M>) {
         self.sync_data(data).unwrap();
         self.render().unwrap();
     }

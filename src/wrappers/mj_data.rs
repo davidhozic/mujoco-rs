@@ -7,10 +7,10 @@ use crate::error::MjDataError;
 
 use super::mj_statistic::{MjWarningStat, MjTimerStat, MjSolverStat};
 use super::mj_model::{MjModel, MjModelLayout, MjtSameFrame, MjtObj, MjtStage};
+use super::mj_model::traits::{ModelTypeMut, ModelType};
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
 
-use std::ops::{Deref, DerefMut};
 use std::ptr::{self, NonNull};
 use std::ffi::CString;
 use std::borrow::Cow;
@@ -50,7 +50,7 @@ pub type MjtSleepState = mjtSleepState;
 /// Wrapper around the `mjData` struct.
 /// Provides lifetime guarantees as well as automatic cleanup.
 #[derive(Debug)]
-pub struct MjData<M: Deref<Target = MjModel>> {
+pub struct MjData<M: ModelType> {
     data: NonNull<mjData>,
     model: M
 }
@@ -59,11 +59,11 @@ pub struct MjData<M: Deref<Target = MjModel>> {
 // (e.g. Arc<MjModel>). Non-Send M types such as Rc<MjModel> are correctly
 // excluded by the M: Send / M: Sync bounds.
 // SAFETY: MjData owns its mjData heap allocation exclusively. Send/Sync follow from M's bounds.
-unsafe impl<M: Deref<Target = MjModel> + Send> Send for MjData<M> {}
-unsafe impl<M: Deref<Target = MjModel> + Sync> Sync for MjData<M> {}
+unsafe impl<M: ModelType + Send> Send for MjData<M> {}
+unsafe impl<M: ModelType + Sync> Sync for MjData<M> {}
 
 
-impl<M: Deref<Target = MjModel>> MjData<M> {
+impl<M: ModelType> MjData<M> {
     /// Creates a new [`MjData`] linked to `model`.
     ///
     /// # Note
@@ -109,7 +109,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// See [here](https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
     /// 
-    /// If `M` implements [`DerefMut`], prefer
+    /// If `M` implements [`ModelTypeMut`], prefer
     /// [`model_mut`](MjData::model_mut) for direct in-place modification instead.
     /// 
     /// If model recompilation speed is not an issue,
@@ -1288,7 +1288,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IncompatibleModel`] if `src` was created from a model that is not
     /// compatible with this data's model (see [`MjModel::is_compatible_with_model`]).
-    pub fn copy_state_from_data<N: Deref<Target = MjModel>>(&mut self, src: &MjData<N>, spec: u32) -> Result<(), MjDataError> {
+    pub fn copy_state_from_data<N: ModelType>(&mut self, src: &MjData<N>, spec: u32) -> Result<(), MjDataError> {
         if !self.model.is_compatible_with_model(&src.model) {
             return Err(MjDataError::IncompatibleModel {
                 source: src.model.signature(),
@@ -1533,7 +1533,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IncompatibleModel`] if `destination` was created from a model that
     /// is not compatible with this data's model (see [`MjModel::is_compatible_with_model`]).
-    pub fn copy_visual_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
+    pub fn copy_visual_to<N: ModelType>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
         if !self.model.is_compatible_with_model(&destination.model) {
             return Err(MjDataError::IncompatibleModel {
                 source: self.model.signature(),
@@ -1555,7 +1555,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IncompatibleModel`] if `destination` was created from a model that
     /// is not compatible with this data's model (see [`MjModel::is_compatible_with_model`]).
-    pub fn copy_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
+    pub fn copy_to<N: ModelType>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
         if !self.model.is_compatible_with_model(&destination.model) {
             return Err(MjDataError::IncompatibleModel {
                 source: self.model.signature(),
@@ -1578,7 +1578,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
 
 /// Some public attribute methods.
-impl<M: Deref<Target = MjModel>> MjData<M> {
+impl<M: ModelType> MjData<M> {
     /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjData {
         // SAFETY: self.data is a valid non-null mjData pointer for the lifetime of self
@@ -1598,7 +1598,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Returns a reference to data's [`MjModel`].
     ///
     /// See also [`model_mut`](MjData::model_mut) for mutable access
-    /// (requires `M: DerefMut<Target = MjModel>`).
+    /// (requires `M: ModelTypeMut`).
     pub fn model(&self) -> &MjModel {
         &self.model
     }
@@ -1694,7 +1694,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 }
 
-impl<M: DerefMut<Target = MjModel>> MjData<M> {
+impl<M: ModelTypeMut> MjData<M> {
     /// Returns a mutable reference to data's [`MjModel`].
     ///
     /// This is useful for modifying the physics parameters of the model
@@ -1704,8 +1704,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#mjmodel-changes)
     /// for a list of parameters that are safe to change.
     ///
-    /// Only available when the inner model type `M` implements
-    /// [`DerefMut<Target = MjModel>`](std::ops::DerefMut)
+    /// Only available when the inner model type `M` implements [`ModelTypeMut`]
     /// (e.g., `Box<MjModel>`, `&mut MjModel`).
     /// Shared-ownership types such as `Arc<MjModel>` do not provide mutable
     /// access; use [`swap_model`](MjData::swap_model) instead.
@@ -1786,7 +1785,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
 }
 
 /// Arrays of dynamic size.
-impl<M: Deref<Target = MjModel>> MjData<M> {
+impl<M: ModelType> MjData<M> {
     array_slice_dyn! {
         qpos: &[MjtNum; "position"; model.ffi().nq],
         qvel: &[MjtNum; "velocity"; model.ffi().nv],
@@ -1947,7 +1946,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 }
 
-impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
+impl<M: ModelType> Drop for MjData<M> {
     fn drop(&mut self) {
         // SAFETY: self.data is a valid non-null mjData pointer; called exactly once in Drop.
         unsafe {
@@ -1956,7 +1955,7 @@ impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
     }
 }
 
-impl<M: Deref<Target = MjModel> + Clone> Clone for MjData<M> {
+impl<M: ModelType + Clone> Clone for MjData<M> {
     /// # Note
     /// MuJoCo aborts the process through `mjERROR` when an allocation fails, so this never fails.
     #[expect(deprecated, reason = "try_clone keeps the implementation until it is removed")]
@@ -1965,7 +1964,7 @@ impl<M: Deref<Target = MjModel> + Clone> Clone for MjData<M> {
     }
 }
 
-impl<M: Deref<Target = MjModel> + Clone> MjData<M> {
+impl<M: ModelType + Clone> MjData<M> {
     /// Fallible version of [`Clone::clone`].
     ///
     /// # Note
@@ -2000,7 +1999,7 @@ info_with_view!(Data, actuator,
      [actuator_] velocity: MjtNum,
      [actuator_] force: MjtNum],
     [],
-    [act: MjtNum], M: Deref<Target = MjModel>);
+    [act: MjtNum], M: ModelType);
 
 info_with_view!(Data, body,
     [xfrc_applied: MjtNum,
@@ -2020,19 +2019,19 @@ info_with_view!(Data, body,
      cfrc_ext: MjtNum,
      [body_] awake: MjtSleepState [force]],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, camera,
     [[cam_] xpos: MjtNum,
      [cam_] xmat: MjtNum],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, geom,
     [[geom_] xpos: MjtNum,
      [geom_] xmat: MjtNum],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, joint,
     [qpos: MjtNum,
@@ -2056,24 +2055,24 @@ info_with_view!(Data, joint,
      qfrc_constraint: MjtNum,
      qfrc_inverse: MjtNum],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, light,
     [[light_] xpos: MjtNum,
      [light_] xdir: MjtNum],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, sensor,
     [[sensor] data: MjtNum],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, site,
     [[site_] xpos: MjtNum,
      [site_] xmat: MjtNum],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, tendon,
     [[ten_] J: MjtNum,
@@ -2082,7 +2081,7 @@ info_with_view!(Data, tendon,
     [[ten_] wrapadr: i32,
      [ten_] wrapnum: i32,
      [tendon_] efcadr: i32],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 /**************************************************************************************************/
 // Unit tests

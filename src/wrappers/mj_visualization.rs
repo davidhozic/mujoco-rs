@@ -1,12 +1,12 @@
 //! Definitions related to visualization.
 use std::default::Default;
 use std::mem::MaybeUninit;
-use std::ops::Deref;
 use std::ptr;
 
 use super::mj_rendering::{MjrContext, MjrRectangle};
 use super::mj_primitive::{MjtNum, MjtByte, MjtSize};
 use super::mj_model::{MjModel, MjtGeom, MjtObj};
+use super::mj_model::traits::ModelType;
 use super::mj_data::MjData;
 use crate::{array_slice_dyn, c_str_as_str_method};
 use crate::util::checked_c_len;
@@ -125,7 +125,7 @@ impl MjvPerturb {
     /// # Panics
     /// Panics if `self.flexselect` is greater than or equal to the number of flexes in the model
     /// of `data`.
-    pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, data: &mut MjData<M>, scene: &MjvScene) {
+    pub fn start<M: ModelType>(&mut self, type_: MjtPertBit, data: &mut MjData<M>, scene: &MjvScene) {
         // mjv_initPerturb indexes flex_rigid, flex_edgenum and flex_vertnum by flexselect after
         // testing only that it is not negative.
         let nflex = data.model().nflex();
@@ -151,7 +151,7 @@ impl MjvPerturb {
     /// # Panics
     /// Panics if `self.select` is out of range for the model in `data` (i.e. negative or
     /// `>= nbody`).
-    pub fn move_<M: Deref<Target = MjModel>>(&mut self, data: &MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
+    pub fn move_<M: ModelType>(&mut self, data: &MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
         // mjv_movePerturb dereferences d->xmat + 9*select (move-relative actions) and
         // d->xquat + 4*select / m->body_iquat + 4*select (rotate actions) *before* its own
         // sel range check, so an out-of-range id is an out-of-bounds read. Unlike the
@@ -172,7 +172,7 @@ impl MjvPerturb {
     /// This method **zeroes `xfrc_applied`** for all bodies before applying the perturbation
     /// force. Any external forces set on `data` before calling this method will be cleared.
     /// If you need to preserve external forces, apply them *after* calling this method.
-    pub fn apply<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+    pub fn apply<M: ModelType>(&mut self, data: &mut MjData<M>) {
         data.xfrc_applied_mut().fill([0.0; 6]);
         let model_ffi = data.model().ffi();
         unsafe { mjv_applyPerturbPose(model_ffi, data.ffi_mut(), self, 0); }
@@ -185,7 +185,7 @@ impl MjvPerturb {
     /// # Panics
     /// Panics if `self.select` is out of range for the `xpos`/`xmat` arrays (i.e., negative or
     /// `>= nbody`). In debug builds, a dedicated assertion fires first for the negative case.
-    pub fn update_local_pos<M: Deref<Target = MjModel>>(&mut self, selection_xyz: &[MjtNum; 3], data: &MjData<M>) {
+    pub fn update_local_pos<M: ModelType>(&mut self, selection_xyz: &[MjtNum; 3], data: &MjData<M>) {
         debug_assert!(self.select >= 0, "invalid selecting when calling update_local_pos");
         let select = self.select as usize;
         let body_xpos = &data.xpos()[select];
@@ -301,7 +301,7 @@ impl MjvCamera {
     /// Panics if this is a fixed camera (`MjtCamera::mjCAMERA_FIXED`) whose `fixedcamid` is out of
     /// range, or a tracking camera (`MjtCamera::mjCAMERA_TRACKING`) whose `trackbodyid` is greater
     /// than or equal to the number of bodies.
-    pub fn frame<M: Deref<Target = MjModel>>(&self, data: &MjData<M>) -> ([MjtNum; 3], [MjtNum; 3], [MjtNum; 3], [MjtNum; 3]) {
+    pub fn frame<M: ModelType>(&self, data: &MjData<M>) -> ([MjtNum; 3], [MjtNum; 3], [MjtNum; 3], [MjtNum; 3]) {
         // mjv_cameraFrame indexes cam_xmat/cam_xpos by fixedcamid and subtree_com by trackbodyid
         // without an upper bound; no other branch indexes a model or data array.
         if self.type_ == MjtCamera::mjCAMERA_FIXED as i32 {
@@ -833,7 +833,7 @@ impl MjvScene {
     ///
     /// # Panics
     /// Panics if `max_geom` exceeds [`i32::MAX`].
-    pub fn new<M: Deref<Target = MjModel>>(model: M, max_geom: usize) -> Self {
+    pub fn new<M: ModelType>(model: M, max_geom: usize) -> Self {
         let model_ffi = model.ffi();
         let layout = MjvSceneLayout::from(&*model);
 
@@ -936,7 +936,7 @@ impl MjvScene {
     ///   out of range for the model in `data`.
     /// - Panics if `perturb.select` is out of range (greater than or equal to the number of
     ///   bodies) for the model in `data`.
-    pub fn update_with_catmask<M: Deref<Target = MjModel>>(
+    pub fn update_with_catmask<M: ModelType>(
         &mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb,
         cam: &mut MjvCamera, catmask: i32,
     ) {
@@ -980,7 +980,7 @@ impl MjvScene {
     /// Panics under the same conditions as [`update_with_catmask`](Self::update_with_catmask):
     /// a model-signature mismatch, an out-of-range fixed-camera id, or an out-of-range
     /// `perturb.select`.
-    pub fn update<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb, cam: &mut MjvCamera) {
+    pub fn update<M: ModelType>(&mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb, cam: &mut MjvCamera) {
         self.update_with_catmask(data, opt, perturb, cam, MjtCatBit::mjCAT_ALL as i32);
     }
 
@@ -1099,7 +1099,7 @@ impl MjvScene {
     /// # Panics
     /// Panics if `data` was created from a model that is not compatible with this scene
     /// (see [`MjvScene::is_compatible_with_model`]).
-    pub fn find_selection<M: Deref<Target = MjModel>>(
+    pub fn find_selection<M: ModelType>(
         &self, data: &mut MjData<M>, option: &MjvOption,
         aspect_ratio: MjtNum, relx: MjtNum, rely: MjtNum,
     ) -> SceneSelection {

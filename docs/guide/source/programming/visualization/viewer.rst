@@ -367,7 +367,8 @@ and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model
         lock.sync_model_stat(data.model_stat_mut());
     }).unwrap();
 
-This requires the ``M`` bound inside |mj_data| to be ``DerefMut<Target = MjModel>`` (e.g., ``Box<MjModel>``).
+This requires the ``M`` bound inside |mj_data| to be
+:docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut` (e.g., ``Box<MjModel>``).
 
 :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model` does all three in one
 call and also reloads the viewer's internal state when the model's ``signature()`` changed. It takes

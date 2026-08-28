@@ -446,7 +446,7 @@ macro_rules! info_method {
 
 /// Generates `Info`, `ViewMut`, and `View` types for a named MuJoCo object, along with
 /// `view`, `try_view`, `view_mut`, `try_view_mut` and `model_signature` on the `Info` type and
-/// `zero` on `ViewMut`. A trailing `, Generic: Bound` (`M: Deref<Target = MjModel>`) is required
+/// `zero` on `ViewMut`. A trailing `, Generic: Bound` (`M: ModelType`) is required
 /// when the target wrapper is generic, as `MjData<M>` is.
 ///
 /// # Field lists

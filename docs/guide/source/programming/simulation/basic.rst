@@ -54,8 +54,8 @@ For example:
     Using the :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>new` method is far **more flexible**
     than using the :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>make_data` method.
     The former allows parameters to be of any type as long as they implement
-    the `Deref <https://doc.rust-lang.org/std/ops/trait.Deref.html>`_
-    trait (e.g., `Box\<MjModel\> <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_). For example:
+    :docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelType`
+    (e.g., `Box\<MjModel\> <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_). For example:
 
     .. code-block:: rust
 
@@ -158,7 +158,7 @@ Direct mutation with ``model_opt_mut`` / ``model_vis_mut`` / ``model_stat_mut``
 -------------------------------------------------------------------------------
 
 When the model-handle type ``M`` implements
-`DerefMut\<Target = MjModel\> <https://doc.rust-lang.org/std/ops/trait.DerefMut.html>`_
+:docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut`
 (e.g., ``Box<MjModel>``), the safe accessors
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut`,
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`, and
@@ -184,7 +184,7 @@ and statistics respectively.
     For full mutable access to the entire |mj_model| (e.g., to replace the model in-place),
     use the ``unsafe``
     :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_mut` method.
-    It requires ``M: DerefMut<Target = MjModel>`` and is unsafe because swapping to an
+    It requires ``M: ModelTypeMut`` and is unsafe because swapping to an
     incompatible model can violate internal invariants.
 
     ``model_opt_mut`` and its siblings are **not** available when ``M`` is a shared-ownership
@@ -200,7 +200,7 @@ approaches (``model_opt_mut`` and ``swap_model``).
 Swapping models with ``swap_model``
 --------------------------------------
 
-When ``M`` does not support ``DerefMut`` (e.g., ``Arc<MjModel>``), or when you need to
+When ``M`` does not implement ``ModelTypeMut`` (e.g., ``Arc<MjModel>``), or when you need to
 swap in an entirely different model instance, use the
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` method
 or the :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_swap_model` method,

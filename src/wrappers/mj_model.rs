@@ -18,6 +18,8 @@ use std::ffi::{c_char, CStr, CString, c_int, c_void};
 use std::ptr::{self, NonNull};
 use std::path::Path;
 
+pub mod traits;
+
 
 /*******************************************/
 // Types

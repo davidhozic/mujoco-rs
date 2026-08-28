@@ -5,10 +5,10 @@
 //! For most use cases, the Rust-native [`crate::viewer::MjViewer`] is recommended instead.
 use crate::mujoco_c::*;
 use std::ffi::CString;
-use std::ops::Deref;
 
 use log::{debug, warn};
 
+use crate::wrappers::mj_model::traits::ModelType;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
@@ -83,7 +83,7 @@ impl MjViewerCpp {
     ///
     /// # Panics
     /// Panics if the load thread panics.
-    pub unsafe fn launch_passive<M: Deref<Target = MjModel> + Clone + Send + Sync>(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
+    pub unsafe fn launch_passive<M: ModelType + Clone + Send + Sync>(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut cam = Box::new(MjvCamera::default());
         let mut opt = Box::new(MjvOption::default());

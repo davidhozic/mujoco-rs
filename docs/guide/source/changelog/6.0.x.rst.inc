@@ -122,6 +122,16 @@
   the slices they already take determine. Drop the argument at the call site, see
   :ref:`migrate_6_0_0`.
 
+|mj_data| *and the visual APIs bound the model handle by* ``ModelType``
+
+- The model-handle generic ``M`` is now bound by the ``unsafe`` marker traits
+  :docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelType` :sup:`new` and
+  :docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut` :sup:`new`, instead of
+  ``Deref<Target = MjModel>`` and ``DerefMut<Target = MjModel>``. A handle whose ``deref`` returns
+  a different model each time can no longer reach the wrappers from safe code. Every standard
+  handle implements the markers, so only code that spells the bound or defines its own handle
+  needs an edit, see :ref:`migrate_6_0_0`.
+
 .. rubric:: New dependencies
 
 - Added `log <https://docs.rs/log/0.4.34/log/>`__ as a mandatory dependency.
