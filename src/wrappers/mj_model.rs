@@ -212,8 +212,8 @@ unsafe impl bytemuck::Zeroable for mjtWrap {}
 /// Snapshot of the [`MjModel`] sizes that fix the length of every `mjData` buffer, the byte size
 /// of its arena, and every packed `mjModel` array that a cached index range reaches.
 ///
-/// [`MjModel::signature`] pins the element tree (`nbody`, `nq`, `nv`, `ngeom`, ...) but none of
-/// the sizes below, so a compatibility test needs both.
+/// [`MjModel::signature`] is a 64-bit hash of the printed spec tree, so it pins no count and no
+/// size exactly. Every value a caller relies on therefore travels here as data.
 // `Eq` also selects the pointer shortcut in `PartialEq for Arc`, which is what makes a view gate
 // against the model's own snapshot a pointer comparison. Losing `Eq` would silently cost that.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -224,6 +224,13 @@ pub(crate) struct MjModelLayout {
     /* Per-element count tables, byte for byte. The totals below fix the length of each packed
        array, but not the split of that array between the elements. */
     split: MjSplitTables,
+
+    /* Element counts that bound an `Info` id, an `mjData` buffer row, and a swapped model. A
+       count that the length of a table inside `split` already pins gets no field here. */
+    nq: MjtSize,             nv: MjtSize,             nbody: MjtSize,         njnt: MjtSize,
+    ngeom: MjtSize,          nsite: MjtSize,          ncam: MjtSize,          nlight: MjtSize,
+    nexclude: MjtSize,       nmat: MjtSize,           npair: MjtSize,         nskin: MjtSize,
+    nkey: MjtSize,
 
     /* Row lengths of MJDATA_POINTERS and MJDATA_ARENA_POINTERS. */
     na: MjtSize,             nu: MjtSize,             nout: MjtSize,          nmocap: MjtSize,
@@ -265,6 +272,10 @@ impl From<&MjModel> for MjModelLayout {
         Self {
             signature: m.signature,
             split: model.split_tables(),
+            nq: m.nq, nv: m.nv, nbody: m.nbody, njnt: m.njnt,
+            ngeom: m.ngeom, nsite: m.nsite, ncam: m.ncam, nlight: m.nlight,
+            nexclude: m.nexclude, nmat: m.nmat, npair: m.npair, nskin: m.nskin,
+            nkey: m.nkey,
             na: m.na, nu: m.nu, nout: m.nout, nmocap: m.nmocap,
             nuserdata: m.nuserdata, nsensordata: m.nsensordata, nhistory: m.nhistory, nplugin: m.nplugin,
             npluginstate: m.npluginstate, nwrap: m.nwrap, neq: m.neq, nbvh: m.nbvh,
@@ -1039,10 +1050,10 @@ impl MjModel {
     /// Reports whether `other` can take the place of this model in every object that this model
     /// built: an [`MjData`], and the index ranges an `Info` caches.
     ///
-    /// The test covers the compilation signature, every size that fixes an `mjData` buffer or a
-    /// packed `mjModel` array, and the per-flex, per-element and plugin count tables that fix
-    /// where each element starts inside such an array. [`MjModel::signature`] alone pins none of
-    /// these sizes, so it is not a sufficient test on its own.
+    /// The test covers the compilation signature, the count of every element an index reaches,
+    /// every size that fixes an `mjData` buffer or a packed `mjModel` array, and the per-flex,
+    /// per-element and plugin count tables that fix where each element starts inside such an
+    /// array. [`MjModel::signature`] is a hash, so it is not a sufficient test on its own.
     pub fn is_compatible_with_model(&self, other: &MjModel) -> bool {
         self.layout() == other.layout()
     }
@@ -1081,6 +1092,8 @@ impl MjModel {
             // flex_elemdataadr, and mj_resetData relays a plugin instance to the slot in m->plugin.
             must_cast_slice(self.flex_dim()),           must_cast_slice(self.flex_vertnum()),
             must_cast_slice(self.flex_elemnum()),       must_cast_slice(self.plugin()),
+            // plugin_stateadr is the prefix sum of plugin_statenum inside npluginstate.
+            must_cast_slice(self.plugin_statenum()),
         ].into_iter()
     }
 
