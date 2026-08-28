@@ -37,6 +37,7 @@ sys.path.append(os.path.abspath("./_extensions/"))
 extensions = [
     "sphinx.ext.extlinks",
     "sphinx_tabs.tabs",
+    "sphinx_design",
     "docs-rs",
     "gh-example"
 ]

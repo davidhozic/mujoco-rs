@@ -49,37 +49,70 @@ For example:
     }
 
 
-.. tip::
+Using the ``MjData::new`` method is far **more flexible** than using the ``MjModel::make_data``
+method.
+The former allows parameters to be of any type as long as they implement
+:docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelType`
+(e.g., `Box\<MjModel\> <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_). For example:
 
-    Using the :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>new` method is far **more flexible**
-    than using the :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>make_data` method.
-    The former allows parameters to be of any type as long as they implement
-    :docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelType`
-    (e.g., `Box\<MjModel\> <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_). For example:
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn main() {
+        let model = Box::new(MjModel::from_xml("model.xml").expect("could not load the model"));
+        let mut data = MjData::new(model);  // move model into the data
+        let model_ref = data.model();  // obtain a reference to the model
+    }
+
+The model-handle type ``M`` must implement ``ModelType`` --- a MuJoCo-rs trait that is
+pre-implemented for most standard ``Deref`` containers, such as
+`Rc <https://doc.rust-lang.org/std/rc/struct.Rc.html>`_ and
+`Arc <https://doc.rust-lang.org/std/sync/struct.Arc.html>`_.
+:docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut` implements the same but for ``DerefMut``
+standard containers.
+For shared ownership, use ``Rc<MjModel>`` (single-threaded) or ``Arc<MjModel>``
+when thread-sharing is needed. For non-shared usage, ``Box<MjModel>`` is the most appropriate,
+as it also allows :ref:`changes to model parameters <changing_model_parameters>`.
+
+Using ``Box`` or ``Rc`` (instead of direct references) allows usage in environments with lifetime restrictions.
+One such example is **Python bindings** created with **PyO3**.
+The :gh-example:`standalone/pyo3_application` example shows how to create a simple MuJoCo-rs based application
+for use from the Python programming language.
+
+
+.. dropdown:: Implementing a custom ``ModelType``
+    :color: warning
+
+    .. note::
+
+        This section is optional for most users as the standard containers inside
+        the Rust standard library should suffice.
+
+    ``ModelType`` and ``ModelTypeMut`` are ``unsafe`` traits with two rules: every ``deref`` call
+    returns the same |mj_model|, and that model stays valid and in place for as long as the
+    container lives. Plain ``Deref`` does not guarantee the rules on its own.
+
+    To use a container of your own, implement ``Deref`` and then add the ``unsafe impl``:
 
     .. code-block:: rust
 
+        use mujoco_rs::wrappers::mj_model::traits::ModelType;
         use mujoco_rs::prelude::*;
+        use std::ops::Deref;
 
-        fn main() {
-            let model = Box::new(MjModel::from_xml("model.xml").expect("could not load the model"));
-            let mut data = MjData::new(model);  // move model into the data
-            let model_ref = data.model();  // obtain a reference to the model
+        struct MyHandle(Box<MjModel>);
+
+        impl Deref for MyHandle {
+            type Target = MjModel;
+            fn deref(&self) -> &MjModel { &self.0 }
         }
 
-    Note that all related APIs must use the same model-handle type ``M``.
-    For example, if you create ``MjData<Box<MjModel>>``, APIs expecting
-    ``MjData<&MjModel>`` (or ``Rc``/``Arc`` variants) are not interchangeable.
-    For shared ownership, use
-    `Rc\<MjModel\> <https://doc.rust-lang.org/std/rc/struct.Rc.html>`_
-    (single-threaded) or
-    `Arc\<MjModel\> <https://doc.rust-lang.org/std/sync/struct.Arc.html>`_
-    when thread-sharing is needed.
+        // SAFETY: deref returns the model that the handle owns, on every call.
+        unsafe impl ModelType for MyHandle {}
 
-    Using ``Box`` or ``Rc`` (instead of direct references) allows usage in environments with lifetime restrictions.
-    One such example is **Python bindings** created with **PyO3**.
-    The :gh-example:`standalone/pyo3_application` example shows how to create a simple MuJoCo-rs based application
-    for use from the Python programming language.
+    Add ``DerefMut`` and ``ModelTypeMut`` the same way when the container also gives mutable access
+    to the model.
 
 
 Running
@@ -101,7 +134,7 @@ method like so:
         }
     }
 
-The method :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>step` is just a wrapper around the
+The method ``MjData::step`` is just a wrapper around the
 :docs-rs:`~~mujoco_rs::mujoco_c::<fn>mj_step` FFI function.
 Similarly, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>step1` and
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>step2` wrap
@@ -140,6 +173,7 @@ for precise timing.
         }
     }
 
+.. _changing_model_parameters:
 
 Changing model's parameters
 ================================
@@ -157,8 +191,7 @@ such as physics parameters --- part of |mj_model|.
 Direct mutation with ``model_opt_mut`` / ``model_vis_mut`` / ``model_stat_mut``
 -------------------------------------------------------------------------------
 
-When the model-handle type ``M`` implements
-:docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut`
+When the model-handle type ``M`` implements ``ModelTypeMut``
 (e.g., ``Box<MjModel>``), the safe accessors
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_opt_mut`,
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>model_vis_mut`, and
@@ -201,9 +234,8 @@ Swapping models with ``swap_model``
 --------------------------------------
 
 When ``M`` does not implement ``ModelTypeMut`` (e.g., ``Arc<MjModel>``), or when you need to
-swap in an entirely different model instance, use the
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` method
-or the :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_swap_model` method,
+swap in an entirely different model instance, use the ``swap_model`` method
+or the ``try_swap_model`` method,
 which swap the |mj_model| owned by |mj_data| for the |mj_model| given as parameter.
 
 .. code-block:: rust
