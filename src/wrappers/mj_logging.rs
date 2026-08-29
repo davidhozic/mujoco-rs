@@ -140,6 +140,9 @@ impl MjLogMessage {
     }
 
     /// Borrows a nullable C string field as `&str`, returning `None` for a null pointer.
+    ///
+    /// # Panics
+    /// Panics if the text is not valid UTF-8.
     fn opt_cstr(&self, ptr: *const c_char) -> Option<&str> {
         if ptr.is_null() {
             None

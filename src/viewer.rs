@@ -300,7 +300,9 @@ impl ViewerSharedState {
         // Build every model-dependent value before the first assignment. A panic part-way then
         // leaves the previous generation whole, instead of a mix of two models that a later sync
         // accepts because the sizes happen to agree again.
-        let data_passive = MjData::new(Box::new(model.clone()));
+        let mut data_passive = MjData::new(Box::new(model.clone()));
+        // Compute kinematic state that the viewer uses (only the state exists on a new MjData).
+        data_passive.forward();
         let model_passive = data_passive.model();
         let user_scene = MjvScene::new(model_passive, max_user_geom);
         let state_size = model_passive.state_size(MjtState::mjSTATE_INTEGRATION as u32);

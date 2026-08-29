@@ -1499,8 +1499,10 @@ impl<M: ModelType> MjData<M> {
     /// every time. This benefits performance in some cases.
     ///
     /// # Errors
-    /// Returns [`MjDataError::BufferTooSmall`] if `state` is smaller than the
-    /// length required by `spec`.
+    /// - [`MjDataError::BufferTooSmall`] if `state` is smaller than the length required by `spec`.
+    /// - [`MjDataError::InvalidHistoryCursor`] if `spec` selects [`MjtState::mjSTATE_HISTORY`]
+    ///   and a cursor slot in `state` lies outside `0..nsample` for its buffer. The history
+    ///   buffer keeps its previous contents; every other selected component stays written.
     pub fn set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
         let required_len = self.model.state_size(spec);
         if state.len() < required_len {
@@ -1510,10 +1512,43 @@ impl<M: ModelType> MjData<M> {
                 needed: required_len,
             });
         }
+        // The history payload carries the ring-buffer cursors, which C indexes with
+        // `(cursor + 1 + logical) % nsample`. C's `%` keeps the sign of its left operand, so an
+        // out-of-range cursor becomes a negative index. Keep the old buffer to undo such a write.
+        let previous = (spec & MjtState::mjSTATE_HISTORY as u32 != 0).then(|| self.history().to_vec());
         unsafe {
             mj_setState(self.model.ffi(), self.ffi_mut(), state.as_ptr(), spec as i32);
         }
+        if let Some(previous) = previous
+            && let Some((kind, id, nsample)) = self.history_cursor_fault()
+        {
+            // SAFETY: `previous` is this data's own history buffer, saved above, so it is exactly
+            // `nhistory` long and holds values MuJoCo itself wrote.
+            unsafe { self.history_mut() }.copy_from_slice(&previous);
+            return Err(MjDataError::InvalidHistoryCursor { kind, id, nsample });
+        }
         Ok(())
+    }
+
+    /// Returns the first history buffer whose cursor slot is outside `0..nsample`, as
+    /// `(kind, id, nsample)`, or `None` when every cursor is valid.
+    ///
+    /// The cursor sits at offset 1 of each buffer, after the user slot.
+    fn history_cursor_fault(&self) -> Option<(&'static str, usize, usize)> {
+        let history = self.history();
+        let fault = |kind, spec: &[[i32; 2]], adr: &[i32]| {
+            spec.iter().zip(adr).enumerate().find_map(|(id, (sample, &address))| {
+                let nsample = sample[0];
+                if nsample <= 0 || address < 0 {
+                    return None;
+                }
+                let cursor = *history.get(address as usize + 1)?;
+                let valid = cursor.fract() == 0.0 && cursor >= 0.0 && cursor <= f64::from(nsample - 1);
+                (!valid).then_some((kind, id, nsample as usize))
+            })
+        };
+        fault("actuator", self.model.actuator_history(), self.model.actuator_historyadr())
+            .or_else(|| fault("sensor", self.model.sensor_history(), self.model.sensor_historyadr()))
     }
 
 
@@ -1801,6 +1836,7 @@ impl<M: ModelTypeMut> MjData<M> {
 /// Arrays of dynamic size.
 impl<M: ModelType> MjData<M> {
     array_slice_dyn! {
+        probe = probe_dynamic_arrays;
         qpos: &[MjtNum; "position"; model.ffi().nq],
         qvel: &[MjtNum; "velocity"; model.ffi().nv],
         act: &[MjtNum; "actuator activation"; model.ffi().na],
@@ -1895,10 +1931,10 @@ impl<M: ModelType> MjData<M> {
         (mut = unsafe) contact: &[MjContact; "array of all detected contacts"; ffi().ncon],
         (mut = unsafe) efc_type: &[MjtConstraint [force]; "constraint type"; ffi().nefc],
         (mut = unsafe) efc_id: &[i32; "id of object of specified type"; ffi().nefc],
-        (mut = unsafe) efc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
-        (mut = unsafe) efc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
-        (mut = unsafe) efc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
-        (mut = unsafe) efc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
+        (read = unsafe) efc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
+        (read = unsafe) efc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
+        (read = unsafe) efc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
+        (read = unsafe) efc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
         efc_J: &[MjtNum; "constraint Jacobian"; ffi().nJ],
         efc_pos: &[MjtNum; "constraint position (equality, contact)"; ffi().nefc],
         efc_margin: &[MjtNum; "inclusion margin (contact)"; ffi().nefc],
@@ -1918,9 +1954,9 @@ impl<M: ModelType> MjData<M> {
         (mut = unsafe) island_dofadr: &[i32; "island start address in dof vector"; ffi().nisland],
         (mut = unsafe) map_dof2idof: &[i32; "map from dof to idof"; model.ffi().nv],
         (mut = unsafe) map_idof2dof: &[i32; "map from idof to dof;  >= nidof: unconstrained"; model.ffi().nv],
-        ifrc_smooth: &[MjtNum; "net unconstrained force"; ffi().nidof],
-        iacc_smooth: &[MjtNum; "unconstrained acceleration"; ffi().nidof],
-        iacc: &[MjtNum; "acceleration"; ffi().nidof],
+        (read = unsafe) ifrc_smooth: &[MjtNum; "net unconstrained force"; ffi().nidof],
+        (read = unsafe) iacc_smooth: &[MjtNum; "unconstrained acceleration"; ffi().nidof],
+        (read = unsafe) iacc: &[MjtNum; "acceleration"; ffi().nidof],
         (mut = unsafe) efc_island: &[i32; "island id of this constraint"; ffi().nefc],
         (mut = unsafe) island_ne: &[i32; "number of equality constraints in island"; ffi().nisland],
         (mut = unsafe) island_nf: &[i32; "number of friction constraints in island"; ffi().nisland],
@@ -1941,8 +1977,8 @@ impl<M: ModelType> MjData<M> {
         (mut = unsafe) efc_AR_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
         (mut = unsafe) efc_AR_colind: &[i32; "column indices in sparse AR"; ffi().nA],
         efc_AR: &[MjtNum; "J*inv(M)*J' + R"; ffi().nA],
-        efc_vel: &[MjtNum; "velocity in constraint space: J*qvel"; ffi().nefc],
-        efc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
+        (read = unsafe) efc_vel: &[MjtNum; "velocity in constraint space: J*qvel"; ffi().nefc],
+        (read = unsafe) efc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
         efm_c: &[MjtNum; "smooth-force shift h*K*qvel"; model.ffi().nv],
         (mut = unsafe) efm_K_rownnz: &[i32; "effective-stiffness CSR row nonzeros"; model.ffi().nv],
         (mut = unsafe) efm_K_rowadr: &[i32; "effective-stiffness CSR row addresses"; model.ffi().nv],
@@ -1950,13 +1986,13 @@ impl<M: ModelType> MjData<M> {
         efm_K_val: &[MjtNum; "effective-stiffness CSR values"; ffi().nefmK],
         (mut = unsafe) efm_dofid: &[i32; "block k -> dof address of its vertex triple"; ffi().nefmdof],
         efm_L: &[MjtNum; "factored 3x3 diagonal blocks of M+K"; ffi().nefmL],
-        efc_b: &[MjtNum; "linear cost term: J*qacc_smooth - aref"; ffi().nefc],
-        iefc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
-        iefc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
-        iefc_force: &[MjtNum; "constraint force in constraint space"; ffi().nefc],
-        efc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
-        efc_force: &[MjtNum; "constraint force in constraint space"; ffi().nefc],
-        ifrc_constraint: &[MjtNum; "constraint force"; ffi().nidof]
+        (read = unsafe) efc_b: &[MjtNum; "linear cost term: J*qacc_smooth - aref"; ffi().nefc],
+        (read = unsafe) iefc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
+        (read = unsafe) iefc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
+        (read = unsafe) iefc_force: &[MjtNum; "constraint force in constraint space"; ffi().nefc],
+        (read = unsafe) efc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
+        (read = unsafe) efc_force: &[MjtNum; "constraint force in constraint space"; ffi().nefc],
+        (read = unsafe) ifrc_constraint: &[MjtNum; "constraint force"; ffi().nidof]
     }
 }
 
@@ -2627,6 +2663,61 @@ mod test {
         data.step();
 
         assert!(!data.contact().is_empty());
+    }
+
+    /// A poisoned history cursor in a `set_state` payload must be rejected, and the history
+    /// buffer must keep its previous contents. Without the guard MuJoCo computes
+    /// `(cursor + 1 + logical) % nsample` on a negative cursor and indexes outside the buffer.
+    #[test]
+    fn test_set_state_rejects_out_of_range_history_cursor() {
+        const HIST_MODEL: &str = r#"
+<mujoco>
+  <worldbody>
+    <body name="body">
+      <joint name="slide" type="slide"/>
+      <geom size="0.1"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor name="motor0" joint="slide" delay="0.05" nsample="6"/>
+  </actuator>
+</mujoco>
+"#;
+        let model = MjModel::from_xml_string(HIST_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let spec = MjtState::mjSTATE_HISTORY as u32;
+        let mut state = data.state(spec).to_vec();
+        let before = data.history().to_vec();
+        assert!(!before.is_empty(), "the fixture must have a history buffer");
+
+        // The cursor sits at offset 1 of the buffer, after the user slot.
+        let address = model.actuator_historyadr()[0] as usize;
+        let nsample = model.actuator_history()[0][0];
+
+        // A round trip of the untouched state stays accepted.
+        assert!(data.set_state(&state, spec).is_ok());
+
+        for poison in [-1.0, f64::from(nsample), 1e18] {
+            state[address + 1] = poison;
+            let err = data.set_state(&state, spec).unwrap_err();
+            assert_eq!(
+                err,
+                MjDataError::InvalidHistoryCursor { kind: "actuator", id: 0, nsample: nsample as usize },
+                "cursor {poison} must be rejected",
+            );
+            assert_eq!(data.history(), before.as_slice(), "a rejected write must not change history");
+        }
+
+        // A fractional cursor is not a usable index either.
+        state[address + 1] = 1.5;
+        assert!(data.set_state(&state, spec).is_err());
+
+        // Every in-range cursor stays accepted.
+        for cursor in 0..nsample {
+            state[address + 1] = f64::from(cursor);
+            assert!(data.set_state(&state, spec).is_ok(), "cursor {cursor} must be accepted");
+        }
     }
 
     #[test]
@@ -4465,7 +4556,8 @@ mod test {
         let nefc = data.ffi().nefc as usize;
         if nefc > 0 {
             let iefc_type = data.iefc_type();
-            let iefc_state = data.iefc_state();
+            // SAFETY: the loop above ran the solver, so the arena arrays hold computed values.
+            let iefc_state = unsafe { data.iefc_state() };
 
             assert_eq!(iefc_type.len(), nefc);
             assert_eq!(iefc_state.len(), nefc);
@@ -4616,8 +4708,8 @@ mod test {
         assert!(any_nonzero, "qfrc_actuator must reflect the actuator force");
     }
 
-    /// Steps multiple times with gravity & contacts, then verifies enum force-casts
-    /// (efc_type, efc_state) and array groupings (efc_KBIP, contact xpos/frame)
+    /// Steps multiple times with gravity & contacts, then verifies the efc_type enum
+    /// force-cast, the efc_state force-cast, and array groupings (efc_KBIP, contact xpos/frame)
     /// reflect the evolved simulation state and remain FFI-consistent.
     #[test]
     fn test_force_cast_multi_step_constraints_evolve() {
@@ -4648,7 +4740,8 @@ mod test {
 
         if nefc > 0 {
             let efc_type = data.efc_type();
-            let efc_state = data.efc_state();
+            // SAFETY: the model was stepped above, so the solver wrote the arena arrays.
+            let efc_state = unsafe { data.efc_state() };
             assert_eq!(efc_type.len(), nefc);
             assert_eq!(efc_state.len(), nefc);
 
@@ -5195,4 +5288,29 @@ mod test {
             assert_eq!(data.dof_awake_ind()[i], unsafe { *data.ffi().dof_awake_ind.add(i) });
         }
     }
+
+    /// Drives the generated sanitizer probes over every dynamic array of |MjData|. Under `/asan`
+    /// MuJoCo defines `mjUSEASAN` and poisons the arena past `parena`, so a length that overruns
+    /// its array faults here instead of returning a plausible number.
+    ///
+    /// The safe probe runs on a fresh |MjData|, before any pipeline stage. That is the claim the
+    /// safe accessors make: a caller may read them without running anything first. The unsafe
+    /// probe runs only after the solver has filled the arena.
+    #[test]
+    fn test_probe_dynamic_arrays_stays_in_bounds() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+        data.probe_dynamic_arrays();
+
+        // Every stage must have run: the unsafe probe reads the arrays the solver fills.
+        for _ in 0..5 {
+            data.step();
+        }
+        assert!(data.ffi().nefc > 0, "the model must build constraints for the probe to mean anything");
+        data.probe_dynamic_arrays();
+
+        // SAFETY: the loop above ran the full pipeline, so every arena array holds computed values.
+        unsafe { data.probe_dynamic_arrays_unsafe() };
+    }
+
 }

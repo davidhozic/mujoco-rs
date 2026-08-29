@@ -10,7 +10,6 @@ use log::{debug, warn};
 
 use crate::wrappers::mj_model::traits::ModelType;
 use crate::wrappers::mj_visualization::*;
-use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
 
 #[repr(C)]
@@ -75,7 +74,8 @@ impl MjViewerCpp {
     /// # Safety
     /// The caller must ensure that both `model` and `data` remain alive and at a stable memory
     /// address for the entire lifetime of the returned [`MjViewerCpp`]. Dropping or moving the
-    /// underlying [`MjModel`] or [`MjData`] while the viewer is alive is undefined behavior.
+    /// underlying [`MjModel`](crate::wrappers::mj_model::MjModel) or [`MjData`] while the viewer
+    /// is alive is undefined behavior.
     /// [`MjViewerCpp::launch_passive`] itself performs the OpenGL initialization and render
     /// steps, so it and [`MjViewerCpp::render`] must be called only on the **main** thread.
     /// The viewer writes through both pointers, so the caller must treat `model` and `data` as

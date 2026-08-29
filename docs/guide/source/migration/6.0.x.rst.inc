@@ -202,6 +202,101 @@ engine write more force outputs than the actuator owns.
     unsafe { view.gaintype.as_mut_slice()[0] = MjtGain::mjGAIN_AFFINE };
 
 
+Unsafe mutation of three more ``MjModel`` tables
+------------------------------------------------
+``tex_type_mut``, ``sensor_intprm_mut`` and ``flex_elemlayer_mut`` are now ``unsafe fn``, for the
+same reason as ``actuator_gaintype_mut`` above. C sizes a buffer or indexes an array from the
+values of all three: a texture kind sets how many faces the upload reads, a sensor int parameter
+selects the object a sensor stage reads, and an element layer sets how many flex faces the scene
+builder emits.
+
+**Before:**
+
+.. code-block:: rust
+
+    model.tex_type_mut()[id] = MjtTexture::mjTEXTURE_CUBE;
+    model.sensor_intprm_mut()[id][0] = 1;
+    model.flex_elemlayer_mut()[id] = 0;
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: the texture data behind `id` holds the six faces that a cube map reads.
+    unsafe { model.tex_type_mut()[id] = MjtTexture::mjTEXTURE_CUBE };
+    // SAFETY: 1 selects an object that this sensor's stage can read.
+    unsafe { model.sensor_intprm_mut()[id][0] = 1 };
+    // SAFETY: 0 keeps the element on the surface, so the face count does not grow.
+    unsafe { model.flex_elemlayer_mut()[id] = 0 };
+
+
+Drawing an ``MjvFigure`` is ``unsafe``
+--------------------------------------
+``draw`` is now an ``unsafe fn``. ``linepnt`` is a public field, and C reads ``linedata[n][2*i]``
+for every ``i < linepnt[n]`` without an upper-bound check, so an entry above ``mjMAXLINEPNT``
+read past the row. Validating it would scan all ``mjMAXLINE`` entries on a per-frame path, so the
+bound is a caller precondition. ``push`` refuses to grow a plot that is already at capacity, so a
+figure filled only through the line-editing methods already satisfies it; a direct write to the
+public ``linepnt`` field is what needs the care.
+
+**Before:**
+
+.. code-block:: rust
+
+    figure.draw(viewport, &context);
+
+**After:**
+
+.. code-block:: rust
+
+    // SAFETY: every linepnt entry stays within 0..=mjMAXLINEPNT, as only push wrote them.
+    unsafe { figure.draw(viewport, &context) };
+
+
+Reading an ``MjData`` arena array is ``unsafe``
+-----------------------------------------------
+MuJoCo allocates the constraint arrays in the ``mjData`` arena and never zeroes it, so an array is
+uninitialized until the pipeline stage that computes it has run. Sixteen accessors and their
+``_mut`` counterparts are now ``unsafe fn``, grouped by the stage each one needs:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Run first
+     - Accessors
+   * - ``forward`` or ``step2``
+     - ``efc_state``, ``efc_force``, ``efc_b``, ``iefc_state``, ``iefc_force``, ``iefc_aref``,
+       ``iacc``, ``iacc_smooth``, ``ifrc_smooth``, ``ifrc_constraint``
+   * - ``step1``, ``fwd_velocity`` or later
+     - ``efc_vel``, ``efc_aref``
+   * - ``fwd_position`` or later, with a sparse Jacobian
+     - ``efc_j_rownnz``, ``efc_j_rowadr``, ``efc_j_rowsuper``, ``efc_j_colind``
+
+Two groups need extra care. MuJoCo fills the four Jacobian index arrays only when ``opt.jacobian``
+resolves to sparse, so a dense model leaves them uninitialized even after a full ``forward``. The
+four island dof arrays stay uninitialized after ``forward`` as well when ``opt.solver`` is ``PGS``,
+because only the CG and Newton island paths gather into them.
+
+**Before:**
+
+.. code-block:: rust
+
+    data.step1();
+    let state = data.efc_state();   // allocated, but the solver has not run
+
+**After:**
+
+.. code-block:: rust
+
+    data.forward();
+    // SAFETY: forward ran the constraint solver, so efc_state holds computed values.
+    let state = unsafe { data.efc_state() };
+    if state[0] == MjtConstraintState::mjCNSTRSTATE_QUADRATIC {
+        // ...
+    }
+
+
 Unsafe geom creation on ``MjvScene``
 ------------------------------------
 ``create_geom`` and ``try_create_geom`` are now ``unsafe fn``. The caller keeps ``matid`` and

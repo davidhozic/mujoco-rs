@@ -42,12 +42,48 @@ Creates raw-pointer slices safely (null-pointer and zero-length guarded):
 | `sublen_dep` | `array_slice_dyn!(sublen_dep => ptr, outer, inner)` | `outer * inner` |
 | `summed` | `array_slice_dyn!(summed => ptr, len_array)` | sum of `len_array` entries |
 
-#### Mutable field safety: `(mut = unsafe)` and `(allow_mut = false)`
-Fields are mutable by default. Two prefixes restrict mutability, each belonging to a **different
-macro** (they cannot be combined):
+#### Sanitizer probe: `probe = <name>;`
+A scalar-arm block may open with `probe = <name>;`. The macro then also generates two
+`#[cfg(test)] pub(crate)` methods that touch the first and last element of every slice the block
+declares, on the read path and the write path. Each write restores the value it read, so no field
+changes.
+
+| Method | Signature | Covers |
+|---|---|---|
+| `<name>` | `fn (&mut self)` | reads through a safe getter; writes through a safe setter |
+| `<name>_unsafe` | `unsafe fn (&mut self)` | every accessor the first one leaves out |
+
+The split is exact: each accessor lands in one method, never both, never neither. Call `<name>` on
+a freshly built value, before any pipeline stage: that is the claim a safe accessor makes, so a
+sanitizer fault there is a real bug. Call `<name>_unsafe` only after the stage its
+`(read = unsafe)` fields need. The safe method being a safe `fn` is itself a check: an accessor
+that the split misroutes fails to compile.
+
+The two helpers it calls live in `src/util/testing.rs`, a `#[cfg(test)]` `pub(crate)` submodule
+of `util`. Both clone the element and pass the clone through `black_box`: the sanitizer
+instruments a load or a store, not the creation of a reference, and a plain identity write
+disappears in the optimizer before the sanitizer pass runs. Every element type an
+`array_slice_dyn!` block casts to is therefore `Clone`.
+
+Call both from one `#[test]` per type. `MjData`, `MjModel` and `MjvScene` have one; `MjrContext`
+does not, because it needs a live GL context.
+
+Under `/asan` a length that overruns its allocation faults inside the probe. MuJoCo defines
+`mjUSEASAN` automatically when it is compiled with `-fsanitize=address`, and then poisons the arena
+past `parena`, so an arena array that reads beyond its true length is caught as well. Against a
+stock prebuilt `libmujoco` that poisoning is absent, so only overruns past a whole `malloc` block
+are caught.
+
+#### Field safety: `(mut = unsafe)`, `(read = unsafe)` and `(allow_mut = false)`
+Fields are safe and mutable by default. Three prefixes restrict access; the first two belong to
+`array_slice_dyn!` and cannot be combined with each other, the third belongs to a **different
+macro**:
 
 - `(mut = unsafe)` in **`array_slice_dyn!`**: generates `unsafe fn field_mut()`; the caller upholds
   the C-side invariants.
+- `(read = unsafe)` in **`array_slice_dyn!`**: generates `unsafe fn field()` **and**
+  `unsafe fn field_mut()`. For an `mjData` arena array that MuJoCo allocates but does not zero, so
+  a read before its computing stage reads uninitialized memory. The caller runs the stage first.
 - `(allow_mut = false)` in **`getter_setter!`**: suppresses `field_mut()` entirely.
 
 **Safety criterion**: a field whose VALUES are used by C as unguarded array INDICES
@@ -57,6 +93,16 @@ macro** (they cannot be combined):
 **Known `(mut = unsafe)` fields**: `contact` (`mj_sensorAcc()` indexes `geom_bodyid[]` with only a
 `>= 0` guard), `flexedge` and `geoms` (`render_gl3.c` vertex/material indices without bounds
 checks). **Known safe**: `geomorder` (`mjr_render()` repopulates it before reading).
+
+**Known `(read = unsafe)` fields** (all on `MjData`, all arena-allocated): `efc_state`, `efc_force`,
+`efc_b`, `iefc_state`, `iefc_force`, `iefc_aref`, `iacc`, `iacc_smooth`, `ifrc_smooth` and
+`ifrc_constraint` need `forward()`/`step2()`; `efc_vel` and `efc_aref` need `step1()` or later;
+`efc_J_rownnz`, `efc_J_rowadr`, `efc_J_rowsuper`, `efc_J_colind` are filled only when
+`opt.jacobian` resolves to sparse, so a dense model leaves them uninitialized forever. The four
+island dof arrays stay uninitialized after `forward()` when `opt.solver` is `PGS`, because only the
+CG and Newton island paths gather into them.
+The arena comes from `mju_malloc` and `_resetData` only sets `parena = 0`, so it is NEVER zeroed;
+do not assume a fresh read is zero, because that is only the kernel handing out zero pages.
 
 When adding or reviewing an `array_slice_dyn!` invocation, trace how C uses the field's VALUES
 before choosing the prefix.

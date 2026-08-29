@@ -132,6 +132,48 @@
   handle implements the markers, so only code that spells the bound or defines its own handle
   needs an edit, see :ref:`migrate_6_0_0`.
 
+*Three* |mj_model| *setters that drive a C index became* ``unsafe``
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tex_type_mut`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>sensor_intprm_mut` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_elemlayer_mut` are now
+  ``unsafe fn``, which every neighbouring field in each of the three tables already was. C sizes a
+  buffer or indexes an array from the values of all three without an upper-bound check, so a safe
+  write reached memory outside that buffer. Wrap the call in an ``unsafe`` block and uphold the C
+  invariant, see :ref:`migrate_6_0_0`.
+
+*Drawing an* ``MjvFigure`` *became* ``unsafe``
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>draw` is now an
+  ``unsafe fn``. ``linepnt`` is a public field and C reads ``linedata`` up to that count without
+  an upper-bound check, so an oversized entry read past the row. Checking it would scan every
+  line on a per-frame path, so the bound is a caller precondition, see :ref:`migrate_6_0_0`.
+
+*Sixteen* |mj_data| *arena accessors became* ``unsafe``
+
+- The accessors below are now ``unsafe fn``, together with their ``_mut`` counterparts:
+
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_state`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_force`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_b`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_vel`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_aref`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>iefc_state`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>iefc_force`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>iefc_aref`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>iacc`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>iacc_smooth`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ifrc_smooth`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ifrc_constraint`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_j_rownnz`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_j_rowadr`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_j_rowsuper`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_j_colind`
+
+  MuJoCo allocates each of these arrays in the ``mjData`` arena and never zeroes it, so a read
+  taken before the pipeline stage that computes the array returns uninitialized memory. Run that
+  stage first, see :ref:`migrate_6_0_0`.
+
 .. rubric:: New dependencies
 
 - Added `log <https://docs.rs/log/0.4.34/log/>`__ as a mandatory dependency.
@@ -339,8 +381,20 @@
 
 .. rubric:: Bug fixes
 
+*Safety*
+
+- |mj_data|'s :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_state` now
+  rejects a history payload whose ring-buffer cursor falls outside ``0..nsample``, and leaves the
+  history buffer unchanged. It reports the new
+  :docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>InvalidHistoryCursor` :sup:`new`.
+  MuJoCo reads the buffer at ``(cursor + 1 + logical) % nsample``, and C's ``%`` keeps the sign of
+  its left operand, so a cursor below zero produced a negative index.
+
 *Viewer*
 
+- The viewer runs a forward step on the data it builds for a new model, so the first frame after
+  a model load or swap no longer draws every geom collapsed at the origin. A fresh |mj_data| has a
+  zeroed ``geom_xpos``, which the scene update copies verbatim.
 - The viewer no longer clamps ``ctrl`` to the range of its slider. While the "Actuator" window
   was open, it wrote the clamped control back on every frame, so a program that set a control
   outside the slider range lost that value.

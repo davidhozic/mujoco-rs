@@ -65,6 +65,18 @@ pub enum MjDataError {
         /// The zero-based index of the actuator or sensor.
         id: usize,
     },
+    /// A history buffer cursor in the written state is outside its valid range.
+    ///
+    /// [`MjData::set_state`](crate::wrappers::MjData::set_state) rejects the write and leaves
+    /// the history buffer unchanged.
+    InvalidHistoryCursor {
+        /// `"actuator"` or `"sensor"`.
+        kind: &'static str,
+        /// The zero-based index of the actuator or sensor.
+        id: usize,
+        /// Number of samples in that history buffer; a valid cursor lies in `0..nsample`.
+        nsample: usize,
+    },
     /// The contact buffer is full; no more contacts can be added.
     ContactBufferFull,
     /// A filesystem path argument contains invalid UTF-8.
@@ -105,6 +117,9 @@ impl fmt::Display for MjDataError {
             }
             Self::NoHistoryBuffer { kind, id } => {
                 write!(f, "{kind} {id} has no history buffer")
+            }
+            Self::InvalidHistoryCursor { kind, id, nsample } => {
+                write!(f, "{kind} {id} history cursor is out of bounds [0, {nsample})")
             }
             Self::ContactBufferFull => {
                 write!(f, "contact buffer is full")

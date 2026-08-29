@@ -497,7 +497,16 @@ impl MjvFigure {
     }
 
     /// Draws the 2D figure to the `viewport` on screen.
-    pub fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
+    ///
+    /// Wraps [`mjr_figure`].
+    ///
+    /// # Safety
+    /// Every `linepnt` entry must lie within `0..=mjMAXLINEPNT`, the capacity of the matching
+    /// `linedata` row. Auomated checks from Rust side are too expensive.
+    pub unsafe fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
+        // The only guard would scan all mjMAXLINE entries on a per-frame path, so the bound is a
+        // caller precondition instead (coding-conventions, FFI guard ladder).
+        // SAFETY: the caller guarantees every `linepnt` entry is within the `linedata` capacity.
         unsafe { mjr_figure(viewport, self, context.ffi()) };
     }
 }
@@ -1147,6 +1156,7 @@ impl MjvScene {
 impl MjvScene {
     // Scalar length arrays
     array_slice_dyn! {
+        probe = probe_dynamic_arrays;
         (mut = unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; layout.nflexedge],
         flexvert: &[[f32; 3] [force]; "flex vertices"; layout.nflexvert],
         skinvert: &[[f32; 3] [force]; "skin vertex data"; layout.nskinvert],
@@ -1718,4 +1728,26 @@ mod tests {
         assert!(scene.flexnormal().is_empty(), "flexnormal must be empty with no flex bodies");
         assert!(scene.flextexcoord().is_empty(), "flextexcoord must be empty with no flex bodies");
     }
+
+    /// Drives the generated sanitizer probes over every dynamic array of [`MjvScene`], first on a
+    /// fresh scene and then after an update has filled the geom buffer.
+    #[test]
+    fn test_probe_dynamic_arrays_stays_in_bounds() {
+        let model = load_model();
+        let mut data = model.make_data();
+        data.forward();
+
+        let mut scene = MjvScene::new(&model, 1000);
+        scene.probe_dynamic_arrays();
+
+        let (opt, perturb) = (MjvOption::default(), MjvPerturb::default());
+        let mut camera = MjvCamera::default();
+        scene.update(&mut data, &opt, &perturb, &mut camera);
+        assert!(scene.ffi().ngeom > 0, "the update must add geoms for the probe to mean anything");
+        scene.probe_dynamic_arrays();
+
+        // SAFETY: MjvScene::new zeroes every buffer mjv_makeScene leaves untouched.
+        unsafe { scene.probe_dynamic_arrays_unsafe() };
+    }
+
 }

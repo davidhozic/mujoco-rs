@@ -356,9 +356,7 @@ impl Debug for MjSplitTables {
 #[derive(Debug)]
 pub struct MjModel {
     ptr: NonNull<mjModel>,
-    /// Snapshot of the sizes and of the element split, computed once on first use and shared with
-    /// every `Info` this model builds. Only an `unsafe` write through [`MjModel::ffi_mut`] can
-    /// make it stale.
+    /// Memory layout for compatibility checks.
     layout: OnceLock<Arc<MjModelLayout>>,
 }
 
@@ -1323,6 +1321,7 @@ impl MjModel {
 /// Array slices.
 impl MjModel {
     array_slice_dyn! {
+        probe = probe_dynamic_arrays;
         qpos0: &[MjtNum; "qpos values at default pose"; ffi().nq],
         qpos_spring: &[MjtNum; "reference pose for springs"; ffi().nq],
         (mut = unsafe) body_parentid: &[i32; "id of body's parent"; ffi().nbody],
@@ -1517,7 +1516,7 @@ impl MjModel {
         (mut = unsafe) flex_elem: &[i32; "element vertex ids (dim+1 per elem)"; ffi().nflexelemdata],
         (mut = unsafe) flex_elemtexcoord: &[i32; "element texture coordinates (dim+1)"; ffi().nflexelemdata],
         (mut = unsafe) flex_elemedge: &[i32; "element edge ids"; ffi().nflexelemedge],
-        flex_elemlayer: &[i32; "element distance from surface, 3D only"; ffi().nflexelem],
+        (mut = unsafe) flex_elemlayer: &[i32; "element distance from surface, 3D only"; ffi().nflexelem],
         (mut = unsafe) flex_shell: &[i32; "shell fragment vertex ids (dim per frag)"; ffi().nflexshelldata],
         (mut = unsafe) flex_evpair: &[[i32; 2] [force]; "(element, vertex) collision pairs"; ffi().nflexevpair],
         flex_vert: &[[MjtNum; 3] [force]; "vertex positions in local body frames"; ffi().nflexvert],
@@ -1616,7 +1615,7 @@ impl MjModel {
         (mut = unsafe) hfield_adr: &[i32; "address in hfield_data"; ffi().nhfield],
         hfield_data: &[f32; "elevation data"; ffi().nhfielddata],
         (mut = unsafe) hfield_pathadr: &[i32; "address of hfield asset path; -1: none"; ffi().nhfield],
-        tex_type: &[MjtTexture [force]; "texture type"; ffi().ntex],
+        (mut = unsafe) tex_type: &[MjtTexture [force]; "texture type"; ffi().ntex],
         tex_colorspace: &[MjtColorSpace [force]; "texture colorspace"; ffi().ntex],
         (mut = unsafe) tex_height: &[i32; "number of rows in texture image"; ffi().ntex],
         (mut = unsafe) tex_width: &[i32; "number of columns in texture image"; ffi().ntex],
@@ -1729,7 +1728,7 @@ impl MjModel {
         (mut = unsafe) sensor_objid: &[i32; "id of sensorized object"; ffi().nsensor],
         (mut = unsafe) sensor_reftype: &[MjtObj [force]; "type of reference frame"; ffi().nsensor],
         (mut = unsafe) sensor_refid: &[i32; "id of reference frame; -1: global frame"; ffi().nsensor],
-        sensor_intprm: &[[i32; mjNSENS as usize] [force]; "sensor parameters"; ffi().nsensor],
+        (mut = unsafe) sensor_intprm: &[[i32; mjNSENS as usize] [force]; "sensor parameters"; ffi().nsensor],
         (mut = unsafe) sensor_dim: &[i32; "number of scalar outputs"; ffi().nsensor],
         (mut = unsafe) sensor_adr: &[i32; "address in sensor array"; ffi().nsensor],
         sensor_cutoff: &[MjtNum; "cutoff for real and positive; 0: ignore"; ffi().nsensor],
@@ -4518,4 +4517,17 @@ mod tests {
         // Test invalid geom index.
         assert!( model.try_max_contacts(999, geom2, Some(true)).is_err());
     }
+
+    /// Drives the generated sanitizer probes over every dynamic array of |MjModel|. See the
+    /// matching test on |MjData| for what the sanitizers catch here.
+    #[test]
+    fn test_probe_dynamic_arrays_stays_in_bounds() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        assert!(model.ffi().nbody > 1, "the model must have bodies for the probe to mean anything");
+        model.probe_dynamic_arrays();
+
+        // SAFETY: no accessor of this block needs a pipeline stage; the compiler fills the model.
+        unsafe { model.probe_dynamic_arrays_unsafe() };
+    }
+
 }
