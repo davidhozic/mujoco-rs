@@ -16,6 +16,12 @@ For these changes, see MuJoCo's changelog for this release (and prior changelogs
 https://mujoco.readthedocs.io/en/3.12.0/changelog.html
 
 
+Minimum Rust version
+-----------------------
+
+This release needs Rust **1.95**, up from 1.88. Run ``rustup update stable`` before you build.
+
+
 Redundant dimension parameters removed
 ---------------------------------------------------------
 Four utility wrappers took a dimension that the slices they already take fix. Drop the argument;

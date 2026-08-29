@@ -212,13 +212,16 @@ impl MjrContext {
                 height: viewport.height,
             });
         }
-        let size = viewport.width as usize * viewport.height as usize;
+        // Either product can wrap on a 32-bit target, which would let a short buffer pass.
+        let overflow = || MjrContextError::InvalidViewport {
+            width: viewport.width,
+            height: viewport.height,
+        };
+        let size = (viewport.width as usize)
+            .checked_mul(viewport.height as usize)
+            .ok_or_else(overflow)?;
         if let Some(buf) = rgb.as_ref() {
-            // The product can wrap on a 32-bit target, which would let a short buffer pass.
-            let needed = size.checked_mul(3).ok_or(MjrContextError::InvalidViewport {
-                width: viewport.width,
-                height: viewport.height,
-            })?;
+            let needed = size.checked_mul(3).ok_or_else(overflow)?;
             if buf.len() < needed {
                 return Err(MjrContextError::BufferTooSmall {
                     name: "rgb",

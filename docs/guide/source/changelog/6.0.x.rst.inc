@@ -490,8 +490,9 @@
 *Rendering*
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels` no longer
-  wraps when the ``rgb`` byte count (the pixel count times 3) overflows ``usize`` on a 32-bit
-  target, which let a short ``rgb`` buffer pass the size check; it reports
+  wraps when the pixel count, or the ``rgb`` byte count that is three times it, overflows
+  ``usize`` on a 32-bit target, which let a short ``rgb`` or ``depth`` buffer pass the size
+  check; it reports
   :docs-rs:`~mujoco_rs::error::<enum>MjrContextError::<variant>InvalidViewport` instead.
 - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new` no longer truncates its
   ``width``, ``height`` and ``max_user_geom`` arguments, which turned a value above ``u32::MAX``

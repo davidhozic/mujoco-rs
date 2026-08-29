@@ -502,7 +502,7 @@ impl MjvFigure {
     ///
     /// # Safety
     /// Every `linepnt` entry must lie within `0..=mjMAXLINEPNT`, the capacity of the matching
-    /// `linedata` row. Auomated checks from Rust side are too expensive.
+    /// `linedata` row. Automated checks from Rust side are too expensive.
     pub unsafe fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
         // The only guard would scan all mjMAXLINE entries on a per-frame path, so the bound is a
         // caller precondition instead (coding-conventions, FFI guard ladder).
