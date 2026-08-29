@@ -114,6 +114,9 @@ mod winit_gl_base;
 #[cfg(any(feature = "viewer", feature = "renderer"))]
 pub mod vis_common;
 
+#[cfg(miri)]
+pub mod miri;
+
 
 /// Returns the version string of the MuJoCo library.
 ///
