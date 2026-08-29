@@ -4,17 +4,11 @@
 //! The gate decides whether an `mjData` buffer, or an index range an `Info` cached, stays valid
 //! when the model behind it changes. A wrong "yes" is a memory-safety fault, and a wrong "no"
 //! makes the gate useless.
-//!
-//! The variant matrix is generated, not written out. An [`Edit`] is a function over an [`MjSpec`],
-//! and the suite compiles the base spec with every edit alone and with every pair of edits. The
-//! type-field axes walk the whole enum: `all_variants!` builds the list and an anonymous `const`
-//! item matches on it, so a value the list misses stops the build. The base model itself, and the degenerate models
-//! at the end, stay plain XML.
 
-use mujoco_rs::prelude::*;
 use mujoco_rs::wrappers::mj_editing::{
     IntVelocityConfig, PositionConfig, DcMotorConfig, MjsActuator, PidConfig,
 };
+use mujoco_rs::prelude::*;
 
 /* The base model. */
 
@@ -107,7 +101,7 @@ const BASE_XML: &str = r#"<mujoco model='base'>
 <keyframe><key name='k0' time='0'/><key name='k1' time='1'/></keyframe>
 </mujoco>"#;
 
-/// The spec every variant starts from. Cloning it is far cheaper than parsing the XML again.
+/// The spec every variant starts from. A clone of it costs less than a second parse of the XML.
 fn base_spec() -> MjSpec {
     MjSpec::from_xml_string(BASE_XML).expect("the base model does not parse")
 }
@@ -118,17 +112,6 @@ fn base() -> MjModel {
 
 /* Edits. */
 
-/// What an edit is expected to do to the model structure.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Kind {
-    /// Changes a value MuJoCo stores; moves no element and resizes no buffer.
-    Parameter,
-    /// Moves an element, resizes a buffer, or changes what a slot means.
-    Structural,
-    /// The effect is not known in advance. Only the reference check decides for it.
-    Open,
-}
-
 /// One edit to the base spec.
 struct Edit {
     label: String,
@@ -136,8 +119,21 @@ struct Edit {
     apply: Box<dyn Fn(&mut MjSpec)>,
 }
 
-fn edit(label: impl Into<String>, kind: Kind, apply: impl Fn(&mut MjSpec) + 'static) -> Edit {
-    Edit { label: label.into(), kind, apply: Box::new(apply) }
+impl Edit {
+    fn new(label: impl Into<String>, kind: Kind, apply: impl Fn(&mut MjSpec) + 'static) -> Self {
+        Self { label: label.into(), kind, apply: Box::new(apply) }
+    }
+}
+
+/// What an edit is expected to do to the model structure.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Kind {
+    /// Changes a value MuJoCo stores; moves no element and resizes no buffer.
+    Parameter,
+    /// Moves an element, resizes a buffer, or changes what a slot means.
+    Structural,
+    /// The effect is not obvious in advance. Only the reference check decides it.
+    Open,
 }
 
 /// Applies every edit in `edits` to a copy of `spec` and compiles it.
@@ -176,11 +172,12 @@ macro_rules! on_item {
 /// value that no group names makes the match non-exhaustive and stops the build; a value that two
 /// name makes an arm unreachable.
 macro_rules! all_variants {
-    ($(#[$doc:meta])* $name:ident: $ty:ty = $($variant:ident),+ $(,)?) => {
+    ($(#[$doc:meta])* $name:ident: $ty:ty = $($variant:ident),+
+     $(; except $($other:ident),+)? $(,)?) => {
         $(#[$doc])*
         const $name: [$ty; [$(stringify!($variant)),+].len()] = [$(<$ty>::$variant),+];
 
-        all_variants!($ty = $($variant),+);
+        all_variants!($ty = $($variant),+ $(; except $($other),+)?);
     };
 
     ($ty:ty = $($variant:ident),+ $(; except $($other:ident),+)? $(,)?) => {
@@ -193,51 +190,42 @@ macro_rules! all_variants {
 
 /* Type-field axes: every value of every enum the layout compares. */
 
-/// Every [`MjtJoint`] value, applied to the trunk's root joint.
-///
-/// The root joint is the one that sits alone in its body. MuJoCo refuses a free joint beside
-/// another one, so a joint that shares a body cannot host the whole enum.
-fn joint_type_edits() -> Vec<Edit> {
-    all_variants!(ALL: MjtJoint = mjJNT_FREE, mjJNT_BALL, mjJNT_SLIDE, mjJNT_HINGE);
+all_variants!(
+    /// Every [`MjtJoint`] value.
+    JOINT_TYPES: MjtJoint = mjJNT_FREE, mjJNT_BALL, mjJNT_SLIDE, mjJNT_HINGE);
 
-    ALL.into_iter()
+/// Every [`MjtJoint`] value, applied to the trunk's root joint.
+fn joint_type_edits() -> Vec<Edit> {
+    // MuJoCo refuses a free joint beside another one, so only the root joint, which sits alone in
+    // its body, can host the whole enum.
+    JOINT_TYPES.into_iter()
         .map(|t| {
             // The root is a free joint, so setting it to free again changes nothing.
             let kind = if t == MjtJoint::mjJNT_FREE { Kind::Parameter } else { Kind::Structural };
-            edit(format!("joint type {t:?}"), kind, move |spec: &mut MjSpec| {
+            Edit::new(format!("joint type {t:?}"), kind, move |spec: &mut MjSpec| {
                 on_item!(spec, joint_iter_mut, "root", |j| j.set_type(t));
             })
         })
         .collect()
 }
 
+// The values at and above mjNGEOMTYPES are the rendering-only kinds and the "no geom" marker;
+// a model geom never carries one.
+all_variants!(
+    /// Every [`MjtGeom`] value a model geom can carry.
+    GEOM_TYPES: MjtGeom =
+    mjGEOM_PLANE, mjGEOM_HFIELD, mjGEOM_SPHERE, mjGEOM_CAPSULE, mjGEOM_ELLIPSOID,
+    mjGEOM_CYLINDER, mjGEOM_BOX, mjGEOM_MESH, mjGEOM_SDF
+    ; except mjNGEOMTYPES, mjGEOM_ARROW, mjGEOM_ARROW1, mjGEOM_ARROW2, mjGEOM_LINE,
+             mjGEOM_LINEBOX, mjGEOM_FLEX, mjGEOM_SKIN, mjGEOM_LABEL, mjGEOM_TRIANGLE,
+             mjGEOM_NONE);
+
 /// Every [`MjtGeom`] value MuJoCo accepts on a geom, applied to `g_upper`.
 fn geom_type_edits() -> Vec<Edit> {
-    all_variants!(ALL: MjtGeom =
-        mjGEOM_PLANE, mjGEOM_HFIELD, mjGEOM_SPHERE, mjGEOM_CAPSULE, mjGEOM_ELLIPSOID,
-        mjGEOM_CYLINDER, mjGEOM_BOX, mjGEOM_MESH, mjGEOM_SDF, mjNGEOMTYPES, mjGEOM_ARROW,
-        mjGEOM_ARROW1, mjGEOM_ARROW2, mjGEOM_LINE, mjGEOM_LINEBOX, mjGEOM_FLEX, mjGEOM_SKIN,
-        mjGEOM_LABEL, mjGEOM_TRIANGLE, mjGEOM_NONE);
-
-    // The values at and above mjNGEOMTYPES are the rendering-only kinds and the "no geom" marker;
-    // a model geom never carries one.
-    const fn is_model_geom(t: MjtGeom) -> bool {
-        match t {
-            MjtGeom::mjGEOM_PLANE | MjtGeom::mjGEOM_HFIELD | MjtGeom::mjGEOM_SPHERE
-            | MjtGeom::mjGEOM_CAPSULE | MjtGeom::mjGEOM_ELLIPSOID | MjtGeom::mjGEOM_CYLINDER
-            | MjtGeom::mjGEOM_BOX | MjtGeom::mjGEOM_MESH | MjtGeom::mjGEOM_SDF => true,
-            MjtGeom::mjNGEOMTYPES | MjtGeom::mjGEOM_ARROW | MjtGeom::mjGEOM_ARROW1
-            | MjtGeom::mjGEOM_ARROW2 | MjtGeom::mjGEOM_LINE | MjtGeom::mjGEOM_LINEBOX
-            | MjtGeom::mjGEOM_FLEX | MjtGeom::mjGEOM_SKIN | MjtGeom::mjGEOM_LABEL
-            | MjtGeom::mjGEOM_TRIANGLE | MjtGeom::mjGEOM_NONE => false,
-        }
-    }
-
-    ALL.into_iter()
-        .filter(|t| is_model_geom(*t))
+    GEOM_TYPES.into_iter()
         .map(|t| {
             let kind = if t == MjtGeom::mjGEOM_CAPSULE { Kind::Parameter } else { Kind::Structural };
-            edit(format!("geom type {t:?}"), kind, move |spec: &mut MjSpec| {
+            Edit::new(format!("geom type {t:?}"), kind, move |spec: &mut MjSpec| {
                 on_item!(spec, geom_iter_mut, "g_upper", |g| {
                     g.set_type(t);
                     *g.size_mut() = [0.04, 0.04, 0.1];
@@ -253,14 +241,16 @@ fn geom_type_edits() -> Vec<Edit> {
         .collect()
 }
 
+all_variants!(
+    /// Every [`MjtTexture`] value.
+    TEXTURE_TYPES: MjtTexture = mjTEXTURE_2D, mjTEXTURE_CUBE, mjTEXTURE_SKYBOX);
+
 /// Every [`MjtTexture`] value, applied to the 2D texture.
 fn texture_type_edits() -> Vec<Edit> {
-    all_variants!(ALL: MjtTexture = mjTEXTURE_2D, mjTEXTURE_CUBE, mjTEXTURE_SKYBOX);
-
-    ALL.into_iter()
+    TEXTURE_TYPES.into_iter()
         .map(|t| {
             let kind = if t == MjtTexture::mjTEXTURE_2D { Kind::Parameter } else { Kind::Structural };
-            edit(format!("texture type {t:?}"), kind, move |spec: &mut MjSpec| {
+            Edit::new(format!("texture type {t:?}"), kind, move |spec: &mut MjSpec| {
                 on_item!(spec, texture_iter_mut, "tx", |tex| {
                     tex.set_type(t);
                     // A cube and a skybox hold six square faces, so the height follows the width.
@@ -274,12 +264,14 @@ fn texture_type_edits() -> Vec<Edit> {
         .collect()
 }
 
+all_variants!(
+    /// Every [`MjtEq`] value.
+    EQUALITY_TYPES: MjtEq =
+    mjEQ_CONNECT, mjEQ_WELD, mjEQ_JOINT, mjEQ_TENDON, mjEQ_FLEX, mjEQ_FLEXVERT,
+    mjEQ_FLEXSTRAIN, mjEQ_DISTANCE);
+
 /// Every [`MjtEq`] value, applied to the first equality.
 fn equality_type_edits() -> Vec<Edit> {
-    all_variants!(ALL: MjtEq =
-        mjEQ_CONNECT, mjEQ_WELD, mjEQ_JOINT, mjEQ_TENDON, mjEQ_FLEX, mjEQ_FLEXVERT,
-        mjEQ_FLEXSTRAIN, mjEQ_DISTANCE);
-
     // The pair of objects an equality names depends on its type. A type whose targets the base
     // model cannot supply fails to compile, and the caller reports it as skipped.
     fn targets(t: MjtEq) -> (MjtObj, &'static str, &'static str) {
@@ -293,10 +285,10 @@ fn equality_type_edits() -> Vec<Edit> {
         }
     }
 
-    ALL.into_iter()
+    EQUALITY_TYPES.into_iter()
         .map(|t| {
             let kind = if t == MjtEq::mjEQ_CONNECT { Kind::Parameter } else { Kind::Structural };
-            edit(format!("equality type {t:?}"), kind, move |spec: &mut MjSpec| {
+            Edit::new(format!("equality type {t:?}"), kind, move |spec: &mut MjSpec| {
                 let (objtype, name1, name2) = targets(t);
                 on_item!(spec, equality_iter_mut, "eq0", |eq| {
                     eq.set_type(t);
@@ -311,10 +303,10 @@ fn equality_type_edits() -> Vec<Edit> {
 
 /// Every actuator kind the wrapper can build, applied to `a_motor`.
 ///
-/// The list mirrors the `set_to_*` methods of [`MjsActuator`]: each one writes a different
-/// combination of `actuator_trntype`, `actuator_dyntype`, `actuator_gaintype` and
-/// `actuator_biastype`, which are four separate tables in the layout.
+/// The list mirrors the `set_to_*` methods of [`MjsActuator`].
 fn actuator_kind_edits() -> Vec<Edit> {
+    // Each method writes a different combination of actuator_trntype, actuator_dyntype,
+    // actuator_gaintype and actuator_biastype, which are four separate tables in the layout.
     let kinds: Vec<ActuatorKind> = vec![
         ("motor",        |a| a.set_to_motor()),
         ("velocity",     |a| a.set_to_velocity(1.0)),
@@ -330,7 +322,7 @@ fn actuator_kind_edits() -> Vec<Edit> {
     kinds.into_iter()
         .map(|(name, set)| {
             let kind = if name == "motor" { Kind::Parameter } else { Kind::Structural };
-            edit(format!("actuator kind {name}"), kind, move |spec: &mut MjSpec| {
+            Edit::new(format!("actuator kind {name}"), kind, move |spec: &mut MjSpec| {
                 on_item!(spec, actuator_iter_mut, "a_motor", |a| set(a));
             })
         })
@@ -360,8 +352,7 @@ type SensorTarget = (MjtObj, &'static str, MjtObj, &'static str);
 /// One actuator kind: its name and the `set_to_*` method that writes it.
 type ActuatorKind = (&'static str, fn(&mut MjsActuator));
 
-/// The object a generated sensor points at. The sweep tries each one in turn and keeps the first
-/// that compiles, so no per-type table has to be maintained by hand.
+/// The objects a generated sensor can point at. The sweep keeps the first one that compiles.
 const SENSOR_TARGETS: &[SensorTarget] = &[
     (MjtObj::mjOBJ_SITE,     "s_lower", MjtObj::mjOBJ_UNKNOWN, ""),
     (MjtObj::mjOBJ_SITE,     "s_lower", MjtObj::mjOBJ_SITE,    "s_trunk"),
@@ -381,7 +372,7 @@ const SENSOR_TARGETS: &[SensorTarget] = &[
 /// Builds the edit that appends one sensor of type `t` pointed at `target`.
 fn add_sensor_edit(t: MjtSensor, target: SensorTarget) -> Edit {
     let (objtype, objname, reftype, refname) = target;
-    edit(format!("add sensor {t:?} on {objname}"), Kind::Structural, move |spec: &mut MjSpec| {
+    Edit::new(format!("add sensor {t:?} on {objname}"), Kind::Structural, move |spec: &mut MjSpec| {
         let sensor = spec.add_sensor();
         sensor.set_type(t);
         let _ = sensor.set_objtype(objtype);
@@ -390,11 +381,12 @@ fn add_sensor_edit(t: MjtSensor, target: SensorTarget) -> Edit {
             let _ = sensor.set_reftype(reftype);
             sensor.set_refname(refname);
         }
-        // A ray sensor reads its output selection from intprm[0], and rejects a zero.
+        // A rangefinder and a contact sensor both read intprm[0] as a data spec, and both reject
+        // a value that is not positive.
         if matches!(t, MjtSensor::mjSENS_RANGEFINDER | MjtSensor::mjSENS_CONTACT) {
             sensor.intprm_mut()[0] = 1;
         }
-        // A user sensor has no built-in width, so it needs one; every other type ignores this.
+        // A user sensor has no built-in width, so the edit sets one. Every other type ignores it.
         if t == MjtSensor::mjSENS_USER {
             sensor.set_dim(3);
             sensor.set_needstage(MjtStage::mjSTAGE_VEL);
@@ -402,14 +394,11 @@ fn add_sensor_edit(t: MjtSensor, target: SensorTarget) -> Edit {
     })
 }
 
-/// The target a sensor type must be given, because probing it blindly ends the process.
-///
-/// `mjSENS_CAMPROJECTION` is the one entry. `mjCSensor::Compile` (`user_objects.cc:7871`) casts
-/// the resolved reference to `mjCCamera*` and reads `resolution` from it with no null check, so a
-/// camprojection sensor that names no camera dereferences a null pointer. The XML parser demands
-/// the attribute; the spec API does not.
+/// The target a sensor type must be given, or `None` when the sweep may try every target.
 fn forced_target(t: MjtSensor) -> Option<SensorTarget> {
     match t {
+        // A camprojection sensor that names no camera makes the compiler read through a null
+        // mjCCamera pointer. The XML parser demands the attribute; the spec API does not.
         MjtSensor::mjSENS_CAMPROJECTION =>
             Some((MjtObj::mjOBJ_SITE, "s_lower", MjtObj::mjOBJ_CAMERA, "c_trunk")),
         _ => None,
@@ -418,15 +407,14 @@ fn forced_target(t: MjtSensor) -> Option<SensorTarget> {
 
 /// One edit per [`MjtSensor`] value, each pointed at the first target the compiler accepts.
 ///
-/// Returns the edits and the types no target fitted, so the caller reports them instead of
-/// letting a type disappear from the sweep in silence.
+/// Returns the edits and the sensor types that no target fitted.
 fn sensor_type_edits(spec: &MjSpec) -> (Vec<Edit>, Vec<MjtSensor>) {
     let (mut edits, mut skipped) = (Vec::new(), Vec::new());
     for t in SENSOR_TYPES {
-        let candidates: Vec<_> = forced_target(t)
-            .map_or_else(|| SENSOR_TARGETS.to_vec(), |target| vec![target]);
-        let fitted = candidates.into_iter()
-            .map(|target| add_sensor_edit(t, target))
+        let forced = forced_target(t);
+        let candidates = forced.as_ref().map_or(SENSOR_TARGETS, std::slice::from_ref);
+        let fitted = candidates.iter()
+            .map(|&target| add_sensor_edit(t, target))
             .find(|candidate| compile_with(spec, &[candidate]).is_some());
         match fitted {
             Some(e) => edits.push(e),
@@ -440,15 +428,14 @@ fn sensor_type_edits(spec: &MjSpec) -> (Vec<Edit>, Vec<MjtSensor>) {
 
 /// One edit per named element of the base model, each deleting that element.
 ///
-/// The sweep walks the spec, so every element the base carries takes part and none is chosen by
-/// hand. A deletion that leaves an illegal model is reported as skipped by the caller.
+/// The sweep walks the spec, so every element the base carries takes part. The caller reports a
+/// deletion that leaves an illegal model as skipped.
 fn deletion_edits(spec: &MjSpec) -> Vec<Edit> {
     let mut out = Vec::new();
     macro_rules! sweep {
         ($($obj:ident, $kind:literal => $iter:ident, $iter_mut:ident;)+) => {
-            // The kinds the sweep leaves out hold no element a spec can delete: an xbody is a
-            // body read another way, a dof and a plugin belong to the compiled model, and the rest
-            // are markers or name a whole model.
+            // The kinds the sweep leaves out hold no element a spec can delete: markers, a whole
+            // model, an xbody, and the dof and plugin kinds that belong to the compiled model.
             all_variants!(MjtObj = $($obj),+ ;
                           except mjOBJ_UNKNOWN, mjOBJ_XBODY, mjOBJ_DOF, mjOBJ_PLUGIN, mjNOBJECT,
                                  mjOBJ_FRAME, mjOBJ_DEFAULT, mjOBJ_MODEL);
@@ -459,7 +446,7 @@ fn deletion_edits(spec: &MjSpec) -> Vec<Edit> {
                     continue;
                 }
                 let target = name.clone();
-                out.push(edit(
+                out.push(Edit::new(
                     format!("delete {} '{}'", $kind, name), Kind::Open,
                     move |spec: &mut MjSpec| {
                         if let Some(pointer) = element_pointer!(spec, $iter_mut, target) {
@@ -502,14 +489,14 @@ fn deletion_edits(spec: &MjSpec) -> Vec<Edit> {
 /// One edit per element kind [`MjSpec`] and [`MjsBody`] can add, each appending one element.
 fn addition_edits() -> Vec<Edit> {
     vec![
-        edit("add body", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add body", Kind::Open, |spec: &mut MjSpec| {
             let body = spec.world_body_mut().add_body();
             let _ = body.set_name("added_body");
             let geom = body.add_geom();
             *geom.size_mut() = [0.02, 0.0, 0.0];
             let _ = geom.set_name("added_body_geom");
         }),
-        edit("add joint", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add joint", Kind::Open, |spec: &mut MjSpec| {
             if let Some(body) = spec.world_body_mut().child_mut("spare") {
                 let joint = body.add_joint();
                 let _ = joint.set_name("added_joint");
@@ -517,42 +504,42 @@ fn addition_edits() -> Vec<Edit> {
                 *joint.axis_mut() = [1.0, 0.0, 0.0];
             }
         }),
-        edit("add geom", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add geom", Kind::Open, |spec: &mut MjSpec| {
             let geom = spec.world_body_mut().add_geom();
             let _ = geom.set_name("added_geom");
             *geom.size_mut() = [0.02, 0.0, 0.0];
         }),
-        edit("add site", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add site", Kind::Open, |spec: &mut MjSpec| {
             let site = spec.world_body_mut().add_site();
             let _ = site.set_name("added_site");
         }),
-        edit("add camera", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add camera", Kind::Open, |spec: &mut MjSpec| {
             let camera = spec.world_body_mut().add_camera();
             let _ = camera.set_name("added_camera");
         }),
-        edit("add light", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add light", Kind::Open, |spec: &mut MjSpec| {
             let light = spec.world_body_mut().add_light();
             let _ = light.set_name("added_light");
         }),
-        edit("add actuator", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add actuator", Kind::Open, |spec: &mut MjSpec| {
             let actuator = spec.add_actuator();
             let _ = actuator.set_name("added_actuator");
             actuator.set_target("slide");
             actuator.set_trntype(MjtTrn::mjTRN_JOINT);
         }),
-        edit("add pair", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add pair", Kind::Open, |spec: &mut MjSpec| {
             let pair = spec.add_pair();
             let _ = pair.set_name("added_pair");
             pair.set_geomname1("g_trunk");
             pair.set_geomname2("g_lower");
         }),
-        edit("add exclude", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add exclude", Kind::Open, |spec: &mut MjSpec| {
             let exclude = spec.add_exclude();
             let _ = exclude.set_name("added_exclude");
             exclude.set_bodyname1("trunk");
             exclude.set_bodyname2("upper");
         }),
-        edit("add equality", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add equality", Kind::Open, |spec: &mut MjSpec| {
             let equality = spec.add_equality();
             let _ = equality.set_name("added_equality");
             equality.set_type(MjtEq::mjEQ_WELD);
@@ -560,28 +547,28 @@ fn addition_edits() -> Vec<Edit> {
             equality.set_name1("upper");
             equality.set_name2("world");
         }),
-        edit("add numeric", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add numeric", Kind::Open, |spec: &mut MjSpec| {
             let numeric = spec.add_numeric();
             let _ = numeric.set_name("added_numeric");
             numeric.set_data(&[1.0, 2.0]);
         }),
-        edit("add text", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add text", Kind::Open, |spec: &mut MjSpec| {
             let text = spec.add_text();
             let _ = text.set_name("added_text");
             text.set_data("added");
         }),
-        edit("add tuple", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add tuple", Kind::Open, |spec: &mut MjSpec| {
             let tuple = spec.add_tuple();
             let _ = tuple.set_name("added_tuple");
             let _ = tuple.set_objtype(&[MjtObj::mjOBJ_BODY]);
             tuple.append_objname("upper");
             tuple.set_objprm(&[0.0]);
         }),
-        edit("add key", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add key", Kind::Open, |spec: &mut MjSpec| {
             let key = spec.add_key();
             let _ = key.set_name("added_key");
         }),
-        edit("add material", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add material", Kind::Open, |spec: &mut MjSpec| {
             let material = spec.add_material();
             let _ = material.set_name("added_material");
         }),
@@ -594,7 +581,7 @@ fn size_edits() -> Vec<Edit> {
     macro_rules! sizes {
         ($($field:ident = $value:expr;)+) => {
             vec![$(
-                edit(concat!(stringify!($field), " grows"), Kind::Structural,
+                Edit::new(concat!(stringify!($field), " grows"), Kind::Structural,
                      |spec: &mut MjSpec| {
                         // SAFETY: the field is plain data that the compiler reads as a count.
                         unsafe { spec.ffi_mut() }.$field = $value;
@@ -603,118 +590,121 @@ fn size_edits() -> Vec<Edit> {
         };
     }
     sizes! {
-        nuserdata = 64;
-        nuser_body = 5;
-        nuser_jnt = 4;
-        nuser_geom = 6;
-        nuser_site = 4;
-        nuser_cam = 3;
-        nuser_tendon = 5;
+        nuserdata      = 64;
+        nuser_body     = 5;
+        nuser_jnt      = 4;
+        nuser_geom     = 6;
+        nuser_site     = 4;
+        nuser_cam      = 3;
+        nuser_tendon   = 5;
         nuser_actuator = 4;
-        nuser_sensor = 6;
-        memory = 4 * 1024 * 1024;
+        nuser_sensor   = 6;
+        memory         = 4 * 1024 * 1024;
     }
 }
 
 /* The parameter axis: values MuJoCo stores that move no element. */
 
-/// Edits that change a value only. Every one of these must stay compatible, or the gate rejects an
-/// ordinary parameter sweep.
+/// Edits that change a value only. The gate must accept every one of them.
 fn parameter_edits() -> Vec<Edit> {
     vec![
-        edit("timestep", Kind::Parameter, |spec: &mut MjSpec| spec.option_mut().timestep = 0.01),
-        edit("gravity", Kind::Parameter, |spec: &mut MjSpec| spec.option_mut().gravity = [0.0, 0.0, -1.0]),
-        edit("solver iterations", Kind::Parameter, |spec: &mut MjSpec| spec.option_mut().iterations = 200),
-        edit("solver tolerance", Kind::Parameter, |spec: &mut MjSpec| spec.option_mut().tolerance = 1e-10),
-        edit("geom size", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("timestep", Kind::Parameter,
+                  |spec: &mut MjSpec| spec.option_mut().timestep = 0.01),
+        Edit::new("gravity", Kind::Parameter,
+                  |spec: &mut MjSpec| spec.option_mut().gravity = [0.0, 0.0, -1.0]),
+        Edit::new("solver iterations", Kind::Parameter,
+                  |spec: &mut MjSpec| spec.option_mut().iterations = 200),
+        Edit::new("solver tolerance", Kind::Parameter,
+                  |spec: &mut MjSpec| spec.option_mut().tolerance = 1e-10),
+        Edit::new("geom size", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, geom_iter_mut, "g_lower", |g| *g.size_mut() = [0.07, 0.0, 0.2]);
         }),
-        edit("geom density", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("geom density", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, geom_iter_mut, "g_lower", |g| g.set_density(2000.0));
         }),
-        edit("geom friction", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("geom friction", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, geom_iter_mut, "g_lower", |g| *g.friction_mut() = [2.0, 0.01, 0.001]);
         }),
-        edit("geom rgba", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("geom rgba", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, geom_iter_mut, "g_trunk", |g| *g.rgba_mut() = [1.0, 0.0, 0.0, 0.5]);
         }),
-        edit("body position", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("body position", Kind::Parameter, |spec: &mut MjSpec| {
             if let Some(body) = spec.world_body_mut().child_mut("trunk") {
                 *body.pos_mut() = [0.0, 0.5, 1.0];
             }
         }),
-        edit("body mass", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("body mass", Kind::Parameter, |spec: &mut MjSpec| {
             if let Some(body) = spec.world_body_mut().child_mut("spare") {
                 body.set_mass(3.0);
             }
         }),
-        edit("joint armature", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("joint armature", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, joint_iter_mut, "slide", |j| j.set_armature(0.1));
         }),
-        edit("joint range", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("joint range", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, joint_iter_mut, "knee", |j| *j.range_mut() = [-2.0, 2.0]);
         }),
-        edit("joint axis", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("joint axis", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, joint_iter_mut, "knee", |j| *j.axis_mut() = [1.0, 0.0, 0.0]);
         }),
-        edit("joint friction loss", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("joint friction loss", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, joint_iter_mut, "slide", |j| j.set_frictionloss(0.2));
         }),
-        edit("actuator gear", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("actuator gear", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, actuator_iter_mut, "a_motor", |a| *a.gear_mut() = [7.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
         }),
-        edit("actuator control range", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("actuator control range", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, actuator_iter_mut, "a_pos", |a| *a.ctrlrange_mut() = [-2.0, 2.0]);
         }),
-        edit("tendon stiffness", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("tendon stiffness", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, tendon_iter_mut, "td", |t| t.stiffness_mut()[0] = 4.0);
         }),
-        edit("tendon range", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("tendon range", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, tendon_iter_mut, "td", |t| *t.range_mut() = [0.0, 2.0]);
         }),
-        edit("sensor noise", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("sensor noise", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, sensor_iter_mut, "se_jp", |s| s.set_noise(0.01));
         }),
-        edit("sensor cutoff", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("sensor cutoff", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, sensor_iter_mut, "se_jp", |s| s.set_cutoff(3.0));
         }),
-        edit("equality solimp", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("equality solimp", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, equality_iter_mut, "eq0", |e| *e.solimp_mut() = [0.8, 0.9, 0.001, 0.5, 2.0]);
         }),
-        edit("pair friction", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("pair friction", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, pair_iter_mut, "p0", |p| *p.friction_mut() = [2.0, 2.0, 0.01, 0.001, 0.001]);
         }),
-        edit("pair margin", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("pair margin", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, pair_iter_mut, "p0", |p| p.set_margin(0.01));
         }),
-        edit("numeric values", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("numeric values", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, numeric_iter_mut, "n0", |n| n.set_data(&[9.0, 9.0, 9.0]));
         }),
-        edit("keyframe time", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("keyframe time", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, key_iter_mut, "k1", |k| k.set_time(5.0));
         }),
-        edit("material rgba", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("material rgba", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, material_iter_mut, "mat", |m| *m.rgba_mut() = [0.0, 1.0, 0.0, 1.0]);
         }),
-        edit("texture colour", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("texture colour", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, texture_iter_mut, "tx", |t| *t.rgb1_mut() = [0.0, 0.0, 1.0]);
         }),
-        edit("light diffuse", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("light diffuse", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, light_iter_mut, "l0", |l| *l.diffuse_mut() = [0.1, 0.2, 0.3]);
         }),
-        edit("camera field of view", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("camera field of view", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, camera_iter_mut, "c_trunk", |c| c.set_fovy(70.0));
         }),
-        edit("skin inflate", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("skin inflate", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, skin_iter_mut, "sk", |s| s.set_inflate(0.03));
         }),
-        edit("mesh scale", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("mesh scale", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, mesh_iter_mut, "ms", |m| *m.scale_mut() = [2.0, 2.0, 2.0]);
         }),
-        edit("heightfield extent", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("heightfield extent", Kind::Parameter, |spec: &mut MjSpec| {
             on_item!(spec, hfield_iter_mut, "hf", |h| *h.size_mut() = [2.0, 2.0, 0.3, 0.05]);
         }),
-        edit("element name", Kind::Parameter, |spec: &mut MjSpec| {
+        Edit::new("element name", Kind::Parameter, |spec: &mut MjSpec| {
             // 'spare' carries no reference from any other element, so the rename stands alone.
             on_item!(spec, body_iter_mut, "spare", |b| { let _ = b.set_name("spare_renamed_much_longer"); });
         }),
@@ -740,13 +730,13 @@ fn all_edits(spec: &MjSpec) -> (Vec<Edit>, Vec<MjtSensor>) {
     (edits, skipped)
 }
 
-/// Compiles the base model with every edit alone. Returns the models that compile, keyed by label,
-/// and the labels that do not.
-fn singletons(spec: &MjSpec, edits: &[Edit]) -> (Vec<(String, Kind, MjModel)>, Vec<String>) {
-    let (mut built, mut skipped) = (Vec::new(), Vec::new());
+/// Compiles the base model with every edit alone. Returns the base model and every model that
+/// compiles, keyed by label, and the labels that produce no model.
+fn matrix(spec: &MjSpec, edits: &[Edit]) -> (Vec<(String, MjModel)>, Vec<String>) {
+    let (mut built, mut skipped) = (vec![("base".to_owned(), base())], Vec::new());
     for e in edits {
         match compile_with(spec, &[e]) {
-            Some(model) => built.push((e.label.clone(), e.kind, model)),
+            Some(model) => built.push((e.label.clone(), model)),
             None => skipped.push(e.label.clone()),
         }
     }
@@ -765,11 +755,7 @@ macro_rules! first_difference {
 /// Returns the name of the first size or table where `a` and `b` keep their elements in different
 /// places, or `None` when every one agrees.
 ///
-/// This is a second opinion on the question `MjModel::is_compatible_with_model` answers, written
-/// from `mjmodel.h` rather than from `MjModelLayout`. It holds every size MuJoCo stores and every
-/// count, address, type and owner table. It holds no name and no value array: a name reaches no
-/// `mjData` buffer and no cached range, and a value is what a compatible model is allowed to
-/// change.
+/// The list comes from `mjmodel.h`, so it is independent of the list `MjModelLayout` holds.
 fn first_structural_difference(a: &MjModel, b: &MjModel) -> Option<&'static str> {
     first_difference!(a, b,
         nq, nv, nu, nactuator, nout, na, nbody, nbvh, nbvhstatic, nbvhdynamic, noct, njnt, ntree,
@@ -784,22 +770,8 @@ fn first_structural_difference(a: &MjModel, b: &MjModel) -> Option<&'static str>
         nemax, njmax, nconmax, npolygonmax, nmeshdegmax, nuserdata, nsensordata,
         npluginstate, nhistory, narena,
     );
-    // ngravcomp counts the bodies that carry gravity compensation. It sizes no array in mjmodel.h
-    // or mjdata.h and no engine file reads it, so it moves no element and belongs to no structure
-    // test. nnames, nnames_map, npaths and nbuffer stay out for the same reason: they follow the
-    // names, which reach no mjData buffer and no cached range.
-    //
-    // The skin totals and the skin tables stay out for the same reason, and the reason is
-    // checkable: mjdata.h holds no array sized by any nskin size, the skin Info declares only
-    // fixed-stride fields that nskin bounds, and the asset gate guards a texture, a mesh and a
-    // heightfield upload but no skin. MjvScene::is_compatible_with_model is the gate that owns
-    // nskinvert, because the scene, not mjData, holds the skin vertex buffer.
-    //
-    // ntext, ntextdata, text_adr and text_size stay out on the same criterion: mjdata.h names no
-    // text size, MJDATA_POINTERS holds no row sized by one, and the wrapper builds no text Info,
-    // so a text field reaches no buffer and no range. A numeric and a tuple do have an Info with a
-    // range, which is why their count tables travel in the layout.
-
+    // ngravcomp, the name and path sizes, the skin sizes and tables and the text sizes and tables
+    // stay out: each one sizes no mjData array and bounds no cached range.
     first_difference!(a, b,
         body_parentid, body_rootid, body_weldid, body_mocapid, body_jntnum, body_jntadr,
         body_dofnum, body_dofadr, body_treeid, body_geomnum, body_geomadr, body_bvhadr,
@@ -835,9 +807,8 @@ fn first_structural_difference(a: &MjModel, b: &MjModel) -> Option<&'static str>
 /// Returns the first asset field where `a` and `b` keep their mesh, texture or heightfield data in
 /// different places, or give a texture a different kind.
 ///
-/// The second opinion on `MjModel::is_asset_compatible_with_model`, which authorises the viewer's
-/// texture, mesh and heightfield uploads. Those uploads read the asset arrays and the texture
-/// kind, and nothing else.
+/// The list comes from `mjmodel.h` and holds the asset arrays and the texture kind, which the
+/// viewer's uploads read.
 fn first_asset_difference(a: &MjModel, b: &MjModel) -> Option<&'static str> {
     first_difference!(a, b,
         nmesh, nmeshvert, nmeshnormal, nmeshtexcoord, nmeshface, nmeshgraph, ntex, ntexdata,
@@ -875,32 +846,28 @@ macro_rules! same_slice {
 
 /* Tests. */
 
-/// Every ordered pair of the matrix, checked against the reference. This is the sweep the other
-/// tests rest on: the gate reads [`MjModel`]'s cached layout, the reference reads the accessors one
-/// at a time, so a gap in either shows up as a disagreement. The pairs run variant against variant
-/// as well as against the base, because a model that agrees with the base can still disagree with
-/// another variant.
+/// Every ordered pair of the matrix, checked against the reference.
 #[test]
 fn test_the_gate_agrees_with_an_independent_structure_check() {
     let spec = base_spec();
     let (edits, skipped_sensors) = all_edits(&spec);
-    let (built, skipped) = singletons(&spec, &edits);
+    let (models, skipped) = matrix(&spec, &edits);
+    let built = models.len() - 1;
 
-    // Every edit that produced no model is named, so the sweep cannot shrink unnoticed.
+    // The sweep names every edit that produced no model, so it cannot shrink unnoticed.
     println!("{} edits, {} compiled, {} did not: {:?}",
-             edits.len(), built.len(), skipped.len(), skipped);
+             edits.len(), built, skipped.len(), skipped);
     if !skipped_sensors.is_empty() {
         println!("{} sensor types fitted no target: {:?}",
                  skipped_sensors.len(), skipped_sensors);
     }
-    assert_eq!(built.len() + skipped.len(), edits.len(), "an edit left the sweep unaccounted for");
+    assert_eq!(built + skipped.len(), edits.len(), "an edit left the sweep unaccounted for");
 
-    let models: Vec<_> = std::iter::once(("base".to_owned(), Kind::Parameter, base()))
-        .chain(built).collect();
-
+    // A model that agrees with the base can still disagree with another variant, so the sweep
+    // runs variant against variant too.
     let mut compatible = 0;
-    for (label_a, _, a) in &models {
-        for (label_b, _, b) in &models {
+    for (label_a, a) in &models {
+        for (label_b, b) in &models {
             let gate = a.is_compatible_with_model(b);
             let difference = first_structural_difference(a, b);
             assert_eq!(gate, difference.is_none(),
@@ -913,30 +880,41 @@ fn test_the_gate_agrees_with_an_independent_structure_check() {
     assert!(compatible < models.len() * models.len(), "every pair passed, the gate accepts all");
 }
 
-/// Every pair of edits applied together, checked against the base in both directions.
-///
-/// One edit at a time leaves the interactions untested: two edits can each move an element and
-/// still leave every size equal, and the reference is the only thing that knows.
+/// Every pair of edits applied together, checked in both directions against the base and against
+/// each single-edit parent.
 #[test]
 fn test_every_pair_of_edits_agrees_with_the_reference() {
     let spec = base_spec();
     let base = base();
     let (edits, _) = all_edits(&spec);
+    let parents: Vec<_> = edits.iter().map(|e| compile_with(&spec, &[e])).collect();
 
-    let (mut checked, mut skipped, mut accepted) = (0usize, 0usize, 0usize);
+    let (mut checked, mut skipped, mut accepted) = (0, 0, 0);
+    let (mut compared, mut absent) = (0, 0);
     for (i, first) in edits.iter().enumerate() {
-        for second in &edits[i + 1..] {
+        for (offset, second) in edits[i + 1..].iter().enumerate() {
             let Some(model) = compile_with(&spec, &[first, second]) else {
                 skipped += 1;
                 continue;
             };
             let label = format!("{} + {}", first.label, second.label);
-            for (a, b) in [(&base, &model), (&model, &base)] {
-                let gate = a.is_compatible_with_model(b);
-                let difference = first_structural_difference(a, b);
-                assert_eq!(gate, difference.is_none(),
-                           "'{label}': the gate says compatible={gate}, the reference found \
-                            {difference:?}");
+            // A parent differs by one edit, so it is the closest neighbour the matrix holds. Two
+            // pair models never meet: the reference walks every size and table on each call.
+            let others = [("the base", Some(&base)),
+                          (first.label.as_str(), parents[i].as_ref()),
+                          (second.label.as_str(), parents[i + 1 + offset].as_ref())];
+
+            for (other_label, other) in others {
+                // An edit that compiles in a pair may still fail alone, and then it has no parent.
+                let Some(other) = other else { absent += 1; continue };
+                for (a, b) in [(&model, other), (other, &model)] {
+                    let gate = a.is_compatible_with_model(b);
+                    let difference = first_structural_difference(a, b);
+                    assert_eq!(gate, difference.is_none(),
+                               "'{label}' against '{other_label}': the gate says \
+                                compatible={gate}, the reference found {difference:?}");
+                }
+                compared += 1;
             }
             accepted += usize::from(base.is_compatible_with_model(&model));
             checked += 1;
@@ -944,12 +922,14 @@ fn test_every_pair_of_edits_agrees_with_the_reference() {
     }
     let total = checked + skipped;
     println!("{checked} pairs checked, {skipped} did not compile, {accepted} accepted by the gate");
+    println!("{compared} model pairs compared, {absent} parents missing");
     assert_eq!(total, edits.len() * (edits.len() - 1) / 2, "a pair went missing");
     assert!(accepted > 0, "no pair of edits stays compatible");
 }
 
-/// An edit declared as a parameter change must stay compatible, in both directions and through the
-/// asset gate too.
+
+/// An edit declared as a parameter change must stay compatible, in both directions and through
+/// the asset gate.
 #[test]
 fn test_parameter_edits_stay_compatible() {
     let spec = base_spec();
@@ -969,8 +949,7 @@ fn test_parameter_edits_stay_compatible() {
     }
 }
 
-/// An edit declared as a structural change must be rejected, or an `Info` resolves a range that no
-/// longer belongs to it.
+/// The gate must reject an edit declared as a structural change, in both directions.
 #[test]
 fn test_structural_edits_are_rejected() {
     let spec = base_spec();
@@ -989,8 +968,7 @@ fn test_structural_edits_are_rejected() {
     assert!(checked > 0, "no structural edit produced a model");
 }
 
-/// A compatible model must resolve every cached range to the same place, or the gate's "yes" is a
-/// promise it does not keep.
+/// A compatible model must resolve every cached range to the same place.
 #[test]
 fn test_a_compatible_model_resolves_every_cached_range_identically() {
     let spec = base_spec();
@@ -1080,24 +1058,34 @@ fn test_data_runs_against_every_compatible_model() {
     let base = base();
     let (edits, _) = all_edits(&spec);
 
-    for e in edits.iter().filter(|e| e.kind == Kind::Parameter) {
-        let other = compile_with(&spec, &[e]).expect("a parameter edit compiles");
+    // The gate makes its promise over every model it accepts, so the sweep covers that whole set.
+    let mut swapped = 0;
+    for e in &edits {
+        let Some(other) = compile_with(&spec, &[e]) else { continue };
+        if !base.is_compatible_with_model(&other) {
+            continue;
+        }
         let mut data = MjData::new(&base);
         for _ in 0..3 {
             data.step();
         }
+        // The Info comes from the model the data leaves behind, so the view after the swap
+        // resolves a range that the old model cached.
+        let sensor = data.sensor("se_u1").unwrap();
         let returned = data.swap_model(&other);
-        assert_eq!(returned.signature(), base.signature(), "swap_model returns the old model");
+        assert!(std::ptr::eq(returned, &base), "swap_model returns the old model");
         for _ in 0..3 {
             data.step();
         }
-        assert_eq!(data.sensor("se_u1").unwrap().view(&data).data.len(), 5,
-                   "'{}': the sensor range survives the swap", e.label);
+        assert_eq!(sensor.view(&data).data.as_ptr(),
+                   data.sensor("se_u1").unwrap().view(&data).data.as_ptr(),
+                   "'{}': the cached sensor range moved in the swap", e.label);
+        swapped += 1;
     }
+    assert!(swapped > 0, "no model reached the swap");
 }
 
-/// Every path that can hand out a view must refuse an incompatible model, and refuse it as an
-/// error rather than by reading the wrong memory.
+/// Every path that can hand out a view must refuse an incompatible model with an error.
 #[test]
 fn test_every_view_path_refuses_an_incompatible_model() {
     let spec = base_spec();
@@ -1106,11 +1094,6 @@ fn test_every_view_path_refuses_an_incompatible_model() {
     let info = base.body("trunk").unwrap();
     let joint = base_data.joint("knee").unwrap();
     let (edits, _) = all_edits(&spec);
-
-    // The view path below is expected to panic on every model, so the default hook would print
-    // one backtrace notice per variant.
-    let previous_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
 
     let mut checked = 0;
     for e in edits.iter().filter(|e| e.kind == Kind::Structural) {
@@ -1136,26 +1119,30 @@ fn test_every_view_path_refuses_an_incompatible_model() {
         assert!(MjData::new(&base).try_swap_model(&other).is_err(),
                 "'{label}': swap_model must refuse");
 
+        // The view below panics on every model, so the default hook would print one backtrace
+        // notice per variant. The empty hook is process-global and must not span an assertion.
+        let previous_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
         let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _ = info.view(&other);
         }));
+        std::panic::set_hook(previous_hook);
+
         assert!(panicked.is_err(), "'{label}': the panicking view must panic");
         checked += 1;
     }
-    std::panic::set_hook(previous_hook);
     assert!(checked > 0, "no incompatible model reached the view paths");
 }
 
-/// The gate must accept a model against itself, and against a second build of the same source
-/// through the other loader, and `update_layout` must restore the pointer comparison after a swap.
+/// The gate must accept a second build of the same source through the other loader, and
+/// `update_layout` must move an `Info` to it.
 #[test]
-fn test_a_model_is_compatible_with_itself_and_with_its_twin() {
+fn test_a_model_is_compatible_with_its_twin() {
     let base = base();
     let twin = MjModel::from_xml_string(BASE_XML).unwrap();
-    assert!(base.is_compatible_with_model(&base));
     assert!(base.is_compatible_with_model(&twin));
-    // The twin takes the XML path and the base takes the spec path, so this is also where the two
-    // ways of building the matrix's own model are held to one structure.
+    // The twin takes the XML path and the base takes the spec path, so this check also holds the
+    // two build paths to one structure.
     assert_eq!(first_structural_difference(&base, &twin), None);
     assert!(base.is_asset_compatible_with_model(&twin));
     assert_eq!(base.signature(), twin.signature());
@@ -1168,24 +1155,24 @@ fn test_a_model_is_compatible_with_itself_and_with_its_twin() {
     assert!(info.try_view(&base).is_ok());
 }
 
+/// Every ordered pair of the matrix through the asset gate, checked against an asset reference.
+/// The asset gate authorises the viewer's uploads, so it may accept a pair the full gate refuses.
 #[test]
 fn test_the_asset_gate_agrees_with_an_independent_asset_check() {
     let spec = base_spec();
     let (edits, _) = all_edits(&spec);
-    let (built, _) = singletons(&spec, &edits);
-    let models: Vec<_> = std::iter::once(("base".to_owned(), Kind::Parameter, base()))
-        .chain(built).collect();
+    let (models, _) = matrix(&spec, &edits);
 
     let (mut compatible, mut asset_only) = (0, 0);
-    for (label_a, _, a) in &models {
-        for (label_b, _, b) in &models {
+    for (label_a, a) in &models {
+        for (label_b, b) in &models {
             let gate = a.is_asset_compatible_with_model(b);
             let difference = first_asset_difference(a, b);
             assert_eq!(gate, difference.is_none(),
                        "'{label_a}' against '{label_b}': the asset gate says compatible={gate}, \
                         the reference found {difference:?}");
             compatible += usize::from(gate);
-            // The asset gate must be the weaker of the two, never the stronger one.
+            // The asset gate must be the weaker of the two.
             assert!(gate || !a.is_compatible_with_model(b),
                     "'{label_a}' against '{label_b}': the full gate accepted a pair the asset \
                      gate refused");
@@ -1197,19 +1184,15 @@ fn test_the_asset_gate_agrees_with_an_independent_asset_check() {
 }
 
 /// A model that survives `save_to_buffer` and `from_buffer` must still be compatible with the one
-/// it came from. `mj_loadModel` recomputes nothing: it takes every size and every table from the
-/// file, so this is the path that a checkpoint and a network transfer both take.
+/// it came from. `mj_loadModel` takes every size and every table from the file.
 #[test]
 fn test_a_saved_and_reloaded_model_stays_compatible() {
     let spec = base_spec();
     let (edits, _) = all_edits(&spec);
-    let (built, _) = singletons(&spec, &edits);
-    let expected = built.len() + 1;
+    let (models, _) = matrix(&spec, &edits);
+    assert!(models.len() > 1, "the matrix holds no variant");
 
-    let mut checked = 0;
-    for (label, _, model) in std::iter::once(("base".to_owned(), Kind::Parameter, base()))
-        .chain(built)
-    {
+    for (label, model) in models {
         let mut buffer = vec![0u8; model.size()];
         model.save_to_buffer(&mut buffer).unwrap();
         let reloaded = MjModel::from_buffer(&buffer).unwrap();
@@ -1229,19 +1212,15 @@ fn test_a_saved_and_reloaded_model_stays_compatible() {
                        "'{label}': the joint range moved in a round trip");
         }
 
-        // The signature is the one thing a round trip does not keep: mjModel.signature belongs to
-        // no MJMODEL_* macro in mjxmacro.h, so mj_saveModel never writes it. The gate must not
-        // depend on it.
+        // mjModel.signature belongs to no MJMODEL_* macro in mjxmacro.h, so mj_saveModel never
+        // writes it. The gate must not depend on it.
         assert_eq!(reloaded.signature(), 0, "'{label}': mj_loadModel now restores the signature");
-        checked += 1;
     }
-    assert_eq!(checked, expected, "the round trip must cover the whole matrix");
 }
 
 /* Plain-XML models: the shapes a spec edit cannot reach. */
 
-/// A model with nothing in it still has to answer the question, and every count table it compares
-/// is empty. An empty table must not make two different models look alike.
+/// An empty model compares empty count tables. An empty table must not make two models alike.
 #[test]
 fn test_degenerate_models() {
     let empty = MjModel::from_xml_string("<mujoco/>").unwrap();
@@ -1270,16 +1249,17 @@ fn test_degenerate_models() {
                        first_structural_difference(a, b).is_none(),
                        "'{label_a}' against '{label_b}'");
         }
-        assert!(a.is_compatible_with_model(a), "'{label_a}' must match itself");
     }
 
     // An empty model still serves an mjData and refuses a foreign Info.
     let mut data = MjData::new(&empty);
     data.step();
-    assert!(one_joint.joint("").is_none(), "the unnamed joint has no name to look up");
+    let trunk = base().body("trunk").unwrap();
+    assert!(matches!(trunk.try_view(&empty), Err(MjModelError::IncompatibleModel { .. })),
+            "the empty model must refuse an Info that another model built");
 }
 
-/// A clone shares the model, so it must answer yes to itself by pointer alone.
+/// A clone keeps every size and every table, so both gates accept it in either direction.
 #[test]
 fn test_a_cloned_model_is_compatible() {
     let base = base();
@@ -1293,9 +1273,7 @@ fn test_a_cloned_model_is_compatible() {
 }
 
 /// Swapping two names moves no memory, so both gates accept the pair. The `Info` caches the id it
-/// resolved in its own model, so it then reads the element that now carries the other name. This
-/// is the documented shape of an `Info`, not a fault in the gate, and the test pins the behaviour
-/// so that a change to it is deliberate.
+/// resolved in its own model, so it then reads the element that now carries the other name.
 #[test]
 fn test_a_name_permutation_is_accepted_and_keeps_the_cached_id() {
     let model = |first: &str, second: &str| MjModel::from_xml_string(&format!(
