@@ -165,9 +165,9 @@
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`
   :sup:`new` reports whether another |mj_model| can take the place of this one in an |mj_data| or
-  in a cached ``Info``. It compares the signature, every size that fixes an ``mjData`` buffer or a
-  packed ``mjModel`` array, and the per-flex, per-element and plugin tables that place an element
-  inside one of those arrays.
+  in a cached ``Info``. It compares the structure of the two models: the signature, every size that
+  fixes an ``mjData`` buffer or a packed ``mjModel`` array, and the per-element tables and types
+  that place each element inside one of those arrays and fix what its state means.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_asset_compatible_with_model`
   :sup:`new` is the weaker test the asset-upload methods need: it compares the mesh, texture and
   heightfield memory alone.
@@ -176,6 +176,12 @@
   :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_scene`
   :sup:`new` report whether a model, or a second |mjv_scene|, matches the buffers this scene
   holds. Use them to decide whether a scene needs to be rebuilt before an update or a merge.
+- Every ``Info`` gained an ``update_layout`` method, for example
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjBodyDataInfo::<method>update_layout`
+  :sup:`new`. After a model swap an ``Info`` compares the whole cached layout on every view; call
+  ``update_layout`` once against the new |mj_data| or |mj_model| to make that test a pointer
+  comparison again. It reports the same error as a view method when the new model is not
+  compatible.
 
 *Viewer improvements*
 

@@ -3074,6 +3074,35 @@ mod test {
         assert!(info.try_view_mut(&mut other).is_err());
     }
 
+    /// `update_layout` re-points an `Info` at a second `MjData`, so a later view test compares a
+    /// pointer instead of the whole snapshot. It must refuse a model that is not compatible, and
+    /// it must leave the `Info` usable when it refuses.
+    #[test]
+    fn test_info_update_layout_accepts_only_a_compatible_model() {
+        let sensor_model = |first: u32, second: u32| MjModel::from_xml_string(&format!(
+            "<mujoco><worldbody><body name='b1'><joint name='j' type='hinge'/><geom size='0.1'/>\
+             </body></worldbody><sensor><user name='u1' dim='{first}' objtype='body' objname='b1'/>\
+             <user name='u2' dim='{second}' objtype='body' objname='b1'/></sensor></mujoco>"
+        )).unwrap();
+
+        let model = sensor_model(3, 1);
+        let data = model.make_data();
+        let mut info = data.sensor("u1").unwrap();
+
+        // A second data built from an equal but separate model: compatible, no shared snapshot.
+        let twin = sensor_model(3, 1);
+        let twin_data = twin.make_data();
+        assert!(info.try_view(&twin_data).is_ok());
+        info.update_layout(&twin_data).unwrap();
+        assert_eq!(info.view(&twin_data).data.len(), 3, "the cached range must survive");
+
+        // The redistributed split moves the first sensor, so the re-point must fail.
+        let swapped = sensor_model(1, 3);
+        let swapped_data = swapped.make_data();
+        assert!(info.update_layout(&swapped_data).is_err());
+        assert_eq!(info.view(&data).data.len(), 3, "a refused re-point must not disturb the Info");
+    }
+
     #[test]
     fn test_ray_zero_direction_reports_no_intersection() {
         let model = MjModel::from_xml_string(MODEL).unwrap();
