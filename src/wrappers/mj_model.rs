@@ -222,44 +222,40 @@ unsafe impl bytemuck::NoUninit for mjtBias {}
 unsafe impl bytemuck::NoUninit for mjtSensor {}
 unsafe impl bytemuck::NoUninit for mjtDataType {}
 unsafe impl bytemuck::NoUninit for mjtStage {}
+unsafe impl bytemuck::NoUninit for mjtTexture {}
 
 /*******************************************/
 
 /// Number of mesh, texture and heightfield count tables in [`MjSplitTables`].
-const ASSET_SPLIT_TABLES: usize = 10;
+const ASSET_SPLIT_TABLES: usize = 11;
 
 /// Number of per-element and plugin count tables in [`MjSplitTables`].
-const ELEMENT_SPLIT_TABLES: usize = 34;
+const ELEMENT_SPLIT_TABLES: usize = 32;
 
-/// Snapshot of an [`MjModel`]: the sizes that fix the length of every `mjData` buffer, the byte
-/// size of its arena, every packed `mjModel` array that a cached index range reaches, and the
-/// per-element tables that fix how each array divides between the elements.
+/// Snapshot of an [`MjModel`]: the sizes that no per-element table determines, and the tables that
+/// fix how each packed array divides between the elements.
 ///
 /// An entry belongs here only when no other entry already determines it. `signature` is the
-/// exception: the tables below pin everything it hashes, and it leads the comparison because one
-/// `u64` rejects most mismatched pairs before the first table.
+/// exception: it takes no part in the comparison at all, and only reports which model an `Info`
+/// came from. The fields run cheapest first, because `PartialEq` tests them in that order and
+/// stops at the first difference.
 // `Eq` also selects the pointer shortcut in `PartialEq for Arc`, which is what makes a view gate
 // against the model's own snapshot a pointer comparison. Losing `Eq` would silently cost that.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Eq)]
 #[expect(non_snake_case, reason = "the fields keep the MuJoCo size symbol names")]
 pub(crate) struct MjModelLayout {
     signature: u64,
 
-    /* Per-element count tables, byte for byte. The totals below fix the length of each packed
-       array, but not the split of that array between the elements. */
-    split: MjSplitTables,
-
     /* Element counts that bound an `Info` id, an `mjData` buffer row, and a swapped model. A
-       count that the length of a table inside `split` already pins gets no field here. */
-    nq: MjtSize,             nv: MjtSize,             nexclude: MjtSize,      nmat: MjtSize,
-    npair: MjtSize,          nskin: MjtSize,          nkey: MjtSize,
+       count that the byte length of a table inside `split` already pins gets no field here. */
+    nexclude: MjtSize,       nmat: MjtSize,           npair: MjtSize,         nskin: MjtSize,
+    nkey: MjtSize,
 
-    /* Row lengths of MJDATA_POINTERS and MJDATA_ARENA_POINTERS that the length of no table
-       inside `split` already pins. */
-    na: MjtSize,             nu: MjtSize,             nout: MjtSize,          nmocap: MjtSize,
-    nuserdata: MjtSize,      nsensordata: MjtSize,    nhistory: MjtSize,      npluginstate: MjtSize,
-    nbvh: MjtSize,           nbvhdynamic: MjtSize,    nflexvert: MjtSize,     nflexedge: MjtSize,
-    nflexelem: MjtSize,      nflexstiffness: MjtSize, nJmom: MjtSize,         nJten: MjtSize,
+    /* Row lengths of MJDATA_POINTERS and MJDATA_ARENA_POINTERS that no table inside `split`
+       already determines. A total that is the plain sum of a count table gets no field here:
+       equal tables force an equal sum, so the total follows. */
+    nmocap: MjtSize,         nuserdata: MjtSize,      nhistory: MjtSize,      nbvh: MjtSize,
+    nbvhdynamic: MjtSize,    nflexedge: MjtSize,      nflexstiffness: MjtSize, nJmom: MjtSize,
     nJfe: MjtSize,           nJfv: MjtSize,           nC: MjtSize,            nD: MjtSize,
     ntree: MjtSize,
 
@@ -275,6 +271,29 @@ pub(crate) struct MjModelLayout {
     /* Strides of the per-element user arrays. */
     nuser_body: MjtSize,     nuser_jnt: MjtSize,      nuser_geom: MjtSize,    nuser_site: MjtSize,
     nuser_cam: MjtSize,      nuser_tendon: MjtSize,   nuser_actuator: MjtSize, nuser_sensor: MjtSize,
+
+    /* Per-element count tables, byte for byte. A table pins the length of the packed array beside
+       it, and it also pins how that array divides between the elements. This field sits last
+       because the derived `PartialEq` tests the fields in order: every scalar above costs the same
+       on any model, while a table comparison grows with the element count. */
+    split: MjSplitTables,
+}
+
+impl PartialEq for MjModelLayout {
+    /// `signature` takes no part. `mjModel.signature` (mjmodel.h:919) belongs to no `MJMODEL_*`
+    /// macro in `mjxmacro.h`, so `mj_saveModel` does not write it and `mj_loadModel` leaves it
+    /// zero; the only writer is the compiler (`user_model.cc:5625`). Testing it would refuse a
+    /// model against its own saved copy. The entries below pin everything the hash covers.
+    fn eq(&self, other: &Self) -> bool {
+            self.nexclude == other.nexclude && self.nmat == other.nmat && self.npair == other.npair && self.nskin == other.nskin &&
+            self.nkey == other.nkey && self.nmocap == other.nmocap && self.nuserdata == other.nuserdata && self.nhistory == other.nhistory &&
+            self.nbvh == other.nbvh && self.nbvhdynamic == other.nbvhdynamic && self.nflexedge == other.nflexedge && self.nflexstiffness == other.nflexstiffness &&
+            self.nJmom == other.nJmom && self.nJfe == other.nJfe && self.nJfv == other.nJfv && self.nC == other.nC &&
+            self.nD == other.nD && self.ntree == other.ntree && self.narena == other.narena && self.nmeshgraph == other.nmeshgraph &&
+            self.nuser_body == other.nuser_body && self.nuser_jnt == other.nuser_jnt && self.nuser_geom == other.nuser_geom && self.nuser_site == other.nuser_site &&
+            self.nuser_cam == other.nuser_cam && self.nuser_tendon == other.nuser_tendon && self.nuser_actuator == other.nuser_actuator && self.nuser_sensor == other.nuser_sensor &&
+            self.split == other.split
+    }
 }
 
 impl MjModelLayout {
@@ -294,20 +313,16 @@ impl From<&MjModel> for MjModelLayout {
         let m = model.ffi();
         Self {
             signature: m.signature,
-            split: model.split_tables(),
-            nq: m.nq, nv: m.nv, nexclude: m.nexclude, nmat: m.nmat,
-            npair: m.npair, nskin: m.nskin, nkey: m.nkey,
-            na: m.na, nu: m.nu, nout: m.nout, nmocap: m.nmocap,
-            nuserdata: m.nuserdata, nsensordata: m.nsensordata, nhistory: m.nhistory,
-            npluginstate: m.npluginstate, nbvh: m.nbvh, nbvhdynamic: m.nbvhdynamic,
-            nflexvert: m.nflexvert, nflexedge: m.nflexedge, nflexelem: m.nflexelem,
-            nflexstiffness: m.nflexstiffness, nJmom: m.nJmom, nJten: m.nJten, nJfe: m.nJfe,
-            nJfv: m.nJfv, nC: m.nC, nD: m.nD, ntree: m.ntree,
+            nexclude: m.nexclude, nmat: m.nmat, npair: m.npair, nskin: m.nskin, nkey: m.nkey,
+            nmocap: m.nmocap, nuserdata: m.nuserdata, nhistory: m.nhistory, nbvh: m.nbvh,
+            nbvhdynamic: m.nbvhdynamic, nflexedge: m.nflexedge, nflexstiffness: m.nflexstiffness,
+            nJmom: m.nJmom, nJfe: m.nJfe, nJfv: m.nJfv, nC: m.nC, nD: m.nD, ntree: m.ntree,
             narena: m.narena,
             nmeshgraph: m.nmeshgraph,
             nuser_body: m.nuser_body, nuser_jnt: m.nuser_jnt, nuser_geom: m.nuser_geom, nuser_site: m.nuser_site,
             nuser_cam: m.nuser_cam, nuser_tendon: m.nuser_tendon, nuser_actuator: m.nuser_actuator,
             nuser_sensor: m.nuser_sensor,
+            split: model.split_tables(),
         }
     }
 }
@@ -1100,22 +1115,21 @@ impl MjModel {
     /// The test covers every size that fixes an `mjData` buffer or a packed `mjModel` array, and
     /// the tables that fix how each array divides between the elements: the per-element counts,
     /// the joint addresses, the kinematic tree, the body of every element, and the type of every
-    /// joint, geom, equality, wrap, actuator and sensor. [`MjModel::signature`] leads the test,
-    /// but it hashes a subset of the same structure and decides nothing on its own.
+    /// joint, geom, equality, wrap, actuator and sensor. [`MjModel::signature`] takes no part:
+    /// `mj_saveModel` does not write it, so a model that came back from a buffer carries a zero.
     pub fn is_compatible_with_model(&self, other: &MjModel) -> bool {
         self.layout() == other.layout()
     }
 
     /// Reports whether `other` keeps its mesh, texture and heightfield data in the same memory
-    /// as this model: the same totals and the same shape for every asset.
+    /// as this model, and gives every texture the same kind: the same shape for every asset, and
+    /// the same convex hull total.
+    ///
+    /// The count tables carry every other total, because each one is the plain sum, or the sum of
+    /// the products, of the tables beside it. `nmeshgraph` is the exception: qhull sizes each
+    /// convex hull and `mesh_graphadr` holds addresses only.
     pub fn is_asset_compatible_with_model(&self, other: &MjModel) -> bool {
-        self.nmeshvert() == other.nmeshvert()
-            && self.nmeshnormal() == other.nmeshnormal()
-            && self.nmeshtexcoord() == other.nmeshtexcoord()
-            && self.nmeshface() == other.nmeshface()
-            && self.nmeshgraph() == other.nmeshgraph()
-            && self.ntexdata() == other.ntexdata()
-            && self.nhfielddata() == other.nhfielddata()
+        self.nmeshgraph() == other.nmeshgraph()
             && self.layout().asset_split() == other.layout().asset_split()
     }
 
@@ -1126,10 +1140,12 @@ impl MjModel {
     /// total differently. A caller that resolves one element through a range read from the other
     /// model then reads or writes the neighbouring element, and no length ever disagrees. Each
     /// address table is the running prefix sum of the count table beside it, so the counts pin
-    /// the addresses and the address tables need no entry. Each table also enters the comparison
-    /// with its own length, so a table pins the count of the elements it describes. The joint
-    /// tables are the exception: `mjModel` holds no per-joint count array, so `jnt_qposadr`,
-    /// `jnt_dofadr` and `jnt_type` travel here as data themselves.
+    /// the addresses and the address tables need no entry. The total of a packed array is the
+    /// plain sum of the same counts, so it needs no entry either. Each table also enters the
+    /// comparison with its own length, so a table pins the count of the elements it describes.
+    /// `mjModel` holds no per-joint count array, and `jnt_type` fills that role: every `mjtJoint`
+    /// value carries one fixed qpos and dof footprint, so `jnt_qposadr` and `jnt_dofadr` are the
+    /// running prefix sums of the types.
     fn element_split_tables(&self) -> [&[u8]; ELEMENT_SPLIT_TABLES] {
         [
             must_cast_slice(self.sensor_dim()),         must_cast_slice(self.numeric_size()),
@@ -1143,13 +1159,9 @@ impl MjModel {
             must_cast_slice(self.flex_elemnum()),       must_cast_slice(self.plugin()),
             // plugin_stateadr is the prefix sum of plugin_statenum inside npluginstate.
             must_cast_slice(self.plugin_statenum()),
-            // mjModel holds no per-joint count array, so these three travel as data themselves. A
-            // slide joint and a hinge joint share the qpos and dof footprint, so the addresses
-            // alone leave the meaning of the state free.
-            must_cast_slice(self.jnt_qposadr()),        must_cast_slice(self.jnt_dofadr()),
-            must_cast_slice(self.jnt_type()),
             // Every per-element type below fixes what a state, a control or an output MEANS. The
             // length of each one also pins the count of the elements it describes.
+            must_cast_slice(self.jnt_type()),
             must_cast_slice(self.geom_type()),          must_cast_slice(self.eq_type()),
             must_cast_slice(self.eq_objtype()),         must_cast_slice(self.wrap_type()),
             must_cast_slice(self.actuator_trntype()),   must_cast_slice(self.actuator_dyntype()),
@@ -1165,8 +1177,8 @@ impl MjModel {
         ]
     }
 
-    /// Returns the per-mesh, per-texture and per-heightfield count tables, as raw bytes in a
-    /// fixed order.
+    /// Returns the per-mesh, per-texture and per-heightfield count tables, plus the texture kinds,
+    /// as raw bytes in a fixed order.
     fn asset_split_tables(&self) -> [&[u8]; ASSET_SPLIT_TABLES] {
         [
             must_cast_slice(self.mesh_vertnum()),       must_cast_slice(self.mesh_normalnum()),
@@ -1176,6 +1188,10 @@ impl MjModel {
             must_cast_slice(self.mesh_graphadr()),
             must_cast_slice(self.tex_width()),          must_cast_slice(self.tex_height()),
             must_cast_slice(self.tex_nchannel()),
+            // A cube texture holds the same bytes as a 2D texture of the same width and height,
+            // so the sizes alone leave the kind free. mjr_makeContext records tex_type in
+            // mjrContext, and mjr_uploadTexture binds GL_TEXTURE_2D or GL_TEXTURE_CUBE_MAP by it.
+            must_cast_slice(self.tex_type()),
             must_cast_slice(self.hfield_nrow()),        must_cast_slice(self.hfield_ncol()),
         ]
     }
@@ -2690,6 +2706,126 @@ mod tests {
         let sensor = asset_model("<sensor><user dim='4' objtype='body' objname='b'/></sensor>", TET, CUBE);
         assert!(!model.is_compatible_with_model(&sensor), "the element tables differ");
         assert!(model.is_asset_compatible_with_model(&sensor));
+    }
+
+    /// `mjr_makeContext` records `tex_type` in the `mjrContext` and `mjr_uploadTexture` binds
+    /// `GL_TEXTURE_2D` or `GL_TEXTURE_CUBE_MAP` by it, so an upload that crosses the two kinds
+    /// leaves the recorded kind disagreeing with the texture object. The compiler gives a cube
+    /// texture `height = 6 * width`, which a 2D texture may also carry, so the sizes alone do not
+    /// separate the pair.
+    #[test]
+    fn test_is_asset_compatible_with_model_rejects_a_different_texture_kind() {
+        let textured = |kind: &str, width: u32, height: u32| MjModel::from_xml_string(&format!(
+            "<mujoco><asset><texture name='t' type='{kind}' builtin='flat' width='{width}' \
+             height='{height}' rgb1='1 1 1'/><material name='m' texture='t'/></asset>\
+             <worldbody><geom size='0.1' material='m'/></worldbody></mujoco>"
+        )).unwrap();
+
+        let flat = textured("2d", 8, 48);
+        let cube = textured("cube", 8, 8);
+        assert_eq!(flat.tex_width(), cube.tex_width(), "the widths must agree");
+        assert_eq!(flat.tex_height(), cube.tex_height(), "the compiler gives the cube 6 * width");
+        assert_eq!(flat.tex_nchannel(), cube.tex_nchannel(), "the channel counts must agree");
+        assert_eq!(flat.ntexdata(), cube.ntexdata(), "the pair holds the same number of bytes");
+        assert_ne!(flat.tex_type(), cube.tex_type());
+
+        assert!(!flat.is_asset_compatible_with_model(&cube));
+        assert!(!flat.is_compatible_with_model(&cube));
+        assert!(flat.is_asset_compatible_with_model(&textured("2d", 8, 48)));
+    }
+
+    /// [`MjModelLayout`] carries no size that a count table already determines, so a compatible
+    /// pair keeps every size below equal only while the identity beside it holds. A MuJoCo release
+    /// that adds a padding term, an alignment term or an extra row to one of them would let the
+    /// gate accept a model whose `mjData` buffers differ, or whose joints keep their state
+    /// elsewhere.
+    #[test]
+    fn test_every_dropped_size_follows_from_a_count_table() {
+        let model = MjModel::from_xml_string(
+            "<mujoco><asset>\
+             <texture name='t1' type='2d' builtin='checker' width='17' height='23' rgb1='1 0 0' rgb2='0 1 0'/>\
+             <texture name='t2' type='cube' builtin='flat' width='8' height='8' rgb1='1 1 1'/>\
+             <texture name='t3' type='2d' builtin='flat' width='4' height='6' nchannel='4' rgb1='1 1 1'/>\
+             <material name='mat' texture='t1'/>\
+             <hfield name='hf' nrow='7' ncol='11' size='1 1 1 0.1'/>\
+             <mesh name='ms' vertex='0 0 0  1 0 0  0 1 0  0 0 1' texcoord='0 0  1 0  0 1  1 1'/>\
+             </asset><worldbody>\
+             <geom type='hfield' hfield='hf'/>\
+             <body name='free'><freejoint/><geom size='0.1' type='mesh' mesh='ms' material='mat'/>\
+             <site name='s1'/>\
+             <body name='ball' pos='0 0 0.2'><joint name='jb' type='ball'/><geom size='0.1'/>\
+             <body name='slide' pos='0 0 0.2'><joint name='js' type='slide'/><geom size='0.1'/>\
+             <site name='s2'/><joint name='jh' type='hinge'/></body></body></body>\
+             <body name='v0'><freejoint/><geom size='0.01'/></body>\
+             <body name='v1' pos='0.1 0 0'><freejoint/><geom size='0.01'/></body>\
+             <body name='v2' pos='0.2 0 0'><freejoint/><geom size='0.01'/></body>\
+             </worldbody>\
+             <deformable><flex name='f1' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>\
+             </deformable>\
+             <tendon><spatial name='td'><site site='s1'/><site site='s2'/></spatial>\
+             <fixed name='tf'><joint joint='js' coef='1'/><joint joint='jh' coef='2'/></fixed></tendon>\
+             <actuator><motor joint='jh'/><position joint='js' kp='3'/>\
+             <general joint='jh' dyntype='integrator'/><general joint='js' dyntype='filter' dynprm='0.1'/>\
+             <general tendon='tf' dyntype='filterexact' dynprm='0.1'/>\
+             <orientation site='s2' refsite='s1' kp='1' input='expmap'/>\
+             <orientation site='s2' refsite='s1' kp='1' input='quat'/>\
+             <pid joint='jh' kp='1' kv='1' input='pos vel'/></actuator>\
+             <sensor><framepos objtype='site' objname='s1'/><framequat objtype='site' objname='s1'/>\
+             <jointpos joint='jh'/><accelerometer site='s2'/><tendonpos tendon='td'/>\
+             <user objtype='site' objname='s2' dim='5' needstage='vel'/></sensor></mujoco>"
+        ).unwrap();
+
+        let sum = |table: &[i32]| table.iter().map(|&n| i64::from(n)).sum::<MjtSize>();
+        let product = |first: &[i32], second: &[i32]| first.iter().zip(second)
+            .map(|(&a, &b)| i64::from(a) * i64::from(b)).sum::<MjtSize>();
+
+        // Every joint type appears above, so a wrong footprint for any one of them fails here.
+        let qpos = |joint: &MjtJoint| match joint {
+            MjtJoint::mjJNT_FREE => 7, MjtJoint::mjJNT_BALL => 4, _ => 1,
+        };
+        let dof = |joint: &MjtJoint| match joint {
+            MjtJoint::mjJNT_FREE => 6, MjtJoint::mjJNT_BALL => 3, _ => 1,
+        };
+        assert_eq!(model.nq(), model.jnt_type().iter().map(qpos).sum::<MjtSize>());
+        assert_eq!(model.nv(), model.jnt_type().iter().map(dof).sum::<MjtSize>());
+
+        // Both joint address tables left the layout as well, because each one is the running
+        // prefix sum of the same footprints, in joint id order and with no gap.
+        let (mut qpos_adr, mut dof_adr) = (0, 0);
+        for (id, joint) in model.jnt_type().iter().enumerate() {
+            assert_eq!(i64::from(model.jnt_qposadr()[id]), qpos_adr, "joint {id}");
+            assert_eq!(i64::from(model.jnt_dofadr()[id]), dof_adr, "joint {id}");
+            qpos_adr += qpos(joint);
+            dof_adr += dof(joint);
+        }
+
+        assert_eq!(model.nsensordata(), sum(model.sensor_dim()));
+        assert_eq!(model.na(), sum(model.actuator_actnum()));
+        assert_eq!(model.nu(), sum(model.actuator_ctrlnum()));
+        assert_eq!(model.nout(), sum(model.actuator_outnum()));
+        assert_eq!(model.n_jten(), sum(model.ten_j_rownnz()));
+        assert_eq!(model.nflexvert(), sum(model.flex_vertnum()));
+        assert_eq!(model.nflexelem(), sum(model.flex_elemnum()));
+
+        assert_eq!(model.nmeshvert(), sum(model.mesh_vertnum()));
+        assert_eq!(model.nmeshnormal(), sum(model.mesh_normalnum()));
+        assert_eq!(model.nmeshtexcoord(), sum(model.mesh_texcoordnum()));
+        assert_eq!(model.nmeshface(), sum(model.mesh_facenum()));
+        assert_eq!(model.nhfielddata(), product(model.hfield_nrow(), model.hfield_ncol()));
+        assert_eq!(model.ntexdata(), model.tex_width().iter().zip(model.tex_height())
+            .zip(model.tex_nchannel())
+            .map(|((&w, &h), &c)| i64::from(w) * i64::from(h) * i64::from(c)).sum::<MjtSize>());
+
+        // An empty table satisfies every assertion above, so hold the model to its content.
+        assert!(model.na() > 0 && model.nu() > 0 && model.nout() > 0);
+        assert!(model.nsensordata() > 6 && model.n_jten() > 0);
+        assert!(model.nflexvert() > 0 && model.nflexelem() > 0 && model.nmeshvert() > 0);
+        assert_eq!(model.nhfielddata(), 77, "the heightfield must survive the compiler");
+        assert!(model.ntexdata() > 0 && model.nmeshtexcoord() > 0);
+        // A one-control actuator and a three-channel texture would hide a per-element term, so
+        // hold the model to the multi-control and the multi-channel case as well.
+        assert!(model.actuator_ctrlnum().contains(&4) && model.actuator_outnum().contains(&3));
+        assert!(model.tex_nchannel().contains(&3) && model.tex_nchannel().contains(&4));
     }
 
     #[test]

@@ -165,9 +165,9 @@
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`
   :sup:`new` reports whether another |mj_model| can take the place of this one in an |mj_data| or
-  in a cached ``Info``. It compares the structure of the two models: the signature, every size that
-  fixes an ``mjData`` buffer or a packed ``mjModel`` array, and the per-element tables and types
-  that place each element inside one of those arrays and fix what its state means.
+  in a cached ``Info``. It compares the structure of the two models: the per-element tables and
+  types that place each element inside a packed array and fix what its state means, plus every
+  size that no table already determines.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_asset_compatible_with_model`
   :sup:`new` is the weaker test the asset-upload methods need: it compares the mesh, texture and
   heightfield memory alone.
@@ -407,8 +407,12 @@
 - Closed a heap buffer overflow reachable from safe code in
   :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>find_selection`:
-  both now test the model with ``MjvScene::is_compatible_with_model`` instead of the signature
-  alone, and panic when the model in the given |mj_data| needs larger scene buffers.
+  both now test the model with ``MjvScene::is_compatible_with_model`` instead of the signature,
+  and panic when the model in the given |mj_data| needs larger scene buffers.
+- ``MjvScene::update`` and ``MjvScene::find_selection`` now accept a model that
+  :docs-rs:`~mujoco_rs::mujoco_c::<fn>mj_loadModel` returned. ``mj_saveModel`` writes no
+  compilation signature, so the previous signature test refused the saved copy of the very model
+  the scene was created for.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>create_geom` now
   writes every field that :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjv_initGeom` leaves unwritten over
   uninitialized memory: ``objtype`` becomes

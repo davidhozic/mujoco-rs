@@ -782,16 +782,22 @@ impl MjvFigure {
 ** MjvScene
 ***********************************************************************************************************************/
 /// Snapshot of the [`MjModel`] quantities that fix the size of every buffer that
-/// [`MjvScene::new`] allocates.
+/// [`MjvScene::new`] allocates, and the two element counts that bound the `objid` of a flex geom
+/// and of a skin geom.
 ///
-/// The flex tables are kept whole: `mjv_makeScene` sizes the flex face buffer from `flex_dim`,
-/// `flex_elemnum`, `flex_shellnum` and `flex_elemlayer` together, so no scalar total replaces
-/// them.
+/// The compilation signature is no entry here: `mj_saveModel` does not write it, so a model that
+/// came back from a buffer carries a zero and would be refused against the scene it built. The
+/// entries below stand on their own. The flex tables are kept whole: `mjv_makeScene` sizes the
+/// flex face buffer from `flex_dim`, `flex_elemnum`, `flex_shellnum` and `flex_elemlayer`
+/// together, so no scalar total replaces them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MjvSceneLayout {
-    signature: u64,
     nflexedge: MjtSize,
     nflexvert: MjtSize,
+    // `mjv_addGeoms` gives a skin geom the skin id as its `objid`, and `mjr_render` reads
+    // `skinfacenum[objid]` of the scene and `skinvertVBO[objid]` of the context. Both arrays hold
+    // one entry per skin of the model that built them.
+    nskin: MjtSize,
     nskinvert: MjtSize,
     flex_dim: Vec<i32>,
     flex_elemnum: Vec<i32>,
@@ -803,9 +809,9 @@ impl From<&MjModel> for MjvSceneLayout {
     fn from(model: &MjModel) -> Self {
         let ffi = model.ffi();
         Self {
-            signature: model.signature(),
             nflexedge: ffi.nflexedge,
             nflexvert: ffi.nflexvert,
+            nskin: ffi.nskin,
             nskinvert: ffi.nskinvert,
             flex_dim: model.flex_dim().to_vec(),
             flex_elemnum: model.flex_elemnum().to_vec(),
@@ -826,6 +832,9 @@ impl From<&MjModel> for MjvSceneLayout {
 pub struct MjvScene {
     ffi: Box<mjvScene>,
     layout: MjvSceneLayout,
+    /// Reported by [`MjvScene::signature`] and named in the panic of an incompatible model. It
+    /// decides nothing: `MjvSceneLayout` carries every size the scene depends on.
+    signature: u64,
 }
 
 impl MjvScene {
@@ -877,20 +886,22 @@ impl MjvScene {
             }
         }
 
-        Self { ffi: scene, layout }
+        Self { ffi: scene, layout, signature: model.signature() }
     }
 
     /// Returns the model signature this scene was created for.
     pub fn signature(&self) -> u64 {
-        self.layout.signature
+        self.signature
     }
 
     /// Reports whether `model` can take the place of the model that created this scene.
     ///
     /// The scene buffers hold one entry per flex face, flex vertex, flex edge and skin vertex of
     /// the model that created them, and `mjv_updateScene` refills them with the counts of the
-    /// model it receives. The test therefore covers the compilation signature and every count
-    /// that sizes such a buffer.
+    /// model it receives. The test covers every count that sizes such a buffer, plus the flex and
+    /// skin counts that bound the `objid` a geom carries into those buffers.
+    /// [`MjvScene::signature`] takes no part: `mj_saveModel` does not write it, so a model that
+    /// came back from a buffer would be refused against the scene it built.
     pub fn is_compatible_with_model(&self, model: &MjModel) -> bool {
         self.layout == MjvSceneLayout::from(model)
     }
@@ -909,7 +920,7 @@ impl MjvScene {
         assert!(
             self.is_compatible_with_model(model),
             "the model is not compatible with the scene: scene signature {:#X}, model signature {:#X}",
-            self.layout.signature, model.signature()
+            self.signature, model.signature()
         );
     }
 
@@ -1313,6 +1324,63 @@ mod tests {
         let scene = MjvScene::new(&three, 100);
         assert!(scene.is_compatible_with_model(&three));
         assert!(!scene.is_compatible_with_model(&two));
+    }
+
+    /// A model that carries `skins` and nothing else, so that only the skin counts change.
+    fn skin_model(skins: &str) -> MjModel {
+        let xml = format!(
+            "<mujoco><asset>{skins}</asset><worldbody>\
+<body name='b'><joint name='j' type='hinge' axis='0 0 1'/><geom size='0.1'/></body>\
+</worldbody></mujoco>"
+        );
+        MjModel::from_xml_string(&xml).unwrap()
+    }
+
+    /// `mjv_addGeoms` gives a skin geom the skin id as its `objid`, and `mjr_render` reads
+    /// `skinfacenum[objid]` of the scene with it. A model that holds more skins than the scene
+    /// must be refused, even when it needs no larger buffer.
+    #[test]
+    fn test_scene_rejects_a_larger_skin_count_at_an_equal_vertex_total() {
+        let one = skin_model(
+            "<skin name='s' vertex='0 0 0  1 0 0  0 1 0  1 1 0  2 0 0  2 1 0' \
+                   face='0 1 2  1 3 2  1 4 3  4 5 3'>\
+             <bone body='b' bindpos='0 0 0' bindquat='1 0 0 0' \
+                   vertid='0 1 2 3 4 5' vertweight='1 1 1 1 1 1'/></skin>"
+        );
+        let two = skin_model(
+            "<skin name='s1' vertex='0 0 0  1 0 0  0 1 0' face='0 1 2'>\
+             <bone body='b' bindpos='0 0 0' bindquat='1 0 0 0' \
+                   vertid='0 1 2' vertweight='1 1 1'/></skin>\
+             <skin name='s2' vertex='0 0 1  1 0 1  0 1 1' face='0 1 2'>\
+             <bone body='b' bindpos='0 0 0' bindquat='1 0 0 0' \
+                   vertid='0 1 2' vertweight='1 1 1'/></skin>"
+        );
+        // Every scene buffer is the same size in both, so only nskin separates the pair.
+        assert_eq!(one.nskinvert(), two.nskinvert());
+        assert_ne!(one.nskin(), two.nskin());
+
+        let scene = MjvScene::new(&one, 100);
+        assert!(scene.is_compatible_with_model(&one));
+        assert!(!scene.is_compatible_with_model(&two));
+    }
+
+    /// `mj_saveModel` writes no signature, so `mj_loadModel` returns a zero. A scene that tested
+    /// the signature would refuse the saved copy of the very model it was created for.
+    #[test]
+    fn test_scene_accepts_the_saved_copy_of_its_own_model() {
+        let model = flex_model(
+            "<flex name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>"
+        );
+        let scene = MjvScene::new(&model, 100);
+
+        let mut buffer = vec![0u8; model.size()];
+        model.save_to_buffer(&mut buffer).unwrap();
+        let reloaded = MjModel::from_buffer(&buffer).unwrap();
+
+        assert_ne!(model.signature(), reloaded.signature(),
+                   "mj_loadModel now restores the signature");
+        assert!(scene.is_compatible_with_model(&reloaded),
+                "the scene refuses the saved copy of its own model");
     }
 
     #[test]

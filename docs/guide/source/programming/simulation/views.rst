@@ -25,8 +25,7 @@ number of entries that each element owns inside them.
     Cached info structs are tied to the model layout they were created from.
     Calling ``view()`` / ``view_mut()`` with data from an incompatible model
     will panic. Two models are compatible when they agree on every size and on
-    the way each element splits those sizes, which is more than just an equal
-    model signature.
+    the way each element splits those sizes.
     Use ``try_view()`` / ``try_view_mut()`` if you want to handle mismatches
     as ``Result`` values instead of panicking.
 

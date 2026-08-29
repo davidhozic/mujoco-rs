@@ -186,7 +186,7 @@ the GPU copies held by the renderer must be refreshed explicitly.
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_meshes_from`,
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfields_from`.
   The plural methods are more convenient when the majority of assets of a given type
-  are modified, avoiding repeated signature and context checks.
+  are modified, avoiding repeated compatibility and context checks.
 
 Unlike the viewer, the renderer uploads asset data **immediately** --- there is no staging or
 dirty-flag mechanism. The upload takes effect before the next call to

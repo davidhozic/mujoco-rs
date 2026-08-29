@@ -157,17 +157,26 @@ mod tests {
     use crate::wrappers::mj_model::{MjModel, MjtGeom};
 
     /// A copied geom keeps its `objid`, which the renderer uses as an unchecked index into the
-    /// destination scene's flex and skin arrays, so the two scenes must belong to one model.
+    /// destination scene's flex and skin arrays, so the two scenes must belong to one model. The
+    /// pair below differs in the flex arrays alone: a model that holds no flex sizes them to zero.
     #[test]
     #[should_panic(expected = "models that are not compatible")]
     fn test_sync_geoms_cross_model_panics() {
-        let with_body = MjModel::from_xml_string(
-            "<mujoco><worldbody><body><geom size=\"0.1\"/></body></worldbody></mujoco>").unwrap();
-        let world_only = MjModel::from_xml_string(
-            "<mujoco><worldbody><geom size=\"0.1\"/></worldbody></mujoco>").unwrap();
+        let with_flex = MjModel::from_xml_string(
+            "<mujoco><worldbody>\
+<body name=\"v0\"><freejoint/><geom size=\"0.01\"/></body>\
+<body name=\"v1\" pos=\"0.1 0 0\"><freejoint/><geom size=\"0.01\"/></body>\
+</worldbody><deformable>\
+<flex name=\"f\" dim=\"1\" body=\"v0 v1\" vertex=\"0 0 0 0 0 0\" element=\"0 1\"/>\
+</deformable></mujoco>").unwrap();
+        let without_flex = MjModel::from_xml_string(
+            "<mujoco><worldbody>\
+<body name=\"v0\"><freejoint/><geom size=\"0.01\"/></body>\
+<body name=\"v1\" pos=\"0.1 0 0\"><freejoint/><geom size=\"0.01\"/></body>\
+</worldbody></mujoco>").unwrap();
 
-        let mut source = MjvScene::new(&with_body, 8);
-        let mut destination = MjvScene::new(&world_only, 8);
+        let mut source = MjvScene::new(&with_flex, 8);
+        let mut destination = MjvScene::new(&without_flex, 8);
         // SAFETY: the test never writes a material, texture or object id.
         unsafe { source.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None) };
 
