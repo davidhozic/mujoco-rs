@@ -67,7 +67,20 @@ Run the codebase under Miri's experimental FFI native-lib support to detect unde
 > - **Verbose output**: The default flags intentionally increase log volume (`backtrace=full`, `report-progress`, alloc access tracking) to maximize diagnosability.
 > - **Provenance**: `-Zmiri-permissive-provenance` is essential because MuJoCo (a C library) manages its own memory, which Rust then accesses.
 > - **Strict provenance**: `-Zmiri-strict-provenance` is not compatible with native FFI calls; do not use it for MuJoCo-backed runs.
-> - **Test harness**: Miri does run the standard test harness. `cargo +nightly miri test --test <NAME>` works once every test calls `mujoco_rs::miri::install_allocator()` first; without it, the first MuJoCo pointer fails with `[noalloc] has no provenance`. Add `-- --test-threads=1`, because the allocator keeps no lock.
+> - **Test harness**: use `cargo +nightly miri run --example <NAME>`, not `cargo +nightly miri test`.
+>   Miri does interpret the standard test harness, and each test reports UB correctly once it calls
+>   `mujoco_rs::miri::install_allocator()` first (without it, the first MuJoCo pointer fails with
+>   `[noalloc] has no provenance`), but every test process that loads MuJoCo dies with SIGSEGV at
+>   exit, after Miri prints its verdict. A clean run and a failing run therefore both exit non-zero,
+>   so `cargo miri test` cannot serve as a pass/fail gate. `cargo miri run --example` exits 0 on a
+>   clean run.
+> - **Detection limits**, measured by fault injection. Caught: reads and writes past a MuJoCo
+>   allocation, Tree Borrows aliasing on MuJoCo memory, alignment, invalid `bool` and enum values,
+>   null and dangling references, uninitialised reads. Missed: an overrun under 64 bytes (`mju_malloc`
+>   rounds every block up to 64, so the overrun stays inside the allocation), a wrong stride inside
+>   one MuJoCo buffer (every model array shares one block), use after free of a MuJoCo block (a freed
+>   chunk stays a live Rust allocation), and anything whose only effect is inside C. Run `/asan` for
+>   those four; it catches all of them except the sub-64-byte overrun.
 
 ## Deliverable -- HTML report
 
