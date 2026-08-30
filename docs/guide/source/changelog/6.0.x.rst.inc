@@ -3,6 +3,18 @@
 
 .. rubric:: Breaking changes
 
+*Mutable body iteration is restricted to a tree walk*
+
+- Patched undefined-behavior cases by making
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec` no longer carry ``body_iter_mut``,
+  and :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>body_iter_mut` no
+  longer taking the ``recurse`` argument. This now makes them yield only their direct children.
+  Reach a body through
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>world_body_mut` and walk
+  down. Immutable iteration is unchanged, and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>body_iter` keeps
+  ``recurse``. See :ref:`migrate_6_0_0`.
+
 *The items deprecated in 3.0.0 are removed*
 
 - ``mujoco_rs::get_mujoco_version`` (:docs-rs:`~mujoco_rs::<fn>mujoco_version`), |mj_vfs|'s
@@ -575,6 +587,10 @@
   passed a truncated capacity to MuJoCo and allocated a smaller scene than the caller asked for.
 
 .. rubric:: Other changes
+
+- The :gh-example:`Basic model editing <model_editing/model_editing.rs>` example now builds three
+  swinging pendulum chains instead of overlapping balls, and walks the finished body tree to shade
+  each link by its depth. The old model stood still and showed nothing.
 
 - Following the reworked FFI struct field-visibility rules, the fields of
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsOrientation` (``type_``, ``axisangle``,

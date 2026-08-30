@@ -301,6 +301,13 @@ To iterate over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec` item
 ``[item_type]_iter`` for immutable iteration or ``[item_type]_iter_mut`` for mutable iteration,
 with ``[item_type]`` replaced by geom, body, etc.
 
+A body is the exception: |mj_spec| carries ``body_iter`` alone. Every item that a mutable iterator
+yields borrows the spec for the same lifetime, so all of them stay live together. A body owns a
+subtree, so a flat mutable body iterator would hand out a body and that body's own descendant at
+once. Reach a body through
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>world_body_mut` and walk down
+the tree.
+
 .. code-block:: rust
 
     // ...
@@ -311,6 +318,9 @@ with ``[item_type]`` replaced by geom, body, etc.
 
 Iteration over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody` items can be used in a similar way.
 The only difference is an additional boolean parameter, which enables recursive iteration when ``true``.
+The mutable body iterator
+(:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>body_iter_mut`) takes no such
+parameter and yields the direct children only, for the reason above.
 
 .. code-block:: rust
 

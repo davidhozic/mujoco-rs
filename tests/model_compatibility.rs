@@ -150,8 +150,8 @@ fn compile_with(spec: &MjSpec, edits: &[&Edit]) -> Option<MjModel> {
 
 /// Runs `body` on the item of one kind that carries `name`, and does nothing when it is gone.
 macro_rules! on_item {
-    ($spec:expr, $iter_mut:ident, $name:expr, |$item:ident| $body:expr) => {
-        if let Some($item) = $spec.$iter_mut().find(|item| item.name() == $name) {
+    ($spec:expr, $finder:ident, $name:expr, |$item:ident| $body:expr) => {
+        if let Some($item) = $spec.$finder(&$name[..]) {
             $body;
         }
     };
@@ -195,7 +195,7 @@ fn joint_type_edits() -> Vec<Edit> {
             // The root is a free joint, so setting it to free again changes nothing.
             let kind = if t == MjtJoint::mjJNT_FREE { Kind::Parameter } else { Kind::Structural };
             Edit::new(format!("joint type {t:?}"), kind, move |spec: &mut MjSpec| {
-                on_item!(spec, joint_iter_mut, "root", |j| j.set_type(t));
+                on_item!(spec, joint_mut, "root", |j| j.set_type(t));
             })
         })
         .collect()
@@ -218,7 +218,7 @@ fn geom_type_edits() -> Vec<Edit> {
         .map(|t| {
             let kind = if t == MjtGeom::mjGEOM_CAPSULE { Kind::Parameter } else { Kind::Structural };
             Edit::new(format!("geom type {t:?}"), kind, move |spec: &mut MjSpec| {
-                on_item!(spec, geom_iter_mut, "g_upper", |g| {
+                on_item!(spec, geom_mut, "g_upper", |g| {
                     g.set_type(t);
                     *g.size_mut() = [0.04, 0.04, 0.1];
                     // A mesh geom and a heightfield geom each need their asset named.
@@ -243,7 +243,7 @@ fn texture_type_edits() -> Vec<Edit> {
         .map(|t| {
             let kind = if t == MjtTexture::mjTEXTURE_2D { Kind::Parameter } else { Kind::Structural };
             Edit::new(format!("texture type {t:?}"), kind, move |spec: &mut MjSpec| {
-                on_item!(spec, texture_iter_mut, "tx", |tex| {
+                on_item!(spec, texture_mut, "tx", |tex| {
                     tex.set_type(t);
                     // A cube and a skybox hold six square faces, so the height follows the width.
                     if t != MjtTexture::mjTEXTURE_2D {
@@ -282,7 +282,7 @@ fn equality_type_edits() -> Vec<Edit> {
             let kind = if t == MjtEq::mjEQ_CONNECT { Kind::Parameter } else { Kind::Structural };
             Edit::new(format!("equality type {t:?}"), kind, move |spec: &mut MjSpec| {
                 let (objtype, name1, name2) = targets(t);
-                on_item!(spec, equality_iter_mut, "eq0", |eq| {
+                on_item!(spec, equality_mut, "eq0", |eq| {
                     eq.set_type(t);
                     eq.set_objtype(objtype);
                     eq.set_name1(name1);
@@ -315,7 +315,7 @@ fn actuator_kind_edits() -> Vec<Edit> {
         .map(|(name, set)| {
             let kind = if name == "motor" { Kind::Parameter } else { Kind::Structural };
             Edit::new(format!("actuator kind {name}"), kind, move |spec: &mut MjSpec| {
-                on_item!(spec, actuator_iter_mut, "a_motor", |a| set(a));
+                on_item!(spec, actuator_mut, "a_motor", |a| set(a));
             })
         })
         .collect()
@@ -425,7 +425,7 @@ fn sensor_type_edits(spec: &MjSpec) -> (Vec<Edit>, Vec<MjtSensor>) {
 fn deletion_edits(spec: &MjSpec) -> Vec<Edit> {
     let mut out = Vec::new();
     macro_rules! sweep {
-        ($($obj:ident, $kind:literal => $iter:ident, $iter_mut:ident;)+) => {
+        ($($obj:ident, $kind:literal => $iter:ident, $finder:ident;)+) => {
             // The kinds the sweep leaves out hold no element a spec can delete: markers, a whole
             // model, an xbody, and the dof and plugin kinds that belong to the compiled model.
             all_variants!(MjtObj = $($obj),+ ;
@@ -443,7 +443,7 @@ fn deletion_edits(spec: &MjSpec) -> Vec<Edit> {
                     move |spec: &mut MjSpec| {
                         // SAFETY: the walk runs on the spec that the edits before it left, so it
                         // reaches a live element only, and each edit deletes one name once.
-                        on_item!(spec, $iter_mut, target, |item| unsafe { let _ = item.delete(); });
+                        on_item!(spec, $finder, target, |item| unsafe { let _ = item.delete(); });
                     },
                 ));
             }
@@ -451,28 +451,28 @@ fn deletion_edits(spec: &MjSpec) -> Vec<Edit> {
         };
     }
     sweep! {
-        mjOBJ_BODY,     "body"     => body_iter, body_iter_mut;
-        mjOBJ_JOINT,    "joint"    => joint_iter, joint_iter_mut;
-        mjOBJ_GEOM,     "geom"     => geom_iter, geom_iter_mut;
-        mjOBJ_SITE,     "site"     => site_iter, site_iter_mut;
-        mjOBJ_CAMERA,   "camera"   => camera_iter, camera_iter_mut;
-        mjOBJ_LIGHT,    "light"    => light_iter, light_iter_mut;
-        mjOBJ_ACTUATOR, "actuator" => actuator_iter, actuator_iter_mut;
-        mjOBJ_SENSOR,   "sensor"   => sensor_iter, sensor_iter_mut;
-        mjOBJ_TENDON,   "tendon"   => tendon_iter, tendon_iter_mut;
-        mjOBJ_EQUALITY, "equality" => equality_iter, equality_iter_mut;
-        mjOBJ_PAIR,     "pair"     => pair_iter, pair_iter_mut;
-        mjOBJ_EXCLUDE,  "exclude"  => exclude_iter, exclude_iter_mut;
-        mjOBJ_FLEX,     "flex"     => flex_iter, flex_iter_mut;
-        mjOBJ_MESH,     "mesh"     => mesh_iter, mesh_iter_mut;
-        mjOBJ_HFIELD,   "hfield"   => hfield_iter, hfield_iter_mut;
-        mjOBJ_SKIN,     "skin"     => skin_iter, skin_iter_mut;
-        mjOBJ_TEXTURE,  "texture"  => texture_iter, texture_iter_mut;
-        mjOBJ_MATERIAL, "material" => material_iter, material_iter_mut;
-        mjOBJ_NUMERIC,  "numeric"  => numeric_iter, numeric_iter_mut;
-        mjOBJ_TEXT,     "text"     => text_iter, text_iter_mut;
-        mjOBJ_TUPLE,    "tuple"    => tuple_iter, tuple_iter_mut;
-        mjOBJ_KEY,      "key"      => key_iter, key_iter_mut;
+        mjOBJ_BODY,     "body"     => body_iter, body_mut;
+        mjOBJ_JOINT,    "joint"    => joint_iter, joint_mut;
+        mjOBJ_GEOM,     "geom"     => geom_iter, geom_mut;
+        mjOBJ_SITE,     "site"     => site_iter, site_mut;
+        mjOBJ_CAMERA,   "camera"   => camera_iter, camera_mut;
+        mjOBJ_LIGHT,    "light"    => light_iter, light_mut;
+        mjOBJ_ACTUATOR, "actuator" => actuator_iter, actuator_mut;
+        mjOBJ_SENSOR,   "sensor"   => sensor_iter, sensor_mut;
+        mjOBJ_TENDON,   "tendon"   => tendon_iter, tendon_mut;
+        mjOBJ_EQUALITY, "equality" => equality_iter, equality_mut;
+        mjOBJ_PAIR,     "pair"     => pair_iter, pair_mut;
+        mjOBJ_EXCLUDE,  "exclude"  => exclude_iter, exclude_mut;
+        mjOBJ_FLEX,     "flex"     => flex_iter, flex_mut;
+        mjOBJ_MESH,     "mesh"     => mesh_iter, mesh_mut;
+        mjOBJ_HFIELD,   "hfield"   => hfield_iter, hfield_mut;
+        mjOBJ_SKIN,     "skin"     => skin_iter, skin_mut;
+        mjOBJ_TEXTURE,  "texture"  => texture_iter, texture_mut;
+        mjOBJ_MATERIAL, "material" => material_iter, material_mut;
+        mjOBJ_NUMERIC,  "numeric"  => numeric_iter, numeric_mut;
+        mjOBJ_TEXT,     "text"     => text_iter, text_mut;
+        mjOBJ_TUPLE,    "tuple"    => tuple_iter, tuple_mut;
+        mjOBJ_KEY,      "key"      => key_iter, key_mut;
     }
     out
 }
@@ -608,16 +608,16 @@ fn parameter_edits() -> Vec<Edit> {
         Edit::new("solver tolerance", Kind::Parameter,
                   |spec: &mut MjSpec| spec.option_mut().tolerance = 1e-10),
         Edit::new("geom size", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, geom_iter_mut, "g_lower", |g| *g.size_mut() = [0.07, 0.0, 0.2]);
+            on_item!(spec, geom_mut, "g_lower", |g| *g.size_mut() = [0.07, 0.0, 0.2]);
         }),
         Edit::new("geom density", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, geom_iter_mut, "g_lower", |g| g.set_density(2000.0));
+            on_item!(spec, geom_mut, "g_lower", |g| g.set_density(2000.0));
         }),
         Edit::new("geom friction", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, geom_iter_mut, "g_lower", |g| *g.friction_mut() = [2.0, 0.01, 0.001]);
+            on_item!(spec, geom_mut, "g_lower", |g| *g.friction_mut() = [2.0, 0.01, 0.001]);
         }),
         Edit::new("geom rgba", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, geom_iter_mut, "g_trunk", |g| *g.rgba_mut() = [1.0, 0.0, 0.0, 0.5]);
+            on_item!(spec, geom_mut, "g_trunk", |g| *g.rgba_mut() = [1.0, 0.0, 0.0, 0.5]);
         }),
         Edit::new("body position", Kind::Parameter, |spec: &mut MjSpec| {
             if let Some(body) = spec.world_body_mut().child_mut("trunk") {
@@ -630,74 +630,74 @@ fn parameter_edits() -> Vec<Edit> {
             }
         }),
         Edit::new("joint armature", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, joint_iter_mut, "slide", |j| j.set_armature(0.1));
+            on_item!(spec, joint_mut, "slide", |j| j.set_armature(0.1));
         }),
         Edit::new("joint range", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, joint_iter_mut, "knee", |j| *j.range_mut() = [-2.0, 2.0]);
+            on_item!(spec, joint_mut, "knee", |j| *j.range_mut() = [-2.0, 2.0]);
         }),
         Edit::new("joint axis", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, joint_iter_mut, "knee", |j| *j.axis_mut() = [1.0, 0.0, 0.0]);
+            on_item!(spec, joint_mut, "knee", |j| *j.axis_mut() = [1.0, 0.0, 0.0]);
         }),
         Edit::new("joint friction loss", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, joint_iter_mut, "slide", |j| j.set_frictionloss(0.2));
+            on_item!(spec, joint_mut, "slide", |j| j.set_frictionloss(0.2));
         }),
         Edit::new("actuator gear", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, actuator_iter_mut, "a_motor", |a| *a.gear_mut() = [7.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+            on_item!(spec, actuator_mut, "a_motor", |a| *a.gear_mut() = [7.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
         }),
         Edit::new("actuator control range", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, actuator_iter_mut, "a_pos", |a| *a.ctrlrange_mut() = [-2.0, 2.0]);
+            on_item!(spec, actuator_mut, "a_pos", |a| *a.ctrlrange_mut() = [-2.0, 2.0]);
         }),
         Edit::new("tendon stiffness", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, tendon_iter_mut, "td", |t| t.stiffness_mut()[0] = 4.0);
+            on_item!(spec, tendon_mut, "td", |t| t.stiffness_mut()[0] = 4.0);
         }),
         Edit::new("tendon range", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, tendon_iter_mut, "td", |t| *t.range_mut() = [0.0, 2.0]);
+            on_item!(spec, tendon_mut, "td", |t| *t.range_mut() = [0.0, 2.0]);
         }),
         Edit::new("sensor noise", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, sensor_iter_mut, "se_jp", |s| s.set_noise(0.01));
+            on_item!(spec, sensor_mut, "se_jp", |s| s.set_noise(0.01));
         }),
         Edit::new("sensor cutoff", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, sensor_iter_mut, "se_jp", |s| s.set_cutoff(3.0));
+            on_item!(spec, sensor_mut, "se_jp", |s| s.set_cutoff(3.0));
         }),
         Edit::new("equality solimp", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, equality_iter_mut, "eq0", |e| *e.solimp_mut() = [0.8, 0.9, 0.001, 0.5, 2.0]);
+            on_item!(spec, equality_mut, "eq0", |e| *e.solimp_mut() = [0.8, 0.9, 0.001, 0.5, 2.0]);
         }),
         Edit::new("pair friction", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, pair_iter_mut, "p0", |p| *p.friction_mut() = [2.0, 2.0, 0.01, 0.001, 0.001]);
+            on_item!(spec, pair_mut, "p0", |p| *p.friction_mut() = [2.0, 2.0, 0.01, 0.001, 0.001]);
         }),
         Edit::new("pair margin", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, pair_iter_mut, "p0", |p| p.set_margin(0.01));
+            on_item!(spec, pair_mut, "p0", |p| p.set_margin(0.01));
         }),
         Edit::new("numeric values", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, numeric_iter_mut, "n0", |n| n.set_data(&[9.0, 9.0, 9.0]));
+            on_item!(spec, numeric_mut, "n0", |n| n.set_data(&[9.0, 9.0, 9.0]));
         }),
         Edit::new("keyframe time", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, key_iter_mut, "k1", |k| k.set_time(5.0));
+            on_item!(spec, key_mut, "k1", |k| k.set_time(5.0));
         }),
         Edit::new("material rgba", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, material_iter_mut, "mat", |m| *m.rgba_mut() = [0.0, 1.0, 0.0, 1.0]);
+            on_item!(spec, material_mut, "mat", |m| *m.rgba_mut() = [0.0, 1.0, 0.0, 1.0]);
         }),
         Edit::new("texture colour", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, texture_iter_mut, "tx", |t| *t.rgb1_mut() = [0.0, 0.0, 1.0]);
+            on_item!(spec, texture_mut, "tx", |t| *t.rgb1_mut() = [0.0, 0.0, 1.0]);
         }),
         Edit::new("light diffuse", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, light_iter_mut, "l0", |l| *l.diffuse_mut() = [0.1, 0.2, 0.3]);
+            on_item!(spec, light_mut, "l0", |l| *l.diffuse_mut() = [0.1, 0.2, 0.3]);
         }),
         Edit::new("camera field of view", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, camera_iter_mut, "c_trunk", |c| c.set_fovy(70.0));
+            on_item!(spec, camera_mut, "c_trunk", |c| c.set_fovy(70.0));
         }),
         Edit::new("skin inflate", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, skin_iter_mut, "sk", |s| s.set_inflate(0.03));
+            on_item!(spec, skin_mut, "sk", |s| s.set_inflate(0.03));
         }),
         Edit::new("mesh scale", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, mesh_iter_mut, "ms", |m| *m.scale_mut() = [2.0, 2.0, 2.0]);
+            on_item!(spec, mesh_mut, "ms", |m| *m.scale_mut() = [2.0, 2.0, 2.0]);
         }),
         Edit::new("heightfield extent", Kind::Parameter, |spec: &mut MjSpec| {
-            on_item!(spec, hfield_iter_mut, "hf", |h| *h.size_mut() = [2.0, 2.0, 0.3, 0.05]);
+            on_item!(spec, hfield_mut, "hf", |h| *h.size_mut() = [2.0, 2.0, 0.3, 0.05]);
         }),
         Edit::new("element name", Kind::Parameter, |spec: &mut MjSpec| {
             // 'spare' carries no reference from any other element, so the rename stands alone.
-            on_item!(spec, body_iter_mut, "spare", |b| { let _ = b.set_name("spare_renamed_much_longer"); });
+            on_item!(spec, body_mut, "spare", |b| { let _ = b.set_name("spare_renamed_much_longer"); });
         }),
     ]
 }

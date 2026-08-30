@@ -833,35 +833,61 @@ macro_rules! vec_vec_append {
 
 /// Generates methods for obtaining iterators to `$iter_over` spec items.
 macro_rules! spec_get_iter {
-    ($($iter_over: ident),*) => {paste::paste!{
+    (read_only: $($iter_over: ident),*) => {paste::paste!{
         $(
-            #[doc = concat!("Return an iterator over ", stringify!($iter_over)," items that allows modifying each value.")]
-            pub fn [<$iter_over _iter_mut>](&mut self) -> MjsSpecItemIterMut<'_, [<Mjs $iter_over:camel>]> {
-                MjsSpecItemIterMut::<[<Mjs $iter_over:camel>]>::new(self)
-            }
-
             #[doc = concat!("Return an immutable iterator over ", stringify!($iter_over)," items.")]
             pub fn [<$iter_over _iter>](&self) -> MjsSpecItemIter<'_, [<Mjs $iter_over:camel>]> {
                 MjsSpecItemIter::<[<Mjs $iter_over:camel>]>::new(self)
             }
         )*
     }};
+
+    ($($iter_over: ident),*) => {paste::paste!{
+        $(
+            #[doc = concat!("Return an iterator over ", stringify!($iter_over)," items that allows modifying each value.")]
+            pub fn [<$iter_over _iter_mut>](&mut self) -> MjsSpecItemIterMut<'_, [<Mjs $iter_over:camel>]> {
+                MjsSpecItemIterMut::<[<Mjs $iter_over:camel>]>::new(self)
+            }
+        )*
+
+        spec_get_iter!(read_only: $($iter_over),*);
+    }};
 }
 
 
 /// Generates methods for obtaining iterators to `$iter_over` body items.
 macro_rules! body_get_iter {
+    (read_only: [$($iter_over: ident),*]) => {paste::paste!{
+        $(
+            #[doc = concat!("Return an immutable iterator over ", stringify!($iter_over)," items.")]
+            pub fn [<$iter_over _iter>](&self, recurse: bool) -> MjsBodyItemIter<'_, [<Mjs $iter_over:camel>]> {
+                MjsBodyItemIter::<[<Mjs $iter_over:camel>]>::new(self, recurse)
+            }
+        )*
+    }};
+
+    (direct_children_mut: [$($iter_over: ident),*]) => {paste::paste!{
+        $(
+            #[doc = concat!(
+                "Return an iterator over the direct child ", stringify!($iter_over),
+                " items that allows modifying each value."
+            )]
+            pub fn [<$iter_over _iter_mut>](&mut self) -> MjsBodyItemIterMut<'_, [<Mjs $iter_over:camel>]> {
+                MjsBodyItemIterMut::<[<Mjs $iter_over:camel>]>::new(self, false)
+            }
+        )*
+
+        body_get_iter!(read_only: [$($iter_over),*]);
+    }};
+
     ([$($iter_over: ident),*]) => {paste::paste!{
         $(
             #[doc = concat!("Return an iterator over ", stringify!($iter_over)," items that allows modifying each value.")]
             pub fn [<$iter_over _iter_mut>](&mut self, recurse: bool) -> MjsBodyItemIterMut<'_, [<Mjs $iter_over:camel>]> {
                 MjsBodyItemIterMut::<[<Mjs $iter_over:camel>]>::new(self, recurse)
             }
-
-            #[doc = concat!("Return an immutable iterator over ", stringify!($iter_over)," items.")]
-            pub fn [<$iter_over _iter>](&self, recurse: bool) -> MjsBodyItemIter<'_, [<Mjs $iter_over:camel>]> {
-                MjsBodyItemIter::<[<Mjs $iter_over:camel>]>::new(self, recurse)
-            }
         )*
+
+        body_get_iter!(read_only: [$($iter_over),*]);
     }};
 }

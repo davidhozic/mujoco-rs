@@ -751,9 +751,13 @@ impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsSpecItemIter<'a, T>
 /// Iterator methods.
 impl MjSpec {
     spec_get_iter! {
-        body, geom, joint, site, camera, light, frame, actuator, sensor, flex, pair, equality,
+        geom, joint, site, camera, light, frame, actuator, sensor, flex, pair, equality,
         exclude, tendon, numeric, text, tuple, key, mesh, hfield, skin, texture, material, plugin
     }
+
+    // A body owns a subtree, so a flat mutable iterator would hand out an ancestor and that
+    // ancestor's own descendant at once. Reach a body through `world_body_mut` and walk down.
+    spec_get_iter!(read_only: body);
 }
 
 impl Default for MjSpec {
@@ -2282,6 +2286,14 @@ impl MjsBody {
     ///
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
+    ///
+    /// # Examples
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// let mut spec = MjSpec::new();
+    /// spec.world_body_mut().add_body().with_name("ball");
+    /// spec.world_body_mut().child_mut("ball").unwrap().set_gravcomp(1.0);
+    /// ```
     pub fn child_mut(&mut self, name: &str) -> Option<&mut MjsBody> {
         let c_name = CString::new(name).unwrap();
         unsafe {
@@ -2645,7 +2657,8 @@ impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsBodyItemIter<'a, T>
 
 /// Iterator methods.
 impl MjsBody {
-    body_get_iter! {[body, joint, geom, site, camera, light, frame] }
+    body_get_iter! {[joint, geom, site, camera, light, frame] }
+    body_get_iter! { direct_children_mut: [body] }
 }
 
 /******************************
@@ -3223,18 +3236,18 @@ mod tests {
 
         // Iter MjSpec
         assert_eq!(spec.geom_iter_mut().count(), N_GEOM);
-        assert_eq!(spec.body_iter_mut().count(), N_BODY);
+        assert_eq!(spec.body_iter().count(), N_BODY);
         assert_eq!(spec.site_iter_mut().count(), N_SITE);
         assert_eq!(spec.tendon_iter_mut().count(), N_TENDON);
         assert_eq!(spec.mesh_iter_mut().count(), N_MESH);
-        assert_eq!(spec.body_iter_mut().last().unwrap().name(), LAST_BODY_NAME);
+        assert_eq!(spec.body_iter().last().unwrap().name(), LAST_BODY_NAME);
 
         // Iter MjsBody
         let world = spec.world_body_mut();
         assert_eq!(world.geom_iter_mut(true).count(), N_GEOM);
-        assert_eq!(world.body_iter_mut(true).count(), N_BODY - 1);  // world must now be excluded
+        assert_eq!(world.body_iter(true).count(), N_BODY - 1);  // world must now be excluded
         assert_eq!(world.site_iter_mut(true).count(), N_SITE);
-        assert_eq!(world.body_iter_mut(false).last().unwrap().name(), LAST_WORLD_BODY_NAME);
+        assert_eq!(world.body_iter_mut().last().unwrap().name(), LAST_WORLD_BODY_NAME);
     }
 
     /// Tests wrapper method of [`mj_parse`] with VFS.
@@ -3929,7 +3942,7 @@ mod tests {
             "<mujoco><worldbody><body name=\"a&#xD800;b\"/></worldbody></mujoco>"
         ).unwrap();
 
-        let body = spec.body_iter_mut().nth(1).unwrap();
+        let body = spec.world_body_mut().body_iter_mut().next().unwrap();
         // SAFETY: the spec owns the name string for as long as the element lives.
         let name = unsafe { CStr::from_ptr(mjs_getString(mjs_getName(body.element_mut_pointer()))) };
         assert!(
@@ -4095,7 +4108,7 @@ mod tests {
         world.add_site();
         world.add_camera();
         world.add_light();
-        spec.body_iter_mut().last().unwrap().add_joint();
+        world.body_iter_mut().last().unwrap().add_joint();
         spec.add_actuator();
         spec.add_pair();
         spec.add_equality();
@@ -4120,7 +4133,7 @@ mod tests {
         );
 
         // The world body stays, so the body list never empties.
-        assert!(unsafe { spec.body_iter_mut().last().unwrap().delete() }.is_ok(), "body");
+        assert!(unsafe { spec.world_body_mut().body_iter_mut().last().unwrap().delete() }.is_ok(), "body");
         assert_eq!(spec.body_iter().count(), 1);
     }
 }

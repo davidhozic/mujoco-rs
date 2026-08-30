@@ -22,6 +22,45 @@ Minimum Rust version
 This release needs Rust **1.95**, up from 1.88. Run ``rustup update stable`` before you build.
 
 
+Mutable body iteration
+---------------------------------------------------------
+
+|mj_spec| lost ``body_iter_mut``, and |mjs_body|'s ``body_iter_mut`` lost its ``recurse``
+argument. Every item a mutable iterator yields borrows its parent for the same lifetime, so all of
+them stay live together. A body owns a subtree, so both forms could hand out a body and that
+body's own descendant at once, and writing through the second handle broke the uniqueness that
+``&mut`` promises. Walk the tree instead: a child borrows its parent, so the two are never live
+together.
+
+.. code-block:: rust
+
+    // Before
+    for body in spec.body_iter_mut() {
+        body.set_gravcomp(1.0);
+    }
+
+    // After: the world body is the root of the walk.
+    fn walk(body: &mut MjsBody) {
+        body.set_gravcomp(1.0);
+        for child in body.body_iter_mut() {
+            walk(child);
+        }
+    }
+    walk(spec.world_body_mut());
+
+.. code-block:: rust
+
+    // Before
+    for body in world.body_iter_mut(true) { /* ... */ }
+
+    // After: `body_iter_mut` yields the direct children, so recurse by hand.
+    for body in world.body_iter_mut() { /* ... */ }
+
+Read-only iteration is unchanged. ``MjSpec::body_iter`` still walks every body flat, and
+``MjsBody::body_iter`` still takes ``recurse``, so a loop that only reads needs no edit beyond
+dropping ``_mut``.
+
+
 Items deprecated in 3.0.0 are removed
 ---------------------------------------------------------
 Each one has carried a deprecation warning since 3.0.0. Switch to the replacement.
