@@ -18,7 +18,8 @@
 //!
 //! /* Initialization */
 //! env_logger::init();  // Any `log` backend works.
-//! install_logging_hook();
+//! // SAFETY: no other thread uses MuJoCo yet.
+//! unsafe { install_logging_hook() };
 //!
 //! /* Use through the `log` crate */
 //! log::warn!(target: "example_program::main", "this is an example warning!");
@@ -27,7 +28,8 @@
 //! log_warning("the log backend receives this, with the target 'mujoco'");
 //!
 //! /* Replace the `log` routing with a structured handler */
-//! set_log_handler(handler);
+//! // SAFETY: no other thread uses MuJoCo yet.
+//! unsafe { set_log_handler(handler) };
 //! log_warning("the handler receives this, and the `log` backend receives nothing");
 //! ```
 use std::sync::atomic::{AtomicPtr, Ordering};
@@ -44,7 +46,7 @@ use crate::mujoco_c::mju_setLogHandler;
 
 /// The `topics` bitmask of [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) that enables
 /// every filterable topic.
-pub const ALL_LOG_TOPICS: i32 = (1 << MjtLogTopic::mjNTOPIC as i32) - 1;
+const ALL_LOG_TOPICS: i32 = (1 << MjtLogTopic::mjNTOPIC as i32) - 1;
 
 /// A logging handler function type.
 type LoggingHandler = fn(&MjLogMessage);
@@ -57,8 +59,8 @@ type LoggingHandler = fn(&MjLogMessage);
 /// and needs no allocation.
 static USER_LOG_HANDLER: AtomicPtr<()> = AtomicPtr::new(ptr::null_mut());
 
-/// Guards the single [`mju_setLogHandler`] call, so that repeated installs do not race on the
-/// non-atomic global of MuJoCo.
+/// Guards the [`mju_setLogHandler`] call, so that the program writes the MuJoCo globals at most
+/// once.
 static LOGGING_HOOK_INSTALLED: Once = Once::new();
 
 /// Sets a user-defined log handler that receives every MuJoCo message.
@@ -71,6 +73,10 @@ static LOGGING_HOOK_INSTALLED: Once = Once::new();
 /// To clear the user handler and restore routing to [`log`],
 /// call [`install_logging_hook`].
 ///
+/// # Safety
+/// No other thread may use MuJoCo while this call runs. Call it at the start of the program,
+/// before any thread that steps a simulation, loads a model, or emits a message.
+///
 /// # Note
 /// <div class="warning">
 /// A message with level `mjLOG_ERROR` ends the process with exit code 1 after the handler returns,
@@ -81,10 +87,11 @@ static LOGGING_HOOK_INSTALLED: Once = Once::new();
 /// The handler must not call [`log_error`](crate::wrappers::mj_logging::log_error),
 /// as it would cause infinite recursion.
 /// </div>
-pub fn set_log_handler(handler: LoggingHandler) {
+pub unsafe fn set_log_handler(handler: LoggingHandler) {
     // Release, and Acquire in the hook: no thread observes the hook without the handler behind it.
     USER_LOG_HANDLER.store(handler as *mut (), Ordering::Release);
-    set_mujoco_handler();
+    // SAFETY: the caller holds every thread that could use MuJoCo.
+    unsafe { set_mujoco_handler() };
 }
 
 /// Installs a hook for routing MuJoCo logging messages to the [`log`] crate.
@@ -102,28 +109,38 @@ pub fn set_log_handler(handler: LoggingHandler) {
 /// | `func`, `subject`, `body` | message text `func: subject\nbody` (empty parts are dropped) |
 /// | `file`, `line` | record file and line (only when `line` is positive) |
 ///
+/// # Safety
+/// No other thread may use MuJoCo while this call runs. Call it at the start of the program,
+/// before any thread that steps a simulation, loads a model, or emits a message.
+///
 /// # Notes
 /// A message with level [`MjtLogLevel::mjLOG_ERROR`] will exit the program with code 1, just like the default MuJoCo
 /// handler does, to prevent undefined behaviors that would arise due to MuJoCo erroring system
 /// assumptions.
 ///
 /// [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) has no effect when this logging hook is installed.
-pub fn install_logging_hook() {
+pub unsafe fn install_logging_hook() {
     USER_LOG_HANDLER.store(ptr::null_mut(), Ordering::Release);
-    set_mujoco_handler();
+    // SAFETY: the caller holds every thread that could use MuJoCo.
+    unsafe { set_mujoco_handler() };
 }
 
 /// Registers [`logging_hook`] as the MuJoCo log handler, at most once per program, and enables
 /// every topic of the producer-side filter.
 ///
 /// The caller stores [`USER_LOG_HANDLER`] first, so the hook always finds the routing it must use.
-fn set_mujoco_handler() {
+///
+/// # Safety
+/// No other thread may use MuJoCo while this call runs.
+unsafe fn set_mujoco_handler() {
     LOGGING_HOOK_INSTALLED.call_once(|| {
-        set_log_config(log_config().with_topics(ALL_LOG_TOPICS));
-
-        // SAFETY: `logging_hook` is a valid handler for the whole program. The user is assumed to
-        // not install another handler through the C FFI at the same time.
-        unsafe { mju_setLogHandler(Some(logging_hook)); }
+        // SAFETY: both writes land on a non-atomic MuJoCo global, and the caller holds every
+        // thread that could read one. `logging_hook` is a valid handler for the whole program,
+        // and the caller installs no other handler through the C FFI.
+        unsafe {
+            set_log_config(log_config().with_topics(ALL_LOG_TOPICS));
+            mju_setLogHandler(Some(logging_hook));
+        }
     });
 }
 

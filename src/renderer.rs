@@ -1,4 +1,5 @@
 //! Module related to implementation of the [`MjRenderer`].
+use crate::wrappers::mj_model::traits::ModelType;
 use crate::wrappers::mj_visualization::MjvScene;
 use crate::wrappers::mj_rendering::MjrContext;
 
@@ -10,13 +11,14 @@ use crate::builder_setters;
 use crate::prelude::*;
 
 use bitflags::bitflags;
-use log::{debug, warn};
+#[cfg(all(feature = "renderer-winit-fallback", target_os = "linux"))]
+use log::warn;
+use log::debug;
 
 use std::io::{self, BufWriter, Write};
 use std::fmt::Display;
 use std::error::Error;
 use std::num::NonZero;
-use std::ops::Deref;
 use std::path::Path;
 use std::fs::File;
 
@@ -202,7 +204,7 @@ which can be configured at the top of the model's XML like so:
     /// # Panics
     /// Panics if the GL display reports no framebuffer configuration for the fallback window
     /// (feature `renderer-winit-fallback`).
-    pub fn build<M: Deref<Target = MjModel>>(self, model: M) -> Result<MjRenderer, RendererError> {
+    pub fn build<M: ModelType>(self, model: M) -> Result<MjRenderer, RendererError> {
         // Assume model's maximum should be used
         let mut height = self.height;
         let mut width = self.width;
@@ -339,7 +341,7 @@ impl MjRenderer {
     /// # Panics
     /// Panics if the GL display reports no framebuffer configuration for the fallback window
     /// (feature `renderer-winit-fallback`).
-    pub fn new<M: Deref<Target = MjModel>>(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
+    pub fn new<M: ModelType>(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
         // Saturate instead of truncating: `as u32` would turn an over-large value into a small
         // valid one, so the renderer would silently use dimensions the caller never asked for.
         MjRendererBuilder::new()
@@ -428,8 +430,8 @@ impl MjRenderer {
     }
 
     fn prepare_upload(&self, model: &MjModel) -> Result<(), RendererError> {
-        if model.signature() != self.scene.signature() {
-            return Err(RendererError::SignatureMismatch);
+        if !self.scene.is_compatible_with_model(model) {
+            return Err(RendererError::IncompatibleModel);
         }
         self.gl_state.make_current().map_err(RendererError::GlutinError)
     }
@@ -451,7 +453,7 @@ impl MjRenderer {
     /// Re-uploads the texture with `texture_id` from `model` to the GPU immediately.
     ///
     /// # Errors
-    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::IncompatibleModel`] if `model` is not compatible with the renderer's scene.
     /// - [`RendererError::ContextError`] if `texture_id >= model.ntex()`.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_texture_from(&self, model: &MjModel, texture_id: usize) -> Result<(), RendererError> {
@@ -461,7 +463,7 @@ impl MjRenderer {
     /// Re-uploads all textures from `model` to the GPU immediately.
     ///
     /// # Errors
-    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::IncompatibleModel`] if `model` is not compatible with the renderer's scene.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_textures_from(&self, model: &MjModel) -> Result<(), RendererError> {
         self.update_all_from_impl(model, model.ntex() as usize, MjrContext::upload_texture)
@@ -476,7 +478,7 @@ impl MjRenderer {
     /// hull graph data (`mesh_graph`).
     ///
     /// # Errors
-    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::IncompatibleModel`] if `model` is not compatible with the renderer's scene.
     /// - [`RendererError::ContextError`] if `mesh_id >= model.nmesh()`.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_mesh_from(&self, model: &MjModel, mesh_id: usize) -> Result<(), RendererError> {
@@ -492,7 +494,7 @@ impl MjRenderer {
     /// hull graph data (`mesh_graph`).
     ///
     /// # Errors
-    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::IncompatibleModel`] if `model` is not compatible with the renderer's scene.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_meshes_from(&self, model: &MjModel) -> Result<(), RendererError> {
         self.update_all_from_impl(model, model.nmesh() as usize, MjrContext::upload_mesh)
@@ -501,7 +503,7 @@ impl MjRenderer {
     /// Re-uploads the heightfield with `hfield_id` from `model` to the GPU immediately.
     ///
     /// # Errors
-    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::IncompatibleModel`] if `model` is not compatible with the renderer's scene.
     /// - [`RendererError::ContextError`] if `hfield_id >= model.nhfield()`.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_hfield_from(&self, model: &MjModel, hfield_id: usize) -> Result<(), RendererError> {
@@ -511,7 +513,7 @@ impl MjRenderer {
     /// Re-uploads all heightfields from `model` to the GPU immediately.
     ///
     /// # Errors
-    /// - [`RendererError::SignatureMismatch`] if `model`'s signature does not match the renderer's scene.
+    /// - [`RendererError::IncompatibleModel`] if `model` is not compatible with the renderer's scene.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_hfields_from(&self, model: &MjModel) -> Result<(), RendererError> {
         self.update_all_from_impl(model, model.nhfield() as usize, MjrContext::upload_hfield)
@@ -585,13 +587,13 @@ impl MjRenderer {
     ///
     /// # Errors
     /// - [`RendererError::GlutinError`] if the OpenGL context could not be made current
-    ///   (only when the signature of the [`MjModel`] in `data` differs from the internal [`MjvScene`]).
+    ///   (only when the [`MjModel`] in `data` is incompatible with the internal [`MjvScene`]).
     ///
     /// # Panics
     /// Panics if the renderer's camera is a fixed camera whose `fixedcamid` is out of range for
     /// `data`'s model.
-    pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
-        if data.model().signature() != self.scene.signature() {
+    pub fn sync_data<M: ModelType>(&mut self, data: &mut MjData<M>) -> Result<(), RendererError> {
+        if !self.scene.is_compatible_with_model(data.model()) {
             /* Model changed: preserve the extra-geom headroom and user-geom
              * capacity, only substitute the per-model ngeom base count. */
             // Ensure the GL context is current before dropping old GPU resources
@@ -623,7 +625,7 @@ impl MjRenderer {
     /// context cannot be made current). Use [`MjRenderer::sync_data`] + [`MjRenderer::render`]
     /// instead.
     #[deprecated(note = "replaced with sync_data + render", since = "3.0.0")]
-    pub fn sync<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+    pub fn sync<M: ModelType>(&mut self, data: &mut MjData<M>) {
         self.sync_data(data).unwrap();
         self.render().unwrap();
     }
@@ -876,7 +878,7 @@ pub enum RendererError {
     ContextError(crate::error::MjrContextError),
     /// The model's structure signature does not match the renderer's scene.
     /// Call [`MjRenderer::sync_data`] first.
-    SignatureMismatch,
+    IncompatibleModel,
 }
 
 /// Formats a human-readable description of the renderer error.
@@ -895,7 +897,7 @@ impl Display for RendererError {
             Self::IoError(e) => write!(f, "I/O error: {e}"),
             Self::SceneError(e) => write!(f, "scene error: {e}"),
             Self::ContextError(e) => write!(f, "rendering context error: {e}"),
-            Self::SignatureMismatch => write!(f, "model signature mismatch: call sync_data first"),
+            Self::IncompatibleModel => write!(f, "the model is not compatible with the scene: call sync_data first"),
         }
     }
 }

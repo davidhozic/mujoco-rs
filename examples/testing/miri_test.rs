@@ -1,16 +1,13 @@
 //! Comprehensive Miri test for `mujoco-rs`.
-//!
-//! Exercises various parts of the MuJoCo C API wrappers (model loading,
-//! data simulation, state extract/apply, querying jacobians, contact info,
-//! sensor info) to ensure they are memory-safe and free of undefined behavior
-//! when run under Miri.
-
-use mujoco_rs::prelude::{MjSpec, SpecItem};
 use mujoco_rs::wrappers::{MjModel, MjData, MjtObj, MjtGeom, MjtJoint, MjtTrn, MjtSensor};
 use mujoco_rs::wrappers::mj_editing::MjtLimited;
-use mujoco_rs::wrappers::fun::*;
+use mujoco_rs::prelude::{MjSpec, SpecItem};
 use mujoco_rs::mujoco_c::mjtState;
+use mujoco_rs::wrappers::fun::*;
+
+#[cfg(not(miri))]
 use mujoco_rs::logging::install_logging_hook;
+
 use env_logger::Env;
 
 fn build_model() -> MjModel {
@@ -296,7 +293,8 @@ fn test_auxiliary(model: &MjModel) {
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
     // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
-    install_logging_hook();
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
 
     log::info!("Loading procedurally generated model...");
     let model = build_model();
@@ -322,22 +320,10 @@ fn main() {
 #[cfg(miri)]
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
-    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
-    install_logging_hook();
 
-    unsafe extern "C" {
-        fn setup_miri_bump_allocator(buffer: *mut u8, size: usize);
-    }
-    
-    let bump_size = 100 * 1024 * 1024; // 100MB
-    let bump_layout = std::alloc::Layout::from_size_align(bump_size, 64).unwrap();
-    let bump_buffer = unsafe { std::alloc::alloc_zeroed(bump_layout) };
-    
-    log::info!("RUST_LOG: bump_buffer = {:p}", bump_buffer);
-
-    unsafe {
-        setup_miri_bump_allocator(bump_buffer, bump_size);
-    }
+    // Register a special-block allocator of Rust memory for MuJoCo to use.
+    // Needed for Miri.
+    mujoco_rs::miri::install_allocator();
 
     log::info!("Loading procedurally generated model...");
     let model = build_model();
@@ -358,17 +344,6 @@ fn main() {
 
     log::info!("Comprehensive Miri test completed successfully (core physics and utilities)!");
 
-    // Renderer verification last because it may abort Miri process due to EGL dependencies in Miri environment
-    test_renderer(&model, &mut data);
-
-    log::info!("Full suite (including renderer) completed successfully!");
-
-    // Drop MuJoCo structures *before* deallocating their backing memory buffer!
     drop(data);
     drop(model);
-    
-    // ensure bump buffer lives until the very end
-    unsafe {
-        std::alloc::dealloc(bump_buffer, bump_layout);
-    }
 }

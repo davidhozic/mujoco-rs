@@ -31,19 +31,22 @@ fn main() {
     /* Default handler: MuJoCo writes to the console and to MUJOCO_LOG.TXT */
     // MjLogConfig configures the default handler only.
     // The config has no effect after the `install_logging_hook` below is used.
-    set_log_config(log_config().with_logto_file(false));
+    // SAFETY: no other thread runs yet, so nothing reads the configuration concurrently.
+    unsafe { set_log_config(log_config().with_logto_file(false)) };
     log_warning("the default handler prints this to the console");
 
     /* Logging hook: MuJoCo sends every message to the log backend */
     // The level applies while RUST_LOG is unset; try RUST_LOG=mujoco::sleep=off.
     env_logger::builder().filter_level(LevelFilter::Debug).parse_default_env().init();
-    install_logging_hook();
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
     log::warn!("the application logs as usual");                     // Target "logging".
     log_warning("the model defines no actuator");                    // Target "mujoco".
     log_info(MjtLogTopic::mjTOPIC_SLEEP, "the island fell asleep");   // Target "mujoco::sleep".
 
     /* Custom handler: replaces the routing above, and needs no `install_logging_hook` call */
-    set_log_handler(custom_handler);
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { set_log_handler(custom_handler) };
     log_message(
         &MjLogMessage::new(MjtLogLevel::mjLOG_WARNING, MjtLogTopic::mjTOPIC_NONE, "a full message")
             .with_func(Some(c"main"))

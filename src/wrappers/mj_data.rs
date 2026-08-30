@@ -6,12 +6,14 @@ use crate::{getter_setter, mujoco_c::*};
 use crate::error::MjDataError;
 
 use super::mj_statistic::{MjWarningStat, MjTimerStat, MjSolverStat};
-use super::mj_model::{MjModel, MjtSameFrame, MjtObj, MjtStage};
+use super::mj_model::{MjModel, MjModelLayout, MjtSameFrame, MjtObj, MjtStage};
+use super::mj_model::traits::{ModelTypeMut, ModelType};
+use super::fun::utility::mju_norm_3;
 use super::mj_auxiliary::MjContact;
 use super::mj_primitive::*;
 
-use std::ops::{Deref, DerefMut};
 use std::ptr::{self, NonNull};
+use std::sync::Arc;
 use std::ffi::CString;
 use std::borrow::Cow;
 use std::path::Path;
@@ -50,7 +52,7 @@ pub type MjtSleepState = mjtSleepState;
 /// Wrapper around the `mjData` struct.
 /// Provides lifetime guarantees as well as automatic cleanup.
 #[derive(Debug)]
-pub struct MjData<M: Deref<Target = MjModel>> {
+pub struct MjData<M: ModelType> {
     data: NonNull<mjData>,
     model: M
 }
@@ -59,11 +61,11 @@ pub struct MjData<M: Deref<Target = MjModel>> {
 // (e.g. Arc<MjModel>). Non-Send M types such as Rc<MjModel> are correctly
 // excluded by the M: Send / M: Sync bounds.
 // SAFETY: MjData owns its mjData heap allocation exclusively. Send/Sync follow from M's bounds.
-unsafe impl<M: Deref<Target = MjModel> + Send> Send for MjData<M> {}
-unsafe impl<M: Deref<Target = MjModel> + Sync> Sync for MjData<M> {}
+unsafe impl<M: ModelType + Send> Send for MjData<M> {}
+unsafe impl<M: ModelType + Sync> Sync for MjData<M> {}
 
 
-impl<M: Deref<Target = MjModel>> MjData<M> {
+impl<M: ModelType> MjData<M> {
     /// Creates a new [`MjData`] linked to `model`.
     ///
     /// # Note
@@ -98,18 +100,18 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// This can be done by keeping a clone of the model, which is then modified and swapped.
     /// 
     /// # Panics
-    /// Panics if the signature of `model` does not match the signature of the model
-    /// this data belongs to.
+    /// Panics if `model` is not compatible with the model this data belongs to
+    /// (see [`MjModel::is_compatible_with_model`]).
     /// 
     /// Use [`MjData::try_swap_model`] for a fallible alternative.
     /// 
     /// # Notes
-    /// This method only validates model-signature compatibility.
+    /// This method only validates the model memory layout.
     /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
     /// See [here](https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
     /// 
-    /// If `M` implements [`DerefMut`], prefer
+    /// If `M` implements [`ModelTypeMut`], prefer
     /// [`model_mut`](MjData::model_mut) for direct in-place modification instead.
     /// 
     /// If model recompilation speed is not an issue,
@@ -126,19 +128,20 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// model_template = data.swap_model(model_template);
     /// ```
     pub fn swap_model(&mut self, model: M) -> M {
-        self.try_swap_model(model).expect("swap_model failed: model signature mismatch")
+        self.try_swap_model(model).expect("swap_model failed: the model is not compatible")
     }
 
     /// Fallible version of [`MjData::swap_model`].
     ///
     /// # Errors
-    /// Returns [`MjDataError::SignatureMismatch`] if the new model's signature
-    /// does not match the current one.
+    /// Returns [`MjDataError::IncompatibleModel`] if `model` is not compatible with the model
+    /// this data belongs to (see [`MjModel::is_compatible_with_model`]).
     pub fn try_swap_model(&mut self, model: M) -> Result<M, MjDataError> {
-        let new_signature = model.signature();
-        let current_signature = self.model.signature();
-        if new_signature != current_signature {
-            return Err(MjDataError::SignatureMismatch { source: new_signature, destination: current_signature });
+        if !self.model.is_compatible_with_model(&model) {
+            return Err(MjDataError::IncompatibleModel {
+                source: model.signature(),
+                destination: self.model.signature(),
+            });
         }
 
         Ok(std::mem::replace(&mut self.model, model))
@@ -215,8 +218,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         let qfrc_fluid = nv_range;
         let qfrc_adhesion = nv_range;
 
-        let model_signature = self.model.signature();
-        Some(MjJointDataInfo {name: name.to_string(), id, model_signature,
+        let model_layout = self.model.layout().clone();
+        Some(MjJointDataInfo {name: name.to_string(), id, model_layout,
             qpos, qvel, qacc_warmstart, qfrc_applied, qacc, xanchor, xaxis, qLDiagInv, qfrc_bias,
             qfrc_spring, qfrc_damper, qfrc_gravcomp, qfrc_fluid, qfrc_adhesion, qfrc_passive,
             qfrc_actuator, qfrc_smooth, qacc_smooth, qfrc_constraint, qfrc_inverse
@@ -1200,7 +1203,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
             return Err(MjDataError::LengthMismatch { name: "normals_out", expected: nray, got: buf.len() });
         }
 
-        let mut geom_id_raw = vec![0i32; nray];
+        // mj_multiRay leaves geomid unwritten for a ray shorter than mjMINVAL, so the buffer
+        // starts at the "no intersection" id.
+        let mut geom_id_raw = vec![-1i32; nray];
         let mut distance = vec![0.0; nray];
 
         unsafe { mj_multiRay(
@@ -1221,11 +1226,21 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Returns `(geomid, distance)` where distance is -1 if no intersection.
     /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
     /// `geomgroup` and `flg_static` are as in mjvOption; pass `None` for `geomgroup` to skip group exclusion.
+    /// A `vec` shorter than `mjMINVAL` reports no intersection, as [`MjData::multi_ray`] does.
     pub fn ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: MjtBool, bodyexclude: Option<usize>,
         normal_out: Option<&mut [MjtNum; 3]>
     ) -> (Option<usize>, MjtNum) {
+        // mj_ray raises mjERROR, which ends the process, before it reads anything else. mj_multiRay
+        // answers the same direction with "no intersection", which this returns instead.
+        if mju_norm_3(vec) < mjMINVAL {
+            if let Some(normal) = normal_out {
+                *normal = [0.0; 3];
+            }
+            return (None, -1.0);
+        }
+
         // `normal_out` is a fixed-size array; nothing to validate at runtime here.
         let mut geom_id_raw = -1i32;
         let dist = unsafe { mj_ray(
@@ -1285,15 +1300,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Copies data state from `src` to `self` based on the specified `spec` combination of `mjtState` flags.
     ///
     /// # Errors
-    /// Returns [`MjDataError::SignatureMismatch`] if `src` was created from
-    /// a different model.
-    pub fn copy_state_from_data<N: Deref<Target = MjModel>>(&mut self, src: &MjData<N>, spec: u32) -> Result<(), MjDataError> {
-        let src_sig = src.model.signature();
-        let dst_sig = self.model.signature();
-        if src_sig != dst_sig {
-            return Err(MjDataError::SignatureMismatch {
-                source: src_sig,
-                destination: dst_sig,
+    /// Returns [`MjDataError::IncompatibleModel`] if `src` was created from a model that is not
+    /// compatible with this data's model (see [`MjModel::is_compatible_with_model`]).
+    pub fn copy_state_from_data<N: ModelType>(&mut self, src: &MjData<N>, spec: u32) -> Result<(), MjDataError> {
+        if !self.model.is_compatible_with_model(&src.model) {
+            return Err(MjDataError::IncompatibleModel {
+                source: src.model.signature(),
+                destination: self.model.signature(),
             });
         }
         unsafe {
@@ -1486,8 +1499,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// every time. This benefits performance in some cases.
     ///
     /// # Errors
-    /// Returns [`MjDataError::BufferTooSmall`] if `state` is smaller than the
-    /// length required by `spec`.
+    /// - [`MjDataError::BufferTooSmall`] if `state` is smaller than the length required by `spec`.
+    /// - [`MjDataError::InvalidHistoryCursor`] if `spec` selects [`MjtState::mjSTATE_HISTORY`]
+    ///   and a cursor slot in `state` lies outside `0..nsample` for its buffer. The history
+    ///   buffer keeps its previous contents; every other selected component stays written.
     pub fn set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
         let required_len = self.model.state_size(spec);
         if state.len() < required_len {
@@ -1497,10 +1512,43 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
                 needed: required_len,
             });
         }
+        // The history payload carries the ring-buffer cursors, which C indexes with
+        // `(cursor + 1 + logical) % nsample`. C's `%` keeps the sign of its left operand, so an
+        // out-of-range cursor becomes a negative index. Keep the old buffer to undo such a write.
+        let previous = (spec & MjtState::mjSTATE_HISTORY as u32 != 0).then(|| self.history().to_vec());
         unsafe {
             mj_setState(self.model.ffi(), self.ffi_mut(), state.as_ptr(), spec as i32);
         }
+        if let Some(previous) = previous
+            && let Some((kind, id, nsample)) = self.history_cursor_fault()
+        {
+            // SAFETY: `previous` is this data's own history buffer, saved above, so it is exactly
+            // `nhistory` long and holds values MuJoCo itself wrote.
+            unsafe { self.history_mut() }.copy_from_slice(&previous);
+            return Err(MjDataError::InvalidHistoryCursor { kind, id, nsample });
+        }
         Ok(())
+    }
+
+    /// Returns the first history buffer whose cursor slot is outside `0..nsample`, as
+    /// `(kind, id, nsample)`, or `None` when every cursor is valid.
+    ///
+    /// The cursor sits at offset 1 of each buffer, after the user slot.
+    fn history_cursor_fault(&self) -> Option<(&'static str, usize, usize)> {
+        let history = self.history();
+        let fault = |kind, spec: &[[i32; 2]], adr: &[i32]| {
+            spec.iter().zip(adr).enumerate().find_map(|(id, (sample, &address))| {
+                let nsample = sample[0];
+                if nsample <= 0 || address < 0 {
+                    return None;
+                }
+                let cursor = *history.get(address as usize + 1)?;
+                let valid = cursor.fract() == 0.0 && cursor >= 0.0 && cursor <= f64::from(nsample - 1);
+                (!valid).then_some((kind, id, nsample as usize))
+            })
+        };
+        fault("actuator", self.model.actuator_history(), self.model.actuator_historyadr())
+            .or_else(|| fault("sensor", self.model.sensor_history(), self.model.sensor_historyadr()))
     }
 
 
@@ -1532,15 +1580,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// MuJoCo reports an error and stops the process when this data's stack is in use.
     ///
     /// # Errors
-    /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
-    /// from a different model.
-    pub fn copy_visual_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
-        let src_sig = self.model.signature();
-        let dst_sig = destination.model.signature();
-        if src_sig != dst_sig {
-            return Err(MjDataError::SignatureMismatch {
-                source: src_sig,
-                destination: dst_sig,
+    /// Returns [`MjDataError::IncompatibleModel`] if `destination` was created from a model that
+    /// is not compatible with this data's model (see [`MjModel::is_compatible_with_model`]).
+    pub fn copy_visual_to<N: ModelType>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
+        if !self.model.is_compatible_with_model(&destination.model) {
+            return Err(MjDataError::IncompatibleModel {
+                source: self.model.signature(),
+                destination: destination.model.signature(),
             });
         }
         unsafe {
@@ -1556,15 +1602,13 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// MuJoCo reports an error and stops the process when this data's stack is in use.
     ///
     /// # Errors
-    /// Returns [`MjDataError::SignatureMismatch`] if `destination` was created
-    /// from a different model.
-    pub fn copy_to<N: Deref<Target = MjModel>>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
-        let src_sig = self.model.signature();
-        let dst_sig = destination.model.signature();
-        if src_sig != dst_sig {
-            return Err(MjDataError::SignatureMismatch {
-                source: src_sig,
-                destination: dst_sig,
+    /// Returns [`MjDataError::IncompatibleModel`] if `destination` was created from a model that
+    /// is not compatible with this data's model (see [`MjModel::is_compatible_with_model`]).
+    pub fn copy_to<N: ModelType>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
+        if !self.model.is_compatible_with_model(&destination.model) {
+            return Err(MjDataError::IncompatibleModel {
+                source: self.model.signature(),
+                destination: destination.model.signature(),
             });
         }
         unsafe {
@@ -1583,7 +1627,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
 
 
 /// Some public attribute methods.
-impl<M: Deref<Target = MjModel>> MjData<M> {
+impl<M: ModelType> MjData<M> {
     /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjData {
         // SAFETY: self.data is a valid non-null mjData pointer for the lifetime of self
@@ -1603,7 +1647,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     /// Returns a reference to data's [`MjModel`].
     ///
     /// See also [`model_mut`](MjData::model_mut) for mutable access
-    /// (requires `M: DerefMut<Target = MjModel>`).
+    /// (requires `M: ModelTypeMut`).
     pub fn model(&self) -> &MjModel {
         &self.model
     }
@@ -1658,6 +1702,15 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         [ffi] signature: u64; "compilation signature.";
     ]}
 
+    /// Returns the memory layout snapshot of the model this data belongs to.
+    ///
+    /// The buffers were allocated for the model that created this data. That model and
+    /// [`MjData::model`] share one layout, because [`MjData::try_swap_model`] rejects a model
+    /// that does not.
+    pub(crate) fn layout(&self) -> &Arc<MjModelLayout> {
+        self.model.layout()
+    }
+
     getter_setter! {get, [
         [ffi] efm_active: bool; "whether the implicit effective metric M+K is active.";
     ]}
@@ -1690,7 +1743,7 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
     }
 }
 
-impl<M: DerefMut<Target = MjModel>> MjData<M> {
+impl<M: ModelTypeMut> MjData<M> {
     /// Returns a mutable reference to data's [`MjModel`].
     ///
     /// This is useful for modifying the physics parameters of the model
@@ -1700,8 +1753,7 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#mjmodel-changes)
     /// for a list of parameters that are safe to change.
     ///
-    /// Only available when the inner model type `M` implements
-    /// [`DerefMut<Target = MjModel>`](std::ops::DerefMut)
+    /// Only available when the inner model type `M` implements [`ModelTypeMut`]
     /// (e.g., `Box<MjModel>`, `&mut MjModel`).
     /// Shared-ownership types such as `Arc<MjModel>` do not provide mutable
     /// access; use [`swap_model`](MjData::swap_model) instead.
@@ -1710,8 +1762,8 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
     /// This method is marked unsafe as the owned model can be swapped entirely without any compatibility
     /// checks.
     /// 
-    /// It is the caller's responsibility to ensure the internal [`MjModel::signature`] matches the
-    /// swapped model's signature in case of a swap.
+    /// It is the caller's responsibility to ensure that a swapped model is compatible with the
+    /// model this data belongs to, as [`MjModel::is_compatible_with_model`] defines.
     /// 
     /// For safe swapping consider [`MjData::swap_model`] or [`MjData::try_swap_model`] for a fallible alternative.
     ///
@@ -1782,8 +1834,9 @@ impl<M: DerefMut<Target = MjModel>> MjData<M> {
 }
 
 /// Arrays of dynamic size.
-impl<M: Deref<Target = MjModel>> MjData<M> {
+impl<M: ModelType> MjData<M> {
     array_slice_dyn! {
+        probe = probe_dynamic_arrays;
         qpos: &[MjtNum; "position"; model.ffi().nq],
         qvel: &[MjtNum; "velocity"; model.ffi().nv],
         act: &[MjtNum; "actuator activation"; model.ffi().na],
@@ -1878,10 +1931,10 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         (mut = unsafe) contact: &[MjContact; "array of all detected contacts"; ffi().ncon],
         (mut = unsafe) efc_type: &[MjtConstraint [force]; "constraint type"; ffi().nefc],
         (mut = unsafe) efc_id: &[i32; "id of object of specified type"; ffi().nefc],
-        (mut = unsafe) efc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
-        (mut = unsafe) efc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
-        (mut = unsafe) efc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
-        (mut = unsafe) efc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
+        (read = unsafe) efc_J_rownnz: &[i32; "number of non-zeros in constraint Jacobian row"; ffi().nefc],
+        (read = unsafe) efc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
+        (read = unsafe) efc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
+        (read = unsafe) efc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
         efc_J: &[MjtNum; "constraint Jacobian"; ffi().nJ],
         efc_pos: &[MjtNum; "constraint position (equality, contact)"; ffi().nefc],
         efc_margin: &[MjtNum; "inclusion margin (contact)"; ffi().nefc],
@@ -1901,9 +1954,9 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         (mut = unsafe) island_dofadr: &[i32; "island start address in dof vector"; ffi().nisland],
         (mut = unsafe) map_dof2idof: &[i32; "map from dof to idof"; model.ffi().nv],
         (mut = unsafe) map_idof2dof: &[i32; "map from idof to dof;  >= nidof: unconstrained"; model.ffi().nv],
-        ifrc_smooth: &[MjtNum; "net unconstrained force"; ffi().nidof],
-        iacc_smooth: &[MjtNum; "unconstrained acceleration"; ffi().nidof],
-        iacc: &[MjtNum; "acceleration"; ffi().nidof],
+        (read = unsafe) ifrc_smooth: &[MjtNum; "net unconstrained force"; ffi().nidof],
+        (read = unsafe) iacc_smooth: &[MjtNum; "unconstrained acceleration"; ffi().nidof],
+        (read = unsafe) iacc: &[MjtNum; "acceleration"; ffi().nidof],
         (mut = unsafe) efc_island: &[i32; "island id of this constraint"; ffi().nefc],
         (mut = unsafe) island_ne: &[i32; "number of equality constraints in island"; ffi().nisland],
         (mut = unsafe) island_nf: &[i32; "number of friction constraints in island"; ffi().nisland],
@@ -1924,8 +1977,8 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         (mut = unsafe) efc_AR_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
         (mut = unsafe) efc_AR_colind: &[i32; "column indices in sparse AR"; ffi().nA],
         efc_AR: &[MjtNum; "J*inv(M)*J' + R"; ffi().nA],
-        efc_vel: &[MjtNum; "velocity in constraint space: J*qvel"; ffi().nefc],
-        efc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
+        (read = unsafe) efc_vel: &[MjtNum; "velocity in constraint space: J*qvel"; ffi().nefc],
+        (read = unsafe) efc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
         efm_c: &[MjtNum; "smooth-force shift h*K*qvel"; model.ffi().nv],
         (mut = unsafe) efm_K_rownnz: &[i32; "effective-stiffness CSR row nonzeros"; model.ffi().nv],
         (mut = unsafe) efm_K_rowadr: &[i32; "effective-stiffness CSR row addresses"; model.ffi().nv],
@@ -1933,17 +1986,17 @@ impl<M: Deref<Target = MjModel>> MjData<M> {
         efm_K_val: &[MjtNum; "effective-stiffness CSR values"; ffi().nefmK],
         (mut = unsafe) efm_dofid: &[i32; "block k -> dof address of its vertex triple"; ffi().nefmdof],
         efm_L: &[MjtNum; "factored 3x3 diagonal blocks of M+K"; ffi().nefmL],
-        efc_b: &[MjtNum; "linear cost term: J*qacc_smooth - aref"; ffi().nefc],
-        iefc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
-        iefc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
-        iefc_force: &[MjtNum; "constraint force in constraint space"; ffi().nefc],
-        efc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
-        efc_force: &[MjtNum; "constraint force in constraint space"; ffi().nefc],
-        ifrc_constraint: &[MjtNum; "constraint force"; ffi().nidof]
+        (read = unsafe) efc_b: &[MjtNum; "linear cost term: J*qacc_smooth - aref"; ffi().nefc],
+        (read = unsafe) iefc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
+        (read = unsafe) iefc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
+        (read = unsafe) iefc_force: &[MjtNum; "constraint force in constraint space"; ffi().nefc],
+        (read = unsafe) efc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
+        (read = unsafe) efc_force: &[MjtNum; "constraint force in constraint space"; ffi().nefc],
+        (read = unsafe) ifrc_constraint: &[MjtNum; "constraint force"; ffi().nidof]
     }
 }
 
-impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
+impl<M: ModelType> Drop for MjData<M> {
     fn drop(&mut self) {
         // SAFETY: self.data is a valid non-null mjData pointer; called exactly once in Drop.
         unsafe {
@@ -1952,7 +2005,7 @@ impl<M: Deref<Target = MjModel>> Drop for MjData<M> {
     }
 }
 
-impl<M: Deref<Target = MjModel> + Clone> Clone for MjData<M> {
+impl<M: ModelType + Clone> Clone for MjData<M> {
     /// # Note
     /// MuJoCo aborts the process through `mjERROR` when an allocation fails, so this never fails.
     #[expect(deprecated, reason = "try_clone keeps the implementation until it is removed")]
@@ -1961,7 +2014,7 @@ impl<M: Deref<Target = MjModel> + Clone> Clone for MjData<M> {
     }
 }
 
-impl<M: Deref<Target = MjModel> + Clone> MjData<M> {
+impl<M: ModelType + Clone> MjData<M> {
     /// Fallible version of [`Clone::clone`].
     ///
     /// # Note
@@ -1996,7 +2049,7 @@ info_with_view!(Data, actuator,
      [actuator_] velocity: MjtNum,
      [actuator_] force: MjtNum],
     [],
-    [act: MjtNum], M: Deref<Target = MjModel>);
+    [act: MjtNum], M: ModelType);
 
 info_with_view!(Data, body,
     [xfrc_applied: MjtNum,
@@ -2016,19 +2069,19 @@ info_with_view!(Data, body,
      cfrc_ext: MjtNum,
      [body_] awake: MjtSleepState [force]],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, camera,
     [[cam_] xpos: MjtNum,
      [cam_] xmat: MjtNum],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, geom,
     [[geom_] xpos: MjtNum,
      [geom_] xmat: MjtNum],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, joint,
     [qpos: MjtNum,
@@ -2052,24 +2105,24 @@ info_with_view!(Data, joint,
      qfrc_constraint: MjtNum,
      qfrc_inverse: MjtNum],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, light,
     [[light_] xpos: MjtNum,
      [light_] xdir: MjtNum],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, sensor,
     [[sensor] data: MjtNum],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, site,
     [[site_] xpos: MjtNum,
      [site_] xmat: MjtNum],
     [],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 info_with_view!(Data, tendon,
     [[ten_] J: MjtNum,
@@ -2078,7 +2131,7 @@ info_with_view!(Data, tendon,
     [[ten_] wrapadr: i32,
      [ten_] wrapnum: i32,
      [tendon_] efcadr: i32],
-    [], M: Deref<Target = MjModel>);
+    [], M: ModelType);
 
 /**************************************************************************************************/
 // Unit tests
@@ -2612,6 +2665,61 @@ mod test {
         assert!(!data.contact().is_empty());
     }
 
+    /// A poisoned history cursor in a `set_state` payload must be rejected, and the history
+    /// buffer must keep its previous contents. Without the guard MuJoCo computes
+    /// `(cursor + 1 + logical) % nsample` on a negative cursor and indexes outside the buffer.
+    #[test]
+    fn test_set_state_rejects_out_of_range_history_cursor() {
+        const HIST_MODEL: &str = r#"
+<mujoco>
+  <worldbody>
+    <body name="body">
+      <joint name="slide" type="slide"/>
+      <geom size="0.1"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor name="motor0" joint="slide" delay="0.05" nsample="6"/>
+  </actuator>
+</mujoco>
+"#;
+        let model = MjModel::from_xml_string(HIST_MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let spec = MjtState::mjSTATE_HISTORY as u32;
+        let mut state = data.state(spec).to_vec();
+        let before = data.history().to_vec();
+        assert!(!before.is_empty(), "the fixture must have a history buffer");
+
+        // The cursor sits at offset 1 of the buffer, after the user slot.
+        let address = model.actuator_historyadr()[0] as usize;
+        let nsample = model.actuator_history()[0][0];
+
+        // A round trip of the untouched state stays accepted.
+        assert!(data.set_state(&state, spec).is_ok());
+
+        for poison in [-1.0, f64::from(nsample), 1e18] {
+            state[address + 1] = poison;
+            let err = data.set_state(&state, spec).unwrap_err();
+            assert_eq!(
+                err,
+                MjDataError::InvalidHistoryCursor { kind: "actuator", id: 0, nsample: nsample as usize },
+                "cursor {poison} must be rejected",
+            );
+            assert_eq!(data.history(), before.as_slice(), "a rejected write must not change history");
+        }
+
+        // A fractional cursor is not a usable index either.
+        state[address + 1] = 1.5;
+        assert!(data.set_state(&state, spec).is_err());
+
+        // Every in-range cursor stays accepted.
+        for cursor in 0..nsample {
+            state[address + 1] = f64::from(cursor);
+            assert!(data.set_state(&state, spec).is_ok(), "cursor {cursor} must be accepted");
+        }
+    }
+
     #[test]
     fn test_init_ctrl_history_all_combinations() {
         const HIST_MODEL: &str = r#"
@@ -2944,7 +3052,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "model signature mismatch")]
+    #[should_panic(expected = "the model is not compatible")]
     fn test_signature_mismatch_panics() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
         let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();
@@ -2958,7 +3066,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "model signature mismatch")]
+    #[should_panic(expected = "the model is not compatible")]
     fn test_signature_mismatch_reversed_joints() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='b2'><joint name='j2' type='ball'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
         let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j2' type='ball'/><geom size='0.1' mass='1'/></body><body name='b2'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
@@ -2972,7 +3080,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "model signature mismatch")]
+    #[should_panic(expected = "the model is not compatible")]
     fn test_signature_mismatch_view_mut_panics() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
         let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();
@@ -2982,6 +3090,28 @@ mod test {
 
         let mut data2 = model2.make_data();
         let _view = joint_info1.view_mut(&mut data2);
+    }
+
+
+    /// Two models that differ only in `nuserdata` share a signature, and `nuserdata` sizes
+    /// `mjData::userdata`. The swap must fail, or `userdata()` returns a slice past the buffer.
+    #[test]
+    fn test_try_swap_model_rejects_unpinned_size() {
+        const BODY: &str = "<worldbody><body name='b1'><joint type='free'/><geom size='0.1'/></body></worldbody>";
+        let plain = Box::new(MjModel::from_xml_string(&format!("<mujoco>{BODY}</mujoco>")).unwrap());
+        let userdata = Box::new(
+            MjModel::from_xml_string(&format!("<mujoco><size nuserdata='2000'/>{BODY}</mujoco>")).unwrap()
+        );
+        assert_eq!(plain.signature(), userdata.signature(), "the pair must share a signature");
+
+        let mut data = MjData::new(plain);
+        let buffer_len = data.userdata().len();
+        let err = data.try_swap_model(userdata).unwrap_err();
+        match err {
+            MjDataError::IncompatibleModel { source, destination } => assert_eq!(source, destination),
+            other => panic!("expected IncompatibleModel, got {other:?}"),
+        }
+        assert_eq!(data.userdata().len(), buffer_len);
     }
 
     #[test]
@@ -2995,21 +3125,89 @@ mod test {
 
         let err = joint_info1.try_view(&data2).unwrap_err();
         match err {
-            MjDataError::SignatureMismatch { source, destination } => {
+            MjDataError::IncompatibleModel { source, destination } => {
                 assert_eq!(source, data1.signature());
                 assert_eq!(destination, data2.signature());
             }
-            other => panic!("expected SignatureMismatch, got {other:?}"),
+            other => panic!("expected IncompatibleModel, got {other:?}"),
         }
 
         let err = joint_info1.try_view_mut(&mut data2).unwrap_err();
         match err {
-            MjDataError::SignatureMismatch { source, destination } => {
+            MjDataError::IncompatibleModel { source, destination } => {
                 assert_eq!(source, data1.signature());
                 assert_eq!(destination, data2.signature());
             }
-            other => panic!("expected SignatureMismatch, got {other:?}"),
+            other => panic!("expected IncompatibleModel, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_try_view_rejects_a_different_sensor_split() {
+        let sensor_model = |first: u32, second: u32| MjModel::from_xml_string(&format!(
+            "<mujoco><worldbody><body name='b1'><joint name='j' type='hinge'/><geom size='0.1'/>\
+             </body></worldbody><sensor><user name='u1' dim='{first}' objtype='body' objname='b1'/>\
+             <user name='u2' dim='{second}' objtype='body' objname='b1'/></sensor></mujoco>"
+        )).unwrap();
+
+        let model = sensor_model(3, 1);
+        let swapped = sensor_model(1, 3);
+        assert_eq!(model.signature(), swapped.signature(), "the pair must share a signature");
+        assert_eq!(model.nsensordata(), swapped.nsensordata(), "the data totals must agree");
+
+        let data = model.make_data();
+        let info = data.sensor("u1").unwrap();
+        assert_eq!(info.view(&data).data.len(), 3);
+
+        // In `swapped` the first sensor owns one element, so this range would reach the second.
+        let mut other = swapped.make_data();
+        assert!(info.try_view(&other).is_err());
+        assert!(info.try_view_mut(&mut other).is_err());
+    }
+
+    /// `update_layout` re-points an `Info` at a second `MjData`, so a later view test compares a
+    /// pointer instead of the whole snapshot. It must refuse a model that is not compatible, and
+    /// it must leave the `Info` usable when it refuses.
+    #[test]
+    fn test_info_update_layout_accepts_only_a_compatible_model() {
+        let sensor_model = |first: u32, second: u32| MjModel::from_xml_string(&format!(
+            "<mujoco><worldbody><body name='b1'><joint name='j' type='hinge'/><geom size='0.1'/>\
+             </body></worldbody><sensor><user name='u1' dim='{first}' objtype='body' objname='b1'/>\
+             <user name='u2' dim='{second}' objtype='body' objname='b1'/></sensor></mujoco>"
+        )).unwrap();
+
+        let model = sensor_model(3, 1);
+        let data = model.make_data();
+        let mut info = data.sensor("u1").unwrap();
+
+        // A second data built from an equal but separate model: compatible, no shared snapshot.
+        let twin = sensor_model(3, 1);
+        let twin_data = twin.make_data();
+        assert!(info.try_view(&twin_data).is_ok());
+        info.update_layout(&twin_data).unwrap();
+        assert_eq!(info.view(&twin_data).data.len(), 3, "the cached range must survive");
+
+        // The redistributed split moves the first sensor, so the re-point must fail.
+        let swapped = sensor_model(1, 3);
+        let swapped_data = swapped.make_data();
+        assert!(info.update_layout(&swapped_data).is_err());
+        assert_eq!(info.view(&data).data.len(), 3, "a refused re-point must not disturb the Info");
+    }
+
+    #[test]
+    fn test_ray_zero_direction_reports_no_intersection() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+
+        let mut normal = [1.0; 3];
+        let (geom_id, distance) = data.ray(&[0.0; 3], &[0.0; 3], None, false, None, Some(&mut normal));
+        assert_eq!(geom_id, None);
+        assert_eq!(distance, -1.0);
+        assert_eq!(normal, [0.0; 3]);
+
+        let (geom_ids, distances) = data.multi_ray(&[0.0; 3], &[[0.0; 3]], None, false, None, 10.0, None);
+        assert_eq!(geom_ids, vec![None]);
+        assert_eq!(distances, vec![-1.0]);
     }
 
     #[test]
@@ -3185,7 +3383,7 @@ mod test {
         assert_relative_eq!(jinfo.view(&data).qvel[0], original_qvel0, epsilon = 1e-15);
     }
 
-    /// Tests `copy_state_from_data` returns `SignatureMismatch` for mismatched models.
+    /// Tests `copy_state_from_data` returns `IncompatibleModel` for mismatched models.
     #[test]
     fn test_copy_state_signature_mismatch() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body><joint type='free'/><geom size='0.1'/></body></worldbody></mujoco>").unwrap();
@@ -3196,10 +3394,10 @@ mod test {
 
         let err = data2.copy_state_from_data(&data1, MjtState::mjSTATE_FULLPHYSICS as u32).unwrap_err();
         match err {
-            MjDataError::SignatureMismatch { source, destination } => {
+            MjDataError::IncompatibleModel { source, destination } => {
                 assert_ne!(source, destination);
             }
-            other => panic!("expected SignatureMismatch, got {:?}", other),
+            other => panic!("expected IncompatibleModel, got {:?}", other),
         }
     }
 
@@ -3711,26 +3909,6 @@ mod test {
                 let expected: MjtConstraint = unsafe { crate::util::force_cast(raw_i32) };
                 assert_eq!(efc_type[i], expected,
                     "efc_type[{}]: got {:?}, expected {:?} (raw={})", i, efc_type[i], expected, raw_i32);
-            }
-        }
-    }
-
-    /// Verifies [force]-cast enum: efc_state (*mut i32 -> *mut MjtConstraintState).
-    #[test]
-    fn test_force_cast_efc_state_enum() {
-        let model = MjModel::from_xml_string(MODEL).unwrap();
-        let mut data = model.make_data();
-        data.forward();
-
-        let nefc = data.ffi().nefc as usize;
-        if nefc > 0 {
-            let efc_state = data.efc_state();
-            assert_eq!(efc_state.len(), nefc);
-
-            for i in 0..nefc {
-                let raw_i32 = unsafe { *data.ffi().efc_state.add(i) };
-                let expected: MjtConstraintState = unsafe { crate::util::force_cast(raw_i32) };
-                assert_eq!(efc_state[i], expected);
             }
         }
     }
@@ -4378,7 +4556,8 @@ mod test {
         let nefc = data.ffi().nefc as usize;
         if nefc > 0 {
             let iefc_type = data.iefc_type();
-            let iefc_state = data.iefc_state();
+            // SAFETY: the loop above ran the solver, so the arena arrays hold computed values.
+            let iefc_state = unsafe { data.iefc_state() };
 
             assert_eq!(iefc_type.len(), nefc);
             assert_eq!(iefc_state.len(), nefc);
@@ -4529,8 +4708,8 @@ mod test {
         assert!(any_nonzero, "qfrc_actuator must reflect the actuator force");
     }
 
-    /// Steps multiple times with gravity & contacts, then verifies enum force-casts
-    /// (efc_type, efc_state) and array groupings (efc_KBIP, contact xpos/frame)
+    /// Steps multiple times with gravity & contacts, then verifies the efc_type enum
+    /// force-cast, the efc_state force-cast, and array groupings (efc_KBIP, contact xpos/frame)
     /// reflect the evolved simulation state and remain FFI-consistent.
     #[test]
     fn test_force_cast_multi_step_constraints_evolve() {
@@ -4561,7 +4740,8 @@ mod test {
 
         if nefc > 0 {
             let efc_type = data.efc_type();
-            let efc_state = data.efc_state();
+            // SAFETY: the model was stepped above, so the solver wrote the arena arrays.
+            let efc_state = unsafe { data.efc_state() };
             assert_eq!(efc_type.len(), nefc);
             assert_eq!(efc_state.len(), nefc);
 
@@ -5108,4 +5288,29 @@ mod test {
             assert_eq!(data.dof_awake_ind()[i], unsafe { *data.ffi().dof_awake_ind.add(i) });
         }
     }
+
+    /// Drives the generated sanitizer probes over every dynamic array of |MjData|. Under `/asan`
+    /// MuJoCo defines `mjUSEASAN` and poisons the arena past `parena`, so a length that overruns
+    /// its array faults here instead of returning a plausible number.
+    ///
+    /// The safe probe runs on a fresh |MjData|, before any pipeline stage. That is the claim the
+    /// safe accessors make: a caller may read them without running anything first. The unsafe
+    /// probe runs only after the solver has filled the arena.
+    #[test]
+    fn test_probe_dynamic_arrays_stays_in_bounds() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+        data.probe_dynamic_arrays();
+
+        // Every stage must have run: the unsafe probe reads the arrays the solver fills.
+        for _ in 0..5 {
+            data.step();
+        }
+        assert!(data.ffi().nefc > 0, "the model must build constraints for the probe to mean anything");
+        data.probe_dynamic_arrays();
+
+        // SAFETY: the loop above ran the full pipeline, so every arena array holds computed values.
+        unsafe { data.probe_dynamic_arrays_unsafe() };
+    }
+
 }

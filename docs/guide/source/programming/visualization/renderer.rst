@@ -186,14 +186,14 @@ the GPU copies held by the renderer must be refreshed explicitly.
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_meshes_from`,
   :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>update_hfields_from`.
   The plural methods are more convenient when the majority of assets of a given type
-  are modified, avoiding repeated signature and context checks.
+  are modified, avoiding repeated compatibility and context checks.
 
 Unlike the viewer, the renderer uploads asset data **immediately** --- there is no staging or
 dirty-flag mechanism. The upload takes effect before the next call to
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>render`.
 All methods return ``Result<(), RendererError>`` ---
-:docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>SignatureMismatch` is returned
-when the model signature does not match the renderer's current scene,
+:docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>IncompatibleModel` is returned
+when the model is not compatible with the renderer's current scene,
 :docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>ContextError` when the asset
 ID is out of range (singular methods only), and
 :docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>GlutinError` if the OpenGL context

@@ -97,7 +97,8 @@ const ENERGY_PRINT_INTERVAL: usize = 100;
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
     // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
-    install_logging_hook();
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
 
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
 
@@ -179,7 +180,7 @@ fn main() {
         data.step();
 
         // Compute and print energy at regular intervals.
-        if step_count % ENERGY_PRINT_INTERVAL == 0 {
+        if step_count.is_multiple_of(ENERGY_PRINT_INTERVAL) {
             data.energy_pos();  // compute potential energy -> data.energy()[0]
             data.energy_vel();  // compute kinetic energy   -> data.energy()[1]
             let e_pot = data.energy()[0];

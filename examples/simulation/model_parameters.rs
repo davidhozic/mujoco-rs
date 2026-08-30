@@ -30,7 +30,8 @@ const STEPS: usize = 500;
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
     // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
-    install_logging_hook();
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
 
     let model = Box::new(
         MjModel::from_xml_string(MODEL_XML).expect("could not load the model"),
@@ -45,7 +46,7 @@ fn main() {
     let z_baseline = data.qpos()[2];
     log::info!("baseline   z={z_baseline:.4}  (gravity={default_gravity:.2})");
 
-    // model_opt_mut: direct in-place mutation (requires M: DerefMut).
+    // model_opt_mut: direct in-place mutation (requires M: ModelTypeMut).
     data.reset();
     let half_gravity = default_gravity / 2.0;
     data.model_opt_mut().gravity[2] = half_gravity;

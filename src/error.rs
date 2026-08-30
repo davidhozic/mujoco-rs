@@ -48,11 +48,11 @@ pub enum MjDataError {
         /// Actual length that was provided.
         got: usize,
     },
-    /// Two model-signature-bound objects were created from different models.
+    /// Two model-bound objects were created from models that are not compatible.
     ///
-    /// This is returned by APIs that require matching model signatures,
+    /// This is returned by APIs that require a matching model memory layout,
     /// including data-copy operations and info-view accessors.
-    SignatureMismatch {
+    IncompatibleModel {
         /// Model signature of the source object.
         source: u64,
         /// Model signature of the destination object.
@@ -64,6 +64,18 @@ pub enum MjDataError {
         kind: &'static str,
         /// The zero-based index of the actuator or sensor.
         id: usize,
+    },
+    /// A history buffer cursor in the written state is outside its valid range.
+    ///
+    /// [`MjData::set_state`](crate::wrappers::MjData::set_state) rejects the write and leaves
+    /// the history buffer unchanged.
+    InvalidHistoryCursor {
+        /// `"actuator"` or `"sensor"`.
+        kind: &'static str,
+        /// The zero-based index of the actuator or sensor.
+        id: usize,
+        /// Number of samples in that history buffer; a valid cursor lies in `0..nsample`.
+        nsample: usize,
     },
     /// The contact buffer is full; no more contacts can be added.
     ContactBufferFull,
@@ -90,11 +102,11 @@ impl fmt::Display for MjDataError {
                      but need at least {needed}"
                 )
             }
-            Self::SignatureMismatch { source, destination } => {
+            Self::IncompatibleModel { source, destination } => {
                 write!(
                     f,
-                    "model signature mismatch: source {source:#X}, \
-                     destination {destination:#X}"
+                    "incompatible model: source signature {source:#X}, \
+                     destination signature {destination:#X}"
                 )
             }
             Self::LengthMismatch { name, expected, got } => {
@@ -105,6 +117,9 @@ impl fmt::Display for MjDataError {
             }
             Self::NoHistoryBuffer { kind, id } => {
                 write!(f, "{kind} {id} has no history buffer")
+            }
+            Self::InvalidHistoryCursor { kind, id, nsample } => {
+                write!(f, "{kind} {id} history cursor is out of bounds [0, {nsample})")
             }
             Self::ContactBufferFull => {
                 write!(f, "contact buffer is full")
@@ -379,8 +394,8 @@ pub enum MjModelError {
         /// Actual number of elements available.
         available: usize,
     },
-    /// Two model-signature-bound objects were created from different models.
-    SignatureMismatch {
+    /// Two model-bound objects were created from models that are not compatible.
+    IncompatibleModel {
         /// Model signature of the source object.
         source: u64,
         /// Model signature of the destination object.
@@ -417,11 +432,11 @@ impl fmt::Display for MjModelError {
                      but need at least {needed}"
                 )
             }
-            Self::SignatureMismatch { source, destination } => {
+            Self::IncompatibleModel { source, destination } => {
                 write!(
                     f,
-                    "model signature mismatch: source {source:#X}, \
-                     destination {destination:#X}"
+                    "incompatible model: source signature {source:#X}, \
+                     destination signature {destination:#X}"
                 )
             }
             Self::VfsError(e) => write!(f, "VFS error: {e}"),

@@ -1,14 +1,15 @@
 //! Definitions related to visualization.
 use std::default::Default;
 use std::mem::MaybeUninit;
-use std::ops::Deref;
 use std::ptr;
 
 use super::mj_rendering::{MjrContext, MjrRectangle};
 use super::mj_primitive::{MjtNum, MjtByte, MjtSize};
 use super::mj_model::{MjModel, MjtGeom, MjtObj};
+use super::mj_model::traits::ModelType;
 use super::mj_data::MjData;
 use crate::{array_slice_dyn, c_str_as_str_method};
+use crate::util::checked_c_len;
 use crate::error::MjSceneError;
 use crate::getter_setter;
 use crate::mujoco_c::*;
@@ -124,7 +125,7 @@ impl MjvPerturb {
     /// # Panics
     /// Panics if `self.flexselect` is greater than or equal to the number of flexes in the model
     /// of `data`.
-    pub fn start<M: Deref<Target = MjModel>>(&mut self, type_: MjtPertBit, data: &mut MjData<M>, scene: &MjvScene) {
+    pub fn start<M: ModelType>(&mut self, type_: MjtPertBit, data: &mut MjData<M>, scene: &MjvScene) {
         // mjv_initPerturb indexes flex_rigid, flex_edgenum and flex_vertnum by flexselect after
         // testing only that it is not negative.
         let nflex = data.model().nflex();
@@ -150,7 +151,7 @@ impl MjvPerturb {
     /// # Panics
     /// Panics if `self.select` is out of range for the model in `data` (i.e. negative or
     /// `>= nbody`).
-    pub fn move_<M: Deref<Target = MjModel>>(&mut self, data: &MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
+    pub fn move_<M: ModelType>(&mut self, data: &MjData<M>, action: MjtMouse, dx: MjtNum, dy: MjtNum, scene: &MjvScene) {
         // mjv_movePerturb dereferences d->xmat + 9*select (move-relative actions) and
         // d->xquat + 4*select / m->body_iquat + 4*select (rotate actions) *before* its own
         // sel range check, so an out-of-range id is an out-of-bounds read. Unlike the
@@ -171,7 +172,7 @@ impl MjvPerturb {
     /// This method **zeroes `xfrc_applied`** for all bodies before applying the perturbation
     /// force. Any external forces set on `data` before calling this method will be cleared.
     /// If you need to preserve external forces, apply them *after* calling this method.
-    pub fn apply<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+    pub fn apply<M: ModelType>(&mut self, data: &mut MjData<M>) {
         data.xfrc_applied_mut().fill([0.0; 6]);
         let model_ffi = data.model().ffi();
         unsafe { mjv_applyPerturbPose(model_ffi, data.ffi_mut(), self, 0); }
@@ -184,7 +185,7 @@ impl MjvPerturb {
     /// # Panics
     /// Panics if `self.select` is out of range for the `xpos`/`xmat` arrays (i.e., negative or
     /// `>= nbody`). In debug builds, a dedicated assertion fires first for the negative case.
-    pub fn update_local_pos<M: Deref<Target = MjModel>>(&mut self, selection_xyz: &[MjtNum; 3], data: &MjData<M>) {
+    pub fn update_local_pos<M: ModelType>(&mut self, selection_xyz: &[MjtNum; 3], data: &MjData<M>) {
         debug_assert!(self.select >= 0, "invalid selecting when calling update_local_pos");
         let select = self.select as usize;
         let body_xpos = &data.xpos()[select];
@@ -300,7 +301,7 @@ impl MjvCamera {
     /// Panics if this is a fixed camera (`MjtCamera::mjCAMERA_FIXED`) whose `fixedcamid` is out of
     /// range, or a tracking camera (`MjtCamera::mjCAMERA_TRACKING`) whose `trackbodyid` is greater
     /// than or equal to the number of bodies.
-    pub fn frame<M: Deref<Target = MjModel>>(&self, data: &MjData<M>) -> ([MjtNum; 3], [MjtNum; 3], [MjtNum; 3], [MjtNum; 3]) {
+    pub fn frame<M: ModelType>(&self, data: &MjData<M>) -> ([MjtNum; 3], [MjtNum; 3], [MjtNum; 3], [MjtNum; 3]) {
         // mjv_cameraFrame indexes cam_xmat/cam_xpos by fixedcamid and subtree_com by trackbodyid
         // without an upper bound; no other branch indexes a model or data array.
         if self.type_ == MjtCamera::mjCAMERA_FIXED as i32 {
@@ -496,7 +497,16 @@ impl MjvFigure {
     }
 
     /// Draws the 2D figure to the `viewport` on screen.
-    pub fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
+    ///
+    /// Wraps [`mjr_figure`].
+    ///
+    /// # Safety
+    /// Every `linepnt` entry must lie within `0..=mjMAXLINEPNT`, the capacity of the matching
+    /// `linedata` row. Automated checks from Rust side are too expensive.
+    pub unsafe fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
+        // The only guard would scan all mjMAXLINE entries on a per-frame path, so the bound is a
+        // caller precondition instead (coding-conventions, FFI guard ladder).
+        // SAFETY: the caller guarantees every `linepnt` entry is within the `linedata` capacity.
         unsafe { mjr_figure(viewport, self, context.ffi()) };
     }
 }
@@ -780,45 +790,112 @@ impl MjvFigure {
 /***********************************************************************************************************************
 ** MjvScene
 ***********************************************************************************************************************/
+/// Snapshot of the [`MjModel`] quantities that fix the size of every buffer that
+/// [`MjvScene::new`] allocates, and the two element counts that bound the `objid` of a flex geom
+/// and of a skin geom.
+///
+/// The compilation signature is no entry here: `mj_saveModel` does not write it, so a model that
+/// came back from a buffer carries a zero and would be refused against the scene it built. The
+/// entries below stand on their own. The flex tables are kept whole: `mjv_makeScene` sizes the
+/// flex face buffer from `flex_dim`, `flex_elemnum`, `flex_shellnum` and `flex_elemlayer`
+/// together, so no scalar total replaces them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MjvSceneLayout {
+    nflexedge: MjtSize,
+    nflexvert: MjtSize,
+    // `mjv_addGeoms` gives a skin geom the skin id as its `objid`, and `mjr_render` reads
+    // `skinfacenum[objid]` of the scene and `skinvertVBO[objid]` of the context. Both arrays hold
+    // one entry per skin of the model that built them.
+    nskin: MjtSize,
+    nskinvert: MjtSize,
+    flex_dim: Vec<i32>,
+    flex_elemnum: Vec<i32>,
+    flex_shellnum: Vec<i32>,
+    flex_elemlayer: Vec<i32>,
+}
+
+impl From<&MjModel> for MjvSceneLayout {
+    fn from(model: &MjModel) -> Self {
+        let ffi = model.ffi();
+        Self {
+            nflexedge: ffi.nflexedge,
+            nflexvert: ffi.nflexvert,
+            nskin: ffi.nskin,
+            nskinvert: ffi.nskinvert,
+            flex_dim: model.flex_dim().to_vec(),
+            flex_elemnum: model.flex_elemnum().to_vec(),
+            flex_shellnum: model.flex_shellnum().to_vec(),
+            flex_elemlayer: model.flex_elemlayer().to_vec(),
+        }
+    }
+}
+
+
 /// 3D scene visualization.
 /// This struct provides a way to render visual-only geometry.
 ///
-/// The scene does not hold a reference to the model; the caller is responsible for
-/// ensuring that the same model (identified by signature) is used consistently.
-/// Passing data from a different model to [`MjvScene::update`] or
-/// [`MjvScene::find_selection`] will panic.
+/// The scene does not hold a reference to the model.
+/// Trying to use an existing scene with an incompatible model (see
+/// [`MjvScene::is_compatible_with_model`]) will result in a panic.
 #[derive(Debug)]
 pub struct MjvScene {
     ffi: Box<mjvScene>,
+    layout: MjvSceneLayout,
+    /// Reported by [`MjvScene::signature`] and named in the panic of an incompatible model. It
+    /// decides nothing: `MjvSceneLayout` carries every size the scene depends on.
     signature: u64,
-    /// Cached from the model at construction time for the flex/skin array slice accessors.
-    nflexedge: MjtSize,
-    nflexvert: MjtSize,
-    nskinvert: MjtSize,
 }
 
 impl MjvScene {
     /// Creates a new scene for `model`, allocating space for up to `max_geom` geoms.
     ///
     /// # Panics
-    /// In debug builds, panics if `max_geom` exceeds `i32::MAX`.
-    pub fn new<M: Deref<Target = MjModel>>(model: M, max_geom: usize) -> Self {
-        debug_assert!(max_geom <= i32::MAX as usize, "max_geom exceeds i32::MAX");
+    /// Panics if `max_geom` exceeds [`i32::MAX`].
+    pub fn new<M: ModelType>(model: M, max_geom: usize) -> Self {
         let model_ffi = model.ffi();
-        let nflexedge = model_ffi.nflexedge;
-        let nflexvert = model_ffi.nflexvert;
-        let nskinvert = model_ffi.nskinvert;
-        let signature = model.signature();
-        // SAFETY: mjv_defaultScene + mjv_makeScene initialize the struct and allocate
-        // internal geom buffers; model pointer is valid for the duration of this call.
-        let scn = unsafe {
+        let layout = MjvSceneLayout::from(&*model);
+
+        // SAFETY: The struct memory gets initialized properly before assumed initialized.
+        // The uninitialized memory, not part of the struct, gets zeroed below this unsafe block.
+        let scene = unsafe {
             let mut t = Box::new_uninit();
             mjv_defaultScene(t.as_mut_ptr());
-            mjv_makeScene(model_ffi, t.as_mut_ptr(), max_geom as i32);
+            mjv_makeScene(model_ffi, t.as_mut_ptr(), checked_c_len(max_geom));
             t.assume_init()
         };
 
-        Self { ffi: scn, signature, nflexedge, nflexvert, nskinvert }
+        // Zero uninitialized memory that `mjv_makeScene` allocated.
+        let nflex = scene.nflex as usize;
+        let nface = if scene.flexfacenum.is_null() {
+            0
+        } else {
+            // SAFETY: scene.flexfacenum is non-null and scene.nflex is guaranteed
+            // correct by MuJoCo code.
+            unsafe { std::slice::from_raw_parts(scene.flexfacenum, nflex) }
+            .iter().map(|&n| n as usize).sum()
+        };
+        let nflexvert = layout.nflexvert as usize;
+        let nskinvert = layout.nskinvert as usize;
+        let maxgeom = scene.maxgeom as usize;
+        let buffers: [(*mut u8, usize); 9] = [
+            (scene.geoms.cast(),        maxgeom * size_of::<mjvGeom>()),
+            (scene.geomorder.cast(),    maxgeom * size_of::<i32>()),
+            (scene.flexfaceused.cast(), nflex * size_of::<i32>()),
+            (scene.flexvert.cast(),     3 * nflexvert * size_of::<f32>()),
+            (scene.flexface.cast(),     9 * nface * size_of::<f32>()),
+            (scene.flexnormal.cast(),   9 * nface * size_of::<f32>()),
+            (scene.flextexcoord.cast(), 6 * nface * size_of::<f32>()),
+            (scene.skinvert.cast(),     3 * nskinvert * size_of::<f32>()),
+            (scene.skinnormal.cast(),   3 * nskinvert * size_of::<f32>()),
+        ];
+        for (pointer, bytes) in buffers {
+            if !pointer.is_null() && bytes != 0 {
+                // SAFETY: destination pointer is non-null and bytes > 0.
+                unsafe { ptr::write_bytes(pointer, 0, bytes); }
+            }
+        }
+
+        Self { ffi: scene, layout, signature: model.signature() }
     }
 
     /// Returns the model signature this scene was created for.
@@ -826,12 +903,33 @@ impl MjvScene {
         self.signature
     }
 
-    /// Panics if `data_sig` does not match this scene's model signature.
-    fn assert_signature(&self, data_sig: u64) {
-        assert_eq!(
-            self.signature, data_sig,
-            "model signature mismatch: scene {:#X}, data model {:#X}",
-            self.signature, data_sig
+    /// Reports whether `model` can take the place of the model that created this scene.
+    ///
+    /// The scene buffers hold one entry per flex face, flex vertex, flex edge and skin vertex of
+    /// the model that created them, and `mjv_updateScene` refills them with the counts of the
+    /// model it receives. The test covers every count that sizes such a buffer, plus the flex and
+    /// skin counts that bound the `objid` a geom carries into those buffers.
+    /// [`MjvScene::signature`] takes no part: `mj_saveModel` does not write it, so a model that
+    /// came back from a buffer would be refused against the scene it built.
+    pub fn is_compatible_with_model(&self, model: &MjModel) -> bool {
+        self.layout == MjvSceneLayout::from(model)
+    }
+
+    /// Reports whether `other` was created for a model that is compatible with this scene's
+    /// model.
+    ///
+    /// A geom that moves between two scenes keeps its `objid`, which the renderer uses as an
+    /// unchecked index into the destination scene's flex and skin arrays.
+    pub fn is_compatible_with_scene(&self, other: &MjvScene) -> bool {
+        self.layout == other.layout
+    }
+
+    /// Panics if `model` is not compatible with the model used to create the scene.
+    fn assert_compatible(&self, model: &MjModel) {
+        assert!(
+            self.is_compatible_with_model(model),
+            "the model is not compatible with the scene: scene signature {:#X}, model signature {:#X}",
+            self.signature, model.signature()
         );
     }
 
@@ -852,16 +950,18 @@ impl MjvScene {
     /// of bodies.
     ///
     /// # Panics
-    /// - Panics if `data` was created from a different model than this scene.
+    /// - Panics if `data` was created from a model that is not compatible with this scene
+    ///   (see [`MjvScene::is_compatible_with_model`]).
     /// - Panics if `cam` is a fixed camera ([`MjtCamera::mjCAMERA_FIXED`]) whose `fixedcamid` is
     ///   out of range for the model in `data`.
     /// - Panics if `perturb.select` is out of range (greater than or equal to the number of
     ///   bodies) for the model in `data`.
-    pub fn update_with_catmask<M: Deref<Target = MjModel>>(
+    pub fn update_with_catmask<M: ModelType>(
         &mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb,
         cam: &mut MjvCamera, catmask: i32,
     ) {
-        self.assert_signature(data.model().signature());
+        self.assert_compatible(data.model());
+
         // mjv_updateScene -> mjv_updateCamera calls mjv_cameraFrame, whose mjCAMERA_FIXED branch
         // reads d->cam_xmat + 9*fixedcamid / d->cam_xpos + 3*fixedcamid *before* C performs its own
         // range check, so an out-of-range id is an out-of-bounds read. Guard it here, matching the
@@ -900,7 +1000,7 @@ impl MjvScene {
     /// Panics under the same conditions as [`update_with_catmask`](Self::update_with_catmask):
     /// a model-signature mismatch, an out-of-range fixed-camera id, or an out-of-range
     /// `perturb.select`.
-    pub fn update<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb, cam: &mut MjvCamera) {
+    pub fn update<M: ModelType>(&mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb, cam: &mut MjvCamera) {
         self.update_with_catmask(data, opt, perturb, cam, MjtCatBit::mjCAT_ALL as i32);
     }
 
@@ -1017,12 +1117,13 @@ impl MjvScene {
     /// [`MjvScene::update`], which leaves `frustum_near` at zero.
     ///
     /// # Panics
-    /// Panics if `data` was created from a different model than this scene.
-    pub fn find_selection<M: Deref<Target = MjModel>>(
+    /// Panics if `data` was created from a model that is not compatible with this scene
+    /// (see [`MjvScene::is_compatible_with_model`]).
+    pub fn find_selection<M: ModelType>(
         &self, data: &mut MjData<M>, option: &MjvOption,
         aspect_ratio: MjtNum, relx: MjtNum, rely: MjtNum,
     ) -> SceneSelection {
-        self.assert_signature(data.model().signature());
+        self.assert_compatible(data.model());
         let (mut geom_id, mut flex_id, mut skin_id) = (-1 , -1, -1);
         let mut selpnt = [0.0; 3];
         let body_id = unsafe {
@@ -1055,10 +1156,11 @@ impl MjvScene {
 impl MjvScene {
     // Scalar length arrays
     array_slice_dyn! {
-        (mut = unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; nflexedge],
-        flexvert: &[[f32; 3] [force]; "flex vertices"; nflexvert],
-        skinvert: &[[f32; 3] [force]; "skin vertex data"; nskinvert],
-        skinnormal: &[[f32; 3] [force]; "skin normal data"; nskinvert],
+        probe = probe_dynamic_arrays;
+        (mut = unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; layout.nflexedge],
+        flexvert: &[[f32; 3] [force]; "flex vertices"; layout.nflexvert],
+        skinvert: &[[f32; 3] [force]; "skin vertex data"; layout.nskinvert],
+        skinnormal: &[[f32; 3] [force]; "skin normal data"; layout.nskinvert],
         (mut = unsafe) geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
         geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
         (mut = unsafe) flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
@@ -1171,6 +1273,137 @@ mod tests {
         MjModel::from_xml_string(EXAMPLE_MODEL).unwrap()
     }
 
+
+    /// The three bodies are the same in both models, so `mjCModel::Signature` is the same; only
+    /// the number of flex vertices differs, and that number sizes `mjvScene::flexvert`.
+    fn flex_model(flex: &str) -> MjModel {
+        let xml = format!(
+            "<mujoco><worldbody>\
+<body name='v0' pos='0 0 0'><freejoint/><geom size='0.01'/></body>\
+<body name='v1' pos='0.1 0 0'><freejoint/><geom size='0.01'/></body>\
+<body name='v2' pos='0.2 0 0'><freejoint/><geom size='0.01'/></body>\
+</worldbody><deformable>{flex}</deformable></mujoco>"
+        );
+        MjModel::from_xml_string(&xml).unwrap()
+    }
+
+    /// `mjv_makeScene` allocates the flex vertex and face buffers with `mju_malloc` and never
+    /// writes them, so a fresh scene must not expose that memory through its safe accessors.
+    #[test]
+    fn test_new_scene_zeroes_the_uninitialized_flex_buffers() {
+        let model = flex_model(
+            "<flex name='f' dim='2' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 2'/>"
+        );
+        let scene = MjvScene::new(&model, 100);
+
+        // An all-zero test over an empty slice would pass for the wrong reason.
+        assert!(!scene.flexvert().is_empty(), "the model must allocate flex vertices");
+        assert!(!scene.flexface().is_empty(), "the model must allocate flex faces");
+
+        assert!(scene.flexvert().iter().all(|vertex| *vertex == [0.0; 3]));
+        assert!(scene.flexface().iter().all(|face| *face == [0.0; 9]));
+        assert!(scene.flexnormal().iter().all(|normal| *normal == [0.0; 9]));
+        assert!(scene.flextexcoord().iter().all(|texcoord| *texcoord == [0.0; 6]));
+        assert!(scene.flexfaceused().iter().all(|used| *used == 0));
+    }
+
+    /// `mjv_makeScene` allocates `geomorder` with `mju_malloc`, and only `mjr_render` writes it,
+    /// and then only the transparent prefix. An updated but unrendered scene must therefore not
+    /// expose that memory through its safe accessor.
+    #[test]
+    fn test_new_scene_zeroes_the_geom_order_buffer() {
+        let model = load_model();
+        let mut scene = MjvScene::new(&model, 100);
+        let mut data = model.make_data();
+        let (opt, pert) = (MjvOption::default(), MjvPerturb::default());
+        let mut camera = MjvCamera::default();
+        scene.update(&mut data, &opt, &pert, &mut camera);
+
+        // An all-zero test over an empty slice would pass for the wrong reason.
+        assert!(!scene.geomorder().is_empty(), "the update must add geoms");
+        assert!(scene.geomorder().iter().all(|order| *order == 0));
+    }
+
+    #[test]
+    fn test_scene_is_compatible_with_model() {
+        let three = flex_model("<flex name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>");
+        let two = flex_model("<flex name='f' dim='1' body='v0 v1' vertex='0 0 0 0 0 0' element='0 1'/>");
+        assert_eq!(three.signature(), two.signature(), "the pair must share a signature");
+        assert_ne!(three.nflexvert(), two.nflexvert());
+
+        let scene = MjvScene::new(&three, 100);
+        assert!(scene.is_compatible_with_model(&three));
+        assert!(!scene.is_compatible_with_model(&two));
+    }
+
+    /// A model that carries `skins` and nothing else, so that only the skin counts change.
+    fn skin_model(skins: &str) -> MjModel {
+        let xml = format!(
+            "<mujoco><asset>{skins}</asset><worldbody>\
+<body name='b'><joint name='j' type='hinge' axis='0 0 1'/><geom size='0.1'/></body>\
+</worldbody></mujoco>"
+        );
+        MjModel::from_xml_string(&xml).unwrap()
+    }
+
+    /// `mjv_addGeoms` gives a skin geom the skin id as its `objid`, and `mjr_render` reads
+    /// `skinfacenum[objid]` of the scene with it. A model that holds more skins than the scene
+    /// must be refused, even when it needs no larger buffer.
+    #[test]
+    fn test_scene_rejects_a_larger_skin_count_at_an_equal_vertex_total() {
+        let one = skin_model(
+            "<skin name='s' vertex='0 0 0  1 0 0  0 1 0  1 1 0  2 0 0  2 1 0' \
+                   face='0 1 2  1 3 2  1 4 3  4 5 3'>\
+             <bone body='b' bindpos='0 0 0' bindquat='1 0 0 0' \
+                   vertid='0 1 2 3 4 5' vertweight='1 1 1 1 1 1'/></skin>"
+        );
+        let two = skin_model(
+            "<skin name='s1' vertex='0 0 0  1 0 0  0 1 0' face='0 1 2'>\
+             <bone body='b' bindpos='0 0 0' bindquat='1 0 0 0' \
+                   vertid='0 1 2' vertweight='1 1 1'/></skin>\
+             <skin name='s2' vertex='0 0 1  1 0 1  0 1 1' face='0 1 2'>\
+             <bone body='b' bindpos='0 0 0' bindquat='1 0 0 0' \
+                   vertid='0 1 2' vertweight='1 1 1'/></skin>"
+        );
+        // Every scene buffer is the same size in both, so only nskin separates the pair.
+        assert_eq!(one.nskinvert(), two.nskinvert());
+        assert_ne!(one.nskin(), two.nskin());
+
+        let scene = MjvScene::new(&one, 100);
+        assert!(scene.is_compatible_with_model(&one));
+        assert!(!scene.is_compatible_with_model(&two));
+    }
+
+    /// `mj_saveModel` writes no signature, so `mj_loadModel` returns a zero. A scene that tested
+    /// the signature would refuse the saved copy of the very model it was created for.
+    #[test]
+    fn test_scene_accepts_the_saved_copy_of_its_own_model() {
+        let model = flex_model(
+            "<flex name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>"
+        );
+        let scene = MjvScene::new(&model, 100);
+
+        let mut buffer = vec![0u8; model.size()];
+        model.save_to_buffer(&mut buffer).unwrap();
+        let reloaded = MjModel::from_buffer(&buffer).unwrap();
+
+        assert_ne!(model.signature(), reloaded.signature(),
+                   "mj_loadModel now restores the signature");
+        assert!(scene.is_compatible_with_model(&reloaded),
+                "the scene refuses the saved copy of its own model");
+    }
+
+    #[test]
+    fn test_scene_is_compatible_with_scene() {
+        let three = flex_model("<flex name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>");
+        let two = flex_model("<flex name='f' dim='1' body='v0 v1' vertex='0 0 0 0 0 0' element='0 1'/>");
+
+        let scene = MjvScene::new(&three, 100);
+        let same = MjvScene::new(&three, 10);
+        let other = MjvScene::new(&two, 100);
+        assert!(scene.is_compatible_with_scene(&same), "maxgeom must not affect compatibility");
+        assert!(!scene.is_compatible_with_scene(&other));
+    }
     #[test]
     #[allow(non_snake_case)]
     fn test_MjvGeom() {
@@ -1495,4 +1728,26 @@ mod tests {
         assert!(scene.flexnormal().is_empty(), "flexnormal must be empty with no flex bodies");
         assert!(scene.flextexcoord().is_empty(), "flextexcoord must be empty with no flex bodies");
     }
+
+    /// Drives the generated sanitizer probes over every dynamic array of [`MjvScene`], first on a
+    /// fresh scene and then after an update has filled the geom buffer.
+    #[test]
+    fn test_probe_dynamic_arrays_stays_in_bounds() {
+        let model = load_model();
+        let mut data = model.make_data();
+        data.forward();
+
+        let mut scene = MjvScene::new(&model, 1000);
+        scene.probe_dynamic_arrays();
+
+        let (opt, perturb) = (MjvOption::default(), MjvPerturb::default());
+        let mut camera = MjvCamera::default();
+        scene.update(&mut data, &opt, &perturb, &mut camera);
+        assert!(scene.ffi().ngeom > 0, "the update must add geoms for the probe to mean anything");
+        scene.probe_dynamic_arrays();
+
+        // SAFETY: MjvScene::new zeroes every buffer mjv_makeScene leaves untouched.
+        unsafe { scene.probe_dynamic_arrays_unsafe() };
+    }
+
 }

@@ -140,6 +140,9 @@ impl MjLogMessage {
     }
 
     /// Borrows a nullable C string field as `&str`, returning `None` for a null pointer.
+    ///
+    /// # Panics
+    /// Panics if the text is not valid UTF-8.
     fn opt_cstr(&self, ptr: *const c_char) -> Option<&str> {
         if ptr.is_null() {
             None
@@ -164,8 +167,12 @@ pub fn log_config() -> MjLogConfig {
 }
 
 /// Set default handler configuration. Wraps [`mju_setLogConfig`].
-pub fn set_log_config(config: MjLogConfig) {
-    // SAFETY: mju_setLogConfig copies the struct by value; no aliasing.
+///
+/// # Safety
+/// This must not be used in a multi-threaded way. No MuJoCo items can be used
+/// while this is called.
+pub unsafe fn set_log_config(config: MjLogConfig) {
+    // SAFETY: the caller holds every thread that reads the global configuration.
     unsafe { mju_setLogConfig(config) }
 }
 

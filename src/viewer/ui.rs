@@ -341,14 +341,14 @@ impl ViewerUI {
             show_tracking_modal: false,
             tracking_selected_body: None,
         };
-        viewer_ui.update_names(model);
+        viewer_ui.update_caches(model);
         Ok(viewer_ui)
     }
 
     /// Rebuilds all model-dependent cached state: names, control and joint limits with
     /// their ranges, and joint qpos addresses.
     /// Must be called whenever the active model changes.
-    pub(crate) fn update_names(&mut self, model: &MjModel) {
+    pub(crate) fn update_caches(&mut self, model: &MjModel) {
         self.camera_names = (0..model.ncam()).map(|i| {
             if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i as usize) {
                 name.to_string()
@@ -440,6 +440,10 @@ impl ViewerUI {
                 name.to_string()
             } else { format!("Equality {i}") }
         }).collect();
+
+        // The pending selection is a body ID of the previous model, which addresses a different
+        // body in the new one.
+        self.tracking_selected_body = None;
     }
 
     /// Handles winit input events.
@@ -824,7 +828,11 @@ impl ViewerUI {
                                 ui.end_row();
                             });
                         });
-                        *shared_viewer_state.lock_unpoison().data_passive.model_opt_mut() = options;
+                        let mut lock = shared_viewer_state.lock_unpoison();
+                        if lock.model_reloaded {
+                            return;
+                        }
+                        *lock.data_passive.model_opt_mut() = options;
                     });
 
                     /* Visualization options */
@@ -844,6 +852,9 @@ impl ViewerUI {
                             };
                             let enumerated: MjtCamera = enumerated;
                             let lock = shared_viewer_state.lock_unpoison();
+                            if lock.model_reloaded {
+                                return;
+                            }
                             let model = lock.data_passive.model();
                             let mut camera_choice = match enumerated {
                                 MjtCamera::mjCAMERA_FIXED => self.camera_names[camera.fixedcamid as usize].to_string(),
@@ -1465,6 +1476,9 @@ impl ViewerUI {
                     // Write modified vis and stat back to model
                     {
                         let mut lock = shared_viewer_state.lock_unpoison();
+                        if lock.model_reloaded {
+                            return;
+                        }
                         *lock.data_passive.model_vis_mut() = vis;
                         *lock.data_passive.model_stat_mut() = stat;
                     }
@@ -1494,6 +1508,9 @@ impl ViewerUI {
                 .show(ui, |ui|
             {
                 let mut lock = shared_viewer_state.lock_unpoison();
+                if lock.model_reloaded {
+                    return;
+                }
                 let ctrl_mut = lock.data_passive.ctrl_mut();
                 debug_assert_eq!(
                     self.actuator_info.iter().map(|info| info.inputs.len()).sum::<usize>(),
@@ -1537,6 +1554,9 @@ impl ViewerUI {
                 .show(ui, |ui|
             {
                 let mut lock = shared_viewer_state.lock_unpoison();
+                if lock.model_reloaded {
+                    return;
+                }
                 let qpos = lock.data_passive.qpos_mut();
                 for JointDisplayInfo { name, qpos_start, components, quat } in &self.joint_info {
                     let joint_qpos = &mut qpos[*qpos_start..*qpos_start + components.len()];
@@ -1609,7 +1629,11 @@ impl ViewerUI {
                 .show(ui, |ui|
             {
                 ui.horizontal_wrapped(|ui| {
-                    let data = &mut shared_viewer_state.lock_unpoison().data_passive;
+                    let mut lock = shared_viewer_state.lock_unpoison();
+                    if lock.model_reloaded {
+                        return;
+                    }
+                    let data = &mut lock.data_passive;
                     debug_assert_eq!(
                         self.equality_names.len(), data.eq_active_mut().len(),
                         "equality names length don't match the number of equalities found in model. This is a bug!"
@@ -1653,6 +1677,9 @@ impl ViewerUI {
                             .max_height(CAMERA_MODAL_MAX_HEIGHT)
                             .show(ui, |ui| {
                                 let lock = shared_viewer_state.lock_unpoison();
+                                if lock.model_reloaded {
+                                    return;
+                                }
                                 let model = lock.data_passive.model();
                                 let nbody = model.nbody();
 

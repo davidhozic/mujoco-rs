@@ -193,11 +193,15 @@ The compiled |mj_model| can also be swapped into a running simulation using
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` or
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_swap_model`,
 as described in the :ref:`basic_sim` chapter. The swap keeps the existing |mj_data|, so it accepts
-only a model with the same signature. The signature covers the element tree, the ``nq`` of each
-joint and the type of each sensor. Most attribute changes therefore keep it, while an added or
-deleted element, a joint type change that alters ``nq`` (for example ``hinge`` to ``ball``) or a
-changed sensor type changes it; ``swap_model`` then panics and ``try_swap_model`` returns
-``MjDataError::SignatureMismatch``.
+only a compatible model, which can be checked by
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`.
+A compatible model keeps the element tree, the ``nq`` of each joint and
+the type of each sensor, and every size that fixes an |mj_data| buffer, such as ``nuserdata``,
+``na`` and ``nout``. Most attribute changes therefore keep compatibility, while an added or
+deleted element, a joint type change that alters ``nq`` (for example ``hinge`` to ``ball``), a
+changed sensor type or a changed actuator dynamics type breaks it; ``swap_model`` then panics and
+``try_swap_model`` returns
+:docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>IncompatibleModel`.
 
 
 Deleting elements

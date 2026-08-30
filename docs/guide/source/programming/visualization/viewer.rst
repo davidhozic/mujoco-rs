@@ -367,7 +367,8 @@ and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model
         lock.sync_model_stat(data.model_stat_mut());
     }).unwrap();
 
-This requires the ``M`` bound inside |mj_data| to be ``DerefMut<Target = MjModel>`` (e.g., ``Box<MjModel>``).
+This requires the ``M`` bound inside |mj_data| to be
+:docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut` (e.g., ``Box<MjModel>``).
 
 :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model` does all three in one
 call and also reloads the viewer's internal state when the model's ``signature()`` changed. It takes
@@ -402,10 +403,11 @@ Both :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
   UV texture coordinates, face-vertex indices, face-normal indices, face-texcoord indices,
   and convex hull graph data), so ``update_meshes_from`` issues several array copies.
 
-Both call paths require ``model.signature()`` to match the viewer's internal passive model
+Both call paths require ``model`` to be compatible with the viewer's internal passive model
+(:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`)
 and return ``Result<(), MjViewerError>`` ---
-:docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>SignatureMismatch` is returned when
-the signatures differ, and
+:docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>IncompatibleModel` is returned when
+the two models are not compatible, and
 :docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>IndexOutOfBounds` when the asset ID
 is out of range (singular methods only).
 If the model has been replaced or reloaded, call

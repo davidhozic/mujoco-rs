@@ -73,7 +73,8 @@ fn main() {
     /* Initialize the log backend and send MuJoCo messages to it */
     env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
     // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
-    install_logging_hook();
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
 
     /* Load the model and create data */
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
