@@ -12,7 +12,7 @@ update your library path. See :ref:`installation` for details.
 
 The FFI bindings follow the upstream API. This page gives no entry for an accessor that only
 mirrors a renamed, a removed or a resized MuJoCo field, and none for a shifted enum discriminant.
-For these changes, see MuJoCo's changelog for this release (and prior changelogs since MuJoCo 3.10.0+):
+For these changes, see MuJoCo's changelog for this release:
 https://mujoco.readthedocs.io/en/3.12.0/changelog.html
 
 
@@ -52,8 +52,7 @@ The variant is renamed in :docs-rs:`~mujoco_rs::error::<enum>MjDataError`,
 :docs-rs:`~mujoco_rs::error::<enum>MjModelError`,
 :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError` and
 :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`. It now also fires for two models that share
-a signature but need different buffer sizes, so a program that treated an equal signature as
-"safe to pair" must handle the error on that path too.
+a signature but need different buffer sizes.
 
 **Before:**
 
@@ -211,10 +210,8 @@ engine write more force outputs than the actuator owns.
 Unsafe mutation of three more ``MjModel`` tables
 ------------------------------------------------
 ``tex_type_mut``, ``sensor_intprm_mut`` and ``flex_elemlayer_mut`` are now ``unsafe fn``, for the
-same reason as ``actuator_gaintype_mut`` above. C sizes a buffer or indexes an array from the
-values of all three: a texture kind sets how many faces the upload reads, a sensor int parameter
-selects the object a sensor stage reads, and an element layer sets how many flex faces the scene
-builder emits.
+same reason as ``actuator_gaintype_mut`` above: C sizes a buffer or indexes an array from the
+value of each one.
 
 **Before:**
 
@@ -238,12 +235,10 @@ builder emits.
 
 Drawing an ``MjvFigure`` is ``unsafe``
 --------------------------------------
-``draw`` is now an ``unsafe fn``. ``linepnt`` is a public field, and C reads ``linedata[n][2*i]``
-for every ``i < linepnt[n]`` without an upper-bound check, so an entry above ``mjMAXLINEPNT``
-read past the row. Validating it would scan all ``mjMAXLINE`` entries on a per-frame path, so the
-bound is a caller precondition. ``push`` refuses to grow a plot that is already at capacity, so a
-figure filled only through the line-editing methods already satisfies it; a direct write to the
-public ``linepnt`` field is what needs the care.
+``draw`` is now an ``unsafe fn``. Every ``linepnt`` entry must stay within ``0..=mjMAXLINEPNT``,
+and the bound is a caller precondition. ``push`` refuses to grow a plot that is already at
+capacity, so a figure filled only through the line-editing methods already satisfies it; a direct
+write to the public ``linepnt`` field is what needs the care.
 
 **Before:**
 
@@ -589,8 +584,7 @@ stays ``Send`` and ``Sync``.
 
 ``MjsWrap::side_site_mut`` is removed
 -------------------------------------------
-Two wraps that name one site each handed out a ``&mut MjsSite`` for the same site. Read the name
-through the shared ``side_site`` and take the mutable borrow from the specification.
+Read the name through the shared ``side_site`` and take the mutable borrow from the specification.
 
 .. code-block:: rust
 
@@ -610,8 +604,7 @@ through the shared ``side_site`` and take the mutable borrow from the specificat
 ----------------------------------------------------------------------
 A body, geom, mesh, actuator and sensor embed a reference that names a plugin instance and carries
 no element of its own. The ``plugin`` and ``plugin_mut`` accessors return ``MjsPluginReference``,
-which keeps the instance name, the plugin name and the active flag, and which implements no
-``SpecItem`` method. Reach the instance itself through ``MjSpec::plugin``.
+which implements no ``SpecItem`` method. Reach the instance itself through ``MjSpec::plugin``.
 
 .. code-block:: rust
 
@@ -635,9 +628,7 @@ which keeps the instance name, the plugin name and the active flag, and which im
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecObject::<method>delete` keeps the shape of
 the removed ``SpecItem::delete``, so a call through the element handle needs no edit. Import
 :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecObject`, which ``mujoco_rs::prelude`` also
-exports. The method is no longer deprecated, and its safety contract is the one the guide states:
-delete each element at most once, and do not touch an element that the deletion of a body took out
-of the specification.
+exports.
 
 ``MjSpec::delete_element`` is deprecated. Delete through the handle instead.
 

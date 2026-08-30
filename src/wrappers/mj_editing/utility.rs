@@ -215,7 +215,7 @@ macro_rules! add_x_method {
             #[doc = concat!(
                 "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
                 "# Note\n",
-                "MuJoCo ends the process when the allocation fails, so this never fails."
+                "MuJoCo ends the process when the allocation fails."
             )]
             #[expect(deprecated, reason = "try_add_* keeps the implementation until it is removed")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
@@ -256,7 +256,7 @@ macro_rules! add_x_method_by_frame {
             #[doc = concat!(
                 "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
                 "# Note\n",
-                "MuJoCo ends the process when the allocation fails, so this never fails."
+                "MuJoCo ends the process when the allocation fails."
             )]
             #[expect(deprecated, reason = "try_add_* keeps the implementation until it is removed")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
@@ -307,7 +307,7 @@ macro_rules! add_x_method_no_default {
             #[doc = concat!(
                 "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
                 "# Note\n",
-                "MuJoCo ends the process when the allocation fails, so this never fails."
+                "MuJoCo ends the process when the allocation fails."
             )]
             #[expect(deprecated, reason = "try_add_* keeps the implementation until it is removed")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {

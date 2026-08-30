@@ -252,8 +252,6 @@ impl MjSpec {
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
-    /// # Returns
-    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the XML.
@@ -265,8 +263,6 @@ impl MjSpec {
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file, located in a virtual file system (`vfs`).
-    /// # Returns
-    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the XML.
@@ -295,8 +291,6 @@ impl MjSpec {
     }
 
     /// Creates a [`MjSpec`] from an `xml` string.
-    /// # Returns
-    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
     /// Returns [`MjEditError::ParseFailed`] if MuJoCo encounters an error parsing the string.
     /// # Panics
@@ -319,8 +313,6 @@ impl MjSpec {
     /// Parse and create a [`MjSpec`] from `filename`.
     /// The `content_type` controls the decoder to use.
     /// This is a wrapper around low-level method [`mj_parse`].
-    /// # Returns
-    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
@@ -332,8 +324,6 @@ impl MjSpec {
     }
 
     /// Same as [`MjSpec::from_parse`], except `filename` is taken from `vfs`.
-    /// # Returns
-    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
@@ -435,8 +425,6 @@ impl MjSpec {
     /// Compile [`MjSpec`] to [`MjModel`].
     /// A spec can be edited and compiled multiple times,
     /// returning a new mjModel instance that takes the edits into account.
-    /// # Returns
-    /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
     /// Returns [`MjEditError::CompileFailed`] if the model fails to compile, including when a
     /// texture has a builtin pattern set while its `nchannel` is less than 3, and when a texture
@@ -504,8 +492,6 @@ impl MjSpec {
     }
 
     /// Saves the spec to an XML file.
-    /// # Returns
-    /// `Ok(())` on success.
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::SaveFailed`] with MuJoCo's error message if saving fails.
@@ -536,8 +522,6 @@ impl MjSpec {
 
     /// Saves the spec to an XML string.
     /// `buffer_size` controls how many bytes are allocated for the output.
-    /// # Returns
-    /// On success, returns the generated XML string.
     /// # Errors
     /// - [`MjEditError::XmlBufferTooSmall`] when `buffer_size` is too small.
     ///   The `required_size` field uses `snprintf`-style semantics (bytes to write, excluding NUL),
@@ -662,8 +646,6 @@ impl MjSpec {
     }
 
     /// Fallible version of [`MjSpec::add_default`].
-    /// # Returns
-    /// On success, returns a mutable reference to the newly created [`MjsDefault`].
     /// # Errors
     /// Returns [`MjEditError::AlreadyExists`] when `class_name` already exists.
     /// Returns [`MjEditError::NotFound`] when `parent_class_name` doesn't exist.
@@ -1031,7 +1013,7 @@ impl MjsFrame {
     /// Add and return a child frame.
     ///
     /// # Note
-    /// MuJoCo ends the process when the allocation fails, so this never fails.
+    /// MuJoCo ends the process when the allocation fails.
     #[expect(deprecated, reason = "try_add_frame keeps the implementation until it is removed")]
     pub fn add_frame(&mut self) -> &mut MjsFrame {
         self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
@@ -2311,7 +2293,7 @@ impl MjsBody {
     /// Add and return a child frame.
     ///
     /// # Note
-    /// MuJoCo ends the process when the allocation fails, so this never fails.
+    /// MuJoCo ends the process when the allocation fails.
     #[expect(deprecated, reason = "try_add_frame keeps the implementation until it is removed")]
     pub fn add_frame(&mut self) -> &mut MjsFrame {
         self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")

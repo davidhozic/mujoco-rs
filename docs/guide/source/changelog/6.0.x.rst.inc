@@ -38,8 +38,7 @@
 *MuJoCo FFI upgraded to 3.12.0*
 
 - MuJoCo-rs now builds against MuJoCo 3.12.0 FFI, which rolls up the upstream 3.10.0,
-  3.11.0 and 3.12.0 releases. This is a breaking dependency-level change for consumers
-  tied to older MuJoCo C ABI details.
+  3.11.0 and 3.12.0 releases.
   This directly affects all the wrappers, separate changelog will not be provided.
   See MuJoCo's changelog for this release:
   https://mujoco.readthedocs.io/en/3.12.0/changelog.html
@@ -90,9 +89,8 @@
 
 *Relaxed* |mj_data| ``body_awake`` *view mutability*
 
-- The body views now hold ``awake`` as a :docs-rs:`~mujoco_rs::util::<struct>PointerViewMut`, which
-  matches the array accessor, already safe to mutate. Code that wrote through ``as_mut_slice`` must
-  drop the call and the surrounding ``unsafe``.
+- The body views now hold ``awake`` as a :docs-rs:`~mujoco_rs::util::<struct>PointerViewMut`. Code
+  that wrote through ``as_mut_slice`` must drop the call and the surrounding ``unsafe``.
 
 ``SpecItem::default`` *returns an* ``Option``
 
@@ -182,8 +180,7 @@
 
 - Every ``Mjs*`` element handle is now an opaque, zero-sized struct instead of an alias for the
   matching ``mujoco_c`` struct; |mjs_body| and
-  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsDefault` are examples. A handle still
-  travels only as ``&MjsX`` or ``&mut MjsX``, so wrapper code needs no change. It exposes its FFI
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsDefault` are examples. It exposes its FFI
   struct through ``ffi`` for reading and ``unsafe fn ffi_mut`` for writing, so code that hands a
   handle to a ``mujoco_c`` function needs an edit, see :ref:`migrate_6_0_0`. ``std::mem::swap`` on
   two handles used to exchange the contents of two elements; it now exchanges nothing.
@@ -195,8 +192,7 @@
 
 |mjs_wrap| *lost* ``side_site_mut``
 
-- Two wraps, that name one site, each handed out a mutable reference to it.
-  The shared :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsWrap::<method>side_site` is not removed.
+- The shared :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsWrap::<method>side_site` is not removed.
   Mutable references to sites are available through
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>site_mut`, see
   :ref:`migrate_6_0_0`.
@@ -251,9 +247,7 @@
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`
   :sup:`new` reports whether another |mj_model| can take the place of this one in an |mj_data| or
-  in a cached ``Info``. It compares the structure of the two models: the per-element tables and
-  types that place each element inside a packed array and fix what its state means, plus every
-  size that no table already determines.
+  in a cached ``Info``.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_asset_compatible_with_model`
   :sup:`new` is the weaker test the asset-upload methods need: it compares the mesh, texture and
   heightfield memory alone.
@@ -264,10 +258,8 @@
   holds. Use them to decide whether a scene needs to be rebuilt before an update or a merge.
 - Every ``Info`` gained an ``update_layout`` method, for example
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjBodyDataInfo::<method>update_layout`
-  :sup:`new`. After a model swap an ``Info`` compares the whole cached layout on every view; call
-  ``update_layout`` once against the new |mj_data| or |mj_model| to make that test a pointer
-  comparison again. It reports the same error as a view method when the new model is not
-  compatible.
+  :sup:`new`. Call ``update_layout`` once against the new |mj_data| or |mj_model| after a model
+  swap. It reports the same error as a view method when the new model is not compatible.
 
 *Viewer improvements*
 
@@ -275,9 +267,8 @@
   the left screen-edge, so the panel no longer needs the keyboard. The ``X`` key still toggles
   it. The panel now slides with an animation when it opens or closes.
 - The "Joint" window now lists every joint, and each joint is a collapsible section like an
-  actuator in the "Actuator" window. A ball joint and a free joint show all their position
-  components in one horizontal row, named ``x``, ``y``, ``z`` and ``qw``, ``qx``, ``qy``, ``qz``.
-  The window listed a slide joint and a hinge joint only before.
+  actuator in the "Actuator" window. The window listed a slide joint and a hinge joint only
+  before.
 - Each component of the "Joint" window now writes ``qpos``, so the window moves the model. The
   window was read-only before. A limited joint gets the joint limit as its slider range. Without
   a limit, a slide joint spans -1 to 1 and a hinge joint spans -pi to pi, as in MuJoCo's own
@@ -509,12 +500,9 @@
   the scene was created for.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>create_geom` now
   writes every field that :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjv_initGeom` leaves unwritten over
-  uninitialized memory: ``objtype`` becomes
-  :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtObj::<variant>mjOBJ_UNKNOWN`, ``objid``
-  becomes ``-1``, ``category`` becomes
-  :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjtCatBit::<variant>mjCAT_DECOR`,
-  ``segid`` becomes the geom's own index, and ``label``, ``camdist`` and ``transparent`` are
-  cleared. A ``mjCAT_DECOR`` geom casts no shadow.
+  uninitialized memory. ``category`` becomes
+  :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjtCatBit::<variant>mjCAT_DECOR`, and a
+  ``mjCAT_DECOR`` geom casts no shadow.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>new` now clears the
   geom, flex and skin buffers that :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjv_makeScene` allocates but
   never writes. A read before the first render returned uninitialized memory; it now returns
