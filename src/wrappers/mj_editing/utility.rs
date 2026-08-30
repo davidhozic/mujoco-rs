@@ -827,12 +827,6 @@ macro_rules! vec_vec_append {
                 // SAFETY: self.$name is a valid pointer for the lifetime of self.
                 unsafe { [<append_mjs_vec_vec_ $type>](value, self.ffi().$name) };
             }
-
-            #[doc = concat!("Set ", $comment, " (deprecated; use ", stringify!([<append_ $name>]), " instead).")]
-            #[deprecated(note = "use append_ instead of set_ for vector-of-vectors attributes", since = "3.0.0")]
-            pub fn [<set_ $name>](&mut self, value: &[$type]) {
-                self.[<append_ $name>](value);
-            }
         )*
     }};
 }

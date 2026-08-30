@@ -22,6 +22,39 @@ Minimum Rust version
 This release needs Rust **1.95**, up from 1.88. Run ``rustup update stable`` before you build.
 
 
+Items deprecated in 3.0.0 are removed
+---------------------------------------------------------
+Each one has carried a deprecation warning since 3.0.0. Switch to the replacement.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 50 50
+
+   * - Before
+     - After
+   * - ``mujoco_rs::get_mujoco_version()``
+     - ``mujoco_rs::mujoco_version()``
+   * - ``vfs.add_from_file(Some(dir), file)``
+     - ``vfs.add_file_from(dir, file)``
+   * - ``vfs.add_from_file(None, file)``
+     - ``vfs.add_file(file)``
+   * - ``renderer.sync(&mut data)``
+     - ``renderer.sync_data(&mut data)?; renderer.render()?``
+   * - ``MjvFigure::new()``
+     - ``MjvFigure::new_boxed()``
+   * - ``data.contacts()``
+     - ``data.contact()``
+   * - ``data.get_state(spec)``
+     - ``data.state(spec)``
+   * - ``skin.set_vertid(&ids)``
+     - ``skin.append_vertid(&ids)``
+   * - ``skin.set_vertweight(&weights)``
+     - ``skin.append_vertweight(&weights)``
+
+``MjRenderer::sync`` unwrapped both failures; ``sync_data`` and
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>render` return a ``Result`` each.
+
+
 Redundant dimension parameters removed
 ---------------------------------------------------------
 Four utility wrappers took a dimension that the slices they already take fix. Drop the argument;

@@ -3,6 +3,17 @@
 
 .. rubric:: Breaking changes
 
+*The items deprecated in 3.0.0 are removed*
+
+- ``mujoco_rs::get_mujoco_version`` (:docs-rs:`~mujoco_rs::<fn>mujoco_version`), |mj_vfs|'s
+  ``add_from_file`` (:docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>add_file`
+  and :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>add_file_from`),
+  ``MjRenderer::sync`` (:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`), ``MjvFigure::new``
+  (:docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`), |mj_data|'s ``contacts``
+  and ``get_state``, and ``MjsSkin::set_vertid`` and ``MjsSkin::set_vertweight``
+  (:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsSkin`) are gone.
+  See :ref:`migrate_6_0_0`.
+
 *Minimum-supported Rust version (MSRV) raised to 1.95*
 
 - `egui <https://docs.rs/egui/0.36.1/egui/>`_ 0.36 requires Rust 1.95, so the MSRV rose from 1.88

@@ -489,12 +489,6 @@ impl MjvFigure {
         }
     }
 
-    /// Instantiates a new figure with default values, allocated on the heap.
-    #[deprecated(since = "3.0.0", note = "use `new_boxed` instead")]
-    pub fn new() -> Box<Self> {
-        Self::new_boxed()
-    }
-
     /// Draws the 2D figure to the `viewport` on screen.
     ///
     /// Wraps [`mjr_figure`].

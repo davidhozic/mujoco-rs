@@ -618,18 +618,6 @@ impl MjRenderer {
         Ok(())
     }
 
-    /// Update the scene with new data and render it.
-    ///
-    /// # Panics
-    /// Panics if syncing the data or performing the render step fails (e.g. the OpenGL
-    /// context cannot be made current). Use [`MjRenderer::sync_data`] + [`MjRenderer::render`]
-    /// instead.
-    #[deprecated(note = "replaced with sync_data + render", since = "3.0.0")]
-    pub fn sync<M: ModelType>(&mut self, data: &mut MjData<M>) {
-        self.sync_data(data).unwrap();
-        self.render().unwrap();
-    }
-
     /// Return a flattened RGB image of the scene.
     pub fn rgb_flat(&self) -> Option<&[u8]> {
         self.rgb.as_deref()
