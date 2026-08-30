@@ -147,13 +147,15 @@ pub fn mju_dot(vec1: &[MjtNum], vec2: &[MjtNum]) -> MjtNum {
 /// Multiply matrix and vector: `res = mat * vec`.
 ///
 /// # Panics
-/// Panics if `mat` does not have `res.len() * vec.len()` elements.
+/// - Panics if `mat` does not have `res.len() * vec.len()` elements.
+/// - Panics if `res` or `vec` has more than [`i32::MAX`] elements.
 pub fn mju_mul_mat_vec(res: &mut [MjtNum], mat: &[MjtNum], vec: &[MjtNum]) {
     let nr = res.len();
     let nc = vec.len();
-    assert!(mat.len() == nr * nc);
+    assert!(mat.len() == nr.strict_mul(nc));
+    let (nr, nc) = (checked_c_len::<i32>(nr), checked_c_len::<i32>(nc));
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
-    unsafe { mujoco_c::mju_mulMatVec(res.as_mut_ptr(), mat.as_ptr(), vec.as_ptr(), nr as i32, nc as i32) }
+    unsafe { mujoco_c::mju_mulMatVec(res.as_mut_ptr(), mat.as_ptr(), vec.as_ptr(), nr, nc) }
 }
 
 /// Multiply transposed matrix and vector: `res = mat^T * vec`.
@@ -164,9 +166,10 @@ pub fn mju_mul_mat_vec(res: &mut [MjtNum], mat: &[MjtNum], vec: &[MjtNum]) {
 pub fn mju_mul_mat_t_vec(res: &mut [MjtNum], mat: &[MjtNum], vec: &[MjtNum]) {
     let nc = res.len();
     let nr = vec.len();
-    assert!(mat.len() == nr * nc);
+    assert!(mat.len() == nr.strict_mul(nc));
+    let (nr, nc) = (checked_c_len::<i32>(nr), checked_c_len::<i32>(nc));
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
-    unsafe { mujoco_c::mju_mulMatTVec(res.as_mut_ptr(), mat.as_ptr(), vec.as_ptr(), nr as i32, checked_c_len(nc)) }
+    unsafe { mujoco_c::mju_mulMatTVec(res.as_mut_ptr(), mat.as_ptr(), vec.as_ptr(), nr, nc) }
 }
 
 /// Multiply square matrix with vectors on both sides: returns `vec1^T * mat * vec2`.
@@ -174,21 +177,25 @@ pub fn mju_mul_mat_t_vec(res: &mut [MjtNum], mat: &[MjtNum], vec: &[MjtNum]) {
 /// # Panics
 /// - Panics if `vec1` and `vec2` have different lengths.
 /// - Panics if `mat` does not have `vec1.len() * vec1.len()` elements (must be square).
+/// - Panics if `vec1` has more than [`i32::MAX`] elements.
 pub fn mju_mul_vec_mat_vec(vec1: &[MjtNum], mat: &[MjtNum], vec2: &[MjtNum]) -> MjtNum {
     let n = vec1.len();
-    assert!(vec2.len() == n && mat.len() == n * n);
+    assert!(vec2.len() == n && mat.len() == n.strict_mul(n));
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
-    unsafe { mujoco_c::mju_mulVecMatVec(vec1.as_ptr(), mat.as_ptr(), vec2.as_ptr(), n as i32) }
+    unsafe { mujoco_c::mju_mulVecMatVec(vec1.as_ptr(), mat.as_ptr(), vec2.as_ptr(), checked_c_len(n)) }
 }
 
 /// Transpose a matrix: `res = mat^T`.
 ///
 /// # Panics
-/// Panics if `res` or `mat` does not have `nr * nc` elements.
+/// - Panics if `res` or `mat` does not have `nr * nc` elements.
+/// - Panics if `nr` or `nc` has more than [`i32::MAX`] elements, or if their product overflows.
 pub fn mju_transpose(res: &mut [MjtNum], mat: &[MjtNum], nr: usize, nc: usize) {
-    assert!(res.len() == nr * nc && mat.len() == nr * nc);
+    let size = nr.strict_mul(nc);
+    assert!(res.len() == size && mat.len() == size);
+    let (nr, nc) = (checked_c_len::<i32>(nr), checked_c_len::<i32>(nc));
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
-    unsafe { mujoco_c::mju_transpose(res.as_mut_ptr(), mat.as_ptr(), nr as i32, nc as i32) }
+    unsafe { mujoco_c::mju_transpose(res.as_mut_ptr(), mat.as_ptr(), nr, nc) }
 }
 
 /// Symmetrize a square matrix: `res = (mat + mat^T)/2`.
@@ -196,10 +203,12 @@ pub fn mju_transpose(res: &mut [MjtNum], mat: &[MjtNum], nr: usize, nc: usize) {
 /// The order `n` is `res.len().isqrt()`.
 ///
 /// # Panics
-/// Panics if `res` is not a perfect square in length, or if `mat` has a different length.
+/// - Panics if `res` is not a perfect square in length, or if `mat` has a different length.
+/// - Panics if `res` has more than [`i32::MAX`] elements.
 pub fn mju_symmetrize(res: &mut [MjtNum], mat: &[MjtNum]) {
     let n = res.len().isqrt();
     assert!(res.len() == n * n && mat.len() == n * n);
+    checked_c_len::<i32>(res.len());
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
     unsafe { mujoco_c::mju_symmetrize(res.as_mut_ptr(), mat.as_ptr(), n as i32) }
 }
@@ -228,7 +237,6 @@ pub unsafe fn mju_sym2dense(
 ) {
     let n = rownnz.len();
     assert!(res.len() == n * n);
-    // C clears the n*n elements of res, so the product is the count that must fit.
     checked_c_len::<i32>(res.len());
     assert!(rowadr.len() == n);
     assert!(mat.len() == colind.len());
@@ -251,7 +259,6 @@ pub unsafe fn mju_sym2dense(
 pub fn mju_eye(mat: &mut [MjtNum]) {
     let n = mat.len().isqrt();
     assert!(mat.len() == n * n);
-    // C clears the n*n elements of mat, so the product is the count that must fit.
     checked_c_len::<i32>(mat.len());
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
     unsafe { mujoco_c::mju_eye(mat.as_mut_ptr(), n as i32) }
@@ -264,14 +271,15 @@ pub fn mju_eye(mat: &mut [MjtNum]) {
 /// - Panics if `mat2` does not have `c1 * c2` elements.
 /// - Panics if `res` does not have `r1 * c2` elements.
 /// - Panics if `res` has more than [`i32::MAX`] elements.
+/// - Panics if `r1`, `c1` or `c2` is larger than [`i32::MAX`], or if any product overflows.
 pub fn mju_mul_mat_mat(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r1: usize, c1: usize, c2: usize) {
-    assert!(mat1.len() == r1 * c1);
-    assert!(mat2.len() == c1 * c2);
-    assert!(res.len() == r1 * c2);
-    // C clears the r1*c2 elements of res, so the product is the count that must fit.
+    assert!(mat1.len() == r1.strict_mul(c1));
+    assert!(mat2.len() == c1.strict_mul(c2));
+    assert!(res.len() == r1.strict_mul(c2));
     checked_c_len::<i32>(res.len());
+    let (r1, c1, c2) = (checked_c_len::<i32>(r1), checked_c_len::<i32>(c1), checked_c_len::<i32>(c2));
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
-    unsafe { mujoco_c::mju_mulMatMat(res.as_mut_ptr(), mat1.as_ptr(), mat2.as_ptr(), r1 as i32, c1 as i32, c2 as i32) }
+    unsafe { mujoco_c::mju_mulMatMat(res.as_mut_ptr(), mat1.as_ptr(), mat2.as_ptr(), r1, c1, c2) }
 }
 
 /// Multiply matrices, second transposed: `res = mat1 * mat2^T`.
@@ -280,12 +288,14 @@ pub fn mju_mul_mat_mat(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r1:
 /// - Panics if `mat1` does not have `r1 * c1` elements.
 /// - Panics if `mat2` does not have `r2 * c1` elements.
 /// - Panics if `res` does not have `r1 * r2` elements.
+/// - Panics if `r1`, `c1` or `r2` is larger than [`i32::MAX`], or if any product overflows.
 pub fn mju_mul_mat_mat_t(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r1: usize, c1: usize, r2: usize) {
-    assert!(mat1.len() == r1 * c1);
-    assert!(mat2.len() == r2 * c1);
-    assert!(res.len() == r1 * r2);
+    assert!(mat1.len() == r1.strict_mul(c1));
+    assert!(mat2.len() == r2.strict_mul(c1));
+    assert!(res.len() == r1.strict_mul(r2));
+    let (r1, c1, r2) = (checked_c_len::<i32>(r1), checked_c_len::<i32>(c1), checked_c_len::<i32>(r2));
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
-    unsafe { mujoco_c::mju_mulMatMatT(res.as_mut_ptr(), mat1.as_ptr(), mat2.as_ptr(), r1 as i32, c1 as i32, r2 as i32) }
+    unsafe { mujoco_c::mju_mulMatMatT(res.as_mut_ptr(), mat1.as_ptr(), mat2.as_ptr(), r1, c1, r2) }
 }
 
 /// Multiply matrices, first transposed: `res = mat1^T * mat2`.
@@ -295,14 +305,15 @@ pub fn mju_mul_mat_mat_t(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r
 /// - Panics if `mat2` does not have `r1 * c2` elements.
 /// - Panics if `res` does not have `c1 * c2` elements.
 /// - Panics if `res` has more than [`i32::MAX`] elements.
+/// - Panics if `r1`, `c1` or `c2` is larger than [`i32::MAX`], or if any product overflows.
 pub fn mju_mul_mat_t_mat(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r1: usize, c1: usize, c2: usize) {
-    assert!(mat1.len() == r1 * c1);
-    assert!(mat2.len() == r1 * c2);
-    assert!(res.len() == c1 * c2);
-    // C clears the c1*c2 elements of res, so the product is the count that must fit.
+    assert!(mat1.len() == r1.strict_mul(c1));
+    assert!(mat2.len() == r1.strict_mul(c2));
+    assert!(res.len() == c1.strict_mul(c2));
     checked_c_len::<i32>(res.len());
+    let (r1, c1, c2) = (checked_c_len::<i32>(r1), checked_c_len::<i32>(c1), checked_c_len::<i32>(c2));
     // SAFETY: pointers and lengths derived from valid slices; matching lengths asserted above.
-    unsafe { mujoco_c::mju_mulMatTMat(res.as_mut_ptr(), mat1.as_ptr(), mat2.as_ptr(), r1 as i32, c1 as i32, c2 as i32) }
+    unsafe { mujoco_c::mju_mulMatTMat(res.as_mut_ptr(), mat1.as_ptr(), mat2.as_ptr(), r1, c1, c2) }
 }
 
 /// Compute `res = mat^T * diag * mat` if `diag` is Some, else `res = mat^T * mat`.
@@ -314,20 +325,19 @@ pub fn mju_mul_mat_t_mat(res: &mut [MjtNum], mat1: &[MjtNum], mat2: &[MjtNum], r
 /// - Panics if `mat` does not have `nr * nc` elements.
 /// - Panics if `diag` is `Some` and does not have `nr` elements.
 /// - Panics if `res` has more than [`i32::MAX`] elements.
+/// - Panics if `nr` is larger than [`i32::MAX`], or if `nr * nc` overflows.
 pub fn mju_sqr_mat_td(res: &mut [MjtNum], mat: &[MjtNum], diag: Option<&[MjtNum]>, nr: usize) {
     let nc = res.len().isqrt();
-    // Without this the caller loses the non-square rejection that the old `nc` parameter gave.
     assert!(res.len() == nc * nc);
-    assert!(mat.len() == nr * nc);
-    // C clears the nc*nc elements of res, so the product is the count that must fit.
+    assert!(mat.len() == nr.strict_mul(nc));
     checked_c_len::<i32>(res.len());
     if let Some(d) = diag {
         assert!(d.len() == nr);
-        // SAFETY: all arguments are valid references; nullable parameters use null when None.
-        unsafe { mujoco_c::mju_sqrMatTD(res.as_mut_ptr(), mat.as_ptr(), d.as_ptr(), nr as i32, nc as i32) }
-    } else {
-        unsafe { mujoco_c::mju_sqrMatTD(res.as_mut_ptr(), mat.as_ptr(), ptr::null(), nr as i32, nc as i32) }
     }
+    let (nr, nc) = (checked_c_len::<i32>(nr), checked_c_len::<i32>(nc));
+    let diag_ptr = diag.map_or(ptr::null(), |d| d.as_ptr());
+    // SAFETY: all arguments are valid references; nullable parameters use null when None.
+    unsafe { mujoco_c::mju_sqrMatTD(res.as_mut_ptr(), mat.as_ptr(), diag_ptr, nr, nc) }
 }
 
 

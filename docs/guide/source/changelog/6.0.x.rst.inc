@@ -174,6 +174,16 @@
   taken before the pipeline stage that computes the array returns uninitialized memory. Run that
   stage first, see :ref:`migrate_6_0_0`.
 
+*Two model view fields moved to the read-only list*
+
+- ``intprm`` on :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjSensorModelViewMut` and
+  ``type`` on :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTextureModelViewMut` are now
+  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`, matching the array accessors
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>sensor_intprm_mut` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tex_type_mut`. MuJoCo reads
+  both values as unchecked sizes, so writing one needs ``as_mut_slice`` and explicit ``unsafe``,
+  see :ref:`migrate_6_0_0`. ``zero`` no longer touches either field.
+
 .. rubric:: New dependencies
 
 - Added `log <https://docs.rs/log/0.4.34/log/>`__ as a mandatory dependency.
@@ -389,6 +399,11 @@
   :docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>InvalidHistoryCursor` :sup:`new`.
   MuJoCo reads the buffer at ``(cursor + 1 + logical) % nsample``, and C's ``%`` keeps the sign of
   its left operand, so a cursor below zero produced a negative index.
+- The matrix helpers of :docs-rs:`mujoco_rs::wrappers::fun::utility` now reject a dimension above
+  ``i32::MAX`` and a size product that overflows, instead of passing a wrapped size to MuJoCo.
+- A view of a |mj_data| field that MuJoCo allocates in the arena is now empty until the stage that
+  allocates it, for every element id. Only ``efcadr`` on
+  :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjTendonDataView` is affected.
 
 *Viewer*
 

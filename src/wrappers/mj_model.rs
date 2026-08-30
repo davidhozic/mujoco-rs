@@ -2051,9 +2051,9 @@ info_with_view!(Model, sensor,
      [sensor_] interval: MjtNum,
 	 [sensor_] user: MjtNum,
 	 [sensor_] datatype: MjtDataType [force],
-	 [sensor_] needstage: MjtStage [force],
-	 [sensor_] intprm: i32],
-	[[sensor_] r#type: MjtSensor [force],
+	 [sensor_] needstage: MjtStage [force]],
+	[[sensor_] intprm: i32,
+	 [sensor_] r#type: MjtSensor [force],
 	 [sensor_] objid: i32,
 	 [sensor_] refid: i32,
 	 [sensor_] objtype: MjtObj [force],
@@ -2114,9 +2114,9 @@ info_with_view!(Model, tendon,
 	[]);
 
 info_with_view!(Model, texture,
-	[[tex_] colorspace: MjtColorSpace [force],
-	 [tex_] r#type: MjtTexture [force]],
-	[[tex_] height: i32,
+	[[tex_] colorspace: MjtColorSpace [force]],
+	[[tex_] r#type: MjtTexture [force],
+	 [tex_] height: i32,
 	 [tex_] width: i32,
 	 [tex_] nchannel: i32,
 	 [tex_] adr: MjtSize,
@@ -4529,5 +4529,4 @@ mod tests {
         // SAFETY: no accessor of this block needs a pipeline stage; the compiler fills the model.
         unsafe { model.probe_dynamic_arrays_unsafe() };
     }
-
 }

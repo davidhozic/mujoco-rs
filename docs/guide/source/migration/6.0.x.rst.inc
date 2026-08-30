@@ -514,3 +514,24 @@ claim the marker for a hand-written handle.
 
     // SAFETY: deref returns the model that the handle owns, for every call.
     unsafe impl ModelType for MyHandle {}
+
+Two model view fields became read-only
+-------------------------------------------
+MuJoCo reads ``sensor_intprm`` as an output-length bitfield and ``tex_type`` as the texture upload
+kind, and it bounds neither, so both now sit in the read-only list of their view.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+    use mujoco_rs::wrappers::mj_model::MjtTexture;
+
+    fn set_kind(model: &mut MjModel) {
+        let info = model.texture("tex").unwrap();
+
+        // Before
+        // info.view_mut(model).r#type[0] = MjtTexture::mjTEXTURE_CUBE;
+
+        // After
+        // SAFETY: the caller keeps the kind consistent with the texture's own width and height.
+        unsafe { info.view_mut(model).r#type.as_mut_slice()[0] = MjtTexture::mjTEXTURE_CUBE };
+    }

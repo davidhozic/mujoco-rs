@@ -77,7 +77,8 @@ const OUTPUT_DIR: &str = "./output_contact_forces/";
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
     // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
-    install_logging_hook();
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
 
     // Create output directory.
     fs::create_dir_all(OUTPUT_DIR).expect("failed to create output directory");

@@ -91,6 +91,24 @@ pub(crate) fn checked_c_len<T: TryFrom<usize>>(len: usize) -> T {
 }
 
 
+/// Offsets a raw array pointer, keeping a null pointer null.
+///
+/// MuJoCo leaves an arena pointer null until the stage that allocates the array, and every
+/// `PointerView` maps a null pointer to an empty slice. A plain `add` turns null into a non-null
+/// dangling address and so defeats that guard.
+///
+/// # Safety
+/// When `ptr` is not null, `ptr.add(offset)` must stay inside the same allocation.
+pub(crate) unsafe fn offset_or_null<T>(ptr: *mut T, offset: usize) -> *mut T {
+    if ptr.is_null() {
+        ptr
+    } else {
+        // SAFETY: the caller keeps the offset inside the allocation.
+        unsafe { ptr.add(offset) }
+    }
+}
+
+
 /// Sets or clears a bit flag based on a boolean value.
 ///
 /// # Examples
@@ -347,14 +365,14 @@ macro_rules! view_creator {
                 $view {
                     $(
                         $field: $ptr_view(
-                            $crate::maybe_force_cast!($data.[<$($prefix_field)? $field>].add($self.$field.0), $type_ $(, $force)?),
+                            $crate::maybe_force_cast!($crate::util::offset_or_null($data.[<$($prefix_field)? $field>], $self.$field.0), $type_ $(, $force)?),
                             $self.$field.1,
                             std::marker::PhantomData
                         ),
                     )*
                     $(
                         $field_ro: $ptr_view_ro(
-                            $crate::maybe_force_cast!($data.[<$($prefix_field_ro)? $field_ro>].add($self.$field_ro.0), $type_ro $(, $force_ro)?),
+                            $crate::maybe_force_cast!($crate::util::offset_or_null($data.[<$($prefix_field_ro)? $field_ro>], $self.$field_ro.0), $type_ro $(, $force_ro)?),
                             $self.$field_ro.1,
                             std::marker::PhantomData
                         ),
@@ -362,7 +380,7 @@ macro_rules! view_creator {
                     $(
                         $opt_field: if $self.$opt_field.1 > 0 {
                             Some($ptr_view(
-                                $crate::maybe_force_cast!($data.[<$($prefix_opt_field)? $opt_field>].add($self.$opt_field.0), $type_opt $(, $force_opt)?),
+                                $crate::maybe_force_cast!($crate::util::offset_or_null($data.[<$($prefix_opt_field)? $opt_field>], $self.$opt_field.0), $type_opt $(, $force_opt)?),
                                 $self.$opt_field.1,
                                 std::marker::PhantomData
                             ))

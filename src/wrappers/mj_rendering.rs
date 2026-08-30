@@ -82,6 +82,11 @@ impl Default for MjrRectangle {
 /// - All method calls, including `drop`, must happen on that same thread while the GL
 ///   context is still current. Dropping `MjrContext` on any other thread, or after the GL
 ///   context has been released, causes undefined behaviour.
+///
+/// # Model compatibility
+/// Every method that takes a `&MjModel` must receive a model compatible with the one that built
+/// this context. It is recommended to recreate the context when a model with a different structure
+/// is used.
 #[derive(Debug)]
 pub struct MjrContext {
     ffi: Box<mjrContext>
@@ -102,6 +107,10 @@ impl MjrContext {
     /// this function. Calling without an active GL context causes MuJoCo to abort the process.
     /// The same GL context must also remain current when this `MjrContext` is dropped, and must
     /// remain on the same thread for the lifetime of this value.
+    /// 
+    /// Any models used in the methods of [`MjrContext`] must be structurally
+    /// compatible with the `model`. The methods will not check compatibility
+    /// on their own.
     pub unsafe fn new(model: &MjModel) -> Self {
         // SAFETY: caller guarantees a valid GL context is current (documented above).
         // Box::new_uninit is fully initialized by mjr_defaultContext + mjr_makeContext

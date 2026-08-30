@@ -167,8 +167,12 @@ pub fn log_config() -> MjLogConfig {
 }
 
 /// Set default handler configuration. Wraps [`mju_setLogConfig`].
-pub fn set_log_config(config: MjLogConfig) {
-    // SAFETY: mju_setLogConfig copies the struct by value; no aliasing.
+///
+/// # Safety
+/// This must not be used in a multi-threaded way. No MuJoCo items can be used
+/// while this is called.
+pub unsafe fn set_log_config(config: MjLogConfig) {
+    // SAFETY: the caller holds every thread that reads the global configuration.
     unsafe { mju_setLogConfig(config) }
 }
 
