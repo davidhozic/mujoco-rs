@@ -564,3 +564,68 @@ and ``unsafe fn ffi_mut`` for writing.
 
 ``std::mem::swap`` on two handles used to exchange the contents of two elements. It now
 exchanges nothing.
+
+``MjSpec`` is no longer ``Send``
+-------------------------------------------
+A model that attaches another model, through ``<asset><model file=.../></asset>``, keeps the child
+specification shared between a spec and every clone of it, behind a reference count that MuJoCo
+does not synchronise. Keep the specification on one thread and move the compiled |mj_model|, which
+stays ``Send`` and ``Sync``.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn build(path: &str) -> MjModel {
+        let mut spec = MjSpec::from_xml(path).unwrap();
+
+        // Before
+        // std::thread::spawn(move || spec.compile().unwrap()).join().unwrap()
+
+        // After
+        let model = spec.compile().unwrap();
+        std::thread::spawn(move || model).join().unwrap()
+    }
+
+``MjsWrap::side_site_mut`` is removed
+-------------------------------------------
+Two wraps that name one site each handed out a ``&mut MjsSite`` for the same site. Read the name
+through the shared ``side_site`` and take the mutable borrow from the specification.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn widen(spec: &mut MjSpec) {
+        // Before
+        // let site = spec.tendon_mut("t").unwrap().wrap_mut(0).side_site_mut().unwrap();
+        // site.with_size([0.1, 0.1, 0.1]);
+
+        // After
+        let name = spec.tendon("t").unwrap().wrap(0).side_site().unwrap().name().to_owned();
+        spec.site_mut(&name).unwrap().with_size([0.1, 0.1, 0.1]);
+    }
+
+``MjsPlugin`` no longer stands for the plugin that an element embeds
+----------------------------------------------------------------------
+A body, geom, mesh, actuator and sensor embed a reference that names a plugin instance and carries
+no element of its own. The ``plugin`` and ``plugin_mut`` accessors return ``MjsPluginReference``,
+which keeps the instance name, the plugin name and the active flag, and which implements no
+``SpecItem`` method. Reach the instance itself through ``MjSpec::plugin``.
+
+.. code-block:: rust
+
+    use mujoco_rs::wrappers::mj_editing::MjsPluginReference;
+    use mujoco_rs::prelude::*;
+
+    fn configure(spec: &mut MjSpec) {
+        let geom = spec.world_body_mut().add_geom();
+
+        // Before
+        // let plugin: &mut MjsPlugin = geom.plugin_mut();
+
+        // After
+        let plugin: &mut MjsPluginReference = geom.plugin_mut();
+        plugin.set_name("instance");
+        plugin.set_active(true);
+    }

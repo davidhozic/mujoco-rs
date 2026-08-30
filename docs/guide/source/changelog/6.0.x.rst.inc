@@ -188,6 +188,25 @@
   handle to a ``mujoco_c`` function needs an edit, see :ref:`migrate_6_0_0`. ``std::mem::swap`` on
   two handles used to exchange the contents of two elements; it now exchanges nothing.
 
+|mj_spec| *is no longer* ``Send``
+
+- A model that attaches another model keeps the child specification shared between a spec and every
+  clone of it, behind a reference count that MuJoCo does not synchronize.
+
+|mjs_wrap| *lost* ``side_site_mut``
+
+- Two wraps, that name one site, each handed out a mutable reference to it.
+  The shared :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsWrap::<method>side_site` is not removed.
+  Mutable references to sites are available through
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>site_mut`, see
+  :ref:`migrate_6_0_0`.
+
+|mjs_plugin| *no longer stands for the plugin that an element embeds*
+
+- The ``plugin`` and ``plugin_mut`` accessors of a body, geom, mesh, actuator and sensor now hand
+  out :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsPluginReference` :sup:`new`.
+  See :ref:`migrate_6_0_0`.
+
 .. rubric:: New dependencies
 
 - Added `log <https://docs.rs/log/0.4.34/log/>`__ as a mandatory dependency.
@@ -519,6 +538,10 @@
   carries no name of its own:
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>name` reports the wrapped
   object's name.
+- Closed a heap over-read reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile`. It now rejects a
+  texture whose ``nchannel``, ``width`` or ``height`` is negative, and one whose
+  ``nchannel * width * height`` product does not fit in an ``i32``.
 
 *Utility functions*
 

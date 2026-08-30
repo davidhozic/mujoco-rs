@@ -30,7 +30,7 @@ use crate::mujoco_c::*;
 use crate::getter_setter;
 
 // Re-export with lowercase 'f' to fix method generation
-use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
+use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjs_asHField as mjs_asHfield};
 use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
 
 /* Validation helpers */
@@ -137,7 +137,7 @@ impl MjsOrientation {
     }
 }
 
-mjs_opaque!(MjsCompiler, mjsCompiler,
+mjs_opaque!(MjsCompiler <= mjsCompiler,
     "Compiler options. An opaque handle for the FFI type [`mjsCompiler`], reached through \
 [`ffi`](Self::ffi).");
 
@@ -194,17 +194,6 @@ pub type MjsAuthored = mjsAuthored;
 #[derive(Debug)]
 pub struct MjSpec(NonNull<mjSpec>);
 
-// SAFETY: `MjSpec` owns its `mjSpec` exclusively, so moving it between threads transfers
-// sole ownership and cannot race.
-//
-// It is intentionally NOT `Sync`. `clone`/`try_clone` produce a faithful, independent copy, but
-// the C++ copy constructor behind `mj_copySpec` is not strictly `const` on the source: for every
-// actuator it calls `ForgetKeyframes`, which clears two `std::map` keyframe-resolution caches
-// (`act_`/`ctrl_`). Those maps are empty for a normally-built spec, yet `std::map::clear` rewrites
-// the tree header unconditionally, so two threads sharing a `&MjSpec` and cloning concurrently
-// would race on those writes (a data race, though no spec data is lost). Hence the type stays `!Sync`.
-unsafe impl Send for MjSpec {}
-
 impl MjSpec {
     /// Creates an empty [`MjSpec`].
     ///
@@ -240,9 +229,9 @@ impl MjSpec {
 
     /// Creates a deep copy of this [`MjSpec`].
     ///
-    /// Internally calls `mj_copySpec`, which invokes the C++ copy constructor
-    /// on the underlying model.  This is a proper deep copy: the returned spec
-    /// is fully independent from the original.
+    /// Internally calls `mj_copySpec`, which invokes the C++ copy constructor on the underlying
+    /// model. A child specification that the model attaches from another file stays shared with
+    /// the original, behind MuJoCo's own reference count.
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
@@ -469,17 +458,31 @@ impl MjSpec {
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
     /// Returns [`MjEditError::CompileFailed`] if the model fails to compile, including when a
-    /// texture has a builtin pattern set while its `nchannel` is less than 3.
+    /// texture has a builtin pattern set while its `nchannel` is less than 3, and when a texture
+    /// has a negative dimension or a pixel count that does not fit in an [`i32`].
     pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
-        // The builtin-texture generators (`Builtin2D`/`BuiltinCube`) write a hard-coded 3 bytes per
-        // pixel, but MuJoCo only allocates `nchannel*width*height` bytes and (unlike the file/data
-        // paths) does not check `nchannel >= 3` for the builtin path, so `nchannel < 3` heap-overflows
-        // during compilation. Both setters (`set_nchannel`, `set_builtin`) are safe and independent,
-        // so this cross-field invariant can only be enforced at the compile choke point.
+        // A texture carries four independent safe setters whose values MuJoCo only checks against
+        // each other during compilation. Both cross-field invariants can therefore only be
+        // enforced at this choke point.
         for texture in self.texture_iter() {
+            // The builtin generators (`Builtin2D`/`BuiltinCube`) write a hard-coded 3 bytes per
+            // pixel, but MuJoCo allocates `nchannel*width*height` bytes and, unlike the file and
+            // data paths, does not check `nchannel >= 3` for the builtin path.
             if texture.builtin() != MjtBuiltin::mjBUILTIN_NONE && texture.nchannel() < 3 {
                 return Err(MjEditError::CompileFailed(
                     "texture with a builtin pattern requires nchannel >= 3".to_owned(),
+                ));
+            }
+
+            let (nchannel, width, height) = (texture.nchannel(), texture.width(), texture.height());
+            if nchannel < 0 || width < 0 || height < 0 {
+                return Err(MjEditError::CompileFailed(
+                    "texture nchannel, width and height must be non-negative".to_owned(),
+                ));
+            }
+            if i64::from(nchannel) * i64::from(width) * i64::from(height) > i64::from(i32::MAX) {
+                return Err(MjEditError::CompileFailed(
+                    "texture nchannel*width*height must fit in an i32".to_owned(),
                 ));
             }
         }
@@ -834,7 +837,7 @@ impl Clone for MjSpec {
 /***************************
 ** Site specification
 ***************************/
-mjs_struct!(Site [SpecObject]);
+mjs_struct!(Site with SpecObject: MjsSite <= mjsSite);
 impl MjsSite {
     getter_setter! {
         [&] with, get, [
@@ -864,7 +867,7 @@ impl MjsSite {
 /***************************
 ** Joint specification
 ***************************/
-mjs_struct!(Joint [SpecObject]);
+mjs_struct!(Joint with SpecObject: MjsJoint <= mjsJoint);
 impl MjsJoint {
     getter_setter! {
         [&] with, get, [
@@ -919,7 +922,7 @@ impl MjsJoint {
 /***************************
 ** Geom specification
 ***************************/
-mjs_struct!(Geom [SpecObject]);
+mjs_struct!(Geom with SpecObject: MjsGeom <= mjsGeom);
 impl MjsGeom {
     getter_setter! {
         [&] with, get, [
@@ -942,7 +945,7 @@ impl MjsGeom {
         ]
     }
 
-    nested_handle!(plugin: MjsPlugin; "sdf plugin.");
+    nested_handle!(plugin: MjsPluginReference; "sdf plugin.");
 
     getter_setter!([&] with, get, set, [
         [ffi, ffi_mut] type_ + _: MjtGeom;            "geom type.";
@@ -974,7 +977,7 @@ impl MjsGeom {
 /***************************
 ** Camera specification
 ***************************/
-mjs_struct!(Camera [SpecObject]);
+mjs_struct!(Camera with SpecObject: MjsCamera <= mjsCamera);
 impl MjsCamera {
     getter_setter! {
         [&] with, get, [
@@ -1009,7 +1012,7 @@ impl MjsCamera {
 /***************************
 ** Light specification
 ***************************/
-mjs_struct!(Light [SpecObject]);
+mjs_struct!(Light with SpecObject: MjsLight <= mjsLight);
 impl MjsLight {
     getter_setter! {
         [&] with, get, [
@@ -1049,7 +1052,7 @@ impl MjsLight {
 /***************************
 ** Frame specification
 ***************************/
-mjs_struct!(Frame [SpecObject]);
+mjs_struct!(Frame with SpecObject: MjsFrame <= mjsFrame);
 impl MjsFrame {
     add_x_method_by_frame! { body, site, joint, geom, camera, light }
 
@@ -1105,7 +1108,7 @@ impl MjsFrame {
 /***************************
 ** Actuator specification
 ***************************/
-mjs_struct!(Actuator [SpecObject]);
+mjs_struct!(Actuator with SpecObject: MjsActuator <= mjsActuator);
 impl MjsActuator {
     getter_setter! {
         [&] with, get, [
@@ -1128,7 +1131,7 @@ impl MjsActuator {
         ]
     }
 
-    nested_handle!(plugin: MjsPlugin; "actuator plugin.");
+    nested_handle!(plugin: MjsPluginReference; "actuator plugin.");
 
     getter_setter!([&] with, get, set, [
         [ffi, ffi_mut] gaintype: MjtGain;             "gain type.";
@@ -1538,7 +1541,7 @@ impl MjsActuator {
 /***************************
 ** Sensor specification
 ***************************/
-mjs_struct!(Sensor [SpecObject]);
+mjs_struct!(Sensor with SpecObject: MjsSensor <= mjsSensor);
 impl MjsSensor {
     getter_setter! {
         [&] with, get, [
@@ -1552,7 +1555,7 @@ impl MjsSensor {
         ]
     }
 
-    nested_handle!(plugin: MjsPlugin; "sensor plugin.");
+    nested_handle!(plugin: MjsPluginReference; "sensor plugin.");
 
     getter_setter!([&] with, get, set, [
         [ffi, ffi_mut] type_ + _: MjtSensor;          "sensor type.";
@@ -1581,7 +1584,7 @@ impl MjsSensor {
 /***************************
 ** Flex specification
 ***************************/
-mjs_struct!(Flex [SpecObject]);
+mjs_struct!(Flex with SpecObject: MjsFlex <= mjsFlex);
 impl MjsFlex {
     getter_setter! {
         [&] with, get, [
@@ -1662,7 +1665,7 @@ impl MjsFlex {
 /***************************
 ** Pair specification
 ***************************/
-mjs_struct!(Pair [SpecObject]);
+mjs_struct!(Pair with SpecObject: MjsPair <= mjsPair);
 impl MjsPair {
     getter_setter! {
         [&] with, get, [
@@ -1691,7 +1694,7 @@ impl MjsPair {
 /***************************
 ** Exclude specification
 ***************************/
-mjs_struct!(Exclude [SpecObject]);
+mjs_struct!(Exclude with SpecObject: MjsExclude <= mjsExclude);
 impl MjsExclude {
     string_set_get_with! {[&]
         bodyname1; "name of body 1.";
@@ -1702,7 +1705,7 @@ impl MjsExclude {
 /***************************
 ** Equality specification
 ***************************/
-mjs_struct!(Equality [SpecObject]);
+mjs_struct!(Equality with SpecObject: MjsEquality <= mjsEquality);
 impl MjsEquality {
     getter_setter! {
         [&] with, get, [
@@ -1730,7 +1733,7 @@ impl MjsEquality {
 /***************************
 ** Tendon specification
 ***************************/
-mjs_struct!(Tendon [SpecObject]);
+mjs_struct!(Tendon with SpecObject: MjsTendon <= mjsTendon);
 impl MjsTendon {
     getter_setter! {
         [&] with, get, [
@@ -1939,7 +1942,7 @@ impl MjsTendon {
 /***************************
 ** Wrap specification
 ***************************/
-mjs_struct!(Wrap {
+mjs_struct!(MjsWrap <= mjsWrap {
     /// A wrap carries no name of its own; [`SpecItem::name`] reports the wrapped object's name.
     ///
     /// # Errors
@@ -1968,16 +1971,12 @@ impl MjsWrap {
     /// Return the side site element. Returns `None` when the wrap is not a sphere or cylinder
     /// wrap, when it holds no side site, or when the named site is missing from the spec (MuJoCo
     /// logs a warning in that last case).
+    ///
+    /// There is no mutable counterpart due to alising issues.
+    /// Edit the site through [`MjSpec::site_mut`] instead.
     pub fn side_site(&self) -> Option<&MjsSite> {
         let ptr = unsafe { mjs_getWrapSideSite(self.ffi()) };
         unsafe { MjsSite::from_ffi_ptr(ptr) }
-    }
-
-    /// Return the side site element mutably. Returns `None` under the same conditions as
-    /// [`MjsWrap::side_site`].
-    pub fn side_site_mut(&mut self) -> Option<&mut MjsSite> {
-        let ptr = unsafe { mjs_getWrapSideSite(self.ffi()) };
-        unsafe { MjsSite::from_ffi_ptr_mut(ptr) }
     }
 
     /// Return the wrap divisor. For a wrap whose type is not [`MjtWrap::mjWRAP_PULLEY`], MuJoCo
@@ -1996,7 +1995,7 @@ impl MjsWrap {
 /***************************
 ** Numeric specification
 ***************************/
-mjs_struct!(Numeric [SpecObject]);
+mjs_struct!(Numeric with SpecObject: MjsNumeric <= mjsNumeric);
 impl MjsNumeric {
     getter_setter! {
         [&] with, get, set, [
@@ -2012,7 +2011,7 @@ impl MjsNumeric {
 /***************************
 ** Text specification
 ***************************/
-mjs_struct!(Text [SpecObject]);
+mjs_struct!(Text with SpecObject: MjsText <= mjsText);
 impl MjsText {
     string_set_get_with! {[&]
         data; "text string.";
@@ -2022,7 +2021,7 @@ impl MjsText {
 /***************************
 ** Tuple specification
 ***************************/
-mjs_struct!(Tuple [SpecObject]);
+mjs_struct!(Tuple with SpecObject: MjsTuple <= mjsTuple);
 impl MjsTuple {
     vec_set! {
         // `objtype` is stored as a raw C `int` and, at `compile()` time, used to index the model
@@ -2046,7 +2045,7 @@ impl MjsTuple {
 /***************************
 ** Key specification
 ***************************/
-mjs_struct!(Key [SpecObject]);
+mjs_struct!(Key with SpecObject: MjsKey <= mjsKey);
 impl MjsKey {
     getter_setter! {
         [&] with, get, set, [
@@ -2067,7 +2066,28 @@ impl MjsKey {
 /***************************
 ** Plugin specification
 ***************************/
-mjs_struct!(Plugin [SpecObject]);
+mjs_struct!(Plugin with SpecObject: MjsPlugin <= mjsPlugin);
+
+mjs_opaque!(MjsPluginReference <= mjsPlugin,
+    "Reference to the plugin instance that an element embeds.\n\n\
+     A body, geom, mesh, actuator or sensor names the instance it uses through this reference. \
+     The reference carries no element of its own: MuJoCo resolves the `element` field to the \
+     [`MjsPlugin`] instance that the name selects. Reach the instance itself through \
+     [`MjSpec::plugin`].");
+
+impl MjsPluginReference {
+    string_set_get_with! {[&]
+        name; "instance name.";
+        plugin_name; "plugin name.";
+    }
+
+    getter_setter! {
+        [&] with, get, set, [
+            [ffi, ffi_mut] active: bool; "is the plugin active.";
+        ]
+    }
+}
+
 impl MjsPlugin {
     string_set_get_with! {[&]
         name; "instance name.";
@@ -2086,7 +2106,7 @@ impl MjsPlugin {
 /***************************
 ** Mesh specification
 ***************************/
-mjs_struct!(Mesh [SpecObject]);
+mjs_struct!(Mesh with SpecObject: MjsMesh <= mjsMesh);
 impl MjsMesh {
     getter_setter! {
         [&] with, get, [
@@ -2101,7 +2121,7 @@ impl MjsMesh {
         ]
     }
 
-    nested_handle!(plugin: MjsPlugin; "sdf plugin.");
+    nested_handle!(plugin: MjsPluginReference; "sdf plugin.");
 
     getter_setter! {
         [&] with, get, set, [
@@ -2147,7 +2167,7 @@ impl MjsMesh {
 /***************************
 ** Hfield specification
 ***************************/
-mjs_struct!(Hfield [SpecObject]);
+mjs_struct!(HField with SpecObject: MjsHfield <= mjsHField);
 impl MjsHfield {
     getter_setter! {
         [&] with, get, [
@@ -2175,7 +2195,7 @@ impl MjsHfield {
 /***************************
 ** Skin specification
 ***************************/
-mjs_struct!(Skin [SpecObject]);
+mjs_struct!(Skin with SpecObject: MjsSkin <= mjsSkin);
 impl MjsSkin {
     getter_setter! {
         [&] with, get, [
@@ -2222,7 +2242,7 @@ impl MjsSkin {
 /***************************
 ** Texture specification
 ***************************/
-mjs_struct!(Texture [SpecObject]);
+mjs_struct!(Texture with SpecObject: MjsTexture <= mjsTexture);
 
 /// # Note: cube-map files
 ///
@@ -2292,7 +2312,7 @@ impl MjsTexture {
 /***************************
 ** Material specification
 ***************************/
-mjs_struct!(Material [SpecObject]);
+mjs_struct!(Material with SpecObject: MjsMaterial <= mjsMaterial);
 
 /// # Note: texture assignment
 ///
@@ -2334,7 +2354,7 @@ impl MjsMaterial {
 /***************************
 ** Body specification
 ***************************/
-mjs_struct!(Body [SpecObject] {
+mjs_struct!(Body with SpecObject: MjsBody <= mjsBody {
     // Override the delete method to prevent deletion of world.
     /// Delete this body from its parent spec.
     ///
@@ -2654,7 +2674,7 @@ impl MjsBody {
         ]
     }
 
-    nested_handle!(plugin: MjsPlugin; "passive force plugin.");
+    nested_handle!(plugin: MjsPluginReference; "passive force plugin.");
 
     // Plain types with normal getters and setters.
     getter_setter! {

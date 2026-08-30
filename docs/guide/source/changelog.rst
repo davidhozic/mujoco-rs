@@ -19,6 +19,7 @@ Changelog
 .. |mjr_context| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`
 .. |mjs_light| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsLight`
 .. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsActuator`
+.. |mjs_plugin| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsPlugin`
 
 
 This page contains the summary of changes made throughout different releases of the MuJoCo-rs crate.

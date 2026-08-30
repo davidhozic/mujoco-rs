@@ -32,7 +32,7 @@ macro_rules! default_accessor_wrapper {
 // This is implemented manually since we can't directly borrow check if something is using the default.
 // We also override the delete method to return an error instead of deleting.
 
-mjs_opaque!(MjsDefault, mjsDefault,
+mjs_opaque!(MjsDefault <= mjsDefault,
     "Default specification. An opaque handle for the FFI type [`mjsDefault`], reached through \
 [`ffi`](Self::ffi).");
 
@@ -104,9 +104,3 @@ impl SpecItem for MjsDefault {
         Err(MjEditError::UnsupportedOperation)
     }
 }
-
-// MjsDefault is intentionally NEITHER Send NOR Sync, for the same reason as the Mjs*
-// element handles: it is a raw pointer into the shared mjSpec arena and its `&mut self`
-// mutators reach into model-global state. The raw-pointer field already makes it
-// auto-`!Send + !Sync`; do NOT add `unsafe impl Send`/`Sync` here. The owning `MjSpec`
-// remains `Send` (but not `Sync`), so the spec itself can still move between threads.

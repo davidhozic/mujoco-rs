@@ -414,7 +414,7 @@ macro_rules! find_x_method_direct {
 /// exchanging two elements would leave each specification holding pointers that the other owns.
 /// Do not give the handle a field of type `$raw`, and do not add [`DerefMut`](std::ops::DerefMut).
 macro_rules! mjs_opaque {
-    ($handle:ident, $raw:ident, $doc:expr) => {
+    ($handle:ident <= $raw:ident, $doc:expr) => {
         #[doc = $doc]
         #[repr(C)]
         pub struct $handle {
@@ -488,18 +488,42 @@ macro_rules! nested_handle {
 }
 
 
-/// Creates a wrapper around a mjs$ffi_name item. It also implements the methods `info()` and
-/// `set_info()`, and the traits `Sealed` and [`SpecItem`](super::traits::SpecItem).
+/// Creates the wrapper `$handle` around the FFI struct `$raw`. It also implements the methods
+/// `info()` and `set_info()`, and the traits `Sealed` and [`SpecItem`](super::traits::SpecItem).
 /// The handles are deliberately neither [`Send`] nor [`Sync`].
-/// 
-/// When `[SpecObject]` is given to the right of `ffi_name`, the SpecObject trait also gets implemented.
+///
+/// A leading `$kind with SpecObject:` also implements [`SpecObject`](super::traits::SpecObject).
+/// `$kind` is the element kind as MuJoCo camel-cases it (`Texture`, `HField`), which names both the
+/// [`MjtObj`] variant and the `mjs_as*` function. A trailing brace block adds methods to the
+/// `SpecItem` implementation.
 macro_rules! mjs_struct {
-    ($ffi_name:ident $([$SpecObject:ident])? $({ $($extra_trait_methods:tt)* })?) => {paste::paste!{
-        mjs_opaque!([<Mjs $ffi_name>], [<mjs $ffi_name>], concat!(
-            stringify!($ffi_name), " specification. An opaque handle for the FFI type [`",
-            stringify!([<mjs $ffi_name>]), "`], reached through [`ffi`](Self::ffi)."));
+    (
+        $kind:ident with SpecObject: $handle:ident <= $raw:ident
+        $({ $($extra_trait_methods:tt)* })?
+    ) => {paste::paste!{
+        mjs_struct!($handle <= $raw $({ $($extra_trait_methods)* })?);
 
-        impl [<Mjs $ffi_name>] {
+        impl SpecObject for $handle {
+            const OBJ_TYPE: MjtObj = MjtObj::[<mjOBJ_ $kind:upper>];
+            unsafe fn from_element_as_ptr_mut(element: *mut mjsElement) -> *mut Self {
+                // The annotation ties the conversion function to `$raw`, so a call site cannot
+                // pair the handle with another element's kind.
+                let raw: *mut $raw = unsafe { [<mjs_as $kind>](element) };
+                // SAFETY: the handle stands at the address of the struct that mjs_as returns.
+                raw.cast::<Self>()
+            }
+        }
+    }};
+
+    (
+        $handle:ident <= $raw:ident
+        $({ $($extra_trait_methods:tt)* })?
+    ) => {
+        mjs_opaque!($handle <= $raw, concat!(
+            stringify!($handle), " specification. An opaque handle for the FFI type [`",
+            stringify!($raw), "`], reached through [`ffi`](Self::ffi)."));
+
+        impl $handle {
             /// Return the message appended to compiler errors.
             /// # Panics
             /// Panics if it contains invalid UTF-8.
@@ -517,9 +541,9 @@ macro_rules! mjs_struct {
             }
         }
 
-        impl crate::wrappers::mj_editing::traits::sealed::Sealed for [<Mjs $ffi_name>] {}
+        impl crate::wrappers::mj_editing::traits::sealed::Sealed for $handle {}
 
-        impl SpecItem for [<Mjs $ffi_name>] {
+        impl SpecItem for $handle {
             fn element_pointer(&self) -> *const mjsElement {
                 self.ffi().element
             }
@@ -528,29 +552,7 @@ macro_rules! mjs_struct {
                 $extra_trait_methods
             )*)?
         }
-
-
-        $(
-            impl $SpecObject for [<Mjs $ffi_name>] {
-                const OBJ_TYPE: MjtObj = MjtObj::[<mjOBJ_ $ffi_name:upper>];
-                unsafe fn from_element_as_ptr_mut(element: *mut mjsElement) -> *mut Self {
-                    // SAFETY: the handle stands at the address of the struct that mjs_as returns.
-                    unsafe { [<mjs_as $ffi_name:camel>](element) }.cast::<Self>()
-                }
-            }
-        )?
-
-        // Mjs* handles are intentionally NEITHER Send NOR Sync. Each is a thin alias over
-        // a raw pointer into a single shared mjSpec/mjCModel arena, and its `&mut self`
-        // mutators (e.g. `SpecItem::set_name` -> `mjs_setName`) reach through that pointer
-        // to read every sibling and write model-global state (`mjCModel::CheckRepeat` and
-        // the shared `errInfo`). Letting a handle --- or a reference to one --- cross a
-        // thread boundary would let two such accesses race on the one arena from safe code.
-        // The raw-pointer field already makes the type auto-`!Send + !Sync`, so we simply
-        // do not add the impls. Do NOT add `unsafe impl Send`/`Sync` here: the owning
-        // `MjSpec` is itself `Send` (but `!Sync`), so a whole spec can still move between
-        // threads --- handles derived from it just stay on the thread that created them.
-    }};
+    };
 }
 
 /// Implements the userdata method.
