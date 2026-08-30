@@ -651,7 +651,7 @@ impl MjRenderer {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the rendered RGB image.
     /// # Errors
-    /// - [`RendererError::DimensionMismatch`] if `WIDTH * HEIGHT` doesn't match the rendered pixel count .
+    /// - [`RendererError::DimensionMismatch`] if `WIDTH * HEIGHT` doesn't match the rendered pixel count.
     /// - [`RendererError::RgbDisabled`] if RGB rendering is disabled.
     pub fn try_rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[[u8; 3]; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.rgb_flat() {

@@ -27,8 +27,7 @@ use std::path::Path;
 /// (see [`MjvScene::is_compatible_with_scene`]).
 pub fn sync_geoms(src: &MjvScene, dst: &mut MjvScene) -> Result<(), MjSceneError> {
     // A copied mjvGeom keeps its objid, which the renderer uses as an unchecked index into the
-    // DESTINATION scene's flex and skin arrays; those are sized by the model the scene was built
-    // for, and are null when that model has none.
+    // DESTINATION scene's flex and skin arrays, sized by the model that scene was built for.
     assert!(
         src.is_compatible_with_scene(dst),
         "the two scenes were created for models that are not compatible"
@@ -157,8 +156,7 @@ mod tests {
     use crate::wrappers::mj_model::{MjModel, MjtGeom};
 
     /// A copied geom keeps its `objid`, which the renderer uses as an unchecked index into the
-    /// destination scene's flex and skin arrays, so the two scenes must belong to one model. The
-    /// pair below differs in the flex arrays alone: a model that holds no flex sizes them to zero.
+    /// destination scene's flex and skin arrays, so the two scenes must belong to one model.
     #[test]
     #[should_panic(expected = "models that are not compatible")]
     fn test_sync_geoms_cross_model_panics() {

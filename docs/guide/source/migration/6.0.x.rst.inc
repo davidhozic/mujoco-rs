@@ -454,7 +454,7 @@ the lock.
     });
 
 Port the widgets themselves against egui's changelog:
-https://github.com/emilk/egui/blob/main/CHANGELOG.md
+https://github.com/emilk/egui/blob/0.36.1/CHANGELOG.md
 
 
 Model handles are bound by ``ModelType``
@@ -535,3 +535,32 @@ kind, and it bounds neither, so both now sit in the read-only list of their view
         // SAFETY: the caller keeps the kind consistent with the texture's own width and height.
         unsafe { info.view_mut(model).r#type.as_mut_slice()[0] = MjtTexture::mjTEXTURE_CUBE };
     }
+
+Element handles are opaque types
+-------------------------------------------
+An ``Mjs*`` element handle is no longer an alias for its ``mujoco_c`` struct. It is an opaque,
+zero-sized type that stands at the address of that struct, so every wrapper method keeps its
+signature and code that stays inside the wrapper API needs no edit.
+
+Two things change. Naming the FFI struct where the handle belongs no longer compiles, and passing
+a handle straight to a ``mujoco_c`` function no longer coerces. Call ``ffi`` for the FFI struct,
+and ``unsafe fn ffi_mut`` for writing.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+    use mujoco_rs::mujoco_c::mjs_sensorDim;
+
+    fn dimension(spec: &MjSpec) -> i32 {
+        let sensor = spec.sensor("s").unwrap();
+
+        // Before
+        // unsafe { mjs_sensorDim(sensor) }
+
+        // After
+        // SAFETY: the borrow of the sensor keeps it alive for the call.
+        unsafe { mjs_sensorDim(sensor.ffi()) }
+    }
+
+``std::mem::swap`` on two handles used to exchange the contents of two elements. It now
+exchanges nothing.

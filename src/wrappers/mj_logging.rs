@@ -108,9 +108,8 @@ impl MjLogMessage {
 
     /// Maps a nullable caller-owned `&'static CStr` to the raw pointer stored in the message.
     ///
-    /// The `'static CStr` bound is what keeps the stored pointer sound: the data is
-    /// NUL-terminated (C reads `body`/`func`/`file` as C strings) and lives for the whole
-    /// program, so the pointer can never dangle and C never reads out of bounds.
+    /// The `'static CStr` bound keeps the stored pointer sound: the data is NUL-terminated and
+    /// lives for the whole program.
     fn cstr_ptr(s: Option<&'static CStr>) -> *const c_char {
         s.map_or(ptr::null(), CStr::as_ptr)
     }

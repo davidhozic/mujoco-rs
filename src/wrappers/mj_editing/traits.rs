@@ -70,12 +70,11 @@ pub trait SpecItem: Sized + sealed::Sealed {
     /// camera, light, actuator, pair, equality, tendon, mesh and material. Every other element,
     /// a frame included, returns `None`.
     fn default(&self) -> Option<&MjsDefault> {
-        // mjs_getDefault looks the element's classname up in mjCModel::def_map and returns null on
-        // a miss. An element added without a default class keeps the empty classname it starts
-        // with.
+        // mjs_getDefault looks the classname up in mjCModel::def_map and returns null on a miss;
+        // an element added without a default class keeps the empty classname it starts with.
         let ptr = unsafe { mjs_getDefault(self.element_pointer()) };
         // SAFETY: a non-null return points to the mjsDefault owned by a live mjCDef of the spec.
-        (!ptr.is_null()).then(|| unsafe { &*ptr })
+        unsafe { crate::wrappers::mj_editing::MjsDefault::from_ffi_ptr(ptr) }
     }
 
     /// Returns the numeric id for this element, if assigned.
@@ -153,8 +152,7 @@ pub trait SpecItem: Sized + sealed::Sealed {
     /// # Safety
     /// Same contract as [`SpecItem::delete`]: must be called at most once per item; any use
     /// of `self` after a successful call is **use-after-free** undefined behavior. The item must
-    /// not be a [`MjsDefault`]: `mjs_getSpec` casts to `mjCBase`, which `mjCDef` does not derive
-    /// from, so it would read the spec pointer at an unrelated offset.
+    /// not be a [`MjsDefault`].
     unsafe fn __delete_default__(&mut self) -> Result<(), MjEditError> {
         // SAFETY: element_mut_pointer() is valid (struct invariant); mjs_getSpec
         // returns the owning spec, also valid.

@@ -61,22 +61,22 @@
 
 *MjsTuple::set_objtype now takes ``&[MjtObj]`` and is fallible*
 
-- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTuple::<method>set_objtype` now accepts
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTuple::<method>set_objtype` now accepts
   ``&[MjtObj]`` instead of ``&[i32]`` and is a **safe** ``fn`` returning ``Result<(), MjEditError>``
   instead of ``()``. Out-of-range object types are rejected with ``MjEditError::InvalidParameter``.
   See the migration guide.
 
 *MjsSensor::set_objtype / set_reftype are now fallible*
 
-- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsSensor::<method>set_objtype` and
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsSensor::<method>set_reftype` now return
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor::<method>set_objtype` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor::<method>set_reftype` now return
   ``Result<(), MjEditError>`` instead of ``()``, rejecting out-of-range object types with
   ``MjEditError::InvalidParameter``. The builder counterparts ``with_objtype`` / ``with_reftype``
   keep their signature but **panic** on a rejected value. See the migration guide.
 
 *MjsNumeric::set_size is now fallible*
 
-- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsNumeric::<method>set_size` now returns
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsNumeric::<method>set_size` now returns
   ``Result<(), MjEditError>`` instead of ``()``, rejecting a negative size with
   ``MjEditError::InvalidParameter`` (a negative size triggers an out-of-bounds write in the model
   compiler). See the migration guide.
@@ -202,8 +202,8 @@ New error variants in pre-existing enums:
 
 *Fallible tendon wrap accessors*
 
-- Added :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>try_wrap` and
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>try_wrap_mut`, the fallible
+- Added :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>try_wrap` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>try_wrap_mut`, the fallible
   counterparts of ``wrap`` / ``wrap_mut``. They return
   ``Result<&MjsWrap, MjEditError>`` and yield ``MjEditError::IndexOutOfBounds`` for an out-of-range
   index instead of panicking. A new
@@ -268,8 +268,8 @@ runtime.
 
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>timer`
     for CTIMER values.
-  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child` and
-    :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child_mut`
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>child` and
+    :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>child_mut`
     for named child lookup.
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>id`
     for retrieving optional element IDs.
@@ -280,7 +280,7 @@ runtime.
 - Added the missing frame-finding methods to |mj_spec|: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`
   and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame_mut`.
 
-- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator` now exposes the full family of
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsActuator` now exposes the full family of
   actuator-configuration helpers covering MuJoCo's ``mjs_setToX`` C API: ``set_to_motor``,
   ``set_to_position``, ``set_to_int_velocity``, ``set_to_velocity``, ``set_to_damper``,
   ``set_to_cylinder``, ``set_to_muscle``, ``set_to_adhesion``, and ``set_to_dc_motor``. Helpers

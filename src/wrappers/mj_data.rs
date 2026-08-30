@@ -2018,15 +2018,7 @@ impl<M: ModelType + Clone> MjData<M> {
     /// Fallible version of [`Clone::clone`].
     ///
     /// # Note
-    ///
-    /// <div class="warning">
-    ///
-    /// MuJoCo cannot report a failure here: `mj_copyData` raises `mjERROR` when an allocation
-    /// fails, and the default error handler exits the process, so this method never returns
-    /// `Err`. Prefer [`Clone::clone`]. This method may be undeprecated in the future if MuJoCo's
-    /// upstream C code is changed to report the failure recoverably.
-    ///
-    /// </div>
+    /// MuJoCo ends the process when the allocation fails, so this never returns `Err`.
     ///
     /// # Errors
     /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate

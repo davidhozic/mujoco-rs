@@ -280,10 +280,8 @@ pub(crate) struct MjModelLayout {
 }
 
 impl PartialEq for MjModelLayout {
-    /// `signature` takes no part. `mjModel.signature` (mjmodel.h:919) belongs to no `MJMODEL_*`
-    /// macro in `mjxmacro.h`, so `mj_saveModel` does not write it and `mj_loadModel` leaves it
-    /// zero; the only writer is the compiler (`user_model.cc:5625`). Testing it would refuse a
-    /// model against its own saved copy. The entries below pin everything the hash covers.
+    /// `signature` takes no part: only the compiler writes it, so `mj_loadModel` leaves it zero
+    /// and a test would refuse a model against its own saved copy.
     fn eq(&self, other: &Self) -> bool {
             self.nexclude == other.nexclude && self.nmat == other.nmat && self.npair == other.npair && self.nskin == other.nskin &&
             self.nkey == other.nkey && self.nmocap == other.nmocap && self.nuserdata == other.nuserdata && self.nhistory == other.nhistory &&
@@ -729,15 +727,7 @@ impl MjModel {
     ///
     /// Wraps [`mj_copyModel`].
     /// # Note
-    ///
-    /// <div class="warning">
-    ///
-    /// MuJoCo cannot report a failure here: `mj_copyModel` raises `mjERROR` when it cannot make
-    /// the model, and the default error handler exits the process, so this method never returns
-    /// `Err`. Prefer [`Clone::clone`]. This method may be undeprecated in the future if MuJoCo's
-    /// upstream C code is changed to report the failure recoverably.
-    ///
-    /// </div>
+    /// MuJoCo ends the process when the allocation fails, so this never returns `Err`.
     ///
     /// # Errors
     /// Returns [`MjModelError::AllocationFailed`] if MuJoCo returns a null model.

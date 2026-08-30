@@ -17,13 +17,13 @@ macro_rules! default_accessor_wrapper {
             pub fn $name(&self) -> &[<Mjs $name:camel>] {
                 // SAFETY: MuJoCo's mjCDef::PointToLocal() always initializes these
                 // pointers to non-null addresses of the owning mjCDef's local members.
-                unsafe { &*self.$name }
+                unsafe { [<Mjs $name:camel>]::from_ffi_ptr(self.ffi().$name) }.unwrap()
             }
 
             #[doc = concat!("Returns a mutable reference to ", stringify!($name), "'s defaults.")]
             pub fn [<$name _mut>](&mut self) -> &mut [<Mjs $name:camel>] {
                 // SAFETY: see above.
-                unsafe { &mut *self.$name }
+                unsafe { [<Mjs $name:camel>]::from_ffi_ptr_mut(self.ffi().$name) }.unwrap()
             }
         )*
     }};
@@ -32,8 +32,9 @@ macro_rules! default_accessor_wrapper {
 // This is implemented manually since we can't directly borrow check if something is using the default.
 // We also override the delete method to return an error instead of deleting.
 
-/// Default specification. This is a type alias to [`mjsDefault`].
-pub type MjsDefault = mjsDefault;
+mjs_opaque!(MjsDefault, mjsDefault,
+    "Default specification. An opaque handle for the FFI type [`mjsDefault`], reached through \
+[`ffi`](Self::ffi).");
 
 impl MjsDefault {
     default_accessor_wrapper! {
@@ -46,7 +47,7 @@ impl super::traits::sealed::Sealed for MjsDefault {}
 
 impl SpecItem for MjsDefault {
     fn element_pointer(&self) -> *const mjsElement {
-        self.element
+        self.ffi().element
     }
 
     fn default(&self) -> Option<&MjsDefault> {

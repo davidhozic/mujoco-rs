@@ -7,9 +7,9 @@ Model editing
 .. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
 .. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
-.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`
-.. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator`
-.. |mjs_flex| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsFlex`
+.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`
+.. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsActuator`
+.. |mjs_flex| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsFlex`
 
 The most general way to create an |mj_model| instance is by loading an XML file
 via :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml`.
@@ -281,7 +281,7 @@ Iterators
 ================
 Since MuJoCo-rs 1.5.0, it is possible to also iterate existing :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
 items (geoms, joints, etc.). Iterators exist on :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
-and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`.
+and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`.
 
 To iterate over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec` items, call
 ``[item_type]_iter`` for immutable iteration or ``[item_type]_iter_mut`` for mutable iteration,
@@ -295,7 +295,7 @@ with ``[item_type]`` replaced by geom, body, etc.
     }
     // ...
 
-Iteration over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody` items can be used in a similar way.
+Iteration over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody` items can be used in a similar way.
 The only difference is an additional boolean parameter, which enables recursive iteration when ``true``.
 
 .. code-block:: rust
@@ -326,8 +326,8 @@ Existing elements can be looked up by name. |mj_spec| exposes a finder method (a
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>geom`, and
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`. Within a body,
 a body of its subtree is found with
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child` /
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child_mut`.
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>child` /
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>child_mut`.
 The search is recursive, and it returns the body itself when its own name matches.
 Every finder returns an ``Option`` that is ``None`` when no element with that name exists.
 
@@ -391,8 +391,8 @@ Procedural flex generation
 A `flexcomp <https://mujoco.readthedocs.io/en/3.12.0/XMLreference.html#body-flexcomp>`_ procedurally
 generates a deformable |mjs_flex| together with its supporting bodies, joints, and optional
 equality constraints --- handy for cloth, ropes, and soft volumes. In MuJoCo-rs it is created with
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>add_flexcomp` (or the fallible
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>try_add_flexcomp`).
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_flexcomp` (or the fallible
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>try_add_flexcomp`).
 
 The generation is configured through a ``Default``-able
 :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjFlexcompConfig`, using the same ``with_*``

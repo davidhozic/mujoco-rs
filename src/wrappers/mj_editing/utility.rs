@@ -205,7 +205,7 @@ macro_rules! add_x_method {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.ffi_mut(), ptr::null()) };
                 // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null
                 // the pointee is properly aligned and initialized by C++ operator new.
-                unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
+                unsafe { [<Mjs $name:camel>]::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
             }
         )*
     }};
@@ -267,9 +267,9 @@ macro_rules! add_x_method_by_frame {
                     if ptr.is_null() {
                         return Err(MjEditError::AllocationFailed);
                     }
-                    let set_result = mjs_setFrame((*ptr).element, self);
+                    let set_result = mjs_setFrame((*ptr).element, self.ffi_mut());
                     debug_assert_eq!(set_result, 0, "mjs_setFrame failed; element or frame is invalid");
-                    Ok(&mut *ptr)
+                    Ok([<Mjs $name:camel>]::from_ffi_ptr_mut(ptr).unwrap())
                 }
             }
         )*
@@ -314,7 +314,7 @@ macro_rules! add_x_method_no_default {
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.0.as_ptr()) };
-                unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
+                unsafe { [<Mjs $name:camel>]::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
             }
         )*
     }};
@@ -338,7 +338,7 @@ macro_rules! find_x_method {
                         None
                     }
                     else {
-                        [<mjs_as $item:camel>](ptr).as_ref()
+                        [<Mjs $item:camel>]::from_ffi_ptr([<mjs_as $item:camel>](ptr))
                     }
                 }
             }
@@ -356,7 +356,7 @@ macro_rules! find_x_method {
                         None
                     }
                     else {
-                        [<mjs_as $item:camel>](ptr).as_mut()
+                        [<Mjs $item:camel>]::from_ffi_ptr_mut([<mjs_as $item:camel>](ptr))
                     }
                 }
             }
@@ -381,7 +381,7 @@ macro_rules! find_x_method_direct {
                         None
                     }
                     else {
-                        ptr.as_ref()
+                        [<Mjs $item:camel>]::from_ffi_ptr(ptr)
                     }
                 }
             }
@@ -399,11 +399,91 @@ macro_rules! find_x_method_direct {
                         None
                     }
                     else {
-                        ptr.as_mut()
+                        [<Mjs $item:camel>]::from_ffi_ptr_mut(ptr)
                     }
                 }
             }
         )*
+    }};
+}
+
+
+/// Declares an opaque zero-sized element handle that stands at the address of `$raw`.
+///
+/// The handle must stay zero-sized, because [`std::mem::swap`] copies `size_of::<T>()` bytes and
+/// exchanging two elements would leave each specification holding pointers that the other owns.
+/// Do not give the handle a field of type `$raw`, and do not add [`DerefMut`](std::ops::DerefMut).
+macro_rules! mjs_opaque {
+    ($handle:ident, $raw:ident, $doc:expr) => {
+        #[doc = $doc]
+        #[repr(C)]
+        pub struct $handle {
+            // A private field with no constructor keeps the handle non-instantiable downstream.
+            _data: (),
+            // Removes the automatic `Send`, `Sync` and `Unpin`; the element belongs to its spec.
+            _marker: std::marker::PhantomData<(*mut u8, std::marker::PhantomPinned)>,
+        }
+
+        impl $handle {
+            /// Returns the FFI struct that the handle stands on.
+            pub fn ffi(&self) -> &$raw {
+                // SAFETY: the handle stands at the address of a live, aligned `$raw`, and the cast
+                // keeps the provenance of the pointer that built the handle.
+                unsafe { &*(self as *const Self).cast::<$raw>() }
+            }
+
+            /// Returns the FFI struct that the handle stands on, mutably.
+            ///
+            /// # Safety
+            /// The caller must not exchange the contents of the struct with another element's.
+            pub unsafe fn ffi_mut(&mut self) -> &mut $raw {
+                // SAFETY: a unique borrow of the handle is a unique borrow of the struct.
+                unsafe { &mut *(self as *mut Self).cast::<$raw>() }
+            }
+
+            /// Borrows the element that `ptr` addresses, or [`None`] when `ptr` is null.
+            ///
+            /// # Safety
+            /// `ptr` must address a valid element that stays alive and unmoved for `'a`.
+            pub(crate) unsafe fn from_ffi_ptr<'a>(ptr: *const $raw) -> Option<&'a Self> {
+                // SAFETY: the cast keeps the address, and the handle reads no bytes of its own.
+                unsafe { ptr.cast::<Self>().as_ref() }
+            }
+
+            /// Borrows the element mutably, or [`None`] when `ptr` is null.
+            ///
+            /// # Safety
+            /// `ptr` must address a valid element that stays alive and unmoved for `'a`, and no
+            /// other handle for that element may be live.
+            pub(crate) unsafe fn from_ffi_ptr_mut<'a>(ptr: *mut $raw) -> Option<&'a mut Self> {
+                unsafe { ptr.cast::<Self>().as_mut() }
+            }
+        }
+
+        impl std::fmt::Debug for $handle {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                std::fmt::Debug::fmt(self.ffi(), f)
+            }
+        }
+    };
+}
+
+/// Generates the accessor pair for an element handle that the FFI struct embeds by value.
+///
+/// `$name` must be a field of the type that `ffi()` returns.
+macro_rules! nested_handle {
+    ($name:ident: $handle:ty; $doc:expr) => {paste::paste!{
+        #[doc = concat!("Returns an immutable reference to ", $doc)]
+        pub fn $name(&self) -> &$handle {
+            // SAFETY: the owner keeps the field alive and unmoved for as long as it is borrowed.
+            unsafe { <$handle>::from_ffi_ptr(&raw const self.ffi().$name) }.unwrap()
+        }
+
+        #[doc = concat!("Returns a mutable reference to ", $doc)]
+        pub fn [<$name _mut>](&mut self) -> &mut $handle {
+            // SAFETY: as above, and a unique borrow of the owner is a unique borrow of the field.
+            unsafe { <$handle>::from_ffi_ptr_mut(&raw mut self.ffi_mut().$name) }.unwrap()
+        }
     }};
 }
 
@@ -415,8 +495,9 @@ macro_rules! find_x_method_direct {
 /// When `[SpecObject]` is given to the right of `ffi_name`, the SpecObject trait also gets implemented.
 macro_rules! mjs_struct {
     ($ffi_name:ident $([$SpecObject:ident])? $({ $($extra_trait_methods:tt)* })?) => {paste::paste!{
-        #[doc = concat!(stringify!($ffi_name), " specification. This is an alias to the FFI type [`", stringify!([<mjs $ffi_name>]), "`].")]
-        pub type [<Mjs $ffi_name>] = [<mjs $ffi_name>];
+        mjs_opaque!([<Mjs $ffi_name>], [<mjs $ffi_name>], concat!(
+            stringify!($ffi_name), " specification. An opaque handle for the FFI type [`",
+            stringify!([<mjs $ffi_name>]), "`], reached through [`ffi`](Self::ffi)."));
 
         impl [<Mjs $ffi_name>] {
             /// Return the message appended to compiler errors.
@@ -424,7 +505,7 @@ macro_rules! mjs_struct {
             /// Panics if it contains invalid UTF-8.
             pub fn info(&self) -> &str {
                 // SAFETY: self.info is a valid mjString pointer for the lifetime of self.
-                unsafe { read_mjs_string(self.info) }
+                unsafe { read_mjs_string(self.ffi().info) }
             }
 
             /// Set the message appended to compiler errors.
@@ -432,7 +513,7 @@ macro_rules! mjs_struct {
             /// When the `info` contains '\0' characters, a panic occurs.
             pub fn set_info(&mut self, info: &str) {
                 // SAFETY: self.info is a valid mjString pointer for the lifetime of self.
-                unsafe { write_mjs_string(info, self.info) };
+                unsafe { write_mjs_string(info, self.ffi().info) };
             }
         }
 
@@ -440,7 +521,7 @@ macro_rules! mjs_struct {
 
         impl SpecItem for [<Mjs $ffi_name>] {
             fn element_pointer(&self) -> *const mjsElement {
-                self.element
+                self.ffi().element
             }
 
             $($(
@@ -453,9 +534,8 @@ macro_rules! mjs_struct {
             impl $SpecObject for [<Mjs $ffi_name>] {
                 const OBJ_TYPE: MjtObj = MjtObj::[<mjOBJ_ $ffi_name:upper>];
                 unsafe fn from_element_as_ptr_mut(element: *mut mjsElement) -> *mut Self {
-                    // SAFETY: *const conversion to *mut is valid, because mjs_as returns mut originally,
-                    // thus the data itself is *mut.
-                    unsafe { [<mjs_as $ffi_name:camel>](element) }
+                    // SAFETY: the handle stands at the address of the struct that mjs_as returns.
+                    unsafe { [<mjs_as $ffi_name:camel>](element) }.cast::<Self>()
                 }
             }
         )?
@@ -479,19 +559,19 @@ macro_rules! userdata_method {
         /// Return an immutable slice to userdata.
         pub fn userdata(&self) -> &[$type] {
             // SAFETY: self.userdata is a valid mjDoubleVec pointer for the lifetime of self.
-            unsafe { [<read_mjs_vec_ $type>](self.userdata) }
+            unsafe { [<read_mjs_vec_ $type>](self.ffi().userdata) }
         }
         
         /// Set `userdata`.
         pub fn set_userdata<T: AsRef<[$type]>>(&mut self, value: T) {
             // SAFETY: self.userdata is a valid pointer for the lifetime of self.
-            unsafe { [<write_mjs_vec_ $type>](value.as_ref(), self.userdata) };
+            unsafe { [<write_mjs_vec_ $type>](value.as_ref(), self.ffi().userdata) };
         }
 
         /// Builder method for setting `userdata`.
         pub fn with_userdata<T: AsRef<[$type]>>(&mut self, value: T) -> &mut Self {
             // SAFETY: self.userdata is a valid pointer for the lifetime of self.
-            unsafe { [<write_mjs_vec_ $type>](value.as_ref(), self.userdata) };
+            unsafe { [<write_mjs_vec_ $type>](value.as_ref(), self.ffi().userdata) };
             self
         }
     }};
@@ -509,7 +589,7 @@ macro_rules! vec_string_set_append {
             )]
             pub fn [<set_ $name>](&mut self, value: &str) {
                 // SAFETY: self.$name is a valid mjStringVec pointer for the lifetime of self.
-                unsafe { write_mjs_vec_string(value, self.$name) };
+                unsafe { write_mjs_vec_string(value, self.ffi().$name) };
             }
 
             #[doc = concat!(
@@ -520,7 +600,7 @@ macro_rules! vec_string_set_append {
             )]
             pub fn [<append_ $name>](&mut self, value: &str) {
                 // SAFETY: self.$name is a valid mjStringVec pointer for the lifetime of self.
-                unsafe { append_mjs_vec_string(value, self.$name) };
+                unsafe { append_mjs_vec_string(value, self.ffi().$name) };
             }
         )*
     }};
@@ -544,7 +624,7 @@ macro_rules! vec_string_set_append {
         pub fn [<set_ $singular>](&mut self, role: $role_ty, name: &str) {
             let c_name = CString::new(name).unwrap();
             // SAFETY: self.$name is a valid mjStringVec pre-sized to one entry per role.
-            unsafe { mjs_setInStringVec(self.$name, role as std::ffi::c_int, c_name.as_ptr()) };
+            unsafe { mjs_setInStringVec(self.ffi().$name, role as std::ffi::c_int, c_name.as_ptr()) };
         }
 
         #[doc = concat!(
@@ -577,7 +657,7 @@ macro_rules! vec_string_set_append {
         )]
         pub fn [<set_ $name>](&mut self, value: &str) {
             // SAFETY: self.$name is a valid mjStringVec pointer for the lifetime of self.
-            unsafe { write_mjs_vec_string(value, self.$name) };
+            unsafe { write_mjs_vec_string(value, self.ffi().$name) };
         }
 
         #[doc = concat!(
@@ -594,14 +674,14 @@ macro_rules! vec_string_set_append {
         )]
         pub fn [<append_ $name>](&mut self, value: &str) {
             // SAFETY: self.$name is a valid mjStringVec pointer for the lifetime of self.
-            unsafe { append_mjs_vec_string(value, self.$name) };
+            unsafe { append_mjs_vec_string(value, self.ffi().$name) };
         }
     }};
 }
 
 /// Implements string methods for given attribute $name.
 macro_rules! string_set_get_with {
-    (@impl common $([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;) => {paste::paste!{
+    (@impl common $name:ident; $comment:expr;) => {paste::paste!{
         #[doc = concat!(
             "Return ", $comment,
             "\n",
@@ -610,7 +690,7 @@ macro_rules! string_set_get_with {
         )]
         pub fn $name(&self) -> &str {
                 // SAFETY: the mjString field is valid for the lifetime of self.
-                unsafe { read_mjs_string(self$(.$ffi())?.$name) }
+                unsafe { read_mjs_string(self.ffi().$name) }
         }
 
         #[allow(unused_unsafe)]
@@ -622,13 +702,13 @@ macro_rules! string_set_get_with {
         )]
         pub fn [<set_ $name>](&mut self, value: &str) {
             // SAFETY: the mjString field is valid for the lifetime of self.
-            unsafe { write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name }) };
+            unsafe { write_mjs_string(value, unsafe { self.ffi_mut() }.$name) };
         }
     }};
 
-    ( $($([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;)* ) => {paste::paste!{
+    ( $($name:ident; $comment:expr;)* ) => {paste::paste!{
         $(
-            string_set_get_with!(@impl common $([$ffi, $ffi_mut])? $name; $comment;);
+            string_set_get_with!(@impl common $name; $comment;);
             #[allow(unused_unsafe)]
             #[doc = concat!(
                 "Builder method for setting ", $comment,
@@ -638,15 +718,15 @@ macro_rules! string_set_get_with {
             )]
             pub fn [<with_ $name>](mut self, value: &str) -> Self {
                 // SAFETY: the mjString field is valid for the lifetime of self.
-                unsafe { write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name }) };
+                unsafe { write_mjs_string(value, unsafe { self.ffi_mut() }.$name) };
                 self
             }
         )*
     }};
 
-    ([&] $($([$ffi:ident, $ffi_mut:ident])? $name:ident; $comment:expr;)* ) => {paste::paste!{
+    ([&] $($name:ident; $comment:expr;)* ) => {paste::paste!{
         $(
-            string_set_get_with!(@impl common $([$ffi, $ffi_mut])? $name; $comment;);
+            string_set_get_with!(@impl common $name; $comment;);
             #[allow(unused_unsafe)]
             #[doc = concat!(
                 "Builder method for setting ", $comment,
@@ -656,7 +736,7 @@ macro_rules! string_set_get_with {
             )]
             pub fn [<with_ $name>](&mut self, value: &str) -> &mut Self {
                 // SAFETY: the mjString field is valid for the lifetime of self.
-                unsafe { write_mjs_string(value, unsafe { self$(.$ffi_mut())?.$name }) };
+                unsafe { write_mjs_string(value, unsafe { self.ffi_mut() }.$name) };
                 self
             }
         )*
@@ -670,7 +750,7 @@ macro_rules! vec_set_get {
             #[doc = concat!("Return ", $comment)]
             pub fn $name(&self) -> &[$type] {
                 // SAFETY: self.$name is a valid mjDoubleVec/mjFloatVec pointer for the lifetime of self.
-                unsafe { [<read_mjs_vec_ $type>](self.$name) }
+                unsafe { [<read_mjs_vec_ $type>](self.ffi().$name) }
             }
         )*
 
@@ -697,15 +777,14 @@ macro_rules! vec_set_get {
 ///   own validation (e.g. as an unchecked array index, count, or `memcpy` length) and which
 ///   cannot be cheaply validated here. The optional leading `[unsafe: "safety"]` marker flips the
 ///   generated setter to `unsafe fn` and emits `"safety"` as its caller-facing `# Safety`
-///   obligation. The brackets keep the `unsafe` keyword unambiguous with the field's own `name`
-///   ident, and the keyword is captured (`$unsafe_kw:ident`) and echoed verbatim onto the `fn`.
+///   obligation.
 macro_rules! vec_set {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
             #[doc = concat!("Set ", $comment)]
             pub fn [<set_ $name>](&mut self, value: &[$type]) {
                 // SAFETY: self.$name is a valid pointer for the lifetime of self.
-                unsafe { [<write_mjs_vec_ $type>](value, self.$name) };
+                unsafe { [<write_mjs_vec_ $type>](value, self.ffi().$name) };
             }
         )*
     }};
@@ -737,7 +816,7 @@ macro_rules! vec_set {
                 // by the `$check` loop above when present, or by the caller's `# Safety` contract
                 // otherwise. self.$name is a valid pointer for the lifetime of self.
                 let raw = unsafe { std::slice::from_raw_parts(value.as_ptr().cast(), value.len()) };
-                unsafe { [<write_mjs_vec_ $type>](raw, self.$name) };
+                unsafe { [<write_mjs_vec_ $type>](raw, self.ffi().$name) };
                 $(Ok::<(), $err>(()))?
             }
         )*
@@ -751,7 +830,7 @@ macro_rules! vec_vec_append {
             #[doc = concat!("Append to ", $comment)]
             pub fn [<append_ $name>](&mut self, value: &[$type]) {
                 // SAFETY: self.$name is a valid pointer for the lifetime of self.
-                unsafe { [<append_mjs_vec_vec_ $type>](value, self.$name) };
+                unsafe { [<append_mjs_vec_vec_ $type>](value, self.ffi().$name) };
             }
 
             #[doc = concat!("Set ", $comment, " (deprecated; use ", stringify!([<append_ $name>]), " instead).")]

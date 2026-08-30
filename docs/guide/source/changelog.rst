@@ -7,22 +7,22 @@ Changelog
 .. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
 .. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
-.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`
-.. |mjs_frame| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsFrame`
+.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`
+.. |mjs_frame| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsFrame`
 .. |mj_geomview| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjGeomDataView`
 .. |mj_geomviewmut| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjGeomDataViewMut`
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
 .. |mj_vfs| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs`
-.. |mjs_tendon| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsTendon`
-.. |mjs_wrap| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsWrap`
+.. |mjs_tendon| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon`
+.. |mjs_wrap| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsWrap`
 .. |mjv_camera| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`
 .. |mjr_context| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`
-.. |mjs_light| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsLight`
-.. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator`
+.. |mjs_light| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsLight`
+.. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsActuator`
 
 
 This page contains the summary of changes made throughout different releases of the MuJoCo-rs crate.
-Ony the last 5 major/minor versions are shown in detail.
+Only the last 5 major/minor versions are shown in detail.
 
 Versioning
 =================
