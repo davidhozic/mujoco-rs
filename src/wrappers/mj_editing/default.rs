@@ -29,9 +29,6 @@ macro_rules! default_accessor_wrapper {
     }};
 }
 
-// This is implemented manually since we can't directly borrow check if something is using the default.
-// We also override the delete method to return an error instead of deleting.
-
 mjs_opaque!(MjsDefault <= mjsDefault,
     "Default specification. An opaque handle for the FFI type [`mjsDefault`], reached through \
 [`ffi`](Self::ffi).");
@@ -54,19 +51,13 @@ impl SpecItem for MjsDefault {
         Some(self)
     }
 
-    /// MuJoCo exposes no id accessor for a default class.
-    ///
-    /// Always returns `None`.
+    /// A default class carries no id. Always returns `None`.
     fn id(&self) -> Option<usize> {
-        // mjs_getId casts to mjCBase, but mjCDef derives from mjsElement directly, so the cast
-        // would read an unrelated offset instead of an id.
+        // mjCDef derives from mjsElement, not mjCBase, so mjs_getId would read an unrelated offset.
         None
     }
 
-    /// `MjsDefault` cannot be assigned to a named default class.
-    ///
-    /// This override always returns [`MjEditError::UnsupportedOperation`] without using
-    /// `class_name` or performing any operation.
+    /// A default class cannot be assigned to another default class.
     ///
     /// # Errors
     /// Always returns [`MjEditError::UnsupportedOperation`].
@@ -74,33 +65,11 @@ impl SpecItem for MjsDefault {
         Err(MjEditError::UnsupportedOperation)
     }
 
-    /// `MjsDefault` cannot be assigned to a named default class.
-    ///
-    /// This override always returns [`MjEditError::UnsupportedOperation`] without using
-    /// `class_name` or performing any operation.
+    /// A default class cannot be assigned to another default class.
     ///
     /// # Errors
     /// Always returns [`MjEditError::UnsupportedOperation`].
     fn with_default(&mut self, _class_name: &str) -> Result<&mut Self, MjEditError> {
-        Err(MjEditError::UnsupportedOperation)
-    }
-
-    /// This crate does not delete a default class through the item itself.
-    ///
-    /// # Deprecated
-    /// This API is deprecated and will be removed in a future release.
-    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) instead.
-    ///
-    /// This override always returns [`MjEditError::UnsupportedOperation`] without performing
-    /// any operation, so the post-deletion use-after-free restriction from [`SpecItem::delete`]
-    /// does not apply; `self` remains valid after an `Err` return.
-    ///
-    /// # Errors
-    /// This will always error with [`MjEditError::UnsupportedOperation`].
-    ///
-    /// # Safety
-    /// No unsafe operations are performed; the struct is unchanged on return.
-    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
         Err(MjEditError::UnsupportedOperation)
     }
 }

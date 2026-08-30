@@ -4,6 +4,7 @@ use crate::error::MjEditError;
 use std::ptr::{self, NonNull};
 use std::marker::PhantomData;
 use std::path::Path;
+use std::fmt;
 
 #[macro_use]
 mod utility;
@@ -34,12 +35,10 @@ use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjs_asHField as mjs_asHfie
 use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
 
 /* Validation helpers */
-/// Validates that an object-type value is a real object type, i.e. an [`MjtObj`] discriminant below
-/// [`MjtObj::mjNOBJECT`]. Meta variants (`mjOBJ_FRAME`, `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) and
-/// `mjNOBJECT` itself are rejected because the model compiler uses such values as an unchecked
-/// index into a `mjNOBJECT`-sized array (via `mjCModel::FindObject`), which would read out of
-/// bounds. Used for any safe setter whose value reaches `FindObject` during `compile()`.
+/// Validates that `t` is a real object type, i.e. an [`MjtObj`] discriminant below
+/// [`MjtObj::mjNOBJECT`].
 fn check_objtype(t: MjtObj) -> Result<(), MjEditError> {
+    // A meta variant indexes `mjCModel::FindObject`'s `mjNOBJECT`-sized array out of bounds.
     if (t as i32) < (MjtObj::mjNOBJECT as i32) {
         Ok(())
     } else {
@@ -50,12 +49,9 @@ fn check_objtype(t: MjtObj) -> Result<(), MjEditError> {
 }
 
 /// Validates that a custom-numeric array size is non-negative.
-///
-/// A negative `size` slips through every guard in the model compiler's `mjCNumeric::Compile`
-/// (the `size < data_.size()` check is gated on a non-empty init array, and the zero checks treat
-/// negatives as non-zero), so it undersizes the shared `numeric_data` allocation while another
-/// numeric's zero-fill loop still runs up to its own positive size, writing out of bounds.
 fn check_numeric_size(size: i32) -> Result<(), MjEditError> {
+    // A negative size passes every guard in `mjCNumeric::Compile` and undersizes the shared
+    // `numeric_data` allocation, which another numeric's zero-fill loop then overruns.
     if size < 0 {
         Err(MjEditError::InvalidParameter(format!(
             "numeric size must be non-negative, got {size}"
@@ -191,10 +187,23 @@ pub type MjsAuthored = mjsAuthored;
 ** Model Specification
 ***************************/
 /// Model specification. This wraps the FFI type [`mjSpec`] internally.
-#[derive(Debug)]
-pub struct MjSpec(NonNull<mjSpec>);
+pub struct MjSpec {
+    /// The specification that MuJoCo owns.
+    ffi: NonNull<mjSpec>,
+}
+
+impl fmt::Debug for MjSpec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MjSpec").field("ffi", &self.ffi).finish_non_exhaustive()
+    }
+}
 
 impl MjSpec {
+    /// Wraps a specification that MuJoCo allocated.
+    fn from_ffi(ffi: NonNull<mjSpec>) -> Self {
+        Self { ffi }
+    }
+
     /// Creates an empty [`MjSpec`].
     ///
     /// # Panics
@@ -224,23 +233,22 @@ impl MjSpec {
         // SAFETY: mj_makeSpec allocates a new MjSpec; returns null on allocation
         // failure, handled by ok_or below.
         let ptr = unsafe { mj_makeSpec() };
-        Ok(MjSpec(NonNull::new(ptr).ok_or(MjEditError::AllocationFailed)?))
+        Ok(Self::from_ffi(NonNull::new(ptr).ok_or(MjEditError::AllocationFailed)?))
     }
 
     /// Creates a deep copy of this [`MjSpec`].
     ///
-    /// Internally calls `mj_copySpec`, which invokes the C++ copy constructor on the underlying
-    /// model. A child specification that the model attaches from another file stays shared with
-    /// the original, behind MuJoCo's own reference count.
+    /// A child specification that the model attaches from another file stays shared with the
+    /// original, behind MuJoCo's own reference count.
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
     /// the copy (e.g. out of memory or an internal C++ exception).
     pub fn try_clone(&self) -> Result<Self, MjEditError> {
-        // SAFETY: self.0 is a valid non-null mjSpec pointer for the lifetime of self
+        // SAFETY: self.ffi is a valid non-null mjSpec pointer for the lifetime of self
         // (struct invariant); mj_copySpec returns null on allocation failure, handled below.
-        let ptr = unsafe { mj_copySpec(self.0.as_ptr()) };
-        NonNull::new(ptr).map(MjSpec).ok_or(MjEditError::AllocationFailed)
+        let ptr = unsafe { mj_copySpec(self.ffi.as_ptr()) };
+        NonNull::new(ptr).map(Self::from_ffi).ok_or(MjEditError::AllocationFailed)
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
@@ -372,15 +380,15 @@ impl MjSpec {
         }
         else {
             // SAFETY: spec_ptr is confirmed non-null by the guard above.
-            Ok(MjSpec(unsafe { NonNull::new_unchecked(spec_ptr) }))
+            Ok(Self::from_ffi(unsafe { NonNull::new_unchecked(spec_ptr) }))
         }
     }
 
     /// An immutable reference to the internal FFI struct.
     pub fn ffi(&self) -> &mjSpec {
-        // SAFETY: self.0 is a valid non-null mjSpec pointer for the lifetime of
+        // SAFETY: self.ffi is a valid non-null mjSpec pointer for the lifetime of
         // self (struct invariant).
-        unsafe { self.0.as_ref() }
+        unsafe { self.ffi.as_ref() }
     }
 
     /// A mutable reference to the internal FFI struct.
@@ -389,10 +397,13 @@ impl MjSpec {
     /// Callers must ensure that any mutations performed through the returned reference
     /// preserve the invariants that MuJoCo expects for `mjSpec`.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjSpec {
-        unsafe { self.0.as_mut() }
+        unsafe { self.ffi.as_mut() }
     }
 
     /// Delete an element from this specification.
+    ///
+    /// # Deprecated
+    /// Call [`SpecObject::delete`] on the element handle instead.
     ///
     /// # Errors
     /// - [`MjEditError::DeleteFailed`] if `element` is null, does not belong to this spec, or
@@ -401,54 +412,24 @@ impl MjSpec {
     ///   wrap, or the world body.
     ///
     /// # Safety
-    /// The caller must ensure:
-    /// - `element` is a valid pointer to an mjsElement
-    /// - `element` has not been previously deleted
-    /// - no Rust references derived from `element` exist
+    /// Same contract as [`SpecObject::delete`], and `element` must point to an element of a
+    /// specification.
+    #[deprecated(since = "6.0.0", note = "use SpecObject::delete on the element handle")]
     pub unsafe fn delete_element(&mut self, element: *mut mjsElement) -> Result<(), MjEditError> {
         if element.is_null() {
             return Err(MjEditError::DeleteFailed("null element pointer".to_owned()));
         }
 
-        // mjCDef is not an mjCBase, so this precedes mjs_getSpec. Deleting a frame indexes
-        // `object_lists_` past its `mjNOBJECT` end, and deleting a wrap hits its null slot.
-        if matches!(
-            unsafe { (*element).elemtype },
-            MjtObj::mjOBJ_DEFAULT | MjtObj::mjOBJ_FRAME | MjtObj::mjOBJ_UNKNOWN
-        ) {
+        // mjCDef is not an mjCBase, so a default class must not reach the owner check below.
+        if unsafe { (*element).elemtype } == MjtObj::mjOBJ_DEFAULT {
             return Err(MjEditError::UnsupportedOperation);
         }
 
-        let spec = unsafe { self.ffi_mut() };
-        let owner = unsafe { mjs_getSpec(element) };
-        if owner != spec {
+        if unsafe { mjs_getSpec(element) } != self.ffi.as_ptr() {
             return Err(MjEditError::DeleteFailed("element does not belong to this spec".to_owned()));
         }
 
-        if unsafe { (*element).elemtype } == MjtObj::mjOBJ_BODY {
-            // Compare the raw bytes: a name loaded from a file need not be valid UTF-8, and the
-            // &str conversion panics on it.
-            let name = unsafe { mjs_getString(mjs_getName(element)) };
-            if !name.is_null() && unsafe { CStr::from_ptr(name) }.to_bytes() == b"world" {
-                return Err(MjEditError::UnsupportedOperation);
-            }
-        }
-
-        let result = unsafe { mjs_delete(spec, element) };
-        match result {
-            0 => Ok(()),
-            _ => {
-                let error_msg = unsafe {
-                    let ptr = mjs_getError(spec);
-                    if ptr.is_null() {
-                        "Unknown error".to_owned()
-                    } else {
-                        CStr::from_ptr(ptr).to_string_lossy().into_owned()
-                    }
-                };
-                Err(MjEditError::DeleteFailed(error_msg))
-            }
-        }
+        unsafe { utility::delete_element(element) }
     }
 
     /// Compile [`MjSpec`] to [`MjModel`].
@@ -461,13 +442,9 @@ impl MjSpec {
     /// texture has a builtin pattern set while its `nchannel` is less than 3, and when a texture
     /// has a negative dimension or a pixel count that does not fit in an [`i32`].
     pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
-        // A texture carries four independent safe setters whose values MuJoCo only checks against
-        // each other during compilation. Both cross-field invariants can therefore only be
-        // enforced at this choke point.
+        // The builtin generators write 3 bytes per pixel into an `nchannel*width*height` buffer,
+        // and the setters are independent, so `compile` is the only place to check them together.
         for texture in self.texture_iter() {
-            // The builtin generators (`Builtin2D`/`BuiltinCube`) write a hard-coded 3 bytes per
-            // pixel, but MuJoCo allocates `nchannel*width*height` bytes and, unlike the file and
-            // data paths, does not check `nchannel >= 3` for the builtin path.
             if texture.builtin() != MjtBuiltin::mjBUILTIN_NONE && texture.nchannel() < 3 {
                 return Err(MjEditError::CompileFailed(
                     "texture with a builtin pattern requires nchannel >= 3".to_owned(),
@@ -487,7 +464,7 @@ impl MjSpec {
             }
         }
 
-        let result = unsafe { MjModel::from_raw( mj_compile(self.0.as_ptr(), ptr::null()) ) };
+        let result = unsafe { MjModel::from_raw( mj_compile(self.ffi.as_ptr(), ptr::null()) ) };
         result.map_err(|_| {
             // SAFETY: The spec is still valid after failed compilation.
             // The error pointer is valid until the next MuJoCo call on this spec.
@@ -505,22 +482,20 @@ impl MjSpec {
 
     /// Return the compiler timers, in seconds, in `mjtCTimer` order.
     pub fn timer(&self) -> &[f64; MjtCTimer::mjNCTIMER as usize] {
-        unsafe { &*mjs_getTimer(self.0.as_ptr()).cast() }
+        unsafe { &*mjs_getTimer(self.ffi.as_ptr()).cast() }
     }
 
     /// Get number of warnings accumulated in the spec. Wraps [`mjs_numWarnings`].
     pub fn num_warnings(&self) -> i32 {
-        // SAFETY: self.0 is a valid non-null mjSpec pointer.
-        unsafe { mjs_numWarnings(self.0.as_ptr()) }
+        // SAFETY: self.ffi is a valid non-null mjSpec pointer.
+        unsafe { mjs_numWarnings(self.ffi.as_ptr()) }
     }
 
     /// Get the i-th warning message. Returns `None` if the index is out of bounds, or if the
     /// message is not valid UTF-8. Wraps [`mjs_getWarning`].
     pub fn warning(&self, index: i32) -> Option<&str> {
-        // SAFETY: mjs_getWarning returns a pointer to a NUL-terminated C string owned
-        // by the spec, valid as long as self is alive and not mutated. We return a &str
-        // with the same lifetime as &self, which is sound.
-        let ptr = unsafe { mjs_getWarning(self.0.as_ptr(), index) };
+        // SAFETY: the string belongs to the spec and lives as long as the borrow of self.
+        let ptr = unsafe { mjs_getWarning(self.ffi.as_ptr(), index) };
         if ptr.is_null() {
             None
         } else {
@@ -722,35 +697,26 @@ impl MjSpec {
 /// Mutable iterator over items in [`MjSpec`].
 #[derive(Debug)]
 pub struct MjsSpecItemIterMut<'a, T> {
-    /// Copy of the raw `mjSpec` pointer that [`MjSpec`] wraps.
-    /// This is the FFI type wrapped inside [`MjSpec`].
+    /// Raw pointer to the spec; a borrow would alias the handles that the iterator yields.
     ffi_ptr: *mut mjSpec,
-    /// Last obtained element in the iterator.
-    /// This CAN be null, and this iterator it uses the null to detect
-    /// end of iteration. 
+    /// Element that the last `next` yielded. Null marks the end of the iteration.
     last: *mut mjsElement,
-    /// Used for generic implementation of iterator's methods.
     item_type: PhantomData<&'a mut T>
 }
 
 /// Immutable iterator over items in [`MjSpec`].
 #[derive(Debug, Clone)]
 pub struct MjsSpecItemIter<'a, T> {
-    /// Copy of the raw `mjSpec` pointer that [`MjSpec`] wraps.
-    /// This is the FFI type wrapped inside [`MjSpec`].
     ffi_ptr: *const mjSpec,
-    /// Last obtained element in the iterator.
-    /// This CAN be null, and this iterator it uses the null to detect
-    /// end of iteration. 
+    /// Element that the last `next` yielded. Null marks the end of the iteration.
     last: *mut mjsElement,
-    /// Used for generic implementation of iterator's methods.
     item_type: PhantomData<&'a T>
 }
 
 impl<'a, T: SpecObject> MjsSpecItemIterMut<'a, T> {
     fn new(root: &'a mut MjSpec) -> Self {
-        let last = unsafe { mjs_firstElement(root.0.as_ptr(), T::OBJ_TYPE) };
-        Self { ffi_ptr: root.0.as_ptr(), last, item_type: PhantomData }
+        let last = unsafe { mjs_firstElement(root.ffi.as_ptr(), T::OBJ_TYPE) };
+        Self { ffi_ptr: root.ffi.as_ptr(), last, item_type: PhantomData }
     }
 }
 
@@ -758,8 +724,8 @@ impl<'a, T: SpecObject> MjsSpecItemIter<'a, T> {
     fn new(root: &'a MjSpec) -> Self {
         // SAFETY: mjs_firstElement takes a *const mjSpec; the borrow of root keeps the spec
         // alive for the call.
-        let last = unsafe { mjs_firstElement(root.0.as_ptr(), T::OBJ_TYPE) };
-        Self { ffi_ptr: root.0.as_ptr(), last, item_type: PhantomData }
+        let last = unsafe { mjs_firstElement(root.ffi.as_ptr(), T::OBJ_TYPE) };
+        Self { ffi_ptr: root.ffi.as_ptr(), last, item_type: PhantomData }
     }
 }
 
@@ -797,7 +763,6 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsSpecItemIter<'a, T> {
     }
 }
 
-// Once self.last is null, next() always returns None.
 impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsSpecItemIterMut<'a, T> {}
 impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsSpecItemIter<'a, T> {}
 
@@ -817,9 +782,9 @@ impl Default for MjSpec {
 
 impl Drop for MjSpec {
     fn drop(&mut self) {
-        // SAFETY: self.0 is a valid non-null mjSpec pointer; called exactly once
+        // SAFETY: self.ffi is a valid non-null mjSpec pointer; called exactly once
         // in Drop.
-        unsafe { mj_deleteSpec(self.0.as_ptr()); }
+        unsafe { mj_deleteSpec(self.ffi.as_ptr()); }
     }
 }
 
@@ -937,11 +902,6 @@ impl MjsGeom {
             [ffi, ffi_mut] solimp: &[MjtNum; mjNIMP as usize];     "solver impedance.";
             [ffi, ffi_mut] surfacevel: &[f64; 6];                  "surface velocity in local frame: linear, angular.";
             [ffi, ffi_mut] fluid_coefs: &[MjtNum; 5];              "ellipsoid-fluid interaction coefs."
-        ]
-    }
-
-    getter_setter! {
-        get, [
         ]
     }
 
@@ -1090,15 +1050,11 @@ impl MjsFrame {
         note = "always returns Ok; use `add_frame`"
     )]
     pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
-        // SAFETY: element_mut_pointer() reads `self.element`, valid for any live MjsFrame.
-        // mjs_getParent returns non-null because every Rust-API MjsFrame was created via
-        // mjs_addFrame, which always calls SetParent(body).
+        // SAFETY: mjs_addFrame always calls SetParent(body), so every frame the Rust API hands out
+        // has a non-null parent. The frame it returns is freshly allocated, so nothing aliases it.
         let parent_body = unsafe { mjs_getParent(self.element_mut_pointer()) };
         debug_assert!(!parent_body.is_null(), "mjs_getParent returned null; frame has no parent body");
         let ptr = unsafe { mjs_addFrame(parent_body, self.ffi_mut()) };
-        // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
-        // pointee is properly aligned and initialized by C++ operator new, and freshly
-        // allocated so no existing Rust reference aliases it for the returned lifetime.
         unsafe { MjsFrame::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
     }
 }
@@ -1123,11 +1079,6 @@ impl MjsActuator {
             [ffi, ffi_mut] ffrange: &[f64; 2];                         "range of the feedforward input (pid).";
             [ffi, ffi_mut] forcerange: &[f64; 2];                      "force range.";
             [ffi, ffi_mut] actrange: &[f64; 2];                        "activation range.";
-        ]
-    }
-
-    getter_setter! {
-        get, [
         ]
     }
 
@@ -1178,11 +1129,8 @@ impl MjsActuator {
 }
 
 
-/// Converts the error string returned by MuJoCo's `mjs_setToX` actuator
-/// configuration functions into a [`Result`].
-///
-/// Those functions return an empty string on success and a non-empty,
-/// NUL-terminated message describing the rejected parameter on failure.
+/// Converts the string that MuJoCo's `mjs_setToX` actuator functions return into a [`Result`].
+/// An empty string is success; anything else names the rejected parameter.
 fn actuator_set_result(c_err_msg: *const c_char) -> Result<(), MjEditError> {
     // SAFETY: MuJoCo's error messages are always NUL terminated.
     let err_msg = unsafe { CStr::from_ptr(c_err_msg) }.to_string_lossy();
@@ -1194,13 +1142,8 @@ fn actuator_set_result(c_err_msg: *const c_char) -> Result<(), MjEditError> {
     }
 }
 
-/* Actuator configuration structs.
-** Each `set_to_*` method taking optional (nullable in C) parameters has its own config struct.
-** Build either with struct-update syntax or with the chainable `with_*` builder methods, e.g.
-** `PositionConfig { kp: 10.0, kv: Some(2.0), ..Default::default() }` or
-** `PositionConfig::default().with_kp(10.0).with_kv(2.0)`. Optional fields default to `None`,
-** leaving the corresponding actuator parameter at its MuJoCo default; the `with_*` setters take
-** the inner value directly and wrap it in `Some`. */
+/* Actuator configuration structs. A `None` field reaches MuJoCo as a null pointer, which leaves
+** the corresponding actuator parameter at its own default. */
 
 /// Configuration for [`MjsActuator::set_to_position`].
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -1547,11 +1490,6 @@ impl MjsSensor {
         [&] with, get, [
             [ffi, ffi_mut] intprm: &[i32; mjNSENS as usize];            "integer parameters.";
             [ffi, ffi_mut] interval: &[f64; 2];                         "[period, time_prev] in seconds.";
-        ]
-    }
-
-    getter_setter! {
-        get, [
         ]
     }
 
@@ -1906,8 +1844,7 @@ impl MjsTendon {
     /// Returns [`MjEditError::IndexOutOfBounds`] if `i >= wrap_num()`.
     pub fn try_wrap(&self, i: usize) -> Result<&MjsWrap, MjEditError> {
         let len = self.wrap_num();
-        // mjs_getWrap aborts the process via mju_error for an out-of-range index, so the bound is
-        // checked here and turned into a recoverable error instead.
+        // mjs_getWrap ends the process via mju_error for an out-of-range index.
         if i >= len {
             return Err(MjEditError::IndexOutOfBounds { id: i, len });
         }
@@ -1972,8 +1909,8 @@ impl MjsWrap {
     /// wrap, when it holds no side site, or when the named site is missing from the spec (MuJoCo
     /// logs a warning in that last case).
     ///
-    /// There is no mutable counterpart due to alising issues.
-    /// Edit the site through [`MjSpec::site_mut`] instead.
+    /// There is no mutable counterpart, because it would alias. Edit the site through
+    /// [`MjSpec::site_mut`] instead.
     pub fn side_site(&self) -> Option<&MjsSite> {
         let ptr = unsafe { mjs_getWrapSideSite(self.ffi()) };
         unsafe { MjsSite::from_ffi_ptr(ptr) }
@@ -2024,11 +1961,8 @@ impl MjsText {
 mjs_struct!(Tuple with SpecObject: MjsTuple <= mjsTuple);
 impl MjsTuple {
     vec_set! {
-        // `objtype` is stored as a raw C `int` and, at `compile()` time, used to index the model
-        // compiler's `object_lists_` array (size `mjNOBJECT`) with no bounds check. Validating every
-        // element against `mjNOBJECT` rules out the meta `MjtObj` variants (`mjOBJ_FRAME`,
-        // `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) that would otherwise cause an out-of-bounds read, which is
-        // what lets this setter be safe.
+        // `compile()` indexes `object_lists_` (size `mjNOBJECT`) with each value and no bounds
+        // check, so the per-element check is what makes this setter safe.
         objtype: MjtObj => i32 { check_objtype, "[`MjEditError::InvalidParameter`] when any value is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
             "object types. Every value must be a real object type (an `MjtObj` below `mjNOBJECT`).";
     }
@@ -2113,11 +2047,6 @@ impl MjsMesh {
             [ffi, ffi_mut] refpos: &[f64; 3];            "reference position.";
             [ffi, ffi_mut] refquat: &[f64; 4];           "reference orientation.";
             [ffi, ffi_mut] scale: &[f64; 3];             "scale vector.";
-        ]
-    }
-
-    getter_setter! {
-        get, [
         ]
     }
 
@@ -2246,11 +2175,9 @@ mjs_struct!(Texture with SpecObject: MjsTexture <= mjsTexture);
 
 /// # Note: cube-map files
 ///
-/// The `cubefiles` field is a **pre-sized** string vector (6 entries, one per cube face).
-/// Use [`set_cubefile`](Self::set_cubefile) with a [`MjtCubeFace`] variant to assign a
-/// file to a specific face. The bulk [`set_cubefiles`](Self::set_cubefiles) /
-/// [`append_cubefiles`](Self::append_cubefiles) methods are also available but
-/// operate on the vector as a whole.
+/// `cubefiles` is a pre-sized string vector of 6 entries, one per cube face. Assign one face with
+/// [`set_cubefile`](Self::set_cubefile); [`set_cubefiles`](Self::set_cubefiles) and
+/// [`append_cubefiles`](Self::append_cubefiles) replace or extend the vector as a whole.
 impl MjsTexture {
     getter_setter! {
         [&] with, get, [
@@ -2272,9 +2199,7 @@ impl MjsTexture {
 
     getter_setter! {
         [&] with, get, set, [
-            // `nchannel` must be `>= 3` whenever a builtin pattern is set
-            // (`builtin != MjtBuiltin::mjBUILTIN_NONE`); this cross-field invariant is
-            // enforced at the compile choke point in `MjSpec::compile`.
+            // A builtin pattern needs `nchannel >= 3`; `MjSpec::compile` enforces that.
             [ffi, ffi_mut] nchannel: i32; "number of channels.";
         ]
     }
@@ -2316,12 +2241,10 @@ mjs_struct!(Material with SpecObject: MjsMaterial <= mjsMaterial);
 
 /// # Note: texture assignment
 ///
-/// The `textures` field is a **pre-sized** string vector (`mjNTEXROLE` entries, one per
-/// [`MjtTextureRole`]). Use [`set_texture`](Self::set_texture) to assign a texture name
-/// to a specific role (e.g. [`MjtTextureRole::mjTEXROLE_RGB`] for the base colour used by
-/// the renderer). The bulk [`set_textures`](Self::set_textures) /
-/// [`append_textures`](Self::append_textures) methods are also available but operate on
-/// the vector as a whole and may disrupt the pre-sized layout.
+/// `textures` is a pre-sized string vector of `mjNTEXROLE` entries, one per [`MjtTextureRole`].
+/// Assign one role with [`set_texture`](Self::set_texture); [`set_textures`](Self::set_textures)
+/// and [`append_textures`](Self::append_textures) replace or extend the vector as a whole and
+/// break the pre-sized layout.
 impl MjsMaterial {
     getter_setter! {
         [&] with, get, [
@@ -2354,30 +2277,7 @@ impl MjsMaterial {
 /***************************
 ** Body specification
 ***************************/
-mjs_struct!(Body with SpecObject: MjsBody <= mjsBody {
-    // Override the delete method to prevent deletion of world.
-    /// Delete this body from its parent spec.
-    ///
-    /// # Deprecated
-    /// This API is deprecated and will be removed in a future release.
-    /// Use [`MjSpec::delete_element`](crate::wrappers::MjSpec::delete_element) instead.
-    ///
-    /// This method is inherently unsound: deleting a body mutates owner/ancestor graph
-    /// structures outside the borrowed `&mut self` region.
-    ///
-    /// # Errors
-    /// - Returns [`MjEditError::UnsupportedOperation`] if this is the world body.
-    /// - Returns [`MjEditError::DeleteFailed`] if MuJoCo's internal deletion fails.
-    ///
-    /// # Safety
-    /// This legacy method is not soundly callable; it exists only for backward compatibility.
-    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
-        if self.name() == "world" {
-            return Err(MjEditError::UnsupportedOperation);
-        }
-        unsafe { SpecItem::__delete_default__(self) }
-    }
-});
+mjs_struct!(Body with SpecObject: MjsBody <= mjsBody);
 
 impl MjsBody {
     add_x_method! { body, site, joint, geom, camera, light }
@@ -2430,13 +2330,9 @@ impl MjsBody {
         note = "always returns Ok; use `add_frame`"
     )]
     pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
-        // SAFETY: ffi_mut() returns self unchanged; the coercion to *mut mjsBody is safe.
-        // ptr::null_mut() for parentframe is valid: the MuJoCo API accepts null to mean
-        // "attach directly to the body with no parent frame".
+        // SAFETY: a null parentframe attaches the frame directly to the body. The frame that
+        // mjs_addFrame returns is freshly allocated, so nothing aliases it.
         let ptr = unsafe { mjs_addFrame(self.ffi_mut(), ptr::null_mut()) };
-        // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
-        // pointee is properly aligned and initialized by C++ operator new, and freshly
-        // allocated so no existing Rust reference aliases it for the returned lifetime.
         unsafe { MjsFrame::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
     }
 }
@@ -2545,8 +2441,6 @@ impl Default for MjFlexcompConfig<'_> {
 }
 
 impl<'a> MjFlexcompConfig<'a> {
-    // Builders are macro-generated. Optional fields are `Option`, so `.into()` wraps the
-    // value in `Some` via the std `From<T> for Option<T>` impl.
     getter_setter! {
         with, [
             r#type: &'a str;      "the flexcomp type: \"grid\", \"box\", \"cylinder\", \"ellipsoid\", \"square\", \"disc\", \"circle\", \"mesh\", \"gmsh\", or \"direct\" (default \"grid\").";
@@ -2614,12 +2508,8 @@ impl MjsBody {
         let quat_ptr = config.quat.as_ref().map_or(ptr::null(), |a| a as *const [f64; 4]);
         let origin_ptr = config.origin.as_ref().map_or(ptr::null(), |a| a as *const [f64; 3]);
 
-        // SAFETY: ffi_mut() yields self as a valid *mut mjsBody. Every array/string
-        // pointer either references `config`, the local CStrings, or the widened count
-        // arrays (all of which outlive the call), or is null, which mjs_makeFlex
-        // documents as "use default". `name` is non-null as the C function requires.
-        // mjs_makeFlex copies the strings (name/file into std::string, type/dof read
-        // into enums) and retains no pointers, so call-duration validity is sufficient.
+        // SAFETY: every pointer below is either null, which mjs_makeFlex reads as "use the
+        // default", or borrows a local that outlives the call. MuJoCo retains no pointer of its own.
         let ptr = unsafe {
             mjs_makeFlex(
                 self.ffi_mut(),
@@ -2645,14 +2535,11 @@ impl MjsBody {
                 config.vfs.map_or(ptr::null(), |v| v.ffi() as *const mjVFS),
             )
         };
-        // SAFETY: null maps to None (reported as AllocationFailed); a non-null pointer
-        // is a freshly allocated, initialized mjsFlex with no aliasing Rust references.
         unsafe { MjsFlex::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
     }
 }
 
 impl MjsBody {
-    // Complex types with mutable and immutable reference returns.
     getter_setter! {
         [&] with, get, [
             // body frame
@@ -2669,14 +2556,8 @@ impl MjsBody {
         ]
     }
 
-    getter_setter! {
-        get, [
-        ]
-    }
-
     nested_handle!(plugin: MjsPluginReference; "passive force plugin.");
 
-    // Plain types with normal getters and setters.
     getter_setter! {
         [&] with, get, set, [
             [ffi, ffi_mut] mass: f64;                     "mass.";
@@ -2701,16 +2582,15 @@ impl MjsBody {
 pub struct MjsBodyItemIterMut<'a, T> {
     /// Raw pointer to the body; a borrow would alias the handles that the iterator yields.
     ffi_ptr: *mut mjsBody,
+    /// Element that the last `next` yielded. Null marks the end of the iteration.
     last: *mut mjsElement,
     recurse: bool,
-    /// Used for generic implementation of iterator's methods.
     item_type: PhantomData<&'a mut T>
 }
 
 impl<'a, T: SpecObject> MjsBodyItemIterMut<'a, T> {
     fn new(root: &'a mut MjsBody, recurse: bool) -> Self {
-        // SAFETY: the iterator walks the children of the body; it never exchanges its contents,
-        // and the borrow of root keeps the body alive.
+        // SAFETY: the iterator walks the children of the body and never exchanges its contents.
         let ffi_ptr = unsafe { root.ffi_mut() } as *mut mjsBody;
         let last = unsafe { mjs_firstChild(ffi_ptr, T::OBJ_TYPE, recurse.into()) };
         Self { ffi_ptr, last, recurse, item_type: PhantomData }
@@ -2739,9 +2619,9 @@ impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsBodyItemIterMut<'a,
 #[derive(Debug, Clone)]
 pub struct MjsBodyItemIter<'a, T> {
     ffi_ptr: *const mjsBody,
+    /// Element that the last `next` yielded. Null marks the end of the iteration.
     last: *const mjsElement,
     recurse: bool,
-    /// Used for generic implementation of iterator's methods.
     item_type: PhantomData<&'a T>
 }
 
@@ -2779,7 +2659,6 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsBodyItemIter<'a, T> {
     }
 }
 
-// Once self.last is null, next() always returns None.
 impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsBodyItemIter<'a, T> {}
 
 /// Iterator methods.
@@ -2929,19 +2808,15 @@ mod tests {
         body.set_name(NEW_MODEL_NAME).unwrap();
 
         /* Test normal body deletion */
-        let body_element = {
-            let body = spec.body_mut(NEW_MODEL_NAME).expect("failed to obtain the body");
-            body.element_mut_pointer()
-        };
-        assert!(unsafe { spec.delete_element(body_element) }.is_ok(), "failed to delete model");
+        assert!(
+            unsafe { spec.body_mut(NEW_MODEL_NAME).unwrap().delete() }.is_ok(),
+            "failed to delete model"
+        );
         assert!(spec.body(NEW_MODEL_NAME).is_none(), "body was not removed from spec");
 
         /* Test world body deletion */
-        let world_element = {
-            let world = spec.world_body_mut();
-            world.element_mut_pointer()
-        };
-        assert!(unsafe { spec.delete_element(world_element) }.is_err(), "the world model should not be deletable");
+        let world = unsafe { spec.world_body_mut().delete() };
+        assert!(world.is_err(), "the world model should not be deletable");
 
         spec.compile().unwrap();
     }
@@ -2956,11 +2831,10 @@ mod tests {
         joint.set_name(NEW_NAME).unwrap();
 
         /* Test normal body deletion */
-        let joint_element = {
-            let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
-            joint.element_mut_pointer()
-        };
-        assert!(unsafe { spec.delete_element(joint_element) }.is_ok(), "failed to delete model");
+        assert!(
+            unsafe { spec.joint_mut(NEW_NAME).unwrap().delete() }.is_ok(),
+            "failed to delete model"
+        );
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed fom spec");
 
         spec.compile().unwrap();
@@ -2975,11 +2849,8 @@ mod tests {
         hfield.set_name(NEW_NAME).unwrap();
 
         /* Test normal hfield deletion */
-        let hfield_element = {
-            let hfield = spec.hfield_mut(NEW_NAME).expect("failed to obtain the hfield");
-            hfield.element_mut_pointer()
-        };
-        assert!(unsafe { spec.delete_element(hfield_element) }.is_ok(), "failed to delete hfield");
+        let hfield = spec.hfield_mut(NEW_NAME).expect("failed to obtain the hfield");
+        assert!(unsafe { hfield.delete() }.is_ok(), "failed to delete hfield");
         assert!(spec.hfield(NEW_NAME).is_none(), "hfield was not removed from spec");
 
         spec.compile().unwrap();
@@ -3162,9 +3033,7 @@ mod tests {
         };
         assert!(required_size > 1, "required_size must exceed the original 1-byte buffer");
 
-        // Retry with the size MuJoCo reported plus one extra byte for safety
-        // (MuJoCo uses a strict less-than comparison, so the buffer must be
-        // at least required_size + 1 to succeed).
+        // `required_size` excludes the NUL, so the retry needs one byte more.
         let xml = spec.save_xml_string(required_size + 1)
             .expect("save_xml_string should succeed with required_size + 1 bytes");
         assert!(!xml.is_empty(), "saved XML must be non-empty");
@@ -3677,13 +3546,9 @@ mod tests {
                 "Before compile: joint '{}' align should be {:?}", name, expected);
         }
 
-        // Compile and verify -- AUTO should resolve, FALSE/TRUE should remain
+        // Compiling proves MuJoCo accepted every enum value.
         let model = spec.compile().unwrap();
-        let jnt_count = model.ffi().njnt as usize;
-        assert_eq!(jnt_count, 3, "expected 3 joints");
-
-        // Must compile without error -- the key correctness is the round-trip above;
-        // compilation proves MuJoCo accepted the enum values.
+        assert_eq!(model.ffi().njnt as usize, 3, "expected 3 joints");
     }
 
     /// Test that MjsJoint `limited` also correctly round-trips all three states
@@ -3713,12 +3578,11 @@ mod tests {
                 "Before compile: joint '{}' limited should be {:?}", name, expected);
         }
 
-        // Compile -- AUTO resolves based on range presence
+        // AUTO resolves from the presence of a range.
         let model = spec.compile().unwrap();
         let jnt_limited = model.jnt_limited();
         assert!(!jnt_limited[0]);
         assert!(jnt_limited[1]);
-        // AUTO with range present should resolve to true
         assert!(jnt_limited[2], "Joint with limited=AUTO and range should resolve to true");
     }
 
@@ -3893,9 +3757,8 @@ mod tests {
             .set_nchannel(3);
         assert!(ok_spec.compile().is_ok(), "nchannel == 3 builtin texture should compile");
 
-        // nchannel < 3 with NO builtin pattern must not trip this guard. Such a texture still
-        // fails to compile (it has no pixel source), but with MuJoCo's own error message rather
-        // than the nchannel guard's, proving the guard is correctly scoped to the builtin path.
+        // Without a builtin pattern the texture still fails to compile, but through MuJoCo's own
+        // error, which scopes the guard to the builtin path.
         let mut no_builtin = MjSpec::new();
         no_builtin.add_texture()
             .with_name("plain")
@@ -4074,33 +3937,24 @@ mod tests {
         assert!(MjSpec::new().add_default("cls", None).id().is_none());
     }
 
-    /// `mjs_getSpec` casts to `mjCBase` too, so the default check must run before the owner check
-    /// for `delete_element` to reject a default of this very spec as unsupported.
+    /// A name that MuJoCo parses need not be valid UTF-8, so `delete` must reach the world body
+    /// through its address; a name comparison would panic instead of deleting the body.
     #[test]
-    fn test_delete_element_rejects_default() {
-        let mut spec = MjSpec::new();
-        let element = spec.add_default("cls", None).element_mut_pointer();
-        assert!(matches!(unsafe { spec.delete_element(element) }, Err(MjEditError::UnsupportedOperation)));
-    }
-
-    /// A name that MuJoCo parses need not be valid UTF-8, so `delete_element` compares the raw
-    /// bytes; a `&str` conversion would panic instead of deleting the body.
-    #[test]
-    fn test_delete_element_non_utf8_name() {
+    fn test_delete_non_utf8_name() {
         // tinyxml2 encodes a character reference without validating it, so the surrogate U+D800
         // becomes the three bytes ED A0 80, which no UTF-8 string may hold.
         let mut spec = MjSpec::from_xml_string(
             "<mujoco><worldbody><body name=\"a&#xD800;b\"/></worldbody></mujoco>"
         ).unwrap();
 
-        let element = spec.body_iter_mut().nth(1).unwrap().element_mut_pointer();
+        let body = spec.body_iter_mut().nth(1).unwrap();
         // SAFETY: the spec owns the name string for as long as the element lives.
-        let name = unsafe { CStr::from_ptr(mjs_getString(mjs_getName(element))) };
+        let name = unsafe { CStr::from_ptr(mjs_getString(mjs_getName(body.element_mut_pointer()))) };
         assert!(
             std::str::from_utf8(name.to_bytes()).is_err(), "the test needs a non-UTF-8 name"
         );
 
-        unsafe { spec.delete_element(element) }.unwrap();
+        unsafe { body.delete() }.unwrap();
         assert_eq!(spec.body_iter().count(), 1);
     }
 
@@ -4115,14 +3969,29 @@ mod tests {
         assert_eq!(wrap.name(), "s0");
     }
 
-    /// A frame's element type lies past the end of MuJoCo's element-list array, and a wrap's slot
-    /// in that array is empty, so `mjs_delete` corrupts the spec and still reports success.
+    /// A frame's element type lies past the end of MuJoCo's element-list array, so `mjs_delete`
+    /// corrupts the spec and still reports success.
     #[test]
-    fn test_delete_element_rejects_frame_and_wrap() {
+    fn test_delete_rejects_frame() {
         let mut spec = MjSpec::new();
-        let frame = spec.world_body_mut().add_frame().element_mut_pointer();
+        let frame = spec.world_body_mut().add_frame();
+        assert!(matches!(unsafe { frame.delete() }, Err(MjEditError::UnsupportedOperation)));
+        assert_eq!(spec.world_body().frame_iter(false).count(), 1, "the frame stays in the body");
+    }
+
+    /// The deprecated raw-pointer path reaches what a handle cannot: a null pointer, a default
+    /// class, a tendon wrap, and an element of another spec.
+    #[test]
+    #[expect(deprecated, reason = "the test covers the deprecated method itself")]
+    fn test_delete_element_guards() {
+        let mut spec = MjSpec::new();
         assert!(matches!(
-            unsafe { spec.delete_element(frame) }, Err(MjEditError::UnsupportedOperation)
+            unsafe { spec.delete_element(ptr::null_mut()) }, Err(MjEditError::DeleteFailed(_))
+        ));
+
+        let default = spec.add_default("cls", None).element_mut_pointer();
+        assert!(matches!(
+            unsafe { spec.delete_element(default) }, Err(MjEditError::UnsupportedOperation)
         ));
 
         spec.world_body_mut().add_site().with_name("s0");
@@ -4130,5 +3999,146 @@ mod tests {
         assert!(matches!(
             unsafe { spec.delete_element(wrap) }, Err(MjEditError::UnsupportedOperation)
         ));
+
+        let mut other = MjSpec::new();
+        let foreign = other.world_body_mut().add_body().element_mut_pointer();
+        assert!(matches!(
+            unsafe { spec.delete_element(foreign) }, Err(MjEditError::DeleteFailed(_))
+        ));
+        assert_eq!(other.body_iter().count(), 2, "the foreign body stays in its own spec");
+
+        let hfield = spec.add_hfield().element_mut_pointer();
+        unsafe { spec.delete_element(hfield) }.unwrap();
+        assert_eq!(spec.hfield_iter().count(), 0, "an element of this spec still deletes");
+    }
+
+    /// Deleting a body deletes its subtree, which the safety contract of `delete` builds on.
+    #[test]
+    fn test_delete_body_removes_subtree() {
+        let mut spec = MjSpec::new();
+        let parent = spec.world_body_mut().add_body();
+        parent.set_name("parent").unwrap();
+        parent.add_body().with_name("child");
+        spec.body_mut("child").unwrap().add_geom().with_name("g0");
+
+        unsafe { spec.body_mut("parent").unwrap().delete() }.unwrap();
+        assert!(spec.body("child").is_none(), "the child left the spec with its parent");
+        assert!(spec.geom("g0").is_none(), "so did the geom of the child");
+        assert_eq!(spec.body_iter().count(), 1, "only the world body stays");
+    }
+
+    /// Deleting a body frees the elements that referenced it, so their address returns to the
+    /// allocator and a later element can take it.
+    #[test]
+    fn test_delete_body_releases_dependents() {
+        const MODEL_WITH_ACTUATOR: &str = "\
+<mujoco>
+  <worldbody>
+    <body name=\"arm\"><joint name=\"j0\" type=\"hinge\"/><geom size=\".1\"/></body>
+  </worldbody>
+  <actuator><motor name=\"a0\" joint=\"j0\"/></actuator>
+</mujoco>";
+
+        let mut spec = MjSpec::from_xml_string(MODEL_WITH_ACTUATOR).unwrap();
+        unsafe { spec.body_mut("arm").unwrap().delete() }.unwrap();
+        assert!(spec.actuator("a0").is_none(), "the delete released the dependent actuator");
+        assert_eq!(spec.actuator_iter().count(), 0, "no walk reaches it either");
+    }
+
+    /// Compiling with `discardvisual` frees the visual geoms and their assets, so a later element
+    /// can take the address of a discarded one, and a walk must still reach only live geoms.
+    ///
+    /// The test walks instead of looking a name up: MuJoCo leaves the discarded name in its id map,
+    /// so `MjSpec::geom("visual")` throws out of C++ here. That is a separate defect of the lookup.
+    #[test]
+    fn test_delete_after_discardvisual() {
+        const VISUAL: &str = "\
+<mujoco>
+  <worldbody>
+    <geom name=\"solid\" size=\".1\"/>
+    <geom name=\"visual\" size=\".1\" contype=\"0\" conaffinity=\"0\" group=\"3\"/>
+  </worldbody>
+</mujoco>";
+
+        let mut spec = MjSpec::from_xml_string(VISUAL).unwrap();
+        spec.compiler_mut().set_discardvisual(true);
+        spec.compile().unwrap();
+        assert_eq!(spec.geom_iter().count(), 1, "the compile discarded the visual geom");
+        assert_eq!(spec.geom_iter().next().unwrap().name(), "solid");
+
+        for i in 0..64 {
+            spec.world_body_mut().add_geom().with_name(&format!("fresh{i}"))
+                .with_size([0.1, 0.0, 0.0]);
+        }
+        assert!(
+            unsafe { spec.geom_iter_mut().next().unwrap().delete() }.is_ok(), "the survivor deletes"
+        );
+        assert_eq!(spec.geom_iter().count(), 64);
+    }
+
+    /// A walk that deletes the first element of each round removes a whole selection, which is how
+    /// a caller deletes in bulk without holding a handle across a deletion.
+    #[test]
+    fn test_delete_removes_a_whole_selection() {
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+        for name in ["g0", "g1", "g2"] {
+            world.add_geom().with_name(name).with_size([0.1, 0.0, 0.0]);
+        }
+
+        let mut deleted = 0;
+        while let Some(geom) = spec.geom_iter_mut().next() {
+            unsafe { geom.delete() }.unwrap();
+            deleted += 1;
+        }
+        assert_eq!(deleted, 3);
+        assert_eq!(spec.geom_iter().count(), 0);
+    }
+
+    /// Every element kind that `delete` accepts removes through it.
+    #[test]
+    fn test_delete_every_element_kind() {
+        let mut spec = MjSpec::new();
+        macro_rules! delete_added {
+            ($($kind:ident),*) => {paste::paste! {$({
+                let element = spec.[<$kind _iter_mut>]().next().unwrap();
+                assert!(unsafe { element.delete() }.is_ok(), stringify!($kind));
+                assert_eq!(spec.[<$kind _iter>]().count(), 0, stringify!($kind));
+            })*}};
+        }
+
+        let world = spec.world_body_mut();
+        world.add_body();
+        world.add_geom();
+        world.add_site();
+        world.add_camera();
+        world.add_light();
+        spec.body_iter_mut().last().unwrap().add_joint();
+        spec.add_actuator();
+        spec.add_pair();
+        spec.add_equality();
+        spec.add_tendon();
+        spec.add_mesh();
+        spec.add_material();
+        spec.add_sensor();
+        spec.add_flex();
+        spec.add_exclude();
+        spec.add_numeric();
+        spec.add_text();
+        spec.add_tuple();
+        spec.add_key();
+        spec.add_hfield();
+        spec.add_skin();
+        spec.add_texture();
+        spec.add_plugin();
+
+        delete_added!(
+            joint, geom, site, camera, light, actuator, pair, equality, tendon, mesh, material,
+            sensor, flex, exclude, numeric, text, tuple, key, hfield, skin, texture, plugin
+        );
+
+        // The world body stays, so the body list never empties.
+        assert!(unsafe { spec.body_iter_mut().last().unwrap().delete() }.is_ok(), "body");
+        assert_eq!(spec.body_iter().count(), 1);
     }
 }

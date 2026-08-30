@@ -148,14 +148,6 @@ fn compile_with(spec: &MjSpec, edits: &[&Edit]) -> Option<MjModel> {
     copy.compile().ok()
 }
 
-/// Finds the item of one kind by name and hands its raw element pointer back, so that the
-/// borrow on the spec ends before `delete_element` takes its own.
-macro_rules! element_pointer {
-    ($spec:expr, $iter_mut:ident, $name:expr) => {
-        $spec.$iter_mut().find(|item| item.name() == $name).map(|item| item.element_mut_pointer())
-    };
-}
-
 /// Runs `body` on the item of one kind that carries `name`, and does nothing when it is gone.
 macro_rules! on_item {
     ($spec:expr, $iter_mut:ident, $name:expr, |$item:ident| $body:expr) => {
@@ -449,10 +441,9 @@ fn deletion_edits(spec: &MjSpec) -> Vec<Edit> {
                 out.push(Edit::new(
                     format!("delete {} '{}'", $kind, name), Kind::Open,
                     move |spec: &mut MjSpec| {
-                        if let Some(pointer) = element_pointer!(spec, $iter_mut, target) {
-                            // SAFETY: the pointer names an element of this spec, found just above.
-                            let _ = unsafe { spec.delete_element(pointer) };
-                        }
+                        // SAFETY: the walk runs on the spec that the edits before it left, so it
+                        // reaches a live element only, and each edit deletes one name once.
+                        on_item!(spec, $iter_mut, target, |item| unsafe { let _ = item.delete(); });
                     },
                 ));
             }

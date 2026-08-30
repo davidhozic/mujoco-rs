@@ -206,11 +206,11 @@ changed sensor type or a changed actuator dynamics type breaks it; ``swap_model`
 
 Deleting elements
 ======================
-Most elements can be removed from a specification with
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`,
-which takes the element's raw pointer obtained from
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>element_mut_pointer`.
-The world body and default classes cannot be removed; ``delete_element`` returns
+Most elements can be removed from a specification with the ``unsafe``
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecObject::<method>delete`, called on the
+handle of the element. A default class and a tendon wrap are no
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecObject`, so they carry no ``delete`` at all.
+The world body and a frame do carry it, and it returns
 :docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>UnsupportedOperation` for them.
 
 .. code-block:: rust
@@ -219,23 +219,37 @@ The world body and default classes cannot be removed; ``delete_element`` returns
 
     fn main() {
         let mut spec = MjSpec::new();
-        let body = spec.world_body_mut().add_body().with_name("ball");
+        spec.world_body_mut().add_body().with_name("ball");
 
-        let body_ptr = body.element_mut_pointer();
-        // SAFETY: `body_ptr` refers to a live element of `spec` that has not been deleted.
-        unsafe { spec.delete_element(body_ptr).expect("failed to delete the body") };
+        unsafe { spec.body_mut("ball").unwrap().delete() }.expect("failed to delete the body");
     }
 
-Because ``delete_element`` takes ``&mut MjSpec``, the borrow checker already invalidates any
-references obtained earlier (such as ``body`` above) --- you cannot use a reference into the
-spec across the call. The method is ``unsafe`` only because the raw element pointer itself
-cannot be validated: in particular, the caller must not pass a pointer to an element that has
-already been deleted, which would make MuJoCo operate on freed memory.
+``delete`` is ``unsafe`` because MuJoCo cannot answer whether it already deleted an element. It
+keeps a deleted element allocated until the specification drops, so a second deletion of the same
+element frees it twice. The caller carries three obligations:
 
-.. note::
+- Delete each element at most once.
+- Do not delete an element that the deletion of a body already took out of the specification.
+- Do not use the handle of an element that the deletion of a body freed.
 
-    The older ``SpecItem::delete`` method is **deprecated since 5.0.0** and is unsound
-    (it relies on undefined behavior). Use ``delete_element`` instead.
+Deleting a body deletes its whole subtree, and it frees every keyframe, and every actuator, sensor,
+tendon, equality, pair and exclude that refers to the subtree. The last two obligations follow from
+that: an iterator collected before such a deletion still hands out the handles it took.
+
+The borrow checker covers the ordinary case, because a handle borrows the specification and a
+deletion needs it mutably. Look the next element up in each round, as the loop below does, and every
+handle the loop holds belongs to a live element.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn delete_every_geom(spec: &mut MjSpec) {
+        // SAFETY: the walk starts again after each deletion, so it reaches a live geom only.
+        while let Some(geom) = spec.geom_iter_mut().next() {
+            unsafe { geom.delete() }.unwrap();
+        }
+    }
 
 
 .. _model_editing_defaults:

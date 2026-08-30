@@ -629,3 +629,22 @@ which keeps the instance name, the plugin name and the active flag, and which im
         plugin.set_name("instance");
         plugin.set_active(true);
     }
+
+``delete`` moved from ``SpecItem`` to ``SpecObject``
+----------------------------------------------------------------------
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecObject::<method>delete` keeps the shape of
+the removed ``SpecItem::delete``, so a call through the element handle needs no edit. Import
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecObject`, which ``mujoco_rs::prelude`` also
+exports. The method is no longer deprecated, and its safety contract is the one the guide states:
+delete each element at most once, and do not touch an element that the deletion of a body took out
+of the specification.
+
+``MjSpec::delete_element`` is deprecated. Delete through the handle instead.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn prune(spec: &mut MjSpec) {
+        unsafe { spec.geom_mut("g0").unwrap().delete() }.unwrap();
+    }

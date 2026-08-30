@@ -207,12 +207,23 @@
   out :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsPluginReference` :sup:`new`.
   See :ref:`migrate_6_0_0`.
 
+``delete`` *moved from* :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem` *to*
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecObject`
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecObject::<method>delete` :sup:`new` stays
+  ``unsafe`` and is no longer deprecated. A default class and a tendon wrap are no ``SpecObject``,
+  so a deletion that MuJoCo cannot carry out is now a compile error instead of an error value.
+  See :ref:`migrate_6_0_0`.
+
 .. rubric:: New dependencies
 
 - Added `log <https://docs.rs/log/0.4.34/log/>`__ as a mandatory dependency.
 
 .. rubric:: Deprecations
 
+- Deprecated |mj_spec|'s
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`. Call
+  ``SpecObject::delete`` on the element handle instead.
 - Deprecated |mj_model|'s
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_clone` --- its
   :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>AllocationFailed` arm is
@@ -525,12 +536,9 @@
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>id` now returns ``None``
   for a default class.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element` now reports
-  :docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>UnsupportedOperation` for a default
-  class of this spec, instead of
-  :docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>DeleteFailed`, and no
-  longer panics on an element whose stored name is not valid UTF-8. It also reports
-  ``UnsupportedOperation`` for a frame and for a tendon wrap.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecObject::<method>delete` now reports
+  :docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>UnsupportedOperation` for a frame and
+  for the world body. MuJoCo reported success for both and left the specification corrupted.
 - Closed a crash reachable from safe code when naming a tendon wrap:
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name` on a |mjs_wrap|
   now reports ``UnsupportedOperation`` and

@@ -2,6 +2,7 @@
 use std::ffi::{CStr, CString};
 
 use crate::util::checked_c_len;
+use crate::error::MjEditError;
 use crate::mujoco_c::*;
 
 
@@ -10,12 +11,9 @@ use crate::mujoco_c::*;
 ***************************/
 /// Reads MJS string (C++) as a `&str`.
 ///
-/// The returned `&str` borrows from the `mjString` object pointed to by `string`.
-/// It remains valid as long as that object is alive and the string is not mutated
-/// (which would reallocate the internal C++ `std::string` buffer).
-///
 /// # Safety
-/// `string` must point to a valid `mjString` object for the duration `'a`.
+/// `string` must point to a valid `mjString` object for the duration `'a`, and the string must
+/// not be written during `'a`, because a write reallocates the C++ buffer.
 ///
 /// # Panics
 /// Panics if the string contains invalid UTF-8.
@@ -24,8 +22,7 @@ pub(crate) unsafe fn read_mjs_string<'a>(string: *const mjString) -> &'a str {
     if ptr.is_null() {
         ""
     } else {
-        // SAFETY: `ptr` points into the internal buffer of the C++ std::string
-        // referenced by `string`, which is valid for lifetime 'a.
+        // SAFETY: `ptr` points into the buffer of the C++ std::string, valid for `'a`.
         unsafe { CStr::from_ptr(ptr) }.to_str().unwrap()
     }
 }
@@ -161,6 +158,51 @@ pub(crate) unsafe fn write_mjs_vec_byte<T: bytemuck::NoUninit>(source: &[T], des
     }
 }
 
+/// Deletes `element` from the specification that holds it, with the checks MuJoCo omits.
+///
+/// # Errors
+/// Returns [`MjEditError::UnsupportedOperation`] for a default class, a frame, a tendon wrap and
+/// the world body, and [`MjEditError::DeleteFailed`] when MuJoCo refuses the deletion.
+///
+/// # Safety
+/// Same contract as [`SpecObject::delete`](super::traits::SpecObject::delete), and `element` must
+/// point to an element of a specification.
+pub(crate) unsafe fn delete_element(element: *mut mjsElement) -> Result<(), MjEditError> {
+    let elemtype = unsafe { (*element).elemtype };
+
+    // mjCDef is not an mjCBase, so this precedes mjs_getSpec. A frame's type is 100, past the
+    // mjNOBJECT end of the element list MuJoCo indexes with it, and a wrap's slot in it is null.
+    if matches!(
+        elemtype,
+        mjtObj::mjOBJ_DEFAULT | mjtObj::mjOBJ_FRAME | mjtObj::mjOBJ_UNKNOWN
+    ) {
+        return Err(MjEditError::UnsupportedOperation);
+    }
+
+    let spec = unsafe { mjs_getSpec(element) };
+
+    // Prevent deletion of the world-bodies.
+    if elemtype == mjtObj::mjOBJ_BODY && element == unsafe { mjs_firstElement(spec, elemtype) } {
+        return Err(MjEditError::UnsupportedOperation);
+    }
+
+    match unsafe { mjs_delete(spec, element) } {
+        0 => Ok(()),
+        _ => {
+            // SAFETY: the message belongs to the spec and lives until the next call on it.
+            let error_msg = unsafe {
+                let ptr = mjs_getError(spec);
+                if ptr.is_null() {
+                    "Unknown error".to_owned()
+                } else {
+                    CStr::from_ptr(ptr).to_string_lossy().into_owned()
+                }
+            };
+            Err(MjEditError::DeleteFailed(error_msg))
+        }
+    }
+}
+
 
 /***************************
 ** Helper macros
@@ -185,26 +227,21 @@ macro_rules! add_x_method {
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
                 "# Note\n\n",
                 "<div class=\"warning\">\n\n",
-                "MuJoCo cannot report a failure here: `mjs_add", stringify!([<$name:camel>]),
-                "` allocates the element with C++ `new`, which throws instead of returning null, ",
-                "and then returns the address of the element it just added, so this method never ",
-                "returns `Err`. An allocation failure ends the process: the exception cannot ",
-                "cross the C API. Prefer the panicking [`Self::add_", stringify!($name), "`]. ",
-                "This method may be undeprecated in the future if MuJoCo's upstream C++ code is ",
-                "changed to report the failure recoverably.\n\n",
+                "`mjs_add", stringify!([<$name:camel>]), "` allocates with C++ `new`, which ends ",
+                "the process instead of returning null, so this never returns `Err`. Prefer ",
+                "[`Self::add_", stringify!($name), "`].\n\n",
                 "</div>\n\n",
                 "# Errors\n",
-                "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate ",
-                "the element, instead of panicking."
+                "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate the element."
             )]
             #[deprecated(
                 since = "6.0.0",
                 note = "always returns Ok; use the panicking variant"
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
+                // SAFETY: the element is freshly allocated by C++ operator new, so it is aligned,
+                // initialized and unaliased. A null pointer becomes `None`.
                 let ptr = unsafe { [<mjs_add $name:camel>](self.ffi_mut(), ptr::null()) };
-                // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null
-                // the pointee is properly aligned and initialized by C++ operator new.
                 unsafe { [<Mjs $name:camel>]::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
             }
         )*
@@ -231,13 +268,9 @@ macro_rules! add_x_method_by_frame {
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
                 "# Note\n\n",
                 "<div class=\"warning\">\n\n",
-                "MuJoCo cannot report a failure here: `mjs_add", stringify!([<$name:camel>]),
-                "` allocates the element with C++ `new`, which throws instead of returning null, ",
-                "and then returns the address of the element it just added, so this method never ",
-                "returns `Err`. An allocation failure ends the process: the exception cannot ",
-                "cross the C API. Prefer the panicking [`Self::add_", stringify!($name), "`]. ",
-                "This method may be undeprecated in the future if MuJoCo's upstream C++ code is ",
-                "changed to report the failure recoverably.\n\n",
+                "`mjs_add", stringify!([<$name:camel>]), "` allocates with C++ `new`, which ends ",
+                "the process instead of returning null, so this never returns `Err`. Prefer ",
+                "[`Self::add_", stringify!($name), "`].\n\n",
                 "</div>\n\n",
                 "# Errors\n",
                 "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate the element."
@@ -247,18 +280,8 @@ macro_rules! add_x_method_by_frame {
                 note = "always returns Ok; use the panicking variant"
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
-                // SAFETY:
-                // - element_mut_pointer() reads `self.element`, a field always valid after construction.
-                // - body_ptr is non-null for any MjsFrame reachable through the Rust API because
-                //   mjs_addFrame always calls SetParent(body).
-                // - The is_null() guard is defensive; mjs_addXxx functions do not perform
-                //   null-check error handling internally, so under current MuJoCo the
-                //   pointer is always non-null.
-                // - mjs_setFrame: both dest and frame are non-null and valid; failure for a
-                //   freshly-created element is treated as a bug via debug_assert.
-                // - `&mut *ptr`: ptr is confirmed non-null by the guard above, properly aligned
-                //   and initialized by C++ operator new, and freshly allocated so no Rust
-                //   reference can alias it for the returned lifetime.
+                // SAFETY: mjs_addFrame always calls SetParent(body), so the parent is non-null,
+                // and the element that mjs_addXxx returns is fresh, so nothing aliases it.
                 unsafe {
                     let ep = self.element_mut_pointer();
                     let body_ptr = mjs_getParent(ep);
@@ -296,24 +319,19 @@ macro_rules! add_x_method_no_default {
                 "Fallible version of [`Self::add_", stringify!($name), "`].\n\n",
                 "# Note\n\n",
                 "<div class=\"warning\">\n\n",
-                "MuJoCo cannot report a failure here: `mjs_add", stringify!([<$name:camel>]),
-                "` allocates the element with C++ `new`, which throws instead of returning null, ",
-                "and then returns the address of the element it just added, so this method never ",
-                "returns `Err`. An allocation failure ends the process: the exception cannot ",
-                "cross the C API. Prefer the panicking [`Self::add_", stringify!($name), "`]. ",
-                "This method may be undeprecated in the future if MuJoCo's upstream C++ code is ",
-                "changed to report the failure recoverably.\n\n",
+                "`mjs_add", stringify!([<$name:camel>]), "` allocates with C++ `new`, which ends ",
+                "the process instead of returning null, so this never returns `Err`. Prefer ",
+                "[`Self::add_", stringify!($name), "`].\n\n",
                 "</div>\n\n",
                 "# Errors\n",
-                "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate ",
-                "the element, instead of panicking."
+                "Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate the element."
             )]
             #[deprecated(
                 since = "6.0.0",
                 note = "always returns Ok; use the panicking variant"
             )]
             pub fn [<try_add_ $name>](&mut self) -> Result<&mut [<Mjs $name:camel>], MjEditError> {
-                let ptr = unsafe { [<mjs_add $name:camel>](self.0.as_ptr()) };
+                let ptr = unsafe { [<mjs_add $name:camel>](self.ffi.as_ptr()) };
                 unsafe { [<Mjs $name:camel>]::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
             }
         )*
@@ -333,7 +351,7 @@ macro_rules! find_x_method {
             pub fn $item(&self, name: &str) -> Option<&[<Mjs $item:camel>]> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
-                    let ptr = mjs_findElement(self.0.as_ptr(), MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
+                    let ptr = mjs_findElement(self.ffi.as_ptr(), MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
                     if ptr.is_null() {
                         None
                     }
@@ -351,7 +369,7 @@ macro_rules! find_x_method {
             pub fn [<$item _mut>](&mut self, name: &str) -> Option<&mut [<Mjs $item:camel>]> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
-                    let ptr = mjs_findElement(self.0.as_ptr(), MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
+                    let ptr = mjs_findElement(self.ffi.as_ptr(), MjtObj::[<mjOBJ_ $item:upper>], c_name.as_ptr());
                     if ptr.is_null() {
                         None
                     }
@@ -376,7 +394,7 @@ macro_rules! find_x_method_direct {
             pub fn $item(&self, name: &str) -> Option<&[<Mjs $item:camel>]> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
-                    let ptr = [<mjs_find $item:camel>](self.0.as_ptr(), c_name.as_ptr());
+                    let ptr = [<mjs_find $item:camel>](self.ffi.as_ptr(), c_name.as_ptr());
                     if ptr.is_null() {
                         None
                     }
@@ -394,7 +412,7 @@ macro_rules! find_x_method_direct {
             pub fn [<$item _mut>](&mut self, name: &str) -> Option<&mut [<Mjs $item:camel>]> {
                 let c_name = CString::new(name).unwrap();
                 unsafe {
-                    let ptr = [<mjs_find $item:camel>](self.0.as_ptr(), c_name.as_ptr());
+                    let ptr = [<mjs_find $item:camel>](self.ffi.as_ptr(), c_name.as_ptr());
                     if ptr.is_null() {
                         None
                     }
@@ -607,18 +625,16 @@ macro_rules! vec_string_set_append {
         )*
     }};
 
-    // Indexed variant: the string vector is pre-sized (one entry per enum variant)
-    // and entries must be set by index. Generates `set_<singular>(role, name)` and
-    // `with_<singular>(role, name)` in addition to the bulk `set_<plural>` / `append_<plural>`.
+    // Indexed variant: the vector is pre-sized with one entry per enum variant, so an entry is
+    // set by index rather than appended.
     ($name:ident[$role_ty:ty] => $singular:ident; $comment:expr $(;)?) => {paste::paste!{
         #[doc = concat!(
             "Sets the entry at index `role` in `", stringify!($name), "` to `name`. ",
             $comment,
             "\n\n",
             "# Note\n",
-            "The `", stringify!($name), "` vector is pre-sized by MuJoCo with one slot per ",
-            "[`", stringify!($role_ty), "`] value. An index with no slot makes MuJoCo call ",
-            "`mju_error`, which ends the process under the default log handler.\n",
+            "MuJoCo pre-sizes `", stringify!($name), "` with one slot per [`", stringify!($role_ty),
+            "`] value. An index with no slot ends the process through `mju_error`.\n",
             "\n",
             "# Panics\n",
             "When `name` contains '\\0' characters, a panic occurs."
@@ -763,23 +779,15 @@ macro_rules! vec_set_get {
 /// Implements setters for non-string attributes.
 ///
 /// Three forms are supported:
-/// - `name: Type; "comment"`: a **safe** setter that takes `&[Type]` and writes it unchanged.
-/// - `name: InputType => StoredType { check, "reason" } => ErrType; "comment"`: a **safe** setter
-///   taking `&[InputType]` (typically a Rust enum) that stores each element as the raw C type
-///   `StoredType` via a zero-cost pointer reinterpretation (the same compile-time-checked cast the
-///   view layer uses, so no `bytemuck` trait is required on the enum). Every element is passed
-///   through `check` (a `Fn(InputType) -> Result<(), ErrType>`) before anything is written; if any
-///   element fails, nothing is written. Use this when the validation rules out the out-of-range
-///   values the C side would misuse, which is what makes the setter sound without `unsafe`.
-///   `"reason"` is a doc fragment in the crate's `# Errors` style (e.g.
-///   `"[`MjEditError::InvalidParameter`] when ..."`) reused verbatim in the generated `# Errors`
-///   section. The `{ check, "reason" } => ErrType` part may be omitted for a plain safe cast.
-/// - `[unsafe: "safety"] name: InputType => StoredType; "comment"`: the same cast setter made
-///   **`unsafe`** (the per-element `check` omitted), for vectors the C side later uses without its
-///   own validation (e.g. as an unchecked array index, count, or `memcpy` length) and which
-///   cannot be cheaply validated here. The optional leading `[unsafe: "safety"]` marker flips the
-///   generated setter to `unsafe fn` and emits `"safety"` as its caller-facing `# Safety`
-///   obligation.
+/// - `name: Type; "comment"`: a safe setter that takes `&[Type]` and writes it unchanged.
+/// - `name: InputType => StoredType { check, "reason" } => ErrType; "comment"`: a safe setter
+///   taking `&[InputType]` (an enum) and storing it as the C type `StoredType`. Every element
+///   passes `check`, a `Fn(InputType) -> Result<(), ErrType>`, before anything is written, which
+///   is what makes the cast sound without `unsafe`. `"reason"` is a doc fragment in the crate's
+///   `# Errors` style. Omit the `{ check, "reason" } => ErrType` tail for a plain cast.
+/// - `[unsafe: "safety"] name: InputType => StoredType; "comment"`: the same cast without the
+///   per-element check, for a vector the C side later trusts as an unchecked index, count or
+///   length. `"safety"` becomes the caller's `# Safety` obligation.
 macro_rules! vec_set {
     ($($name:ident: $type:ty; $comment:expr);* $(;)?) => {paste::paste!{
         $(
@@ -793,30 +801,15 @@ macro_rules! vec_set {
 
     ($($([$unsafe_kw:ident : $safety:literal])? $name:ident: $input_type:ty => $type:ty $({$check:expr , $reason:literal} => $err:ty)?; $comment:expr);* $(;)?) => {paste::paste!{
         $(
-            // One cast setter whose shape is driven by the optional check / safety tail:
-            // - `{ check, "reason" } => ErrType` makes it a safe `-> Result<(), ErrType>` that
-            //   validates every element first; passing validation rules out the values the C side
-            //   would misuse, so the reinterpretation is sound without `unsafe`. `"reason"` is a doc
-            //   fragment naming the error and condition, reused verbatim in the `# Errors` section.
-            // - a leading `[unsafe: "safety"]` marker makes it an `unsafe fn` (no per-element
-            //   check) for vectors the C side later trusts as an unchecked index/count/length;
-            //   `"safety"` documents the caller's `# Safety` obligation. The brackets keep the
-            //   marker unambiguous with the field's own `name` ident, and the `unsafe` keyword
-            //   (`$unsafe_kw`) is echoed onto the generated `fn`.
-            // - neither: a plain safe cast.
             #[doc = concat!("Set ", $comment
                 $(, "\n\n# Errors\nReturns ", $reason, " (in that case nothing is written).")?
                 $(, "\n\n# Safety\n", $safety)?
             )]
             pub $($unsafe_kw)? fn [<set_ $name>](&mut self, value: &[$input_type]) $(-> Result<(), $err>)? {
                 $(for &v in value { ($check)(v)?; })?
-                // Compile-time size/alignment check for the layout-compatible reinterpretation below.
                 $crate::util::assert_ptr_cast_valid::<$input_type, $type>(value.as_ptr());
-                // SAFETY: $input_type and $type are layout-compatible (asserted above) and every enum
-                // value is a valid bit pattern for its underlying integer, so reinterpreting the slice
-                // is sound and zero-cost. The value-range precondition the C side relies on is enforced
-                // by the `$check` loop above when present, or by the caller's `# Safety` contract
-                // otherwise. self.$name is a valid pointer for the lifetime of self.
+                // SAFETY: the assert proves the types are layout-compatible, and the `$check` loop
+                // or the caller's `# Safety` contract covers the value range that C relies on.
                 let raw = unsafe { std::slice::from_raw_parts(value.as_ptr().cast(), value.len()) };
                 unsafe { [<write_mjs_vec_ $type>](raw, self.ffi().$name) };
                 $(Ok::<(), $err>(()))?
