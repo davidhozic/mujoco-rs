@@ -142,5 +142,6 @@ Each view call compares the layout of the info struct against the layout of the 
 :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`.
 While both of them name the same model, that comparison is a single pointer check.
 Both models keep their own copy of the layout, so after a swap to a different model
-each call compares the entire layout instead. Look the element up again on the new model
-to get the pointer check back.
+each call compares the entire layout instead. Call
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjJointDataInfo::<method>update_layout` once
+against the new ``MjData`` or ``MjModel`` to get the pointer check back.

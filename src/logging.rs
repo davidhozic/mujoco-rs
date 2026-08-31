@@ -114,7 +114,9 @@ pub unsafe fn set_log_handler(handler: LoggingHandler) {
 /// # Notes
 /// A message with level [`MjtLogLevel::mjLOG_ERROR`] will exit the program with code 1.
 ///
-/// [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) has no effect when this logging hook is installed.
+/// This call replaces MuJoCo's own handler, so the `logto_console`, `logto_file` and `logfile`
+/// fields of [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) no longer reach the output.
+/// It also enables every topic once, so a topic bitmask set before the call is lost.
 pub unsafe fn install_logging_hook() {
     USER_LOG_HANDLER.store(ptr::null_mut(), Ordering::Release);
     // SAFETY: the caller holds every thread that could use MuJoCo.

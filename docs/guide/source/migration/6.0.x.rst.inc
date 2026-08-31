@@ -39,7 +39,9 @@ together.
         body.set_gravcomp(1.0);
     }
 
-    // After: the world body is the root of the walk.
+    // After: the world body is the root of the walk. The prelude does not carry `MjsBody`.
+    // use mujoco_rs::wrappers::mj_editing::MjsBody;
+
     fn walk(body: &mut MjsBody) {
         body.set_gravcomp(1.0);
         for child in body.body_iter_mut() {
@@ -535,8 +537,10 @@ the same model, which the wrappers rely on but ``Deref`` alone does not give.
 
 ``&MjModel``, ``&mut MjModel``, ``Box<MjModel>``, ``Rc<MjModel>``, ``Arc<MjModel>``,
 ``Ref<MjModel>``, ``RefMut<MjModel>``, ``MutexGuard<MjModel>``, ``RwLockReadGuard<MjModel>`` and
-``RwLockWriteGuard<MjModel>`` implement the markers. Rename the bound in your own generic code, and
-claim the marker for a hand-written handle.
+``RwLockWriteGuard<MjModel>`` implement ``ModelType``. The five that deref mutably
+(``&mut MjModel``, ``Box<MjModel>``, ``RefMut<MjModel>``, ``MutexGuard<MjModel>`` and
+``RwLockWriteGuard<MjModel>``) also implement ``ModelTypeMut``. Rename the bound in your own
+generic code, and claim the marker for a hand-written handle.
 
 **Before:**
 
@@ -606,8 +610,9 @@ kind, and it bounds neither, so both now sit in the read-only list of their view
 Element handles are opaque types
 -------------------------------------------
 An ``Mjs*`` element handle is no longer an alias for its ``mujoco_c`` struct. It is an opaque,
-zero-sized type that stands at the address of that struct, so every wrapper method keeps its
-signature and code that stays inside the wrapper API needs no edit.
+zero-sized type that stands at the address of that struct, so code that stays inside the wrapper
+API needs no edit, with one exception: ``MjSpec::with_compiler`` is gone, because a by-value
+builder cannot take an opaque handle.
 
 Two things change. Naming the FFI struct where the handle belongs no longer compiles, and passing
 a handle straight to a ``mujoco_c`` function no longer coerces. Call ``ffi`` for the FFI struct,
@@ -631,6 +636,21 @@ and ``unsafe fn ffi_mut`` for writing.
 
 ``std::mem::swap`` on two handles used to exchange the contents of two elements. It now
 exchanges nothing.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn build() -> MjSpec {
+        let mut spec = MjSpec::new();
+
+        // Before
+        // let spec = spec.with_compiler(compiler);
+
+        // After
+        spec.compiler_mut().set_degree(false);
+        spec
+    }
 
 ``MjSpec`` is no longer ``Send``
 -------------------------------------------

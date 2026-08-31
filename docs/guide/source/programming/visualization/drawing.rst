@@ -39,7 +39,8 @@ To draw custom geoms to a scene inside a viewer or a renderer, applications typi
 
 .. warning::
 
-        Both methods are ``unsafe``. The renderer reads the geom's ``matid``, ``texid`` and, on a
+        ``create_geom`` and ``try_create_geom`` are ``unsafe``; ``clear_geom`` is safe. The
+        renderer reads the geom's ``matid``, ``texid`` and, on a
         flex or a skin geom, ``objid`` as unchecked indices, so the caller must keep each one below
         the count of the model that the rendering context was created for. ``matid`` and ``texid``
         also accept ``-1`` for none, which is what the two methods write.

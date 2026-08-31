@@ -234,7 +234,7 @@ To build statically linkable libraries, perform the following steps:
 
        git submodule update --init --recursive
        cd ./mujoco/
-       cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF
+       cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF -DMUJOCO_BUILD_TESTS:BOOL=OFF
        cmake --build build --parallel --target glfw libmujoco_simulate --config=Release
 
    This was tested with the ``gcc`` compiler.
@@ -259,7 +259,7 @@ To build statically linkable libraries, perform the following steps:
         compiler flags.
 
 4. Set the environment variable ``MUJOCO_STATIC_LINK_DIR`` to the **absolute** path of the ``lib/`` subdirectory
-   inside ``mujoco/build/`` (on some distributions, e.g. Fedora/RHEL/Arch, the directory may be ``lib64/``).
+   inside ``mujoco/build/`` (on some distributions, e.g. Fedora/RHEL, the directory may be ``lib64/``).
    Bash example:
 
    ::

@@ -207,6 +207,10 @@
   struct through ``ffi`` for reading and ``unsafe fn ffi_mut`` for writing, so code that hands a
   handle to a ``mujoco_c`` function needs an edit, see :ref:`migrate_6_0_0`. ``std::mem::swap`` on
   two handles used to exchange the contents of two elements; it now exchanges nothing.
+- |mj_spec| lost ``with_compiler``, because a by-value builder cannot take an opaque handle. Reach
+  the compiler options through
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compiler_mut`, see
+  :ref:`migrate_6_0_0`.
 
 |mj_spec| *is no longer* ``Send``
 
@@ -342,8 +346,8 @@
     :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` :sup:`new` installs a hook for
     ``log`` routing.
     :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler` :sup:`new` registers a user handler.
-  - MuJoCo-rs now reports its own events to the ``log`` crate as well, on the ``Info``, ``Warn``
-    and ``Error`` levels, with the emitting module path as the target.
+  - MuJoCo-rs now reports its own events to the ``log`` crate as well, on the ``Debug``, ``Info``,
+    ``Warn`` and ``Error`` levels, with the emitting module path as the target.
 
 *New compilation-warning accessors*
 
@@ -575,9 +579,10 @@
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_eye`,
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_mul_mat_mat`,
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_mul_mat_t_mat`,
-  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sqr_mat_td` and
-  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sym2dense`. They now panic on a
-  destination above ``i32::MAX`` elements. The other wrappers in the module are unchanged.
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sqr_mat_td`,
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sym2dense` and
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_symmetrize`. They now panic on a
+  destination above ``i32::MAX`` elements.
 - Closed a heap buffer overflow reachable from safe code in
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsHfield::<method>set_userdata` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>set_data`. They now

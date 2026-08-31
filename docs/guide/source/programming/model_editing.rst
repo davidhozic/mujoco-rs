@@ -109,7 +109,8 @@ We can now add our ball's body, geom and joint like so:
 
     In the above block, we used methods that have the ``with_`` prefix.
     These allow method chaining.
-    Alternatively, methods that have the ``set_`` prefix can be used. A plain field setter
+    Many fields also carry a ``set_`` method, but not all: an array field such as ``pos`` or
+    ``size`` offers ``with_pos`` and ``pos_mut`` only. A plain field setter
     (e.g. ``set_group``, ``set_mass``) returns nothing, while a validated setter returns a
     ``Result`` (``set_name`` fails on a duplicate name, ``set_default`` on an unknown class, and
     ``MjsNumeric::set_size`` on a negative size).
@@ -287,8 +288,9 @@ In Rust code, class assignment is done with
 MuJoCo copies the values of a class into an element when the element is **created**, so set the
 class on the parent body before you add its children. A call on an element that already exists
 only records the class name: the saved XML then carries ``class="..."``, but the next ``compile``
-keeps the old values. Some item-specific wrappers (for example frames) also expose explicit
-``childclass`` setters, with the same limitation.
+keeps the old values. A frame also exposes an explicit ``childclass`` setter
+(:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsFrame::<method>set_childclass`), with the
+same limitation.
 
 
 Iterators
@@ -356,7 +358,7 @@ The search is recursive, and it returns the body itself when its own name matche
 Every finder returns an ``Option`` that is ``None`` when no element with that name exists.
 
 After compilation, an element's numeric id in the resulting |mj_model| can be retrieved with
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>id`
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>id`
 (``None`` when the element has no id yet).
 
 

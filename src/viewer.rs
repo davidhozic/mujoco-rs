@@ -358,9 +358,8 @@ impl ViewerSharedState {
     /// Performs a bidirectional three-way merge of model's `opt`, `vis`, and `stat` parameters
     /// between the viewer's passive model and the incoming model.
     ///
-    /// Detects model changes via signature comparison and reloads internal state if needed.
+    /// Reloads the internal state when `model` is no longer compatible with the passive model.
     pub fn sync_model(&mut self, model: &mut MjModel) {
-        // Check if model signature changed
         if !self.data_passive.model().is_compatible_with_model(model) {
             // Model changed: reload internal state.
             let max_user_geom = self.user_scene.maxgeom() as usize;

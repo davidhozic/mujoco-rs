@@ -29,6 +29,16 @@ We provide a hook for integrating the MuJoCo logging with the ``log`` crate.
 The hook can be installed by calling :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` once
 at the start of the program.
 
+.. note::
+
+    Installing the hook, through either function, replaces MuJoCo's own handler, so the
+    ``logto_console``, ``logto_file`` and ``logfile`` fields of
+    :docs-rs:`~mujoco_rs::wrappers::mj_logging::<struct>MjLogConfig` no longer reach the output.
+    The install also writes every topic into the global topic bitmask once, so a bitmask that the
+    program set before the install is lost. The producer-side topic gate still reads that bitmask,
+    so a :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>set_log_config` call after the install
+    still suppresses the topics it clears.
+
 .. attention::
 
     :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` and
