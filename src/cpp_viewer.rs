@@ -5,10 +5,11 @@
 //! For most use cases, the Rust-native [`crate::viewer::MjViewer`] is recommended instead.
 use crate::mujoco_c::*;
 use std::ffi::CString;
-use std::ops::Deref;
 
+use log::{debug, warn};
+
+use crate::wrappers::mj_model::traits::ModelType;
 use crate::wrappers::mj_visualization::*;
-use crate::wrappers::mj_model::MjModel;
 use crate::wrappers::mj_data::MjData;
 
 #[repr(C)]
@@ -73,12 +74,16 @@ impl MjViewerCpp {
     /// # Safety
     /// The caller must ensure that both `model` and `data` remain alive and at a stable memory
     /// address for the entire lifetime of the returned [`MjViewerCpp`]. Dropping or moving the
-    /// underlying [`MjModel`] or [`MjData`] while the viewer is alive is undefined behavior.
-    /// Calls to [`MjViewerCpp::render`] must be done only on the **main** thread.
+    /// underlying [`MjModel`](crate::wrappers::mj_model::MjModel) or [`MjData`] while the viewer
+    /// is alive is undefined behavior.
+    /// [`MjViewerCpp::launch_passive`] itself performs the OpenGL initialization and render
+    /// steps, so it and [`MjViewerCpp::render`] must be called only on the **main** thread.
+    /// The viewer writes through both pointers, so the caller must treat `model` and `data` as
+    /// mutably borrowed by the viewer, and must not access them while [`MjViewerCpp::sync`] runs.
     ///
     /// # Panics
-    /// Panics if `mujoco_cSimulate_create` returns a null pointer, or if the load thread panics.
-    pub unsafe fn launch_passive<M: Deref<Target = MjModel> + Clone + Send + Sync>(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
+    /// Panics if the load thread panics.
+    pub unsafe fn launch_passive<M: ModelType + Clone + Send + Sync>(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut cam = Box::new(MjvCamera::default());
         let mut opt = Box::new(MjvOption::default());
@@ -113,11 +118,13 @@ impl MjViewerCpp {
             let running = unsafe { mujoco_cSimulate_RenderStep(sim) };
             if running == 0 {
                 // Window closed during model load; stop rendering.
+                warn!("the C++ viewer window closed while the model was loading");
                 break;
             }
         }
         load_thread.join().unwrap();
 
+        debug!("started the C++ viewer");
         Self {sim, running: true, user_scn, _cam: cam, _opt: opt, _pert: pert}
     }
 
@@ -141,7 +148,7 @@ impl MjViewerCpp {
         Ok(())
     }
 
-    /// Syncs the simulation state with the viewer.
+    /// Syncs the simulation state with the viewer. The transfer runs in both directions.
     pub fn sync(&mut self) {
         if !self.running {
             return;
@@ -166,8 +173,8 @@ impl Drop for MjViewerCpp {
 }
 
 /// # Safety
-/// Rendering must only be performed on the main thread. `Send` is provided so
-/// the viewer handle can be moved to the main thread after construction.
+/// Rendering must only be performed on the main thread. `Send` is provided so the viewer handle
+/// can be moved to another thread that only calls [`MjViewerCpp::sync`].
 unsafe impl Send for MjViewerCpp {}
 /// # Safety
 /// The viewer is safe to share across threads for syncing, but rendering must

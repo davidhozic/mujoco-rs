@@ -2,6 +2,7 @@
 //! struct to obtain images of the simulation.
 use mujoco_rs::renderer::MjRenderer;
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 use std::fs;
 
 // Re-exported `png` crate for convenience.
@@ -44,6 +45,11 @@ const SAVE_FREQUENCY: u32 = 50;
 
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
+
     /* Create the output directory for saving png files */
     fs::create_dir_all(OUTPUT_DIRECTORY).unwrap();
 
@@ -51,7 +57,7 @@ fn main() {
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
     let mut data = MjData::new(&model);  // or model.make_data()
 
-    /* Renderer for rendering at 1280x720 px (width x height) */
+    /* Renderer for rendering at 1920x1080 px (width x height) */
     let mut renderer = MjRenderer::builder()
         .width(0).height(0)  // set to width(0) and height(0) to set automatically based on <global offwidth="1920" offheight="1080"/>
         .num_visual_user_geom(5)  // maximum number of visual-only geoms as result of the user
@@ -66,8 +72,8 @@ fn main() {
     /* Make a camera that follows the ball */
     let ball_body_id = model.body("ball").unwrap().id;
     let mut camera = MjvCamera::new_tracking(ball_body_id);
-    camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -1.0, renderer.scene());
-    renderer.set_camera(camera);  // zoom-out a bit
+    camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -1.0);  // zoom-out a bit
+    renderer.set_camera(camera);
 
     for i in 0..1000 {
         data.step();

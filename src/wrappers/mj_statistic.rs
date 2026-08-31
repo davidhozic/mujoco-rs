@@ -10,7 +10,9 @@ pub type MjWarningStat = mjWarningStat;
 /***********************************************************************************************************************
 ** MjTimerStat
 ***********************************************************************************************************************/
-/// Per-timer statistics (duration and call count).
+/// Per-timer statistics: the duration accumulated over all calls, and the call count. The duration
+/// stays zero unless an [`mjcb_time`] callback is installed; its unit is the unit that callback
+/// returns.
 pub type MjTimerStat = mjTimerStat;
 
 /***********************************************************************************************************************

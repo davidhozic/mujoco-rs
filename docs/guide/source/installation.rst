@@ -4,7 +4,7 @@
 Installation
 =============================
 
-.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.9.0
+.. _mj_download: https://github.com/google-deepmind/mujoco/releases/tag/3.12.0
 
 
 MuJoCo-rs
@@ -12,7 +12,7 @@ MuJoCo-rs
 
 .. note::
 
-    MuJoCo-rs requires **Rust 1.88** or newer (MSRV).  Run ``rustup update stable``
+    MuJoCo-rs requires **Rust 1.95** or newer (MSRV).  Run ``rustup update stable``
     to ensure you are on a supported toolchain.
 
 
@@ -72,6 +72,14 @@ Dynamic linking (official MuJoCo build)
 
 When the goal is to provide MuJoCo as a dynamic dependency,
 you can either tell MuJoCo-rs to download MuJoCo automatically or you can download MuJoCo yourself.
+
+.. note::
+
+    Cross-OS builds (for example a Windows target from a Linux host) support neither the
+    automatic download nor pkg-config, because both give the host's binaries. Such a build
+    fails unless ``MUJOCO_DYNAMIC_LINK_DIR`` or ``MUJOCO_STATIC_LINK_DIR`` points to a MuJoCo
+    build for the target. Cross-compilation within the same OS (for example Linux x86_64 to
+    Linux aarch64) is not affected.
 
 .. tabs::
 
@@ -226,7 +234,7 @@ To build statically linkable libraries, perform the following steps:
 
        git submodule update --init --recursive
        cd ./mujoco/
-       cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF
+       cmake -B build -S . -DBUILD_SHARED_LIBS:BOOL=OFF -DMUJOCO_HARDEN:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=OFF -DMUJOCO_BUILD_EXAMPLES:BOOL=OFF -DMUJOCO_BUILD_TESTS:BOOL=OFF
        cmake --build build --parallel --target glfw libmujoco_simulate --config=Release
 
    This was tested with the ``gcc`` compiler.
@@ -236,18 +244,22 @@ To build statically linkable libraries, perform the following steps:
 
    .. seealso::
 
-        See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/main/Dockerfile.ubuntu>`_ for a reproducible
-        build environment which, to our knowledge, matches MuJoCo's official build environment.
+        See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/v6.0.x/Dockerfile.ubuntu>`_
+        for a reproducible build environment which, to our knowledge, matches MuJoCo's official
+        build environment.
         The Dockerfile includes commented-out commands for installing the Rust toolchain and
         for using clang-13/clang++-13 as the compiler. Our testing showed that static libraries
-        built in the container also work outside of the container, even on the rust-lld linker.
+        built in the container also work outside of the container. The Dockerfile's cmake command
+        enables interprocedural optimization (``-DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=ON``),
+        so a library built with it needs the system linker; see the attention block below. Set the
+        flag to ``OFF`` to keep the rust-lld linker usable.
 
         The Dockerfile defines a container running Ubuntu 22.04 and installs clang-13 alongside
         build-essential. See the commented-out cmake commands in the Dockerfile for the recommended
         compiler flags.
 
 4. Set the environment variable ``MUJOCO_STATIC_LINK_DIR`` to the **absolute** path of the ``lib/`` subdirectory
-   inside ``mujoco/build/`` (on some distributions, e.g. Fedora/RHEL/Arch, the directory may be ``lib64/``).
+   inside ``mujoco/build/`` (on some distributions, e.g. Fedora/RHEL, the directory may be ``lib64/``).
    Bash example:
 
    ::
@@ -266,7 +278,7 @@ To build statically linkable libraries, perform the following steps:
 
     Above CMake configuration command **disables** link-time optimization (LTO). This results in worse performance
     but allows the compiled code to be used with the rust-lld linker, which is the default linker
-    since Rust 1.90.0 on the **x86_64-unknown-linux-gnu** target.
+    on the **x86_64-unknown-linux-gnu** target.
 
     If performance is critical for you, link-time optimization of MuJoCo code can be enabled during configuration:
 

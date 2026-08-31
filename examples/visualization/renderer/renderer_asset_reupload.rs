@@ -2,11 +2,11 @@
 //!
 //! Three types of animated assets are rendered across multiple frames, each saved as a PNG:
 //!
-//! - **Heightfield** -- elevation data is rewritten each frame, creating a propagating
+//! - **Heightfield**: elevation data is rewritten each frame, creating a propagating
 //!   ripple wave across the terrain.
-//! - **Texture** -- pixel data is rewritten each frame, producing a shifting colour
+//! - **Texture**: pixel data is rewritten each frame, producing a shifting colour
 //!   gradient across the surface of the ball.
-//! - **Mesh** -- vertex Z positions are rewritten each frame, making a flat grid mesh
+//! - **Mesh**: vertex Z positions are rewritten each frame, making a flat grid mesh
 //!   deform into a wave surface.
 //!
 //! After modifying the raw asset arrays directly on the `MjData`'s embedded model, the
@@ -17,6 +17,7 @@ use std::fs;
 
 use mujoco_rs::renderer::MjRenderer;
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 
 /// Width and height of the 2-D texture in pixels.
 const TEX_SIZE: usize = 64;
@@ -26,12 +27,17 @@ const HF_N: usize = 32;
 const MESH_N: usize = 10;
 /// Number of frames to render.
 const NUM_FRAMES: usize = 60;
-/// Number of frames between renders.
+/// Number of simulation steps between two rendered frames.
 const FRAME_SKIP: usize = 100;
 /// Output directory for saved images.
 const OUTPUT_DIR: &str = "./output_renderer_asset_reupload/";
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
+
     fs::create_dir_all(OUTPUT_DIR).unwrap();
 
     let model = Box::new(create_model());
@@ -55,7 +61,7 @@ fn main() {
         .expect("failed to initialise renderer");
 
     let mut camera = MjvCamera::new_free(model);
-    camera.move_(MjtMouse::mjMOUSE_ZOOM, model,-10.0, 0.0, renderer.scene());
+    camera.move_(MjtMouse::mjMOUSE_ZOOM, model,-10.0, 0.0);
     renderer.set_camera(camera);
 
     let mut frames_processed = 0;
@@ -136,18 +142,18 @@ fn main() {
         frames_processed += 1;
     }
 
-    println!("Saved {NUM_FRAMES} frames to {OUTPUT_DIR}");
+    log::info!("Saved {NUM_FRAMES} frames to {OUTPUT_DIR}");
 }
 
 /// Builds an [`MjModel`] containing a heightfield, a textured ball, and a wave mesh.
 ///
-/// The offscreen buffer is sized to 1280×720 via the spec's `visual.global` settings so
+/// The offscreen buffer is sized to 1280x720 via the spec's `visual.global` settings so
 /// that callers can construct an [`MjRenderer`] with `width(0).height(0)` to inherit the
 /// model's configured resolution.
 fn create_model() -> MjModel {
     let mut spec = MjSpec::new();
 
-    // Configure offscreen resolution: 1280 × 720.
+    // Configure offscreen resolution: 1280 x 720.
     let visual = spec.visual_mut();
     visual.global.offwidth  = 1280;
     visual.global.offheight = 720;

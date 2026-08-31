@@ -76,12 +76,6 @@ impl Default for MjLROpt {
 }
 
 /***********************************************************************************************************************
-** MjTask
-***********************************************************************************************************************/
-// wrapper_with_default!(mjTask);
-
-
-/***********************************************************************************************************************
 ** MjVfs
 ***********************************************************************************************************************/
 /// Wrapper around the virtual-file system.
@@ -99,23 +93,6 @@ impl MjVfs {
             let mut maybe_uninit = Box::new_uninit();
             mj_defaultVFS(maybe_uninit.as_mut_ptr());
             Self { ffi: maybe_uninit.assume_init() }
-        }
-    }
-
-    /// Adds a file from disk to the virtual file system.
-    /// # Returns
-    /// `Ok(())` on success.
-    /// # Errors
-    /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
-    /// - [`MjVfsError::LoadFailed`] if the file could not be loaded.
-    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
-    /// # Panics
-    /// When `directory` or `filename` contain interior `\0` characters.
-    #[deprecated(since = "3.0.0", note = "use `add_file` or `add_file_from` instead")]
-    pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> Result<(), MjVfsError> {
-        match directory {
-            Some(d) => self.add_file_from(d, filename),
-            None => self.add_file(filename),
         }
     }
 
@@ -213,7 +190,8 @@ impl MjVfs {
         }
     }
 
-    /// Check if file exists in VFS in the given directory.
+    /// Check if file exists in VFS. MuJoCo keeps only the last path element of
+    /// `directory`/`name` for the lookup, so `directory` does not restrict the search.
     /// 
     /// A mutable borrow is required due to the internal mutex. 
     /// 
@@ -240,8 +218,6 @@ impl MjVfs {
     }
 
     /// Check if file exists in VFS.
-    /// 
-    /// Use [`MjVfs::contains_file_in`] to search within a directory.
     /// 
     /// A mutable borrow is required due to the internal mutex. 
     /// 
@@ -538,26 +514,4 @@ mod tests {
         fs::remove_file(FILE).expect("could not clean up temp file");
     }
 
-    /// The deprecated `add_from_file` still delegates correctly.
-    #[test]
-    fn test_vfs_deprecated_add_from_file() {
-        const FILE: &str = "mujoco-rs-deprecated-add-from-file.xml";
-        fs::write(FILE, RAW_FILE_DATA).expect("could not write temp file");
-
-        let mut vfs;
-
-        // With directory (delegates to add_file_from)
-        vfs = MjVfs::new();
-        #[allow(deprecated)]
-        vfs.add_from_file(Some("./"), FILE).unwrap();
-        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
-
-        // Without directory (delegates to add_file)
-        vfs = MjVfs::new();
-        #[allow(deprecated)]
-        vfs.add_from_file(None, FILE).unwrap();
-        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
-
-        fs::remove_file(FILE).expect("could not clean up temp file");
-    }
 }

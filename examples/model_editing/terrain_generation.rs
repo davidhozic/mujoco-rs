@@ -7,9 +7,15 @@
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
 use std::time::Instant;
+use env_logger::Env;
 
 
 fn main() {   
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
+
     const FPS: f64 = 60.0;  // the refresh rate of the viewer
     const RENDER_TIME_MS: u128 = (1000.0 / FPS) as u128;  //  time to wait before updating the viewer (1 / FPS)
 
@@ -76,7 +82,7 @@ fn create_model() -> MjModel {
         for j in -2..2 {
             direction = if rand::random_bool(0.5) { 1 } else { -1 };
 
-            // Generate each step
+            // Generate one stair region per grid cell
             stairs(&mut spec, [i as f64 * 2.0 * 2.0, j as f64 * 2.0 * 2.0], 4, direction, &format!("{base_name}{i}_{j}"));
         }
     }

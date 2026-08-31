@@ -11,6 +11,7 @@ use std::rc::Rc;
 
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 
 const EXAMPLE_MODEL: &str = "
 <mujoco>
@@ -70,17 +71,14 @@ impl CustomSimulation {
                 // Process input events.
                 ctx.input(|reader| {
                     for event in reader.events.iter() {
-                        match event {
-                            egui::Event::Key { key, pressed: true, ..} => {
-                                println!("A new key has been pressed: {}", key.name());
-                            }
-                            _ => {}
+                        if let egui::Event::Key { key, pressed: true, ..} = event {
+                            log::info!("A new key has been pressed: {}", key.name());
                         }
                     }
                 });
 
                 // Create a side panel, with a button to toggle the window.
-                egui::SidePanel::right("custom_panel")
+                egui::Panel::right("custom_panel")
                     .show(ctx, |ui| {
                         ui.heading("Custom Panel");
                         ui.separator();
@@ -108,13 +106,13 @@ impl CustomSimulation {
         viewer.add_ui_callback({
             // Clone the reference counter so that the closure below moves the clone, not the original.
             let storage = storage.clone();
-            move |ctx, _| {
+            move |ui, _| {
                 use mujoco_rs::viewer::egui;
 
                 // Since we're using Rc, we need RefCell to dynamically borrow.
                 let storage_borrow = storage.borrow();
-                egui::TopBottomPanel::top("custom_top_panel")
-                    .show(ctx, |ui| {
+                egui::Panel::top("custom_top_panel")
+                    .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             ui.label("Custom Top Bar");
                             ui.separator();
@@ -142,6 +140,11 @@ impl CustomSimulation {
 
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
+
     let mut simulation = CustomSimulation::new(EXAMPLE_MODEL);
     
     // Run the simulation

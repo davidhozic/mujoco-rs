@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 
 
 const EXAMPLE_MODEL: &str = "
@@ -32,6 +33,11 @@ const EXAMPLE_MODEL: &str = "
 
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
+
     /* Create model and data */
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
     let mut data = MjData::new(&model);  // or model.make_data()
@@ -58,17 +64,20 @@ fn main() {
             state_lock.sync_data(&mut data);
 
             /* Prepare the scene */
-            let scene = state_lock.user_scene_mut();  // obtain a mutable reference to the user scene. The method name mirrors the C++ viewer.
+            let scene = state_lock.user_scene_mut();  // obtain a mutable reference to the user scene
             scene.clear_geom();  // clear existing geoms
 
             /* Create a line, that (visually) connects the two balls we have in the example model */
-            let new_geom = scene.create_geom(
-                MjtGeom::mjGEOM_LINE,  // type of geom to draw.
-                None,  // size, ignore here as we set it below.
-                None,   // position: ignore here as we set it below.
-                None,   // rotational matrix: ignore here as we set it below.
-                Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
-            );
+            // SAFETY: the geom keeps the material, texture and object ids that create_geom sets to none.
+            let new_geom = unsafe {
+                scene.create_geom(
+                    MjtGeom::mjGEOM_LINE,  // type of geom to draw.
+                    None,  // size, ignore here as we set it below.
+                    None,   // position: ignore here as we set it below.
+                    None,   // rotational matrix: ignore here as we set it below.
+                    Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
+                )
+            };
 
             /* Read X, Y and Z coordinates of both balls. */
             let ball1_position = ball1_joint_info.view(&data).qpos[..3]

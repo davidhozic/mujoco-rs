@@ -19,8 +19,10 @@ MuJoCo-rs can be compiled to `WebAssembly <https://webassembly.org/>`_ via
 Additional prerequisites for MuJoCo-rs
 ========================================
 
-In addition to the emsdk prerequisites described in MuJoCo's documentation,
-you need:
+In addition to the emsdk prerequisites described in MuJoCo's
+`WebAssembly bindings README
+<https://github.com/google-deepmind/mujoco/blob/3.12.0/wasm/README.md#prerequisites>`_,
+which pins emsdk 4.0.10, you need:
 
 1. **Rust wasm32-unknown-emscripten target**
 
@@ -50,7 +52,7 @@ Building MuJoCo
 =============================
 
 Use either the ``mujoco/`` submodule (already initialized in the MuJoCo-rs
-repository) or a fresh clone of the official MuJoCo ``3.9.0`` release as the
+repository) or a fresh clone of the official MuJoCo |MUJOCO_VERSION| release as the
 source directory.  The official unmodified tag is sufficient for WASM --- the
 submodule patches are only required for native/C++ features.
 
@@ -58,7 +60,7 @@ To clone the official release:
 
 ::
 
-    git clone https://github.com/google-deepmind/mujoco.git --branch 3.9.0 --depth 1
+    git clone https://github.com/google-deepmind/mujoco.git --branch 3.12.0 --depth 1
 
 Then build (replace ``mujoco`` with the path to whichever source you chose):
 
@@ -104,8 +106,9 @@ Memory growth for complex models
 =================================
 
 The Emscripten WASM heap defaults to 16 MB.  Complex models (e.g. many geoms,
-tendons, or connected bodies) can exceed this limit during ``mj_compile()`` and
-will panic with ``"Could not allocate memory"``.  Add
+tendons, or connected bodies) can exceed this limit during ``mj_compile()``.  MuJoCo's
+allocator then reports ``"Could not allocate memory"``, and its default error handler exits
+the process; this is not a Rust panic, so it cannot be caught.  Add
 ``-sALLOW_MEMORY_GROWTH=1`` as a linker argument via ``RUSTFLAGS``:
 
 ::
@@ -133,3 +136,20 @@ Replace ``<version>`` with the directory name found under
 ``/path/to/emsdk/node/`` (e.g. ``22.16.0_64bit``).
 
 Expected output: ``Step 0`` through ``Step 999``.
+
+
+Running in a browser
+=============================
+
+The repository ships a small browser runner at ``assets/wasm_examples.html``. Copy it next to
+the compiled artifacts as ``index.html``, then serve that directory:
+
+::
+
+    cp assets/wasm_examples.html \
+        target/wasm32-unknown-emscripten/debug/examples/index.html
+    python3 -m http.server 8080 --bind 127.0.0.1 \
+        --directory target/wasm32-unknown-emscripten/debug/examples
+
+Open http://127.0.0.1:8080/ and start the ``basic`` example from the page. Reload the page
+between two runs, because the Emscripten globals keep the state of the previous run.

@@ -10,7 +10,7 @@
 //! The model consists of a combined box-and-sphere body (free-floating) that
 //! falls onto a flat floor.  The simulation runs for a fixed number of steps
 //! while the renderer periodically saves frames that show:
-//!   - red markers at contact points (`mjVIS_CONTACTPOINT`),
+//!   - orange markers at contact points (`mjVIS_CONTACTPOINT`),
 //!   - arrows representing contact forces (`mjVIS_CONTACTFORCE`), and
 //!   - a transparent body so that the contact markers inside remain visible
 //!     (`mjVIS_TRANSPARENT`).
@@ -24,6 +24,7 @@ use std::fs;
 
 use mujoco_rs::prelude::*;
 use mujoco_rs::renderer::MjRenderer;
+use env_logger::Env;
 
 // ---------------------------------------------------------------------------
 // Model XML
@@ -54,9 +55,8 @@ const EXAMPLE_MODEL: &str = r#"
     <geom name="floor" type="plane" size="0 0 .05" material="grid"/>
 
     <!--
-      The body is rotated 30 deg around z so the box lands on a corner,
-      producing multiple simultaneous contact points and making
-      the force visualisation more interesting.
+      The box lands flat on the floor, which produces multiple simultaneous
+      contact points and makes the force visualisation more interesting.
     -->
     <body name="box_and_sphere" pos="0 0 0.5" euler="0 0 -30">
       <freejoint/>
@@ -75,6 +75,11 @@ const SAVE_EVERY: usize = 50;
 const OUTPUT_DIR: &str = "./output_contact_forces/";
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
+
     // Create output directory.
     fs::create_dir_all(OUTPUT_DIR).expect("failed to create output directory");
 
@@ -99,7 +104,7 @@ fn main() {
     // Enable contact visualisation on the renderer.
     //
     // MjtVisFlag values used:
-    //   mjVIS_CONTACTPOINT = 14  -> red dots at contact points
+    //   mjVIS_CONTACTPOINT = 14  -> orange dots at contact points
     //   mjVIS_CONTACTFORCE = 16  -> arrows showing contact force direction
     //   mjVIS_TRANSPARENT  = 18  -> make geoms semi-transparent so that
     //                               markers inside them remain visible
@@ -113,14 +118,14 @@ fn main() {
 
     // Position the camera so we can see the whole scene.
     let mut camera = MjvCamera::new_free(&model);
-    // Zoom out a little and elevate the viewpoint.
-    camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -0.5, renderer.scene());
-    camera.move_(MjtMouse::mjMOUSE_ROTATE_V, &model, 0.0, -0.1, renderer.scene());
+    // Zoom out a little and lower the viewpoint.
+    camera.move_(MjtMouse::mjMOUSE_ZOOM, &model, 0.0, -0.5);
+    camera.move_(MjtMouse::mjMOUSE_ROTATE_V, &model, 0.0, -0.1);
     renderer.set_camera(camera);
 
-    println!("Running {SIM_STEPS} simulation steps.");
-    println!("Saving a frame every {SAVE_EVERY} steps to '{OUTPUT_DIR}'.");
-    println!("{:<8} {:<10} Contact forces (norm)", "Step", "ncon");
+    log::info!("Running {SIM_STEPS} simulation steps.");
+    log::info!("Saving a frame every {SAVE_EVERY} steps to '{OUTPUT_DIR}'.");
+    log::info!("{:<8} {:<10} Contact forces (norm)", "Step", "ncon");
 
     for step in 0..SIM_STEPS {
         data.step();
@@ -141,7 +146,7 @@ fn main() {
                     format!("{norm:.2}")
                 })
                 .collect();
-            println!(
+            log::info!(
                 "{:<8} {:<10} [{}]",
                 step,
                 ncon,
@@ -155,9 +160,9 @@ fn main() {
             renderer.render().unwrap();
             let path = format!("{OUTPUT_DIR}/frame_{step:04}.png");
             renderer.save_rgb(&path).expect("failed to save RGB image");
-            println!("  -> saved {path}");
+            log::info!("saved {path}");
         }
     }
 
-    println!("Done. Images are in '{OUTPUT_DIR}'.");
+    log::info!("Done. Images are in '{OUTPUT_DIR}'.");
 }

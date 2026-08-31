@@ -1,23 +1,27 @@
 //! Implementation of the interface for use in the viewer.
 
 use std::collections::VecDeque;
+use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
+use std::f64::consts::PI;
 use std::ffi::CString;
+use std::borrow::Cow;
 use std::fmt::Debug;
 
 use glutin::display::{Display, GlDisplay};
 use egui_winit::winit::event::WindowEvent;
 use egui_glow::glow::{self, HasContext};
-use egui::{FontId, RichText, Id};
+use egui::{FontId, RichText, LayerId, Order, Id};
 use egui_winit::winit::window::Window;
 use egui_winit::egui;
 use egui_winit;
+use log::info;
 
 use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint, MjtDisableBit, MjtEnableBit};
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjtCamera, MjvScene};
+use crate::wrappers::fun::{mju_normalize_3, mju_normalize_4, mju_quat_2_vel};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
 use crate::wrappers::mj_primitive::MjtNum;
-use crate::wrappers::mj_data::MjData;
 use crate::{cast_mut_info, set_flag};
 use crate::mujoco_c::mjNGROUP;
 use crate::util::LockUnpoison;
@@ -31,10 +35,10 @@ const HEADING_POST_SPACE: f32 = 5.0;
 const BUTTON_SPACING_X: f32 = 10.0;
 const BUTTON_SPACING_Y: f32 = 5.0;
 const BUTTON_ROUNDING: f32 = 50.0;
-const SIDE_PANEL_DEFAULT_WIDTH: f32 = 200.0;
 const TOGGLE_LABEL_HEIGHT_EXTRA_SPACE: f32 = 20.0;
 const SIDE_PANEL_PAD: f32 = 10.0;
 const MAX_SPAN_WIDTH: f32 = 350.0;
+const JOINT_ANGLE_BAR_WIDTH: f32 = 120.0;
 
 /* Precision and Tolerances */
 const RANGE_PRECISION_TOLERANCE: f32 = 1e-4;
@@ -193,7 +197,7 @@ const DISABLE_FLAGS: &[(&str, MjtDisableBit)] = &[
     ("Island", MjtDisableBit::mjDSBL_ISLAND),
     ("Multi CCD", MjtDisableBit::mjDSBL_MULTICCD),
 ];
-const _: () = assert!(DISABLE_FLAGS.len() == crate::mujoco_c::mjtDisableBit_::mjNDISABLE as usize);
+const _: () = assert!(DISABLE_FLAGS.len() == crate::mujoco_c::mjtDisableBit::mjNDISABLE as usize);
 
 /// Maps MuJoCo enable flag bits to their string representations
 const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
@@ -204,13 +208,67 @@ const ENABLE_FLAGS: &[(&str, MjtEnableBit)] = &[
     ("Sleep", MjtEnableBit::mjENBL_SLEEP),
     ("DiagExact", MjtEnableBit::mjENBL_DIAGEXACT)
 ];
-const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit_::mjNENABLE as usize);
+const _: () = assert!(ENABLE_FLAGS.len() == crate::mujoco_c::mjtEnableBit::mjNENABLE as usize);
+
+/// Names of the translation components of a free joint, in `qpos` order.
+const FREE_JOINT_TRANSLATION_COMPONENTS: [&str; 3] = ["x", "y", "z"];
+
+/// Names of the components of a joint quaternion, in `qpos` order.
+const JOINT_QUAT_COMPONENTS: [&str; 4] = ["qw", "qx", "qy", "qz"];
+
+/// Value change per point of pointer travel in the numeric input of a joint component.
+const JOINT_INPUT_DRAG_SPEED: f64 = 0.01;
 
 /// Type alias for a user-provided UI callback function.
-pub(crate) type UiCallback = Box<dyn FnMut(&egui::Context, &mut MjData<Box<MjModel>>)>;
+pub(crate) type UiCallback = Box<dyn FnMut(&mut egui::Ui, &Arc<Mutex<ViewerSharedState>>)>;
 
-/// Type alias for a detached (from state) user-provided UI callback function.
-pub(crate) type UiCallbackDetached = Box<dyn FnMut(&egui::Context)>;
+/// Cached display information about one input (one control) of an actuator.
+struct ActuatorInputDisplayInfo {
+    /// Name of the input, or the input index when the actuator type defines no input names and
+    /// the actuator has more than one input. [`None`] when the input needs no label.
+    label: Option<Cow<'static, str>>,
+    /// Range of the slider: the control range when the model defines one, else -1 to 1.
+    range: RangeInclusive<MjtNum>,
+}
+
+/// Cached display information about one actuator.
+struct ActuatorDisplayInfo {
+    /// Name of the actuator, or a generated name when the model defines none.
+    name: String,
+    /// Address of the first control of the actuator inside `ctrl`.
+    ctrl_start: usize,
+    /// Display information of each input of the actuator, in control order.
+    inputs: Box<[ActuatorInputDisplayInfo]>,
+}
+
+/// Cached display information about one position component (one `qpos` entry) of a joint.
+struct JointComponentDisplayInfo {
+    /// Name of the component. [`None`] when the joint holds one component, which needs no label.
+    label: Option<&'static str>,
+    /// Range of the slider of the component, or [`None`] when the component has no natural range
+    /// and takes a numeric input instead.
+    range: Option<RangeInclusive<MjtNum>>,
+}
+
+/// Cached display information about the position components of a joint that form a quaternion.
+struct JointQuatDisplayInfo {
+    /// Offset of the quaternion inside the position block of the joint.
+    offset: usize,
+    /// Maximum rotation angle in radians, or [`None`] when the joint has no limit.
+    angle_limit: Option<MjtNum>,
+}
+
+/// Cached display information about one joint.
+struct JointDisplayInfo {
+    /// Name of the joint, or a generated name when the model defines none.
+    name: String,
+    /// Address of the first position component of the joint inside `qpos`.
+    qpos_start: usize,
+    /// Display information of each position component of the joint, in `qpos` order.
+    components: Box<[JointComponentDisplayInfo]>,
+    /// The quaternion of a ball or a free joint, [`None`] for a slide or a hinge joint.
+    quat: Option<JointQuatDisplayInfo>,
+}
 
 /// Viewer user interface context.
 pub(crate) struct ViewerUI {
@@ -220,11 +278,10 @@ pub(crate) struct ViewerUI {
     gl: Arc<egui_glow::glow::Context>,
     events: VecDeque<UiEvent>,
     camera_names: Vec<String>,
-    actuator_display_info: Vec<(String, bool, [MjtNum; 2])>,
-    joint_display_info: Vec<(String, bool, [MjtNum; 2], usize)>,
+    actuator_info: Vec<ActuatorDisplayInfo>,
+    joint_info: Vec<JointDisplayInfo>,
     equality_names: Vec<String>,
     user_ui_callbacks: Vec<UiCallback>,
-    user_ui_callbacks_detached: Vec<UiCallbackDetached>,
 
     // Window toggles.
     // Note that these are bool for easier integration with egui.
@@ -271,11 +328,10 @@ impl ViewerUI {
         let mut viewer_ui = Self {
             egui_ctx, state, painter, gl, events: VecDeque::new(),
             camera_names: Vec::new(),
-            actuator_display_info: Vec::new(),
-            joint_display_info: Vec::new(),
+            actuator_info: Vec::new(),
+            joint_info: Vec::new(),
             equality_names: Vec::new(),
             user_ui_callbacks: Vec::new(),
-            user_ui_callbacks_detached: Vec::new(),
             actuator_window: false,
             joint_window: false,
             equality_window: false,
@@ -285,43 +341,97 @@ impl ViewerUI {
             show_tracking_modal: false,
             tracking_selected_body: None,
         };
-        viewer_ui.update_names(model);
+        viewer_ui.update_caches(model);
         Ok(viewer_ui)
     }
 
-    /// Rebuilds all model-dependent cached state (name lists).
+    /// Rebuilds all model-dependent cached state: names, control and joint limits with
+    /// their ranges, and joint qpos addresses.
     /// Must be called whenever the active model changes.
-    pub(crate) fn update_names(&mut self, model: &MjModel) {
+    pub(crate) fn update_caches(&mut self, model: &MjModel) {
         self.camera_names = (0..model.ncam()).map(|i| {
             if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i as usize) {
                 name.to_string()
             } else { format!("Camera {i}") }
         }).collect();
 
-        self.actuator_display_info = (0..model.nu()).map(|i| {
-            let idx = i as usize;
-            let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, idx) {
-                name.to_string()
-            } else { format!("Actuator {i}") };
-            let limited = model.actuator_ctrllimited()[idx];
-            let range   = model.actuator_ctrlrange()[idx];
-            (name, limited, range)
+        self.actuator_info = (0..model.nactuator() as usize).map(|idx_actuator| {
+            let input_limits = model.actuator_ctrlrange();
+            let ctrl_start = model.actuator_ctrladr()[idx_actuator] as usize;
+            let num_inputs = model.actuator_ctrlnum()[idx_actuator] as usize;
+
+            let name = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, idx_actuator)
+                .map(|name| name.to_string())
+                .unwrap_or_else(|| format!("Actuator {idx_actuator}"));
+
+            let inputs = (0..num_inputs)
+                .map(|idx_in| {
+                    // Most actuator types define no input names. An actuator with more than one
+                    // input then shows the input index, an actuator with one input shows no label.
+                    let label = model.actuator_input_name(idx_actuator, idx_in)
+                        .map(Cow::Borrowed)
+                        .or_else(|| (num_inputs > 1).then(|| Cow::Owned(idx_in.to_string())));
+
+                    // The range array holds one entry per control, not per actuator. A defined
+                    // range sets the slider range even when MuJoCo does not clamp the control.
+                    let [low, high] = input_limits[ctrl_start + idx_in];
+                    let range = if low < high { low..=high } else { -1.0..=1.0 };
+
+                    ActuatorInputDisplayInfo { label, range }
+                }).collect();
+
+            ActuatorDisplayInfo { name, ctrl_start, inputs }
         }).collect();
 
-        self.joint_display_info = (0..model.njnt()).filter_map(|i| {
-            let idx = i as usize;
-            match model.jnt_type()[idx] {
-                MjtJoint::mjJNT_SLIDE | MjtJoint::mjJNT_HINGE => {
-                    let name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_JOINT, idx) {
-                        name.to_string()
-                    } else { format!("Joint {i}") };
-                    let limited  = model.jnt_limited()[idx];
-                    let range    = model.jnt_range()[idx];
-                    let qpos_adr = model.jnt_qposadr()[idx] as usize;
-                    Some((name, limited, range, qpos_adr))
+        self.joint_info = (0..model.njnt() as usize).map(|idx_joint| {
+            let name = model.id_to_name(MjtObj::mjOBJ_JOINT, idx_joint)
+                .map(|name| name.to_string())
+                .unwrap_or_else(|| format!("Joint {idx_joint}"));
+
+            let qpos_start = model.jnt_qposadr()[idx_joint] as usize;
+            let limits = model.jnt_range()[idx_joint];
+
+            // The limit of a ball joint applies to the rotation angle, and MuJoCo takes the
+            // maximum of the range as that limit. A zero limit carries no scale for the bar.
+            let angle_limit = model.jnt_limited()[idx_joint]
+                .then(|| limits[0].max(limits[1]))
+                .filter(|limit| *limit > 0.0);
+
+            let (components, quat) = match model.jnt_type()[idx_joint] {
+                // A free joint holds no limit and no natural range, so each of its components
+                // takes a numeric input.
+                MjtJoint::mjJNT_FREE => {
+                    let components = FREE_JOINT_TRANSLATION_COMPONENTS.into_iter()
+                        .chain(JOINT_QUAT_COMPONENTS)
+                        .map(|label| JointComponentDisplayInfo { label: Some(label), range: None })
+                        .collect();
+
+                    (components, Some(JointQuatDisplayInfo { offset: 3, angle_limit }))
                 }
-                _ => None
-            }
+
+                // A quaternion component always lies inside the unit sphere.
+                MjtJoint::mjJNT_BALL => {
+                    let components = JOINT_QUAT_COMPONENTS.map(|label| {
+                        JointComponentDisplayInfo { label: Some(label), range: Some(-1.0..=1.0) }
+                    });
+
+                    (components.into(), Some(JointQuatDisplayInfo { offset: 0, angle_limit }))
+                }
+
+                // A slide or a hinge joint holds one position component, which the limit applies
+                // to. Without a limit the slider spans the same range as MuJoCo's own viewer.
+                joint_type => {
+                    let range = if model.jnt_limited()[idx_joint] {
+                        limits[0]..=limits[1]
+                    } else if joint_type == MjtJoint::mjJNT_SLIDE {
+                        -1.0..=1.0
+                    } else { -PI..=PI };
+
+                    ([JointComponentDisplayInfo { label: None, range: Some(range) }].into(), None)
+                }
+            };
+
+            JointDisplayInfo { name, qpos_start, components, quat }
         }).collect();
 
         self.equality_names = (0..model.neq()).map(|i| {
@@ -329,6 +439,10 @@ impl ViewerUI {
                 name.to_string()
             } else { format!("Equality {i}") }
         }).collect();
+
+        // The pending selection is a body ID of the previous model, which addresses a different
+        // body in the new one.
+        self.tracking_selected_body = None;
     }
 
     /// Handles winit input events.
@@ -344,7 +458,8 @@ impl ViewerUI {
         once_fn(&mut self.egui_ctx)
     }
 
-    /// Draws the UI to the viewport.
+    /// Draws the UI to the viewport. Returns the width in physical pixels that the left side
+    /// panel reserves, or `0.0` when the panel is hidden.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn process(
         &mut self,
@@ -359,1050 +474,1070 @@ impl ViewerUI {
 
         // Process the UI
         let raw_input = self.state.take_egui_input(window);
-        let full_output = self.egui_ctx.run(raw_input, |ctx| {
-            if status.contains(ViewerStatusBit::UI) {
-                egui::SidePanel::new(egui::panel::Side::Left,"interface_panel")
-                    .resizable(true)
-                    .default_width(SIDE_PANEL_DEFAULT_WIDTH)
-                    .show(ctx, |ui|
-                {                  
-                    // The menu
-                    egui::ScrollArea::vertical()
-                        .max_height(ui.available_height() - (TOGGLE_LABEL_HEIGHT_EXTRA_SPACE + HEADING_POST_SPACE + HEADING_FONT.size))
+        let mut full_output = self.egui_ctx.run_ui(raw_input, |ui| {
+            let mut is_expanded = status.contains(ViewerStatusBit::UI);
+            egui::Panel::left("interface_panel")
+                .resizable(true)
+                .show_collapsible(ui, &mut is_expanded, |ui|
+            {
+                // The menu
+                egui::ScrollArea::vertical()
+                    .max_height(ui.available_height() - (TOGGLE_LABEL_HEIGHT_EXTRA_SPACE + HEADING_POST_SPACE + HEADING_FONT.size))
+                    .scroll_source(egui::scroll_area::ScrollSource::ALL)
+                    .show(ui, |ui|
+                {
+                    // Make buttons have more space in the width
+                    let spacing = ui.spacing_mut();
+                    spacing.button_padding.x = BUTTON_SPACING_X;
+                    spacing.button_padding.y = BUTTON_SPACING_Y;
+
+                    /* Window controls */
+                    egui::CollapsingHeader::new(RichText::new("Basic").font(HEADING_FONT))
+                        .default_open(true)
                         .show(ui, |ui|
                     {
-                        // Make buttons have more space in the width
-                        let spacing = ui.spacing_mut();
-                        spacing.button_padding.x = BUTTON_SPACING_X;
-                        spacing.button_padding.y = BUTTON_SPACING_Y;
-
-                        /* Window controls */
-                        egui::CollapsingHeader::new(RichText::new("Basic").font(HEADING_FONT))
-                            .default_open(true)
-                            .show(ui, |ui|
-                        {
-                            ui.horizontal_wrapped(|ui| {
-                                if ui.add(egui::Button::new(
-                                    RichText::new("Quit").font(MAIN_FONT)
-                                ).corner_radius(BUTTON_ROUNDING)).clicked() {
-                                    self.events.push_back(UiEvent::Close);
-                                }
-                            });
-                        });
-
-                        /* UI toggles */
-                        egui::CollapsingHeader::new(RichText::new("UI").font(HEADING_FONT))
-                            .default_open(true)
-                            .show(ui, |ui|
-                        {
-                            // Normal toggles
-                            ui.horizontal_wrapped(|ui| {
-                                let mut selected = status.contains(ViewerStatusBit::HELP);
-                                ui.toggle_value(&mut selected, RichText::new("Help").font(MAIN_FONT));
-                                status.set(ViewerStatusBit::HELP, selected);
-
-                                selected = window.fullscreen().is_some();
-                                if ui.toggle_value(&mut selected, RichText::new("Fullscreen").font(MAIN_FONT)).clicked() {
-                                    self.events.push_back(UiEvent::Fullscreen);
-                                };
-
-                                // VSync
-                                let mut selected = status.contains(ViewerStatusBit::VSYNC);
-                                if ui.toggle_value(&mut selected, RichText::new("V-Sync").font(MAIN_FONT)).clicked() {
-                                    self.events.push_back(UiEvent::VSyncToggle);
-                                };
-                                status.set(ViewerStatusBit::VSYNC, selected);
-
-                                // Info menu (FPS, time, etc.)
-                                let mut selected = status.contains(ViewerStatusBit::INFO);
-                                ui.toggle_value(&mut selected, RichText::new("Info").font(MAIN_FONT));
-                                status.set(ViewerStatusBit::INFO, selected);
-                            });
-
-                            ui.separator();
-
-                            /* Window toggles */
-                            ui.horizontal_wrapped(|ui| {
-                                ui.toggle_value(&mut self.actuator_window, RichText::new("Actuator").font(MAIN_FONT));
-                                ui.toggle_value(&mut self.joint_window, RichText::new("Joint").font(MAIN_FONT));
-                                ui.toggle_value(&mut self.equality_window, RichText::new("Equality").font(MAIN_FONT));
-                                ui.toggle_value(&mut self.group_window, RichText::new("Group").font(MAIN_FONT));
-                            });
-
-                            ui.separator();
-
-                            ui.horizontal_wrapped(|ui| {
-                                // Warnings
-                                ui.collapsing(RichText::new("Warnings").font(MAIN_FONT), |ui| {
-                                    // Non-realtime factor warning
-                                    let mut selected = status.contains(ViewerStatusBit::WARN_REALTIME);
-                                    ui.checkbox(&mut selected, RichText::new("Realtime factor").font(MAIN_FONT));
-                                    status.set(ViewerStatusBit::WARN_REALTIME, selected);
-                                });
-                            });
-                        });
-
-                        /* Simulation */
-                        egui::CollapsingHeader::new(RichText::new("Simulation").font(HEADING_FONT))
-                            .default_open(true)
-                            .show(ui, |ui|
-                        {
-                            ui.horizontal_wrapped(|ui| {
-                                // Reset simulation
-                                if ui.add(egui::Button::new(
-                                    RichText::new("Reset").font(MAIN_FONT)
-                                ).corner_radius(BUTTON_ROUNDING)).clicked() {
-                                    self.events.push_back(UiEvent::ResetSimulation);
-                                }
-
-                                // Align camera
-                                if ui.add(egui::Button::new(
-                                    RichText::new("Align").font(MAIN_FONT)
-                                ).corner_radius(BUTTON_ROUNDING)).clicked() {
-                                    self.events.push_back(UiEvent::AlignCamera);
-                                }
-                            });
-                        });
-
-                        /* Physics options */
-                        egui::CollapsingHeader::new(RichText::new("Physics").font(HEADING_FONT))
-                            .show(ui, |ui|
-                        {
-                            let (opt_is_editable, mut options) = {
-                                let state = shared_viewer_state.lock_unpoison();
-                                (
-                                    state.last_opt_sync_time().elapsed() < PHYSICS_SYNC_TIMEOUT,
-                                    state.data_passive.model().opt().clone(),
-                                )
-                            };
-                            if !opt_is_editable {
-                                ui.colored_label(egui::Color32::YELLOW, MODEL_OPT_SYNC_WARNING);
-                            }
-
-                            // Physics solver and method selectors (top level)
-                            egui::Grid::new("physics_enum_grid").num_columns(2).show(ui, |ui| {
-                                ui.label(RichText::new("Integrator").font(MAIN_FONT));
-                                let combo_width = ui.available_width().min(MAX_SPAN_WIDTH);
-
-                                let current_integrator = INTEGRATOR_MAP.get(options.integrator as usize).copied().unwrap_or("Unknown");
-                                let mut integrator_idx = options.integrator as usize;
-                                egui::ComboBox::from_id_salt("integrator_combo")
-                                    .selected_text(current_integrator)
-                                    .width(combo_width)
-                                    .show_ui(ui, |ui| {
-                                        for (i, integrator_name) in INTEGRATOR_MAP.iter().enumerate() {
-                                            ui.selectable_value(&mut integrator_idx, i, *integrator_name);
-                                        }
-                                    });
-                                options.integrator = integrator_idx as i32;
-                                ui.end_row();
-
-                                ui.label(RichText::new("Cone").font(MAIN_FONT));
-                                let current_cone = CONE_MAP.get(options.cone as usize).copied().unwrap_or("Unknown");
-                                let mut cone_idx = options.cone as usize;
-                                egui::ComboBox::from_id_salt("cone_combo")
-                                    .selected_text(current_cone)
-                                    .width(combo_width)
-                                    .show_ui(ui, |ui| {
-                                        for (i, cone_name) in CONE_MAP.iter().enumerate() {
-                                            ui.selectable_value(&mut cone_idx, i, *cone_name);
-                                        }
-                                    });
-                                options.cone = cone_idx as i32;
-                                ui.end_row();
-
-                                ui.label(RichText::new("Jacobian").font(MAIN_FONT));
-                                let current_jacobian = JACOBIAN_MAP.get(options.jacobian as usize).copied().unwrap_or("Unknown");
-                                let mut jacobian_idx = options.jacobian as usize;
-                                egui::ComboBox::from_id_salt("jacobian_combo")
-                                    .selected_text(current_jacobian)
-                                    .width(combo_width)
-                                    .show_ui(ui, |ui| {
-                                        for (i, jacobian_name) in JACOBIAN_MAP.iter().enumerate() {
-                                            ui.selectable_value(&mut jacobian_idx, i, *jacobian_name);
-                                        }
-                                    });
-                                options.jacobian = jacobian_idx as i32;
-                                ui.end_row();
-
-                                ui.label(RichText::new("Solver").font(MAIN_FONT));
-                                let current_solver = SOLVER_MAP.get(options.solver as usize).copied().unwrap_or("Unknown");
-                                let mut solver_idx = options.solver as usize;
-                                egui::ComboBox::from_id_salt("solver_combo")
-                                    .selected_text(current_solver)
-                                    .width(combo_width)
-                                    .show_ui(ui, |ui| {
-                                        for (i, solver_name) in SOLVER_MAP.iter().enumerate() {
-                                            ui.selectable_value(&mut solver_idx, i, *solver_name);
-                                        }
-                                    });
-                                options.solver = solver_idx as i32;
-                                ui.end_row();
-                            });
-
-                            ui.collapsing(RichText::new("Algorithm parameters").font(MAIN_FONT), |ui| {
-                                egui::Grid::new("algo_param_grid").num_columns(2).show(ui, |ui| {
-                                    ui.add(
-                                        RowScalar::new("Timestep", &mut options.timestep, 1e-6)
-                                            .range(0.0..=f64::INFINITY)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("Iterations", &mut options.iterations, 1.0)
-                                            .range(1..=i32::MAX)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("Tolerance", &mut options.tolerance, 1e-8)
-                                            .range(0.0..=f64::INFINITY)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("LS Iter", &mut options.ls_iterations, 1.0)
-                                            .range(1..=i32::MAX)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("LS Tol", &mut options.ls_tolerance, 1e-8)
-                                            .range(0.0..=f64::INFINITY)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("Noslip Iter", &mut options.noslip_iterations, 1.0)
-                                            .range(0..=i32::MAX)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("Noslip Tol", &mut options.noslip_tolerance, 1e-8)
-                                            .range(0.0..=f64::INFINITY)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("CCD Iter", &mut options.ccd_iterations, 1.0)
-                                            .range(1..=i32::MAX)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("CCD Tol", &mut options.ccd_tolerance, 1e-8)
-                                            .range(0.0..=f64::INFINITY)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("Sleep Tol", &mut options.sleep_tolerance, 1e-8)
-                                            .range(0.0..=f64::INFINITY)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("SDF Iter", &mut options.sdf_iterations, 1.0)
-                                            .range(1..=i32::MAX)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("SDF Init", &mut options.sdf_initpoints, 1.0)
-                                            .range(0..=i32::MAX)
-                                    );
-                                    ui.end_row();
-
-                                });
-                            });
-
-                            ui.collapsing(RichText::new("Physics parameters").font(MAIN_FONT), |ui| {
-                                egui::Grid::new("phys_param_grid").num_columns(2).show(ui, |ui| {
-                                    ui.add(
-                                        RowScalar::new("Density", &mut options.density, 1e-3)
-                                            .range(0.0..=f64::INFINITY)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("Viscosity", &mut options.viscosity, 1e-6)
-                                            .range(0.0..=f64::INFINITY)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(
-                                        RowScalar::new("Imp Ratio", &mut options.impratio, 1e-3)
-                                            .range(0.0..=f64::INFINITY)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(RowArray::new(
-                                        "Gravity", &mut options.gravity, 1e-3
-                                    ));
-                                    ui.end_row();
-
-                                    ui.add(RowArray::new(
-                                        "Wind", &mut options.wind, 1e-3
-                                    ));
-                                    ui.end_row();
-
-                                    ui.add(RowArray::new(
-                                        "Magnetic", &mut options.magnetic, 1e-3
-                                    ));
-                                    ui.end_row();
-                                });
-                            });
-
-                            ui.collapsing(RichText::new("Disable Flags").font(MAIN_FONT), |ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    for (flag_name, flag_value) in DISABLE_FLAGS {
-                                        let mut is_enabled = (options.disableflags & (*flag_value as i32)) != 0;
-                                        if ui.toggle_value(&mut is_enabled, *flag_name).changed() {
-                                            set_flag!(options.disableflags, *flag_value as i32, is_enabled);
-                                        }
-                                    }
-                                });
-                            });
-
-                            ui.collapsing(RichText::new("Enable Flags").font(MAIN_FONT), |ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    for (flag_name, flag_value) in ENABLE_FLAGS {
-                                        let mut is_enabled = (options.enableflags & (*flag_value as i32)) != 0;
-                                        if ui.toggle_value(&mut is_enabled, *flag_name).changed() {
-                                            set_flag!(options.enableflags, *flag_value as i32, is_enabled);
-                                        }
-                                    }
-                                });
-                            });
-
-                            ui.collapsing(RichText::new("Actuator Group Enable").font(MAIN_FONT), |ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    for i in 0..mjNGROUP as usize {
-                                        let mask = 1 << i;
-                                        let mut is_enabled = (options.disableactuator & mask) == 0;
-                                        if ui.toggle_value(&mut is_enabled, format!("Act Group {i}")).changed() {
-                                            set_flag!(options.disableactuator, mask, !is_enabled);
-                                        }
-                                    }
-                                });
-                            });
-
-                            ui.collapsing(RichText::new("Contact Override").font(MAIN_FONT), |ui| {
-                                egui::Grid::new("contact_override_grid").num_columns(2).show(ui, |ui| {
-                                    ui.add(
-                                        RowScalar::new("Margin", &mut options.o_margin, 1e-5)
-                                            .range(0.0..=f64::INFINITY)
-                                    );
-                                    ui.end_row();
-
-                                    ui.add(RowArray::new(
-                                        "Sol Ref", &mut options.o_solref, 1e-5
-                                    ));
-                                    ui.end_row();
-
-                                    ui.add(RowArray::new(
-                                        "Sol Imp", &mut options.o_solimp, 1e-3
-                                    ));
-                                    ui.end_row();
-
-                                    ui.add(RowArray::new(
-                                        "Friction", &mut options.o_friction, 1e-3
-                                    ));
-                                    ui.end_row();
-                                });
-                            });
-                            *shared_viewer_state.lock_unpoison().data_passive.model_opt_mut() = options;
-                        });
-
-                        /* Visualization options */
-                        egui::CollapsingHeader::new(RichText::new("Rendering").font(HEADING_FONT))
-                            .show(ui, |ui|
-                        {
-                            egui::Grid::new("render_select_grid").num_columns(2).show(ui, |ui| {
-                                // Camera
-                                ui.label(RichText::new("Camera").font(MAIN_FONT));
-                                let combo_width = ui.available_width().min(MAX_SPAN_WIDTH);
-
-                                let Ok(enumerated) = camera.type_.try_into() else {
-                                    // Unknown camera type - skip the camera row rather than panic.
-                                    ui.label(format!("Unknown camera type {}", camera.type_));
-                                    ui.end_row();
-                                    return;
-                                };
-                                let enumerated: MjtCamera = enumerated;
-                                let lock = shared_viewer_state.lock_unpoison();
-                                let model = lock.data_passive.model();
-                                let mut camera_choice = match enumerated {
-                                    MjtCamera::mjCAMERA_FIXED => self.camera_names[camera.fixedcamid as usize].to_string(),
-                                    MjtCamera::mjCAMERA_TRACKING => {
-                                        let bid = camera.trackbodyid as usize;
-                                        if let Some(name) = model.id_to_name(MjtObj::mjOBJ_BODY, bid) {
-                                            format!("Tracking: {}", name)
-                                        } else {
-                                            format!("Tracking: Body {}", bid)
-                                        }
-                                    },
-                                    MjtCamera::mjCAMERA_FREE => "Free".to_string(),
-                                    MjtCamera::mjCAMERA_USER => "User".to_string(),
-                                };
-                                drop(lock);
-                                egui::ComboBox::from_id_salt("camera_combo")
-                                    .selected_text(&camera_choice)
-                                    .width(combo_width)
-                                    .show_ui(ui, |ui| {
-                                        if ui.selectable_value(&mut camera_choice, "Free".to_string(), "Free").clicked() {
-                                            camera.free();
-                                        }
-
-                                        // Button to open tracking modal
-                                        if ui.button("Track").clicked() {
-                                            self.show_tracking_modal = true;
-                                        }
-
-                                        // Separator for fixed cameras
-                                        for (pos, name) in self.camera_names.iter().enumerate() {
-                                            if ui.selectable_value(&mut camera_choice, name.to_string(), name).clicked() {
-                                                *camera = MjvCamera::new_fixed(pos);
-                                            }
-                                        }
-                                    });
-
-                                // Apply selected body if one was selected in the modal
-                                if let Some(body_id) = self.tracking_selected_body.take() {
-                                    camera.track(body_id);
-                                }
-
-                                ui.end_row();
-
-                                // Label
-                                ui.label(RichText::new("Label").font(MAIN_FONT));
-                                let mut current_lbl_ty = LABEL_TYPE_MAP[options.label as usize];
-                                egui::ComboBox::from_id_salt("label_combo")
-                                    .selected_text(current_lbl_ty)
-                                    .width(combo_width)
-                                    .show_ui(ui, |ui| {
-                                        for (label_type_i, label_type) in LABEL_TYPE_MAP.iter().enumerate() {
-                                            if ui.selectable_value(&mut current_lbl_ty, label_type, *label_type).clicked() {
-                                                options.label = label_type_i as i32;
-                                            }
-                                        }
-                                    });
-                                ui.end_row();
-
-                                // Frame
-                                ui.label(RichText::new("Frame").font(MAIN_FONT));
-                                let mut current_frm_ty = FRAME_TYPE_MAP[options.frame as usize];
-                                egui::ComboBox::from_id_salt("frame_combo")
-                                    .selected_text(current_frm_ty)
-                                    .width(combo_width)
-                                    .show_ui(ui, |ui| {
-                                        for (frame_type_i, frame_type) in FRAME_TYPE_MAP.iter().enumerate() {
-                                            if ui.selectable_value(&mut current_frm_ty, frame_type, *frame_type).clicked() {
-                                                options.frame = frame_type_i as i32;
-                                            }
-                                        }
-                                    });
-                                ui.end_row();
-                            });
-
-                            ui.add_space(5.0);
-
-                            // Copy camera state to clipboard as XML
+                        ui.horizontal_wrapped(|ui| {
                             if ui.add(egui::Button::new(
-                                RichText::new("Print camera").font(MAIN_FONT)
+                                RichText::new("Quit").font(MAIN_FONT)
                             ).corner_radius(BUTTON_ROUNDING)).clicked() {
-                                let gl_cams = scene.camera();
-                                let fwd = gl_cams[0].forward;
-                                let up = gl_cams[0].up;
-
-                                // right = forward x up
-                                let right = [
-                                    fwd[1] * up[2] - fwd[2] * up[1],
-                                    fwd[2] * up[0] - fwd[0] * up[2],
-                                    fwd[0] * up[1] - fwd[1] * up[0],
-                                ];
-
-                                // Average position of left and right eye cameras
-                                let pos = [
-                                    (gl_cams[0].pos[0] + gl_cams[1].pos[0]) / 2.0,
-                                    (gl_cams[0].pos[1] + gl_cams[1].pos[1]) / 2.0,
-                                    (gl_cams[0].pos[2] + gl_cams[1].pos[2]) / 2.0,
-                                ];
-
-                                println!(
-                                    "<camera pos=\"{:.3} {:.3} {:.3}\" \
-                                    xyaxes=\"{:.3} {:.3} {:.3} {:.3} {:.3} {:.3}\"/>",
-                                    pos[0], pos[1], pos[2],
-                                    right[0], right[1], right[2],
-                                    up[0], up[1], up[2]
-                                );
-                                // TODO in the future, when
-                                // clipboard copying feature doesn't crash:
-                                // ctx.copy_text(xml);
-                                // Until then ^^^.
+                                self.events.push_back(UiEvent::Close);
                             }
+                        });
+                    });
 
-                            // Screenshot
-                            ui.collapsing(RichText::new("Screenshot").font(MAIN_FONT), |ui| {
-                                if ui.add(egui::Button::new(
-                                    RichText::new("Screenshot").font(MAIN_FONT)
-                                ).corner_radius(BUTTON_ROUNDING)).clicked() {
-                                    self.events.push_back(UiEvent::Screenshot {
-                                        viewport_only: self.screenshot_viewport_only,
-                                        depth: self.screenshot_depth
-                                    });
-                                }
-                                ui.checkbox(
-                                    &mut self.screenshot_viewport_only,
-                                    RichText::new("Viewport only").font(MAIN_FONT)
-                                );
-                                ui.checkbox(
-                                    &mut self.screenshot_depth,
-                                    RichText::new("Depth").font(MAIN_FONT)
-                                );
-                            });
+                    /* UI toggles */
+                    egui::CollapsingHeader::new(RichText::new("UI").font(HEADING_FONT))
+                        .default_open(true)
+                        .show(ui, |ui|
+                    {
+                        // Normal toggles
+                        ui.horizontal_wrapped(|ui| {
+                            let mut selected = status.contains(ViewerStatusBit::HELP);
+                            ui.toggle_value(&mut selected, RichText::new("Help").font(MAIN_FONT));
+                            status.set(ViewerStatusBit::HELP, selected);
 
-                            ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    for (flag, (enabled, flag_name)) in options.flags.iter_mut().zip(VIS_OPT_MAP).enumerate() {
-                                        ui.toggle_value(cast_mut_info!(enabled, flag), flag_name);
-                                    }
-                                });
-                                ui.separator();
-                                egui::Grid::new("tree_flex_slide").show(ui, |ui| {
-                                    ui.label("Tree depth");
-                                    ui.add(egui::Slider::new(&mut options.bvh_depth, 0..=20));
-                                    ui.end_row();
-                                    ui.label("Flex layer");
-                                    ui.add(egui::Slider::new(&mut options.flex_layer, 0..=10));
-                                });
-                            });
+                            selected = window.fullscreen().is_some();
+                            if ui.toggle_value(&mut selected, RichText::new("Fullscreen").font(MAIN_FONT)).clicked() {
+                                self.events.push_back(UiEvent::Fullscreen);
+                            };
 
-                            ui.collapsing(RichText::new("OpenGL effects").font(MAIN_FONT), |ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    for (flag, (enabled, flag_name)) in scene.flags_mut().iter_mut().zip(GL_EFFECT_MAP).enumerate() {
-                                        ui.toggle_value(
-                                            cast_mut_info!(enabled, flag),
-                                            flag_name
-                                        );
-                                    }
-                                });
-                            });
+                            // VSync
+                            let mut selected = status.contains(ViewerStatusBit::VSYNC);
+                            if ui.toggle_value(&mut selected, RichText::new("V-Sync").font(MAIN_FONT)).clicked() {
+                                self.events.push_back(UiEvent::VSyncToggle);
+                            };
+                            status.set(ViewerStatusBit::VSYNC, selected);
 
+                            // Info menu (FPS, time, etc.)
+                            let mut selected = status.contains(ViewerStatusBit::INFO);
+                            ui.toggle_value(&mut selected, RichText::new("Info").font(MAIN_FONT));
+                            status.set(ViewerStatusBit::INFO, selected);
                         });
 
-                        /* Visualization */
-                        egui::CollapsingHeader::new(RichText::new("Visualization").font(HEADING_FONT))
-                            .show(ui, |ui|
-                        {
-                        let (stat_is_editable, vis_is_editable, mut vis, mut stat) = {
+                        ui.separator();
+
+                        /* Window toggles */
+                        ui.horizontal_wrapped(|ui| {
+                            ui.toggle_value(&mut self.actuator_window, RichText::new("Actuator").font(MAIN_FONT));
+                            ui.toggle_value(&mut self.joint_window, RichText::new("Joint").font(MAIN_FONT));
+                            ui.toggle_value(&mut self.equality_window, RichText::new("Equality").font(MAIN_FONT));
+                            ui.toggle_value(&mut self.group_window, RichText::new("Group").font(MAIN_FONT));
+                        });
+
+                        ui.separator();
+
+                        ui.horizontal_wrapped(|ui| {
+                            // Warnings
+                            ui.collapsing(RichText::new("Warnings").font(MAIN_FONT), |ui| {
+                                // Non-realtime factor warning
+                                let mut selected = status.contains(ViewerStatusBit::WARN_REALTIME);
+                                ui.checkbox(&mut selected, RichText::new("Realtime factor").font(MAIN_FONT));
+                                status.set(ViewerStatusBit::WARN_REALTIME, selected);
+                            });
+                        });
+                    });
+
+                    /* Simulation */
+                    egui::CollapsingHeader::new(RichText::new("Simulation").font(HEADING_FONT))
+                        .default_open(true)
+                        .show(ui, |ui|
+                    {
+                        ui.horizontal_wrapped(|ui| {
+                            // Reset simulation
+                            if ui.add(egui::Button::new(
+                                RichText::new("Reset").font(MAIN_FONT)
+                            ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                                self.events.push_back(UiEvent::ResetSimulation);
+                            }
+
+                            // Align camera
+                            if ui.add(egui::Button::new(
+                                RichText::new("Align").font(MAIN_FONT)
+                            ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                                self.events.push_back(UiEvent::AlignCamera);
+                            }
+                        });
+                    });
+
+                    /* Physics options */
+                    egui::CollapsingHeader::new(RichText::new("Physics").font(HEADING_FONT))
+                        .show(ui, |ui|
+                    {
+                        let (opt_is_editable, mut options) = {
                             let state = shared_viewer_state.lock_unpoison();
                             (
-                                state.last_stat_sync_time().elapsed() < PHYSICS_SYNC_TIMEOUT,
-                                state.last_vis_sync_time().elapsed() < PHYSICS_SYNC_TIMEOUT,
-                                state.data_passive.model_vis().clone(),
-                                state.data_passive.model_stat().clone(),
+                                state.last_opt_sync_time().elapsed() < PHYSICS_SYNC_TIMEOUT,
+                                state.data_passive.model().opt().clone(),
                             )
                         };
-
-                        if !vis_is_editable {
-                            ui.colored_label(egui::Color32::YELLOW, MODEL_VIS_SYNC_WARNING);
-                        }
-                        if !stat_is_editable {
-                            ui.colored_label(egui::Color32::YELLOW, MODEL_STAT_SYNC_WARNING);
+                        if !opt_is_editable {
+                            ui.colored_label(egui::Color32::YELLOW, MODEL_OPT_SYNC_WARNING);
                         }
 
-                        // Headlight
-                        ui.collapsing(RichText::new("Headlight").font(MAIN_FONT), |ui| {
-                            egui::Grid::new("headlight_grid").num_columns(2).show(ui, |ui| {
-                                ui.label("Active");
-                                ui.horizontal_top(|ui| {
-                                    let mut active_bool = vis.headlight.active != 0;
-                                    if ui.checkbox(&mut active_bool, "").changed() {
-                                        vis.headlight.active = if active_bool { 1 } else { 0 };
+                        // Physics solver and method selectors (top level)
+                        egui::Grid::new("physics_enum_grid").num_columns(2).show(ui, |ui| {
+                            ui.label(RichText::new("Integrator").font(MAIN_FONT));
+                            let combo_width = ui.available_width().min(MAX_SPAN_WIDTH);
+
+                            let current_integrator = INTEGRATOR_MAP.get(options.integrator as usize).copied().unwrap_or("Unknown");
+                            let mut integrator_idx = options.integrator as usize;
+                            egui::ComboBox::from_id_salt("integrator_combo")
+                                .selected_text(current_integrator)
+                                .width(combo_width)
+                                .show_ui(ui, |ui| {
+                                    for (i, integrator_name) in INTEGRATOR_MAP.iter().enumerate() {
+                                        ui.selectable_value(&mut integrator_idx, i, *integrator_name);
                                     }
                                 });
+                            options.integrator = integrator_idx as i32;
+                            ui.end_row();
+
+                            ui.label(RichText::new("Cone").font(MAIN_FONT));
+                            let current_cone = CONE_MAP.get(options.cone as usize).copied().unwrap_or("Unknown");
+                            let mut cone_idx = options.cone as usize;
+                            egui::ComboBox::from_id_salt("cone_combo")
+                                .selected_text(current_cone)
+                                .width(combo_width)
+                                .show_ui(ui, |ui| {
+                                    for (i, cone_name) in CONE_MAP.iter().enumerate() {
+                                        ui.selectable_value(&mut cone_idx, i, *cone_name);
+                                    }
+                                });
+                            options.cone = cone_idx as i32;
+                            ui.end_row();
+
+                            ui.label(RichText::new("Jacobian").font(MAIN_FONT));
+                            let current_jacobian = JACOBIAN_MAP.get(options.jacobian as usize).copied().unwrap_or("Unknown");
+                            let mut jacobian_idx = options.jacobian as usize;
+                            egui::ComboBox::from_id_salt("jacobian_combo")
+                                .selected_text(current_jacobian)
+                                .width(combo_width)
+                                .show_ui(ui, |ui| {
+                                    for (i, jacobian_name) in JACOBIAN_MAP.iter().enumerate() {
+                                        ui.selectable_value(&mut jacobian_idx, i, *jacobian_name);
+                                    }
+                                });
+                            options.jacobian = jacobian_idx as i32;
+                            ui.end_row();
+
+                            ui.label(RichText::new("Solver").font(MAIN_FONT));
+                            let current_solver = SOLVER_MAP.get(options.solver as usize).copied().unwrap_or("Unknown");
+                            let mut solver_idx = options.solver as usize;
+                            egui::ComboBox::from_id_salt("solver_combo")
+                                .selected_text(current_solver)
+                                .width(combo_width)
+                                .show_ui(ui, |ui| {
+                                    for (i, solver_name) in SOLVER_MAP.iter().enumerate() {
+                                        ui.selectable_value(&mut solver_idx, i, *solver_name);
+                                    }
+                                });
+                            options.solver = solver_idx as i32;
+                            ui.end_row();
+                        });
+
+                        ui.collapsing(RichText::new("Algorithm parameters").font(MAIN_FONT), |ui| {
+                            egui::Grid::new("algo_param_grid").num_columns(2).show(ui, |ui| {
+                                ui.add(
+                                    RowScalar::new("Timestep", &mut options.timestep, 1e-6)
+                                        .range(0.0..=f64::INFINITY)
+                                );
                                 ui.end_row();
 
-                                ui.add(RowArray::new("Ambient", &mut vis.headlight.ambient, 1e-3));
+                                ui.add(
+                                    RowScalar::new("Iterations", &mut options.iterations, 1.0)
+                                        .range(1..=i32::MAX)
+                                );
                                 ui.end_row();
 
-                                ui.add(RowArray::new("Diffuse", &mut vis.headlight.diffuse, 1e-3));
+                                ui.add(
+                                    RowScalar::new("Tolerance", &mut options.tolerance, 1e-8)
+                                        .range(0.0..=f64::INFINITY)
+                                );
                                 ui.end_row();
 
-                                ui.add(RowArray::new("Specular", &mut vis.headlight.specular, 1e-3));
+                                ui.add(
+                                    RowScalar::new("LS Iter", &mut options.ls_iterations, 1.0)
+                                        .range(1..=i32::MAX)
+                                );
+                                ui.end_row();
+
+                                ui.add(
+                                    RowScalar::new("LS Tol", &mut options.ls_tolerance, 1e-8)
+                                        .range(0.0..=f64::INFINITY)
+                                );
+                                ui.end_row();
+
+                                ui.add(
+                                    RowScalar::new("Noslip Iter", &mut options.noslip_iterations, 1.0)
+                                        .range(0..=i32::MAX)
+                                );
+                                ui.end_row();
+
+                                ui.add(
+                                    RowScalar::new("Noslip Tol", &mut options.noslip_tolerance, 1e-8)
+                                        .range(0.0..=f64::INFINITY)
+                                );
+                                ui.end_row();
+
+                                ui.add(
+                                    RowScalar::new("CCD Iter", &mut options.ccd_iterations, 1.0)
+                                        .range(1..=i32::MAX)
+                                );
+                                ui.end_row();
+
+                                ui.add(
+                                    RowScalar::new("CCD Tol", &mut options.ccd_tolerance, 1e-8)
+                                        .range(0.0..=f64::INFINITY)
+                                );
+                                ui.end_row();
+
+                                ui.add(
+                                    RowScalar::new("Sleep Tol", &mut options.sleep_tolerance, 1e-8)
+                                        .range(0.0..=f64::INFINITY)
+                                );
+                                ui.end_row();
+
+                                ui.add(
+                                    RowScalar::new("SDF Iter", &mut options.sdf_iterations, 1.0)
+                                        .range(1..=i32::MAX)
+                                );
+                                ui.end_row();
+
+                                ui.add(
+                                    RowScalar::new("SDF Init", &mut options.sdf_initpoints, 1.0)
+                                        .range(0..=i32::MAX)
+                                );
+                                ui.end_row();
+
+                            });
+                        });
+
+                        ui.collapsing(RichText::new("Physics parameters").font(MAIN_FONT), |ui| {
+                            egui::Grid::new("phys_param_grid").num_columns(2).show(ui, |ui| {
+                                ui.add(
+                                    RowScalar::new("Density", &mut options.density, 1e-3)
+                                        .range(0.0..=f64::INFINITY)
+                                );
+                                ui.end_row();
+
+                                ui.add(
+                                    RowScalar::new("Viscosity", &mut options.viscosity, 1e-6)
+                                        .range(0.0..=f64::INFINITY)
+                                );
+                                ui.end_row();
+
+                                ui.add(
+                                    RowScalar::new("Imp Ratio", &mut options.impratio, 1e-3)
+                                        .range(0.0..=f64::INFINITY)
+                                );
+                                ui.end_row();
+
+                                ui.add(RowArray::new(
+                                    "Gravity", &mut options.gravity, 1e-3
+                                ));
+                                ui.end_row();
+
+                                ui.add(RowArray::new(
+                                    "Wind", &mut options.wind, 1e-3
+                                ));
+                                ui.end_row();
+
+                                ui.add(RowArray::new(
+                                    "Magnetic", &mut options.magnetic, 1e-3
+                                ));
                                 ui.end_row();
                             });
                         });
 
-                        // Free Camera
-                        ui.collapsing(RichText::new("Free Camera").font(MAIN_FONT), |ui| {
-                            egui::Grid::new("camera_grid").num_columns(2).show(ui, |ui| {
-                                ui.label("Orthographic");
-                                ui.horizontal_top(|ui| {
-                                    let mut ortho_bool = vis.global.orthographic != 0;
-                                    if ui.checkbox(&mut ortho_bool, "").changed() {
-                                        vis.global.orthographic = if ortho_bool { 1 } else { 0 };
+                        ui.collapsing(RichText::new("Disable Flags").font(MAIN_FONT), |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                for (flag_name, flag_value) in DISABLE_FLAGS {
+                                    let mut is_enabled = (options.disableflags & (*flag_value as i32)) != 0;
+                                    if ui.toggle_value(&mut is_enabled, *flag_name).changed() {
+                                        set_flag!(options.disableflags, *flag_value as i32, is_enabled);
                                     }
-                                });
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Field of view", &mut vis.global.fovy, 1e-2)
-                                        .range(5.0..=175.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(RowArray::new("Center", &mut stat.center, 1e-3));
-                                ui.end_row();
-
-                                ui.add(RowScalar::new("Azimuth", &mut vis.global.azimuth, 1e-2));
-                                ui.end_row();
-
-                                ui.add(RowScalar::new("Elevation", &mut vis.global.elevation, 1e-2));
-                                ui.end_row();
-
-                                if ui.button("Align").clicked() {
-                                    self.events.push_back(UiEvent::AlignCamera);
                                 }
-                                ui.end_row();
                             });
                         });
 
-                        // Global
-                        ui.collapsing(RichText::new("Global").font(MAIN_FONT), |ui| {
-                            egui::Grid::new("global_grid").num_columns(2).show(ui, |ui| {
+                        ui.collapsing(RichText::new("Enable Flags").font(MAIN_FONT), |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                for (flag_name, flag_value) in ENABLE_FLAGS {
+                                    let mut is_enabled = (options.enableflags & (*flag_value as i32)) != 0;
+                                    if ui.toggle_value(&mut is_enabled, *flag_name).changed() {
+                                        set_flag!(options.enableflags, *flag_value as i32, is_enabled);
+                                    }
+                                }
+                            });
+                        });
+
+                        ui.collapsing(RichText::new("Actuator Group Enable").font(MAIN_FONT), |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                for i in 0..mjNGROUP as usize {
+                                    let mask = 1 << i;
+                                    let mut is_enabled = (options.disableactuator & mask) == 0;
+                                    if ui.toggle_value(&mut is_enabled, format!("Act Group {i}")).changed() {
+                                        set_flag!(options.disableactuator, mask, !is_enabled);
+                                    }
+                                }
+                            });
+                        });
+
+                        ui.collapsing(RichText::new("Contact Override").font(MAIN_FONT), |ui| {
+                            egui::Grid::new("contact_override_grid").num_columns(2).show(ui, |ui| {
                                 ui.add(
-                                    RowScalar::new("Extent", &mut stat.extent, 1e-3)
-                                        .range(0.001..=f64::INFINITY)
+                                    RowScalar::new("Margin", &mut options.o_margin, 1e-5)
+                                        .range(0.0..=f64::INFINITY)
                                 );
                                 ui.end_row();
 
-                                ui.label("Inertia Geom");
-                                ui.horizontal_top(|ui| {
-                                    let combo_width = ui.available_width().min(MAX_SPAN_WIDTH);
-                                    let mut inertia_choice = if vis.global.ellipsoidinertia == 0 { "Box" } else { "Ellipsoid" };
-                                    egui::ComboBox::from_id_salt("inertia_geom_combo")
-                                        .selected_text(inertia_choice)
-                                        .width(combo_width)
-                                        .show_ui(ui, |ui| {
-                                            ui.selectable_value(&mut inertia_choice, "Box", "Box");
-                                            ui.selectable_value(&mut inertia_choice, "Ellipsoid", "Ellipsoid");
-                                        });
-                                    vis.global.ellipsoidinertia = if inertia_choice == "Box" { 0 } else { 1 };
-                                });
+                                ui.add(RowArray::new(
+                                    "Sol Ref", &mut options.o_solref, 1e-5
+                                ));
                                 ui.end_row();
 
-                                ui.label("BVH active");
-                                ui.horizontal_top(|ui| {
-                                    let mut bvh_bool = vis.global.bvactive != 0;
-                                    if ui.checkbox(&mut bvh_bool, "").changed() {
-                                        vis.global.bvactive = if bvh_bool { 1 } else { 0 };
+                                ui.add(RowArray::new(
+                                    "Sol Imp", &mut options.o_solimp, 1e-3
+                                ));
+                                ui.end_row();
+
+                                ui.add(RowArray::new(
+                                    "Friction", &mut options.o_friction, 1e-3
+                                ));
+                                ui.end_row();
+                            });
+                        });
+                        let mut lock = shared_viewer_state.lock_unpoison();
+                        if lock.model_reloaded {
+                            return;
+                        }
+                        *lock.data_passive.model_opt_mut() = options;
+                    });
+
+                    /* Visualization options */
+                    egui::CollapsingHeader::new(RichText::new("Rendering").font(HEADING_FONT))
+                        .show(ui, |ui|
+                    {
+                        egui::Grid::new("render_select_grid").num_columns(2).show(ui, |ui| {
+                            // Camera
+                            ui.label(RichText::new("Camera").font(MAIN_FONT));
+                            let combo_width = ui.available_width().min(MAX_SPAN_WIDTH);
+
+                            let Ok(enumerated) = camera.type_.try_into() else {
+                                // Unknown camera type - skip the whole selector grid rather than panic.
+                                ui.label(format!("Unknown camera type {}", camera.type_));
+                                ui.end_row();
+                                return;
+                            };
+                            let enumerated: MjtCamera = enumerated;
+                            let lock = shared_viewer_state.lock_unpoison();
+                            if lock.model_reloaded {
+                                return;
+                            }
+                            let model = lock.data_passive.model();
+                            let mut camera_choice = match enumerated {
+                                MjtCamera::mjCAMERA_FIXED => self.camera_names[camera.fixedcamid as usize].to_string(),
+                                MjtCamera::mjCAMERA_TRACKING => {
+                                    let bid = camera.trackbodyid as usize;
+                                    if let Some(name) = model.id_to_name(MjtObj::mjOBJ_BODY, bid) {
+                                        format!("Tracking: {}", name)
+                                    } else {
+                                        format!("Tracking: Body {}", bid)
+                                    }
+                                },
+                                MjtCamera::mjCAMERA_FREE => "Free".to_string(),
+                                MjtCamera::mjCAMERA_USER => "User".to_string(),
+                            };
+                            drop(lock);
+                            egui::ComboBox::from_id_salt("camera_combo")
+                                .selected_text(&camera_choice)
+                                .width(combo_width)
+                                .show_ui(ui, |ui| {
+                                    if ui.selectable_value(&mut camera_choice, "Free".to_string(), "Free").clicked() {
+                                        camera.free();
+                                    }
+
+                                    // Button to open tracking modal
+                                    if ui.button("Track").clicked() {
+                                        self.show_tracking_modal = true;
+                                    }
+
+                                    // Fixed cameras of the model.
+                                    for (pos, name) in self.camera_names.iter().enumerate() {
+                                        if ui.selectable_value(&mut camera_choice, name.to_string(), name).clicked() {
+                                            *camera = MjvCamera::new_fixed(pos);
+                                        }
                                     }
                                 });
-                                ui.end_row();
-                            });
+
+                            // Apply selected body if one was selected in the modal
+                            if let Some(body_id) = self.tracking_selected_body.take() {
+                                camera.track(body_id);
+                            }
+
+                            ui.end_row();
+
+                            // Label
+                            ui.label(RichText::new("Label").font(MAIN_FONT));
+                            let mut current_lbl_ty = LABEL_TYPE_MAP[options.label as usize];
+                            egui::ComboBox::from_id_salt("label_combo")
+                                .selected_text(current_lbl_ty)
+                                .width(combo_width)
+                                .show_ui(ui, |ui| {
+                                    for (label_type_i, label_type) in LABEL_TYPE_MAP.iter().enumerate() {
+                                        if ui.selectable_value(&mut current_lbl_ty, label_type, *label_type).clicked() {
+                                            options.label = label_type_i as i32;
+                                        }
+                                    }
+                                });
+                            ui.end_row();
+
+                            // Frame
+                            ui.label(RichText::new("Frame").font(MAIN_FONT));
+                            let mut current_frm_ty = FRAME_TYPE_MAP[options.frame as usize];
+                            egui::ComboBox::from_id_salt("frame_combo")
+                                .selected_text(current_frm_ty)
+                                .width(combo_width)
+                                .show_ui(ui, |ui| {
+                                    for (frame_type_i, frame_type) in FRAME_TYPE_MAP.iter().enumerate() {
+                                        if ui.selectable_value(&mut current_frm_ty, frame_type, *frame_type).clicked() {
+                                            options.frame = frame_type_i as i32;
+                                        }
+                                    }
+                                });
+                            ui.end_row();
                         });
 
-                        // Map
-                        ui.collapsing(RichText::new("Map").font(MAIN_FONT), |ui| {
-                            egui::Grid::new("map_grid").num_columns(2).show(ui, |ui| {
-                                ui.add(
-                                    RowScalar::new("Stiffness", &mut vis.map.stiffness, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
+                        ui.add_space(5.0);
 
-                                ui.add(
-                                    RowScalar::new("Rot stiffness", &mut vis.map.stiffnessrot, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
+                        // Print the camera state as MJCF to stdout.
+                        if ui.add(egui::Button::new(
+                            RichText::new("Print camera").font(MAIN_FONT)
+                        ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                            let gl_cams = scene.camera();
+                            let fwd = gl_cams[0].forward;
+                            let up = gl_cams[0].up;
 
-                                ui.add(
-                                    RowScalar::new("Force", &mut vis.map.force, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
+                            // right = forward x up
+                            let right = [
+                                fwd[1] * up[2] - fwd[2] * up[1],
+                                fwd[2] * up[0] - fwd[0] * up[2],
+                                fwd[0] * up[1] - fwd[1] * up[0],
+                            ];
 
-                                ui.add(
-                                    RowScalar::new("Torque", &mut vis.map.torque, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
+                            // Average position of left and right eye cameras
+                            let pos = [
+                                (gl_cams[0].pos[0] + gl_cams[1].pos[0]) / 2.0,
+                                (gl_cams[0].pos[1] + gl_cams[1].pos[1]) / 2.0,
+                                (gl_cams[0].pos[2] + gl_cams[1].pos[2]) / 2.0,
+                            ];
 
-                                ui.add(
-                                    RowScalar::new("Alpha", &mut vis.map.alpha, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Fog start", &mut vis.map.fogstart, 1e-3)
-                                        .range(0.0..=(vis.map.fogend - RANGE_PRECISION_TOLERANCE).max(0.0))
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Fog end", &mut vis.map.fogend, 1e-3)
-                                        .range((vis.map.fogstart + RANGE_PRECISION_TOLERANCE)..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Z near", &mut vis.map.znear, 1e-3)
-                                        .range(0.001..=(vis.map.zfar - RANGE_PRECISION_TOLERANCE))
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Z far", &mut vis.map.zfar, 1e-3)
-                                        .range((vis.map.znear + RANGE_PRECISION_TOLERANCE)..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Haze", &mut vis.map.haze, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Shadow clip", &mut vis.map.shadowclip, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Shadow scale", &mut vis.map.shadowscale, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Actuator tendon", &mut vis.map.actuatortendon, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-                            });
-                        });
-
-                        // Scale
-                        ui.collapsing(RichText::new("Scale").font(MAIN_FONT), |ui| {
-                            egui::Grid::new("scale_grid").num_columns(2).show(ui, |ui| {
-                                ui.add(
-                                    RowScalar::new("Force width", &mut vis.scale.forcewidth, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Contact width", &mut vis.scale.contactwidth, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Contact height", &mut vis.scale.contactheight, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Connect", &mut vis.scale.connect, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("COM", &mut vis.scale.com, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Camera", &mut vis.scale.camera, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Light", &mut vis.scale.light, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Select point", &mut vis.scale.selectpoint, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Joint length", &mut vis.scale.jointlength, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Joint width", &mut vis.scale.jointwidth, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Actuator length", &mut vis.scale.actuatorlength, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Actuator width", &mut vis.scale.actuatorwidth, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Frame length", &mut vis.scale.framelength, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Frame width", &mut vis.scale.framewidth, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Constraint", &mut vis.scale.constraint, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Slider crank", &mut vis.scale.slidercrank, 1e-3)
-                                        .range(0.0..=f32::INFINITY)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowScalar::new("Frustum", &mut vis.scale.frustum, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-                            });
-                        });
-
-                        // RGBA
-                        ui.collapsing(RichText::new("RGBA").font(MAIN_FONT), |ui| {
-                            egui::Grid::new("rgba_grid").num_columns(2).show(ui, |ui| {
-                                ui.add(
-                                    RowArray::new("Fog", &mut vis.rgba.fog, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Haze", &mut vis.rgba.haze, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Force", &mut vis.rgba.force, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Inertia", &mut vis.rgba.inertia, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Joint", &mut vis.rgba.joint, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Actuator", &mut vis.rgba.actuator, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Actuator negative", &mut vis.rgba.actuatornegative, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Actuator positive", &mut vis.rgba.actuatorpositive, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("COM", &mut vis.rgba.com, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Camera", &mut vis.rgba.camera, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Light", &mut vis.rgba.light, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Select point", &mut vis.rgba.selectpoint, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Connect", &mut vis.rgba.connect, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Contact point", &mut vis.rgba.contactpoint, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Contact force", &mut vis.rgba.contactforce, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Contact friction", &mut vis.rgba.contactfriction, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Contact torque", &mut vis.rgba.contacttorque, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Contact gap", &mut vis.rgba.contactgap, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Rangefinder", &mut vis.rgba.rangefinder, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Constraint", &mut vis.rgba.constraint, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Slider crank", &mut vis.rgba.slidercrank, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Crank broken", &mut vis.rgba.crankbroken, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("Frustum", &mut vis.rgba.frustum, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("BV", &mut vis.rgba.bv, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-
-                                ui.add(
-                                    RowArray::new("BV active", &mut vis.rgba.bvactive, 1e-3)
-                                        .range(0.0..=1.0)
-                                );
-                                ui.end_row();
-                            });
-                        });
-
-                        // Write modified vis and stat back to model
-                        {
-                            let mut lock = shared_viewer_state.lock_unpoison();
-                            *lock.data_passive.model_vis_mut() = vis;
-                            *lock.data_passive.model_stat_mut() = stat;
+                            info!(
+                                "<camera pos=\"{:.3} {:.3} {:.3}\" \
+                                xyaxes=\"{:.3} {:.3} {:.3} {:.3} {:.3} {:.3}\"/>",
+                                pos[0], pos[1], pos[2],
+                                right[0], right[1], right[2],
+                                up[0], up[1], up[2]
+                            );
+                            // TODO in the future, when
+                            // clipboard copying feature doesn't crash:
+                            // ctx.copy_text(xml);
+                            // Until then ^^^.
                         }
+
+                        // Screenshot
+                        ui.collapsing(RichText::new("Screenshot").font(MAIN_FONT), |ui| {
+                            if ui.add(egui::Button::new(
+                                RichText::new("Screenshot").font(MAIN_FONT)
+                            ).corner_radius(BUTTON_ROUNDING)).clicked() {
+                                self.events.push_back(UiEvent::Screenshot {
+                                    viewport_only: self.screenshot_viewport_only,
+                                    depth: self.screenshot_depth
+                                });
+                            }
+                            ui.checkbox(
+                                &mut self.screenshot_viewport_only,
+                                RichText::new("Viewport only").font(MAIN_FONT)
+                            );
+                            ui.checkbox(
+                                &mut self.screenshot_depth,
+                                RichText::new("Depth").font(MAIN_FONT)
+                            );
                         });
 
-                        // Make the scroll bars span to the edges of the sidebar.
-                        ui.take_available_space();
+                        ui.collapsing(RichText::new("Elements").font(MAIN_FONT), |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                for (flag, (enabled, flag_name)) in options.flags.iter_mut().zip(VIS_OPT_MAP).enumerate() {
+                                    ui.toggle_value(cast_mut_info!(enabled, flag), flag_name);
+                                }
+                            });
+                            ui.separator();
+                            egui::Grid::new("tree_flex_slide").show(ui, |ui| {
+                                ui.label("Tree depth");
+                                ui.add(egui::Slider::new(&mut options.bvh_depth, 0..=20));
+                                ui.end_row();
+                                ui.label("Flex layer");
+                                ui.add(egui::Slider::new(&mut options.flex_layer, 0..=10));
+                            });
+                        });
+
+                        ui.collapsing(RichText::new("OpenGL effects").font(MAIN_FONT), |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                for (flag, (enabled, flag_name)) in scene.flags_mut().iter_mut().zip(GL_EFFECT_MAP).enumerate() {
+                                    ui.toggle_value(
+                                        cast_mut_info!(enabled, flag),
+                                        flag_name
+                                    );
+                                }
+                            });
+                        });
+
                     });
 
-                    // Panel toggle info
-                    ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-                        ui.add_space(HEADING_POST_SPACE);
-                        ui.heading("Toggle: X");
+                    /* Visualization */
+                    egui::CollapsingHeader::new(RichText::new("Visualization").font(HEADING_FONT))
+                        .show(ui, |ui|
+                    {
+                    let (stat_is_editable, vis_is_editable, mut vis, mut stat) = {
+                        let state = shared_viewer_state.lock_unpoison();
+                        (
+                            state.last_stat_sync_time().elapsed() < PHYSICS_SYNC_TIMEOUT,
+                            state.last_vis_sync_time().elapsed() < PHYSICS_SYNC_TIMEOUT,
+                            state.data_passive.model_vis().clone(),
+                            state.data_passive.model_stat().clone(),
+                        )
+                    };
+
+                    if !vis_is_editable {
+                        ui.colored_label(egui::Color32::YELLOW, MODEL_VIS_SYNC_WARNING);
+                    }
+                    if !stat_is_editable {
+                        ui.colored_label(egui::Color32::YELLOW, MODEL_STAT_SYNC_WARNING);
+                    }
+
+                    // Headlight
+                    ui.collapsing(RichText::new("Headlight").font(MAIN_FONT), |ui| {
+                        egui::Grid::new("headlight_grid").num_columns(2).show(ui, |ui| {
+                            ui.label("Active");
+                            ui.horizontal_top(|ui| {
+                                let mut active_bool = vis.headlight.active != 0;
+                                if ui.checkbox(&mut active_bool, "").changed() {
+                                    vis.headlight.active = if active_bool { 1 } else { 0 };
+                                }
+                            });
+                            ui.end_row();
+
+                            ui.add(RowArray::new("Ambient", &mut vis.headlight.ambient, 1e-3));
+                            ui.end_row();
+
+                            ui.add(RowArray::new("Diffuse", &mut vis.headlight.diffuse, 1e-3));
+                            ui.end_row();
+
+                            ui.add(RowArray::new("Specular", &mut vis.headlight.specular, 1e-3));
+                            ui.end_row();
+                        });
                     });
 
-                    // Make the panel track its width on resize
-                    left = ui.max_rect().max.x + SIDE_PANEL_PAD;
+                    // Free Camera
+                    ui.collapsing(RichText::new("Free Camera").font(MAIN_FONT), |ui| {
+                        egui::Grid::new("camera_grid").num_columns(2).show(ui, |ui| {
+                            ui.label("Orthographic");
+                            ui.horizontal_top(|ui| {
+                                let mut ortho_bool = vis.global.orthographic != 0;
+                                if ui.checkbox(&mut ortho_bool, "").changed() {
+                                    vis.global.orthographic = if ortho_bool { 1 } else { 0 };
+                                }
+                            });
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Field of view", &mut vis.global.fovy, 1e-2)
+                                    .range(5.0..=175.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(RowArray::new("Center", &mut stat.center, 1e-3));
+                            ui.end_row();
+
+                            ui.add(RowScalar::new("Azimuth", &mut vis.global.azimuth, 1e-2));
+                            ui.end_row();
+
+                            ui.add(RowScalar::new("Elevation", &mut vis.global.elevation, 1e-2));
+                            ui.end_row();
+
+                            if ui.button("Align").clicked() {
+                                self.events.push_back(UiEvent::AlignCamera);
+                            }
+                            ui.end_row();
+                        });
+                    });
+
+                    // Global
+                    ui.collapsing(RichText::new("Global").font(MAIN_FONT), |ui| {
+                        egui::Grid::new("global_grid").num_columns(2).show(ui, |ui| {
+                            ui.add(
+                                RowScalar::new("Extent", &mut stat.extent, 1e-3)
+                                    .range(0.001..=f64::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.label("Inertia Geom");
+                            ui.horizontal_top(|ui| {
+                                let combo_width = ui.available_width().min(MAX_SPAN_WIDTH);
+                                let mut inertia_choice = if vis.global.ellipsoidinertia == 0 { "Box" } else { "Ellipsoid" };
+                                egui::ComboBox::from_id_salt("inertia_geom_combo")
+                                    .selected_text(inertia_choice)
+                                    .width(combo_width)
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(&mut inertia_choice, "Box", "Box");
+                                        ui.selectable_value(&mut inertia_choice, "Ellipsoid", "Ellipsoid");
+                                    });
+                                vis.global.ellipsoidinertia = if inertia_choice == "Box" { 0 } else { 1 };
+                            });
+                            ui.end_row();
+
+                            ui.label("BVH active");
+                            ui.horizontal_top(|ui| {
+                                let mut bvh_bool = vis.global.bvactive != 0;
+                                if ui.checkbox(&mut bvh_bool, "").changed() {
+                                    vis.global.bvactive = if bvh_bool { 1 } else { 0 };
+                                }
+                            });
+                            ui.end_row();
+                        });
+                    });
+
+                    // Map
+                    ui.collapsing(RichText::new("Map").font(MAIN_FONT), |ui| {
+                        egui::Grid::new("map_grid").num_columns(2).show(ui, |ui| {
+                            ui.add(
+                                RowScalar::new("Stiffness", &mut vis.map.stiffness, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Rot stiffness", &mut vis.map.stiffnessrot, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Force", &mut vis.map.force, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Torque", &mut vis.map.torque, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Alpha", &mut vis.map.alpha, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Fog start", &mut vis.map.fogstart, 1e-3)
+                                    .range(0.0..=(vis.map.fogend - RANGE_PRECISION_TOLERANCE).max(0.0))
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Fog end", &mut vis.map.fogend, 1e-3)
+                                    .range((vis.map.fogstart + RANGE_PRECISION_TOLERANCE)..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Z near", &mut vis.map.znear, 1e-3)
+                                    .range(0.001..=(vis.map.zfar - RANGE_PRECISION_TOLERANCE))
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Z far", &mut vis.map.zfar, 1e-3)
+                                    .range((vis.map.znear + RANGE_PRECISION_TOLERANCE)..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Haze", &mut vis.map.haze, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Shadow clip", &mut vis.map.shadowclip, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Shadow scale", &mut vis.map.shadowscale, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Actuator tendon", &mut vis.map.actuatortendon, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+                        });
+                    });
+
+                    // Scale
+                    ui.collapsing(RichText::new("Scale").font(MAIN_FONT), |ui| {
+                        egui::Grid::new("scale_grid").num_columns(2).show(ui, |ui| {
+                            ui.add(
+                                RowScalar::new("Force width", &mut vis.scale.forcewidth, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Contact width", &mut vis.scale.contactwidth, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Contact height", &mut vis.scale.contactheight, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Connect", &mut vis.scale.connect, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("COM", &mut vis.scale.com, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Camera", &mut vis.scale.camera, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Light", &mut vis.scale.light, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Select point", &mut vis.scale.selectpoint, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Joint length", &mut vis.scale.jointlength, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Joint width", &mut vis.scale.jointwidth, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Actuator length", &mut vis.scale.actuatorlength, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Actuator width", &mut vis.scale.actuatorwidth, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Frame length", &mut vis.scale.framelength, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Frame width", &mut vis.scale.framewidth, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Constraint", &mut vis.scale.constraint, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Slider crank", &mut vis.scale.slidercrank, 1e-3)
+                                    .range(0.0..=f32::INFINITY)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowScalar::new("Frustum", &mut vis.scale.frustum, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+                        });
+                    });
+
+                    // RGBA
+                    ui.collapsing(RichText::new("RGBA").font(MAIN_FONT), |ui| {
+                        egui::Grid::new("rgba_grid").num_columns(2).show(ui, |ui| {
+                            ui.add(
+                                RowArray::new("Fog", &mut vis.rgba.fog, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Haze", &mut vis.rgba.haze, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Force", &mut vis.rgba.force, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Inertia", &mut vis.rgba.inertia, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Joint", &mut vis.rgba.joint, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Actuator", &mut vis.rgba.actuator, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Actuator negative", &mut vis.rgba.actuatornegative, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Actuator positive", &mut vis.rgba.actuatorpositive, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("COM", &mut vis.rgba.com, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Camera", &mut vis.rgba.camera, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Light", &mut vis.rgba.light, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Select point", &mut vis.rgba.selectpoint, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Connect", &mut vis.rgba.connect, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Contact point", &mut vis.rgba.contactpoint, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Contact force", &mut vis.rgba.contactforce, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Contact friction", &mut vis.rgba.contactfriction, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Contact torque", &mut vis.rgba.contacttorque, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Contact gap", &mut vis.rgba.contactgap, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Rangefinder", &mut vis.rgba.rangefinder, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Constraint", &mut vis.rgba.constraint, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Slider crank", &mut vis.rgba.slidercrank, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Crank broken", &mut vis.rgba.crankbroken, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("Frustum", &mut vis.rgba.frustum, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("BV", &mut vis.rgba.bv, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+
+                            ui.add(
+                                RowArray::new("BV active", &mut vis.rgba.bvactive, 1e-3)
+                                    .range(0.0..=1.0)
+                            );
+                            ui.end_row();
+                        });
+                    });
+
+                    // Write modified vis and stat back to model
+                    {
+                        let mut lock = shared_viewer_state.lock_unpoison();
+                        if lock.model_reloaded {
+                            return;
+                        }
+                        *lock.data_passive.model_vis_mut() = vis;
+                        *lock.data_passive.model_stat_mut() = stat;
+                    }
+                    });
+
+                    // Make the scroll bars span to the edges of the sidebar.
+                    ui.take_available_space();
                 });
-            }
+
+                // Panel toggle info
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                    ui.add_space(HEADING_POST_SPACE);
+                    ui.heading("Toggle: X");
+                });
+
+                // Make the panel track its width on resize
+                left = ui.max_rect().max.x + SIDE_PANEL_PAD;
+            });
+            status.set(ViewerStatusBit::UI, is_expanded);
 
             /* Windows */
             // Controls window
             egui::Window::new("Actuator")
                 .scroll(true)
+                .drag_to_scroll(egui::scroll_area::DragScroll::Always)
                 .open(&mut self.actuator_window)
-                .show(ctx, |ui|
+                .show(ui, |ui|
             {
                 let mut lock = shared_viewer_state.lock_unpoison();
+                if lock.model_reloaded {
+                    return;
+                }
                 let ctrl_mut = lock.data_passive.ctrl_mut();
-                egui::Grid::new("ctrl_grid").show(ui, |ui| {
-                    debug_assert_eq!(
-                        self.actuator_display_info.len(), ctrl_mut.len(),
-                        "actuator names don't match num of actuators in model. This is a bug!"
-                    );
-                    for ((name, limited, range), ctrl) in self.actuator_display_info.iter()
-                        .zip(ctrl_mut.iter_mut())
-                    {
-                        ui.label(RichText::new(name).font(MAIN_FONT));
+                debug_assert_eq!(
+                    self.actuator_info.iter().map(|info| info.inputs.len()).sum::<usize>(),
+                    ctrl_mut.len(),
+                    "actuator inputs don't match num of controls in model. This is a bug!"
+                );
+                for ActuatorDisplayInfo { name, ctrl_start, inputs } in &self.actuator_info {
+                    let actuator_ctrl = &mut ctrl_mut[*ctrl_start..*ctrl_start + inputs.len()];
+                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
+                        if inputs.is_empty() {
+                            ui.label(RichText::new("no inputs").font(MAIN_FONT));
+                            return;
+                        }
 
-                        let range_inc = if *limited {
-                            range[0]..=range[1]
-                        } else { -1.0..=1.0 };
-
-                        ui.add(
-                            egui::Slider::new(ctrl, range_inc)
-                            .update_while_editing(false)
-                        );
-                        ui.end_row();
-                    }
-                });
+                        ui.horizontal(|ui| {
+                            for (input, ctrl) in inputs.iter().zip(actuator_ctrl) {
+                                if let Some(label) = &input.label {
+                                    ui.label(RichText::new(&**label).font(MAIN_FONT));
+                                }
+                                ui.add(
+                                    egui::Slider::new(ctrl, input.range.clone())
+                                    .clamping(egui::SliderClamping::Never)
+                                    .update_while_editing(false)
+                                );
+                            }
+                        });
+                    });
+                }
 
                 // Clear all actuator controls by setting them to 0
                 if ui.button(RichText::new("Clear").font(MAIN_FONT)).clicked() {
@@ -1413,40 +1548,91 @@ impl ViewerUI {
             // Joints window
             egui::Window::new("Joint")
                 .scroll(true)
+                .drag_to_scroll(egui::scroll_area::DragScroll::Always)
                 .open(&mut self.joint_window)
-                .show(ctx, |ui|
+                .show(ui, |ui|
             {
-                egui::Grid::new("joint_grid").show(ui, |ui| {
-                    let lock = shared_viewer_state.lock_unpoison();
-                    let qpos = lock.data_passive.qpos();
-                    for (name, limited, range, qpos_adr) in &self.joint_display_info
-                    {
-                        ui.label(RichText::new(name).font(MAIN_FONT));
-                        let mut value = qpos[*qpos_adr];
-                        ui.add_enabled(false, egui::DragValue::new(&mut value));
+                let mut lock = shared_viewer_state.lock_unpoison();
+                if lock.model_reloaded {
+                    return;
+                }
+                let qpos = lock.data_passive.qpos_mut();
+                for JointDisplayInfo { name, qpos_start, components, quat } in &self.joint_info {
+                    let joint_qpos = &mut qpos[*qpos_start..*qpos_start + components.len()];
+                    ui.collapsing(RichText::new(name).font(MAIN_FONT), |ui| {
+                        let mut edited = false;
+                        ui.horizontal(|ui| {
+                            for (component, value) in components.iter().zip(joint_qpos.iter_mut()) {
+                                if let Some(label) = component.label {
+                                    ui.label(RichText::new(label).font(MAIN_FONT));
+                                }
 
-                        if *limited {
-                            let [low, high] = *range;
-                            let value_scaled = ((value - low) / (high - low)).clamp(0.0, 1.0);
-                            ui.add(egui::ProgressBar::new(value_scaled as f32));
-                        }
-                        else {
-                            ui.label("no limit");
-                        }
+                                // A slider must not clamp: the simulation reaches values outside
+                                // the range, for example a hinge that turns past pi.
+                                edited |= match &component.range {
+                                    Some(range) => ui.add(
+                                        egui::Slider::new(value, range.clone())
+                                        .clamping(egui::SliderClamping::Never)
+                                        .update_while_editing(false)
+                                    ),
 
-                        ui.end_row();
-                    }
-                });
+                                    None => ui.add(
+                                        egui::DragValue::new(value)
+                                        .speed(JOINT_INPUT_DRAG_SPEED)
+                                        .update_while_editing(false)
+                                    )
+                                }.changed();
+                            }
+                        });
+
+                        // Only a ball or a free joint holds a quaternion.
+                        if let Some(JointQuatDisplayInfo { offset, angle_limit }) = quat
+                            && let Some(joint_quat) = joint_qpos[*offset..].first_chunk_mut::<4>()
+                        {
+                            // A slider moves one component alone, which takes the quaternion off
+                            // the unit sphere.
+                            if edited {
+                                mju_normalize_4(joint_quat);
+                            }
+
+                            // The limit of a ball joint applies to the rotation angle, so the
+                            // angle needs a row of its own.
+                            if let Some(limit) = angle_limit {
+                                let mut angle_axis = [0.0; 3];
+                                mju_quat_2_vel(&mut angle_axis, joint_quat, 1.0);
+                                let mut angle = mju_normalize_3(&mut angle_axis);
+
+                                ui.horizontal(|ui| {
+                                    ui.label(RichText::new("angle").font(MAIN_FONT));
+                                    ui.add_enabled(
+                                        false,
+                                        egui::DragValue::new(&mut angle).suffix(" rad")
+                                    );
+                                    let angle_scaled = (angle / limit).clamp(0.0, 1.0);
+                                    ui.add(
+                                        egui::ProgressBar::new(angle_scaled as f32)
+                                        .desired_width(JOINT_ANGLE_BAR_WIDTH)
+                                    );
+                                });
+                            }
+                        }
+                    });
+                }
             });
 
             // Equalities window
             egui::Window::new("Equality")
                 .scroll(true)
+                .drag_to_scroll(egui::scroll_area::DragScroll::Always)
                 .open(&mut self.equality_window)
-                .show(ctx, |ui|
+                .show(ui, |ui|
             {
                 ui.horizontal_wrapped(|ui| {
-                    let data = &mut shared_viewer_state.lock_unpoison().data_passive;
+                    let mut lock = shared_viewer_state.lock_unpoison();
+                    if lock.model_reloaded {
+                        return;
+                    }
+                    let data = &mut lock.data_passive;
                     debug_assert_eq!(
                         self.equality_names.len(), data.eq_active_mut().len(),
                         "equality names length don't match the number of equalities found in model. This is a bug!"
@@ -1461,7 +1647,8 @@ impl ViewerUI {
 
             egui::Window::new("Group")
                 .open(&mut self.group_window)
-                .show(ctx, |ui|
+                .resizable(false)
+                .show(ui, |ui|
             {
                 egui::Grid::new("group_grid").show(ui, |ui| {
                     for i in 0..mjNGROUP as usize {
@@ -1480,7 +1667,7 @@ impl ViewerUI {
             /* Camera Tracking Modal */
             if self.show_tracking_modal {
                 let modal = egui::Modal::new(Id::new("select_body_tracking"))
-                    .show(ctx, |ui|
+                    .show(ui, |ui|
                 {
                         ui.heading("Select the body to track");
                         ui.separator();
@@ -1489,6 +1676,9 @@ impl ViewerUI {
                             .max_height(CAMERA_MODAL_MAX_HEIGHT)
                             .show(ui, |ui| {
                                 let lock = shared_viewer_state.lock_unpoison();
+                                if lock.model_reloaded {
+                                    return;
+                                }
                                 let model = lock.data_passive.model();
                                 let nbody = model.nbody();
 
@@ -1548,20 +1738,16 @@ impl ViewerUI {
             /* User-defined UI callbacks */
             // Callbacks that receive the egui context and MjData passive instance
             for callback in self.user_ui_callbacks.iter_mut() {
-                callback(ctx, &mut shared_viewer_state.lock_unpoison().data_passive);
-            }
-            // Callbacks that only receive the egui context
-            for callback in self.user_ui_callbacks_detached.iter_mut() {
-                callback(ctx);
+                callback(ui, shared_viewer_state);
             }
         });
 
-        // Prevent window interactions when covering egui widgets
+        // Apply egui's platform output (cursor icon, clipboard, IME).
         self.state.handle_platform_output(window, full_output.platform_output);
 
         // Tessellate
         let pixels_per_point = full_output.pixels_per_point;
-        let textures_delta = &full_output.textures_delta;
+        let textures_delta = &mut full_output.textures_delta;
         let clipped_primitives = self.egui_ctx.tessellate(full_output.shapes, pixels_per_point);
 
         // Paint the menu
@@ -1576,18 +1762,34 @@ impl ViewerUI {
     }
 
     /// Checks whether the UI is focused (e.g., typing).
-    pub(crate) fn focused(&self) -> bool {
+    pub(crate) fn is_focused(&self) -> bool {
         self.egui_ctx.memory(|ui| ui.focused().is_some())
     }
 
     /// Checks whether the mouse is over the UI.
-    pub(crate) fn covered(&self) -> bool {
-        self.egui_ctx.is_pointer_over_area()
+    pub(crate) fn is_covered(&self) -> bool {
+        self.egui_ctx.is_pointer_over_egui()
+    }
+
+    /// Checks whether the mouse is over one of UI's windows (side panels do not count).
+    pub(crate) fn is_window_covered(&self) -> bool {
+        let Some(position) = self.egui_ctx.pointer_interact_pos() else {
+            return false;
+        };
+
+        // The side panels share the background layer with the scene; windows and popups do not.
+        self.egui_ctx.layer_id_at(position).is_some_and(|layer| layer.order != Order::Background)
     }
 
     /// Checks whether the UI is currently being dragged.
-    pub(crate) fn dragged(&self) -> bool {
+    pub(crate) fn is_dragged(&self) -> bool {
         self.egui_ctx.dragged_id().is_some()
+    }
+
+    /// Takes the selection away from every UI window.
+    pub(crate) fn deselect_windows(&self) {
+        let scene_layer = LayerId::new(Order::Middle, Id::new("mujoco_scene"));
+        self.egui_ctx.memory_mut(|memory| memory.areas_mut().move_to_top(scene_layer));
     }
 
     /// Prepares OpenGL for drawing 2D overlays.
@@ -1626,23 +1828,13 @@ impl ViewerUI {
     }
 
     /// Adds a user-defined UI callback that will be invoked during UI rendering.
-    /// The callback receives the egui context and can be used to create custom windows,
-    /// panels, or other UI elements.
+    /// The callback receives the root [`egui::Ui`] and the viewer's shared state ([`ViewerSharedState`]),
+    /// and can be used to create custom windows, panels, or other UI elements.
     pub(crate) fn add_ui_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&egui::Context, &mut MjData<Box<MjModel>>) + 'static
+        F: FnMut(&mut egui::Ui, &Arc<Mutex<ViewerSharedState>>) + 'static
     {
         self.user_ui_callbacks.push(Box::new(callback));
-    }
-
-    /// Adds a detached user-defined UI callback that will be invoked during UI rendering.
-    /// Unlike [`ViewerUI::add_ui_callback`], this method does not pass in the passive [`MjData`]
-    /// instance, located in the shared state, thus avoiding mutex locking when not necessary.
-    pub(crate) fn add_ui_callback_detached<F>(&mut self, callback: F)
-    where
-        F: FnMut(&egui::Context) + 'static
-    {
-        self.user_ui_callbacks_detached.push(Box::new(callback));
     }
 
     /// Release OpenGL resources held by the egui painter.

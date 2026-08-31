@@ -14,6 +14,7 @@ use mujoco_rs::prelude::*;
 use mujoco_rs::wrappers::mj_editing::{MjsBody, MjtBuiltin};
 use mujoco_rs::wrappers::mj_model::MjtTextureRole;
 use mujoco_rs::viewer::MjViewer;
+use env_logger::Env;
 
 const TORSO_R: f64   = 0.1;
 const LEG_LEN: f64   = 0.1;   // BODY_RADIUS in Python
@@ -165,7 +166,7 @@ fn build_scene() -> MjModel {
         .with_size([2.0, 2.0, 0.1])
         .with_material("floor");
 
-    // Two directional lights as in the Python example.
+    // Two spot lights as in the Python example.
     let world = spec.world_body_mut();
     world.add_light()
         .with_pos([-2.0, -1.0, 3.0])
@@ -193,10 +194,15 @@ fn apply_ctrl(data: &mut MjData<&MjModel>, phases: &[f64], freq: f64) {
 }
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
+
     let model = build_scene();
     let mut data = MjData::new(&model);
     let n_ctrl = data.ctrl_mut().len();
-    println!("scene: {} bodies, {} DOFs, {} actuators",
+    log::info!("scene: {} bodies, {} DOFs, {} actuators",
         model.ffi().nbody, model.ffi().nv, n_ctrl);
 
     // Systematic phase spread: legs within each creature are evenly spaced;

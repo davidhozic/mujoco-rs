@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 
 
 const EXAMPLE_MODEL: &str = "
@@ -32,6 +33,12 @@ const EXAMPLE_MODEL: &str = "
 ";
 
 fn main() {
+    /* Initialize the log backend and send MuJoCo messages to it */
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
+
     /* Load the model and create data */
     let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
     let mut data = MjData::new(&model);  // or model.make_data()
@@ -47,8 +54,8 @@ fn main() {
         viewer.sync_data(&mut data);
         viewer.render().unwrap();
 
-        /* Print the touch sensor output, which is the contact force */
-        println!("{}", sensor_data_info.view(&data).data[0]);
+        /* Log the touch sensor output, which is the contact force */
+        log::info!("{}", sensor_data_info.view(&data).data[0]);
 
         std::thread::sleep(Duration::from_secs_f64(0.002));
     }

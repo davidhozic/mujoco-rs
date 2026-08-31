@@ -3,22 +3,20 @@
 This crate uses declarative macros extensively to reduce boilerplate when wrapping MuJoCo's C arrays.
 
 ## Before modifying wrapper files
-1. **Read `src/util.rs`** first - it contains all core macro definitions. Understand their syntax before modifying any wrapper file.
-2. **Cross-reference with MuJoCo C API docs** (see `coding-conventions.md`) for correct field sizes and types.
+1. **Read `src/util.rs`** first: all core macro definitions. Understand their syntax first.
+2. **Cross-reference the MuJoCo C API docs** (`coding-conventions.md`) for field sizes and types.
 
 ## Finding macros
-- All macros are defined in `src/util.rs`. Search for `macro_rules!` to find them all.
-- Read name and doc comments of each macro to understand its purpose before invoking it.
-- Look at existing invocations in the wrapper files (`src/wrappers/`) to see usage patterns.
-
-## Code generation tool
-Check if a `../mujoco-rs-utils` directory exists. If it does, it is a CLI tool that can auto-generate macro invocations from MuJoCo's C headers. Run it with `--help` to see available subcommands.
+- All macros live in `src/util.rs` (search `macro_rules!`); read each macro's doc comment before
+  invoking it. Existing invocations in `src/wrappers/` show usage patterns.
+- If `../mujoco-rs-utils` exists, its CLI auto-generates macro invocations from the C headers
+  (`--help`).
 
 ## Key macro reference
 
 ### `mj_model_dyn_range!(model, id, nx)`
-Resolves the `(start, len)` pair for the contiguous slice owned by element `id`, where `nx`
-is a keyword selecting the address-array mapping:
+Resolves the `(start, len)` pair for the contiguous slice owned by element `id`; `nx` selects the
+address-array mapping:
 
 | `nx` | address array | total length |
 |---|---|---|
@@ -32,9 +30,8 @@ is a keyword selecting the address-array mapping:
 | `na` | `actuator_actadr` | `na` |
 | `nJten` | `ten_j_rowadr` | `n_jten()` |
 
-Returns `(start_addr, n)` where `n = end_addr - start_addr`. If the address entry for `id` is -1,
-returns `(0, 0)`. For the last element, when all subsequent address entries are -1, the macro falls
-back to the total-length field as the exclusive end.
+Returns `(start_addr, n)`. Address entry `-1` yields `(0, 0)`. For the last element with all
+subsequent entries `-1`, the total-length field is the exclusive end.
 
 ### `array_slice_dyn!` - three variants
 Creates raw-pointer slices safely (null-pointer and zero-length guarded):
@@ -45,97 +42,115 @@ Creates raw-pointer slices safely (null-pointer and zero-length guarded):
 | `sublen_dep` | `array_slice_dyn!(sublen_dep => ptr, outer, inner)` | `outer * inner` |
 | `summed` | `array_slice_dyn!(summed => ptr, len_array)` | sum of `len_array` entries |
 
-#### Mutable field safety -- `(unsafe)` and `(allow_mut = false)`
-Fields are mutable by default (both `field()` and `field_mut()` accessors are generated).
-Two prefixes restrict mutability, each belonging to a **different macro**:
+#### Sanitizer probe: `probe = <name>;`
+A scalar-arm block may open with `probe = <name>;`. The macro then also generates two
+`#[cfg(test)] pub(crate)` methods that touch the first and last element of every slice the block
+declares, on the read path and the write path. Each write restores the value it read, so no field
+changes.
 
-- `(unsafe)`: used in **`array_slice_dyn!`** -- generates `unsafe fn field_mut()`. The caller must
-  use an `unsafe` block and takes responsibility for maintaining C-side invariants.
-- `(allow_mut = false)`: used in **`getter_setter!`** -- suppresses `field_mut()` entirely via the
-  `eval_or_expand!` helper macro. No mutation path exists.
+| Method | Signature | Covers |
+|---|---|---|
+| `<name>` | `fn (&mut self)` | reads through a safe getter; writes through a safe setter |
+| `<name>_unsafe` | `unsafe fn (&mut self)` | every accessor the first one leaves out |
 
-> **Important**: these prefixes belong to **different macros** and cannot be combined in the same
-> invocation. `array_slice_dyn!` does not support `(allow_mut = false)`, and `getter_setter!` does
-> not support `(unsafe)`. If full suppression is needed for an array field, the `array_slice_dyn!`
-> macro itself would need to be extended.
+The split is exact: each accessor lands in one method, never both, never neither. Call `<name>` on
+a freshly built value, before any pipeline stage: that is the claim a safe accessor makes, so a
+sanitizer fault there is a real bug. Call `<name>_unsafe` only after the stage its
+`(read = unsafe)` fields need. The safe method being a safe `fn` is itself a check: an accessor
+that the split misroutes fails to compile.
 
-**Safety criterion**: A field whose VALUES are used by C code as unguarded array INDICES into
-other arrays (e.g., `arr[field[i]]` without an upper-bound check against `max_n`) must use
-`(unsafe)` at minimum. Pure numeric / float data (forces, positions, velocities, matrices) is
-always safe to mutate and needs neither prefix.
+The two helpers it calls live in `src/util/testing.rs`, a `#[cfg(test)]` `pub(crate)` submodule
+of `util`. Both clone the element and pass the clone through `black_box`: the sanitizer
+instruments a load or a store, not the creation of a reference, and a plain identity write
+disappears in the optimizer before the sanitizer pass runs. Every element type an
+`array_slice_dyn!` block casts to is therefore `Clone`.
 
-**Known `(unsafe)` fields** (in `array_slice_dyn!`) -- mutation is gated behind `unsafe`:
-- `contact` in `mj_data.rs`: `mj_sensorAcc()` uses `contact[i].geom[0]` as an index into
-  `geom_bodyid[]` with only a `>= 0` guard (no upper-bound check against `ngeom`).
-- `flexedge` in `mj_visualization.rs`: `render_gl3.c` uses `flexedge[2*e]` as a vertex index with
-  no upper-bound check.
-- `geoms` in `mj_visualization.rs`: `render_gl3.c` uses `geom->matid`, `geom->objid`, and
-  `geom->dataid` as indices into multiple arrays without upper-bound checks.
+Call both from one `#[test]` per type. `MjData`, `MjModel` and `MjvScene` have one; `MjrContext`
+does not, because it needs a live GL context.
 
-**Known safe mutable fields** (must NOT have `(unsafe)` or `(allow_mut = false)`):
-- `geomorder` in `mj_visualization.rs`: `mjr_render()` always repopulates `geomorder[0..nt-1]`
-  with fresh valid indices before reading them, so user modifications are always overwritten first.
+Under `/asan` a length that overruns its allocation faults inside the probe. MuJoCo defines
+`mjUSEASAN` automatically when it is compiled with `-fsanitize=address`, and then poisons the arena
+past `parena`, so an arena array that reads beyond its true length is caught as well. Against a
+stock prebuilt `libmujoco` that poisoning is absent, so only overruns past a whole `malloc` block
+are caught.
 
-When adding or reviewing `array_slice_dyn!` invocations, trace how C code uses each field's VALUES
-and verify whether unguarded index dereferences exist before choosing the appropriate prefix.
+#### Field safety: `(mut = unsafe)`, `(read = unsafe)` and `(allow_mut = false)`
+Fields are safe and mutable by default. Three prefixes restrict access; the first two belong to
+`array_slice_dyn!` and cannot be combined with each other, the third belongs to a **different
+macro**:
+
+- `(mut = unsafe)` in **`array_slice_dyn!`**: generates `unsafe fn field_mut()`; the caller upholds
+  the C-side invariants.
+- `(read = unsafe)` in **`array_slice_dyn!`**: generates `unsafe fn field()` **and**
+  `unsafe fn field_mut()`. For an `mjData` arena array that MuJoCo allocates but does not zero, so
+  a read before its computing stage reads uninitialized memory. The caller runs the stage first.
+- `(allow_mut = false)` in **`getter_setter!`**: suppresses `field_mut()` entirely.
+
+**Safety criterion**: a field whose VALUES are used by C as unguarded array INDICES
+(`arr[field[i]]` with no upper-bound check) needs `(mut = unsafe)` at minimum. Pure numeric data
+(forces, positions, velocities, matrices) is always safe to mutate.
+
+**Known `(mut = unsafe)` fields**: `contact` (`mj_sensorAcc()` indexes `geom_bodyid[]` with only a
+`>= 0` guard), `flexedge` and `geoms` (`render_gl3.c` vertex/material indices without bounds
+checks). **Known safe**: `geomorder` (`mjr_render()` repopulates it before reading).
+
+**Known `(read = unsafe)` fields** (all on `MjData`, all arena-allocated): `efc_state`, `efc_force`,
+`efc_b`, `iefc_state`, `iefc_force`, `iefc_aref`, `iacc`, `iacc_smooth`, `ifrc_smooth` and
+`ifrc_constraint` need `forward()`/`step2()`; `efc_vel` and `efc_aref` need `step1()` or later;
+`efc_J_rownnz`, `efc_J_rowadr`, `efc_J_rowsuper`, `efc_J_colind` are filled only when
+`opt.jacobian` resolves to sparse, so a dense model leaves them uninitialized forever. The four
+island dof arrays stay uninitialized after `forward()` when `opt.solver` is `PGS`, because only the
+CG and Newton island paths gather into them.
+The arena comes from `mju_malloc` and `_resetData` only sets `parena = 0`, so it is NEVER zeroed;
+do not assume a fresh read is zero, because that is only the kernel handing out zero pages.
+
+When adding or reviewing an `array_slice_dyn!` invocation, trace how C uses the field's VALUES
+before choosing the prefix.
 
 ### `view_creator!(field, start_ffi_field, data_ptr, type_)`
-Generates `fn field(&self) -> &[T]` and the `_mut` variant by reading `(offset, len)` then calling
-`data_ptr.add(offset).cast::<T>()`. The cast target type must match `type_` in the info struct.
+Generates `fn field(&self) -> &[T]` and the `_mut` variant via `(offset, len)` and
+`data_ptr.add(offset).cast::<T>()`. The cast target must match `type_` in the info struct.
 
 ### `info_method!(Kind, ffi_model, element_type, id, fields...)`
-Generates per-element accessor methods like `body()`, `joint()`, etc. on `MjModel` and `MjData`.
-Each field entry can use a static stride (e.g. `xpos: 3` produces an `id * 3` offset and a 3-element
-slice), a dynamic view through `mj_model_dyn_range!` for variable-length ranges like dof/qpos, or a
-zero stride which the accessor returns as `Option::None`.
+Generates per-element accessors (`body()`, `joint()`, ...) on `MjModel`/`MjData`. A field entry is a
+static stride (`xpos: 3` -> `id * 3` offset, 3-element slice), a dynamic view via
+`mj_model_dyn_range!`, or a zero stride returned as `Option::None`.
 
-> **WARNING**: Each element type has TWO macro blocks in the wrapper file:
-> 1. `info_method! { ... [field: STRIDE, ...] ... }` -- defines stride **numbers**. This is
->    where bugs live. Located in the first half of the file, inside `impl MjModel`/`impl MjData`.
-> 2. `info_with_view! { ... field: &[[Type; N] ...] ... }` -- defines accessor **types** and
->    doc strings. Located in the second half of the file. Uses `[Type; N]` syntax.
->
-> When verifying strides, always read the `info_method!` block, NOT the `info_with_view!` block.
-> The `info_with_view!` type annotations may be correct even when the `info_method!` stride is wrong.
+> **WARNING**: Each element type has TWO macro blocks. Verify strides in the `info_method!` block
+> (stride numbers, first half of the file, where bugs live), NOT the `info_with_view!` block
+> (types and doc strings, second half); its annotations can be right while the stride is wrong.
 
 ### `c_str_as_str_method!(field, inner_field, len)`
-Getter returns `&str` via `CStr::from_ptr`; setter copies into the fixed `[i8; N]` buffer using
-`copy_from_slice`. The buffer is always NUL-terminated.
+Getter returns `&str` via `CStr::from_ptr`; setter copies into the fixed `[i8; N]` buffer with
+`copy_from_slice`. Always NUL-terminated.
 
 ### `cast_mut_info!(expr, TargetType)`
-Wraps `bytemuck::checked::try_cast_mut` to reinterpret a mutable C struct reference.
-Only valid when the target type has the same size and alignment as the source.
+Wraps `bytemuck::checked::try_cast_mut`. Valid only when target and source match in size and
+alignment.
 
 ## Verification checklist when adding/reviewing an `info_method!` field
-1. **Read the Rust source first.** Find the actual stride value in the `info_method!` invocation and write it down.
-2. Open `mujoco/include/mujoco/mjmodel.h` (or `mjdata.h`) and find the field. Read the dimension
-   comment next to it, e.g. `// (nbody x 3)`.
-3. **Compare** the Rust stride against the header dimension. They must match exactly.
-4. Confirm the Rust element type matches the C type: `mjtNum` is `f64`, `int` is `i32`, `mjtByte` is `u8`.
-5. Make sure a unit test exercises the new accessor on a real non-trivial model.
-6. If needed, grep `src/` for existing invocations of the same macro to cross-check the generated shape.
+1. Read the actual stride in the `info_method!` invocation; write it down.
+2. Find the field in `mujoco/include/mujoco/mjmodel.h` (or `mjdata.h`); read its dimension comment
+   (e.g. `// (nbody x 3)`).
+3. The two must match exactly. Element types: `mjtNum` = `f64`, `int` = `i32`, `mjtByte` = `u8`.
+4. Add a unit test on a real non-trivial model.
 
-> **WARNING**: Do NOT assume the code is correct and only check the header. Always quote the actual
-> code value alongside the header value. A common failure mode is reading the header, seeing the
-> correct value, and confirming without verifying the source actually uses that value.
+> **WARNING**: never confirm from the header alone; quote the actual code value alongside the
+> header value.
 
 ## Verification checklist for `array_slice_dyn!` invocations
-1. **Read the Rust source first.** Find the length expression (e.g., `ffi().nbody`) and the cast type
-   (e.g., `[MjtNum; 3]`). Write both down.
-2. Open the C header and find the field. Read its dimension comment (e.g., `// (nbody x 3)`).
-3. **Compare**: the length expression must use the FIRST dimension's count field, and the cast type's
-   inner size must match the SECOND dimension. E.g., `body_pos` should use `ffi().nbody` and cast to
-   `[MjtNum; 3]` because the header says `(nbody x 3)`.
-4. Check null/zero guards: the generated code should return `&[]` when the pointer is null or length is 0.
+1. Read the length expression (e.g. `ffi().nbody`) and cast type (e.g. `[MjtNum; 3]`); write both
+   down.
+2. Check against the header's dimension comment: length uses the FIRST dimension's count, the
+   cast's inner size matches the SECOND (`body_pos`: `ffi().nbody`, `[MjtNum; 3]` for `(nbody x 3)`).
+3. Null/zero guards: the generated code returns `&[]` for a null pointer or zero length.
 
 ## Verification checklist for unsafe blocks (non-macro)
-1. **Bounds checking**: Before any FFI call with an index parameter, verify the Rust code validates
-   the index is in range. Check for off-by-one: `< max` not `<= max`, `>= 0` not `> 0`.
-2. **Buffer sizes**: For functions that write into caller-supplied buffers (like `mj_contactForce`),
-   verify the buffer is large enough. E.g., `contact_force` needs `[MjtNum; 6]`.
-3. **Null pointer handling**: All raw pointer dereferences must be guarded. `PointerView` handles this
-   via its `Deref` impl, but manually constructed slices need explicit checks.
-4. **Return value interpretation**: MuJoCo functions return different sentinel values. Check that
-   Rust correctly interprets 0 vs 1, -1 vs null, etc.
-5. **Type compatibility**: `as i32`, `as usize`, etc. must not truncate or wrap. Especially check
-   that negative C values (like -1 sentinels) are handled before unsigned conversion.
+1. **Bounds**: index validated before the FFI call; `< max` not `<= max`, `>= 0` not `> 0`.
+2. **Buffer sizes**: caller-supplied write buffers are large enough (`mj_contactForce` needs
+   `[MjtNum; 6]`).
+3. **Null pointers**: every dereference guarded (`PointerView` guards via `Deref`; manual slices
+   need explicit checks).
+4. **Return values**: sentinels differ per function (0 vs 1, -1 vs null); check the header.
+5. **Casts**: `as i32`/`as usize` must not truncate or wrap; handle `-1` sentinels before unsigned
+   conversion.

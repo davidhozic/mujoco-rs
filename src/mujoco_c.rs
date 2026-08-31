@@ -43,7 +43,7 @@ impl<T> ::std::cmp::PartialEq for __BindgenUnionField<T> {
     }
 }
 impl<T> ::std::cmp::Eq for __BindgenUnionField<T> {}
-pub const mjVERSION_HEADER: u32 = 3009000;
+pub const mjVERSION_HEADER: u32 = 3012000;
 pub const mjMINVAL: f64 = 0.000000000000001;
 pub const mjPI: f64 = 3.141592653589793;
 pub const mjMAXVAL: f64 = 10000000000.0;
@@ -65,7 +65,6 @@ pub const mjNPOLY: u32 = 2;
 pub const mjNSENS: u32 = 3;
 pub const mjNSOLVER: u32 = 200;
 pub const mjNISLAND: u32 = 20;
-pub const mjMAXTHREAD: u32 = 128;
 pub const mjNGROUP: u32 = 6;
 pub const mjMAXLIGHT: u32 = 100;
 pub const mjMAXOVERLAY: u32 = 500;
@@ -118,7 +117,7 @@ pub type mjtBool = bool;
 pub type mjtSize = i64;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtDisableBit_ {
+pub enum mjtDisableBit {
     mjDSBL_CONSTRAINT = 1,
     mjDSBL_EQUALITY = 2,
     mjDSBL_FRICTIONLOSS = 4,
@@ -141,10 +140,9 @@ pub enum mjtDisableBit_ {
     mjDSBL_MULTICCD = 524288,
     mjNDISABLE = 20,
 }
-pub use self::mjtDisableBit_ as mjtDisableBit;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtEnableBit_ {
+pub enum mjtEnableBit {
     mjENBL_OVERRIDE = 1,
     mjENBL_ENERGY = 2,
     mjENBL_FWDINV = 4,
@@ -153,19 +151,17 @@ pub enum mjtEnableBit_ {
     mjENBL_DIAGEXACT = 32,
     mjNENABLE = 6,
 }
-pub use self::mjtEnableBit_ as mjtEnableBit;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtJoint_ {
+pub enum mjtJoint {
     mjJNT_FREE = 0,
     mjJNT_BALL = 1,
     mjJNT_SLIDE = 2,
     mjJNT_HINGE = 3,
 }
-pub use self::mjtJoint_ as mjtJoint;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtGeom_ {
+pub enum mjtGeom {
     mjGEOM_PLANE = 0,
     mjGEOM_HFIELD = 1,
     mjGEOM_SPHERE = 2,
@@ -187,44 +183,39 @@ pub enum mjtGeom_ {
     mjGEOM_TRIANGLE = 108,
     mjGEOM_NONE = 1001,
 }
-pub use self::mjtGeom_ as mjtGeom;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtProjection_ {
+pub enum mjtProjection {
     mjPROJ_PERSPECTIVE = 0,
     mjPROJ_ORTHOGRAPHIC = 1,
 }
-pub use self::mjtProjection_ as mjtProjection;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtCamLight_ {
+pub enum mjtCamLight {
     mjCAMLIGHT_FIXED = 0,
     mjCAMLIGHT_TRACK = 1,
     mjCAMLIGHT_TRACKCOM = 2,
     mjCAMLIGHT_TARGETBODY = 3,
     mjCAMLIGHT_TARGETBODYCOM = 4,
 }
-pub use self::mjtCamLight_ as mjtCamLight;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtLightType_ {
+pub enum mjtLightType {
     mjLIGHT_SPOT = 0,
     mjLIGHT_DIRECTIONAL = 1,
     mjLIGHT_POINT = 2,
     mjLIGHT_IMAGE = 3,
 }
-pub use self::mjtLightType_ as mjtLightType;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtTexture_ {
+pub enum mjtTexture {
     mjTEXTURE_2D = 0,
     mjTEXTURE_CUBE = 1,
     mjTEXTURE_SKYBOX = 2,
 }
-pub use self::mjtTexture_ as mjtTexture;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtTextureRole_ {
+pub enum mjtTextureRole {
     mjTEXROLE_USER = 0,
     mjTEXROLE_RGB = 1,
     mjTEXROLE_OCCLUSION = 2,
@@ -237,50 +228,44 @@ pub enum mjtTextureRole_ {
     mjTEXROLE_ORM = 9,
     mjNTEXROLE = 10,
 }
-pub use self::mjtTextureRole_ as mjtTextureRole;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtColorSpace_ {
+pub enum mjtColorSpace {
     mjCOLORSPACE_AUTO = 0,
     mjCOLORSPACE_LINEAR = 1,
     mjCOLORSPACE_SRGB = 2,
 }
-pub use self::mjtColorSpace_ as mjtColorSpace;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtIntegrator_ {
+pub enum mjtIntegrator {
     mjINT_EULER = 0,
     mjINT_RK4 = 1,
     mjINT_IMPLICIT = 2,
     mjINT_IMPLICITFAST = 3,
 }
-pub use self::mjtIntegrator_ as mjtIntegrator;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtCone_ {
+pub enum mjtCone {
     mjCONE_PYRAMIDAL = 0,
     mjCONE_ELLIPTIC = 1,
 }
-pub use self::mjtCone_ as mjtCone;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtJacobian_ {
+pub enum mjtJacobian {
     mjJAC_DENSE = 0,
     mjJAC_SPARSE = 1,
     mjJAC_AUTO = 2,
 }
-pub use self::mjtJacobian_ as mjtJacobian;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtSolver_ {
+pub enum mjtSolver {
     mjSOL_PGS = 0,
     mjSOL_CG = 1,
     mjSOL_NEWTON = 2,
 }
-pub use self::mjtSolver_ as mjtSolver;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtEq_ {
+pub enum mjtEq {
     mjEQ_CONNECT = 0,
     mjEQ_WELD = 1,
     mjEQ_JOINT = 2,
@@ -290,10 +275,9 @@ pub enum mjtEq_ {
     mjEQ_FLEXSTRAIN = 6,
     mjEQ_DISTANCE = 7,
 }
-pub use self::mjtEq_ as mjtEq;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtWrap_ {
+pub enum mjtWrap {
     mjWRAP_NONE = 0,
     mjWRAP_JOINT = 1,
     mjWRAP_PULLEY = 2,
@@ -301,54 +285,69 @@ pub enum mjtWrap_ {
     mjWRAP_SPHERE = 4,
     mjWRAP_CYLINDER = 5,
 }
-pub use self::mjtWrap_ as mjtWrap;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtTrn_ {
+pub enum mjtTrn {
     mjTRN_JOINT = 0,
     mjTRN_JOINTINPARENT = 1,
     mjTRN_SLIDERCRANK = 2,
     mjTRN_TENDON = 3,
     mjTRN_SITE = 4,
     mjTRN_BODY = 5,
+    mjTRN_SO3 = 6,
     mjTRN_UNDEFINED = 1000,
 }
-pub use self::mjtTrn_ as mjtTrn;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtDyn_ {
+pub enum mjtDyn {
     mjDYN_NONE = 0,
     mjDYN_INTEGRATOR = 1,
     mjDYN_FILTER = 2,
     mjDYN_FILTEREXACT = 3,
     mjDYN_MUSCLE = 4,
     mjDYN_DCMOTOR = 5,
-    mjDYN_USER = 6,
+    mjDYN_PID = 6,
+    mjDYN_USER = 7,
 }
-pub use self::mjtDyn_ as mjtDyn;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtGain_ {
+pub enum mjtGain {
     mjGAIN_FIXED = 0,
     mjGAIN_AFFINE = 1,
     mjGAIN_MUSCLE = 2,
     mjGAIN_DCMOTOR = 3,
-    mjGAIN_USER = 4,
+    mjGAIN_SO3 = 4,
+    mjGAIN_PID = 5,
+    mjGAIN_USER = 6,
 }
-pub use self::mjtGain_ as mjtGain;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtBias_ {
+pub enum mjtBias {
     mjBIAS_NONE = 0,
     mjBIAS_AFFINE = 1,
     mjBIAS_MUSCLE = 2,
     mjBIAS_DCMOTOR = 3,
-    mjBIAS_USER = 4,
+    mjBIAS_SO3 = 4,
+    mjBIAS_USER = 5,
 }
-pub use self::mjtBias_ as mjtBias;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtObj_ {
+pub enum mjtCtrlChart {
+    mjCHART_EXPMAP = 1,
+    mjCHART_QUAT = 2,
+}
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
+pub enum mjtCtrlInput {
+    mjINPUT_POS = 1,
+    mjINPUT_VEL = 2,
+    mjINPUT_FF = 4,
+    mjINPUT_VOLTAGE = 8,
+    mjINPUT_NONE = 16,
+}
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
+pub enum mjtObj {
     mjOBJ_UNKNOWN = 0,
     mjOBJ_BODY = 1,
     mjOBJ_XBODY = 2,
@@ -380,10 +379,9 @@ pub enum mjtObj_ {
     mjOBJ_DEFAULT = 101,
     mjOBJ_MODEL = 102,
 }
-pub use self::mjtObj_ as mjtObj;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtSensor_ {
+pub enum mjtSensor {
     mjSENS_TOUCH = 0,
     mjSENS_ACCELEROMETER = 1,
     mjSENS_VELOCIMETER = 2,
@@ -434,28 +432,25 @@ pub enum mjtSensor_ {
     mjSENS_PLUGIN = 47,
     mjSENS_USER = 48,
 }
-pub use self::mjtSensor_ as mjtSensor;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtStage_ {
+pub enum mjtStage {
     mjSTAGE_NONE = 0,
     mjSTAGE_POS = 1,
     mjSTAGE_VEL = 2,
     mjSTAGE_ACC = 3,
 }
-pub use self::mjtStage_ as mjtStage;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtDataType_ {
+pub enum mjtDataType {
     mjDATATYPE_REAL = 0,
     mjDATATYPE_POSITIVE = 1,
     mjDATATYPE_AXIS = 2,
     mjDATATYPE_QUATERNION = 3,
 }
-pub use self::mjtDataType_ as mjtDataType;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtConDataField_ {
+pub enum mjtConDataField {
     mjCONDATA_FOUND = 0,
     mjCONDATA_FORCE = 1,
     mjCONDATA_TORQUE = 2,
@@ -465,10 +460,9 @@ pub enum mjtConDataField_ {
     mjCONDATA_TANGENT = 6,
     mjNCONDATA = 7,
 }
-pub use self::mjtConDataField_ as mjtConDataField;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtRayDataField_ {
+pub enum mjtRayDataField {
     mjRAYDATA_DIST = 0,
     mjRAYDATA_DIR = 1,
     mjRAYDATA_ORIGIN = 2,
@@ -477,10 +471,9 @@ pub enum mjtRayDataField_ {
     mjRAYDATA_DEPTH = 5,
     mjNRAYDATA = 6,
 }
-pub use self::mjtRayDataField_ as mjtRayDataField;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtCamOutBit_ {
+pub enum mjtCamOutBit {
     mjCAMOUT_RGB = 1,
     mjCAMOUT_DEPTH = 2,
     mjCAMOUT_DIST = 4,
@@ -488,20 +481,18 @@ pub enum mjtCamOutBit_ {
     mjCAMOUT_SEG = 16,
     mjNCAMOUT = 5,
 }
-pub use self::mjtCamOutBit_ as mjtCamOutBit;
 #[repr(u8)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtSameFrame_ {
+pub enum mjtSameFrame {
     mjSAMEFRAME_NONE = 0,
     mjSAMEFRAME_BODY = 1,
     mjSAMEFRAME_INERTIA = 2,
     mjSAMEFRAME_BODYROT = 3,
     mjSAMEFRAME_INERTIAROT = 4,
 }
-pub use self::mjtSameFrame_ as mjtSameFrame;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtSleepPolicy_ {
+pub enum mjtSleepPolicy {
     mjSLEEP_AUTO = 0,
     mjSLEEP_AUTO_NEVER = 1,
     mjSLEEP_AUTO_ALLOWED = 2,
@@ -509,38 +500,34 @@ pub enum mjtSleepPolicy_ {
     mjSLEEP_ALLOWED = 4,
     mjSLEEP_INIT = 5,
 }
-pub use self::mjtSleepPolicy_ as mjtSleepPolicy;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtLRMode_ {
+pub enum mjtLRMode {
     mjLRMODE_NONE = 0,
     mjLRMODE_MUSCLE = 1,
     mjLRMODE_MUSCLEUSER = 2,
     mjLRMODE_ALL = 3,
 }
-pub use self::mjtLRMode_ as mjtLRMode;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtFlexSelf_ {
+pub enum mjtFlexSelf {
     mjFLEXSELF_NONE = 0,
     mjFLEXSELF_NARROW = 1,
     mjFLEXSELF_BVH = 2,
     mjFLEXSELF_SAP = 3,
     mjFLEXSELF_AUTO = 4,
 }
-pub use self::mjtFlexSelf_ as mjtFlexSelf;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtSDFType_ {
+pub enum mjtSDFType {
     mjSDFTYPE_SINGLE = 0,
     mjSDFTYPE_INTERSECTION = 1,
     mjSDFTYPE_MIDSURFACE = 2,
     mjSDFTYPE_COLLISION = 3,
 }
-pub use self::mjtSDFType_ as mjtSDFType;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtState_ {
+pub enum mjtState {
     mjSTATE_TIME = 1,
     mjSTATE_QPOS = 2,
     mjSTATE_QVEL = 4,
@@ -561,10 +548,9 @@ pub enum mjtState_ {
     mjSTATE_USER = 8128,
     mjSTATE_INTEGRATION = 16383,
 }
-pub use self::mjtState_ as mjtState;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtConstraint_ {
+pub enum mjtConstraint {
     mjCNSTR_EQUALITY = 0,
     mjCNSTR_FRICTION_DOF = 1,
     mjCNSTR_FRICTION_TENDON = 2,
@@ -574,20 +560,18 @@ pub enum mjtConstraint_ {
     mjCNSTR_CONTACT_PYRAMIDAL = 6,
     mjCNSTR_CONTACT_ELLIPTIC = 7,
 }
-pub use self::mjtConstraint_ as mjtConstraint;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtConstraintState_ {
+pub enum mjtConstraintState {
     mjCNSTRSTATE_SATISFIED = 0,
     mjCNSTRSTATE_QUADRATIC = 1,
     mjCNSTRSTATE_LINEARNEG = 2,
     mjCNSTRSTATE_LINEARPOS = 3,
     mjCNSTRSTATE_CONE = 4,
 }
-pub use self::mjtConstraintState_ as mjtConstraintState;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtWarning_ {
+pub enum mjtWarning {
     mjWARN_INERTIA = 0,
     mjWARN_CONTACTFULL = 1,
     mjWARN_CNSTRFULL = 2,
@@ -597,10 +581,9 @@ pub enum mjtWarning_ {
     mjWARN_BADCTRL = 6,
     mjNWARNING = 7,
 }
-pub use self::mjtWarning_ as mjtWarning;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtTimer_ {
+pub enum mjtTimer {
     mjTIMER_STEP = 0,
     mjTIMER_FORWARD = 1,
     mjTIMER_INVERSE = 2,
@@ -618,15 +601,55 @@ pub enum mjtTimer_ {
     mjTIMER_COL_NARROW = 14,
     mjNTIMER = 15,
 }
-pub use self::mjtTimer_ as mjtTimer;
 #[repr(i32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtSleepState_ {
+pub enum mjtSleepState {
     mjS_STATIC = -1,
     mjS_ASLEEP = 0,
     mjS_AWAKE = 1,
 }
-pub use self::mjtSleepState_ as mjtSleepState;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
+pub enum mjtLogLevel {
+    mjLOG_DEBUG = 0,
+    mjLOG_INFO = 1,
+    mjLOG_WARNING = 2,
+    mjLOG_ERROR = 3,
+}
+impl mjtLogTopic {
+    pub const mjNTOPIC: mjtLogTopic = mjtLogTopic::mjTOPIC_SLEEP;
+}
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
+pub enum mjtLogTopic {
+    mjTOPIC_NONE = 0,
+    mjTOPIC_TIME_STP = 1,
+    mjTOPIC_TIME_CMP = 2,
+    mjTOPIC_SLEEP = 3,
+}
+#[repr(C)]
+#[derive(Debug)]
+pub struct mjLogMessage_ {
+    pub(crate) level: ::std::os::raw::c_int,
+    pub(crate) topic: ::std::os::raw::c_int,
+    pub(crate) subject: [::std::os::raw::c_char; 1024usize],
+    pub(crate) body: *const ::std::os::raw::c_char,
+    pub(crate) func: *const ::std::os::raw::c_char,
+    pub(crate) file: *const ::std::os::raw::c_char,
+    pub(crate) line: ::std::os::raw::c_int,
+    pub(crate) timestamp: mjtBool,
+}
+pub type mjLogMessage = mjLogMessage_;
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct mjLogConfig_ {
+    pub(crate) logto_console: mjtBool,
+    pub(crate) logto_file: mjtBool,
+    pub(crate) logfile: [::std::os::raw::c_char; 1024usize],
+    pub(crate) topics: ::std::os::raw::c_int,
+}
+pub type mjLogConfig = mjLogConfig_;
+pub type mjfLogHandler = ::std::option::Option<unsafe extern "C" fn(arg1: *const mjLogMessage)>;
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct mjLROpt_ {
@@ -825,6 +848,8 @@ pub struct mjModel_ {
     pub nq: mjtSize,
     pub nv: mjtSize,
     pub nu: mjtSize,
+    pub nactuator: mjtSize,
+    pub nout: mjtSize,
     pub na: mjtSize,
     pub nbody: mjtSize,
     pub nbvh: mjtSize,
@@ -849,6 +874,8 @@ pub struct mjModel_ {
     pub nflexelemdata: mjtSize,
     pub nflexstiffness: mjtSize,
     pub nflexbending: mjtSize,
+    pub nefm0dof: mjtSize,
+    pub nefm0L: mjtSize,
     pub nflexelemedge: mjtSize,
     pub nflexshelldata: mjtSize,
     pub nflexevpair: mjtSize,
@@ -908,12 +935,17 @@ pub struct mjModel_ {
     pub nemax: mjtSize,
     pub njmax: mjtSize,
     pub nconmax: mjtSize,
+    pub npolygonmax: mjtSize,
+    pub nmeshdegmax: mjtSize,
     pub nuserdata: mjtSize,
     pub nsensordata: mjtSize,
     pub npluginstate: mjtSize,
     pub nhistory: mjtSize,
     pub narena: mjtSize,
     pub nbuffer: mjtSize,
+    pub flg_gravcomp: mjtBool,
+    pub flg_surfacevel: mjtBool,
+    pub flg_adhesion: mjtBool,
     pub opt: mjOption,
     pub vis: mjVisual,
     pub stat: mjStatistic,
@@ -1018,6 +1050,8 @@ pub struct mjModel_ {
     pub geom_friction: *mut mjtNum,
     pub geom_margin: *mut mjtNum,
     pub geom_gap: *mut mjtNum,
+    pub geom_surfacevel: *mut mjtNum,
+    pub geom_adhesion: *mut mjtNum,
     pub geom_fluid: *mut mjtNum,
     pub geom_user: *mut mjtNum,
     pub geom_rgba: *mut f32,
@@ -1064,6 +1098,7 @@ pub struct mjModel_ {
     pub light_dir0: *mut mjtNum,
     pub light_attenuation: *mut f32,
     pub light_cutoff: *mut f32,
+    pub light_softness: *mut f32,
     pub light_exponent: *mut f32,
     pub light_ambient: *mut f32,
     pub light_diffuse: *mut f32,
@@ -1128,6 +1163,11 @@ pub struct mjModel_ {
     pub flex_size: *mut mjtNum,
     pub flex_stiffness: *mut mjtNum,
     pub flex_bending: *mut mjtNum,
+    pub efm0_dofid: *mut ::std::os::raw::c_int,
+    pub efm0_L_rownnz: *mut ::std::os::raw::c_int,
+    pub efm0_L_rowadr: *mut ::std::os::raw::c_int,
+    pub efm0_L_colind: *mut ::std::os::raw::c_int,
+    pub efm0_L: *mut mjtNum,
     pub flex_damping: *mut mjtNum,
     pub flex_edgestiffness: *mut mjtNum,
     pub flex_edgedamping: *mut mjtNum,
@@ -1159,6 +1199,7 @@ pub struct mjModel_ {
     pub mesh_texcoordadr: *mut ::std::os::raw::c_int,
     pub mesh_texcoordnum: *mut ::std::os::raw::c_int,
     pub mesh_graphadr: *mut ::std::os::raw::c_int,
+    pub mesh_extrema: *mut ::std::os::raw::c_int,
     pub mesh_vert: *mut f32,
     pub mesh_normal: *mut f32,
     pub mesh_texcoord: *mut f32,
@@ -1234,6 +1275,7 @@ pub struct mjModel_ {
     pub pair_solimp: *mut mjtNum,
     pub pair_margin: *mut mjtNum,
     pub pair_gap: *mut mjtNum,
+    pub pair_adhesion: *mut mjtNum,
     pub pair_friction: *mut mjtNum,
     pub exclude_signature: *mut ::std::os::raw::c_int,
     pub eq_type: *mut ::std::os::raw::c_int,
@@ -1282,33 +1324,38 @@ pub struct mjModel_ {
     pub actuator_dyntype: *mut ::std::os::raw::c_int,
     pub actuator_gaintype: *mut ::std::os::raw::c_int,
     pub actuator_biastype: *mut ::std::os::raw::c_int,
-    pub actuator_trnid: *mut ::std::os::raw::c_int,
-    pub actuator_damping: *mut mjtNum,
-    pub actuator_dampingpoly: *mut mjtNum,
-    pub actuator_armature: *mut mjtNum,
+    pub actuator_ctrladr: *mut ::std::os::raw::c_int,
+    pub actuator_ctrlnum: *mut ::std::os::raw::c_int,
+    pub actuator_ctrlspec: *mut ::std::os::raw::c_int,
+    pub actuator_outadr: *mut ::std::os::raw::c_int,
+    pub actuator_outnum: *mut ::std::os::raw::c_int,
     pub actuator_actadr: *mut ::std::os::raw::c_int,
     pub actuator_actnum: *mut ::std::os::raw::c_int,
-    pub actuator_group: *mut ::std::os::raw::c_int,
-    pub actuator_history: *mut ::std::os::raw::c_int,
-    pub actuator_historyadr: *mut ::std::os::raw::c_int,
-    pub actuator_delay: *mut mjtNum,
-    pub actuator_ctrllimited: *mut mjtBool,
-    pub actuator_forcelimited: *mut mjtBool,
-    pub actuator_actlimited: *mut mjtBool,
+    pub actuator_trnid: *mut ::std::os::raw::c_int,
+    pub actuator_cranklength: *mut mjtNum,
     pub actuator_dynprm: *mut mjtNum,
     pub actuator_gainprm: *mut mjtNum,
     pub actuator_biasprm: *mut mjtNum,
-    pub actuator_actearly: *mut mjtBool,
-    pub actuator_ctrlrange: *mut mjtNum,
-    pub actuator_forcerange: *mut mjtNum,
+    pub actuator_actlimited: *mut mjtBool,
     pub actuator_actrange: *mut mjtNum,
+    pub actuator_actearly: *mut mjtBool,
+    pub actuator_history: *mut ::std::os::raw::c_int,
+    pub actuator_historyadr: *mut ::std::os::raw::c_int,
+    pub actuator_delay: *mut mjtNum,
+    pub actuator_damping: *mut mjtNum,
+    pub actuator_dampingpoly: *mut mjtNum,
+    pub actuator_armature: *mut mjtNum,
+    pub actuator_group: *mut ::std::os::raw::c_int,
+    pub actuator_user: *mut mjtNum,
+    pub actuator_plugin: *mut ::std::os::raw::c_int,
+    pub actuator_forcelimited: *mut mjtBool,
+    pub actuator_forcerange: *mut mjtNum,
+    pub actuator_ctrllimited: *mut mjtBool,
+    pub actuator_ctrlrange: *mut mjtNum,
     pub actuator_gear: *mut mjtNum,
-    pub actuator_cranklength: *mut mjtNum,
     pub actuator_acc0: *mut mjtNum,
     pub actuator_length0: *mut mjtNum,
     pub actuator_lengthrange: *mut mjtNum,
-    pub actuator_user: *mut mjtNum,
-    pub actuator_plugin: *mut ::std::os::raw::c_int,
     pub sensor_type: *mut ::std::os::raw::c_int,
     pub sensor_datatype: *mut ::std::os::raw::c_int,
     pub sensor_needstage: *mut ::std::os::raw::c_int,
@@ -1392,31 +1439,6 @@ pub struct mjModel_ {
     pub signature: u64,
 }
 pub type mjModel = mjModel_;
-#[repr(u32)]
-#[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtTaskStatus_ {
-    mjTASK_NEW = 0,
-    mjTASK_QUEUED = 1,
-    mjTASK_COMPLETED = 2,
-}
-pub use self::mjtTaskStatus_ as mjtTaskStatus;
-pub type mjfTask = ::std::option::Option<
-    unsafe extern "C" fn(arg1: *mut ::std::os::raw::c_void) -> *mut ::std::os::raw::c_void,
->;
-#[repr(C)]
-#[derive(Debug, Clone)]
-pub struct mjThreadPool_ {
-    pub nworker: ::std::os::raw::c_int,
-}
-pub type mjThreadPool = mjThreadPool_;
-#[repr(C)]
-#[derive(Debug, Clone)]
-pub struct mjTask_ {
-    pub func: mjfTask,
-    pub args: *mut ::std::os::raw::c_void,
-    pub status: ::std::os::raw::c_int,
-}
-pub type mjTask = mjTask_;
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct mjPreContact_ {
@@ -1437,6 +1459,7 @@ pub struct mjContact_ {
     pub solref: [mjtNum; 2usize],
     pub solreffriction: [mjtNum; 2usize],
     pub solimp: [mjtNum; 5usize],
+    pub adhesion: mjtNum,
     pub mu: mjtNum,
     pub H: [mjtNum; 36usize],
     pub dim: ::std::os::raw::c_int,
@@ -1485,8 +1508,9 @@ pub struct mjData_ {
     pub pstack: usize,
     pub pbase: usize,
     pub parena: usize,
+    pub threadpool: usize,
+    pub threadlock: mjtBool,
     pub maxuse_stack: mjtSize,
-    pub maxuse_threadstack: [mjtSize; 128usize],
     pub maxuse_arena: mjtSize,
     pub maxuse_con: ::std::os::raw::c_int,
     pub maxuse_efc: ::std::os::raw::c_int,
@@ -1502,6 +1526,10 @@ pub struct mjData_ {
     pub nl: ::std::os::raw::c_int,
     pub nefc: ::std::os::raw::c_int,
     pub nJ: ::std::os::raw::c_int,
+    pub efm_active: ::std::os::raw::c_int,
+    pub nefmK: ::std::os::raw::c_int,
+    pub nefmdof: ::std::os::raw::c_int,
+    pub nefmL: ::std::os::raw::c_int,
     pub nY: ::std::os::raw::c_int,
     pub nA: ::std::os::raw::c_int,
     pub nisland: ::std::os::raw::c_int,
@@ -1557,6 +1585,7 @@ pub struct mjData_ {
     pub cinert: *mut mjtNum,
     pub flexvert_xpos: *mut mjtNum,
     pub flexelem_aabb: *mut mjtNum,
+    pub flexelem_krot: *mut mjtNum,
     pub flexedge_J: *mut mjtNum,
     pub flexedge_length: *mut mjtNum,
     pub flexvert_J: *mut mjtNum,
@@ -1574,7 +1603,6 @@ pub struct mjData_ {
     pub moment_colind: *mut ::std::os::raw::c_int,
     pub actuator_moment: *mut mjtNum,
     pub crb: *mut mjtNum,
-    pub qM: *mut mjtNum,
     pub M: *mut mjtNum,
     pub qLD: *mut mjtNum,
     pub qLDiagInv: *mut mjtNum,
@@ -1594,6 +1622,7 @@ pub struct mjData_ {
     pub qfrc_damper: *mut mjtNum,
     pub qfrc_gravcomp: *mut mjtNum,
     pub qfrc_fluid: *mut mjtNum,
+    pub qfrc_adhesion: *mut mjtNum,
     pub qfrc_passive: *mut mjtNum,
     pub subtree_linvel: *mut mjtNum,
     pub subtree_angmom: *mut mjtNum,
@@ -1621,7 +1650,7 @@ pub struct mjData_ {
     pub efc_pos: *mut mjtNum,
     pub efc_margin: *mut mjtNum,
     pub efc_frictionloss: *mut mjtNum,
-    pub efc_diagApprox: *mut mjtNum,
+    pub efc_diagA: *mut mjtNum,
     pub efc_KBIP: *mut mjtNum,
     pub efc_D: *mut mjtNum,
     pub efc_R: *mut mjtNum,
@@ -1638,12 +1667,6 @@ pub struct mjData_ {
     pub map_idof2dof: *mut ::std::os::raw::c_int,
     pub ifrc_smooth: *mut mjtNum,
     pub iacc_smooth: *mut mjtNum,
-    pub iM_rownnz: *mut ::std::os::raw::c_int,
-    pub iM_rowadr: *mut ::std::os::raw::c_int,
-    pub iM_colind: *mut ::std::os::raw::c_int,
-    pub iM: *mut mjtNum,
-    pub iLD: *mut mjtNum,
-    pub iLDiagInv: *mut mjtNum,
     pub iacc: *mut mjtNum,
     pub efc_island: *mut ::std::os::raw::c_int,
     pub island_ne: *mut ::std::os::raw::c_int,
@@ -1654,11 +1677,6 @@ pub struct mjData_ {
     pub map_iefc2efc: *mut ::std::os::raw::c_int,
     pub iefc_type: *mut ::std::os::raw::c_int,
     pub iefc_id: *mut ::std::os::raw::c_int,
-    pub iefc_J_rownnz: *mut ::std::os::raw::c_int,
-    pub iefc_J_rowadr: *mut ::std::os::raw::c_int,
-    pub iefc_J_rowsuper: *mut ::std::os::raw::c_int,
-    pub iefc_J_colind: *mut ::std::os::raw::c_int,
-    pub iefc_J: *mut mjtNum,
     pub iefc_frictionloss: *mut mjtNum,
     pub iefc_D: *mut mjtNum,
     pub iefc_R: *mut mjtNum,
@@ -1672,6 +1690,13 @@ pub struct mjData_ {
     pub efc_AR: *mut mjtNum,
     pub efc_vel: *mut mjtNum,
     pub efc_aref: *mut mjtNum,
+    pub efm_c: *mut mjtNum,
+    pub efm_K_rownnz: *mut ::std::os::raw::c_int,
+    pub efm_K_rowadr: *mut ::std::os::raw::c_int,
+    pub efm_K_colind: *mut ::std::os::raw::c_int,
+    pub efm_K_val: *mut mjtNum,
+    pub efm_dofid: *mut ::std::os::raw::c_int,
+    pub efm_L: *mut mjtNum,
     pub efc_b: *mut mjtNum,
     pub iefc_aref: *mut mjtNum,
     pub iefc_state: *mut ::std::os::raw::c_int,
@@ -1679,7 +1704,6 @@ pub struct mjData_ {
     pub efc_state: *mut ::std::os::raw::c_int,
     pub efc_force: *mut mjtNum,
     pub ifrc_constraint: *mut mjtNum,
-    pub threadpool: usize,
     pub signature: u64,
 }
 pub type mjData = mjData_;
@@ -1720,23 +1744,21 @@ pub type mjDoubleVec = ::std::os::raw::c_void;
 pub type mjByteVec = ::std::os::raw::c_void;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtGeomInertia_ {
+pub enum mjtGeomInertia {
     mjINERTIA_VOLUME = 0,
     mjINERTIA_SHELL = 1,
 }
-pub use self::mjtGeomInertia_ as mjtGeomInertia;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtMeshInertia_ {
+pub enum mjtMeshInertia {
     mjMESH_INERTIA_CONVEX = 0,
     mjMESH_INERTIA_EXACT = 1,
     mjMESH_INERTIA_LEGACY = 2,
     mjMESH_INERTIA_SHELL = 3,
 }
-pub use self::mjtMeshInertia_ as mjtMeshInertia;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtMeshBuiltin_ {
+pub enum mjtMeshBuiltin {
     mjMESH_BUILTIN_NONE = 0,
     mjMESH_BUILTIN_SPHERE = 1,
     mjMESH_BUILTIN_HEMISPHERE = 2,
@@ -1746,62 +1768,62 @@ pub enum mjtMeshBuiltin_ {
     mjMESH_BUILTIN_WEDGE = 6,
     mjMESH_BUILTIN_PLATE = 7,
 }
-pub use self::mjtMeshBuiltin_ as mjtMeshBuiltin;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtBuiltin_ {
+pub enum mjtBuiltin {
     mjBUILTIN_NONE = 0,
     mjBUILTIN_GRADIENT = 1,
     mjBUILTIN_CHECKER = 2,
     mjBUILTIN_FLAT = 3,
 }
-pub use self::mjtBuiltin_ as mjtBuiltin;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtMark_ {
+pub enum mjtMark {
     mjMARK_NONE = 0,
     mjMARK_EDGE = 1,
     mjMARK_CROSS = 2,
     mjMARK_RANDOM = 3,
 }
-pub use self::mjtMark_ as mjtMark;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtLimited_ {
+pub enum mjtLimited {
     mjLIMITED_FALSE = 0,
     mjLIMITED_TRUE = 1,
     mjLIMITED_AUTO = 2,
 }
-pub use self::mjtLimited_ as mjtLimited;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtAlignFree_ {
+pub enum mjtAlignFree {
     mjALIGNFREE_FALSE = 0,
     mjALIGNFREE_TRUE = 1,
     mjALIGNFREE_AUTO = 2,
 }
-pub use self::mjtAlignFree_ as mjtAlignFree;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtInertiaFromGeom_ {
+pub enum mjtInertiaFromGeom {
     mjINERTIAFROMGEOM_FALSE = 0,
     mjINERTIAFROMGEOM_TRUE = 1,
     mjINERTIAFROMGEOM_AUTO = 2,
 }
-pub use self::mjtInertiaFromGeom_ as mjtInertiaFromGeom;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtOrientation_ {
+pub enum mjtOrientation {
     mjORIENTATION_QUAT = 0,
     mjORIENTATION_AXISANGLE = 1,
     mjORIENTATION_XYAXES = 2,
     mjORIENTATION_ZAXIS = 3,
     mjORIENTATION_EULER = 4,
 }
-pub use self::mjtOrientation_ as mjtOrientation;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtCTimer_ {
+pub enum mjtConflict {
+    mjCONFLICT_WARNING = 0,
+    mjCONFLICT_MERGE = 1,
+    mjCONFLICT_ERROR = 2,
+}
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
+pub enum mjtCTimer {
     mjCTIMER_TOTAL = 0,
     mjCTIMER_ASSETS = 1,
     mjCTIMER_TEXTURE = 2,
@@ -1813,44 +1835,60 @@ pub enum mjtCTimer_ {
     mjCTIMER_MESH_OCTREE = 8,
     mjNCTIMER = 9,
 }
-pub use self::mjtCTimer_ as mjtCTimer;
 #[repr(C)]
 #[derive(Debug)]
 pub struct mjsElement_ {
-    pub(crate) elemtype: mjtObj,
-    pub(crate) signature: u64,
+    pub elemtype: mjtObj,
+    pub signature: u64,
 }
 pub type mjsElement = mjsElement_;
 #[repr(C)]
 #[derive(Debug)]
 pub struct mjsCompiler_ {
-    pub(crate) autolimits: mjtByte,
+    pub(crate) autolimits: mjtBool,
     pub(crate) boundmass: f64,
     pub(crate) boundinertia: f64,
     pub(crate) settotalmass: f64,
-    pub(crate) balanceinertia: mjtByte,
-    pub(crate) fitaabb: mjtByte,
-    pub(crate) degree: mjtByte,
+    pub(crate) balanceinertia: mjtBool,
+    pub(crate) fitaabb: mjtBool,
+    pub(crate) degree: mjtBool,
     pub(crate) eulerseq: [::std::os::raw::c_char; 3usize],
-    pub(crate) discardvisual: mjtByte,
-    pub(crate) usethread: mjtByte,
-    pub(crate) fusestatic: mjtByte,
-    pub(crate) inertiafromgeom: ::std::os::raw::c_int,
+    pub(crate) discardvisual: mjtBool,
+    pub(crate) usethread: mjtBool,
+    pub(crate) fusestatic: mjtBool,
+    pub(crate) inertiafromgeom: mjtInertiaFromGeom,
     pub(crate) inertiagrouprange: [::std::os::raw::c_int; 2usize],
-    pub(crate) saveinertial: mjtByte,
-    pub(crate) alignfree: ::std::os::raw::c_int,
+    pub(crate) saveinertial: mjtBool,
+    pub(crate) alignfree: mjtBool,
+    pub(crate) conflict: mjtConflict,
     pub(crate) LRopt: mjLROpt,
     pub(crate) meshdir: *mut mjString,
     pub(crate) texturedir: *mut mjString,
+    pub(crate) authored: u64,
 }
 pub type mjsCompiler = mjsCompiler_;
+#[repr(C)]
+#[derive(Debug)]
+pub struct mjsAuthored_ {
+    pub option: u64,
+    pub disableflags: ::std::os::raw::c_int,
+    pub enableflags: ::std::os::raw::c_int,
+    pub disableactuator: ::std::os::raw::c_int,
+    pub visual_global: u64,
+    pub visual_quality: u64,
+    pub visual_headlight: u64,
+    pub visual_map: u64,
+    pub visual_scale: u64,
+    pub visual_rgba: u64,
+}
+pub type mjsAuthored = mjsAuthored_;
 #[repr(C)]
 #[derive(Debug)]
 pub struct mjSpec_ {
     pub element: *mut mjsElement,
     pub modelname: *mut mjString,
     pub compiler: mjsCompiler,
-    pub strippath: mjtByte,
+    pub strippath: mjtBool,
     pub option: mjOption,
     pub visual: mjVisual,
     pub stat: mjStatistic,
@@ -1871,17 +1909,18 @@ pub struct mjSpec_ {
     pub nstack: mjtSize,
     pub comment: *mut mjString,
     pub modelfiledir: *mut mjString,
-    pub hasImplicitPluginElem: mjtByte,
+    pub hasImplicitPluginElem: mjtBool,
+    pub authored: mjsAuthored,
 }
 pub type mjSpec = mjSpec_;
 #[repr(C)]
 #[derive(Debug)]
 pub struct mjsOrientation_ {
-    pub(crate) type_: mjtOrientation,
-    pub(crate) axisangle: [f64; 4usize],
-    pub(crate) xyaxes: [f64; 6usize],
-    pub(crate) zaxis: [f64; 3usize],
-    pub(crate) euler: [f64; 3usize],
+    pub type_: mjtOrientation,
+    pub axisangle: [f64; 4usize],
+    pub xyaxes: [f64; 6usize],
+    pub zaxis: [f64; 3usize],
+    pub euler: [f64; 3usize],
 }
 pub type mjsOrientation = mjsOrientation_;
 #[repr(C)]
@@ -1890,7 +1929,7 @@ pub struct mjsPlugin_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) name: *mut mjString,
     pub(crate) plugin_name: *mut mjString,
-    pub(crate) active: mjtByte,
+    pub(crate) active: mjtBool,
     pub(crate) info: *mut mjString,
 }
 pub type mjsPlugin = mjsPlugin_;
@@ -1908,11 +1947,12 @@ pub struct mjsBody_ {
     pub(crate) inertia: [f64; 3usize],
     pub(crate) ialt: mjsOrientation,
     pub(crate) fullinertia: [f64; 6usize],
-    pub(crate) mocap: mjtByte,
+    pub(crate) mocap: mjtBool,
     pub(crate) gravcomp: f64,
     pub(crate) sleep: mjtSleepPolicy,
+    pub(crate) simple: mjtByte,
     pub(crate) userdata: *mut mjDoubleVec,
-    pub(crate) explicitinertial: mjtByte,
+    pub(crate) explicitinertial: mjtBool,
     pub(crate) plugin: mjsPlugin,
     pub(crate) info: *mut mjString,
 }
@@ -1936,16 +1976,16 @@ pub struct mjsJoint_ {
     pub(crate) pos: [f64; 3usize],
     pub(crate) axis: [f64; 3usize],
     pub(crate) ref_: f64,
-    pub(crate) align: ::std::os::raw::c_int,
+    pub(crate) align: mjtAlignFree,
     pub(crate) stiffness: [f64; 3usize],
     pub(crate) springref: f64,
     pub(crate) springdamper: [f64; 2usize],
-    pub(crate) limited: ::std::os::raw::c_int,
+    pub(crate) limited: mjtLimited,
     pub(crate) range: [f64; 2usize],
     pub(crate) margin: f64,
     pub(crate) solref_limit: [mjtNum; 2usize],
     pub(crate) solimp_limit: [mjtNum; 5usize],
-    pub(crate) actfrclimited: ::std::os::raw::c_int,
+    pub(crate) actfrclimited: mjtLimited,
     pub(crate) actfrcrange: [f64; 2usize],
     pub(crate) armature: f64,
     pub(crate) damping: [f64; 3usize],
@@ -1953,7 +1993,7 @@ pub struct mjsJoint_ {
     pub(crate) solref_friction: [mjtNum; 2usize],
     pub(crate) solimp_friction: [mjtNum; 5usize],
     pub(crate) group: ::std::os::raw::c_int,
-    pub(crate) actgravcomp: mjtByte,
+    pub(crate) actgravcomp: mjtBool,
     pub(crate) userdata: *mut mjDoubleVec,
     pub(crate) info: *mut mjString,
 }
@@ -1978,6 +2018,8 @@ pub struct mjsGeom_ {
     pub(crate) solimp: [mjtNum; 5usize],
     pub(crate) margin: f64,
     pub(crate) gap: f64,
+    pub(crate) surfacevel: [f64; 6usize],
+    pub(crate) adhesion: f64,
     pub(crate) mass: f64,
     pub(crate) density: f64,
     pub(crate) typeinertia: mjtGeomInertia,
@@ -2043,15 +2085,16 @@ pub struct mjsLight_ {
     pub(crate) dir: [f64; 3usize],
     pub(crate) mode: mjtCamLight,
     pub(crate) targetbody: *mut mjString,
-    pub(crate) active: mjtByte,
+    pub(crate) active: mjtBool,
     pub(crate) type_: mjtLightType,
     pub(crate) texture: *mut mjString,
-    pub(crate) castshadow: mjtByte,
+    pub(crate) castshadow: mjtBool,
     pub(crate) bulbradius: f32,
     pub(crate) intensity: f32,
     pub(crate) range: f32,
     pub(crate) attenuation: [f32; 3usize],
     pub(crate) cutoff: f32,
+    pub(crate) softness: f32,
     pub(crate) exponent: f32,
     pub(crate) ambient: [f32; 3usize],
     pub(crate) diffuse: [f32; 3usize],
@@ -2076,9 +2119,9 @@ pub struct mjsFlex_ {
     pub(crate) dim: ::std::os::raw::c_int,
     pub(crate) radius: f64,
     pub(crate) size: [f64; 3usize],
-    pub(crate) internal: mjtByte,
-    pub(crate) flatskin: mjtByte,
-    pub(crate) selfcollide: ::std::os::raw::c_int,
+    pub(crate) internal: mjtBool,
+    pub(crate) flatskin: mjtBool,
+    pub(crate) selfcollide: mjtFlexSelf,
     pub(crate) passive: ::std::os::raw::c_int,
     pub(crate) activelayers: ::std::os::raw::c_int,
     pub(crate) group: ::std::os::raw::c_int,
@@ -2113,8 +2156,8 @@ pub struct mjsMesh_ {
     pub(crate) refquat: [f64; 4usize],
     pub(crate) scale: [f64; 3usize],
     pub(crate) inertia: mjtMeshInertia,
-    pub(crate) smoothnormal: mjtByte,
-    pub(crate) needsdf: mjtByte,
+    pub(crate) smoothnormal: mjtBool,
+    pub(crate) needsdf: mjtBool,
     pub(crate) maxhullvert: ::std::os::raw::c_int,
     pub(crate) uservert: *mut mjFloatVec,
     pub(crate) usernormal: *mut mjFloatVec,
@@ -2167,8 +2210,8 @@ pub struct mjsTexture_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) type_: mjtTexture,
     pub(crate) colorspace: mjtColorSpace,
-    pub(crate) builtin: ::std::os::raw::c_int,
-    pub(crate) mark: ::std::os::raw::c_int,
+    pub(crate) builtin: mjtBuiltin,
+    pub(crate) mark: mjtMark,
     pub(crate) rgb1: [f64; 3usize],
     pub(crate) rgb2: [f64; 3usize],
     pub(crate) markrgb: [f64; 3usize],
@@ -2182,8 +2225,8 @@ pub struct mjsTexture_ {
     pub(crate) gridlayout: [::std::os::raw::c_char; 12usize],
     pub(crate) cubefiles: *mut mjStringVec,
     pub(crate) data: *mut mjByteVec,
-    pub(crate) hflip: mjtByte,
-    pub(crate) vflip: mjtByte,
+    pub(crate) hflip: mjtBool,
+    pub(crate) vflip: mjtBool,
     pub(crate) info: *mut mjString,
 }
 pub type mjsTexture = mjsTexture_;
@@ -2192,7 +2235,7 @@ pub type mjsTexture = mjsTexture_;
 pub struct mjsMaterial_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) textures: *mut mjStringVec,
-    pub(crate) texuniform: mjtByte,
+    pub(crate) texuniform: mjtBool,
     pub(crate) texrepeat: [f32; 2usize],
     pub(crate) emission: f32,
     pub(crate) specular: f32,
@@ -2216,6 +2259,7 @@ pub struct mjsPair_ {
     pub(crate) solimp: [mjtNum; 5usize],
     pub(crate) margin: f64,
     pub(crate) gap: f64,
+    pub(crate) adhesion: f64,
     pub(crate) friction: [f64; 5usize],
     pub(crate) info: *mut mjString,
 }
@@ -2235,7 +2279,7 @@ pub struct mjsEquality_ {
     pub(crate) element: *mut mjsElement,
     pub(crate) type_: mjtEq,
     pub(crate) data: [f64; 11usize],
-    pub(crate) active: mjtByte,
+    pub(crate) active: mjtBool,
     pub(crate) name1: *mut mjString,
     pub(crate) name2: *mut mjString,
     pub(crate) objtype: mjtObj,
@@ -2255,8 +2299,8 @@ pub struct mjsTendon_ {
     pub(crate) solref_friction: [mjtNum; 2usize],
     pub(crate) solimp_friction: [mjtNum; 5usize],
     pub(crate) armature: f64,
-    pub(crate) limited: ::std::os::raw::c_int,
-    pub(crate) actfrclimited: ::std::os::raw::c_int,
+    pub(crate) limited: mjtLimited,
+    pub(crate) actfrclimited: mjtLimited,
     pub(crate) range: [f64; 2usize],
     pub(crate) actfrcrange: [f64; 2usize],
     pub(crate) margin: f64,
@@ -2289,7 +2333,10 @@ pub struct mjsActuator_ {
     pub(crate) dyntype: mjtDyn,
     pub(crate) dynprm: [f64; 10usize],
     pub(crate) actdim: ::std::os::raw::c_int,
-    pub(crate) actearly: mjtByte,
+    pub(crate) ctrlspec: ::std::os::raw::c_int,
+    pub(crate) velrange: [f64; 2usize],
+    pub(crate) ffrange: [f64; 2usize],
+    pub(crate) actearly: mjtBool,
     pub(crate) trntype: mjtTrn,
     pub(crate) gear: [f64; 6usize],
     pub(crate) target: *mut mjString,
@@ -2300,11 +2347,11 @@ pub struct mjsActuator_ {
     pub(crate) inheritrange: f64,
     pub(crate) damping: [f64; 3usize],
     pub(crate) armature: f64,
-    pub(crate) ctrllimited: ::std::os::raw::c_int,
+    pub(crate) ctrllimited: mjtLimited,
     pub(crate) ctrlrange: [f64; 2usize],
-    pub(crate) forcelimited: ::std::os::raw::c_int,
+    pub(crate) forcelimited: mjtLimited,
     pub(crate) forcerange: [f64; 2usize],
-    pub(crate) actlimited: ::std::os::raw::c_int,
+    pub(crate) actlimited: mjtLimited,
     pub(crate) actrange: [f64; 2usize],
     pub(crate) group: ::std::os::raw::c_int,
     pub(crate) nsample: ::std::os::raw::c_int,
@@ -2418,6 +2465,8 @@ pub enum mjtMouse_ {
     mjMOUSE_ZOOM = 5,
     mjMOUSE_MOVE_V_REL = 6,
     mjMOUSE_MOVE_H_REL = 7,
+    mjMOUSE_TURN_V = 8,
+    mjMOUSE_TURN_H = 9,
 }
 pub use self::mjtMouse_ as mjtMouse;
 #[repr(u32)]
@@ -2588,6 +2637,8 @@ pub struct mjvGeom_ {
     pub objid: ::std::os::raw::c_int,
     pub category: ::std::os::raw::c_int,
     pub matid: ::std::os::raw::c_int,
+    pub texid: ::std::os::raw::c_int,
+    pub texuniform: ::std::os::raw::c_int,
     pub texcoord: ::std::os::raw::c_int,
     pub segid: ::std::os::raw::c_int,
     pub size: [f32; 3usize],
@@ -2598,6 +2649,7 @@ pub struct mjvGeom_ {
     pub specular: f32,
     pub shininess: f32,
     pub reflectance: f32,
+    pub texrepeat: [f32; 2usize],
     pub label: [::std::os::raw::c_char; 100usize],
     pub camdist: f32,
     pub modelrbound: f32,
@@ -2623,6 +2675,7 @@ pub struct mjvLight_ {
     pub bulbradius: f32,
     pub intensity: f32,
     pub range: f32,
+    pub softness: f32,
 }
 pub type mjvLight = mjvLight_;
 #[repr(C)]
@@ -2732,6 +2785,7 @@ pub struct mjResource_ {
     pub vfs: *mut mjVFS,
     pub timestamp: [::std::os::raw::c_char; 512usize],
     pub provider: *const mjpResourceProvider,
+    pub args: *const ::std::os::raw::c_char,
 }
 pub type mjResource = mjResource_;
 pub type mjfOpenResource =
@@ -2753,6 +2807,13 @@ pub type mjfResourceModified = ::std::option::Option<
         timestamp: *const ::std::os::raw::c_char,
     ) -> ::std::os::raw::c_int,
 >;
+pub type mjfWriteResource = ::std::option::Option<
+    unsafe extern "C" fn(
+        resource: *mut mjResource,
+        buffer: *const ::std::os::raw::c_void,
+        nbytes: mjtSize,
+    ) -> mjtSize,
+>;
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct mjpResourceProvider {
@@ -2763,6 +2824,7 @@ pub struct mjpResourceProvider {
     pub mount: mjfMountResource,
     pub unmount: mjfUnmountResource,
     pub modified: mjfResourceModified,
+    pub write: mjfWriteResource,
     pub data: *mut ::std::os::raw::c_void,
 }
 pub type mjfDecode = ::std::option::Option<
@@ -2785,7 +2847,7 @@ pub type mjfEncode = ::std::option::Option<
         m: *const mjModel,
         vfs: *const mjVFS,
         resource: *mut mjResource,
-    ) -> ::std::os::raw::c_int,
+    ) -> mjtSize,
 >;
 #[repr(C)]
 #[derive(Debug, Clone)]
@@ -2968,6 +3030,51 @@ pub enum mjtFont_ {
     mjFONT_BIG = 2,
 }
 pub use self::mjtFont_ as mjtFont;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, )]
+pub enum mjrPixelFormat_ {
+    mjPIXEL_FORMAT_UNKNOWN = 0,
+    mjPIXEL_FORMAT_R8 = 1,
+    mjPIXEL_FORMAT_RGB8 = 2,
+    mjPIXEL_FORMAT_RGBA8 = 3,
+    mjPIXEL_FORMAT_R32F = 4,
+    mjPIXEL_FORMAT_DEPTH32F = 5,
+    mjPIXEL_FORMAT_KTX = 6,
+}
+pub use self::mjrPixelFormat_ as mjrPixelFormat;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, )]
+pub enum mjrVertexAttributeUsage_ {
+    mjVERTEX_ATTRIBUTE_USAGE_POSITION = 0,
+    mjVERTEX_ATTRIBUTE_USAGE_NORMAL = 1,
+    mjVERTEX_ATTRIBUTE_USAGE_TANGENTS = 2,
+    mjVERTEX_ATTRIBUTE_USAGE_UV = 3,
+    mjVERTEX_ATTRIBUTE_USAGE_COLOR = 4,
+}
+pub use self::mjrVertexAttributeUsage_ as mjrVertexAttributeUsage;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, )]
+pub enum mjrVertexAttributeType_ {
+    mjVERTEX_ATTRIBUTE_TYPE_FLOAT2 = 0,
+    mjVERTEX_ATTRIBUTE_TYPE_FLOAT3 = 1,
+    mjVERTEX_ATTRIBUTE_TYPE_FLOAT4 = 2,
+    mjVERTEX_ATTRIBUTE_TYPE_UBYTE4 = 3,
+}
+pub use self::mjrVertexAttributeType_ as mjrVertexAttributeType;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, )]
+pub enum mjrIndexType_ {
+    mjINDEX_TYPE_U16 = 0,
+    mjINDEX_TYPE_U32 = 1,
+}
+pub use self::mjrIndexType_ as mjrIndexType;
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, )]
+pub enum mjrMeshPrimitiveType_ {
+    mjMESH_PRIMITIVE_TYPE_TRIANGLES = 0,
+    mjMESH_PRIMITIVE_TYPE_LINES = 1,
+}
+pub use self::mjrMeshPrimitiveType_ as mjrMeshPrimitiveType;
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct mjrRect_ {
@@ -2977,6 +3084,24 @@ pub struct mjrRect_ {
     pub height: ::std::os::raw::c_int,
 }
 pub type mjrRect = mjrRect_;
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct mjrRendererInfo_ {
+    pub(crate) renderer: *const ::std::os::raw::c_char,
+    pub(crate) backend: *const ::std::os::raw::c_char,
+}
+pub type mjrRendererInfo = mjrRendererInfo_;
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct mjrVertexAttribute_ {
+    pub usage: ::std::os::raw::c_int,
+    pub type_: ::std::os::raw::c_int,
+}
+pub type mjrVertexAttribute = mjrVertexAttribute_;
+pub use self::mjtColorSpace as mjrColorSpace;
+pub use self::mjtLightType as mjrLightType;
+pub use self::mjtTexture as mjrSamplerType;
+pub type mjrCamera = mjvGLCamera;
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct mjrContext_ {
@@ -3045,16 +3170,15 @@ pub struct mjrContext_ {
 pub type mjrContext = mjrContext_;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtButton_ {
+pub enum mjtButton {
     mjBUTTON_NONE = 0,
     mjBUTTON_LEFT = 1,
     mjBUTTON_RIGHT = 2,
     mjBUTTON_MIDDLE = 3,
 }
-pub use self::mjtButton_ as mjtButton;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtEvent_ {
+pub enum mjtEvent {
     mjEVENT_NONE = 0,
     mjEVENT_MOVE = 1,
     mjEVENT_PRESS = 2,
@@ -3065,10 +3189,9 @@ pub enum mjtEvent_ {
     mjEVENT_REDRAW = 7,
     mjEVENT_FILESDROP = 8,
 }
-pub use self::mjtEvent_ as mjtEvent;
 #[repr(i32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtItem_ {
+pub enum mjtItem {
     mjITEM_END = -2,
     mjITEM_SECTION = -1,
     mjITEM_SEPARATOR = 0,
@@ -3087,15 +3210,13 @@ pub enum mjtItem_ {
     mjITEM_EDITTXT = 13,
     mjNITEM = 14,
 }
-pub use self::mjtItem_ as mjtItem;
 #[repr(u32)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq,  Copy)]
-pub enum mjtSection_ {
+pub enum mjtSection {
     mjSECT_CLOSED = 0,
     mjSECT_OPEN = 1,
     mjSECT_FIXED = 2,
 }
-pub use self::mjtSection_ as mjtSection;
 pub type mjfItemEnable = ::std::option::Option<
     unsafe extern "C" fn(
         category: ::std::os::raw::c_int,
@@ -3288,20 +3409,20 @@ pub struct mjuiDef_ {
 }
 pub type mjuiDef = mjuiDef_;
 unsafe extern "C" {
-    pub static mut mju_user_error:
-        ::std::option::Option<unsafe extern "C" fn(arg1: *const ::std::os::raw::c_char)>;
-}
-unsafe extern "C" {
-    pub static mut mju_user_warning:
-        ::std::option::Option<unsafe extern "C" fn(arg1: *const ::std::os::raw::c_char)>;
-}
-unsafe extern "C" {
     pub static mut mju_user_malloc:
         ::std::option::Option<unsafe extern "C" fn(arg1: usize) -> *mut ::std::os::raw::c_void>;
 }
 unsafe extern "C" {
     pub static mut mju_user_free:
         ::std::option::Option<unsafe extern "C" fn(arg1: *mut ::std::os::raw::c_void)>;
+}
+unsafe extern "C" {
+    pub static mut mju_user_error:
+        ::std::option::Option<unsafe extern "C" fn(arg1: *const ::std::os::raw::c_char)>;
+}
+unsafe extern "C" {
+    pub static mut mju_user_warning:
+        ::std::option::Option<unsafe extern "C" fn(arg1: *const ::std::os::raw::c_char)>;
 }
 unsafe extern "C" {
     pub static mut mjcb_passive: mjfGeneric;
@@ -3350,6 +3471,9 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub static mut mjRNDSTRING: [[*const ::std::os::raw::c_char; 3usize]; 11usize];
+}
+unsafe extern "C" {
+    pub static mut mjTOPICSTRING: [*const ::std::os::raw::c_char; 3usize];
 }
 unsafe extern "C" {
     pub fn mj_defaultVFS(vfs: *mut mjVFS);
@@ -3461,7 +3585,7 @@ unsafe extern "C" {
         vfs: *const mjVFS,
         error: *mut ::std::os::raw::c_char,
         error_sz: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+    ) -> mjtSize;
 }
 unsafe extern "C" {
     pub fn mj_compile(s: *mut mjSpec, vfs: *const mjVFS) -> *mut mjModel;
@@ -3589,6 +3713,9 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mjv_copyData(dest: *mut mjData, m: *const mjModel, src: *const mjData) -> *mut mjData;
+}
+unsafe extern "C" {
+    pub fn mj_resetCtrl(m: *const mjModel, d: *mut mjData);
 }
 unsafe extern "C" {
     pub fn mj_resetData(m: *const mjModel, d: *mut mjData);
@@ -4076,7 +4203,14 @@ unsafe extern "C" {
     ) -> *const ::std::os::raw::c_char;
 }
 unsafe extern "C" {
-    pub fn mj_fullM(m: *const mjModel, dst: *mut mjtNum, M: *const mjtNum);
+    pub fn mj_actuatorInputName(
+        m: *const mjModel,
+        id: ::std::os::raw::c_int,
+        input: ::std::os::raw::c_int,
+    ) -> *const ::std::os::raw::c_char;
+}
+unsafe extern "C" {
+    pub fn mj_fullM(m: *const mjModel, d: *const mjData, dst: *mut mjtNum);
 }
 unsafe extern "C" {
     pub fn mj_mulM(m: *const mjModel, d: *const mjData, res: *mut mjtNum, vec: *const mjtNum);
@@ -4343,7 +4477,6 @@ unsafe extern "C" {
         action: ::std::os::raw::c_int,
         reldx: mjtNum,
         reldy: mjtNum,
-        scn: *const mjvScene,
         cam: *mut mjvCamera,
     );
 }
@@ -4389,6 +4522,13 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mjv_averageCamera(cam1: *const mjvGLCamera, cam2: *const mjvGLCamera) -> mjvGLCamera;
+}
+unsafe extern "C" {
+    pub fn mjv_camera2GLCamera(
+        model: *const mjModel,
+        data: *const mjData,
+        mjv_camera: *const mjvCamera,
+    ) -> mjvGLCamera;
 }
 unsafe extern "C" {
     pub fn mjv_select(
@@ -4498,6 +4638,12 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mjr_defaultContext(con: *mut mjrContext);
+}
+unsafe extern "C" {
+    pub fn mjr_defaultRendererInfo(info: *mut mjrRendererInfo);
+}
+unsafe extern "C" {
+    pub fn mjr_getRendererInfo(info: *mut mjrRendererInfo);
 }
 unsafe extern "C" {
     pub fn mjr_makeContext(
@@ -4689,22 +4835,25 @@ unsafe extern "C" {
     pub fn mju_error(msg: *const ::std::os::raw::c_char, ...);
 }
 unsafe extern "C" {
-    pub fn mju_error_i(msg: *const ::std::os::raw::c_char, i: ::std::os::raw::c_int);
-}
-unsafe extern "C" {
-    pub fn mju_error_s(msg: *const ::std::os::raw::c_char, text: *const ::std::os::raw::c_char);
-}
-unsafe extern "C" {
     pub fn mju_warning(msg: *const ::std::os::raw::c_char, ...);
 }
 unsafe extern "C" {
-    pub fn mju_warning_i(msg: *const ::std::os::raw::c_char, i: ::std::os::raw::c_int);
-}
-unsafe extern "C" {
-    pub fn mju_warning_s(msg: *const ::std::os::raw::c_char, text: *const ::std::os::raw::c_char);
-}
-unsafe extern "C" {
     pub fn mju_clearHandlers();
+}
+unsafe extern "C" {
+    pub fn mju_setLogHandler(handler: mjfLogHandler) -> mjfLogHandler;
+}
+unsafe extern "C" {
+    pub fn mju_getLogConfig() -> mjLogConfig;
+}
+unsafe extern "C" {
+    pub fn mju_setLogConfig(config: mjLogConfig);
+}
+unsafe extern "C" {
+    pub fn mju_info(topic: ::std::os::raw::c_int, msg: *const ::std::os::raw::c_char, ...);
+}
+unsafe extern "C" {
+    pub fn mju_message(msg: *const mjLogMessage);
 }
 unsafe extern "C" {
     pub fn mju_malloc(size: usize) -> *mut ::std::os::raw::c_void;
@@ -4726,6 +4875,15 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mjs_isWarning(s: *mut mjSpec) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjs_numWarnings(spec: *const mjSpec) -> ::std::os::raw::c_int;
+}
+unsafe extern "C" {
+    pub fn mjs_getWarning(
+        spec: *const mjSpec,
+        index: ::std::os::raw::c_int,
+    ) -> *const ::std::os::raw::c_char;
 }
 unsafe extern "C" {
     pub fn mju_zero3(res: *mut [mjtNum; 3usize]);
@@ -5477,6 +5635,16 @@ unsafe extern "C" {
     ) -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
+    pub fn mju_writeResource(
+        name: *const ::std::os::raw::c_char,
+        buffer: *const ::std::os::raw::c_void,
+        nbytes: mjtSize,
+        vfs: *const mjVFS,
+        error: *mut ::std::os::raw::c_char,
+        nerror: usize,
+    ) -> mjtSize;
+}
+unsafe extern "C" {
     pub fn mju_getResourceDir(
         resource: *mut mjResource,
         dir: *mut *const ::std::os::raw::c_char,
@@ -5497,22 +5665,7 @@ unsafe extern "C" {
     ) -> *mut mjSpec;
 }
 unsafe extern "C" {
-    pub fn mju_threadPoolCreate(number_of_threads: usize) -> *mut mjThreadPool;
-}
-unsafe extern "C" {
-    pub fn mju_bindThreadPool(d: *mut mjData, thread_pool: *mut ::std::os::raw::c_void);
-}
-unsafe extern "C" {
-    pub fn mju_threadPoolEnqueue(thread_pool: *mut mjThreadPool, task: *mut mjTask);
-}
-unsafe extern "C" {
-    pub fn mju_threadPoolDestroy(thread_pool: *mut mjThreadPool);
-}
-unsafe extern "C" {
-    pub fn mju_defaultTask(task: *mut mjTask);
-}
-unsafe extern "C" {
-    pub fn mju_taskJoin(task: *mut mjTask);
+    pub fn mju_threadpool(d: *mut mjData, nthread: ::std::os::raw::c_int);
 }
 unsafe extern "C" {
     pub fn mjs_attach(
@@ -5557,6 +5710,31 @@ unsafe extern "C" {
 }
 unsafe extern "C" {
     pub fn mjs_addFlex(s: *mut mjSpec) -> *mut mjsFlex;
+}
+unsafe extern "C" {
+    pub fn mjs_makeFlex(
+        body: *mut mjsBody,
+        name: *const ::std::os::raw::c_char,
+        type_: *const ::std::os::raw::c_char,
+        dim: ::std::os::raw::c_int,
+        dof: *const ::std::os::raw::c_char,
+        count: *const [::std::os::raw::c_int; 3usize],
+        cellcount: *const [::std::os::raw::c_int; 3usize],
+        spacing: *const [f64; 3usize],
+        scale: *const [f64; 3usize],
+        radius: f64,
+        mass: f64,
+        inertiabox: f64,
+        equality: ::std::os::raw::c_int,
+        rigid: ::std::os::raw::c_int,
+        flatskin: ::std::os::raw::c_int,
+        elastic2d: ::std::os::raw::c_int,
+        pos: *const [f64; 3usize],
+        quat: *const [f64; 4usize],
+        origin: *const [f64; 3usize],
+        file: *const ::std::os::raw::c_char,
+        vfs: *const mjVFS,
+    ) -> *mut mjsFlex;
 }
 unsafe extern "C" {
     pub fn mjs_addPair(s: *mut mjSpec, def: *const mjsDefault) -> *mut mjsPair;
@@ -5642,6 +5820,28 @@ unsafe extern "C" {
     pub fn mjs_setToVelocity(actuator: *mut mjsActuator, kv: f64) -> *const ::std::os::raw::c_char;
 }
 unsafe extern "C" {
+    pub fn mjs_setToOrientation(
+        actuator: *mut mjsActuator,
+        kp: f64,
+        kv: *mut f64,
+        dampratio: *mut f64,
+        ctrlspec: ::std::os::raw::c_int,
+    ) -> *const ::std::os::raw::c_char;
+}
+unsafe extern "C" {
+    pub fn mjs_setToPID(
+        actuator: *mut mjsActuator,
+        kp: f64,
+        kv: *mut f64,
+        dampratio: *mut f64,
+        ki: *mut f64,
+        imax: *mut f64,
+        slewmax: *mut f64,
+        inheritrange: f64,
+        ctrlspec: ::std::os::raw::c_int,
+    ) -> *const ::std::os::raw::c_char;
+}
+unsafe extern "C" {
     pub fn mjs_setToDamper(actuator: *mut mjsActuator, kv: f64) -> *const ::std::os::raw::c_char;
 }
 unsafe extern "C" {
@@ -5686,7 +5886,7 @@ unsafe extern "C" {
         controller: *mut [f64; 6usize],
         thermal: *mut [f64; 6usize],
         lugre: *mut [f64; 5usize],
-        input_mode: ::std::os::raw::c_int,
+        ctrlspec: ::std::os::raw::c_int,
     ) -> *const ::std::os::raw::c_char;
 }
 unsafe extern "C" {

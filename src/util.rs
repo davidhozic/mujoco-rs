@@ -1,9 +1,14 @@
 //! Utility types and macros used throughout the crate.
 use std::{marker::PhantomData, ops::{Deref, DerefMut}};
 use std::sync::{Mutex, MutexGuard};
-use std::ffi::c_char;
+use std::ffi::{CString, c_char};
+use std::any::type_name;
 
 use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
+
+/// Helpers that only the generated sanitizer probes use.
+#[cfg(test)]
+pub(crate) mod testing;
 
 /// Standard size of temporary error buffers passed to MuJoCo C functions.
 /// MuJoCo NUL-terminates within this size, so the effective maximum
@@ -25,15 +30,24 @@ pub(crate) fn write_ascii_to_buf(buf: &mut [c_char], value: &str) {
     dest[bytes.len()..].fill(0);
 }
 
+/// Returns `msg` as a C string that escapes every `%`, so it is sound to pass as the format
+/// string of a `printf`-family C function (`mju_error`, `mju_warning`, `mju_info`).
+///
+/// # Panics
+/// Panics if `msg` contains interior `\0` characters.
+pub(crate) fn printf_safe_cstring(msg: &str) -> CString {
+    CString::new(msg.replace('%', "%%")).unwrap()
+}
+
 /// Returns `Some((start, len))` for item `id` inside a packed data array,
 /// or `None` if the item has no data (address entry is negative).
 ///
 /// Each entry in `addr_array` is either the item's start offset in the data array
-/// or a negative value (conventionally `-1`) meaning the item has no associated data.
+/// or `-1`, meaning the item has no associated data.
 ///
-/// The length is determined by scanning `addr_array[id + 1..]` for the first
-/// non-negative entry (the next item that *does* have data). If no such entry exists,
-/// the region extends to the end of the data array (`data_len`).
+/// The length is determined by scanning `addr_array[id + 1..]` for the first entry that is not
+/// `-1` (the next item that *does* have data). If no such entry exists, the region extends to the
+/// end of the data array (`data_len`).
 ///
 /// # Examples
 /// ```ignore
@@ -66,6 +80,33 @@ where
     Some((adr, len))
 }
 
+/// Converts a buffer length into the element count type `T` that MuJoCo takes.
+///
+/// # Panics
+/// Panics if `len` does not fit in `T`.
+pub(crate) fn checked_c_len<T: TryFrom<usize>>(len: usize) -> T {
+    T::try_from(len).unwrap_or_else(
+        |_| panic!("length {len} exceeds the MuJoCo {} element count", type_name::<T>())
+    )
+}
+
+
+/// Offsets a raw array pointer, keeping a null pointer null.
+///
+/// A plain `add` turns null into a dangling address, which defeats the empty-slice guard that
+/// every `PointerView` applies to a null pointer.
+///
+/// # Safety
+/// When `ptr` is not null, `ptr.add(offset)` must stay inside the same allocation.
+pub(crate) unsafe fn offset_or_null<T>(ptr: *mut T, offset: usize) -> *mut T {
+    if ptr.is_null() {
+        ptr
+    } else {
+        // SAFETY: the caller keeps the offset inside the allocation.
+        unsafe { ptr.add(offset) }
+    }
+}
+
 
 /// Sets or clears a bit flag based on a boolean value.
 ///
@@ -88,7 +129,10 @@ macro_rules! set_flag {
 }
 
 
-/// Returns the correct address mapping based on the X in nX (nq, nv, nu, ...).
+/// Resolves the `(start, len)` pair of the packed range that element `$id` owns; the `nX` token
+/// (`nq`, `nv`, `nu`, `nout`, `na`, `nsensordata`, ...) selects both the address array and the
+/// total length of the data array. Returns `(0, 0)` when the element's address entry is `-1`, and
+/// ends the range at the total length when no later element owns data.
 #[macro_export]
 #[doc(hidden)]
 macro_rules! mj_model_dyn_range {
@@ -115,6 +159,12 @@ macro_rules! mj_model_dyn_range {
     };
     ($model:expr, $id:expr, na) => {
         $crate::util::optional_sparse_addr_range($model.actuator_actadr(), $id, $model.na() as usize).unwrap_or((0, 0))
+    };
+    ($model:expr, $id:expr, nu) => {
+        $crate::util::optional_sparse_addr_range($model.actuator_ctrladr(), $id, $model.nu() as usize).unwrap_or((0, 0))
+    };
+    ($model:expr, $id:expr, nout) => {
+        $crate::util::optional_sparse_addr_range($model.actuator_outadr(), $id, $model.nout() as usize).unwrap_or((0, 0))
     };
     ($model:expr, $id:expr, nJten) => {
         $crate::util::optional_sparse_addr_range($model.ten_j_rowadr(), $id, $model.n_jten() as usize).unwrap_or((0, 0))
@@ -291,10 +341,13 @@ macro_rules! eval_or_expand {
 ///
 /// - `$field` list uses `$ptr_view` (read-write in `ViewMut`, read-only in `View`).
 /// - `$field_ro` list uses `$ptr_view_ro` (`PointerViewUnsafeMut` in `ViewMut`, `PointerView` in `View`).
-/// - `$opt_field` list uses `$ptr_view`, wrapped in `Option`.
+/// - `$opt_field` list uses `$ptr_view`, wrapped in `Option`; the field is `None` when the
+///   recorded length is zero.
 ///
 /// # Safety
-/// Caller must ensure the data pointers remain valid for the lifetime of the view.
+/// Caller must ensure the data pointers remain valid for the lifetime of the view, and that every
+/// `(offset, len)` pair in `$self` lies inside its array: the expansion offsets each pointer with
+/// `add(offset)`.
 #[macro_export]
 #[doc(hidden)]
 macro_rules! view_creator {
@@ -311,14 +364,14 @@ macro_rules! view_creator {
                 $view {
                     $(
                         $field: $ptr_view(
-                            $crate::maybe_force_cast!($data.[<$($prefix_field)? $field>].add($self.$field.0), $type_ $(, $force)?),
+                            $crate::maybe_force_cast!($crate::util::offset_or_null($data.[<$($prefix_field)? $field>], $self.$field.0), $type_ $(, $force)?),
                             $self.$field.1,
                             std::marker::PhantomData
                         ),
                     )*
                     $(
                         $field_ro: $ptr_view_ro(
-                            $crate::maybe_force_cast!($data.[<$($prefix_field_ro)? $field_ro>].add($self.$field_ro.0), $type_ro $(, $force_ro)?),
+                            $crate::maybe_force_cast!($crate::util::offset_or_null($data.[<$($prefix_field_ro)? $field_ro>], $self.$field_ro.0), $type_ro $(, $force_ro)?),
                             $self.$field_ro.1,
                             std::marker::PhantomData
                         ),
@@ -326,7 +379,7 @@ macro_rules! view_creator {
                     $(
                         $opt_field: if $self.$opt_field.1 > 0 {
                             Some($ptr_view(
-                                $crate::maybe_force_cast!($data.[<$($prefix_opt_field)? $opt_field>].add($self.$opt_field.0), $type_opt $(, $force_opt)?),
+                                $crate::maybe_force_cast!($crate::util::offset_or_null($data.[<$($prefix_opt_field)? $opt_field>], $self.$opt_field.0), $type_opt $(, $force_opt)?),
                                 $self.$opt_field.1,
                                 std::marker::PhantomData
                             ))
@@ -342,7 +395,8 @@ macro_rules! view_creator {
 
 
 /// Generates a lookup method `$type_(&self, name: &str) -> Option<Mj{Type}{InfoType}Info>` on
-/// a wrapper.
+/// a wrapper. The optional `[$model]` token names the accessor that reaches the model (`[model]`
+/// on `MjData`); omit it when `self` is the model.
 ///
 /// The returned `Info` struct stores the name, id, and index ranges needed to
 /// create views into the corresponding `MjData` or `MjModel` arrays.
@@ -353,10 +407,11 @@ macro_rules! view_creator {
 /// - **FFI stride** (with optional multiplier): `attr: ffi_field (* k)`: stride taken from
 ///   `model.ffi_field`, optionally scaled by `k`.
 /// - **Dynamic range**: `attr: nXXX (* k)`: start and length resolved via [`mj_model_dyn_range!`],
-///   where `nXXX` is the major-dimension field (e.g. `nhfielddata`, `ntexdata`).
+///   where `nXXX` is the total-length field of the packed data array (e.g. `nhfielddata`,
+///   `ntexdata`), which also selects the address array.
 ///   The optional `* k` is a stride multiplier: each logical unit occupies `k` flat elements,
 ///   so both the start offset and the length are scaled by `k`. Use this when the target array
-///   stores `k` flat values per logical unit (e.g. `dof_dampingpoly (nv × mjNPOLY)` viewed as
+///   stores `k` flat values per logical unit (e.g. `dof_dampingpoly (nv x mjNPOLY)` viewed as
 ///   a flat `MjtNum` slice: offset = `dof_start * mjNPOLY`, length = `n_dofs * mjNPOLY`).
 #[doc(hidden)]
 #[macro_export]
@@ -371,7 +426,8 @@ macro_rules! info_method {
         paste::paste! {
             #[doc = concat!(
                 "Returns a [`", stringify!([<Mj $type_:camel $info_type Info>]), "`] for the named ", stringify!($type_), ", ",
-                "containing the indices required to create views into [`Mj", stringify!($info_type), "`] arrays.\n\n",
+                "containing the indices required to create views into [`Mj", stringify!($info_type), "`] arrays, ",
+                "or `None` when the model holds no ", stringify!($type_), " with that name.\n\n",
                 "Call [`view`](", stringify!([<Mj $type_:camel $info_type Info>]), "::view) or ",
                 "[`try_view`](", stringify!([<Mj $type_:camel $info_type Info>]), "::try_view) on the result to obtain the actual view.\n\n",
                 "# Panics\n",
@@ -381,6 +437,7 @@ macro_rules! info_method {
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let model_ref = self$(.$model())?;
                 let id = model_ref.name_to_id(MjtObj::[<mjOBJ_ $type_:upper>], name)?;
+                #[allow(unused)]
                 let model_ffi = model_ref.ffi();
 
                 let id = id as usize;
@@ -400,8 +457,8 @@ macro_rules! info_method {
                     };
                 )*
 
-                let model_signature = model_ffi.signature;
-                Some([<Mj $type_:camel $info_type Info>] { name: name.to_string(), id, model_signature, $($attr,)* $($attr_ffi,)* $($attr_dyn),* })
+                let model_layout = model_ref.layout().clone();
+                Some([<Mj $type_:camel $info_type Info>] { name: name.to_string(), id, model_layout, $($attr,)* $($attr_ffi,)* $($attr_dyn),* })
             }
         }
     }
@@ -409,13 +466,16 @@ macro_rules! info_method {
 
 
 /// Generates `Info`, `ViewMut`, and `View` types for a named MuJoCo object, along with
-/// `view`, `try_view`, `view_mut`, and `try_view_mut` methods on the `Info` type.
+/// `view`, `try_view`, `view_mut`, `try_view_mut` and `model_signature` on the `Info` type and
+/// `zero` on `ViewMut`. A trailing `, Generic: Bound` (`M: ModelType`) is required
+/// when the target wrapper is generic, as `MjData<M>` is.
 ///
 /// # Field lists
 ///
 /// - **`[rw fields]`**: read-write: `PointerViewMut` in `ViewMut`, `PointerView` in `View`.
 /// - **`[ro fields]`**: read as `PointerViewUnsafeMut` in `ViewMut` (unsafe to mutate), `PointerView` in `View`.
-/// - **`[opt fields]`**: optional read-write: `Option<PointerViewMut>` / `Option<PointerView>`.
+/// - **`[opt fields]`**: optional read-write: `Option<PointerViewMut>` / `Option<PointerView>`;
+///   `None` when the element owns no entries in that array (a stateless actuator's `act`, say).
 ///
 /// # Field entry syntax
 ///
@@ -445,7 +505,7 @@ macro_rules! info_with_view {
                 pub name: String,
                 /// Index of the element.
                 pub id: usize,
-                model_signature: u64,
+                model_layout: std::sync::Arc<$crate::wrappers::mj_model::MjModelLayout>,
                 $(
                     $attr: (usize, usize),
                 )*
@@ -460,7 +520,28 @@ macro_rules! info_with_view {
             impl [<Mj $name:camel $info_type Info>] {
                 /// Returns the model signature this `Info` was created from.
                 pub fn model_signature(&self) -> u64 {
-                    self.model_signature
+                    self.model_layout.signature()
+                }
+
+                #[doc = concat!(
+                    "Re-points this `Info` at the layout of `", stringify!([<$info_type:lower>]), "`.\n\n",
+                    "A compatible model holds the same index ranges, so the cached ranges stay correct and only ",
+                    "the layout handle changes. Every later view test against that same [`Mj", stringify!($info_type), "`] ",
+                    "is a pointer comparison again.\n\n",
+                    "# Errors\n",
+                    "Returns [`IncompatibleModel`](", stringify!([<Mj $info_type Error>]), "::IncompatibleModel) if `",
+                    stringify!([<$info_type:lower>]), "` was built from a model that is not compatible with this `Info`'s model."
+                )]
+                pub fn update_layout$(<$generics: $bound>)?(&mut self, [<$info_type:lower>]: &[<Mj $info_type>]$(<$generics>)?) -> Result<(), $crate::error::[<Mj $info_type Error>]> {
+                    let destination_layout = [<$info_type:lower>].layout();
+                    if self.model_layout != *destination_layout {
+                        return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
+                            source: self.model_layout.signature(),
+                            destination: destination_layout.signature(),
+                        });
+                    }
+                    self.model_layout = std::sync::Arc::clone(destination_layout);
+                    Ok(())
                 }
 
                 #[doc = concat!(
@@ -468,15 +549,19 @@ macro_rules! info_with_view {
                     "Fields listed as read-only use [`PointerViewUnsafeMut`](crate::util::PointerViewUnsafeMut): ",
                     "read is safe, mutation requires [`as_mut_slice`](crate::util::PointerViewUnsafeMut::as_mut_slice) and `unsafe`.\n\n",
                     "# Errors\n",
-                    "Returns [`SignatureMismatch`](", stringify!([<Mj $info_type Error>]), "::SignatureMismatch) if `",
-                    stringify!($info_type), "` was built from a different model than this `Info`."
+                    "Returns [`IncompatibleModel`](", stringify!([<Mj $info_type Error>]), "::IncompatibleModel) if `",
+                    stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model.",
+                    "\n\n# Note\n",
+                    "Every call tests the model layout. While this `Info` and the given [`Mj", stringify!($info_type), "`] ",
+                    "name the same model, that test is a pointer comparison; otherwise it compares the whole layout ",
+                    "snapshot. Call `update_layout` after a model swap to restore the pointer comparison."
                 )]
                 pub fn try_view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> Result<[<Mj $name:camel $info_type ViewMut>]<'p>, $crate::error::[<Mj $info_type Error>]> {
-                    let destination_signature = [<$info_type:lower>].signature();
-                    if self.model_signature != destination_signature {
-                        return Err($crate::error::[<Mj $info_type Error>]::SignatureMismatch {
-                            source: self.model_signature,
-                            destination: destination_signature,
+                    let destination_layout = [<$info_type:lower>].layout();
+                    if self.model_layout != *destination_layout {
+                        return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
+                            source: self.model_layout.signature(),
+                            destination: destination_layout.signature(),
                         });
                     }
                     Ok(view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(),
@@ -492,25 +577,33 @@ macro_rules! info_with_view {
                     "Fields listed as read-only use [`PointerViewUnsafeMut`](crate::util::PointerViewUnsafeMut): ",
                     "read is safe, mutation requires [`as_mut_slice`](crate::util::PointerViewUnsafeMut::as_mut_slice) and `unsafe`.\n\n",
                     "# Panics\n",
-                    "Panics if `", stringify!($info_type), "` was built from a different model than this `Info`. ",
-                    "Use [`try_view_mut`](Self::try_view_mut) to handle this as a `Result`."
+                    "Panics if `", stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model. ",
+                    "Use [`try_view_mut`](Self::try_view_mut) to handle this as a `Result`.",
+                    "\n\n# Note\n",
+                    "Every call tests the model layout. While this `Info` and the given [`Mj", stringify!($info_type), "`] ",
+                    "name the same model, that test is a pointer comparison; otherwise it compares the whole layout ",
+                    "snapshot. Call `update_layout` after a model swap to restore the pointer comparison."
                 )]
                 pub fn view_mut<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p mut [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type ViewMut>]<'p> {
-                    self.try_view_mut([<$info_type:lower>]).unwrap_or_else(|_| panic!("model signature mismatch"))
+                    self.try_view_mut([<$info_type:lower>]).unwrap_or_else(|_| panic!("the model is not compatible"))
                 }
 
                 #[doc = concat!(
                     "Returns an immutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
                     "# Errors\n",
-                    "Returns [`SignatureMismatch`](", stringify!([<Mj $info_type Error>]), "::SignatureMismatch) if `",
-                    stringify!($info_type), "` was built from a different model than this `Info`."
+                    "Returns [`IncompatibleModel`](", stringify!([<Mj $info_type Error>]), "::IncompatibleModel) if `",
+                    stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model.",
+                    "\n\n# Note\n",
+                    "Every call tests the model layout. While this `Info` and the given [`Mj", stringify!($info_type), "`] ",
+                    "name the same model, that test is a pointer comparison; otherwise it compares the whole layout ",
+                    "snapshot. Call `update_layout` after a model swap to restore the pointer comparison."
                 )]
                 pub fn try_view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> Result<[<Mj $name:camel $info_type View>]<'p>, $crate::error::[<Mj $info_type Error>]> {
-                    let destination_signature = [<$info_type:lower>].signature();
-                    if self.model_signature != destination_signature {
-                        return Err($crate::error::[<Mj $info_type Error>]::SignatureMismatch {
-                            source: self.model_signature,
-                            destination: destination_signature,
+                    let destination_layout = [<$info_type:lower>].layout();
+                    if self.model_layout != *destination_layout {
+                        return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
+                            source: self.model_layout.signature(),
+                            destination: destination_layout.signature(),
                         });
                     }
                     Ok(view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(),
@@ -524,11 +617,15 @@ macro_rules! info_with_view {
                 #[doc = concat!(
                     "Returns an immutable view into the [`Mj", stringify!($info_type), "`] arrays for this ", stringify!($name), ".\n\n",
                     "# Panics\n",
-                    "Panics if `", stringify!($info_type), "` was built from a different model than this `Info`. ",
-                    "Use [`try_view`](Self::try_view) to handle this as a `Result`."
+                    "Panics if `", stringify!($info_type), "` was built from a model that is not compatible with this `Info`'s model. ",
+                    "Use [`try_view`](Self::try_view) to handle this as a `Result`.",
+                    "\n\n# Note\n",
+                    "Every call tests the model layout. While this `Info` and the given [`Mj", stringify!($info_type), "`] ",
+                    "name the same model, that test is a pointer comparison; otherwise it compares the whole layout ",
+                    "snapshot. Call `update_layout` after a model swap to restore the pointer comparison."
                 )]
                 pub fn view<'p $(, $generics: $bound)?>(&self, [<$info_type:lower>]: &'p [<Mj $info_type>]$(<$generics>)?) -> [<Mj $name:camel $info_type View>]<'p> {
-                    self.try_view([<$info_type:lower>]).unwrap_or_else(|_| panic!("model signature mismatch"))
+                    self.try_view([<$info_type:lower>]).unwrap_or_else(|_| panic!("the model is not compatible"))
                 }
             }
 
@@ -548,7 +645,7 @@ macro_rules! info_with_view {
                     pub $attr_ro: $crate::util::PointerViewUnsafeMut<'d, $type_ro>,
                 )*
                 $(
-                    #[doc = concat!("Optional mutable view of `", stringify!($opt_attr), "`.")]
+                    #[doc = concat!("Optional mutable view of `", stringify!($opt_attr), "`. `None` when this element owns no entries in the array.")]
                     pub $opt_attr: Option<$crate::util::PointerViewMut<'d, $type_opt>>,
                 )*
             }
@@ -580,7 +677,7 @@ macro_rules! info_with_view {
                     pub $attr_ro: $crate::util::PointerView<'d, $type_ro>,
                 )*
                 $(
-                    #[doc = concat!("Optional view of `", stringify!($opt_attr), "`.")]
+                    #[doc = concat!("Optional view of `", stringify!($opt_attr), "`. `None` when this element owns no entries in the array.")]
                     pub $opt_attr: Option<$crate::util::PointerView<'d, $type_opt>>,
                 )*
             }
@@ -592,7 +689,7 @@ macro_rules! info_with_view {
 ///
 /// ## Optional value constraints
 ///
-/// Every arm that writes a value (`set`, `with`, `[&] with`, their `force!` variants, and the
+/// Every arm that writes a value (`set`, `with`, `[&] with`, their `[force]` cast variants, and the
 /// `get, set` / `with, get, set` / `with, get` aggregates) accepts an **optional per-field check**
 /// for fields whose value can be invalid. Bool arms have no check (a bool is always in range).
 ///
@@ -613,7 +710,7 @@ macro_rules! info_with_view {
 ///
 /// The `"comment"` describes the field itself and is shared verbatim by the getter, setter, and
 /// builder; the getter never gets an `# Errors`/`# Panics` section, so do **not** hand-write
-/// error/panic notes into `"comment"` — put them in the check `"reason"` instead.
+/// error/panic notes into `"comment"`; put them in the check `"reason"` instead.
 ///
 /// Omitting the check yields the plain infallible setter/builder.
 #[doc(hidden)]
@@ -753,6 +850,34 @@ macro_rules! builder_setters {
     };
 }
 
+/// Helper macro that routes one probe touch to the safe probe or to the unsafe probe.
+///
+/// The first argument names the probe being generated, the second is the accessor's optional
+/// `unsafe` prefix. A touch lands in exactly one of the two probes, so together they cover every
+/// accessor of the block exactly once.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! probe_touch {
+    (safe; ; $call:expr) => { $call };
+    (safe; unsafe; $call:expr) => {};
+    (unsafe; ; $call:expr) => {};
+    (unsafe; unsafe; $call:expr) => { unsafe { $call } };
+}
+
+/// Helper macro for conditionally generating `# Safety` docs on immutable array slice methods.
+/// When `unsafe` is passed (method is unsafe), includes the uninitialized-arena safety section.
+/// When no `unsafe` is passed (method is safe), only generates the basic doc.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! array_read_doc {
+    (unsafe, $doc:literal) => {
+        concat!("Immutable slice of the ", $doc, " array.\n\n# Safety\n\nMuJoCo allocates this array in the `mjData` arena and never zeroes it. The caller must ensure that the pipeline stage which computes the array has run for the current state, for example through [`MjData::forward`](crate::wrappers::mj_data::MjData::forward) or [`MjData::step`](crate::wrappers::mj_data::MjData::step). A read before that stage reads uninitialized memory.")
+    };
+    ($doc:literal) => {
+        concat!("Immutable slice of the ", $doc, " array.")
+    };
+}
+
 /// Helper macro for conditionally generating `# Safety` docs on mutable array slice methods.
 /// When `unsafe` is passed (method is unsafe), includes the safety section.
 /// When no `unsafe` is passed (method is safe), only generates the basic doc.
@@ -781,16 +906,75 @@ macro_rules! array_mut_doc {
 ///         ],
 ///         ...
 ///     }
+/// Syntax for arrays whose second dimension is itself a variable:
+///     sublen_dep {
+///         attribute: &[[datatype; code to access the inner length]; documentation;
+///                      code to access the outer length]
+///     }
+/// The accessor generated by `sublen_dep` returns a flat slice of `outer * inner` elements.
+///
+/// Two optional prefixes restrict how an attribute may be reached:
+///   `(mut = unsafe)`  the `_mut` accessor is unsafe; C reads the values as unguarded indices.
+///   `(read = unsafe)` both accessors are unsafe; MuJoCo allocates the array in the never-zeroed
+///                     arena, so a read before its computing stage reads uninitialized memory.
 ///
 #[doc(hidden)]
 #[macro_export]
 macro_rules! array_slice_dyn {
     // Arrays that are of scalar variable size
-    ($($((mut = $unsafe_mut:ident))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
+    // Opt-in sanitizer probe: the accessors, then the two methods that touch every one of them.
+    (probe = $probe:ident; $($rest:tt)*) => {
+        $crate::array_slice_dyn!($($rest)*);
+        $crate::array_slice_dyn!(@probe safe, $probe, $($rest)*);
+        $crate::array_slice_dyn!(@probe unsafe, $probe, $($rest)*);
+    };
+
+    // The safe probe. Mirrors the field grammar of the scalar arm below.
+    (@probe safe, $probe:ident, $($((mut = $unsafe_mut:ident))? $((read = $unsafe_read:ident))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
+        paste::paste! {
+            /// Touches the first and last element of every slice this block reaches through a safe
+            /// accessor, on the read path and, where the setter is also safe, on the write path.
+            ///
+            /// Each write restores the value it read, so no field changes. Call this on a freshly
+            /// built value, before any pipeline stage runs.
+            #[cfg(test)]
+            pub(crate) fn $probe(&mut self) {
+                $(
+                    $crate::probe_touch!(safe; $($unsafe_read)?;
+                        $crate::util::testing::touch_slice_ends(&self.[<$name:camel:snake>]()));
+                    $crate::probe_touch!(safe; $($unsafe_read)? $($unsafe_mut)?;
+                        $crate::util::testing::touch_slice_ends_mut(self.[<$name:camel:snake _mut>]()));
+                )*
+            }
+        }
+    };
+
+    // The unsafe probe. Covers exactly the accessors the safe probe leaves out.
+    (@probe unsafe, $probe:ident, $($((mut = $unsafe_mut:ident))? $((read = $unsafe_read:ident))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
+        paste::paste! {
+            /// The counterpart of the safe probe, over the accessors this block marks
+            /// `(read = unsafe)` or `(mut = unsafe)`.
+            ///
+            /// # Safety
+            /// Every `(read = unsafe)` accessor of this block requires the pipeline stage that
+            /// computes its array to have run for the current state.
+            #[cfg(test)]
+            pub(crate) unsafe fn [<$probe _unsafe>](&mut self) {
+                $(
+                    $crate::probe_touch!(unsafe; $($unsafe_read)?;
+                        $crate::util::testing::touch_slice_ends(&self.[<$name:camel:snake>]()));
+                    $crate::probe_touch!(unsafe; $($unsafe_read)? $($unsafe_mut)?;
+                        $crate::util::testing::touch_slice_ends_mut(self.[<$name:camel:snake _mut>]()));
+                )*
+            }
+        }
+    };
+
+    ($($((mut = $unsafe_mut:ident))? $((read = $unsafe_read:ident))? $name:ident: $($as_ptr:ident $as_mut_ptr:ident)? &[$type:ty $([$force:ident])?; $doc:literal; $($len_accessor:tt)*]),*) => {
         paste::paste! {
             $(
-                #[doc = concat!("Immutable slice of the ", $doc," array.")]
-                pub fn [<$name:camel:snake>](&self) -> &[$type] {
+                #[doc = $crate::array_read_doc!($($unsafe_read,)? $doc)]
+                pub $($unsafe_read)? fn [<$name:camel:snake>](&self) -> &[$type] {
                     let length = self.$($len_accessor)* as usize;
                     let ptr = $crate::maybe_force_cast!(self.ffi().$name$(.$as_ptr())?, $type $(, $force)?);
                     if ptr.is_null() || length == 0 {
@@ -799,8 +983,8 @@ macro_rules! array_slice_dyn {
                     unsafe { std::slice::from_raw_parts(ptr, length) }
                 }
 
-                #[doc = $crate::array_mut_doc!($($unsafe_mut,)? $doc)]
-                pub $($unsafe_mut)? fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
+                #[doc = $crate::array_mut_doc!($($unsafe_read,)? $($unsafe_mut,)? $doc)]
+                pub $($unsafe_read)? $($unsafe_mut)? fn [<$name:camel:snake _mut>](&mut self) -> &mut [$type] {
                     let length = self.$($len_accessor)* as usize;
                     let ptr = $crate::maybe_force_cast!(unsafe { self.ffi_mut().$name$(.$as_mut_ptr())? }, $type $(, $force)?);
                     if ptr.is_null() || length == 0 {
@@ -892,14 +1076,19 @@ macro_rules! array_slice_dyn {
 
 /// Generates getter and setter methods for converting between Rust's &str type and C's char arrays.
 ///
-/// # Safety
-/// The generated getters blindly interpret a `char` array as a C string; the
-/// array must be NUL-terminated and contain valid UTF-8. Setters validate
-/// ASCII encoding and will **panic** if the value exceeds the buffer length.
-/// The macro works by first specifying the methods to create (get = getter, set = setter) --- c_str_as_str_method {get, set, {...}} ---
-/// and then providing the rest of the parameters.
-/// 
-/// The rest of the parameters are recursive and are as follows:
+/// The first tokens select the methods to create (`get` = getter, `set` = setter, `with` =
+/// builder) in one of the accepted orders (`get`, `set`, `with`, `get, set`, `with, set`,
+/// `with, get`, `with, get, set`), followed directly by the parameter group, with no comma in
+/// between:
+/// `c_str_as_str_method! {with, get, set { ... }}`.
+///
+/// # Panics
+/// The generated getters panic if the `char` buffer holds no NUL terminator, or if the bytes
+/// before it are not valid UTF-8. The generated setters and builders panic if the value is not
+/// ASCII, holds an interior NUL byte, or does not fit in the buffer. A generated method that
+/// takes a sub-index panics if that index is out of range.
+///
+/// The parameters are recursive and are as follows:
 /// - ffi (optional): name of the method that returns some lower-level struct,
 ///                   which contains the actual attributes we want to read;
 /// - name: the attribute name;
@@ -913,7 +1102,7 @@ macro_rules! array_slice_dyn {
 macro_rules! c_str_as_str_method {
     (get {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {
         $(
-            #[doc = concat!("Returns ", $comment, "\n\n# Panics", "\nPanics if the buffer has no NUL terminator or if the resulting string contains invalid UTF-8.")]
+            #[doc = concat!("Returns ", $comment, "\n\n# Panics", "\nPanics if the buffer has no NUL terminator or if the resulting string contains invalid UTF-8.", $("\nPanics if `", stringify!($sub_index_name), "` is out of range.",)?)]
             pub fn $name(&self $(, $sub_index_name: $sub_index_type)? ) -> &str {
                 let bytes: &[u8] = bytemuck::cast_slice(&self$(.$ffi())?.$name$([$sub_index_name])?[..]);
                 std::ffi::CStr::from_bytes_until_nul(bytes)
@@ -925,7 +1114,7 @@ macro_rules! c_str_as_str_method {
 
     (set {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {paste::paste!{
         $(
-            #[doc = concat!("Sets ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII, an interior NUL byte, or is too long.")]
+            #[doc = concat!("Sets ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII, an interior NUL byte, or is too long.", $("\nPanics if `", stringify!($sub_index_name), "` is out of range.",)?)]
             pub fn [<set_ $name>](&mut self, $($sub_index_name: $sub_index_type,)? $name: &str) {
                 $crate::util::write_ascii_to_buf(
                     &mut self$(.$ffi())?.$name$([$sub_index_name])?,
@@ -937,7 +1126,7 @@ macro_rules! c_str_as_str_method {
 
     (with {$($([$ffi:ident])? $name:ident $([$sub_index_name:ident: $sub_index_type:ty])?; $comment:literal; )*}) => {paste::paste!{
         $(
-            #[doc = concat!("Builder method for setting ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII, an interior NUL byte, or is too long.")]
+            #[doc = concat!("Builder method for setting ", $comment, "\n\n# Panics", "\nPanics when `", stringify!($name), "` contains invalid ASCII, an interior NUL byte, or is too long.", $("\nPanics if `", stringify!($sub_index_name), "` is out of range.",)?)]
             pub fn [<with_ $name>](mut self, $($sub_index_name: $sub_index_type,)? $name: &str) -> Self {
                 $crate::util::write_ascii_to_buf(
                     &mut self$(.$ffi())?.$name$([$sub_index_name])?,
@@ -1145,7 +1334,21 @@ impl<T: Copy + PartialEq> ThreeWayMerge for T {
 mod tests {
     use std::sync::{Arc, Mutex};
     use std::ffi::c_char;
-    use super::LockUnpoison;
+    use super::{LockUnpoison, checked_c_len};
+
+    #[test]
+    fn test_checked_c_len_accepts_the_boundary() {
+        // The C count is a signed int, so i32::MAX itself is still exact.
+        assert_eq!(checked_c_len::<i32>(i32::MAX as usize), i32::MAX);
+        // A wider count type must accept what the narrower one rejects.
+        assert_eq!(checked_c_len::<i64>(i32::MAX as usize + 1), i32::MAX as i64 + 1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_checked_c_len_rejects_above_the_boundary() {
+        checked_c_len::<i32>(i32::MAX as usize + 1);
+    }
 
     /// Verifies that `lock_unpoison` recovers a poisoned mutex and preserves the inner value.
     #[test]

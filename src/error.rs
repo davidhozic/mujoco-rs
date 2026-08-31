@@ -26,13 +26,13 @@ pub enum MjDataError {
     },
     /// The provided MuJoCo object type is not supported by this operation.
     ///
-    /// Contains the raw MuJoCo C object-type code (`mjOBJ_*`) that was not recognized.
+    /// Contains the raw MuJoCo C object-type code (`mjOBJ_*`).
     UnsupportedObjectType(i32),
     /// MuJoCo failed to allocate the requested structure.
     AllocationFailed,
     /// A buffer passed to the operation is too small for the required data.
     BufferTooSmall {
-        /// Descriptive name of the buffer (e.g. `"destination"`, `"rgb"`).
+        /// Descriptive name of the buffer (e.g. `"destination"`, `"state"`).
         name: &'static str,
         /// Actual length of the buffer that was provided.
         got: usize,
@@ -48,11 +48,11 @@ pub enum MjDataError {
         /// Actual length that was provided.
         got: usize,
     },
-    /// Two model-signature-bound objects were created from different models.
+    /// Two model-bound objects were created from models that are not compatible.
     ///
-    /// This is returned by APIs that require matching model signatures,
+    /// This is returned by APIs that require a matching model memory layout,
     /// including data-copy operations and info-view accessors.
-    SignatureMismatch {
+    IncompatibleModel {
         /// Model signature of the source object.
         source: u64,
         /// Model signature of the destination object.
@@ -64,6 +64,18 @@ pub enum MjDataError {
         kind: &'static str,
         /// The zero-based index of the actuator or sensor.
         id: usize,
+    },
+    /// A history buffer cursor in the written state is outside its valid range.
+    ///
+    /// [`MjData::set_state`](crate::wrappers::MjData::set_state) rejects the write and leaves
+    /// the history buffer unchanged.
+    InvalidHistoryCursor {
+        /// `"actuator"` or `"sensor"`.
+        kind: &'static str,
+        /// The zero-based index of the actuator or sensor.
+        id: usize,
+        /// Number of samples in that history buffer; a valid cursor lies in `0..nsample`.
+        nsample: usize,
     },
     /// The contact buffer is full; no more contacts can be added.
     ContactBufferFull,
@@ -90,11 +102,11 @@ impl fmt::Display for MjDataError {
                      but need at least {needed}"
                 )
             }
-            Self::SignatureMismatch { source, destination } => {
+            Self::IncompatibleModel { source, destination } => {
                 write!(
                     f,
-                    "model signature mismatch: source {source:#X}, \
-                     destination {destination:#X}"
+                    "incompatible model: source signature {source:#X}, \
+                     destination signature {destination:#X}"
                 )
             }
             Self::LengthMismatch { name, expected, got } => {
@@ -105,6 +117,9 @@ impl fmt::Display for MjDataError {
             }
             Self::NoHistoryBuffer { kind, id } => {
                 write!(f, "{kind} {id} has no history buffer")
+            }
+            Self::InvalidHistoryCursor { kind, id, nsample } => {
+                write!(f, "{kind} {id} history cursor is out of bounds [0, {nsample})")
             }
             Self::ContactBufferFull => {
                 write!(f, "contact buffer is full")
@@ -280,13 +295,14 @@ impl std::error::Error for MjrContextError {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MjEditError {
-    /// MuJoCo failed to allocate the requested model element.
+    /// MuJoCo failed to allocate the requested spec or model element.
     AllocationFailed,
     /// A filesystem path argument contains invalid UTF-8.
     InvalidUtf8Path,
     /// MuJoCo failed to parse the XML (or other format) input.
     ParseFailed(String),
-    /// MuJoCo failed to compile the spec into a model.
+    /// Compiling the spec into a model failed. Carries MuJoCo's error message, or the reason the
+    /// wrapper rejected the spec before the compile step.
     CompileFailed(String),
     /// MuJoCo failed to save the spec to XML.
     SaveFailed(String),
@@ -296,7 +312,8 @@ pub enum MjEditError {
     AlreadyExists,
     /// This operation is not supported for the current element.
     UnsupportedOperation,
-    /// MuJoCo returned an error while attempting to delete the element.
+    /// Deleting the element failed. Carries MuJoCo's error message, or the reason the wrapper
+    /// rejected the element.
     DeleteFailed(String),
     /// The output buffer passed to [`MjSpec::save_xml_string`](crate::wrappers::mj_editing::MjSpec::save_xml_string)
     /// was too small to hold the XML.
@@ -323,7 +340,7 @@ pub enum MjEditError {
 impl fmt::Display for MjEditError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::AllocationFailed => write!(f, "MuJoCo failed to allocate the model element"),
+            Self::AllocationFailed => write!(f, "MuJoCo failed to allocate the spec or model element"),
             Self::InvalidUtf8Path => write!(f, "path contains invalid UTF-8"),
             Self::ParseFailed(msg) => write!(f, "parse failed: {msg}"),
             Self::CompileFailed(msg) => write!(f, "compilation failed: {msg}"),
@@ -377,8 +394,8 @@ pub enum MjModelError {
         /// Actual number of elements available.
         available: usize,
     },
-    /// Two model-signature-bound objects were created from different models.
-    SignatureMismatch {
+    /// Two model-bound objects were created from models that are not compatible.
+    IncompatibleModel {
         /// Model signature of the source object.
         source: u64,
         /// Model signature of the destination object.
@@ -415,11 +432,11 @@ impl fmt::Display for MjModelError {
                      but need at least {needed}"
                 )
             }
-            Self::SignatureMismatch { source, destination } => {
+            Self::IncompatibleModel { source, destination } => {
                 write!(
                     f,
-                    "model signature mismatch: source {source:#X}, \
-                     destination {destination:#X}"
+                    "incompatible model: source signature {source:#X}, \
+                     destination signature {destination:#X}"
                 )
             }
             Self::VfsError(e) => write!(f, "VFS error: {e}"),
@@ -451,11 +468,11 @@ impl From<MjVfsError> for MjModelError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MjVfsError {
-    /// A file or mount with the same name already exists.
+    /// A file with the same name already exists in the VFS.
     AlreadyExists,
     /// MuJoCo failed to load the file or register the buffer.
     LoadFailed,
-    /// The specified file or directory was not found in the VFS.
+    /// The specified file was not found in the VFS.
     NotFound,
     /// The provided path contains invalid UTF-8.
     InvalidUtf8Path,
@@ -511,7 +528,8 @@ impl std::error::Error for MjPluginError {}
 pub enum GlInitError {
     /// The windowing / display builder failed to initialize.
     DisplayBuild(String),
-    /// The display builder succeeded but did not produce a window.
+    /// No window was produced: the display builder returned no window, or the event loop never
+    /// resumed.
     NoWindow,
     /// Failed to obtain the native window handle.
     WindowHandle(String),

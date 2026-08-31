@@ -21,7 +21,18 @@ use std::path::Path;
 ///
 /// Returns [`MjSceneError::SceneFull`] if the combined geom count would
 /// exceed the destination scene's `maxgeom` capacity.
+///
+/// # Panics
+/// Panics if `src` and `dst` were created for models that are not compatible
+/// (see [`MjvScene::is_compatible_with_scene`]).
 pub fn sync_geoms(src: &MjvScene, dst: &mut MjvScene) -> Result<(), MjSceneError> {
+    // A copied mjvGeom keeps its objid, which the renderer uses as an unchecked index into the
+    // DESTINATION scene's flex and skin arrays, sized by the model that scene was built for.
+    assert!(
+        src.is_compatible_with_scene(dst),
+        "the two scenes were created for models that are not compatible"
+    );
+
     let ffi_src = src.ffi();
     let ffi_dst = unsafe { dst.ffi_mut() };
 
@@ -108,7 +119,7 @@ pub fn flip_image_vertically<T>(buffer: &mut [T], height: usize, row_len: usize)
 /// * `height`      - Image height in pixels.
 /// * `color_type`  - PNG colour model (e.g., `png::ColorType::Rgb`).
 /// * `bit_depth`   - Bits per channel (e.g., `png::BitDepth::Eight`).
-/// * `compression` - PNG compression level (e.g., `png::Compression::Default`).
+/// * `compression` - PNG compression level (e.g., `png::Compression::Balanced`).
 ///
 /// # Errors
 ///
@@ -137,4 +148,36 @@ pub fn write_png<P: AsRef<Path>>(
         .write_image_data(data)
         .map_err(io::Error::other)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wrappers::mj_model::{MjModel, MjtGeom};
+
+    /// A copied geom keeps its `objid`, which the renderer uses as an unchecked index into the
+    /// destination scene's flex and skin arrays, so the two scenes must belong to one model.
+    #[test]
+    #[should_panic(expected = "models that are not compatible")]
+    fn test_sync_geoms_cross_model_panics() {
+        let with_flex = MjModel::from_xml_string(
+            "<mujoco><worldbody>\
+<body name=\"v0\"><freejoint/><geom size=\"0.01\"/></body>\
+<body name=\"v1\" pos=\"0.1 0 0\"><freejoint/><geom size=\"0.01\"/></body>\
+</worldbody><deformable>\
+<flex name=\"f\" dim=\"1\" body=\"v0 v1\" vertex=\"0 0 0 0 0 0\" element=\"0 1\"/>\
+</deformable></mujoco>").unwrap();
+        let without_flex = MjModel::from_xml_string(
+            "<mujoco><worldbody>\
+<body name=\"v0\"><freejoint/><geom size=\"0.01\"/></body>\
+<body name=\"v1\" pos=\"0.1 0 0\"><freejoint/><geom size=\"0.01\"/></body>\
+</worldbody></mujoco>").unwrap();
+
+        let mut source = MjvScene::new(&with_flex, 8);
+        let mut destination = MjvScene::new(&without_flex, 8);
+        // SAFETY: the test never writes a material, texture or object id.
+        unsafe { source.create_geom(MjtGeom::mjGEOM_SPHERE, None, None, None, None) };
+
+        let _ = sync_geoms(&source, &mut destination);
+    }
 }

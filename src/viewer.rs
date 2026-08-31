@@ -4,8 +4,8 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
-use std::ops::{Deref, DerefMut};
 use std::collections::BTreeSet;
+use std::ops::DerefMut;
 use std::num::NonZero;
 use std::error::Error;
 use std::fmt::Display;
@@ -16,6 +16,7 @@ use winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDe
 use winit::platform::pump_events::EventLoopExtPumpEvents;
 use glutin::prelude::PossiblyCurrentGlContext;
 use winit::keyboard::{KeyCode, PhysicalKey};
+use log::{debug, error, info, warn};
 use winit::event_loop::EventLoop;
 use winit::dpi::PhysicalPosition;
 use glutin::surface::GlSurface;
@@ -29,6 +30,7 @@ use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::winit_gl_base::{RenderBaseGlState, RenderBase};
 use crate::wrappers::mj_primitive::{MjtNum, MjtSize};
 use crate::wrappers::mj_data::{MjData, MjtState};
+use crate::wrappers::mj_model::traits::ModelType;
 use crate::{builder_setters, mujoco_version};
 use crate::wrappers::mj_option::MjOption;
 use crate::wrappers::mj_visualization::*;
@@ -135,7 +137,7 @@ pub enum MjViewerError {
     ContextError(crate::error::MjrContextError),
     /// The model's structure signature does not match the viewer's passive model.
     /// Call [`ViewerSharedState::sync_model`] or [`ViewerSharedState::sync_data`] first.
-    SignatureMismatch,
+    IncompatibleModel,
     /// The asset ID is out of range.
     IndexOutOfBounds {
         /// The ID that was supplied.
@@ -155,7 +157,7 @@ impl Display for MjViewerError {
             Self::GlInitFailed(e) => write!(f, "GL initialization failed: {e}"),
             Self::SceneError(e) => write!(f, "scene error: {e}"),
             Self::ContextError(e) => write!(f, "rendering context error: {e}"),
-            Self::SignatureMismatch => write!(f, "model signature mismatch: call sync_model / sync_data first"),
+            Self::IncompatibleModel => write!(f, "the model is not compatible with the passive model: call sync_model / sync_data first"),
             Self::IndexOutOfBounds { id, len } => write!(f, "asset id {id} is out of range [0, {len})"),
         }
     }
@@ -171,7 +173,7 @@ impl Error for MjViewerError {
             Self::GlInitFailed(e) => Some(e),
             Self::SceneError(e) => Some(e),
             Self::ContextError(e) => Some(e),
-            Self::SignatureMismatch | Self::IndexOutOfBounds { .. } => None,
+            Self::IncompatibleModel | Self::IndexOutOfBounds { .. } => None,
         }
     }
 }
@@ -246,10 +248,14 @@ pub struct ViewerSharedState {
     texture_reupload_pending: BTreeSet<usize>,
     mesh_reupload_pending: BTreeSet<usize>,
     hfield_reupload_pending: BTreeSet<usize>,
+
+    /// Used to skip processing until a new scene has been created inside [`MjViewer::update_scene`].
+    /// The latter method clears this dirty flag.
+    model_reloaded: bool,
 }
 
 impl ViewerSharedState {
-    fn new<M: Deref<Target = MjModel>>(model: M, max_user_geom: usize) -> Self {
+    fn new<M: ModelType>(model: M, max_user_geom: usize) -> Self {
         // Empty values to avoid unnecessary double creation
         let empty: Box<[MjtNum]> = vec![].into_boxed_slice();
         let empty_model = Box::new(MjSpec::new().compile().unwrap());
@@ -277,9 +283,13 @@ impl ViewerSharedState {
             texture_reupload_pending: BTreeSet::new(),
             mesh_reupload_pending: BTreeSet::new(),
             hfield_reupload_pending: BTreeSet::new(),
+            model_reloaded: false,
         };
 
         shared_state.reload_model(&model, max_user_geom);
+        // The caller builds its scene, render context, camera and UI caches from the same model,
+        // so the first frame has nothing to rebuild.
+        shared_state.model_reloaded = false;
         shared_state
     }
 
@@ -287,22 +297,35 @@ impl ViewerSharedState {
     /// Called on construction and whenever [`_sync_data`](Self::_sync_data) or
     /// [`sync_model`](Self::sync_model) detects a model change.
     fn reload_model(&mut self, model: &MjModel, max_user_geom: usize) {
-        let model_passive = Box::new(model.clone());
-        self.data_passive = MjData::new(model_passive);
-        let model_passive = self.data_passive.model();
-
-        self.user_scene = MjvScene::new(model_passive, max_user_geom);
+        // Build every model-dependent value before the first assignment, so a panic part-way
+        // leaves the previous generation whole rather than a mix of two models.
+        let mut data_passive = MjData::new(Box::new(model.clone()));
+        // Compute kinematic state that the viewer uses (only the state exists on a new MjData).
+        data_passive.forward();
+        let model_passive = data_passive.model();
+        let user_scene = MjvScene::new(model_passive, max_user_geom);
         let state_size = model_passive.state_size(MjtState::mjSTATE_INTEGRATION as u32);
-        self.data_passive_state = vec![0.0; state_size].into_boxed_slice();
+        let mut data_passive_state = vec![0.0; state_size].into_boxed_slice();
+        let prev_opt = model_passive.opt().clone();
+        let prev_vis = model_passive.vis().clone();
+        let prev_stat = model_passive.stat().clone();
+
         // Read the actual initial state (qpos0 may be non-zero) so that data_passive_state_old
         // matches data_passive_state from the start, preventing a spurious write-back of the
         // default pose to the incoming data on the first sync after a model change.
-        self.data_passive.read_state_into(
+        data_passive.read_state_into(
             MjtState::mjSTATE_INTEGRATION as u32,
-            &mut self.data_passive_state,
+            &mut data_passive_state,
         );
-        self.data_passive_state_old = self.data_passive_state.clone();
-        self.data_state_buffer = self.data_passive_state.clone();
+
+        self.data_passive_state_old = data_passive_state.clone();
+        self.data_state_buffer = data_passive_state.clone();
+        self.data_passive_state = data_passive_state;
+        self.data_passive = data_passive;
+        self.user_scene = user_scene;
+        self.prev_opt = prev_opt;  // opt, vis and state would be resyced using the three-way-merge.
+        self.prev_vis = prev_vis;
+        self.prev_stat = prev_stat;
         self.realtime_factor_smooth = 1.0;
         self.pert = MjvPerturb::default();
         // Clear pending re-uploads: the new context will already have the model's
@@ -310,6 +333,7 @@ impl ViewerSharedState {
         self.texture_reupload_pending.clear();
         self.mesh_reupload_pending.clear();
         self.hfield_reupload_pending.clear();
+        self.model_reloaded = true;
     }
 
     /// Checks whether the viewer is still running or is supposed to run.
@@ -318,13 +342,15 @@ impl ViewerSharedState {
     }
 
     /// Returns an immutable reference to a user scene for drawing custom visual-only geoms.
-    /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`].
+    /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`],
+    /// but a sync that detects a model change discards them.
     pub fn user_scene(&self) -> &MjvScene {
         &self.user_scene
     }
 
     /// Returns a mutable reference to a user scene for drawing custom visual-only geoms.
-    /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`].
+    /// Geoms in the user scene are preserved between calls to [`ViewerSharedState::sync_data`],
+    /// but a sync that detects a model change discards them.
     pub fn user_scene_mut(&mut self) -> &mut MjvScene {
         &mut self.user_scene
     }
@@ -332,11 +358,10 @@ impl ViewerSharedState {
     /// Performs a bidirectional three-way merge of model's `opt`, `vis`, and `stat` parameters
     /// between the viewer's passive model and the incoming model.
     ///
-    /// Detects model changes via signature comparison and reloads internal state if needed.
+    /// Reloads the internal state when `model` is no longer compatible with the passive model.
     pub fn sync_model(&mut self, model: &mut MjModel) {
-        // Check if model signature changed
-        if model.signature() != self.data_passive.model().signature() {
-            // Model changed: reload internal state, skip parameter sync
+        if !self.data_passive.model().is_compatible_with_model(model) {
+            // Model changed: reload internal state.
             let max_user_geom = self.user_scene.maxgeom() as usize;
             self.reload_model(model, max_user_geom);
         }
@@ -350,7 +375,9 @@ impl ViewerSharedState {
     /// passive model and the provided option struct.
     ///
     /// Changes made by the viewer UI are written to `opt`; changes made to `opt` externally
-    /// are written back to the viewer's passive model.
+    /// are written back to the viewer's passive model. The merge runs per field, and an array
+    /// counts as one field: a change made to `opt` outside the viewer is lost only when the viewer
+    /// changed that same field since the previous sync.
     pub fn sync_model_opt(&mut self, opt: &mut MjOption) {
         ThreeWayMerge::merge(opt, self.data_passive.model_opt_mut(), &mut self.prev_opt);
         self.last_opt_sync_time = Instant::now();
@@ -360,7 +387,9 @@ impl ViewerSharedState {
     /// passive model and the provided visual struct.
     ///
     /// Changes made by the viewer UI are written to `vis`; changes made to `vis` externally
-    /// are written back to the viewer's passive model.
+    /// are written back to the viewer's passive model. The merge runs per field, and an array
+    /// counts as one field: a change made to `vis` outside the viewer is lost only when the viewer
+    /// changed that same field since the previous sync.
     pub fn sync_model_vis(&mut self, vis: &mut MjVisual) {
         ThreeWayMerge::merge(vis, self.data_passive.model_vis_mut(), &mut self.prev_vis);
         self.last_vis_sync_time = Instant::now();
@@ -370,7 +399,9 @@ impl ViewerSharedState {
     /// passive model and the provided statistic struct.
     ///
     /// Changes made by the viewer UI are written to `stat`; changes made to `stat` externally
-    /// are written back to the viewer's passive model.
+    /// are written back to the viewer's passive model. The merge runs per field, and an array
+    /// counts as one field: a change made to `stat` outside the viewer is lost only when the viewer
+    /// changed that same field since the previous sync.
     pub fn sync_model_stat(&mut self, stat: &mut MjStatistic) {
         ThreeWayMerge::merge(stat, self.data_passive.model_stat_mut(), &mut self.prev_stat);
         self.last_stat_sync_time = Instant::now();
@@ -391,9 +422,11 @@ impl ViewerSharedState {
         self.last_stat_sync_time
     }
 
-    fn check_signature(&self, model: &MjModel) -> Result<(), MjViewerError> {
-        if model.signature() != self.data_passive.model().signature() {
-            return Err(MjViewerError::SignatureMismatch);
+    /// Tests the asset memory alone: an update below overrides the asset data, and reaches no
+    /// `mjData` buffer, so a model that only sizes its data differently still fits.
+    fn check_asset_compatible(&self, model: &MjModel) -> Result<(), MjViewerError> {
+        if !self.data_passive.model().is_asset_compatible_with_model(model) {
+            return Err(MjViewerError::IncompatibleModel);
         }
         Ok(())
     }
@@ -405,10 +438,10 @@ impl ViewerSharedState {
     /// the updated texture will be reflected in the scene.
     ///
     /// # Errors
-    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     /// - [`MjViewerError::IndexOutOfBounds`] if `texture_id >= model.ntex()`.
     pub fn update_texture_from(&mut self, model: &MjModel, texture_id: usize) -> Result<(), MjViewerError> {
-        self.check_signature(model)?;
+        self.check_asset_compatible(model)?;
         let ntex = model.ntex() as usize;
         if texture_id >= ntex {
             return Err(MjViewerError::IndexOutOfBounds { id: texture_id, len: ntex });
@@ -418,8 +451,8 @@ impl ViewerSharedState {
         let tex_height = model.tex_height()[texture_id] as usize;
         let tex_nchannel = model.tex_nchannel()[texture_id] as usize;
         let tex_len = tex_width * tex_height * tex_nchannel;
-        // SAFETY: Signature and bounds verified above; tex_len is derived from the texture's
-        // own metadata, so the slice cannot exceed the allocation.
+        // SAFETY: the asset memory and the bounds are verified above; tex_len is derived from
+        // the texture's own metadata, so the slice cannot exceed the allocation.
         unsafe { self.data_passive.model_mut() }
             .tex_data_mut()[tex_adr..tex_adr + tex_len]
             .copy_from_slice(&model.tex_data()[tex_adr..tex_adr + tex_len]);
@@ -431,10 +464,10 @@ impl ViewerSharedState {
     /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
     /// # Errors
-    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     pub fn update_textures_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
-        self.check_signature(model)?;
-        // SAFETY: Signature verified above, so tex_data layouts match exactly.
+        self.check_asset_compatible(model)?;
+        // SAFETY: the asset memory is verified above, so the tex_data layouts match exactly.
         unsafe { self.data_passive.model_mut() }
             .tex_data_mut()
             .copy_from_slice(model.tex_data());
@@ -447,19 +480,18 @@ impl ViewerSharedState {
     ///
     /// All data arrays read by `mjr_uploadMesh` are copied: vertex positions
     /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
-    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
-    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
-    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
-    /// not copied because they are fixed by the model signature.
+    /// (`mesh_texcoord`), face-vertex indices (`mesh_face`), face-normal indices
+    /// (`mesh_facenormal`), face-texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`).
     ///
     /// The upload is processed on the next call to [`MjViewer::render`], at which point
     /// the updated mesh will be reflected in the scene.
     ///
     /// # Errors
-    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     /// - [`MjViewerError::IndexOutOfBounds`] if `mesh_id >= model.nmesh()`.
     pub fn update_mesh_from(&mut self, model: &MjModel, mesh_id: usize) -> Result<(), MjViewerError> {
-        self.check_signature(model)?;
+        self.check_asset_compatible(model)?;
         let nmesh = model.nmesh() as usize;
         if mesh_id >= nmesh {
             return Err(MjViewerError::IndexOutOfBounds { id: mesh_id, len: nmesh });
@@ -473,8 +505,7 @@ impl ViewerSharedState {
         let face_adr = model.mesh_faceadr()[mesh_id] as usize;
         let face_num = model.mesh_facenum()[mesh_id] as usize;
         let graph_range = optional_sparse_addr_range(model.mesh_graphadr(), mesh_id, model.mesh_graph().len());
-        // SAFETY: Signature and bounds verified above; all offsets and counts are taken
-        // from the mesh's own metadata in a model with matching layout.
+        // SAFETY: no model swap happens here; only mesh values change.
         let passive = unsafe { self.data_passive.model_mut() };
         passive.mesh_vert_mut()[vert_adr..vert_adr + vert_num]
             .copy_from_slice(&model.mesh_vert()[vert_adr..vert_adr + vert_num]);
@@ -506,16 +537,15 @@ impl ViewerSharedState {
     ///
     /// All data arrays read by `mjr_uploadMesh` are bulk-copied: vertex positions
     /// (`mesh_vert`), per-vertex normals (`mesh_normal`), UV texture coordinates
-    /// (`mesh_texcoord`), face--vertex indices (`mesh_face`), face--normal indices
-    /// (`mesh_facenormal`), face--texcoord indices (`mesh_facetexcoord`), and convex
-    /// hull graph data (`mesh_graph`). Layout fields (address and count arrays) are
-    /// not copied because they are fixed by the model signature.
+    /// (`mesh_texcoord`), face-vertex indices (`mesh_face`), face-normal indices
+    /// (`mesh_facenormal`), face-texcoord indices (`mesh_facetexcoord`), and convex
+    /// hull graph data (`mesh_graph`).
     ///
     /// # Errors
-    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     pub fn update_meshes_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
-        self.check_signature(model)?;
-        // SAFETY: Signature verified above, ensuring all mesh array layouts match exactly.
+        self.check_asset_compatible(model)?;
+        // SAFETY: no model swap happens here; only mesh values change.
         let passive = unsafe { self.data_passive.model_mut() };
         passive.mesh_vert_mut().copy_from_slice(model.mesh_vert());
         passive.mesh_normal_mut().copy_from_slice(model.mesh_normal());
@@ -537,10 +567,10 @@ impl ViewerSharedState {
     /// the updated heightfield will be reflected in the scene.
     ///
     /// # Errors
-    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     /// - [`MjViewerError::IndexOutOfBounds`] if `hfield_id >= model.nhfield()`.
     pub fn update_hfield_from(&mut self, model: &MjModel, hfield_id: usize) -> Result<(), MjViewerError> {
-        self.check_signature(model)?;
+        self.check_asset_compatible(model)?;
         let nhfield = model.nhfield() as usize;
         if hfield_id >= nhfield {
             return Err(MjViewerError::IndexOutOfBounds { id: hfield_id, len: nhfield });
@@ -549,8 +579,7 @@ impl ViewerSharedState {
         let hfield_nrow = model.hfield_nrow()[hfield_id] as usize;
         let hfield_ncol = model.hfield_ncol()[hfield_id] as usize;
         let hfield_len = hfield_nrow * hfield_ncol;
-        // SAFETY: Signature and bounds verified above; hfield_len is derived from the
-        // heightfield's own row/column metadata.
+        // SAFETY: no model swap happens here; only hfield_data values change.
         unsafe { self.data_passive.model_mut() }
             .hfield_data_mut()[hfield_adr..hfield_adr + hfield_len]
             .copy_from_slice(&model.hfield_data()[hfield_adr..hfield_adr + hfield_len]);
@@ -562,10 +591,10 @@ impl ViewerSharedState {
     /// and schedules a GPU re-upload for the next [`MjViewer::render`] call.
     ///
     /// # Errors
-    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     pub fn update_hfields_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
-        self.check_signature(model)?;
-        // SAFETY: Signature verified above, so hfield_data layouts match exactly.
+        self.check_asset_compatible(model)?;
+        // SAFETY: no model swap happens here; only hfield_data values change.
         unsafe { self.data_passive.model_mut() }
             .hfield_data_mut()
             .copy_from_slice(model.hfield_data());
@@ -578,8 +607,9 @@ impl ViewerSharedState {
     /// struct (including large Jacobian and other arrays), not just the state needed for visualization.
     ///
     /// # Panics
-    /// Panics if the internal data copy fails due to an inconsistent model state (indicates a bug).
-    pub fn sync_data_full<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+    /// Panics if the internal data copy or state merge fails due to an inconsistent model
+    /// state (indicates a bug).
+    pub fn sync_data_full<M: ModelType>(&mut self, data: &mut MjData<M>) {
         self._sync_data(data, true);
     }
 
@@ -602,13 +632,17 @@ impl ViewerSharedState {
     ///
     /// <div class="warning">
     /// The user's data is copied into the viewer's internal passive copy via ``mjv_copyData``,
-    /// which skips large computed arrays not required for visualization.
-    /// The viewer's passive copy will therefore **not** contain:
+    /// which skips large computed arrays not required for visualization. In the viewer's passive
+    /// copy:
     ///
-    /// - mass matrices (``qM``, ``qLD``, ``qLDiagInv``, ``qLU``);
-    /// - constraint arrays (``efc_*``, ``iefc_*``, including constraint Jacobians).
+    /// - the mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``,
+    ///   ``qLU``) keep the values of the previous copy, because they live in the fixed buffer
+    ///   that ``mjv_copyData`` does not overwrite;
+    /// - the sparse constraint Jacobian blocks (``efc_J``, ``efc_Y``, ``efc_AR`` and their
+    ///   index arrays) are empty, because they live in the arena, which the copy leaves
+    ///   unallocated.
     ///
-    /// In UI callbacks these fields will be absent unless
+    /// In UI callbacks these fields are therefore stale or empty unless
     /// [`ViewerSharedState::sync_data_full`] is used or they are recomputed explicitly
     /// (e.g. via `data.forward()`).
     ///
@@ -620,14 +654,14 @@ impl ViewerSharedState {
     /// # Panics
     /// Panics if the internal data copy or state merge fails due to an inconsistent model
     /// state (indicates a bug).
-    pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+    pub fn sync_data<M: ModelType>(&mut self, data: &mut MjData<M>) {
         self._sync_data(data, false);
     }
 
     /// Data sync implementation.
-    fn _sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>, full_sync: bool) {
+    fn _sync_data<M: ModelType>(&mut self, data: &mut MjData<M>, full_sync: bool) {
         // Recreate internal data and user scene when the model changes
-        if data.model().signature() != self.data_passive.model().signature() {
+        if !self.data_passive.model().is_compatible_with_model(data.model()) {
             let max_user_geom = self.user_scene.maxgeom() as usize;
             self.reload_model(data.model(), max_user_geom);
         }
@@ -715,8 +749,11 @@ impl ViewerSharedState {
 /// - I: inertia,
 /// - E: constraint.
 /// 
-/// # Safety
-/// Due to the nature of OpenGL, this should only be run in the **main thread**.
+/// With the `viewer-ui` feature, `X` toggles the side UI panel. The side panel also closes and
+/// opens by a drag of its inner edge to and from the screen edge.
+///
+/// # Panics
+/// Panics when initialized outside the main thread.
 #[derive(Debug)]
 pub struct MjViewer {
     /* MuJoCo rendering */
@@ -782,7 +819,9 @@ impl MjViewer {
     /// - [`MjViewerError::GlutinError`] if a glutin operation fails.
     /// - [`MjViewerError::PainterInitError`] if the UI painter fails to initialize
     ///   (feature `viewer-ui`).
-    pub fn launch_passive<M: Deref<Target = MjModel>>(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
+    /// # Panics
+    /// Panics if the GL display reports no usable configuration.
+    pub fn launch_passive<M: ModelType>(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
         MjViewerBuilder::new()
             .max_user_geoms(max_user_geom)
             .build_passive(model)
@@ -824,7 +863,10 @@ impl MjViewer {
     ///     .build_passive(&model).unwrap();
     /// viewer.with_state_lock(|mut lock| {
     ///     let scene = lock.user_scene_mut();
-    ///     scene.create_geom(MjtGeom::mjGEOM_BOX, Some([1.0, 1.0, 1.0]), Some([0.0, 0.0, 0.0]), None, None);
+    ///     // SAFETY: the geom keeps the material, texture and object ids that `create_geom` zeroes.
+    ///     unsafe {
+    ///         scene.create_geom(MjtGeom::mjGEOM_BOX, Some([1.0, 1.0, 1.0]), Some([0.0, 0.0, 0.0]), None, None);
+    ///     }
     /// }).unwrap();
     /// ```
     pub fn with_state_lock<F, R>(&self, fun: F) -> Result<R, PoisonError<MutexGuard<'_, ViewerSharedState>>>
@@ -834,16 +876,24 @@ impl MjViewer {
     }
 
     /// Adds a user-defined UI callback for custom widgets in the viewer's UI.
-    /// The callback receives an [`egui::Context`] reference and can be used to create
-    /// custom windows, panels, or other UI elements.
-    /// It also receives a mutable reference to [`MjData`], which can be used to read
-    /// and modify simulation state. Note that the model can be accessed through [`MjData::model`].
+    /// The callback receives the root [`egui::Ui`], which creates custom windows, panels or
+    /// other UI elements, and the viewer's [`ViewerSharedState`] (An [`Arc`] `<`[`Mutex`]`>` of it),
+    /// which the callback locks only when it needs the state.
     ///
     /// # Note
-    /// The viewer's internal shared-state [`Mutex`] is **held for the entire
-    /// duration of the callback** (because `data` is a live borrow of the guarded
-    /// `data_passive` field). Do **not** attempt to lock the shared state again from
-    /// within the callback as that will deadlock the viewer thread.
+    /// If you need the shared-state of the viewer, keep the lock short, because a simulation thread
+    /// that calls [`MjViewer::sync_data`] waits for the same [`Mutex`].
+    ///
+    /// # Model swaps
+    /// Callbacks run inside [`MjViewer::render`]. A sync on another
+    /// thread through [`ViewerSharedState::sync_data`] with `data`'s [`MjData::model`] being a different
+    /// model than the model used to create the viewer, or through [`ViewerSharedState::sync_model`],
+    /// can cause the contents of [`ViewerSharedState`]'s (the `state` parameter) to change when it isn't locked.
+    ///
+    /// If you rely on the shared state to stay the same during the callback, either:
+    /// - don't swap the model without reopening the viewer or
+    /// - lock the shared-state throughout entire callback (but be careful to not create deadlocks) or
+    /// - compare [`MjModel::signature`] against the signature of the expected model.
     ///
     /// # Example
     /// ```no_run
@@ -851,33 +901,21 @@ impl MjViewer {
     /// # use mujoco_rs::viewer::MjViewer;
     /// # let model = MjModel::from_xml_string("<mujoco/>").unwrap();
     /// # let mut viewer = MjViewer::launch_passive(&model, 0).unwrap();
-    /// viewer.add_ui_callback(|ctx, data| {
+    /// viewer.add_ui_callback(|ui, state| {
     ///     use mujoco_rs::viewer::egui;
     ///     egui::Window::new("Custom controls")
     ///         .scroll(true)
-    ///         .show(ctx, |ui| {
-    ///             ui.label("Custom UI element");
+    ///         .show(ui, |ui| {
+    ///             ui.label(format!("running: {}", state.lock().unwrap().running()));
     ///         });
     /// });
     /// ```
     #[cfg(feature = "viewer-ui")]
     pub fn add_ui_callback<F>(&mut self, callback: F)
     where
-        F: FnMut(&egui::Context, &mut MjData<Box<MjModel>>) + 'static
+        F: FnMut(&mut egui::Ui, &Arc<Mutex<ViewerSharedState>>) + 'static
     {
         self.ui.add_ui_callback(callback);
-    }
-
-    /// Same as [`MjViewer::add_ui_callback`], except the `callback` does
-    /// not receive the passive [`MjData`] instance of the viewer.
-    /// Consequently, the mutex of the viewer's shared state doesn't need to
-    /// be locked, yielding better performance.
-    #[cfg(feature = "viewer-ui")]
-    pub fn add_ui_callback_detached<F>(&mut self, callback: F)
-    where
-        F: FnMut(&egui::Context) + 'static
-    {
-        self.ui.add_ui_callback_detached(callback);
     }
 
     /// Same as [`MjViewer::sync_data`], except it copies the entire [`MjData`]
@@ -885,14 +923,15 @@ impl MjViewer {
     /// This is a proxy to [`ViewerSharedState::sync_data_full`].
     ///
     /// # Panics
-    /// Panics if the internal data copy fails due to an inconsistent model state (indicates a bug).
-    pub fn sync_data_full<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+    /// Panics if the internal data copy or state merge fails due to an inconsistent model
+    /// state (indicates a bug).
+    pub fn sync_data_full<M: ModelType>(&mut self, data: &mut MjData<M>) {
         self.shared_state.lock_unpoison().sync_data_full(data);
     }
 
     /// Syncs the state of viewer's internal [`MjData`] with `data`.
     /// This is a proxy to [`ViewerSharedState::sync_data`].
-    /// 
+    ///
     /// Any changes made to the internal [`MjData`] in between syncs
     /// get selectively merged back into `data` before the copy.
     /// Perturbations are applied to `data` **after** the sync, which
@@ -904,13 +943,17 @@ impl MjViewer {
     /// 
     /// <div class="warning">
     /// The user's data is copied into the viewer's internal passive copy via ``mjv_copyData``,
-    /// which skips large computed arrays not required for visualization.
-    /// The viewer's passive copy will therefore **not** contain:
+    /// which skips large computed arrays not required for visualization. In the viewer's passive
+    /// copy:
     ///
-    /// - mass matrices (``qM``, ``qLD``, ``qLDiagInv``, ``qLU``);
-    /// - constraint arrays (``efc_*``, ``iefc_*``, including constraint Jacobians).
+    /// - the mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``,
+    ///   ``qLU``) keep the values of the previous copy, because they live in the fixed buffer
+    ///   that ``mjv_copyData`` does not overwrite;
+    /// - the sparse constraint Jacobian blocks (``efc_J``, ``efc_Y``, ``efc_AR`` and their
+    ///   index arrays) are empty, because they live in the arena, which the copy leaves
+    ///   unallocated.
     ///
-    /// In UI callbacks these fields will be absent unless
+    /// In UI callbacks these fields are therefore stale or empty unless
     /// [`MjViewer::sync_data_full`] is used or they are recomputed explicitly
     /// (e.g. via `data.forward()`).
     ///
@@ -933,7 +976,7 @@ impl MjViewer {
     /// viewer.sync_data(&mut data);  // sync the data
     /// viewer.render().unwrap();  // render the scene and process the user interface
     /// ```
-    pub fn sync_data<M: Deref<Target = MjModel>>(&mut self, data: &mut MjData<M>) {
+    pub fn sync_data<M: ModelType>(&mut self, data: &mut MjData<M>) {
         self.shared_state.lock_unpoison().sync_data(data);
     }
 
@@ -985,7 +1028,7 @@ impl MjViewer {
     /// This is a proxy to [`ViewerSharedState::update_texture_from`].
     ///
     /// # Errors
-    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     /// - [`MjViewerError::IndexOutOfBounds`] if `texture_id >= model.ntex()`.
     pub fn update_texture_from(&mut self, model: &MjModel, texture_id: usize) -> Result<(), MjViewerError> {
         self.shared_state.lock_unpoison().update_texture_from(model, texture_id)
@@ -997,7 +1040,7 @@ impl MjViewer {
     /// This is a proxy to [`ViewerSharedState::update_textures_from`].
     ///
     /// # Errors
-    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     pub fn update_textures_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
         self.shared_state.lock_unpoison().update_textures_from(model)
     }
@@ -1008,7 +1051,7 @@ impl MjViewer {
     /// This is a proxy to [`ViewerSharedState::update_mesh_from`].
     ///
     /// # Errors
-    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     /// - [`MjViewerError::IndexOutOfBounds`] if `mesh_id >= model.nmesh()`.
     pub fn update_mesh_from(&mut self, model: &MjModel, mesh_id: usize) -> Result<(), MjViewerError> {
         self.shared_state.lock_unpoison().update_mesh_from(model, mesh_id)
@@ -1020,7 +1063,7 @@ impl MjViewer {
     /// This is a proxy to [`ViewerSharedState::update_meshes_from`].
     ///
     /// # Errors
-    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     pub fn update_meshes_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
         self.shared_state.lock_unpoison().update_meshes_from(model)
     }
@@ -1031,7 +1074,7 @@ impl MjViewer {
     /// This is a proxy to [`ViewerSharedState::update_hfield_from`].
     ///
     /// # Errors
-    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     /// - [`MjViewerError::IndexOutOfBounds`] if `hfield_id >= model.nhfield()`.
     pub fn update_hfield_from(&mut self, model: &MjModel, hfield_id: usize) -> Result<(), MjViewerError> {
         self.shared_state.lock_unpoison().update_hfield_from(model, hfield_id)
@@ -1043,7 +1086,7 @@ impl MjViewer {
     /// This is a proxy to [`ViewerSharedState::update_hfields_from`].
     ///
     /// # Errors
-    /// - [`MjViewerError::SignatureMismatch`] if `model`'s signature does not match the viewer's passive model.
+    /// - [`MjViewerError::IncompatibleModel`] if `model` is not compatible with the viewer's passive model.
     pub fn update_hfields_from(&mut self, model: &MjModel) -> Result<(), MjViewerError> {
         self.shared_state.lock_unpoison().update_hfields_from(model)
     }
@@ -1175,9 +1218,9 @@ impl MjViewer {
                 &path, &encoded, w as u32, h as u32,
                 png::ColorType::Grayscale, png::BitDepth::Sixteen, png::Compression::High
             ) {
-                eprintln!("depth screenshot failed: {e}");
+                error!("depth screenshot failed: {e}");
             } else {
-                eprintln!("depth screenshot saved to {path} (min={min:.4}, max={max:.4})");
+                info!("depth screenshot saved to {path} (min={min:.4}, max={max:.4})");
             }
         } else {
             let mut rgb = vec![0u8; w * h * 3];
@@ -1192,9 +1235,9 @@ impl MjViewer {
                 &path, &rgb, w as u32, h as u32,
                 png::ColorType::Rgb, png::BitDepth::Eight, png::Compression::High
             ) {
-                eprintln!("screenshot failed: {e}");
+                error!("screenshot failed: {e}");
             } else {
-                eprintln!("screenshot saved to {path}");
+                info!("screenshot saved to {path}");
             }
         }
         Ok(())
@@ -1219,12 +1262,13 @@ impl MjViewer {
             let mut lock = self.shared_state.lock_unpoison();
             let ViewerSharedState {
                 data_passive, pert, user_scene,
-                texture_reupload_pending, mesh_reupload_pending, hfield_reupload_pending,
-                ..
+                texture_reupload_pending, mesh_reupload_pending,
+                hfield_reupload_pending, model_reloaded, ..
             } = lock.deref_mut();
 
             // Recreate scene when the model changes
-            if data_passive.model().signature() != self.scene.signature() {
+            if *model_reloaded {
+                debug!("the model changed, rebuilding the viewer scene and the render context");
                 let new_model = data_passive.model();
                 let ngeom = new_model.ffi().ngeom as usize;
                 let max_user_geom = user_scene.maxgeom() as usize;
@@ -1242,12 +1286,18 @@ impl MjViewer {
                 self.context = unsafe { MjrContext::new(new_model) };
                 self.ncam = new_model.ffi().ncam;
                 #[cfg(feature = "viewer-ui")]
-                self.ui.update_names(new_model);
-                // reload_model already cleared the pending flags and notified waiters.
+                self.ui.update_caches(new_model);
+                // reload_model already cleared the pending re-upload sets.
+
+                // The scene has been recreated after a model has been changed.
+                // Thus, the scene is now permitted to be used again.
+                *model_reloaded = false;
             }
 
-            // Process any pending GPU asset re-uploads. The GL context is current here
-            // (ensured by render()). Each set is taken (leaving an empty set) and iterated.
+            // Update and render the scene from the MjData state
+            self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
+
+            // Upload pending assets.
             for id in std::mem::take(texture_reupload_pending) {
                 self.context.upload_texture(data_passive.model(), id)?;
             }
@@ -1257,9 +1307,6 @@ impl MjViewer {
             for id in std::mem::take(hfield_reupload_pending) {
                 self.context.upload_hfield(data_passive.model(), id)?;
             }
-
-            // Update and render the scene from the MjData state
-            self.scene.update(data_passive, &self.opt, pert, &mut self.camera);
 
             // Draw geoms drawn through the user scene.
             sync_geoms(user_scene, &mut self.scene)?;
@@ -1424,14 +1471,14 @@ impl MjViewer {
             if let Err(e) = gl_surface.set_swap_interval(
                 gl_context, glutin::surface::SwapInterval::Wait(NonZero::<u32>::MIN)
             ) {
-                eprintln!("failed to enable vsync: {e}");
+                warn!("failed to enable vsync: {e}");
                 self.status.set(ViewerStatusBit::VSYNC, false);
             }
         } else {
             if let Err(e) = gl_surface.set_swap_interval(
                 gl_context, glutin::surface::SwapInterval::DontWait
             ) {
-                eprintln!("failed to disable vsync: {e}");
+                warn!("failed to disable vsync: {e}");
                 self.status.set(ViewerStatusBit::VSYNC, true);
             }
         }
@@ -1459,7 +1506,7 @@ impl MjViewer {
 
                 // if the UI has an active input focus, ignore all keyboard events
                 if let WindowEvent::KeyboardInput { .. } = &window_event
-                    && self.ui.focused()
+                    && self.ui.is_focused()
                 {
                     continue;
                 }
@@ -1471,8 +1518,16 @@ impl MjViewer {
                     let is_pressed = state == ElementState::Pressed;
                     
                     #[cfg(feature = "viewer-ui")]
-                    if self.ui.covered() && is_pressed {
-                        continue;
+                    if is_pressed {
+                        // A press outside the UI windows (scene or side panel) takes the
+                        // selection away from them.
+                        if !self.ui.is_window_covered() {
+                            self.ui.deselect_windows();
+                        }
+
+                        if self.ui.is_covered() {
+                            continue;
+                        }
                     }
 
                     let index = match button {
@@ -1495,7 +1550,7 @@ impl MjViewer {
                     // of a (popup) window. This might seem like an ad-hoc solution, but is at the time the
                     // shortest and most efficient one.
                     #[cfg(feature = "viewer-ui")]
-                    if self.ui.dragged() {
+                    if self.ui.is_dragged() {
                         continue;
                     }
 
@@ -1513,7 +1568,10 @@ impl MjViewer {
                 }
 
                 // Also set the viewer's state to pending exit if the window no longer exists.
-                WindowEvent::CloseRequested => { self.running_flag.store(false, Ordering::Relaxed) }
+                WindowEvent::CloseRequested => {
+                    debug!("the user closed the viewer window");
+                    self.running_flag.store(false, Ordering::Relaxed);
+                }
 
                 // Free the camera from tracking.
                 WindowEvent::KeyboardInput {
@@ -1665,7 +1723,7 @@ impl MjViewer {
                 // Zoom in/out
                 WindowEvent::MouseWheel {delta, ..} => {
                     #[cfg(feature = "viewer-ui")]
-                    if self.ui.covered() {
+                    if self.ui.is_covered() {
                         continue;
                     }
 
@@ -1713,7 +1771,7 @@ impl MjViewer {
         self.camera.move_(
             MjtMouse::mjMOUSE_ZOOM,
             self.shared_state.lock_unpoison().data_passive.model(),
-            0.0, -0.05 * change, &self.scene
+            0.0, -0.05 * change
         );
     }
 
@@ -1759,7 +1817,7 @@ impl MjViewer {
             self.camera.move_(
                 action,
                 data_passive.model(),
-                dx / height, dy / height, &self.scene
+                dx / height, dy / height
             );
         }
         else {  // When the perturbation is active, move apply the perturbation.
@@ -1771,7 +1829,14 @@ impl MjViewer {
     fn process_left_click(&mut self, state: ElementState) {
         let modifier_state = self.modifiers.state();
         let mut lock = self.shared_state.lock_unpoison();
-        let ViewerSharedState {data_passive, pert, ..} = lock.deref_mut();
+        let ViewerSharedState {data_passive, pert, model_reloaded, ..} = lock.deref_mut();
+
+        // The render thread skips the mutex lock for part of its work, so a model reload defers
+        // every operation until the next sync in update_scene.
+        if *model_reloaded {
+            return;
+        }
+
         match state {
             ElementState::Pressed => {
                 // Clicking and holding applies perturbation
@@ -1872,7 +1937,7 @@ pub struct MjViewerBuilder {
     /// Start the viewer with warnings enabled for non-realtime synchronization.
     /// When this is enabled and the simulation state isn't synced in realtime, an overlay will be displayed
     /// in the bottom right corner indicating the realtime percentage.
-    /// The warning will only be shown if the deviation is 2 % from realtime or more.
+    /// The warning will only be shown if the deviation from realtime is larger than 2 %.
     warn_non_realtime: bool,
 }
 
@@ -1903,7 +1968,9 @@ impl MjViewerBuilder {
     /// - [`MjViewerError::GlutinError`] if a glutin operation fails.
     /// - [`MjViewerError::PainterInitError`] if the UI painter fails to initialize
     ///   (feature `viewer-ui`).
-    pub fn build_passive<M: Deref<Target = MjModel>>(&self, model: M) -> Result<MjViewer, MjViewerError> {
+    /// # Panics
+    /// Panics if the GL display reports no usable configuration.
+    pub fn build_passive<M: ModelType>(&self, model: M) -> Result<MjViewer, MjViewerError> {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
         let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
         let adapter = RenderBase::new(
@@ -1949,13 +2016,16 @@ impl MjViewerBuilder {
         // User interface
         #[cfg(feature = "viewer-ui")]
         let ui = ui::ViewerUI::new(&model, window, &gl_surface.display())?;
-        #[cfg(feature = "viewer-ui")]
-        let mut status = ViewerStatusBit::UI;
-        #[cfg(not(feature = "viewer-ui"))]
-        let mut status = ViewerStatusBit::HELP;
+        let mut status = cfg_select! {
+            feature = "viewer-ui" => ViewerStatusBit::UI,
+            _ => ViewerStatusBit::HELP,
+        };
 
         status.set(ViewerStatusBit::VSYNC, self.vsync);
         status.set(ViewerStatusBit::WARN_REALTIME, self.warn_non_realtime);
+
+        let size = adapter.state.as_ref().unwrap().window.inner_size();
+        debug!("opened the viewer window \"{}\" ({}x{})", self.window_name, size.width, size.height);
 
         Ok(MjViewer {
             scene,
@@ -1992,7 +2062,7 @@ impl Default for MjViewerBuilder {
 }
 
 bitflags! {
-    /// Internal bit-flags that track the visibility state of various on-screen overlays.
+    /// Internal bit-flags that track the on-screen overlays, the side panel and the vsync mode.
     #[derive(Debug)]
     struct ViewerStatusBit: u8 {
         const HELP = 1 << 0;
@@ -2010,5 +2080,52 @@ bitflags! {
         const LEFT = 1 << 0;
         const MIDDLE = 1 << 1;
         const RIGHT = 1 << 2;
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A model with a free joint, whose `qpos0` holds a unit quaternion.
+    const MODEL_FREE: &str =
+        "<mujoco><worldbody><body><freejoint/><geom size=\"0.1\"/></body></worldbody></mujoco>";
+    /// A model with one hinge joint and a gravity that `MODEL_FREE` does not share.
+    const MODEL_HINGE: &str =
+        "<mujoco><option gravity=\"0 0 -1\"/><worldbody><body><joint type=\"hinge\"/>\
+         <geom size=\"0.1\"/></body></worldbody></mujoco>";
+
+    /// A reload replaces the passive model, so the merge shadow must describe the new one. A stale
+    /// shadow makes the next `sync_model` overwrite the caller's own edit.
+    #[test]
+    fn test_reload_refreshes_the_model_merge_shadow() {
+        let mut model_hinge = MjModel::from_xml_string(MODEL_HINGE).unwrap();
+        let mut model_free = MjModel::from_xml_string(MODEL_FREE).unwrap();
+        let mut state = ViewerSharedState::new(&model_hinge, 0);
+
+        // Fill the shadow with the first model's own gravity, which the second model does not
+        // share. Without this the shadow holds MuJoCo's defaults, which already match.
+        state.sync_model(&mut model_hinge);
+
+        // A data sync reloads the passive model, and it never merges the options itself.
+        {
+            let mut data_free = MjData::new(&model_free);
+            state.sync_data(&mut data_free);
+        }
+
+        // The caller edits its own model after the reload. The viewer changed nothing since, so
+        // the edit must reach the passive model instead of being overwritten by it.
+        let expected = -5.0;
+        model_free.opt_mut().gravity[2] = expected;
+        state.sync_model(&mut model_free);
+        assert_eq!(
+            model_free.ffi().opt.gravity[2], expected,
+            "the caller's edit must survive the first sync_model after a reload"
+        );
+        assert_eq!(
+            state.data_passive.model().ffi().opt.gravity[2], expected,
+            "the edit must also reach the passive model"
+        );
     }
 }

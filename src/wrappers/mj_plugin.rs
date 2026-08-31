@@ -7,11 +7,16 @@ use crate::error::MjPluginError;
 
 /// Callback invoked by [`load_all_plugin_libraries`] for each loaded library.
 ///
-/// Parameters: `filename`, `first` plugin index, `count` of plugins registered.
+/// Parameters: `filename`, `first` plugin index (`-1` when `count` is 0), and `count` of
+/// plugins that the library registered.
 pub type MjPluginLibraryLoadCallback =
     Option<unsafe extern "C" fn(*const c_char, c_int, c_int)>;
 
-/// Loads a single MuJoCo plugin shared library.
+/// Loads a single MuJoCo plugin shared library. Wraps [`mj_loadPluginLibrary`].
+///
+/// # Note
+/// A load failure is not reported here: on Unix MuJoCo calls `mju_error`, whose default handler
+/// prints the message and ends the process; on Windows MuJoCo discards the result.
 ///
 /// # Errors
 /// Returns [`MjPluginError`] if `path` is not valid UTF-8 or contains a null byte.
@@ -24,7 +29,7 @@ pub type MjPluginLibraryLoadCallback =
 /// use mujoco_rs::prelude::*;
 ///
 /// load_plugin_library("path/to/mujoco/bin/mujoco_plugin/libactuator.so")
-///     .expect("failed to load actuator plugin");
+///     .expect("invalid plugin path");
 ///
 /// let model = MjModel::from_xml("model.xml").expect("could not load the model");
 /// ```
@@ -37,8 +42,14 @@ pub fn load_plugin_library<P: AsRef<Path>>(path: P) -> Result<(), MjPluginError>
 }
 
 /// Loads all MuJoCo plugin shared libraries found in `directory`.
+/// Wraps [`mj_loadAllPluginLibraries`].
 ///
 /// Pass `None` for `callback` to omit per-library notification.
+///
+/// # Note
+/// A library in `directory` that the loader refuses is not reported here: on Unix MuJoCo calls
+/// `mju_error`, whose default handler prints the message and ends the process; on Windows MuJoCo
+/// discards the result.
 ///
 /// # Errors
 /// Returns [`MjPluginError`] if `directory` is not valid UTF-8 or contains a null byte.

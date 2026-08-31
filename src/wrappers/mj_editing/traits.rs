@@ -1,5 +1,5 @@
 //! Trait definitions for model editing.
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 
 use crate::error::MjEditError;
 use crate::mujoco_c::*;
@@ -12,28 +12,16 @@ pub(crate) mod sealed {
     pub trait Sealed {}
 }
 
-/// Represents all the types that [`MjSpec`](super::MjSpec) supports.
-/// This is pre-implemented for all the specification types and is not
-/// meant to be implemented by the user.
-///
+/// Every type that [`MjSpec`](super::MjSpec) supports. Sealed.
 pub trait SpecItem: Sized + sealed::Sealed {
-    /// Returns the internal element struct.
-    /// The element struct is the C++ implementation of the
-    /// actual item, which is hidden from the user, but is needed
-    /// in some functions.
-    /// 
-    /// # Safety
-    /// This borrows immutably, but returns a mutable pointer. This is done to overcome MJS's wrong
-    /// use of mutable pointers in functions, such as [`mjs_getName`].
+    /// Returns the `mjsElement` that MuJoCo keeps behind the item.
+    ///
+    /// The pointer is const. A caller that must satisfy MJS's wrong use of mutable pointers, such
+    /// as [`mjs_getName`], casts it at the call site.
     fn element_pointer(&self) -> *const mjsElement;
 
-    /// Same as [`SpecItem::element_pointer`], but with a mutable borrow.
-    ///
-    /// # Safety
-    /// See [`SpecItem::element_pointer`].
+    /// Same as [`SpecItem::element_pointer`], but with a mutable borrow and a mutable pointer.
     fn element_mut_pointer(&mut self) -> *mut mjsElement {
-        // SAFETY: self.element is a valid non-null pointer to the C spec element
-        // for the lifetime of the parent MjSpec (struct invariant).
         self.element_pointer() as *mut _
     }
 
@@ -42,9 +30,8 @@ pub trait SpecItem: Sized + sealed::Sealed {
     /// # Panics
     /// Panics if the stored MuJoCo string is not valid UTF-8.
     fn name(&self) -> &str {
-        // SAFETY: mjs_getName returns a pointer to a null-terminated string owned
-        // by the spec element, valid for the element's lifetime.
-        // It is safe to convert to *mut _ as it doesn't actually modify anything.
+        // SAFETY: the string belongs to the element and lives as long as it does. mjs_getName
+        // takes a mutable pointer but writes nothing.
         unsafe { read_mjs_string(mjs_getName(self.element_pointer() as *mut _)) }
     }
 
@@ -70,31 +57,31 @@ pub trait SpecItem: Sized + sealed::Sealed {
         self
     }
 
-    /// Returns the used default.
-    fn default(&self) -> &MjsDefault {
-        // SAFETY: mjs_getDefault indexes into mjCModel::def_map which always
-        // contains the element's classname (inserted at construction), so the
-        // returned pointer is never null.
-        unsafe { &*mjs_getDefault(self.element_pointer()) }
+    /// Returns the used default, or `None` when the element carries no default class name.
+    ///
+    /// Only a body, joint, geom, site, camera, light, actuator, pair, equality, tendon, mesh or
+    /// material can carry one. Every other element, a frame included, returns `None`.
+    fn default(&self) -> Option<&MjsDefault> {
+        let ptr = unsafe { mjs_getDefault(self.element_pointer()) };
+        // SAFETY: a non-null return points to the mjsDefault owned by a live mjCDef of the spec.
+        unsafe { crate::wrappers::mj_editing::MjsDefault::from_ffi_ptr(ptr) }
     }
 
-    /// Returns the numeric id for this element, if assigned.
-    ///
-    /// MuJoCo returns `-1` when no id exists (for example before compilation);
-    /// in that case this returns `None`.
+    /// Returns the numeric id for this element, or `None` when it has none yet (before
+    /// compilation, for example).
     fn id(&self) -> Option<usize> {
         let id = unsafe { mjs_getId(self.element_pointer()) };
         usize::try_from(id).ok()
     }
 
-    /// Make the item inherit properties from a default class.
+    /// Assign the item to a default class.
     /// # Errors
     /// Returns [`MjEditError::NotFound`] when the default with the `class_name` doesn't exist.
     /// # Panics
     /// When the `class_name` contains '\0' characters, a panic occurs.
     fn set_default(&mut self, class_name: &str) -> Result<(), MjEditError> {
         /* Workaround to pass the borrow checker (we use the existing borrow) */
-        let cname = CString::new(class_name).unwrap();  // class_name is always valid UTF-8.
+        let cname = CString::new(class_name).unwrap();  // panics on interior NUL bytes only.
         let element = self.element_pointer();
         let spec = unsafe { mjs_getSpec(element) };
         let default = unsafe { mjs_findDefault(spec, cname.as_ptr()) };
@@ -108,7 +95,7 @@ pub trait SpecItem: Sized + sealed::Sealed {
 
     /// Builder style make the item inherit from a default class.
     /// # Errors
-    /// Returns [`MjEditError::NotFound`] when the default with the `class_name` doesn't exist.
+    /// Same as [`SpecItem::set_default`].
     /// # Panics
     /// When the `class_name` contains '\0' characters, a panic occurs.
     fn with_default(&mut self, class_name: &str) -> Result<&mut Self, MjEditError> {
@@ -116,71 +103,12 @@ pub trait SpecItem: Sized + sealed::Sealed {
         Ok(self)
     }
 
-    /// Delete the item.
-    ///
-    /// # Deprecated
-    /// This API is deprecated and will be removed in a future release.
-    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) instead.
-    ///
-    /// This method is inherently unsound: deleting one element mutates owner/ancestor graph
-    /// structures outside the borrowed `&mut self` region, so aliasing assumptions of existing
-    /// Rust references can already be violated by the call itself.
-    ///
-    /// In other words, calling this method is **undefined behavior** and should be avoided.
-    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) for deletion.
-    ///
-    /// # Errors
-    /// - [`MjEditError::DeleteFailed`] if MuJoCo cannot delete the element.
-    /// - [`MjEditError::UnsupportedOperation`] if the element cannot be deleted
-    ///   (e.g. the world body or default classes).
-    ///
-    /// # Safety
-    /// This legacy method is not soundly callable; it exists only for backward compatibility.
-    #[deprecated(
-        since = "5.0.0",
-        note = "unsound legacy API; use MjSpec::delete_element(element_mut_pointer())"
-    )]
-    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
-        unsafe { self.__delete_default__() }
-    }
-
-    /// Default implementation of the delete method.
-    /// Override [`SpecItem::delete`] for custom deletion logic.
-    ///
-    /// # Errors
-    /// Returns [`MjEditError::DeleteFailed`] if MuJoCo's internal deletion fails.
-    ///
-    /// # Safety
-    /// Same contract as [`SpecItem::delete`]: must be called at most once per item; any use
-    /// of `self` after a successful call is **use-after-free** undefined behavior.
-    unsafe fn __delete_default__(&mut self) -> Result<(), MjEditError> {
-        // SAFETY: element_mut_pointer() is valid (struct invariant); mjs_getSpec
-        // returns the owning spec, also valid.
-        let element = self.element_mut_pointer();
-        let spec = unsafe { mjs_getSpec(element) };
-        let result = unsafe { mjs_delete(spec, element) };
-        match result {
-            0 => Ok(()),
-            _ => {
-                let error_msg: String = unsafe {
-                    let ptr = mjs_getError(spec);
-                    if ptr.is_null() {
-                        "Unknown error".to_owned()
-                    } else {
-                        CStr::from_ptr(ptr).to_string_lossy().into_owned()
-                    }
-                };
-                Err(MjEditError::DeleteFailed(error_msg))
-            }
-        }
-    }
 }
 
-/// Represents a [`SpecItem`] that is a concrete object inside [`crate::wrappers::mj_model::MjModel`]
-/// after compilation of [`super::MjSpec`]. This includes all the [`SpecItem`]-s except [`MjsDefault`].
-/// 
-/// This trait is used internally by MuJoCo-rs to provide a generic casting interface from
-/// *mut mjsElement during iteration. 
+/// A [`SpecItem`] that becomes a concrete object inside
+/// [`crate::wrappers::mj_model::MjModel`] once [`super::MjSpec`] compiles. That is every
+/// [`SpecItem`] except [`MjsDefault`] and [`MjsWrap`](super::MjsWrap). Only such an object carries
+/// [`SpecObject::delete`].
 pub trait SpecObject: SpecItem {
     /// The `mjtObj` discriminant passed to `mjs_firstElement` / `mjs_firstChild`.
     const OBJ_TYPE: mjtObj;
@@ -190,4 +118,43 @@ pub trait SpecObject: SpecItem {
     /// # Safety
     /// `ptr` must point to a valid element of type `Self`.
     unsafe fn from_element_as_ptr_mut(ptr: *mut mjsElement) -> *mut Self;
+
+    /// Delete the element from the specification that holds it.
+    ///
+    /// Deleting a body deletes its subtree, and frees every keyframe, and every actuator, sensor,
+    /// tendon, equality, pair and exclude that refers to the subtree.
+    ///
+    /// # Errors
+    /// - [`MjEditError::UnsupportedOperation`] if the element is a frame or the world body.
+    /// - [`MjEditError::DeleteFailed`] if MuJoCo refuses the deletion, which it does while another
+    ///   specification holds this one.
+    ///
+    /// # Safety
+    /// - Delete each element at most once. MuJoCo keeps the element allocated until the
+    ///   specification drops, so a second deletion frees it twice.
+    /// - Do not delete an element that the deletion of a body already took out of the
+    ///   specification. An iterator collected before that deletion still hands out its handle.
+    /// - Do not use the handle of an element that the deletion of a body freed.
+    ///
+    /// # Examples
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// let mut spec = MjSpec::new();
+    /// spec.world_body_mut().add_body().with_name("ball");
+    ///
+    /// // SAFETY: the body is deleted once, and no handle of the spec outlives the call.
+    /// unsafe { spec.body_mut("ball").unwrap().delete() }.unwrap();
+    /// ```
+    ///
+    /// A default class is no `SpecObject`, so it carries no `delete`.
+    /// ```compile_fail
+    /// # use mujoco_rs::prelude::*;
+    /// let mut spec = MjSpec::new();
+    /// unsafe { spec.add_default("cls", None).delete() }.unwrap();
+    /// ```
+    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
+        // SAFETY: the handle stands at a live element, which the caller keeps out of a second
+        // deletion.
+        unsafe { delete_element(self.element_mut_pointer()) }
+    }
 }

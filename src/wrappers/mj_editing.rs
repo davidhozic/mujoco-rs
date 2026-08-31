@@ -1,9 +1,10 @@
 //! Definitions related to model editing.
 use std::ffi::{c_char, c_int, CStr, CString};
-use std::marker::PhantomData;
-use std::ptr::{self, NonNull};
-use std::path::Path;
 use crate::error::MjEditError;
+use std::ptr::{self, NonNull};
+use std::marker::PhantomData;
+use std::path::Path;
+use std::fmt;
 
 #[macro_use]
 mod utility;
@@ -30,16 +31,14 @@ use crate::mujoco_c::*;
 use crate::getter_setter;
 
 // Re-export with lowercase 'f' to fix method generation
-use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjsHField as mjsHfield, mjs_asHField as mjs_asHfield};
+use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjs_asHField as mjs_asHfield};
 use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
 
 /* Validation helpers */
-/// Validates that an object-type value is a real object type, i.e. an [`MjtObj`] discriminant below
-/// [`MjtObj::mjNOBJECT`]. Meta variants (`mjOBJ_FRAME`, `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) and
-/// `mjNOBJECT` itself are rejected because the model compiler uses such values as an unchecked
-/// index into a `mjNOBJECT`-sized array (via `mjCModel::FindObject`), which would read out of
-/// bounds. Used for any safe setter whose value reaches `FindObject` during `compile()`.
+/// Validates that `t` is a real object type, i.e. an [`MjtObj`] discriminant below
+/// [`MjtObj::mjNOBJECT`].
 fn check_objtype(t: MjtObj) -> Result<(), MjEditError> {
+    // A meta variant indexes `mjCModel::FindObject`'s `mjNOBJECT`-sized array out of bounds.
     if (t as i32) < (MjtObj::mjNOBJECT as i32) {
         Ok(())
     } else {
@@ -50,12 +49,9 @@ fn check_objtype(t: MjtObj) -> Result<(), MjEditError> {
 }
 
 /// Validates that a custom-numeric array size is non-negative.
-///
-/// A negative `size` slips through every guard in the model compiler's `mjCNumeric::Compile`
-/// (the `size < data_.size()` check is gated on a non-empty init array, and the zero checks treat
-/// negatives as non-zero), so it undersizes the shared `numeric_data` allocation while another
-/// numeric's zero-fill loop still runs up to its own positive size, writing out of bounds.
 fn check_numeric_size(size: i32) -> Result<(), MjEditError> {
+    // A negative size passes every guard in `mjCNumeric::Compile` and undersizes the shared
+    // `numeric_data` allocation, which another numeric's zero-fill loop then overruns.
     if size < 0 {
         Err(MjEditError::InvalidParameter(format!(
             "numeric size must be non-negative, got {size}"
@@ -89,6 +85,9 @@ pub type MjtAlignFree = mjtAlignFree;
 
 /// Whether to infer body inertias from child geoms.
 pub type MjtInertiaFromGeom = mjtInertiaFromGeom;
+
+/// Conflict-resolution policy used when attaching specifications.
+pub type MjtConflict = mjtConflict;
 
 /// Type of orientation specifier.
 pub type MjtOrientation = mjtOrientation;
@@ -134,73 +133,93 @@ impl MjsOrientation {
     }
 }
 
-/// Compiler options.
-pub type MjsCompiler = mjsCompiler;
+mjs_opaque!(MjsCompiler <= mjsCompiler,
+    "Compiler options. An opaque handle for the FFI type [`mjsCompiler`], reached through \
+[`ffi`](Self::ffi).");
+
 impl MjsCompiler {
     getter_setter! {[&] with, get, set, [
-        autolimits: bool;              "infer \"limited\" attribute based on range.";
-        balanceinertia: bool;          "automatically impose A + B >= C rule.";
-        fitaabb: bool;                 "meshfit to aabb instead of inertia box.";
-        degree: bool;                  "angles in radians or degrees.";
-        discardvisual: bool;           "discard visual geoms in parser.";
-        usethread: bool;               "use multiple threads to speed up compiler.";
-        fusestatic: bool;              "fuse static bodies with parent.";
-        saveinertial: bool;            "save explicit inertial clause for all bodies to XML.";
-        alignfree: bool;               "align free joints with inertial frame.";
+        [ffi, ffi_mut] autolimits: bool;              "infer \"limited\" attribute based on range.";
+        [ffi, ffi_mut] balanceinertia: bool;          "automatically impose A + B >= C rule.";
+        [ffi, ffi_mut] fitaabb: bool;                 "meshfit to aabb instead of inertia box.";
+        [ffi, ffi_mut] degree: bool;                  "angles in radians or degrees.";
+        [ffi, ffi_mut] discardvisual: bool;           "discard visual geoms in parser.";
+        [ffi, ffi_mut] usethread: bool;               "use multiple threads to speed up compiler.";
+        [ffi, ffi_mut] fusestatic: bool;              "fuse static bodies with parent.";
+        [ffi, ffi_mut] saveinertial: bool;            "save explicit inertial clause for all bodies to XML.";
+        [ffi, ffi_mut] alignfree: bool;               "align free joints with inertial frame.";
     ]}
 
     getter_setter! {[&] with, get, set, [
-        boundmass: f64;                "enforce minimum body mass.";
-        boundinertia: f64;             "enforce minimum body diagonal inertia.";
-        settotalmass: f64;             "rescale masses and inertias; <=0: ignore.";
+        [ffi, ffi_mut] boundmass: f64;                "enforce minimum body mass.";
+        [ffi, ffi_mut] boundinertia: f64;             "enforce minimum body diagonal inertia.";
+        [ffi, ffi_mut] settotalmass: f64;             "rescale masses and inertias; <=0: ignore.";
     ]}
 
     getter_setter! {[&] with, get, set, [
-        inertiafromgeom: MjtInertiaFromGeom [force];  "use geom inertias.";
+        [ffi, ffi_mut] inertiafromgeom: MjtInertiaFromGeom [force];  "use geom inertias.";
+        [ffi, ffi_mut] conflict: MjtConflict [force];                "conflict-resolution policy for attach.";
     ]}
 
     getter_setter! {[&] with, get, [
-        inertiagrouprange: &[i32; 2];       "range of geom groups used to compute inertia.";
-        eulerseq: &[c_char; 3];             "sequence for euler rotations.";
-        LRopt: &MjLROpt;                    "options for lengthrange computation.";
+        [ffi, ffi_mut] inertiagrouprange: &[i32; 2];       "range of geom groups used to compute inertia.";
+        [ffi, ffi_mut] eulerseq: &[c_char; 3];             "sequence for euler rotations.";
+        [ffi, ffi_mut] LRopt: &MjLROpt;                    "options for lengthrange computation.";
     ]}
 
     string_set_get_with! {[&]
         meshdir;        "mesh and hfield directory.";
         texturedir;     "texture directory.";
     }
+
+    getter_setter! { get, [
+        [ffi] authored: u64; "bitmask of authored compiler fields.";
+    ]}
 }
+
+/// Authored-field tracking bitmasks for [`mjModel`] structs.
+///
+/// Each field records, as a bitmask, which attributes of the corresponding section were
+/// explicitly authored in the specification.
+pub type MjsAuthored = mjsAuthored;
 
 /***************************
 ** Model Specification
 ***************************/
 /// Model specification. This wraps the FFI type [`mjSpec`] internally.
-#[derive(Debug)]
-pub struct MjSpec(NonNull<mjSpec>);
+///
+/// Model editing is single-threaded. MuJoCo's C++ implementation shares unsynchronized state
+/// between a specification and its elements, so this type is neither [`Send`] nor [`Sync`].
+pub struct MjSpec {
+    /// The specification that MuJoCo owns.
+    ffi: NonNull<mjSpec>,
+}
 
-// SAFETY: `MjSpec` owns its `mjSpec` exclusively, so moving it between threads transfers
-// sole ownership and cannot race.
-//
-// It is intentionally NOT `Sync`. `clone`/`try_clone` produce a faithful, independent copy, but
-// the C++ copy constructor behind `mj_copySpec` is not strictly `const` on the source: for every
-// actuator it calls `ForgetKeyframes`, which clears two `std::map` keyframe-resolution caches
-// (`act_`/`ctrl_`). Those maps are empty for a normally-built spec, yet `std::map::clear` rewrites
-// the tree header unconditionally, so two threads sharing a `&MjSpec` and cloning concurrently
-// would race on those writes (a data race, though no spec data is lost). Hence the type stays `!Sync`.
-unsafe impl Send for MjSpec {}
+impl fmt::Debug for MjSpec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MjSpec").field("ffi", &self.ffi).finish_non_exhaustive()
+    }
+}
 
 impl MjSpec {
+    /// Wraps a specification that MuJoCo allocated.
+    fn from_ffi(ffi: NonNull<mjSpec>) -> Self {
+        Self { ffi }
+    }
+
     /// Creates an empty [`MjSpec`].
     ///
     /// # Panics
-    /// - When the linked MuJoCo version does not match the expected from MuJoCo-rs.
-    /// - When MuJoCo fails to allocate the specification.
-    ///   Use [`MjSpec::try_new`] for a fallible alternative.
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    #[expect(deprecated, reason = "try_new keeps the implementation until it is removed")]
     pub fn new() -> Self {
         Self::try_new().expect("MuJoCo failed to allocate MjSpec")
     }
 
     /// Fallible version of [`MjSpec::new`].
+    ///
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails, so this never returns `Err`.
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
@@ -208,33 +227,34 @@ impl MjSpec {
     ///
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `new`"
+    )]
     pub fn try_new() -> Result<Self, MjEditError> {
         assert_mujoco_version();
         // SAFETY: mj_makeSpec allocates a new MjSpec; returns null on allocation
         // failure, handled by ok_or below.
         let ptr = unsafe { mj_makeSpec() };
-        Ok(MjSpec(NonNull::new(ptr).ok_or(MjEditError::AllocationFailed)?))
+        Ok(Self::from_ffi(NonNull::new(ptr).ok_or(MjEditError::AllocationFailed)?))
     }
 
     /// Creates a deep copy of this [`MjSpec`].
     ///
-    /// Internally calls `mj_copySpec`, which invokes the C++ copy constructor
-    /// on the underlying model.  This is a proper deep copy: the returned spec
-    /// is fully independent from the original.
+    /// A child specification that the model attaches from another file stays shared with the
+    /// original, behind MuJoCo's own reference count.
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo fails to allocate
     /// the copy (e.g. out of memory or an internal C++ exception).
     pub fn try_clone(&self) -> Result<Self, MjEditError> {
-        // SAFETY: self.0 is a valid non-null mjSpec pointer for the lifetime of self
+        // SAFETY: self.ffi is a valid non-null mjSpec pointer for the lifetime of self
         // (struct invariant); mj_copySpec returns null on allocation failure, handled below.
-        let ptr = unsafe { mj_copySpec(self.0.as_ptr()) };
-        NonNull::new(ptr).map(MjSpec).ok_or(MjEditError::AllocationFailed)
+        let ptr = unsafe { mj_copySpec(self.ffi.as_ptr()) };
+        NonNull::new(ptr).map(Self::from_ffi).ok_or(MjEditError::AllocationFailed)
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file.
-    /// # Returns
-    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the XML.
@@ -246,8 +266,6 @@ impl MjSpec {
     }
 
     /// Creates a [`MjSpec`] from the `path` to a file, located in a virtual file system (`vfs`).
-    /// # Returns
-    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the XML.
@@ -276,8 +294,6 @@ impl MjSpec {
     }
 
     /// Creates a [`MjSpec`] from an `xml` string.
-    /// # Returns
-    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
     /// Returns [`MjEditError::ParseFailed`] if MuJoCo encounters an error parsing the string.
     /// # Panics
@@ -300,8 +316,6 @@ impl MjSpec {
     /// Parse and create a [`MjSpec`] from `filename`.
     /// The `content_type` controls the decoder to use.
     /// This is a wrapper around low-level method [`mj_parse`].
-    /// # Returns
-    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
@@ -313,8 +327,6 @@ impl MjSpec {
     }
 
     /// Same as [`MjSpec::from_parse`], except `filename` is taken from `vfs`.
-    /// # Returns
-    /// On success, returns [`Ok`] variant containing the loaded [`MjSpec`].
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::ParseFailed`] if MuJoCo fails to parse the file.
@@ -361,15 +373,15 @@ impl MjSpec {
         }
         else {
             // SAFETY: spec_ptr is confirmed non-null by the guard above.
-            Ok(MjSpec(unsafe { NonNull::new_unchecked(spec_ptr) }))
+            Ok(Self::from_ffi(unsafe { NonNull::new_unchecked(spec_ptr) }))
         }
     }
 
     /// An immutable reference to the internal FFI struct.
     pub fn ffi(&self) -> &mjSpec {
-        // SAFETY: self.0 is a valid non-null mjSpec pointer for the lifetime of
+        // SAFETY: self.ffi is a valid non-null mjSpec pointer for the lifetime of
         // self (struct invariant).
-        unsafe { self.0.as_ref() }
+        unsafe { self.ffi.as_ref() }
     }
 
     /// A mutable reference to the internal FFI struct.
@@ -378,81 +390,72 @@ impl MjSpec {
     /// Callers must ensure that any mutations performed through the returned reference
     /// preserve the invariants that MuJoCo expects for `mjSpec`.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjSpec {
-        unsafe { self.0.as_mut() }
+        unsafe { self.ffi.as_mut() }
     }
 
     /// Delete an element from this specification.
     ///
+    /// # Deprecated
+    /// Call [`SpecObject::delete`] on the element handle instead.
+    ///
     /// # Errors
-    /// Returns [`MjEditError::DeleteFailed`] if MuJoCo cannot delete the element.
+    /// - [`MjEditError::DeleteFailed`] if `element` is null, does not belong to this spec, or
+    ///   MuJoCo refuses the deletion.
+    /// - [`MjEditError::UnsupportedOperation`] if `element` is a default class, a frame, a tendon
+    ///   wrap, or the world body.
     ///
     /// # Safety
-    /// The caller must ensure:
-    /// - `element` is a valid pointer to an mjsElement
-    /// - `element` is owned by this spec
-    /// - `element` has not been previously deleted
-    /// - no Rust references derived from `element` exist
+    /// Same contract as [`SpecObject::delete`], and `element` must point to an element of a
+    /// specification.
+    #[deprecated(since = "6.0.0", note = "use SpecObject::delete on the element handle")]
     pub unsafe fn delete_element(&mut self, element: *mut mjsElement) -> Result<(), MjEditError> {
         if element.is_null() {
             return Err(MjEditError::DeleteFailed("null element pointer".to_owned()));
         }
 
-        let spec = unsafe { self.ffi_mut() };
-        let owner = unsafe { mjs_getSpec(element) };
-        if owner != spec {
-            return Err(MjEditError::DeleteFailed("element does not belong to this spec".to_owned()));
-        }
-
+        // mjCDef is not an mjCBase, so a default class must not reach the owner check below.
         if unsafe { (*element).elemtype } == MjtObj::mjOBJ_DEFAULT {
             return Err(MjEditError::UnsupportedOperation);
         }
-        if unsafe { (*element).elemtype } == MjtObj::mjOBJ_BODY {
-            let name = unsafe { read_mjs_string(mjs_getName(element)) };
-            if name == "world" {
-                return Err(MjEditError::UnsupportedOperation);
-            }
+
+        if unsafe { mjs_getSpec(element) } != self.ffi.as_ptr() {
+            return Err(MjEditError::DeleteFailed("element does not belong to this spec".to_owned()));
         }
 
-        let result = unsafe { mjs_delete(spec, element) };
-        match result {
-            0 => Ok(()),
-            _ => {
-                let error_msg = unsafe {
-                    let ptr = mjs_getError(spec);
-                    if ptr.is_null() {
-                        "Unknown error".to_owned()
-                    } else {
-                        CStr::from_ptr(ptr).to_string_lossy().into_owned()
-                    }
-                };
-                Err(MjEditError::DeleteFailed(error_msg))
-            }
-        }
+        unsafe { utility::delete_element(element) }
     }
 
     /// Compile [`MjSpec`] to [`MjModel`].
     /// A spec can be edited and compiled multiple times,
     /// returning a new mjModel instance that takes the edits into account.
-    /// # Returns
-    /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
     /// Returns [`MjEditError::CompileFailed`] if the model fails to compile, including when a
-    /// texture has a builtin pattern set while its `nchannel` is less than 3.
+    /// texture has a builtin pattern set while its `nchannel` is less than 3, and when a texture
+    /// has a negative dimension or a pixel count that does not fit in an [`i32`].
     pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
-        // The builtin-texture generators (`Builtin2D`/`BuiltinCube`) write a hard-coded 3 bytes per
-        // pixel, but MuJoCo only allocates `nchannel*width*height` bytes and (unlike the file/data
-        // paths) does not check `nchannel >= 3` for the builtin path, so `nchannel < 3` heap-overflows
-        // during compilation. Both setters (`set_nchannel`, `set_builtin`) are safe and independent,
-        // so this cross-field invariant can only be enforced at the compile choke point.
+        // The builtin generators write 3 bytes per pixel into an `nchannel*width*height` buffer,
+        // and the setters are independent, so `compile` is the only place to check them together.
         for texture in self.texture_iter() {
             if texture.builtin() != MjtBuiltin::mjBUILTIN_NONE && texture.nchannel() < 3 {
                 return Err(MjEditError::CompileFailed(
                     "texture with a builtin pattern requires nchannel >= 3".to_owned(),
                 ));
             }
+
+            let (nchannel, width, height) = (texture.nchannel(), texture.width(), texture.height());
+            if nchannel < 0 || width < 0 || height < 0 {
+                return Err(MjEditError::CompileFailed(
+                    "texture nchannel, width and height must be non-negative".to_owned(),
+                ));
+            }
+            if i64::from(nchannel) * i64::from(width) * i64::from(height) > i64::from(i32::MAX) {
+                return Err(MjEditError::CompileFailed(
+                    "texture nchannel*width*height must fit in an i32".to_owned(),
+                ));
+            }
         }
 
-        let result = unsafe { MjModel::from_raw( mj_compile(self.0.as_ptr(), ptr::null()) ) };
+        let result = unsafe { MjModel::from_raw( mj_compile(self.ffi.as_ptr(), ptr::null()) ) };
         result.map_err(|_| {
             // SAFETY: The spec is still valid after failed compilation.
             // The error pointer is valid until the next MuJoCo call on this spec.
@@ -468,14 +471,30 @@ impl MjSpec {
         })
     }
 
-    /// Return compiler timers (`mjtCTimer` order).
+    /// Return the compiler timers, in seconds, in `mjtCTimer` order.
     pub fn timer(&self) -> &[f64; MjtCTimer::mjNCTIMER as usize] {
-        unsafe { &*mjs_getTimer(self.0.as_ptr()).cast() }
+        unsafe { &*mjs_getTimer(self.ffi.as_ptr()).cast() }
+    }
+
+    /// Get number of warnings accumulated in the spec. Wraps [`mjs_numWarnings`].
+    pub fn num_warnings(&self) -> i32 {
+        // SAFETY: self.ffi is a valid non-null mjSpec pointer.
+        unsafe { mjs_numWarnings(self.ffi.as_ptr()) }
+    }
+
+    /// Get the i-th warning message. Returns `None` if the index is out of bounds, or if the
+    /// message is not valid UTF-8. Wraps [`mjs_getWarning`].
+    pub fn warning(&self, index: i32) -> Option<&str> {
+        // SAFETY: the string belongs to the spec and lives as long as the borrow of self.
+        let ptr = unsafe { mjs_getWarning(self.ffi.as_ptr(), index) };
+        if ptr.is_null() {
+            None
+        } else {
+            unsafe { CStr::from_ptr(ptr) }.to_str().ok()
+        }
     }
 
     /// Saves the spec to an XML file.
-    /// # Returns
-    /// `Ok(())` on success.
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::SaveFailed`] with MuJoCo's error message if saving fails.
@@ -506,8 +525,6 @@ impl MjSpec {
 
     /// Saves the spec to an XML string.
     /// `buffer_size` controls how many bytes are allocated for the output.
-    /// # Returns
-    /// On success, returns the generated XML string.
     /// # Errors
     /// - [`MjEditError::XmlBufferTooSmall`] when `buffer_size` is too small.
     ///   The `required_size` field uses `snprintf`-style semantics (bytes to write, excluding NUL),
@@ -565,17 +582,24 @@ impl MjSpec {
 /// Public attributes.
 impl MjSpec {
     string_set_get_with! {
-        [ffi, ffi_mut] modelname; "model name.";
-        [ffi, ffi_mut] comment; "comment at top of XML.";
-        [ffi, ffi_mut] modelfiledir; "path to model file.";
+        modelname; "model name.";
+        comment; "comment at top of XML.";
+        modelfiledir; "path to model file.";
     }
 
     getter_setter! {
         with, get, [
-            [ffi, ffi_mut] compiler: &MjsCompiler; "compiler options.";
             [ffi, ffi_mut] stat: &MjStatistic; "statistic overrides.";
             [ffi, ffi_mut] visual: &MjVisual; "visualization options.";
             [ffi, ffi_mut] option: &MjOption; "simulation options.";
+        ]
+    }
+
+    nested_handle!(compiler: MjsCompiler; "compiler options.");
+
+    getter_setter! {
+        get, [
+            [ffi] (allow_mut = false) authored: &MjsAuthored; "authored-field tracking bitmasks.";
         ]
     }
 
@@ -625,8 +649,6 @@ impl MjSpec {
     }
 
     /// Fallible version of [`MjSpec::add_default`].
-    /// # Returns
-    /// On success, returns a mutable reference to the newly created [`MjsDefault`].
     /// # Errors
     /// Returns [`MjEditError::AlreadyExists`] when `class_name` already exists.
     /// Returns [`MjEditError::NotFound`] when `parent_class_name` doesn't exist.
@@ -636,7 +658,7 @@ impl MjSpec {
         let c_class_name = CString::new(class_name).unwrap();
 
         let parent_ptr = if let Some(name) = parent_class_name {
-                self.default(name).ok_or(MjEditError::NotFound)?
+                self.default(name).ok_or(MjEditError::NotFound)?.ffi()
         } else {
             ptr::null()
         };
@@ -651,7 +673,7 @@ impl MjSpec {
                 Err(MjEditError::AlreadyExists)
             }
             else {
-                Ok(&mut *ptr_default)
+                Ok(MjsDefault::from_ffi_ptr_mut(ptr_default).unwrap())
             }
         }
     }
@@ -660,44 +682,35 @@ impl MjSpec {
 /// Mutable iterator over items in [`MjSpec`].
 #[derive(Debug)]
 pub struct MjsSpecItemIterMut<'a, T> {
-    /// Pointer to the wrapped mjSpec pointer.
-    /// This is the FFI type wrapped inside [`MjSpec`].
+    /// Raw pointer to the spec; a borrow would alias the handles that the iterator yields.
     ffi_ptr: *mut mjSpec,
-    /// Last obtained element in the iterator.
-    /// This CAN be null, and this iterator it uses the null to detect
-    /// end of iteration. 
+    /// Element that the last `next` yielded. Null marks the end of the iteration.
     last: *mut mjsElement,
-    /// Used for generic implementation of iterator's methods.
     item_type: PhantomData<&'a mut T>
 }
 
 /// Immutable iterator over items in [`MjSpec`].
 #[derive(Debug, Clone)]
 pub struct MjsSpecItemIter<'a, T> {
-    /// Pointer to the wrapped mjSpec pointer.
-    /// This is the FFI type wrapped inside [`MjSpec`].
     ffi_ptr: *const mjSpec,
-    /// Last obtained element in the iterator.
-    /// This CAN be null, and this iterator it uses the null to detect
-    /// end of iteration. 
+    /// Element that the last `next` yielded. Null marks the end of the iteration.
     last: *mut mjsElement,
-    /// Used for generic implementation of iterator's methods.
     item_type: PhantomData<&'a T>
 }
 
 impl<'a, T: SpecObject> MjsSpecItemIterMut<'a, T> {
     fn new(root: &'a mut MjSpec) -> Self {
-        let last = unsafe { mjs_firstElement(root.0.as_ptr(), T::OBJ_TYPE) };
-        Self { ffi_ptr: root.0.as_ptr(), last, item_type: PhantomData }
+        let last = unsafe { mjs_firstElement(root.ffi.as_ptr(), T::OBJ_TYPE) };
+        Self { ffi_ptr: root.ffi.as_ptr(), last, item_type: PhantomData }
     }
 }
 
 impl<'a, T: SpecObject> MjsSpecItemIter<'a, T> {
     fn new(root: &'a MjSpec) -> Self {
-        // SAFETY: mjs_firstElement does not mutate mjsSpec, thus as_ptr is valid to be case to *mut
-        // from the const reference to its wrapper.
-        let last = unsafe { mjs_firstElement(root.0.as_ptr(), T::OBJ_TYPE) };
-        Self { ffi_ptr: root.0.as_ptr(), last, item_type: PhantomData }
+        // SAFETY: mjs_firstElement takes a *const mjSpec; the borrow of root keeps the spec
+        // alive for the call.
+        let last = unsafe { mjs_firstElement(root.ffi.as_ptr(), T::OBJ_TYPE) };
+        Self { ffi_ptr: root.ffi.as_ptr(), last, item_type: PhantomData }
     }
 }
 
@@ -727,24 +740,27 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsSpecItemIter<'a, T> {
         }
         unsafe {
             let out = T::from_element_as_ptr_mut(self.last).as_ref();
-            // SAFETY: mjs_nextElement does not mutate mjsSpec, thus as_ptr is valid to be case to *mut
-            // from the const reference to its wrapper.
+            // SAFETY: mjs_nextElement takes *const pointers; ffi_ptr and last stay valid while
+            // the iterator borrows the spec.
             self.last = mjs_nextElement(self.ffi_ptr, self.last);
             out
         }
     }
 }
 
-// Once self.last is null, next() always returns None.
 impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsSpecItemIterMut<'a, T> {}
 impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsSpecItemIter<'a, T> {}
 
 /// Iterator methods.
 impl MjSpec {
     spec_get_iter! {
-        body, geom, joint, site, camera, light, frame, actuator, sensor, flex, pair, equality,
+        geom, joint, site, camera, light, frame, actuator, sensor, flex, pair, equality,
         exclude, tendon, numeric, text, tuple, key, mesh, hfield, skin, texture, material, plugin
     }
+
+    // A body owns a subtree, so a flat mutable iterator would hand out an ancestor and that
+    // ancestor's own descendant at once. Reach a body through `world_body_mut` and walk down.
+    spec_get_iter!(read_only: body);
 }
 
 impl Default for MjSpec {
@@ -755,9 +771,9 @@ impl Default for MjSpec {
 
 impl Drop for MjSpec {
     fn drop(&mut self) {
-        // SAFETY: self.0 is a valid non-null mjSpec pointer; called exactly once
+        // SAFETY: self.ffi is a valid non-null mjSpec pointer; called exactly once
         // in Drop.
-        unsafe { mj_deleteSpec(self.0.as_ptr()); }
+        unsafe { mj_deleteSpec(self.ffi.as_ptr()); }
     }
 }
 
@@ -765,7 +781,7 @@ impl Clone for MjSpec {
     /// Creates a deep copy of this [`MjSpec`].
     ///
     /// # Panics
-    /// Panics if MuJoCo fails to allocate the cloned spec.
+    /// Panics if MuJoCo raises an error while it copies the spec.
     /// Use [`MjSpec::try_clone`] for a fallible alternative.
     fn clone(&self) -> Self {
         self.try_clone().expect("MuJoCo failed to clone MjSpec")
@@ -775,24 +791,24 @@ impl Clone for MjSpec {
 /***************************
 ** Site specification
 ***************************/
-mjs_struct!(Site [SpecObject]);
+mjs_struct!(Site with SpecObject: MjsSite <= mjsSite);
 impl MjsSite {
     getter_setter! {
         [&] with, get, [
             // frame, size
-            pos:  &[f64; 3];              "position.";
-            quat: &[f64; 4];              "orientation.";
-            alt:  &MjsOrientation;        "alternative orientation.";
-            fromto: &[f64; 6];            "alternative for capsule, cylinder, box, ellipsoid.";
-            size: &[f64; 3];              "geom size.";
+            [ffi, ffi_mut] pos:  &[f64; 3];              "position.";
+            [ffi, ffi_mut] quat: &[f64; 4];              "orientation.";
+            [ffi, ffi_mut] alt:  &MjsOrientation;        "alternative orientation.";
+            [ffi, ffi_mut] fromto: &[f64; 6];            "alternative for capsule, cylinder, box, ellipsoid.";
+            [ffi, ffi_mut] size: &[f64; 3];              "geom size.";
 
             // visual
-            rgba: &[f32; 4];              "rgba when material is omitted.";
+            [ffi, ffi_mut] rgba: &[f32; 4];              "rgba when material is omitted.";
     ]}
 
     getter_setter!([&] with, get, set, [
-        type_ + _: MjtGeom;               "geom type.";
-        group: i32;                       "group.";
+        [ffi, ffi_mut] type_ + _: MjtGeom;               "geom type.";
+        [ffi, ffi_mut] group: i32;                       "group.";
     ]);
 
     userdata_method!(f64);
@@ -805,52 +821,52 @@ impl MjsSite {
 /***************************
 ** Joint specification
 ***************************/
-mjs_struct!(Joint [SpecObject]);
+mjs_struct!(Joint with SpecObject: MjsJoint <= mjsJoint);
 impl MjsJoint {
     getter_setter! {
         [&] with, get, [
             // kinematics
-            pos:     &[f64; 3];         "anchor position.";
-            axis:    &[f64; 3];         "joint axis.";
-            ref_ + _:    &f64;          "value at reference configuration: qpos0.";
-            springdamper: &[f64; 2];    "timeconst, dampratio.";
+            [ffi, ffi_mut] pos:     &[f64; 3];         "anchor position.";
+            [ffi, ffi_mut] axis:    &[f64; 3];         "joint axis.";
+            [ffi, ffi_mut] ref_ + _:    &f64;          "value at reference configuration: qpos0.";
+            [ffi, ffi_mut] springdamper: &[f64; 2];    "timeconst, dampratio.";
 
             // stiffness
-            stiffness: &[f64; mjNPOLY as usize + 1];            "stiffness coefficient.";
+            [ffi, ffi_mut] stiffness: &[f64; mjNPOLY as usize + 1];            "stiffness coefficients.";
 
             // limits
-            range:   &[f64; 2];         "joint limits.";
-            solref_limit: &[MjtNum; mjNREF as usize];  "solver reference: joint limits.";
-            solimp_limit: &[MjtNum; mjNIMP as usize];  "solver impedance: joint limits.";
-            actfrcrange: &[f64; 2];     "actuator force limits.";
+            [ffi, ffi_mut] range:   &[f64; 2];         "joint limits.";
+            [ffi, ffi_mut] solref_limit: &[MjtNum; mjNREF as usize];  "solver reference: joint limits.";
+            [ffi, ffi_mut] solimp_limit: &[MjtNum; mjNIMP as usize];  "solver impedance: joint limits.";
+            [ffi, ffi_mut] actfrcrange: &[f64; 2];     "actuator force limits.";
 
             // dof properties
-            damping: &[f64; mjNPOLY as usize + 1];                 "damping coefficient.";
-            solref_friction: &[MjtNum; mjNREF as usize]; "solver reference: dof friction.";
-            solimp_friction: &[MjtNum; mjNIMP as usize]; "solver impedance: dof friction.";
+            [ffi, ffi_mut] damping: &[f64; mjNPOLY as usize + 1];                 "damping coefficients.";
+            [ffi, ffi_mut] solref_friction: &[MjtNum; mjNREF as usize]; "solver reference: dof friction.";
+            [ffi, ffi_mut] solimp_friction: &[MjtNum; mjNIMP as usize]; "solver impedance: dof friction.";
         ]
     }
 
     getter_setter!([&] with, get, set, [
-        type_ + _: MjtJoint;           "joint type.";
-        group: i32;                    "joint group.";
-        springref: f64;               "spring reference value: qpos_spring.";
-        margin: f64;                  "margin value for joint limit detection.";
-        armature: f64;                "armature inertia (mass for slider).";
-        frictionloss: f64;            "friction loss.";
+        [ffi, ffi_mut] type_ + _: MjtJoint;           "joint type.";
+        [ffi, ffi_mut] group: i32;                    "joint group.";
+        [ffi, ffi_mut] springref: f64;               "spring reference value: qpos_spring.";
+        [ffi, ffi_mut] margin: f64;                  "margin value for joint limit detection.";
+        [ffi, ffi_mut] armature: f64;                "armature inertia (mass for slider).";
+        [ffi, ffi_mut] frictionloss: f64;            "friction loss.";
     ]);
 
     getter_setter! {
         [&] with, get, set, [
-            align: MjtAlignFree [force];       "align free joint with body com (mjtAlignFree).";
-            limited: MjtLimited [force];       "does joint have limits (mjtLimited).";
-            actfrclimited: MjtLimited [force]; "are actuator forces on joint limited (mjtLimited).";
+            [ffi, ffi_mut] align: MjtAlignFree [force];       "align free joint with body com (mjtAlignFree).";
+            [ffi, ffi_mut] limited: MjtLimited [force];       "does joint have limits (mjtLimited).";
+            [ffi, ffi_mut] actfrclimited: MjtLimited [force]; "are actuator forces on joint limited (mjtLimited).";
         ]
     }
 
     getter_setter! {
         [&] with, get, set, [
-            actgravcomp: bool;         "is gravcomp force applied via actuators.";
+            [ffi, ffi_mut] actgravcomp: bool;         "is gravcomp force applied via actuators.";
         ]
     }
 
@@ -860,44 +876,42 @@ impl MjsJoint {
 /***************************
 ** Geom specification
 ***************************/
-mjs_struct!(Geom [SpecObject]);
+mjs_struct!(Geom with SpecObject: MjsGeom <= mjsGeom);
 impl MjsGeom {
     getter_setter! {
         [&] with, get, [
-            pos: &[f64; 3];                         "geom position.";
-            quat: &[f64; 4];                        "geom orientation.";
-            alt: &MjsOrientation;                   "alternative orientation.";
-            fromto: &[f64; 6];                      "alternative for capsule, cylinder, box, ellipsoid.";
-            size: &[f64; 3];                        "geom size.";
-            rgba: &[f32; 4];                        "rgba when material is omitted.";
-            friction: &[f64; 3];                    "one-sided friction coefficients: slide, roll, spin.";
-            solref: &[MjtNum; mjNREF as usize];     "solver reference.";
-            solimp: &[MjtNum; mjNIMP as usize];     "solver impedance.";
-            fluid_coefs: &[MjtNum; 5];              "ellipsoid-fluid interaction coefs."
+            [ffi, ffi_mut] pos: &[f64; 3];                         "geom position.";
+            [ffi, ffi_mut] quat: &[f64; 4];                        "geom orientation.";
+            [ffi, ffi_mut] alt: &MjsOrientation;                   "alternative orientation.";
+            [ffi, ffi_mut] fromto: &[f64; 6];                      "alternative for capsule, cylinder, box, ellipsoid.";
+            [ffi, ffi_mut] size: &[f64; 3];                        "geom size.";
+            [ffi, ffi_mut] rgba: &[f32; 4];                        "rgba when material is omitted.";
+            [ffi, ffi_mut] friction: &[f64; 3];                    "one-sided friction coefficients: slide, spin, roll.";
+            [ffi, ffi_mut] solref: &[MjtNum; mjNREF as usize];     "solver reference.";
+            [ffi, ffi_mut] solimp: &[MjtNum; mjNIMP as usize];     "solver impedance.";
+            [ffi, ffi_mut] surfacevel: &[f64; 6];                  "surface velocity in local frame: linear, angular.";
+            [ffi, ffi_mut] fluid_coefs: &[MjtNum; 5];              "ellipsoid-fluid interaction coefs."
         ]
     }
 
-    getter_setter! {
-        get, [
-            plugin: &MjsPlugin;                     "sdf plugin.";
-        ]
-    }
+    nested_handle!(plugin: MjsPluginReference; "sdf plugin.");
 
     getter_setter!([&] with, get, set, [
-        type_ + _: MjtGeom;            "geom type.";
-        group: i32;                    "group.";
-        contype: i32;                  "contact type.";
-        conaffinity: i32;              "contact affinity.";
-        condim: i32;                   "contact dimensionality.";
-        priority: i32;                 "contact priority.";
-        solmix: f64;                   "solver mixing for contact pairs.";
-        margin: f64;                   "margin for contact detection.";
-        gap: f64;                      "additional contact detection buffer.";
-        mass: f64;                     "used to compute density.";
-        density: f64;                  "used to compute mass and inertia from volume or surface.";
-        typeinertia: MjtGeomInertia;   "selects between surface and volume inertia.";
-        fluid_ellipsoid: MjtNum;       "whether ellipsoid-fluid model is active.";
-        fitscale: f64;                 "scale mesh uniformly.";
+        [ffi, ffi_mut] type_ + _: MjtGeom;            "geom type.";
+        [ffi, ffi_mut] group: i32;                    "group.";
+        [ffi, ffi_mut] contype: i32;                  "contact type.";
+        [ffi, ffi_mut] conaffinity: i32;              "contact affinity.";
+        [ffi, ffi_mut] condim: i32;                   "contact dimensionality.";
+        [ffi, ffi_mut] priority: i32;                 "contact priority.";
+        [ffi, ffi_mut] solmix: f64;                   "solver mixing for contact pairs.";
+        [ffi, ffi_mut] margin: f64;                   "margin for contact detection.";
+        [ffi, ffi_mut] gap: f64;                      "additional contact detection buffer.";
+        [ffi, ffi_mut] adhesion: f64;                 "adhesive force of contacts.";
+        [ffi, ffi_mut] mass: f64;                     "used to compute density.";
+        [ffi, ffi_mut] density: f64;                  "used to compute mass and inertia from volume or surface.";
+        [ffi, ffi_mut] typeinertia: MjtGeomInertia;   "selects between surface and volume inertia.";
+        [ffi, ffi_mut] fluid_ellipsoid: MjtNum;       "whether ellipsoid-fluid model is active.";
+        [ffi, ffi_mut] fitscale: f64;                 "scale mesh uniformly.";
     ]);
 
     userdata_method!(f64);
@@ -912,29 +926,29 @@ impl MjsGeom {
 /***************************
 ** Camera specification
 ***************************/
-mjs_struct!(Camera [SpecObject]);
+mjs_struct!(Camera with SpecObject: MjsCamera <= mjsCamera);
 impl MjsCamera {
     getter_setter! {
         [&] with, get, [
-            pos: &[f64; 3];               "camera position.";
-            quat: &[f64; 4];              "camera orientation.";
-            alt: &MjsOrientation;         "alternative orientation.";
-            intrinsic: &[f32; 4];         "intrinsic parameters.";
-            sensor_size: &[f32; 2];       "sensor size.";
-            resolution: &[i32; 2];        "resolution.";
-            focal_length: &[f32; 2];      "focal length (length).";
-            focal_pixel: &[f32; 2];       "focal length (pixel).";
-            principal_length: &[f32; 2];  "principal point (length).";
-            principal_pixel: &[f32; 2];   "principal point (pixel).";
+            [ffi, ffi_mut] pos: &[f64; 3];               "camera position.";
+            [ffi, ffi_mut] quat: &[f64; 4];              "camera orientation.";
+            [ffi, ffi_mut] alt: &MjsOrientation;         "alternative orientation.";
+            [ffi, ffi_mut] intrinsic: &[f32; 4];         "intrinsic parameters.";
+            [ffi, ffi_mut] sensor_size: &[f32; 2];       "sensor size.";
+            [ffi, ffi_mut] resolution: &[i32; 2];        "resolution.";
+            [ffi, ffi_mut] focal_length: &[f32; 2];      "focal length (length).";
+            [ffi, ffi_mut] focal_pixel: &[f32; 2];       "focal length (pixel).";
+            [ffi, ffi_mut] principal_length: &[f32; 2];  "principal point (length).";
+            [ffi, ffi_mut] principal_pixel: &[f32; 2];   "principal point (pixel).";
         ]
     }
 
     getter_setter!([&] with, get, set, [
-        mode: MjtCamLight;              "camera mode.";
-        fovy: f64;                      "field of view in y direction.";
-        ipd: f64;                       "inter-pupillary distance for stereo.";
-        proj: MjtProjection;            "camera projection type.";
-        output: i32;                    "bit flags for output type.";
+        [ffi, ffi_mut] mode: MjtCamLight;              "camera mode.";
+        [ffi, ffi_mut] fovy: f64;                      "field of view in y direction.";
+        [ffi, ffi_mut] ipd: f64;                       "inter-pupillary distance for stereo.";
+        [ffi, ffi_mut] proj: MjtProjection;            "camera projection type.";
+        [ffi, ffi_mut] output: i32;                    "bit flags for output type.";
     ]);
 
     userdata_method!(f64);
@@ -947,33 +961,34 @@ impl MjsCamera {
 /***************************
 ** Light specification
 ***************************/
-mjs_struct!(Light [SpecObject]);
+mjs_struct!(Light with SpecObject: MjsLight <= mjsLight);
 impl MjsLight {
     getter_setter! {
         [&] with, get, [
-            pos: &[f64; 3];               "light position.";
-            dir: &[f64; 3];               "light direction.";
-            ambient: &[f32; 3];           "ambient color.";
-            diffuse: &[f32; 3];           "diffuse color.";
-            specular: &[f32; 3];          "specular color.";
-            attenuation: &[f32; 3];       "OpenGL attenuation (quadratic model).";
+            [ffi, ffi_mut] pos: &[f64; 3];               "light position.";
+            [ffi, ffi_mut] dir: &[f64; 3];               "light direction.";
+            [ffi, ffi_mut] ambient: &[f32; 3];           "ambient color.";
+            [ffi, ffi_mut] diffuse: &[f32; 3];           "diffuse color.";
+            [ffi, ffi_mut] specular: &[f32; 3];          "specular color.";
+            [ffi, ffi_mut] attenuation: &[f32; 3];       "OpenGL attenuation (quadratic model).";
         ]
     }
 
     getter_setter!([&] with, get, set, [
-        mode: MjtCamLight;             "light mode.";
-        type_ + _: MjtLightType;       "light type.";
-        bulbradius: f32;               "bulb radius, for soft shadows.";
-        intensity: f32;                "intensity, in candelas.";
-        range: f32;                    "range of effectiveness.";
-        cutoff: f32;                   "OpenGL cutoff.";
-        exponent: f32;                 "OpenGL exponent.";
+        [ffi, ffi_mut] mode: MjtCamLight;             "light mode.";
+        [ffi, ffi_mut] type_ + _: MjtLightType;       "light type.";
+        [ffi, ffi_mut] bulbradius: f32;               "bulb radius, for soft shadows.";
+        [ffi, ffi_mut] intensity: f32;                "intensity, in candelas.";
+        [ffi, ffi_mut] range: f32;                    "range of effectiveness.";
+        [ffi, ffi_mut] cutoff: f32;                   "OpenGL cutoff.";
+        [ffi, ffi_mut] softness: f32;                 "spotlight edge softness.";
+        [ffi, ffi_mut] exponent: f32;                 "OpenGL exponent.";
     ]);
 
     getter_setter! {
         [&] with, get, set, [
-            active: bool;       "active flag.";
-            castshadow: bool;   "whether light cast shadows."
+            [ffi, ffi_mut] active: bool;       "active flag.";
+            [ffi, ffi_mut] castshadow: bool;   "whether light cast shadows."
         ]
     }
 
@@ -986,15 +1001,15 @@ impl MjsLight {
 /***************************
 ** Frame specification
 ***************************/
-mjs_struct!(Frame [SpecObject]);
+mjs_struct!(Frame with SpecObject: MjsFrame <= mjsFrame);
 impl MjsFrame {
     add_x_method_by_frame! { body, site, joint, geom, camera, light }
 
     getter_setter! {
         [&] with, get, [
-            pos: &[f64; 3];               "frame position.";
-            quat: &[f64; 4];              "frame orientation.";
-            alt: &MjsOrientation;         "alternative orientation.";
+            [ffi, ffi_mut] pos: &[f64; 3];               "frame position.";
+            [ffi, ffi_mut] quat: &[f64; 4];              "frame orientation.";
+            [ffi, ffi_mut] alt: &MjsOrientation;         "alternative orientation.";
         ]
     }
 
@@ -1004,29 +1019,32 @@ impl MjsFrame {
 
     /// Add and return a child frame.
     ///
-    /// Delegates to [`Self::try_add_frame`] and panics if allocation fails.
-    /// # Panics
-    /// Panics if MuJoCo fails to allocate the frame.
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails.
+    #[expect(deprecated, reason = "try_add_frame keeps the implementation until it is removed")]
     pub fn add_frame(&mut self) -> &mut MjsFrame {
         self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
     }
 
     /// Fallible version of [`Self::add_frame`].
     ///
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails, so this never returns `Err`.
+    ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
     /// the frame, instead of panicking.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `add_frame`"
+    )]
     pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
-        // SAFETY: element_mut_pointer() reads `self.element`, valid for any live MjsFrame.
-        // mjs_getParent returns non-null because every Rust-API MjsFrame was created via
-        // mjs_addFrame, which always calls SetParent(body).
+        // SAFETY: mjs_addFrame always calls SetParent(body), so every frame the Rust API hands out
+        // has a non-null parent. The frame it returns is freshly allocated, so nothing aliases it.
         let parent_body = unsafe { mjs_getParent(self.element_mut_pointer()) };
         debug_assert!(!parent_body.is_null(), "mjs_getParent returned null; frame has no parent body");
-        let ptr = unsafe { mjs_addFrame(parent_body, self) };
-        // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
-        // pointee is properly aligned and initialized by C++ operator new, and freshly
-        // allocated so no existing Rust reference aliases it for the returned lifetime.
-        unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
+        let ptr = unsafe { mjs_addFrame(parent_body, self.ffi_mut()) };
+        unsafe { MjsFrame::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
     }
 }
 
@@ -1035,59 +1053,58 @@ impl MjsFrame {
 /***************************
 ** Actuator specification
 ***************************/
-mjs_struct!(Actuator [SpecObject]);
+mjs_struct!(Actuator with SpecObject: MjsActuator <= mjsActuator);
 impl MjsActuator {
     getter_setter! {
         [&] with, get, [
-            gear: &[f64; 6];                            "gear parameters.";
-            gainprm: &[f64; mjNGAIN as usize];          "gain parameters.";
-            biasprm: &[f64; mjNBIAS as usize];          "bias parameters.";
-            dynprm: &[f64; mjNDYN as usize];            "dynamic parameters.";
-            lengthrange: &[f64; 2];                     "transmission length range.";
-            damping: &[f64; mjNPOLY as usize + 1];      "damping coefficient.";
-            ctrlrange: &[f64; 2];                       "control range.";
-            forcerange: &[f64; 2];                      "force range.";
-            actrange: &[f64; 2];                        "activation range.";
+            [ffi, ffi_mut] gear: &[f64; 6];                            "gear parameters.";
+            [ffi, ffi_mut] gainprm: &[f64; mjNGAIN as usize];          "gain parameters.";
+            [ffi, ffi_mut] biasprm: &[f64; mjNBIAS as usize];          "bias parameters.";
+            [ffi, ffi_mut] dynprm: &[f64; mjNDYN as usize];            "dynamic parameters.";
+            [ffi, ffi_mut] lengthrange: &[f64; 2];                     "transmission length range.";
+            [ffi, ffi_mut] damping: &[f64; mjNPOLY as usize + 1];      "damping coefficients.";
+            [ffi, ffi_mut] ctrlrange: &[f64; 2];                       "control range.";
+            [ffi, ffi_mut] velrange: &[f64; 2];                        "range of the velocity-setpoint input (pid).";
+            [ffi, ffi_mut] ffrange: &[f64; 2];                         "range of the feedforward input (pid).";
+            [ffi, ffi_mut] forcerange: &[f64; 2];                      "force range.";
+            [ffi, ffi_mut] actrange: &[f64; 2];                        "activation range.";
         ]
     }
 
-    getter_setter! {
-        get, [
-            plugin: &MjsPlugin;                     "actuator plugin.";
-        ]
-    }
+    nested_handle!(plugin: MjsPluginReference; "actuator plugin.");
 
     getter_setter!([&] with, get, set, [
-        gaintype: MjtGain;             "gain type.";
-        biastype: MjtBias;             "bias type.";
-        dyntype: MjtDyn;               "dyn type.";
-        group: i32;                    "group.";
-        actdim: i32;                   "number of activation variables.";
-        trntype: MjtTrn;               "transmission type.";
-        cranklength: f64;              "crank length, for slider-crank.";
-        inheritrange: f64;             "automatic range setting for position and intvelocity.";
-        armature: f64;                 "armature inertia.";
-        nsample: i32;                  "number of samples in history buffer.";
-        interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
-        delay: f64;                    "delay time in seconds; 0: no delay.";
+        [ffi, ffi_mut] gaintype: MjtGain;             "gain type.";
+        [ffi, ffi_mut] biastype: MjtBias;             "bias type.";
+        [ffi, ffi_mut] dyntype: MjtDyn;               "dyn type.";
+        [ffi, ffi_mut] group: i32;                    "group.";
+        [ffi, ffi_mut] actdim: i32;                   "number of activation variables.";
+        [ffi, ffi_mut] trntype: MjtTrn;               "transmission type.";
+        [ffi, ffi_mut] cranklength: f64;              "crank length, for slider-crank.";
+        [ffi, ffi_mut] inheritrange: f64;             "automatic range setting for position and intvelocity.";
+        [ffi, ffi_mut] armature: f64;                 "armature inertia.";
+        [ffi, ffi_mut] nsample: i32;                  "number of samples in history buffer.";
+        [ffi, ffi_mut] interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
+        [ffi, ffi_mut] delay: f64;                    "delay time in seconds; 0: no delay.";
+        [ffi, ffi_mut] ctrlspec: i32;                 "input signature, scoped by gaintype; 0: type default.";
     ]);
 
     getter_setter! {
         [&] with, get, set, [
-            ctrllimited: MjtLimited [force];        "are control limits defined.";
-            forcelimited: MjtLimited [force];       "are force limits defined.";
+            [ffi, ffi_mut] ctrllimited: MjtLimited [force];        "are control limits defined.";
+            [ffi, ffi_mut] forcelimited: MjtLimited [force];       "are force limits defined.";
         ]
     }
 
     getter_setter! {
         [&] with, get, set, [
-            actlimited: MjtLimited [force];         "are activation limits defined.";
+            [ffi, ffi_mut] actlimited: MjtLimited [force];         "are activation limits defined.";
         ]
     }
 
     getter_setter! {
         [&] with, get, set, [
-            actearly: bool;                "apply next activations to qfrc.";
+            [ffi, ffi_mut] actearly: bool;                "apply next activations to qfrc.";
         ]
     }
 
@@ -1101,11 +1118,8 @@ impl MjsActuator {
 }
 
 
-/// Converts the error string returned by MuJoCo's `mjs_setToX` actuator
-/// configuration functions into a [`Result`].
-///
-/// Those functions return an empty string on success and a non-empty,
-/// NUL-terminated message describing the rejected parameter on failure.
+/// Converts the string that MuJoCo's `mjs_setToX` actuator functions return into a [`Result`].
+/// An empty string is success; anything else names the rejected parameter.
 fn actuator_set_result(c_err_msg: *const c_char) -> Result<(), MjEditError> {
     // SAFETY: MuJoCo's error messages are always NUL terminated.
     let err_msg = unsafe { CStr::from_ptr(c_err_msg) }.to_string_lossy();
@@ -1117,13 +1131,8 @@ fn actuator_set_result(c_err_msg: *const c_char) -> Result<(), MjEditError> {
     }
 }
 
-/* Actuator configuration structs.
-** Each `set_to_*` method taking optional (nullable in C) parameters has its own config struct.
-** Build either with struct-update syntax or with the chainable `with_*` builder methods, e.g.
-** `PositionConfig { kp: 10.0, kv: Some(2.0), ..Default::default() }` or
-** `PositionConfig::default().with_kp(10.0).with_kv(2.0)`. Optional fields default to `None`,
-** leaving the corresponding actuator parameter at its MuJoCo default; the `with_*` setters take
-** the inner value directly and wrap it in `Some`. */
+/* Actuator configuration structs. A `None` field reaches MuJoCo as a null pointer, which leaves
+** the corresponding actuator parameter at its own default. */
 
 /// Configuration for [`MjsActuator::set_to_position`].
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -1186,8 +1195,9 @@ impl IntVelocityConfig {
 pub struct DcMotorConfig {
     /// Electrical resistance.
     pub resistance: f64,
-    /// Input mode selector.
-    pub input_mode: i32,
+    /// Input signature: a bitmask of
+    /// [`MjtCtrlInput`](crate::wrappers::mj_model::MjtCtrlInput) values.
+    pub ctrlspec: i32,
     /// Torque and back-EMF constants `[Kt, Ke]`.
     pub motorconst: Option<[f64; 2]>,
     /// Nominal ratings `[voltage, stall_torque, no_load_speed]`.
@@ -1210,7 +1220,7 @@ impl DcMotorConfig {
     getter_setter! {
         with, [
             resistance: f64;       "the electrical resistance.";
-            input_mode: i32;       "the input mode selector.";
+            ctrlspec: i32;         "the input signature bitmask ([`MjtCtrlInput`](crate::wrappers::mj_model::MjtCtrlInput)).";
             motorconst: [f64; 2];  "the torque and back-EMF constants [Kt, Ke].";
             nominal: [f64; 3];     "the nominal ratings [voltage, stall_torque, no_load_speed].";
             saturation: [f64; 3];  "the saturation [tau_max, i_max, di_dt_max].";
@@ -1223,11 +1233,77 @@ impl DcMotorConfig {
     }
 }
 
+/// Configuration for [`MjsActuator::set_to_pid`].
+///
+/// Each optional field defaults to `None`, disabling the corresponding feature.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PidConfig {
+    /// Proportional (position) gain.
+    pub kp: f64,
+    /// Velocity feedback gain. Mutually exclusive with `dampratio`.
+    pub kv: Option<f64>,
+    /// Damping ratio. Mutually exclusive with `kv`.
+    pub dampratio: Option<f64>,
+    /// Integral gain on the position error.
+    pub ki: Option<f64>,
+    /// Anti-windup limit on the integral state.
+    pub imax: Option<f64>,
+    /// Slew rate limit of the position setpoint.
+    pub slewmax: Option<f64>,
+    /// Automatic range-inheritance factor for the position-setpoint range (0 disables it).
+    pub inheritrange: f64,
+    /// Input signature: a bitmask of
+    /// [`MjtCtrlInput`](crate::wrappers::mj_model::MjtCtrlInput) values.
+    pub ctrlspec: i32,
+}
+
+impl PidConfig {
+    getter_setter! {
+        with, [
+            kp: f64;            "the proportional (position) gain.";
+            kv: f64;            "the velocity feedback gain (mutually exclusive with dampratio).";
+            dampratio: f64;     "the damping ratio (mutually exclusive with kv).";
+            ki: f64;            "the integral gain on the position error.";
+            imax: f64;          "the anti-windup limit on the integral state.";
+            slewmax: f64;       "the position-setpoint slew rate limit.";
+            inheritrange: f64;  "the automatic range-inheritance factor.";
+            ctrlspec: i32;      "the input signature bitmask ([`MjtCtrlInput`](crate::wrappers::mj_model::MjtCtrlInput)).";
+        ]
+    }
+}
+
+/// Configuration for [`MjsActuator::set_to_orientation`].
+///
+/// Each optional field defaults to `None`, disabling the corresponding feature.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct OrientationConfig {
+    /// Proportional gain, in torque per radian of geodesic error.
+    pub kp: f64,
+    /// Damping, per force output. Mutually exclusive with `dampratio`.
+    pub kv: Option<f64>,
+    /// Damping ratio. Mutually exclusive with `kv`.
+    pub dampratio: Option<f64>,
+    /// Chart of the commanded orientation
+    /// ([`MjtCtrlChart`](crate::wrappers::mj_model::MjtCtrlChart)).
+    pub ctrlspec: i32,
+}
+
+impl OrientationConfig {
+    getter_setter! {
+        with, [
+            kp: f64;         "the proportional gain, in torque per radian of geodesic error.";
+            kv: f64;         "the velocity feedback gain (mutually exclusive with dampratio).";
+            dampratio: f64;  "the damping ratio (mutually exclusive with kv).";
+            ctrlspec: i32;   "the chart of the commanded orientation ([`MjtCtrlChart`](crate::wrappers::mj_model::MjtCtrlChart)).";
+        ]
+    }
+}
+
 impl MjsActuator {
     /// Configure the actuator to be a motor.
     pub fn set_to_motor(&mut self) {
         // mjs_setToMotor cannot fail; it always returns an empty string.
-        unsafe { mjs_setToMotor(self) };
+        unsafe { mjs_setToMotor(self.ffi_mut()) };
     }
 
     /// Configure the actuator to be a positional-target motor (with a proportional regulator).
@@ -1238,7 +1314,7 @@ impl MjsActuator {
     pub fn set_to_position(&mut self, config: PositionConfig) -> Result<(), MjEditError> {
         let PositionConfig { kp, inheritrange, mut kv, mut dampratio, mut timeconst } = config;
         let c_err_msg = unsafe { mjs_setToPosition(
-            self, kp,
+            self.ffi_mut(), kp,
             kv.as_mut().map_or(ptr::null_mut(), |x| x),
             dampratio.as_mut().map_or(ptr::null_mut(), |x| x),
             timeconst.as_mut().map_or(ptr::null_mut(), |x| x),
@@ -1256,7 +1332,7 @@ impl MjsActuator {
     pub fn set_to_int_velocity(&mut self, config: IntVelocityConfig) -> Result<(), MjEditError> {
         let IntVelocityConfig { kp, inheritrange, mut kv, mut dampratio, mut timeconst } = config;
         let c_err_msg = unsafe { mjs_setToIntVelocity(
-            self, kp,
+            self.ffi_mut(), kp,
             kv.as_mut().map_or(ptr::null_mut(), |x| x),
             dampratio.as_mut().map_or(ptr::null_mut(), |x| x),
             timeconst.as_mut().map_or(ptr::null_mut(), |x| x),
@@ -1268,7 +1344,7 @@ impl MjsActuator {
     /// Configure the actuator to be a velocity servo with velocity feedback gain `kv`.
     pub fn set_to_velocity(&mut self, kv: f64) {
         // mjs_setToVelocity cannot fail; it always returns an empty string.
-        unsafe { mjs_setToVelocity(self, kv) };
+        unsafe { mjs_setToVelocity(self.ffi_mut(), kv) };
     }
 
     /// Configure the actuator to be a damper with damping coefficient `kv`. The applied force is
@@ -1277,7 +1353,7 @@ impl MjsActuator {
     /// Returns [`MjEditError::InvalidParameter`] when `kv` is negative or the control range is
     /// negative.
     pub fn set_to_damper(&mut self, kv: f64) -> Result<(), MjEditError> {
-        actuator_set_result(unsafe { mjs_setToDamper(self, kv) })
+        actuator_set_result(unsafe { mjs_setToDamper(self.ffi_mut(), kv) })
     }
 
     /// Configure the actuator to be a hydraulic or pneumatic cylinder. `timeconst` is the
@@ -1286,7 +1362,7 @@ impl MjsActuator {
     /// `diameter` to use `area` directly).
     pub fn set_to_cylinder(&mut self, timeconst: f64, bias: f64, area: f64, diameter: f64) {
         // mjs_setToCylinder cannot fail; it always returns an empty string.
-        unsafe { mjs_setToCylinder(self, timeconst, bias, area, diameter) };
+        unsafe { mjs_setToCylinder(self.ffi_mut(), timeconst, bias, area, diameter) };
     }
 
     /// Configure the actuator to be a muscle. `timeconst` holds the activation and deactivation
@@ -1302,7 +1378,7 @@ impl MjsActuator {
     ) -> Result<(), MjEditError>
     {
         let c_err_msg = unsafe { mjs_setToMuscle(
-            self, &mut timeconst, tausmooth, &mut range,
+            self.ffi_mut(), &mut timeconst, tausmooth, &mut range,
             force, scale, lmin, lmax, vmax, fpmax, fvmax
         ) };
         actuator_set_result(c_err_msg)
@@ -1313,7 +1389,7 @@ impl MjsActuator {
     /// Returns [`MjEditError::InvalidParameter`] when `gain` is negative or the control range is
     /// negative.
     pub fn set_to_adhesion(&mut self, gain: f64) -> Result<(), MjEditError> {
-        actuator_set_result(unsafe { mjs_setToAdhesion(self, gain) })
+        actuator_set_result(unsafe { mjs_setToAdhesion(self.ffi_mut(), gain) })
     }
 
     /// Configure the actuator to be a DC motor.
@@ -1323,12 +1399,12 @@ impl MjsActuator {
     /// value is out of its allowed range.
     pub fn set_to_dc_motor(&mut self, config: DcMotorConfig) -> Result<(), MjEditError> {
         let DcMotorConfig {
-            resistance, input_mode,
+            resistance, ctrlspec,
             mut motorconst, mut nominal, mut saturation, mut inductance,
             mut cogging, mut controller, mut thermal, mut lugre
         } = config;
         let c_err_msg = unsafe { mjs_setToDCMotor(
-            self,
+            self.ffi_mut(),
             motorconst.as_mut().map_or(ptr::null_mut(), |x| x),
             resistance,
             nominal.as_mut().map_or(ptr::null_mut(), |x| x),
@@ -1338,8 +1414,58 @@ impl MjsActuator {
             controller.as_mut().map_or(ptr::null_mut(), |x| x),
             thermal.as_mut().map_or(ptr::null_mut(), |x| x),
             lugre.as_mut().map_or(ptr::null_mut(), |x| x),
-            input_mode
+            ctrlspec
         ) };
+        actuator_set_result(c_err_msg)
+    }
+
+    /// Configure the actuator to be a PID controller on a single force output. The force is
+    /// `kp * (u_pos - length) + kv * (u_vel - velocity) + ki * integral + ff`.
+    /// # Errors
+    /// Returns [`MjEditError::InvalidParameter`] when `kv` and `dampratio` are both set, when
+    /// `kv`, `dampratio` or `slewmax` is negative, or when `inheritrange` is set together with a
+    /// position-setpoint range.
+    pub fn set_to_pid(&mut self, config: PidConfig) -> Result<(), MjEditError> {
+        let PidConfig {
+            kp, mut kv, mut dampratio, mut ki,
+            mut imax, mut slewmax, inheritrange, ctrlspec
+        } = config;
+
+        let c_err_msg = unsafe {
+            mjs_setToPID(
+                self.ffi_mut(),
+                kp,
+                kv.as_mut().map_or(ptr::null_mut(), |x| x),
+                dampratio.as_mut().map_or(ptr::null_mut(), |x| x),
+                ki.as_mut().map_or(ptr::null_mut(), |x| x),
+                imax.as_mut().map_or(ptr::null_mut(), |x| x),
+                slewmax.as_mut().map_or(ptr::null_mut(), |x| x),
+                inheritrange, ctrlspec
+            )
+        };
+        actuator_set_result(c_err_msg)
+    }
+
+    /// Configure the actuator to be an orientation servo: a geodesic PD controller on a ball
+    /// joint or a site with a reference site. The three force outputs carry the torque
+    /// `kp * log(q^-1 * q_target) - kv * omega`, in the frame of the transmission target.
+    /// # Errors
+    /// Returns [`MjEditError::InvalidParameter`] when `kv` and `dampratio` are both set, or when
+    /// `kv` or `dampratio` is negative.
+    pub fn set_to_orientation(&mut self, config: OrientationConfig) -> Result<(), MjEditError> {
+        let OrientationConfig {
+            kp, mut kv, mut dampratio, ctrlspec
+        } = config;
+
+        let c_err_msg = unsafe {
+            mjs_setToOrientation(
+                self.ffi_mut(),
+                kp,
+                kv.as_mut().map_or(ptr::null_mut(), |x| x),
+                dampratio.as_mut().map_or(ptr::null_mut(), |x| x),
+                ctrlspec
+            )
+        };
         actuator_set_result(c_err_msg)
     }
 }
@@ -1347,35 +1473,31 @@ impl MjsActuator {
 /***************************
 ** Sensor specification
 ***************************/
-mjs_struct!(Sensor [SpecObject]);
+mjs_struct!(Sensor with SpecObject: MjsSensor <= mjsSensor);
 impl MjsSensor {
     getter_setter! {
         [&] with, get, [
-            intprm: &[i32; mjNSENS as usize];            "integer parameters.";
-            interval: &[f64; 2];                         "[period, time_prev] in seconds.";
+            [ffi, ffi_mut] intprm: &[i32; mjNSENS as usize];            "integer parameters.";
+            [ffi, ffi_mut] interval: &[f64; 2];                         "[period, time_prev] in seconds.";
         ]
     }
 
-    getter_setter! {
-        get, [
-            plugin: &MjsPlugin;                     "sensor plugin.";
-        ]
-    }
+    nested_handle!(plugin: MjsPluginReference; "sensor plugin.");
 
     getter_setter!([&] with, get, set, [
-        type_ + _: MjtSensor;          "sensor type.";
-        objtype: MjtObj { check_objtype, "[`MjEditError::InvalidParameter`] when the object type is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
+        [ffi, ffi_mut] type_ + _: MjtSensor;          "sensor type.";
+        [ffi, ffi_mut] objtype: MjtObj { check_objtype, "[`MjEditError::InvalidParameter`] when the object type is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
                                        "object type the sensor refers to.";
-        reftype: MjtObj { check_objtype, "[`MjEditError::InvalidParameter`] when the reference type is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
+        [ffi, ffi_mut] reftype: MjtObj { check_objtype, "[`MjEditError::InvalidParameter`] when the reference type is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
                                        "type of referenced object.";
-        datatype: MjtDataType;         "data type.";
-        cutoff: f64;                   "cutoff for real and positive datatypes.";
-        noise: f64;                    "noise stdev.";
-        needstage: MjtStage;           "compute stage needed to simulate sensor.";
-        dim: i32;                      "number of scalar outputs.";
-        nsample: i32;                  "number of samples in history buffer.";
-        interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
-        delay: f64;                    "delay time in seconds; 0: no delay.";
+        [ffi, ffi_mut] datatype: MjtDataType;         "data type.";
+        [ffi, ffi_mut] cutoff: f64;                   "cutoff for real and positive datatypes.";
+        [ffi, ffi_mut] noise: f64;                    "noise stdev.";
+        [ffi, ffi_mut] needstage: MjtStage;           "compute stage needed to simulate sensor.";
+        [ffi, ffi_mut] dim: i32;                      "number of scalar outputs.";
+        [ffi, ffi_mut] nsample: i32;                  "number of samples in history buffer.";
+        [ffi, ffi_mut] interp: i32;                   "interpolation order (0=ZOH, 1=linear, 2=cubic).";
+        [ffi, ffi_mut] delay: f64;                    "delay time in seconds; 0: no delay.";
     ]);
 
     userdata_method!(f64);
@@ -1389,55 +1511,55 @@ impl MjsSensor {
 /***************************
 ** Flex specification
 ***************************/
-mjs_struct!(Flex [SpecObject]);
+mjs_struct!(Flex with SpecObject: MjsFlex <= mjsFlex);
 impl MjsFlex {
     getter_setter! {
         [&] with, get, [
-            rgba: &[f32; 4];                                "rgba when material is omitted.";
-            friction: &[f64; 3];                            "contact friction vector.";
-            solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
-            solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
-            size: &[f64; 3];                                "vertex bounding box half sizes in qpos0.";
-            cellcount: &[i32; 3];                           "grid cell count for finite cell method.";
+            [ffi, ffi_mut] rgba: &[f32; 4];                                "rgba when material is omitted.";
+            [ffi, ffi_mut] friction: &[f64; 3];                            "one-sided friction coefficients: slide, spin, roll.";
+            [ffi, ffi_mut] solref: &[MjtNum; mjNREF as usize];             "solver reference.";
+            [ffi, ffi_mut] solimp: &[MjtNum; mjNIMP as usize];             "solver impedance.";
+            [ffi, ffi_mut] size: &[f64; 3];                                "vertex bounding box half sizes in qpos0.";
+            [ffi, ffi_mut] cellcount: &[i32; 3];                           "grid cell count for finite cell method.";
         ]
     }
 
     getter_setter! {
         [&] with, get, set, [
-            young: f64;                    "elastic stiffness.";
-            group: i32;                    "group.";
-            contype: i32;                  "contact type.";
-            conaffinity: i32;              "contact affinity.";
-            condim: i32;                   "contact dimensionality.";
-            priority: i32;                 "contact priority.";
-            solmix: f64;                   "solver mixing for contact pairs.";
-            margin: f64;                   "margin for contact detection.";
-            gap: f64;                      "additional contact detection buffer.";
+            [ffi, ffi_mut] young: f64;                    "Young's modulus, in units of pressure (force/area).";
+            [ffi, ffi_mut] group: i32;                    "group.";
+            [ffi, ffi_mut] contype: i32;                  "contact type.";
+            [ffi, ffi_mut] conaffinity: i32;              "contact affinity.";
+            [ffi, ffi_mut] condim: i32;                   "contact dimensionality.";
+            [ffi, ffi_mut] priority: i32;                 "contact priority.";
+            [ffi, ffi_mut] solmix: f64;                   "solver mixing for contact pairs.";
+            [ffi, ffi_mut] margin: f64;                   "margin for contact detection.";
+            [ffi, ffi_mut] gap: f64;                      "additional contact detection buffer.";
 
-            dim: i32;                "element dimensionality.";
-            radius: f64;             "radius around primitive element.";
-            activelayers: i32;       "number of active element layers in 3D.";
-            edgestiffness: f64;      "edge stiffness.";
-            edgedamping: f64;        "edge damping.";
-            poisson: f64;            "Poisson's ratio.";
-            damping: f64;            "Rayleigh's damping.";
-            thickness: f64;          "thickness (2D only).";
-            elastic2d: i32;          "2D passive forces; 0: none, 1: bending, 2: stretching, 3: both.";
-            order: i32;              "interpolation order (1: trilinear, 2: quadratic).";
+            [ffi, ffi_mut] dim: i32;                "element dimensionality.";
+            [ffi, ffi_mut] radius: f64;             "radius around primitive element.";
+            [ffi, ffi_mut] activelayers: i32;       "number of active element layers in 3D.";
+            [ffi, ffi_mut] edgestiffness: f64;      "edge stiffness.";
+            [ffi, ffi_mut] edgedamping: f64;        "edge damping.";
+            [ffi, ffi_mut] poisson: f64;            "Poisson's ratio.";
+            [ffi, ffi_mut] damping: f64;            "Rayleigh's damping.";
+            [ffi, ffi_mut] thickness: f64;          "thickness (2D only).";
+            [ffi, ffi_mut] elastic2d: i32;          "2D passive forces; 0: none, 1: bending, 2: stretching, 3: both.";
+            [ffi, ffi_mut] order: i32;              "interpolation order (1: trilinear, 2: quadratic).";
         ]
     }
 
     getter_setter! {
         [&] with, get, set, [
-            internal: bool;       "enable internal collisions.";
-            flatskin: bool;       "render flex skin with flat shading.";
-            passive: bool;        "mode for passive collisions.";
+            [ffi, ffi_mut] internal: bool;       "enable internal collisions.";
+            [ffi, ffi_mut] flatskin: bool;       "render flex skin with flat shading.";
+            [ffi, ffi_mut] passive: bool;        "mode for passive collisions.";
         ]        
     }
 
     getter_setter! {
         [&] with, get, set, [
-            selfcollide: MjtFlexSelf [force];        "mode for flex self collision.";
+            [ffi, ffi_mut] selfcollide: MjtFlexSelf [force];        "mode for flex self collision.";
         ]
     }
 
@@ -1470,22 +1592,23 @@ impl MjsFlex {
 /***************************
 ** Pair specification
 ***************************/
-mjs_struct!(Pair [SpecObject]);
+mjs_struct!(Pair with SpecObject: MjsPair <= mjsPair);
 impl MjsPair {
     getter_setter! {
         [&] with, get, [
-            friction: &[f64; 5];                            "contact friction vector.";
-            solref: &[MjtNum; mjNREF as usize];             "solref for the pair.";
-            solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
-            solreffriction: &[MjtNum; mjNREF as usize];     "solver reference, frictional directions.";
+            [ffi, ffi_mut] friction: &[f64; 5];                            "contact friction: slide1, slide2, spin, roll1, roll2.";
+            [ffi, ffi_mut] solref: &[MjtNum; mjNREF as usize];             "solver reference, normal direction.";
+            [ffi, ffi_mut] solimp: &[MjtNum; mjNIMP as usize];             "solimp for the pair.";
+            [ffi, ffi_mut] solreffriction: &[MjtNum; mjNREF as usize];     "solver reference, frictional directions.";
         ]
     }
 
     getter_setter! {
         [&] with, get, set, [
-            margin: f64;             "margin for contact detection.";
-            gap: f64;         "additional contact detection buffer.";
-            condim: i32;                   "contact dimensionality.";
+            [ffi, ffi_mut] margin: f64;             "margin for contact detection.";
+            [ffi, ffi_mut] gap: f64;         "additional contact detection buffer.";
+            [ffi, ffi_mut] adhesion: f64;           "adhesive force of contacts.";
+            [ffi, ffi_mut] condim: i32;                   "contact dimensionality.";
         ]
     }
 
@@ -1498,7 +1621,7 @@ impl MjsPair {
 /***************************
 ** Exclude specification
 ***************************/
-mjs_struct!(Exclude [SpecObject]);
+mjs_struct!(Exclude with SpecObject: MjsExclude <= mjsExclude);
 impl MjsExclude {
     string_set_get_with! {[&]
         bodyname1; "name of body 1.";
@@ -1509,23 +1632,23 @@ impl MjsExclude {
 /***************************
 ** Equality specification
 ***************************/
-mjs_struct!(Equality [SpecObject]);
+mjs_struct!(Equality with SpecObject: MjsEquality <= mjsEquality);
 impl MjsEquality {
     getter_setter! {
         [&] with, get, [
-            data: &[f64; mjNEQDATA as usize];   "data array for equality parameters.";
-            solref: &[f64; mjNREF as usize];    "solver reference.";         
-            solimp: &[f64; mjNIMP as usize];    "solver impedance.";
+            [ffi, ffi_mut] data: &[f64; mjNEQDATA as usize];   "data array for equality parameters.";
+            [ffi, ffi_mut] solref: &[f64; mjNREF as usize];    "solver reference.";
+            [ffi, ffi_mut] solimp: &[f64; mjNIMP as usize];    "solver impedance.";
         ]
     }
 
     getter_setter! {[&] with, get, set, [
-        active: bool;   "active flag.";
+        [ffi, ffi_mut] active: bool;   "active flag.";
     ]}
 
     getter_setter! {[&] with, get, set, [
-        type_ + _: MjtEq;   "equality type.";
-        objtype: MjtObj;    "type of both objects.";
+        [ffi, ffi_mut] type_ + _: MjtEq;   "equality type.";
+        [ffi, ffi_mut] objtype: MjtObj;    "type of both objects.";
     ]}
 
     string_set_get_with! {[&]
@@ -1537,35 +1660,35 @@ impl MjsEquality {
 /***************************
 ** Tendon specification
 ***************************/
-mjs_struct!(Tendon [SpecObject]);
+mjs_struct!(Tendon with SpecObject: MjsTendon <= mjsTendon);
 impl MjsTendon {
     getter_setter! {
         [&] with, get, [
-            damping: &[f64; mjNPOLY as usize + 1];       "damping coefficient.";
-            stiffness: &[f64; mjNPOLY as usize + 1];     "stiffness coefficient.";
-            springlength: &[f64; 2];                    "spring length.";
-            solref_friction: &[f64; mjNREF as usize];   "solver reference: tendon friction.";
-            solimp_friction: &[f64; mjNIMP as usize];   "solver impedance: tendon friction.";
-            range: &[f64; 2];                           "range.";
-            actfrcrange: &[f64; 2];                     "actuator force limits.";
-            solref_limit: &[f64; mjNREF as usize];      "solver reference: tendon limits.";
-            solimp_limit: &[f64; mjNIMP as usize];      "solver impedance: tendon limits.";
-            rgba: &[f32; 4];                            "rgba when material omitted.";
+            [ffi, ffi_mut] damping: &[f64; mjNPOLY as usize + 1];       "damping coefficients.";
+            [ffi, ffi_mut] stiffness: &[f64; mjNPOLY as usize + 1];     "stiffness coefficients.";
+            [ffi, ffi_mut] springlength: &[f64; 2];                    "spring length.";
+            [ffi, ffi_mut] solref_friction: &[f64; mjNREF as usize];   "solver reference: tendon friction.";
+            [ffi, ffi_mut] solimp_friction: &[f64; mjNIMP as usize];   "solver impedance: tendon friction.";
+            [ffi, ffi_mut] range: &[f64; 2];                           "range.";
+            [ffi, ffi_mut] actfrcrange: &[f64; 2];                     "actuator force limits.";
+            [ffi, ffi_mut] solref_limit: &[f64; mjNREF as usize];      "solver reference: tendon limits.";
+            [ffi, ffi_mut] solimp_limit: &[f64; mjNIMP as usize];      "solver impedance: tendon limits.";
+            [ffi, ffi_mut] rgba: &[f32; 4];                            "rgba when material omitted.";
         ]
     }
 
     getter_setter! {[&] with, get, set, [
-        group: i32;         "group.";
-        frictionloss: f64;  "friction loss.";
-        armature: f64;      "inertia associated with tendon velocity.";
-        margin: f64;        "margin value for tendon limit detection.";
-        width: f64;         "width for rendering.";
+        [ffi, ffi_mut] group: i32;         "group.";
+        [ffi, ffi_mut] frictionloss: f64;  "friction loss.";
+        [ffi, ffi_mut] armature: f64;      "inertia associated with tendon velocity.";
+        [ffi, ffi_mut] margin: f64;        "margin value for tendon limit detection.";
+        [ffi, ffi_mut] width: f64;         "width for rendering.";
     ]}
 
     getter_setter! {
         [&] with, get, set, [
-            limited: MjtLimited [force];       "does tendon have limits (mjtLimited).";
-            actfrclimited: MjtLimited [force]; "does tendon have actuator force limits."
+            [ffi, ffi_mut] limited: MjtLimited [force];       "does tendon have limits (mjtLimited).";
+            [ffi, ffi_mut] actfrclimited: MjtLimited [force]; "does tendon have actuator force limits."
         ]
     }
 
@@ -1586,17 +1709,7 @@ impl MjsTendon {
     /// Fallible version of [`MjsTendon::wrap_site`].
     ///
     /// # Note
-    ///
-    /// <div class="warning">
-    ///
-    /// By default, MuJoCo aborts the process on an allocation failure instead of
-    /// returning null. Under a non-default error configuration MuJoCo writes
-    /// through the null pointer on allocation failure before returning, so the
-    /// failure cannot be recovered soundly. Prefer the panicking
-    /// [`MjsTendon::wrap_site`]. This method may be undeprecated in the future
-    /// if MuJoCo's upstream C++ code is changed to return null recoverably.
-    ///
-    /// </div>
+    /// MuJoCo ends the process when the allocation fails, so this never returns `Err`.
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
@@ -1606,12 +1719,12 @@ impl MjsTendon {
     /// When the `name` contains '\0' characters.
     #[deprecated(
         since = "5.0.0",
-        note = "allocation failure cannot be recovered soundly; use `wrap_site`"
+        note = "always returns Ok; use `wrap_site`"
     )]
     pub fn try_wrap_site(&mut self, name: &str) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
-        let wrap_ptr = unsafe { mjs_wrapSite(self, cname.as_ptr()) };
-        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
+        let wrap_ptr = unsafe { mjs_wrapSite(self.ffi_mut(), cname.as_ptr()) };
+        unsafe { MjsWrap::from_ffi_ptr_mut(wrap_ptr) }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Wrap a geom corresponding to `name`, using the tendon.
@@ -1626,17 +1739,7 @@ impl MjsTendon {
     /// Fallible version of [`MjsTendon::wrap_geom`].
     ///
     /// # Note
-    ///
-    /// <div class="warning">
-    ///
-    /// By default, MuJoCo aborts the process on an allocation failure instead of
-    /// returning null. Under a non-default error configuration MuJoCo writes
-    /// through the null pointer on allocation failure before returning, so the
-    /// failure cannot be recovered soundly. Prefer the panicking
-    /// [`MjsTendon::wrap_geom`]. This method may be undeprecated in the future
-    /// if MuJoCo's upstream C++ code is changed to return null recoverably.
-    ///
-    /// </div>
+    /// MuJoCo ends the process when the allocation fails, so this never returns `Err`.
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
@@ -1646,16 +1749,16 @@ impl MjsTendon {
     /// When `name` or `sidesite` contain '\0' characters.
     #[deprecated(
         since = "5.0.0",
-        note = "allocation failure cannot be recovered soundly; use `wrap_geom`"
+        note = "always returns Ok; use `wrap_geom`"
     )]
     pub fn try_wrap_geom(&mut self, name: &str, sidesite: &str) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
         let csidesite = CString::new(sidesite).unwrap();
         let wrap_ptr = unsafe { mjs_wrapGeom(
-            self,
+            self.ffi_mut(),
             cname.as_ptr(), csidesite.as_ptr()
         ) };
-        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
+        unsafe { MjsWrap::from_ffi_ptr_mut(wrap_ptr) }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Wrap a joint corresponding to `name`, using the tendon.
@@ -1670,17 +1773,7 @@ impl MjsTendon {
     /// Fallible version of [`MjsTendon::wrap_joint`].
     ///
     /// # Note
-    ///
-    /// <div class="warning">
-    ///
-    /// By default, MuJoCo aborts the process on an allocation failure instead of
-    /// returning null. Under a non-default error configuration MuJoCo writes
-    /// through the null pointer on allocation failure before returning, so the
-    /// failure cannot be recovered soundly. Prefer the panicking
-    /// [`MjsTendon::wrap_joint`]. This method may be undeprecated in the future
-    /// if MuJoCo's upstream C++ code is changed to return null recoverably.
-    ///
-    /// </div>
+    /// MuJoCo ends the process when the allocation fails, so this never returns `Err`.
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
@@ -1690,12 +1783,12 @@ impl MjsTendon {
     /// When `name` contains '\0' characters.
     #[deprecated(
         since = "5.0.0",
-        note = "allocation failure cannot be recovered soundly; use `wrap_joint`"
+        note = "always returns Ok; use `wrap_joint`"
     )]
     pub fn try_wrap_joint(&mut self, name: &str, coef: f64) -> Result<&mut MjsWrap, MjEditError> {
         let cname = CString::new(name).unwrap();
-        let wrap_ptr = unsafe { mjs_wrapJoint(self, cname.as_ptr(), coef) };
-        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
+        let wrap_ptr = unsafe { mjs_wrapJoint(self.ffi_mut(), cname.as_ptr(), coef) };
+        unsafe { MjsWrap::from_ffi_ptr_mut(wrap_ptr) }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Wrap a pulley using the tendon.
@@ -1707,33 +1800,23 @@ impl MjsTendon {
     /// Fallible version of [`MjsTendon::wrap_pulley`].
     ///
     /// # Note
-    ///
-    /// <div class="warning">
-    ///
-    /// By default, MuJoCo aborts the process on an allocation failure instead of
-    /// returning null. Under a non-default error configuration MuJoCo writes
-    /// through the null pointer on allocation failure before returning, so the
-    /// failure cannot be recovered soundly. Prefer the panicking
-    /// [`MjsTendon::wrap_pulley`]. This method may be undeprecated in the future
-    /// if MuJoCo's upstream C++ code is changed to return null recoverably.
-    ///
-    /// </div>
+    /// MuJoCo ends the process when the allocation fails, so this never returns `Err`.
     ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] if MuJoCo returns a null
     /// pointer.
     #[deprecated(
         since = "5.0.0",
-        note = "allocation failure cannot be recovered soundly; use `wrap_pulley`"
+        note = "always returns Ok; use `wrap_pulley`"
     )]
     pub fn try_wrap_pulley(&mut self, divisor: f64) -> Result<&mut MjsWrap, MjEditError> {
-        let wrap_ptr = unsafe { mjs_wrapPulley(self, divisor) };
-        unsafe { wrap_ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
+        let wrap_ptr = unsafe { mjs_wrapPulley(self.ffi_mut(), divisor) };
+        unsafe { MjsWrap::from_ffi_ptr_mut(wrap_ptr) }.ok_or(MjEditError::AllocationFailed)
     }
 
     /// Return the number of wrap objects.
     pub fn wrap_num(&self) -> usize {
-        unsafe { mjs_getWrapNum(self) as usize }
+        unsafe { mjs_getWrapNum(self.ffi()) as usize }
     }
 
     /// Return an indexed wrap object.
@@ -1750,14 +1833,13 @@ impl MjsTendon {
     /// Returns [`MjEditError::IndexOutOfBounds`] if `i >= wrap_num()`.
     pub fn try_wrap(&self, i: usize) -> Result<&MjsWrap, MjEditError> {
         let len = self.wrap_num();
-        // mjs_getWrap aborts the process via mju_error for an out-of-range index, so the bound is
-        // checked here and turned into a recoverable error instead.
+        // mjs_getWrap ends the process via mju_error for an out-of-range index.
         if i >= len {
             return Err(MjEditError::IndexOutOfBounds { id: i, len });
         }
-        let ptr = unsafe { mjs_getWrap(self, i as i32) };
+        let ptr = unsafe { mjs_getWrap(self.ffi(), i as i32) };
         // SAFETY: index validated above; mjs_getWrap returns a non-null pointer for in-range indices.
-        Ok(unsafe { &*ptr })
+        Ok(unsafe { MjsWrap::from_ffi_ptr(ptr) }.unwrap())
     }
 
     /// Return a mutable indexed wrap object.
@@ -1777,54 +1859,73 @@ impl MjsTendon {
         if i >= len {
             return Err(MjEditError::IndexOutOfBounds { id: i, len });
         }
-        let ptr = unsafe { mjs_getWrap(self, i as i32) };
+        let ptr = unsafe { mjs_getWrap(self.ffi(), i as i32) };
         // SAFETY: see try_wrap().
-        Ok(unsafe { &mut *ptr })
+        Ok(unsafe { MjsWrap::from_ffi_ptr_mut(ptr) }.unwrap())
     }
 }
 
 /***************************
 ** Wrap specification
 ***************************/
-mjs_struct!(Wrap);
+mjs_struct!(MjsWrap <= mjsWrap {
+    /// A wrap carries no name of its own; [`SpecItem::name`] reports the wrapped object's name.
+    ///
+    /// # Errors
+    /// Always returns [`MjEditError::UnsupportedOperation`].
+    fn set_name(&mut self, _name: &str) -> Result<(), MjEditError> {
+        // mjCWrap leaves elemtype at mjOBJ_UNKNOWN, and mjs_setName hands that to
+        // mjCModel::CheckRepeat, which indexes object_lists_ and dereferences its null slot 0.
+        Err(MjEditError::UnsupportedOperation)
+    }
+
+    /// A wrap carries no name of its own.
+    ///
+    /// # Panics
+    /// Always panics.
+    fn with_name(&mut self, _name: &str) -> &mut Self {
+        panic!("a wrap carries no name of its own")
+    }
+});
 impl MjsWrap {
     getter_setter! {
         [&] with, get, set, [
-            type_ + _: MjtWrap; "wrap type.";
+            [ffi, ffi_mut] type_ + _: MjtWrap; "wrap type.";
         ]
     }
 
-    /// Return the side site element.
+    /// Return the side site element. Returns `None` when the wrap is not a sphere or cylinder
+    /// wrap, when it holds no side site, or when the named site is missing from the spec (MuJoCo
+    /// logs a warning in that last case).
+    ///
+    /// There is no mutable counterpart, because it would alias. Edit the site through
+    /// [`MjSpec::site_mut`] instead.
     pub fn side_site(&self) -> Option<&MjsSite> {
-        let ptr = unsafe { mjs_getWrapSideSite(self) };
-        if ptr.is_null() { None } else { Some(unsafe { &*ptr }) }
+        let ptr = unsafe { mjs_getWrapSideSite(self.ffi()) };
+        unsafe { MjsSite::from_ffi_ptr(ptr) }
     }
 
-    /// Return the side site element mutably.
-    pub fn side_site_mut(&mut self) -> Option<&mut MjsSite> {
-        let ptr = unsafe { mjs_getWrapSideSite(self) };
-        if ptr.is_null() { None } else { Some(unsafe { &mut *ptr }) }
-    }
-
-    /// Return the wrap divisor.
+    /// Return the wrap divisor. For a wrap whose type is not [`MjtWrap::mjWRAP_PULLEY`], MuJoCo
+    /// logs a warning and this returns 1.0.
     pub fn divisor(&self) -> f64 {
-        unsafe { mjs_getWrapDivisor(self) }
+        unsafe { mjs_getWrapDivisor(self.ffi()) }
     }
 
-    /// Return the wrap coefficient.
+    /// Return the wrap coefficient. For a wrap whose type is not [`MjtWrap::mjWRAP_JOINT`],
+    /// MuJoCo logs a warning and this returns 1.0.
     pub fn coef(&self) -> f64 {
-        unsafe { mjs_getWrapCoef(self) }
+        unsafe { mjs_getWrapCoef(self.ffi()) }
     }
 }
 
 /***************************
 ** Numeric specification
 ***************************/
-mjs_struct!(Numeric [SpecObject]);
+mjs_struct!(Numeric with SpecObject: MjsNumeric <= mjsNumeric);
 impl MjsNumeric {
     getter_setter! {
         [&] with, get, set, [
-            size: i32 { check_numeric_size, "[`MjEditError::InvalidParameter`] when the size is negative" } => MjEditError;     "size of the numeric array.";
+            [ffi, ffi_mut] size: i32 { check_numeric_size, "[`MjEditError::InvalidParameter`] when the size is negative" } => MjEditError;     "size of the numeric array.";
         ]
     }
 
@@ -1836,7 +1937,7 @@ impl MjsNumeric {
 /***************************
 ** Text specification
 ***************************/
-mjs_struct!(Text [SpecObject]);
+mjs_struct!(Text with SpecObject: MjsText <= mjsText);
 impl MjsText {
     string_set_get_with! {[&]
         data; "text string.";
@@ -1846,14 +1947,11 @@ impl MjsText {
 /***************************
 ** Tuple specification
 ***************************/
-mjs_struct!(Tuple [SpecObject]);
+mjs_struct!(Tuple with SpecObject: MjsTuple <= mjsTuple);
 impl MjsTuple {
     vec_set! {
-        // `objtype` is stored as a raw C `int` and, at `compile()` time, used to index the model
-        // compiler's `object_lists_` array (size `mjNOBJECT`) with no bounds check. Validating every
-        // element against `mjNOBJECT` rules out the meta `MjtObj` variants (`mjOBJ_FRAME`,
-        // `mjOBJ_DEFAULT`, `mjOBJ_MODEL`) that would otherwise cause an out-of-bounds read, which is
-        // what lets this setter be safe.
+        // `compile()` indexes `object_lists_` (size `mjNOBJECT`) with each value and no bounds
+        // check, so the per-element check is what makes this setter safe.
         objtype: MjtObj => i32 { check_objtype, "[`MjEditError::InvalidParameter`] when any value is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
             "object types. Every value must be a real object type (an `MjtObj` below `mjNOBJECT`).";
     }
@@ -1870,11 +1968,11 @@ impl MjsTuple {
 /***************************
 ** Key specification
 ***************************/
-mjs_struct!(Key [SpecObject]);
+mjs_struct!(Key with SpecObject: MjsKey <= mjsKey);
 impl MjsKey {
     getter_setter! {
         [&] with, get, set, [
-            time: f64; "time."
+            [ffi, ffi_mut] time: f64; "time."
         ]
     }
 
@@ -1891,7 +1989,28 @@ impl MjsKey {
 /***************************
 ** Plugin specification
 ***************************/
-mjs_struct!(Plugin [SpecObject]);
+mjs_struct!(Plugin with SpecObject: MjsPlugin <= mjsPlugin);
+
+mjs_opaque!(MjsPluginReference <= mjsPlugin,
+    "Reference to the plugin instance that an element embeds.\n\n\
+     A body, geom, mesh, actuator or sensor names the instance it uses through this reference. \
+     The reference carries no element of its own: MuJoCo resolves the `element` field to the \
+     [`MjsPlugin`] instance that the name selects. Reach the instance itself through \
+     [`MjSpec::plugin`].");
+
+impl MjsPluginReference {
+    string_set_get_with! {[&]
+        name; "instance name.";
+        plugin_name; "plugin name.";
+    }
+
+    getter_setter! {
+        [&] with, get, set, [
+            [ffi, ffi_mut] active: bool; "is the plugin active.";
+        ]
+    }
+}
+
 impl MjsPlugin {
     string_set_get_with! {[&]
         name; "instance name.";
@@ -1900,7 +2019,7 @@ impl MjsPlugin {
 
     getter_setter! {
         [&] with, get, set, [
-            active: bool; "is the plugin active.";
+            [ffi, ffi_mut] active: bool; "is the plugin active.";
         ]
     }
 }
@@ -1910,34 +2029,30 @@ impl MjsPlugin {
 /***************************
 ** Mesh specification
 ***************************/
-mjs_struct!(Mesh [SpecObject]);
+mjs_struct!(Mesh with SpecObject: MjsMesh <= mjsMesh);
 impl MjsMesh {
     getter_setter! {
         [&] with, get, [
-            refpos: &[f64; 3];            "reference position.";
-            refquat: &[f64; 4];           "reference orientation.";
-            scale: &[f64; 3];             "scale vector.";
+            [ffi, ffi_mut] refpos: &[f64; 3];            "reference position.";
+            [ffi, ffi_mut] refquat: &[f64; 4];           "reference orientation.";
+            [ffi, ffi_mut] scale: &[f64; 3];             "scale vector.";
         ]
     }
 
-    getter_setter! {
-        get, [
-            plugin: &MjsPlugin;                     "sdf plugin.";
-        ]
-    }
+    nested_handle!(plugin: MjsPluginReference; "sdf plugin.");
 
     getter_setter! {
         [&] with, get, set, [
-            inertia: MjtMeshInertia;      "inertia type (convex, legacy, exact, shell).";
-            maxhullvert: i32;             "maximum vertex count for the convex hull.";
-            octree_maxdepth: i32;         "max octree depth.";
+            [ffi, ffi_mut] inertia: MjtMeshInertia;      "inertia type (convex, legacy, exact, shell).";
+            [ffi, ffi_mut] maxhullvert: i32;             "maximum vertex count for the convex hull.";
+            [ffi, ffi_mut] octree_maxdepth: i32;         "max octree depth.";
         ]
     }
 
     getter_setter! {
         [&] with, get,set, [
-            smoothnormal: bool;           "do not exclude large-angle faces from normals.";
-            needsdf: bool;                "compute sdf from mesh.";
+            [ffi, ffi_mut] smoothnormal: bool;           "do not exclude large-angle faces from normals.";
+            [ffi, ffi_mut] needsdf: bool;                "compute sdf from mesh.";
         ]
     }
 
@@ -1970,17 +2085,17 @@ impl MjsMesh {
 /***************************
 ** Hfield specification
 ***************************/
-mjs_struct!(Hfield [SpecObject]);
+mjs_struct!(HField with SpecObject: MjsHfield <= mjsHField);
 impl MjsHfield {
     getter_setter! {
         [&] with, get, [
-            size: &[f64; 4];              "size of the hfield.";
+            [ffi, ffi_mut] size: &[f64; 4];              "size of the hfield.";
         ]
     }
 
     getter_setter! { [&] with, get, set, [
-        nrow: i32;  "number of rows.";
-        ncol: i32;  "number of columns.";
+        [ffi, ffi_mut] nrow: i32;  "number of rows.";
+        [ffi, ffi_mut] ncol: i32;  "number of columns.";
     ]}
 
     string_set_get_with! {[&]
@@ -1991,25 +2106,25 @@ impl MjsHfield {
     /// Sets `userdata`.
     pub fn set_userdata<T: AsRef<[f32]>>(&mut self, userdata: T) {
         // SAFETY: self.userdata is a valid mjFloatVec pointer for the lifetime of self.
-        unsafe { write_mjs_vec_f32(userdata.as_ref(), self.userdata) };
+        unsafe { write_mjs_vec_f32(userdata.as_ref(), self.ffi().userdata) };
     }
 }
 
 /***************************
 ** Skin specification
 ***************************/
-mjs_struct!(Skin [SpecObject]);
+mjs_struct!(Skin with SpecObject: MjsSkin <= mjsSkin);
 impl MjsSkin {
     getter_setter! {
         [&] with, get, [
-            rgba: &[f32; 4];    "rgba when material is omitted.";
+            [ffi, ffi_mut] rgba: &[f32; 4];    "rgba when material is omitted.";
         ]
     }
 
     getter_setter! {
         [&] with, get, set, [
-            inflate: f32;       "inflate in normal direction.";
-            group: i32;         "group for visualization.";
+            [ffi, ffi_mut] inflate: f32;       "inflate in normal direction.";
+            [ffi, ffi_mut] group: i32;         "group for visualization.";
         ]
     }
 
@@ -2045,49 +2160,45 @@ impl MjsSkin {
 /***************************
 ** Texture specification
 ***************************/
-mjs_struct!(Texture [SpecObject]);
+mjs_struct!(Texture with SpecObject: MjsTexture <= mjsTexture);
 
-/// # Note -- cube-map files
+/// # Note: cube-map files
 ///
-/// The `cubefiles` field is a **pre-sized** string vector (6 entries, one per cube face).
-/// Use [`set_cubefile`](Self::set_cubefile) with a [`MjtCubeFace`] variant to assign a
-/// file to a specific face. The bulk [`set_cubefiles`](Self::set_cubefiles) /
-/// [`append_cubefiles`](Self::append_cubefiles) methods are also available but
-/// operate on the vector as a whole.
+/// `cubefiles` is a pre-sized string vector of 6 entries, one per cube face. Assign one face with
+/// [`set_cubefile`](Self::set_cubefile); [`set_cubefiles`](Self::set_cubefiles) and
+/// [`append_cubefiles`](Self::append_cubefiles) replace or extend the vector as a whole.
 impl MjsTexture {
     getter_setter! {
         [&] with, get, [
-            rgb1: &[f64; 3];               "first color for builtin.";
-            rgb2: &[f64; 3];               "second color for builtin.";
-            markrgb: &[f64; 3];            "mark color.";
-            gridsize: &[i32; 2];           "size of grid for composite file; (1,1)-repeat.";
-            gridlayout: &[c_char; 12];     "row-major: L,R,F,B,U,D for faces; . for unused.";
+            [ffi, ffi_mut] rgb1: &[f64; 3];               "first color for builtin.";
+            [ffi, ffi_mut] rgb2: &[f64; 3];               "second color for builtin.";
+            [ffi, ffi_mut] markrgb: &[f64; 3];            "mark color.";
+            [ffi, ffi_mut] gridsize: &[i32; 2];           "size of grid for composite file; (1,1)-repeat.";
+            [ffi, ffi_mut] gridlayout: &[c_char; 12];     "row-major: L,R,F,B,U,D for faces; . for unused.";
         ]
     }
 
     getter_setter! {
         [&] with, get, set, [
-            random: f64;                  "probability of random dots.";
-            width: i32;                   "image width.";
-            height: i32;                  "image height.";
+            [ffi, ffi_mut] random: f64;                  "probability of random dots.";
+            [ffi, ffi_mut] width: i32;                   "image width.";
+            [ffi, ffi_mut] height: i32;                  "image height.";
         ]
     }
 
     getter_setter! {
         [&] with, get, set, [
-            // `nchannel` must be `>= 3` whenever a builtin pattern is set
-            // (`builtin != MjtBuiltin::mjBUILTIN_NONE`); this cross-field invariant is
-            // enforced at the compile choke point in `MjSpec::compile`.
-            nchannel: i32; "number of channels.";
+            // A builtin pattern needs `nchannel >= 3`; `MjSpec::compile` enforces that.
+            [ffi, ffi_mut] nchannel: i32; "number of channels.";
         ]
     }
 
     getter_setter! {
         [&] with, get, set, [
-            type_ + _: MjtTexture [force];        "texture type.";
-            colorspace: MjtColorSpace [force];    "colorspace.";
-            builtin: MjtBuiltin [force];          "builtin type.";
-            mark: MjtMark [force];                "mark type.";
+            [ffi, ffi_mut] type_ + _: MjtTexture [force];        "texture type.";
+            [ffi, ffi_mut] colorspace: MjtColorSpace [force];    "colorspace.";
+            [ffi, ffi_mut] builtin: MjtBuiltin [force];          "builtin type.";
+            [ffi, ffi_mut] mark: MjtMark [force];                "mark type.";
         ]
     }
 
@@ -2096,14 +2207,14 @@ impl MjsTexture {
     }
 
     getter_setter! {[&] with, get, set, [
-        hflip: bool;    "horizontal flip.";
-        vflip: bool;    "vertical flip.";
+        [ffi, ffi_mut] hflip: bool;    "horizontal flip.";
+        [ffi, ffi_mut] vflip: bool;    "vertical flip.";
     ]}
 
     /// Sets texture `data`.
     pub fn set_data<T: bytemuck::NoUninit>(&mut self, data: &[T]) {
         // SAFETY: self.data is a valid mjByteVec pointer for the lifetime of self.
-        unsafe { write_mjs_vec_byte(data, self.data) };
+        unsafe { write_mjs_vec_byte(data, self.ffi().data) };
     }
 
     string_set_get_with! {[&]
@@ -2115,36 +2226,34 @@ impl MjsTexture {
 /***************************
 ** Material specification
 ***************************/
-mjs_struct!(Material [SpecObject]);
+mjs_struct!(Material with SpecObject: MjsMaterial <= mjsMaterial);
 
-/// # Note -- texture assignment
+/// # Note: texture assignment
 ///
-/// The `textures` field is a **pre-sized** string vector (`mjNTEXROLE` entries, one per
-/// [`MjtTextureRole`]). Use [`set_texture`](Self::set_texture) to assign a texture name
-/// to a specific role (e.g. [`MjtTextureRole::mjTEXROLE_RGB`] for the base colour used by
-/// the renderer). The bulk [`set_textures`](Self::set_textures) /
-/// [`append_textures`](Self::append_textures) methods are also available but operate on
-/// the vector as a whole and may disrupt the pre-sized layout.
+/// `textures` is a pre-sized string vector of `mjNTEXROLE` entries, one per [`MjtTextureRole`].
+/// Assign one role with [`set_texture`](Self::set_texture); [`set_textures`](Self::set_textures)
+/// and [`append_textures`](Self::append_textures) replace or extend the vector as a whole and
+/// break the pre-sized layout.
 impl MjsMaterial {
     getter_setter! {
         [&] with, get, [
-            rgba: &[f32; 4];                               "rgba color.";
-            texrepeat: &[f32; 2];    "texture repetition for 2D mapping.";
+            [ffi, ffi_mut] rgba: &[f32; 4];                               "rgba color.";
+            [ffi, ffi_mut] texrepeat: &[f32; 2];    "texture repetition for 2D mapping.";
         ]
     }
 
     getter_setter! {[&] with, get, set, [
-        texuniform: bool;       "make texture cube uniform.";
+        [ffi, ffi_mut] texuniform: bool;       "make texture cube uniform.";
     ]}
 
     getter_setter! {
         [&] with, get, set, [
-            emission: f32;                           "emission.";
-            specular: f32;                           "specular.";
-            shininess: f32;                         "shininess.";
-            reflectance: f32;                     "reflectance.";
-            metallic: f32;                           "metallic.";
-            roughness: f32;                         "roughness.";
+            [ffi, ffi_mut] emission: f32;                           "emission.";
+            [ffi, ffi_mut] specular: f32;                           "specular.";
+            [ffi, ffi_mut] shininess: f32;                         "shininess.";
+            [ffi, ffi_mut] reflectance: f32;                     "reflectance.";
+            [ffi, ffi_mut] metallic: f32;                           "metallic.";
+            [ffi, ffi_mut] roughness: f32;                         "roughness.";
         ]
     }
 
@@ -2157,132 +2266,308 @@ impl MjsMaterial {
 /***************************
 ** Body specification
 ***************************/
-mjs_struct!(Body [SpecObject] {
-    // Override the delete method to prevent deletion of world.
-    /// Delete this body from its parent spec.
-    ///
-    /// # Deprecated
-    /// This API is deprecated and will be removed in a future release.
-    /// Use [`MjSpec::delete_element`](crate::wrappers::MjSpec::delete_element) instead.
-    ///
-    /// This method is inherently unsound: deleting a body mutates owner/ancestor graph
-    /// structures outside the borrowed `&mut self` region.
-    ///
-    /// # Errors
-    /// - Returns [`MjEditError::UnsupportedOperation`] if this is the world body.
-    /// - Returns [`MjEditError::DeleteFailed`] if MuJoCo's internal deletion fails.
-    ///
-    /// # Safety
-    /// This legacy method is not soundly callable; it exists only for backward compatibility.
-    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
-        if self.name() == "world" {
-            return Err(MjEditError::UnsupportedOperation);
-        }
-        unsafe { SpecItem::__delete_default__(self) }
-    }
-});
+mjs_struct!(Body with SpecObject: MjsBody <= mjsBody);
 
 impl MjsBody {
     add_x_method! { body, site, joint, geom, camera, light }
 
-    /// Obtain an immutable reference to a child body with the given `name`.
+    /// Obtain an immutable reference to a body with the given `name` in this body's subtree.
+    /// The search is recursive and returns this body when its own name matches.
     ///
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
     pub fn child(&self, name: &str) -> Option<&MjsBody> {
         let c_name = CString::new(name).unwrap();
         unsafe {
-            let ptr = mjs_findChild(self, c_name.as_ptr());
-            if ptr.is_null() { None } else { ptr.as_ref() }
+            let ptr = mjs_findChild(self.ffi(), c_name.as_ptr());
+            MjsBody::from_ffi_ptr(ptr)
         }
     }
 
-    /// Obtain a mutable reference to a child body with the given `name`.
+    /// Obtain a mutable reference to a body with the given `name` in this body's subtree.
+    /// The search is recursive and returns this body when its own name matches.
     ///
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
+    ///
+    /// # Examples
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// let mut spec = MjSpec::new();
+    /// spec.world_body_mut().add_body().with_name("ball");
+    /// spec.world_body_mut().child_mut("ball").unwrap().set_gravcomp(1.0);
+    /// ```
     pub fn child_mut(&mut self, name: &str) -> Option<&mut MjsBody> {
         let c_name = CString::new(name).unwrap();
         unsafe {
-            let ptr = mjs_findChild(self, c_name.as_ptr());
-            if ptr.is_null() { None } else { ptr.as_mut() }
+            let ptr = mjs_findChild(self.ffi(), c_name.as_ptr());
+            MjsBody::from_ffi_ptr_mut(ptr)
         }
     }
-
-    /// Dummy mutable FFI method used to simplify access through macros.
-    ///
-    /// # Safety
-    /// Callers must ensure that any mutations performed through the returned reference
-    /// preserve the invariants that MuJoCo expects for `mjsBody`.
-    #[inline]
-    unsafe fn ffi_mut(&mut self) -> &mut Self {
-        self
-    }
-
     // Special case
     /// Add and return a child frame.
     ///
-    /// Delegates to [`Self::try_add_frame`] and panics if allocation fails.
-    /// # Panics
-    /// Panics if MuJoCo fails to allocate the frame.
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails.
+    #[expect(deprecated, reason = "try_add_frame keeps the implementation until it is removed")]
     pub fn add_frame(&mut self) -> &mut MjsFrame {
         self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
     }
 
     /// Fallible version of [`Self::add_frame`].
     ///
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails, so this never returns `Err`.
+    ///
     /// # Errors
     /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
     /// the frame, instead of panicking.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `add_frame`"
+    )]
     pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
-        // SAFETY: ffi_mut() returns self unchanged; the coercion to *mut mjsBody is safe.
-        // ptr::null_mut() for parentframe is valid: the MuJoCo API accepts null to mean
-        // "attach directly to the body with no parent frame".
+        // SAFETY: a null parentframe attaches the frame directly to the body. The frame that
+        // mjs_addFrame returns is freshly allocated, so nothing aliases it.
         let ptr = unsafe { mjs_addFrame(self.ffi_mut(), ptr::null_mut()) };
-        // SAFETY: ptr.as_mut() returns None for null, handled by ok_or; when non-null the
-        // pointee is properly aligned and initialized by C++ operator new, and freshly
-        // allocated so no existing Rust reference aliases it for the returned lifetime.
-        unsafe { ptr.as_mut() }.ok_or(MjEditError::AllocationFailed)
+        unsafe { MjsFrame::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
+    }
+}
+
+/* ----------------------------------------------------------------------------
+** Procedural flex creation (mjs_makeFlex)
+** ------------------------------------------------------------------------- */
+
+/// Configuration for [`MjsBody::add_flexcomp`], mirroring the `flexcomp` element.
+///
+/// An unset array, string or VFS field reaches MuJoCo as null, so the compiler applies its own
+/// default. `dim` is 2 and `radius` is 0.005; every other scalar is zero, which MuJoCo also
+/// reads as its own default.
+///
+/// # Example
+/// ```
+/// # use mujoco_rs::prelude::*;
+/// let mut spec = MjSpec::new();
+///
+/// // Configure a 3x3 cloth-like 2D grid flex.
+/// let config = MjFlexcompConfig::default()
+///     .with_type("grid")
+///     .with_dim(2)
+///     .with_count([3, 3, 1])
+///     .with_spacing([0.1, 0.1, 0.1])
+///     .with_mass(1.0);
+///
+/// let flex = spec.world_body_mut().add_flexcomp("cloth", &config);
+/// assert_eq!(flex.dim(), 2);
+///
+/// // The configured flex is now part of the model and it compiles.
+/// spec.compile().unwrap();
+/// ```
+#[derive(Debug, Clone)]
+pub struct MjFlexcompConfig<'a> {
+    /// Flexcomp type: "grid", "box", "cylinder", "ellipsoid", "square", "disc", "circle", "mesh",
+    /// "gmsh" or "direct". MuJoCo falls back to "grid" for `None` and for any other string.
+    pub r#type: Option<&'a str>,
+    /// Dimensionality of the flex object (1, 2, or 3); ignored for types that imply it.
+    /// Defaults to MuJoCo's default (2).
+    pub dim: u8,
+    /// Dof parametrization: "full", "radial", "trilinear", "quadratic", or "2d" (default "full").
+    pub dof: Option<&'a str>,
+    /// Number of generated points in each dimension (grid/box/cylinder/ellipsoid).
+    pub count: Option<[u16; 3]>,
+    /// Number of interpolation-grid cells in each dimension (trilinear/quadratic dofs).
+    pub cellcount: Option<[u16; 3]>,
+    /// Spacing between generated points in each dimension.
+    pub spacing: Option<[f64; 3]>,
+    /// Scaling of all point coordinates (applied after the pose transformation).
+    pub scale: Option<[f64; 3]>,
+    /// Radius of the flex elements. Defaults to MuJoCo's default (0.005).
+    pub radius: f64,
+    /// Total mass, divided evenly over the generated points. A value of 0 keeps MuJoCo's default.
+    pub mass: f64,
+    /// Equivalent-inertia box size used to set each body's rotational inertia. A value of 0 keeps
+    /// MuJoCo's default.
+    pub inertiabox: f64,
+    /// Edge equality constraint: 0 none, 1 edge, 2 vertex, 3 strain.
+    pub equality: u8,
+    /// Whether all points are vertices in the parent body (no new bodies created).
+    pub rigid: bool,
+    /// Whether to render the flex skin with flat shading. MuJoCo forces this on for the "box" and
+    /// "cylinder" types and for a 3D "grid".
+    pub flatskin: bool,
+    /// 2D passive force mode: 0 none, 1 bending, 2 stretching, 3 both.
+    pub elastic2d: u8,
+    /// Translation of all points relative to the parent body frame.
+    pub pos: Option<[f64; 3]>,
+    /// Quaternion rotation of all points around the position offset.
+    pub quat: Option<[f64; 4]>,
+    /// Flexcomp origin used to build a volumetric mesh from a surface mesh.
+    pub origin: Option<[f64; 3]>,
+    /// File to load the surface or volumetric mesh from.
+    pub file: Option<&'a str>,
+    /// Virtual file system used to resolve the mesh file.
+    pub vfs: Option<&'a MjVfs>,
+}
+
+// `mjs_makeFlex` applies `dim` and `radius` unconditionally, so both must carry MuJoCo's own
+// defaults (2 and 0.005) rather than zero.
+impl Default for MjFlexcompConfig<'_> {
+    fn default() -> Self {
+        Self {
+            r#type: None,
+            dim: 2,
+            dof: None,
+            count: None,
+            cellcount: None,
+            spacing: None,
+            scale: None,
+            radius: 0.005,
+            mass: 0.0,
+            inertiabox: 0.0,
+            equality: 0,
+            rigid: false,
+            flatskin: false,
+            elastic2d: 0,
+            pos: None,
+            quat: None,
+            origin: None,
+            file: None,
+            vfs: None,
+        }
+    }
+}
+
+impl<'a> MjFlexcompConfig<'a> {
+    getter_setter! {
+        with, [
+            r#type: &'a str;      "the flexcomp type: \"grid\", \"box\", \"cylinder\", \"ellipsoid\", \"square\", \"disc\", \"circle\", \"mesh\", \"gmsh\", or \"direct\" (default \"grid\").";
+            dim: u8;              "the dimensionality of the flex object (1, 2, or 3); ignored for types that imply it.";
+            dof: &'a str;         "the dof parametrization: \"full\", \"radial\", \"trilinear\", \"quadratic\", or \"2d\" (default \"full\").";
+            count: [u16; 3];      "the number of generated points in each dimension (grid/box/cylinder/ellipsoid).";
+            cellcount: [u16; 3];  "the number of interpolation-grid cells in each dimension (trilinear/quadratic dofs).";
+            spacing: [f64; 3];    "the spacing between generated points in each dimension.";
+            scale: [f64; 3];      "the scaling of all point coordinates (applied after the pose transformation).";
+            radius: f64;          "the radius of the flex elements.";
+            mass: f64;            "the total mass, divided evenly over the generated points.";
+            inertiabox: f64;      "the equivalent-inertia box size used to set each body's rotational inertia.";
+            equality: u8;         "the edge equality constraint: 0 none, 1 edge, 2 vertex, 3 strain.";
+            rigid: bool;          "whether all points are vertices in the parent body (no new bodies created).";
+            flatskin: bool;       "render flex skin with flat shading.";
+            elastic2d: u8;        "the 2D passive force mode: 0 none, 1 bending, 2 stretching, 3 both.";
+            pos: [f64; 3];        "the translation of all points relative to the parent body frame.";
+            quat: [f64; 4];       "the quaternion rotation of all points around the position offset.";
+            origin: [f64; 3];     "the flexcomp origin used to build a volumetric mesh from a surface mesh.";
+            file: &'a str;        "the file to load the surface or volumetric mesh from.";
+            vfs: &'a MjVfs;       "the virtual file system used to resolve the mesh file.";
+        ]
     }
 }
 
 impl MjsBody {
-    // Complex types with mutable and immutable reference returns.
+    /// Add and return a child [`MjsFlex`].
+    ///
+    /// Creates a flex with auto-generated bodies, joints, and optional equality constraints, the
+    /// programmatic equivalent of the `flexcomp` element, configured via
+    /// [`MjFlexcompConfig`]. Wraps [`mjs_makeFlex`].
+    ///
+    /// # Panics
+    /// Panics if MuJoCo fails to create the flex, or if `name` or any string in
+    /// `config` contains an interior NUL byte.
+    pub fn add_flexcomp(&mut self, name: &str, config: &MjFlexcompConfig) -> &mut MjsFlex {
+        self.try_add_flexcomp(name, config).expect("mjs_makeFlex returned null")
+    }
+
+    /// Fallible version of [`Self::add_flexcomp`]. Wraps [`mjs_makeFlex`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to create the
+    /// flex (returns null).
+    ///
+    /// # Panics
+    /// Panics if `name` or any string in `config` contains an interior NUL byte.
+    pub fn try_add_flexcomp(&mut self, name: &str, config: &MjFlexcompConfig)
+        -> Result<&mut MjsFlex, MjEditError>
+    {
+        // Owned C strings must outlive the FFI call below.
+        let c_name = CString::new(name).unwrap();
+        let c_type = config.r#type.map(|s| CString::new(s).unwrap());
+        let c_dof = config.dof.map(|s| CString::new(s).unwrap());
+        let c_file = config.file.map(|s| CString::new(s).unwrap());
+
+        // Widen the small count types to C ints; the locals must outlive the FFI call.
+        let count = config.count.map(|c| c.map(|v| v as c_int));
+        let cellcount = config.cellcount.map(|c| c.map(|v| v as c_int));
+        let count_ptr = count.as_ref().map_or(ptr::null(), |a| a as *const [c_int; 3]);
+        let cellcount_ptr = cellcount.as_ref().map_or(ptr::null(), |a| a as *const [c_int; 3]);
+        let spacing_ptr = config.spacing.as_ref().map_or(ptr::null(), |a| a as *const [f64; 3]);
+        let scale_ptr = config.scale.as_ref().map_or(ptr::null(), |a| a as *const [f64; 3]);
+        let pos_ptr = config.pos.as_ref().map_or(ptr::null(), |a| a as *const [f64; 3]);
+        let quat_ptr = config.quat.as_ref().map_or(ptr::null(), |a| a as *const [f64; 4]);
+        let origin_ptr = config.origin.as_ref().map_or(ptr::null(), |a| a as *const [f64; 3]);
+
+        // SAFETY: every pointer below is either null, which mjs_makeFlex reads as "use the
+        // default", or borrows a local that outlives the call. MuJoCo retains no pointer of its own.
+        let ptr = unsafe {
+            mjs_makeFlex(
+                self.ffi_mut(),
+                c_name.as_ptr(),
+                c_type.as_ref().map_or(ptr::null(), |c| c.as_ptr()),
+                config.dim as c_int,
+                c_dof.as_ref().map_or(ptr::null(), |c| c.as_ptr()),
+                count_ptr,
+                cellcount_ptr,
+                spacing_ptr,
+                scale_ptr,
+                config.radius,
+                config.mass,
+                config.inertiabox,
+                config.equality as c_int,
+                config.rigid as c_int,
+                config.flatskin as c_int,
+                config.elastic2d as c_int,
+                pos_ptr,
+                quat_ptr,
+                origin_ptr,
+                c_file.as_ref().map_or(ptr::null(), |c| c.as_ptr()),
+                config.vfs.map_or(ptr::null(), |v| v.ffi() as *const mjVFS),
+            )
+        };
+        unsafe { MjsFlex::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
+    }
+}
+
+impl MjsBody {
     getter_setter! {
         [&] with, get, [
             // body frame
-            pos: &[f64; 3];                   "frame position.";
-            quat: &[f64; 4];                  "frame orientation.";
-            alt: &MjsOrientation;             "frame alternative orientation.";
+            [ffi, ffi_mut] pos: &[f64; 3];                   "frame position.";
+            [ffi, ffi_mut] quat: &[f64; 4];                  "frame orientation.";
+            [ffi, ffi_mut] alt: &MjsOrientation;             "frame alternative orientation.";
 
             //inertial frame
-            ipos: &[f64; 3];                  "inertial frame position.";
-            iquat: &[f64; 4];                 "inertial frame orientation.";
-            inertia: &[f64; 3];               "diagonal inertia (in i-frame).";
-            ialt: &MjsOrientation;            "inertial frame alternative orientation.";
-            fullinertia: &[f64; 6];           "non-axis-aligned inertia matrix.";
+            [ffi, ffi_mut] ipos: &[f64; 3];                  "inertial frame position.";
+            [ffi, ffi_mut] iquat: &[f64; 4];                 "inertial frame orientation.";
+            [ffi, ffi_mut] inertia: &[f64; 3];               "diagonal inertia (in i-frame).";
+            [ffi, ffi_mut] ialt: &MjsOrientation;            "inertial frame alternative orientation.";
+            [ffi, ffi_mut] fullinertia: &[f64; 6];           "non-axis-aligned inertia matrix.";
         ]
     }
 
-    getter_setter! {
-        get, [
-            plugin: &MjsPlugin;                     "passive force plugin.";
-        ]
-    }
+    nested_handle!(plugin: MjsPluginReference; "passive force plugin.");
 
-    // Plain types with normal getters and setters.
     getter_setter! {
         [&] with, get, set, [
-            mass: f64;                     "mass.";
-            gravcomp: f64;                 "gravity compensation.";
-            sleep: MjtSleepPolicy;           "sleep policy.";
+            [ffi, ffi_mut] mass: f64;                     "mass.";
+            [ffi, ffi_mut] gravcomp: f64;                 "gravity compensation.";
+            [ffi, ffi_mut] sleep: MjtSleepPolicy;           "sleep policy.";
         ]
     }
 
     getter_setter! {
         [&] with, get, set, [
-            mocap: bool;                   "whether this is a mocap body.";
-            explicitinertial: bool;        "whether to save the body with explicit inertial clause.";
+            [ffi, ffi_mut] mocap: bool;                   "whether this is a mocap body.";
+            [ffi, ffi_mut] explicitinertial: bool;        "whether to save the body with explicit inertial clause.";
+            [ffi, ffi_mut] simple: bool;                  "simple body optimization (false: disabled, true: auto).";
         ]
     }
 
@@ -2292,21 +2577,20 @@ impl MjsBody {
 /// Mutable iterator over items in [`MjsBody`].
 #[derive(Debug)]
 pub struct MjsBodyItemIterMut<'a, T> {
-    /// NonNull pointer to the FFI type [`mjsBody`].
-    /// [`MjsBody`] is its alias, thus storing it plainly
-    /// would technically be UB as Rust can't see across
-    /// boundary to verify . 
-    ffi_ptr: *mut MjsBody,
+    /// Raw pointer to the body; a borrow would alias the handles that the iterator yields.
+    ffi_ptr: *mut mjsBody,
+    /// Element that the last `next` yielded. Null marks the end of the iteration.
     last: *mut mjsElement,
     recurse: bool,
-    /// Used for generic implementation of iterator's methods.
     item_type: PhantomData<&'a mut T>
 }
 
 impl<'a, T: SpecObject> MjsBodyItemIterMut<'a, T> {
     fn new(root: &'a mut MjsBody, recurse: bool) -> Self {
-        let last = unsafe { mjs_firstChild(root, T::OBJ_TYPE, recurse.into()) };
-        Self { ffi_ptr: root, last, recurse, item_type: PhantomData }
+        // SAFETY: the iterator walks the children of the body and never exchanges its contents.
+        let ffi_ptr = unsafe { root.ffi_mut() } as *mut mjsBody;
+        let last = unsafe { mjs_firstChild(ffi_ptr, T::OBJ_TYPE, recurse.into()) };
+        Self { ffi_ptr, last, recurse, item_type: PhantomData }
     }
 }
 
@@ -2331,26 +2615,27 @@ impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsBodyItemIterMut<'a,
 /// Immutable iterator over items in [`MjsBody`].
 #[derive(Debug, Clone)]
 pub struct MjsBodyItemIter<'a, T> {
-    ffi_ptr: *const MjsBody,
+    ffi_ptr: *const mjsBody,
+    /// Element that the last `next` yielded. Null marks the end of the iteration.
     last: *const mjsElement,
     recurse: bool,
-    /// Used for generic implementation of iterator's methods.
     item_type: PhantomData<&'a T>
 }
 
 
 impl<'a, T: SpecObject> MjsBodyItemIter<'a, T> {
     fn new(root: &'a MjsBody, recurse: bool) -> Self {
-        // SAFETY: mjs_firstChild requires a *mut pointer but does not mutate
-        // the body. The const-to-mut cast is sound because no mutation occurs.
+        let ffi_ptr = root.ffi() as *const mjsBody;
+        // SAFETY: mjs_firstChild takes a *const mjsBody; the borrow of root keeps the body
+        // alive for the call.
         let last = unsafe {
             mjs_firstChild(
-                root,
+                ffi_ptr,
                 T::OBJ_TYPE,
                 recurse.into()
             )
         };
-        Self { ffi_ptr: root, last, recurse, item_type: PhantomData }
+        Self { ffi_ptr, last, recurse, item_type: PhantomData }
     }
 }
 
@@ -2363,19 +2648,20 @@ impl<'a, T: SpecObject + 'a> Iterator for MjsBodyItemIter<'a, T> {
         }
         unsafe {
             let out = T::from_element_as_ptr_mut(self.last as *mut _).as_ref();
-            // SAFETY: mjs_nextChild requires *mut but does not mutate. Cast is sound.
+            // SAFETY: mjs_nextChild takes *const pointers; ffi_ptr and last stay valid while
+            // the iterator borrows the body.
             self.last = mjs_nextChild(self.ffi_ptr, self.last, self.recurse.into());
             out
         }
     }
 }
 
-// Once self.last is null, next() always returns None.
 impl<'a, T: SpecObject + 'a> std::iter::FusedIterator for MjsBodyItemIter<'a, T> {}
 
 /// Iterator methods.
 impl MjsBody {
-    body_get_iter! {[body, joint, geom, site, camera, light, frame] }
+    body_get_iter! {[joint, geom, site, camera, light, frame] }
+    body_get_iter! { direct_children_mut: [body] }
 }
 
 /******************************
@@ -2400,6 +2686,48 @@ mod tests {
     <geom name=\"floor1\" type=\"plane\" size=\"10 10 1\" solref=\"0.004 1.0\"/>
   </worldbody>
 </mujoco>";
+
+    #[test]
+    fn test_spec_authored_accessor() {
+        use crate::mujoco_c::{mjtDisableBit, mjtEnableBit};
+
+        // A model that explicitly authors option flags: disables the contact flag,
+        // enables the energy flag, and disables actuator group 3.
+        const AUTHORED: &str = "\
+<mujoco>
+  <option actuatorgroupdisable=\"3\">
+    <flag contact=\"disable\" energy=\"enable\"/>
+  </option>
+  <worldbody>
+    <light ambient=\"0.2 0.2 0.2\"/>
+    <body name=\"ball\" pos=\".2 .2 .1\">
+        <geom name=\"green_sphere\" size=\".1\" rgba=\"0 1 0 1\"/>
+        <joint name=\"ball\" type=\"free\"/>
+    </body>
+  </worldbody>
+</mujoco>";
+
+        let contact = mjtDisableBit::mjDSBL_CONTACT as i32;
+        let gravity = mjtDisableBit::mjDSBL_GRAVITY as i32;
+        let energy = mjtEnableBit::mjENBL_ENERGY as i32;
+
+        let spec = MjSpec::from_xml_string(AUTHORED).unwrap();
+        let authored = spec.authored();
+
+        // Flags that were explicitly set must be marked authored at the matching bit...
+        assert_eq!(authored.disableflags & contact, contact, "contact disable must be authored");
+        assert_eq!(authored.enableflags & energy, energy, "energy enable must be authored");
+        assert_eq!(authored.disableactuator & (1 << 3), 1 << 3, "actuator group 3 must be authored");
+        // ...while flags that were never touched must stay unauthored.
+        assert_eq!(authored.disableflags & gravity, 0, "gravity was never authored");
+
+        // A model that authors none of these leaves the bitmasks clear.
+        let plain = MjSpec::from_xml_string(MODEL).unwrap();
+        let plain_authored = plain.authored();
+        assert_eq!(plain_authored.disableflags, 0);
+        assert_eq!(plain_authored.enableflags, 0);
+        assert_eq!(plain_authored.disableactuator, 0);
+    }
 
     #[test]
     fn test_parse_xml_string() {
@@ -2478,19 +2806,15 @@ mod tests {
         body.set_name(NEW_MODEL_NAME).unwrap();
 
         /* Test normal body deletion */
-        let body_element = {
-            let body = spec.body_mut(NEW_MODEL_NAME).expect("failed to obtain the body");
-            body.element_mut_pointer()
-        };
-        assert!(unsafe { spec.delete_element(body_element) }.is_ok(), "failed to delete model");
+        assert!(
+            unsafe { spec.body_mut(NEW_MODEL_NAME).unwrap().delete() }.is_ok(),
+            "failed to delete model"
+        );
         assert!(spec.body(NEW_MODEL_NAME).is_none(), "body was not removed from spec");
 
         /* Test world body deletion */
-        let world_element = {
-            let world = spec.world_body_mut();
-            world.element_mut_pointer()
-        };
-        assert!(unsafe { spec.delete_element(world_element) }.is_err(), "the world model should not be deletable");
+        let world = unsafe { spec.world_body_mut().delete() };
+        assert!(world.is_err(), "the world model should not be deletable");
 
         spec.compile().unwrap();
     }
@@ -2505,11 +2829,10 @@ mod tests {
         joint.set_name(NEW_NAME).unwrap();
 
         /* Test normal body deletion */
-        let joint_element = {
-            let joint = spec.joint_mut(NEW_NAME).expect("failed to obtain the body");
-            joint.element_mut_pointer()
-        };
-        assert!(unsafe { spec.delete_element(joint_element) }.is_ok(), "failed to delete model");
+        assert!(
+            unsafe { spec.joint_mut(NEW_NAME).unwrap().delete() }.is_ok(),
+            "failed to delete model"
+        );
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed fom spec");
 
         spec.compile().unwrap();
@@ -2524,11 +2847,8 @@ mod tests {
         hfield.set_name(NEW_NAME).unwrap();
 
         /* Test normal hfield deletion */
-        let hfield_element = {
-            let hfield = spec.hfield_mut(NEW_NAME).expect("failed to obtain the hfield");
-            hfield.element_mut_pointer()
-        };
-        assert!(unsafe { spec.delete_element(hfield_element) }.is_ok(), "failed to delete hfield");
+        let hfield = spec.hfield_mut(NEW_NAME).expect("failed to obtain the hfield");
+        assert!(unsafe { hfield.delete() }.is_ok(), "failed to delete hfield");
         assert!(spec.hfield(NEW_NAME).is_none(), "hfield was not removed from spec");
 
         spec.compile().unwrap();
@@ -2673,9 +2993,9 @@ mod tests {
   <worldbody>
     <body>
       <geom size=\"0.01\"/>
-      <site pos=\"0 0 0\"/>
-      <camera pos=\"0 0 0\"/>
-      <light pos=\"0 0 0\" dir=\"0 0 -1\"/>
+      <site/>
+      <camera/>
+      <light/>
     </body>
   </worldbody>
 </mujoco>
@@ -2711,9 +3031,7 @@ mod tests {
         };
         assert!(required_size > 1, "required_size must exceed the original 1-byte buffer");
 
-        // Retry with the size MuJoCo reported plus one extra byte for safety
-        // (MuJoCo uses a strict less-than comparison, so the buffer must be
-        // at least required_size + 1 to succeed).
+        // `required_size` excludes the NUL, so the retry needs one byte more.
         let xml = spec.save_xml_string(required_size + 1)
             .expect("save_xml_string should succeed with required_size + 1 bytes");
         assert!(!xml.is_empty(), "saved XML must be non-empty");
@@ -2921,18 +3239,18 @@ mod tests {
 
         // Iter MjSpec
         assert_eq!(spec.geom_iter_mut().count(), N_GEOM);
-        assert_eq!(spec.body_iter_mut().count(), N_BODY);
+        assert_eq!(spec.body_iter().count(), N_BODY);
         assert_eq!(spec.site_iter_mut().count(), N_SITE);
         assert_eq!(spec.tendon_iter_mut().count(), N_TENDON);
         assert_eq!(spec.mesh_iter_mut().count(), N_MESH);
-        assert_eq!(spec.body_iter_mut().last().unwrap().name(), LAST_BODY_NAME);
+        assert_eq!(spec.body_iter().last().unwrap().name(), LAST_BODY_NAME);
 
         // Iter MjsBody
         let world = spec.world_body_mut();
         assert_eq!(world.geom_iter_mut(true).count(), N_GEOM);
-        assert_eq!(world.body_iter_mut(true).count(), N_BODY - 1);  // world must now be excluded
+        assert_eq!(world.body_iter(true).count(), N_BODY - 1);  // world must now be excluded
         assert_eq!(world.site_iter_mut(true).count(), N_SITE);
-        assert_eq!(world.body_iter_mut(false).last().unwrap().name(), LAST_WORLD_BODY_NAME);
+        assert_eq!(world.body_iter_mut().last().unwrap().name(), LAST_WORLD_BODY_NAME);
     }
 
     /// Tests wrapper method of [`mj_parse`] with VFS.
@@ -3095,7 +3413,7 @@ mod tests {
         assert_eq!(model.ffi().ntendon, 1, "expected one tendon");
         assert_eq!(model.ffi().nwrap, 2, "expected two wrap elements");
 
-        // Verify wrap types are mjWRAP_SITE (= 1)
+        // Verify wrap types are mjWRAP_SITE
         let wrap_types = model.wrap_type();
         assert_eq!(wrap_types[0], MjtWrap::mjWRAP_SITE);
         assert_eq!(wrap_types[1], MjtWrap::mjWRAP_SITE);
@@ -3112,7 +3430,7 @@ mod tests {
     /// (FALSE, TRUE, AUTO), which would fail if the field were `bool`.
     #[test]
     fn test_tendon_limited_tristate() {
-        use crate::mujoco_c::mjtLimited_::*;
+        use crate::mujoco_c::mjtLimited::*;
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
@@ -3160,7 +3478,7 @@ mod tests {
     /// states (FALSE, TRUE, AUTO).
     #[test]
     fn test_tendon_actfrclimited_tristate() {
-        use crate::mujoco_c::mjtLimited_::*;
+        use crate::mujoco_c::mjtLimited::*;
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
@@ -3203,7 +3521,7 @@ mod tests {
     /// (FALSE, TRUE, AUTO), which would fail if the field were `i32`.
     #[test]
     fn test_joint_align_tristate() {
-        use crate::mujoco_c::mjtAlignFree_::*;
+        use crate::mujoco_c::mjtAlignFree::*;
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
@@ -3226,20 +3544,16 @@ mod tests {
                 "Before compile: joint '{}' align should be {:?}", name, expected);
         }
 
-        // Compile and verify -- AUTO should resolve, FALSE/TRUE should remain
+        // Compiling proves MuJoCo accepted every enum value.
         let model = spec.compile().unwrap();
-        let jnt_count = model.ffi().njnt as usize;
-        assert_eq!(jnt_count, 3, "expected 3 joints");
-
-        // Must compile without error -- the key correctness is the round-trip above;
-        // compilation proves MuJoCo accepted the enum values.
+        assert_eq!(model.ffi().njnt as usize, 3, "expected 3 joints");
     }
 
     /// Test that MjsJoint `limited` also correctly round-trips all three states
     /// since it was also changed to MjtLimited.
     #[test]
     fn test_joint_limited_tristate() {
-        use crate::mujoco_c::mjtLimited_::*;
+        use crate::mujoco_c::mjtLimited::*;
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
@@ -3262,12 +3576,11 @@ mod tests {
                 "Before compile: joint '{}' limited should be {:?}", name, expected);
         }
 
-        // Compile -- AUTO resolves based on range presence
+        // AUTO resolves from the presence of a range.
         let model = spec.compile().unwrap();
         let jnt_limited = model.jnt_limited();
         assert!(!jnt_limited[0]);
         assert!(jnt_limited[1]);
-        // AUTO with range present should resolve to true
         assert!(jnt_limited[2], "Joint with limited=AUTO and range should resolve to true");
     }
 
@@ -3442,9 +3755,8 @@ mod tests {
             .set_nchannel(3);
         assert!(ok_spec.compile().is_ok(), "nchannel == 3 builtin texture should compile");
 
-        // nchannel < 3 with NO builtin pattern must not trip this guard. Such a texture still
-        // fails to compile (it has no pixel source), but with MuJoCo's own error message rather
-        // than the nchannel guard's, proving the guard is correctly scoped to the builtin path.
+        // Without a builtin pattern the texture still fails to compile, but through MuJoCo's own
+        // error, which scopes the guard to the builtin path.
         let mut no_builtin = MjSpec::new();
         no_builtin.add_texture()
             .with_name("plain")
@@ -3491,6 +3803,55 @@ mod tests {
             flex_mut.set_order(1);
         }
         assert_eq!(spec.flex("myflex").unwrap().order(), 1);
+    }
+
+    /// Verifies procedural flex creation via [`MjsBody::add_flexcomp`] (wraps `mjs_makeFlex`):
+    /// the returned flex reflects the requested config, is registered in the spec, and the
+    /// spec still compiles into a valid model.
+    #[test]
+    fn test_add_flexcomp() {
+        let mut spec = MjSpec::new();
+
+        let config = MjFlexcompConfig::default()
+            .with_type("grid")
+            .with_dim(2)
+            .with_count([3, 3, 1])
+            .with_spacing([0.1, 0.1, 0.1])
+            .with_radius(0.001)
+            .with_mass(1.0);
+
+        {
+            let flex = spec.world_body_mut().add_flexcomp("genflex", &config);
+            assert_eq!(flex.dim(), 2);
+            assert!((flex.radius() - 0.001).abs() < 1e-12);
+        }
+
+        /* The generated flex is registered in the spec and addressable by name. */
+        let flex = spec.flex("genflex").expect("generated flex not found in spec");
+        assert_eq!(flex.cellcount().len(), 3);
+
+        /* The spec with the generated flex still compiles into a valid model. */
+        spec.compile().expect("spec with generated flex failed to compile");
+    }
+
+    /// A config that sets only the structural fields must compile and keep MuJoCo's own default
+    /// dim (2) and radius (0.005).
+    #[test]
+    fn test_flexcomp_config_defaults() {
+        let mut spec = MjSpec::new();
+
+        let config = MjFlexcompConfig::default()
+            .with_count([3, 3, 1])
+            .with_spacing([0.1, 0.1, 0.1])
+            .with_mass(1.0);
+
+        {
+            let flex = spec.world_body_mut().add_flexcomp("genflex", &config);
+            assert_eq!(flex.dim(), 2);
+            assert!((flex.radius() - 0.005).abs() < 1e-12);
+        }
+
+        spec.compile().expect("spec with defaulted flex failed to compile");
     }
 
     /// Verifies the sensor's objtype protection works.
@@ -3555,5 +3916,227 @@ mod tests {
             Err(MjEditError::InvalidParameter(_))
         ));
         assert!(numeric.set_size(4).is_ok());
+    }
+
+    /// A frame carries no default class name, so `default()` reports `None` for it, while a geom
+    /// and a body added with a default class still yield one.
+    #[test]
+    fn test_frame_has_no_default() {
+        let mut spec = MjSpec::new();
+        assert!(spec.world_body_mut().add_frame().default().is_none());
+        assert!(spec.world_body_mut().add_geom().default().is_some());
+        assert!(spec.world_body_mut().default().is_some());
+    }
+
+    /// `mjs_getId` casts to `mjCBase`, which `mjCDef` does not derive from, so a default class
+    /// must report no id instead of the value read at that offset.
+    #[test]
+    fn test_default_has_no_id() {
+        assert!(MjSpec::new().add_default("cls", None).id().is_none());
+    }
+
+    /// A name that MuJoCo parses need not be valid UTF-8, so `delete` must reach the world body
+    /// through its address; a name comparison would panic instead of deleting the body.
+    #[test]
+    fn test_delete_non_utf8_name() {
+        // tinyxml2 encodes a character reference without validating it, so the surrogate U+D800
+        // becomes the three bytes ED A0 80, which no UTF-8 string may hold.
+        let mut spec = MjSpec::from_xml_string(
+            "<mujoco><worldbody><body name=\"a&#xD800;b\"/></worldbody></mujoco>"
+        ).unwrap();
+
+        let body = spec.world_body_mut().body_iter_mut().next().unwrap();
+        // SAFETY: the spec owns the name string for as long as the element lives.
+        let name = unsafe { CStr::from_ptr(mjs_getString(mjs_getName(body.element_mut_pointer()))) };
+        assert!(
+            std::str::from_utf8(name.to_bytes()).is_err(), "the test needs a non-UTF-8 name"
+        );
+
+        unsafe { body.delete() }.unwrap();
+        assert_eq!(spec.body_iter().count(), 1);
+    }
+
+    /// `mjCWrap` leaves its elemtype at `mjOBJ_UNKNOWN`, which makes MuJoCo's duplicate-name check
+    /// index a null list and crash, so naming a wrap must be rejected before the FFI call.
+    #[test]
+    fn test_wrap_set_name_rejected() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_site().with_name("s0");
+        let wrap = spec.add_tendon().wrap_site("s0");
+        assert!(matches!(wrap.set_name("w0"), Err(MjEditError::UnsupportedOperation)));
+        assert_eq!(wrap.name(), "s0");
+    }
+
+    /// A frame's element type lies past the end of MuJoCo's element-list array, so `mjs_delete`
+    /// corrupts the spec and still reports success.
+    #[test]
+    fn test_delete_rejects_frame() {
+        let mut spec = MjSpec::new();
+        let frame = spec.world_body_mut().add_frame();
+        assert!(matches!(unsafe { frame.delete() }, Err(MjEditError::UnsupportedOperation)));
+        assert_eq!(spec.world_body().frame_iter(false).count(), 1, "the frame stays in the body");
+    }
+
+    /// The deprecated raw-pointer path reaches what a handle cannot: a null pointer, a default
+    /// class, a tendon wrap, and an element of another spec.
+    #[test]
+    #[expect(deprecated, reason = "the test covers the deprecated method itself")]
+    fn test_delete_element_guards() {
+        let mut spec = MjSpec::new();
+        assert!(matches!(
+            unsafe { spec.delete_element(ptr::null_mut()) }, Err(MjEditError::DeleteFailed(_))
+        ));
+
+        let default = spec.add_default("cls", None).element_mut_pointer();
+        assert!(matches!(
+            unsafe { spec.delete_element(default) }, Err(MjEditError::UnsupportedOperation)
+        ));
+
+        spec.world_body_mut().add_site().with_name("s0");
+        let wrap = spec.add_tendon().wrap_site("s0").element_mut_pointer();
+        assert!(matches!(
+            unsafe { spec.delete_element(wrap) }, Err(MjEditError::UnsupportedOperation)
+        ));
+
+        let mut other = MjSpec::new();
+        let foreign = other.world_body_mut().add_body().element_mut_pointer();
+        assert!(matches!(
+            unsafe { spec.delete_element(foreign) }, Err(MjEditError::DeleteFailed(_))
+        ));
+        assert_eq!(other.body_iter().count(), 2, "the foreign body stays in its own spec");
+
+        let hfield = spec.add_hfield().element_mut_pointer();
+        unsafe { spec.delete_element(hfield) }.unwrap();
+        assert_eq!(spec.hfield_iter().count(), 0, "an element of this spec still deletes");
+    }
+
+    /// Deleting a body deletes its subtree, which the safety contract of `delete` builds on.
+    #[test]
+    fn test_delete_body_removes_subtree() {
+        let mut spec = MjSpec::new();
+        let parent = spec.world_body_mut().add_body();
+        parent.set_name("parent").unwrap();
+        parent.add_body().with_name("child");
+        spec.body_mut("child").unwrap().add_geom().with_name("g0");
+
+        unsafe { spec.body_mut("parent").unwrap().delete() }.unwrap();
+        assert!(spec.body("child").is_none(), "the child left the spec with its parent");
+        assert!(spec.geom("g0").is_none(), "so did the geom of the child");
+        assert_eq!(spec.body_iter().count(), 1, "only the world body stays");
+    }
+
+    /// Deleting a body frees the elements that referenced it, so their address returns to the
+    /// allocator and a later element can take it.
+    #[test]
+    fn test_delete_body_releases_dependents() {
+        const MODEL_WITH_ACTUATOR: &str = "\
+<mujoco>
+  <worldbody>
+    <body name=\"arm\"><joint name=\"j0\" type=\"hinge\"/><geom size=\".1\"/></body>
+  </worldbody>
+  <actuator><motor name=\"a0\" joint=\"j0\"/></actuator>
+</mujoco>";
+
+        let mut spec = MjSpec::from_xml_string(MODEL_WITH_ACTUATOR).unwrap();
+        unsafe { spec.body_mut("arm").unwrap().delete() }.unwrap();
+        assert!(spec.actuator("a0").is_none(), "the delete released the dependent actuator");
+        assert_eq!(spec.actuator_iter().count(), 0, "no walk reaches it either");
+    }
+
+    /// Compiling with `discardvisual` frees the visual geoms and their assets, so a later element
+    /// can take the address of a discarded one, and a walk must still reach only live geoms.
+    ///
+    /// The test walks instead of looking a name up: MuJoCo leaves the discarded name in its id map,
+    /// so `MjSpec::geom("visual")` throws out of C++ here. That is a separate defect of the lookup.
+    #[test]
+    fn test_delete_after_discardvisual() {
+        const VISUAL: &str = "\
+<mujoco>
+  <worldbody>
+    <geom name=\"solid\" size=\".1\"/>
+    <geom name=\"visual\" size=\".1\" contype=\"0\" conaffinity=\"0\" group=\"3\"/>
+  </worldbody>
+</mujoco>";
+
+        let mut spec = MjSpec::from_xml_string(VISUAL).unwrap();
+        spec.compiler_mut().set_discardvisual(true);
+        spec.compile().unwrap();
+        assert_eq!(spec.geom_iter().count(), 1, "the compile discarded the visual geom");
+        assert_eq!(spec.geom_iter().next().unwrap().name(), "solid");
+
+        for i in 0..64 {
+            spec.world_body_mut().add_geom().with_name(&format!("fresh{i}"))
+                .with_size([0.1, 0.0, 0.0]);
+        }
+        assert!(
+            unsafe { spec.geom_iter_mut().next().unwrap().delete() }.is_ok(), "the survivor deletes"
+        );
+        assert_eq!(spec.geom_iter().count(), 64);
+    }
+
+    /// A walk that deletes the first element of each round removes a whole selection, which is how
+    /// a caller deletes in bulk without holding a handle across a deletion.
+    #[test]
+    fn test_delete_removes_a_whole_selection() {
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+        for name in ["g0", "g1", "g2"] {
+            world.add_geom().with_name(name).with_size([0.1, 0.0, 0.0]);
+        }
+
+        let mut deleted = 0;
+        while let Some(geom) = spec.geom_iter_mut().next() {
+            unsafe { geom.delete() }.unwrap();
+            deleted += 1;
+        }
+        assert_eq!(deleted, 3);
+        assert_eq!(spec.geom_iter().count(), 0);
+    }
+
+    /// Every element kind that `delete` accepts removes through it.
+    #[test]
+    fn test_delete_every_element_kind() {
+        let mut spec = MjSpec::new();
+        macro_rules! delete_added {
+            ($($kind:ident),*) => {paste::paste! {$({
+                let element = spec.[<$kind _iter_mut>]().next().unwrap();
+                assert!(unsafe { element.delete() }.is_ok(), stringify!($kind));
+                assert_eq!(spec.[<$kind _iter>]().count(), 0, stringify!($kind));
+            })*}};
+        }
+
+        let world = spec.world_body_mut();
+        world.add_body();
+        world.add_geom();
+        world.add_site();
+        world.add_camera();
+        world.add_light();
+        world.body_iter_mut().last().unwrap().add_joint();
+        spec.add_actuator();
+        spec.add_pair();
+        spec.add_equality();
+        spec.add_tendon();
+        spec.add_mesh();
+        spec.add_material();
+        spec.add_sensor();
+        spec.add_flex();
+        spec.add_exclude();
+        spec.add_numeric();
+        spec.add_text();
+        spec.add_tuple();
+        spec.add_key();
+        spec.add_hfield();
+        spec.add_skin();
+        spec.add_texture();
+        spec.add_plugin();
+
+        delete_added!(
+            joint, geom, site, camera, light, actuator, pair, equality, tendon, mesh, material,
+            sensor, flex, exclude, numeric, text, tuple, key, hfield, skin, texture, plugin
+        );
+
+        // The world body stays, so the body list never empties.
+        assert!(unsafe { spec.world_body_mut().body_iter_mut().last().unwrap().delete() }.is_ok(), "body");
+        assert_eq!(spec.body_iter().count(), 1);
     }
 }

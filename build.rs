@@ -20,7 +20,9 @@ mod build_dependencies {
             // pointer-containing types is unsound -- clones share aliased raw
             // pointers and can cause data races across thread boundaries.
             // mjSpec_ has the same issue (contains *mut mjsElement etc.).
-            if info.name.starts_with("mjs") || info.name == "mjSpec_" {
+            // mjLogMessage_: MuJoCo builds `body` on the stack of the caller, so a clone that a
+            // log handler keeps alive would outlive the string and read freed memory.
+            if info.name.starts_with("mjs") || ["mjSpec_", "mjLogMessage_"].contains(&info.name) {
                 return vec![];
             }
 
@@ -45,14 +47,6 @@ mod build_dependencies {
             data
         }
 
-        fn field_visibility(
-            &self,
-            _info: bindgen::callbacks::FieldInfo<'_>,
-        ) -> Option<bindgen::FieldVisibilityKind> {
-            if _info.type_name.starts_with("mjs") {
-                Some(bindgen::FieldVisibilityKind::PublicCrate)
-            } else { None }
-        }
     }
 
 
@@ -92,12 +86,84 @@ mod build_dependencies {
         fdata = re.replace_all(&fdata, "#[derive($1, $2)]").to_string();
 
         // Make mjtSameFrame be MjtByte as used in all fields.
-        re = regex::Regex::new(r"#\[repr\(u32\)\]\n(.*\npub enum mjtSameFrame_)").unwrap();
+        re = regex::Regex::new(r"#\[repr\(u32\)\]\n(.*\npub enum mjtSameFrame \{)").unwrap();
         fdata = re.replace(&fdata, "#[repr(u8)]\n$1").to_string();
 
         // Replace "zero"-sized and one-sized arrays with raw pointers
         re = regex::Regex::new(r"\*\s*(const|mut)\s*\[\s*(.+?)\s*;\s*[0-1]+[A-z]+\s*\]").unwrap();
         fdata = re.replace_all(&fdata, "*$1 $2").to_string();
+
+        // Per-struct field visibility. A struct that the safe API exposes directly (through
+        // a bare pub type alias, with no dedicated wrapper) "needs mediation" when at least
+        // one of its fields requires the safe API to validate writes: a raw pointer (a public
+        // one would let a user substitute an arbitrary address that C dereferences), a fixed
+        // char buffer (must stay NUL-terminated), or a value C uses as an unchecked memory
+        // index. When a struct needs mediation, ALL of its fields are demoted to pub(crate)
+        // together -- a per-struct rule, so the access pattern is uniform (every field
+        // reached through a wrapper accessor) rather than mixing direct field access with
+        // accessors.
+        //
+        // Demotion is applied as a text pass (rather than the field_visibility callback)
+        // because bindgen reports the same anonymous type name for pointers and arrays and
+        // so cannot tell them apart, and because the per-struct decision needs to see the
+        // whole struct body at once. Raw pointers are detected from the text; pointer-free
+        // structs that still have a memory-unsafe field (a char buffer C reads as a string, or
+        // a value C uses as an unchecked memory index) are listed explicitly in CONFIG_DEMOTE
+        // (those field kinds are not reliably detectable from the text). A struct whose
+        // rule-breaking fields are all memory-safe stays a plain, fully-public struct.
+        //
+        // Structs not exposed in the safe API (wrapped structs, internal helpers, UI types)
+        // keep all fields public -- they are only reachable through FFI code that already
+        // requires unsafe. See coding-conventions.md "Generated struct field visibility".
+        const WRAPPED_STRUCTS: [&str; 6] =
+            ["mjModel_", "mjData_", "mjvScene_", "mjrContext_", "mjVFS_", "mjSpec_"];
+        // mjpResourceProvider has a bare `pub type MjpResourceProvider` alias but no safe API
+        // consumes/produces it (the only consumer is the unwrapped unsafe FFI
+        // mjp_registerResourceProvider) and it has no accessors, so it is reachable only through
+        // unsafe FFI -- treat it as internal and keep its (pointer) fields public.
+        const INTERNAL_STRUCTS: [&str; 9] = [
+            "mjCache_", "mjpDecoder", "mjpEncoder", "mjpPlugin_",
+            "mjResource_", "mjSDF_", "mjrVertexAttribute_", "mjsElement_",
+            "mjpResourceProvider",
+        ];
+        // Exposed pointer-free structs that still have a memory-unsafe field (a char buffer C
+        // reads as a NUL-terminated string, or a value C uses as an unchecked memory index),
+        // which the text scan cannot detect:
+        //   mjLogConfig_ -- `logfile` is fopen()'d as a C string (non-NUL-terminated -> OOB read).
+        // Structs whose rule-breaking fields are all memory-safe (e.g. an enum-as-int C only
+        // switches on, like mjOption_/mjLROpt_/mjvOption_) are plain structs and are NOT listed.
+        //
+        // NOTE: mjvGeom_ and mjvFigure_ also have memory-unsafe fields (the renderer uses
+        // mjvGeom_.matid/objid/dataid as unchecked array indices, and reads mjvFigure_'s
+        // xlabel/linename/xformat as C strings), so they would normally belong here. They are
+        // deliberately kept fully public for now and are intentionally NOT listed; revisit before
+        // hardening those two structs behind accessors.
+        const CONFIG_DEMOTE: [&str; 1] = ["mjLogConfig_"];
+        let struct_re = regex::Regex::new(r"(?s)(pub struct (\w+) \{)(.*?)(\n\})").unwrap();
+        let ptr_field_re =
+            regex::Regex::new(r"(?m)^(\s*)pub (\w+: \*(?:const|mut) )").unwrap();
+        // Matches any `pub <field>:` line so the whole struct can be demoted at once.
+        let any_field_re = regex::Regex::new(r"(?m)^(\s*)pub (\w+:)").unwrap();
+        fdata = struct_re
+            .replace_all(&fdata, |caps: &regex::Captures| {
+                let header = &caps[1];
+                let name = &caps[2];
+                let body = &caps[3];
+                let tail = &caps[4];
+                let exposed = !(WRAPPED_STRUCTS.contains(&name)
+                    || INTERNAL_STRUCTS.contains(&name)
+                    || name.starts_with("mjui")
+                    || name.starts_with("mjUI"));
+                let needs_mediation =
+                    exposed && (ptr_field_re.is_match(body) || CONFIG_DEMOTE.contains(&name));
+                let body = if needs_mediation {
+                    any_field_re.replace_all(body, "${1}pub(crate) ${2}").to_string()
+                } else {
+                    body.to_string()
+                };
+                format!("{header}{body}{tail}")
+            })
+            .to_string();
 
         // Wrap ThreeWayMerge in cfg_attr so it is only derived when the viewer feature is active.
         re = regex::Regex::new(r"(#\[derive\([^)]*?),\s*mujoco_rs_derive\s*::\s*ThreeWayMerge(\)\])").unwrap();
@@ -226,15 +292,13 @@ fn main() {
     else {
         let mujoco_version = env!("CARGO_PKG_VERSION").split_once("mj-").unwrap().1;
 
-        // In build.rs, #[cfg(target_os)] evaluates against the HOST, not the target.
-        #[cfg(target_os = "linux")]
-        const HOST_OS: &str = "linux";
-        #[cfg(target_os = "windows")]
-        const HOST_OS: &str = "windows";
-        #[cfg(target_os = "macos")]
-        const HOST_OS: &str = "macos";
-        #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-        compile_error!("unsupported host OS");
+        // In build.rs, a target_os predicate evaluates against the HOST, not the target.
+        const HOST_OS: &str = cfg_select! {
+            target_os = "linux"   => "linux",
+            target_os = "windows" => "windows",
+            target_os = "macos"   => "macos",
+            _ => compile_error!("unsupported host OS"),
+        };
 
         // Cross-OS builds require explicit library paths; neither pkg-config
         // (queries host packages) nor auto-download (extracts host binaries) can help.
@@ -245,7 +309,7 @@ fn main() {
             );
         }
 
-        // ---- Native builds only below this point ----
+        // ---- Same-OS builds only below this point ----
 
         // Try pkg-config (unix hosts only).
         #[cfg(unix)]
@@ -296,7 +360,7 @@ fn main() {
             false
         };
 
-        // Auto-download MuJoCo (Linux and Windows native builds only).
+        // Auto-download MuJoCo (Linux and Windows, same-OS builds only).
         #[cfg(not(target_os = "macos"))]
         #[cfg(feature = "auto-download-mujoco")]
         if !found {
@@ -376,7 +440,11 @@ fn main() {
                 let mut hashfile_data = String::new();
                 file = File::open(&download_hash_path).expect("failed to open the hash file");
                 file.read_to_string(&mut hashfile_data).expect("failed to read hash file contents");
-                let hash_official = hashfile_data.split_once(' ').unwrap().0;
+                // The official hash files disagree per platform: 'sha256sum' output ('<hash>  <file>')
+                // on Linux, a bare hash on Windows, and neither guarantees the hex case.
+                let hash_official = hashfile_data.split_whitespace().next().unwrap_or_else(||
+                    panic!("hash file '{}' holds no hash", download_hash_path.display())
+                );
 
                 file = File::open(&download_path).unwrap();
                 let mut reader = BufReader::new(file);
@@ -391,8 +459,9 @@ fn main() {
                     }
                     hasher.update(&buffer[..n]);
                 }
-                let result = format!("{:x}", hasher.finalize());
-                if hash_official != result {
+                let result: String = hasher.finalize()
+                    .iter().map(|byte| format!("{byte:02x}")).collect();
+                if !hash_official.eq_ignore_ascii_case(&result) {
                     panic!(
                         "sha256sum of '{}' does not match \
                         the one stored in the official hash file --- stopping due to security concerns!",

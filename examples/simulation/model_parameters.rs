@@ -1,14 +1,15 @@
 //! Modifying [`MjModel`] physics parameters at runtime.
 //!
 //! Shows two ways to change the gravity of a model already attached to
-//! [`MjData`]: in-place via [`MjData::model_mut`] and by swapping via
+//! [`MjData`]: in-place via [`MjData::model_opt_mut`] and by swapping via
 //! [`MjData::swap_model`].
 //!
 //! Not all model parameters are safe to change at runtime.
-//! See [MuJoCo's docs](https://mujoco.readthedocs.io/en/3.6.0/programming/simulation.html#mjmodel-changes)
+//! See [MuJoCo's docs](https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#mjmodel-changes)
 //! for the full list.
 
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 
 
 const MODEL_XML: &str = r#"
@@ -27,6 +28,11 @@ const MODEL_XML: &str = r#"
 const STEPS: usize = 500;
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
+
     let model = Box::new(
         MjModel::from_xml_string(MODEL_XML).expect("could not load the model"),
     );
@@ -38,9 +44,9 @@ fn main() {
         data.step();
     }
     let z_baseline = data.qpos()[2];
-    println!("baseline   z={z_baseline:.4}  (gravity={default_gravity:.2})");
+    log::info!("baseline   z={z_baseline:.4}  (gravity={default_gravity:.2})");
 
-    // model_mut: direct in-place mutation (requires M: DerefMut).
+    // model_opt_mut: direct in-place mutation (requires M: ModelTypeMut).
     data.reset();
     let half_gravity = default_gravity / 2.0;
     data.model_opt_mut().gravity[2] = half_gravity;
@@ -48,7 +54,7 @@ fn main() {
         data.step();
     }
     let z_mut = data.qpos()[2];
-    println!("model_mut  z={z_mut:.4}  (gravity={half_gravity:.2})");
+    log::info!("model_opt_mut z={z_mut:.4}  (gravity={half_gravity:.2})");
 
     // Restore gravity for the next method.
     data.model_opt_mut().gravity[2] = default_gravity;
@@ -66,5 +72,5 @@ fn main() {
         data.step();
     }
     let z_swap = data.qpos()[2];
-    println!("swap_model z={z_swap:.4}  (gravity={half_gravity:.2})");
+    log::info!("swap_model z={z_swap:.4}  (gravity={half_gravity:.2})");
 }

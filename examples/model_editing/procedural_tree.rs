@@ -1,7 +1,8 @@
 //! Procedural tree using recursive model editing.
 //!
 //! Builds a branching tree programmatically via MjSpec's body/joint/geom API.
-//! Ball joints with spring-stiffness make branches sway under an animated wind gust.
+//! Ball joints with spring-stiffness let the branches sag and settle under gravity.
+//! Set `opt.wind` in `build_tree` to a non-zero value to make them sway.
 //!
 //! Adapted from the MuJoCo mjspec tutorial:
 //! https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb
@@ -9,8 +10,9 @@
 use std::time::Duration;
 use mujoco_rs::prelude::*;
 use mujoco_rs::wrappers::mj_editing::MjsBody;
-use mujoco_rs::mujoco_c::mjtDisableBit_;
+use mujoco_rs::mujoco_c::mjtDisableBit;
 use mujoco_rs::viewer::MjViewer;
+use env_logger::Env;
 
 const MAX_DEPTH:    usize = 4;
 const SCALE:        f64   = 0.6;
@@ -22,6 +24,7 @@ const GREEN: [f32; 4] = [0.0, 0.7,  0.2, 1.0];
 
 // Five branch directions on a ~45 degree cone (phi = pi/4), evenly spaced in theta.
 // sin(pi/4) approx 0.7071;  theta = k * 72 degree.
+#[expect(clippy::approx_constant, reason = "0.7071 is a tabulated direction component, not FRAC_1_SQRT_2")]
 const DIRS: [[f64; 3]; NUM_BRANCHES] = [
     [ 0.7071, 0.0000, 0.7071],
     [ 0.2190, 0.6756, 0.7071],
@@ -37,7 +40,7 @@ fn normalize(v: [f64; 3]) -> [f64; 3] {
 
 // Grow a branch as a child of `parent`, attached at height `attach_z` along the
 // parent capsule.  Child branches are themselves distributed from 60% to 100% of
-// their own length, matching the Python linspace distribution.
+// this branch's length, matching the Python linspace distribution.
 fn grow(parent: &mut MjsBody, depth: usize, len: f64, r: f64, dir: [f64; 3], attach_z: f64) {
     let d = normalize(dir);
 
@@ -77,8 +80,8 @@ fn grow(parent: &mut MjsBody, depth: usize, len: f64, r: f64, dir: [f64; 3], att
 }
 
 fn build_tree() -> MjModel {
-    // Start from a spec with joint spring defaults.  MjsJoint doesn't yet expose
-    // stiffness/damping setters directly, so we embed them in the default class.
+    // Start from a spec with joint spring defaults. MjsJoint exposes with_springdamper
+    // per joint; the default class is used here so every joint inherits one value.
     let mut spec = MjSpec::from_xml_string(
         r#"<mujoco>
              <default>
@@ -91,7 +94,7 @@ fn build_tree() -> MjModel {
     opt.timestep      = 0.002;
     opt.density       = 1.294;  // air density - required for aerodynamic drag
     opt.wind[0]       = 0.0;    // wind in +x
-    opt.disableflags |= mjtDisableBit_::mjDSBL_CONSTRAINT as i32;
+    opt.disableflags |= mjtDisableBit::mjDSBL_CONSTRAINT as i32;
 
     // Give the viewer a sensible default camera framing.
     let stat = spec.stat_mut();
@@ -128,9 +131,14 @@ fn build_tree() -> MjModel {
 }
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
+
     let model = build_tree();
     let mut data = MjData::new(&model);
-    println!("tree: {} bodies, {} DOFs", model.ffi().nbody, model.ffi().nv);
+    log::info!("tree: {} bodies, {} DOFs", model.ffi().nbody, model.ffi().nv);
 
     let mut viewer = MjViewer::launch_passive(&model, 0).expect("failed to launch viewer");
     let dt = model.opt().timestep;

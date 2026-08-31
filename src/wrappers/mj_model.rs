@@ -3,7 +3,7 @@ use crate::{
     view_creator, info_method, info_with_view,
     array_slice_dyn, getter_setter
 };
-use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
+use crate::util::{assert_mujoco_version, checked_c_len, ERROR_BUF_LEN};
 use crate::error::{MjDataError, MjModelError};
 use crate::wrappers::mj_option::MjOption;
 use crate::wrappers::mj_data::MjData;
@@ -12,9 +12,16 @@ use crate::mujoco_c::*;
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
 use super::mj_primitive::*;
 
+use bytemuck::must_cast_slice;
+use log::debug;
+
+use std::fmt::{Formatter, Debug, Result as FmtResult};
 use std::ffi::{c_char, CStr, CString, c_int, c_void};
+use std::sync::{OnceLock, Arc};
 use std::ptr::{self, NonNull};
 use std::path::Path;
+
+pub mod traits;
 
 
 /*******************************************/
@@ -117,6 +124,13 @@ pub type MjtGain = mjtGain;
 /// Actuator bias types. These values are used in `m->actuator_biastype`.
 pub type MjtBias = mjtBias;
 
+/// Orientation input charts of so3 actuators. These values are used in `m->actuator_ctrlspec`.
+pub type MjtCtrlChart = mjtCtrlChart;
+
+/// Input signature bits of servo-family (`pid`, `dcmotor`) actuators. These values are OR-ed into
+/// `m->actuator_ctrlspec`.
+pub type MjtCtrlInput = mjtCtrlInput;
+
 /// MuJoCo object types. These are used, for example, in the support functions `mj_name2id` and
 /// `mj_id2name` to convert between object names and integer ids.
 pub type MjtObj = mjtObj;
@@ -128,14 +142,14 @@ pub type MjtSensor = mjtSensor;
 /// `mj_inverseSkip`.
 pub type MjtStage = mjtStage;
 
-/// These are the possible sensor data types, used in `mjData.sensor_datatype`.
+/// These are the possible sensor data types, used in [`MjModel::sensor_datatype`].
 pub type MjtDataType = mjtDataType;
 
 /// Types of data fields returned by contact sensors.
 pub type MjtConDataField = mjtConDataField;
 
 /// Types of frame alignment of elements with their parent bodies. Used as shortcuts during `mj_kinematics` in the
-/// last argument to `mj_local2global`.
+/// last argument to `mj_local2Global`.
 pub type MjtSameFrame = mjtSameFrame;
 
 /// Sleep policy associated with a tree. The compiler automatically chooses between `NEVER` and `ALLOWED`, but the user
@@ -154,35 +168,195 @@ pub type MjtRayDataField = mjtRayDataField;
 /// Camera output type bitflags.
 pub type MjtCamOutBit = mjtCamOutBit;
 
-// SAFETY: All MuJoCo C enums below are `#[repr(u32)]` (or `#[repr(u8)]`) and each
+// SAFETY: All MuJoCo C enums below are fieldless with an explicit integer repr, and each
 // has a variant with discriminant 0, so the all-zeros bit pattern is a valid value.
 // This lets `info_with_view!`'s `zero()` method use the safe `Zeroable::zeroed()`
 // instead of `unsafe { std::mem::zeroed() }`, providing a compile-time guarantee
 // that only safe-to-zero types are used in views.
-unsafe impl bytemuck::Zeroable for mjtTrn_ {}
-unsafe impl bytemuck::Zeroable for mjtDyn_ {}
-unsafe impl bytemuck::Zeroable for mjtGain_ {}
-unsafe impl bytemuck::Zeroable for mjtBias_ {}
-unsafe impl bytemuck::Zeroable for mjtObj_ {}
-unsafe impl bytemuck::Zeroable for mjtSameFrame_ {}
-unsafe impl bytemuck::Zeroable for mjtCamLight_ {}
-unsafe impl bytemuck::Zeroable for mjtProjection_ {}
-unsafe impl bytemuck::Zeroable for mjtEq_ {}
-unsafe impl bytemuck::Zeroable for mjtGeom_ {}
-unsafe impl bytemuck::Zeroable for mjtJoint_ {}
-unsafe impl bytemuck::Zeroable for mjtLightType_ {}
-unsafe impl bytemuck::Zeroable for mjtSensor_ {}
-unsafe impl bytemuck::Zeroable for mjtDataType_ {}
-unsafe impl bytemuck::Zeroable for mjtStage_ {}
-unsafe impl bytemuck::Zeroable for mjtTexture_ {}
-unsafe impl bytemuck::Zeroable for mjtColorSpace_ {}
+unsafe impl bytemuck::Zeroable for mjtTrn {}
+unsafe impl bytemuck::Zeroable for mjtDyn {}
+unsafe impl bytemuck::Zeroable for mjtGain {}
+unsafe impl bytemuck::Zeroable for mjtBias {}
+unsafe impl bytemuck::Zeroable for mjtObj {}
+unsafe impl bytemuck::Zeroable for mjtSameFrame {}
+unsafe impl bytemuck::Zeroable for mjtCamLight {}
+unsafe impl bytemuck::Zeroable for mjtProjection {}
+unsafe impl bytemuck::Zeroable for mjtEq {}
+unsafe impl bytemuck::Zeroable for mjtGeom {}
+unsafe impl bytemuck::Zeroable for mjtJoint {}
+unsafe impl bytemuck::Zeroable for mjtLightType {}
+unsafe impl bytemuck::Zeroable for mjtSensor {}
+unsafe impl bytemuck::Zeroable for mjtDataType {}
+unsafe impl bytemuck::Zeroable for mjtStage {}
+unsafe impl bytemuck::Zeroable for mjtTexture {}
+unsafe impl bytemuck::Zeroable for mjtColorSpace {}
+unsafe impl bytemuck::Zeroable for mjtAlignFree {}
+unsafe impl bytemuck::Zeroable for mjtBuiltin {}
+unsafe impl bytemuck::Zeroable for mjtConflict {}
+unsafe impl bytemuck::Zeroable for mjtConstraint {}
+unsafe impl bytemuck::Zeroable for mjtConstraintState {}
+unsafe impl bytemuck::Zeroable for mjtDepthMap {}
+unsafe impl bytemuck::Zeroable for mjtFlexSelf {}
+unsafe impl bytemuck::Zeroable for mjtInertiaFromGeom {}
+unsafe impl bytemuck::Zeroable for mjtLimited {}
+unsafe impl bytemuck::Zeroable for mjtLogLevel {}
+unsafe impl bytemuck::Zeroable for mjtLogTopic {}
+unsafe impl bytemuck::Zeroable for mjtMark {}
+unsafe impl bytemuck::Zeroable for mjtSleepPolicy {}
+unsafe impl bytemuck::Zeroable for mjtSleepState {}
+unsafe impl bytemuck::Zeroable for mjtStereo {}
+unsafe impl bytemuck::Zeroable for mjtWrap {}
+
+// SAFETY: every enum below is fieldless with a `#[repr(u32)]`, so it holds no padding and every
+// byte of it is initialised. `MjSplitTables` reads these as raw bytes and never casts bytes back
+// into them.
+unsafe impl bytemuck::NoUninit for mjtJoint {}
+unsafe impl bytemuck::NoUninit for mjtGeom {}
+unsafe impl bytemuck::NoUninit for mjtEq {}
+unsafe impl bytemuck::NoUninit for mjtObj {}
+unsafe impl bytemuck::NoUninit for mjtWrap {}
+unsafe impl bytemuck::NoUninit for mjtTrn {}
+unsafe impl bytemuck::NoUninit for mjtDyn {}
+unsafe impl bytemuck::NoUninit for mjtGain {}
+unsafe impl bytemuck::NoUninit for mjtBias {}
+unsafe impl bytemuck::NoUninit for mjtSensor {}
+unsafe impl bytemuck::NoUninit for mjtDataType {}
+unsafe impl bytemuck::NoUninit for mjtStage {}
+unsafe impl bytemuck::NoUninit for mjtTexture {}
 
 /*******************************************/
+
+/// Number of mesh, texture and heightfield count tables in [`MjSplitTables`].
+const ASSET_SPLIT_TABLES: usize = 11;
+
+/// Number of per-element and plugin count tables in [`MjSplitTables`].
+const ELEMENT_SPLIT_TABLES: usize = 32;
+
+/// Snapshot of an [`MjModel`]: the sizes that no per-element table determines, and the tables that
+/// fix how each packed array divides between the elements.
+///
+/// An entry belongs here only when no other entry already determines it. `signature` is the
+/// exception: it takes no part in the comparison at all, and only reports which model an `Info`
+/// came from. The fields run cheapest first, because `PartialEq` tests them in that order and
+/// stops at the first difference.
+// `Eq` also selects the pointer shortcut in `PartialEq for Arc`, which is what makes a view gate
+// against the model's own snapshot a pointer comparison. Losing `Eq` would silently cost that.
+#[derive(Debug, Clone, Eq)]
+#[expect(non_snake_case, reason = "the fields keep the MuJoCo size symbol names")]
+pub(crate) struct MjModelLayout {
+    signature: u64,
+
+    /* Element counts that bound an `Info` id, an `mjData` buffer row, and a swapped model. A
+       count that the byte length of a table inside `split` already pins gets no field here. */
+    nexclude: MjtSize,       nmat: MjtSize,           npair: MjtSize,         nskin: MjtSize,
+    nkey: MjtSize,
+
+    /* Row lengths of MJDATA_POINTERS and MJDATA_ARENA_POINTERS that no table inside `split`
+       already determines. A total that is the plain sum of a count table gets no field here:
+       equal tables force an equal sum, so the total follows. */
+    nmocap: MjtSize,         nuserdata: MjtSize,      nhistory: MjtSize,      nbvh: MjtSize,
+    nbvhdynamic: MjtSize,    nflexedge: MjtSize,      nflexstiffness: MjtSize, nJmom: MjtSize,
+    nJfe: MjtSize,           nJfv: MjtSize,           nC: MjtSize,            nD: MjtSize,
+    ntree: MjtSize,
+
+    /* Byte size of the mjData arena. mjData inherits it from the model, and mj_copyDataVisual
+       raises mjERROR when the destination and the source disagree. */
+    narena: MjtSize,
+
+    /* Total of the one packed mjModel array that no count table splits: qhull sizes each convex
+       hull, and `mesh_graphadr` holds addresses only. Every other total is the sum of the count
+       table beside it. */
+    nmeshgraph: MjtSize,
+
+    /* Strides of the per-element user arrays. */
+    nuser_body: MjtSize,     nuser_jnt: MjtSize,      nuser_geom: MjtSize,    nuser_site: MjtSize,
+    nuser_cam: MjtSize,      nuser_tendon: MjtSize,   nuser_actuator: MjtSize, nuser_sensor: MjtSize,
+
+    /* Per-element count tables, byte for byte. A table pins the length of the packed array beside
+       it, and it also pins how that array divides between the elements. This field sits last
+       because the derived `PartialEq` tests the fields in order: every scalar above costs the same
+       on any model, while a table comparison grows with the element count. */
+    split: MjSplitTables,
+}
+
+impl PartialEq for MjModelLayout {
+    /// `signature` takes no part: only the compiler writes it, so `mj_loadModel` leaves it zero
+    /// and a test would refuse a model against its own saved copy.
+    fn eq(&self, other: &Self) -> bool {
+            self.nexclude == other.nexclude && self.nmat == other.nmat && self.npair == other.npair && self.nskin == other.nskin &&
+            self.nkey == other.nkey && self.nmocap == other.nmocap && self.nuserdata == other.nuserdata && self.nhistory == other.nhistory &&
+            self.nbvh == other.nbvh && self.nbvhdynamic == other.nbvhdynamic && self.nflexedge == other.nflexedge && self.nflexstiffness == other.nflexstiffness &&
+            self.nJmom == other.nJmom && self.nJfe == other.nJfe && self.nJfv == other.nJfv && self.nC == other.nC &&
+            self.nD == other.nD && self.ntree == other.ntree && self.narena == other.narena && self.nmeshgraph == other.nmeshgraph &&
+            self.nuser_body == other.nuser_body && self.nuser_jnt == other.nuser_jnt && self.nuser_geom == other.nuser_geom && self.nuser_site == other.nuser_site &&
+            self.nuser_cam == other.nuser_cam && self.nuser_tendon == other.nuser_tendon && self.nuser_actuator == other.nuser_actuator && self.nuser_sensor == other.nuser_sensor &&
+            self.split == other.split
+    }
+}
+
+impl MjModelLayout {
+    /// Returns the compilation signature of the model this layout came from.
+    pub(crate) fn signature(&self) -> u64 {
+        self.signature
+    }
+
+    /// Returns the mesh, texture and heightfield count tables.
+    fn asset_split(&self) -> &[Box<[u8]>; ASSET_SPLIT_TABLES] {
+        &self.split.assets
+    }
+}
+
+impl From<&MjModel> for MjModelLayout {
+    fn from(model: &MjModel) -> Self {
+        let m = model.ffi();
+        Self {
+            signature: m.signature,
+            nexclude: m.nexclude, nmat: m.nmat, npair: m.npair, nskin: m.nskin, nkey: m.nkey,
+            nmocap: m.nmocap, nuserdata: m.nuserdata, nhistory: m.nhistory, nbvh: m.nbvh,
+            nbvhdynamic: m.nbvhdynamic, nflexedge: m.nflexedge, nflexstiffness: m.nflexstiffness,
+            nJmom: m.nJmom, nJfe: m.nJfe, nJfv: m.nJfv, nC: m.nC, nD: m.nD, ntree: m.ntree,
+            narena: m.narena,
+            nmeshgraph: m.nmeshgraph,
+            nuser_body: m.nuser_body, nuser_jnt: m.nuser_jnt, nuser_geom: m.nuser_geom, nuser_site: m.nuser_site,
+            nuser_cam: m.nuser_cam, nuser_tendon: m.nuser_tendon, nuser_actuator: m.nuser_actuator,
+            nuser_sensor: m.nuser_sensor,
+            split: model.split_tables(),
+        }
+    }
+}
+
+
+/// Count tables of an [`MjModel`], one owned table per entry and as raw bytes, so that a
+/// comparison tests the length of each table on its own and then its content.
+///
+/// One flat buffer would test the sum of the lengths instead, which leaves the element count of a
+/// single table free.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct MjSplitTables {
+    assets: [Box<[u8]>; ASSET_SPLIT_TABLES],
+    elements: [Box<[u8]>; ELEMENT_SPLIT_TABLES],
+}
+
+impl Debug for MjSplitTables {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let assets = self.assets.each_ref().map(|table| table.len());
+        let elements = self.elements.each_ref().map(|table| table.len());
+        f.debug_struct("MjSplitTables")
+            .field("assets", &assets)
+            .field("elements", &elements)
+            .finish_non_exhaustive()
+    }
+}
+
 
 /// A Rust-safe wrapper around mjModel.
 /// Automatically clean after itself on destruction.
 #[derive(Debug)]
-pub struct MjModel(NonNull<mjModel>);
+pub struct MjModel {
+    ptr: NonNull<mjModel>,
+    /// Memory layout for compatibility checks.
+    layout: OnceLock<Arc<MjModelLayout>>,
+}
 
 // SAFETY: MjModel owns its mjModel heap allocation exclusively. The data is not shared
 // outside of Rust, except in the C++ code which is synchronized via wrapper APIs.
@@ -192,6 +366,7 @@ unsafe impl Sync for MjModel {}
 
 impl MjModel {
     /// Loads the model from an XML file. To load from a virtual file system, use [`MjModel::from_xml_vfs`].
+    /// Wraps [`mj_loadXML`].
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
@@ -205,6 +380,7 @@ impl MjModel {
     }
 
     /// Loads the model from an XML file, located in a virtual file system (`vfs`)
+    /// Wraps [`mj_loadXML`].
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
@@ -230,9 +406,11 @@ impl MjModel {
         ) };
 
         Self::check_raw_model(raw_ptr, &error_buffer)
+            .inspect(|_| debug!("loaded the model from \"{path_str}\""))
     }
 
     /// Loads the model from an XML string.
+    /// Wraps [`mj_loadXML`].
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
@@ -260,16 +438,18 @@ impl MjModel {
     }
 
     /// Loads the model from MJB raw data.
+    /// Wraps [`mj_loadModelBuffer`].
     /// # Returns
     /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
     /// # Errors
     /// Returns [`MjModelError::LoadFailed`] if MuJoCo fails to parse the MJB buffer.
     /// # Panics
-    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    /// When the linked MuJoCo version does not match the expected from MuJoCo-rs, or when `data`
+    /// is longer than [`i32::MAX`] bytes.
     pub fn from_buffer(data: &[u8]) -> Result<Self, MjModelError> {
         assert_mujoco_version();
         unsafe {
-            Self::from_raw(mj_loadModelBuffer(data.as_ptr() as *const c_void, data.len() as i32))
+            Self::from_raw(mj_loadModelBuffer(data.as_ptr() as *const c_void, checked_c_len(data.len())))
         }
     }
 
@@ -279,6 +459,7 @@ impl MjModel {
     }
 
     /// Saves the last loaded XML to `filename`.
+    /// Wraps [`mj_saveLastXML`].
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
@@ -296,7 +477,10 @@ impl MjModel {
             error.as_mut_ptr(), error.len() as i32
         ) };
         match result {
-            1 => Ok(()),
+            1 => {
+                debug!("saved the last loaded XML to \"{path_str}\"");
+                Ok(())
+            },
             _ => {
                 // SAFETY: error is zero-initialised and MuJoCo NUL-terminates the message it
                 // writes into it; the resulting CStr borrows the stack buffer and is consumed
@@ -331,7 +515,7 @@ impl MjModel {
     /// Returns an error with the C error-buffer message if the pointer is null.
     fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[c_char]) -> Result<Self, MjModelError> {
         match NonNull::new(ptr_model) {
-            Some(nn) => Ok(Self(nn)),
+            Some(nn) => Ok(Self { ptr: nn, layout: OnceLock::new() }),
             None => {
                 // SAFETY: error_buffer is zero-initialised and MuJoCo always
                 // NUL-terminates the message it writes into it.
@@ -344,13 +528,13 @@ impl MjModel {
     }
 
     info_method! { Model, actuator,
-        [trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, trnid: 2, actadr: 1, actnum: 1,
-        group: 1, history: 2, historyadr: 1, delay: 1, ctrllimited: 1, forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize, biasprm: mjNBIAS as usize,
-        actearly: 1, ctrlrange: 2, forcerange: 2, actrange: 2, damping: 1,
-        dampingpoly: mjNPOLY as usize, armature: 1, gear: 6, cranklength: 1, acc0: 1, length0: 1,
-        lengthrange: 2, plugin: 1],
+        [trntype: 1, dyntype: 1, gaintype: 1, biastype: 1, ctrladr: 1, ctrlnum: 1, ctrlspec: 1,
+        outadr: 1, outnum: 1, trnid: 2, actadr: 1, actnum: 1,
+        group: 1, history: 2, historyadr: 1, delay: 1, forcelimited: 1, actlimited: 1, dynprm: mjNDYN as usize, gainprm: mjNGAIN as usize, biasprm: mjNBIAS as usize,
+        actearly: 1, forcerange: 2, actrange: 2, damping: 1,
+        dampingpoly: mjNPOLY as usize, armature: 1, cranklength: 1, plugin: 1],
         [user: nuser_actuator],
-        []
+        [ctrllimited: nu, ctrlrange: nu * 2, gear: nout * 6, acc0: nout, length0: nout, lengthrange: nout * 2]
     }
 
     info_method! { Model, body,
@@ -402,7 +586,7 @@ impl MjModel {
     info_method! { Model, geom,
         [r#type: 1, contype: 1, conaffinity: 1, condim: 1, bodyid: 1, dataid: 1, matid: 1,
         group: 1, priority: 1, plugin: 1, sameframe: 1, solmix: 1, solref: mjNREF as usize, solimp: mjNIMP as usize, size: 3,
-        aabb: 6, rbound: 1, pos: 3, quat: 4, friction: 3, margin: 1, gap: 1, fluid: mjNFLUID as usize, rgba: 4],
+        aabb: 6, rbound: 1, pos: 3, quat: 4, friction: 3, margin: 1, gap: 1, surfacevel: 6, adhesion: 1, fluid: mjNFLUID as usize, rgba: 4],
         [user: nuser_geom],
         []
     }
@@ -421,7 +605,7 @@ impl MjModel {
         [mode: 1, bodyid: 1, targetbodyid: 1, r#type: 1, texid: 1, castshadow: 1,
         bulbradius: 1, intensity: 1, range: 1,
         active: 1, pos: 3, dir: 3, poscom0: 3, pos0: 3,
-        dir0: 3, attenuation: 3, cutoff: 1, exponent: 1, ambient: 3,
+        dir0: 3, attenuation: 3, cutoff: 1, softness: 1, exponent: 1, ambient: 3,
         diffuse: 3, specular: 3],
         [],
         []
@@ -439,7 +623,7 @@ impl MjModel {
     info_method! { Model, mesh,
         [vertadr: 1, vertnum: 1,
         texcoordadr: 1, faceadr: 1,
-        facenum: 1, graphadr: 1,
+        facenum: 1, graphadr: 1, extrema: 27,
         normaladr: 1, normalnum: 1, texcoordnum: 1,
         bvhadr: 1, bvhnum: 1, octadr: 1, octnum: 1,
         pathadr: 1, polynum: 1, polyadr: 1,
@@ -458,7 +642,7 @@ impl MjModel {
     info_method! { Model, pair,
         [dim: 1, geom1: 1, geom2: 1,
         signature: 1, solref: mjNREF as usize, solimp: mjNIMP as usize,
-        margin: 1, gap: 1, friction: 5, solreffriction: mjNREF as usize],
+        margin: 1, gap: 1, adhesion: 1, friction: 5, solreffriction: mjNREF as usize],
         [],
         []
     }
@@ -526,6 +710,7 @@ impl MjModel {
 
     /// Translates `name` to the correct id. Wrapper around `mj_name2id`.
     /// Returns `None` if the name is not found.
+    /// Wraps [`mj_name2id`].
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
     pub fn name_to_id(&self, type_: MjtObj, name: &str) -> Option<usize> {
@@ -540,18 +725,27 @@ impl MjModel {
 
     /// Fallible version of [`Clone::clone`].
     ///
+    /// Wraps [`mj_copyModel`].
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails, so this never returns `Err`.
+    ///
     /// # Errors
-    /// Returns [`MjModelError::AllocationFailed`] if MuJoCo fails to allocate
-    /// the copy.
+    /// Returns [`MjModelError::AllocationFailed`] if MuJoCo returns a null model.
+    #[deprecated(
+        since = "6.0.0",
+        note = "always returns Ok; use `clone`"
+    )]
     pub fn try_clone(&self) -> Result<MjModel, MjModelError> {
         let ptr = unsafe { mj_copyModel(ptr::null_mut(), self.ffi()) };
         NonNull::new(ptr)
-            .map(MjModel)
+            // The copy holds the same sizes and the same tables, so it reuses the snapshot.
+            .map(|ptr| MjModel { ptr, layout: self.layout.clone() })
             .ok_or(MjModelError::AllocationFailed)
     }
 
     /// Save model to binary MJB file.
     ///
+    /// Wraps [`mj_saveModel`].
     /// # Returns
     /// `Ok(())` if the path is valid UTF-8 and contains no interior `\0` characters.
     /// **Note:** the underlying C function `mj_saveModel` returns `void`, so file I/O
@@ -569,10 +763,12 @@ impl MjModel {
             self.ffi(), c_filename.as_ptr(),
             ptr::null_mut(), 0
         ) };
+        debug!("saved the model to \"{path_str}\"");
         Ok(())
     }
 
     /// Save model to memory buffer.
+    /// Wraps [`mj_saveModel`].
     /// # Returns
     /// `Ok(())` on success.
     /// # Errors
@@ -593,6 +789,7 @@ impl MjModel {
     }
 
     /// Return size of buffer needed to hold model.
+    /// Wraps [`mj_sizeModel`].
     pub fn size(&self) -> usize {
         unsafe { mj_sizeModel(self.ffi()) as usize }
     }
@@ -600,6 +797,7 @@ impl MjModel {
     /// Print mjModel to text file, specifying format.
     /// float_format must be a valid printf-style format string for a single float value.
     ///
+    /// Wraps [`mj_printFormattedModel`].
     /// # Returns
     /// `Ok(())` if the path and format string are valid UTF-8 and contain no interior `\0`
     /// characters. **Note:** the underlying C function `mj_printFormattedModel` returns `void`,
@@ -619,6 +817,7 @@ impl MjModel {
 
     /// Print model to text file.
     ///
+    /// Wraps [`mj_printModel`].
     /// # Returns
     /// `Ok(())` if the path is valid UTF-8 and contains no interior `\0` characters.
     /// **Note:** the underlying C function `mj_printModel` returns `void`, so file I/O
@@ -636,6 +835,9 @@ impl MjModel {
     }
 
     /// Return size of state specification. The bits of the integer spec correspond to element fields of [`MjtState`](crate::wrappers::mj_data::MjtState).
+    /// Wraps [`mj_stateSize`].
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `spec` is not below `1 << mjNSTATE`.
     pub fn state_size(&self, spec: u32) -> usize {
         unsafe { mj_stateSize(self.ffi(), spec as i32) as usize }
     }
@@ -643,6 +845,11 @@ impl MjModel {
     /// Extract the subset of components specified by `dst_spec` from a state `src`
     /// previously obtained via [`MjData::read_state_into`] or [`MjData::state`]
     /// with components specified by `src_spec`.
+    ///
+    /// Wraps [`mj_extractState`].
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
+    /// `1 << mjNSTATE`.
     ///
     /// # Panics
     /// - When `src.len()` does not equal the size required by `src_spec`.
@@ -654,6 +861,11 @@ impl MjModel {
     }
 
     /// Fallible version of [`MjModel::extract_state`].
+    ///
+    /// Wraps [`mj_extractState`].
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
+    /// `1 << mjNSTATE`.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the extracted state.
     /// # Errors
@@ -691,6 +903,11 @@ impl MjModel {
     /// previously obtained via [`MjData::read_state_into`] or [`MjData::state`]
     /// with components specified by `src_spec`.
     ///
+    /// Wraps [`mj_extractState`].
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
+    /// `1 << mjNSTATE`.
+    ///
     /// # Panics
     /// - When `src.len()` does not equal the size required by `src_spec`.
     /// - When `dst_spec` is not a subset of `src_spec`.
@@ -702,6 +919,11 @@ impl MjModel {
     }
 
     /// Fallible version of [`MjModel::extract_state_into`].
+    ///
+    /// Wraps [`mj_extractState`].
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
+    /// `1 << mjNSTATE`.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the number of elements written to `dst`.
     /// # Errors
@@ -737,44 +959,49 @@ impl MjModel {
     }
 
     /// Determine type of friction cone. Returns `true` if pyramidal, `false` if elliptic.
+    /// Wraps [`mj_isPyramidal`].
     pub fn is_pyramidal(&self) -> bool {
         unsafe { mj_isPyramidal(self.ffi()) == 1 }
     }
 
     /// Determine type of constraint Jacobian. Returns `true` if sparse, `false` if dense.
+    /// Wraps [`mj_isSparse`].
     pub fn is_sparse(&self) -> bool {
         unsafe { mj_isSparse(self.ffi()) == 1 }
     }
 
-    /// Determine type of solver. Returns `true` if dual (PGS), `false` if primal (CG or Newton).
+    /// Determine type of solver. Returns `true` for a dual solver: PGS, or any solver with
+    /// `noslip_iterations > 0`.
+    /// Wraps [`mj_isDual`].
     pub fn is_dual(&self) -> bool {
         unsafe { mj_isDual(self.ffi()) == 1 }
     }
 
     /// Get name of object with the specified [`MjtObj`] type and id, returns `None` if name not found.
-    /// Wraps `mj_id2name`.
+    /// Wraps [`mj_id2name`].
     /// # Panics
-    /// Panics if MuJoCo internally returns a C string that is not valid UTF-8. In practice
-    /// MuJoCo names are always valid ASCII (and therefore UTF-8), so this should not occur.
+    /// Panics if MuJoCo internally returns a C string that is not valid UTF-8.
     pub fn id_to_name(&self, type_: MjtObj, id: usize) -> Option<&str> {
         let ptr = unsafe { mj_id2name(self.ffi(), type_ as i32, id as i32) };
         if ptr.is_null() {
             None
         }
         else {
-            // SAFETY: ptr was checked non-null above; MuJoCo guarantees the pointed-to string is
-            // valid UTF-8 and lives as long as the model.
+            // SAFETY: ptr was checked non-null above; MuJoCo NUL-terminates the names blob and it
+            // lives as long as the model.
             let cstr = unsafe { CStr::from_ptr(ptr).to_str().unwrap() };
             Some(cstr)
         }
     }
 
     /// Sum all body masses.
+    /// Wraps [`mj_getTotalmass`].
     pub fn totalmass(&self) -> MjtNum {
         unsafe { mj_getTotalmass(self.ffi()) }
     }
 
     /// Scale body masses and inertias to achieve specified total mass.
+    /// Wraps [`mj_setTotalmass`].
     pub fn set_totalmass(&mut self, newmass: MjtNum) {
         unsafe { mj_setTotalmass(self.ffi_mut(), newmass) }
     }
@@ -784,6 +1011,7 @@ impl MjModel {
     /// To pull margin from model, set `has_margin` to [`None`], otherwise pass `true` or `false`
     /// inside [`Some`] (true indicating a present margin). 
     /// 
+    /// Wraps [`mj_maxContact`].
     /// # Panics
     /// Panics when either `geom1` or `geom2` are equal or greater than [`MjModel::ngeom`].
     /// Use [`MjModel::try_max_contacts`] for a fallible alternative.
@@ -792,6 +1020,7 @@ impl MjModel {
     }
 
     /// Fallible version of [`MjModel::max_contacts`].
+    /// Wraps [`mj_maxContact`].
     /// # Errors
     /// Returns [`MjModelError::IndexOutOfBounds`] when either `geom1` or `geom2` are equal or
     /// greater than [`MjModel::ngeom`].
@@ -814,12 +1043,30 @@ impl MjModel {
         ) as u32 })
     }
 
+    /// Returns the name that the type of actuator `id` gives to its control input `input`, an
+    /// index into the control block of the actuator. For example, an orientation servo on the
+    /// exponential-map chart names its first input `"rx"`.
+    /// Wraps [`mj_actuatorInputName`].
+    /// # Returns
+    /// [`None`] when the actuator type defines no input names, or when `id` or `input` is out of
+    /// range.
+    /// # Panics
+    /// Panics if the reported name is not valid UTF-8.
+    pub fn actuator_input_name(&self, id: usize, input: usize) -> Option<&'static str> {
+        // SAFETY: id and input are checked inside the function. When c_ptr is not null, it is
+        // always an ASCII static C string constant, so the UTF-8 check cannot fail.
+        unsafe {
+            let c_ptr = mj_actuatorInputName(self.ffi(), id as i32, input as i32);
+            (!c_ptr.is_null()).then(|| CStr::from_ptr(c_ptr).to_str().unwrap())
+        }
+    }
+
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
-        // SAFETY: self.0 is a valid non-null mjModel pointer for the lifetime of self
+        // SAFETY: self.ptr is a valid non-null mjModel pointer for the lifetime of self
         // (struct invariant).
-        unsafe { self.0.as_ref() }
+        unsafe { self.ptr.as_ref() }
     }
 
     /// Returns a mutable reference to the wrapped FFI struct.
@@ -828,15 +1075,17 @@ impl MjModel {
     /// The caller must ensure that any modifications to the underlying struct preserve
     /// the invariants that MuJoCo expects (e.g. do not corrupt computed fields or
     /// break index relationships). Violating these invariants can cause undefined behavior.
+    /// A write that changes a size or an address table also leaves the cached layout stale, so
+    /// [`MjModel::is_compatible_with_model`] then answers for the model as it was loaded.
     pub unsafe fn ffi_mut(&mut self) -> &mut mjModel {
-        unsafe { self.0.as_mut() }
+        unsafe { self.ptr.as_mut() }
     }
 
     /// Returns a direct mutable pointer to the underlying C model struct.
     /// Only for internal use by viewer code that passes the pointer to C++ FFI.
     #[cfg(feature = "cpp-viewer")]
     pub(crate) fn as_raw_ptr(&self) -> *mut mjModel {
-        self.0.as_ptr()
+        self.ptr.as_ptr()
     }
 }
 
@@ -848,10 +1097,112 @@ impl MjModel {
         self.ffi().signature
     }
 
+    /// Reports whether `other` can take the place of this model in every object that this model
+    /// built: an [`MjData`], and the index ranges an `Info` caches.
+    ///
+    /// The test covers every size that fixes an `mjData` buffer or a packed `mjModel` array, and
+    /// the tables that fix how each array divides between the elements: the per-element counts,
+    /// the joint addresses, the kinematic tree, the body of every element, and the type of every
+    /// joint, geom, equality, wrap, actuator and sensor. [`MjModel::signature`] takes no part:
+    /// `mj_saveModel` does not write it, so a model that came back from a buffer carries a zero.
+    pub fn is_compatible_with_model(&self, other: &MjModel) -> bool {
+        self.layout() == other.layout()
+    }
+
+    /// Reports whether `other` keeps its mesh, texture and heightfield data in the same memory
+    /// as this model, and gives every texture the same kind: the same shape for every asset, and
+    /// the same convex hull total.
+    ///
+    /// The count tables carry every other total, because each one is the plain sum, or the sum of
+    /// the products, of the tables beside it. `nmeshgraph` is the exception: qhull sizes each
+    /// convex hull and `mesh_graphadr` holds addresses only.
+    pub fn is_asset_compatible_with_model(&self, other: &MjModel) -> bool {
+        self.nmeshgraph() == other.nmeshgraph()
+            && self.layout().asset_split() == other.layout().asset_split()
+    }
+
+    /// Returns the per-sensor, per-numeric, per-tuple, per-actuator, per-tendon, per-flex and
+    /// plugin count tables, as raw bytes in a fixed order.
+    ///
+    /// Two models can hold the same element count and the same data total and still split that
+    /// total differently. A caller that resolves one element through a range read from the other
+    /// model then reads or writes the neighbouring element, and no length ever disagrees. Each
+    /// address table is the running prefix sum of the count table beside it, so the counts pin
+    /// the addresses and the address tables need no entry. The total of a packed array is the
+    /// plain sum of the same counts, so it needs no entry either. Each table also enters the
+    /// comparison with its own length, so a table pins the count of the elements it describes.
+    /// `mjModel` holds no per-joint count array, and `jnt_type` fills that role: every `mjtJoint`
+    /// value carries one fixed qpos and dof footprint, so `jnt_qposadr` and `jnt_dofadr` are the
+    /// running prefix sums of the types.
+    fn element_split_tables(&self) -> [&[u8]; ELEMENT_SPLIT_TABLES] {
+        [
+            must_cast_slice(self.sensor_dim()),         must_cast_slice(self.numeric_size()),
+            must_cast_slice(self.tuple_size()),         must_cast_slice(self.actuator_actnum()),
+            must_cast_slice(self.actuator_ctrlnum()),   must_cast_slice(self.actuator_outnum()),
+            // A tendon Info caches its Jacobian row, which ten_J_rownnz sizes inside nJten.
+            must_cast_slice(self.ten_j_rownnz()),
+            // An mjData contact holds a flex element index that C resolves through
+            // flex_elemdataadr, and mj_resetData relays a plugin instance to the slot in m->plugin.
+            must_cast_slice(self.flex_dim()),           must_cast_slice(self.flex_vertnum()),
+            must_cast_slice(self.flex_elemnum()),       must_cast_slice(self.plugin()),
+            // plugin_stateadr is the prefix sum of plugin_statenum inside npluginstate.
+            must_cast_slice(self.plugin_statenum()),
+            // Every per-element type below fixes what a state, a control or an output MEANS. The
+            // length of each one also pins the count of the elements it describes.
+            must_cast_slice(self.jnt_type()),
+            must_cast_slice(self.geom_type()),          must_cast_slice(self.eq_type()),
+            must_cast_slice(self.eq_objtype()),         must_cast_slice(self.wrap_type()),
+            must_cast_slice(self.actuator_trntype()),   must_cast_slice(self.actuator_dyntype()),
+            must_cast_slice(self.actuator_gaintype()),  must_cast_slice(self.actuator_biastype()),
+            must_cast_slice(self.sensor_type()),        must_cast_slice(self.sensor_objtype()),
+            must_cast_slice(self.sensor_reftype()),     must_cast_slice(self.sensor_datatype()),
+            must_cast_slice(self.sensor_needstage()),
+            // The kinematic tree, and the body that owns each element. `mjModel` holds the tree as
+            // a parent id per body, so the nesting travels as data.
+            must_cast_slice(self.body_parentid()),      must_cast_slice(self.jnt_bodyid()),
+            must_cast_slice(self.geom_bodyid()),        must_cast_slice(self.site_bodyid()),
+            must_cast_slice(self.cam_bodyid()),         must_cast_slice(self.light_bodyid()),
+        ]
+    }
+
+    /// Returns the per-mesh, per-texture and per-heightfield count tables, plus the texture kinds,
+    /// as raw bytes in a fixed order.
+    fn asset_split_tables(&self) -> [&[u8]; ASSET_SPLIT_TABLES] {
+        [
+            must_cast_slice(self.mesh_vertnum()),       must_cast_slice(self.mesh_normalnum()),
+            must_cast_slice(self.mesh_texcoordnum()),   must_cast_slice(self.mesh_facenum()),
+            // mesh_graphadr travels as an address: its length is the size of the convex hull that
+            // qhull builds, and mjModel holds no count for it.
+            must_cast_slice(self.mesh_graphadr()),
+            must_cast_slice(self.tex_width()),          must_cast_slice(self.tex_height()),
+            must_cast_slice(self.tex_nchannel()),
+            // A cube texture holds the same bytes as a 2D texture of the same width and height,
+            // so the sizes alone leave the kind free. mjr_makeContext records tex_type in
+            // mjrContext, and mjr_uploadTexture binds GL_TEXTURE_2D or GL_TEXTURE_CUBE_MAP by it.
+            must_cast_slice(self.tex_type()),
+            must_cast_slice(self.hfield_nrow()),        must_cast_slice(self.hfield_ncol()),
+        ]
+    }
+
+    /// Copies every asset table and every element table into its own buffer.
+    fn split_tables(&self) -> MjSplitTables {
+        MjSplitTables {
+            assets: self.asset_split_tables().map(Box::from),
+            elements: self.element_split_tables().map(Box::from),
+        }
+    }
+
+    /// Returns the memory layout snapshot of this model.
+    pub(crate) fn layout(&self) -> &Arc<MjModelLayout> {
+        self.layout.get_or_init(|| Arc::new(MjModelLayout::from(self)))
+    }
+
     getter_setter! {get, [
         [ffi] nq: MjtSize; "number of generalized coordinates = dim(qpos).";
         [ffi] nv: MjtSize; "number of degrees of freedom = dim(qvel).";
-        [ffi] nu: MjtSize; "number of actuators/controls = dim(ctrl).";
+        [ffi] nu: MjtSize; "number of scalar controls = dim(ctrl).";
+        [ffi] nactuator: MjtSize; "number of actuators.";
+        [ffi] nout: MjtSize; "number of force outputs, derived from transmission type.";
         [ffi] na: MjtSize; "number of activation states = dim(act).";
         [ffi] nbody: MjtSize; "number of bodies.";
         [ffi] nbvh: MjtSize; "number of total bounding volumes in all bodies.";
@@ -876,6 +1227,8 @@ impl MjModel {
         [ffi] nflexelemdata: MjtSize; "number of element vertex ids in all flexes.";
         [ffi] nflexstiffness: MjtSize; "number of stiffness parameters in all flexes.";
         [ffi] nflexbending: MjtSize; "number of bending parameters in all flexes";
+        [ffi] nefm0dof: MjtSize; "number of dofs covered by the constant metric factor.";
+        [ffi] nefm0L: MjtSize; "number of non-zeros in the constant metric factor.";
         [ffi] nflexelemedge: MjtSize; "number of element edge ids in all flexes.";
         [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
         [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
@@ -935,12 +1288,17 @@ impl MjModel {
         [ffi] nemax: MjtSize; "number of potential equality-constraint rows.";
         [ffi] njmax: MjtSize; "number of available rows in constraint Jacobian (legacy).";
         [ffi] nconmax: MjtSize; "number of potential contacts in contact list (legacy).";
+        [ffi] npolygonmax: MjtSize; "maximum number of vertices in a mesh polygon.";
+        [ffi] nmeshdegmax: MjtSize; "maximum number of edges adjacent to a mesh vertex.";
         [ffi] nuserdata: MjtSize; "number of mjtNums reserved for the user.";
         [ffi] nsensordata: MjtSize; "number of mjtNums in sensor data vector.";
         [ffi] npluginstate: MjtSize; "number of mjtNums in plugin state vector.";
         [ffi] nhistory: MjtSize; "number of mjtNums in history buffer.";
         [ffi] narena: MjtSize; "number of bytes in the mjData arena (inclusive of stack).";
         [ffi] nbuffer: MjtSize; "number of bytes in buffer.";
+        [ffi] flg_gravcomp: MjtBool; "whether any body has nonzero gravcomp.";
+        [ffi] flg_surfacevel: MjtBool; "whether any geom has nonzero surfacevel.";
+        [ffi] flg_adhesion: MjtBool; "whether any geom or pair has nonzero adhesion.";
     ]}
 
     getter_setter! {get, [
@@ -953,11 +1311,12 @@ impl MjModel {
 /// Array slices.
 impl MjModel {
     array_slice_dyn! {
+        probe = probe_dynamic_arrays;
         qpos0: &[MjtNum; "qpos values at default pose"; ffi().nq],
         qpos_spring: &[MjtNum; "reference pose for springs"; ffi().nq],
         (mut = unsafe) body_parentid: &[i32; "id of body's parent"; ffi().nbody],
         (mut = unsafe) body_rootid: &[i32; "ancestor that is direct child of world"; ffi().nbody],
-        (mut = unsafe) body_weldid: &[i32; "top ancestor with no dofs to this body"; ffi().nbody],
+        (mut = unsafe) body_weldid: &[i32; "top dof-less ancestor; mocap: own root"; ffi().nbody],
         (mut = unsafe) body_mocapid: &[i32; "id of mocap data; -1: none"; ffi().nbody],
         (mut = unsafe) body_jntnum: &[i32; "number of joints for this body"; ffi().nbody],
         (mut = unsafe) body_jntadr: &[i32; "start addr of joints; -1: no joints"; ffi().nbody],
@@ -977,7 +1336,7 @@ impl MjModel {
         body_inertia: &[[MjtNum; 3] [force]; "diagonal inertia in ipos/iquat frame"; ffi().nbody],
         body_invweight0: &[[MjtNum; 2] [force]; "mean inv inert in qpos0 (trn, rot)"; ffi().nbody],
         body_gravcomp: &[MjtNum; "antigravity force, units of body weight"; ffi().nbody],
-        body_margin: &[MjtNum; "MAX over all geom margins"; ffi().nbody],
+        body_margin: &[MjtNum; "MAX over all geom margins+gaps"; ffi().nbody],
         (mut = unsafe) body_plugin: &[i32; "plugin instance id; -1: not in use"; ffi().nbody],
         body_contype: &[i32; "OR over all geom contypes"; ffi().nbody],
         body_conaffinity: &[i32; "OR over all geom conaffinities"; ffi().nbody],
@@ -1004,7 +1363,7 @@ impl MjModel {
         jnt_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance: limit"; ffi().njnt],
         jnt_pos: &[[MjtNum; 3] [force]; "local anchor position"; ffi().njnt],
         jnt_axis: &[[MjtNum; 3] [force]; "local joint axis"; ffi().njnt],
-        jnt_stiffness: &[MjtNum; "stiffness coefficient"; ffi().njnt],
+        jnt_stiffness: &[MjtNum; "linear stiffness coefficient"; ffi().njnt],
         jnt_stiffnesspoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order stiffness coefficients"; ffi().njnt],
         jnt_range: &[[MjtNum; 2] [force]; "joint limits"; ffi().njnt],
         jnt_actfrcrange: &[[MjtNum; 2] [force]; "range of total actuator force"; ffi().njnt],
@@ -1019,7 +1378,7 @@ impl MjModel {
         dof_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance:frictionloss"; ffi().nv],
         dof_frictionloss: &[MjtNum; "dof friction loss"; ffi().nv],
         dof_armature: &[MjtNum; "dof armature inertia/mass"; ffi().nv],
-        dof_damping: &[MjtNum; "damping coefficient"; ffi().nv],
+        dof_damping: &[MjtNum; "linear damping coefficient"; ffi().nv],
         dof_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().nv],
         dof_invweight0: &[MjtNum; "diag. inverse inertia in qpos0"; ffi().nv],
         dof_M0: &[MjtNum; "diag. inertia in qpos0"; ffi().nv],
@@ -1051,6 +1410,8 @@ impl MjModel {
         geom_friction: &[[MjtNum; 3] [force]; "friction for (slide, spin, roll)"; ffi().ngeom],
         geom_margin: &[MjtNum; "geometric inflation for contact"; ffi().ngeom],
         geom_gap: &[MjtNum; "additional contact detection buffer"; ffi().ngeom],
+        geom_surfacevel: &[[MjtNum; 6] [force]; "surface velocity in local frame: lin,ang"; ffi().ngeom],
+        geom_adhesion: &[MjtNum; "adhesive force of contacts"; ffi().ngeom],
         geom_fluid: &[[MjtNum; mjNFLUID as usize] [force]; "fluid interaction parameters"; ffi().ngeom],
         geom_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().ngeom],
         site_type: &[MjtGeom [force]; "geom type for rendering"; ffi().nsite],
@@ -1094,6 +1455,7 @@ impl MjModel {
         light_dir0: &[[MjtNum; 3] [force]; "global direction in qpos0"; ffi().nlight],
         light_attenuation: &[[f32; 3] [force]; "OpenGL attenuation (quadratic model)"; ffi().nlight],
         light_cutoff: &[f32; "OpenGL cutoff"; ffi().nlight],
+        light_softness: &[f32; "spotlight edge softness"; ffi().nlight],
         light_exponent: &[f32; "OpenGL exponent"; ffi().nlight],
         light_ambient: &[[f32; 3] [force]; "ambient rgb (alpha=1)"; ffi().nlight],
         light_diffuse: &[[f32; 3] [force]; "diffuse rgb (alpha=1)"; ffi().nlight],
@@ -1144,7 +1506,7 @@ impl MjModel {
         (mut = unsafe) flex_elem: &[i32; "element vertex ids (dim+1 per elem)"; ffi().nflexelemdata],
         (mut = unsafe) flex_elemtexcoord: &[i32; "element texture coordinates (dim+1)"; ffi().nflexelemdata],
         (mut = unsafe) flex_elemedge: &[i32; "element edge ids"; ffi().nflexelemedge],
-        flex_elemlayer: &[i32; "element distance from surface, 3D only"; ffi().nflexelem],
+        (mut = unsafe) flex_elemlayer: &[i32; "element distance from surface, 3D only"; ffi().nflexelem],
         (mut = unsafe) flex_shell: &[i32; "shell fragment vertex ids (dim per frag)"; ffi().nflexshelldata],
         (mut = unsafe) flex_evpair: &[[i32; 2] [force]; "(element, vertex) collision pairs"; ffi().nflexevpair],
         flex_vert: &[[MjtNum; 3] [force]; "vertex positions in local body frames"; ffi().nflexvert],
@@ -1158,6 +1520,11 @@ impl MjModel {
         flex_size: &[[MjtNum; 3] [force]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
         flex_stiffness: &[MjtNum; "finite element stiffness matrix"; ffi().nflexstiffness],
         flex_bending: &[MjtNum; "bending stiffness"; ffi().nflexbending],
+        (mut = unsafe) efm0_dofid: &[i32; "constant metric factor row->dof address"; ffi().nefm0dof],
+        (mut = unsafe) efm0_L_rownnz: &[i32; "constant metric factor row nonzeros"; ffi().nefm0dof],
+        (mut = unsafe) efm0_L_rowadr: &[i32; "constant metric factor row addresses"; ffi().nefm0dof],
+        (mut = unsafe) efm0_L_colind: &[i32; "constant metric factor column indices"; ffi().nefm0L],
+        efm0_L: &[MjtNum; "factor of M + (dt^2+dt*d)*K_bend"; ffi().nefm0L],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
@@ -1189,6 +1556,7 @@ impl MjModel {
         (mut = unsafe) mesh_texcoordadr: &[i32; "texcoord data address; -1: no texcoord"; ffi().nmesh],
         (mut = unsafe) mesh_texcoordnum: &[i32; "number of texcoord"; ffi().nmesh],
         (mut = unsafe) mesh_graphadr: &[i32; "graph data address; -1: no graph"; ffi().nmesh],
+        (mut = unsafe) mesh_extrema: &[[i32; 27] [force]; "extremum vertices in 3x3x3 directions"; ffi().nmesh],
         mesh_vert: &[[f32; 3] [force]; "vertex positions for all meshes"; ffi().nmeshvert],
         mesh_normal: &[[f32; 3] [force]; "normals for all meshes"; ffi().nmeshnormal],
         mesh_texcoord: &[[f32; 2] [force]; "vertex texcoords for all meshes"; ffi().nmeshtexcoord],
@@ -1237,7 +1605,7 @@ impl MjModel {
         (mut = unsafe) hfield_adr: &[i32; "address in hfield_data"; ffi().nhfield],
         hfield_data: &[f32; "elevation data"; ffi().nhfielddata],
         (mut = unsafe) hfield_pathadr: &[i32; "address of hfield asset path; -1: none"; ffi().nhfield],
-        tex_type: &[MjtTexture [force]; "texture type"; ffi().ntex],
+        (mut = unsafe) tex_type: &[MjtTexture [force]; "texture type"; ffi().ntex],
         tex_colorspace: &[MjtColorSpace [force]; "texture colorspace"; ffi().ntex],
         (mut = unsafe) tex_height: &[i32; "number of rows in texture image"; ffi().ntex],
         (mut = unsafe) tex_width: &[i32; "number of columns in texture image"; ffi().ntex],
@@ -1264,6 +1632,7 @@ impl MjModel {
         pair_solimp: &[[MjtNum; mjNIMP as usize] [force]; "solver impedance: contact"; ffi().npair],
         pair_margin: &[MjtNum; "geometric inflation for contact"; ffi().npair],
         pair_gap: &[MjtNum; "additional contact detection buffer"; ffi().npair],
+        pair_adhesion: &[MjtNum; "adhesive force of contacts"; ffi().npair],
         pair_friction: &[[MjtNum; 5] [force]; "tangent1, 2, spin, roll1, 2"; ffi().npair],
         exclude_signature: &[i32; "body1 << 16 + body2"; ffi().nexclude],
         (mut = unsafe) eq_type: &[MjtEq [force]; "constraint type"; ffi().neq],
@@ -1294,9 +1663,9 @@ impl MjModel {
         tendon_range: &[[MjtNum; 2] [force]; "tendon length limits"; ffi().ntendon],
         tendon_actfrcrange: &[[MjtNum; 2] [force]; "range of total actuator force"; ffi().ntendon],
         tendon_margin: &[MjtNum; "min distance for limit detection"; ffi().ntendon],
-        tendon_stiffness: &[MjtNum; "stiffness coefficient"; ffi().ntendon],
+        tendon_stiffness: &[MjtNum; "linear stiffness coefficient"; ffi().ntendon],
         tendon_stiffnesspoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order stiffness coefficients"; ffi().ntendon],
-        tendon_damping: &[MjtNum; "damping coefficient"; ffi().ntendon],
+        tendon_damping: &[MjtNum; "linear damping coefficient"; ffi().ntendon],
         tendon_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().ntendon],
         tendon_armature: &[MjtNum; "inertia associated with tendon velocity"; ffi().ntendon],
         tendon_frictionloss: &[MjtNum; "loss due to friction"; ffi().ntendon],
@@ -1307,36 +1676,41 @@ impl MjModel {
         (mut = unsafe) wrap_type: &[MjtWrap [force]; "wrap object type"; ffi().nwrap],
         (mut = unsafe) wrap_objid: &[i32; "object id: geom, site, joint"; ffi().nwrap],
         (mut = unsafe) wrap_prm: &[MjtNum; "divisor, joint coef, or site id"; ffi().nwrap],
-        (mut = unsafe) actuator_trntype: &[MjtTrn [force]; "transmission type"; ffi().nu],
-        (mut = unsafe) actuator_dyntype: &[MjtDyn [force]; "dynamics type"; ffi().nu],
-        actuator_gaintype: &[MjtGain [force]; "gain type"; ffi().nu],
-        actuator_biastype: &[MjtBias [force]; "bias type"; ffi().nu],
-        (mut = unsafe) actuator_trnid: &[[i32; 2] [force]; "transmission id: joint, tendon, site"; ffi().nu],
-        (mut = unsafe) actuator_actadr: &[i32; "first activation address; -1: stateless"; ffi().nu],
-        (mut = unsafe) actuator_actnum: &[i32; "number of activation variables"; ffi().nu],
-        actuator_group: &[i32; "group for visibility"; ffi().nu],
-        (mut = unsafe) actuator_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nu],
-        (mut = unsafe) actuator_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nu],
-        actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nu],
+        (mut = unsafe) actuator_trntype: &[MjtTrn [force]; "transmission type"; ffi().nactuator],
+        (mut = unsafe) actuator_dyntype: &[MjtDyn [force]; "dynamics type"; ffi().nactuator],
+        (mut = unsafe) actuator_gaintype: &[MjtGain [force]; "gain type"; ffi().nactuator],
+        actuator_biastype: &[MjtBias [force]; "bias type"; ffi().nactuator],
+        (mut = unsafe) actuator_ctrladr: &[i32; "address of first control"; ffi().nactuator],
+        (mut = unsafe) actuator_ctrlnum: &[i32; "number of controls"; ffi().nactuator],
+        (mut = unsafe) actuator_ctrlspec: &[i32; "input signature, scoped by gaintype"; ffi().nactuator],
+        (mut = unsafe) actuator_outadr: &[i32; "address of first force output"; ffi().nactuator],
+        (mut = unsafe) actuator_outnum: &[i32; "number of force outputs, from trntype"; ffi().nactuator],
+        (mut = unsafe) actuator_trnid: &[[i32; 2] [force]; "transmission id: joint, tendon, site"; ffi().nactuator],
+        (mut = unsafe) actuator_actadr: &[i32; "first activation address; -1: stateless"; ffi().nactuator],
+        (mut = unsafe) actuator_actnum: &[i32; "number of activation variables"; ffi().nactuator],
+        actuator_group: &[i32; "group for visibility"; ffi().nactuator],
+        (mut = unsafe) actuator_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nactuator],
+        (mut = unsafe) actuator_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nactuator],
+        actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nactuator],
         actuator_ctrllimited: &[MjtBool; "is control limited"; ffi().nu],
-        actuator_forcelimited: &[MjtBool; "is force limited"; ffi().nu],
-        actuator_actlimited: &[MjtBool; "is activation limited"; ffi().nu],
-        actuator_dynprm: &[[MjtNum; mjNDYN as usize] [force]; "dynamics parameters"; ffi().nu],
-        actuator_gainprm: &[[MjtNum; mjNGAIN as usize] [force]; "gain parameters"; ffi().nu],
-        actuator_biasprm: &[[MjtNum; mjNBIAS as usize] [force]; "bias parameters"; ffi().nu],
-        actuator_actearly: &[MjtBool; "step activation before force"; ffi().nu],
+        actuator_forcelimited: &[MjtBool; "is force limited"; ffi().nactuator],
+        actuator_actlimited: &[MjtBool; "is activation limited"; ffi().nactuator],
+        actuator_dynprm: &[[MjtNum; mjNDYN as usize] [force]; "dynamics parameters"; ffi().nactuator],
+        actuator_gainprm: &[[MjtNum; mjNGAIN as usize] [force]; "gain parameters"; ffi().nactuator],
+        actuator_biasprm: &[[MjtNum; mjNBIAS as usize] [force]; "bias parameters"; ffi().nactuator],
+        actuator_actearly: &[MjtBool; "step activation before force"; ffi().nactuator],
         actuator_ctrlrange: &[[MjtNum; 2] [force]; "range of controls"; ffi().nu],
-        actuator_forcerange: &[[MjtNum; 2] [force]; "range of forces"; ffi().nu],
-        actuator_actrange: &[[MjtNum; 2] [force]; "range of activations"; ffi().nu],
-        actuator_damping: &[MjtNum; "linear damping coefficient"; ffi().nu],
-        actuator_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().nu],
-        actuator_armature: &[MjtNum; "armature added to target"; ffi().nu],
-        actuator_gear: &[[MjtNum; 6] [force]; "scale length and transmitted force"; ffi().nu],
-        actuator_cranklength: &[MjtNum; "crank length for slider-crank"; ffi().nu],
-        actuator_acc0: &[MjtNum; "acceleration from unit force in qpos0"; ffi().nu],
-        actuator_length0: &[MjtNum; "actuator length in qpos0"; ffi().nu],
-        actuator_lengthrange: &[[MjtNum; 2] [force]; "feasible actuator length range"; ffi().nu],
-        (mut = unsafe) actuator_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nu],
+        actuator_forcerange: &[[MjtNum; 2] [force]; "range of forces"; ffi().nactuator],
+        actuator_actrange: &[[MjtNum; 2] [force]; "range of activations"; ffi().nactuator],
+        actuator_damping: &[MjtNum; "linear damping coefficient"; ffi().nactuator],
+        actuator_dampingpoly: &[[MjtNum; mjNPOLY as usize] [force]; "high-order damping coefficients"; ffi().nactuator],
+        actuator_armature: &[MjtNum; "armature added to target (joint, tendon)"; ffi().nactuator],
+        actuator_gear: &[[MjtNum; 6] [force]; "scale length and transmitted force"; ffi().nout],
+        actuator_cranklength: &[MjtNum; "crank length for slider-crank"; ffi().nactuator],
+        actuator_acc0: &[MjtNum; "acceleration from unit force in qpos0"; ffi().nout],
+        actuator_length0: &[MjtNum; "actuator length in qpos0"; ffi().nout],
+        actuator_lengthrange: &[[MjtNum; 2] [force]; "feasible actuator length range"; ffi().nout],
+        (mut = unsafe) actuator_plugin: &[i32; "plugin instance id; -1: not a plugin"; ffi().nactuator],
         (mut = unsafe) sensor_type: &[MjtSensor [force]; "sensor type"; ffi().nsensor],
         sensor_datatype: &[MjtDataType [force]; "numeric data type"; ffi().nsensor],
         sensor_needstage: &[MjtStage [force]; "required compute stage"; ffi().nsensor],
@@ -1344,7 +1718,7 @@ impl MjModel {
         (mut = unsafe) sensor_objid: &[i32; "id of sensorized object"; ffi().nsensor],
         (mut = unsafe) sensor_reftype: &[MjtObj [force]; "type of reference frame"; ffi().nsensor],
         (mut = unsafe) sensor_refid: &[i32; "id of reference frame; -1: global frame"; ffi().nsensor],
-        sensor_intprm: &[[i32; mjNSENS as usize] [force]; "sensor parameters"; ffi().nsensor],
+        (mut = unsafe) sensor_intprm: &[[i32; mjNSENS as usize] [force]; "sensor parameters"; ffi().nsensor],
         (mut = unsafe) sensor_dim: &[i32; "number of scalar outputs"; ffi().nsensor],
         (mut = unsafe) sensor_adr: &[i32; "address in sensor array"; ffi().nsensor],
         sensor_cutoff: &[MjtNum; "cutoff for real and positive; 0: ignore"; ffi().nsensor],
@@ -1365,7 +1739,7 @@ impl MjModel {
         (mut = unsafe) text_adr: &[i32; "address of text in text_data"; ffi().ntext],
         (mut = unsafe) text_size: &[i32; "size of text field (strlen+1)"; ffi().ntext],
         (mut = unsafe) text_data: &[c_char; "array of all text fields (0-terminated)"; ffi().ntextdata],
-        (mut = unsafe) tuple_adr: &[i32; "address of text in text_data"; ffi().ntuple],
+        (mut = unsafe) tuple_adr: &[i32; "address of tuple in tuple_objtype/objid/objprm"; ffi().ntuple],
         (mut = unsafe) tuple_size: &[i32; "number of objects in tuple"; ffi().ntuple],
         tuple_objtype: &[MjtObj [force]; "array of object types in all tuples"; ffi().ntupledata],
         (mut = unsafe) tuple_objid: &[i32; "array of object ids in all tuples"; ffi().ntupledata],
@@ -1387,7 +1761,7 @@ impl MjModel {
         (mut = unsafe) name_excludeadr: &[i32; "exclude name pointers"; ffi().nexclude],
         (mut = unsafe) name_eqadr: &[i32; "equality constraint name pointers"; ffi().neq],
         (mut = unsafe) name_tendonadr: &[i32; "tendon name pointers"; ffi().ntendon],
-        (mut = unsafe) name_actuatoradr: &[i32; "actuator name pointers"; ffi().nu],
+        (mut = unsafe) name_actuatoradr: &[i32; "actuator name pointers"; ffi().nactuator],
         (mut = unsafe) name_sensoradr: &[i32; "sensor name pointers"; ffi().nsensor],
         (mut = unsafe) name_numericadr: &[i32; "numeric name pointers"; ffi().nnumeric],
         (mut = unsafe) name_textadr: &[i32; "text name pointers"; ffi().ntext],
@@ -1396,7 +1770,7 @@ impl MjModel {
         (mut = unsafe) name_pluginadr: &[i32; "plugin instance name pointers"; ffi().nplugin],
         (mut = unsafe) names: &[c_char; "names of all objects, 0-terminated"; ffi().nnames],
         (mut = unsafe) names_map: &[i32; "internal hash map of names"; ffi().nnames_map],
-        (mut = unsafe) paths: &[c_char; "paths to assets, 0-terminated"; ffi().npaths],
+        paths: &[c_char; "paths to assets, 0-terminated"; ffi().npaths],
         (mut = unsafe) B_rownnz: &[i32; "body-dof: non-zeros in each row"; ffi().nbody],
         (mut = unsafe) B_rowadr: &[i32; "body-dof: row addresses"; ffi().nbody],
         (mut = unsafe) B_colind: &[i32; "body-dof: column indices"; ffi().nB],
@@ -1404,7 +1778,7 @@ impl MjModel {
         (mut = unsafe) M_rowadr: &[i32; "reduced inertia: row addresses"; ffi().nv],
         (mut = unsafe) M_colind: &[i32; "reduced inertia: column indices"; ffi().nC],
         (mut = unsafe) mapM2M: &[i32; "index mapping from qM to M"; ffi().nC],
-        (mut = unsafe) D_rownnz: &[i32; "non-zeros in each row"; ffi().nv],
+        (mut = unsafe) D_rownnz: &[i32; "full inertia: non-zeros in each row"; ffi().nv],
         (mut = unsafe) D_rowadr: &[i32; "full inertia: row addresses"; ffi().nv],
         (mut = unsafe) D_diag: &[i32; "full inertia: index of diagonal element"; ffi().nv],
         (mut = unsafe) D_colind: &[i32; "full inertia: column indices"; ffi().nD],
@@ -1422,7 +1796,7 @@ impl MjModel {
             key_ctrl: &[[MjtNum; ffi().nu] [force]; "key control"; ffi().nkey],
 
             sensor_user: &[[MjtNum; ffi().nuser_sensor] [force]; "user data"; ffi().nsensor],
-            actuator_user: &[[MjtNum; ffi().nuser_actuator] [force]; "user data"; ffi().nu],
+            actuator_user: &[[MjtNum; ffi().nuser_actuator] [force]; "user data"; ffi().nactuator],
             tendon_user: &[[MjtNum; ffi().nuser_tendon] [force]; "user data"; ffi().ntendon],
             cam_user: &[[MjtNum; ffi().nuser_cam] [force]; "user data"; ffi().ncam],
             site_user: &[[MjtNum; ffi().nuser_site] [force]; "user data"; ffi().nsite],
@@ -1434,9 +1808,9 @@ impl MjModel {
 }
 
 impl Clone for MjModel {
-    /// # Panics
-    /// Panics if MuJoCo fails to allocate the cloned model.
-    /// Use [`MjModel::try_clone`] for a fallible alternative.
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when an allocation fails, so this never fails.
+    #[expect(deprecated, reason = "try_clone keeps the implementation until it is removed")]
     fn clone(&self) -> Self {
         self.try_clone().expect("failed to clone model")
     }
@@ -1444,9 +1818,9 @@ impl Clone for MjModel {
 
 impl Drop for MjModel {
     fn drop(&mut self) {
-        // SAFETY: self.0 is a valid non-null mjModel pointer; called exactly once in Drop.
+        // SAFETY: self.ptr is a valid non-null mjModel pointer; called exactly once in Drop.
         unsafe {
-            mj_deleteModel(self.0.as_ptr());
+            mj_deleteModel(self.ptr.as_ptr());
         }
     }
 }
@@ -1463,10 +1837,12 @@ info_with_view!(Model, actuator,
 	 [actuator_] armature: MjtNum,
 	 [actuator_] cranklength: MjtNum, [actuator_] acc0: MjtNum,
 	 [actuator_] length0: MjtNum, [actuator_] lengthrange: MjtNum,
-	 [actuator_] user: MjtNum,
-	 [actuator_] gaintype: MjtGain [force], [actuator_] biastype: MjtBias [force],
+	 [actuator_] user: MjtNum, [actuator_] biastype: MjtBias [force],
 	 [actuator_] plugin: i32],
 	[[actuator_] trntype: MjtTrn [force], [actuator_] dyntype: MjtDyn [force],
+	 [actuator_] ctrladr: i32, [actuator_] ctrlnum: i32, [actuator_] ctrlspec: i32,
+	 [actuator_] gaintype: MjtGain [force],
+	 [actuator_] outadr: i32, [actuator_] outnum: i32,
 	 [actuator_] trnid: i32, [actuator_] actadr: i32,
 	 [actuator_] actnum: i32, [actuator_] history: i32,
 	 [actuator_] historyadr: i32],
@@ -1537,7 +1913,8 @@ info_with_view!(Model, geom,
 	 [geom_] aabb: MjtNum,
 	 [geom_] rbound: MjtNum, [geom_] pos: MjtNum,
 	 [geom_] quat: MjtNum, [geom_] friction: MjtNum,
-	 [geom_] margin: MjtNum, [geom_] gap: MjtNum, [geom_] fluid: MjtNum,
+	 [geom_] margin: MjtNum, [geom_] gap: MjtNum,
+	 [geom_] surfacevel: MjtNum, [geom_] adhesion: MjtNum, [geom_] fluid: MjtNum,
 	 [geom_] user: MjtNum, [geom_] rgba: f32],
 	[[geom_] r#type: MjtGeom [force], [geom_] condim: i32,
 	 [geom_] bodyid: i32, [geom_] dataid: i32,
@@ -1591,6 +1968,7 @@ info_with_view!(Model, light,
 	 [light_] dir0: MjtNum,
 	 [light_] attenuation: f32,
 	 [light_] cutoff: f32,
+	 [light_] softness: f32,
 	 [light_] exponent: f32,
 	 [light_] ambient: f32,
 	 [light_] diffuse: f32,
@@ -1623,6 +2001,7 @@ info_with_view!(Model, mesh,
 	 [mesh_] faceadr: i32,
 	 [mesh_] facenum: i32,
 	 [mesh_] graphadr: i32,
+	 [mesh_] extrema: i32,
 	 [mesh_] normaladr: i32,
 	 [mesh_] normalnum: i32,
 	 [mesh_] texcoordnum: i32,
@@ -1646,6 +2025,7 @@ info_with_view!(Model, pair,
 	 [pair_] solimp: MjtNum,
 	 [pair_] margin: MjtNum,
 	 [pair_] gap: MjtNum,
+	 [pair_] adhesion: MjtNum,
 	 [pair_] friction: MjtNum,
      [pair_] solreffriction: MjtNum,
 	 [pair_] signature: i32],
@@ -1661,9 +2041,9 @@ info_with_view!(Model, sensor,
      [sensor_] interval: MjtNum,
 	 [sensor_] user: MjtNum,
 	 [sensor_] datatype: MjtDataType [force],
-	 [sensor_] needstage: MjtStage [force],
-	 [sensor_] intprm: i32],
-	[[sensor_] r#type: MjtSensor [force],
+	 [sensor_] needstage: MjtStage [force]],
+	[[sensor_] intprm: i32,
+	 [sensor_] r#type: MjtSensor [force],
 	 [sensor_] objid: i32,
 	 [sensor_] refid: i32,
 	 [sensor_] objtype: MjtObj [force],
@@ -1724,9 +2104,9 @@ info_with_view!(Model, tendon,
 	[]);
 
 info_with_view!(Model, texture,
-	[[tex_] colorspace: MjtColorSpace [force],
-	 [tex_] r#type: MjtTexture [force]],
-	[[tex_] height: i32,
+	[[tex_] colorspace: MjtColorSpace [force]],
+	[[tex_] r#type: MjtTexture [force],
+	 [tex_] height: i32,
 	 [tex_] width: i32,
 	 [tex_] nchannel: i32,
 	 [tex_] adr: MjtSize,
@@ -1753,8 +2133,8 @@ info_with_view!(Model, key,
 	[]);
 
 #[cfg(test)]
-// The loop indices are needed for FFI pointer arithmetic (e.g. `ptr.add(i * stride + j)`).
-#[allow(clippy::needless_range_loop)]
+#[expect(clippy::needless_range_loop,
+         reason = "the loop indices drive FFI pointer arithmetic, ptr.add(i * stride + j)")]
 mod tests {
     use crate::assert_relative_eq;
 
@@ -1983,15 +2363,34 @@ mod tests {
 
         /* Test write */
         let mut view_mut = actuator_model_info.view_mut(&mut model);
-        view_mut.gaintype[0] = MjtGain::mjGAIN_AFFINE;
+        view_mut.biastype[0] = MjtBias::mjBIAS_USER;
         view_mut.delay[0] = 3.0;
 
-        assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_AFFINE);
+        assert_eq!(view_mut.biastype[0], MjtBias::mjBIAS_USER);
         assert_eq!(view_mut.delay[0], 3.0);
         view_mut.zero();
 
         assert_eq!(view_mut.delay[0], 0.0);
-        assert_eq!(view_mut.gaintype[0], MjtGain::mjGAIN_FIXED);
+        assert_eq!(view_mut.biastype[0], MjtBias::mjBIAS_NONE);
+    }
+
+    /// `light_softness` must expose the per-light `softness`, not one of the arrays that bracket
+    /// it in `mjModel` (`light_cutoff` before it, `light_exponent` after it).
+    #[test]
+    fn test_light_softness() {
+        const XML: &str = stringify!(
+            <mujoco>
+                <worldbody>
+                    <light name="spot1" type="spot" cutoff="45" softness="0.25" exponent="2"/>
+                    <light name="spot2" type="spot" cutoff="60" softness="0.75" exponent="3"/>
+                </worldbody>
+            </mujoco>
+        );
+        let model = MjModel::from_xml_string(XML).unwrap();
+        assert_eq!(model.light_softness(), [0.25, 0.75]);
+
+        let info = model.light("spot2").unwrap();
+        assert_eq!(info.view(&model).softness[0], 0.75);
     }
 
     #[test]
@@ -2104,6 +2503,328 @@ mod tests {
         assert_eq!(view_mut.pos[0], 1.0);
     }
 
+
+    /// XML of a hinge body with one motor; `{extra}` adds a size or actuator difference that
+    /// `mjCModel::Signature` does not hash.
+    const COMPAT_MODEL: &str = "<mujoco>{extra}\
+<worldbody><body name='b1'><joint name='j' type='hinge'/><geom size='0.1'/></body></worldbody>\
+<actuator>{actuator}</actuator></mujoco>";
+
+    fn compat_model(extra: &str, actuator: &str) -> MjModel {
+        let xml = COMPAT_MODEL.replace("{extra}", extra).replace("{actuator}", actuator);
+        MjModel::from_xml_string(&xml).unwrap()
+    }
+
+    #[test]
+    fn test_is_compatible_with_model_rejects_unpinned_size() {
+        let plain = compat_model("", "<motor joint='j'/>");
+
+        // nuserdata sizes mjData::userdata; the signature does not hash it.
+        let userdata = compat_model("<size nuserdata='2000'/>", "<motor joint='j'/>");
+        assert_eq!(plain.signature(), userdata.signature(), "the pair must share a signature");
+        assert_ne!(plain.nuserdata(), userdata.nuserdata());
+        assert!(!plain.is_compatible_with_model(&userdata));
+
+        // na sizes mjData::act; the actuator tag carries no dynamics type.
+        let stateful = compat_model("", "<general joint='j' dyntype='integrator'/>");
+        assert_eq!(plain.signature(), stateful.signature(), "the pair must share a signature");
+        assert_ne!(plain.na(), stateful.na());
+        assert!(!plain.is_compatible_with_model(&stateful));
+    }
+
+    #[test]
+    fn test_is_compatible_with_model_rejects_a_different_arena_size() {
+        let plain = compat_model("", "<motor joint='j'/>");
+
+        // mjData inherits narena from the model, and mj_copyDataVisual raises mjERROR on a
+        // mismatch, which ends the process.
+        let small = compat_model("<size memory='4M'/>", "<motor joint='j'/>");
+        assert_eq!(plain.signature(), small.signature(), "the pair must share a signature");
+        assert_ne!(plain.narena(), small.narena());
+        assert!(!plain.is_compatible_with_model(&small));
+    }
+
+    #[test]
+    fn test_is_compatible_with_model_rejects_a_different_mesh_split() {
+        const TET: &str = "0 0 0  1 0 0  0 1 0  0 0 1";
+        const CUBE: &str = "0 0 0  1 0 0  1 1 0  0 1 0  0 0 1  1 0 1  1 1 1  0 1 1";
+        let mesh_model = |first: &str, second: &str| MjModel::from_xml_string(&format!(
+            "<mujoco><asset><mesh name='m1' vertex='{first}'/><mesh name='m2' vertex='{second}'/>\
+             </asset><worldbody><body name='b'><joint name='j' type='hinge'/>\
+             <geom type='mesh' mesh='m1'/><geom type='mesh' mesh='m2'/></body></worldbody></mujoco>"
+        )).unwrap();
+
+        let model = mesh_model(TET, CUBE);
+        let swapped = mesh_model(CUBE, TET);
+        assert_eq!(model.signature(), swapped.signature(), "the pair must share a signature");
+        assert_eq!(model.nmeshvert(), swapped.nmeshvert(), "the vertex totals must agree");
+        assert_ne!(model.mesh_vertadr(), swapped.mesh_vertadr());
+        assert!(!model.is_compatible_with_model(&swapped));
+        // An `Info` gate compares layouts alone, so the layout must carry the split.
+        assert_ne!(model.layout(), swapped.layout());
+        assert!(model.is_compatible_with_model(&mesh_model(TET, CUBE)));
+    }
+
+    #[test]
+    fn test_is_compatible_with_model_accepts_a_renamed_element() {
+        const LONG_NAME: &str = "name='a_body_name_long_enough_to_cross_the_model_buffer_padding_boundary'";
+        let model = compat_model("", "<motor joint='j'/>");
+        let renamed = MjModel::from_xml_string(
+            &COMPAT_MODEL.replace("{extra}", "").replace("{actuator}", "<motor joint='j'/>")
+                         .replace("name='b1'", LONG_NAME)
+        ).unwrap();
+
+        assert_eq!(model.signature(), renamed.signature(), "the pair must share a signature");
+        assert_ne!(model.nbuffer(), renamed.nbuffer(), "the rename must move nbuffer");
+        assert_eq!(model.narena(), renamed.narena(), "no mjData buffer may follow the name");
+        assert!(model.is_compatible_with_model(&renamed));
+    }
+
+    /// A slide joint and a hinge joint share their `qpos` and `dof` footprint, so every address
+    /// table and every size agrees. Only the joint type separates the pair, and it changes what
+    /// the state means.
+    #[test]
+    fn test_is_compatible_with_model_rejects_a_joint_type_change() {
+        let joint_model = |kind: &str| MjModel::from_xml_string(&format!(
+            "<mujoco><worldbody><body><joint type='{kind}'/><geom size='0.1'/></body>\
+             </worldbody></mujoco>"
+        )).unwrap();
+
+        let slide = joint_model("slide");
+        let hinge = joint_model("hinge");
+        assert_eq!(slide.signature(), hinge.signature(), "the pair must share a signature");
+        assert_eq!(slide.nq(), hinge.nq(), "the qpos totals must agree");
+        assert_eq!(slide.nv(), hinge.nv(), "the dof totals must agree");
+        assert_eq!(slide.jnt_qposadr(), hinge.jnt_qposadr());
+        assert_eq!(slide.jnt_dofadr(), hinge.jnt_dofadr());
+        assert!(!slide.is_compatible_with_model(&hinge));
+    }
+
+    /// The kinematic tree is the one structure that `mjCModel::Signature` carried alone, so the
+    /// gate must reject a re-parented body now that it ignores the signature.
+    #[test]
+    fn test_is_compatible_with_model_rejects_a_different_body_tree() {
+        const INNER: &str = "<body name='b2' pos='0.1 0 0'><joint type='hinge'/>\
+                             <geom size='0.05'/></body>";
+        let nested = MjModel::from_xml_string(&format!(
+            "<mujoco><worldbody><body name='b1'><joint type='hinge'/><geom size='0.1'/>\
+             {INNER}</body></worldbody></mujoco>"
+        )).unwrap();
+        let siblings = MjModel::from_xml_string(&format!(
+            "<mujoco><worldbody><body name='b1'><joint type='hinge'/><geom size='0.1'/></body>\
+             {INNER}</worldbody></mujoco>"
+        )).unwrap();
+
+        assert_eq!(nested.nbody(), siblings.nbody(), "the body counts must agree");
+        assert_eq!(nested.nq(), siblings.nq(), "the qpos totals must agree");
+        assert_eq!(nested.njnt(), siblings.njnt(), "the joint counts must agree");
+        assert_ne!(nested.body_parentid(), siblings.body_parentid());
+        // The signature also separates this pair, so test the table that must carry the tree.
+        assert_ne!(nested.element_split_tables(), siblings.element_split_tables());
+        assert!(!nested.is_compatible_with_model(&siblings));
+    }
+
+    #[test]
+    fn test_is_compatible_with_model_rejects_a_different_sensor_split() {
+        let sensor_model = |first: u32, second: u32| MjModel::from_xml_string(&format!(
+            "<mujoco><worldbody><body name='b1'><joint name='j' type='hinge'/><geom size='0.1'/>\
+             </body></worldbody><sensor><user name='u1' dim='{first}' objtype='body' objname='b1'/>\
+             <user name='u2' dim='{second}' objtype='body' objname='b1'/></sensor></mujoco>"
+        )).unwrap();
+
+        let model = sensor_model(3, 1);
+        let swapped = sensor_model(1, 3);
+        assert_eq!(model.signature(), swapped.signature(), "the pair must share a signature");
+        assert_eq!(model.nsensordata(), swapped.nsensordata(), "the data totals must agree");
+        assert_ne!(model.sensor_adr(), swapped.sensor_adr());
+        assert!(!model.is_compatible_with_model(&swapped));
+        assert!(model.is_compatible_with_model(&sensor_model(3, 1)));
+    }
+
+    /// A view gate compares the layout alone, so the per-flex split must reach the layout: a
+    /// contact holds a flex element index that C resolves through the per-flex tables.
+    #[test]
+    fn test_layout_rejects_a_different_flex_split() {
+        let flex = |name: &str, bodies: &str, nvert: usize, element: &str| format!(
+            "<flex name='{name}' dim='1' body='{bodies}' vertex='{}' element='{element}'/>",
+            "0 0 0 ".repeat(nvert)
+        );
+        let flex_model = |first: String, second: String| MjModel::from_xml_string(&format!(
+            "<mujoco><worldbody>\
+             <body name='v0'><freejoint/><geom size='0.01'/></body>\
+             <body name='v1' pos='0.1 0 0'><freejoint/><geom size='0.01'/></body>\
+             <body name='v2' pos='0.2 0 0'><freejoint/><geom size='0.01'/></body>\
+             <body name='v3' pos='0.3 0 0'><freejoint/><geom size='0.01'/></body>\
+             <body name='v4' pos='0.4 0 0'><freejoint/><geom size='0.01'/></body>\
+             </worldbody><deformable>{first}{second}</deformable></mujoco>"
+        )).unwrap();
+
+        // The same five vertices and three elements, divided the other way round between f1 and f2.
+        let model = flex_model(flex("f1", "v0 v1 v2", 3, "0 1 1 2"), flex("f2", "v3 v4", 2, "0 1"));
+        let swapped = flex_model(flex("f1", "v0 v1", 2, "0 1"), flex("f2", "v2 v3 v4", 3, "0 1 1 2"));
+        assert_eq!(model.signature(), swapped.signature(), "the pair must share a signature");
+        assert_eq!(model.nflexvert(), swapped.nflexvert(), "the vertex totals must agree");
+        assert_ne!(model.flex_vertnum(), swapped.flex_vertnum());
+        assert!(!model.is_compatible_with_model(&swapped));
+        assert_ne!(model.layout(), swapped.layout());
+    }
+
+    /// An asset copy overrides the asset data and reaches no `mjData` buffer, so it accepts a
+    /// model that only sizes its data differently. A moved asset it still rejects.
+    #[test]
+    fn test_is_asset_compatible_with_model_ignores_the_data_sizes() {
+        const TET: &str = "0 0 0  1 0 0  0 1 0  0 0 1";
+        const CUBE: &str = "0 0 0  1 0 0  1 1 0  0 1 0  0 0 1  1 0 1  1 1 1  0 1 1";
+        let asset_model = |extra: &str, first: &str, second: &str| MjModel::from_xml_string(&format!(
+            "<mujoco>{extra}<asset><mesh name='m1' vertex='{first}'/><mesh name='m2' vertex='{second}'/>\
+             </asset><worldbody><body name='b'><joint name='j' type='hinge'/>\
+             <geom type='mesh' mesh='m1'/><geom type='mesh' mesh='m2'/></body></worldbody></mujoco>"
+        )).unwrap();
+
+        let model = asset_model("", TET, CUBE);
+        let more_userdata = asset_model("<size nuserdata='2000'/>", TET, CUBE);
+        assert!(!model.is_compatible_with_model(&more_userdata), "the mjData buffers differ");
+        assert!(model.is_asset_compatible_with_model(&more_userdata));
+
+        // The same total, split the other way round: the copy would write the neighbouring mesh.
+        let swapped = asset_model("", CUBE, TET);
+        assert_eq!(model.nmeshvert(), swapped.nmeshvert(), "the vertex totals must agree");
+        assert!(!model.is_asset_compatible_with_model(&swapped));
+
+        // A sensor moves no asset, so the asset test must read the asset tables alone.
+        let sensor = asset_model("<sensor><user dim='4' objtype='body' objname='b'/></sensor>", TET, CUBE);
+        assert!(!model.is_compatible_with_model(&sensor), "the element tables differ");
+        assert!(model.is_asset_compatible_with_model(&sensor));
+    }
+
+    /// `mjr_makeContext` records `tex_type` in the `mjrContext` and `mjr_uploadTexture` binds
+    /// `GL_TEXTURE_2D` or `GL_TEXTURE_CUBE_MAP` by it, so an upload that crosses the two kinds
+    /// leaves the recorded kind disagreeing with the texture object. The compiler gives a cube
+    /// texture `height = 6 * width`, which a 2D texture may also carry, so the sizes alone do not
+    /// separate the pair.
+    #[test]
+    fn test_is_asset_compatible_with_model_rejects_a_different_texture_kind() {
+        let textured = |kind: &str, width: u32, height: u32| MjModel::from_xml_string(&format!(
+            "<mujoco><asset><texture name='t' type='{kind}' builtin='flat' width='{width}' \
+             height='{height}' rgb1='1 1 1'/><material name='m' texture='t'/></asset>\
+             <worldbody><geom size='0.1' material='m'/></worldbody></mujoco>"
+        )).unwrap();
+
+        let flat = textured("2d", 8, 48);
+        let cube = textured("cube", 8, 8);
+        assert_eq!(flat.tex_width(), cube.tex_width(), "the widths must agree");
+        assert_eq!(flat.tex_height(), cube.tex_height(), "the compiler gives the cube 6 * width");
+        assert_eq!(flat.tex_nchannel(), cube.tex_nchannel(), "the channel counts must agree");
+        assert_eq!(flat.ntexdata(), cube.ntexdata(), "the pair holds the same number of bytes");
+        assert_ne!(flat.tex_type(), cube.tex_type());
+
+        assert!(!flat.is_asset_compatible_with_model(&cube));
+        assert!(!flat.is_compatible_with_model(&cube));
+        assert!(flat.is_asset_compatible_with_model(&textured("2d", 8, 48)));
+    }
+
+    /// [`MjModelLayout`] carries no size that a count table already determines, so a compatible
+    /// pair keeps every size below equal only while the identity beside it holds. A MuJoCo release
+    /// that adds a padding term, an alignment term or an extra row to one of them would let the
+    /// gate accept a model whose `mjData` buffers differ, or whose joints keep their state
+    /// elsewhere.
+    #[test]
+    fn test_every_dropped_size_follows_from_a_count_table() {
+        let model = MjModel::from_xml_string(
+            "<mujoco><asset>\
+             <texture name='t1' type='2d' builtin='checker' width='17' height='23' rgb1='1 0 0' rgb2='0 1 0'/>\
+             <texture name='t2' type='cube' builtin='flat' width='8' height='8' rgb1='1 1 1'/>\
+             <texture name='t3' type='2d' builtin='flat' width='4' height='6' nchannel='4' rgb1='1 1 1'/>\
+             <material name='mat' texture='t1'/>\
+             <hfield name='hf' nrow='7' ncol='11' size='1 1 1 0.1'/>\
+             <mesh name='ms' vertex='0 0 0  1 0 0  0 1 0  0 0 1' texcoord='0 0  1 0  0 1  1 1'/>\
+             </asset><worldbody>\
+             <geom type='hfield' hfield='hf'/>\
+             <body name='free'><freejoint/><geom size='0.1' type='mesh' mesh='ms' material='mat'/>\
+             <site name='s1'/>\
+             <body name='ball' pos='0 0 0.2'><joint name='jb' type='ball'/><geom size='0.1'/>\
+             <body name='slide' pos='0 0 0.2'><joint name='js' type='slide'/><geom size='0.1'/>\
+             <site name='s2'/><joint name='jh' type='hinge'/></body></body></body>\
+             <body name='v0'><freejoint/><geom size='0.01'/></body>\
+             <body name='v1' pos='0.1 0 0'><freejoint/><geom size='0.01'/></body>\
+             <body name='v2' pos='0.2 0 0'><freejoint/><geom size='0.01'/></body>\
+             </worldbody>\
+             <deformable><flex name='f1' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>\
+             </deformable>\
+             <tendon><spatial name='td'><site site='s1'/><site site='s2'/></spatial>\
+             <fixed name='tf'><joint joint='js' coef='1'/><joint joint='jh' coef='2'/></fixed></tendon>\
+             <actuator><motor joint='jh'/><position joint='js' kp='3'/>\
+             <general joint='jh' dyntype='integrator'/><general joint='js' dyntype='filter' dynprm='0.1'/>\
+             <general tendon='tf' dyntype='filterexact' dynprm='0.1'/>\
+             <orientation site='s2' refsite='s1' kp='1' input='expmap'/>\
+             <orientation site='s2' refsite='s1' kp='1' input='quat'/>\
+             <pid joint='jh' kp='1' kv='1' input='pos vel'/></actuator>\
+             <sensor><framepos objtype='site' objname='s1'/><framequat objtype='site' objname='s1'/>\
+             <jointpos joint='jh'/><accelerometer site='s2'/><tendonpos tendon='td'/>\
+             <user objtype='site' objname='s2' dim='5' needstage='vel'/></sensor></mujoco>"
+        ).unwrap();
+
+        let sum = |table: &[i32]| table.iter().map(|&n| i64::from(n)).sum::<MjtSize>();
+        let product = |first: &[i32], second: &[i32]| first.iter().zip(second)
+            .map(|(&a, &b)| i64::from(a) * i64::from(b)).sum::<MjtSize>();
+
+        // Every joint type appears above, so a wrong footprint for any one of them fails here.
+        let qpos = |joint: &MjtJoint| match joint {
+            MjtJoint::mjJNT_FREE => 7, MjtJoint::mjJNT_BALL => 4, _ => 1,
+        };
+        let dof = |joint: &MjtJoint| match joint {
+            MjtJoint::mjJNT_FREE => 6, MjtJoint::mjJNT_BALL => 3, _ => 1,
+        };
+        assert_eq!(model.nq(), model.jnt_type().iter().map(qpos).sum::<MjtSize>());
+        assert_eq!(model.nv(), model.jnt_type().iter().map(dof).sum::<MjtSize>());
+
+        // Both joint address tables left the layout as well, because each one is the running
+        // prefix sum of the same footprints, in joint id order and with no gap.
+        let (mut qpos_adr, mut dof_adr) = (0, 0);
+        for (id, joint) in model.jnt_type().iter().enumerate() {
+            assert_eq!(i64::from(model.jnt_qposadr()[id]), qpos_adr, "joint {id}");
+            assert_eq!(i64::from(model.jnt_dofadr()[id]), dof_adr, "joint {id}");
+            qpos_adr += qpos(joint);
+            dof_adr += dof(joint);
+        }
+
+        assert_eq!(model.nsensordata(), sum(model.sensor_dim()));
+        assert_eq!(model.na(), sum(model.actuator_actnum()));
+        assert_eq!(model.nu(), sum(model.actuator_ctrlnum()));
+        assert_eq!(model.nout(), sum(model.actuator_outnum()));
+        assert_eq!(model.n_jten(), sum(model.ten_j_rownnz()));
+        assert_eq!(model.nflexvert(), sum(model.flex_vertnum()));
+        assert_eq!(model.nflexelem(), sum(model.flex_elemnum()));
+
+        assert_eq!(model.nmeshvert(), sum(model.mesh_vertnum()));
+        assert_eq!(model.nmeshnormal(), sum(model.mesh_normalnum()));
+        assert_eq!(model.nmeshtexcoord(), sum(model.mesh_texcoordnum()));
+        assert_eq!(model.nmeshface(), sum(model.mesh_facenum()));
+        assert_eq!(model.nhfielddata(), product(model.hfield_nrow(), model.hfield_ncol()));
+        assert_eq!(model.ntexdata(), model.tex_width().iter().zip(model.tex_height())
+            .zip(model.tex_nchannel())
+            .map(|((&w, &h), &c)| i64::from(w) * i64::from(h) * i64::from(c)).sum::<MjtSize>());
+
+        // An empty table satisfies every assertion above, so hold the model to its content.
+        assert!(model.na() > 0 && model.nu() > 0 && model.nout() > 0);
+        assert!(model.nsensordata() > 6 && model.n_jten() > 0);
+        assert!(model.nflexvert() > 0 && model.nflexelem() > 0 && model.nmeshvert() > 0);
+        assert_eq!(model.nhfielddata(), 77, "the heightfield must survive the compiler");
+        assert!(model.ntexdata() > 0 && model.nmeshtexcoord() > 0);
+        // A one-control actuator and a three-channel texture would hide a per-element term, so
+        // hold the model to the multi-control and the multi-channel case as well.
+        assert!(model.actuator_ctrlnum().contains(&4) && model.actuator_outnum().contains(&3));
+        assert!(model.tex_nchannel().contains(&3) && model.tex_nchannel().contains(&4));
+    }
+
+    #[test]
+    fn test_is_compatible_with_model_accepts_parameter_change() {
+        let light = compat_model("", "<motor joint='j' gear='1'/>");
+        let heavy = compat_model("", "<motor joint='j' gear='7'/>");
+        assert!(light.is_compatible_with_model(&heavy));
+        assert!(light.is_compatible_with_model(&light));
+    }
+
     #[test]
     fn test_try_view_model_signature_mismatch() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint type='free'/><geom size='0.1'/></body></worldbody></mujoco>").unwrap();
@@ -2113,25 +2834,25 @@ mod tests {
 
         let err = body_info.try_view(&model2).unwrap_err();
         match err {
-            MjModelError::SignatureMismatch { source, destination } => {
+            MjModelError::IncompatibleModel { source, destination } => {
                 assert_eq!(source, model1.signature());
                 assert_eq!(destination, model2.signature());
             }
-            other => panic!("expected SignatureMismatch, got {other:?}"),
+            other => panic!("expected IncompatibleModel, got {other:?}"),
         }
 
         let err = body_info.try_view_mut(&mut model2).unwrap_err();
         match err {
-            MjModelError::SignatureMismatch { source, destination } => {
+            MjModelError::IncompatibleModel { source, destination } => {
                 assert_eq!(source, model1.signature());
                 assert_eq!(destination, model2.signature());
             }
-            other => panic!("expected SignatureMismatch, got {other:?}"),
+            other => panic!("expected IncompatibleModel, got {other:?}"),
         }
     }
 
     #[test]
-    #[should_panic(expected = "model signature mismatch")]
+    #[should_panic(expected = "the model is not compatible")]
     fn test_view_mut_model_signature_mismatch_panics() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint type='free'/><geom size='0.1'/></body></worldbody></mujoco>").unwrap();
         let mut model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint type='free'/><geom size='0.1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();
@@ -2161,7 +2882,7 @@ mod tests {
     fn test_id_2name_valid() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
 
-        // Body with id=1 should exist ("box")
+        // Body with id=1 should exist ("ball")
         let name = model.id_to_name(MjtObj::mjOBJ_BODY, 1);
         assert_eq!(name, Some("ball"));
     }
@@ -2475,7 +3196,7 @@ mod tests {
     fn test_hfield_view() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
 
-        // Access first height field
+        // Access the second height field
         let info_hf = model.hfield("hf2").unwrap();
         let view_hf = info_hf.view(&model);
 
@@ -3010,9 +3731,10 @@ mod tests {
     #[test]
     fn test_force_cast_actuator_model_enums_and_bools() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nactuator = model.ffi().nactuator as usize;
         let nu = model.ffi().nu as usize;
 
-        if nu == 0 {
+        if nactuator == 0 {
             return;
         }
 
@@ -3025,16 +3747,16 @@ mod tests {
         let actlimited = model.actuator_actlimited();
         let actearly = model.actuator_actearly();
 
-        assert_eq!(trntype.len(), nu);
-        assert_eq!(dyntype.len(), nu);
-        assert_eq!(gaintype.len(), nu);
-        assert_eq!(biastype.len(), nu);
+        assert_eq!(trntype.len(), nactuator);
+        assert_eq!(dyntype.len(), nactuator);
+        assert_eq!(gaintype.len(), nactuator);
+        assert_eq!(biastype.len(), nactuator);
         assert_eq!(ctrllimited.len(), nu);
-        assert_eq!(forcelimited.len(), nu);
-        assert_eq!(actlimited.len(), nu);
-        assert_eq!(actearly.len(), nu);
+        assert_eq!(forcelimited.len(), nactuator);
+        assert_eq!(actlimited.len(), nactuator);
+        assert_eq!(actearly.len(), nactuator);
 
-        for i in 0..nu {
+        for i in 0..nactuator {
             // Enum cross-validation
             assert_eq!(trntype[i], unsafe { crate::util::force_cast::<_, MjtTrn>(*model.ffi().actuator_trntype.add(i)) });
             assert_eq!(dyntype[i], unsafe { crate::util::force_cast::<_, MjtDyn>(*model.ffi().actuator_dyntype.add(i)) });
@@ -3064,6 +3786,8 @@ mod tests {
     #[test]
     fn test_force_cast_actuator_param_arrays() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let nactuator = model.ffi().nactuator as usize;
+        let nout = model.ffi().nout as usize;
         let nu = model.ffi().nu as usize;
 
         let dynprm = model.actuator_dynprm();
@@ -3071,10 +3795,10 @@ mod tests {
         let gear = model.actuator_gear();
         let trnid = model.actuator_trnid();
 
-        assert_eq!(dynprm.len(), nu);
+        assert_eq!(dynprm.len(), nactuator);
         assert_eq!(ctrlrange.len(), nu);
-        assert_eq!(gear.len(), nu);
-        assert_eq!(trnid.len(), nu);
+        assert_eq!(gear.len(), nout);
+        assert_eq!(trnid.len(), nactuator);
 
         // Verify "slider" dynprm and ctrlrange
         let slider = model.actuator("slider").unwrap();
@@ -3085,13 +3809,19 @@ mod tests {
         let slider2 = model.actuator("slider2").unwrap();
         assert_eq!(dynprm[slider2.id][0..10], [10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]);
 
-        // Cross-validate FFI for gear (stride 6)
-        for i in 0..nu {
+        // Cross-validate FFI for gear (stride 6), trnid (stride 2) and ctrlrange (stride 2)
+        for i in 0..nout {
             for j in 0..6 {
                 assert_eq!(gear[i][j], unsafe { *model.ffi().actuator_gear.add(i * 6 + j) });
             }
+        }
+        for i in 0..nactuator {
             for j in 0..2 {
                 assert_eq!(trnid[i][j], unsafe { *model.ffi().actuator_trnid.add(i * 2 + j) });
+            }
+        }
+        for i in 0..nu {
+            for j in 0..2 {
                 assert_eq!(ctrlrange[i][j], unsafe { *model.ffi().actuator_ctrlrange.add(i * 2 + j) });
             }
         }
@@ -3383,9 +4113,9 @@ mod tests {
 
         // Mutable enum roundtrip via view
         let mut slider_view_mut = slider_info.view_mut(&mut model);
-        slider_view_mut.gaintype[0] = MjtGain::mjGAIN_AFFINE;
+        slider_view_mut.biastype[0] = MjtBias::mjBIAS_NONE;
         let slider_view2 = slider_info.view(&model);
-        assert_eq!(slider_view2.gaintype[0], MjtGain::mjGAIN_AFFINE);
+        assert_eq!(slider_view2.biastype[0], MjtBias::mjBIAS_NONE);
     }
 
     /// Verifies mutable model-array roundtrip via info views.
@@ -3553,9 +4283,9 @@ mod tests {
         assert_ne!(jnt_solref[0].as_ptr(), jnt_solref[1].as_ptr());
         assert_ne!(std::ptr::addr_of!(jnt_type[0]), std::ptr::addr_of!(jnt_type[1]));
 
-        // Pointer stride should be exactly mjNREF elements apart
-        let ptr_diff = unsafe { jnt_solref[1].as_ptr().offset_from(jnt_solref[0].as_ptr()) };
-        assert_eq!(ptr_diff, mjNREF as isize,
+        // Stride must be exactly mjNREF elements
+        let stride = jnt_solref.as_flattened().element_offset(&jnt_solref[1][0]).unwrap();
+        assert_eq!(stride, mjNREF as usize,
             "jnt_solref stride must be mjNREF={}", mjNREF);
     }
 
@@ -3776,5 +4506,17 @@ mod tests {
 
         // Test invalid geom index.
         assert!( model.try_max_contacts(999, geom2, Some(true)).is_err());
+    }
+
+    /// Drives the generated sanitizer probes over every dynamic array of |MjModel|. See the
+    /// matching test on |MjData| for what the sanitizers catch here.
+    #[test]
+    fn test_probe_dynamic_arrays_stays_in_bounds() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        assert!(model.ffi().nbody > 1, "the model must have bodies for the probe to mean anything");
+        model.probe_dynamic_arrays();
+
+        // SAFETY: no accessor of this block needs a pipeline stage; the compiler fills the model.
+        unsafe { model.probe_dynamic_arrays_unsafe() };
     }
 }

@@ -5,8 +5,11 @@ Interface to C API
 ============================
 
 When the user requires extra flexibility that MuJoCo-rs does not offer, direct FFI bindings to the
-C language structs and functions can be used. All the structs, except the model-editing-related ones,
-have their attributes public.
+C language structs and functions can be used. Most structs have their attributes public.
+The exceptions are the model-editing structs (``mjs*``, apart from the plain-data
+``mjsOrientation``, ``mjsElement`` and ``mjsAuthored``) and the structs whose raw fields are
+unsafe to write directly (``mjLogConfig``, ``mjLogMessage``); read and write the fields of these
+structs through the accessors of the matching wrapper.
 
 Direct FFI bindings are available inside the :docs-rs:`mujoco_rs::mujoco_c` module.
 

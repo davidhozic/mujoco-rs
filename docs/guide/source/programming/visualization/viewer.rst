@@ -23,9 +23,11 @@ Rust-native 3D viewer
     (or ``viewer-ui`` for UI support).
 
 The Rust-native 3D viewer, enabled by the ``viewer`` feature, supports visualization of the 3D scene, as well as interaction via mouse and keyboard.
+Press ``F1`` in the viewer window to show or hide the list of mouse and keyboard shortcuts.
 This also includes object perturbations. Optionally, enabled by the ``viewer-ui`` feature, the viewer
 also provides a user interface, which tries to replicate the original C++ viewer as best as possible
-(while simultaneously enriching it) and thus allows control of constraints, joints, actuators, etc.
+(while simultaneously enriching it) and thus allows control of constraints and actuators,
+inspection of joint state, and much more.
 
 A screenshot of the Rust 3D viewer is shown below.
 
@@ -33,7 +35,7 @@ A screenshot of the Rust 3D viewer is shown below.
 
     Rust-native interactive 3D viewer.
     Showing the `Spot <https://github.com/google-deepmind/mujoco_menagerie/tree/main/boston_dynamics_spot>`_ scene from
-    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.9.0/models.html>`_.
+    `MuJoCo's menagerie <https://mujoco.readthedocs.io/en/3.12.0/models.html>`_.
 
 The viewer can be launched only in **passive mode**, i.e. it won't run as a separate application,
 and needs to be periodically "synced" by the user application.
@@ -63,7 +65,7 @@ The viewer can be launched in two ways:
           let mut viewer = MjViewer::builder()
               .window_name("My Simulation")    // text shown in the window title bar.
               .max_user_geoms(0)               // maximum additional geoms drawn by the user.
-              .vsync(false)                    // vertical synchronization (use true when rendering in a separate thread).
+              .vsync(false)                    // vertical synchronization (use true with a separate simulation thread).
               .warn_non_realtime(false)        // show an overlay when the simulation lags behind realtime.
               .build_passive(&model).expect("could not launch the viewer");
           while viewer.running() {
@@ -135,11 +137,12 @@ This is optional and can be removed or reduced to run the simulation faster than
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` copies only the fields
     of :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` required for visualization
     (kinematics, contacts, sensor data, etc.), skipping large computed arrays
-    (mass matrices, constraint arrays ``efc_*``/``iefc_*`` including constraint Jacobians). This is faster.
+    (the mass and factorization matrices ``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``, ``qLU``,
+    and the sparse constraint Jacobian blocks ``efc_J``, ``efc_Y``, ``efc_AR`` and their index
+    arrays). This is faster.
     :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full` copies the **entire**
     ``MjData`` struct and should only be used when those large arrays are needed inside the
-    viewer (for example, when using
-    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` to access them).
+    viewer.
 
 .. admonition:: Performance tip
 
@@ -150,12 +153,14 @@ This is optional and can be removed or reduced to run the simulation faster than
     such as:
 
     - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`;
-    - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running`;
+    - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_model`;
     - etc.;
 
     internally acquire a mutex lock to the shared state.
     Sequential calls to more than one of these can consequently
     hurt performance.
+    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>running` is an exception: it reads
+    an atomic flag and never locks.
 
     A more optimized way to use these methods is to call their equivalents on the shared
     state directly. The shared state can be accessed mainly through:
@@ -173,7 +178,7 @@ This is optional and can be removed or reduced to run the simulation faster than
     .. code-block:: rust
 
         viewer.with_state_lock(|mut lock| {
-            lock.sync_data(&mut data);  // both calls share one lock
+            lock.sync_data(&mut data);  // one lock for the whole closure
             viewer_running = lock.running();
         }).unwrap();
 
@@ -187,14 +192,14 @@ This can slow down the simulation as :docs-rs:`~~mujoco_rs::viewer::<struct>MjVi
 is relatively expensive to call. Additionally, synchronous usage with the simulation causes
 the refresh rate to be equal to the simulation stepping frequency, which puts strain on the GPU.
 
-To prevent slowdowns and allow V-Sync, the viewer can run in the **main thread**, while
-the actual physics simulation runs in another.
+To prevent slowdowns and allow V-Sync, run the physics simulation in a second thread. The viewer
+must stay in the **main thread**, because it owns the window event loop and the OpenGL context.
 
 Here's an adapted excerpt from the :gh-example:`example <visualization/viewer/rust_viewer_threaded.rs>`
 on how to use the viewer in a multi-threaded way:
 
 .. code-block:: rust
-    :emphasize-lines: 12-13, 18-22, 30-34
+    :emphasize-lines: 1-2, 12-13, 18-22, 31-33
 
     let model = Arc::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
     let mut data = MjData::new(model.clone());
@@ -236,7 +241,8 @@ on how to use the viewer in a multi-threaded way:
 The example mainly differs from the synchronous one in the highlighted lines:
 
 - :docs-rs:`mujoco_rs::wrappers::mj_model::<struct>MjModel` is wrapped into
-  `Arc <https://doc.rust-lang.org/std/sync/struct.Arc.html>`_,
+  `Arc <https://doc.rust-lang.org/std/sync/struct.Arc.html>`_
+  (it could also be wrapped into `Box <https://doc.rust-lang.org/std/boxed/struct.Box.html>`_ ),
 - Data is synced through :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_data`;
 
   - :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState` is obtained through
@@ -253,24 +259,18 @@ Custom UI widgets
 The Rust-native viewer supports adding custom UI widgets through the
 :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` method.
 This allows you to create custom windows, panels, and other UI elements using
-`egui <https://docs.rs/egui/0.33.0/egui/>`_.
+`egui <https://docs.rs/egui/0.36.1/egui/>`_.
 
 .. note::
 
     Callbacks added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`
-    receive the passive simulation state (:docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`).
-    This requires locking the mutex to the shared state, which may slow down the program.
-
-    To avoid unnecessary locks when the simulation state is not required in the UI,
-    :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback_detached`
-    can be used instead, which only accepts the
-    `egui::Context <https://docs.rs/egui/0.33.0/egui/struct.Context.html>`_ as a parameter.
-
+    receive the root `egui::Ui <https://docs.rs/egui/0.36.1/egui/struct.Ui.html>`__ and the viewer's shared state
+    (``Arc<Mutex<T>>``, ``T`` being :docs-rs:`~mujoco_rs::viewer::<struct>ViewerSharedState`).
 
 The following example demonstrates how to add a custom window to the viewer:
 
 .. code-block:: rust
-    :emphasize-lines: 15-28
+    :emphasize-lines: 15-27
 
     use std::time::Duration;
 
@@ -287,12 +287,11 @@ The following example demonstrates how to add a custom window to the viewer:
             .build_passive(&model).expect("could not launch the viewer");
 
         /* Add a custom UI window */
-        // viewer.add_ui_callback(|ctx, data| {...}) or
-        viewer.add_ui_callback_detached(|ctx| {
+        viewer.add_ui_callback(|ui, _state| {
             use mujoco_rs::viewer::egui;
             egui::Window::new("Custom controls")
                 .scroll(true)
-                .show(ctx, |ui| {
+                .show(ui, |ui| {
                     ui.heading("My Custom Widget");
                     ui.label("This is a custom UI element!");
                     if ui.button("Click me").clicked() {
@@ -310,7 +309,8 @@ The following example demonstrates how to add a custom window to the viewer:
     }
 
 Multiple callbacks can be registered by calling ``add_ui_callback`` multiple times.
-Each callback will be invoked during the UI rendering phase with access to the egui context.
+Each callback will be invoked during the UI rendering phase with access to the root
+`egui::Ui <https://docs.rs/egui/0.36.1/egui/struct.Ui.html>`__.
 
 For a comprehensive example, see the :gh-example:`visualization/viewer/custom_ui_widgets.rs` example,
 which demonstrates various types of UI elements including windows, side panels, and top panels.
@@ -325,23 +325,24 @@ which demonstrates various types of UI elements including windows, side panels, 
 
     When :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` is called, the
     user's data is copied into the viewer's internal passive copy via ``mjv_copyData``, which
-    skips large computed arrays not required for visualization. As a result, the
-    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` passed to UI callbacks
-    (added via :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback`)
-    will **not** contain:
+    skips large computed arrays not required for visualization. The passive copy will therefore
+    **not** hold current values in:
 
-    - mass matrices (``qM``, ``qLD``, ``qLDiagInv``, ``qLU``);
-    - constraint arrays (``efc_*``, ``iefc_*``, including constraint Jacobians).
+    - the mass and factorization matrices (``crb``, ``M``, ``qLD``, ``qH``, ``qDeriv``,
+      ``qLU``), which keep the values of the previous copy and are therefore stale;
+    - the sparse constraint Jacobian blocks (``efc_J``, ``efc_Y``, ``efc_AR`` and their index
+      arrays), which are empty.
 
-    If you require those in a UI callback, either call an appropriate method on the passed
-    :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData` instance
-    (e.g., :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>forward`),
-    or switch to :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full`.
+    Use :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data_full` when the viewer
+    needs those arrays.
 
     Additionally, the viewer writes any UI-driven state changes (e.g. actuator controls,
     equality constraints) back to the user's ``data`` via the integration state. If your
     code relies on derived quantities such as previously-computed Jacobians, recompute them
     after each :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data` call.
+
+    Each sync also applies the mouse perturbation, which unconditionally zeroes
+    ``data.xfrc_applied``. Set your own external forces after the sync, not before it.
 
 
 .. _model_parameter_sync:
@@ -352,7 +353,9 @@ Model Parameter Synchronization
 The viewer provides methods to synchronize model parameters (``opt``, ``vis``,
 ``stat``) between the simulation and the viewer's passive internal state.
 
-The primary method is :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_opt`,
+Each method merges in both directions: a change made in the viewer UI is written to the value you
+pass, and a change you made yourself is written to the viewer's passive model. The per-field methods
+are :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_opt`,
 :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_vis`,
 and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model_stat`:
 
@@ -364,7 +367,14 @@ and :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model
         lock.sync_model_stat(data.model_stat_mut());
     }).unwrap();
 
-This requires the ``M`` bound inside |mj_data| to be ``DerefMut<Target = MjModel>`` (e.g., ``Box<MjModel>``).
+This requires the ``M`` bound inside |mj_data| to be
+:docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut` (e.g., ``Box<MjModel>``).
+
+:docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model` does all three in one
+call and also reloads the viewer's internal state when the incoming model is no longer compatible
+with the passive model
+(:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`). It
+takes ``&mut MjModel``, so the caller passes ``unsafe { data.model_mut() }``.
 
 
 .. _viewer_asset_reupload:
@@ -395,10 +405,12 @@ Both :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
   UV texture coordinates, face-vertex indices, face-normal indices, face-texcoord indices,
   and convex hull graph data), so ``update_meshes_from`` issues several array copies.
 
-Both call paths require ``model.signature()`` to match the viewer's internal passive model
+Both call paths require ``model`` to be asset-compatible with the viewer's internal passive model
+(:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_asset_compatible_with_model`,
+which tests the mesh, texture and heightfield memory only, not the full model layout)
 and return ``Result<(), MjViewerError>`` ---
-:docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>SignatureMismatch` is returned when
-the signatures differ, and
+:docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>IncompatibleModel` is returned when
+the two models are not compatible, and
 :docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>IndexOutOfBounds` when the asset ID
 is out of range (singular methods only).
 If the model has been replaced or reloaded, call
@@ -436,6 +448,9 @@ The viewer **stages** the upload and applies it on the next call to
             data.step();
         }
     }
+
+The :gh-example:`example <visualization/viewer/asset_reupload.rs>` animates a heightfield, a texture
+and a mesh from a physics thread.
 
 
 .. _mj_cpp_viewer:

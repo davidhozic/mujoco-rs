@@ -7,13 +7,14 @@ Model editing
 .. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
 .. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
-.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`
-.. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator`
+.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`
+.. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsActuator`
+.. |mjs_flex| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsFlex`
 
 The most general way to create an |mj_model| instance is by loading an XML file
 via :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml`.
 Due to |mj_model| only allowing (some) changes to parameters and not to the actual
-geometry, MuJoCo introduced `Model Editing <https://mujoco.readthedocs.io/en/3.9.0/programming/modeledit.html>`_.
+geometry, MuJoCo introduced `Model Editing <https://mujoco.readthedocs.io/en/3.12.0/programming/modeledit.html>`_.
 
 In MuJoCo-rs, we created a high-level wrapper around MuJoCo's C API, which provides
 safe wrappers around C structs, as well as methods. Aside from that, we try to stay faithful
@@ -33,8 +34,14 @@ After creation, we can use |mj_spec| to add items to the model, such as joints, 
 **Non-structured** items can be added through |mj_spec| itself (e.g., actuators, sensors, meshes, etc.).
 **Structured** items can be added through |mjs_body| (e.g., bodies, geoms, joints, etc.).
 
-After procedurally creating a specification with |mj_spec|, the latter
-can either be compiled for direct use in the simulation or saved to an XML file.
+After procedurally creating a specification with |mj_spec|, compile it with
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile`. The compiled model
+runs in the simulation, and the compiled specification can also be saved to an XML file.
+
+.. attention::
+
+    Model editing stays on one thread. MuJoCo's C++ implementation shares unsynchronized state
+    between a specification and its elements, so |mj_spec| is neither ``Send`` nor ``Sync``.
 
 
 Examples
@@ -107,9 +114,11 @@ We can now add our ball's body, geom and joint like so:
 
     In the above block, we used methods that have the ``with_`` prefix.
     These allow method chaining.
-    Alternatively, methods that have the ``set_`` prefix can be used. Field setters
-    (e.g. ``set_pos``, ``set_size``) return nothing, while ``set_name`` and ``set_default``
-    return a ``Result`` (``set_name`` fails on a duplicate name, ``set_default`` on an unknown class).
+    Many fields also carry a ``set_`` method, but not all: an array field such as ``pos`` or
+    ``size`` offers ``with_pos`` and ``pos_mut`` only. A plain field setter
+    (e.g. ``set_group``, ``set_mass``) returns nothing, while a validated setter returns a
+    ``Result`` (``set_name`` fails on a duplicate name, ``set_default`` on an unknown class, and
+    ``MjsNumeric::set_size`` on a negative size).
     Setter (``set_``) methods are available for many common fields, including strings and
     several vector/buffer fields. For nested or structured data, use getters that end with
     the ``_mut`` suffix.
@@ -146,7 +155,9 @@ Finally, we can now add the base plane, like so:
 
 This concludes the specification's definition.
 We can now compile it to a model and save it to an MJB (binary) file.
-The specification can also be saved directly to an MJCF (XML) file:
+The specification can also be saved to an MJCF (XML) file. MuJoCo writes MJCF only from a
+compiled specification, so ``save_xml`` and ``save_xml_string`` return
+:docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>SaveFailed` when ``compile`` did not run:
 
 .. code-block:: rust
     :emphasize-lines: 24-28
@@ -187,15 +198,26 @@ can be used exactly the same as if we were to directly load an XML model (see :r
 The compiled |mj_model| can also be swapped into a running simulation using
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` or
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_swap_model`,
-as described in the :ref:`basic_sim` chapter.
+as described in the :ref:`basic_sim` chapter. The swap keeps the existing |mj_data|, so it accepts
+only a compatible model, which can be checked by
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`.
+A compatible model keeps the element tree, the ``nq`` of each joint and
+the type of each sensor, and every size that fixes an |mj_data| buffer, such as ``nuserdata``,
+``na`` and ``nout``. Most attribute changes therefore keep compatibility, while an added or
+deleted element, a joint type change that alters ``nq`` (for example ``hinge`` to ``ball``), a
+changed sensor type or a changed actuator dynamics type breaks it; ``swap_model`` then panics and
+``try_swap_model`` returns
+:docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>IncompatibleModel`.
 
 
 Deleting elements
 ======================
-Elements can be removed from a specification with
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`,
-which takes the element's raw pointer obtained from
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>element_mut_pointer`:
+Most elements can be removed from a specification with the ``unsafe``
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecObject::<method>delete`, called on the
+handle of the element. A default class and a tendon wrap are no
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecObject`, so they carry no ``delete`` at all.
+The world body and a frame do carry it, and it returns
+:docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>UnsupportedOperation` for them.
 
 .. code-block:: rust
 
@@ -203,30 +225,44 @@ which takes the element's raw pointer obtained from
 
     fn main() {
         let mut spec = MjSpec::new();
-        let body = spec.world_body_mut().add_body().with_name("ball");
+        spec.world_body_mut().add_body().with_name("ball");
 
-        let body_ptr = body.element_mut_pointer();
-        // SAFETY: `body_ptr` refers to a live element of `spec` that has not been deleted.
-        unsafe { spec.delete_element(body_ptr).expect("failed to delete the body") };
+        unsafe { spec.body_mut("ball").unwrap().delete() }.expect("failed to delete the body");
     }
 
-Because ``delete_element`` takes ``&mut MjSpec``, the borrow checker already invalidates any
-references obtained earlier (such as ``body`` above) --- you cannot use a reference into the
-spec across the call. The method is ``unsafe`` only because the raw element pointer itself
-cannot be validated: in particular, the caller must not pass a pointer to an element that has
-already been deleted, which would make MuJoCo operate on freed memory.
+``delete`` is ``unsafe`` because MuJoCo cannot answer whether it already deleted an element. It
+keeps a deleted element allocated until the specification drops, so a second deletion of the same
+element frees it twice. The caller carries three obligations:
 
-.. note::
+- Delete each element at most once.
+- Do not delete an element that the deletion of a body already took out of the specification.
+- Do not use the handle of an element that the deletion of a body freed.
 
-    The older ``SpecItem::delete`` method is **deprecated since 5.0.0** and is unsound
-    (it relies on undefined behavior). Use ``delete_element`` instead.
+Deleting a body deletes its whole subtree, and it frees every keyframe, and every actuator, sensor,
+tendon, equality, pair and exclude that refers to the subtree. The last two obligations follow from
+that: an iterator collected before such a deletion still hands out the handles it took.
+
+The borrow checker covers the ordinary case, because a handle borrows the specification and a
+deletion needs it mutably. Look the next element up in each round, as the loop below does, and every
+handle the loop holds belongs to a live element.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn delete_every_geom(spec: &mut MjSpec) {
+        // SAFETY: the walk starts again after each deletion, so it reaches a live geom only.
+        while let Some(geom) = spec.geom_iter_mut().next() {
+            unsafe { geom.delete() }.unwrap();
+        }
+    }
 
 
 .. _model_editing_defaults:
 
 Class inheritance (defaults)
 ==============================
-MuJoCo supports `default classes <https://mujoco.readthedocs.io/en/3.9.0/XMLreference.html#default>`_,
+MuJoCo supports `default classes <https://mujoco.readthedocs.io/en/3.12.0/XMLreference.html#default>`_,
 which allow shared attribute values to be set in one place and then inherited by multiple elements.
 In MuJoCo-rs, default classes can be created with
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>add_default`.
@@ -249,23 +285,35 @@ A new class is created by providing its ``class_name`` and optionally a ``parent
         spec.add_default("small-red", Some("red"));
     }
 
-Elements can then reference the class via their ``childclass`` or ``class`` (``dclass``) attribute
+Elements can then reference the class via their ``childclass`` or ``class`` attribute
 in the model XML.
-In Rust code, class assignment is typically done with
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>set_default` or
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>with_default`.
-Some item-specific wrappers (for example frames) also expose explicit ``childclass`` setters.
+In Rust code, class assignment is done with
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_default` or
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_default`.
+MuJoCo copies the values of a class into an element when the element is **created**, so set the
+class on the parent body before you add its children. A call on an element that already exists
+only records the class name: the saved XML then carries ``class="..."``, but the next ``compile``
+keeps the old values. A frame also exposes an explicit ``childclass`` setter
+(:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsFrame::<method>set_childclass`), with the
+same limitation.
 
 
 Iterators
 ================
 Since MuJoCo-rs 1.5.0, it is possible to also iterate existing :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
 items (geoms, joints, etc.). Iterators exist on :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
-and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`.
+and :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`.
 
 To iterate over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec` items, call
 ``[item_type]_iter`` for immutable iteration or ``[item_type]_iter_mut`` for mutable iteration,
 with ``[item_type]`` replaced by geom, body, etc.
+
+A body is the exception: |mj_spec| carries ``body_iter`` alone. Every item that a mutable iterator
+yields borrows the spec for the same lifetime, so all of them stay live together. A body owns a
+subtree, so a flat mutable body iterator would hand out a body and that body's own descendant at
+once. Reach a body through
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>world_body_mut` and walk down
+the tree.
 
 .. code-block:: rust
 
@@ -275,8 +323,11 @@ with ``[item_type]`` replaced by geom, body, etc.
     }
     // ...
 
-Iteration over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody` items can be used in a similar way.
+Iteration over :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody` items can be used in a similar way.
 The only difference is an additional boolean parameter, which enables recursive iteration when ``true``.
+The mutable body iterator
+(:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>body_iter_mut`) takes no such
+parameter and yields the direct children only, for the reason above.
 
 .. code-block:: rust
 
@@ -305,13 +356,14 @@ Existing elements can be looked up by name. |mj_spec| exposes a finder method (a
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>body_mut`,
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>geom`, and
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>frame`. Within a body,
-child bodies are found with
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child` /
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>child_mut`.
+a body of its subtree is found with
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>child` /
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>child_mut`.
+The search is recursive, and it returns the body itself when its own name matches.
 Every finder returns an ``Option`` that is ``None`` when no element with that name exists.
 
 After compilation, an element's numeric id in the resulting |mj_model| can be retrieved with
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>SpecItem::<method>id`
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>id`
 (``None`` when the element has no id yet).
 
 
@@ -322,14 +374,16 @@ Configuring actuators
 An actuator added with :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>add_actuator`
 can be configured into one of MuJoCo's predefined actuator types with the ``set_to_*`` family of
 methods on |mjs_actuator| (motor, position, integrated velocity, velocity, damper, cylinder,
-muscle, adhesion, and DC motor), mirroring MuJoCo's ``mjs_setToX`` C API.
+muscle, adhesion, DC motor, PID, and orientation), mirroring MuJoCo's ``mjs_setToX`` C API.
 
 A method whose parameters are all mandatory takes them positionally (for example
 ``set_to_velocity(kv)`` or ``set_to_cylinder(timeconst, bias, area, diameter)``). A method whose
 underlying C function accepts *nullable* parameters instead takes a dedicated ``Default``-able
 config struct --- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>PositionConfig`,
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>IntVelocityConfig`, and
-:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>DcMotorConfig` --- in which those nullable
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>IntVelocityConfig`,
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>DcMotorConfig`,
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>PidConfig`, and
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>OrientationConfig` --- in which those nullable
 parameters are ``Option`` fields. A config is built either with struct-update syntax or with the
 chainable ``with_*`` builder methods (which take the inner value and wrap optional fields in
 ``Some``), so only the relevant fields need to be set; everything else stays at its MuJoCo default:
@@ -359,3 +413,40 @@ Methods that MuJoCo can reject (for example a negative gain, or mutually exclusi
 return ``Result<(), MjEditError>``, and the only error variant they ever produce is
 :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>InvalidParameter`; the parameterless or
 always-valid ones (``set_to_motor``, ``set_to_velocity``, ``set_to_cylinder``) return ``()``.
+
+
+.. _model_editing_flexcomp:
+
+Procedural flex generation
+==========================
+A `flexcomp <https://mujoco.readthedocs.io/en/3.12.0/XMLreference.html#body-flexcomp>`_ procedurally
+generates a deformable |mjs_flex| together with its supporting bodies, joints, and optional
+equality constraints --- handy for cloth, ropes, and soft volumes. In MuJoCo-rs it is created with
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_flexcomp` (or the fallible
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>try_add_flexcomp`).
+
+The generation is configured through a ``Default``-able
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjFlexcompConfig`, using the same ``with_*``
+builder pattern as the actuator configs above: only the fields you set deviate from MuJoCo's
+defaults, and unset optional fields fall back to the compiler's own defaults. ``add_flexcomp``
+returns the created |mjs_flex|, which can be tweaked further (for example its self-collision mode).
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn main() {
+        let mut spec = MjSpec::new();
+
+        // A 5x5 cloth-like 2D grid, held together by edge equality constraints.
+        let config = MjFlexcompConfig::default()
+            .with_type("grid")
+            .with_dim(2)
+            .with_count([5, 5, 1])
+            .with_spacing([0.1, 0.1, 0.1])
+            .with_mass(1.0)
+            .with_equality(1);  // 0 none, 1 edge, 2 vertex, 3 strain
+
+        spec.world_body_mut().add_flexcomp("cloth", &config);
+        spec.compile().expect("failed to compile");
+    }

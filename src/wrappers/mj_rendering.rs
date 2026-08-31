@@ -16,13 +16,12 @@ pub type MjtGridPos = mjtGridPos;
 /// These are the possible framebuffers. They are used as an argument to the function `mjr_setBuffer`.
 pub type MjtFramebuffer = mjtFramebuffer;
 
-/// These are the depth mapping options. They are used as a value for the `readPixelDepth` attribute of the
+/// These are the depth mapping options. They are used as a value for the `readDepthMap` attribute of the
 /// `mjrContext` struct, to control how the depth returned by `mjr_readPixels` is mapped from
 /// `znear` to `zfar`.
 pub type MjtDepthMap = mjtDepthMap;
 
-/// These are the possible font sizes. The fonts are predefined bitmaps stored in the dynamic library at three different
-/// sizes.
+/// These are the possible font sizes.
 pub type MjtFontScale = mjtFontScale;
 
 /// These are the possible font types.
@@ -83,6 +82,11 @@ impl Default for MjrRectangle {
 /// - All method calls, including `drop`, must happen on that same thread while the GL
 ///   context is still current. Dropping `MjrContext` on any other thread, or after the GL
 ///   context has been released, causes undefined behaviour.
+///
+/// # Model compatibility
+/// Every method that takes a `&MjModel` must receive a model compatible with the one that built
+/// this context. It is recommended to recreate the context when a model with a different structure
+/// is used.
 #[derive(Debug)]
 pub struct MjrContext {
     ffi: Box<mjrContext>
@@ -92,11 +96,21 @@ impl MjrContext {
     /// Creates and initializes a new rendering context for `model`.
     /// The font scale defaults to 100 %.
     ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when the OpenGL driver cannot allocate the
+    /// offscreen or the shadow framebuffer for the sizes `model` requests, or when `model` declares
+    /// more than `mjMAXTEXTURE` (1000) textures or more than `mjMAXMATERIAL - 2` (998) materials,
+    /// one less with a skybox texture.
+    ///
     /// # Safety
     /// A valid OpenGL context must exist and be current in the calling thread before calling
     /// this function. Calling without an active GL context causes MuJoCo to abort the process.
     /// The same GL context must also remain current when this `MjrContext` is dropped, and must
     /// remain on the same thread for the lifetime of this value.
+    ///
+    /// Any models used in the methods of [`MjrContext`] must be structurally
+    /// compatible with the `model`. The methods will not check compatibility
+    /// on their own.
     pub unsafe fn new(model: &MjModel) -> Self {
         // SAFETY: caller guarantees a valid GL context is current (documented above).
         // Box::new_uninit is fully initialized by mjr_defaultContext + mjr_makeContext
@@ -111,19 +125,13 @@ impl MjrContext {
 
     /// Set OpenGL framebuffer for rendering to mjFB_OFFSCREEN.
     pub fn offscreen(&mut self) -> &mut Self {
-        // SAFETY: self.ffi is a valid, fully initialized mjrContext.
-        unsafe {
-            mjr_setBuffer(MjtFramebuffer::mjFB_OFFSCREEN as i32, self.ffi.as_mut());
-        }
+        self.set_buffer(MjtFramebuffer::mjFB_OFFSCREEN);
         self
     }
 
     /// Set OpenGL framebuffer for rendering to mjFB_WINDOW.
     pub fn window(&mut self) -> &mut Self {
-        // SAFETY: self.ffi is a valid, fully initialized mjrContext.
-        unsafe {
-            mjr_setBuffer(MjtFramebuffer::mjFB_WINDOW as i32, self.ffi.as_mut());
-        }
+        self.set_buffer(MjtFramebuffer::mjFB_WINDOW);
         self
     }
 
@@ -134,6 +142,11 @@ impl MjrContext {
     }
 
     /// Add Aux buffer with given index to context; free previous Aux buffer.
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when `width` or `height` is above the OpenGL
+    /// implementation's maximum renderbuffer size. A zero `width` or `height` creates no buffer.
+    ///
     /// # Errors
     /// Returns [`MjrContextError::IndexOutOfBounds`] when `index >= mjNAUX` (10).
     pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) -> Result<(), MjrContextError> {
@@ -181,15 +194,16 @@ impl MjrContext {
         unsafe { mjr_restoreBuffer(self.ffi_mut()); }
     }
 
-    /// Sets the active OpenGL framebuffer to the given raw `framebuffer` id.
+    /// Sets the active OpenGL framebuffer to one of MuJoCo's two framebuffers.
     /// Prefer [`MjrContext::offscreen`] or [`MjrContext::window`] for the common cases.
-    pub fn set_buffer(&mut self, framebuffer: i32) {
+    pub fn set_buffer(&mut self, framebuffer: MjtFramebuffer) {
         // SAFETY: self.ffi is a valid, fully initialized mjrContext.
-        unsafe { mjr_setBuffer(framebuffer, self.ffi_mut()); }
+        unsafe { mjr_setBuffer(framebuffer as i32, self.ffi_mut()); }
     }
 
-    /// Read pixels from current OpenGL framebuffer to client buffer.
-    /// The `rgb` array is of size `[width * height * 3]`, while `depth` is of size `[width * height]`.
+    /// Read pixels from current OpenGL framebuffer to client buffer. The `rgb` array is of size
+    /// `[viewport.width * viewport.height * 3]`, while `depth` is of size
+    /// `[viewport.width * viewport.height]`.
     ///
     /// # Errors
     /// Returns [`MjrContextError::InvalidViewport`] if the viewport has negative
@@ -207,9 +221,16 @@ impl MjrContext {
                 height: viewport.height,
             });
         }
-        let size = viewport.width as usize * viewport.height as usize;
+        // Either product can wrap on a 32-bit target, which would let a short buffer pass.
+        let overflow = || MjrContextError::InvalidViewport {
+            width: viewport.width,
+            height: viewport.height,
+        };
+        let size = (viewport.width as usize)
+            .checked_mul(viewport.height as usize)
+            .ok_or_else(overflow)?;
         if let Some(buf) = rgb.as_ref() {
-            let needed = size * 3;
+            let needed = size.checked_mul(3).ok_or_else(overflow)?;
             if buf.len() < needed {
                 return Err(MjrContextError::BufferTooSmall {
                     name: "rgb",
@@ -241,6 +262,11 @@ impl MjrContext {
     }
 
     /// Set Aux buffer for custom OpenGL rendering (call restoreBuffer when done).
+    ///
+    /// # Note
+    /// MuJoCo reports an error and stops the process when no Aux buffer exists at `index`; create
+    /// it with [`MjrContext::add_aux`] first.
+    ///
     /// # Errors
     /// Returns [`MjrContextError::IndexOutOfBounds`] when `index >= mjNAUX` (10).
     pub fn set_aux(&mut self, index: usize) -> Result<(), MjrContextError> {
@@ -302,7 +328,7 @@ impl MjrContext {
 /// Array slices.
 impl MjrContext {
     array_slice_dyn! {
-        (mut = unsafe) textureType: as_ptr as_mut_ptr &[MjtTexture [force]; "type of texture"; ffi().ntexture],
+        textureType: as_ptr as_mut_ptr &[MjtTexture [force]; "type of texture"; ffi().ntexture],
         (mut = unsafe) skinvertVBO: &[u32; "skin vertex position VBOs"; ffi().nskin],
         (mut = unsafe) skinnormalVBO: &[u32; "skin vertex normal VBOs"; ffi().nskin],
         (mut = unsafe) skintexcoordVBO: &[u32; "skin vertex texture coordinate VBOs"; ffi().nskin],
@@ -321,7 +347,9 @@ impl MjrContext {
         [ffi] offWidth: i32; "width of offscreen buffer.";
         [ffi] offHeight: i32; "height of offscreen buffer.";
         [ffi] offSamples: i32; "number of offscreen buffer multisamples.";
-        [ffi] fontScale: i32; "font scale.";
+        // The zeroed state that mjr_defaultContext leaves has no mjtFontScale variant, but only
+        // Drop can reach it: new() and ffi_mut() are unsafe and change_font() takes the enum.
+        [ffi] fontScale: MjtFontScale [force]; "font scale.";
         [ffi] offFBO: u32; "offscreen framebuffer object.";
         [ffi] offFBO_r: u32; "offscreen framebuffer for resolving multisamples.";
         [ffi] offColor: u32; "offscreen color buffer.";
@@ -346,14 +374,17 @@ impl MjrContext {
         [ffi] nskin: i32; "number of skins.";
         [ffi] charHeight: i32; "character heights: normal and shadow.";
         [ffi] charHeightBig: i32; "character heights: big.";
-        [ffi] glInitialized: i32; "is OpenGL initialized.";
-        [ffi] windowAvailable: i32; "is default/window framebuffer available.";
         [ffi] windowSamples: i32; "number of samples for default/window framebuffer.";
-        [ffi] windowStereo: i32; "is stereo available for default/window framebuffer.";
-        [ffi] windowDoublebuffer: i32; "is default/window framebuffer double buffered.";
         [ffi] currentBuffer: i32; "currently active framebuffer: mjFB_WINDOW or mjFB_OFFSCREEN.";
         [ffi] readPixelFormat: i32; "default color pixel format for mjr_readPixels.";
-        [ffi] readDepthMap: i32; "depth mapping: mjDEPTH_ZERONEAR or mjDEPTH_ZEROFAR.";
+        [ffi] readDepthMap: MjtDepthMap [force]; "depth mapping.";
+    ]}
+
+    getter_setter! {get, [
+        [ffi] glInitialized: bool; "whether OpenGL is initialized.";
+        [ffi] windowAvailable: bool; "whether the default/window framebuffer is available.";
+        [ffi] windowStereo: bool; "whether stereo is available for the default/window framebuffer.";
+        [ffi] windowDoublebuffer: bool; "whether the default/window framebuffer is double buffered.";
     ]}
 
     getter_setter! {get, [

@@ -37,6 +37,14 @@ To draw custom geoms to a scene inside a viewer or a renderer, applications typi
         Use ``try_create_geom`` for the fallible variant that returns ``Result``.
         Increase the configured user-geom capacity if you hit this limit.
 
+.. warning::
+
+        ``create_geom`` and ``try_create_geom`` are ``unsafe``; ``clear_geom`` is safe. The
+        renderer reads the geom's ``matid``, ``texid`` and, on a
+        flex or a skin geom, ``objid`` as unchecked indices, so the caller must keep each one below
+        the count of the model that the rendering context was created for. ``matid`` and ``texid``
+        also accept ``-1`` for none, which is what the two methods write.
+
 This :gh-example:`example <visualization/viewer/drawing_scene_viewer.rs>` shows how to draw a line between two balls.
 
 In the example, we start drawing by first obtaining a mutable reference to the user scene and clearing
@@ -56,19 +64,22 @@ at this stage.
 
 
 .. code-block:: rust
-    :emphasize-lines: 5-11
+    :emphasize-lines: 5-14
 
     viewer.with_state_lock(|mut state_lock| {
         let scene = state_lock.user_scene_mut();  // obtain a mutable reference to the user scene.
         scene.clear_geom();  // clear existing geoms
 
-        let new_geom = scene.create_geom(
-            MjtGeom::mjGEOM_LINE,  // type of geom to draw.
-            None,  // size, ignore here as we set it below.
-            None,  // position: ignore here as we set it below.
-            None,  // rotational matrix: ignore here as we set it below.
-            Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
-        );
+        // SAFETY: the geom keeps the ids that create_geom sets to none.
+        let new_geom = unsafe {
+            scene.create_geom(
+                MjtGeom::mjGEOM_LINE,  // type of geom to draw.
+                None,  // size, ignore here as we set it below.
+                None,  // position: ignore here as we set it below.
+                None,  // rotational matrix: ignore here as we set it below.
+                Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
+            )
+        };
     }).unwrap();
 
 
@@ -79,19 +90,22 @@ which calculates the values to result in the geom pointing from one point to ano
 
 
 .. code-block:: rust
-    :emphasize-lines: 19-24
+    :emphasize-lines: 22-27
 
     viewer.with_state_lock(|mut state_lock| {
         let scene = state_lock.user_scene_mut();  // obtain a mutable reference to the user scene.
         scene.clear_geom();  // clear existing geoms
 
-        let new_geom = scene.create_geom(
-            MjtGeom::mjGEOM_LINE,  // type of geom to draw.
-            None,  // size, ignore here as we set it below.
-            None,  // position: ignore here as we set it below.
-            None,  // rotational matrix: ignore here as we set it below.
-            Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
-        );
+        // SAFETY: the geom keeps the ids that create_geom sets to none.
+        let new_geom = unsafe {
+            scene.create_geom(
+                MjtGeom::mjGEOM_LINE,  // type of geom to draw.
+                None,  // size, ignore here as we set it below.
+                None,  // position: ignore here as we set it below.
+                None,  // rotational matrix: ignore here as we set it below.
+                Some([1.0, 1.0, 1.0, 1.0])  // color (rgba): pure white.
+            )
+        };
 
         /* Read X, Y and Z coordinates of both balls. */
         let ball1_position = ball1_joint_info.view(&data).qpos[..3]

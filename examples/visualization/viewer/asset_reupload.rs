@@ -2,11 +2,11 @@
 //!
 //! Three types of animated assets are rendered in the same scene:
 //!
-//! - **Heightfield** -- elevation data is rewritten each frame, creating a propagating
+//! - **Heightfield**: elevation data is rewritten each frame, creating a propagating
 //!   ripple wave across the terrain.
-//! - **Texture** -- pixel data is rewritten each frame, producing a shifting colour
+//! - **Texture**: pixel data is rewritten each frame, producing a shifting colour
 //!   gradient across the surface of the ball.
-//! - **Mesh** -- vertex Z positions are rewritten each frame, making a flat grid mesh
+//! - **Mesh**: vertex Z positions are rewritten each frame, making a flat grid mesh
 //!   deform into a wave surface.
 //!
 //! A ball with a free joint is dropped under gravity onto the animated terrain,
@@ -25,6 +25,7 @@ use std::thread;
 
 use mujoco_rs::viewer::MjViewer;
 use mujoco_rs::prelude::*;
+use env_logger::Env;
 
 /// Width and height of the 2-D texture in pixels.
 const TEX_SIZE: usize = 64;
@@ -34,6 +35,11 @@ const HF_N: usize = 32;
 const MESH_N: usize = 10;
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info,mujoco::=off")).init();
+    // (Optional) The hook sends MuJoCo's messages to the `log` crate, instead of the console.
+    // SAFETY: no other thread uses MuJoCo yet.
+    unsafe { install_logging_hook() };
+
     let model = Box::new(create_model());
     let mut data = MjData::new(model);
     data.forward();
@@ -67,7 +73,7 @@ fn main() {
             let m = unsafe { data.model_mut() };
 
             /* Heightfield: propagating ripple wave */
-            // Values must be in [0, 1]; 0 = z_bottom, 1 = z_top (from the `size` parameter).
+            // Values must be in [0, 1]: 0 = Z 0 (top of the base), 1 = Z z_top_scale.
             let hf = m.hfield_data_mut();
             for row in 0..hf_nrow {
                 for col in 0..hf_ncol {
@@ -146,7 +152,7 @@ fn create_model() -> MjModel {
     hf.set_ncol(HF_N as i32);
     // size = [x_half, y_half, z_top_scale, z_bottom_thickness]
     hf.with_size([4.0, 4.0, 1.0, 0.1]);
-    // Flat initial elevation (0.5 = mid-height in [0, 1]).
+    // Elevation is in [0, 1]: 0 = Z 0 (top of the base), 1 = Z z_top_scale.
     // Smooth wall: inner 60% is pure ripple; outer 40% transitions to a full-height wall.
     let initial: Vec<f32> = (0..HF_N)
         .flat_map(|row| {

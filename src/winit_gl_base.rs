@@ -19,8 +19,7 @@ use crate::error::GlInitError;
 use std::collections::VecDeque;
 
 
-/// Base struct for rendering through Glutin.
-/// This is a proxy since Glutin only allows event processing through callbacks, which this implements.
+/// Window, OpenGL context and drawing surface, created when the event loop resumes.
 #[derive(Debug)]
 pub(crate) struct RenderBaseGlState {
     pub(crate) window: Window,
@@ -28,6 +27,8 @@ pub(crate) struct RenderBaseGlState {
     pub(crate) gl_surface: Surface<WindowSurface>,
 }
 
+/// Base struct for rendering through Glutin.
+/// This is a proxy since winit only allows event processing through callbacks, which this implements.
 #[derive(Debug)]
 pub(crate) struct RenderBase {
     pub(crate) state: Option<RenderBaseGlState>,
@@ -75,6 +76,12 @@ impl RenderBase {
 
 impl ApplicationHandler for RenderBase {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // winit emits `Resumed` again on the first `pump_app_events` call after the loop exited,
+        // and a rebuild would destroy the GL context that the live `mjrContext` has objects in.
+        if self.state.is_some() {
+            return;
+        }
+
         let result = (|| -> Result<RenderBaseGlState, GlInitError> {
             let window_attrs = Window::default_attributes()
                 .with_title(&self.title)
@@ -92,8 +99,8 @@ impl ApplicationHandler for RenderBase {
                 .with_window_attributes(Some(window_attrs));
 
             // Select the config with most samples.
-            // The config-picker callback must return a Config (not Result), so the
-            // expect inside it stays: if build() succeeds, at least one config exists.
+            // The config-picker callback must return a Config (not Result), so the expect
+            // inside it stays; glutin hands it the raw find_configs list, which can be empty.
             let (maybe_window, gl_config) = display_builder
                 .build(event_loop, template, |configs| {
                     configs.into_iter().reduce(|current, cfg|
@@ -116,6 +123,8 @@ impl ApplicationHandler for RenderBase {
                 .build(raw_window_handle);
 
             let gl_display = gl_config.display();
+            // SAFETY: both calls below need a window handle that is valid at call time.
+            // raw_window_handle and attrs carry the handle of `window`, which is alive here.
             let not_current = unsafe {
                 gl_display
                     .create_context(&gl_config, &context_attrs)
