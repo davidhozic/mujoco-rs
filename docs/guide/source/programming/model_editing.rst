@@ -38,6 +38,11 @@ After procedurally creating a specification with |mj_spec|, compile it with
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile`. The compiled model
 runs in the simulation, and the compiled specification can also be saved to an XML file.
 
+.. attention::
+
+    Model editing stays on one thread. MuJoCo's C++ implementation shares unsynchronized state
+    between a specification and its elements, so |mj_spec| is neither ``Send`` nor ``Sync``.
+
 
 Examples
 ================

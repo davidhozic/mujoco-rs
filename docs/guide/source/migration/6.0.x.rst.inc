@@ -614,6 +614,21 @@ zero-sized type that stands at the address of that struct, so code that stays in
 API needs no edit, with one exception: ``MjSpec::with_compiler`` is gone, because a by-value
 builder cannot take an opaque handle.
 
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn build() -> MjSpec {
+        let mut spec = MjSpec::new();
+
+        // Before
+        // let spec = spec.with_compiler(compiler);
+
+        // After
+        spec.compiler_mut().set_degree(false);
+        spec
+    }
+
 Two things change. Naming the FFI struct where the handle belongs no longer compiles, and passing
 a handle straight to a ``mujoco_c`` function no longer coerces. Call ``ffi`` for the FFI struct,
 and ``unsafe fn ffi_mut`` for writing.
@@ -636,21 +651,6 @@ and ``unsafe fn ffi_mut`` for writing.
 
 ``std::mem::swap`` on two handles used to exchange the contents of two elements. It now
 exchanges nothing.
-
-.. code-block:: rust
-
-    use mujoco_rs::prelude::*;
-
-    fn build() -> MjSpec {
-        let mut spec = MjSpec::new();
-
-        // Before
-        // let spec = spec.with_compiler(compiler);
-
-        // After
-        spec.compiler_mut().set_degree(false);
-        spec
-    }
 
 ``MjSpec`` is no longer ``Send``
 -------------------------------------------

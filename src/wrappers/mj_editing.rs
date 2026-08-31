@@ -187,6 +187,9 @@ pub type MjsAuthored = mjsAuthored;
 ** Model Specification
 ***************************/
 /// Model specification. This wraps the FFI type [`mjSpec`] internally.
+///
+/// Model editing is single-threaded. MuJoCo's C++ implementation shares unsynchronized state
+/// between a specification and its elements, so this type is neither [`Send`] nor [`Sync`].
 pub struct MjSpec {
     /// The specification that MuJoCo owns.
     ffi: NonNull<mjSpec>,

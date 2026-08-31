@@ -219,7 +219,7 @@
 
 |mjs_wrap| *lost* ``side_site_mut``
 
-- The shared :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsWrap::<method>side_site` is not removed.
+- The shared :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsWrap::<method>side_site` stays.
   Mutable references to sites are available through
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>site_mut`, see
   :ref:`migrate_6_0_0`.

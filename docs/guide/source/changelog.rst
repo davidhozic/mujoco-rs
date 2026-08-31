@@ -23,7 +23,6 @@ Changelog
 
 
 This page contains the summary of changes made throughout different releases of the MuJoCo-rs crate.
-Only the last 5 major/minor versions are shown in detail.
 
 Versioning
 =================
