@@ -11,10 +11,10 @@ Migration guide
 .. |mjv_scene| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene`
 .. |mjv_camera| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera`
 .. |mjr_context| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext`
-.. |mjs_joint| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsJoint`
-.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody`
-.. |mjs_frame| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsFrame`
-.. |mjs_tendon| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsTendon`
+.. |mjs_joint| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsJoint`
+.. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`
+.. |mjs_frame| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsFrame`
+.. |mjs_tendon| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon`
 
 
 This page documents the migration steps for upgrading between major versions of MuJoCo-rs.

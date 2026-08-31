@@ -29,6 +29,16 @@ We provide a hook for integrating the MuJoCo logging with the ``log`` crate.
 The hook can be installed by calling :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` once
 at the start of the program.
 
+.. note::
+
+    Installing the hook, through either function, replaces MuJoCo's own handler, so the
+    ``logto_console``, ``logto_file`` and ``logfile`` fields of
+    :docs-rs:`~mujoco_rs::wrappers::mj_logging::<struct>MjLogConfig` no longer reach the output.
+    The install also writes every topic into the global topic bitmask once, so a bitmask that the
+    program set before the install is lost. The producer-side topic gate still reads that bitmask,
+    so a :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>set_log_config` call after the install
+    still suppresses the topics it clears.
+
 .. attention::
 
     :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` and
@@ -106,11 +116,6 @@ that takes a regular Rust reference to the
 log.
 
 The user callback function can be registered via :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler`.
-Note that the callback does **not** go to
-:docs-rs:`~mujoco_rs::mujoco_c::<fn>mju_setLogHandler` directly. MuJoCo-rs stores it in a global
-static inside MuJoCo-rs (not MuJoCo), and gives ``mju_setLogHandler`` its own handler.
-That handler is responsible for both calling the global user-set Rust logging handler
-and routing the message to the ``log`` crate when no user-set Rust logging handler is set.
 
 When setting a custom logging callback inside MuJoCo-rs, there is no need to call
 :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` separately,
@@ -137,7 +142,7 @@ All ``log_`` function calls (and internal MuJoCo calls) will now be redirected t
 
     Setting a custom handler using only ``set_log_handler`` only redirects **MuJoCo** messages
     to the user handler.
-    
+
     Any message emitted using ``log::`` invocations bypass the handler. This also applies
     to the internal invocations of MuJoCo-rs as well. For a custom callback of that, `a custom
     logger <https://docs.rs/log/0.4.34/log/#implementing-a-logger>`__ can be defined. Such logger

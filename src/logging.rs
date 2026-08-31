@@ -55,8 +55,7 @@ type LoggingHandler = fn(&MjLogMessage);
 /// [`install_logging_hook`] routes to the [`log`] crate instead.
 ///
 /// The MuJoCo handler is [`logging_hook`], which builds the [`MjLogMessage`] reference and then
-/// calls this handler. A [`LoggingHandler`] is a plain function pointer, so it fits in a pointer
-/// and needs no allocation.
+/// calls this handler.
 static USER_LOG_HANDLER: AtomicPtr<()> = AtomicPtr::new(ptr::null_mut());
 
 /// Guards the [`mju_setLogHandler`] call, so that the program writes the MuJoCo globals at most
@@ -67,8 +66,7 @@ static LOGGING_HOOK_INSTALLED: Once = Once::new();
 ///
 /// The function installs the same MuJoCo hook as [`install_logging_hook`], but `handler` replaces
 /// the built-in [`log`] routing of that hook.
-/// 
-/// 
+///
 /// # Clearing a handler
 /// To clear the user handler and restore routing to [`log`],
 /// call [`install_logging_hook`].
@@ -98,7 +96,7 @@ pub unsafe fn set_log_handler(handler: LoggingHandler) {
 /// Wraps [`mju_setLogHandler`].
 ///
 /// Also clears the handler set by [`set_log_handler`].
-/// For  structured [`MjLogMessage`] calls use [`set_log_handler`] instead,
+/// For structured [`MjLogMessage`] calls use [`set_log_handler`] instead,
 /// which installs the same hook and redirects messages to the user handler instead of the `log` crate.
 /// The hook maps the message like this:
 ///
@@ -114,11 +112,11 @@ pub unsafe fn set_log_handler(handler: LoggingHandler) {
 /// before any thread that steps a simulation, loads a model, or emits a message.
 ///
 /// # Notes
-/// A message with level [`MjtLogLevel::mjLOG_ERROR`] will exit the program with code 1, just like the default MuJoCo
-/// handler does, to prevent undefined behaviors that would arise due to MuJoCo erroring system
-/// assumptions.
+/// A message with level [`MjtLogLevel::mjLOG_ERROR`] will exit the program with code 1.
 ///
-/// [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) has no effect when this logging hook is installed.
+/// This call replaces MuJoCo's own handler, so the `logto_console`, `logto_file` and `logfile`
+/// fields of [`MjLogConfig`](crate::wrappers::mj_logging::MjLogConfig) no longer reach the output.
+/// It also enables every topic once, so a topic bitmask set before the call is lost.
 pub unsafe fn install_logging_hook() {
     USER_LOG_HANDLER.store(ptr::null_mut(), Ordering::Release);
     // SAFETY: the caller holds every thread that could use MuJoCo.

@@ -127,12 +127,6 @@ pub fn mujoco_version() -> &'static str {
     unsafe { CStr::from_ptr(arr).to_str().unwrap() }
 }
 
-/// Returns the version string of the MuJoCo library.
-#[deprecated(since = "3.0.0", note = "use `mujoco_version` instead")]
-pub fn get_mujoco_version() -> &'static str {
-    mujoco_version()
-}
-
 #[cfg(test)]
 mod tests {
     use crate::mujoco_version;

@@ -93,9 +93,8 @@ pub(crate) fn checked_c_len<T: TryFrom<usize>>(len: usize) -> T {
 
 /// Offsets a raw array pointer, keeping a null pointer null.
 ///
-/// MuJoCo leaves an arena pointer null until the stage that allocates the array, and every
-/// `PointerView` maps a null pointer to an empty slice. A plain `add` turns null into a non-null
-/// dangling address and so defeats that guard.
+/// A plain `add` turns null into a dangling address, which defeats the empty-slice guard that
+/// every `PointerView` applies to a null pointer.
 ///
 /// # Safety
 /// When `ptr` is not null, `ptr.add(offset)` must stay inside the same allocation.
@@ -936,10 +935,8 @@ macro_rules! array_slice_dyn {
             /// Touches the first and last element of every slice this block reaches through a safe
             /// accessor, on the read path and, where the setter is also safe, on the write path.
             ///
-            /// Exists for the sanitizers. A length that overruns its allocation faults here instead
-            /// of returning a plausible number. Each write restores the value it read, so no field
-            /// changes. Call this on a freshly built value, before any pipeline stage runs: a safe
-            /// accessor must be sound at that point.
+            /// Each write restores the value it read, so no field changes. Call this on a freshly
+            /// built value, before any pipeline stage runs.
             #[cfg(test)]
             pub(crate) fn $probe(&mut self) {
                 $(

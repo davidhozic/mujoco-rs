@@ -199,7 +199,7 @@ Here's an adapted excerpt from the :gh-example:`example <visualization/viewer/ru
 on how to use the viewer in a multi-threaded way:
 
 .. code-block:: rust
-    :emphasize-lines: 12-13, 18-22, 30-34
+    :emphasize-lines: 1-2, 12-13, 18-22, 31-33
 
     let model = Arc::new(MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model"));
     let mut data = MjData::new(model.clone());
@@ -371,8 +371,10 @@ This requires the ``M`` bound inside |mj_data| to be
 :docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut` (e.g., ``Box<MjModel>``).
 
 :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model` does all three in one
-call and also reloads the viewer's internal state when the model's ``signature()`` changed. It takes
-``&mut MjModel``, so the caller passes ``unsafe { data.model_mut() }``.
+call and also reloads the viewer's internal state when the incoming model is no longer compatible
+with the passive model
+(:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`). It
+takes ``&mut MjModel``, so the caller passes ``unsafe { data.model_mut() }``.
 
 
 .. _viewer_asset_reupload:
@@ -403,8 +405,9 @@ Both :docs-rs:`~mujoco_rs::viewer::<struct>MjViewer` and
   UV texture coordinates, face-vertex indices, face-normal indices, face-texcoord indices,
   and convex hull graph data), so ``update_meshes_from`` issues several array copies.
 
-Both call paths require ``model`` to be compatible with the viewer's internal passive model
-(:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`)
+Both call paths require ``model`` to be asset-compatible with the viewer's internal passive model
+(:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_asset_compatible_with_model`,
+which tests the mesh, texture and heightfield memory only, not the full model layout)
 and return ``Result<(), MjViewerError>`` ---
 :docs-rs:`~~mujoco_rs::viewer::<enum>MjViewerError::<variant>IncompatibleModel` is returned when
 the two models are not compatible, and

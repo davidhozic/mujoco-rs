@@ -618,18 +618,6 @@ impl MjRenderer {
         Ok(())
     }
 
-    /// Update the scene with new data and render it.
-    ///
-    /// # Panics
-    /// Panics if syncing the data or performing the render step fails (e.g. the OpenGL
-    /// context cannot be made current). Use [`MjRenderer::sync_data`] + [`MjRenderer::render`]
-    /// instead.
-    #[deprecated(note = "replaced with sync_data + render", since = "3.0.0")]
-    pub fn sync<M: ModelType>(&mut self, data: &mut MjData<M>) {
-        self.sync_data(data).unwrap();
-        self.render().unwrap();
-    }
-
     /// Return a flattened RGB image of the scene.
     pub fn rgb_flat(&self) -> Option<&[u8]> {
         self.rgb.as_deref()
@@ -651,7 +639,7 @@ impl MjRenderer {
     /// # Returns
     /// On success, returns [`Ok`] variant containing the rendered RGB image.
     /// # Errors
-    /// - [`RendererError::DimensionMismatch`] if `WIDTH * HEIGHT` doesn't match the rendered pixel count .
+    /// - [`RendererError::DimensionMismatch`] if `WIDTH * HEIGHT` doesn't match the rendered pixel count.
     /// - [`RendererError::RgbDisabled`] if RGB rendering is disabled.
     pub fn try_rgb<const WIDTH: usize, const HEIGHT: usize>(&self) -> Result<&[[[u8; 3]; WIDTH]; HEIGHT], RendererError> {
         if let Some(flat) = self.rgb_flat() {

@@ -28,7 +28,7 @@
 
 *Model-editing wrappers now expose polynomial stiffness and damping coefficients*
 
-- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsJoint`:
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsJoint`:
   ``stiffness`` and ``damping`` now expose coefficient arrays
   instead of scalar ``f64`` values.
 - |mjs_tendon|:
@@ -63,7 +63,7 @@
 - Updated FFI bindings and wrappers to match MuJoCo 3.8.0 headers.
 - |mj_model| now exposes the new joint, dof, tendon, and actuator coefficient
   arrays and actuator-linkage fields added in newer MuJoCo releases.
-  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator` now exposes its
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsActuator` now exposes its
   ``damping`` coefficient array and ``armature`` field.
 - :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtLRMode` is now exported for
   typed access to ``MjLROpt.mode``.

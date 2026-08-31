@@ -482,7 +482,7 @@ Type changes
   Replace ``data.runge_kutta(n)`` with ``data.runge_kutta(n as u32)`` at call sites.
   The function also now panics if ``n < 1`` (previously passed negative or zero values
   silently to MuJoCo C).
-- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>set_data`
   now requires ``T: bytemuck::NoUninit`` (add ``bytemuck`` to your dependencies if you
   call this method with a custom type, and derive or implement ``NoUninit`` for it).
 - ``MjTendonDataInfo``: ``J_rownnz``, ``J_rowadr``, and ``J_colind`` are no longer
@@ -987,8 +987,8 @@ Callers must ensure the model and data remain alive and at a stable address.
 ``MjsTendon::wrap`` / ``wrap_mut`` no longer return ``Option``
 --------------------------------------------------------------
 
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>wrap` and
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTendon::<method>wrap_mut` now return
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>wrap` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTendon::<method>wrap_mut` now return
 ``&MjsWrap`` / ``&mut MjsWrap`` instead of ``Option<&MjsWrap>`` / ``Option<&mut MjsWrap>``, and
 panic when the index is out of bounds. Drop the ``.unwrap()`` and make sure the index is
 ``< wrap_num()``, or use the new fallible ``try_wrap`` / ``try_wrap_mut``.

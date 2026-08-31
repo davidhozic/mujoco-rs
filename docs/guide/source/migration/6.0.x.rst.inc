@@ -12,7 +12,7 @@ update your library path. See :ref:`installation` for details.
 
 The FFI bindings follow the upstream API. This page gives no entry for an accessor that only
 mirrors a renamed, a removed or a resized MuJoCo field, and none for a shifted enum discriminant.
-For these changes, see MuJoCo's changelog for this release (and prior changelogs since MuJoCo 3.10.0+):
+For these changes, see MuJoCo's changelog for this release:
 https://mujoco.readthedocs.io/en/3.12.0/changelog.html
 
 
@@ -20,6 +20,80 @@ Minimum Rust version
 -----------------------
 
 This release needs Rust **1.95**, up from 1.88. Run ``rustup update stable`` before you build.
+
+
+Mutable body iteration
+---------------------------------------------------------
+
+|mj_spec| lost ``body_iter_mut``, and |mjs_body|'s ``body_iter_mut`` lost its ``recurse``
+argument. Every item a mutable iterator yields borrows its parent for the same lifetime, so all of
+them stay live together. A body owns a subtree, so both forms could hand out a body and that
+body's own descendant at once, and writing through the second handle broke the uniqueness that
+``&mut`` promises. Walk the tree instead: a child borrows its parent, so the two are never live
+together.
+
+.. code-block:: rust
+
+    // Before
+    for body in spec.body_iter_mut() {
+        body.set_gravcomp(1.0);
+    }
+
+    // After: the world body is the root of the walk. The prelude does not carry `MjsBody`.
+    // use mujoco_rs::wrappers::mj_editing::MjsBody;
+
+    fn walk(body: &mut MjsBody) {
+        body.set_gravcomp(1.0);
+        for child in body.body_iter_mut() {
+            walk(child);
+        }
+    }
+    walk(spec.world_body_mut());
+
+.. code-block:: rust
+
+    // Before
+    for body in world.body_iter_mut(true) { /* ... */ }
+
+    // After: `body_iter_mut` yields the direct children, so recurse by hand.
+    for body in world.body_iter_mut() { /* ... */ }
+
+Read-only iteration is unchanged. ``MjSpec::body_iter`` still walks every body flat, and
+``MjsBody::body_iter`` still takes ``recurse``, so a loop that only reads needs no edit beyond
+dropping ``_mut``.
+
+
+Items deprecated in 3.0.0 are removed
+---------------------------------------------------------
+Each one has carried a deprecation warning since 3.0.0. Switch to the replacement.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 50 50
+
+   * - Before
+     - After
+   * - ``mujoco_rs::get_mujoco_version()``
+     - ``mujoco_rs::mujoco_version()``
+   * - ``vfs.add_from_file(Some(dir), file)``
+     - ``vfs.add_file_from(dir, file)``
+   * - ``vfs.add_from_file(None, file)``
+     - ``vfs.add_file(file)``
+   * - ``renderer.sync(&mut data)``
+     - ``renderer.sync_data(&mut data)?; renderer.render()?``
+   * - ``MjvFigure::new()``
+     - ``MjvFigure::new_boxed()``
+   * - ``data.contacts()``
+     - ``data.contact()``
+   * - ``data.get_state(spec)``
+     - ``data.state(spec)``
+   * - ``skin.set_vertid(&ids)``
+     - ``skin.append_vertid(&ids)``
+   * - ``skin.set_vertweight(&weights)``
+     - ``skin.append_vertweight(&weights)``
+
+``MjRenderer::sync`` unwrapped both failures; ``sync_data`` and
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>render` return a ``Result`` each.
 
 
 Redundant dimension parameters removed
@@ -52,8 +126,7 @@ The variant is renamed in :docs-rs:`~mujoco_rs::error::<enum>MjDataError`,
 :docs-rs:`~mujoco_rs::error::<enum>MjModelError`,
 :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError` and
 :docs-rs:`~mujoco_rs::renderer::<enum>RendererError`. It now also fires for two models that share
-a signature but need different buffer sizes, so a program that treated an equal signature as
-"safe to pair" must handle the error on that path too.
+a signature but need different buffer sizes.
 
 **Before:**
 
@@ -211,10 +284,8 @@ engine write more force outputs than the actuator owns.
 Unsafe mutation of three more ``MjModel`` tables
 ------------------------------------------------
 ``tex_type_mut``, ``sensor_intprm_mut`` and ``flex_elemlayer_mut`` are now ``unsafe fn``, for the
-same reason as ``actuator_gaintype_mut`` above. C sizes a buffer or indexes an array from the
-values of all three: a texture kind sets how many faces the upload reads, a sensor int parameter
-selects the object a sensor stage reads, and an element layer sets how many flex faces the scene
-builder emits.
+same reason as ``actuator_gaintype_mut`` above: C sizes a buffer or indexes an array from the
+value of each one.
 
 **Before:**
 
@@ -238,12 +309,10 @@ builder emits.
 
 Drawing an ``MjvFigure`` is ``unsafe``
 --------------------------------------
-``draw`` is now an ``unsafe fn``. ``linepnt`` is a public field, and C reads ``linedata[n][2*i]``
-for every ``i < linepnt[n]`` without an upper-bound check, so an entry above ``mjMAXLINEPNT``
-read past the row. Validating it would scan all ``mjMAXLINE`` entries on a per-frame path, so the
-bound is a caller precondition. ``push`` refuses to grow a plot that is already at capacity, so a
-figure filled only through the line-editing methods already satisfies it; a direct write to the
-public ``linepnt`` field is what needs the care.
+``draw`` is now an ``unsafe fn``. Every ``linepnt`` entry must stay within ``0..=mjMAXLINEPNT``,
+and the bound is a caller precondition. ``push`` refuses to grow a plot that is already at
+capacity, so a figure filled only through the line-editing methods already satisfies it; a direct
+write to the public ``linepnt`` field is what needs the care.
 
 **Before:**
 
@@ -454,7 +523,7 @@ the lock.
     });
 
 Port the widgets themselves against egui's changelog:
-https://github.com/emilk/egui/blob/main/CHANGELOG.md
+https://github.com/emilk/egui/blob/0.36.1/CHANGELOG.md
 
 
 Model handles are bound by ``ModelType``
@@ -468,8 +537,10 @@ the same model, which the wrappers rely on but ``Deref`` alone does not give.
 
 ``&MjModel``, ``&mut MjModel``, ``Box<MjModel>``, ``Rc<MjModel>``, ``Arc<MjModel>``,
 ``Ref<MjModel>``, ``RefMut<MjModel>``, ``MutexGuard<MjModel>``, ``RwLockReadGuard<MjModel>`` and
-``RwLockWriteGuard<MjModel>`` implement the markers. Rename the bound in your own generic code, and
-claim the marker for a hand-written handle.
+``RwLockWriteGuard<MjModel>`` implement ``ModelType``. The five that deref mutably
+(``&mut MjModel``, ``Box<MjModel>``, ``RefMut<MjModel>``, ``MutexGuard<MjModel>`` and
+``RwLockWriteGuard<MjModel>``) also implement ``ModelTypeMut``. Rename the bound in your own
+generic code, and claim the marker for a hand-written handle.
 
 **Before:**
 
@@ -534,4 +605,129 @@ kind, and it bounds neither, so both now sit in the read-only list of their view
         // After
         // SAFETY: the caller keeps the kind consistent with the texture's own width and height.
         unsafe { info.view_mut(model).r#type.as_mut_slice()[0] = MjtTexture::mjTEXTURE_CUBE };
+    }
+
+Element handles are opaque types
+-------------------------------------------
+An ``Mjs*`` element handle is no longer an alias for its ``mujoco_c`` struct. It is an opaque,
+zero-sized type that stands at the address of that struct, so code that stays inside the wrapper
+API needs no edit, with one exception: ``MjSpec::with_compiler`` is gone, because a by-value
+builder cannot take an opaque handle.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn build() -> MjSpec {
+        let mut spec = MjSpec::new();
+
+        // Before
+        // let spec = spec.with_compiler(compiler);
+
+        // After
+        spec.compiler_mut().set_degree(false);
+        spec
+    }
+
+Two things change. Naming the FFI struct where the handle belongs no longer compiles, and passing
+a handle straight to a ``mujoco_c`` function no longer coerces. Call ``ffi`` for the FFI struct,
+and ``unsafe fn ffi_mut`` for writing.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+    use mujoco_rs::mujoco_c::mjs_sensorDim;
+
+    fn dimension(spec: &MjSpec) -> i32 {
+        let sensor = spec.sensor("s").unwrap();
+
+        // Before
+        // unsafe { mjs_sensorDim(sensor) }
+
+        // After
+        // SAFETY: the borrow of the sensor keeps it alive for the call.
+        unsafe { mjs_sensorDim(sensor.ffi()) }
+    }
+
+``std::mem::swap`` on two handles used to exchange the contents of two elements. It now
+exchanges nothing.
+
+``MjSpec`` is no longer ``Send``
+-------------------------------------------
+A model that attaches another model, through ``<asset><model file=.../></asset>``, keeps the child
+specification shared between a spec and every clone of it, behind a reference count that MuJoCo
+does not synchronise. Keep the specification on one thread and move the compiled |mj_model|, which
+stays ``Send`` and ``Sync``.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn build(path: &str) -> MjModel {
+        let mut spec = MjSpec::from_xml(path).unwrap();
+
+        // Before
+        // std::thread::spawn(move || spec.compile().unwrap()).join().unwrap()
+
+        // After
+        let model = spec.compile().unwrap();
+        std::thread::spawn(move || model).join().unwrap()
+    }
+
+``MjsWrap::side_site_mut`` is removed
+-------------------------------------------
+Read the name through the shared ``side_site`` and take the mutable borrow from the specification.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn widen(spec: &mut MjSpec) {
+        // Before
+        // let site = spec.tendon_mut("t").unwrap().wrap_mut(0).side_site_mut().unwrap();
+        // site.with_size([0.1, 0.1, 0.1]);
+
+        // After
+        let name = spec.tendon("t").unwrap().wrap(0).side_site().unwrap().name().to_owned();
+        spec.site_mut(&name).unwrap().with_size([0.1, 0.1, 0.1]);
+    }
+
+``MjsPlugin`` no longer stands for the plugin that an element embeds
+----------------------------------------------------------------------
+A body, geom, mesh, actuator and sensor embed a reference that names a plugin instance and carries
+no element of its own. The ``plugin`` and ``plugin_mut`` accessors return ``MjsPluginReference``,
+which implements no ``SpecItem`` method. Reach the instance itself through ``MjSpec::plugin``.
+
+.. code-block:: rust
+
+    use mujoco_rs::wrappers::mj_editing::MjsPluginReference;
+    use mujoco_rs::prelude::*;
+
+    fn configure(spec: &mut MjSpec) {
+        let geom = spec.world_body_mut().add_geom();
+
+        // Before
+        // let plugin: &mut MjsPlugin = geom.plugin_mut();
+
+        // After
+        let plugin: &mut MjsPluginReference = geom.plugin_mut();
+        plugin.set_name("instance");
+        plugin.set_active(true);
+    }
+
+``delete`` moved from ``SpecItem`` to ``SpecObject``
+----------------------------------------------------------------------
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecObject::<method>delete` keeps the shape of
+the removed ``SpecItem::delete``, so a call through the element handle needs no edit. Import
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecObject`, which ``mujoco_rs::prelude`` also
+exports.
+
+``MjSpec::delete_element`` is deprecated. Delete through the handle instead.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn prune(spec: &mut MjSpec) {
+        unsafe { spec.geom_mut("g0").unwrap().delete() }.unwrap();
     }

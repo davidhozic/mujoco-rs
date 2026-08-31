@@ -3,6 +3,29 @@
 
 .. rubric:: Breaking changes
 
+*Mutable body iteration is restricted to a tree walk*
+
+- Patched undefined-behavior cases by making
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec` no longer carry ``body_iter_mut``,
+  and :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>body_iter_mut` no
+  longer taking the ``recurse`` argument. This now makes them yield only their direct children.
+  Reach a body through
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>world_body_mut` and walk
+  down. Immutable iteration is unchanged, and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>body_iter` keeps
+  ``recurse``. See :ref:`migrate_6_0_0`.
+
+*The items deprecated in 3.0.0 are removed*
+
+- ``mujoco_rs::get_mujoco_version`` (:docs-rs:`~mujoco_rs::<fn>mujoco_version`), |mj_vfs|'s
+  ``add_from_file`` (:docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>add_file`
+  and :docs-rs:`~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>add_file_from`),
+  ``MjRenderer::sync`` (:docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`), ``MjvFigure::new``
+  (:docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`), |mj_data|'s ``contacts``
+  and ``get_state``, and ``MjsSkin::set_vertid`` and ``MjsSkin::set_vertweight``
+  (:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsSkin`) are gone.
+  See :ref:`migrate_6_0_0`.
+
 *Minimum-supported Rust version (MSRV) raised to 1.95*
 
 - `egui <https://docs.rs/egui/0.36.1/egui/>`_ 0.36 requires Rust 1.95, so the MSRV rose from 1.88
@@ -13,9 +36,9 @@
 - The :ref:`mj_rust_viewer` now builds against ``egui`` 0.36, which it re-exports as
   ``mujoco_rs::viewer::egui``. Custom UI code must be ported to the new ``egui`` API,
   see :ref:`migrate_6_0_0`. For the upstream changes, see egui's changelog:
-  https://github.com/emilk/egui/blob/main/CHANGELOG.md
+  https://github.com/emilk/egui/blob/0.36.1/CHANGELOG.md
 
-*UI callbacks receive a* `egui::Ui <https://docs.rs/egui/0.36.1/egui/struct.Ui.html>`_ *and the shared state*
+*UI callbacks receive an* `egui::Ui <https://docs.rs/egui/0.36.1/egui/struct.Ui.html>`_ *and the shared state*
 
 - The closure passed to
   :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>add_ui_callback` now receives
@@ -38,9 +61,8 @@
 *MuJoCo FFI upgraded to 3.12.0*
 
 - MuJoCo-rs now builds against MuJoCo 3.12.0 FFI, which rolls up the upstream 3.10.0,
-  3.11.0 and 3.12.0 releases. This is a breaking dependency-level change for consumers
-  tied to older MuJoCo C ABI details.
-  This directly affects all the wrappers, separate changelog will not be provided. 
+  3.11.0 and 3.12.0 releases.
+  This directly affects all the wrappers, separate changelog will not be provided.
   See MuJoCo's changelog for this release:
   https://mujoco.readthedocs.io/en/3.12.0/changelog.html
 
@@ -84,20 +106,19 @@
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>DcMotorConfig::<method>with_ctrlspec`,
   following the renamed :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjs_setToDCMotor` parameter. The value
   is now a bitmask of :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtCtrlInput` values instead
-  of a single mode selector. MuJoCo 3.12.0 also moved the ``dcmotor`` controller gains from voltage space to torque
-  space, so the same ``controller`` array now gives a different force. The old velocity mode's
-  integrated-velocity term is gone.
+  of a single mode selector. MuJoCo 3.12.0 also moved the ``dcmotor`` controller gains from
+  voltage space to torque space, so the same ``controller`` array now gives a different force.
+  The old velocity mode's integrated-velocity term is gone.
 
 *Relaxed* |mj_data| ``body_awake`` *view mutability*
 
-- The body views now hold ``awake`` as a :docs-rs:`~mujoco_rs::util::<struct>PointerViewMut`, which
-  matches the array accessor, already safe to mutate. Code that wrote through ``as_mut_slice`` must
-  drop the call and the surrounding ``unsafe``.
+- The body views now hold ``awake`` as a :docs-rs:`~mujoco_rs::util::<struct>PointerViewMut`. Code
+  that wrote through ``as_mut_slice`` must drop the call and the surrounding ``unsafe``.
 
 ``SpecItem::default`` *returns an* ``Option``
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>default` now returns
-  ``Option<&MjsDefault>`` (:docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsDefault`). Handle
+  ``Option<&MjsDefault>`` (:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsDefault`). Handle
   the ``None`` case.
 
 *Changed* |mjr_context| ``set_buffer`` *parameter type*
@@ -127,8 +148,7 @@
 - The model-handle generic ``M`` is now bound by the ``unsafe`` marker traits
   :docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelType` :sup:`new` and
   :docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut` :sup:`new`, instead of
-  ``Deref<Target = MjModel>`` and ``DerefMut<Target = MjModel>``. A handle whose ``deref`` returns
-  a different model each time can no longer reach the wrappers from safe code. Every standard
+  ``Deref<Target = MjModel>`` and ``DerefMut<Target = MjModel>``. Every standard
   handle implements the markers, so only code that spells the bound or defines its own handle
   needs an edit, see :ref:`migrate_6_0_0`.
 
@@ -137,17 +157,13 @@
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tex_type_mut`,
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>sensor_intprm_mut` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_elemlayer_mut` are now
-  ``unsafe fn``, which every neighbouring field in each of the three tables already was. C sizes a
-  buffer or indexes an array from the values of all three without an upper-bound check, so a safe
-  write reached memory outside that buffer. Wrap the call in an ``unsafe`` block and uphold the C
-  invariant, see :ref:`migrate_6_0_0`.
+  ``unsafe fn``. Wrap the call in an ``unsafe`` block and uphold the C invariant,
+  see :ref:`migrate_6_0_0`.
 
 *Drawing an* ``MjvFigure`` *became* ``unsafe``
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>draw` is now an
-  ``unsafe fn``. ``linepnt`` is a public field and C reads ``linedata`` up to that count without
-  an upper-bound check, so an oversized entry read past the row. Checking it would scan every
-  line on a per-frame path, so the bound is a caller precondition, see :ref:`migrate_6_0_0`.
+  ``unsafe fn``. The ``linepnt`` bound is a caller precondition, see :ref:`migrate_6_0_0`.
 
 *Sixteen* |mj_data| *arena accessors became* ``unsafe``
 
@@ -170,9 +186,8 @@
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_j_rowsuper`,
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_j_colind`
 
-  MuJoCo allocates each of these arrays in the ``mjData`` arena and never zeroes it, so a read
-  taken before the pipeline stage that computes the array returns uninitialized memory. Run that
-  stage first, see :ref:`migrate_6_0_0`.
+  A read taken before the pipeline stage that computes the array returns uninitialized memory.
+  Run that stage first, see :ref:`migrate_6_0_0`.
 
 *Two model view fields moved to the read-only list*
 
@@ -180,9 +195,48 @@
   ``type`` on :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTextureModelViewMut` are now
   :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`, matching the array accessors
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>sensor_intprm_mut` and
-  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tex_type_mut`. MuJoCo reads
-  both values as unchecked sizes, so writing one needs ``as_mut_slice`` and explicit ``unsafe``,
-  see :ref:`migrate_6_0_0`. ``zero`` no longer touches either field.
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tex_type_mut`. Writing one
+  now needs ``as_mut_slice`` and explicit ``unsafe``, see :ref:`migrate_6_0_0`. ``zero`` no longer
+  touches either field.
+
+*Element handles are opaque types*
+
+- Every ``Mjs*`` element handle is now an opaque, zero-sized struct instead of an alias for the
+  matching ``mujoco_c`` struct; |mjs_body| and
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsDefault` are examples. It exposes its FFI
+  struct through ``ffi`` for reading and ``unsafe fn ffi_mut`` for writing, so code that hands a
+  handle to a ``mujoco_c`` function needs an edit, see :ref:`migrate_6_0_0`. ``std::mem::swap`` on
+  two handles used to exchange the contents of two elements; it now exchanges nothing.
+- |mj_spec| lost ``with_compiler``, because a by-value builder cannot take an opaque handle. Reach
+  the compiler options through
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compiler_mut`, see
+  :ref:`migrate_6_0_0`.
+
+|mj_spec| *is no longer* ``Send``
+
+- A model that attaches another model keeps the child specification shared between a spec and every
+  clone of it, behind a reference count that MuJoCo does not synchronize.
+
+|mjs_wrap| *lost* ``side_site_mut``
+
+- The shared :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsWrap::<method>side_site` stays.
+  Mutable references to sites are available through
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>site_mut`, see
+  :ref:`migrate_6_0_0`.
+
+|mjs_plugin| *no longer stands for the plugin that an element embeds*
+
+- The ``plugin`` and ``plugin_mut`` accessors of a body, geom, mesh, actuator and sensor now hand
+  out :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsPluginReference` :sup:`new`.
+  See :ref:`migrate_6_0_0`.
+
+``delete`` *moved from* :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem` *to*
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecObject`
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecObject::<method>delete` :sup:`new` stays
+  ``unsafe`` and is no longer deprecated. A default class and a tendon wrap are no ``SpecObject``,
+  so a deletion that MuJoCo cannot carry out is now a compile error instead of an error value.
+  See :ref:`migrate_6_0_0`.
 
 .. rubric:: New dependencies
 
@@ -190,6 +244,9 @@
 
 .. rubric:: Deprecations
 
+- Deprecated |mj_spec|'s
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`. Call
+  ``SpecObject::delete`` on the element handle instead.
 - Deprecated |mj_model|'s
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>try_clone` --- its
   :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>AllocationFailed` arm is
@@ -201,14 +258,14 @@
 
 - Deprecated |mj_spec|'s
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>try_new`,
-  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>try_add_frame` on |mjs_body|
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>try_add_frame` on |mjs_body|
   and |mjs_frame|, and every
   macro-generated ``try_add_*`` element constructor on |mj_spec|, |mjs_body| and |mjs_frame| ---
   their :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>AllocationFailed` arm is
   unreachable. Use ``new`` and the
   panicking ``add_*`` methods instead.
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>try_add_default` and
-  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>try_add_flexcomp` keep their
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>try_add_flexcomp` keep their
   ``Result``: MuJoCo does report a duplicate class name and a failed flex build.
 
 .. rubric:: New features and improvements
@@ -217,9 +274,7 @@
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`
   :sup:`new` reports whether another |mj_model| can take the place of this one in an |mj_data| or
-  in a cached ``Info``. It compares the structure of the two models: the per-element tables and
-  types that place each element inside a packed array and fix what its state means, plus every
-  size that no table already determines.
+  in a cached ``Info``.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_asset_compatible_with_model`
   :sup:`new` is the weaker test the asset-upload methods need: it compares the mesh, texture and
   heightfield memory alone.
@@ -230,10 +285,8 @@
   holds. Use them to decide whether a scene needs to be rebuilt before an update or a merge.
 - Every ``Info`` gained an ``update_layout`` method, for example
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjBodyDataInfo::<method>update_layout`
-  :sup:`new`. After a model swap an ``Info`` compares the whole cached layout on every view; call
-  ``update_layout`` once against the new |mj_data| or |mj_model| to make that test a pointer
-  comparison again. It reports the same error as a view method when the new model is not
-  compatible.
+  :sup:`new`. Call ``update_layout`` once against the new |mj_data| or |mj_model| after a model
+  swap. It reports the same error as a view method when the new model is not compatible.
 
 *Viewer improvements*
 
@@ -241,9 +294,8 @@
   the left screen-edge, so the panel no longer needs the keyboard. The ``X`` key still toggles
   it. The panel now slides with an animation when it opens or closes.
 - The "Joint" window now lists every joint, and each joint is a collapsible section like an
-  actuator in the "Actuator" window. A ball joint and a free joint show all their position
-  components in one horizontal row, named ``x``, ``y``, ``z`` and ``qw``, ``qx``, ``qy``, ``qz``.
-  The window listed a slide joint and a hinge joint only before.
+  actuator in the "Actuator" window. The window listed a slide joint and a hinge joint only
+  before.
 - Each component of the "Joint" window now writes ``qpos``, so the window moves the model. The
   window was read-only before. A limited joint gets the joint limit as its slider range. Without
   a limit, a slide joint spans -1 to 1 and a hinge joint spans -pi to pi, as in MuJoCo's own
@@ -294,8 +346,8 @@
     :docs-rs:`~mujoco_rs::logging::<fn>install_logging_hook` :sup:`new` installs a hook for
     ``log`` routing.
     :docs-rs:`~mujoco_rs::logging::<fn>set_log_handler` :sup:`new` registers a user handler.
-  - MuJoCo-rs now reports its own events to the ``log`` crate as well, on the ``Info``, ``Warn``
-    and ``Error`` levels, with the emitting module path as the target.
+  - MuJoCo-rs now reports its own events to the ``log`` crate as well, on the ``Debug``, ``Info``,
+    ``Warn`` and ``Error`` levels, with the emitting module path as the target.
 
 *New compilation-warning accessors*
 
@@ -337,10 +389,11 @@
 
 - |mjs_body|:
 
-  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsBody::<method>add_flexcomp` :sup:`new` (and the
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_flexcomp` :sup:`new` (and the
     fallible ``try_add_flexcomp``), wrapping :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjs_makeFlex` to
     procedurally create a flex with auto-generated bodies, joints, and optional equality constraints
-    (the programmatic equivalent of the ``flexcomp`` element). The generation is configured through the new
+    (the programmatic equivalent of the ``flexcomp`` element). The generation is configured
+    through the new
     :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjFlexcompConfig` :sup:`new` builder.
 
 *New type aliases*
@@ -362,11 +415,11 @@
 
 - |mjs_actuator|:
 
-  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator::<method>set_to_pid` :sup:`new`,
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsActuator::<method>set_to_pid` :sup:`new`,
     wrapping :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjs_setToPID`, makes the actuator a PID controller
     on a single force output. The controller is configured through the new
     :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>PidConfig` :sup:`new` builder.
-  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsActuator::<method>set_to_orientation`
+  - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsActuator::<method>set_to_orientation`
     :sup:`new`, wrapping :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjs_setToOrientation`, makes the
     actuator a geodesic PD orientation servo on a ball joint or a site. It is configured through the
     new
@@ -397,8 +450,6 @@
   rejects a history payload whose ring-buffer cursor falls outside ``0..nsample``, and leaves the
   history buffer unchanged. It reports the new
   :docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>InvalidHistoryCursor` :sup:`new`.
-  MuJoCo reads the buffer at ``(cursor + 1 + logical) % nsample``, and C's ``%`` keeps the sign of
-  its left operand, so a cursor below zero produced a negative index.
 - The matrix helpers of :docs-rs:`mujoco_rs::wrappers::fun::utility` now reject a dimension above
   ``i32::MAX`` and a size product that overflows, instead of passing a wrapped size to MuJoCo.
 - A view of a |mj_data| field that MuJoCo allocates in the arena is now empty until the stage that
@@ -408,8 +459,7 @@
 *Viewer*
 
 - The viewer runs a forward step on the data it builds for a new model, so the first frame after
-  a model load or swap no longer draws every geom collapsed at the origin. A fresh |mj_data| has a
-  zeroed ``geom_xpos``, which the scene update copies verbatim.
+  a model load or swap no longer draws every geom collapsed at the origin.
 - The viewer no longer clamps ``ctrl`` to the range of its slider. While the "Actuator" window
   was open, it wrote the clamped control back on every frame, so a program that set a control
   outside the slider range lost that value.
@@ -419,15 +469,10 @@
   through :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>sync_data`. The click is dropped
   while the scene still follows the previous model.
 - The viewer's side panel and its windows can no longer panic, or write to the wrong actuator,
-  joint or equality, when a model swap through ``sync_data`` arrives in the same frame. Each
-  section now draws and writes only while the viewer still holds the model that the frame's
-  widgets belong to, and the next frame rebuilds it against the new model.
+  joint or equality, when a model swap through ``sync_data`` arrives in the same frame.
 - A model swap no longer discards the change that a program makes to the new model's ``opt``,
   ``vis`` or ``stat`` before the next
-  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model`. The viewer
-  measured such a change against the parameters of the model it held before the swap, so it read
-  the difference between the two models as its own edit and wrote that back over the program's
-  value.
+  :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>sync_model`.
 - The viewer no longer applies a pending camera tracking selection to a body of the previous model
   after a model swap. A selection that the "Track" dialog left open held a body id that addresses
   a different body in the new model, so the camera followed that one instead.
@@ -440,16 +485,15 @@
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_to`,
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to`,
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_state_from_data` and in
-  every ``Info`` view method. All of them compared the model signature alone, which pins the
-  element tree but no ``mjData`` buffer size, so a model with a larger ``nuserdata``, ``na`` or
-  ``nout`` passed the test. The ``MjData`` methods now test
+  every ``Info`` view method. All of them compared the model signature alone. The ``MjData``
+  methods now test
   ``MjModel::is_compatible_with_model``, which also compares the per-element address tables; an
   ``Info`` view method compares the model layout it cached.
 - The viewer and the renderer no longer test the signature either. ``MjViewer::sync_data`` and
   ``MjViewer::sync_model`` test model compatibility, so a model that needs different buffers
   triggers a reload rather than a copy into the wrong sizes. The viewer's asset-upload methods
-  test the mesh, texture and heightfield memory alone, which is all a copy that overrides an asset
-  reads, so they accept a model whose ``mjData`` sizes differ.
+  test the mesh, texture and heightfield memory alone, so they accept a model whose ``mjData``
+  sizes differ.
 
 *Ray casting*
 
@@ -459,8 +503,7 @@
   direction.
 - ``multi_ray`` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_multi_ray` no longer report
-  geom ``0`` for such a direction. MuJoCo leaves the id unwritten, so the returned id was the
-  initial value of the buffer; it is now ``None``.
+  geom ``0`` for such a direction; the returned id is now ``None``.
 
 *Visualization*
 
@@ -484,61 +527,50 @@
   the scene was created for.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>create_geom` now
   writes every field that :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjv_initGeom` leaves unwritten over
-  uninitialized memory: ``objtype`` becomes
-  :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtObj::<variant>mjOBJ_UNKNOWN`, ``objid``
-  becomes ``-1``, ``category`` becomes
-  :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjtCatBit::<variant>mjCAT_DECOR`,
-  ``segid`` becomes the geom's own index, and ``label``, ``camdist`` and ``transparent`` are
-  cleared. The renderer uses ``objid`` as an unchecked index into the skin and flex arrays, and it
-  casts no shadow for a ``mjCAT_DECOR`` geom.
+  uninitialized memory. ``category`` becomes
+  :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjtCatBit::<variant>mjCAT_DECOR`, and a
+  ``mjCAT_DECOR`` geom casts no shadow.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>new` now clears the
   geom, flex and skin buffers that :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjv_makeScene` allocates but
-  never writes. The scene's slice accessors are safe, so a read before the first render returned
-  uninitialized memory; it now returns zeros.
+  never writes. A read before the first render returned uninitialized memory; it now returns
+  zeros.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>set_at` now treats a
-  negative ``linepnt`` entry as an empty plot. The count is public, and casting a negative value to
-  ``usize`` made the range test pass, so the call wrote outside the plot's data range.
+  negative ``linepnt`` entry as an empty plot, instead of writing outside the plot's data range.
 - :docs-rs:`~mujoco_rs::vis_common::<fn>sync_geoms` now panics when the two scenes were created for
-  models that are not compatible. A copied geom keeps its ``objid``, which the renderer uses as an
-  unchecked index into the destination scene's flex and skin arrays.
+  models that are not compatible.
 
 *Rendering*
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>read_pixels` no longer
-  wraps when the pixel count, or the ``rgb`` byte count that is three times it, overflows
-  ``usize`` on a 32-bit target, which let a short ``rgb`` or ``depth`` buffer pass the size
-  check; it reports
-  :docs-rs:`~mujoco_rs::error::<enum>MjrContextError::<variant>InvalidViewport` instead.
+  wraps when the pixel count or the ``rgb`` byte count overflows ``usize`` on a 32-bit target; it
+  reports :docs-rs:`~mujoco_rs::error::<enum>MjrContextError::<variant>InvalidViewport` instead.
 - :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new` no longer truncates its
-  ``width``, ``height`` and ``max_user_geom`` arguments, which turned a value above ``u32::MAX``
-  into a small valid one, so the renderer used a size or a geom capacity the caller never asked
-  for. The three arguments now saturate at ``u32::MAX``.
+  ``width``, ``height`` and ``max_user_geom`` arguments; they now saturate at ``u32::MAX``.
 
 *Model editing*
 
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>id` now returns ``None``
   for a default class.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element` now reports
-  :docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>UnsupportedOperation` for a default
-  class of this spec, instead of
-  :docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>DeleteFailed`, and no
-  longer panics on an element whose stored name is not valid UTF-8. It also reports
-  ``UnsupportedOperation`` for a frame and for a tendon wrap.
-- Closed a crash reachable from safe code when naming a tendon wrap. ``mjCWrap`` leaves its element
-  type at ``mjOBJ_UNKNOWN``, which makes MuJoCo's duplicate-name check index a null list, so
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecObject::<method>delete` now reports
+  :docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>UnsupportedOperation` for a frame and
+  for the world body. MuJoCo reported success for both and left the specification corrupted.
+- Closed a crash reachable from safe code when naming a tendon wrap:
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name` on a |mjs_wrap|
   now reports ``UnsupportedOperation`` and
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_name` panics. A wrap
   carries no name of its own:
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>name` reports the wrapped
   object's name.
+- Closed a heap over-read reachable from safe code in
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile`. It now rejects a
+  texture whose ``nchannel``, ``width`` or ``height`` is negative, and one whose
+  ``nchannel * width * height`` product does not fit in an ``i32``.
 
 *Utility functions*
 
 - Closed a division by zero and a non-terminating loop reachable from safe code in
-  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_halton`: MuJoCo divides by ``base`` without
-  checking it, so ``base = 0`` divided by zero and ``base = 1`` never returned. The wrapper now
-  panics unless ``base`` is 2 or more.
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_halton`: the wrapper now panics unless
+  ``base`` is 2 or more.
 - Closed a heap buffer overflow reachable from safe code in
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_zero`,
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_copy`,
@@ -547,23 +579,23 @@
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_eye`,
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_mul_mat_mat`,
   :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_mul_mat_t_mat`,
-  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sqr_mat_td` and
-  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sym2dense`. Each of them reaches a C
-  ``memset`` whose byte count comes from a signed ``int``, so a destination above ``i32::MAX``
-  elements truncated to a negative count and cleared far past the buffer. They now panic on such a
-  destination. The other wrappers in the module take the length in a loop counter, where a
-  truncated count only shortens the work, and they are unchanged.
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sqr_mat_td`,
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_sym2dense` and
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_symmetrize`. They now panic on a
+  destination above ``i32::MAX`` elements.
 - Closed a heap buffer overflow reachable from safe code in
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsHfield::<method>set_userdata` and
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<type>MjsTexture::<method>set_data`. Both give the
-  slice length to C++ as a signed ``int``, and a slice above ``i32::MAX`` elements truncated to a
-  negative count, which C++ turned into an out-of-range pointer or an enormous allocation. They now
-  panic on such a slice.
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsHfield::<method>set_userdata` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>set_data`. They now
+  panic on a slice above ``i32::MAX`` elements.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>new` now checks
   ``max_geom`` in a release build as well. The check was a ``debug_assert!``, so a release build
   passed a truncated capacity to MuJoCo and allocated a smaller scene than the caller asked for.
 
 .. rubric:: Other changes
+
+- The :gh-example:`Basic model editing <model_editing/model_editing.rs>` example now builds three
+  swinging pendulum chains instead of overlapping balls, and walks the finished body tree to shade
+  each link by its depth. The old model stood still and showed nothing.
 
 - Following the reworked FFI struct field-visibility rules, the fields of
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<type>MjsOrientation` (``type_``, ``axisangle``,

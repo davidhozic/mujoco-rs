@@ -107,7 +107,7 @@ impl MjrContext {
     /// this function. Calling without an active GL context causes MuJoCo to abort the process.
     /// The same GL context must also remain current when this `MjrContext` is dropped, and must
     /// remain on the same thread for the lifetime of this value.
-    /// 
+    ///
     /// Any models used in the methods of [`MjrContext`] must be structurally
     /// compatible with the `model`. The methods will not check compatibility
     /// on their own.

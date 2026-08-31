@@ -96,23 +96,6 @@ impl MjVfs {
         }
     }
 
-    /// Adds a file from disk to the virtual file system.
-    /// # Returns
-    /// `Ok(())` on success.
-    /// # Errors
-    /// - [`MjVfsError::AlreadyExists`] if a file with the same name already exists in the VFS.
-    /// - [`MjVfsError::LoadFailed`] if the file could not be loaded.
-    /// - [`MjVfsError::Unknown`] for unrecognized MuJoCo return codes.
-    /// # Panics
-    /// When `directory` or `filename` contain interior `\0` characters.
-    #[deprecated(since = "3.0.0", note = "use `add_file` or `add_file_from` instead")]
-    pub fn add_from_file(&mut self, directory: Option<&str>, filename: &str) -> Result<(), MjVfsError> {
-        match directory {
-            Some(d) => self.add_file_from(d, filename),
-            None => self.add_file(filename),
-        }
-    }
-
     /// Adds a file from disk to the virtual file system, searching in `directory`.
     /// # Returns
     /// `Ok(())` on success.
@@ -526,29 +509,6 @@ mod tests {
         // PathBuf, &Path
         vfs = MjVfs::new();
         vfs.add_file_from(PathBuf::from("./"), Path::new(FILE)).unwrap();
-        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
-
-        fs::remove_file(FILE).expect("could not clean up temp file");
-    }
-
-    /// The deprecated `add_from_file` still delegates correctly.
-    #[test]
-    fn test_vfs_deprecated_add_from_file() {
-        const FILE: &str = "mujoco-rs-deprecated-add-from-file.xml";
-        fs::write(FILE, RAW_FILE_DATA).expect("could not write temp file");
-
-        let mut vfs;
-
-        // With directory (delegates to add_file_from)
-        vfs = MjVfs::new();
-        #[allow(deprecated)]
-        vfs.add_from_file(Some("./"), FILE).unwrap();
-        assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
-
-        // Without directory (delegates to add_file)
-        vfs = MjVfs::new();
-        #[allow(deprecated)]
-        vfs.add_from_file(None, FILE).unwrap();
         assert!(MjModel::from_xml_vfs(FILE, &vfs).is_ok());
 
         fs::remove_file(FILE).expect("could not clean up temp file");

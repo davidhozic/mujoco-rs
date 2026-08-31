@@ -17,23 +17,21 @@ macro_rules! default_accessor_wrapper {
             pub fn $name(&self) -> &[<Mjs $name:camel>] {
                 // SAFETY: MuJoCo's mjCDef::PointToLocal() always initializes these
                 // pointers to non-null addresses of the owning mjCDef's local members.
-                unsafe { &*self.$name }
+                unsafe { [<Mjs $name:camel>]::from_ffi_ptr(self.ffi().$name) }.unwrap()
             }
 
             #[doc = concat!("Returns a mutable reference to ", stringify!($name), "'s defaults.")]
             pub fn [<$name _mut>](&mut self) -> &mut [<Mjs $name:camel>] {
                 // SAFETY: see above.
-                unsafe { &mut *self.$name }
+                unsafe { [<Mjs $name:camel>]::from_ffi_ptr_mut(self.ffi().$name) }.unwrap()
             }
         )*
     }};
 }
 
-// This is implemented manually since we can't directly borrow check if something is using the default.
-// We also override the delete method to return an error instead of deleting.
-
-/// Default specification. This is a type alias to [`mjsDefault`].
-pub type MjsDefault = mjsDefault;
+mjs_opaque!(MjsDefault <= mjsDefault,
+    "Default specification. An opaque handle for the FFI type [`mjsDefault`], reached through \
+[`ffi`](Self::ffi).");
 
 impl MjsDefault {
     default_accessor_wrapper! {
@@ -46,26 +44,20 @@ impl super::traits::sealed::Sealed for MjsDefault {}
 
 impl SpecItem for MjsDefault {
     fn element_pointer(&self) -> *const mjsElement {
-        self.element
+        self.ffi().element
     }
 
     fn default(&self) -> Option<&MjsDefault> {
         Some(self)
     }
 
-    /// MuJoCo exposes no id accessor for a default class.
-    ///
-    /// Always returns `None`.
+    /// A default class carries no id. Always returns `None`.
     fn id(&self) -> Option<usize> {
-        // mjs_getId casts to mjCBase, but mjCDef derives from mjsElement directly, so the cast
-        // would read an unrelated offset instead of an id.
+        // mjCDef derives from mjsElement, not mjCBase, so mjs_getId would read an unrelated offset.
         None
     }
 
-    /// `MjsDefault` cannot be assigned to a named default class.
-    ///
-    /// This override always returns [`MjEditError::UnsupportedOperation`] without using
-    /// `class_name` or performing any operation.
+    /// A default class cannot be assigned to another default class.
     ///
     /// # Errors
     /// Always returns [`MjEditError::UnsupportedOperation`].
@@ -73,39 +65,11 @@ impl SpecItem for MjsDefault {
         Err(MjEditError::UnsupportedOperation)
     }
 
-    /// `MjsDefault` cannot be assigned to a named default class.
-    ///
-    /// This override always returns [`MjEditError::UnsupportedOperation`] without using
-    /// `class_name` or performing any operation.
+    /// A default class cannot be assigned to another default class.
     ///
     /// # Errors
     /// Always returns [`MjEditError::UnsupportedOperation`].
     fn with_default(&mut self, _class_name: &str) -> Result<&mut Self, MjEditError> {
         Err(MjEditError::UnsupportedOperation)
     }
-
-    /// This crate does not delete a default class through the item itself.
-    ///
-    /// # Deprecated
-    /// This API is deprecated and will be removed in a future release.
-    /// Use [`MjSpec::delete_element`](super::MjSpec::delete_element) instead.
-    ///
-    /// This override always returns [`MjEditError::UnsupportedOperation`] without performing
-    /// any operation, so the post-deletion use-after-free restriction from [`SpecItem::delete`]
-    /// does not apply; `self` remains valid after an `Err` return.
-    ///
-    /// # Errors
-    /// This will always error with [`MjEditError::UnsupportedOperation`].
-    ///
-    /// # Safety
-    /// No unsafe operations are performed; the struct is unchanged on return.
-    unsafe fn delete(&mut self) -> Result<(), MjEditError> {
-        Err(MjEditError::UnsupportedOperation)
-    }
 }
-
-// MjsDefault is intentionally NEITHER Send NOR Sync, for the same reason as the Mjs*
-// element handles: it is a raw pointer into the shared mjSpec arena and its `&mut self`
-// mutators reach into model-global state. The raw-pointer field already makes it
-// auto-`!Send + !Sync`; do NOT add `unsafe impl Send`/`Sync` here. The owning `MjSpec`
-// remains `Send` (but not `Sync`), so the spec itself can still move between threads.

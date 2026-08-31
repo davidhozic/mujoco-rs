@@ -372,9 +372,8 @@ impl ViewerUI {
                         .map(Cow::Borrowed)
                         .or_else(|| (num_inputs > 1).then(|| Cow::Owned(idx_in.to_string())));
 
-                    // The range array holds one entry for each control, not for each actuator.
-                    // A defined range sets the slider range, even when MuJoCo does not clamp the
-                    // control to it.
+                    // The range array holds one entry per control, not per actuator. A defined
+                    // range sets the slider range even when MuJoCo does not clamp the control.
                     let [low, high] = input_limits[ctrl_start + idx_in];
                     let range = if low < high { low..=high } else { -1.0..=1.0 };
 

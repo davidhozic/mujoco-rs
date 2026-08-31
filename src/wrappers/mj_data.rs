@@ -147,21 +147,6 @@ impl<M: ModelType> MjData<M> {
         Ok(std::mem::replace(&mut self.model, model))
     }
 
-    /// Returns a slice of detected contacts.
-    /// To obtain the contact force, call [`MjData::contact_force`].
-    #[deprecated(since = "3.0.0", note = "use contact() instead")]
-    pub fn contacts(&self) -> &[MjContact] {
-        let ffi = self.ffi();
-        let ptr = ffi.contact;
-        if ptr.is_null() {
-            &[]
-        } else {
-            // SAFETY: ptr is non-null (checked above), points to a valid array of `ncon`
-            // initialized mjContact values owned by MjData, and is valid for `'self`.
-            unsafe { std::slice::from_raw_parts(ptr, ffi.ncon as usize) }
-        }
-    }
-
     info_method! { Data, [model], body, [
         xfrc_applied: 6, xpos: 3, xquat: 4, xmat: 9, xipos: 3, ximat: 9, subtree_com: 3, cinert: 10,
         crb: 10, cvel: 6, subtree_linvel: 3, subtree_angmom: 3, cacc: 6, cfrc_int: 6, cfrc_ext: 6,
@@ -1482,13 +1467,6 @@ impl<M: ModelType> MjData<M> {
         destination
     }
 
-    /// Same as [`MjData::read_state_into`], except it allocates
-    /// and returns new boxed data containing the state.
-    #[deprecated(since = "3.0.0", note = "use `state` instead")]
-    pub fn get_state(&self, spec: u32) -> Box<[MjtNum]> {
-        self.state(spec)
-    }
-
     /// Sets the `state` to [`MjData`]. Wraps [`mj_setState`].
     /// The `state` is an array containing the state to write, based on the `spec`
     /// bitmask of elements [`MjtState`].
@@ -2018,15 +1996,7 @@ impl<M: ModelType + Clone> MjData<M> {
     /// Fallible version of [`Clone::clone`].
     ///
     /// # Note
-    ///
-    /// <div class="warning">
-    ///
-    /// MuJoCo cannot report a failure here: `mj_copyData` raises `mjERROR` when an allocation
-    /// fails, and the default error handler exits the process, so this method never returns
-    /// `Err`. Prefer [`Clone::clone`]. This method may be undeprecated in the future if MuJoCo's
-    /// upstream C code is changed to report the failure recoverably.
-    ///
-    /// </div>
+    /// MuJoCo ends the process when the allocation fails, so this never returns `Err`.
     ///
     /// # Errors
     /// Returns [`MjDataError::AllocationFailed`] if MuJoCo fails to allocate

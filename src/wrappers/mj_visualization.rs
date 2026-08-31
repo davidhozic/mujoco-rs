@@ -371,9 +371,8 @@ impl Default for MjvCamera {
 /// OpenGL camera parameters (position, forward/up vectors, frustum planes).
 pub type MjvGLCamera = mjvGLCamera;
 
-/// OpenGL camera parameters (position, forward/up vectors, frustum planes).
-/// This is the same as [`MjvGLCamera`]; this alias follows MuJoCo's internal
-/// type alias convention.
+/// OpenGL camera parameters (position, forward/up vectors, frustum planes). Alias of
+/// [`MjvGLCamera`].
 pub type MjrCamera = mjrCamera;
 
 impl MjvGLCamera {
@@ -490,12 +489,6 @@ impl MjvFigure {
         }
     }
 
-    /// Instantiates a new figure with default values, allocated on the heap.
-    #[deprecated(since = "3.0.0", note = "use `new_boxed` instead")]
-    pub fn new() -> Box<Self> {
-        Self::new_boxed()
-    }
-
     /// Draws the 2D figure to the `viewport` on screen.
     ///
     /// Wraps [`mjr_figure`].
@@ -504,8 +497,6 @@ impl MjvFigure {
     /// Every `linepnt` entry must lie within `0..=mjMAXLINEPNT`, the capacity of the matching
     /// `linedata` row. Automated checks from Rust side are too expensive.
     pub unsafe fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
-        // The only guard would scan all mjMAXLINE entries on a per-frame path, so the bound is a
-        // caller precondition instead (coding-conventions, FFI guard ladder).
         // SAFETY: the caller guarantees every `linepnt` entry is within the `linedata` capacity.
         unsafe { mjr_figure(viewport, self, context.ffi()) };
     }

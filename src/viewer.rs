@@ -297,9 +297,8 @@ impl ViewerSharedState {
     /// Called on construction and whenever [`_sync_data`](Self::_sync_data) or
     /// [`sync_model`](Self::sync_model) detects a model change.
     fn reload_model(&mut self, model: &MjModel, max_user_geom: usize) {
-        // Build every model-dependent value before the first assignment. A panic part-way then
-        // leaves the previous generation whole, instead of a mix of two models that a later sync
-        // accepts because the sizes happen to agree again.
+        // Build every model-dependent value before the first assignment, so a panic part-way
+        // leaves the previous generation whole rather than a mix of two models.
         let mut data_passive = MjData::new(Box::new(model.clone()));
         // Compute kinematic state that the viewer uses (only the state exists on a new MjData).
         data_passive.forward();
@@ -359,9 +358,8 @@ impl ViewerSharedState {
     /// Performs a bidirectional three-way merge of model's `opt`, `vis`, and `stat` parameters
     /// between the viewer's passive model and the incoming model.
     ///
-    /// Detects model changes via signature comparison and reloads internal state if needed.
+    /// Reloads the internal state when `model` is no longer compatible with the passive model.
     pub fn sync_model(&mut self, model: &mut MjModel) {
-        // Check if model signature changed
         if !self.data_passive.model().is_compatible_with_model(model) {
             // Model changed: reload internal state.
             let max_user_geom = self.user_scene.maxgeom() as usize;
@@ -753,7 +751,7 @@ impl ViewerSharedState {
 /// 
 /// With the `viewer-ui` feature, `X` toggles the side UI panel. The side panel also closes and
 /// opens by a drag of its inner edge to and from the screen edge.
-/// 
+///
 /// # Panics
 /// Panics when initialized outside the main thread.
 #[derive(Debug)]
@@ -887,7 +885,7 @@ impl MjViewer {
     /// that calls [`MjViewer::sync_data`] waits for the same [`Mutex`].
     ///
     /// # Model swaps
-    /// Callbacks runs inside [`MjViewer::render`]. A sync on another
+    /// Callbacks run inside [`MjViewer::render`]. A sync on another
     /// thread through [`ViewerSharedState::sync_data`] with `data`'s [`MjData::model`] being a different
     /// model than the model used to create the viewer, or through [`ViewerSharedState::sync_model`],
     /// can cause the contents of [`ViewerSharedState`]'s (the `state` parameter) to change when it isn't locked.
@@ -933,7 +931,7 @@ impl MjViewer {
 
     /// Syncs the state of viewer's internal [`MjData`] with `data`.
     /// This is a proxy to [`ViewerSharedState::sync_data`].
-    /// 
+    ///
     /// Any changes made to the internal [`MjData`] in between syncs
     /// get selectively merged back into `data` before the copy.
     /// Perturbations are applied to `data` **after** the sync, which
@@ -1833,9 +1831,8 @@ impl MjViewer {
         let mut lock = self.shared_state.lock_unpoison();
         let ViewerSharedState {data_passive, pert, model_reloaded, ..} = lock.deref_mut();
 
-        // For a reduced mutex contention, the mutex locks are skipped during part
-        // of the render thread. In the case of the model being reloaded, we defer
-        // all operations until synced again in update_scene.
+        // The render thread skips the mutex lock for part of its work, so a model reload defers
+        // every operation until the next sync in update_scene.
         if *model_reloaded {
             return;
         }
@@ -2100,8 +2097,7 @@ mod tests {
          <geom size=\"0.1\"/></body></worldbody></mujoco>";
 
     /// A reload replaces the passive model, so the merge shadow must describe the new one. A stale
-    /// shadow makes the next `sync_model` read the difference between the two models as a change
-    /// the viewer made, and write it over the caller's own edit.
+    /// shadow makes the next `sync_model` overwrite the caller's own edit.
     #[test]
     fn test_reload_refreshes_the_model_merge_shadow() {
         let mut model_hinge = MjModel::from_xml_string(MODEL_HINGE).unwrap();
