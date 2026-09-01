@@ -4128,4 +4128,142 @@ mod tests {
         assert!(unsafe { spec.world_body_mut().body_iter_mut().last().unwrap().delete() }.is_ok(), "body");
         assert_eq!(spec.body_iter().count(), 1);
     }
+
+    /// Tests the attachment mechanism (wrapper around [`mjs_attach`]).
+    #[test]
+    fn test_attachment() {
+        const BASE_MODEL: &str = r#"
+            <mujoco>
+                <worldbody>
+                    <frame name="base_frame_1">
+                        <body name="base_frame_1_body_1">
+                            <geom size="5" name="base_frame_1_body_1_sphere"/>
+                        </body>
+                    </frame>
+                </worldbody>
+            </mujoco>
+        "#;
+
+        for prefix in ["", "attached_", "added"] {
+            for suffix in ["", "_attached", "_added"] {
+                // The child spec must outlive the compilation, as the parent holds it until then.
+                let mut frame_spec = MjSpec::from_xml_string(BASE_MODEL).unwrap();
+                let mut main_spec = MjSpec::new();
+                let frame = frame_spec.frame_mut("base_frame_1").unwrap();
+                main_spec.world_body_mut().attach(frame, prefix, suffix).expect("attachment failed");
+
+                let renamed = |name: &str| format!("{prefix}{name}{suffix}");
+
+                // MuJoCo attaches by reference, thus it renames the elements of the child spec in
+                // place instead of copying them.
+                assert!(
+                    frame_spec.geom(&renamed("base_frame_1_body_1_sphere")).is_some(),
+                    "the child spec kept the old name"
+                );
+                assert_eq!(
+                    frame_spec.geom("base_frame_1_body_1_sphere").is_some(),
+                    prefix.is_empty() && suffix.is_empty(),
+                    "the old name survived in the child spec"
+                );
+
+                main_spec.frame(&renamed("base_frame_1")).expect("frame not attached");
+                main_spec.body(&renamed("base_frame_1_body_1")).expect("body not attached");
+                main_spec.geom(&renamed("base_frame_1_body_1_sphere")).expect("geom not attached");
+
+                // The original name survives only when both prefix and prefix are empty.
+                assert_eq!(
+                    main_spec.geom("base_frame_1_body_1_sphere").is_some(),
+                    prefix.is_empty() && suffix.is_empty()
+                );
+
+                // An invalid name to validate that the lookups don't just look like they work.
+                assert!(main_spec.geom("base_frame_1_body_1_sphereinvalid").is_none());
+
+                let model = main_spec.compile().expect("compilation of the attached spec failed");
+                assert_eq!(model.nbody(), 2, "the world body plus the attached one");
+                assert_eq!(model.ngeom(), 1);
+            }
+        }
+    }
+
+    /// Tests every parent/child pair that [`Attach`] and [`AttachTo`] support.
+    #[test]
+    fn test_attachment_pairs() {
+        const PARENT_MODEL: &str = r#"
+            <mujoco>
+                <worldbody>
+                    <body name="parent_body"/>
+                    <frame name="parent_frame"/>
+                    <site name="parent_site"/>
+                </worldbody>
+            </mujoco>
+        "#;
+
+        const CHILD_MODEL: &str = r#"
+            <mujoco>
+                <worldbody>
+                    <frame name="child_frame">
+                        <body name="child_body">
+                            <geom size="5" name="child_geom"/>
+                        </body>
+                    </frame>
+                </worldbody>
+            </mujoco>
+        "#;
+
+        // Compiles the parent and checks that the child subtree arrived once, under the new names.
+        #[track_caller]
+        fn assert_attached(parent: &mut MjSpec) {
+            assert!(parent.geom("p_child_geom_s").is_some(), "the geom is not namespaced");
+            let model = parent.compile().expect("cannot compile the attached spec");
+            assert_eq!((model.nbody(), model.ngeom()), (3, 1), "wrong element counts");
+        }
+
+        // A fresh pair for every attachment, as an attachment changes both specs.
+        let specs = || (
+            MjSpec::from_xml_string(PARENT_MODEL).unwrap(),
+            MjSpec::from_xml_string(CHILD_MODEL).unwrap()
+        );
+
+        /* A body as the child. */
+        let (mut parent, mut child) = specs();
+        parent.frame_mut("parent_frame").unwrap()
+            .attach(child.body_mut("child_body").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.site_mut("parent_site").unwrap()
+            .attach(child.body_mut("child_body").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        /* A frame as the child. */
+        let (mut parent, mut child) = specs();
+        parent.body_mut("parent_body").unwrap()
+            .attach(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.frame_mut("parent_frame").unwrap()
+            .attach(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.site_mut("parent_site").unwrap()
+            .attach(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        /* A whole specification as the child. */
+        let (mut parent, mut child) = specs();
+        parent.body_mut("parent_body").unwrap().attach(&mut child, "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.frame_mut("parent_frame").unwrap().attach(&mut child, "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.site_mut("parent_site").unwrap().attach(&mut child, "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+    }
 }
+

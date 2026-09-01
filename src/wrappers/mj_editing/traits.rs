@@ -241,13 +241,24 @@ pub trait Attach: SpecItem {
     /// 
     /// # Panics
     /// Panics when `prefix` or `suffix` contain NULL bytes.
+    ///
+    /// # Examples
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// let mut child = MjSpec::new();
+    /// child.world_body_mut().add_body().with_name("ball");
+    ///
+    /// let mut parent = MjSpec::new();
+    /// parent.world_body_mut().attach(&mut child, "robot_", "").unwrap();
+    /// assert!(parent.body("robot_ball").is_some());
+    /// ```
     fn attach<C>(&mut self, child: &mut C, prefix: &str, suffix: &str) -> Result<(), MjEditError>
         where C: AttachTo<Self>
     {
         let c_prefix = CString::new(prefix).unwrap();  // panics on interior NUL bytes only.
         let c_suffix = CString::new(suffix).unwrap();
-        // MuJoCo writes the namespace into the child before it copies the subtree, so the
-        // child is borrowed uniquely even though the C parameter is const.
+
+        // NOTE: The const on the C parameter is wrong/misleading as mjs_attach can modify it internally regardless.
         let child_element = child.child_element_pointer();
 
         // SAFETY: both elements belong to a live spec, the two strings outlive the call,
