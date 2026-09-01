@@ -456,19 +456,8 @@ impl MjSpec {
         }
 
         let result = unsafe { MjModel::from_raw( mj_compile(self.ffi.as_ptr(), ptr::null()) ) };
-        result.map_err(|_| {
-            // SAFETY: The spec is still valid after failed compilation.
-            // The error pointer is valid until the next MuJoCo call on this spec.
-            let error_msg: String = unsafe {
-                let ptr = mjs_getError(self.ffi_mut());
-                if ptr.is_null() {
-                    "Compilation failed (unknown error)".to_owned()
-                } else {
-                    CStr::from_ptr(ptr).to_string_lossy().into_owned()
-                }
-            };
-            MjEditError::CompileFailed(error_msg)
-        })
+        // SAFETY: the spec is still valid after a failed compilation.
+        result.map_err(|_| MjEditError::CompileFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }))
     }
 
     /// Return the compiler timers, in seconds, in `mjtCTimer` order.

@@ -315,6 +315,8 @@ pub enum MjEditError {
     /// Deleting the element failed. Carries MuJoCo's error message, or the reason the wrapper
     /// rejected the element.
     DeleteFailed(String),
+    /// Attaching the child element failed. Carries MuJoCo's error message.
+    AttachFailed(String),
     /// The output buffer passed to [`MjSpec::save_xml_string`](crate::wrappers::mj_editing::MjSpec::save_xml_string)
     /// was too small to hold the XML.
     ///
@@ -349,6 +351,7 @@ impl fmt::Display for MjEditError {
             Self::AlreadyExists => write!(f, "element with the same name already exists"),
             Self::UnsupportedOperation => write!(f, "this operation is not supported"),
             Self::DeleteFailed(msg) => write!(f, "delete failed: {msg}"),
+            Self::AttachFailed(msg) => write!(f, "attach failed: {msg}"),
             Self::XmlBufferTooSmall { required_size } => write!(
                 f,
                 "XML output buffer too small; retry with at least {} bytes",

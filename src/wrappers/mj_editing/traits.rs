@@ -4,11 +4,13 @@ use std::ffi::CString;
 use crate::error::MjEditError;
 use crate::mujoco_c::*;
 
+use super::{MjSpec, MjsBody, MjsFrame, MjsSite};
 use super::default::MjsDefault;
 use super::utility::*;
 
 pub(crate) mod sealed {
-    /// Prevents external implementations of [`SpecItem`](super::SpecItem).
+    /// Prevents external implementations of [`SpecItem`](super::SpecItem) and
+    /// [`AttachTo`](super::AttachTo).
     pub trait Sealed {}
 }
 
@@ -158,3 +160,111 @@ pub trait SpecObject: SpecItem {
         unsafe { delete_element(self.element_mut_pointer()) }
     }
 }
+
+/// A child that [`mjs_attach`] accepts for a parent of type `P`.
+/// # Interpretation
+/// This can be interpreted/read as the following example shows:
+/// 
+/// `impl AttachTo<MjsFrame> for MjsBody` means a [`MjsBody`] can be attached
+/// as a child to [`MjsFrame`]. 
+///
+/// # Supported attachments
+/// | Child | Parent `P` | [`Output`](AttachTo::Output) |
+/// |---|---|---|
+/// | [`MjsBody`] | [`MjsFrame`], [`MjsSite`] | [`MjsBody`] |
+/// | [`MjsFrame`] | [`MjsBody`], [`MjsFrame`], [`MjsSite`] | [`MjsFrame`] |
+/// | [`MjSpec`] | [`MjsBody`], [`MjsFrame`], [`MjsSite`] | [`MjsFrame`] |
+/// 
+pub trait AttachTo<P>: sealed::Sealed {
+    /// Returns the `mjsElement` that MuJoCo attaches to the parent.
+    fn child_element_pointer(&self) -> *const mjsElement;
+}
+
+// A specification is no `SpecItem`, so it carries its own seal for this trait.
+impl sealed::Sealed for MjSpec {}
+
+impl AttachTo<MjsFrame> for MjsBody {
+    fn child_element_pointer(&self) -> *const mjsElement {
+        self.element_pointer()
+    }
+}
+
+impl AttachTo<MjsSite> for MjsBody {
+    fn child_element_pointer(&self) -> *const mjsElement {
+        self.element_pointer()
+    }
+}
+
+impl AttachTo<MjsBody> for MjsFrame {
+    fn child_element_pointer(&self) -> *const mjsElement {
+        self.element_pointer()
+    }
+}
+
+impl AttachTo<MjsFrame> for MjsFrame {
+    fn child_element_pointer(&self) -> *const mjsElement {
+        self.element_pointer()
+    }
+}
+
+impl AttachTo<MjsSite> for MjsFrame {
+    fn child_element_pointer(&self) -> *const mjsElement {
+        self.element_pointer()
+    }
+}
+
+impl AttachTo<MjsBody> for MjSpec {
+    fn child_element_pointer(&self) -> *const mjsElement {
+        self.ffi().element.cast_const()
+    }
+}
+
+impl AttachTo<MjsFrame> for MjSpec {
+    fn child_element_pointer(&self) -> *const mjsElement {
+        self.ffi().element.cast_const()
+    }
+}
+
+impl AttachTo<MjsSite> for MjSpec {
+    fn child_element_pointer(&self) -> *const mjsElement {
+        self.ffi().element.cast_const()
+    }
+}
+
+/// A parent that [`mjs_attach`] accepts.
+/// The trait is sealed (cannot be implemented by the user).
+///
+/// The [`AttachTo`] trait (also sealed) is used for providing
+/// supported attachment combinations.
+pub trait Attach: SpecItem {
+    /// Attaches the `child` to [`Self`].
+    /// 
+    /// # Panics
+    /// Panics when `prefix` or `suffix` contain NULL bytes.
+    fn attach<C>(&mut self, child: &mut C, prefix: &str, suffix: &str) -> Result<(), MjEditError>
+        where C: AttachTo<Self>
+    {
+        let c_prefix = CString::new(prefix).unwrap();  // panics on interior NUL bytes only.
+        let c_suffix = CString::new(suffix).unwrap();
+        // MuJoCo writes the namespace into the child before it copies the subtree, so the
+        // child is borrowed uniquely even though the C parameter is const.
+        let child_element = child.child_element_pointer();
+
+        // SAFETY: both elements belong to a live spec, the two strings outlive the call,
+        // and the trait implementations of AttachTo are properly implemented.
+        let element = unsafe { mjs_attach(
+            self.element_mut_pointer(), child_element,
+            c_prefix.as_ptr(), c_suffix.as_ptr()
+        ) };
+
+        if element.is_null() {
+            let spec = unsafe { mjs_getSpec(self.element_pointer()) };
+            return Err(MjEditError::AttachFailed(unsafe { read_spec_error(spec) }));
+        }
+        Ok(())
+    }
+}
+
+impl Attach for MjsBody {}
+impl Attach for MjsFrame {}
+impl Attach for MjsSite {}
