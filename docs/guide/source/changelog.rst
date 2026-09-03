@@ -42,6 +42,7 @@ update of MuJoCo alone can increase the major version.
 
 .. Each release group lives in its own fragment. Add a new release at the top of the list.
 
+.. include:: changelog/6.1.x.rst.inc
 .. include:: changelog/6.0.x.rst.inc
 .. include:: changelog/5.0.x.rst.inc
 .. include:: changelog/4.0.x.rst.inc

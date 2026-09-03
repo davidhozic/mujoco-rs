@@ -10,6 +10,8 @@ Model editing
 .. |mjs_body| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsBody`
 .. |mjs_actuator| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsActuator`
 .. |mjs_flex| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsFlex`
+.. |mjs_frame| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsFrame`
+.. |mjs_site| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsSite`
 
 The most general way to create an |mj_model| instance is by loading an XML file
 via :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml`.
@@ -209,6 +211,66 @@ changed sensor type or a changed actuator dynamics type breaks it; ``swap_model`
 ``try_swap_model`` returns
 :docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>IncompatibleModel`.
 
+
+Attaching elements
+======================
+In addition to adding elements to the specification and other elements directly,
+existing trees of elements can be *attached* directly onto a new tree.
+
+Elements can be attached to another element via the
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach` method,
+available on types implementing ``Attach``. Elements implementing ``Attach`` are |mjs_body|,
+|mjs_frame| and |mjs_site|. To attach a whole specification, first
+add a frame to the parent's world body with
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_frame`
+and attach to the newly added frame. Here is the full mapping of what element type can be attached to
+what other element type:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 30 70
+
+    * - Parent
+      - Child
+    * - |mjs_body|
+      - |mjs_frame|, |mj_spec|
+    * - |mjs_frame|
+      - |mjs_body|, |mjs_frame|, |mj_spec|
+    * - |mjs_site|
+      - |mjs_body|, |mjs_frame|, |mj_spec|
+
+When attaching elements, a *prefix* and a *suffix* can be given. When no prefix/suffix is desired, just pass ``""`` to
+``Attach::attach`` at its respective positions.
+
+The example below attaches a one-body specification under a frame of another specification.
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn main() {
+        // Child specification.
+        let mut child = MjSpec::new();
+        child.world_body_mut().add_body().with_name("ball")
+            .add_geom().with_size([0.01, 0.0, 0.0]);
+
+        // Parent specification.
+        let mut parent = MjSpec::new();
+        // Add a frame onto which the child will be attached.
+        let frame = parent.world_body_mut().add_frame().with_pos([0.0, 0.0, 1.0]);
+
+        // Attach the child to the newly-created frame, giving all sub-elements
+        // of the child tree "robot_" as a prefix to all the names.
+        // This method is available by importing the `Attach` trait (already in the prelude).
+        frame.attach(&mut child, "robot_", "").unwrap();
+
+        // The child is now attached.
+        assert!(parent.body("robot_ball").is_some());
+        parent.compile().expect("failed to compile");
+    }
+
+More on attachment is available in MuJoCo's
+`official documentation on attachment <https://mujoco.readthedocs.io/en/stable/programming/modeledit.html#attachment>`__.
 
 Deleting elements
 ======================
