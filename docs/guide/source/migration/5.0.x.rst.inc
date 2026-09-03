@@ -43,7 +43,7 @@ removed.
 
 Deprecated implementation of removing model-editing elements
 --------------------------------------------------------------
-Due to the :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>delete`
+Due to the ``SpecItem::delete``
 method relying on undefined behavior, the said method is now deprecated.
 It's replacement --- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element` ---
 now forces the user to drop all existing references of |mj_spec| and its

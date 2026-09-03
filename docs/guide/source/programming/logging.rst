@@ -33,7 +33,7 @@ at the start of the program.
 
     Installing the hook, through either function, replaces MuJoCo's own handler, so the
     ``logto_console``, ``logto_file`` and ``logfile`` fields of
-    :docs-rs:`~mujoco_rs::wrappers::mj_logging::<struct>MjLogConfig` no longer reach the output.
+    :docs-rs:`~mujoco_rs::wrappers::mj_logging::<type>MjLogConfig` no longer reach the output.
     The install also writes every topic into the global topic bitmask once, so a bitmask that the
     program set before the install is lost. The producer-side topic gate still reads that bitmask,
     so a :docs-rs:`~mujoco_rs::wrappers::mj_logging::<fn>set_log_config` call after the install

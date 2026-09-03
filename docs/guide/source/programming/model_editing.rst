@@ -218,10 +218,11 @@ In addition to adding elements to the specification and other elements directly,
 existing trees of elements can be *attached* directly onto a new tree.
 
 Elements can be attached to another element via the
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::traits::<trait>Attach::<method>attach` method,
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach` method,
 available on types implementing ``Attach``. Elements implementing ``Attach`` are |mjs_body|,
-|mjs_frame| and |mjs_site|. If you'd like to attach elements to a |mj_spec|, you should first
-add a ``MjsFrame`` via :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>add_frame`
+|mjs_frame| and |mjs_site|. To attach a whole specification, first
+add a frame to the parent's world body with
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_frame`
 and attach to the newly added frame. Here is the full mapping of what element type can be attached to
 what other element type:
 

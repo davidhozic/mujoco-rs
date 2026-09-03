@@ -169,11 +169,11 @@ pub trait SpecObject: SpecItem {
 /// as a child to [`MjsFrame`]. 
 ///
 /// # Supported attachments
-/// | Child | Parent `P` | [`Output`](AttachTo::Output) |
-/// |---|---|---|
-/// | [`MjsBody`] | [`MjsFrame`], [`MjsSite`] | [`MjsBody`] |
-/// | [`MjsFrame`] | [`MjsBody`], [`MjsFrame`], [`MjsSite`] | [`MjsFrame`] |
-/// | [`MjSpec`] | [`MjsBody`], [`MjsFrame`], [`MjsSite`] | [`MjsFrame`] |
+/// | Child | Parent `P` |
+/// |---|---|
+/// | [`MjsBody`] | [`MjsFrame`], [`MjsSite`] |
+/// | [`MjsFrame`] | [`MjsBody`], [`MjsFrame`], [`MjsSite`] |
+/// | [`MjSpec`] | [`MjsBody`], [`MjsFrame`], [`MjsSite`] |
 /// 
 pub trait AttachTo<P>: sealed::Sealed {
     /// Returns the `mjsElement` that MuJoCo attaches to the parent.
