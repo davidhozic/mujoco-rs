@@ -93,6 +93,9 @@ impl ApplicationHandler for RenderBase {
                 .with_alpha_size(0)
                 .with_depth_size(24)
                 .with_stencil_size(8);
+            #[cfg(target_os = "macos")]
+            // MuJoCo's OpenGL 2.0 compatibility context cannot use a core-only CGL profile.
+            let template = template.skip_cgl_profile(true);
 
             let display_builder = DisplayBuilder::new()
                 .with_preference(ApiPreference::FallbackEgl)
@@ -177,4 +180,3 @@ impl ApplicationHandler for RenderBase {
         }
     }
 }
-
