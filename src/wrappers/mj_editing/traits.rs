@@ -176,58 +176,59 @@ pub trait SpecObject: SpecItem {
 /// | [`MjSpec`] | [`MjsBody`], [`MjsFrame`], [`MjsSite`] |
 /// 
 pub trait AttachTo<P>: sealed::Sealed {
-    /// Returns the `mjsElement` that MuJoCo attaches to the parent.
-    fn child_element_pointer(&self) -> *const mjsElement;
+    /// Returns the `mjsElement` that MuJoCo attaches to the parent. The pointer is mutable,
+    /// because [`mjs_attach`] renames and reparents the child that it receives.
+    fn child_element_mut_pointer(&mut self) -> *mut mjsElement;
 }
 
 // A specification is no `SpecItem`, so it carries its own seal for this trait.
 impl sealed::Sealed for MjSpec {}
 
 impl AttachTo<MjsFrame> for MjsBody {
-    fn child_element_pointer(&self) -> *const mjsElement {
-        self.element_pointer()
+    fn child_element_mut_pointer(&mut self) -> *mut mjsElement {
+        self.element_mut_pointer()
     }
 }
 
 impl AttachTo<MjsSite> for MjsBody {
-    fn child_element_pointer(&self) -> *const mjsElement {
-        self.element_pointer()
+    fn child_element_mut_pointer(&mut self) -> *mut mjsElement {
+        self.element_mut_pointer()
     }
 }
 
 impl AttachTo<MjsBody> for MjsFrame {
-    fn child_element_pointer(&self) -> *const mjsElement {
-        self.element_pointer()
+    fn child_element_mut_pointer(&mut self) -> *mut mjsElement {
+        self.element_mut_pointer()
     }
 }
 
 impl AttachTo<MjsFrame> for MjsFrame {
-    fn child_element_pointer(&self) -> *const mjsElement {
-        self.element_pointer()
+    fn child_element_mut_pointer(&mut self) -> *mut mjsElement {
+        self.element_mut_pointer()
     }
 }
 
 impl AttachTo<MjsSite> for MjsFrame {
-    fn child_element_pointer(&self) -> *const mjsElement {
-        self.element_pointer()
+    fn child_element_mut_pointer(&mut self) -> *mut mjsElement {
+        self.element_mut_pointer()
     }
 }
 
 impl AttachTo<MjsBody> for MjSpec {
-    fn child_element_pointer(&self) -> *const mjsElement {
-        self.ffi().element.cast_const()
+    fn child_element_mut_pointer(&mut self) -> *mut mjsElement {
+        self.ffi().element
     }
 }
 
 impl AttachTo<MjsFrame> for MjSpec {
-    fn child_element_pointer(&self) -> *const mjsElement {
-        self.ffi().element.cast_const()
+    fn child_element_mut_pointer(&mut self) -> *mut mjsElement {
+        self.ffi().element
     }
 }
 
 impl AttachTo<MjsSite> for MjSpec {
-    fn child_element_pointer(&self) -> *const mjsElement {
-        self.ffi().element.cast_const()
+    fn child_element_mut_pointer(&mut self) -> *mut mjsElement {
+        self.ffi().element
     }
 }
 
@@ -237,8 +238,19 @@ impl AttachTo<MjsSite> for MjSpec {
 /// The [`AttachTo`] trait (also sealed) is used for providing
 /// supported attachment combinations.
 pub trait Attach: SpecItem {
-    /// Attaches the `child` to [`Self`].
+    /// Attaches a **deep-copy** of the `child` to `Self`.
+    /// For faster attachments, call [`Attach::attach_by_reference`], which is
+    /// MuJoCo's default behavior. However, the latter requires `unsafe` due to
+    /// possible UBs it allows.
+    ///
+    /// # Note
+    /// MuJoCo mutates the `child` even with deep-copying enabled.
+    /// When the child is a [`MjSpec`], it will create a new [`MjsFrame`] in its world body
+    /// on every attachment, to which all the sub-elements of `child` will be copied.
     /// 
+    /// # Errors
+    /// Returns [`MjEditError::AttachFailed`] when MuJoCo rejects the attachment.
+    ///
     /// # Panics
     /// Panics when `prefix` or `suffix` contain NULL bytes.
     ///
@@ -249,33 +261,104 @@ pub trait Attach: SpecItem {
     /// child.world_body_mut().add_body().with_name("ball");
     ///
     /// let mut parent = MjSpec::new();
-    /// parent.world_body_mut().attach(&mut child, "robot_", "").unwrap();
+    /// parent.world_body_mut().attach_by_deep_copy(&mut child, "robot_", "").unwrap();
     /// assert!(parent.body("robot_ball").is_some());
     /// ```
-    fn attach<C>(&mut self, child: &mut C, prefix: &str, suffix: &str) -> Result<(), MjEditError>
+    fn attach_by_deep_copy<C>(&mut self, child: &mut C, prefix: &str, suffix: &str)
+        -> Result<(), MjEditError>
         where C: AttachTo<Self>
     {
-        let c_prefix = CString::new(prefix).unwrap();  // panics on interior NUL bytes only.
-        let c_suffix = CString::new(suffix).unwrap();
-
-        // NOTE: The const on the C parameter is wrong/misleading as mjs_attach can modify it internally regardless.
-        let child_element = child.child_element_pointer();
-
-        // SAFETY: both elements belong to a live spec, the two strings outlive the call,
-        // and the trait implementations of AttachTo are properly implemented.
-        let element = unsafe { mjs_attach(
-            self.element_mut_pointer(), child_element,
-            c_prefix.as_ptr(), c_suffix.as_ptr()
-        ) };
-
-        if element.is_null() {
-            let spec = unsafe { mjs_getSpec(self.element_pointer()) };
-            return Err(MjEditError::AttachFailed(unsafe { read_spec_error(spec) }));
+        // SAFETY: all pointers are valid always.
+        unsafe {
+            attach_element(
+                self.element_mut_pointer(), child.child_element_mut_pointer(), prefix, suffix, true
+            )
         }
-        Ok(())
+    }
+
+    /// Attaches the `child` to `Self` by reference.
+    /// Attachment-by-reference is the default behavior in MuJoCo (C library).
+    /// 
+    /// # Safety
+    /// This method is safe as long as the following conditions are met:
+    /// - no element of the [`MjSpec`] in which the `child` lives is used anymore,
+    /// including the elements outside the attached subtree;
+    /// - no further element of that [`MjSpec`] is attached anywhere;
+    /// - no existing references to the child (or other tree elements of child's [`MjSpec`])
+    ///   can be used further. 
+    ///
+    /// # Note
+    /// An attachment that returns an error still marks the `child` specification as attached, thus
+    /// the conditions above hold also for a failed attachment.
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::AttachFailed`] when MuJoCo rejects the attachment.
+    ///
+    /// # Panics
+    /// Panics when `prefix` or `suffix` contain NULL bytes.
+    ///
+    /// # Examples
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// let mut child = MjSpec::new();
+    /// child.world_body_mut().add_body().with_name("ball");
+    ///
+    /// let mut parent = MjSpec::new();
+    /// // SAFETY: no element handle of the child is used after the attachment.
+    /// unsafe { parent.world_body_mut().attach_by_reference(&mut child, "robot_", "") }.unwrap();
+    /// assert!(parent.body("robot_ball").is_some());
+    /// ```
+    unsafe fn attach_by_reference<C>(&mut self, child: &mut C, prefix: &str, suffix: &str)
+        -> Result<(), MjEditError>
+        where C: AttachTo<Self>
+    {
+        // SAFETY: the parent element is live, AttachTo permits the pair, and the caller keeps
+        // every handle of the child unused.
+        unsafe {
+            attach_element(
+                self.element_mut_pointer(), child.child_element_mut_pointer(), prefix, suffix, false
+            )
+        }
     }
 }
 
 impl Attach for MjsBody {}
 impl Attach for MjsFrame {}
 impl Attach for MjsSite {}
+
+/// Attaches the `child` element to the `parent` element. `deep_copy` selects whether the parent
+/// deep-copies the elements of the child or "copies" by-reference.
+/// Wraps [`mjs_attach`].
+///
+/// # Errors
+/// Returns [`MjEditError::AttachFailed`] when MuJoCo rejects the attachment.
+///
+/// # Panics
+/// Panics when `prefix` or `suffix` contain NULL bytes.
+///
+/// # Safety
+/// Both pointers must stand at a live element of a specification.
+/// With `deep_copy` false, the parent shares the elements of the child.
+unsafe fn attach_element(
+    parent: *mut mjsElement, child: *mut mjsElement,
+    prefix: &str, suffix: &str, deep_copy: bool
+) -> Result<(), MjEditError>
+{
+    let c_prefix = CString::new(prefix).unwrap();  // panics on interior NUL bytes only.
+    let c_suffix = CString::new(suffix).unwrap();
+
+    // SAFETY: the caller guarantees a live parent element, which belongs to a live specification.
+    let spec = unsafe { mjs_getSpec(parent) };
+    // MuJoCo keeps the flag on the parent, so every attachment sets the value that it needs.
+    unsafe { mjs_setDeepCopy(spec, deep_copy.into()) };
+
+    // The const on the C child parameter is misleading, because mjs_attach renames and reparents
+    // the child regardless, so the pointer that reaches here is mutable.
+    // SAFETY: both elements stand at a live specification and the two strings outlive the call.
+    let element = unsafe { mjs_attach(parent, child, c_prefix.as_ptr(), c_suffix.as_ptr()) };
+    if element.is_null() {
+        // SAFETY: spec stands at the live specification of the parent.
+        return Err(MjEditError::AttachFailed(unsafe { read_spec_error(spec) }));
+    }
+    Ok(())
+}

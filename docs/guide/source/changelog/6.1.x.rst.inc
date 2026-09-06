@@ -17,10 +17,16 @@
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>Attach` :sup:`new` and
   - :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>AttachTo` :sup:`new`.
 
-  The first defines :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach`, which
-  allows elements to be attached to ``Self`` (implementor of ``Attach``) based on the ``AttachTo`` trait. For example,
-  implementations of ``AttachTo<MjsFrame>`` allow the implementor elements to be attached to
+  The first trait defines
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_deep_copy` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_reference`, which
+  allow elements to be attached to ``Self`` (implementor of ``Attach``) based on the ``AttachTo`` trait.
+  For example, implementations of ``AttachTo<MjsFrame>`` allow the implementor elements to be attached to
   |mjs_frame|.
+
+  ``attach_by_deep_copy`` gives the parent a copy of every element of the child, thus both
+  specifications stay usable. ``attach_by_reference`` shares the elements, which is the default behavior in MuJoCo,
+  and is therefore ``unsafe``. The safe usage conditions are written in the method's docstring.
 
 .. rubric:: Bug fixes
 .. rubric:: Other changes

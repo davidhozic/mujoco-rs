@@ -542,14 +542,6 @@ impl MjSpec {
             }
         }
     }
-
-    /// Configures deep-copy on or off during [`Attach::attach`].
-    /// Wraps [`mjs_setDeepCopy`].
-    pub fn set_deep_copy(&mut self, enable: bool) {
-        // SAFETY: This is inherently a always safe function as it only calls a boolean setter.
-        // Additionally,ffi_mut() is always valid.
-        unsafe { mjs_setDeepCopy(self.ffi_mut(), enable.into()) };
-    }
 }
 
 /// Children accessor methods.
@@ -4154,24 +4146,23 @@ mod tests {
 
         for prefix in ["", "attached_", "added"] {
             for suffix in ["", "_attached", "_added"] {
-                // The child spec must outlive the compilation, as the parent holds it until then.
                 let mut frame_spec = MjSpec::from_xml_string(BASE_MODEL).unwrap();
                 let mut main_spec = MjSpec::new();
                 let frame = frame_spec.frame_mut("base_frame_1").unwrap();
-                main_spec.world_body_mut().attach(frame, prefix, suffix).expect("attachment failed");
+                main_spec.world_body_mut().attach_by_deep_copy(frame, prefix, suffix).expect("attachment failed");
 
                 let renamed = |name: &str| format!("{prefix}{name}{suffix}");
 
-                // MuJoCo attaches by reference, thus it renames the elements of the child spec in
-                // place instead of copying them.
+                // Deep copy renames the copy that the parent holds, thus the child keeps its
+                // own names.
                 assert!(
-                    frame_spec.geom(&renamed("base_frame_1_body_1_sphere")).is_some(),
-                    "the child spec kept the old name"
+                    frame_spec.geom("base_frame_1_body_1_sphere").is_some(),
+                    "the child spec lost its own name"
                 );
                 assert_eq!(
-                    frame_spec.geom("base_frame_1_body_1_sphere").is_some(),
+                    frame_spec.geom(&renamed("base_frame_1_body_1_sphere")).is_some(),
                     prefix.is_empty() && suffix.is_empty(),
-                    "the old name survived in the child spec"
+                    "the renamed element appeared in the child spec"
                 );
 
                 main_spec.frame(&renamed("base_frame_1")).expect("frame not attached");
@@ -4236,41 +4227,41 @@ mod tests {
         /* A body as the child. */
         let (mut parent, mut child) = specs();
         parent.frame_mut("parent_frame").unwrap()
-            .attach(child.body_mut("child_body").unwrap(), "p_", "_s").unwrap();
+            .attach_by_deep_copy(child.body_mut("child_body").unwrap(), "p_", "_s").unwrap();
         assert_attached(&mut parent);
 
         let (mut parent, mut child) = specs();
         parent.site_mut("parent_site").unwrap()
-            .attach(child.body_mut("child_body").unwrap(), "p_", "_s").unwrap();
+            .attach_by_deep_copy(child.body_mut("child_body").unwrap(), "p_", "_s").unwrap();
         assert_attached(&mut parent);
 
         /* A frame as the child. */
         let (mut parent, mut child) = specs();
         parent.body_mut("parent_body").unwrap()
-            .attach(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
+            .attach_by_deep_copy(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
         assert_attached(&mut parent);
 
         let (mut parent, mut child) = specs();
         parent.frame_mut("parent_frame").unwrap()
-            .attach(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
+            .attach_by_deep_copy(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
         assert_attached(&mut parent);
 
         let (mut parent, mut child) = specs();
         parent.site_mut("parent_site").unwrap()
-            .attach(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
+            .attach_by_deep_copy(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
         assert_attached(&mut parent);
 
         /* A whole specification as the child. */
         let (mut parent, mut child) = specs();
-        parent.body_mut("parent_body").unwrap().attach(&mut child, "p_", "_s").unwrap();
+        parent.body_mut("parent_body").unwrap().attach_by_deep_copy(&mut child, "p_", "_s").unwrap();
         assert_attached(&mut parent);
 
         let (mut parent, mut child) = specs();
-        parent.frame_mut("parent_frame").unwrap().attach(&mut child, "p_", "_s").unwrap();
+        parent.frame_mut("parent_frame").unwrap().attach_by_deep_copy(&mut child, "p_", "_s").unwrap();
         assert_attached(&mut parent);
 
         let (mut parent, mut child) = specs();
-        parent.site_mut("parent_site").unwrap().attach(&mut child, "p_", "_s").unwrap();
+        parent.site_mut("parent_site").unwrap().attach_by_deep_copy(&mut child, "p_", "_s").unwrap();
         assert_attached(&mut parent);
     }
 
@@ -4280,9 +4271,11 @@ mod tests {
         // Deep attach off.
         let mut child_spec = MjSpec::new();
         let mut parent_spec = MjSpec::new();
-
-        parent_spec.world_body_mut().add_frame()
-            .attach(&mut child_spec, "", "").unwrap();
+        // SAFETY: the test takes no element handle of the child after the attachment.
+        unsafe {
+            parent_spec.world_body_mut().add_frame()
+                .attach_by_reference(&mut child_spec, "", "")
+        }.unwrap();
 
         // Should error with attached reference errors
         let result = child_spec.compile().unwrap_err();
@@ -4294,15 +4287,14 @@ mod tests {
         // Should compile regulary, both parent and attached child.
         parent_spec.compile().unwrap();
 
-        // Drop old parent and create new parent.
-        parent_spec.set_deep_copy(true);
+        // A fresh pair, which keeps the deep copy that a new specification enables.
+        let mut new_parent_spec = MjSpec::new();
         let mut new_child_spec = MjSpec::new();
-        parent_spec.world_body_mut().attach(&mut new_child_spec, "", "").unwrap();
+        new_parent_spec.world_body_mut().attach_by_deep_copy(&mut new_child_spec, "", "").unwrap();
         assert!(
             new_child_spec.compile().is_ok(),
             "child spec should not be attached by reference when deep-copy is enabled"
         );
-        parent_spec.compile().unwrap();
+        new_parent_spec.compile().unwrap();
     }
 }
-

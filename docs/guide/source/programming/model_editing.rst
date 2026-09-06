@@ -217,8 +217,9 @@ Attaching elements
 In addition to adding elements to the specification and other elements directly,
 existing trees of elements can be *attached* directly onto a new tree.
 
-Elements can be attached to another element via the
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach` method,
+Elements can be attached to another element via
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_reference` or
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_deep_copy`,
 available on types implementing ``Attach``. Elements implementing ``Attach`` are |mjs_body|,
 |mjs_frame| and |mjs_site|. To attach a whole specification, first
 add a frame to the parent's world body with
@@ -240,7 +241,7 @@ what other element type:
       - |mjs_body|, |mjs_frame|, |mj_spec|
 
 When attaching elements, a *prefix* and a *suffix* can be given. When no prefix/suffix is desired, just pass ``""`` to
-``Attach::attach`` at its respective positions.
+``Attach::attach_by_deep_copy`` / ``Attach::attach_by_reference`` at its respective positions.
 
 The example below attaches a one-body specification under a frame of another specification.
 
@@ -262,7 +263,7 @@ The example below attaches a one-body specification under a frame of another spe
         // Attach the child to the newly-created frame, giving all sub-elements
         // of the child tree "robot_" as a prefix to all the names.
         // This method is available by importing the `Attach` trait (already in the prelude).
-        frame.attach(&mut child, "robot_", "").unwrap();
+        frame.attach_by_deep_copy(&mut child, "robot_", "").unwrap();
 
         // The child is now attached.
         assert!(parent.body("robot_ball").is_some());
