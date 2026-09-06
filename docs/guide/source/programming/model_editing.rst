@@ -221,11 +221,11 @@ Elements can be attached to another element via
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_reference` or
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_deep_copy`,
 available on types implementing ``Attach``. Elements implementing ``Attach`` are |mjs_body|,
-|mjs_frame| and |mjs_site|. To attach a whole specification, first
-add a frame to the parent's world body with
+|mjs_frame| and |mjs_site|. To place the attached tree at a chosen position, first add a frame
+to the parent with
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_frame`
-and attach to the newly added frame. Here is the full mapping of what element type can be attached to
-what other element type:
+and attach to that frame. Here is the full mapping of what element type can be
+attached to what other element type:
 
 .. list-table::
     :header-rows: 1
@@ -240,8 +240,15 @@ what other element type:
     * - |mjs_site|
       - |mjs_body|, |mjs_frame|, |mj_spec|
 
-When attaching elements, a *prefix* and a *suffix* can be given. When no prefix/suffix is desired, just pass ``""`` to
-``Attach::attach_by_deep_copy`` / ``Attach::attach_by_reference`` at its respective positions.
+``attach_by_deep_copy`` copies every element of the child into the parent, so both specifications
+stay usable after the call. ``attach_by_reference`` makes the parent share the elements of the
+child, which is MuJoCo's default behavior. That sharing is why the method is ``unsafe``: no handle
+of the child specification, inside or outside the attached subtree, stays usable after the call.
+The method's docstring holds the full conditions.
+
+When attaching elements, a *prefix* and a *suffix* can be given. When no prefix/suffix is desired,
+just pass ``""`` to ``Attach::attach_by_deep_copy`` / ``Attach::attach_by_reference`` at its
+respective positions.
 
 The example below attaches a one-body specification under a frame of another specification.
 
@@ -271,7 +278,8 @@ The example below attaches a one-body specification under a frame of another spe
     }
 
 More on attachment is available in MuJoCo's
-`official documentation on attachment <https://mujoco.readthedocs.io/en/stable/programming/modeledit.html#attachment>`__.
+`official documentation on attachment
+<https://mujoco.readthedocs.io/en/3.12.0/programming/modeledit.html#attachment>`__.
 
 Deleting elements
 ======================

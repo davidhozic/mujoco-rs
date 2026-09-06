@@ -162,11 +162,6 @@ pub trait SpecObject: SpecItem {
 }
 
 /// A child that [`mjs_attach`] accepts for a parent of type `P`.
-/// # Interpretation
-/// This can be interpreted/read as the following example shows:
-/// 
-/// `impl AttachTo<MjsFrame> for MjsBody` means a [`MjsBody`] can be attached
-/// as a child to [`MjsFrame`]. 
 ///
 /// # Supported attachments
 /// | Child | Parent `P` |
@@ -174,7 +169,6 @@ pub trait SpecObject: SpecItem {
 /// | [`MjsBody`] | [`MjsFrame`], [`MjsSite`] |
 /// | [`MjsFrame`] | [`MjsBody`], [`MjsFrame`], [`MjsSite`] |
 /// | [`MjSpec`] | [`MjsBody`], [`MjsFrame`], [`MjsSite`] |
-/// 
 pub trait AttachTo<P>: sealed::Sealed {
     /// Returns the `mjsElement` that MuJoCo attaches to the parent. The pointer is mutable,
     /// because [`mjs_attach`] renames and reparents the child that it receives.
@@ -238,7 +232,7 @@ impl AttachTo<MjsSite> for MjSpec {
 /// The [`AttachTo`] trait (also sealed) is used for providing
 /// supported attachment combinations.
 pub trait Attach: SpecItem {
-    /// Attaches a **deep-copy** of the `child` to `Self`.
+    /// Attaches a **deep-copy** of the `child` to `Self`. Wraps [`mjs_attach`].
     /// For faster attachments, call [`Attach::attach_by_reference`], which is
     /// MuJoCo's default behavior. However, the latter requires `unsafe` due to
     /// possible UBs it allows.
@@ -247,7 +241,7 @@ pub trait Attach: SpecItem {
     /// MuJoCo mutates the `child` even with deep-copying enabled.
     /// When the child is a [`MjSpec`], it will create a new [`MjsFrame`] in its world body
     /// on every attachment, to which all the sub-elements of `child` will be copied.
-    /// 
+    ///
     /// # Errors
     /// Returns [`MjEditError::AttachFailed`] when MuJoCo rejects the attachment.
     ///
@@ -276,16 +270,16 @@ pub trait Attach: SpecItem {
         }
     }
 
-    /// Attaches the `child` to `Self` by reference.
+    /// Attaches the `child` to `Self` by reference. Wraps [`mjs_attach`].
     /// Attachment-by-reference is the default behavior in MuJoCo (C library).
-    /// 
+    ///
     /// # Safety
     /// This method is safe as long as the following conditions are met:
     /// - no element of the [`MjSpec`] in which the `child` lives is used anymore,
-    /// including the elements outside the attached subtree;
+    ///   including the elements outside the attached subtree;
     /// - no further element of that [`MjSpec`] is attached anywhere;
     /// - no existing references to the child (or other tree elements of child's [`MjSpec`])
-    ///   can be used further. 
+    ///   can be used further.
     ///
     /// # Note
     /// An attachment that returns an error still marks the `child` specification as attached, thus
