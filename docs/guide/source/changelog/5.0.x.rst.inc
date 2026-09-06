@@ -158,7 +158,7 @@
 
 .. rubric:: Deprecations
 
-- Deprecated :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>delete`
+- Deprecated ``SpecItem::delete``
   due to it relying on **undefined behavior**.
   Users are expected to use
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>delete_element`

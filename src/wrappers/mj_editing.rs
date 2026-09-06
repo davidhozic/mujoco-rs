@@ -456,19 +456,8 @@ impl MjSpec {
         }
 
         let result = unsafe { MjModel::from_raw( mj_compile(self.ffi.as_ptr(), ptr::null()) ) };
-        result.map_err(|_| {
-            // SAFETY: The spec is still valid after failed compilation.
-            // The error pointer is valid until the next MuJoCo call on this spec.
-            let error_msg: String = unsafe {
-                let ptr = mjs_getError(self.ffi_mut());
-                if ptr.is_null() {
-                    "Compilation failed (unknown error)".to_owned()
-                } else {
-                    CStr::from_ptr(ptr).to_string_lossy().into_owned()
-                }
-            };
-            MjEditError::CompileFailed(error_msg)
-        })
+        // SAFETY: the spec is still valid after a failed compilation.
+        result.map_err(|_| MjEditError::CompileFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }))
     }
 
     /// Return the compiler timers, in seconds, in `mjtCTimer` order.
@@ -4138,5 +4127,174 @@ mod tests {
         // The world body stays, so the body list never empties.
         assert!(unsafe { spec.world_body_mut().body_iter_mut().last().unwrap().delete() }.is_ok(), "body");
         assert_eq!(spec.body_iter().count(), 1);
+    }
+
+    /// Tests the attachment mechanism (wrapper around [`mjs_attach`]).
+    #[test]
+    fn test_attachment() {
+        const BASE_MODEL: &str = r#"
+            <mujoco>
+                <worldbody>
+                    <frame name="base_frame_1">
+                        <body name="base_frame_1_body_1">
+                            <geom size="5" name="base_frame_1_body_1_sphere"/>
+                        </body>
+                    </frame>
+                </worldbody>
+            </mujoco>
+        "#;
+
+        for prefix in ["", "attached_", "added"] {
+            for suffix in ["", "_attached", "_added"] {
+                let mut frame_spec = MjSpec::from_xml_string(BASE_MODEL).unwrap();
+                let mut main_spec = MjSpec::new();
+                let frame = frame_spec.frame_mut("base_frame_1").unwrap();
+                main_spec.world_body_mut().attach_by_deep_copy(frame, prefix, suffix).expect("attachment failed");
+
+                let renamed = |name: &str| format!("{prefix}{name}{suffix}");
+
+                // Deep copy renames the copy that the parent holds, thus the child keeps its
+                // own names.
+                assert!(
+                    frame_spec.geom("base_frame_1_body_1_sphere").is_some(),
+                    "the child spec lost its own name"
+                );
+                assert_eq!(
+                    frame_spec.geom(&renamed("base_frame_1_body_1_sphere")).is_some(),
+                    prefix.is_empty() && suffix.is_empty(),
+                    "the renamed element appeared in the child spec"
+                );
+
+                main_spec.frame(&renamed("base_frame_1")).expect("frame not attached");
+                main_spec.body(&renamed("base_frame_1_body_1")).expect("body not attached");
+                main_spec.geom(&renamed("base_frame_1_body_1_sphere")).expect("geom not attached");
+
+                // The original name survives only when both prefix and prefix are empty.
+                assert_eq!(
+                    main_spec.geom("base_frame_1_body_1_sphere").is_some(),
+                    prefix.is_empty() && suffix.is_empty()
+                );
+
+                // An invalid name to validate that the lookups don't just look like they work.
+                assert!(main_spec.geom("base_frame_1_body_1_sphereinvalid").is_none());
+
+                let model = main_spec.compile().expect("compilation of the attached spec failed");
+                assert_eq!(model.nbody(), 2, "the world body plus the attached one");
+                assert_eq!(model.ngeom(), 1);
+            }
+        }
+    }
+
+    /// Tests every parent/child pair that [`Attach`] and [`AttachTo`] support.
+    #[test]
+    fn test_attachment_pairs() {
+        const PARENT_MODEL: &str = r#"
+            <mujoco>
+                <worldbody>
+                    <body name="parent_body"/>
+                    <frame name="parent_frame"/>
+                    <site name="parent_site"/>
+                </worldbody>
+            </mujoco>
+        "#;
+
+        const CHILD_MODEL: &str = r#"
+            <mujoco>
+                <worldbody>
+                    <frame name="child_frame">
+                        <body name="child_body">
+                            <geom size="5" name="child_geom"/>
+                        </body>
+                    </frame>
+                </worldbody>
+            </mujoco>
+        "#;
+
+        // Compiles the parent and checks that the child subtree arrived once, under the new names.
+        #[track_caller]
+        fn assert_attached(parent: &mut MjSpec) {
+            assert!(parent.geom("p_child_geom_s").is_some(), "the geom is not namespaced");
+            let model = parent.compile().expect("cannot compile the attached spec");
+            assert_eq!((model.nbody(), model.ngeom()), (3, 1), "wrong element counts");
+        }
+
+        // A fresh pair for every attachment, as an attachment changes both specs.
+        let specs = || (
+            MjSpec::from_xml_string(PARENT_MODEL).unwrap(),
+            MjSpec::from_xml_string(CHILD_MODEL).unwrap()
+        );
+
+        /* A body as the child. */
+        let (mut parent, mut child) = specs();
+        parent.frame_mut("parent_frame").unwrap()
+            .attach_by_deep_copy(child.body_mut("child_body").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.site_mut("parent_site").unwrap()
+            .attach_by_deep_copy(child.body_mut("child_body").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        /* A frame as the child. */
+        let (mut parent, mut child) = specs();
+        parent.body_mut("parent_body").unwrap()
+            .attach_by_deep_copy(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.frame_mut("parent_frame").unwrap()
+            .attach_by_deep_copy(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.site_mut("parent_site").unwrap()
+            .attach_by_deep_copy(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        /* A whole specification as the child. */
+        let (mut parent, mut child) = specs();
+        parent.body_mut("parent_body").unwrap().attach_by_deep_copy(&mut child, "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.frame_mut("parent_frame").unwrap().attach_by_deep_copy(&mut child, "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.site_mut("parent_site").unwrap().attach_by_deep_copy(&mut child, "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+    }
+
+    /// Tests whether deep-copy works during attachment.
+    #[test]
+    fn test_deep_copy_attach() {
+        // Deep attach off.
+        let mut child_spec = MjSpec::new();
+        let mut parent_spec = MjSpec::new();
+        // SAFETY: the test takes no element handle of the child after the attachment.
+        unsafe {
+            parent_spec.world_body_mut().add_frame()
+                .attach_by_reference(&mut child_spec, "", "")
+        }.unwrap();
+
+        // Should error with attached reference errors
+        let result = child_spec.compile().unwrap_err();
+        assert!(
+            matches!(result, MjEditError::CompileFailed(e) if e.contains("attached by reference")),
+            "a child attached by reference compiled without reference, which is wrong as the parent shares the references"
+        );
+
+        // Should compile regulary, both parent and attached child.
+        parent_spec.compile().unwrap();
+
+        // A fresh pair, which keeps the deep copy that a new specification enables.
+        let mut new_parent_spec = MjSpec::new();
+        let mut new_child_spec = MjSpec::new();
+        new_parent_spec.world_body_mut().attach_by_deep_copy(&mut new_child_spec, "", "").unwrap();
+        assert!(
+            new_child_spec.compile().is_ok(),
+            "child spec should not be attached by reference when deep-copy is enabled"
+        );
+        new_parent_spec.compile().unwrap();
     }
 }

@@ -188,18 +188,23 @@ pub(crate) unsafe fn delete_element(element: *mut mjsElement) -> Result<(), MjEd
 
     match unsafe { mjs_delete(spec, element) } {
         0 => Ok(()),
-        _ => {
-            // SAFETY: the message belongs to the spec and lives until the next call on it.
-            let error_msg = unsafe {
-                let ptr = mjs_getError(spec);
-                if ptr.is_null() {
-                    "Unknown error".to_owned()
-                } else {
-                    CStr::from_ptr(ptr).to_string_lossy().into_owned()
-                }
-            };
-            Err(MjEditError::DeleteFailed(error_msg))
-        }
+        // SAFETY: the spec stays live after a refused deletion.
+        _ => Err(MjEditError::DeleteFailed(unsafe { read_spec_error(spec) })),
+    }
+}
+
+
+/// Reads the last error message that `spec` recorded, or a placeholder when it holds none.
+///
+/// # Safety
+/// `spec` must address a live specification.
+pub(crate) unsafe fn read_spec_error(spec: *mut mjSpec) -> String {
+    // SAFETY: the message belongs to the spec and lives until the next call on it.
+    let ptr = unsafe { mjs_getError(spec) };
+    if ptr.is_null() {
+        "Unknown error".to_owned()
+    } else {
+        unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned()
     }
 }
 
