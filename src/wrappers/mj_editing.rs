@@ -542,6 +542,14 @@ impl MjSpec {
             }
         }
     }
+
+    /// Configures deep-copy on or off during [`Attach::attach`].
+    /// Wraps [`mjs_setDeepCopy`].
+    pub fn set_deep_copy(&mut self, enable: bool) {
+        // SAFETY: This is inherently a always safe function as it only calls a boolean setter.
+        // Additionally,ffi_mut() is always valid.
+        unsafe { mjs_setDeepCopy(self.ffi_mut(), enable.into()) };
+    }
 }
 
 /// Children accessor methods.
@@ -4264,6 +4272,37 @@ mod tests {
         let (mut parent, mut child) = specs();
         parent.site_mut("parent_site").unwrap().attach(&mut child, "p_", "_s").unwrap();
         assert_attached(&mut parent);
+    }
+
+    /// Tests whether deep-copy works during attachment.
+    #[test]
+    fn test_deep_copy_attach() {
+        // Deep attach off.
+        let mut child_spec = MjSpec::new();
+        let mut parent_spec = MjSpec::new();
+
+        parent_spec.world_body_mut().add_frame()
+            .attach(&mut child_spec, "", "").unwrap();
+
+        // Should error with attached reference errors
+        let result = child_spec.compile().unwrap_err();
+        assert!(
+            matches!(result, MjEditError::CompileFailed(e) if e.contains("attached by reference")),
+            "a child attached by reference compiled without reference, which is wrong as the parent shares the references"
+        );
+
+        // Should compile regulary, both parent and attached child.
+        parent_spec.compile().unwrap();
+
+        // Drop old parent and create new parent.
+        parent_spec.set_deep_copy(true);
+        let mut new_child_spec = MjSpec::new();
+        parent_spec.world_body_mut().attach(&mut new_child_spec, "", "").unwrap();
+        assert!(
+            new_child_spec.compile().is_ok(),
+            "child spec should not be attached by reference when deep-copy is enabled"
+        );
+        parent_spec.compile().unwrap();
     }
 }
 
