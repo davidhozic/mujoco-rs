@@ -1746,11 +1746,11 @@ impl ViewerUI {
         // Apply egui's platform output (cursor icon, clipboard, IME).
         self.state.handle_platform_output(window, full_output.platform_output);
 
-        // Tessellate. The paint waits for MuJoCo to finish the frame; see `paint`.
+        // Tessalate and store result for later drawing.
         let pixels_per_point = full_output.pixels_per_point;
         let mut textures_delta = full_output.textures_delta;
 
-        // A render attempt that ended early between the two calls leaves its own deltas behind. They carry
+        // A render attempt that ended early leaves its own deltas uncleared. They carry
         // upload and free history that egui expects.
         if let Some(dropped) = self.pending_paint.take() {
             let mut merged = dropped.textures_delta;
