@@ -1,3 +1,27 @@
+6.0.1 (MuJoCo 3.12.0)
+======================
+
+.. rubric:: New features and improvements
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>set_window_doublebuffer`
+  :sup:`new` overrides the color-buffer choice that
+  :docs-rs:`~mujoco_rs::mujoco_c::<fn>mjr_makeContext` derives from ``GL_DOUBLEBUFFER``.
+
+.. rubric:: Bug fixes
+
+- Fixed `#276 <https://github.com/davidhozic/mujoco-rs/issues/276>`_ where :ref:`mj_rust_viewer`
+  crashed with models containing a flex.
+- The :ref:`mj_rust_viewer` no longer raises a ``GL_INVALID_OPERATION`` on every frame, which
+  `egui <https://docs.rs/egui/0.36.1/egui/>`_ reported in a debug build. The viewer now takes the
+  color buffer of its window from `glutin <https://docs.rs/glutin/0.32.3/glutin/>`_ instead of
+  MuJoCo's own detection.
+
+.. rubric:: Other changes
+
+- The :gh-example:`Rust viewer <visualization/viewer/rust_viewer.rs>` and
+  :gh-example:`threaded Rust viewer <visualization/viewer/rust_viewer_threaded.rs>` examples now
+  show a ball that bounces on a trampoline.
+
 6.0.0 (MuJoCo 3.12.0)
 ======================
 
