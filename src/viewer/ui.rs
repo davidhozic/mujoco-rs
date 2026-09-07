@@ -4,11 +4,9 @@ use std::collections::VecDeque;
 use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
 use std::f64::consts::PI;
-use std::ffi::CString;
 use std::borrow::Cow;
 use std::fmt::Debug;
 
-use glutin::display::{Display, GlDisplay};
 use egui_winit::winit::event::WindowEvent;
 use egui_glow::glow::{self, HasContext};
 use egui::{FontId, RichText, LayerId, Order, Id};
@@ -270,6 +268,14 @@ struct JointDisplayInfo {
     quat: Option<JointQuatDisplayInfo>,
 }
 
+/// Processed egui data to be painted.
+struct PendingPaint {
+    primitives: Vec<egui::ClippedPrimitive>,
+    textures_delta: egui::TexturesDelta,
+    pixels_per_point: f32,
+    screen_size: [u32; 2],
+}
+
 /// Viewer user interface context.
 pub(crate) struct ViewerUI {
     egui_ctx: egui::Context,
@@ -277,6 +283,7 @@ pub(crate) struct ViewerUI {
     painter: egui_glow::Painter,
     gl: Arc<egui_glow::glow::Context>,
     events: VecDeque<UiEvent>,
+    pending_paint: Option<PendingPaint>,
     camera_names: Vec<String>,
     actuator_info: Vec<ActuatorDisplayInfo>,
     joint_info: Vec<JointDisplayInfo>,
@@ -302,7 +309,7 @@ pub(crate) struct ViewerUI {
 
 impl ViewerUI {
     /// Create a new [`ViewerUI`] instance for the specific winit window.
-    pub(crate) fn new(model: &MjModel, window: &Window, display: &Display) -> Result<Self, MjViewerError> {
+    pub(crate) fn new(model: &MjModel, window: &Window, gl: &Arc<glow::Context>) -> Result<Self, MjViewerError> {
         let egui_ctx = egui::Context::default();
         let viewport_id = egui_ctx.viewport_id();
 
@@ -310,13 +317,6 @@ impl ViewerUI {
             egui_ctx.clone(), viewport_id, &window,
             None, None, None
         );
-
-        let get_addr = |s: &str| display.get_proc_address(
-            &CString::new(s).unwrap()
-        );
-        // SAFETY: the glow::Context is constructed from a loader function backed by the
-        // current glutin Display, which provides valid OpenGL proc addresses.
-        let gl = unsafe { Arc::new(egui_glow::glow::Context::from_loader_function(get_addr)) };
 
         let painter = egui_glow::Painter::new(
             gl.clone(),
@@ -326,7 +326,8 @@ impl ViewerUI {
         ).map_err(|e| MjViewerError::PainterInitError(e.to_string()))?;
 
         let mut viewer_ui = Self {
-            egui_ctx, state, painter, gl, events: VecDeque::new(),
+            egui_ctx, state, painter, gl: gl.clone(), events: VecDeque::new(),
+            pending_paint: None,
             camera_names: Vec::new(),
             actuator_info: Vec::new(),
             joint_info: Vec::new(),
@@ -474,7 +475,7 @@ impl ViewerUI {
 
         // Process the UI
         let raw_input = self.state.take_egui_input(window);
-        let mut full_output = self.egui_ctx.run_ui(raw_input, |ui| {
+        let full_output = self.egui_ctx.run_ui(raw_input, |ui| {
             let mut is_expanded = status.contains(ViewerStatusBit::UI);
             egui::Panel::left("interface_panel")
                 .resizable(true)
@@ -1745,20 +1746,41 @@ impl ViewerUI {
         // Apply egui's platform output (cursor icon, clipboard, IME).
         self.state.handle_platform_output(window, full_output.platform_output);
 
-        // Tessellate
+        // Tessellate. The paint waits for MuJoCo to finish the frame; see `paint`.
         let pixels_per_point = full_output.pixels_per_point;
-        let textures_delta = &mut full_output.textures_delta;
-        let clipped_primitives = self.egui_ctx.tessellate(full_output.shapes, pixels_per_point);
+        let mut textures_delta = full_output.textures_delta;
 
-        // Paint the menu
-        self.painter.paint_and_update_textures(
-            window.inner_size().into(),
+        // A render attempt that ended early between the two calls leaves its own deltas behind. They carry
+        // upload and free history that egui expects.
+        if let Some(dropped) = self.pending_paint.take() {
+            let mut merged = dropped.textures_delta;
+            merged.append(textures_delta);
+            textures_delta = merged;
+        }
+
+        self.pending_paint = Some(PendingPaint {
+            primitives: self.egui_ctx.tessellate(full_output.shapes, pixels_per_point),
+            textures_delta,
             pixels_per_point,
-            &clipped_primitives,
-            textures_delta
-        );
+            screen_size: window.inner_size().into(),
+        });
 
         left * pixels_per_point
+    }
+
+    /// Paints the interface.
+    pub(crate) fn paint(&mut self) {
+        let Some(mut pending) = self.pending_paint.take() else {
+            return;
+        };
+
+        self.init_2d();
+        self.painter.paint_and_update_textures(
+            pending.screen_size,
+            pending.pixels_per_point,
+            &pending.primitives,
+            &mut pending.textures_delta
+        );
     }
 
     /// Checks whether the UI is focused (e.g., typing).
@@ -1793,32 +1815,13 @@ impl ViewerUI {
     }
 
     /// Prepares OpenGL for drawing 2D overlays.
-    pub(crate) fn init_2d(&self) {
+    fn init_2d(&self) {
         let gl = &self.gl;
+        // `mjr_render` leaves the polygon mode on GL_LINE when the wireframe flag is set, and
+        // egui sets every other state it needs in its own `prepare_painting`.
         // SAFETY: the GL context is current (made current by the render loop before this call).
-        unsafe { 
-            gl.disable(glow::DEPTH_TEST);
-            gl.disable(glow::CULL_FACE);
-            gl.disable(glow::BLEND);
-            gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
-            gl.polygon_mode(glow::FRONT_AND_BACK, glow::FILL);
-        }
-    }
-
-    /// Resets OpenGL state. This is needed for MuJoCo's renderer.
-    pub(crate) fn reset(&mut self) {
-        let gl = &self.gl;
-        // SAFETY: the GL context is current; unbinding programs and buffers is always safe
-        // as long as no draw calls are in flight, which is guaranteed by the render loop.
         unsafe {
-            // Disable shaders
-            gl.use_program(None);
-
-            // Unbind buffers
-            gl.bind_vertex_array(None);
-            gl.bind_buffer(glow::ARRAY_BUFFER, None);
-            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
-            gl.bind_framebuffer(glow::FRAMEBUFFER, None);
+            gl.polygon_mode(glow::FRONT_AND_BACK, glow::FILL);
         }
     }
 
@@ -1841,6 +1844,16 @@ impl ViewerUI {
     /// Must be called while the GL context is still current.
     pub(crate) fn destroy_gl(&mut self) {
         self.painter.destroy();
+    }
+}
+
+impl Drop for ViewerUI {
+    fn drop(&mut self) {
+        // A render attempt that ended in between calls leaves texture deltas behind.
+        // They must be cleared due to egui panicking otherwise on its own drop.
+        if let Some(pending) = &mut self.pending_paint {
+            pending.textures_delta.clear();
+        }
     }
 }
 

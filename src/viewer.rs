@@ -2,6 +2,7 @@
 //! see [`crate::cpp_viewer::MjViewerCpp`] (enabled by the `cpp-viewer` cargo feature).
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+#[cfg(feature = "viewer-ui")] use std::ffi::CString;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use std::collections::BTreeSet;
@@ -12,7 +13,8 @@ use std::fmt::Display;
 use std::borrow::Cow;
 
 use winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, WindowEvent};
-#[cfg(feature = "viewer-ui")] use glutin::display::GetGlDisplay;
+#[cfg(feature = "viewer-ui")] use glutin::display::{GetGlDisplay, GlDisplay};
+#[cfg(feature = "viewer-ui")] use egui_glow::glow::{self, HasContext};
 use winit::platform::pump_events::EventLoopExtPumpEvents;
 use glutin::prelude::PossiblyCurrentGlContext;
 use winit::keyboard::{KeyCode, PhysicalKey};
@@ -800,7 +802,11 @@ pub struct MjViewer {
 
     /// Pending screenshot request. [`Some`] with `(viewport_only, depth)` flags when a
     /// screenshot is queued; [`None`] otherwise.
-    screenshot_pending: Option<(bool, bool)>
+    screenshot_pending: Option<(bool, bool)>,
+
+    /// Proxy for controlling OpenGL directly.
+    #[cfg(feature = "viewer-ui")]
+    gl: Arc<egui_glow::glow::Context>,
 }
 
 impl MjViewer {
@@ -1110,11 +1116,19 @@ impl MjViewer {
         // Make sure everything is done on the viewer's window
         gl_context.make_current(gl_surface)?;
 
+        // Configure OpenGL to the expected settings by MuJoCo.
+        #[cfg(feature = "viewer-ui")]
+        self.init_mujoco_gl();
+
         // Read the screen size
         self.update_rectangles(self.adapter.state.as_ref().unwrap().window.inner_size().into());
 
         // Process mouse and keyboard events
         self.process_events();
+
+        // Build the user menu and process its internal events.
+        #[cfg(feature = "viewer-ui")]
+        self.process_user_ui();
 
         // Update the scene from data and render
         self.update_scene()?;
@@ -1127,12 +1141,12 @@ impl MjViewer {
             self.capture_screenshot(depth)?;
         }
 
-        // Draw the user menu on top
-        #[cfg(feature = "viewer-ui")]
-        self.process_user_ui();
-
         // Update the user menu state and overlays
         self.update_menus();
+
+        // Draw the user UI.
+        #[cfg(feature = "viewer-ui")]
+        self.ui.paint();
 
         // Full-window screenshot: capture after all rendering (UI + overlays).
         if let Some((false, _)) = self.screenshot_pending {
@@ -1142,6 +1156,22 @@ impl MjViewer {
 
         // Flush to the GPU
         self.swap_buffers()
+    }
+
+    /// Prepares MuJoCo OpenGL for rendering in MuJoCo 3D mode.
+    #[cfg(feature = "viewer-ui")]
+    fn init_mujoco_gl(&self) {
+        let gl = &self.gl;
+        // SAFETY: the GL context is current.
+        unsafe {
+            // Disable shaders
+            gl.use_program(None);
+
+            // Unbind buffers
+            gl.bind_vertex_array(None);
+            gl.bind_buffer(glow::ARRAY_BUFFER, None);
+            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
+        }
     }
 
     /// Perform OpenGL buffer swap.
@@ -1414,16 +1444,13 @@ impl MjViewer {
         self.ui.with_egui_ctx(once_fn);
     }
 
-    /// Draws the user UI
+    /// Builds the user UI and processes its internally raised events.
     #[cfg(feature = "viewer-ui")]
     fn process_user_ui(&mut self) {
-        // Draw the user interface
-
         use crate::viewer::ui::UiEvent;
         let RenderBaseGlState {window, ..} = &self.adapter.state.as_ref().unwrap();
 
         let inner_size = window.inner_size();
-        self.ui.init_2d();
         let left = self.ui.process(
             window, &mut self.status,
             &mut self.scene, &mut self.opt,
@@ -1433,9 +1460,6 @@ impl MjViewer {
         // Adjust the viewport so MuJoCo doesn't draw over the UI
         self.rect_view.left = left as i32;
         self.rect_view.width = inner_size.width as i32;
-
-        // Reset some OpenGL settings so that MuJoCo can still draw
-        self.ui.reset();
 
         // Process events made in the user UI
         while let Some(event) = self.ui.drain_events() {
@@ -2013,9 +2037,21 @@ impl MjViewerBuilder {
         let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(&*model, self.max_user_geoms)));
         let running_flag = shared_state.lock_unpoison().running.clone();
 
+        // OpenGL context proxy
+        #[cfg(feature = "viewer-ui")]
+        let display = gl_surface.display();
+        #[cfg(feature = "viewer-ui")]
+        let get_addr = |s: &str| display.get_proc_address(
+            &CString::new(s).unwrap()
+        );
+        // SAFETY: the glow::Context is constructed from a loader function backed by the
+        // current glutin Display, which provides valid OpenGL proc addresses.
+        #[cfg(feature = "viewer-ui")]
+        let gl = unsafe { Arc::new(glow::Context::from_loader_function(get_addr)) };
+
         // User interface
         #[cfg(feature = "viewer-ui")]
-        let ui = ui::ViewerUI::new(&model, window, &gl_surface.display())?;
+        let ui = ui::ViewerUI::new(&model, window, &gl)?;
         let mut status = cfg_select! {
             feature = "viewer-ui" => ViewerStatusBit::UI,
             _ => ViewerStatusBit::HELP,
@@ -2049,7 +2085,8 @@ impl MjViewerBuilder {
             raw_cursor_position: (0.0, 0.0),
             #[cfg(feature = "viewer-ui")] ui,
             status,
-            screenshot_pending: None
+            screenshot_pending: None,
+            #[cfg(feature = "viewer-ui")] gl,
         })
     }
 }

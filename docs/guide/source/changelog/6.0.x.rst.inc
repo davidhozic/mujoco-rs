@@ -1,3 +1,11 @@
+6.0.1 (MuJoCo 3.12.0)
+======================
+
+.. rubric:: Bug fixes
+
+- Fixed `#276 <https://github.com/davidhozic/mujoco-rs/issues/276>`_ where :ref:`mj_rust_viewer`
+  crashed with models containing a flex.
+
 6.0.0 (MuJoCo 3.12.0)
 ======================
 
