@@ -1746,7 +1746,7 @@ impl ViewerUI {
         // Apply egui's platform output (cursor icon, clipboard, IME).
         self.state.handle_platform_output(window, full_output.platform_output);
 
-        // Tessalate and store result for later drawing.
+        // Tessellate and store result for later drawing.
         let pixels_per_point = full_output.pixels_per_point;
         let mut textures_delta = full_output.textures_delta;
 
@@ -1814,7 +1814,7 @@ impl ViewerUI {
         self.egui_ctx.memory_mut(|memory| memory.areas_mut().move_to_top(scene_layer));
     }
 
-    /// Prepares OpenGL for drawing 2D overlays.
+    /// Prepares OpenGL for the egui paint pass.
     fn init_2d(&self) {
         let gl = &self.gl;
         // `mjr_render` leaves the polygon mode on GL_LINE when the wireframe flag is set, and
