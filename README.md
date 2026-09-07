@@ -103,7 +103,8 @@ This example requires the ``viewer`` or the ``viewer-ui`` feature
 (``cargo add mujoco-rs --features viewer``).
 It launches the viewer and prints the coordinates
 of a moving ball to the terminal.
-Other examples can be found under the ``examples/`` directory.
+Other examples are available in the
+[``examples/``](https://github.com/davidhozic/mujoco-rs/tree/v6.0.x/examples) directory.
 
 ```rust
 //! Example of using views.

@@ -16,12 +16,12 @@ use winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDe
 #[cfg(feature = "viewer-ui")] use glutin::display::{GetGlDisplay, GlDisplay};
 #[cfg(feature = "viewer-ui")] use egui_glow::glow::{self, HasContext};
 use winit::platform::pump_events::EventLoopExtPumpEvents;
+use glutin::surface::{GlSurface, Surface, WindowSurface};
 use glutin::prelude::PossiblyCurrentGlContext;
 use winit::keyboard::{KeyCode, PhysicalKey};
 use log::{debug, error, info, warn};
 use winit::event_loop::EventLoop;
 use winit::dpi::PhysicalPosition;
-use glutin::surface::GlSurface;
 use winit::window::Fullscreen;
 use bitflags::bitflags;
 
@@ -1286,6 +1286,18 @@ impl MjViewer {
         self.fps_smooth += FPS_SMOOTHING_FACTOR * (fps - self.fps_smooth);
     }
 
+    /// Creates the render context for the window surface `gl_surface`.
+    ///
+    /// # Safety
+    /// The OpenGL context of `gl_surface` must be current.
+    unsafe fn make_render_context(model: &MjModel, gl_surface: &Surface<WindowSurface>) -> MjrContext {
+        // SAFETY: the caller guarantees the current OpenGL context.
+        let mut context = unsafe { MjrContext::new(model) };
+
+        context.set_window_doublebuffer(!gl_surface.is_single_buffered());
+        context
+    }
+
     /// Updates the scene and draws it to the display.
     fn update_scene(&mut self) -> Result<(), MjViewerError> {
         {
@@ -1312,8 +1324,9 @@ impl MjViewer {
                 self.camera = MjvCamera::new_free(new_model);
                 // Recreate the rendering context so that GPU resources (textures,
                 // meshes, heightfields, skins) match the new model.
+                let gl_surface = &self.adapter.state.as_ref().unwrap().gl_surface;
                 // SAFETY: the GL context was made current in render() before this call.
-                self.context = unsafe { MjrContext::new(new_model) };
+                self.context = unsafe { Self::make_render_context(new_model, gl_surface) };
                 self.ncam = new_model.ffi().ncam;
                 #[cfg(feature = "viewer-ui")]
                 self.ui.update_caches(new_model);
@@ -2030,7 +2043,7 @@ impl MjViewerBuilder {
         let ngeom = model.ffi().ngeom as usize;
         let scene = MjvScene::new(&*model, ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
         // SAFETY: The OpenGL context was made current above via gl_surface.
-        let context = unsafe { MjrContext::new(&model) };
+        let context = unsafe { MjViewer::make_render_context(&model, gl_surface) };
         let camera  = MjvCamera::new_free(&model);
 
         // Tracking of changes made between syncs
