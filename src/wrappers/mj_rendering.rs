@@ -384,7 +384,10 @@ impl MjrContext {
         [ffi] glInitialized: bool; "whether OpenGL is initialized.";
         [ffi] windowAvailable: bool; "whether the default/window framebuffer is available.";
         [ffi] windowStereo: bool; "whether stereo is available for the default/window framebuffer.";
-        [ffi] windowDoublebuffer: bool; "whether the default/window framebuffer is double buffered.";
+    ]}
+
+    getter_setter! {get, set, [
+        [ffi, ffi_mut] windowDoublebuffer: bool; "whether the default/window framebuffer is double buffered.";
     ]}
 
     getter_setter! {get, [
