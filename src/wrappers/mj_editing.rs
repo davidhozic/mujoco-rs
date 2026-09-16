@@ -254,6 +254,29 @@ impl MjSpec {
         NonNull::new(ptr).map(Self::from_ffi).ok_or(MjEditError::AllocationFailed)
     }
 
+    /// Wraps the spec into a [`Send`]-able wrapper, allowing it to be moved to another thread.
+    /// # Safety
+    /// The spec must not have any elements attached to it.
+    /// This include any type of attachments done by the following:
+    /// - using the `<model>` tag inside the MJCF XML definition;
+    /// - attaching procedurally via [`Attach::attach_by_reference`];
+    /// - attaching procedurally via [`Attach::attach_by_deep_copy`].
+    /// 
+    /// # Example
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// let spec = MjSpec::new();
+    /// 
+    /// // SAFETY: the source spec doesn't have any attachments.
+    /// let spec2 = unsafe { spec.clone().into_sendable() };
+    /// std::thread::spawn(|| {
+    ///     let moved_spec = spec2.take();
+    /// }).join();
+    /// ```
+    pub unsafe fn into_sendable(self) -> SendableSpec {
+        unsafe { SendableSpec::new(self) }
+    }
+
     /// Creates a [`MjSpec`] from the `path` to a file.
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
@@ -776,6 +799,30 @@ impl Clone for MjSpec {
         self.try_clone().expect("MuJoCo failed to clone MjSpec")
     }
 }
+
+/// A wrapper around [`MjSpec`] implementing [`Send`].
+pub struct SendableSpec(MjSpec);
+
+impl SendableSpec {
+    /// Wrap a [`MjSpec`] into a [`Send`]-able wrapper.
+    /// # Safety
+    /// The `spec` must not have any elements attached to it.
+    /// This rule is true for both elements attached via [`attach`] 
+    pub unsafe fn new(spec: MjSpec) -> Self {
+        Self(spec)
+    }
+
+    /// Takes the wrapped [`MjSpec`] out of the wrapper.
+    pub fn take(self) -> MjSpec {
+        self.0
+    }
+}
+
+/// Implementation of [`Send`] which allows [`MjSpec`] to be sent across threads.
+/// # Safety
+/// A [`SendableSpec`] can only be instantiated through methods marked as `unsafe`.
+/// These methods are safe provided no attachments have been made to the Spec.
+unsafe impl Send for SendableSpec {}
 
 /***************************
 ** Site specification

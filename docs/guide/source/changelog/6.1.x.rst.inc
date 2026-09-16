@@ -32,5 +32,11 @@
 
   The prelude exports both traits.
 
+- Added support for sending |mj_spec| to other threads by wrapping it into
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>SendableSpec` :sup:`new`,
+  which implements `Send <https://doc.rust-lang.org/std/marker/trait.Send.html>`__.
+  A ``SendableSpec`` can be created from ``MjSpec`` by calling the ``unsafe`` method
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>into_sendable` :sup:`new`.
+
 .. rubric:: Bug fixes
 .. rubric:: Other changes
