@@ -256,11 +256,14 @@ impl MjSpec {
 
     /// Wraps the spec into a [`Send`]-able wrapper, allowing it to be moved to another thread.
     /// # Safety
-    /// The spec must not have any elements attached to it.
-    /// This include any type of attachments done by the following:
-    /// - using the `<model>` tag inside the MJCF XML definition;
+    /// No other live [`MjSpec`] may share data with this spec.
+    /// This includes any type of sharing done by the following:
+    /// - cloning a spec that uses the `<model>` tag inside `<asset>` in the MJCF XML definition;
     /// - attaching procedurally via [`Attach::attach_by_reference`];
     /// - attaching procedurally via [`Attach::attach_by_deep_copy`].
+    ///
+    /// The attachments include not just direct attachments of [`MjSpec`], but also any other
+    /// model-editing element. Attachments within the same spec is safe.
     /// 
     /// # Example
     /// ```
@@ -806,8 +809,7 @@ pub struct SendableSpec(MjSpec);
 impl SendableSpec {
     /// Wrap a [`MjSpec`] into a [`Send`]-able wrapper.
     /// # Safety
-    /// The `spec` must not have any elements attached to it.
-    /// This rule is true for both elements attached via [`attach`] 
+    /// The `spec` must follow the same rules as written in [`MjSpec::into_sendable`].
     pub unsafe fn new(spec: MjSpec) -> Self {
         Self(spec)
     }
@@ -821,7 +823,7 @@ impl SendableSpec {
 /// Implementation of [`Send`] which allows [`MjSpec`] to be sent across threads.
 /// # Safety
 /// A [`SendableSpec`] can only be instantiated through methods marked as `unsafe`.
-/// These methods are safe provided no attachments have been made to the Spec.
+/// These methods are safe provided no other [`MjSpec`] shares data with the wrapped spec.
 unsafe impl Send for SendableSpec {}
 
 /***************************
