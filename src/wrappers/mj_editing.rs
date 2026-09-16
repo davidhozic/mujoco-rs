@@ -804,6 +804,7 @@ impl Clone for MjSpec {
 }
 
 /// A wrapper around [`MjSpec`] implementing [`Send`].
+#[derive(Debug)]
 pub struct SendableSpec(MjSpec);
 
 impl SendableSpec {

@@ -17,7 +17,7 @@
 //! MuJoCo-rs relies on MuJoCo [3.12.0](https://github.com/google-deepmind/mujoco/releases/tag/3.12.0).
 //!
 //! ## Documentation
-//! A more guided documentation can be obtained [here](https://mujoco-rs.readthedocs.io/en/v6.0.x/).
+//! A more guided documentation can be obtained [here](https://mujoco-rs.readthedocs.io/en/v6.1.x/).
 //!
 //! ### Missing library errors
 //! Guided documentation also contains information on how to **configure MuJoCo**.
@@ -25,13 +25,13 @@
 //! **load-time errors** about **missing libraries**.
 //!
 //! Information on how to configure MuJoCo and resolve these issues is available
-//! [here](https://mujoco-rs.readthedocs.io/en/v6.0.x/installation.html#mujoco).
+//! [here](https://mujoco-rs.readthedocs.io/en/v6.1.x/installation.html#mujoco).
 //!
 //! ## 3D viewer
 //! The Rust-native viewer is available ([`viewer::MjViewer`]) when the `viewer` / `viewer-ui` feature is enabled.
 //! MuJoCo's C++ one ([`crate::cpp_viewer::MjViewerCpp`]) is available when the `cpp-viewer` feature is enabled.
 //! The C++ viewer, however, requires manual compilation of a patched MuJoCo repository,
-//! like described [here](https://mujoco-rs.readthedocs.io/en/v6.0.x/installation.html#static-linking).
+//! like described [here](https://mujoco-rs.readthedocs.io/en/v6.1.x/installation.html#static-linking).
 //!
 //! ## Model editing
 //! [`MjModel`](wrappers::MjModel) can be procedurally generated through the model editing module.
@@ -59,7 +59,7 @@
 //!     This also allows users to add custom [`egui`](https://docs.rs/egui/0.36.1/egui/) widgets to the viewer.
 //!
 //! - `cpp-viewer`: enables the Rust wrapper around the C++ MuJoCo viewer.
-//!   This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/v6.0.x/installation.html#static-linking).
+//!   This requires static linking to a modified fork of MuJoCo, as described in [installation](https://mujoco-rs.readthedocs.io/en/v6.1.x/installation.html#static-linking).
 //! - `renderer`: enables offscreen rendering for writing RGB and
 //!   depth data to memory or file.
 //!
@@ -73,7 +73,7 @@
 //!   - This is only available on Linux and Windows.
 //!   - The environment variable `MUJOCO_DOWNLOAD_DIR` must be set to the absolute path of the download location.
 //!   - Downloaded MuJoCo library is still a shared library. See
-//!     [installation](https://mujoco-rs.readthedocs.io/en/v6.0.x/installation.html#mujoco)
+//!     [installation](https://mujoco-rs.readthedocs.io/en/v6.1.x/installation.html#mujoco)
 //!     for information on complete configuration.
 //!
 //! By default, no optional features are enabled. Enable the features you need explicitly
@@ -82,7 +82,7 @@
 //!
 //! On macOS, the visualization features (`viewer` and `renderer`) do not work without
 //! patching the `glutin` dependency. See
-//! [installation](https://mujoco-rs.readthedocs.io/en/v6.0.x/installation.html#macos-glutin-patch)
+//! [installation](https://mujoco-rs.readthedocs.io/en/v6.1.x/installation.html#macos-glutin-patch)
 //! for instructions.
 //!
 //!

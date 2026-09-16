@@ -352,7 +352,7 @@ More on attachment is available in MuJoCo's
 
 .. danger::
 
-    Regardless of whether the element is attached via MJCF XML (``<model>`` inside ``<assets>``),
+    Regardless of whether the element is attached via MJCF XML (``<model>`` inside ``<asset>``),
     by ``attach_by_reference`` or by ``attach_by_deep_copy``, the specification becomes
     thread-unsafe. Do not share it across threads.
 
