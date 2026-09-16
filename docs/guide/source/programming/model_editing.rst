@@ -212,14 +212,84 @@ changed sensor type or a changed actuator dynamics type breaks it; ``swap_model`
 :docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>IncompatibleModel`.
 
 
+Thread-safety and ``Send``
+==================================================================================
+Almost all of model-editing features, available in MuJoCo-rs, are wrappers of MuJoCo's C++
+model-editing code. That code is written with certain assumptions in place, such as single-thread
+use of same spec. For this purpose, the model-editing elements and |mj_spec| itself do not implement
+``Send``, which would allow |mj_spec| to be
+sent to another thread directly.
+
+However, using |mj_spec| is thread-safe in certain scenarios. Thread-safety is guaranteed only when
+all of the following are **NOT** true for a |mj_spec|:
+
+- cloning a |mj_spec| that uses the ``<model>`` tag inside ``<asset>`` in the MJCF XML definition;
+- attaching procedurally via
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_reference`;
+- attaching procedurally via
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_deep_copy`.
+
+Note that these attachments don't include just direct attachments of |mj_spec|, but also
+any other model-editing element. Attaching inside a single |mj_spec| shares nothing.
+The restriction is a consequence of MuJoCo using non-atomic reference counting.
+
+Sending a |mj_spec| to another thread does not compile:
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+    use std::thread;
+
+    fn main() {
+        let mut spec = MjSpec::from_xml("model.xml").unwrap();
+        thread::spawn(move || {
+            spec.compile().unwrap();
+        });
+    }
+
+.. code-block:: text
+
+    error[E0277]: `NonNull<mjSpec_>` cannot be sent between threads safely
+    note: required because it appears within the type `mujoco_rs::wrappers::MjSpec`
+
+When the conditions above hold, wrap the specification via
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>into_sendable`:
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+    use std::thread;
+
+    fn main() {
+        let spec = MjSpec::from_xml("model.xml").unwrap();
+
+        // SAFETY: the spec was only parsed, never attached to and never cloned.
+        let sendable = unsafe { spec.into_sendable() };
+        thread::spawn(move || {
+            let mut spec = sendable.take();
+            spec.compile().unwrap();
+        }).join().unwrap();
+    }
+
+.. note::
+    |mj_model| is ``Send``, so you can also compile on the editing thread and move the compiled
+    model instead:
+
+    .. code-block:: rust
+
+        let model = spec.compile().unwrap();  // spec stays on this thread
+        thread::spawn(move || {
+            let mut data = MjData::new(&model);
+            data.step();
+        }).join().unwrap();
+
 Attaching elements
 ======================
 In addition to adding elements to the specification and other elements directly,
 existing trees of elements can be *attached* directly onto a new tree.
 
 Elements can be attached to another element via
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_reference` or
-:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_deep_copy`,
+``Attach::attach_by_reference`` or ``Attach::attach_by_deep_copy``,
 available on types implementing ``Attach``. Elements implementing ``Attach`` are |mjs_body|,
 |mjs_frame| and |mjs_site|. To place the attached tree at a chosen position, first add a frame
 to the parent with
@@ -242,12 +312,11 @@ attached to what other element type:
 
 ``attach_by_deep_copy`` copies every element of the child into the parent, so both specifications
 stay usable after the call. ``attach_by_reference`` makes the parent share the elements of the
-child, which is MuJoCo's default behavior. That sharing is why the method is ``unsafe``: no handle
-of the child specification, inside or outside the attached subtree, stays usable after the call.
-The method's docstring holds the full conditions.
+child, which is MuJoCo's default behavior. That sharing is why the method is ``unsafe``.
+See method docstrings for full conditions.
 
 When attaching elements, a *prefix* and a *suffix* can be given. When no prefix/suffix is desired,
-just pass ``""`` to ``Attach::attach_by_deep_copy`` / ``Attach::attach_by_reference`` at its
+pass ``""`` to ``Attach::attach_by_deep_copy`` / ``Attach::attach_by_reference`` at its
 respective positions.
 
 The example below attaches a one-body specification under a frame of another specification.
@@ -280,6 +349,18 @@ The example below attaches a one-body specification under a frame of another spe
 More on attachment is available in MuJoCo's
 `official documentation on attachment
 <https://mujoco.readthedocs.io/en/3.12.0/programming/modeledit.html#attachment>`__.
+
+.. danger::
+
+    Regardless of whether the element is attached via MJCF XML (``<model>`` inside ``<asset>``),
+    by ``attach_by_reference`` or by ``attach_by_deep_copy``, the specification becomes
+    thread-unsafe. Do not share it across threads.
+
+    Using ``attach_by_reference`` also permits creating shared references that aren't aware they are
+    pointing to same data (one through parent and one through child), thus it is unsafe even in the same
+    thread. When using ``attach_by_reference``, avoid using the original specification and its
+    existing references.
+
 
 Deleting elements
 ======================

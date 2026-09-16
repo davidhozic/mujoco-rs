@@ -254,6 +254,32 @@ impl MjSpec {
         NonNull::new(ptr).map(Self::from_ffi).ok_or(MjEditError::AllocationFailed)
     }
 
+    /// Wraps the spec into a [`Send`]-able wrapper, allowing it to be moved to another thread.
+    /// # Safety
+    /// No other live [`MjSpec`] may share data with this spec.
+    /// This includes any type of sharing done by the following:
+    /// - cloning a spec that uses the `<model>` tag inside `<asset>` in the MJCF XML definition;
+    /// - attaching procedurally via [`Attach::attach_by_reference`];
+    /// - attaching procedurally via [`Attach::attach_by_deep_copy`].
+    ///
+    /// The attachments include not just direct attachments of [`MjSpec`], but also any other
+    /// model-editing element. Attachments within the same spec is safe.
+    /// 
+    /// # Example
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// let spec = MjSpec::new();
+    /// 
+    /// // SAFETY: the source spec doesn't have any attachments.
+    /// let spec2 = unsafe { spec.clone().into_sendable() };
+    /// std::thread::spawn(|| {
+    ///     let moved_spec = spec2.take();
+    /// }).join();
+    /// ```
+    pub unsafe fn into_sendable(self) -> SendableSpec {
+        unsafe { SendableSpec::new(self) }
+    }
+
     /// Creates a [`MjSpec`] from the `path` to a file.
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
@@ -776,6 +802,30 @@ impl Clone for MjSpec {
         self.try_clone().expect("MuJoCo failed to clone MjSpec")
     }
 }
+
+/// A wrapper around [`MjSpec`] implementing [`Send`].
+#[derive(Debug)]
+pub struct SendableSpec(MjSpec);
+
+impl SendableSpec {
+    /// Wrap a [`MjSpec`] into a [`Send`]-able wrapper.
+    /// # Safety
+    /// The `spec` must follow the same rules as written in [`MjSpec::into_sendable`].
+    pub unsafe fn new(spec: MjSpec) -> Self {
+        Self(spec)
+    }
+
+    /// Takes the wrapped [`MjSpec`] out of the wrapper.
+    pub fn take(self) -> MjSpec {
+        self.0
+    }
+}
+
+/// Implementation of [`Send`] which allows [`MjSpec`] to be sent across threads.
+/// # Safety
+/// A [`SendableSpec`] can only be instantiated through methods marked as `unsafe`.
+/// These methods are safe provided no other [`MjSpec`] shares data with the wrapped spec.
+unsafe impl Send for SendableSpec {}
 
 /***************************
 ** Site specification
