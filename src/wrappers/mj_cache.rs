@@ -1,6 +1,5 @@
 //! Wrappers around the asset-cache mechanism.
 use crate::mujoco_c::{mj_clearCache, mj_getCache, mj_getCacheCapacity, mj_getCacheSize, mj_setCacheCapacity, mjCache};
-use crate::util::force_cast;
 
 use std::marker::PhantomData;
 use std::fmt;
@@ -10,14 +9,14 @@ use std::ptr;
 /// The asset cache for caching assets (e.g., textures and meshes)
 /// during recompilations of a specification/model.
 /// 
-/// This is a ZST around [`mjCache`].
+/// This is a zero-sized handle for [`mjCache`].
 /// 
 /// Because caching uses a global lock inside MuJoCo, and thus this acting like a type
 /// with internal mutability, all of the methods here use non-mutable references.
 pub struct MjCache(PhantomData<mjCache>);
 
 // Ensure `MjCache` is in fact a zero-sized type.
-const _ : () = assert!(size_of::<MjCache>() == 0);
+const _: () = assert!(size_of::<MjCache>() == 0);
 
 // SAFETY: the C cache guards every operation with its own internal mutex.
 unsafe impl Sync for MjCache {}
@@ -29,11 +28,12 @@ impl MjCache {
     pub fn current() -> &'static Self {
         // SAFETY: `mj_getCache` returns a pointer to a C static, sitting behind a
         // Mutex for any modification/read.
-        unsafe { force_cast(&*mj_getCache()) }
+        unsafe { &*mj_getCache().cast() }
     }
 
     /// Returns the current size of the asset cache in bytes. Wraps [`mj_getCacheSize`].
     pub fn size(&self) -> usize {
+        // SAFETY: `ffi()` casts `self` to original pointer, which C reads under its own lock.
         unsafe { mj_getCacheSize(self.ffi()) }
     }
 
@@ -44,17 +44,20 @@ impl MjCache {
 
     /// Returns the current capacity of the asset cache in bytes. Wraps [`mj_getCacheCapacity`].
     pub fn capacity(&self) -> usize {
+        // SAFETY: `ffi()` casts `self` to original pointer, which C reads under its own lock.
         unsafe { mj_getCacheCapacity(self.ffi()) }
     }
 
-    /// Set the capacity of the asset cache in bytes (0 to disable).
+    /// Sets the capacity of the asset cache in bytes (0 to disable). Wraps [`mj_setCacheCapacity`].
     /// Returns the new capacity.
     pub fn set_capacity(&self, capacity: usize) -> usize {
+        // SAFETY: `ffi()` casts `self` to original pointer, which C writes under its own lock.
         unsafe { mj_setCacheCapacity(self.ffi(), capacity) }
     }
 
-    /// Clear the asset cache.
+    /// Clears the asset cache. Wraps [`mj_clearCache`].
     pub fn clear(&self) {
+        // SAFETY: `ffi()` casts `self` to original pointer, which C writes under its own lock.
         unsafe { mj_clearCache(self.ffi()) };
     }
 
@@ -74,7 +77,7 @@ impl fmt::Debug for MjCache {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use crate::wrappers::{MjModel, MjVfs};
     use super::*;
 
