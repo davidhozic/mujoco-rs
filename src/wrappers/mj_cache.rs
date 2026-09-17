@@ -81,18 +81,22 @@ mod tests {
     use crate::wrappers::{MjModel, MjVfs};
     use super::*;
 
+    /// The default cache size set inside the MuJoCo's code (1 << 20 gives scaler for MiB to bytes).
+    const MJ_DEFAULT_CACHE_CAPACITY: usize = 500 * (1 << 20);
+
     /// Tests whether cache initializes.
     #[test]
+    #[ignore = "requires no other test to be running in parallel, thus this must be run separately manually"]
     fn test_cache_initialization() {
-        /// The default cache size set inside the MuJoCo's code (1 << 20 gives scaler for MiB to bytes).
-        const MJ_DEFAULT_CACHE_CAPACITY: usize = 500 * (1 << 20);
         let cache = MjCache::current();
         // Preallocated by default.
         assert_eq!(cache.capacity(), MJ_DEFAULT_CACHE_CAPACITY);
+        assert_eq!(cache.set_capacity(0), cache.capacity());
     }
 
     /// Tests whether the cache actually caches elements.
     #[test]
+    #[ignore = "requires no other test to be running in parallel, thus this must be run separately manually"]
     fn test_cache_caching() {
         // Only a mesh loaded from a file enters the cache (`mjCMesh::Compile` in user_mesh.cc).
         const MODEL: &str = "<mujoco>\
@@ -107,6 +111,7 @@ mod tests {
         vfs.add_from_buffer("tetrahedron.obj", TETRAHEDRON_OBJ.as_bytes()).unwrap();
 
         let cache = MjCache::current();
+        cache.set_capacity(MJ_DEFAULT_CACHE_CAPACITY);
         cache.clear();
         assert!(cache.is_empty());
         MjModel::from_xml_vfs("model.xml", &vfs).unwrap();
