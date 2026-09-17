@@ -42,5 +42,13 @@
   The wrapped specification comes back out with
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>SendableSpec::<method>take` :sup:`new`.
 
+*Asset cache*
+
+- Added wrappers around MuJoCo's asset cache, which keeps assets loaded from a file or a virtual
+  file system across recompilations, to prevent reprocessing:
+
+  - :docs-rs:`~mujoco_rs::wrappers::mj_cache::<struct>MjCache` :sup:`new` --- the zero-sized handle,
+    with internal mutability (MuJoCo has a global mutex).
+
 .. rubric:: Bug fixes
 .. rubric:: Other changes
