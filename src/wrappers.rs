@@ -8,6 +8,7 @@ pub mod mj_logging;
 pub mod mj_editing;
 pub mod mj_option;
 pub mod mj_plugin;
+pub mod mj_cache;
 pub mod mj_model;
 pub mod mj_data;
 
@@ -22,5 +23,6 @@ pub use mj_primitive::*;
 pub use mj_logging::*;
 pub use mj_plugin::*;
 pub use mj_option::*;
+pub use mj_cache::*;
 pub use mj_model::*;
 pub use mj_data::*;
