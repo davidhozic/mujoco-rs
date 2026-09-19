@@ -42,6 +42,25 @@
   The wrapped specification comes back out with
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>SendableSpec::<method>take` :sup:`new`.
 
+- New methods:
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile_with_vfs` :sup:`new`
+    for compiling a model with assets loaded on a virtual filesystem;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>encode` :sup:`new`
+    for encoding a specification to a file with
+    the encoder registered for the content type;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>encode_with_vfs` :sup:`new`
+    for reading the encoder's assets through a virtual filesystem.
+
+*MjModel*
+
+- New methods:
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>encode` :sup:`new`
+    for encoding a compiled model to a file with the encoder registered for the content type;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>encode_with_vfs` :sup:`new`
+    for reading the encoder's assets through a virtual filesystem.
+
 *Asset cache*
 
 - Added wrappers around MuJoCo's asset cache, which keeps assets loaded from a file or a virtual

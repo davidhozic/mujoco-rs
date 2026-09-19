@@ -459,6 +459,20 @@ impl MjSpec {
     /// texture has a builtin pattern set while its `nchannel` is less than 3, and when a texture
     /// has a negative dimension or a pixel count that does not fit in an [`i32`].
     pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
+        self.compile_impl(None)
+    }
+
+    /// Same as [`MjSpec::compile`], compiling [`MjSpec`] to [`MjModel`], but taking assets (meshes, heightfields) from `vfs`.
+    /// # Errors
+    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile, including when a
+    /// texture has a builtin pattern set while its `nchannel` is less than 3, and when a texture
+    /// has a negative dimension or a pixel count that does not fit in an [`i32`].
+    pub fn compile_with_vfs(&mut self, vfs: &MjVfs) -> Result<MjModel, MjEditError> {
+        self.compile_impl(Some(vfs))
+    }
+
+    /// Compilation implementation of [`MjSpec::compile_with_vfs`] and [`MjSpec::compile`].
+    fn compile_impl(&mut self, maybe_vfs: Option<&MjVfs>) -> Result<MjModel, MjEditError> {
         // The builtin generators write 3 bytes per pixel into an `nchannel*width*height` buffer,
         // and the setters are independent, so `compile` is the only place to check them together.
         for texture in self.texture_iter() {
@@ -481,7 +495,10 @@ impl MjSpec {
             }
         }
 
-        let result = unsafe { MjModel::from_raw( mj_compile(self.ffi.as_ptr(), ptr::null()) ) };
+        let result = unsafe { MjModel::from_raw(
+            mj_compile(self.ffi.as_ptr(), maybe_vfs.map_or(ptr::null(), |vfs| vfs.ffi()))
+        ) };
+
         // SAFETY: the spec is still valid after a failed compilation.
         result.map_err(|_| MjEditError::CompileFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }))
     }
@@ -568,6 +585,86 @@ impl MjSpec {
             }
         }
     }
+
+    /// Encode [`MjSpec`] to `filepath` using an encoder registered for encoding `content_type`.
+    /// When the `filepath`'s extension is '.xml', the MuJoCo's internal
+    /// XML encoder will be used. Similarly, the MuJoCo's internal
+    /// encoders will be used when `content_type` is 'text/xml'.
+    /// 
+    /// Extensions '.mjb' and `.txt` are not supported. Using them will result in erroring [`MjEditError::SaveFailed`].
+    /// Using 'text/plain' for the `content_type` will result in the same error.
+    /// 
+    /// The spec must be compiled first. Changes made without recompilations
+    /// don't reflect in the encoded file.
+    /// 
+    /// This is a wrapper for [`mj_encode`].
+    /// 
+    /// # Errors
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::SaveFailed`] with MuJoCo's error message if encoding fails.
+    /// # Panics
+    /// When `filepath` is empty, or when `filepath` or `content_type` contain interior `\0`
+    /// characters.
+    pub fn encode(&self, filepath: impl AsRef<Path>, content_type: &str) -> Result<(), MjEditError> {
+        self.encode_impl(filepath, content_type, None)
+    }
+
+    /// Same as [`MjSpec::encode`] except data (assets) are taken from `vfs`.
+    pub fn encode_with_vfs(&self, filepath: impl AsRef<Path>, content_type: &str, vfs: &MjVfs) -> Result<(), MjEditError> {
+        self.encode_impl(filepath, content_type, Some(vfs))
+    }
+
+    /// Implementation of the wrapper for [`mj_encode`].
+    fn encode_impl(
+        &self,
+        filepath: impl AsRef<Path>, content_type: &str,
+        maybe_vfs: Option<&MjVfs>
+    ) -> Result<(), MjEditError> {
+        let filepath = filepath.as_ref().to_str().ok_or(MjEditError::InvalidUtf8Path)?;
+        encode(Some(self), None, filepath, content_type, maybe_vfs).map_err(MjEditError::SaveFailed)
+    }
+}
+
+/// Encodes `spec` or `model` (at least one) to `filepath` with the encoder registered for
+/// `content_type`, taking assets from `vfs` when given. Wraps [`mj_encode`].
+/// # Panics
+/// When `filepath` is empty, or when `filepath` or `content_type` contain interior `\0`
+/// characters.
+/// 
+/// # Errors
+/// A [`String`] carrying MuJoCo-set error is returned on failure.
+pub(crate) fn encode(
+    spec: Option<&MjSpec>, model: Option<&MjModel>,
+    filepath: &str, content_type: &str, vfs: Option<&MjVfs>
+) -> Result<(), String> {
+    // An empty name makes the C encoders abort in `file_size("")`.
+    assert!(!filepath.is_empty(), "encode: filepath is empty");
+    let mut error_buff = [0; ERROR_BUF_LEN];
+
+    let c_filepath = CString::new(filepath).unwrap();
+    let c_content_type = CString::new(content_type).unwrap();
+
+    // SAFETY: the pointers are null or from live wrappers; the strings and buffer outlive the call.
+    let result = unsafe {
+        mj_encode(
+            spec.map_or(ptr::null(), |spec| spec.ffi()),
+            model.map_or(ptr::null(), |model| model.ffi()),
+            c_filepath.as_ptr(), c_content_type.as_ptr(),
+            vfs.map_or(ptr::null(), |vfs| vfs.ffi()),
+            error_buff.as_mut_ptr(), ERROR_BUF_LEN as i32
+        )
+    };
+
+    // == -1 means error, >= 0 mean the number of bytes written
+    if result == -1 {
+        // SAFETY: MuJoCo NUL-terminates the error buffer.
+        let message = unsafe { CStr::from_ptr(error_buff.as_ptr()) }
+            .to_string_lossy()
+            .into_owned();
+        return Err(message);
+    }
+
+    Ok(())
 }
 
 /// Children accessor methods.
@@ -2803,6 +2900,98 @@ mod tests {
         assert_eq!(compiled.opt().timestep, TIMESTEP);
 
         spec.compile().unwrap();
+    }
+
+    /// A spec whose only asset is a fake heightfield (`N_ROW_COLUMN` for width, height and data)
+    /// and a VFS that holds that heightfield.
+    fn heightfield_spec_and_vfs() -> (MjSpec, MjVfs) {
+        const HEIGHTMAP_NAME: &str = "test_height.bin";
+        const N_ROW_COLUMN: u32 = 10;
+
+        let mut heightfield_bytes = vec![N_ROW_COLUMN.to_ne_bytes(), N_ROW_COLUMN.to_ne_bytes()];
+        heightfield_bytes.extend_from_slice(&[[0; 4]; (N_ROW_COLUMN * N_ROW_COLUMN) as usize]);
+
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer(HEIGHTMAP_NAME, heightfield_bytes.as_flattened())
+            .expect("failed to add heightfield to VFS");
+
+        let mut spec = MjSpec::new();
+        spec.add_hfield()
+            .with_file(HEIGHTMAP_NAME)
+            .with_name(HEIGHTMAP_NAME)
+            .with_size([1000.0, 1000.0, 5.0, 5.0]);
+
+        spec.world_body_mut().add_geom()
+            .with_type(MjtGeom::mjGEOM_HFIELD)
+            .with_hfieldname(HEIGHTMAP_NAME);
+
+        (spec, vfs)
+    }
+
+    #[test]
+    fn test_compile_vfs() {
+        let (mut spec, vfs) = heightfield_spec_and_vfs();
+
+        // The file should fail loading as it doesn't exist in local directory.
+        assert!(matches!(
+            spec.compile().unwrap_err(),
+            MjEditError::CompileFailed(e) if e.starts_with("Error: Error opening file")
+        ));
+
+        // The file should exist in the VFS.
+        spec.compile_with_vfs(&vfs).expect("compilation with vfs failed");
+    }
+
+    #[test]
+    fn test_encode_xml() {
+        const PATH_XML: &str = "mj_spec_test_encode_xml.xml";
+
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let model = spec.compile().expect("could not compile the model");
+
+        spec.encode(PATH_XML, "text/xml").expect("XML encoding failed");
+        let mut spec_xml = MjSpec::from_xml(PATH_XML).expect("XML parsing failed");
+        std::fs::remove_file(PATH_XML).unwrap();
+        assert!(model.is_compatible_with_model(&spec_xml.compile().unwrap()));
+
+        assert!(matches!(spec.encode("mj_spec_test_encode_xml.txt", ""), Err(MjEditError::SaveFailed(_))));
+        assert!(matches!(spec.encode("/nonexistent/dir/model.xml", ""), Err(MjEditError::SaveFailed(_))));
+    }
+
+    #[test]
+    fn test_encode_mjz_vfs() {
+        const PATH_MJZ: &str = "mj_spec_test_encode_mjz_vfs.mjz";
+        const PATH_MJZ_NO_ASSETS: &str = "mj_spec_test_encode_mjz_no_assets.mjz";
+
+        let (mut spec, vfs) = heightfield_spec_and_vfs();
+        let model = spec.compile_with_vfs(&vfs).expect("compilation with vfs failed");
+
+        // The heightfield, located in the VFS, is written into the ZIP alongside the model. 
+        spec.encode_with_vfs(PATH_MJZ, "application/zip", &vfs).expect("MJZ encoding failed");
+        // The heightfield, located in the VFS, is skipped from being written into the ZIP.
+        // Only the model is stored.
+        spec.encode(PATH_MJZ_NO_ASSETS, "application/zip").expect("MJZ encoding failed");
+
+
+        let vfs_mjz = MjVfs::new();
+        let vfs_no_assets = MjVfs::new();
+
+        // Assets that were stored in the ZIP get written into the VFS.
+        let mut spec_mjz = MjSpec::from_parse_vfs(PATH_MJZ, "application/zip", &vfs_mjz)
+            .expect("MJZ parsing failed");
+        // No assets are part of the zip. MjSpec loads only the model, without any assets added to the VFS.
+        let mut spec_no_assets = MjSpec::from_parse_vfs(PATH_MJZ_NO_ASSETS, "application/zip", &vfs_no_assets)
+            .expect("MJZ parsing failed");
+
+        std::fs::remove_file(PATH_MJZ).unwrap();
+        std::fs::remove_file(PATH_MJZ_NO_ASSETS).unwrap();
+
+        // Read both from their VFS. Only the first has the heightfield in the VFS.
+        assert!(model.is_compatible_with_model(&spec_mjz.compile_with_vfs(&vfs_mjz).unwrap()));
+        assert!(matches!(
+            spec_no_assets.compile_with_vfs(&vfs_no_assets),
+            Err(MjEditError::CompileFailed(_))
+        ));
     }
 
     #[test]

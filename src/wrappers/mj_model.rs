@@ -10,6 +10,7 @@ use crate::wrappers::mj_data::MjData;
 use crate::mujoco_c::*;
 
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
+use super::mj_editing::encode;
 use super::mj_primitive::*;
 
 use bytemuck::must_cast_slice;
@@ -491,6 +492,41 @@ impl MjModel {
                 Err(MjModelError::SaveFailed(cstr_error))
             },
         }
+    }
+
+    /// Encode [`MjModel`] to `filepath` using an encoder registered for encoding `content_type`.
+    /// When the `filepath`'s extension is '.xml', '.mjb' or `.txt`, the MuJoCo's internal
+    /// XML, MJB and TXT encoders will be used, respectively. Similarly, the MuJoCo's internal
+    /// encoders will be used when `content_type` is 'text/xml' or 'text/plain'.
+    /// The XML encoder writes the spec of the last [`MjModel::from_xml`] (or `_vfs`, `_string`)
+    /// load and fails when there is none.
+    /// 
+    /// This is a wrapper for [`mj_encode`].
+    /// 
+    /// # Errors
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::SaveFailed`] with MuJoCo's error message if encoding fails.
+    /// 
+    /// # Panics
+    /// When `filepath` is empty, or when `filepath` or `content_type` contain interior `\0`
+    /// characters. MuJoCo aborts the process when the MJB or TXT encoder cannot write `filepath`.
+    pub fn encode(&self, filepath: impl AsRef<Path>, content_type: &str) -> Result<(), MjModelError> {
+        self.encode_impl(filepath, content_type, None)
+    }
+
+    /// Same as [`MjModel::encode`] except data (assets) are taken from `vfs`.
+    pub fn encode_with_vfs(&self, filepath: impl AsRef<Path>, content_type: &str, vfs: &MjVfs) -> Result<(), MjModelError> {
+        self.encode_impl(filepath, content_type, Some(vfs))
+    }
+
+    /// Implementation of the wrapper for [`mj_encode`].
+    fn encode_impl(
+        &self,
+        filepath: impl AsRef<Path>, content_type: &str,
+        maybe_vfs: Option<&MjVfs>
+    ) -> Result<(), MjModelError> {
+        let filepath = filepath.as_ref().to_str().ok_or(MjModelError::InvalidUtf8Path)?;
+        encode(None, Some(self), filepath, content_type, maybe_vfs).map_err(MjModelError::SaveFailed)
     }
 
     /// Creates a new [`MjData`] instance linked to this model.
@@ -1097,43 +1133,19 @@ impl MjModel {
         self.ffi().signature
     }
 
-    /// Reports whether `other` can take the place of this model in every object that this model
-    /// built: an [`MjData`], and the index ranges an `Info` caches.
-    ///
-    /// The test covers every size that fixes an `mjData` buffer or a packed `mjModel` array, and
-    /// the tables that fix how each array divides between the elements: the per-element counts,
-    /// the joint addresses, the kinematic tree, the body of every element, and the type of every
-    /// joint, geom, equality, wrap, actuator and sensor. [`MjModel::signature`] takes no part:
-    /// `mj_saveModel` does not write it, so a model that came back from a buffer carries a zero.
+    /// Reports whether `other` is memory-compatible with this model.
     pub fn is_compatible_with_model(&self, other: &MjModel) -> bool {
         self.layout() == other.layout()
     }
 
-    /// Reports whether `other` keeps its mesh, texture and heightfield data in the same memory
-    /// as this model, and gives every texture the same kind: the same shape for every asset, and
-    /// the same convex hull total.
-    ///
-    /// The count tables carry every other total, because each one is the plain sum, or the sum of
-    /// the products, of the tables beside it. `nmeshgraph` is the exception: qhull sizes each
-    /// convex hull and `mesh_graphadr` holds addresses only.
+    /// Reports whether `other`'s assets are memory-compatible with this model's.
     pub fn is_asset_compatible_with_model(&self, other: &MjModel) -> bool {
-        self.nmeshgraph() == other.nmeshgraph()
+        self.layout().nmeshgraph == other.layout().nmeshgraph
             && self.layout().asset_split() == other.layout().asset_split()
     }
 
     /// Returns the per-sensor, per-numeric, per-tuple, per-actuator, per-tendon, per-flex and
     /// plugin count tables, as raw bytes in a fixed order.
-    ///
-    /// Two models can hold the same element count and the same data total and still split that
-    /// total differently. A caller that resolves one element through a range read from the other
-    /// model then reads or writes the neighbouring element, and no length ever disagrees. Each
-    /// address table is the running prefix sum of the count table beside it, so the counts pin
-    /// the addresses and the address tables need no entry. The total of a packed array is the
-    /// plain sum of the same counts, so it needs no entry either. Each table also enters the
-    /// comparison with its own length, so a table pins the count of the elements it describes.
-    /// `mjModel` holds no per-joint count array, and `jnt_type` fills that role: every `mjtJoint`
-    /// value carries one fixed qpos and dof footprint, so `jnt_qposadr` and `jnt_dofadr` are the
-    /// running prefix sums of the types.
     fn element_split_tables(&self) -> [&[u8]; ELEMENT_SPLIT_TABLES] {
         [
             must_cast_slice(self.sensor_dim()),         must_cast_slice(self.numeric_size()),
@@ -2342,6 +2354,28 @@ mod tests {
 
         // Try to get an error
         assert!(model.save_last_xml(MODEL_INVALID_SAVE_XML_PATH).is_err());
+    }
+
+    #[test]
+    fn test_model_encode() {
+        const PATH_MJB: &str = "./__TMP_MODEL_ENCODE.mjb";
+        const PATH_XML: &str = "./__TMP_MODEL_ENCODE.xml";
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        model.encode(PATH_MJB, "").unwrap();
+        model.encode_with_vfs(PATH_XML, "text/xml", &MjVfs::new()).unwrap();
+
+        let encoded = MjModel::from_buffer(&fs::read(PATH_MJB).unwrap()).unwrap();
+        // The XML encoder writes the spec of the last XML load, which a parallel test may replace,
+        // so only the MJB round trip is compared against `model`.
+        let reloaded = MjModel::from_xml(PATH_XML);
+        fs::remove_file(PATH_MJB).unwrap();
+        fs::remove_file(PATH_XML).unwrap();
+
+        assert!(model.is_compatible_with_model(&encoded));
+        reloaded.unwrap();
+
+        assert!(model.encode("/some/non-existent/path/model.xml", "").is_err());
     }
 
     #[test]
