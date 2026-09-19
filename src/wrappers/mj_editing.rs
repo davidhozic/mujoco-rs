@@ -462,7 +462,7 @@ impl MjSpec {
         self.compile_impl(None)
     }
 
-    /// Same as [`MjSpec::compile`], compiling [`MjSpec`] to [`MjModel`], but taking assets (meshes, heightfields).
+    /// Same as [`MjSpec::compile`], compiling [`MjSpec`] to [`MjModel`], but taking assets (meshes, heightfields) from `vfs`.
     /// # Errors
     /// Returns [`MjEditError::CompileFailed`] if the model fails to compile, including when a
     /// texture has a builtin pattern set while its `nchannel` is less than 3, and when a texture
@@ -496,10 +496,8 @@ impl MjSpec {
         }
 
         let result = unsafe { MjModel::from_raw(
-             mj_compile(
-                self.ffi.as_ptr(),
-                maybe_vfs.map_or(ptr::null(), |vfs| vfs.ffi()))
-            ) };
+            mj_compile(self.ffi.as_ptr(), maybe_vfs.map_or(ptr::null(), |vfs| vfs.ffi()))
+        ) };
 
         // SAFETY: the spec is still valid after a failed compilation.
         result.map_err(|_| MjEditError::CompileFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }))
@@ -639,13 +637,14 @@ pub(crate) fn encode(
     spec: Option<&MjSpec>, model: Option<&MjModel>,
     filepath: &str, content_type: &str, vfs: Option<&MjVfs>
 ) -> Result<(), String> {
-    // This assert prevents a NULL write.
+    // An empty name makes the C encoders abort in `file_size("")`.
     assert!(!filepath.is_empty(), "encode: filepath is empty");
     let mut error_buff = [0; ERROR_BUF_LEN];
 
     let c_filepath = CString::new(filepath).unwrap();
     let c_content_type = CString::new(content_type).unwrap();
 
+    // SAFETY: the pointers are null or from live wrappers; the strings and buffer outlive the call.
     let result = unsafe {
         mj_encode(
             spec.map_or(ptr::null(), |spec| spec.ffi()),
@@ -658,6 +657,7 @@ pub(crate) fn encode(
 
     // == -1 means error, >= 0 mean the number of bytes written
     if result == -1 {
+        // SAFETY: MuJoCo NUL-terminates the error buffer.
         let message = unsafe { CStr::from_ptr(error_buff.as_ptr()) }
             .to_string_lossy()
             .into_owned();

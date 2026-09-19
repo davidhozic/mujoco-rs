@@ -498,6 +498,8 @@ impl MjModel {
     /// When the `filepath`'s extension is '.xml', '.mjb' or `.txt`, the MuJoCo's internal
     /// XML, MJB and TXT encoders will be used, respectively. Similarly, the MuJoCo's internal
     /// encoders will be used when `content_type` is 'text/xml' or 'text/plain'.
+    /// The XML encoder writes the spec of the last [`MjModel::from_xml`] (or `_vfs`, `_string`)
+    /// load and fails when there is none.
     /// 
     /// This is a wrapper for [`mj_encode`].
     /// 
@@ -507,7 +509,7 @@ impl MjModel {
     /// 
     /// # Panics
     /// When `filepath` is empty, or when `filepath` or `content_type` contain interior `\0`
-    /// characters.
+    /// characters. MuJoCo aborts the process when the MJB or TXT encoder cannot write `filepath`.
     pub fn encode(&self, filepath: impl AsRef<Path>, content_type: &str) -> Result<(), MjModelError> {
         self.encode_impl(filepath, content_type, None)
     }

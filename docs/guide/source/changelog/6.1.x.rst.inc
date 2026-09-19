@@ -56,7 +56,7 @@
 
 - New methods:
 
-  :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>encode` :sup:`new`
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>encode` :sup:`new`
   (:docs-rs:`~mujoco_rs::mujoco_c::<fn>mj_encode`) for encoding a compiled model to a file with
   the encoder registered for the content type, and
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>encode_with_vfs` :sup:`new`
