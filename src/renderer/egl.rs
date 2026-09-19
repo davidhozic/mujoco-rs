@@ -20,16 +20,9 @@ pub(crate) struct GlStateEgl {
 
 impl GlStateEgl {
     /// Opens an offscreen context on the first EGL device that yields one.
-    ///
-    /// Every enumerated device is tried in turn, because being listed and
-    /// being usable are different things. A headless machine commonly carries
-    /// a DRM node whose driver cannot initialize (`EGL_NOT_INITIALIZED`) or
-    /// that the calling user may not open, while Mesa's software device --
-    /// enumerated after the hardware ones -- renders perfectly well. Taking
-    /// only the first device fails on such a machine even though it can
-    /// render, and no environment variable moves the working device to the
-    /// front: `LIBGL_ALWAYS_SOFTWARE` does not alter the list, and Mesa
-    /// refuses it outright when the caller names a hardware device.
+    /// 
+    /// # Errors
+    /// A [`glutin::error::ErrorKind::NotSupported`] error is returned when no device succeeded in initialization.
     pub(crate) fn new(width: NonZero<u32>, height: NonZero<u32>) -> glutin::error::Result<Self> {
         let devices = Device::query_devices().map_err(|e|
             if glutin::error::ErrorKind::NotFound == e.error_kind() {
@@ -63,7 +56,7 @@ impl GlStateEgl {
         ))
     }
 
-    /// Opens the offscreen context on one device.
+    /// Tries to opens the offscreen context on `device`.
     fn on_device(
         device: &Device,
         width: NonZero<u32>,

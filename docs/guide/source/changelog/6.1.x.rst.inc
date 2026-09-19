@@ -70,4 +70,9 @@
     with internal mutability (MuJoCo has a global mutex).
 
 .. rubric:: Bug fixes
+
+*Renderer*
+
+- Offscreen rendering using EGL now fallbacks to other supported devices when the first device fails.
+
 .. rubric:: Other changes
