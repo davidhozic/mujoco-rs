@@ -67,7 +67,10 @@
 
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_const` :sup:`new`
     --- available only when ``M`` in ``MjData<M>``
-    implements :docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut`.
+    implements :docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut`;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>save_keyframe` :sup:`new`
+    for copying the current state into a model keyframe --- also only available when ``M``
+    implements implements ``ModelTypeMut``.
 
 *Asset cache*
 

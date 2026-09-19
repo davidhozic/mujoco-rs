@@ -1827,6 +1827,23 @@ impl<M: ModelTypeMut> MjData<M> {
             mj_setConst(self.model.ffi_mut(), self.ffi_mut());
         }
     }
+
+    /// Copy current state to the `k`-th model keyframe. This is a wrapper for [`mj_setKeyframe`].
+    /// # Errors
+    /// [`MjDataError::IndexOutOfBounds`] when `k` is equal or greater to [`MjModel::nkey`].
+    pub fn save_keyframe(&mut self, k: usize) -> Result<(), MjDataError> {
+        let nkey = self.model.nkey() as usize;
+        if k >= nkey {
+            return Err(MjDataError::IndexOutOfBounds { kind: "keyframe_id", id: k, upper: nkey });
+        }
+
+        // SAFETY: `k` is below `nkey` due to above check returning early. No other problems can occur.
+        unsafe {
+            mj_setKeyframe(self.model.ffi_mut(), self.ffi(), k as i32)
+        }
+
+        Ok(())
+    }
 }
 
 /// Arrays of dynamic size.
@@ -5299,6 +5316,18 @@ mod test {
 
         // SAFETY: the loop above ran the full pipeline, so every arena array holds computed values.
         unsafe { data.probe_dynamic_arrays_unsafe() };
+    }
+
+    #[test]
+    fn test_set_keyframe() {
+        let mut model = MjModel::from_xml_string(
+            "<mujoco><worldbody><body><joint type=\"slide\"/><geom size=\".1\"/></body></worldbody>
+             <keyframe><key qpos=\"0\"/><key qpos=\"0\"/></keyframe></mujoco>").unwrap();
+        let mut data = MjData::new(&mut model);
+        data.qpos_mut()[0] = 0.25;
+        data.save_keyframe(1).unwrap();
+        assert_eq!(data.model().key_qpos()[1], 0.25);
+        assert!(data.save_keyframe(2).is_err());
     }
 
     #[test]
