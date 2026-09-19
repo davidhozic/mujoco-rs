@@ -1809,6 +1809,24 @@ impl<M: ModelTypeMut> MjData<M> {
     pub fn model_stat_mut(&mut self) -> &mut MjStatistic {
         self.model.stat_mut()
     }
+
+    /// Set constant fields of mjModel, corresponding to qpos0 configuration.
+    /// This needs to be called after some of model's parameters were changed
+    /// directly through the [`MjModel`] this data owns.
+    /// 
+    /// This method is a wrapper for [`mj_setConst`].
+    /// 
+    /// # Note
+    /// MuJoCo aborts the process through `mjERROR` when the model is inconsistent.
+    /// See https://mujoco.readthedocs.io/en/stable/programming/simulation.html#mjmodel-changes
+    /// for information about safety of model changes.
+    pub fn set_const(&mut self) {
+        // SAFETY: All modifications are local to the owned data.
+        // No Rust data is written, thus no worry about borrow-checker rules.
+        unsafe {
+            mj_setConst(self.model.ffi_mut(), self.ffi_mut());
+        }
+    }
 }
 
 /// Arrays of dynamic size.
@@ -5283,4 +5301,11 @@ mod test {
         unsafe { data.probe_dynamic_arrays_unsafe() };
     }
 
+    #[test]
+    fn test_set_const() {
+        let mut data = MjData::new(Box::new(MjModel::from_xml_string(MODEL).unwrap()));
+        unsafe { data.model_mut() }.body_mass_mut()[1] = 2.0;
+        data.set_const();
+        assert_relative_eq!(data.model().body_invweight0()[1][0], 0.5, epsilon=1e-9);
+    }
 }

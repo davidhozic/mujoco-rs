@@ -61,6 +61,14 @@
   - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>encode_with_vfs` :sup:`new`
     for reading the encoder's assets through a virtual filesystem.
 
+*MjData*
+
+- New methods:
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>set_const` :sup:`new`
+    --- available only when ``M`` in ``MjData<M>``
+    implements :docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut`.
+
 *Asset cache*
 
 - Added wrappers around MuJoCo's asset cache, which keeps assets loaded from a file or a virtual
