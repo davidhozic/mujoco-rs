@@ -596,17 +596,23 @@ impl MjSpec {
     /// Extensions '.mjb' and `.txt` are not supported. Using them will result in erroring [`MjEditError::SaveFailed`].
     /// Using 'text/plain' for the `content_type` will result in the same error.
     /// 
+    /// The spec must be compiled first. Changes made without recompilations
+    /// don't reflect in the encoded file.
+    /// 
     /// This is a wrapper for [`mj_encode`].
     /// 
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
     /// - [`MjEditError::SaveFailed`] with MuJoCo's error message if encoding fails.
+    /// # Panics
+    /// When `filepath` is empty, or when `filepath` or `content_type` contain interior `\0`
+    /// characters.
     pub fn encode(&self, filepath: impl AsRef<Path>, content_type: &str) -> Result<(), MjEditError> {
         self.encode_impl(filepath, content_type, None)
     }
 
-    /// Same as [`MjSpec::encode`] except encoded data will be stored into `vfs` (a virtual filesystem). 
-    pub fn encode_to_vfs(&self, filepath: impl AsRef<Path>, content_type: &str, vfs: &MjVfs) -> Result<(), MjEditError> {
+    /// Same as [`MjSpec::encode`] except data (assets) are taken from `vfs`.
+    pub fn encode_with_vfs(&self, filepath: impl AsRef<Path>, content_type: &str, vfs: &MjVfs) -> Result<(), MjEditError> {
         self.encode_impl(filepath, content_type, Some(vfs))
     }
 
@@ -622,9 +628,10 @@ impl MjSpec {
 }
 
 /// Encodes `spec` or `model` (at least one) to `filepath` with the encoder registered for
-/// `content_type`, into `vfs` when given. Wraps [`mj_encode`]
+/// `content_type`, taking assets from `vfs` when given. Wraps [`mj_encode`].
 /// # Panics
-/// When `filepath` or `content_type` contain interior `\0` characters.
+/// When `filepath` is empty, or when `filepath` or `content_type` contain interior `\0`
+/// characters.
 /// 
 /// # Errors
 /// A [`String`] carrying MuJoCo-set error is returned on failure.
@@ -632,6 +639,8 @@ pub(crate) fn encode(
     spec: Option<&MjSpec>, model: Option<&MjModel>,
     filepath: &str, content_type: &str, vfs: Option<&MjVfs>
 ) -> Result<(), String> {
+    // This assert prevents a NULL write.
+    assert!(!filepath.is_empty(), "encode: filepath is empty");
     let mut error_buff = [0; ERROR_BUF_LEN];
 
     let c_filepath = CString::new(filepath).unwrap();
@@ -2893,17 +2902,17 @@ mod tests {
         spec.compile().unwrap();
     }
 
-    #[test]
-    fn test_compile_vfs() {
-        // Fake heightfield, with `N_ROW_COLUMN` for width, height and data. 
+    /// A spec whose only asset is a fake heightfield (`N_ROW_COLUMN` for width, height and data)
+    /// and a VFS that holds that heightfield.
+    fn heightfield_spec_and_vfs() -> (MjSpec, MjVfs) {
         const HEIGHTMAP_NAME: &str = "test_height.bin";
         const N_ROW_COLUMN: u32 = 10;
 
-        let mut heightfield_bytes = vec![N_ROW_COLUMN.to_le_bytes(), N_ROW_COLUMN.to_le_bytes()];
+        let mut heightfield_bytes = vec![N_ROW_COLUMN.to_ne_bytes(), N_ROW_COLUMN.to_ne_bytes()];
         heightfield_bytes.extend_from_slice(&[[0; 4]; (N_ROW_COLUMN * N_ROW_COLUMN) as usize]);
 
         let mut vfs = MjVfs::new();
-        vfs.add_from_buffer("test_height.bin", heightfield_bytes.as_flattened())
+        vfs.add_from_buffer(HEIGHTMAP_NAME, heightfield_bytes.as_flattened())
             .expect("failed to add heightfield to VFS");
 
         let mut spec = MjSpec::new();
@@ -2916,6 +2925,13 @@ mod tests {
             .with_type(MjtGeom::mjGEOM_HFIELD)
             .with_hfieldname(HEIGHTMAP_NAME);
 
+        (spec, vfs)
+    }
+
+    #[test]
+    fn test_compile_vfs() {
+        let (mut spec, vfs) = heightfield_spec_and_vfs();
+
         // The file should fail loading as it doesn't exist in local directory.
         assert!(matches!(
             spec.compile().unwrap_err(),
@@ -2927,27 +2943,55 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_vfs() {
-        const PATH_MJZ: &str = "mj_spec_test_encode_vfs.mjz";
-        const PATH_XML: &str = "mj_spec_test_encode_vfs.xml";
+    fn test_encode_xml() {
+        const PATH_XML: &str = "mj_spec_test_encode_xml.xml";
 
         let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
         let model = spec.compile().expect("could not compile the model");
 
-        let vfs = MjVfs::new();
-        spec.encode_to_vfs(PATH_MJZ, "application/zip", &vfs).expect("MJZ encoding failed");
         spec.encode(PATH_XML, "text/xml").expect("XML encoding failed");
-
-        let mut spec_mjz = MjSpec::from_parse_vfs(PATH_MJZ, "application/zip", &vfs)
-            .expect("MJZ parsing failed");
         let mut spec_xml = MjSpec::from_xml(PATH_XML).expect("XML parsing failed");
-
         std::fs::remove_file(PATH_XML).unwrap();
-        std::fs::remove_file(PATH_MJZ).unwrap();
+        assert!(model.is_compatible_with_model(&spec_xml.compile().unwrap()));
 
-        for other in [spec_mjz.compile().unwrap(), spec_xml.compile().unwrap()] {
-            assert!(model.is_compatible_with_model(&other));
-        }
+        assert!(matches!(spec.encode("mj_spec_test_encode_xml.txt", ""), Err(MjEditError::SaveFailed(_))));
+        assert!(matches!(spec.encode("/nonexistent/dir/model.xml", ""), Err(MjEditError::SaveFailed(_))));
+    }
+
+    #[test]
+    fn test_encode_mjz_vfs() {
+        const PATH_MJZ: &str = "mj_spec_test_encode_mjz_vfs.mjz";
+        const PATH_MJZ_NO_ASSETS: &str = "mj_spec_test_encode_mjz_no_assets.mjz";
+
+        let (mut spec, vfs) = heightfield_spec_and_vfs();
+        let model = spec.compile_with_vfs(&vfs).expect("compilation with vfs failed");
+
+        // The heightfield, located in the VFS, is written into the ZIP alongside the model. 
+        spec.encode_with_vfs(PATH_MJZ, "application/zip", &vfs).expect("MJZ encoding failed");
+        // The heightfield, located in the VFS, is skipped from being written into the ZIP.
+        // Only the model is stored.
+        spec.encode(PATH_MJZ_NO_ASSETS, "application/zip").expect("MJZ encoding failed");
+
+
+        let vfs_mjz = MjVfs::new();
+        let vfs_no_assets = MjVfs::new();
+
+        // Assets that were stored in the ZIP get written into the VFS.
+        let mut spec_mjz = MjSpec::from_parse_vfs(PATH_MJZ, "application/zip", &vfs_mjz)
+            .expect("MJZ parsing failed");
+        // No assets are part of the zip. MjSpec loads only the model, without any assets added to the VFS.
+        let mut spec_no_assets = MjSpec::from_parse_vfs(PATH_MJZ_NO_ASSETS, "application/zip", &vfs_no_assets)
+            .expect("MJZ parsing failed");
+
+        std::fs::remove_file(PATH_MJZ).unwrap();
+        std::fs::remove_file(PATH_MJZ_NO_ASSETS).unwrap();
+
+        // Read both from their VFS. Only the first has the heightfield in the VFS.
+        assert!(model.is_compatible_with_model(&spec_mjz.compile_with_vfs(&vfs_mjz).unwrap()));
+        assert!(matches!(
+            spec_no_assets.compile_with_vfs(&vfs_no_assets),
+            Err(MjEditError::CompileFailed(_))
+        ));
     }
 
     #[test]
