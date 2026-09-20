@@ -48,6 +48,17 @@ fn check_objtype(t: MjtObj) -> Result<(), MjEditError> {
     }
 }
 
+/// Validates that a `nuser_*` count is at least `-1` (-1 meaning automatic).
+fn check_nuser(count: i32) -> Result<(), MjEditError> {
+    if count < -1 {
+        Err(MjEditError::InvalidParameter(format!(
+            "nuser count must be at least -1 (-1 meaning automatic), got {count}"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
 /// Validates that a custom-numeric array size is non-negative.
 fn check_numeric_size(size: i32) -> Result<(), MjEditError> {
     // A negative size passes every guard in `mjCNumeric::Compile` and undersizes the shared
@@ -724,18 +735,29 @@ impl MjSpec {
 
     getter_setter! {
         get, [
-            [ffi] memory: MjtSize;     "number of bytes in arena+stack memory.";
+            // No setter due to the compiler adding its own count.
             [ffi] nemax: i32;             "max number of equality constraints.";
-            [ffi] nuserdata: i32;              "number of mjtNums in userdata.";
-            [ffi] nuser_body: i32;            "number of mjtNums in body_user.";
-            [ffi] nuser_jnt: i32;              "number of mjtNums in jnt_user.";
-            [ffi] nuser_geom: i32;            "number of mjtNums in geom_user.";
-            [ffi] nuser_site: i32;            "number of mjtNums in site_user.";
-            [ffi] nuser_cam: i32;              "number of mjtNums in cam_user.";
-            [ffi] nuser_tendon: i32;        "number of mjtNums in tendon_user.";
-            [ffi] nuser_actuator: i32;    "number of mjtNums in actuator_user.";
-            [ffi] nuser_sensor: i32;        "number of mjtNums in sensor_user.";
-            [ffi] nkey: i32;                             "number of keyframes.";
+        ]
+    }
+
+    getter_setter! {
+        get, set, [
+            [ffi, ffi_mut] memory: MjtSize;     "number of bytes in arena+stack memory.";
+            [ffi, ffi_mut] nuserdata: i32;              "number of mjtNums in userdata.";
+            [ffi, ffi_mut] nkey: i32;                             "number of keyframes.";
+        ]
+    }
+
+    getter_setter! {
+        get, set, [
+            [ffi, ffi_mut] nuser_body: i32     { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;     "number of mjtNums in body_user.";
+            [ffi, ffi_mut] nuser_jnt: i32      { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;      "number of mjtNums in jnt_user.";
+            [ffi, ffi_mut] nuser_geom: i32     { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;     "number of mjtNums in geom_user.";
+            [ffi, ffi_mut] nuser_site: i32     { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;     "number of mjtNums in site_user.";
+            [ffi, ffi_mut] nuser_cam: i32      { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;      "number of mjtNums in cam_user.";
+            [ffi, ffi_mut] nuser_tendon: i32   { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;   "number of mjtNums in tendon_user.";
+            [ffi, ffi_mut] nuser_actuator: i32 { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError; "number of mjtNums in actuator_user.";
+            [ffi, ffi_mut] nuser_sensor: i32   { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;   "number of mjtNums in sensor_user.";
         ]
     }
 }
@@ -4144,6 +4166,25 @@ mod tests {
             Err(MjEditError::InvalidParameter(_))
         ));
         assert!(numeric.set_size(4).is_ok());
+    }
+
+    #[test]
+    fn test_spec_size_setters() {
+        let mut spec = MjSpec::new();
+
+        assert!(matches!(spec.set_nuser_geom(-2), Err(MjEditError::InvalidParameter(_))));
+        assert_eq!(spec.nuser_geom(), -1, "a rejected count must leave the field unchanged");
+
+        spec.set_nuser_geom(3).unwrap();
+        spec.set_nuserdata(7);
+        spec.set_nkey(2);
+        spec.set_memory(1 << 20); // 1 MiB
+
+        let model = spec.compile().unwrap();
+        assert_eq!(model.nuser_geom(), 3);
+        assert_eq!(model.nuserdata(), 7);
+        assert_eq!(model.nkey(), 2);
+        assert_eq!(model.narena(), 1 << 20);
     }
 
     /// A frame carries no default class name, so `default()` reports `None` for it, while a geom

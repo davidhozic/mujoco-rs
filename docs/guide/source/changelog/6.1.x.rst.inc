@@ -52,6 +52,21 @@
   - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>encode_with_vfs` :sup:`new`
     for reading the encoder's assets through a virtual filesystem.
 
+- Added setters for the |mj_spec| size attributes, which were read-only until now:
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_memory` :sup:`new`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nuserdata` :sup:`new`
+    and :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nkey` :sup:`new`;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nuser_body` :sup:`new`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nuser_jnt` :sup:`new`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nuser_geom` :sup:`new`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nuser_site` :sup:`new`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nuser_cam` :sup:`new`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nuser_tendon` :sup:`new`,
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nuser_actuator` :sup:`new`
+    and :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nuser_sensor`
+    :sup:`new`.
+
 *MjModel*
 
 - New methods:
