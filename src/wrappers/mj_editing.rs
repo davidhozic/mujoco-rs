@@ -1179,8 +1179,35 @@ impl MjsFrame {
         ]
     }
 
-    string_set_get_with! {[&]
-        childclass; "childclass name.";
+    /// Return the childclass name.
+    ///
+    /// # Panics
+    /// Panics if the stored string is not valid UTF-8.
+    #[deprecated(since = "6.1.0", note = "the field holds the class of the frame; use `default`")]
+    pub fn childclass(&self) -> &str {
+        // SAFETY: the mjString field is valid for the lifetime of self.
+        unsafe { read_mjs_string(self.ffi().childclass) }
+    }
+
+    /// Set the childclass name.
+    ///
+    /// # Panics
+    /// When the `value` contains '\0' characters, a panic occurs.
+    #[deprecated(since = "6.1.0", note = "writes an unchecked class name; use `set_default`")]
+    pub fn set_childclass(&mut self, value: &str) {
+        // SAFETY: the mjString field is valid for the lifetime of self.
+        unsafe { write_mjs_string(value, self.ffi_mut().childclass) };
+    }
+
+    /// Builder method for setting the childclass name.
+    ///
+    /// # Panics
+    /// When the `value` contains '\0' characters, a panic occurs.
+    #[deprecated(since = "6.1.0", note = "writes an unchecked class name; use `set_default`")]
+    pub fn with_childclass(&mut self, value: &str) -> &mut Self {
+        // SAFETY: the mjString field is valid for the lifetime of self.
+        unsafe { write_mjs_string(value, self.ffi_mut().childclass) };
+        self
     }
 
     /// Add and return a child frame.
@@ -3131,6 +3158,55 @@ mod tests {
         assert_eq!(model.nq(), 8);
         assert_eq!(model.dof_armature()[..6], [0.0; 6]);
         assert_eq!(model.dof_armature()[6], ARMATURE);
+    }
+
+    #[test]
+    fn test_add_with_class() {
+        const MARGIN: f64 = 0.5;
+        const GROUP: i32 = 2;
+
+        let mut spec = MjSpec::new();
+        let class = spec.add_default("cls", None);
+        class.geom_mut().set_margin(MARGIN);
+        class.actuator_mut().set_group(GROUP);
+
+        let body = spec.world_body_mut().add_body();
+        body.add_joint().with_name("hinge");
+        assert_eq!(body.add_geom_with_class("cls").unwrap().with_size([0.010; 3]).margin(), MARGIN);
+        assert_eq!(
+            body.add_frame().add_geom_with_class("cls").unwrap().with_size([0.010; 3]).margin(),
+            MARGIN
+        );
+
+        assert_eq!(body.add_geom().with_size([0.010; 3]).margin(), 0.0);
+        assert!(matches!(body.add_geom_with_class("nope"), Err(MjEditError::NotFound)));
+
+        let actuator = spec.add_actuator_with_class("cls").unwrap().with_trntype(MjtTrn::mjTRN_JOINT);
+        assert_eq!(actuator.group(), GROUP);
+        actuator.set_target("hinge");
+
+        let model = spec.compile().unwrap();
+        assert_eq!(model.geom_margin(), [MARGIN, MARGIN, 0.0]);
+        assert_eq!(model.actuator_group(), [GROUP]);
+    }
+
+    #[test]
+    fn test_default_class_of_parent() {
+        const MARGIN: f64 = 0.5;
+
+        let mut spec = MjSpec::new();
+        spec.add_default("cls", None).geom_mut().set_margin(MARGIN);
+
+        let body = spec.world_body_mut().add_body();
+        body.set_default("cls").unwrap();
+        assert_eq!(body.add_geom().with_size([0.010; 3]).margin(), MARGIN);
+        assert_eq!(body.add_body().add_geom().with_size([0.010; 3]).margin(), MARGIN);
+
+        // The frame carries the class, yet its geom lands on the parent body, which carries none.
+        let frame = spec.world_body_mut().add_body().add_frame();
+        frame.set_default("cls").unwrap();
+        assert!(frame.default().is_some());
+        assert_eq!(frame.add_geom().with_size([0.010; 3]).margin(), 0.0);
     }
 
     #[test]

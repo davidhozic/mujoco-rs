@@ -446,17 +446,54 @@ A new class is created by providing its ``class_name`` and optionally a ``parent
         spec.add_default("small-red", Some("red"));
     }
 
-Elements can then reference the class via their ``childclass`` or ``class`` attribute
-in the model XML.
-In Rust code, class assignment is done with
+Elements reference a class in the model XML through their ``class`` attribute. A body and a frame
+have ``childclass`` in-place of ``class``, which causes their sub-elements to inherit the class.
+
+In Rust code, class assignment is done either at creation of elements or post-creation.
+
+They can be added **at creation** by calling ``SomeSpecElementType::add_geom_with_class``,
+which accepts a name of the class (e.g.,
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_geom_with_class`):
+
+.. code-block:: rust
+    :emphasize-lines: 5, 8
+
+    use mujoco_rs::prelude::*;
+
+    fn main() {
+        let mut spec = MjSpec::new();
+        spec.add_default("red", None).geom_mut().set_margin(0.5);
+
+        // The geom takes the margin of the "red" class at creation.
+        let geom = spec.world_body_mut().add_geom_with_class("red").unwrap();
+        assert_eq!(geom.margin(), 0.5);
+    }
+
+They can be added **post-creation** by calling
 :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_default` or
 :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_default`.
-MuJoCo copies the values of a class into an element when the element is **created**, so set the
-class on the parent body before you add its children. A call on an element that already exists
-only records the class name: the saved XML then carries ``class="..."``, but the next ``compile``
-keeps the old values. A frame also exposes an explicit ``childclass`` setter
-(:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsFrame::<method>set_childclass`), with the
-same limitation.
+However, **note** that these two methods only set the class name on the item, without copying
+the values of the class into it. MuJoCo copies the values at creation, as shown above. A saved XML
+therefore holds something like ``<item class="some-cls" param1="0" param2="5">``, where ``param1``
+and ``param2`` keep the values that the item received at creation.
+
+What the **post-creation** methods (``set_default``, ``with_default``) do allow, is setting the
+class of the children that the item receives any time after calling any of the two methods (|mjs_body|).
+
+.. code-block:: rust
+    :emphasize-lines: 7, 10
+
+    use mujoco_rs::prelude::*;
+
+    fn main() {
+        let mut spec = MjSpec::new();
+        spec.add_default("red", None).geom_mut().set_margin(0.5);
+        let body = spec.world_body_mut().add_body();
+        body.set_default("red").unwrap();
+
+        // The geom takes the margin of the class of the body at creation.
+        assert_eq!(body.add_geom().margin(), 0.5);
+    }
 
 
 Iterators

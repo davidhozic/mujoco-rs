@@ -1,9 +1,21 @@
 6.1.0 (MuJoCo 3.12.0)
 ======================
 
+.. rubric:: Deprecations
+
+- Deprecated |mjs_frame|'s
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsFrame::<method>childclass`,
+  ``set_childclass`` and ``with_childclass``. Use
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>default`,
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_default` and
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_default` instead, which
+  modify the same field, but also fail when no class with the given name exists.
+
 .. rubric:: Error handling
 
-- Added :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>AttachFailed` :sup:`new`.
+- New variants:
+
+  - :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>AttachFailed` :sup:`new`.
 
 .. rubric:: New features and improvements
 
@@ -16,17 +28,9 @@
 
   The first trait defines
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_deep_copy` and
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_reference`
-  (:docs-rs:`~mujoco_rs::mujoco_c::<fn>mjs_attach`), which allow elements to be attached to
-  ``Self`` (implementor of ``Attach``) based on the ``AttachTo`` trait. For example,
-  implementations of ``AttachTo<MjsFrame>`` allow the implementor elements to be attached to
-  |mjs_frame|.
-
-  ``attach_by_deep_copy`` gives the parent a copy of every element of the child, thus both
-  specifications stay usable. A frame attached to a body is the exception that the method's
-  docstring records: the copy keeps pointing at the ancestor frame in the child.
-  ``attach_by_reference`` shares the elements, which is the default behavior in MuJoCo, and is
-  therefore ``unsafe``. The safe usage conditions are written in the method's docstring.
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_reference`,
+  which allow elements to be attached to ``Self`` (implementor of ``Attach``) based on the ``AttachTo`` trait.
+  For example, implementations of ``AttachTo<MjsFrame>`` allow the implementor elements to be attached to |mjs_frame|.
 
   The prelude exports both traits.
 
@@ -40,15 +44,17 @@
 
   The prelude exports the trait.
 
-- Added support for sending |mj_spec| to other threads by wrapping it into
-  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>SendableSpec` :sup:`new`,
-  which implements `Send <https://doc.rust-lang.org/std/marker/trait.Send.html>`__.
-  A ``SendableSpec`` can be created from ``MjSpec`` by calling the ``unsafe`` method
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>into_sendable` :sup:`new`,
-  or the equivalent
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>SendableSpec::<method>new` :sup:`new`.
-  The wrapped specification comes back out with
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>SendableSpec::<method>take` :sup:`new`.
+- Thread support:
+
+  - Added support for sending |mj_spec| to other threads by wrapping it into
+    :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>SendableSpec` :sup:`new`,
+    which implements `Send <https://doc.rust-lang.org/std/marker/trait.Send.html>`__.
+    A ``SendableSpec`` can be created from ``MjSpec`` by calling the ``unsafe`` method
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>into_sendable` :sup:`new`,
+    or the equivalent
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>SendableSpec::<method>new` :sup:`new`.
+    The wrapped specification can be obtained by calling
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>SendableSpec::<method>take` :sup:`new`.
 
 - New methods:
 
@@ -58,7 +64,12 @@
     for encoding a specification to a file with
     the encoder registered for the content type;
   - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>encode_with_vfs` :sup:`new`
-    for reading the encoder's assets through a virtual filesystem.
+    for reading the encoder's assets through a virtual filesystem;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_free_joint` :sup:`new`;
+  - Class-aware element constructors: the macro-generated ``add_*_with_class`` methods on
+    |mj_spec|, |mjs_body| and |mjs_frame|, such as
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_geom_with_class`
+    :sup:`new`.
 
 - Added setters for the |mj_spec| size attributes, which were read-only until now:
 
@@ -74,9 +85,6 @@
     :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nuser_actuator` :sup:`new`
     and :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nuser_sensor`
     :sup:`new`.
-
-- Added :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_free_joint`
-  :sup:`new`.
 
 *MjModel*
 
