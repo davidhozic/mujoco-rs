@@ -510,11 +510,22 @@ impl MjModel {
     /// # Panics
     /// When `filepath` is empty, or when `filepath` or `content_type` contain interior `\0`
     /// characters. MuJoCo aborts the process when the MJB or TXT encoder cannot write `filepath`.
+    /// 
+    /// # Note
+    /// The MJB and TXT encoders report the size of whatever sits at `filepath` instead of the
+    /// bytes they wrote, thus a refused write on an existing file returns `Ok(())` and leaves the
+    /// stale file in place.
     pub fn encode(&self, filepath: impl AsRef<Path>, content_type: &str) -> Result<(), MjModelError> {
         self.encode_impl(filepath, content_type, None)
     }
 
     /// Same as [`MjModel::encode`] except data (assets) are taken from `vfs`.
+    /// 
+    /// # Errors
+    /// The same as [`MjModel::encode`].
+    /// 
+    /// # Panics
+    /// The same as [`MjModel::encode`].
     pub fn encode_with_vfs(&self, filepath: impl AsRef<Path>, content_type: &str, vfs: &MjVfs) -> Result<(), MjModelError> {
         self.encode_impl(filepath, content_type, Some(vfs))
     }

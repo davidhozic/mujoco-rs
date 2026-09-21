@@ -1818,7 +1818,7 @@ impl<M: ModelTypeMut> MjData<M> {
     /// 
     /// # Note
     /// MuJoCo aborts the process through `mjERROR` when the model is inconsistent.
-    /// See https://mujoco.readthedocs.io/en/stable/programming/simulation.html#mjmodel-changes
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#mjmodel-changes)
     /// for information about safety of model changes.
     pub fn set_const(&mut self) {
         // SAFETY: All modifications are local to the owned data.

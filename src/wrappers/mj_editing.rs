@@ -623,6 +623,12 @@ impl MjSpec {
     }
 
     /// Same as [`MjSpec::encode`] except data (assets) are taken from `vfs`.
+    ///
+    /// # Errors
+    /// The same as [`MjSpec::encode`].
+    ///
+    /// # Panics
+    /// The same as [`MjSpec::encode`].
     pub fn encode_with_vfs(&self, filepath: impl AsRef<Path>, content_type: &str, vfs: &MjVfs) -> Result<(), MjEditError> {
         self.encode_impl(filepath, content_type, Some(vfs))
     }

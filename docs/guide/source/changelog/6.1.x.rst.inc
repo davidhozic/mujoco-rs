@@ -1,9 +1,6 @@
 6.1.0 (MuJoCo 3.12.0)
 ======================
 
-.. rubric:: Breaking changes
-.. rubric:: New dependencies
-.. rubric:: Deprecations
 .. rubric:: Error handling
 
 - Added :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>AttachFailed` :sup:`new`.
@@ -26,9 +23,10 @@
   |mjs_frame|.
 
   ``attach_by_deep_copy`` gives the parent a copy of every element of the child, thus both
-  specifications stay usable. ``attach_by_reference`` shares the elements, which is the default
-  behavior in MuJoCo, and is therefore ``unsafe``. The safe usage conditions are written in the
-  method's docstring.
+  specifications stay usable. A frame attached to a body is the exception that the method's
+  docstring records: the copy keeps pointing at the ancestor frame in the child.
+  ``attach_by_reference`` shares the elements, which is the default behavior in MuJoCo, and is
+  therefore ``unsafe``. The safe usage conditions are written in the method's docstring.
 
   The prelude exports both traits.
 
@@ -39,6 +37,8 @@
   - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>user_value_mut` :sup:`new`;
   - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>set_user_value` :sup:`new`;
   - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>remove_user_value` :sup:`new`.
+
+  The prelude exports the trait.
 
 - Added support for sending |mj_spec| to other threads by wrapping it into
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>SendableSpec` :sup:`new`,
@@ -93,7 +93,7 @@
     implements :docs-rs:`~mujoco_rs::wrappers::mj_model::traits::<trait>ModelTypeMut`;
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>save_keyframe` :sup:`new`
     for copying the current state into a model keyframe --- also only available when ``M``
-    implements implements ``ModelTypeMut``.
+    implements ``ModelTypeMut``.
 
 *Asset cache*
 
@@ -101,12 +101,10 @@
   file system across recompilations, to prevent reprocessing:
 
   - :docs-rs:`~mujoco_rs::wrappers::mj_cache::<struct>MjCache` :sup:`new` --- the zero-sized handle,
-    with internal mutability (MuJoCo has a global mutex).
+    with internal mutability (MuJoCo has a global mutex). The prelude exports it.
 
 .. rubric:: Bug fixes
 
 *Renderer*
 
 - Offscreen rendering using EGL now fallbacks to other supported devices when the first device fails.
-
-.. rubric:: Other changes

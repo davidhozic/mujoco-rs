@@ -180,10 +180,9 @@ pub trait SpecObject: SpecItem {
 /// Only spec attachments by reference share values.
 /// 
 /// # Lifetime
-/// After a value has been stored as user data, it will be freed only
-/// after the belonging [`MjSpec`] itself is freed.
-/// Removing a value from user values does not free the said value,
-/// but only makes it virtually deleted on the API surface.
+/// A stored value is dropped when its key is removed, when another value replaces it, or when
+/// MuJoCo deletes the element that holds it. An element survives at most until the belonging
+/// [`MjSpec`] is freed.
 pub trait UserValued: SpecItem {
     /// Obtains a polymorphic reference to the stored data under `key` contained within this spec item.
     /// If no data is stored under `key`, [`None`] is returned.
@@ -435,7 +434,11 @@ pub trait Attach: SpecItem {
     /// # Note
     /// MuJoCo mutates the `child` even with deep-copying enabled.
     /// When the child is a [`MjSpec`], it will create a new [`MjsFrame`] in its world body
-    /// on every attachment, to which all the sub-elements of `child` will be copied.
+    /// on every attachment, under which all the sub-elements of `child` are reparented.
+    ///
+    /// A [`MjsFrame`] attached to an [`MjsBody`] is not copied in full. The parent's frame keeps
+    /// pointing at the ancestor frame in the child. An edit of that ancestor before the parent's
+    /// first compilation therefore still changes the parent. Other pairs are unaffected.
     ///
     /// # Errors
     /// Returns [`MjEditError::AttachFailed`] when MuJoCo rejects the attachment.
