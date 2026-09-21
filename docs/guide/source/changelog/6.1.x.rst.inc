@@ -82,7 +82,9 @@
   - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>encode` :sup:`new`
     for encoding a compiled model to a file with the encoder registered for the content type;
   - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>encode_with_vfs` :sup:`new`
-    for reading the encoder's assets through a virtual filesystem.
+    for reading the encoder's assets through a virtual filesystem;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_mjb` :sup:`new`;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_mjb_vfs` :sup:`new`.
 
 *MjData*
 

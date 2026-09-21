@@ -454,6 +454,49 @@ impl MjModel {
         }
     }
 
+    /// Loads the model from a binary (MJB) file. To load from a virtual file system, use
+    /// [`MjModel::from_mjb_vfs`].
+    /// Wraps [`mj_loadModel`].
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
+    /// # Errors
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::LoadFailed`] if MuJoCo fails to load the model.
+    /// # Panics
+    /// - when the `path` contains '\0'.
+    /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    pub fn from_mjb<T: AsRef<Path>>(path: T) -> Result<Self, MjModelError> {
+        Self::from_mjb_file(path, None)
+    }
+
+    /// Loads the model from a binary (MJB) file, located in a virtual file system (`vfs`).
+    /// Wraps [`mj_loadModel`].
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
+    /// # Errors
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::LoadFailed`] if MuJoCo fails to load the model.
+    /// # Panics
+    /// - when the `path` contains '\0'.
+    /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    pub fn from_mjb_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, MjModelError> {
+        Self::from_mjb_file(path, Some(vfs))
+    }
+
+    fn from_mjb_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, MjModelError> {
+        assert_mujoco_version();
+
+        let path_str = path.as_ref().to_str()
+            .ok_or(MjModelError::InvalidUtf8Path)?;
+        let path = CString::new(path_str).unwrap();
+        let raw_ptr = unsafe { mj_loadModel(
+            path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi())
+        ) };
+
+        Self::from_raw(raw_ptr)
+            .inspect(|_| debug!("loaded the model from \"{path_str}\""))
+    }
+
     /// Creates a [`MjModel`] from a raw pointer.
     pub(crate) fn from_raw(ptr: *mut mjModel) -> Result<Self, MjModelError> {
         Self::check_raw_model(ptr, &[0])
@@ -2988,6 +3031,31 @@ mod tests {
         let model = MjModel::from_buffer(&saved_data).unwrap();
         assert!(model.light("lamp_light2").is_some());
         assert!(model.light("lamp_light-xyz").is_none());
+    }
+
+    #[test]
+    fn test_model_from_mjb() {
+        const MODEL_SAVE_PATH: &str = "./__TMP_MODEL3.mjb";
+        const MODEL_VFS_PATH: &str = "__TMP_MODEL3_VFS.mjb";
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        model.save_to_file(MODEL_SAVE_PATH).unwrap();
+
+        let loaded = MjModel::from_mjb(MODEL_SAVE_PATH).unwrap();
+        assert!(model.is_compatible_with_model(&loaded));
+        assert!(loaded.light("lamp_light2").is_some());
+
+        /* Test virtual file system load */
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer(MODEL_VFS_PATH, &fs::read(MODEL_SAVE_PATH).unwrap()).unwrap();
+        // The MJB now exists on the VFS only, so a load that ignores the VFS finds no file.
+        fs::remove_file(MODEL_SAVE_PATH).unwrap();
+
+        let loaded_vfs = MjModel::from_mjb_vfs(MODEL_VFS_PATH, &vfs).unwrap();
+        assert!(model.is_compatible_with_model(&loaded_vfs));
+        assert!(loaded_vfs.light("lamp_light2").is_some());
+
+        assert!(MjModel::from_mjb(MODEL_SAVE_PATH).is_err());
     }
 
     #[test]

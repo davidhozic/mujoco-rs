@@ -19,7 +19,11 @@ To perform basic simulation with MuJoCo, create a |mj_model| struct by calling o
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml_string`
   (loads XML from a model defined in a string in memory),
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`
-  (loads a compiled model from a buffer).
+  (loads a compiled model from a buffer),
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_mjb`
+  (loads a compiled model from a binary MJB file),
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_mjb_vfs`
+  (loads a compiled model from a binary MJB file on a virtual file system).
 
 For example:
 
