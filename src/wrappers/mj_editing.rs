@@ -4082,6 +4082,7 @@ mod tests {
             let flex = spec.world_body_mut().add_flexcomp("genflex", &config);
             assert_eq!(flex.dim(), 2);
             assert!((flex.radius() - 0.001).abs() < 1e-12);
+            flex.set_edgedamping(1.0);
         }
 
         /* The generated flex is registered in the spec and addressable by name. */
@@ -4107,6 +4108,7 @@ mod tests {
             let flex = spec.world_body_mut().add_flexcomp("genflex", &config);
             assert_eq!(flex.dim(), 2);
             assert!((flex.radius() - 0.005).abs() < 1e-12);
+            flex.set_edgedamping(1.0);
         }
 
         spec.compile().expect("spec with defaulted flex failed to compile");

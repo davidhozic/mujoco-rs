@@ -2734,7 +2734,8 @@ mod tests {
     #[test]
     fn test_layout_rejects_a_different_flex_split() {
         let flex = |name: &str, bodies: &str, nvert: usize, element: &str| format!(
-            "<flex name='{name}' dim='1' body='{bodies}' vertex='{}' element='{element}'/>",
+            "<flex name='{name}' dim='1' body='{bodies}' vertex='{}' element='{element}'>\
+             <edge damping='1'/></flex>",
             "0 0 0 ".repeat(nvert)
         );
         let flex_model = |first: String, second: String| MjModel::from_xml_string(&format!(
@@ -2837,7 +2838,8 @@ mod tests {
              <body name='v1' pos='0.1 0 0'><freejoint/><geom size='0.01'/></body>\
              <body name='v2' pos='0.2 0 0'><freejoint/><geom size='0.01'/></body>\
              </worldbody>\
-             <deformable><flex name='f1' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>\
+             <deformable><flex name='f1' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'>\
+             <edge damping='1'/></flex>\
              </deformable>\
              <tendon><spatial name='td'><site site='s1'/><site site='s2'/></spatial>\
              <fixed name='tf'><joint joint='js' coef='1'/><joint joint='jh' coef='2'/></fixed></tendon>\

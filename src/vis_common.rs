@@ -165,7 +165,8 @@ mod tests {
 <body name=\"v0\"><freejoint/><geom size=\"0.01\"/></body>\
 <body name=\"v1\" pos=\"0.1 0 0\"><freejoint/><geom size=\"0.01\"/></body>\
 </worldbody><deformable>\
-<flex name=\"f\" dim=\"1\" body=\"v0 v1\" vertex=\"0 0 0 0 0 0\" element=\"0 1\"/>\
+<flex name=\"f\" dim=\"1\" body=\"v0 v1\" vertex=\"0 0 0 0 0 0\" element=\"0 1\">\
+<edge damping=\"1\"/></flex>\
 </deformable></mujoco>").unwrap();
         let without_flex = MjModel::from_xml_string(
             "<mujoco><worldbody>\
