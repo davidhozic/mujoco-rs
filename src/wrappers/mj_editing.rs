@@ -819,6 +819,27 @@ impl MjSpec {
             }
         }
     }
+
+    /// Activates the engine plugin registered under `name`.
+    ///
+    /// Wraps [`mjs_activatePlugin`].
+    /// 
+    /// # Errors
+    /// Returns [`MjEditError::NotFound`] when no plugin is registered under `name`.
+    /// 
+    /// # Panics
+    /// When the `name` contains '\0' characters, a panic occurs.
+    pub fn activate_plugin(&mut self, name: &str) -> Result<(), MjEditError> {
+        let c_name = CString::new(name).unwrap();
+        // SAFETY: the spec pointer is valid and c_name stays alive over the call.
+        let result = unsafe { mjs_activatePlugin(self.ffi_mut(), c_name.as_ptr()) };
+        if result == 0 {
+            Ok(())
+        }
+        else {
+            Err(MjEditError::NotFound)
+        }
+    }
 }
 
 /// Mutable iterator over items in [`MjSpec`].
@@ -2892,6 +2913,25 @@ mod tests {
     <geom name=\"floor1\" type=\"plane\" size=\"10 10 1\" solref=\"0.004 1.0\"/>
   </worldbody>
 </mujoco>";
+
+    #[test]
+    fn test_activate_plugin() {
+        use crate::wrappers::mj_plugin::load_all_plugin_libraries;
+        const PLUGIN: &str = "mujoco.elasticity.cable";
+
+        let mut spec = MjSpec::new();
+        assert_eq!(spec.activate_plugin("not.a.plugin"), Err(MjEditError::NotFound));
+
+        let Ok(lib_dir) = std::env::var("MUJOCO_DYNAMIC_LINK_DIR") else { return };
+        let plugin_dir = Path::new(&lib_dir).parent().unwrap().join("bin/mujoco_plugin");
+        load_all_plugin_libraries(&plugin_dir, None).unwrap();
+
+        spec.activate_plugin(PLUGIN).unwrap();
+        spec.compile().unwrap();
+
+        let xml = spec.save_xml_string(4096).unwrap();
+        assert!(xml.contains(&format!("<plugin plugin=\"{PLUGIN}\"/>")), "{xml}");
+    }
 
     #[test]
     fn test_spec_authored_accessor() {

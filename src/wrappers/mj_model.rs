@@ -1048,6 +1048,114 @@ impl MjModel {
         Ok(required_size)
     }
 
+    /// Compute the velocity that carries `qpos1` to `qpos2` in `dt`.
+    ///
+    /// Wraps [`mj_differentiatePos`].
+    /// 
+    /// # Panics
+    /// Panics when `qpos1` or `qpos2` does not hold [`MjModel::nq`] elements.
+    /// Use [`MjModel::try_differentiate_pos`] for a fallible alternative.
+    pub fn differentiate_pos(&self, dt: MjtNum, qpos1: &[MjtNum], qpos2: &[MjtNum]) -> Box<[MjtNum]> {
+        self.try_differentiate_pos(dt, qpos1, qpos2).unwrap()
+    }
+
+    /// Fallible version of [`MjModel::differentiate_pos`].
+    ///
+    /// Wraps [`mj_differentiatePos`].
+    /// 
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the velocity, of [`MjModel::nv`] elements.
+    /// 
+    /// # Errors
+    /// - When `qpos1` or `qpos2` does not hold [`MjModel::nq`] elements,
+    ///   [`MjModelError::LengthMismatch`] is returned.
+    pub fn try_differentiate_pos(&self, dt: MjtNum, qpos1: &[MjtNum], qpos2: &[MjtNum]) -> Result<Box<[MjtNum]>, MjModelError> {
+        let mut qvel = vec![0 as MjtNum; self.ffi().nv as usize];
+        self.try_differentiate_pos_into(dt, qpos1, qpos2, &mut qvel)?;
+        Ok(qvel.into_boxed_slice())
+    }
+
+    /// Same as [`MjModel::differentiate_pos`], except it writes the [`MjModel::nv`] elements into
+    /// `qvel`. Elements of `qvel` above index `nv` keep their previous values.
+    ///
+    /// Wraps [`mj_differentiatePos`].
+    /// 
+    /// # Panics
+    /// - When `qpos1` or `qpos2` does not hold [`MjModel::nq`] elements.
+    /// - When `qvel` holds fewer than [`MjModel::nv`] elements.
+    /// 
+    /// Use [`MjModel::try_differentiate_pos_into`] for a fallible alternative.
+    pub fn differentiate_pos_into(&self, dt: MjtNum, qpos1: &[MjtNum], qpos2: &[MjtNum], qvel: &mut [MjtNum]) {
+        self.try_differentiate_pos_into(dt, qpos1, qpos2, qvel).unwrap()
+    }
+
+    /// Fallible version of [`MjModel::differentiate_pos_into`].
+    ///
+    /// Wraps [`mj_differentiatePos`].
+    /// 
+    /// # Errors
+    /// - When `qpos1` or `qpos2` does not hold [`MjModel::nq`] elements,
+    ///   [`MjModelError::LengthMismatch`] is returned.
+    /// - When `qvel` holds fewer than [`MjModel::nv`] elements,
+    ///   [`MjModelError::BufferTooSmall`] is returned.
+    pub fn try_differentiate_pos_into(&self, dt: MjtNum, qpos1: &[MjtNum], qpos2: &[MjtNum], qvel: &mut [MjtNum]) -> Result<(), MjModelError> {
+        let nq = self.ffi().nq as usize;
+        if qpos1.len() != nq {
+            return Err(MjModelError::LengthMismatch { name: "qpos1", expected: nq, got: qpos1.len() });
+        }
+
+        if qpos2.len() != nq {
+            return Err(MjModelError::LengthMismatch { name: "qpos2", expected: nq, got: qpos2.len() });
+        }
+
+        let nv = self.ffi().nv as usize;
+        if qvel.len() < nv {
+            return Err(MjModelError::BufferTooSmall { needed: nv, available: qvel.len() });
+        }
+
+        // SAFETY: all pointers are valid for the duration of this call; qpos1 and qpos2 hold nq
+        // elements and qvel holds at least nv elements, as checked above.
+        unsafe {
+            mj_differentiatePos(
+                self.ffi(),
+                qvel.as_mut_ptr(), dt,
+                qpos1.as_ptr(), qpos2.as_ptr()
+            )
+        };
+
+        Ok(())
+    }
+
+    /// Integrate `qpos` in place with velocity `qvel` and time step `dt`.
+    ///
+    /// Wraps [`mj_integratePos`].
+    /// # Panics
+    /// - When `qpos` does not hold [`MjModel::nq`] elements.
+    /// - When `qvel` does not hold [`MjModel::nv`] elements.
+    pub fn integrate_pos(&self, qpos: &mut [MjtNum], qvel: &[MjtNum], dt: MjtNum) {
+        // mj_integratePos reads both vectors by the model layout, without a length of its own.
+        assert_eq!(qpos.len(), self.ffi().nq as usize, "qpos must hold nq elements");
+        assert_eq!(qvel.len(), self.ffi().nv as usize, "qvel must hold nv elements");
+
+        // SAFETY: both pointers are valid for the duration of this call, with the lengths that the
+        // model layout requires, as checked above.
+        unsafe { mj_integratePos(self.ffi(), qpos.as_mut_ptr(), qvel.as_ptr(), dt) }
+    }
+
+    /// Normalize every ball and free joint quaternion of a `qpos` vector in place.
+    ///
+    /// Wraps [`mj_normalizeQuat`].
+    /// # Panics
+    /// Panics when `qpos` does not hold [`MjModel::nq`] elements.
+    pub fn normalize_quat(&self, qpos: &mut [MjtNum]) {
+        // mj_normalizeQuat reads the vector by the model layout, without a length of its own.
+        assert_eq!(qpos.len(), self.ffi().nq as usize, "qpos must hold nq elements");
+
+        // SAFETY: the pointer is valid for the duration of this call, with the length that the
+        // model layout requires, as checked above.
+        unsafe { mj_normalizeQuat(self.ffi(), qpos.as_mut_ptr()) }
+    }
+
     /// Determine type of friction cone. Returns `true` if pyramidal, `false` if elliptic.
     /// Wraps [`mj_isPyramidal`].
     pub fn is_pyramidal(&self) -> bool {
@@ -2395,6 +2503,78 @@ mod tests {
         </asset>
     </mujoco>
 );
+
+    #[test]
+    fn test_integrate_and_differentiate_pos() {
+        const DT: MjtNum = 0.05;
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        assert!(model.nq() > model.nv(), "the model must hold a quaternion joint");
+
+        let qvel: Vec<MjtNum> = (0..model.nv()).map(|i| 0.1 * (i as MjtNum + 1.0)).collect();
+        let qpos1 = model.qpos0().to_vec();
+        let mut qpos2 = qpos1.clone();
+        model.integrate_pos(&mut qpos2, &qvel, DT);
+        assert_ne!(qpos1, qpos2, "integration must move the configuration");
+
+        let recovered = model.differentiate_pos(DT, &qpos1, &qpos2);
+        assert_eq!(recovered.len(), model.nv() as usize);
+        for (got, expected) in recovered.iter().zip(&qvel) {
+            assert_relative_eq!(*got, *expected, epsilon = 1e-9);
+        }
+    }
+
+    #[test]
+    fn test_differentiate_pos_rejects_bad_length() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let qpos = model.qpos0().to_vec();
+        let short = &qpos[..qpos.len() - 1];
+
+        assert!(matches!(
+            model.try_differentiate_pos(0.1, short, &qpos),
+            Err(MjModelError::LengthMismatch { name: "qpos1", .. })
+        ));
+        assert!(matches!(
+            model.try_differentiate_pos(0.1, &qpos, short),
+            Err(MjModelError::LengthMismatch { name: "qpos2", .. })
+        ));
+    }
+
+    #[test]
+    fn test_differentiate_pos_into_buffer_bounds() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let nv = model.nv() as usize;
+        let qpos1 = model.qpos0().to_vec();
+        let mut qpos2 = qpos1.clone();
+        model.integrate_pos(&mut qpos2, &vec![0.1; nv], 1.0);
+
+        let mut qvel = vec![MjtNum::NAN; nv + 2];
+        model.differentiate_pos_into(1.0, &qpos1, &qpos2, &mut qvel);
+        assert!(qvel[..nv].iter().all(|v| v.is_finite()), "every element below nv is written");
+        assert!(qvel[nv..].iter().all(|v| v.is_nan()), "elements above nv keep their previous values");
+
+        assert!(matches!(
+            model.try_differentiate_pos_into(1.0, &qpos1, &qpos2, &mut vec![0 as MjtNum; nv - 1]),
+            Err(MjModelError::BufferTooSmall { needed, available }) if needed == nv && available == nv - 1
+        ));
+    }
+
+    #[test]
+    fn test_normalize_quat() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let free_adr = model.jnt_qposadr()[0] as usize;
+        assert_eq!(model.jnt_type()[0], MjtJoint::mjJNT_FREE);
+
+        let mut qpos = model.qpos0().to_vec();
+        qpos[free_adr + 3..free_adr + 7].copy_from_slice(&[2.0, 0.0, 0.0, 2.0]);
+        model.normalize_quat(&mut qpos);
+
+        let quat = &qpos[free_adr + 3..free_adr + 7];
+        let norm = quat.iter().map(|q| q * q).sum::<MjtNum>().sqrt();
+        assert_relative_eq!(norm, 1.0, epsilon = 1e-12);
+        assert_relative_eq!(quat[0], 0.5_f64.sqrt(), epsilon = 1e-12);
+        assert_relative_eq!(quat[3], 0.5_f64.sqrt(), epsilon = 1e-12);
+    }
 
     /// Tests if the model can be loaded and then saved.
     #[test]

@@ -565,6 +565,26 @@ pub fn mju_mat_2_rot(quat: &mut [MjtNum; 4], mat: &[MjtNum; 9]) -> i32  {
     unsafe { mujoco_c::mju_mat2Rot(quat, mat) }
 }
 
+/// Convert a sequence of Euler angles (radians) to a quaternion. Every character of `seq` is one of
+/// `xyzXYZ`, where lower case means an intrinsic rotation and upper case an extrinsic one.
+///
+/// # Panics
+/// Panics when `seq` holds other than 3 characters, or a character outside `xyzXYZ`.
+pub fn mju_euler_2_quat(euler: &[MjtNum; 3], seq: &str) -> [MjtNum; 4]  {
+    // MuJoCo aborts the process through mjERROR on a bad sequence. We panic to avoid that.
+    let seq = seq.as_bytes();
+    assert!(
+        seq.len() == 3 && seq.iter().all(|c| b"xyzXYZ".contains(c)),
+        "seq must hold exactly 3 characters out of xyzXYZ"
+    );
+
+    let c_seq = [seq[0], seq[1], seq[2], 0];
+    let mut quat = [0 as MjtNum; 4];
+    // SAFETY: all arguments are valid references with correct sizes. c_seq is NUL terminated.
+    unsafe { mujoco_c::mju_euler2Quat(&mut quat, euler, c_seq.as_ptr().cast()) };
+    quat
+}
+
 /// Multiply two poses.
 pub fn mju_mul_pose(posres: &mut [MjtNum; 3], quatres: &mut [MjtNum; 4], pos_1: &[MjtNum; 3], quat_1: &[MjtNum; 4], pos_2: &[MjtNum; 3], quat_2: &[MjtNum; 4])  {
     // SAFETY: all arguments are valid references with correct sizes.
@@ -681,6 +701,44 @@ pub fn mju_sigmoid(x: MjtNum) -> MjtNum  {
 mod tests {
     use crate::assert_relative_eq;
     use super::*;
+
+    #[test]
+    fn test_mju_euler_2_quat() {
+        const EULER: [MjtNum; 3] = [0.3, -0.7, 1.1];
+
+        let mut axis_quat = [[0.0; 4]; 3];
+        for (i, quat) in axis_quat.iter_mut().enumerate() {
+            let mut axis = [0.0; 3];
+            axis[i] = 1.0;
+            mju_axis_angle_2_quat(quat, &axis, EULER[i]);
+        }
+
+        let mut partial = [0.0; 4];
+        let mut expected_moving = [0.0; 4];
+        mju_mul_quat(&mut partial, &axis_quat[0], &axis_quat[1]);
+        mju_mul_quat(&mut expected_moving, &partial, &axis_quat[2]);
+
+        let mut expected_fixed = [0.0; 4];
+        mju_mul_quat(&mut partial, &axis_quat[1], &axis_quat[0]);
+        mju_mul_quat(&mut expected_fixed, &axis_quat[2], &partial);
+
+        let moving = mju_euler_2_quat(&EULER, "xyz");
+        let fixed = mju_euler_2_quat(&EULER, "XYZ");
+        assert_ne!(moving, fixed, "the two conventions must not coincide");
+        for (got, expected) in moving.iter().zip(&expected_moving) {
+            assert_relative_eq!(*got, *expected, epsilon = 1e-12);
+        }
+
+        for (got, expected) in fixed.iter().zip(&expected_fixed) {
+            assert_relative_eq!(*got, *expected, epsilon = 1e-12);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "seq must hold exactly 3 characters out of xyzXYZ")]
+    fn test_mju_euler_2_quat_rejects_bad_seq() {
+        mju_euler_2_quat(&[0.0; 3], "xyw");
+    }
 
     #[test]
     fn test_mju_zero_3() {
