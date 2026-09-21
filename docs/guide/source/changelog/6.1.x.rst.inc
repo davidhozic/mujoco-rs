@@ -36,6 +36,7 @@
   stores an arbitrary Rust value on a specification element under a string key:
 
   - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>user_value` :sup:`new`;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>user_value_mut` :sup:`new`;
   - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>set_user_value` :sup:`new`;
   - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>remove_user_value` :sup:`new`.
 

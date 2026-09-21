@@ -576,6 +576,7 @@ macro_rules! mjs_struct {
             )*)?
         }
 
+        // Only a class that derives mjCBase (in MuJoCo's C++ code) may carry user values
         impl UserValued for $handle {}
     };
 }

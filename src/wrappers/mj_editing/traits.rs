@@ -178,6 +178,12 @@ pub trait SpecObject: SpecItem {
 ///
 /// Note that the user storage is spec-local, even after copying.
 /// Only spec attachments by reference share values.
+/// 
+/// # Lifetime
+/// After a value has been stored as user data, it will be freed only
+/// after the belonging [`MjSpec`] itself is freed.
+/// Removing a value from user values does not free the said value,
+/// but only makes it virtually deleted on the API surface.
 pub trait UserValued: SpecItem {
     /// Obtains a polymorphic reference to the stored data under `key` contained within this spec item.
     /// If no data is stored under `key`, [`None`] is returned.
@@ -200,9 +206,9 @@ pub trait UserValued: SpecItem {
     /// # use mujoco_rs::prelude::*;
     /// # let mut spec = MjSpec::new();
     /// # let geom = spec.world_body_mut().add_geom();
-    /// geom.set_user_value("serial", Box::new(String::from("A-42")));
+    /// geom.set_user_value("serial", Box::new(String::from("user-value-1")));
     /// let value = geom.user_value("serial").unwrap();
-    /// assert_eq!(value.downcast_ref::<String>().unwrap(), "A-42");
+    /// assert_eq!(value.downcast_ref::<String>().unwrap(), "user-value-1");
     ///
     /// // A downcast to any other type yields `None`.
     /// assert!(value.downcast_ref::<u32>().is_none());
@@ -225,6 +231,43 @@ pub trait UserValued: SpecItem {
         Some(unsafe { &**(maybe_data as *const Box<dyn Any>) })
     }
 
+    /// Obtains a polymorphic mutable reference to the stored data under `key` contained within
+    /// this spec item. If no data is stored under `key`, [`None`] is returned.
+    /// Wraps [`mjs_getUserValue`].
+    ///
+    /// # Panics
+    /// When `key` contains null-bytes.
+    ///
+    /// # Note
+    /// Plugin-stored values, under plugin-named keys, will always return [`None`], unless under
+    /// conditions described in [`UserValued::user_value`].
+    ///
+    /// # Examples
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// # let mut spec = MjSpec::new();
+    /// # let geom = spec.world_body_mut().add_geom();
+    /// # geom.set_user_value("trace", Box::new(vec![1u32, 2]));
+    /// geom.user_value_mut("trace").unwrap().downcast_mut::<Vec<u32>>().unwrap().push(3);
+    /// assert_eq!(geom.user_value("trace").unwrap().downcast_ref::<Vec<u32>>().unwrap(), &[1, 2, 3]);
+    /// ```
+    fn user_value_mut(&mut self, key: &str) -> Option<&mut dyn Any> {
+        let c_key = user_value_key(key);
+        // SAFETY: the handle is a live element and the key is valid throughout the call.
+        let maybe_data = unsafe {
+            mjs_getUserValue(self.element_mut_pointer(), c_key.as_ptr())
+        };
+
+        if maybe_data.is_null() {
+            return None;
+        }
+
+        // SAFETY: same as in user_value. mjs_getUserValue does return `*const c_void`,
+        // however, the actual owned data is a mutable Box from the start, thus making
+        // the cast from const to mut perfectly sound.
+        Some(unsafe { &mut **maybe_data.cast_mut().cast::<Box<dyn Any>>() })
+    }
+
     /// Sets `value` under `key` into this spec item. The value that `key` held before is dropped.
     /// Wraps [`mjs_setUserValueWithCleanup`].
     /// 
@@ -236,8 +279,8 @@ pub trait UserValued: SpecItem {
     /// # use mujoco_rs::prelude::*;
     /// # let mut spec = MjSpec::new();
     /// # let geom = spec.world_body_mut().add_geom();
-    /// geom.set_user_value("serial", Box::new(String::from("A-42")));
-    /// # assert_eq!(geom.user_value("serial").unwrap().downcast_ref::<String>().unwrap(), "A-42");
+    /// geom.set_user_value("serial", Box::new(String::from("user-value-1")));
+    /// # assert_eq!(geom.user_value("serial").unwrap().downcast_ref::<String>().unwrap(), "user-value-1");
     ///
     /// // The same key takes another type, and drops the value it held.
     /// geom.set_user_value("serial", Box::new(42u32));
@@ -269,7 +312,7 @@ pub trait UserValued: SpecItem {
     /// # use mujoco_rs::prelude::*;
     /// # let mut spec = MjSpec::new();
     /// # let geom = spec.world_body_mut().add_geom();
-    /// # geom.set_user_value("serial", Box::new(String::from("A-42")));
+    /// # geom.set_user_value("serial", Box::new(String::from("user-value-1")));
     /// geom.remove_user_value("serial");
     /// assert!(geom.user_value("serial").is_none());
     /// ```
@@ -516,6 +559,15 @@ mod tests {
 
     use super::*;
 
+    /// Counts its own drops.
+    struct DropCounter(Rc<Cell<u32>>);
+
+    impl Drop for DropCounter {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+
     #[test]
     fn test_user_value() {
         const VALID_USER_VALUE_KEY: &str = "valid_user_value_key";
@@ -534,20 +586,21 @@ mod tests {
         assert!(matches!(value, SetOfUserValueTypes::Integer(14)));
         assert!(geom.user_value(VALID_USER_VALUE_KEY).unwrap().downcast_ref::<u32>().is_none());
 
+        *geom.user_value_mut(VALID_USER_VALUE_KEY).unwrap()
+            .downcast_mut::<SetOfUserValueTypes>().unwrap() = SetOfUserValueTypes::Integer(15);
+        assert!(matches!(
+            geom.user_value(VALID_USER_VALUE_KEY).unwrap()
+                .downcast_ref::<SetOfUserValueTypes>().unwrap(),
+            SetOfUserValueTypes::Integer(15)
+        ));
+        assert!(geom.user_value_mut("absent").is_none());
+
         geom.remove_user_value(VALID_USER_VALUE_KEY);
         assert!(geom.user_value(VALID_USER_VALUE_KEY).is_none());
     }
 
     #[test]
     fn test_user_value_cleanup() {
-        struct DropCounter(Rc<Cell<u32>>);
-
-        impl Drop for DropCounter {
-            fn drop(&mut self) {
-                self.0.set(self.0.get() + 1);
-            }
-        }
-
         let drops = Rc::new(Cell::new(0));
         {
             let mut spec = MjSpec::new();
@@ -565,5 +618,21 @@ mod tests {
             geom.set_user_value("key", Box::new(DropCounter(Rc::clone(&drops))));
         }
         assert_eq!(drops.get(), 3, "dropping the spec must drop the value it holds");
+    }
+
+    #[test]
+    fn test_user_value_dropped_on_element_delete() {
+        let drops = Rc::new(Cell::new(0));
+        {
+            let mut spec = MjSpec::new();
+            let geom = spec.world_body_mut().add_geom();
+            geom.set_user_value("key", Box::new(DropCounter(Rc::clone(&drops))));
+
+            // SAFETY: the borrow of the geom ends with the call, so no handle reaches the element
+            // after its deletion.
+            unsafe { geom.delete() }.unwrap();
+            assert_eq!(drops.get(), 0, "memory is supposed to be freed after the spec is dropped");
+        }
+        assert_eq!(drops.get(), 1, "the spec must drop the value a deleted element held");
     }
 }

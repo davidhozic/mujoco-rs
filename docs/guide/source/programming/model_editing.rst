@@ -212,6 +212,8 @@ changed sensor type or a changed actuator dynamics type breaks it; ``swap_model`
 :docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>IncompatibleModel`.
 
 
+.. _model_editing_send:
+
 Thread-safety and ``Send``
 ==================================================================================
 Almost all of model-editing features, available in MuJoCo-rs, are wrappers of MuJoCo's C++
@@ -220,14 +222,15 @@ use of same spec. For this purpose, the model-editing elements and |mj_spec| its
 ``Send``, which would allow |mj_spec| to be
 sent to another thread directly.
 
-However, using |mj_spec| is thread-safe in certain scenarios. Thread-safety is guaranteed only when
-all of the following are **NOT** true for a |mj_spec|:
+However, using |mj_spec| is thread-safe in certain scenarios. Thread-safety is guaranteed,
+except under the following situations:
 
 - cloning a |mj_spec| that uses the ``<model>`` tag inside ``<asset>`` in the MJCF XML definition;
 - attaching procedurally via
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_reference`;
 - attaching procedurally via
-  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_deep_copy`.
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>Attach::<method>attach_by_deep_copy`;
+- holding a user value that is not ``Send`` (see :ref:`model_editing_user_values`).
 
 Note that these attachments don't include just direct attachments of |mj_spec|, but also
 any other model-editing element. Attaching inside a single |mj_spec| shares nothing.
@@ -517,6 +520,58 @@ Every finder returns an ``Option`` that is ``None`` when no element with that na
 After compilation, an element's numeric id in the resulting |mj_model| can be retrieved with
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>id`
 (``None`` when the element has no id yet).
+
+
+.. _model_editing_user_values:
+
+Storing user values
+=====================
+Every |mj_spec| element can carry arbitrary values under string keys, through the
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>UserValued` trait (exported by the prelude).
+
+The user data stored through use of the methods in ``UserValued`` is not preserved after compiling
+to |mj_model|. It can thus only be used during model editing.
+
+The trait defines the following methods:
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>set_user_value`;
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>user_value`;
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>user_value_mut`;
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>remove_user_value`.
+
+
+On the MuJoCo-rs's API surface, the trait methods accept ``Box<dyn Any>`` and return ``&dyn Any``
+polymorphic type-erased objects. See `Any <https://doc.rust-lang.org/std/any/index.html#any-and-typeid>`__'s documentation
+on how to downcast to the actual type
+(e.g., via `Any::downcast_ref <https://doc.rust-lang.org/std/any/trait.Any.html#method.downcast_ref>`__).
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn main() {
+        let mut spec = MjSpec::new();
+        let geom = spec.world_body_mut().add_geom();
+
+        geom.set_user_value("foo", Box::new(String::from("user-value-1")));
+        geom.set_user_value("bar", Box::new(vec![0.0f64; 3]));
+
+        // Read and name the type again.
+        let serial = geom.user_value("foo").unwrap();
+        assert_eq!(serial.downcast_ref::<String>().unwrap(), "user-value-1");
+
+        // Wrong types give None.
+        assert!(serial.downcast_ref::<u32>().is_none());
+
+        // Modify in place.
+        geom.user_value_mut("bar").unwrap().downcast_mut::<Vec<f64>>().unwrap()[0] = 1.5;
+
+        geom.remove_user_value("foo");
+        assert!(geom.user_value("foo").is_none());
+    }
+
+Keys have ``mujoco-rs:`` prefix added internally, which prevents clashes with user values
+stored externally from MuJoCo-rs (e.g., in plugins).
 
 
 .. _model_editing_actuators:
