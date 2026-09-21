@@ -32,6 +32,13 @@
 
   The prelude exports both traits.
 
+- Added the :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>UserValued` :sup:`new` trait, which
+  stores an arbitrary Rust value on a specification element under a string key:
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>user_value` :sup:`new`;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>set_user_value` :sup:`new`;
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>UserValued::<method>remove_user_value` :sup:`new`.
+
 - Added support for sending |mj_spec| to other threads by wrapping it into
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>SendableSpec` :sup:`new`,
   which implements `Send <https://doc.rust-lang.org/std/marker/trait.Send.html>`__.

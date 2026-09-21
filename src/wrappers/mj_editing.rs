@@ -275,6 +275,8 @@ impl MjSpec {
     ///
     /// The attachments include not just direct attachments of [`MjSpec`], but also any other
     /// model-editing element. Attachments within the same spec is safe.
+    ///
+    /// Any user value, added by [`UserValued::set_user_value`], must also be Send.
     /// 
     /// # Example
     /// ```
@@ -943,7 +945,7 @@ impl SendableSpec {
 /// Implementation of [`Send`] which allows [`MjSpec`] to be sent across threads.
 /// # Safety
 /// A [`SendableSpec`] can only be instantiated through methods marked as `unsafe`.
-/// These methods are safe provided no other [`MjSpec`] shares data with the wrapped spec.
+/// These methods are safe provided the conditions of [`MjSpec::into_sendable`] hold.
 unsafe impl Send for SendableSpec {}
 
 /***************************

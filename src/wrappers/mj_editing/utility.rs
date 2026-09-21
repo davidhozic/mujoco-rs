@@ -575,6 +575,8 @@ macro_rules! mjs_struct {
                 $extra_trait_methods
             )*)?
         }
+
+        impl UserValued for $handle {}
     };
 }
 

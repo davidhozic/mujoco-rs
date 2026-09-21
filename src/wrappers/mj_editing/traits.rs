@@ -1,8 +1,16 @@
 //! Trait definitions for model editing.
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::os::raw::c_void;
+use std::process::abort;
 use std::ffi::CString;
+use std::any::Any;
 
 use crate::error::MjEditError;
 use crate::mujoco_c::*;
+
+/// Prefix of every user value key that the wrapper stores, which separates the keys of this
+/// crate from the keys that another language writes on the same element.
+const USER_VALUE_KEY_PREFIX: &str = "mujoco-rs:";
 
 use super::{MjSpec, MjsBody, MjsFrame, MjsSite};
 use super::default::MjsDefault;
@@ -160,6 +168,150 @@ pub trait SpecObject: SpecItem {
         unsafe { delete_element(self.element_mut_pointer()) }
     }
 }
+
+/// Represents the types of spec items that carry some user-set values (key-value map).
+/// These values are only available while the [`MjSpec`], to which spec items belong,
+/// is alive, and don't get carried over to the compiled [`MjModel`](crate::wrappers::mj_model::MjModel).
+///
+/// The wrapper prefixes every key that it stores, so a key that another language wrote on the
+/// same element stays out of reach.
+///
+/// Note that the user storage is spec-local, even after copying.
+/// Only spec attachments by reference share values.
+pub trait UserValued: SpecItem {
+    /// Obtains a polymorphic reference to the stored data under `key` contained within this spec item.
+    /// If no data is stored under `key`, [`None`] is returned.
+    /// Wraps [`mjs_getUserValue`].
+    /// 
+    /// # Panics
+    /// When `key` contains null-bytes.
+    /// 
+    /// # Note
+    /// Plugin-stored values, under plugin-named keys, will always return [`None`], unless the plugin
+    /// adds the 'mujoco-rs:' prefix, used internally in MuJoCo-rs as a prefix for keys, in front of
+    /// its keys. Doing so, the entire implementation becomes undefined behavior, as non-boxed data
+    /// of types that is non-[`Any`] will be cast in our implementation to `&dyn Any`.
+    /// 
+    /// This function remains a non-`unsafe` function as we consider custom plugins, specifically designed
+    /// to crash this crate, outside our safety scope.
+    ///
+    /// # Examples
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// # let mut spec = MjSpec::new();
+    /// # let geom = spec.world_body_mut().add_geom();
+    /// geom.set_user_value("serial", Box::new(String::from("A-42")));
+    /// let value = geom.user_value("serial").unwrap();
+    /// assert_eq!(value.downcast_ref::<String>().unwrap(), "A-42");
+    ///
+    /// // A downcast to any other type yields `None`.
+    /// assert!(value.downcast_ref::<u32>().is_none());
+    /// assert!(geom.user_value("absent").is_none());
+    /// ```
+    fn user_value(&self, key: &str) -> Option<&dyn Any> {
+        let c_key = user_value_key(key);
+        // SAFETY: the handle stands at a live element, and the key outlives the call. The C
+        // parameter is mutable although the function only reads the element.
+        let maybe_data = unsafe {
+            mjs_getUserValue(self.element_pointer() as *mut _, c_key.as_ptr())
+        };
+
+        if maybe_data.is_null() {
+            return None;
+        }
+
+        // SAFETY: the key prefix keeps foreign writers out, so only set_user_value stores here,
+        // and it stores a pointer to a boxed trait object.
+        Some(unsafe { &**(maybe_data as *const Box<dyn Any>) })
+    }
+
+    /// Sets `value` under `key` into this spec item. The value that `key` held before is dropped.
+    /// Wraps [`mjs_setUserValueWithCleanup`].
+    /// 
+    /// # Panics
+    /// When `key` contains null-bytes.
+    ///
+    /// # Examples
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// # let mut spec = MjSpec::new();
+    /// # let geom = spec.world_body_mut().add_geom();
+    /// geom.set_user_value("serial", Box::new(String::from("A-42")));
+    /// # assert_eq!(geom.user_value("serial").unwrap().downcast_ref::<String>().unwrap(), "A-42");
+    ///
+    /// // The same key takes another type, and drops the value it held.
+    /// geom.set_user_value("serial", Box::new(42u32));
+    /// assert_eq!(geom.user_value("serial").unwrap().downcast_ref::<u32>(), Some(&42));
+    /// ```
+    fn set_user_value(&mut self, key: &str, value: Box<dyn Any>) {
+        let c_key = user_value_key(key);
+        // The outer box keeps the stored pointer thin, because a trait object is a fat pointer.
+        let data = Box::into_raw(Box::new(value)).cast();
+        // SAFETY: the handle stands at a live element, and MuJoCo hands `data` back to
+        // clean_box_any exactly once.
+        unsafe {
+            mjs_setUserValueWithCleanup(
+                self.element_mut_pointer(),
+                c_key.as_ptr(), data,
+                Some(clean_box_any)
+            );
+        }
+    }
+
+    /// Drops the value that `key` holds. Does nothing when `key` holds no value.
+    /// Wraps [`mjs_deleteUserValue`].
+    ///
+    /// # Panics
+    /// When `key` contains null-bytes.
+    ///
+    /// # Examples
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// # let mut spec = MjSpec::new();
+    /// # let geom = spec.world_body_mut().add_geom();
+    /// # geom.set_user_value("serial", Box::new(String::from("A-42")));
+    /// geom.remove_user_value("serial");
+    /// assert!(geom.user_value("serial").is_none());
+    /// ```
+    fn remove_user_value(&mut self, key: &str) {
+        let c_key = user_value_key(key);
+        // SAFETY: the handle stands at a live element, and the key outlives the call.
+        unsafe { mjs_deleteUserValue(self.element_mut_pointer(), c_key.as_ptr()) };
+    }
+}
+
+/// Returns the key under which MuJoCo stores the user value of `key`.
+/// 
+/// This is needed to avoid accidental clashes with plugin-set keys.
+/// The only way a plugin can now clash, is for the plugin itself
+/// to prepend the same [`USER_VALUE_KEY_PREFIX`] to the key.
+/// 
+///
+/// # Panics
+/// Panics when `key` contains null-bytes.
+fn user_value_key(key: &str) -> CString {
+    // Allocate and then push.
+    // This avoids unnecessary reallocations, as, due to the CString implementation,
+    // only one allocation is made (String::with_capacity).
+    let mut prefixed = String::with_capacity(USER_VALUE_KEY_PREFIX.len() + key.len() + 1);
+    prefixed.push_str(USER_VALUE_KEY_PREFIX);
+    prefixed.push_str(key);
+    CString::new(prefixed).unwrap()
+}
+
+/// Drops the box that [`UserValued::set_user_value`] leaked. MuJoCo calls it when the key takes
+/// another value, when the key is removed, and when the element dies.
+///
+/// # Safety
+/// `data` must be a pointer that [`UserValued::set_user_value`] stored, passed back once.
+unsafe extern "C" fn clean_box_any(data: *const c_void) {
+    // SAFETY: the caller passes back the box that set_user_value leaked, and passes it once.
+    let value = unsafe { Box::from_raw(data as *mut Box<dyn Any>) };
+    if catch_unwind(AssertUnwindSafe(move || drop(value))).is_err() {
+        abort();
+    }
+}
+
 
 /// A child that [`mjs_attach`] accepts for a parent of type `P`.
 ///
@@ -355,4 +507,63 @@ unsafe fn attach_element(
         return Err(MjEditError::AttachFailed(unsafe { read_spec_error(spec) }));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+    use std::cell::Cell;
+
+    use super::*;
+
+    #[test]
+    fn test_user_value() {
+        const VALID_USER_VALUE_KEY: &str = "valid_user_value_key";
+        
+        enum SetOfUserValueTypes {
+            Integer(u32),
+        }
+
+        let mut spec = MjSpec::new();
+        let geom = spec.world_body_mut().add_geom();
+
+        geom.set_user_value(VALID_USER_VALUE_KEY, Box::new(SetOfUserValueTypes::Integer(14)));
+        let value = geom.user_value(VALID_USER_VALUE_KEY).unwrap()
+            .downcast_ref::<SetOfUserValueTypes>().unwrap();
+
+        assert!(matches!(value, SetOfUserValueTypes::Integer(14)));
+        assert!(geom.user_value(VALID_USER_VALUE_KEY).unwrap().downcast_ref::<u32>().is_none());
+
+        geom.remove_user_value(VALID_USER_VALUE_KEY);
+        assert!(geom.user_value(VALID_USER_VALUE_KEY).is_none());
+    }
+
+    #[test]
+    fn test_user_value_cleanup() {
+        struct DropCounter(Rc<Cell<u32>>);
+
+        impl Drop for DropCounter {
+            fn drop(&mut self) {
+                self.0.set(self.0.get() + 1);
+            }
+        }
+
+        let drops = Rc::new(Cell::new(0));
+        {
+            let mut spec = MjSpec::new();
+            let geom = spec.world_body_mut().add_geom();
+
+            geom.set_user_value("key", Box::new(DropCounter(Rc::clone(&drops))));
+            assert_eq!(drops.get(), 0);
+
+            geom.set_user_value("key", Box::new(DropCounter(Rc::clone(&drops))));
+            assert_eq!(drops.get(), 1, "overwriting a key must drop the value it held");
+
+            geom.remove_user_value("key");
+            assert_eq!(drops.get(), 2, "removing a key must drop the value it held");
+
+            geom.set_user_value("key", Box::new(DropCounter(Rc::clone(&drops))));
+        }
+        assert_eq!(drops.get(), 3, "dropping the spec must drop the value it holds");
+    }
 }
