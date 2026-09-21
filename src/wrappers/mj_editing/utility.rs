@@ -359,8 +359,7 @@ macro_rules! add_x_method_by_frame {
                 unsafe {
                     let ep = self.element_mut_pointer();
                     let body_ptr = mjs_getParent(ep);
-                    assert!(!body_ptr.is_null(),
-                        "mjs_getParent returned null; frame has no parent body");
+                    debug_assert!(!body_ptr.is_null(), "mjs_getParent returned null; frame has no parent body");
                     let ptr = [<mjs_add $name:camel>](body_ptr, ptr::null());
                     if ptr.is_null() {
                         return Err(MjEditError::AllocationFailed);
@@ -397,8 +396,7 @@ macro_rules! add_x_method_by_frame {
                     }
 
                     let body_ptr = mjs_getParent(self.element_mut_pointer());
-                    assert!(!body_ptr.is_null(),
-                        "mjs_getParent returned null; frame has no parent body");
+                    debug_assert!(!body_ptr.is_null(), "mjs_getParent returned null; frame has no parent body");
                     let ptr = [<mjs_add $name:camel>](body_ptr, default);
                     assert!(!ptr.is_null(),
                         concat!("mjs_add", stringify!([<$name:camel>]), " returned null; allocation failed"));
