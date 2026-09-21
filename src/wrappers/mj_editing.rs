@@ -2498,6 +2498,19 @@ impl MjsBody {
         let ptr = unsafe { mjs_addFrame(self.ffi_mut(), ptr::null_mut()) };
         unsafe { MjsFrame::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
     }
+
+    /// Add and return a child `<freejoint/>` element, which is a [`MjsJoint`] of type
+    /// [`MjtJoint::mjJNT_FREE`]. Unlike [`Self::add_joint`], the returned joint does not
+    /// inherit the class (`<default>`) configuration. Wraps [`mjs_addFreeJoint`].
+    ///
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails.
+    pub fn add_free_joint(&mut self) -> &mut MjsJoint {
+        // SAFETY: This function cannot fail unless the memory runs out, which aborts the process.
+        let ptr = unsafe { mjs_addFreeJoint(self.ffi_mut()) };
+        unsafe { MjsJoint::from_ffi_ptr_mut(ptr) }
+            .expect("mjs_addFreeJoint returned null; allocation failed")
+    }
 }
 
 /* ----------------------------------------------------------------------------
@@ -3094,6 +3107,30 @@ mod tests {
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed fom spec");
 
         spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_add_free_joint() {
+        const ARMATURE: f64 = 0.25;
+
+        let mut spec = MjSpec::new();
+        spec.default_mut("main").unwrap().joint_mut().set_armature(ARMATURE);
+
+        let free_body = spec.world_body_mut().add_body();
+        free_body.add_geom().with_size([0.010; 3]);
+        let free_joint = free_body.add_free_joint();
+        assert_eq!(free_joint.type_(), MjtJoint::mjJNT_FREE);
+        assert_eq!(free_joint.armature(), 0.0, "the free joint must not inherit the default class");
+
+        let hinge_body = spec.world_body_mut().add_body();
+        hinge_body.add_geom().with_size([0.010; 3]);
+        assert_eq!(hinge_body.add_joint().armature(), ARMATURE);
+
+        let model = spec.compile().unwrap();
+        // 7 qpos of the free joint and 1 qpos of the hinge joint.
+        assert_eq!(model.nq(), 8);
+        assert_eq!(model.dof_armature()[..6], [0.0; 6]);
+        assert_eq!(model.dof_armature()[6], ARMATURE);
     }
 
     #[test]

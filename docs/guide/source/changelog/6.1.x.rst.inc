@@ -75,6 +75,9 @@
     and :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>set_nuser_sensor`
     :sup:`new`.
 
+- Added :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_free_joint`
+  :sup:`new`.
+
 *MjModel*
 
 - New methods:

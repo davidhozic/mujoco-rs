@@ -112,6 +112,12 @@ We can now add our ball's body, geom and joint like so:
             .with_type(MjtJoint::mjJNT_FREE);    // make the ball free to move anywhere.
     }
 
+.. note::
+
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_free_joint` adds the
+    same free joint in one call, with the exception of not inheriting any defaults (not even the
+    set-by-default default).
+
 .. tip::
 
     In the above block, we used methods that have the ``with_`` prefix.
