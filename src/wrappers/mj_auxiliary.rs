@@ -190,6 +190,9 @@ impl MjVfs {
         }
     }
 
+    // TODO: The three queries below need no mutable borrow. MuJoCo only reads `impl_` of the
+    // `mjVFS` and locks the mutex of the VFS object behind it, so relax them to `&self`.
+
     /// Check if a file, that [`MjVfs::add_file`] or [`MjVfs::add_file_from`] added, exists in VFS.
     /// 
     /// Wraps [`mj_containsFileVFS`].
@@ -208,7 +211,7 @@ impl MjVfs {
     /// 
     /// # Panics
     /// When `name` or `directory` contain path with null elements.
-    pub fn contains_file_in(&self, directory: impl AsRef<Path>, name: impl AsRef<Path>) -> bool {
+    pub fn contains_file_in(&mut self, directory: impl AsRef<Path>, name: impl AsRef<Path>) -> bool {
         let c_name = if let Some(name) = name.as_ref().to_str() {
             CString::new(name).unwrap()
         } else {
@@ -221,10 +224,10 @@ impl MjVfs {
             return false
         }; 
 
-        // SAFETY: mj_containsFileVFS reads impl_ and locks the mutex of the VFS object behind it,
-        // which is a separate allocation; it writes nothing through this pointer.
+        // SAFETY: ffi_mut hands out the mjVFS this wrapper owns, and mj_containsFileVFS only reads
+        // it to reach the VFS object behind impl_.
         unsafe { mj_containsFileVFS(
-            (&raw const *self.ffi()).cast_mut(),
+            self.ffi_mut(),
             directory.as_ptr(),
             c_name.as_ptr()
         ) != 0 }
@@ -248,17 +251,17 @@ impl MjVfs {
     /// 
     /// # Panics
     /// When `name` contains path with null elements.
-    pub fn contains_file<T: AsRef<Path>>(&self, name: T) -> bool {
+    pub fn contains_file<T: AsRef<Path>>(&mut self, name: T) -> bool {
         let c_name = if let Some(name) = name.as_ref().to_str() {
             CString::new(name).unwrap()
         } else {
             return false;
         };
 
-        // SAFETY: mj_containsFileVFS reads impl_ and locks the mutex of the VFS object behind it,
-        // which is a separate allocation; it writes nothing through this pointer.
+        // SAFETY: ffi_mut hands out the mjVFS this wrapper owns, and mj_containsFileVFS only reads
+        // it to reach the VFS object behind impl_.
         unsafe { mj_containsFileVFS(
-            (&raw const *self.ffi()).cast_mut(),
+            self.ffi_mut(),
             ptr::null(),
             c_name.as_ptr()
         ) != 0 }
@@ -272,17 +275,17 @@ impl MjVfs {
     /// 
     /// # Panics
     /// When `name` contains path with null elements.
-    pub fn contains_buffer<T: AsRef<Path>>(&self, name: T) -> bool {
+    pub fn contains_buffer<T: AsRef<Path>>(&mut self, name: T) -> bool {
         let c_name = if let Some(name) = name.as_ref().to_str() {
             CString::new(name).unwrap()
         } else {
             return false;
         };
 
-        // SAFETY: mj_containsBufferVFS reads impl_ and locks the mutex of the VFS object behind
-        // it, which is a separate allocation; it writes nothing through this pointer.
+        // SAFETY: ffi_mut hands out the mjVFS this wrapper owns, and mj_containsBufferVFS only
+        // reads it to reach the VFS object behind impl_.
         unsafe { mj_containsBufferVFS(
-            (&raw const *self.ffi()).cast_mut(),
+            self.ffi_mut(),
             c_name.as_ptr()
         ) != 0 }
     }
@@ -576,16 +579,5 @@ mod tests {
         assert!(!vfs.contains_file(NAME), "contains_file lowercases the last path element");
 
         assert!(MjModel::from_xml_vfs(NAME, &vfs).is_ok());
-    }
-
-    #[test]
-    fn test_vfs_query_through_shared_reference() {
-        let mut vfs = MjVfs::new();
-        vfs.add_from_buffer(RAW_FILE_NAME, RAW_FILE_DATA.as_bytes()).unwrap();
-
-        let shared = &vfs;
-        assert!(shared.contains_buffer(RAW_FILE_NAME));
-        assert!(MjModel::from_xml_vfs(RAW_FILE_NAME, shared).is_ok());
-        assert!(shared.contains_buffer(RAW_FILE_NAME));
     }
 }

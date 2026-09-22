@@ -115,6 +115,7 @@
     implements ``ModelTypeMut``;
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>jac_subtree_com_into` :sup:`new`
     and :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>angmom_mat_into` :sup:`new`.
+
 *Asset cache*
 
 - Added wrappers around MuJoCo's asset cache, which keeps assets loaded from a file or a virtual
@@ -126,9 +127,6 @@
 *Virtual file system*
 
 - Added :docs-rs:`~~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>contains_buffer` :sup:`new`.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>contains_file` and
-  :docs-rs:`~~mujoco_rs::wrappers::mj_auxiliary::<struct>MjVfs::<method>contains_file_in` now take
-  ``&self`` instead of ``&mut self``.
 
 *Utility functions*
 
