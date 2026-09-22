@@ -5,10 +5,11 @@
 
 - Deprecated |mjs_frame|'s
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsFrame::<method>childclass`,
-  ``set_childclass`` and ``with_childclass``. Use
-  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>default`,
-  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_default` and
-  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_default` instead, which
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsFrame::<method>set_childclass` and
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsFrame::<method>with_childclass`. Use
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>default`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_default` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>with_default` instead, which
   modify the same field, but also fail when no class with the given name exists.
 
 .. rubric:: Error handling
@@ -136,4 +137,4 @@
 
 *Renderer*
 
-- Offscreen rendering using EGL now fallbacks to other supported devices when the first device fails.
+- Offscreen rendering using EGL now falls back to other supported devices when the first device fails.

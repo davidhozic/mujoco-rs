@@ -588,7 +588,8 @@ The trait defines the following methods:
 
 
 On the MuJoCo-rs's API surface, the trait methods accept ``Box<dyn Any>`` and return ``&dyn Any``
-polymorphic type-erased objects. See `Any <https://doc.rust-lang.org/std/any/index.html#any-and-typeid>`__'s documentation
+polymorphic type-erased objects. See
+`Any <https://doc.rust-lang.org/std/any/index.html#any-and-typeid>`__'s documentation
 on how to downcast to the actual type
 (e.g., via `Any::downcast_ref <https://doc.rust-lang.org/std/any/trait.Any.html#method.downcast_ref>`__).
 
