@@ -23,6 +23,7 @@ For a full list of changes, see the :ref:`changelog`.
 
 .. Each release group lives in its own fragment. Add a new release at the top of the list.
 
+.. include:: migration/7.0.x.rst.inc
 .. include:: migration/6.0.x.rst.inc
 .. include:: migration/5.0.x.rst.inc
 .. include:: migration/4.0.x.rst.inc

@@ -131,6 +131,28 @@ pub(crate) unsafe fn write_mjs_vec_string(source: &str, destination: *mut mjStri
     }
 }
 
+/// Replaces `destination` (C++) with the whitespace-split entries of `source`, followed by empty
+/// entries up to `len` entries in total.
+///
+/// # Safety
+/// `destination` must point to a valid `mjStringVec` object.
+///
+/// # Panics
+/// When the `source` contains '\0' characters, a panic occurs.
+pub(crate) unsafe fn write_mjs_vec_string_padded(source: &str, destination: *mut mjStringVec, len: usize) {
+    let entries: Vec<_> = source.split(|c: char| c.is_ascii_whitespace() || c == '\x0B')
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| CString::new(entry).unwrap())
+        .collect();
+    let padding = std::iter::repeat_n(c"", len.saturating_sub(entries.len()));
+    unsafe {
+        mjs_setStringVec(destination, c"".as_ptr());
+        for entry in entries.iter().map(CString::as_c_str).chain(padding) {
+            mjs_appendString(destination, entry.as_ptr());
+        }
+    }
+}
+
 /// Appends `source` as a single entry to `destination` (C++).
 ///
 /// # Safety
@@ -741,7 +763,7 @@ macro_rules! vec_string_set_append {
 
     // Indexed variant: the vector is pre-sized with one entry per enum variant, so an entry is
     // set by index rather than appended.
-    ($name:ident[$role_ty:ty] => $singular:ident; $comment:expr $(;)?) => {paste::paste!{
+    ($name:ident[$role_ty:ty; $len:expr] => $singular:ident; $comment:expr $(;)?) => {paste::paste!{
         #[doc = concat!(
             "Sets the entry at index `role` in `", stringify!($name), "` to `name`. ",
             $comment,
@@ -778,6 +800,7 @@ macro_rules! vec_string_set_append {
         #[doc = concat!(
             "Replaces the entire `", stringify!($name), "` vector with whitespace-split entries from `value`. ",
             $comment,
+            " Empty entries fill the vector up to one entry per [`", stringify!($role_ty), "`] value.",
             "\n\n",
             "<div class=\"warning\">\n\n",
             "This replaces the pre-sized vector. Prefer [`set_",
@@ -789,24 +812,7 @@ macro_rules! vec_string_set_append {
         )]
         pub fn [<set_ $name>](&mut self, value: &str) {
             // SAFETY: self.$name is a valid mjStringVec pointer for the lifetime of self.
-            unsafe { write_mjs_vec_string(value, self.ffi().$name) };
-        }
-
-        #[doc = concat!(
-            "Appends `value` to the end of `", stringify!($name), "`. ",
-            $comment,
-            "\n\n",
-            "<div class=\"warning\">\n\n",
-            "Appending extends past the pre-sized vector. Prefer [`set_",
-            stringify!($singular), "`](Self::set_", stringify!($singular),
-            ") to set individual entries by role.\n\n",
-            "</div>\n\n",
-            "# Panics\n",
-            "When the `value` contains '\\0' characters, a panic occurs."
-        )]
-        pub fn [<append_ $name>](&mut self, value: &str) {
-            // SAFETY: self.$name is a valid mjStringVec pointer for the lifetime of self.
-            unsafe { append_mjs_vec_string(value, self.ffi().$name) };
+            unsafe { write_mjs_vec_string_padded(value, self.ffi().$name, $len) };
         }
     }};
 }

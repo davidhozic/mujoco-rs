@@ -2379,8 +2379,8 @@ mjs_struct!(Texture with SpecObject: MjsTexture <= mjsTexture);
 /// # Note: cube-map files
 ///
 /// `cubefiles` is a pre-sized string vector of 6 entries, one per cube face. Assign one face with
-/// [`set_cubefile`](Self::set_cubefile); [`set_cubefiles`](Self::set_cubefiles) and
-/// [`append_cubefiles`](Self::append_cubefiles) replace or extend the vector as a whole.
+/// [`set_cubefile`](Self::set_cubefile); [`set_cubefiles`](Self::set_cubefiles) replaces the
+/// vector as a whole.
 impl MjsTexture {
     getter_setter! {
         [&] with, get, [
@@ -2417,7 +2417,7 @@ impl MjsTexture {
     }
 
     vec_string_set_append! {
-        cubefiles[MjtCubeFace] => cubefile; "different file for each side of the cube.";
+        cubefiles[MjtCubeFace; MjtCubeFace::Back as usize + 1] => cubefile; "different file for each side of the cube.";
     }
 
     getter_setter! {[&] with, get, set, [
@@ -2445,9 +2445,8 @@ mjs_struct!(Material with SpecObject: MjsMaterial <= mjsMaterial);
 /// # Note: texture assignment
 ///
 /// `textures` is a pre-sized string vector of `mjNTEXROLE` entries, one per [`MjtTextureRole`].
-/// Assign one role with [`set_texture`](Self::set_texture); [`set_textures`](Self::set_textures)
-/// and [`append_textures`](Self::append_textures) replace or extend the vector as a whole and
-/// break the pre-sized layout.
+/// Assign one role with [`set_texture`](Self::set_texture).
+/// Replace all roles using [`set_textures`](Self::set_textures).
 impl MjsMaterial {
     getter_setter! {
         [&] with, get, [
@@ -2472,7 +2471,7 @@ impl MjsMaterial {
     }
 
     vec_string_set_append! {
-        textures[MjtTextureRole] => texture; "names of textures (empty: none).";
+        textures[MjtTextureRole; MjtTextureRole::mjNTEXROLE as usize] => texture; "names of textures (empty: none).";
     }
 }
 
@@ -4132,6 +4131,75 @@ mod tests {
         let tex_id = mat_view.texid;
         assert_ne!(tex_id[MjtTextureRole::mjTEXROLE_RGB as usize], -1,
             "RGB texture slot should be resolved (not -1)");
+    }
+
+    /// `set_textures` must keep one entry per role: the compiler reads every role without a size
+    /// check, and `set_texture` ends the process for a role past the vector end.
+    #[test]
+    fn test_material_set_textures_keeps_roles() {
+        let mut spec = MjSpec::new();
+        spec.add_texture()
+            .with_name("floor")
+            .with_type(MjtTexture::mjTEXTURE_2D)
+            .with_builtin(MjtBuiltin::mjBUILTIN_CHECKER)
+            .with_width(8)
+            .with_height(8);
+
+        // One entry fills the first role; the empty remainder resolves to no texture.
+        spec.add_material().with_name("first").set_textures("floor");
+
+        // An empty value keeps every role slot, so a later role is still settable.
+        let last = spec.add_material().with_name("last");
+        last.set_textures("");
+        last.set_texture(MjtTextureRole::mjTEXROLE_RGBA, "floor");
+
+        let model = spec.compile().unwrap();
+        let floor_id = model.texture("floor").unwrap().id as i32;
+        let first = model.material("first").unwrap().view(&model).texid;
+        let last = model.material("last").unwrap().view(&model).texid;
+        let role_count = MjtTextureRole::mjNTEXROLE as usize;
+        let expected = |role: MjtTextureRole| {
+            (0..role_count).map(|i| if i == role as usize { floor_id } else { -1 }).collect::<Vec<_>>()
+        };
+        assert_eq!(&first[..], expected(MjtTextureRole::mjTEXROLE_USER));
+        assert_eq!(&last[..], expected(MjtTextureRole::mjTEXROLE_RGBA));
+    }
+
+    /// `set_cubefiles` must keep one entry per face: the compiler reads all six faces without a
+    /// size check, and `set_cubefile` ends the process for a face past the vector end.
+    #[test]
+    fn test_texture_set_cubefiles_keeps_faces() {
+        let mut spec = MjSpec::new();
+        let texture = spec.add_texture().with_name("cube").with_type(MjtTexture::mjTEXTURE_CUBE);
+        texture.set_cubefiles("");
+        texture.set_cubefile(MjtCubeFace::Back, "missing_back.png");
+
+        // The compiler reaches the last face and fails to load its file.
+        let err = spec.compile().unwrap_err();
+        assert!(matches!(&err, MjEditError::CompileFailed(msg) if msg.contains("missing_back.png")),
+            "compile must fail on the last cube face file, got {err:?}");
+    }
+
+    /// A user buffer whose `nchannel*width*height` wraps an `i32` to its own length must be
+    /// rejected, because MuJoCo copies the unwrapped product of bytes out of it.
+    #[test]
+    fn test_texture_data_size_overflow_rejected() {
+        const SIDE: i32 = 65537;
+        let wrapped_len = (SIDE as u64 * SIDE as u64 % (1 << 32)) as usize;
+        assert_eq!(wrapped_len, SIDE.wrapping_mul(SIDE) as usize);
+
+        let mut spec = MjSpec::new();
+        let texture = spec.add_texture()
+            .with_name("big")
+            .with_type(MjtTexture::mjTEXTURE_2D)
+            .with_nchannel(1)
+            .with_width(SIDE)
+            .with_height(SIDE);
+        texture.set_data(&vec![0u8; wrapped_len]);
+
+        let err = spec.compile().unwrap_err();
+        assert!(matches!(&err, MjEditError::CompileFailed(msg) if msg.contains("fit in an i32")),
+            "compile must reject an overflowing texture size, got {err:?}");
     }
 
     /// A builtin texture with `nchannel < 3` must be rejected by `compile()` rather than
