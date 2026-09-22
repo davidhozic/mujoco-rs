@@ -388,6 +388,15 @@ pub enum MjModelError {
         /// Actual length.
         got: usize,
     },
+    /// A vector has the wrong length for the model layout.
+    LengthMismatch {
+        /// Descriptive name of the parameter.
+        name: &'static str,
+        /// Expected length.
+        expected: usize,
+        /// Actual length that was provided.
+        got: usize,
+    },
     /// The destination spec is not a subset of the source spec.
     SpecNotSubset,
     /// A destination buffer is too small for the operation.
@@ -424,6 +433,9 @@ impl fmt::Display for MjModelError {
             Self::AllocationFailed => write!(f, "MuJoCo failed to allocate the requested structure"),
             Self::StateSliceLengthMismatch { expected, got } => {
                 write!(f, "state slice length mismatch: expected {expected}, got {got}")
+            }
+            Self::LengthMismatch { name, expected, got } => {
+                write!(f, "{name} has wrong length: expected {expected}, got {got}")
             }
             Self::SpecNotSubset => {
                 write!(f, "dst_spec must be a subset of src_spec")

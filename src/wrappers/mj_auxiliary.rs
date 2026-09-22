@@ -190,10 +190,24 @@ impl MjVfs {
         }
     }
 
-    /// Check if file exists in VFS. MuJoCo keeps only the last path element of
-    /// `directory`/`name` for the lookup, so `directory` does not restrict the search.
+    // TODO: The three queries below need no mutable borrow. MuJoCo only reads `impl_` of the
+    // `mjVFS` and locks the mutex of the VFS object behind it, so relax them to `&self`.
+
+    /// Check if a file, that [`MjVfs::add_file`] or [`MjVfs::add_file_from`] added, exists in VFS.
     /// 
-    /// A mutable borrow is required due to the internal mutex. 
+    /// Wraps [`mj_containsFileVFS`].
+    /// 
+    /// # Note
+    /// At time of writing, the [`mj_addFileVFS`] MuJoCo function, wrapped by [`MjVfs::add_file`]
+    /// and [`MjVfs::add_file_from`], strips the path down to the filename only. It also makes the filename lowercase.
+    /// The `directory` is provided here to match the MuJoCo API and to prevent future breaking changes,
+    /// although it is not strictly needed.
+    /// 
+    /// The opposite of [`mj_addFileVFS`], the [`mj_addBufferVFS`] MuJoCo function,
+    /// wrapped by [`MjVfs::add_from_buffer`], does not transform the path in any way.
+    /// Thus, to check whether buffered data was stored into the VFS, call [`MjVfs::contains_buffer`],
+    /// as this method ([`MjVfs::contains_file_in`]) will return false for those,
+    /// unless you match the behavior manually.
     /// 
     /// # Panics
     /// When `name` or `directory` contain path with null elements.
@@ -210,6 +224,8 @@ impl MjVfs {
             return false
         }; 
 
+        // SAFETY: ffi_mut hands out the mjVFS this wrapper owns, and mj_containsFileVFS only reads
+        // it to reach the VFS object behind impl_.
         unsafe { mj_containsFileVFS(
             self.ffi_mut(),
             directory.as_ptr(),
@@ -217,9 +233,21 @@ impl MjVfs {
         ) != 0 }
     }
 
-    /// Check if file exists in VFS.
+    /// Check if a file, that [`MjVfs::add_file`] or [`MjVfs::add_file_from`] added, exists in VFS.
     /// 
-    /// A mutable borrow is required due to the internal mutex. 
+    /// Wraps [`mj_containsFileVFS`].
+    /// 
+    /// # Note
+    /// At time of writing, the [`mj_addFileVFS`] MuJoCo function, wrapped by [`MjVfs::add_file`]
+    /// and [`MjVfs::add_file_from`], strips the path down to the filename only. It also makes the filename lowercase.
+    /// The `directory` is provided here to match the MuJoCo API and to prevent future breaking changes,
+    /// although it is not strictly needed.
+    /// 
+    /// The opposite of [`mj_addFileVFS`], the [`mj_addBufferVFS`] MuJoCo function,
+    /// wrapped by [`MjVfs::add_from_buffer`], does not transform the path in any way.
+    /// Thus, to check whether buffered data was stored into the VFS, call [`MjVfs::contains_buffer`],
+    /// as this method ([`MjVfs::contains_file`]) will return false for those,
+    /// unless you match the behavior manually.
     /// 
     /// # Panics
     /// When `name` contains path with null elements.
@@ -230,9 +258,34 @@ impl MjVfs {
             return false;
         };
 
+        // SAFETY: ffi_mut hands out the mjVFS this wrapper owns, and mj_containsFileVFS only reads
+        // it to reach the VFS object behind impl_.
         unsafe { mj_containsFileVFS(
             self.ffi_mut(),
             ptr::null(),
+            c_name.as_ptr()
+        ) != 0 }
+    }
+
+    /// Check if a buffer that [`MjVfs::add_from_buffer`] added exists in VFS. The lookup matches
+    /// `name` exactly, including case. MuJoCo reduces `.` and `..` as it adds the buffer, so pass
+    /// the reduced name.
+    /// 
+    /// Wraps [`mj_containsBufferVFS`].
+    /// 
+    /// # Panics
+    /// When `name` contains path with null elements.
+    pub fn contains_buffer<T: AsRef<Path>>(&mut self, name: T) -> bool {
+        let c_name = if let Some(name) = name.as_ref().to_str() {
+            CString::new(name).unwrap()
+        } else {
+            return false;
+        };
+
+        // SAFETY: ffi_mut hands out the mjVFS this wrapper owns, and mj_containsBufferVFS only
+        // reads it to reach the VFS object behind impl_.
+        unsafe { mj_containsBufferVFS(
+            self.ffi_mut(),
             c_name.as_ptr()
         ) != 0 }
     }
@@ -514,4 +567,17 @@ mod tests {
         fs::remove_file(FILE).expect("could not clean up temp file");
     }
 
+    #[test]
+    fn test_vfs_contains_buffer() {
+        const NAME: &str = "assets/Model.XML";
+
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer(NAME, RAW_FILE_DATA.as_bytes()).unwrap();
+
+        assert!(vfs.contains_buffer(NAME));
+        assert!(!vfs.contains_buffer("model.xml"), "the buffer lookup is exact");
+        assert!(!vfs.contains_file(NAME), "contains_file lowercases the last path element");
+
+        assert!(MjModel::from_xml_vfs(NAME, &vfs).is_ok());
+    }
 }

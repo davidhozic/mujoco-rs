@@ -1267,13 +1267,15 @@ mod tests {
 
     /// The three bodies are the same in both models, so `mjCModel::Signature` is the same; only
     /// the number of flex vertices differs, and that number sizes `mjvScene::flexvert`.
-    fn flex_model(flex: &str) -> MjModel {
+    fn flex_model(flex_attributes: &str) -> MjModel {
         let xml = format!(
             "<mujoco><worldbody>\
 <body name='v0' pos='0 0 0'><freejoint/><geom size='0.01'/></body>\
 <body name='v1' pos='0.1 0 0'><freejoint/><geom size='0.01'/></body>\
 <body name='v2' pos='0.2 0 0'><freejoint/><geom size='0.01'/></body>\
-</worldbody><deformable>{flex}</deformable></mujoco>"
+</worldbody><deformable>\
+<flex {flex_attributes}><edge damping='1'/></flex>\
+</deformable></mujoco>"
         );
         MjModel::from_xml_string(&xml).unwrap()
     }
@@ -1283,7 +1285,7 @@ mod tests {
     #[test]
     fn test_new_scene_zeroes_the_uninitialized_flex_buffers() {
         let model = flex_model(
-            "<flex name='f' dim='2' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 2'/>"
+            "name='f' dim='2' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 2'"
         );
         let scene = MjvScene::new(&model, 100);
 
@@ -1317,8 +1319,8 @@ mod tests {
 
     #[test]
     fn test_scene_is_compatible_with_model() {
-        let three = flex_model("<flex name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>");
-        let two = flex_model("<flex name='f' dim='1' body='v0 v1' vertex='0 0 0 0 0 0' element='0 1'/>");
+        let three = flex_model("name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'");
+        let two = flex_model("name='f' dim='1' body='v0 v1' vertex='0 0 0 0 0 0' element='0 1'");
         assert_eq!(three.signature(), two.signature(), "the pair must share a signature");
         assert_ne!(three.nflexvert(), two.nflexvert());
 
@@ -1370,7 +1372,7 @@ mod tests {
     #[test]
     fn test_scene_accepts_the_saved_copy_of_its_own_model() {
         let model = flex_model(
-            "<flex name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>"
+            "name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'"
         );
         let scene = MjvScene::new(&model, 100);
 
@@ -1386,8 +1388,8 @@ mod tests {
 
     #[test]
     fn test_scene_is_compatible_with_scene() {
-        let three = flex_model("<flex name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>");
-        let two = flex_model("<flex name='f' dim='1' body='v0 v1' vertex='0 0 0 0 0 0' element='0 1'/>");
+        let three = flex_model("name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'");
+        let two = flex_model("name='f' dim='1' body='v0 v1' vertex='0 0 0 0 0 0' element='0 1'");
 
         let scene = MjvScene::new(&three, 100);
         let same = MjvScene::new(&three, 10);
