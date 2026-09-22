@@ -337,6 +337,8 @@ pub enum MjEditError {
         /// Exclusive upper bound of the valid range.
         len: usize,
     },
+    /// The frame belongs to a body different from the one where a frame is being set.
+    FrameParentMismatch,
 }
 
 impl fmt::Display for MjEditError {
@@ -362,6 +364,7 @@ impl fmt::Display for MjEditError {
                 f,
                 "index {id} is out of bounds (length is {len})"
             ),
+            Self::FrameParentMismatch => write!(f, "frame belongs to a different body"),
         }
     }
 }

@@ -14,7 +14,7 @@ pub use crate::wrappers::mj_logging::{
 };
 pub use crate::wrappers::mj_editing::{
     MjSpec, MjtConflict, MjFlexcompConfig,
-    SpecItem, SpecObject, UserValued, Attach, AttachTo
+    SpecItem, SpecObject, UserValued, Attach, AttachTo, FrameChild
 };
 pub use crate::logging::{
     install_logging_hook, set_log_handler

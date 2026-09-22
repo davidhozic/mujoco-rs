@@ -47,3 +47,50 @@ to set the elements.
     // After
     texture.set_cubefile(MjtCubeFace::Right, "right.png");
     material.set_texture(MjtTextureRole::mjTEXROLE_RGB, "wood");
+
+
+Removed the frame and body adders of ``MjsFrame``
+-------------------------------------------------
+
+Removed ``add_frame``, ``try_add_frame``, ``add_body``, ``try_add_body`` and
+``add_body_with_class`` from |mjs_frame|. Add elements to bodies instead and assign them into
+a frame using
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>FrameChild::<method>with_frame` or
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>FrameChild::<method>set_frame`.
+
+Nested frames can also be created using
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_frame_in`.
+
+.. code-block:: rust
+
+    // Before
+    let outer = world.add_frame().with_name("outer");
+    outer.add_frame().with_name("inner");
+    outer.add_body().with_name("ball");
+    outer.add_body_with_class("cls").unwrap();
+
+    // After
+    world.add_frame().with_name("outer");
+    world.add_frame_in("outer").unwrap().with_name("inner");
+    world.add_body().with_name("ball").with_frame("outer").unwrap();
+    world.add_body_with_class("cls").unwrap().with_frame("outer").unwrap();
+
+The other element adders of |mjs_frame| are deprecated. Replace them in the same way:
+
+.. code-block:: rust
+
+    // Before
+    frame.add_geom();
+    frame.add_site_with_class("cls").unwrap();
+
+    // After
+    body.add_geom().with_frame("outer").unwrap();
+    body.add_site_with_class("cls").unwrap().with_frame("outer").unwrap();
+
+We are aware that the new API may be less clean, however, the change was necessary
+due to a high chance of possible accidental aliasing (two mutable references with same address)
+problems being created. Notably, deprecated-only methods are technically safe, however,
+they internally do the same thing as the new API. We deprecated them (slated for removal)
+for consistency reasons. We feel it would be annoying trying to figure out how to add
+bodies and frames through the new API if the old API was still meant to be used
+for other items.

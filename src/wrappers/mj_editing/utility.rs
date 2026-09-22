@@ -231,6 +231,30 @@ pub(crate) unsafe fn read_spec_error(spec: *mut mjSpec) -> String {
     }
 }
 
+/// Returns the frame named `name` in the specification of `element`.
+///
+/// # Errors
+/// Returns [`MjEditError::NotFound`] when `name` is empty or no frame has that name.
+///
+/// # Safety
+/// `element` must point to a live element of a specification.
+///
+/// # Panics
+/// When the `name` contains '\0' characters, a panic occurs.
+pub(crate) unsafe fn find_frame(element: *const mjsElement, name: &str) -> Result<*mut mjsFrame, MjEditError> {
+    // MuJoCo matches an empty name to the first unnamed frame.
+    if name.is_empty() {
+        return Err(MjEditError::NotFound);
+    }
+
+    let c_name = CString::new(name).unwrap();  // panics on interior NUL bytes only.
+    let frame = unsafe { mjs_findFrame(mjs_getSpec(element), c_name.as_ptr()) };
+    if frame.is_null() {
+        return Err(MjEditError::NotFound);
+    }
+    Ok(frame)
+}
+
 
 /***************************
 ** Owning specification
@@ -354,6 +378,10 @@ macro_rules! add_x_method_by_frame {
                 "# Note\n",
                 "MuJoCo ends the process when the allocation fails."
             )]
+            #[deprecated(
+                since = "7.0.0",
+                note = "add the element to the body and call `FrameChild::with_frame`"
+            )]
             #[expect(deprecated, reason = "try_add_* keeps the implementation until it is removed")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 self.[<try_add_ $name>]()
@@ -405,6 +433,10 @@ macro_rules! add_x_method_by_frame {
                 "default class.\n\n",
                 "# Panics\n",
                 "When the `class_name` contains '\\0' characters, a panic occurs."
+            )]
+            #[deprecated(
+                since = "7.0.0",
+                note = "add the element to the body and call `FrameChild::with_frame`"
             )]
             pub fn [<add_ $name _with_class>](&mut self, class_name: &str)
                 -> Result<&mut [<Mjs $name:camel>], MjEditError>

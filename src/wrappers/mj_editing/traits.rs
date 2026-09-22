@@ -12,7 +12,7 @@ use crate::mujoco_c::*;
 /// crate from the keys that another language writes on the same element.
 const USER_VALUE_KEY_PREFIX: &str = "mujoco-rs:";
 
-use super::{MjSpec, MjsBody, MjsFrame, MjsSite};
+use super::{MjSpec, MjsBody, MjsFrame, MjsSite, MjsJoint, MjsGeom, MjsCamera, MjsLight};
 use super::default::MjsDefault;
 use super::utility::*;
 
@@ -536,6 +536,61 @@ pub trait Attach: SpecItem {
 impl Attach for MjsBody {}
 impl Attach for MjsFrame {}
 impl Attach for MjsSite {}
+
+/// Represents things that can be children of a frame.
+pub trait FrameChild: SpecItem {
+    /// Puts the spec item/element into a parent frame, named `frame_name`.
+    /// Wraps [`mjs_setFrame`].
+    ///
+    /// <div class="warning">
+    /// This method does not check for cycles. Creating one will result in a stack overflow.
+    /// </div>
+    ///
+    /// # Errors
+    /// - [`MjEditError::NotFound`] when `frame_name` is empty or no frame has that name.
+    /// - [`MjEditError::FrameParentMismatch`] when the frame belongs to a different body
+    ///   than the one this spec item/element is in.
+    ///
+    /// # Panics
+    /// When the `frame_name` contains '\0' characters, a panic occurs.
+    ///
+    /// # Example
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// let mut spec = MjSpec::new();
+    /// let world = spec.world_body_mut();
+    /// world.add_frame().with_name("f").with_pos([1.0, 0.0, 0.0]);
+    /// world.add_geom().with_size([0.1, 0.0, 0.0]).set_frame("f").unwrap();
+    /// assert_eq!(spec.compile().unwrap().geom_pos()[0], [1.0, 0.0, 0.0]);
+    /// ```
+    fn set_frame(&mut self, frame_name: &str) -> Result<(), MjEditError> {
+        // SAFETY: the item is a live element of its specification.
+        let frame = unsafe { find_frame(self.element_pointer(), frame_name) }?;
+        // mjs_setFrame fails only when the frame and the item have different parent bodies.
+        if unsafe { mjs_setFrame(self.element_mut_pointer(), frame) } != 0 {
+            return Err(MjEditError::FrameParentMismatch);
+        }
+        Ok(())
+    }
+
+    /// Builder style [`FrameChild::set_frame`].
+    /// # Errors
+    /// Same as [`FrameChild::set_frame`].
+    /// # Panics
+    /// When the `frame_name` contains '\0' characters, a panic occurs.
+    fn with_frame(&mut self, frame_name: &str) -> Result<&mut Self, MjEditError> {
+        self.set_frame(frame_name)?;
+        Ok(self)
+    }
+}
+
+impl FrameChild for MjsBody {}
+impl FrameChild for MjsFrame {}
+impl FrameChild for MjsJoint {}
+impl FrameChild for MjsGeom {}
+impl FrameChild for MjsSite {}
+impl FrameChild for MjsCamera {}
+impl FrameChild for MjsLight {}
 
 /// Attaches the `child` element to the `parent` element. `deep_copy` selects whether the parent
 /// deep-copies the elements of the child or "copies" by-reference.

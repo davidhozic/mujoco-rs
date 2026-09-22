@@ -1190,7 +1190,7 @@ impl MjsLight {
 ***************************/
 mjs_struct!(Frame with SpecObject: MjsFrame <= mjsFrame);
 impl MjsFrame {
-    add_x_method_by_frame! { body, site, joint, geom, camera, light }
+    add_x_method_by_frame! { site, joint, geom, camera, light }
 
     getter_setter! {
         [&] with, get, [
@@ -1229,36 +1229,6 @@ impl MjsFrame {
         // SAFETY: the mjString field is valid for the lifetime of self.
         unsafe { write_mjs_string(value, self.ffi_mut().childclass) };
         self
-    }
-
-    /// Add and return a child frame.
-    ///
-    /// # Note
-    /// MuJoCo ends the process when the allocation fails.
-    #[expect(deprecated, reason = "try_add_frame keeps the implementation until it is removed")]
-    pub fn add_frame(&mut self) -> &mut MjsFrame {
-        self.try_add_frame().expect("mjs_addFrame returned null; allocation failed")
-    }
-
-    /// Fallible version of [`Self::add_frame`].
-    ///
-    /// # Note
-    /// MuJoCo ends the process when the allocation fails, so this never returns `Err`.
-    ///
-    /// # Errors
-    /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to allocate
-    /// the frame, instead of panicking.
-    #[deprecated(
-        since = "6.0.0",
-        note = "always returns Ok; use `add_frame`"
-    )]
-    pub fn try_add_frame(&mut self) -> Result<&mut MjsFrame, MjEditError> {
-        // SAFETY: mjs_addFrame always calls SetParent(body), so every frame the Rust API hands out
-        // has a non-null parent. The frame it returns is freshly allocated, so nothing aliases it.
-        let parent_body = unsafe { mjs_getParent(self.element_mut_pointer()) };
-        debug_assert!(!parent_body.is_null(), "mjs_getParent returned null; frame has no parent body");
-        let ptr = unsafe { mjs_addFrame(parent_body, self.ffi_mut()) };
-        unsafe { MjsFrame::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
     }
 }
 
@@ -2546,6 +2516,53 @@ impl MjsBody {
         unsafe { MjsFrame::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
     }
 
+    /// Add a sub-frame of frame with name `parent` to the body. Wraps [`mjs_addFrame`].
+    ///
+    /// This is equivalent to writing nested `<frame>` elements:
+    /// ```xml
+    /// <!-- The body on which we are calling add_frame_in -->
+    /// <body>
+    ///     <frame name="parent">
+    ///         <frame>
+    ///             ...
+    ///         </frame>
+    ///     </frame>
+    /// </body>
+    /// ```
+    ///
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails.
+    ///
+    /// # Errors
+    /// - [`MjEditError::NotFound`] when `parent` is empty or no frame has that name.
+    /// - [`MjEditError::FrameParentMismatch`] when the `parent` frame belongs to a different body.
+    ///
+    /// # Panics
+    /// When the `parent` contains '\0' characters, a panic occurs.
+    ///
+    /// # Example
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// let mut spec = MjSpec::new();
+    /// let world = spec.world_body_mut();
+    /// world.add_frame().with_name("outer");
+    /// world.add_frame_in("outer").unwrap().with_name("inner");
+    /// ```
+    pub fn add_frame_in(&mut self, parent: &str) -> Result<&mut MjsFrame, MjEditError> {
+        // SAFETY: the body is a live element of its specification.
+        let parent_frame = unsafe { find_frame(self.element_pointer(), parent) }?;
+
+        // mjs_addFrame does not check that the parent frame belongs to this body.
+        let parent_body = unsafe { mjs_getParent((*parent_frame).element) };
+        if !ptr::eq(parent_body, self.ffi()) {
+            return Err(MjEditError::FrameParentMismatch);
+        }
+
+        // SAFETY: the frame that mjs_addFrame returns is freshly allocated, thus nothing can alias.
+        let ptr = unsafe { mjs_addFrame(self.ffi_mut(), parent_frame) };
+        Ok(unsafe { MjsFrame::from_ffi_ptr_mut(ptr) }.expect("mjs_addFrame returned null; allocation failed"))
+    }
+
     /// Add and return a child `<freejoint/>` element, which is a [`MjsJoint`] of type
     /// [`MjtJoint::mjJNT_FREE`]. Unlike [`Self::add_joint`], the returned joint does not
     /// inherit the class (`<default>`) configuration. Wraps [`mjs_addFreeJoint`].
@@ -3200,6 +3217,7 @@ mod tests {
     }
 
     #[test]
+    #[expect(deprecated, reason = "covers the deprecated MjsFrame adders until they are removed")]
     fn test_add_with_class() {
         const MARGIN: f64 = 0.5;
         const GROUP: i32 = 2;
@@ -3230,6 +3248,7 @@ mod tests {
     }
 
     #[test]
+    #[expect(deprecated, reason = "covers the deprecated MjsFrame adders until they are removed")]
     fn test_default_class_of_parent() {
         const MARGIN: f64 = 0.5;
 
@@ -3491,8 +3510,10 @@ mod tests {
 
         world.add_frame()
             .with_name("frame_a")
-            .with_pos([0.5, 0.5, 0.05])
-            .add_body()
+            .with_pos([0.5, 0.5, 0.05]);
+        world.add_body()
+            .with_frame("frame_a")
+            .unwrap()
             .add_geom()
             .with_size([1.0, 0.0, 0.0]);
 
@@ -4803,5 +4824,35 @@ mod tests {
             "child spec should not be attached by reference when deep-copy is enabled"
         );
         new_parent_spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_nested_frames_and_set_frame() {
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+        world.add_frame().with_name("outer").with_pos([1.0, 0.0, 0.0]);
+        world.add_frame_in("outer").unwrap().with_name("inner").with_pos([0.0, 2.0, 0.0]);
+        world.add_geom().with_size([0.1, 0.0, 0.0]).set_frame("inner").unwrap();
+        world.add_body().with_frame("outer").unwrap().add_geom().with_size([0.1, 0.0, 0.0]);
+
+        // Each frame offset accumulates into the compiled position of its children.
+        let model = spec.compile().unwrap();
+        assert_eq!(model.geom_pos()[0], [1.0, 2.0, 0.0]);
+        assert_eq!(model.body_pos()[1], [1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_frame_parent_rejected() {
+        let mut spec = MjSpec::new();
+        spec.world_body_mut().add_frame().with_name("world_frame");
+        let body = spec.world_body_mut().add_body();
+        body.add_frame();
+
+        assert!(matches!(body.add_frame_in("world_frame"), Err(MjEditError::FrameParentMismatch)));
+        assert_eq!(body.add_geom().set_frame("world_frame"), Err(MjEditError::FrameParentMismatch));
+        assert_eq!(body.add_geom().set_frame("missing"), Err(MjEditError::NotFound));
+        // MuJoCo would match the unnamed frame of the body.
+        assert_eq!(body.add_geom().set_frame(""), Err(MjEditError::NotFound));
+        assert!(matches!(body.add_frame_in(""), Err(MjEditError::NotFound)));
     }
 }

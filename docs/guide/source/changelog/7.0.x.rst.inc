@@ -16,6 +16,35 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   to set the elements. As described in *Bug fixes* of this release log, these methods do their own
   appends of empty values automatically, in order to reach the required size, thus ``append`` methods
   would have no effect.
+- Removed ``add_frame``, ``try_add_frame``, ``add_body``, ``try_add_body`` and
+  ``add_body_with_class`` from |mjs_frame|. A frame that a mutable frame iterator yielded could add
+  another frame. The same iterator would then end up yielding the newly added frame again, resulting in
+  active two mutable borrows (aliasing!).
+  Use :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_frame_in` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>FrameChild::<method>with_frame` instead.
+
+
+.. rubric:: Deprecations
+
+- Deprecated the ``add_*`` and ``add_*_with_class`` element adders of |mjs_frame|.
+  Instead, add elements to the same body as the ``MjsFrame`` and call
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>FrameChild::<method>with_frame`.
+
+.. rubric:: Error handling
+
+- New variant :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>FrameParentMismatch` :sup:`new`.
+
+.. rubric:: New features and improvements
+
+*Model editing*
+
+- Added the :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>FrameChild` :sup:`new` trait
+  and its methods, for setting the parent frame of body items/elements.
+
+- |mjs_body|:
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_frame_in` :sup:`new`
+    for adding a nested frame.
 
 
 .. rubric:: Bug fixes
