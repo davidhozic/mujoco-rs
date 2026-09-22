@@ -4592,7 +4592,8 @@ mod tests {
                 let mut frame_spec = MjSpec::from_xml_string(BASE_MODEL).unwrap();
                 let mut main_spec = MjSpec::new();
                 let frame = frame_spec.frame_mut("base_frame_1").unwrap();
-                main_spec.world_body_mut().attach_by_deep_copy(frame, prefix, suffix).expect("attachment failed");
+                main_spec.world_body_mut().add_frame()
+                    .attach_by_deep_copy(frame, prefix, suffix).expect("attachment failed");
 
                 let renamed = |name: &str| format!("{prefix}{name}{suffix}");
 
@@ -4679,11 +4680,6 @@ mod tests {
         assert_attached(&mut parent);
 
         /* A frame as the child. */
-        let (mut parent, mut child) = specs();
-        parent.body_mut("parent_body").unwrap()
-            .attach_by_deep_copy(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
-        assert_attached(&mut parent);
-
         let (mut parent, mut child) = specs();
         parent.frame_mut("parent_frame").unwrap()
             .attach_by_deep_copy(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();

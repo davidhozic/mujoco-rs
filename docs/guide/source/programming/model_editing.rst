@@ -313,11 +313,15 @@ attached to what other element type:
     * - Parent
       - Child
     * - |mjs_body|
-      - |mjs_frame|, |mj_spec|
+      - |mj_spec|
     * - |mjs_frame|
       - |mjs_body|, |mjs_frame|, |mj_spec|
     * - |mjs_site|
       - |mjs_body|, |mjs_frame|, |mj_spec|
+
+We do not permit attachments of a child |mjs_frame| to an |mjs_body|, because MuJoCo does not
+actually deep-copy the frame fully.
+Add a frame to the body with ``MjsBody::add_frame`` and attach to the newly added frame instead.
 
 ``attach_by_deep_copy`` copies every element of the child into the parent, so both specifications
 stay usable after the call. ``attach_by_reference`` makes the parent share the elements of the

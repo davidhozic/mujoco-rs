@@ -361,8 +361,35 @@ unsafe extern "C" fn clean_box_any(data: *const c_void) {
 /// | Child | Parent `P` |
 /// |---|---|
 /// | [`MjsBody`] | [`MjsFrame`], [`MjsSite`] |
-/// | [`MjsFrame`] | [`MjsBody`], [`MjsFrame`], [`MjsSite`] |
+/// | [`MjsFrame`] | [`MjsFrame`], [`MjsSite`] |
 /// | [`MjSpec`] | [`MjsBody`], [`MjsFrame`], [`MjsSite`] |
+///
+/// ## Attaching a frame to a body
+/// MuJoCo does not copy an [`MjsFrame`] in full when it attaches directly onto an [`MjsBody`].
+/// The attachment pair (parent `MjsBody`, child `MjsFrame`) is therefore not permitted,
+/// thus [`AttachTo`] for that pair is not implemented.
+/// Attach the frame to an [`MjsFrame`] of that body instead.
+/// 
+/// The following will fail to compile:
+/// ```compile_fail
+/// # use mujoco_rs::prelude::*;
+/// let mut child = MjSpec::new();
+/// let mut parent = MjSpec::new();
+/// let frame = child.world_body_mut().add_frame();
+/// parent.world_body_mut()
+///     .attach_by_deep_copy(frame, "c_", "").unwrap();
+/// ```
+/// 
+/// After adding a frame in between, it compiles fine:
+/// ```
+/// # use mujoco_rs::prelude::*;
+/// let mut child = MjSpec::new();
+/// let mut parent = MjSpec::new();
+/// let frame = child.world_body_mut().add_frame();
+/// parent.world_body_mut()
+///     .add_frame()
+///     .attach_by_deep_copy(frame, "c_", "").unwrap();
+/// ```
 pub trait AttachTo<P>: sealed::Sealed {
     /// Returns the `mjsElement` that MuJoCo attaches to the parent. The pointer is mutable,
     /// because [`mjs_attach`] renames and reparents the child that it receives.
@@ -379,12 +406,6 @@ impl AttachTo<MjsFrame> for MjsBody {
 }
 
 impl AttachTo<MjsSite> for MjsBody {
-    fn child_element_mut_pointer(&mut self) -> *mut mjsElement {
-        self.element_mut_pointer()
-    }
-}
-
-impl AttachTo<MjsBody> for MjsFrame {
     fn child_element_mut_pointer(&mut self) -> *mut mjsElement {
         self.element_mut_pointer()
     }
@@ -436,10 +457,6 @@ pub trait Attach: SpecItem {
     /// When the child is a [`MjSpec`], it will create a new [`MjsFrame`] in its world body
     /// on every attachment, under which all the sub-elements of `child` are reparented.
     ///
-    /// A [`MjsFrame`] attached to an [`MjsBody`] is not copied in full. The parent's frame keeps
-    /// pointing at the ancestor frame in the child. An edit of that ancestor before the parent's
-    /// first compilation therefore still changes the parent. Other pairs are unaffected.
-    ///
     /// # Errors
     /// Returns [`MjEditError::AttachFailed`] when MuJoCo rejects the attachment.
     ///
@@ -477,7 +494,9 @@ pub trait Attach: SpecItem {
     ///   including the elements outside the attached subtree;
     /// - no further element of that [`MjSpec`] is attached anywhere;
     /// - no existing references to the child (or other tree elements of child's [`MjSpec`])
-    ///   can be used further.
+    ///   can be used further;
+    /// - that child [`MjSpec`] is not compiled, because a compilation can free an element to
+    ///   which the parent keeps a pointer.
     ///
     /// # Note
     /// An attachment that returns an error still marks the `child` specification as attached, thus
