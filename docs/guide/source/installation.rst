@@ -244,7 +244,7 @@ To build statically linkable libraries, perform the following steps:
 
    .. seealso::
 
-        See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/v6.0.x/Dockerfile.ubuntu>`_
+        See this `Dockerfile <https://github.com/davidhozic/mujoco-rs/blob/v6.1.x/Dockerfile.ubuntu>`_
         for a reproducible build environment which, to our knowledge, matches MuJoCo's official
         build environment.
         The Dockerfile includes commented-out commands for installing the Rust toolchain and

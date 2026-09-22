@@ -48,6 +48,17 @@ fn check_objtype(t: MjtObj) -> Result<(), MjEditError> {
     }
 }
 
+/// Validates that a `nuser_*` count is at least `-1` (-1 meaning automatic).
+fn check_nuser(count: i32) -> Result<(), MjEditError> {
+    if count < -1 {
+        Err(MjEditError::InvalidParameter(format!(
+            "nuser count must be at least -1 (-1 meaning automatic), got {count}"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
 /// Validates that a custom-numeric array size is non-negative.
 fn check_numeric_size(size: i32) -> Result<(), MjEditError> {
     // A negative size passes every guard in `mjCNumeric::Compile` and undersizes the shared
@@ -254,6 +265,34 @@ impl MjSpec {
         NonNull::new(ptr).map(Self::from_ffi).ok_or(MjEditError::AllocationFailed)
     }
 
+    /// Wraps the spec into a [`Send`]-able wrapper, allowing it to be moved to another thread.
+    /// # Safety
+    /// No other live [`MjSpec`] may share data with this spec.
+    /// This includes any type of sharing done by the following:
+    /// - cloning a spec that uses the `<model>` tag inside `<asset>` in the MJCF XML definition;
+    /// - attaching procedurally via [`Attach::attach_by_reference`];
+    /// - attaching procedurally via [`Attach::attach_by_deep_copy`].
+    ///
+    /// The attachments include not just direct attachments of [`MjSpec`], but also any other
+    /// model-editing element. Attachments within the same spec is safe.
+    ///
+    /// Any user value, added by [`UserValued::set_user_value`], must also be Send.
+    /// 
+    /// # Example
+    /// ```
+    /// # use mujoco_rs::prelude::*;
+    /// let spec = MjSpec::new();
+    /// 
+    /// // SAFETY: the source spec doesn't have any attachments.
+    /// let spec2 = unsafe { spec.clone().into_sendable() };
+    /// std::thread::spawn(|| {
+    ///     let moved_spec = spec2.take();
+    /// }).join();
+    /// ```
+    pub unsafe fn into_sendable(self) -> SendableSpec {
+        unsafe { SendableSpec::new(self) }
+    }
+
     /// Creates a [`MjSpec`] from the `path` to a file.
     /// # Errors
     /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
@@ -433,6 +472,20 @@ impl MjSpec {
     /// texture has a builtin pattern set while its `nchannel` is less than 3, and when a texture
     /// has a negative dimension or a pixel count that does not fit in an [`i32`].
     pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
+        self.compile_impl(None)
+    }
+
+    /// Same as [`MjSpec::compile`], compiling [`MjSpec`] to [`MjModel`], but taking assets (meshes, heightfields) from `vfs`.
+    /// # Errors
+    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile, including when a
+    /// texture has a builtin pattern set while its `nchannel` is less than 3, and when a texture
+    /// has a negative dimension or a pixel count that does not fit in an [`i32`].
+    pub fn compile_with_vfs(&mut self, vfs: &MjVfs) -> Result<MjModel, MjEditError> {
+        self.compile_impl(Some(vfs))
+    }
+
+    /// Compilation implementation of [`MjSpec::compile_with_vfs`] and [`MjSpec::compile`].
+    fn compile_impl(&mut self, maybe_vfs: Option<&MjVfs>) -> Result<MjModel, MjEditError> {
         // The builtin generators write 3 bytes per pixel into an `nchannel*width*height` buffer,
         // and the setters are independent, so `compile` is the only place to check them together.
         for texture in self.texture_iter() {
@@ -455,20 +508,12 @@ impl MjSpec {
             }
         }
 
-        let result = unsafe { MjModel::from_raw( mj_compile(self.ffi.as_ptr(), ptr::null()) ) };
-        result.map_err(|_| {
-            // SAFETY: The spec is still valid after failed compilation.
-            // The error pointer is valid until the next MuJoCo call on this spec.
-            let error_msg: String = unsafe {
-                let ptr = mjs_getError(self.ffi_mut());
-                if ptr.is_null() {
-                    "Compilation failed (unknown error)".to_owned()
-                } else {
-                    CStr::from_ptr(ptr).to_string_lossy().into_owned()
-                }
-            };
-            MjEditError::CompileFailed(error_msg)
-        })
+        let result = unsafe { MjModel::from_raw(
+            mj_compile(self.ffi.as_ptr(), maybe_vfs.map_or(ptr::null(), |vfs| vfs.ffi()))
+        ) };
+
+        // SAFETY: the spec is still valid after a failed compilation.
+        result.map_err(|_| MjEditError::CompileFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }))
     }
 
     /// Return the compiler timers, in seconds, in `mjtCTimer` order.
@@ -553,6 +598,92 @@ impl MjSpec {
             }
         }
     }
+
+    /// Encode [`MjSpec`] to `filepath` using an encoder registered for encoding `content_type`.
+    /// When the `filepath`'s extension is '.xml', the MuJoCo's internal
+    /// XML encoder will be used. Similarly, the MuJoCo's internal
+    /// encoders will be used when `content_type` is 'text/xml'.
+    /// 
+    /// Extensions '.mjb' and `.txt` are not supported. Using them will result in erroring [`MjEditError::SaveFailed`].
+    /// Using 'text/plain' for the `content_type` will result in the same error.
+    /// 
+    /// The spec must be compiled first. Changes made without recompilations
+    /// don't reflect in the encoded file.
+    /// 
+    /// This is a wrapper for [`mj_encode`].
+    /// 
+    /// # Errors
+    /// - [`MjEditError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjEditError::SaveFailed`] with MuJoCo's error message if encoding fails.
+    /// # Panics
+    /// When `filepath` is empty, or when `filepath` or `content_type` contain interior `\0`
+    /// characters.
+    pub fn encode(&self, filepath: impl AsRef<Path>, content_type: &str) -> Result<(), MjEditError> {
+        self.encode_impl(filepath, content_type, None)
+    }
+
+    /// Same as [`MjSpec::encode`] except data (assets) are taken from `vfs`.
+    ///
+    /// # Errors
+    /// The same as [`MjSpec::encode`].
+    ///
+    /// # Panics
+    /// The same as [`MjSpec::encode`].
+    pub fn encode_with_vfs(&self, filepath: impl AsRef<Path>, content_type: &str, vfs: &MjVfs) -> Result<(), MjEditError> {
+        self.encode_impl(filepath, content_type, Some(vfs))
+    }
+
+    /// Implementation of the wrapper for [`mj_encode`].
+    fn encode_impl(
+        &self,
+        filepath: impl AsRef<Path>, content_type: &str,
+        maybe_vfs: Option<&MjVfs>
+    ) -> Result<(), MjEditError> {
+        let filepath = filepath.as_ref().to_str().ok_or(MjEditError::InvalidUtf8Path)?;
+        encode(Some(self), None, filepath, content_type, maybe_vfs).map_err(MjEditError::SaveFailed)
+    }
+}
+
+/// Encodes `spec` or `model` (at least one) to `filepath` with the encoder registered for
+/// `content_type`, taking assets from `vfs` when given. Wraps [`mj_encode`].
+/// # Panics
+/// When `filepath` is empty, or when `filepath` or `content_type` contain interior `\0`
+/// characters.
+/// 
+/// # Errors
+/// A [`String`] carrying MuJoCo-set error is returned on failure.
+pub(crate) fn encode(
+    spec: Option<&MjSpec>, model: Option<&MjModel>,
+    filepath: &str, content_type: &str, vfs: Option<&MjVfs>
+) -> Result<(), String> {
+    // An empty name makes the C encoders abort in `file_size("")`.
+    assert!(!filepath.is_empty(), "encode: filepath is empty");
+    let mut error_buff = [0; ERROR_BUF_LEN];
+
+    let c_filepath = CString::new(filepath).unwrap();
+    let c_content_type = CString::new(content_type).unwrap();
+
+    // SAFETY: the pointers are null or from live wrappers; the strings and buffer outlive the call.
+    let result = unsafe {
+        mj_encode(
+            spec.map_or(ptr::null(), |spec| spec.ffi()),
+            model.map_or(ptr::null(), |model| model.ffi()),
+            c_filepath.as_ptr(), c_content_type.as_ptr(),
+            vfs.map_or(ptr::null(), |vfs| vfs.ffi()),
+            error_buff.as_mut_ptr(), ERROR_BUF_LEN as i32
+        )
+    };
+
+    // == -1 means error, >= 0 mean the number of bytes written
+    if result == -1 {
+        // SAFETY: MuJoCo NUL-terminates the error buffer.
+        let message = unsafe { CStr::from_ptr(error_buff.as_ptr()) }
+            .to_string_lossy()
+            .into_owned();
+        return Err(message);
+    }
+
+    Ok(())
 }
 
 /// Children accessor methods.
@@ -612,18 +743,29 @@ impl MjSpec {
 
     getter_setter! {
         get, [
-            [ffi] memory: MjtSize;     "number of bytes in arena+stack memory.";
+            // No setter due to the compiler adding its own count.
             [ffi] nemax: i32;             "max number of equality constraints.";
-            [ffi] nuserdata: i32;              "number of mjtNums in userdata.";
-            [ffi] nuser_body: i32;            "number of mjtNums in body_user.";
-            [ffi] nuser_jnt: i32;              "number of mjtNums in jnt_user.";
-            [ffi] nuser_geom: i32;            "number of mjtNums in geom_user.";
-            [ffi] nuser_site: i32;            "number of mjtNums in site_user.";
-            [ffi] nuser_cam: i32;              "number of mjtNums in cam_user.";
-            [ffi] nuser_tendon: i32;        "number of mjtNums in tendon_user.";
-            [ffi] nuser_actuator: i32;    "number of mjtNums in actuator_user.";
-            [ffi] nuser_sensor: i32;        "number of mjtNums in sensor_user.";
-            [ffi] nkey: i32;                             "number of keyframes.";
+        ]
+    }
+
+    getter_setter! {
+        get, set, [
+            [ffi, ffi_mut] memory: MjtSize;     "number of bytes in arena+stack memory.";
+            [ffi, ffi_mut] nuserdata: i32;              "number of mjtNums in userdata.";
+            [ffi, ffi_mut] nkey: i32;                             "number of keyframes.";
+        ]
+    }
+
+    getter_setter! {
+        get, set, [
+            [ffi, ffi_mut] nuser_body: i32     { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;     "number of mjtNums in body_user.";
+            [ffi, ffi_mut] nuser_jnt: i32      { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;      "number of mjtNums in jnt_user.";
+            [ffi, ffi_mut] nuser_geom: i32     { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;     "number of mjtNums in geom_user.";
+            [ffi, ffi_mut] nuser_site: i32     { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;     "number of mjtNums in site_user.";
+            [ffi, ffi_mut] nuser_cam: i32      { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;      "number of mjtNums in cam_user.";
+            [ffi, ffi_mut] nuser_tendon: i32   { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;   "number of mjtNums in tendon_user.";
+            [ffi, ffi_mut] nuser_actuator: i32 { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError; "number of mjtNums in actuator_user.";
+            [ffi, ffi_mut] nuser_sensor: i32   { check_nuser, "[`MjEditError::InvalidParameter`] when the count is below -1" } => MjEditError;   "number of mjtNums in sensor_user.";
         ]
     }
 }
@@ -675,6 +817,27 @@ impl MjSpec {
             else {
                 Ok(MjsDefault::from_ffi_ptr_mut(ptr_default).unwrap())
             }
+        }
+    }
+
+    /// Activates the engine plugin registered under `name`.
+    ///
+    /// Wraps [`mjs_activatePlugin`].
+    /// 
+    /// # Errors
+    /// Returns [`MjEditError::NotFound`] when no plugin is registered under `name`.
+    /// 
+    /// # Panics
+    /// When the `name` contains '\0' characters, a panic occurs.
+    pub fn activate_plugin(&mut self, name: &str) -> Result<(), MjEditError> {
+        let c_name = CString::new(name).unwrap();
+        // SAFETY: the spec pointer is valid and c_name stays alive over the call.
+        let result = unsafe { mjs_activatePlugin(self.ffi_mut(), c_name.as_ptr()) };
+        if result == 0 {
+            Ok(())
+        }
+        else {
+            Err(MjEditError::NotFound)
         }
     }
 }
@@ -787,6 +950,30 @@ impl Clone for MjSpec {
         self.try_clone().expect("MuJoCo failed to clone MjSpec")
     }
 }
+
+/// A wrapper around [`MjSpec`] implementing [`Send`].
+#[derive(Debug)]
+pub struct SendableSpec(MjSpec);
+
+impl SendableSpec {
+    /// Wrap a [`MjSpec`] into a [`Send`]-able wrapper.
+    /// # Safety
+    /// The `spec` must follow the same rules as written in [`MjSpec::into_sendable`].
+    pub unsafe fn new(spec: MjSpec) -> Self {
+        Self(spec)
+    }
+
+    /// Takes the wrapped [`MjSpec`] out of the wrapper.
+    pub fn take(self) -> MjSpec {
+        self.0
+    }
+}
+
+/// Implementation of [`Send`] which allows [`MjSpec`] to be sent across threads.
+/// # Safety
+/// A [`SendableSpec`] can only be instantiated through methods marked as `unsafe`.
+/// These methods are safe provided the conditions of [`MjSpec::into_sendable`] hold.
+unsafe impl Send for SendableSpec {}
 
 /***************************
 ** Site specification
@@ -1013,8 +1200,35 @@ impl MjsFrame {
         ]
     }
 
-    string_set_get_with! {[&]
-        childclass; "childclass name.";
+    /// Return the childclass name.
+    ///
+    /// # Panics
+    /// Panics if the stored string is not valid UTF-8.
+    #[deprecated(since = "6.1.0", note = "the field holds the class of the frame; use `default`")]
+    pub fn childclass(&self) -> &str {
+        // SAFETY: the mjString field is valid for the lifetime of self.
+        unsafe { read_mjs_string(self.ffi().childclass) }
+    }
+
+    /// Set the childclass name.
+    ///
+    /// # Panics
+    /// When the `value` contains '\0' characters, a panic occurs.
+    #[deprecated(since = "6.1.0", note = "writes an unchecked class name; use `set_default`")]
+    pub fn set_childclass(&mut self, value: &str) {
+        // SAFETY: the mjString field is valid for the lifetime of self.
+        unsafe { write_mjs_string(value, self.ffi_mut().childclass) };
+    }
+
+    /// Builder method for setting the childclass name.
+    ///
+    /// # Panics
+    /// When the `value` contains '\0' characters, a panic occurs.
+    #[deprecated(since = "6.1.0", note = "writes an unchecked class name; use `set_default`")]
+    pub fn with_childclass(&mut self, value: &str) -> &mut Self {
+        // SAFETY: the mjString field is valid for the lifetime of self.
+        unsafe { write_mjs_string(value, self.ffi_mut().childclass) };
+        self
     }
 
     /// Add and return a child frame.
@@ -2332,6 +2546,19 @@ impl MjsBody {
         let ptr = unsafe { mjs_addFrame(self.ffi_mut(), ptr::null_mut()) };
         unsafe { MjsFrame::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
     }
+
+    /// Add and return a child `<freejoint/>` element, which is a [`MjsJoint`] of type
+    /// [`MjtJoint::mjJNT_FREE`]. Unlike [`Self::add_joint`], the returned joint does not
+    /// inherit the class (`<default>`) configuration. Wraps [`mjs_addFreeJoint`].
+    ///
+    /// # Note
+    /// MuJoCo ends the process when the allocation fails.
+    pub fn add_free_joint(&mut self) -> &mut MjsJoint {
+        // SAFETY: This function cannot fail unless the memory runs out, which aborts the process.
+        let ptr = unsafe { mjs_addFreeJoint(self.ffi_mut()) };
+        unsafe { MjsJoint::from_ffi_ptr_mut(ptr) }
+            .expect("mjs_addFreeJoint returned null; allocation failed")
+    }
 }
 
 /* ----------------------------------------------------------------------------
@@ -2688,6 +2915,25 @@ mod tests {
 </mujoco>";
 
     #[test]
+    fn test_activate_plugin() {
+        use crate::wrappers::mj_plugin::load_all_plugin_libraries;
+        const PLUGIN: &str = "mujoco.elasticity.cable";
+
+        let mut spec = MjSpec::new();
+        assert_eq!(spec.activate_plugin("not.a.plugin"), Err(MjEditError::NotFound));
+
+        let Ok(lib_dir) = std::env::var("MUJOCO_DYNAMIC_LINK_DIR") else { return };
+        let plugin_dir = Path::new(&lib_dir).parent().unwrap().join("bin/mujoco_plugin");
+        load_all_plugin_libraries(&plugin_dir, None).unwrap();
+
+        spec.activate_plugin(PLUGIN).unwrap();
+        spec.compile().unwrap();
+
+        let xml = spec.save_xml_string(4096).unwrap();
+        assert!(xml.contains(&format!("<plugin plugin=\"{PLUGIN}\"/>")), "{xml}");
+    }
+
+    #[test]
     fn test_spec_authored_accessor() {
         use crate::mujoco_c::{mjtDisableBit, mjtEnableBit};
 
@@ -2766,6 +3012,98 @@ mod tests {
         spec.compile().unwrap();
     }
 
+    /// A spec whose only asset is a fake heightfield (`N_ROW_COLUMN` for width, height and data)
+    /// and a VFS that holds that heightfield.
+    fn heightfield_spec_and_vfs() -> (MjSpec, MjVfs) {
+        const HEIGHTMAP_NAME: &str = "test_height.bin";
+        const N_ROW_COLUMN: u32 = 10;
+
+        let mut heightfield_bytes = vec![N_ROW_COLUMN.to_ne_bytes(), N_ROW_COLUMN.to_ne_bytes()];
+        heightfield_bytes.extend_from_slice(&[[0; 4]; (N_ROW_COLUMN * N_ROW_COLUMN) as usize]);
+
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer(HEIGHTMAP_NAME, heightfield_bytes.as_flattened())
+            .expect("failed to add heightfield to VFS");
+
+        let mut spec = MjSpec::new();
+        spec.add_hfield()
+            .with_file(HEIGHTMAP_NAME)
+            .with_name(HEIGHTMAP_NAME)
+            .with_size([1000.0, 1000.0, 5.0, 5.0]);
+
+        spec.world_body_mut().add_geom()
+            .with_type(MjtGeom::mjGEOM_HFIELD)
+            .with_hfieldname(HEIGHTMAP_NAME);
+
+        (spec, vfs)
+    }
+
+    #[test]
+    fn test_compile_vfs() {
+        let (mut spec, vfs) = heightfield_spec_and_vfs();
+
+        // The file should fail loading as it doesn't exist in local directory.
+        assert!(matches!(
+            spec.compile().unwrap_err(),
+            MjEditError::CompileFailed(e) if e.starts_with("Error: Error opening file")
+        ));
+
+        // The file should exist in the VFS.
+        spec.compile_with_vfs(&vfs).expect("compilation with vfs failed");
+    }
+
+    #[test]
+    fn test_encode_xml() {
+        const PATH_XML: &str = "mj_spec_test_encode_xml.xml";
+
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        let model = spec.compile().expect("could not compile the model");
+
+        spec.encode(PATH_XML, "text/xml").expect("XML encoding failed");
+        let mut spec_xml = MjSpec::from_xml(PATH_XML).expect("XML parsing failed");
+        std::fs::remove_file(PATH_XML).unwrap();
+        assert!(model.is_compatible_with_model(&spec_xml.compile().unwrap()));
+
+        assert!(matches!(spec.encode("mj_spec_test_encode_xml.txt", ""), Err(MjEditError::SaveFailed(_))));
+        assert!(matches!(spec.encode("/nonexistent/dir/model.xml", ""), Err(MjEditError::SaveFailed(_))));
+    }
+
+    #[test]
+    fn test_encode_mjz_vfs() {
+        const PATH_MJZ: &str = "mj_spec_test_encode_mjz_vfs.mjz";
+        const PATH_MJZ_NO_ASSETS: &str = "mj_spec_test_encode_mjz_no_assets.mjz";
+
+        let (mut spec, vfs) = heightfield_spec_and_vfs();
+        let model = spec.compile_with_vfs(&vfs).expect("compilation with vfs failed");
+
+        // The heightfield, located in the VFS, is written into the ZIP alongside the model. 
+        spec.encode_with_vfs(PATH_MJZ, "application/zip", &vfs).expect("MJZ encoding failed");
+        // The heightfield, located in the VFS, is skipped from being written into the ZIP.
+        // Only the model is stored.
+        spec.encode(PATH_MJZ_NO_ASSETS, "application/zip").expect("MJZ encoding failed");
+
+
+        let vfs_mjz = MjVfs::new();
+        let vfs_no_assets = MjVfs::new();
+
+        // Assets that were stored in the ZIP get written into the VFS.
+        let mut spec_mjz = MjSpec::from_parse_vfs(PATH_MJZ, "application/zip", &vfs_mjz)
+            .expect("MJZ parsing failed");
+        // No assets are part of the zip. MjSpec loads only the model, without any assets added to the VFS.
+        let mut spec_no_assets = MjSpec::from_parse_vfs(PATH_MJZ_NO_ASSETS, "application/zip", &vfs_no_assets)
+            .expect("MJZ parsing failed");
+
+        std::fs::remove_file(PATH_MJZ).unwrap();
+        std::fs::remove_file(PATH_MJZ_NO_ASSETS).unwrap();
+
+        // Read both from their VFS. Only the first has the heightfield in the VFS.
+        assert!(model.is_compatible_with_model(&spec_mjz.compile_with_vfs(&vfs_mjz).unwrap()));
+        assert!(matches!(
+            spec_no_assets.compile_with_vfs(&vfs_no_assets),
+            Err(MjEditError::CompileFailed(_))
+        ));
+    }
+
     #[test]
     fn test_model_name() {
         const DEFAULT_MODEL_NAME: &str = "MuJoCo Model";
@@ -2836,6 +3174,79 @@ mod tests {
         assert!(spec.joint(NEW_NAME).is_none(), "body was not removed fom spec");
 
         spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_add_free_joint() {
+        const ARMATURE: f64 = 0.25;
+
+        let mut spec = MjSpec::new();
+        spec.default_mut("main").unwrap().joint_mut().set_armature(ARMATURE);
+
+        let free_body = spec.world_body_mut().add_body();
+        free_body.add_geom().with_size([0.010; 3]);
+        let free_joint = free_body.add_free_joint();
+        assert_eq!(free_joint.type_(), MjtJoint::mjJNT_FREE);
+        assert_eq!(free_joint.armature(), 0.0, "the free joint must not inherit the default class");
+
+        let hinge_body = spec.world_body_mut().add_body();
+        hinge_body.add_geom().with_size([0.010; 3]);
+        assert_eq!(hinge_body.add_joint().armature(), ARMATURE);
+
+        let model = spec.compile().unwrap();
+        // 7 qpos of the free joint and 1 qpos of the hinge joint.
+        assert_eq!(model.nq(), 8);
+        assert_eq!(model.dof_armature()[..6], [0.0; 6]);
+        assert_eq!(model.dof_armature()[6], ARMATURE);
+    }
+
+    #[test]
+    fn test_add_with_class() {
+        const MARGIN: f64 = 0.5;
+        const GROUP: i32 = 2;
+
+        let mut spec = MjSpec::new();
+        let class = spec.add_default("cls", None);
+        class.geom_mut().set_margin(MARGIN);
+        class.actuator_mut().set_group(GROUP);
+
+        let body = spec.world_body_mut().add_body();
+        body.add_joint().with_name("hinge");
+        assert_eq!(body.add_geom_with_class("cls").unwrap().with_size([0.010; 3]).margin(), MARGIN);
+        assert_eq!(
+            body.add_frame().add_geom_with_class("cls").unwrap().with_size([0.010; 3]).margin(),
+            MARGIN
+        );
+
+        assert_eq!(body.add_geom().with_size([0.010; 3]).margin(), 0.0);
+        assert!(matches!(body.add_geom_with_class("nope"), Err(MjEditError::NotFound)));
+
+        let actuator = spec.add_actuator_with_class("cls").unwrap().with_trntype(MjtTrn::mjTRN_JOINT);
+        assert_eq!(actuator.group(), GROUP);
+        actuator.set_target("hinge");
+
+        let model = spec.compile().unwrap();
+        assert_eq!(model.geom_margin(), [MARGIN, MARGIN, 0.0]);
+        assert_eq!(model.actuator_group(), [GROUP]);
+    }
+
+    #[test]
+    fn test_default_class_of_parent() {
+        const MARGIN: f64 = 0.5;
+
+        let mut spec = MjSpec::new();
+        spec.add_default("cls", None).geom_mut().set_margin(MARGIN);
+
+        let body = spec.world_body_mut().add_body();
+        body.set_default("cls").unwrap();
+        assert_eq!(body.add_geom().with_size([0.010; 3]).margin(), MARGIN);
+        assert_eq!(body.add_body().add_geom().with_size([0.010; 3]).margin(), MARGIN);
+
+        // The frame carries the class, yet its geom lands on the parent body, which carries none.
+        let frame = spec.world_body_mut().add_body().add_frame();
+        frame.set_default("cls").unwrap();
+        assert!(frame.default().is_some());
+        assert_eq!(frame.add_geom().with_size([0.010; 3]).margin(), 0.0);
     }
 
     #[test]
@@ -3824,6 +4235,7 @@ mod tests {
             let flex = spec.world_body_mut().add_flexcomp("genflex", &config);
             assert_eq!(flex.dim(), 2);
             assert!((flex.radius() - 0.001).abs() < 1e-12);
+            flex.set_edgedamping(1.0);
         }
 
         /* The generated flex is registered in the spec and addressable by name. */
@@ -3849,6 +4261,7 @@ mod tests {
             let flex = spec.world_body_mut().add_flexcomp("genflex", &config);
             assert_eq!(flex.dim(), 2);
             assert!((flex.radius() - 0.005).abs() < 1e-12);
+            flex.set_edgedamping(1.0);
         }
 
         spec.compile().expect("spec with defaulted flex failed to compile");
@@ -3916,6 +4329,25 @@ mod tests {
             Err(MjEditError::InvalidParameter(_))
         ));
         assert!(numeric.set_size(4).is_ok());
+    }
+
+    #[test]
+    fn test_spec_size_setters() {
+        let mut spec = MjSpec::new();
+
+        assert!(matches!(spec.set_nuser_geom(-2), Err(MjEditError::InvalidParameter(_))));
+        assert_eq!(spec.nuser_geom(), -1, "a rejected count must leave the field unchanged");
+
+        spec.set_nuser_geom(3).unwrap();
+        spec.set_nuserdata(7);
+        spec.set_nkey(2);
+        spec.set_memory(1 << 20); // 1 MiB
+
+        let model = spec.compile().unwrap();
+        assert_eq!(model.nuser_geom(), 3);
+        assert_eq!(model.nuserdata(), 7);
+        assert_eq!(model.nkey(), 2);
+        assert_eq!(model.narena(), 1 << 20);
     }
 
     /// A frame carries no default class name, so `default()` reports `None` for it, while a geom
@@ -4138,5 +4570,170 @@ mod tests {
         // The world body stays, so the body list never empties.
         assert!(unsafe { spec.world_body_mut().body_iter_mut().last().unwrap().delete() }.is_ok(), "body");
         assert_eq!(spec.body_iter().count(), 1);
+    }
+
+    /// Tests the attachment mechanism (wrapper around [`mjs_attach`]).
+    #[test]
+    fn test_attachment() {
+        const BASE_MODEL: &str = r#"
+            <mujoco>
+                <worldbody>
+                    <frame name="base_frame_1">
+                        <body name="base_frame_1_body_1">
+                            <geom size="5" name="base_frame_1_body_1_sphere"/>
+                        </body>
+                    </frame>
+                </worldbody>
+            </mujoco>
+        "#;
+
+        for prefix in ["", "attached_", "added"] {
+            for suffix in ["", "_attached", "_added"] {
+                let mut frame_spec = MjSpec::from_xml_string(BASE_MODEL).unwrap();
+                let mut main_spec = MjSpec::new();
+                let frame = frame_spec.frame_mut("base_frame_1").unwrap();
+                main_spec.world_body_mut().add_frame()
+                    .attach_by_deep_copy(frame, prefix, suffix).expect("attachment failed");
+
+                let renamed = |name: &str| format!("{prefix}{name}{suffix}");
+
+                // Deep copy renames the copy that the parent holds, thus the child keeps its
+                // own names.
+                assert!(
+                    frame_spec.geom("base_frame_1_body_1_sphere").is_some(),
+                    "the child spec lost its own name"
+                );
+                assert_eq!(
+                    frame_spec.geom(&renamed("base_frame_1_body_1_sphere")).is_some(),
+                    prefix.is_empty() && suffix.is_empty(),
+                    "the renamed element appeared in the child spec"
+                );
+
+                main_spec.frame(&renamed("base_frame_1")).expect("frame not attached");
+                main_spec.body(&renamed("base_frame_1_body_1")).expect("body not attached");
+                main_spec.geom(&renamed("base_frame_1_body_1_sphere")).expect("geom not attached");
+
+                // The original name survives only when both prefix and prefix are empty.
+                assert_eq!(
+                    main_spec.geom("base_frame_1_body_1_sphere").is_some(),
+                    prefix.is_empty() && suffix.is_empty()
+                );
+
+                // An invalid name to validate that the lookups don't just look like they work.
+                assert!(main_spec.geom("base_frame_1_body_1_sphereinvalid").is_none());
+
+                let model = main_spec.compile().expect("compilation of the attached spec failed");
+                assert_eq!(model.nbody(), 2, "the world body plus the attached one");
+                assert_eq!(model.ngeom(), 1);
+            }
+        }
+    }
+
+    /// Tests every parent/child pair that [`Attach`] and [`AttachTo`] support.
+    #[test]
+    fn test_attachment_pairs() {
+        const PARENT_MODEL: &str = r#"
+            <mujoco>
+                <worldbody>
+                    <body name="parent_body"/>
+                    <frame name="parent_frame"/>
+                    <site name="parent_site"/>
+                </worldbody>
+            </mujoco>
+        "#;
+
+        const CHILD_MODEL: &str = r#"
+            <mujoco>
+                <worldbody>
+                    <frame name="child_frame">
+                        <body name="child_body">
+                            <geom size="5" name="child_geom"/>
+                        </body>
+                    </frame>
+                </worldbody>
+            </mujoco>
+        "#;
+
+        // Compiles the parent and checks that the child subtree arrived once, under the new names.
+        #[track_caller]
+        fn assert_attached(parent: &mut MjSpec) {
+            assert!(parent.geom("p_child_geom_s").is_some(), "the geom is not namespaced");
+            let model = parent.compile().expect("cannot compile the attached spec");
+            assert_eq!((model.nbody(), model.ngeom()), (3, 1), "wrong element counts");
+        }
+
+        // A fresh pair for every attachment, as an attachment changes both specs.
+        let specs = || (
+            MjSpec::from_xml_string(PARENT_MODEL).unwrap(),
+            MjSpec::from_xml_string(CHILD_MODEL).unwrap()
+        );
+
+        /* A body as the child. */
+        let (mut parent, mut child) = specs();
+        parent.frame_mut("parent_frame").unwrap()
+            .attach_by_deep_copy(child.body_mut("child_body").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.site_mut("parent_site").unwrap()
+            .attach_by_deep_copy(child.body_mut("child_body").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        /* A frame as the child. */
+        let (mut parent, mut child) = specs();
+        parent.frame_mut("parent_frame").unwrap()
+            .attach_by_deep_copy(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.site_mut("parent_site").unwrap()
+            .attach_by_deep_copy(child.frame_mut("child_frame").unwrap(), "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        /* A whole specification as the child. */
+        let (mut parent, mut child) = specs();
+        parent.body_mut("parent_body").unwrap().attach_by_deep_copy(&mut child, "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.frame_mut("parent_frame").unwrap().attach_by_deep_copy(&mut child, "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+
+        let (mut parent, mut child) = specs();
+        parent.site_mut("parent_site").unwrap().attach_by_deep_copy(&mut child, "p_", "_s").unwrap();
+        assert_attached(&mut parent);
+    }
+
+    /// Tests whether deep-copy works during attachment.
+    #[test]
+    fn test_deep_copy_attach() {
+        // Deep attach off.
+        let mut child_spec = MjSpec::new();
+        let mut parent_spec = MjSpec::new();
+        // SAFETY: the test takes no element handle of the child after the attachment.
+        unsafe {
+            parent_spec.world_body_mut().add_frame()
+                .attach_by_reference(&mut child_spec, "", "")
+        }.unwrap();
+
+        // Should error with attached reference errors
+        let result = child_spec.compile().unwrap_err();
+        assert!(
+            matches!(result, MjEditError::CompileFailed(e) if e.contains("attached by reference")),
+            "a child attached by reference compiled without reference, which is wrong as the parent shares the references"
+        );
+
+        // Should compile regulary, both parent and attached child.
+        parent_spec.compile().unwrap();
+
+        // A fresh pair, which keeps the deep copy that a new specification enables.
+        let mut new_parent_spec = MjSpec::new();
+        let mut new_child_spec = MjSpec::new();
+        new_parent_spec.world_body_mut().attach_by_deep_copy(&mut new_child_spec, "", "").unwrap();
+        assert!(
+            new_child_spec.compile().is_ok(),
+            "child spec should not be attached by reference when deep-copy is enabled"
+        );
+        new_parent_spec.compile().unwrap();
     }
 }

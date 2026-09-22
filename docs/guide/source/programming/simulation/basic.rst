@@ -1,6 +1,7 @@
 .. |mj_model| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModel`
 .. |mj_data| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_data::<struct>MjData`
 .. |mj_spec| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjSpec`
+.. |mj_cache| replace:: :docs-rs:`~mujoco_rs::wrappers::mj_cache::<struct>MjCache`
 
 .. _basic_sim:
 
@@ -18,7 +19,11 @@ To perform basic simulation with MuJoCo, create a |mj_model| struct by calling o
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_xml_string`
   (loads XML from a model defined in a string in memory),
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_buffer`
-  (loads a compiled model from a buffer).
+  (loads a compiled model from a buffer),
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_mjb`
+  (loads a compiled model from a binary MJB file),
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>from_mjb_vfs`
+  (loads a compiled model from a binary MJB file on a virtual file system).
 
 For example:
 
@@ -113,6 +118,34 @@ for use from the Python programming language.
 
     Add ``DerefMut`` and ``ModelTypeMut`` the same way when the container also gives mutable access
     to the model.
+
+
+.. _asset_cache:
+
+Asset cache
+----------------------
+MuJoCo keeps the file-loaded assets (either from disk or virtual file system),
+such as meshes, in a global asset cache to avoid reprocessing.
+
+A handle to the global cache is represented by |mj_cache| and can be obtained by calling
+:docs-rs:`~~mujoco_rs::wrappers::mj_cache::<struct>MjCache::<method>current` (wrapper around MuJoCo's
+`mj_getCache <https://mujoco.readthedocs.io/en/3.12.0/APIreference/APIfunctions.html#mj-getcache>`__).
+
+.. code-block:: rust
+
+    use mujoco_rs::prelude::*;
+
+    fn main() {
+        let cache = MjCache::current();
+        let model = MjModel::from_xml("model.xml").expect("could not load the model");
+        println!("cached bytes: {}", cache.size());
+
+        // Loading the same file again takes the meshes from the cache.
+        let model = MjModel::from_xml("model.xml").expect("could not load the model");
+
+        cache.clear();
+        cache.set_capacity(0);  // disable the cache
+    }
 
 
 Running

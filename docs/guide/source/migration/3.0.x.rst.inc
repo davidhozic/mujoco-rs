@@ -812,7 +812,7 @@ API renames
 ``sync()`` deprecated
 ---------------------------------------
 
-:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync` is deprecated.
+``MjRenderer::sync`` is deprecated.
 Use :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>sync_data`
 followed by :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>render`
 instead. ``sync_data`` updates the scene without rendering, giving you the

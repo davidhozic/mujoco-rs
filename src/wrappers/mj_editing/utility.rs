@@ -1,6 +1,7 @@
 //! Utilities for model editing purposes.
 use std::ffi::{CStr, CString};
 
+use super::{MjSpec, MjsBody, MjsFrame, SpecItem};
 use crate::util::checked_c_len;
 use crate::error::MjEditError;
 use crate::mujoco_c::*;
@@ -188,18 +189,56 @@ pub(crate) unsafe fn delete_element(element: *mut mjsElement) -> Result<(), MjEd
 
     match unsafe { mjs_delete(spec, element) } {
         0 => Ok(()),
-        _ => {
-            // SAFETY: the message belongs to the spec and lives until the next call on it.
-            let error_msg = unsafe {
-                let ptr = mjs_getError(spec);
-                if ptr.is_null() {
-                    "Unknown error".to_owned()
-                } else {
-                    CStr::from_ptr(ptr).to_string_lossy().into_owned()
-                }
-            };
-            Err(MjEditError::DeleteFailed(error_msg))
-        }
+        // SAFETY: the spec stays live after a refused deletion.
+        _ => Err(MjEditError::DeleteFailed(unsafe { read_spec_error(spec) })),
+    }
+}
+
+
+/// Reads the last error message that `spec` recorded, or a placeholder when it holds none.
+///
+/// # Safety
+/// `spec` must address a live specification.
+pub(crate) unsafe fn read_spec_error(spec: *mut mjSpec) -> String {
+    // SAFETY: the message belongs to the spec and lives until the next call on it.
+    let ptr = unsafe { mjs_getError(spec) };
+    if ptr.is_null() {
+        "Unknown error".to_owned()
+    } else {
+        unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned()
+    }
+}
+
+
+/***************************
+** Owning specification
+***************************/
+/// Resolves the specification that owns the element/item passed to an `add_X_with_class` method,
+/// which needs it to look up a default class by name.
+pub(crate) trait OwningSpec {
+    /// Returns the specification that owns `self`.
+    fn owning_spec(&self) -> *const mjSpec;
+}
+
+// The MjSpec "owns" itself. This specific impl is needed
+// to avoid extra macro clutter.
+impl OwningSpec for MjSpec {
+    fn owning_spec(&self) -> *const mjSpec {
+        self.ffi()
+    }
+}
+
+impl OwningSpec for MjsBody {
+    fn owning_spec(&self) -> *const mjSpec {
+        // SAFETY: the element belongs to a live specification, which outlives it.
+        unsafe { mjs_getSpec(self.element_pointer()) }
+    }
+}
+
+impl OwningSpec for MjsFrame {
+    fn owning_spec(&self) -> *const mjSpec {
+        // SAFETY: the element belongs to a live specification, which outlives it.
+        unsafe { mjs_getSpec(self.element_pointer()) }
     }
 }
 
@@ -207,8 +246,9 @@ pub(crate) unsafe fn delete_element(element: *mut mjsElement) -> Result<(), MjEd
 /***************************
 ** Helper macros
 ***************************/
-/// Generates both an `add_$name` method (panics on OOM, delegates to `try_add_$name`) and a
-/// `try_add_$name` method (returns `Result`) for adding child elements that accept a default.
+/// Generates adder methods for spec elements that can inherit defaults.
+/// Specifically, this adds: add_X, (deprecated, because it always returns Ok) try_add_X,
+/// add_X_with_class.
 macro_rules! add_x_method {
     ($($name:ident),*) => {paste::paste! {
         $(
@@ -244,17 +284,51 @@ macro_rules! add_x_method {
                 let ptr = unsafe { [<mjs_add $name:camel>](self.ffi_mut(), ptr::null()) };
                 unsafe { [<Mjs $name:camel>]::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
             }
+
+            #[doc = concat!(
+                "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`] that inherits the ",
+                "`class_name` default/class.\n\n",
+                "# Note\n",
+                "MuJoCo ends the process when the allocation fails.\n\n",
+                "# Errors\n",
+                "Returns [`MjEditError::NotFound`] when the specification holds no `class_name` ",
+                "class.\n\n",
+                "# Panics\n",
+                "When the `class_name` contains '\\0' characters, a panic occurs."
+            )]
+            pub fn [<add_ $name _with_class>](&mut self, class_name: &str)
+                -> Result<&mut [<Mjs $name:camel>], MjEditError>
+            {
+                let c_class_name = CString::new(class_name).unwrap();
+                // SAFETY: the element that mjs_addX returns is freshly allocated, thus nothing
+                // aliases it. Non-existing class names are caught via null checks.
+                unsafe {
+                    let default = mjs_findDefault(self.owning_spec(), c_class_name.as_ptr());
+                    if default.is_null() {
+                        return Err(MjEditError::NotFound);
+                    }
+
+                    let ptr = [<mjs_add $name:camel>](self.ffi_mut(), default);
+                    Ok([<Mjs $name:camel>]::from_ffi_ptr_mut(ptr).expect(
+                        concat!("mjs_add", stringify!([<$name:camel>]), " returned null; allocation failed")
+                    ))
+                }
+            }
         )*
     }};
 }
 
-/// Generates both `add_$name` (panics, delegates to `try_`) and `try_add_$name` (returns
-/// `Result`) for elements parented by a frame.
+/// Generates adder methods for elements parented by a frame, which can inherit defaults.
+/// Specifically, this adds: add_X, (deprecated, because it always returns Ok) try_add_X,
+/// add_X_with_class.
 macro_rules! add_x_method_by_frame {
     ($($name:ident),*) => {paste::paste! {
         $(
             #[doc = concat!(
                 "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`].\n\n",
+                "MuJoCo creates the element on the parent body of the frame and moves it into the ",
+                "frame afterwards, thus the element takes the default class of that body, not the ",
+                "one of the frame.\n\n",
                 "# Note\n",
                 "MuJoCo ends the process when the allocation fails."
             )]
@@ -290,6 +364,43 @@ macro_rules! add_x_method_by_frame {
                     if ptr.is_null() {
                         return Err(MjEditError::AllocationFailed);
                     }
+                    let set_result = mjs_setFrame((*ptr).element, self.ffi_mut());
+                    debug_assert_eq!(set_result, 0, "mjs_setFrame failed; element or frame is invalid");
+                    Ok([<Mjs $name:camel>]::from_ffi_ptr_mut(ptr).unwrap())
+                }
+            }
+
+            #[doc = concat!(
+                "Add and return a child [`", stringify!([<Mjs $name:camel>]), "`] that inherits the ",
+                "`class_name` default class. MuJoCo copies the values of the class into the element ",
+                "at creation, so a class that\n",
+                "[`set_default`](crate::wrappers::mj_editing::SpecItem::set_default) assigns later ",
+                "leaves them unchanged.\n\n",
+                "# Note\n",
+                "MuJoCo ends the process when the allocation fails.\n\n",
+                "# Errors\n",
+                "Returns [`MjEditError::NotFound`] when the specification holds no `class_name` ",
+                "default class.\n\n",
+                "# Panics\n",
+                "When the `class_name` contains '\\0' characters, a panic occurs."
+            )]
+            pub fn [<add_ $name _with_class>](&mut self, class_name: &str)
+                -> Result<&mut [<Mjs $name:camel>], MjEditError>
+            {
+                let c_class_name = CString::new(class_name).unwrap();
+                // SAFETY: see above.
+                unsafe {
+                    let default = mjs_findDefault(self.owning_spec(), c_class_name.as_ptr());
+                    if default.is_null() {
+                        return Err(MjEditError::NotFound);
+                    }
+
+                    let body_ptr = mjs_getParent(self.element_mut_pointer());
+                    debug_assert!(!body_ptr.is_null(), "mjs_getParent returned null; frame has no parent body");
+                    let ptr = [<mjs_add $name:camel>](body_ptr, default);
+                    assert!(!ptr.is_null(),
+                        concat!("mjs_add", stringify!([<$name:camel>]), " returned null; allocation failed"));
+
                     let set_result = mjs_setFrame((*ptr).element, self.ffi_mut());
                     debug_assert_eq!(set_result, 0, "mjs_setFrame failed; element or frame is invalid");
                     Ok([<Mjs $name:camel>]::from_ffi_ptr_mut(ptr).unwrap())
@@ -570,6 +681,9 @@ macro_rules! mjs_struct {
                 $extra_trait_methods
             )*)?
         }
+
+        // Only a class that derives mjCBase (in MuJoCo's C++ code) may carry user values
+        impl UserValued for $handle {}
     };
 }
 

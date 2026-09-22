@@ -10,6 +10,7 @@ use crate::wrappers::mj_data::MjData;
 use crate::mujoco_c::*;
 
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic};
+use super::mj_editing::encode;
 use super::mj_primitive::*;
 
 use bytemuck::must_cast_slice;
@@ -453,6 +454,49 @@ impl MjModel {
         }
     }
 
+    /// Loads the model from a binary (MJB) file. To load from a virtual file system, use
+    /// [`MjModel::from_mjb_vfs`].
+    /// Wraps [`mj_loadModel`].
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
+    /// # Errors
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::LoadFailed`] if MuJoCo fails to load the model.
+    /// # Panics
+    /// - when the `path` contains '\0'.
+    /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    pub fn from_mjb<T: AsRef<Path>>(path: T) -> Result<Self, MjModelError> {
+        Self::from_mjb_file(path, None)
+    }
+
+    /// Loads the model from a binary (MJB) file, located in a virtual file system (`vfs`).
+    /// Wraps [`mj_loadModel`].
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the loaded [`MjModel`].
+    /// # Errors
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::LoadFailed`] if MuJoCo fails to load the model.
+    /// # Panics
+    /// - when the `path` contains '\0'.
+    /// - when the linked MuJoCo version does not match the expected from MuJoCo-rs.
+    pub fn from_mjb_vfs<T: AsRef<Path>>(path: T, vfs: &MjVfs) -> Result<Self, MjModelError> {
+        Self::from_mjb_file(path, Some(vfs))
+    }
+
+    fn from_mjb_file<T: AsRef<Path>>(path: T, vfs: Option<&MjVfs>) -> Result<Self, MjModelError> {
+        assert_mujoco_version();
+
+        let path_str = path.as_ref().to_str()
+            .ok_or(MjModelError::InvalidUtf8Path)?;
+        let path = CString::new(path_str).unwrap();
+        let raw_ptr = unsafe { mj_loadModel(
+            path.as_ptr(), vfs.map_or(ptr::null(), |v| v.ffi())
+        ) };
+
+        Self::from_raw(raw_ptr)
+            .inspect(|_| debug!("loaded the model from \"{path_str}\""))
+    }
+
     /// Creates a [`MjModel`] from a raw pointer.
     pub(crate) fn from_raw(ptr: *mut mjModel) -> Result<Self, MjModelError> {
         Self::check_raw_model(ptr, &[0])
@@ -491,6 +535,52 @@ impl MjModel {
                 Err(MjModelError::SaveFailed(cstr_error))
             },
         }
+    }
+
+    /// Encode [`MjModel`] to `filepath` using an encoder registered for encoding `content_type`.
+    /// When the `filepath`'s extension is '.xml', '.mjb' or `.txt`, the MuJoCo's internal
+    /// XML, MJB and TXT encoders will be used, respectively. Similarly, the MuJoCo's internal
+    /// encoders will be used when `content_type` is 'text/xml' or 'text/plain'.
+    /// The XML encoder writes the spec of the last [`MjModel::from_xml`] (or `_vfs`, `_string`)
+    /// load and fails when there is none.
+    /// 
+    /// This is a wrapper for [`mj_encode`].
+    /// 
+    /// # Errors
+    /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::SaveFailed`] with MuJoCo's error message if encoding fails.
+    /// 
+    /// # Panics
+    /// When `filepath` is empty, or when `filepath` or `content_type` contain interior `\0`
+    /// characters. MuJoCo aborts the process when the MJB or TXT encoder cannot write `filepath`.
+    /// 
+    /// # Note
+    /// The MJB and TXT encoders report the size of whatever sits at `filepath` instead of the
+    /// bytes they wrote, thus a refused write on an existing file returns `Ok(())` and leaves the
+    /// stale file in place.
+    pub fn encode(&self, filepath: impl AsRef<Path>, content_type: &str) -> Result<(), MjModelError> {
+        self.encode_impl(filepath, content_type, None)
+    }
+
+    /// Same as [`MjModel::encode`] except data (assets) are taken from `vfs`.
+    /// 
+    /// # Errors
+    /// The same as [`MjModel::encode`].
+    /// 
+    /// # Panics
+    /// The same as [`MjModel::encode`].
+    pub fn encode_with_vfs(&self, filepath: impl AsRef<Path>, content_type: &str, vfs: &MjVfs) -> Result<(), MjModelError> {
+        self.encode_impl(filepath, content_type, Some(vfs))
+    }
+
+    /// Implementation of the wrapper for [`mj_encode`].
+    fn encode_impl(
+        &self,
+        filepath: impl AsRef<Path>, content_type: &str,
+        maybe_vfs: Option<&MjVfs>
+    ) -> Result<(), MjModelError> {
+        let filepath = filepath.as_ref().to_str().ok_or(MjModelError::InvalidUtf8Path)?;
+        encode(None, Some(self), filepath, content_type, maybe_vfs).map_err(MjModelError::SaveFailed)
     }
 
     /// Creates a new [`MjData`] instance linked to this model.
@@ -958,6 +1048,114 @@ impl MjModel {
         Ok(required_size)
     }
 
+    /// Compute the velocity that carries `qpos1` to `qpos2` in `dt`.
+    ///
+    /// Wraps [`mj_differentiatePos`].
+    /// 
+    /// # Panics
+    /// Panics when `qpos1` or `qpos2` does not hold [`MjModel::nq`] elements.
+    /// Use [`MjModel::try_differentiate_pos`] for a fallible alternative.
+    pub fn differentiate_pos(&self, dt: MjtNum, qpos1: &[MjtNum], qpos2: &[MjtNum]) -> Box<[MjtNum]> {
+        self.try_differentiate_pos(dt, qpos1, qpos2).unwrap()
+    }
+
+    /// Fallible version of [`MjModel::differentiate_pos`].
+    ///
+    /// Wraps [`mj_differentiatePos`].
+    /// 
+    /// # Returns
+    /// On success, returns [`Ok`] variant containing the velocity, of [`MjModel::nv`] elements.
+    /// 
+    /// # Errors
+    /// - When `qpos1` or `qpos2` does not hold [`MjModel::nq`] elements,
+    ///   [`MjModelError::LengthMismatch`] is returned.
+    pub fn try_differentiate_pos(&self, dt: MjtNum, qpos1: &[MjtNum], qpos2: &[MjtNum]) -> Result<Box<[MjtNum]>, MjModelError> {
+        let mut qvel = vec![0 as MjtNum; self.ffi().nv as usize];
+        self.try_differentiate_pos_into(dt, qpos1, qpos2, &mut qvel)?;
+        Ok(qvel.into_boxed_slice())
+    }
+
+    /// Same as [`MjModel::differentiate_pos`], except it writes the [`MjModel::nv`] elements into
+    /// `qvel`. Elements of `qvel` above index `nv` keep their previous values.
+    ///
+    /// Wraps [`mj_differentiatePos`].
+    /// 
+    /// # Panics
+    /// - When `qpos1` or `qpos2` does not hold [`MjModel::nq`] elements.
+    /// - When `qvel` holds fewer than [`MjModel::nv`] elements.
+    /// 
+    /// Use [`MjModel::try_differentiate_pos_into`] for a fallible alternative.
+    pub fn differentiate_pos_into(&self, dt: MjtNum, qpos1: &[MjtNum], qpos2: &[MjtNum], qvel: &mut [MjtNum]) {
+        self.try_differentiate_pos_into(dt, qpos1, qpos2, qvel).unwrap()
+    }
+
+    /// Fallible version of [`MjModel::differentiate_pos_into`].
+    ///
+    /// Wraps [`mj_differentiatePos`].
+    /// 
+    /// # Errors
+    /// - When `qpos1` or `qpos2` does not hold [`MjModel::nq`] elements,
+    ///   [`MjModelError::LengthMismatch`] is returned.
+    /// - When `qvel` holds fewer than [`MjModel::nv`] elements,
+    ///   [`MjModelError::BufferTooSmall`] is returned.
+    pub fn try_differentiate_pos_into(&self, dt: MjtNum, qpos1: &[MjtNum], qpos2: &[MjtNum], qvel: &mut [MjtNum]) -> Result<(), MjModelError> {
+        let nq = self.ffi().nq as usize;
+        if qpos1.len() != nq {
+            return Err(MjModelError::LengthMismatch { name: "qpos1", expected: nq, got: qpos1.len() });
+        }
+
+        if qpos2.len() != nq {
+            return Err(MjModelError::LengthMismatch { name: "qpos2", expected: nq, got: qpos2.len() });
+        }
+
+        let nv = self.ffi().nv as usize;
+        if qvel.len() < nv {
+            return Err(MjModelError::BufferTooSmall { needed: nv, available: qvel.len() });
+        }
+
+        // SAFETY: all pointers are valid for the duration of this call; qpos1 and qpos2 hold nq
+        // elements and qvel holds at least nv elements, as checked above.
+        unsafe {
+            mj_differentiatePos(
+                self.ffi(),
+                qvel.as_mut_ptr(), dt,
+                qpos1.as_ptr(), qpos2.as_ptr()
+            )
+        };
+
+        Ok(())
+    }
+
+    /// Integrate `qpos` in place with velocity `qvel` and time step `dt`.
+    ///
+    /// Wraps [`mj_integratePos`].
+    /// # Panics
+    /// - When `qpos` does not hold [`MjModel::nq`] elements.
+    /// - When `qvel` does not hold [`MjModel::nv`] elements.
+    pub fn integrate_pos(&self, qpos: &mut [MjtNum], qvel: &[MjtNum], dt: MjtNum) {
+        // mj_integratePos reads both vectors by the model layout, without a length of its own.
+        assert_eq!(qpos.len(), self.ffi().nq as usize, "qpos must hold nq elements");
+        assert_eq!(qvel.len(), self.ffi().nv as usize, "qvel must hold nv elements");
+
+        // SAFETY: both pointers are valid for the duration of this call, with the lengths that the
+        // model layout requires, as checked above.
+        unsafe { mj_integratePos(self.ffi(), qpos.as_mut_ptr(), qvel.as_ptr(), dt) }
+    }
+
+    /// Normalize every ball and free joint quaternion of a `qpos` vector in place.
+    ///
+    /// Wraps [`mj_normalizeQuat`].
+    /// # Panics
+    /// Panics when `qpos` does not hold [`MjModel::nq`] elements.
+    pub fn normalize_quat(&self, qpos: &mut [MjtNum]) {
+        // mj_normalizeQuat reads the vector by the model layout, without a length of its own.
+        assert_eq!(qpos.len(), self.ffi().nq as usize, "qpos must hold nq elements");
+
+        // SAFETY: the pointer is valid for the duration of this call, with the length that the
+        // model layout requires, as checked above.
+        unsafe { mj_normalizeQuat(self.ffi(), qpos.as_mut_ptr()) }
+    }
+
     /// Determine type of friction cone. Returns `true` if pyramidal, `false` if elliptic.
     /// Wraps [`mj_isPyramidal`].
     pub fn is_pyramidal(&self) -> bool {
@@ -1097,43 +1295,19 @@ impl MjModel {
         self.ffi().signature
     }
 
-    /// Reports whether `other` can take the place of this model in every object that this model
-    /// built: an [`MjData`], and the index ranges an `Info` caches.
-    ///
-    /// The test covers every size that fixes an `mjData` buffer or a packed `mjModel` array, and
-    /// the tables that fix how each array divides between the elements: the per-element counts,
-    /// the joint addresses, the kinematic tree, the body of every element, and the type of every
-    /// joint, geom, equality, wrap, actuator and sensor. [`MjModel::signature`] takes no part:
-    /// `mj_saveModel` does not write it, so a model that came back from a buffer carries a zero.
+    /// Reports whether `other` is memory-compatible with this model.
     pub fn is_compatible_with_model(&self, other: &MjModel) -> bool {
         self.layout() == other.layout()
     }
 
-    /// Reports whether `other` keeps its mesh, texture and heightfield data in the same memory
-    /// as this model, and gives every texture the same kind: the same shape for every asset, and
-    /// the same convex hull total.
-    ///
-    /// The count tables carry every other total, because each one is the plain sum, or the sum of
-    /// the products, of the tables beside it. `nmeshgraph` is the exception: qhull sizes each
-    /// convex hull and `mesh_graphadr` holds addresses only.
+    /// Reports whether `other`'s assets are memory-compatible with this model's.
     pub fn is_asset_compatible_with_model(&self, other: &MjModel) -> bool {
-        self.nmeshgraph() == other.nmeshgraph()
+        self.layout().nmeshgraph == other.layout().nmeshgraph
             && self.layout().asset_split() == other.layout().asset_split()
     }
 
     /// Returns the per-sensor, per-numeric, per-tuple, per-actuator, per-tendon, per-flex and
     /// plugin count tables, as raw bytes in a fixed order.
-    ///
-    /// Two models can hold the same element count and the same data total and still split that
-    /// total differently. A caller that resolves one element through a range read from the other
-    /// model then reads or writes the neighbouring element, and no length ever disagrees. Each
-    /// address table is the running prefix sum of the count table beside it, so the counts pin
-    /// the addresses and the address tables need no entry. The total of a packed array is the
-    /// plain sum of the same counts, so it needs no entry either. Each table also enters the
-    /// comparison with its own length, so a table pins the count of the elements it describes.
-    /// `mjModel` holds no per-joint count array, and `jnt_type` fills that role: every `mjtJoint`
-    /// value carries one fixed qpos and dof footprint, so `jnt_qposadr` and `jnt_dofadr` are the
-    /// running prefix sums of the types.
     fn element_split_tables(&self) -> [&[u8]; ELEMENT_SPLIT_TABLES] {
         [
             must_cast_slice(self.sensor_dim()),         must_cast_slice(self.numeric_size()),
@@ -2330,6 +2504,78 @@ mod tests {
     </mujoco>
 );
 
+    #[test]
+    fn test_integrate_and_differentiate_pos() {
+        const DT: MjtNum = 0.05;
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        assert!(model.nq() > model.nv(), "the model must hold a quaternion joint");
+
+        let qvel: Vec<MjtNum> = (0..model.nv()).map(|i| 0.1 * (i as MjtNum + 1.0)).collect();
+        let qpos1 = model.qpos0().to_vec();
+        let mut qpos2 = qpos1.clone();
+        model.integrate_pos(&mut qpos2, &qvel, DT);
+        assert_ne!(qpos1, qpos2, "integration must move the configuration");
+
+        let recovered = model.differentiate_pos(DT, &qpos1, &qpos2);
+        assert_eq!(recovered.len(), model.nv() as usize);
+        for (got, expected) in recovered.iter().zip(&qvel) {
+            assert_relative_eq!(*got, *expected, epsilon = 1e-9);
+        }
+    }
+
+    #[test]
+    fn test_differentiate_pos_rejects_bad_length() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let qpos = model.qpos0().to_vec();
+        let short = &qpos[..qpos.len() - 1];
+
+        assert!(matches!(
+            model.try_differentiate_pos(0.1, short, &qpos),
+            Err(MjModelError::LengthMismatch { name: "qpos1", .. })
+        ));
+        assert!(matches!(
+            model.try_differentiate_pos(0.1, &qpos, short),
+            Err(MjModelError::LengthMismatch { name: "qpos2", .. })
+        ));
+    }
+
+    #[test]
+    fn test_differentiate_pos_into_buffer_bounds() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let nv = model.nv() as usize;
+        let qpos1 = model.qpos0().to_vec();
+        let mut qpos2 = qpos1.clone();
+        model.integrate_pos(&mut qpos2, &vec![0.1; nv], 1.0);
+
+        let mut qvel = vec![MjtNum::NAN; nv + 2];
+        model.differentiate_pos_into(1.0, &qpos1, &qpos2, &mut qvel);
+        assert!(qvel[..nv].iter().all(|v| v.is_finite()), "every element below nv is written");
+        assert!(qvel[nv..].iter().all(|v| v.is_nan()), "elements above nv keep their previous values");
+
+        assert!(matches!(
+            model.try_differentiate_pos_into(1.0, &qpos1, &qpos2, &mut vec![0 as MjtNum; nv - 1]),
+            Err(MjModelError::BufferTooSmall { needed, available }) if needed == nv && available == nv - 1
+        ));
+    }
+
+    #[test]
+    fn test_normalize_quat() {
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        let free_adr = model.jnt_qposadr()[0] as usize;
+        assert_eq!(model.jnt_type()[0], MjtJoint::mjJNT_FREE);
+
+        let mut qpos = model.qpos0().to_vec();
+        qpos[free_adr + 3..free_adr + 7].copy_from_slice(&[2.0, 0.0, 0.0, 2.0]);
+        model.normalize_quat(&mut qpos);
+
+        let quat = &qpos[free_adr + 3..free_adr + 7];
+        let norm = quat.iter().map(|q| q * q).sum::<MjtNum>().sqrt();
+        assert_relative_eq!(norm, 1.0, epsilon = 1e-12);
+        assert_relative_eq!(quat[0], 0.5_f64.sqrt(), epsilon = 1e-12);
+        assert_relative_eq!(quat[3], 0.5_f64.sqrt(), epsilon = 1e-12);
+    }
+
     /// Tests if the model can be loaded and then saved.
     #[test]
     fn test_model_load_save() {
@@ -2342,6 +2588,28 @@ mod tests {
 
         // Try to get an error
         assert!(model.save_last_xml(MODEL_INVALID_SAVE_XML_PATH).is_err());
+    }
+
+    #[test]
+    fn test_model_encode() {
+        const PATH_MJB: &str = "./__TMP_MODEL_ENCODE.mjb";
+        const PATH_XML: &str = "./__TMP_MODEL_ENCODE.xml";
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        model.encode(PATH_MJB, "").unwrap();
+        model.encode_with_vfs(PATH_XML, "text/xml", &MjVfs::new()).unwrap();
+
+        let encoded = MjModel::from_buffer(&fs::read(PATH_MJB).unwrap()).unwrap();
+        // The XML encoder writes the spec of the last XML load, which a parallel test may replace,
+        // so only the MJB round trip is compared against `model`.
+        let reloaded = MjModel::from_xml(PATH_XML);
+        fs::remove_file(PATH_MJB).unwrap();
+        fs::remove_file(PATH_XML).unwrap();
+
+        assert!(model.is_compatible_with_model(&encoded));
+        reloaded.unwrap();
+
+        assert!(model.encode("/some/non-existent/path/model.xml", "").is_err());
     }
 
     #[test]
@@ -2646,7 +2914,8 @@ mod tests {
     #[test]
     fn test_layout_rejects_a_different_flex_split() {
         let flex = |name: &str, bodies: &str, nvert: usize, element: &str| format!(
-            "<flex name='{name}' dim='1' body='{bodies}' vertex='{}' element='{element}'/>",
+            "<flex name='{name}' dim='1' body='{bodies}' vertex='{}' element='{element}'>\
+             <edge damping='1'/></flex>",
             "0 0 0 ".repeat(nvert)
         );
         let flex_model = |first: String, second: String| MjModel::from_xml_string(&format!(
@@ -2749,7 +3018,8 @@ mod tests {
              <body name='v1' pos='0.1 0 0'><freejoint/><geom size='0.01'/></body>\
              <body name='v2' pos='0.2 0 0'><freejoint/><geom size='0.01'/></body>\
              </worldbody>\
-             <deformable><flex name='f1' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'/>\
+             <deformable><flex name='f1' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'>\
+             <edge damping='1'/></flex>\
              </deformable>\
              <tendon><spatial name='td'><site site='s1'/><site site='s2'/></spatial>\
              <fixed name='tf'><joint joint='js' coef='1'/><joint joint='jh' coef='2'/></fixed></tendon>\
@@ -2943,6 +3213,31 @@ mod tests {
         let model = MjModel::from_buffer(&saved_data).unwrap();
         assert!(model.light("lamp_light2").is_some());
         assert!(model.light("lamp_light-xyz").is_none());
+    }
+
+    #[test]
+    fn test_model_from_mjb() {
+        const MODEL_SAVE_PATH: &str = "./__TMP_MODEL3.mjb";
+        const MODEL_VFS_PATH: &str = "__TMP_MODEL3_VFS.mjb";
+
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
+        model.save_to_file(MODEL_SAVE_PATH).unwrap();
+
+        let loaded = MjModel::from_mjb(MODEL_SAVE_PATH).unwrap();
+        assert!(model.is_compatible_with_model(&loaded));
+        assert!(loaded.light("lamp_light2").is_some());
+
+        /* Test virtual file system load */
+        let mut vfs = MjVfs::new();
+        vfs.add_from_buffer(MODEL_VFS_PATH, &fs::read(MODEL_SAVE_PATH).unwrap()).unwrap();
+        // The MJB now exists on the VFS only, so a load that ignores the VFS finds no file.
+        fs::remove_file(MODEL_SAVE_PATH).unwrap();
+
+        let loaded_vfs = MjModel::from_mjb_vfs(MODEL_VFS_PATH, &vfs).unwrap();
+        assert!(model.is_compatible_with_model(&loaded_vfs));
+        assert!(loaded_vfs.light("lamp_light2").is_some());
+
+        assert!(MjModel::from_mjb(MODEL_SAVE_PATH).is_err());
     }
 
     #[test]
