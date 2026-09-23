@@ -1,7 +1,7 @@
 //! Comprehensive Miri test for `mujoco-rs`.
 use mujoco_rs::wrappers::{MjModel, MjData, MjtObj, MjtGeom, MjtJoint, MjtTrn, MjtSensor};
 use mujoco_rs::wrappers::mj_editing::MjtLimited;
-use mujoco_rs::prelude::{MjSpec, SpecItem};
+use mujoco_rs::prelude::{MjSpec, SpecElement, SpecItem};
 use mujoco_rs::mujoco_c::mjtState;
 use mujoco_rs::wrappers::fun::*;
 

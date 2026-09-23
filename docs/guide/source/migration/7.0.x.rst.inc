@@ -94,3 +94,32 @@ they internally do the same thing as the new API. We deprecated them (slated for
 for consistency reasons. We feel it would be annoying trying to figure out how to add
 bodies and frames through the new API if the old API was still meant to be used
 for other items.
+
+
+``MjsDefault`` is no longer a ``SpecItem``
+-------------------------------------------
+
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsDefault` no longer implements
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem`, thus a default class cannot be renamed.
+Renaming a default class caused undefined behavior.
+
+It now implements only the new supertrait :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecElement`,
+the latter holding ``element_pointer``, ``element_mut_pointer`` and ``name``.
+
+Code that previously relied on (or imported explicitly) ``SpecItem`` directly should
+also add an import of ``SpecElement``, in addition to updating the type bounds in generics.
+
+.. code-block:: rust
+
+    // Before
+    use mujoco_rs::wrappers::SpecItem;
+    fn print_name<T: SpecItem>(item: &T) { println!("{}", item.name()); }
+    let class = spec.add_default("a", None);
+    class.set_name("b").unwrap();
+    print_name(class);
+
+    // After
+    use mujoco_rs::wrappers::{SpecElement, SpecItem};
+    fn print_name<T: SpecElement>(item: &T) { println!("{}", item.name()); }
+    let class = spec.add_default("b", None);
+    print_name(class);

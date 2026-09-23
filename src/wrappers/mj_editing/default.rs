@@ -1,13 +1,12 @@
-//! Module implements [`MjsDefault`], which is a special type of [`SpecItem`].
+//! Module implements [`MjsDefault`], the handle of a default class.
 
 use crate::wrappers::mj_editing::{
     MjsJoint, MjsGeom, MjsSite, MjsCamera, MjsLight, MjsFlex, MjsMesh, MjsMaterial,
     MjsPair, MjsEquality, MjsTendon, MjsActuator
 };
-use crate::error::MjEditError;
 use crate::mujoco_c::*;
 
-use super::traits::SpecItem;
+use super::traits::{sealed, SpecElement};
 
 
 macro_rules! default_accessor_wrapper {
@@ -40,36 +39,10 @@ impl MjsDefault {
     }
 }
 
-impl super::traits::sealed::Sealed for MjsDefault {}
+impl sealed::Sealed for MjsDefault {}
 
-impl SpecItem for MjsDefault {
+impl SpecElement for MjsDefault {
     fn element_pointer(&self) -> *const mjsElement {
         self.ffi().element
-    }
-
-    fn default(&self) -> Option<&MjsDefault> {
-        Some(self)
-    }
-
-    /// A default class carries no id. Always returns `None`.
-    fn id(&self) -> Option<usize> {
-        // mjCDef derives from mjsElement, not mjCBase, so mjs_getId would read an unrelated offset.
-        None
-    }
-
-    /// A default class cannot be assigned to another default class.
-    ///
-    /// # Errors
-    /// Always returns [`MjEditError::UnsupportedOperation`].
-    fn set_default(&mut self, _class_name: &str) -> Result<(), MjEditError> {
-        Err(MjEditError::UnsupportedOperation)
-    }
-
-    /// A default class cannot be assigned to another default class.
-    ///
-    /// # Errors
-    /// Always returns [`MjEditError::UnsupportedOperation`].
-    fn with_default(&mut self, _class_name: &str) -> Result<&mut Self, MjEditError> {
-        Err(MjEditError::UnsupportedOperation)
     }
 }

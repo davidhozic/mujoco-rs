@@ -1,7 +1,7 @@
 //! Utilities for model editing purposes.
 use std::ffi::{CStr, CString};
 
-use super::{MjSpec, MjsBody, MjsFrame, SpecItem};
+use super::{MjSpec, MjsBody, MjsFrame, SpecElement};
 use crate::util::checked_c_len;
 use crate::error::MjEditError;
 use crate::mujoco_c::*;
@@ -229,6 +229,24 @@ pub(crate) unsafe fn read_spec_error(spec: *mut mjSpec) -> String {
     } else {
         unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned()
     }
+}
+
+/// Sets the name of `element`. Wraps [`mjs_setName`].
+///
+/// # Errors
+/// Returns [`MjEditError::AlreadyExists`] when an element with the same name already exists.
+///
+/// # Safety
+/// `element` must point to a live element of a specification, other than a default class.
+///
+/// # Panics
+/// When the `name` contains '\0' characters, a panic occurs.
+pub(crate) unsafe fn set_element_name(element: *mut mjsElement, name: &str) -> Result<(), MjEditError> {
+    let c_name = CString::new(name).unwrap();  // panics on interior NUL bytes.
+    if unsafe { mjs_setName(element, c_name.as_ptr()) } != 0 {
+        return Err(MjEditError::AlreadyExists);
+    }
+    Ok(())
 }
 
 /// Returns the frame named `name` in the specification of `element`.
@@ -726,11 +744,13 @@ macro_rules! mjs_struct {
 
         impl crate::wrappers::mj_editing::traits::sealed::Sealed for $handle {}
 
-        impl SpecItem for $handle {
+        impl SpecElement for $handle {
             fn element_pointer(&self) -> *const mjsElement {
                 self.ffi().element
             }
+        }
 
+        impl SpecItem for $handle {
             $($(
                 $extra_trait_methods
             )*)?

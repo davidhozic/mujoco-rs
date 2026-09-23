@@ -22,6 +22,11 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   active two mutable borrows (aliasing!).
   Use :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_frame_in` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>FrameChild::<method>with_frame` instead.
+- :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsDefault` no longer implements
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecItem`, because renaming a default class
+  caused undefined behavior. It implements only the new
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecElement` :sup:`new`, which is now the
+  supertrait of ``SpecItem``.
 
 
 .. rubric:: Deprecations

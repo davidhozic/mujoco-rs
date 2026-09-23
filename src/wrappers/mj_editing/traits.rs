@@ -17,20 +17,19 @@ use super::default::MjsDefault;
 use super::utility::*;
 
 pub(crate) mod sealed {
-    /// Prevents external implementations of [`SpecItem`](super::SpecItem) and
-    /// [`AttachTo`](super::AttachTo).
+    /// Prevents external implementations.
     pub trait Sealed {}
 }
 
-/// Every type that [`MjSpec`](super::MjSpec) supports. Sealed.
-pub trait SpecItem: Sized + sealed::Sealed {
+/// Every model-editing element that [`MjSpec`](super::MjSpec) supports. Sealed.
+pub trait SpecElement: Sized + sealed::Sealed {
     /// Returns the `mjsElement` that MuJoCo keeps behind the item.
     ///
     /// The pointer is const. A caller that must satisfy MJS's wrong use of mutable pointers, such
     /// as [`mjs_getName`], casts it at the call site.
     fn element_pointer(&self) -> *const mjsElement;
 
-    /// Same as [`SpecItem::element_pointer`], but with a mutable borrow and a mutable pointer.
+    /// Same as [`SpecElement::element_pointer`], but with a mutable borrow and a mutable pointer.
     fn element_mut_pointer(&mut self) -> *mut mjsElement {
         self.element_pointer() as *mut _
     }
@@ -44,19 +43,21 @@ pub trait SpecItem: Sized + sealed::Sealed {
         // takes a mutable pointer but writes nothing.
         unsafe { read_mjs_string(mjs_getName(self.element_pointer() as *mut _)) }
     }
+}
 
+/// Extension of [`SpecElement`] for elements with:
+/// - a default class;
+/// - ability to change the name post instantiation;
+/// - an ID ([`mjs_getId`]).
+pub trait SpecItem: SpecElement {
     /// Set a new name.
     /// # Errors
     /// Returns [`MjEditError::AlreadyExists`] when an element with the same name already exists.
     /// # Panics
     /// When the `name` contains '\0' characters mid string, a panic occurs.
     fn set_name(&mut self, name: &str) -> Result<(), MjEditError> {
-        let cstr = CString::new(name).unwrap();  // panics on interior NUL bytes; &str guarantees UTF-8
-        let result = unsafe { mjs_setName(self.element_mut_pointer(), cstr.as_ptr()) };
-        if result != 0 {
-            return Err(MjEditError::AlreadyExists);
-        }
-        Ok(())
+        // SAFETY: the item is a live element of its specification.
+        unsafe { set_element_name(self.element_mut_pointer(), name) }
     }
 
     /// Builder style set a new name.
@@ -117,7 +118,7 @@ pub trait SpecItem: Sized + sealed::Sealed {
 
 /// A [`SpecItem`] that becomes a concrete object inside
 /// [`crate::wrappers::mj_model::MjModel`] once [`super::MjSpec`] compiles. That is every
-/// [`SpecItem`] except [`MjsDefault`] and [`MjsWrap`](super::MjsWrap). Only such an object carries
+/// [`SpecItem`] except [`MjsWrap`](super::MjsWrap). Only such an object carries
 /// [`SpecObject::delete`].
 pub trait SpecObject: SpecItem {
     /// The `mjtObj` discriminant passed to `mjs_firstElement` / `mjs_firstChild`.

@@ -2052,25 +2052,37 @@ impl MjsTendon {
 /***************************
 ** Wrap specification
 ***************************/
+/// The first MuJoCo version ([`mj_version`] value) in which [`mjs_setName`] accepts a wrap.
+const WRAP_RENAME_MIN_VERSION: c_int = 3014000;
+
 mjs_struct!(MjsWrap <= mjsWrap {
-    /// A wrap carries no name of its own; [`SpecItem::name`] reports the wrapped object's name.
+    /// Sets the name of the wrapped element.
     ///
     /// # Errors
-    /// Always returns [`MjEditError::UnsupportedOperation`].
-    fn set_name(&mut self, _name: &str) -> Result<(), MjEditError> {
-        // mjCWrap leaves elemtype at mjOBJ_UNKNOWN, and mjs_setName hands that to
-        // mjCModel::CheckRepeat, which indexes object_lists_ and dereferences its null slot 0.
-        Err(MjEditError::UnsupportedOperation)
-    }
-
-    /// A wrap carries no name of its own.
+    /// Returns [`MjEditError::UnsupportedOperation`] when the linked MuJoCo is older than 3.14.0.
     ///
     /// # Panics
-    /// Always panics.
-    fn with_name(&mut self, _name: &str) -> &mut Self {
-        panic!("a wrap carries no name of its own")
+    /// When the `name` contains '\0' characters, a panic occurs.
+    fn set_name(&mut self, name: &str) -> Result<(), MjEditError> {
+        // TODO: remove the version check once the crate links MuJoCo 3.14.0 or later. Before it,
+        // mjs_setName gives the mjOBJ_UNKNOWN elemtype to CheckRepeat, which reads a null list.
+        if unsafe { mj_version() } < WRAP_RENAME_MIN_VERSION {
+            return Err(MjEditError::UnsupportedOperation);
+        }
+        // SAFETY: the wrap is a live element of its specification.
+        unsafe { set_element_name(self.element_mut_pointer(), name) }
+    }
+
+    /// Builder style [`SpecItem::set_name`].
+    ///
+    /// # Panics
+    /// Panics when the linked MuJoCo is older than 3.14.0, or when `name` contains '\0'.
+    fn with_name(&mut self, name: &str) -> &mut Self {
+        self.set_name(name).expect("renaming a wrap requires MuJoCo 3.14.0 or later");
+        self
     }
 });
+
 impl MjsWrap {
     getter_setter! {
         [&] with, get, set, [
@@ -4449,13 +4461,6 @@ mod tests {
         assert!(spec.world_body_mut().default().is_some());
     }
 
-    /// `mjs_getId` casts to `mjCBase`, which `mjCDef` does not derive from, so a default class
-    /// must report no id instead of the value read at that offset.
-    #[test]
-    fn test_default_has_no_id() {
-        assert!(MjSpec::new().add_default("cls", None).id().is_none());
-    }
-
     /// A name that MuJoCo parses need not be valid UTF-8, so `delete` must reach the world body
     /// through its address; a name comparison would panic instead of deleting the body.
     #[test]
@@ -4477,15 +4482,21 @@ mod tests {
         assert_eq!(spec.body_iter().count(), 1);
     }
 
-    /// `mjCWrap` leaves its elemtype at `mjOBJ_UNKNOWN`, which makes MuJoCo's duplicate-name check
-    /// index a null list and crash, so naming a wrap must be rejected before the FFI call.
+    /// `mjCWrap` leaves its elemtype at `mjOBJ_UNKNOWN`, which makes the duplicate-name check of
+    /// MuJoCo before 3.14.0 index a null list and crash, so naming a wrap must be rejected there.
     #[test]
     fn test_wrap_set_name_rejected() {
         let mut spec = MjSpec::new();
         spec.world_body_mut().add_site().with_name("s0");
         let wrap = spec.add_tendon().wrap_site("s0");
-        assert!(matches!(wrap.set_name("w0"), Err(MjEditError::UnsupportedOperation)));
-        assert_eq!(wrap.name(), "s0");
+        // TODO: remove after updating bindings to 3.14.0.
+        if unsafe { mj_version() } < WRAP_RENAME_MIN_VERSION {
+            assert!(matches!(wrap.set_name("w0"), Err(MjEditError::UnsupportedOperation)));
+            assert_eq!(wrap.name(), "s0");
+        } else {
+            wrap.set_name("w0").unwrap();
+            assert_eq!(wrap.name(), "w0");
+        }
     }
 
     /// A frame's element type lies past the end of MuJoCo's element-list array, so `mjs_delete`
@@ -4508,7 +4519,7 @@ mod tests {
             unsafe { spec.delete_element(ptr::null_mut()) }, Err(MjEditError::DeleteFailed(_))
         ));
 
-        let default = spec.add_default("cls", None).element_mut_pointer();
+        let default = spec.add_default("cls", None).ffi().element;
         assert!(matches!(
             unsafe { spec.delete_element(default) }, Err(MjEditError::UnsupportedOperation)
         ));
