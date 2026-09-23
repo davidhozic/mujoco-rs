@@ -123,3 +123,20 @@ also add an import of ``SpecElement``, in addition to updating the type bounds i
     fn print_name<T: SpecElement>(item: &T) { println!("{}", item.name()); }
     let class = spec.add_default("b", None);
     print_name(class);
+
+
+``MjData::contact_force`` panics on an invalid ID (runtime-breaking)
+---------------------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force` now panics when
+``contact_id >= ncon``. Use 
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_contact_force` to handle an
+invalid ID.
+
+.. code-block:: rust
+
+    // Before
+    let force = data.contact_force(contact_id); // [0.0; 6] when contact_id >= ncon
+
+    // After
+    let force = data.try_contact_force(contact_id).unwrap_or([0.0; 6]);

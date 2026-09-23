@@ -276,16 +276,41 @@ impl<M: ModelType> MjData<M> {
     /// via [`MjData::contact`]. Wraps [`mj_contactForce`].
     ///
     /// # Note
-    /// When `contact_id >= ncon`, `[0; 6]` is returned.
+    /// This function will return valid results only after running the constraint solver.
+    /// The solver runs in [`MjData::step`], [`MjData::step2`] (requires a call to [`MjData::step1`]
+    /// first) and [`MjData::forward`]).
+    /// 
+    /// Calling it after the constraint array (`efc_force`) is allocated but not initialized
+    /// (e.g., after calling [`MjData::step1`]) will result in garbage values.
+    ///
+    /// # Panics
+    /// Panics when `contact_id` is outside the range of valid contact IDs.
+    /// For fallible version, consider [`MjData::try_contact_force`].
     pub fn contact_force(&self, contact_id: usize) -> [MjtNum; 6] {
+        self.try_contact_force(contact_id).unwrap()
+    }
+
+    /// Fallible version of [`MjData::contact_force`].
+    /// 
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `contact_id` is not in the
+    /// range of valid contact IDs.
+    pub fn try_contact_force(&self, contact_id: usize) -> Result<[MjtNum; 6], MjDataError> {
+        // OVERFLOW SAFETY: ncon cannot be negative unless set through unsafe intentionally.
+        let n_contacts = self.ncon() as usize;
+        if contact_id >= n_contacts {
+            return Err(MjDataError::IndexOutOfBounds { kind: "contact", id: contact_id, upper: n_contacts });
+        }
+
         let mut force = [0.0; 6];
+        // SAFETY: all pointers point to pointers of enforced lifetimes, index is checked. 
         unsafe {
             mj_contactForce(
                 self.model.ffi(), self.data.as_ptr(),
                 contact_id as i32, &mut force
             );
         }
-        force
+        Ok(force)
     }
 
     /* Partially auto-generated */
@@ -5414,5 +5439,13 @@ mod test {
         unsafe { data.model_mut() }.body_mass_mut()[1] = 2.0;
         data.set_const();
         assert_relative_eq!(data.model().body_invweight0()[1][0], 0.5, epsilon=1e-9);
+    }
+
+    #[test]
+    fn test_contact_force() {
+        let mut data = MjData::new(Box::new(MjSpec::new().compile().unwrap()));
+        data.step();
+        assert_eq!(data.ncon(), 0);
+        assert!(matches!(data.try_contact_force(0), Err(MjDataError::IndexOutOfBounds { kind: "contact", id: 0, upper: 0 }))) ;
     }
 }

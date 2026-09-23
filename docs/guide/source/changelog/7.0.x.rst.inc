@@ -27,6 +27,10 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   caused undefined behavior. It implements only the new
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecElement` :sup:`new`, which is now the
   supertrait of ``SpecItem``.
+- (runtime-breaking) :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force`
+  now panics when ``contact_id >= ncon``. Before, it returned ``[0; 6]``. If you want to catch
+  out-of-bounds errors, use
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_contact_force` :sup:`new`.
 
 
 .. rubric:: Deprecations
@@ -51,6 +55,11 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_frame_in` :sup:`new`
     for adding a nested frame.
 
+*Simulation*
+- |mj_data|:
+
+  - A fallible method, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_contact_force` :sup:`new`,
+    has been created for handling out-of-bound errors.
 
 .. rubric:: Bug fixes
 
@@ -58,3 +67,6 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>set_cubefiles` now fill
   the remaining needed parts the vector with empty entries. A shorter length of vectors caused
   out-of-bound reads.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force` now checks
+  the ID before the call. The cast to ``i32`` could also wrap an ID of ``2^32`` or more into an in-bound,
+  but wrong, contact index, thus the method returned the force of another contact.
