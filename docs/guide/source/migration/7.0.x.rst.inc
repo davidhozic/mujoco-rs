@@ -183,3 +183,23 @@ and ``model_signature`` of the ``Info`` types are removed. Read the signature fr
         println!("{source:?} vs {destination:?}");
     }
     let signature = model.signature();
+
+
+A model swap refuses more models
+--------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` and ``try_swap_model``
+now refuse a model that differs in a size or in an integer table that no safe accessor writes,
+apart from the names, the paths and the collision hulls and trees.
+If you know that the new model is still safe for the data, use
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model_unchecked`.
+Otherwise, create a new |mj_data|.
+
+.. code-block:: rust
+
+    // Before
+    let old = data.swap_model(edited);
+
+    // After
+    // SAFETY: `edited` only changes a joint type, so every size and every address table agrees.
+    let old = unsafe { data.swap_model_unchecked(edited) };

@@ -31,6 +31,11 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   now panics when ``contact_id >= ncon``. Before, it returned ``[0; 6]``. If you want to catch
   out-of-bounds errors, use
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_contact_force` :sup:`new`.
+- (runtime-breaking) :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`,
+  ``is_asset_compatible_with_model`` and the ``Info`` views now compare every size and every
+  integer table that no safe accessor writes, apart from the names, the paths and the collision
+  hulls and trees, so they refuse more models, for example a model with a different joint type.
+  Before, a swapped model could make a step or a plugin read or write out of bounds.
 - (runtime-breaking) :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_model`
   and ``is_compatible_with_scene`` now refuse more models, and ``MjvScene::update`` panics on each of
   them. A scene or a user scene that was filled from an accepted, but different, model could read or
@@ -77,6 +82,8 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 
   - A fallible method, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_contact_force` :sup:`new`,
     has been created for handling out-of-bound errors.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model_unchecked` :sup:`new`
+    swaps in a model that the compatibility check refuses.
 
 .. rubric:: Bug fixes
 
@@ -91,12 +98,3 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   ``sync_data`` rebuilds the context, and the ``update_*_from`` methods return
   :docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>IncompatibleModel`, when the context
   cannot serve the model. Before, an upload could read out of bounds.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`
-  now refuses a model whose history buffer divides differently between the actuators and the
-  sensors. Before, a swapped model could make a step read out of bounds.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`
-  now refuses a model that binds its plugin instances to other elements. Before, a swapped model
-  could make a plugin write out of bounds.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`
-  no longer compares the actuator bias types, the sensor data types and the sensor stages. Safe
-  setters can change them, so a cached result could go stale.

@@ -2,9 +2,10 @@
 use crate::{array_slice_dyn, getter_setter, mujoco_c::*};
 use crate::error::MjrContextError;
 
-use super::mj_model::{MjModel, MjtTexture, MjtTextureRole};
+use super::mj_model::{MjModel, MjModelLayout, MjtTexture, MjtTextureRole};
 
 use std::ffi::CString;
+use std::sync::Arc;
 use std::ptr;
 
 /* Types */
@@ -90,7 +91,7 @@ impl Default for MjrRectangle {
 #[derive(Debug)]
 pub struct MjrContext {
     ffi: Box<mjrContext>,
-    layout: MjrContextLayout
+    layout: Arc<MjModelLayout>,
 }
 
 impl MjrContext {
@@ -120,7 +121,7 @@ impl MjrContext {
             let mut c = Box::new_uninit();
             mjr_defaultContext(c.as_mut_ptr());
             mjr_makeContext(model.ffi(), c.as_mut_ptr(), MjtFontScale::mjFONTSCALE_100 as i32);
-            Self { ffi: c.assume_init(), layout: MjrContextLayout::from(model) }
+            Self { ffi: c.assume_init(), layout: Arc::clone(model.layout()) }
         }
     }
 
@@ -297,8 +298,12 @@ impl MjrContext {
     }
 
     /// Reports whether `model` can take the place of the model that created this context.
+    ///
+    /// # Note
+    /// This check is fairly strict in order to avoid the need for heavy maintenance,
+    /// thus it may sometimes fail for compatible models.
     pub fn is_compatible_with_model(&self, model: &MjModel) -> bool {
-        self.layout == MjrContextLayout::from(model)
+        self.layout == *model.layout()
     }
 
     /// Reference to the wrapped FFI struct.
@@ -419,21 +424,6 @@ impl Drop for MjrContext {
         // SAFETY: self.ffi was fully initialized in new() and has not been freed.
         unsafe {
             mjr_freeContext(self.ffi.as_mut());
-        }
-    }
-}
-
-/// Snapshot of the [`MjModel`]'s attributes (non-derived only) that need to be equal in an incoming
-/// `MjModel` for the existing context to be considered compatible with this incoming `MjModel`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct MjrContextLayout {
-    tex_type: Box<[MjtTexture]>,
-}
-
-impl From<&MjModel> for MjrContextLayout {
-    fn from(model: &MjModel) -> Self {
-        Self {
-            tex_type: model.tex_type().into(),
         }
     }
 }

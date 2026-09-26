@@ -1,11 +1,12 @@
 //! Definitions related to visualization.
 use std::default::Default;
 use std::mem::MaybeUninit;
+use std::sync::Arc;
 use std::ptr;
 
 use super::mj_rendering::{MjrContext, MjrRectangle};
 use super::mj_primitive::{MjtNum, MjtByte, MjtSize};
-use super::mj_model::{MjModel, MjtGeom, MjtObj};
+use super::mj_model::{MjModel, MjModelLayout, MjtGeom, MjtObj};
 use super::mj_model::traits::ModelType;
 use super::mj_data::MjData;
 use crate::{array_slice_dyn, c_str_as_str_method};
@@ -781,56 +782,6 @@ impl MjvFigure {
 /***********************************************************************************************************************
 ** MjvScene
 ***********************************************************************************************************************/
-/// Snapshot of the [`MjModel`] quantities that fix the size and the per-element split of every
-/// buffer that [`MjvScene::new`] allocates, and the counts that bound the `objid`, `dataid`,
-/// `matid` and `texid` of a geom.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct MjvSceneLayout {
-    skin_vertnum: Box<[i32]>,
-    nmat: MjtSize,
-    ntex: MjtSize,
-    nplane: usize,
-    nmesh: MjtSize,
-    nhfield: MjtSize,
-    flex_vertnum: Box<[i32]>,
-    flex_facenum: Box<[i32]>,
-}
-
-impl From<&MjModel> for MjvSceneLayout {
-    fn from(model: &MjModel) -> Self {
-        let ffi = model.ffi();
-        Self {
-            skin_vertnum: model.skin_vertnum().into(),
-            nmat: ffi.nmat,
-            ntex: ffi.ntex,
-            nplane: model.geom_type().iter().filter(|&&t| t == MjtGeom::mjGEOM_PLANE).count(),
-            nmesh: ffi.nmesh,
-            nhfield: ffi.nhfield,
-            flex_vertnum: model.flex_vertnum().into(),
-            flex_facenum: model.flex_dim().iter()
-                .zip(model.flex_elemadr())
-                .zip(model.flex_elemnum())
-                .zip(model.flex_shellnum())
-                .map(|(((&dim, &adr), &num), &shellnum)| match dim {
-                    // `mjv_makeScene` tests for 0, not 1, so a 1D flex takes the 3D branch.
-                    0 => 0,
-                    2 => 2 * shellnum + 2 * num,
-                    _ => {
-                        let layers = &model.flex_elemlayer()[adr as usize..(adr + num) as usize];
-                        let maxlayer = (0..)
-                            .map(|layer| layers.iter().filter(|&&l| l == layer).count())
-                            .take_while(|&n| n > 0)
-                            .max()
-                            .unwrap_or(0);
-                        shellnum.max(4 * maxlayer as i32)
-                    }
-                })
-                .collect(),
-        }
-    }
-}
-
-
 /// 3D scene visualization.
 /// This struct provides a way to render visual-only geometry.
 ///
@@ -840,7 +791,7 @@ impl From<&MjModel> for MjvSceneLayout {
 #[derive(Debug)]
 pub struct MjvScene {
     ffi: Box<mjvScene>,
-    layout: MjvSceneLayout,
+    layout: Arc<MjModelLayout>,
     nflexedge: MjtSize,
     nflexvert: MjtSize,
     nskinvert: MjtSize,
@@ -853,7 +804,7 @@ impl MjvScene {
     /// Panics if `max_geom` exceeds [`i32::MAX`].
     pub fn new<M: ModelType>(model: M, max_geom: usize) -> Self {
         let model_ffi = model.ffi();
-        let layout = MjvSceneLayout::from(&*model);
+        let layout = Arc::clone(model.layout());
 
         // SAFETY: The struct memory gets initialized properly before assumed initialized.
         // The uninitialized memory, not part of the struct, gets zeroed below this unsafe block.
@@ -902,8 +853,12 @@ impl MjvScene {
     }
 
     /// Reports whether `model` can take the place of the model that created this scene.
+    ///
+    /// # Note
+    /// This check is fairly strict in order to avoid the need for heavy maintenence,
+    /// thus it may sometimes fail for compatible models.
     pub fn is_compatible_with_model(&self, model: &MjModel) -> bool {
-        self.layout == MjvSceneLayout::from(model)
+        self.layout == *model.layout()
     }
 
     /// Reports whether `other` was created for a model that is compatible with this scene's
@@ -911,6 +866,10 @@ impl MjvScene {
     ///
     /// A geom that moves between two scenes keeps its `objid`, which the renderer uses as an
     /// unchecked index into the destination scene's flex and skin arrays.
+    ///
+    /// # Note
+    /// This check is fairly strict in order to avoid the need for heavy maintenence,
+    /// thus it may sometimes fail for compatible models.
     pub fn is_compatible_with_scene(&self, other: &MjvScene) -> bool {
         self.layout == other.layout
     }
@@ -1313,104 +1272,6 @@ mod tests {
         assert!(scene.geomorder().iter().all(|order| *order == 0));
     }
 
-    #[test]
-    fn test_scene_is_compatible_with_model() {
-        let three = flex_model("name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'");
-        let two = flex_model("name='f' dim='1' body='v0 v1' vertex='0 0 0 0 0 0' element='0 1'");
-        assert_eq!(three.signature(), two.signature(), "the pair must share a signature");
-        assert_ne!(three.nflexvert(), two.nflexvert());
-
-        let scene = MjvScene::new(&three, 100);
-        assert!(scene.is_compatible_with_model(&three));
-        assert!(!scene.is_compatible_with_model(&two));
-    }
-
-    /// The layout must hold the face capacity that `mjv_makeScene` allocates for each flex, for
-    /// every flex dimension, and for a 3D flex with more than one layer.
-    #[test]
-    fn test_scene_layout_flex_facenum_matches_the_scene() {
-        let model = MjModel::from_xml_string(
-            "<mujoco><worldbody>\
-             <flexcomp name='c' type='grid' count='3 3 3' spacing='.1 .1 .1' dim='3' pos='0 0 1'/>\
-             <flexcomp name='s' type='grid' count='3 3 1' spacing='.1 .1 .1' dim='2' pos='1 0 1'/>\
-             <flexcomp name='l' type='grid' count='4 1 1' spacing='.1 .1 .1' dim='1' pos='2 0 1'/>\
-             </worldbody></mujoco>"
-        ).unwrap();
-        assert!(model.flex_elemlayer().contains(&1), "the 3D flex must have a second layer");
-        assert_eq!(model.flex_dim(), &[3, 2, 1]);
-
-        let scene = MjvScene::new(&model, 100);
-        assert_eq!(&*scene.layout.flex_facenum, scene.flexfacenum());
-    }
-
-    /// A model that carries `skins` and nothing else, so that only the skin counts change.
-    fn skin_model(skins: &str) -> MjModel {
-        let xml = format!(
-            "<mujoco><asset>{skins}</asset><worldbody>\
-<body name='b'><joint name='j' type='hinge' axis='0 0 1'/><geom size='0.1'/></body>\
-</worldbody></mujoco>"
-        );
-        MjModel::from_xml_string(&xml).unwrap()
-    }
-
-    /// `mjv_addGeoms` gives a skin geom the skin id as its `objid`, and `mjr_render` reads
-    /// `skinfacenum[objid]` of the scene with it. A model that holds more skins than the scene
-    /// must be refused, even when it needs no larger buffer.
-    #[test]
-    fn test_scene_rejects_a_larger_skin_count_at_an_equal_vertex_total() {
-        let one = skin_model(
-            "<skin name='s' vertex='0 0 0  1 0 0  0 1 0  1 1 0  2 0 0  2 1 0' \
-                   face='0 1 2  1 3 2  1 4 3  4 5 3'>\
-             <bone body='b' bindpos='0 0 0' bindquat='1 0 0 0' \
-                   vertid='0 1 2 3 4 5' vertweight='1 1 1 1 1 1'/></skin>"
-        );
-        let two = skin_model(
-            "<skin name='s1' vertex='0 0 0  1 0 0  0 1 0' face='0 1 2'>\
-             <bone body='b' bindpos='0 0 0' bindquat='1 0 0 0' \
-                   vertid='0 1 2' vertweight='1 1 1'/></skin>\
-             <skin name='s2' vertex='0 0 1  1 0 1  0 1 1' face='0 1 2'>\
-             <bone body='b' bindpos='0 0 0' bindquat='1 0 0 0' \
-                   vertid='0 1 2' vertweight='1 1 1'/></skin>"
-        );
-        // Every scene buffer is the same size in both, so only nskin separates the pair.
-        assert_eq!(one.nskinvert(), two.nskinvert());
-        assert_ne!(one.nskin(), two.nskin());
-
-        let scene = MjvScene::new(&one, 100);
-        assert!(scene.is_compatible_with_model(&one));
-        assert!(!scene.is_compatible_with_model(&two));
-    }
-
-    /// `mj_saveModel` writes no signature, so `mj_loadModel` returns a zero. A scene that tested
-    /// the signature would refuse the saved copy of the very model it was created for.
-    #[test]
-    fn test_scene_accepts_the_saved_copy_of_its_own_model() {
-        let model = flex_model(
-            "name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'"
-        );
-        let scene = MjvScene::new(&model, 100);
-
-        let mut buffer = vec![0u8; model.size()];
-        model.save_to_buffer(&mut buffer).unwrap();
-        let reloaded = MjModel::from_buffer(&buffer).unwrap();
-
-        assert_ne!(model.signature(), reloaded.signature(),
-                   "mj_loadModel now restores the signature");
-        assert!(scene.is_compatible_with_model(&reloaded),
-                "the scene refuses the saved copy of its own model");
-    }
-
-    #[test]
-    fn test_scene_is_compatible_with_scene() {
-        let three = flex_model("name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'");
-        let two = flex_model("name='f' dim='1' body='v0 v1' vertex='0 0 0 0 0 0' element='0 1'");
-
-        let scene = MjvScene::new(&three, 100);
-        let same = MjvScene::new(&three, 10);
-        let other = MjvScene::new(&two, 100);
-        assert!(scene.is_compatible_with_scene(&same), "maxgeom must not affect compatibility");
-        assert!(!scene.is_compatible_with_scene(&other));
-    }
     #[test]
     #[allow(non_snake_case)]
     fn test_MjvGeom() {

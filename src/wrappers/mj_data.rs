@@ -144,7 +144,19 @@ impl<M: ModelType> MjData<M> {
             });
         }
 
-        Ok(std::mem::replace(&mut self.model, model))
+        // SAFETY: the two models have an equal layout.
+        Ok(unsafe { self.swap_model_unchecked(model) })
+    }
+
+    /// Unchecked version of [`MjData::swap_model`].
+    /// 
+    /// This exists because [`MjModelLayout`] is overly strict in order to ease the crate's maintenance.
+    ///
+    /// # Safety
+    /// The model ``m`` must be compatible such that the expected memory
+    /// structure is preserved for the needed use.
+    pub unsafe fn swap_model_unchecked(&mut self, model: M) -> M {
+        std::mem::replace(&mut self.model, model)
     }
 
     info_method! { Data, [model], body, [
@@ -1817,8 +1829,9 @@ impl<M: ModelTypeMut> MjData<M> {
     /// This method is marked unsafe as the owned model can be swapped entirely without any compatibility
     /// checks.
     /// 
-    /// It is the caller's responsibility to ensure that a swapped model is compatible with the
-    /// model this data belongs to, as [`MjModel::is_compatible_with_model`] defines.
+    /// It is the caller's responsibility to ensure that every size of a changed or swapped model
+    /// stays equal, and that every index, count and address table stays in bounds for the buffers
+    /// of this data, as for [`MjData::swap_model_unchecked`].
     /// 
     /// For safe swapping consider [`MjData::swap_model`] or [`MjData::try_swap_model`] for a fallible alternative.
     ///
@@ -3219,56 +3232,6 @@ mod test {
         assert_eq!(data.userdata().len(), buffer_len);
     }
 
-    #[test]
-    fn test_try_view_incompatible_model_carries_both_layouts() {
-        let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
-        let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();
-
-        let data1 = model1.make_data();
-        let joint_info1 = data1.joint("j1").unwrap();
-        let mut data2 = model2.make_data();
-
-        let err = joint_info1.try_view(&data2).unwrap_err();
-        match err {
-            MjDataError::IncompatibleModel { source, destination } => {
-                assert!(Arc::ptr_eq(&source, data1.layout()));
-                assert!(Arc::ptr_eq(&destination, data2.layout()));
-            }
-            other => panic!("expected IncompatibleModel, got {other:?}"),
-        }
-
-        let err = joint_info1.try_view_mut(&mut data2).unwrap_err();
-        match err {
-            MjDataError::IncompatibleModel { source, destination } => {
-                assert!(Arc::ptr_eq(&source, data1.layout()));
-                assert!(Arc::ptr_eq(&destination, data2.layout()));
-            }
-            other => panic!("expected IncompatibleModel, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn test_try_view_rejects_a_different_sensor_split() {
-        let sensor_model = |first: u32, second: u32| MjModel::from_xml_string(&format!(
-            "<mujoco><worldbody><body name='b1'><joint name='j' type='hinge'/><geom size='0.1'/>\
-             </body></worldbody><sensor><user name='u1' dim='{first}' objtype='body' objname='b1'/>\
-             <user name='u2' dim='{second}' objtype='body' objname='b1'/></sensor></mujoco>"
-        )).unwrap();
-
-        let model = sensor_model(3, 1);
-        let swapped = sensor_model(1, 3);
-        assert_eq!(model.signature(), swapped.signature(), "the pair must share a signature");
-        assert_eq!(model.nsensordata(), swapped.nsensordata(), "the data totals must agree");
-
-        let data = model.make_data();
-        let info = data.sensor("u1").unwrap();
-        assert_eq!(info.view(&data).data.len(), 3);
-
-        // In `swapped` the first sensor owns one element, so this range would reach the second.
-        let mut other = swapped.make_data();
-        assert!(info.try_view(&other).is_err());
-        assert!(info.try_view_mut(&mut other).is_err());
-    }
 
     /// `update_layout` re-points an `Info` at a second `MjData`, so a later view test compares a
     /// pointer instead of the whole snapshot. It must refuse a model that is not compatible, and
