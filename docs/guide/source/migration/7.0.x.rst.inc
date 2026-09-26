@@ -45,11 +45,12 @@ The ``plugin`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjActu
     unsafe { view.plugin.as_mut_slice()[0] = -1; }
 
 
-Equality data and flex stiffness are unsafe to mutate
------------------------------------------------------
+Equality data, flex stiffness and flex bending are unsafe to mutate
+-------------------------------------------------------------------
 
-:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>eq_data_mut` and
-:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_stiffness_mut` are now ``unsafe fn``.
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>eq_data_mut`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_stiffness_mut` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_bending_mut` are now ``unsafe fn``.
 The ``data`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjEqualityModelViewMut` is now
 :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
 

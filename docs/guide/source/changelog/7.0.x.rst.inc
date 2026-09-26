@@ -10,11 +10,12 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 - The ``plugin`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut` and
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjBodyModelViewMut` is now
   :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>eq_data_mut` and
-  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_stiffness_mut` are now ``unsafe fn``,
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>eq_data_mut`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_stiffness_mut` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_bending_mut` are now ``unsafe fn``,
   and the ``data`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjEqualityModelViewMut` is now
-  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`. A wrong value in a flex strain equality made a
-  step read out of bounds.
+  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`. A wrong value in a flex strain equality or an
+  interpolated flex shell made a step read out of bounds.
 - Removed ``append_cubefiles`` and ``append_textures`` from
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture` and
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial`, respectively.

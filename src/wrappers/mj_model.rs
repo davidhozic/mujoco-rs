@@ -1659,7 +1659,7 @@ impl MjModel {
         flex_radius: &[MjtNum; "radius around primitive element"; ffi().nflex],
         flex_size: &[[MjtNum; 3] [force]; "vertex bounding box half sizes in qpos0"; ffi().nflex],
         (mut = unsafe) flex_stiffness: &[MjtNum; "finite element stiffness matrix"; ffi().nflexstiffness],
-        flex_bending: &[MjtNum; "bending stiffness"; ffi().nflexbending],
+        (mut = unsafe) flex_bending: &[MjtNum; "bending stiffness"; ffi().nflexbending],
         (mut = unsafe) efm0_dofid: &[i32; "constant metric factor row->dof address"; ffi().nefm0dof],
         (mut = unsafe) efm0_L_rownnz: &[i32; "constant metric factor row nonzeros"; ffi().nefm0dof],
         (mut = unsafe) efm0_L_rowadr: &[i32; "constant metric factor row addresses"; ffi().nefm0dof],
