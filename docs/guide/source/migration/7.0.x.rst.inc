@@ -45,6 +45,28 @@ The ``plugin`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjActu
     unsafe { view.plugin.as_mut_slice()[0] = -1; }
 
 
+Equality data and flex stiffness are unsafe to mutate
+-----------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>eq_data_mut` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_stiffness_mut` are now ``unsafe fn``.
+The ``data`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjEqualityModelViewMut` is now
+:docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
+
+.. code-block:: rust
+
+    // Before
+    model.eq_data_mut()[0][0] = 0.5;
+    model.equality("eq").unwrap().view_mut(&mut model).data[0] = 0.5;
+
+    // After
+    // SAFETY: equality 0 is not a flex strain equality.
+    unsafe { model.eq_data_mut()[0][0] = 0.5; }
+    let mut view = model.equality("eq").unwrap().view_mut(&mut model);
+    // SAFETY: equality "eq" is not a flex strain equality.
+    unsafe { view.data.as_mut_slice()[0] = 0.5; }
+
+
 Removed ``append_cubefiles`` and ``append_textures``
 ----------------------------------------------------
 
