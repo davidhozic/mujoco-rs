@@ -466,7 +466,7 @@ macro_rules! info_method {
 
 
 /// Generates `Info`, `ViewMut`, and `View` types for a named MuJoCo object, along with
-/// `view`, `try_view`, `view_mut`, `try_view_mut` and `model_signature` on the `Info` type and
+/// `view`, `try_view`, `view_mut` and `try_view_mut` on the `Info` type and
 /// `zero` on `ViewMut`. A trailing `, Generic: Bound` (`M: ModelType`) is required
 /// when the target wrapper is generic, as `MjData<M>` is.
 ///
@@ -518,11 +518,6 @@ macro_rules! info_with_view {
             }
 
             impl [<Mj $name:camel $info_type Info>] {
-                /// Returns the model signature this `Info` was created from.
-                pub fn model_signature(&self) -> u64 {
-                    self.model_layout.signature()
-                }
-
                 #[doc = concat!(
                     "Re-points this `Info` at the layout of `", stringify!([<$info_type:lower>]), "`.\n\n",
                     "A compatible model holds the same index ranges, so the cached ranges stay correct and only ",
@@ -536,8 +531,8 @@ macro_rules! info_with_view {
                     let destination_layout = [<$info_type:lower>].layout();
                     if self.model_layout != *destination_layout {
                         return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
-                            source: self.model_layout.signature(),
-                            destination: destination_layout.signature(),
+                            source: std::sync::Arc::clone(&self.model_layout),
+                            destination: std::sync::Arc::clone(destination_layout),
                         });
                     }
                     self.model_layout = std::sync::Arc::clone(destination_layout);
@@ -560,8 +555,8 @@ macro_rules! info_with_view {
                     let destination_layout = [<$info_type:lower>].layout();
                     if self.model_layout != *destination_layout {
                         return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
-                            source: self.model_layout.signature(),
-                            destination: destination_layout.signature(),
+                            source: std::sync::Arc::clone(&self.model_layout),
+                            destination: std::sync::Arc::clone(destination_layout),
                         });
                     }
                     Ok(view_creator!(self, [<Mj $name:camel $info_type ViewMut>], [<$info_type:lower>].ffi(),
@@ -602,8 +597,8 @@ macro_rules! info_with_view {
                     let destination_layout = [<$info_type:lower>].layout();
                     if self.model_layout != *destination_layout {
                         return Err($crate::error::[<Mj $info_type Error>]::IncompatibleModel {
-                            source: self.model_layout.signature(),
-                            destination: destination_layout.signature(),
+                            source: std::sync::Arc::clone(&self.model_layout),
+                            destination: std::sync::Arc::clone(destination_layout),
                         });
                     }
                     Ok(view_creator!(self, [<Mj $name:camel $info_type View>], [<$info_type:lower>].ffi(),

@@ -137,7 +137,7 @@ pub enum MjViewerError {
     /// A rendering-context operation failed (e.g. a pixel-read buffer is too small or the
     /// viewport has invalid dimensions).
     ContextError(crate::error::MjrContextError),
-    /// The model's structure signature does not match the viewer's passive model.
+    /// The model is not compatible with the viewer's passive model.
     /// Call [`ViewerSharedState::sync_model`] or [`ViewerSharedState::sync_data`] first.
     IncompatibleModel,
     /// The asset ID is out of range.
@@ -899,7 +899,7 @@ impl MjViewer {
     /// If you rely on the shared state to stay the same during the callback, either:
     /// - don't swap the model without reopening the viewer or
     /// - lock the shared-state throughout entire callback (but be careful to not create deadlocks) or
-    /// - compare [`MjModel::signature`] against the signature of the expected model.
+    /// - check the model against the expected model with [`MjModel::is_compatible_with_model`].
     ///
     /// # Example
     /// ```no_run
@@ -990,7 +990,7 @@ impl MjViewer {
     /// viewer's passive model and the incoming model.
     /// This is a proxy to [`ViewerSharedState::sync_model`].
     ///
-    /// Detects model changes via signature comparison and reloads internal state if needed.
+    /// Detects model changes with [`MjModel::is_compatible_with_model`] and reloads internal state if needed.
     /// After a reload, the passive model mirrors the incoming model's defaults, so the
     /// first merge is effectively a no-op. On subsequent calls, viewer UI changes and
     /// simulation-side changes are merged bidirectionally.

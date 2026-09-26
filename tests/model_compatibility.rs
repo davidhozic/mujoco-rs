@@ -1,19 +1,17 @@
 //! Integration tests for [`MjModel::is_compatible_with_model`],
-//! [`MjModel::is_asset_compatible_with_model`] and the `Info` view gate.
-//!
-//! The gate decides whether an `mjData` buffer, or an index range an `Info` cached, stays valid
-//! when the model behind it changes. A wrong "yes" is a memory-safety fault, and a wrong "no"
-//! makes the gate useless.
+//! [`MjModel::is_asset_compatible_with_model`], [`MjvScene::is_compatible_with_model`],
+//! [`MjvScene::is_compatible_with_scene`], [`MjrContext::is_compatible_with_model`] and the `Info`
+//! view gate.
 
 use mujoco_rs::wrappers::mj_editing::{
     IntVelocityConfig, PositionConfig, DcMotorConfig, MjsActuator, PidConfig,
 };
+use mujoco_rs::wrappers::mj_plugin::load_all_plugin_libraries;
 use mujoco_rs::prelude::*;
 
-/* The base model. */
+use std::collections::BTreeSet;
 
-/// One model that carries every element kind MuJoCo compiles, with a name on every element so
-/// that an edit can reach it.
+/* The base model. */
 const BASE_XML: &str = r#"<mujoco model='base'>
 <option timestep='0.002' gravity='0 0 -9.81' integrator='Euler'/>
 <size nuserdata='16' nuser_body='2' nuser_jnt='1' nuser_geom='3' nuser_site='1' nuser_cam='1'
@@ -63,6 +61,7 @@ const BASE_XML: &str = r#"<mujoco model='base'>
 </deformable>
 <tendon>
   <spatial name='td' limited='true' range='0 1'><site site='s_trunk'/><site site='s_lower'/></spatial>
+  <spatial name='t2'><site site='s_trunk'/><site site='s_lower'/></spatial>
   <fixed name='tf'><joint joint='knee' coef='1'/><joint joint='slide' coef='2'/></fixed>
 </tendon>
 <equality>
@@ -76,7 +75,7 @@ const BASE_XML: &str = r#"<mujoco model='base'>
 <actuator>
   <motor name='a_motor' joint='knee'/>
   <position name='a_pos' joint='slide' kp='3'/>
-  <general name='a_int' joint='knee' dyntype='integrator'/>
+  <general name='a_int' joint='knee' dyntype='integrator' nsample='3' delay='.004'/>
   <general name='a_filt' joint='slide' dyntype='filter' dynprm='.1'/>
   <general name='a_ten' tendon='tf' dyntype='filterexact' dynprm='.1'/>
   <orientation name='a_so3' site='s_lower' refsite='s_trunk' kp='1' input='expmap'/>
@@ -85,7 +84,7 @@ const BASE_XML: &str = r#"<mujoco model='base'>
 <sensor>
   <framepos name='se_pos' objtype='site' objname='s_trunk'/>
   <framequat name='se_quat' objtype='site' objname='s_trunk'/>
-  <jointpos name='se_jp' joint='knee'/>
+  <jointpos name='se_jp' joint='knee' nsample='2' delay='.004'/>
   <accelerometer name='se_acc' site='s_lower'/>
   <tendonpos name='se_td' tendon='td'/>
   <actuatorfrc name='se_af' actuator='a_motor'/>
@@ -101,7 +100,7 @@ const BASE_XML: &str = r#"<mujoco model='base'>
 <keyframe><key name='k0' time='0'/><key name='k1' time='1'/></keyframe>
 </mujoco>"#;
 
-/// The spec every variant starts from. A clone of it costs less than a second parse of the XML.
+/// The spec every variant starts from.
 fn base_spec() -> MjSpec {
     MjSpec::from_xml_string(BASE_XML).expect("the base model does not parse")
 }
@@ -138,8 +137,7 @@ enum Kind {
 
 /// Applies every edit in `edits` to a copy of `spec` and compiles it.
 ///
-/// Returns `None` when the result is not a legal model: a generated combination may delete an
-/// element that another one needs, and a generated type value may not fit the element it lands on.
+/// Returns `None` when the model compilation fails (invalid edit).
 fn compile_with(spec: &MjSpec, edits: &[&Edit]) -> Option<MjModel> {
     let mut copy = spec.clone();
     for e in edits {
@@ -148,7 +146,7 @@ fn compile_with(spec: &MjSpec, edits: &[&Edit]) -> Option<MjModel> {
     copy.compile().ok()
 }
 
-/// Runs `body` on the item of one kind that carries `name`, and does nothing when it is gone.
+/// Invokes `|$item| $body` when the $finder finds the $name. Otherwise, nothing happens.
 macro_rules! on_item {
     ($spec:expr, $finder:ident, $name:expr, |$item:ident| $body:expr) => {
         if let Some($item) = $spec.$finder(&$name[..]) {
@@ -157,12 +155,10 @@ macro_rules! on_item {
     };
 }
 
-/// Proves at compile time that a list of enum values is complete and holds no value twice.
+/// Proves at compile time that a list of enum values is complete (exhausted).
 ///
-/// The named form also declares the list as a constant array. The bare form takes a list that
-/// another macro already holds, and an `except` group for the values it leaves out on purpose. A
-/// value that no group names makes the match non-exhaustive and stops the build; a value that two
-/// name makes an arm unreachable.
+/// The named arm also defines this list into a const array.
+/// The `except`-ed variants aren't put into this array.
 macro_rules! all_variants {
     ($(#[$doc:meta])* $name:ident: $ty:ty = $($variant:ident),+
      $(; except $($other:ident),+)? $(,)?) => {
@@ -173,6 +169,7 @@ macro_rules! all_variants {
     };
 
     ($ty:ty = $($variant:ident),+ $(; except $($other:ident),+)? $(,)?) => {
+        #[deny(unreachable_patterns)]
         const _: () = match [$(<$ty>::$variant),+][0] {
             $(<$ty>::$variant)|+ => (),
             $($(<$ty>::$other)|+ => (),)?
@@ -188,8 +185,7 @@ all_variants!(
 
 /// Every [`MjtJoint`] value, applied to the trunk's root joint.
 fn joint_type_edits() -> Vec<Edit> {
-    // MuJoCo refuses a free joint beside another one, so only the root joint, which sits alone in
-    // its body, can host the whole enum.
+
     JOINT_TYPES.into_iter()
         .map(|t| {
             // The root is a free joint, so setting it to free again changes nothing.
@@ -297,8 +293,7 @@ fn equality_type_edits() -> Vec<Edit> {
 ///
 /// The list mirrors the `set_to_*` methods of [`MjsActuator`].
 fn actuator_kind_edits() -> Vec<Edit> {
-    // Each method writes a different combination of actuator_trntype, actuator_dyntype,
-    // actuator_gaintype and actuator_biastype, which are four separate tables in the layout.
+    // The methods write the dyntype, gaintype and biastype tables; the layout holds the first two.
     let kinds: Vec<ActuatorKind> = vec![
         ("motor",        |a| a.set_to_motor()),
         ("velocity",     |a| a.set_to_velocity(1.0)),
@@ -309,11 +304,16 @@ fn actuator_kind_edits() -> Vec<Edit> {
         ("dc motor",     |a| { let _ = a.set_to_dc_motor(DcMotorConfig::default().with_resistance(1.0)
                                                        .with_motorconst([1.0, 1.0])); }),
         ("pid",          |a| { let _ = a.set_to_pid(PidConfig::default().with_kp(1.0).with_kv(1.0)); }),
+        ("adhesion",     |a| { let _ = a.set_to_adhesion(1.0); *a.ctrlrange_mut() = [0.0, 1.0]; }),
     ];
 
     kinds.into_iter()
         .map(|(name, set)| {
-            let kind = if name == "motor" { Kind::Parameter } else { Kind::Structural };
+            // These kinds differ from a motor only in values the layout leaves out.
+            let kind = match name {
+                "motor" | "velocity" | "position" | "adhesion" => Kind::Parameter,
+                _ => Kind::Structural,
+            };
             Edit::new(format!("actuator kind {name}"), kind, move |spec: &mut MjSpec| {
                 on_item!(spec, actuator_mut, "a_motor", |a| set(a));
             })
@@ -359,6 +359,7 @@ const SENSOR_TARGETS: &[SensorTarget] = &[
     (MjtObj::mjOBJ_GEOM,     "g_upper", MjtObj::mjOBJ_UNKNOWN, ""),
     (MjtObj::mjOBJ_GEOM,     "g_upper", MjtObj::mjOBJ_GEOM,    "g_lower"),
     (MjtObj::mjOBJ_CAMERA,   "c_trunk", MjtObj::mjOBJ_UNKNOWN, ""),
+    (MjtObj::mjOBJ_MESH,     "ms",      MjtObj::mjOBJ_GEOM,    "g_trunk"),
 ];
 
 /// Builds the edit that appends one sensor of type `t` pointed at `target`.
@@ -374,9 +375,13 @@ fn add_sensor_edit(t: MjtSensor, target: SensorTarget) -> Edit {
             sensor.set_refname(refname);
         }
         // A rangefinder and a contact sensor both read intprm[0] as a data spec, and both reject
-        // a value that is not positive.
+        // a value that is not positive. A contact sensor also rejects a match count intprm[2] that
+        // is not positive.
         if matches!(t, MjtSensor::mjSENS_RANGEFINDER | MjtSensor::mjSENS_CONTACT) {
             sensor.intprm_mut()[0] = 1;
+        }
+        if t == MjtSensor::mjSENS_CONTACT {
+            sensor.intprm_mut()[2] = 1;
         }
         // A user sensor has no built-in width, so the edit sets one. Every other type ignores it.
         if t == MjtSensor::mjSENS_USER {
@@ -433,8 +438,8 @@ fn deletion_edits(spec: &MjSpec) -> Vec<Edit> {
                                  mjOBJ_FRAME, mjOBJ_DEFAULT, mjOBJ_MODEL);
             $(
             for name in spec.$iter().map(|item| item.name().to_owned()).collect::<Vec<_>>() {
-                // The world body carries no name and cannot be deleted.
-                if name.is_empty() {
+                // The world body cannot be deleted.
+                if name == "world" {
                     continue;
                 }
                 let target = name.clone();
@@ -480,6 +485,42 @@ fn deletion_edits(spec: &MjSpec) -> Vec<Edit> {
 /// One edit per element kind [`MjSpec`] and [`MjsBody`] can add, each appending one element.
 fn addition_edits() -> Vec<Edit> {
     vec![
+        Edit::new("add mesh", Kind::Open, |spec: &mut MjSpec| {
+            let mesh = spec.add_mesh();
+            let _ = mesh.set_name("added_mesh");
+            mesh.set_uservert(&[0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1]);
+        }),
+        Edit::new("add hfield", Kind::Open, |spec: &mut MjSpec| {
+            let hfield = spec.add_hfield();
+            let _ = hfield.set_name("added_hfield");
+            hfield.set_nrow(2);
+            hfield.set_ncol(2);
+            hfield.set_userdata([0.0; 4]);
+            *hfield.size_mut() = [1.0, 1.0, 0.1, 0.1];
+        }),
+        // A 1D flex takes 4 scene faces per element, so these two move the vertex and the face
+        // counts one at a time.
+        Edit::new("add flex vertex", Kind::Open, |spec: &mut MjSpec| {
+            on_item!(spec, flex_mut, "f0", |f| {
+                f.append_vertbody("spare");
+                f.set_vert(&[0.0; 12]);
+                f.set_elem(&[0, 1, 2, 3]);
+            });
+        }),
+        Edit::new("close the flex loop", Kind::Open, |spec: &mut MjSpec| {
+            on_item!(spec, flex_mut, "f0", |f| f.set_elem(&[0, 1, 1, 2, 2, 0]));
+        }),
+        // The fourth vertex needs a positive bone weight, so a second bone binds it.
+        Edit::new("add skin vertex", Kind::Open, |spec: &mut MjSpec| {
+            on_item!(spec, skin_mut, "sk", |s| {
+                s.set_vert(&[0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1, 0.0, 0.1, 0.1, 0.0]);
+                s.append_bodyname("upper");
+                s.set_bindpos(&[0.0; 6]);
+                s.set_bindquat(&[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]);
+                s.append_vertid(&[3]);
+                s.append_vertweight(&[1.0]);
+            });
+        }),
         Edit::new("add body", Kind::Open, |spec: &mut MjSpec| {
             let body = spec.world_body_mut().add_body();
             let _ = body.set_name("added_body");
@@ -559,15 +600,14 @@ fn addition_edits() -> Vec<Edit> {
             let key = spec.add_key();
             let _ = key.set_name("added_key");
         }),
-        Edit::new("add material", Kind::Open, |spec: &mut MjSpec| {
+        Edit::new("add material", Kind::Structural, |spec: &mut MjSpec| {
             let material = spec.add_material();
             let _ = material.set_name("added_material");
         }),
     ]
 }
 
-/// One edit per size field of the spec. `mjSpec` carries these as plain data, so the test writes
-/// them through the raw struct.
+/// One edit per size field of the spec.
 fn size_edits() -> Vec<Edit> {
     macro_rules! sizes {
         ($($field:ident = $value:expr;)+) => {
@@ -590,8 +630,262 @@ fn size_edits() -> Vec<Edit> {
         nuser_tendon   = 5;
         nuser_actuator = 4;
         nuser_sensor   = 6;
-        memory         = 4 * 1024 * 1024;
+        memory         = 32 * 1024 * 1024;
     }
+}
+
+/// Edits that changes history and also the history interpolation.
+fn history_edits() -> Vec<Edit> {
+    vec![
+        Edit::new("actuator history grows", Kind::Structural, |spec: &mut MjSpec| {
+            on_item!(spec, actuator_mut, "a_int", |a| a.set_nsample(5));
+        }),
+        Edit::new("history changes to the sensor", Kind::Structural, |spec: &mut MjSpec| {
+            on_item!(spec, actuator_mut, "a_int", |a| a.set_nsample(2));
+            on_item!(spec, sensor_mut, "se_jp", |s| s.set_nsample(3));
+        }),
+        Edit::new("actuator interpolation", Kind::Parameter, |spec: &mut MjSpec| {
+            on_item!(spec, actuator_mut, "a_int", |a| a.set_interp(2));
+        }),
+        Edit::new("sensor interpolation", Kind::Parameter, |spec: &mut MjSpec| {
+            on_item!(spec, sensor_mut, "se_jp", |s| s.set_interp(1));
+        }),
+    ]
+}
+
+/* The split axis: one table at a time, against the base or a sibling edit. */
+
+/// The corners of a closed box mesh, 0.1 on each side.
+const BOX_VERTICES: [f32; 24] = [
+    0.0, 0.0, 0.0,  0.1, 0.0, 0.0,  0.0, 0.1, 0.0,  0.1, 0.1, 0.0,
+    0.0, 0.0, 0.1,  0.1, 0.0, 0.1,  0.0, 0.1, 0.1,  0.1, 0.1, 0.1,
+];
+
+/// The 12 outward faces of the box in [`BOX_VERTICES`].
+const BOX_FACES: [i32; 36] = [
+    0, 2, 1,  1, 2, 3,  4, 5, 6,  5, 7, 6,  0, 1, 4,  1, 5, 4,
+    2, 6, 3,  3, 6, 7,  0, 4, 2,  2, 4, 6,  1, 3, 5,  3, 7, 5,
+];
+
+/// The 4 faces of the tetrahedron that the mesh `ms` holds.
+const TETRA_FACES: [i32; 12] = [0, 2, 1,  0, 1, 3,  0, 3, 2,  1, 2, 3];
+
+/// Edits that each change one table, against the base or against a sibling edit.
+fn split_edits() -> Vec<Edit> {
+    macro_rules! split {
+        ($($label:literal: $finder:ident, $name:literal |$item:ident| $body:expr;)+) => {
+            vec![$(
+                Edit::new($label, Kind::Structural, |spec: &mut MjSpec| {
+                    on_item!(spec, $finder, $name, |$item| $body);
+                }),
+            )+]
+        };
+    }
+
+    // Rebuilds `ms` with explicit faces, 3 face normals and 4 texture coordinates, plus the given
+    // extra vertex and extra texture coordinate, so that each mesh count moves on its own.
+    fn tetra(spec: &mut MjSpec, extra_vertex: &[f32], extra_texcoord: &[f32]) {
+        on_item!(spec, mesh_mut, "ms", |m| {
+            let vertices = [0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1];
+            let texcoords = [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0];
+            let last = 3 + extra_texcoord.len() as i32 / 2;
+            m.set_uservert(&[&vertices[..], extra_vertex].concat());
+            m.set_userface(&TETRA_FACES);
+            m.set_usernormal(&[0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]);
+            m.set_usertexcoord(&[&texcoords[..], extra_texcoord].concat());
+            // SAFETY: each normal index is below the 3 normals, and each texture coordinate index
+            // is at most `last`, the final coordinate; both lists hold 3 entries per face.
+            unsafe {
+                m.set_userfacenormal(&[0, 0, 0, 1, 1, 1, 2, 2, 2, 0, 1, 2]);
+                m.set_userfacetexcoord(&[0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, last]);
+            }
+        });
+    }
+
+    // Appends one box mesh per hull limit, each on a world geom. The limit caps the convex hull, so
+    // it moves the graph and nothing else.
+    fn boxes(spec: &mut MjSpec, limits: &[i32]) {
+        for (i, &limit) in limits.iter().enumerate() {
+            let name = format!("box{i}");
+            let mesh = spec.add_mesh();
+            let _ = mesh.set_name(&name);
+            mesh.set_uservert(&BOX_VERTICES);
+            mesh.set_userface(&BOX_FACES);
+            mesh.set_maxhullvert(limit);
+            let geom = spec.world_body_mut().add_geom();
+            geom.set_type(MjtGeom::mjGEOM_MESH);
+            geom.set_meshname(&name);
+        }
+    }
+
+    // Rebuilds 'f0' as a 1D flex over five vertex bodies. A path and a tee keep every gate count,
+    // but differ in the shell and evpair totals.
+    fn five_vertices(spec: &mut MjSpec, elements: &[i32]) {
+        on_item!(spec, flex_mut, "f0", |f| {
+            f.set_vertbody("v0 v1 v2 spare mocap");
+            f.set_vert(&[0.0; 15]);
+            f.set_elem(elements);
+        });
+    }
+
+    // Rebuilds 'f0' as one elastic triangle; elastic2d alone sizes the bending table.
+    fn triangle(spec: &mut MjSpec, elastic2d: i32) {
+        on_item!(spec, flex_mut, "f0", |f| {
+            f.set_vertbody("spare mocap spare");
+            f.set_dim(2);
+            f.set_edgestiffness(0.0);
+            f.set_edgedamping(0.0);
+            f.set_elem(&[0, 1, 2]);
+            f.set_vert(&[0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1, 0.0]);
+            f.set_young(1e3);
+            f.set_thickness(0.01);
+            f.set_elastic2d(elastic2d);
+        });
+    }
+
+    // Rebuilds 'f0' on a grid of order + 1 nodes per side, 0.1 wide, every node on 'v0'. Two orders
+    // differ only in the node count and the order; every gate count stays.
+    fn nodes(spec: &mut MjSpec, order: i32) {
+        on_item!(spec, flex_mut, "f0", |f| {
+            let k = order + 1;
+            let step = 0.1 / f64::from(order);
+            let grid: Vec<_> = (0..k.pow(3))
+                .flat_map(|n| [n / (k * k), n / k % k, n % k].map(|i| f64::from(i) * step))
+                .collect();
+            f.set_order(order);
+            f.set_nodebody(&["v0"].repeat(grid.len() / 3).join(" "));
+            f.set_node(&grid);
+            f.set_vert(&[0.01, 0.01, 0.01, 0.05, 0.05, 0.05, 0.09, 0.09, 0.09]);
+            f.set_edgestiffness(0.0);
+            f.set_edgedamping(0.0);
+            f.set_selfcollide(MjtFlexSelf::mjFLEXSELF_NONE);
+        });
+    }
+
+    // The flex edits pick vertex bodies by their dof count: 'spare' and 'mocap' carry none, 'v0'
+    // and 'trunk' 6, 'upper' 9. The vertex and the edge Jacobians count those dofs.
+    let mut edits = split! {
+        "texture width":         texture_mut,  "tx"      |t| t.set_width(32);
+        "equality on sites":     equality_mut, "eq0"     |q| {
+            q.set_objtype(MjtObj::mjOBJ_SITE);
+            q.set_name1("s_lower");
+            q.set_name2("s_trunk");
+        };
+        "texture height":        texture_mut,  "tx"      |t| t.set_height(32);
+        "texture channels":      texture_mut,  "tx"      |t| t.set_nchannel(4);
+        "heightfield rows":      hfield_mut,   "hf"      |h| {
+            h.set_nrow(6);
+            h.set_userdata(vec![0.0; 6 * 9]);
+        };
+        "heightfield columns":   hfield_mut,   "hf"      |h| {
+            h.set_ncol(10);
+            h.set_userdata(vec![0.0; 5 * 10]);
+        };
+        "user sensor width":     sensor_mut,   "se_u1"   |s| s.set_dim(3);
+        "sensor object type":    sensor_mut,   "se_pos"  |s| {
+            let _ = s.set_objtype(MjtObj::mjOBJ_BODY);
+            s.set_objname("lower");
+        };
+        "sensor reference type": sensor_mut,   "se_pos"  |s| {
+            let _ = s.set_reftype(MjtObj::mjOBJ_SITE);
+            s.set_refname("s_lower");
+        };
+        "transmission type":     actuator_mut, "a_motor" |a| a.set_trntype(MjtTrn::mjTRN_JOINTINPARENT);
+        "moment on a ball":      actuator_mut, "a_motor" |a| a.set_target("hip");
+        "pid position input":    actuator_mut, "a_pid"   |a| a.set_ctrlspec(MjtCtrlInput::mjINPUT_POS as i32);
+        // The two user dynamics differ from each other in the activation count alone.
+        "user dynamics":         actuator_mut, "a_filt"  |a| a.set_dyntype(MjtDyn::mjDYN_USER);
+        "user dynamics, 2 acts": actuator_mut, "a_filt"  |a| {
+            a.set_dyntype(MjtDyn::mjDYN_USER);
+            a.set_actdim(2);
+        };
+        // 'g_m' sits on a mocap body and 'g_v0' on a free body, so the two wraps differ from each
+        // other in the Jacobian row alone.
+        "tendon wraps a geom":   tendon_mut,   "td"      |t| {
+            t.wrap_geom("g_m", "");
+            t.wrap_site("s_trunk");
+        };
+        "tendon wraps a dof":    tendon_mut,   "td"      |t| {
+            t.wrap_geom("g_v0", "");
+            t.wrap_site("s_trunk");
+        };
+        "flex vertex dofs":      flex_mut,     "f0"      |f| f.set_vertbody("spare upper v0");
+        "flex edge dofs":        flex_mut,     "f0"      |f| f.set_vertbody("upper v0 trunk");
+        // The mocap vertex closes the loop without a dof, so the two differ in the edge count alone.
+        "flex repeated edge":    flex_mut,     "f0"      |f| {
+            f.set_vertbody("spare v0 mocap");
+            f.set_elem(&[0, 1, 1, 2, 0, 1]);
+        };
+        "flex closed edge":      flex_mut,     "f0"      |f| {
+            f.set_vertbody("spare v0 mocap");
+            f.set_elem(&[0, 1, 1, 2, 2, 0]);
+        };
+        "flex elasticity":       flex_mut,     "f0"      |f| f.set_young(1e3);
+        "geom leaves the bvh":   geom_mut,     "g_sp"    |g| { g.set_contype(0); g.set_conaffinity(0); };
+        "mocap leaves the bvh":  geom_mut,     "g_m"     |g| { g.set_contype(0); g.set_conaffinity(0); };
+        "spare becomes mocap":   body_mut,     "spare"   |b| b.set_mocap(true);
+        // The two tendons run over the same sites, so the pair moves only the wrap split.
+        "td gains a site":       tendon_mut,   "td"      |t| t.wrap_site("s_trunk");
+        "t2 gains a site":       tendon_mut,   "t2"      |t| t.wrap_site("s_trunk");
+        // Against 'tendon wraps a geom', this moves only the wrap types.
+        "td wraps two sites":    tendon_mut,   "td"      |t| {
+            t.wrap_site("s_trunk");
+            t.wrap_site("s_lower");
+        };
+        "t0 gains an element":   tuple_mut,    "t0"      |t| {
+            let _ = t.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_BODY]);
+            t.append_objname("upper");
+            t.set_objprm(&[0.0, 0.0]);
+        };
+        // Against 'add site', which puts the site on the world, this moves only the site owner.
+        "spare gains a site":    body_mut,     "spare"   |b| { b.add_site(); };
+    };
+    edits.extend([
+        // The explicit normals set the normal count; the other two differ from it in one count.
+        Edit::new("mesh normals", Kind::Structural, |spec: &mut MjSpec| tetra(spec, &[], &[])),
+        Edit::new("mesh vertex", Kind::Structural, |spec: &mut MjSpec| tetra(spec, &[0.02; 3], &[])),
+        Edit::new("mesh texcoord", Kind::Structural, |spec: &mut MjSpec| tetra(spec, &[], &[0.5; 2])),
+        // A fifth face adds two nodes to the mesh bvh; the two geoms that leave it take two away.
+        Edit::new("mesh face", Kind::Structural, |spec: &mut MjSpec| {
+            on_item!(spec, mesh_mut, "ms", |m| m.set_userface(&[&TETRA_FACES[..], &[1, 2, 3]].concat()));
+            for name in ["g_sp", "g_m"] {
+                on_item!(spec, geom_mut, name, |g| { g.set_contype(0); g.set_conaffinity(0); });
+            }
+        }),
+        // Against the first, the second moves the graph size; against the second, the third moves
+        // the graph address.
+        Edit::new("box hulls", Kind::Structural, |spec: &mut MjSpec| boxes(spec, &[-1, -1])),
+        Edit::new("second hull capped", Kind::Structural, |spec: &mut MjSpec| boxes(spec, &[-1, 5])),
+        Edit::new("first hull capped", Kind::Structural, |spec: &mut MjSpec| boxes(spec, &[5, -1])),
+        // A raised corner splits a box side into two polygons, and every other count stays.
+        Edit::new("box corner moves", Kind::Structural, |spec: &mut MjSpec| {
+            boxes(spec, &[-1, -1]);
+            let mut vertices = BOX_VERTICES;
+            vertices[23] = 0.13;
+            spec.mesh_mut("box0").unwrap().set_uservert(&vertices);
+        }),
+        Edit::new("body moves under the mocap", Kind::Structural, |spec: &mut MjSpec| {
+            // SAFETY: 'spare' is live and nothing refers to it.
+            on_item!(spec, body_mut, "spare", |b| unsafe { let _ = b.delete(); });
+            if let Some(mocap) = spec.world_body_mut().child_mut("mocap") {
+                // The new child takes the slot that 'spare' left, so no id moves.
+                let body = mocap.add_body();
+                let _ = body.set_name("spare");
+                let geom = body.add_geom();
+                let _ = geom.set_name("g_sp");
+                *geom.size_mut() = [0.03, 0.0, 0.0];
+            }
+        }),
+        Edit::new("flex path", Kind::Structural,
+                  |spec: &mut MjSpec| five_vertices(spec, &[0, 1, 1, 2, 2, 3, 3, 4])),
+        Edit::new("flex tee", Kind::Structural,
+                  |spec: &mut MjSpec| five_vertices(spec, &[0, 1, 0, 2, 0, 3, 3, 4])),
+        Edit::new("flex triangle", Kind::Structural, |spec: &mut MjSpec| triangle(spec, 0)),
+        Edit::new("flex bending triangle", Kind::Structural, |spec: &mut MjSpec| triangle(spec, 1)),
+        Edit::new("flex trilinear nodes", Kind::Structural, |spec: &mut MjSpec| nodes(spec, 1)),
+        Edit::new("flex quadratic nodes", Kind::Structural, |spec: &mut MjSpec| nodes(spec, 2)),
+    ]);
+    edits
 }
 
 /* The parameter axis: values MuJoCo stores that move no element. */
@@ -599,6 +893,32 @@ fn size_edits() -> Vec<Edit> {
 /// Edits that change a value only. The gate must accept every one of them.
 fn parameter_edits() -> Vec<Edit> {
     vec![
+        Edit::new("site type", Kind::Parameter, |spec: &mut MjSpec| {
+            on_item!(spec, site_mut, "s_trunk", |s| s.set_type(MjtGeom::mjGEOM_BOX));
+        }),
+        Edit::new("pair condim", Kind::Parameter, |spec: &mut MjSpec| {
+            on_item!(spec, pair_mut, "p0", |p| p.set_condim(1));
+        }),
+        Edit::new("mocap moves to spare", Kind::Parameter, |spec: &mut MjSpec| {
+            on_item!(spec, body_mut, "mocap", |b| b.set_mocap(false));
+            on_item!(spec, body_mut, "spare", |b| b.set_mocap(true));
+        }),
+        Edit::new("mesh sdf", Kind::Parameter, |spec: &mut MjSpec| {
+            on_item!(spec, mesh_mut, "ms", |m| m.set_needsdf(true));
+        }),
+        Edit::new("flex cell count", Kind::Parameter, |spec: &mut MjSpec| {
+            on_item!(spec, flex_mut, "f0", |f| f.cellcount_mut()[0] = 2);
+        }),
+        Edit::new("flex texture coordinates", Kind::Parameter, |spec: &mut MjSpec| {
+            on_item!(spec, flex_mut, "f0", |f| f.set_texcoord(&[0.0; 6]));
+        }),
+        Edit::new("actuator armature", Kind::Parameter, |spec: &mut MjSpec| {
+            on_item!(spec, actuator_mut, "a_motor", |a| a.set_armature(0.1));
+        }),
+        Edit::new("nconmax", Kind::Parameter, |spec: &mut MjSpec| {
+            // SAFETY: the field is plain data that the compiler copies into the model.
+            unsafe { spec.ffi_mut() }.nconmax = 77;
+        }),
         Edit::new("timestep", Kind::Parameter,
                   |spec: &mut MjSpec| spec.option_mut().timestep = 0.01),
         Edit::new("gravity", Kind::Parameter,
@@ -626,7 +946,10 @@ fn parameter_edits() -> Vec<Edit> {
         }),
         Edit::new("body mass", Kind::Parameter, |spec: &mut MjSpec| {
             if let Some(body) = spec.world_body_mut().child_mut("spare") {
+                // Without an explicit inertial clause the compiler takes the mass from the geoms.
+                body.set_explicitinertial(true);
                 body.set_mass(3.0);
+                *body.inertia_mut() = [0.01; 3];
             }
         }),
         Edit::new("joint armature", Kind::Parameter, |spec: &mut MjSpec| {
@@ -716,6 +1039,8 @@ fn all_edits(spec: &MjSpec) -> (Vec<Edit>, Vec<MjtSensor>) {
         .chain(deletion_edits(spec))
         .chain(addition_edits())
         .chain(size_edits())
+        .chain(history_edits())
+        .chain(split_edits())
         .chain(parameter_edits())
         .collect();
     (edits, skipped)
@@ -749,50 +1074,75 @@ macro_rules! first_difference {
 /// The list comes from `mjmodel.h`, so it is independent of the list `MjModelLayout` holds.
 fn first_structural_difference(a: &MjModel, b: &MjModel) -> Option<&'static str> {
     first_difference!(a, b,
-        nq, nv, nu, nactuator, nout, na, nbody, nbvh, nbvhstatic, nbvhdynamic, noct, njnt, ntree,
-        n_m, n_b, n_c, n_d, ngeom, nsite, ncam, nlight, nflex, nflexnode, nflexvert, nflexedge,
-        nflexelem, nflexelemdata, nflexstiffness, nflexbending, nflexelemedge,
-        nflexshelldata, nflexevpair, nflextexcoord, n_jfe, n_jfv, n_jmom, n_jten, nmesh, nmeshvert, nmeshnormal,
-        nmeshtexcoord, nmeshface, nmeshgraph, nmeshpoly, nmeshpolyvert, nmeshpolymap, nskin,
+        nq, nv, nu, nactuator, nout, na, nbody, nbvh, nbvhstatic, nbvhdynamic, njnt, ntree,
+        n_m, n_b, n_c, n_d, ngeom, nsite, ncam, nlight, nflex, nflexvert, nflexedge,
+        nflexelem, nflexelemdata, nflexstiffness, nflexelemedge,
+        n_jfe, n_jfv, n_jmom, n_jten, nmesh, nmeshvert, nmeshnormal,
+        nmeshtexcoord, nmeshface, nmeshgraph, nskin,
         nhfield, nhfielddata, ntex,
         ntexdata, nmat, npair, nexclude, neq, ntendon, nwrap, nsensor, nnumeric, nnumericdata,
-        ntuple, ntupledata, nkey, nmocap, nplugin, npluginattr, nuser_body,
+        ntuple, ntupledata, nkey, nmocap, nplugin, nuser_body,
         nuser_jnt, nuser_geom, nuser_site, nuser_cam, nuser_tendon, nuser_actuator, nuser_sensor,
-        nemax, njmax, nconmax, npolygonmax, nmeshdegmax, nuserdata, nsensordata,
+        nemax, nuserdata, nsensordata,
         npluginstate, nhistory, narena,
     );
-    // ngravcomp, the name and path sizes, the skin sizes and tables and the text sizes and tables
-    // stay out: each one sizes no mjData array and bounds no cached range.
+    // Skipped as they have no MjData (or cached range) uses: ngravcomp, nefm0dof, nefm0L, nbuffer,
+    // njmax, nconmax, npolygonmax, nmeshdegmax, noct, nmeshpoly, nmeshpolyvert, nmeshpolymap,
+    // nflexnode, nflexbending, nflexshelldata, nflexevpair, nflextexcoord, npluginattr, the name,
+    // path, text and skin sizes and tables (apart from nskin), body_weldid, body_mocapid,
+    // body_bvhadr, body_bvhnum, jnt_actuatorid, dof_simplenum, geom_dataid, site_type, pair_dim,
+    // flex_interp, flex_cellnum, flex_nodeadr, flex_nodenum, flex_edgeadr, flex_edgenum,
+    // flex_stiffnessadr, flex_bendingadr, flex_shellnum, flex_shelldataadr, flex_evpairadr,
+    // flex_evpairnum, flex_texcoordadr, mesh_octadr, mesh_octnum, mesh_polynum, mesh_polyadr,
+    // mesh_polyvertadr, mesh_polyvertnum, mesh_polymapadr, mesh_polymapnum, tendon_adr, tendon_num,
+    // plugin_attradr.
     first_difference!(a, b,
-        body_parentid, body_rootid, body_weldid, body_mocapid, body_jntnum, body_jntadr,
-        body_dofnum, body_dofadr, body_treeid, body_geomnum, body_geomadr, body_bvhadr,
-        body_bvhnum, body_plugin,
-        jnt_type, jnt_qposadr, jnt_dofadr, jnt_bodyid, jnt_actuatorid,
-        dof_bodyid, dof_jntid, dof_parentid, dof_treeid, dof_simplenum,
+        body_parentid, body_rootid, body_jntnum, body_jntadr,
+        body_dofnum, body_dofadr, body_treeid, body_geomnum, body_geomadr, body_plugin,
+        jnt_type, jnt_qposadr, jnt_dofadr, jnt_bodyid,
+        dof_bodyid, dof_jntid, dof_parentid, dof_treeid,
         tree_bodyadr, tree_bodynum, tree_dofadr, tree_dofnum,
-        geom_type, geom_bodyid, geom_dataid, geom_plugin,
-        site_type, site_bodyid, cam_bodyid, light_bodyid,
-        flex_dim, flex_interp, flex_cellnum, flex_nodeadr, flex_nodenum, flex_vertadr,
-        flex_vertnum, flex_edgeadr, flex_edgenum, flex_elemadr, flex_elemnum, flex_elemdataadr,
-        flex_stiffnessadr, flex_elemedgeadr, flex_bendingadr, flex_shellnum, flex_shelldataadr,
-        flex_evpairadr, flex_evpairnum, flex_texcoordadr, flex_bvhadr, flex_bvhnum,
+        geom_type, geom_bodyid, geom_plugin,
+        site_bodyid, cam_bodyid, light_bodyid,
+        flex_dim, flex_vertadr, flex_vertnum, flex_elemadr, flex_elemnum,
+        flex_elemdataadr, flex_elemedgeadr, flex_bvhadr, flex_bvhnum,
         mesh_vertadr, mesh_vertnum, mesh_faceadr, mesh_facenum, mesh_normaladr, mesh_normalnum,
-        mesh_texcoordadr, mesh_texcoordnum, mesh_graphadr, mesh_bvhadr, mesh_bvhnum, mesh_octadr,
-        mesh_octnum, mesh_polynum, mesh_polyadr, mesh_polyvertadr, mesh_polyvertnum,
-        mesh_polymapadr, mesh_polymapnum,
+        mesh_texcoordadr, mesh_texcoordnum, mesh_graphadr, mesh_bvhadr, mesh_bvhnum,
         hfield_nrow, hfield_ncol, hfield_adr,
         tex_type, tex_height, tex_width, tex_nchannel, tex_adr,
-        pair_dim, eq_type, eq_objtype,
-        tendon_adr, tendon_num, ten_j_rownnz, ten_j_rowadr, wrap_type,
-        actuator_trntype, actuator_dyntype, actuator_gaintype, actuator_biastype, actuator_ctrladr,
+        eq_type, eq_objtype,
+        ten_j_rownnz, ten_j_rowadr, wrap_type,
+        actuator_trntype, actuator_dyntype, actuator_gaintype, actuator_ctrladr,
         actuator_ctrlnum, actuator_outadr, actuator_outnum, actuator_actadr, actuator_actnum,
-        actuator_plugin, actuator_history, actuator_historyadr,
-        sensor_type, sensor_datatype, sensor_needstage, sensor_objtype, sensor_reftype, sensor_dim,
-        sensor_adr, sensor_plugin, sensor_history, sensor_historyadr,
-        plugin, plugin_stateadr, plugin_statenum, plugin_attradr,
+        actuator_plugin, actuator_historyadr,
+        sensor_type, sensor_objtype, sensor_reftype, sensor_dim,
+        sensor_adr, sensor_plugin, sensor_historyadr,
+        plugin, plugin_stateadr, plugin_statenum,
         numeric_adr, numeric_size, tuple_adr, tuple_size,
     );
-    None
+    // A history keeps its samples in place under every interpolation order, so only the sample
+    // count takes part.
+    let nsample = |m: &MjModel| m.actuator_history().iter().chain(m.sensor_history()).map(|h| h[0])
+        .collect::<Vec<_>>();
+    (nsample(a) != nsample(b)).then_some("history nsample")
+}
+
+/// Returns each scene quantity, paired with whether it differs between `a` and `b`.
+fn scene_quantities(a: (&MjModel, &MjvScene), b: (&MjModel, &MjvScene))
+    -> impl Iterator<Item = (&'static str, bool)>
+{
+    let ((a, scene_a), (b, scene_b)) = (a, b);
+    let planes = |m: &MjModel| m.geom_type().iter().filter(|&&t| t == MjtGeom::mjGEOM_PLANE).count();
+    [
+        ("nmat", a.nmat() != b.nmat()),
+        ("ntex", a.ntex() != b.ntex()),
+        ("nmesh", a.nmesh() != b.nmesh()),
+        ("nhfield", a.nhfield() != b.nhfield()),
+        ("planes", planes(a) != planes(b)),
+        ("skinvertnum", scene_a.skinvertnum() != scene_b.skinvertnum()),
+        ("flexvertnum", scene_a.flexvertnum() != scene_b.flexvertnum()),
+        ("flexfacenum", scene_a.flexfacenum() != scene_b.flexfacenum()),
+    ].into_iter()
 }
 
 /// Returns the first asset field where `a` and `b` keep their mesh, texture or heightfield data in
@@ -846,29 +1196,49 @@ fn test_the_gate_agrees_with_an_independent_structure_check() {
     let built = models.len() - 1;
 
     // The sweep names every edit that produced no model, so it cannot shrink unnoticed.
-    println!("{} edits, {} compiled, {} did not: {:?}",
-             edits.len(), built, skipped.len(), skipped);
-    if !skipped_sensors.is_empty() {
-        println!("{} sensor types fitted no target: {:?}",
-                 skipped_sensors.len(), skipped_sensors);
-    }
-    assert_eq!(built + skipped.len(), edits.len(), "an edit left the sweep unaccounted for");
+    println!("{} edits, {} compiled, {} did not: {:?}", edits.len(), built, skipped.len(), skipped);
+    let expected = ["geom type mjGEOM_PLANE", "geom type mjGEOM_SDF", "equality type mjEQ_DISTANCE"];
+    let unexpected: Vec<_> = skipped.iter()
+        .filter(|label| !label.starts_with("delete ") && !expected.contains(&label.as_str()))
+        .collect();
+    assert!(unexpected.is_empty(), "these edits do not compile: {unexpected:?}");
+    // A plugin sensor needs a plugin instance; the plugin test covers it.
+    assert_eq!(skipped_sensors, [MjtSensor::mjSENS_PLUGIN],
+               "the set of sensor types that fit no target changed");
 
     // A model that agrees with the base can still disagree with another variant, so the sweep
     // runs variant against variant too.
-    let mut compatible = 0;
-    for (label_a, a) in &models {
-        for (label_b, b) in &models {
+    let scenes: Vec<_> = models.iter().map(|(_, model)| MjvScene::new(model, 0)).collect();
+    let (mut compatible, mut scene_alone) = (0, BTreeSet::new());
+    for ((label_a, a), scene_a) in models.iter().zip(&scenes) {
+        for ((label_b, b), scene_b) in models.iter().zip(&scenes) {
             let gate = a.is_compatible_with_model(b);
             let difference = first_structural_difference(a, b);
             assert_eq!(gate, difference.is_none(),
                        "'{label_a}' against '{label_b}': the gate says compatible={gate}, the \
                         reference found {difference:?}");
             compatible += usize::from(gate);
+
+            let differences: Vec<_> = scene_quantities((a, scene_a), (b, scene_b))
+                .filter_map(|(name, differs)| differs.then_some(name)).collect();
+            for gate in [scene_a.is_compatible_with_model(b), scene_a.is_compatible_with_scene(scene_b)] {
+                assert_eq!(gate, differences.is_empty(),
+                           "'{label_a}' against '{label_b}': the scene gate says compatible={gate}, \
+                            the reference found {differences:?}");
+            }
+            if let [difference] = differences[..] {
+                scene_alone.insert(difference);
+            }
         }
     }
     assert!(compatible > models.len(), "too few compatible pairs: {compatible}");
     assert!(compatible < models.len() * models.len(), "every pair passed, the gate accepts all");
+
+    // Each scene quantity must be the only difference of some pair, so that a gate which drops
+    // it fails above.
+    let (base, scene) = (&models[0].1, &scenes[0]);
+    assert_eq!(scene_alone.len(), scene_quantities((base, scene), (base, scene)).count(),
+               "a scene quantity is never the only difference: {scene_alone:?}");
 }
 
 /// Every pair of edits applied together, checked in both directions against the base and against
@@ -911,10 +1281,8 @@ fn test_every_pair_of_edits_agrees_with_the_reference() {
             checked += 1;
         }
     }
-    let total = checked + skipped;
     println!("{checked} pairs checked, {skipped} did not compile, {accepted} accepted by the gate");
     println!("{compared} model pairs compared, {absent} parents missing");
-    assert_eq!(total, edits.len() * (edits.len() - 1) / 2, "a pair went missing");
     assert!(accepted > 0, "no pair of edits stays compatible");
 }
 
@@ -928,10 +1296,20 @@ fn test_parameter_edits_stay_compatible() {
     let (edits, _) = all_edits(&spec);
     let declared: Vec<_> = edits.iter().filter(|e| e.kind == Kind::Parameter).collect();
     assert!(!declared.is_empty(), "the parameter axis is empty");
+    let bytes = |m: &MjModel| {
+        let mut buffer = vec![0; m.size()];
+        m.save_to_buffer(&mut buffer).unwrap();
+        buffer
+    };
+    // The type sweeps also visit the value that the base already holds.
+    let base_values = ["joint type mjJNT_FREE", "texture type mjTEXTURE_2D", "equality type mjEQ_CONNECT",
+                       "actuator kind motor"];
 
     for e in declared {
         let model = compile_with(&spec, &[e])
             .unwrap_or_else(|| panic!("'{}' produces no model", e.label));
+        assert!(base_values.contains(&e.label.as_str()) || bytes(&model) != bytes(&base),
+                "'{}' leaves the model unchanged, so it tests nothing", e.label);
         assert!(base.is_compatible_with_model(&model),
                 "'{}' changes a value only, so it must stay compatible", e.label);
         assert!(model.is_compatible_with_model(&base),
@@ -959,6 +1337,36 @@ fn test_structural_edits_are_rejected() {
     assert!(checked > 0, "no structural edit produced a model");
 }
 
+/// Each pair differs in one gate field alone, so the gate must refuse it in both directions.
+#[test]
+fn test_declared_incompatible_pairs_are_rejected() {
+    let spec = base_spec();
+    let (edits, _) = all_edits(&spec);
+    let build = |label: &str| {
+        let edit = edits.iter().find(|e| e.label == label).unwrap_or_else(|| panic!("no edit '{label}'"));
+        compile_with(&spec, &[edit]).unwrap_or_else(|| panic!("'{label}' produces no model"))
+    };
+    let pairs = [
+        ("flex repeated edge", "flex closed edge"),                                         // nflexedge
+        ("joint type mjJNT_SLIDE", "joint type mjJNT_HINGE"),                               // jnt_type
+        ("add sensor mjSENS_TOUCH on s_lower", "add sensor mjSENS_RANGEFINDER on s_lower"), // sensor_type
+        ("texture type mjTEXTURE_CUBE", "texture type mjTEXTURE_SKYBOX"),                   // tex_type
+        ("box hulls", "second hull capped"),                                                // nmeshgraph
+        ("second hull capped", "first hull capped"),                                        // mesh_graphadr
+    ];
+    for (label_a, label_b) in pairs {
+        let (a, b) = (build(label_a), build(label_b));
+        assert!(!a.is_compatible_with_model(&b) && !b.is_compatible_with_model(&a),
+                "'{label_a}' against '{label_b}' must be rejected in both directions");
+    }
+    // tex_type, nmeshgraph and mesh_graphadr are asset tables, so the asset gate must refuse too.
+    for &(label_a, label_b) in &pairs[3..] {
+        let (a, b) = (build(label_a), build(label_b));
+        assert!(!a.is_asset_compatible_with_model(&b) && !b.is_asset_compatible_with_model(&a),
+                "'{label_a}' against '{label_b}': the asset gate must refuse in both directions");
+    }
+}
+
 /// A compatible model must resolve every cached range to the same place.
 #[test]
 fn test_a_compatible_model_resolves_every_cached_range_identically() {
@@ -967,23 +1375,23 @@ fn test_a_compatible_model_resolves_every_cached_range_identically() {
     let base_data = base.make_data();
     let (edits, _) = all_edits(&spec);
 
-    for e in edits.iter().filter(|e| e.kind == Kind::Parameter) {
-        // The renaming edit keeps the structure but not the lookup keys.
-        if e.label == "element name" {
+    // The promise covers every model the gate accepts, so the sweep covers that whole set.
+    for e in &edits {
+        let Some(other) = compile_with(&spec, &[e]) else { continue };
+        if !base.is_compatible_with_model(&other) {
             continue;
         }
-        let other = compile_with(&spec, &[e]).expect("a parameter edit compiles");
         let other_data = other.make_data();
         let label = &e.label;
 
         same_slice!(label, "body", base.body("trunk").unwrap().view(&other),
-                    other.body("trunk").unwrap().view(&other), pos);
+                    other.body("trunk").unwrap().view(&other), user);
         same_slice!(label, "joint", base.joint("knee").unwrap().view(&other),
-                    other.joint("knee").unwrap().view(&other), axis);
+                    other.joint("knee").unwrap().view(&other), user);
         same_slice!(label, "geom", base.geom("g_lower").unwrap().view(&other),
-                    other.geom("g_lower").unwrap().view(&other), size);
+                    other.geom("g_lower").unwrap().view(&other), user);
         same_slice!(label, "site", base.site("s_lower").unwrap().view(&other),
-                    other.site("s_lower").unwrap().view(&other), pos);
+                    other.site("s_lower").unwrap().view(&other), user);
         same_slice!(label, "mesh", base.mesh("ms").unwrap().view(&other),
                     other.mesh("ms").unwrap().view(&other), vertadr);
         same_slice!(opt label, "texture", base.texture("tx").unwrap().view(&other),
@@ -995,7 +1403,7 @@ fn test_a_compatible_model_resolves_every_cached_range_identically() {
         same_slice!(label, "key", base.key("k1").unwrap().view(&other),
                     other.key("k1").unwrap().view(&other), qpos);
         same_slice!(label, "camera", base.camera("c_trunk").unwrap().view(&other),
-                    other.camera("c_trunk").unwrap().view(&other), pos);
+                    other.camera("c_trunk").unwrap().view(&other), user);
         same_slice!(label, "light", base.light("l_trunk").unwrap().view(&other),
                     other.light("l_trunk").unwrap().view(&other), pos);
         same_slice!(label, "material", base.material("mat").unwrap().view(&other),
@@ -1008,10 +1416,12 @@ fn test_a_compatible_model_resolves_every_cached_range_identically() {
                     other.equality("eq1").unwrap().view(&other), data);
         same_slice!(label, "actuator", base.actuator("a_int").unwrap().view(&other),
                     other.actuator("a_int").unwrap().view(&other), gear);
+        same_slice!(label, "actuator", base.actuator("a_int").unwrap().view(&other),
+                    other.actuator("a_int").unwrap().view(&other), user);
         same_slice!(label, "sensor", base.sensor("se_u1").unwrap().view(&other),
-                    other.sensor("se_u1").unwrap().view(&other), cutoff);
+                    other.sensor("se_u1").unwrap().view(&other), user);
         same_slice!(label, "tendon", base.tendon("td").unwrap().view(&other),
-                    other.tendon("td").unwrap().view(&other), range);
+                    other.tendon("td").unwrap().view(&other), user);
         same_slice!(label, "skin", base.skin("sk").unwrap().view(&other),
                     other.skin("sk").unwrap().view(&other), rgba);
         same_slice!(label, "tuple", base.tuple("t0").unwrap().view(&other),
@@ -1139,7 +1549,6 @@ fn test_a_model_is_compatible_with_its_twin() {
     assert_eq!(base.signature(), twin.signature());
 
     let mut info = base.body("trunk").unwrap();
-    assert_eq!(info.model_signature(), base.signature());
     info.update_layout(&twin).unwrap();
     assert_eq!(info.view(&twin).pos.as_ptr(), twin.body("trunk").unwrap().view(&twin).pos.as_ptr());
     // The Info now names the twin's layout, and the base still accepts it because they are equal.
@@ -1202,10 +1611,6 @@ fn test_a_saved_and_reloaded_model_stays_compatible() {
                        reloaded.joint("knee").unwrap().view(&reloaded).qpos0.as_ptr(),
                        "'{label}': the joint range moved in a round trip");
         }
-
-        // mjModel.signature belongs to no MJMODEL_* macro in mjxmacro.h, so mj_saveModel never
-        // writes it. The gate must not depend on it.
-        assert_eq!(reloaded.signature(), 0, "'{label}': mj_loadModel now restores the signature");
     }
 }
 
@@ -1283,4 +1688,123 @@ fn test_a_name_permutation_is_accepted_and_keeps_the_cached_id() {
                swapped.body("b").unwrap().view(&swapped).pos.as_ptr(),
                "the cached id follows the slot, not the name");
     assert_eq!(*info.view(&swapped).pos, [1.0, 0.0, 0.0], "slot 1 keeps its own position");
+}
+
+/// The context gate accepts a model exactly when its texture types match the live context.
+#[cfg(feature = "renderer")]
+#[test]
+fn test_the_context_gate_agrees_with_the_texture_table_of_the_context() {
+    let spec = base_spec();
+    let (edits, _) = all_edits(&spec);
+    let (models, _) = matrix(&spec, &edits);
+    // The renderer keeps a GL context current on this thread, which `MjrContext::new` needs.
+    let _renderer = mujoco_rs::renderer::MjRenderer::builder().width(8).height(8).build(&models[0].1)
+        .unwrap();
+    let (mut compatible, mut type_only, mut count) = (0, 0, 0);
+    for (label_a, a) in &models {
+        // SAFETY: the renderer above keeps a GL context current on this thread.
+        let context = unsafe { MjrContext::new(a) };
+        let table = &context.ffi().textureType[..context.ffi().ntexture as usize];
+        for (label_b, b) in &models {
+            let expected = table.iter().copied().eq(b.tex_type().iter().map(|&t| t as i32));
+            let gate = context.is_compatible_with_model(b);
+            assert_eq!(gate, expected, "'{label_a}' against '{label_b}': the context gate says \
+                                        compatible={gate}, its texture table says {expected}");
+            compatible += usize::from(gate);
+            type_only += usize::from(!gate && a.ntex() == b.ntex());
+            count += usize::from(a.ntex() != b.ntex());
+        }
+    }
+    assert!(compatible > models.len(), "too few compatible pairs: {compatible}");
+    assert!(type_only > 0 && count > 0, "no pair differs in the type alone or in the count alone");
+}
+
+/* Plugin bindings: a small model of its own, because an SDF mesh makes each compile slow. */
+
+/// Two instances of each first-party plugin kind, each bound once.
+const PLUGIN_XML: &str = "\
+<mujoco>
+<extension>
+  <plugin plugin='mujoco.elasticity.cable'>
+    <instance name='c0'><config key='twist' value='1'/></instance>
+    <instance name='c1'><config key='twist' value='2'/></instance>
+  </plugin>
+  <plugin plugin='mujoco.sdf.torus'>
+    <instance name='t0'><config key='radius1' value='.3'/><config key='radius2' value='.1'/></instance>
+    <instance name='t1'><config key='radius1' value='.2'/><config key='radius2' value='.05'/></instance>
+  </plugin>
+  <plugin plugin='mujoco.pid'>
+    <instance name='p0'><config key='kp' value='1'/></instance>
+    <instance name='p1'><config key='kp' value='2'/></instance>
+  </plugin>
+  <plugin plugin='mujoco.sensor.touch_grid'>
+    <instance name='g0'><config key='size' value='4 4'/><config key='fov' value='90 90'/>
+      <config key='gamma' value='0'/><config key='nchannel' value='1'/></instance>
+    <instance name='g1'><config key='size' value='2 4'/><config key='fov' value='90 90'/>
+      <config key='gamma' value='0'/><config key='nchannel' value='2'/></instance>
+  </plugin>
+</extension>
+<asset>
+  <mesh name='m0'><plugin instance='t0'/></mesh>
+  <mesh name='m1'><plugin instance='t1'/></mesh>
+</asset>
+<worldbody>
+  <body name='b0'>
+    <plugin instance='c0'/><joint name='j0' type='ball'/><site name='s0'/>
+    <geom name='g0' type='sdf' mesh='m0'><plugin instance='t0'/></geom>
+    <body name='b1' pos='1 0 0'>
+      <plugin instance='c1'/><joint name='j1' type='ball'/>
+      <geom name='g1' type='sdf' mesh='m1'><plugin instance='t1'/></geom>
+    </body>
+  </body>
+</worldbody>
+<actuator>
+  <plugin name='a0' joint='j0' instance='p0' actdim='0'/>
+  <plugin name='a1' joint='j1' instance='p1' actdim='0'/>
+</actuator>
+<sensor>
+  <plugin name='s0' instance='g0' objtype='site' objname='s0'/>
+  <plugin name='s1' instance='g1' objtype='site' objname='s0'/>
+</sensor>
+</mujoco>";
+
+#[test]
+fn test_a_plugin_rebind_is_rejected() {
+    let lib = std::env::var("MUJOCO_DYNAMIC_LINK_DIR").expect("the plugins sit beside the library");
+    load_all_plugin_libraries(std::path::Path::new(&lib).parent().unwrap().join("bin/mujoco_plugin"), None)
+        .unwrap();
+    let base = MjModel::from_xml_string(PLUGIN_XML).unwrap();
+    macro_rules! rebind {
+        ($table:literal, $finder:ident, $first:literal, $second:literal, $instance:literal) => {{
+            // A fresh parse, not a clone: `mj_copySpec` binds each reference to its instance, and
+            // a later rename of the reference then has no effect.
+            let mut spec = MjSpec::from_xml_string(PLUGIN_XML).unwrap();
+            spec.$finder($first).unwrap().plugin_mut().set_name(concat!($instance, "1"));
+            spec.$finder($second).unwrap().plugin_mut().set_name(concat!($instance, "0"));
+            let other = spec.compile().unwrap();
+            assert_eq!(first_structural_difference(&base, &other), Some($table));
+            assert!(!base.is_compatible_with_model(&other), "a swap of the {} must be rejected", $table);
+        }};
+    }
+    rebind!("body_plugin",     body_mut,     "b0", "b1", "c");
+    rebind!("geom_plugin",     geom_mut,     "g0", "g1", "t");
+    rebind!("actuator_plugin", actuator_mut, "a0", "a1", "p");
+    rebind!("sensor_plugin",   sensor_mut,   "s0", "s1", "g");
+
+    // The attribute text lives in mjModel only, so a longer spelling of the same gain moves nothing.
+    let longer = PLUGIN_XML.replacen("key='kp' value='1'", "key='kp' value='1.000'", 1);
+    let longer = MjModel::from_xml_string(&longer).unwrap();
+    assert_eq!(first_structural_difference(&base, &longer), None);
+    assert!(base.is_compatible_with_model(&longer), "a longer attribute text must stay compatible");
+
+    // Two unbound instances at the end of the list swap their kinds, and no binding moves.
+    let unbound = |first: &str, second: &str| MjModel::from_xml_string(&PLUGIN_XML.replace(
+        "</extension>",
+        &format!("<plugin plugin='{first}'><instance name='u0'/></plugin>\
+                  <plugin plugin='{second}'><instance name='u1'/></plugin></extension>"),
+    )).unwrap();
+    let cable_first = unbound("mujoco.elasticity.cable", "mujoco.sdf.torus");
+    let torus_first = unbound("mujoco.sdf.torus", "mujoco.elasticity.cable");
+    assert_eq!(first_structural_difference(&cable_first, &torus_first), Some("plugin"));
+    assert!(!cable_first.is_compatible_with_model(&torus_first), "a swap of the plugin kinds must be rejected");
 }

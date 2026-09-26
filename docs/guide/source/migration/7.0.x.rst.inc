@@ -140,3 +140,46 @@ invalid ID.
 
     // After
     let force = data.try_contact_force(contact_id).unwrap_or([0.0; 6]);
+
+
+``MjvScene`` refuses more models (runtime-breaking)
+---------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_model`
+now refuses more models, and ``MjvScene::update`` panics on such a model. If you reuse one scene
+for several models, create a new scene when the check fails.
+
+.. code-block:: rust
+
+    // Before
+    scene.update(&mut data, &opt, &pert, &mut camera);
+
+    // After
+    if !scene.is_compatible_with_model(data.model()) {
+        scene = MjvScene::new(data.model(), max_geom);
+    }
+    scene.update(&mut data, &opt, &pert, &mut camera);
+
+
+Incompatible-model errors now carry layouts
+-------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>IncompatibleModel` and
+:docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>IncompatibleModel` now hold the
+:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModelLayout` of both models. ``MjvScene::signature``
+and ``model_signature`` of the ``Info`` types are removed. Read the signature from the model.
+
+.. code-block:: rust
+
+    // Before
+    if let Err(MjDataError::IncompatibleModel { source, destination }) = data.try_swap_model(other) {
+        println!("{source:#X} vs {destination:#X}");
+    }
+    let signature = scene.signature();
+    let signature = body_info.model_signature();
+
+    // After
+    if let Err(MjDataError::IncompatibleModel { source, destination }) = data.try_swap_model(other) {
+        println!("{source:?} vs {destination:?}");
+    }
+    let signature = model.signature();

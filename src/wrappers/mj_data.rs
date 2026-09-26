@@ -139,8 +139,8 @@ impl<M: ModelType> MjData<M> {
     pub fn try_swap_model(&mut self, model: M) -> Result<M, MjDataError> {
         if !self.model.is_compatible_with_model(&model) {
             return Err(MjDataError::IncompatibleModel {
-                source: model.signature(),
-                destination: self.model.signature(),
+                source: Arc::clone(model.layout()),
+                destination: Arc::clone(self.model.layout()),
             });
         }
 
@@ -1367,8 +1367,8 @@ impl<M: ModelType> MjData<M> {
     pub fn copy_state_from_data<N: ModelType>(&mut self, src: &MjData<N>, spec: u32) -> Result<(), MjDataError> {
         if !self.model.is_compatible_with_model(&src.model) {
             return Err(MjDataError::IncompatibleModel {
-                source: src.model.signature(),
-                destination: self.model.signature(),
+                source: Arc::clone(src.model.layout()),
+                destination: Arc::clone(self.model.layout()),
             });
         }
         unsafe {
@@ -1640,8 +1640,8 @@ impl<M: ModelType> MjData<M> {
     pub fn copy_visual_to<N: ModelType>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
         if !self.model.is_compatible_with_model(&destination.model) {
             return Err(MjDataError::IncompatibleModel {
-                source: self.model.signature(),
-                destination: destination.model.signature(),
+                source: Arc::clone(self.model.layout()),
+                destination: Arc::clone(destination.model.layout()),
             });
         }
         unsafe {
@@ -1662,8 +1662,8 @@ impl<M: ModelType> MjData<M> {
     pub fn copy_to<N: ModelType>(&self, destination: &mut MjData<N>) -> Result<(), MjDataError> {
         if !self.model.is_compatible_with_model(&destination.model) {
             return Err(MjDataError::IncompatibleModel {
-                source: self.model.signature(),
-                destination: destination.model.signature(),
+                source: Arc::clone(self.model.layout()),
+                destination: Arc::clone(destination.model.layout()),
             });
         }
         unsafe {
@@ -3215,15 +3215,12 @@ mod test {
         let mut data = MjData::new(plain);
         let buffer_len = data.userdata().len();
         let err = data.try_swap_model(userdata).unwrap_err();
-        match err {
-            MjDataError::IncompatibleModel { source, destination } => assert_eq!(source, destination),
-            other => panic!("expected IncompatibleModel, got {other:?}"),
-        }
+        assert!(matches!(err, MjDataError::IncompatibleModel { .. }), "got {err:?}");
         assert_eq!(data.userdata().len(), buffer_len);
     }
 
     #[test]
-    fn test_try_view_signature_mismatch() {
+    fn test_try_view_incompatible_model_carries_both_layouts() {
         let model1 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body></worldbody></mujoco>").unwrap();
         let model2 = MjModel::from_xml_string("<mujoco><worldbody><body name='b1'><joint name='j1' type='free'/><geom size='0.1' mass='1'/></body><body name='extra'/></worldbody></mujoco>").unwrap();
 
@@ -3234,8 +3231,8 @@ mod test {
         let err = joint_info1.try_view(&data2).unwrap_err();
         match err {
             MjDataError::IncompatibleModel { source, destination } => {
-                assert_eq!(source, data1.signature());
-                assert_eq!(destination, data2.signature());
+                assert!(Arc::ptr_eq(&source, data1.layout()));
+                assert!(Arc::ptr_eq(&destination, data2.layout()));
             }
             other => panic!("expected IncompatibleModel, got {other:?}"),
         }
@@ -3243,8 +3240,8 @@ mod test {
         let err = joint_info1.try_view_mut(&mut data2).unwrap_err();
         match err {
             MjDataError::IncompatibleModel { source, destination } => {
-                assert_eq!(source, data1.signature());
-                assert_eq!(destination, data2.signature());
+                assert!(Arc::ptr_eq(&source, data1.layout()));
+                assert!(Arc::ptr_eq(&destination, data2.layout()));
             }
             other => panic!("expected IncompatibleModel, got {other:?}"),
         }

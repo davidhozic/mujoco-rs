@@ -1,6 +1,6 @@
 //! Error types for MuJoCo-rs operations.
 //!
-//! - [`MjDataError`] - physics data, view-signature, and Jacobian operations.
+//! - [`MjDataError`] - physics data, model-compatibility, and Jacobian operations.
 //! - [`MjSceneError`] - 3-D scene and visualization operations (`MjvScene`).
 //! - [`MjrContextError`] - GPU rendering-context operations (`MjrContext`).
 //! - [`MjEditError`] - model-specification editing operations (`MjSpec`).
@@ -8,7 +8,10 @@
 //! - [`MjVfsError`] - virtual file system operations (`MjVfs`).
 //! - [`MjPluginError`] - plugin library loading operations.
 //! - [`GlInitError`] - OpenGL / window initialization (feature-gated).
+use std::sync::Arc;
 use std::fmt;
+
+use crate::wrappers::mj_model::MjModelLayout;
 
 /// Errors that can occur in [`MjData`](crate::wrappers::MjData) physics data
 /// and Jacobian operations.
@@ -53,10 +56,10 @@ pub enum MjDataError {
     /// This is returned by APIs that require a matching model memory layout,
     /// including data-copy operations and info-view accessors.
     IncompatibleModel {
-        /// Model signature of the source object.
-        source: u64,
-        /// Model signature of the destination object.
-        destination: u64,
+        /// Layout of the source object's model.
+        source: Arc<MjModelLayout>,
+        /// Layout of the destination object's model.
+        destination: Arc<MjModelLayout>,
     },
     /// The specified actuator or sensor has no associated history buffer.
     NoHistoryBuffer {
@@ -102,13 +105,7 @@ impl fmt::Display for MjDataError {
                      but need at least {needed}"
                 )
             }
-            Self::IncompatibleModel { source, destination } => {
-                write!(
-                    f,
-                    "incompatible model: source signature {source:#X}, \
-                     destination signature {destination:#X}"
-                )
-            }
+            Self::IncompatibleModel { .. } => write!(f, "incompatible model"),
             Self::LengthMismatch { name, expected, got } => {
                 write!(
                     f,
@@ -411,10 +408,10 @@ pub enum MjModelError {
     },
     /// Two model-bound objects were created from models that are not compatible.
     IncompatibleModel {
-        /// Model signature of the source object.
-        source: u64,
-        /// Model signature of the destination object.
-        destination: u64,
+        /// Layout of the source object's model.
+        source: Arc<MjModelLayout>,
+        /// Layout of the destination object's model.
+        destination: Arc<MjModelLayout>,
     },
     /// A virtual-file-system operation failed while loading a model from a string.
     VfsError(MjVfsError),
@@ -450,13 +447,9 @@ impl fmt::Display for MjModelError {
                      but need at least {needed}"
                 )
             }
-            Self::IncompatibleModel { source, destination } => {
-                write!(
-                    f,
-                    "incompatible model: source signature {source:#X}, \
-                     destination signature {destination:#X}"
-                )
-            }
+            Self::IncompatibleModel { source, destination }=> write!(
+                f, "source = {source:?}, destination = {destination:?}"
+            ),
             Self::VfsError(e) => write!(f, "VFS error: {e}"),
             Self::IndexOutOfBounds { id, len } => write!(
                 f,
