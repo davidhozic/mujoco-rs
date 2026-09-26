@@ -297,11 +297,7 @@ impl MjrContext {
         ); }
     }
 
-    /// Reports whether `model` can take the place of the model that created this context.
-    ///
-    /// # Note
-    /// This check is fairly strict in order to avoid the need for heavy maintenance,
-    /// thus it may sometimes fail for compatible models.
+    /// Reports whether `model` has the [`MjModelLayout`] of the model that created this context.
     pub fn is_compatible_with_model(&self, model: &MjModel) -> bool {
         self.layout == *model.layout()
     }

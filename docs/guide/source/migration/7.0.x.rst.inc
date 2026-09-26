@@ -190,7 +190,8 @@ A model swap refuses more models
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` and ``try_swap_model``
 now refuse a model that differs in a size or in an integer table that no safe accessor writes,
-apart from the names, the paths and the collision hulls and trees.
+apart from the names, the paths, the buffer size, the collision hulls and trees and the values
+derived from floats.
 If you know that the new model is still safe for the data, use
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model_unchecked`.
 Otherwise, create a new |mj_data|.

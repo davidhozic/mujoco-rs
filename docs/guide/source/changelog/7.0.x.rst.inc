@@ -33,9 +33,9 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_contact_force` :sup:`new`.
 - (runtime-breaking) :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`,
   ``is_asset_compatible_with_model`` and the ``Info`` views now compare every size and every
-  integer table that no safe accessor writes, apart from the names, the paths and the collision
-  hulls and trees, so they refuse more models, for example a model with a different joint type.
-  Before, a swapped model could make a step or a plugin read or write out of bounds.
+  integer table that no safe accessor writes, apart from the names, the paths, the buffer size, the
+  collision hulls and trees and the values derived from floats, so they refuse more models, for
+  example a model with a different joint type. Before, a swapped model could make a step or a plugin read or write out of bounds.
 - (runtime-breaking) :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_model`
   and ``is_compatible_with_scene`` now refuse more models, and ``MjvScene::update`` panics on each of
   them. A scene or a user scene that was filled from an accepted, but different, model could read or
@@ -84,6 +84,11 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
     has been created for handling out-of-bound errors.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model_unchecked` :sup:`new`
     swaps in a model that the compatibility check refuses.
+
+- |mj_model|:
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>layout` :sup:`new`
+    returns the layout that the compatibility checks compare.
 
 .. rubric:: Bug fixes
 

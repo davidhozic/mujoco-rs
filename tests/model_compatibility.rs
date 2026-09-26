@@ -135,13 +135,14 @@ writable_tables! {
     bvh_depth,             oct_depth,             tuple_objtype,         paths
 }
 
-/// Reports whether `field` is a name field, a path address or count, or a hull or tree table, which
-/// the layout leaves out.
+/// Reports whether `field` is a name field, a path address or count, the buffer size, a hull or tree
+/// table, or a value that `set_const` derives from floats, which the layout leaves out.
 fn is_left_out_field(field: &str) -> bool {
     field.starts_with("name_") || field.ends_with("_pathadr")
-        || matches!(field, "names" | "names_map" | "nnames" | "npaths")
+        || matches!(field, "names" | "names_map" | "nnames" | "npaths" | "nbuffer")
         || matches!(field, "mesh_extrema" | "mesh_polyvert" | "mesh_polymap")
         || matches!(field, "bvh_child" | "bvh_nodeid" | "oct_child")
+        || matches!(field, "ngravcomp" | "jnt_actuatorid" | "tendon_actuatorid")
 }
 
 /// Returns the base model XML with the mesh vertices moved, so the compiler builds another hull and tree.
@@ -178,7 +179,8 @@ fn header_fields() -> (BTreeSet<String>, BTreeSet<String>) {
 /* Tests. */
 
 /// The layout names every size of the header, and every non-float table that no safe accessor
-/// writes, apart from the name, path, hull and tree fields.
+/// writes, apart from the name, path, buffer size, hull and tree fields and the values that
+/// `set_const` derives from floats.
 #[test]
 fn test_the_layout_covers_the_header() {
     let (mut sizes, mut tables) = header_fields();
@@ -199,7 +201,8 @@ fn test_the_layout_covers_the_header() {
 #[test]
 fn test_every_gate_accepts_a_safe_write() {
     let base = base();
-    let mut edited = MjModel::from_xml_string(&moved_mesh_xml().replace("trunk", "torso_link")).unwrap();
+    let mut edited = MjModel::from_xml_string(&moved_mesh_xml().replace("trunk", "a_longer_trunk")).unwrap();
+    assert_ne!(base.ffi().nbuffer, edited.ffi().nbuffer, "the rename must change the buffer size");
     reverse_writable_tables(&mut edited);
     edited.geom_size_mut().iter_mut().flatten().for_each(|size| *size *= 2.0);
 

@@ -852,24 +852,16 @@ impl MjvScene {
         }
     }
 
-    /// Reports whether `model` can take the place of the model that created this scene.
-    ///
-    /// # Note
-    /// This check is fairly strict in order to avoid the need for heavy maintenence,
-    /// thus it may sometimes fail for compatible models.
+    /// Reports whether `model` has the [`MjModelLayout`] of the model that created this scene.
     pub fn is_compatible_with_model(&self, model: &MjModel) -> bool {
         self.layout == *model.layout()
     }
 
-    /// Reports whether `other` was created for a model that is compatible with this scene's
-    /// model.
+    /// Reports whether `other` and this scene were created for models with an equal
+    /// [`MjModelLayout`].
     ///
     /// A geom that moves between two scenes keeps its `objid`, which the renderer uses as an
     /// unchecked index into the destination scene's flex and skin arrays.
-    ///
-    /// # Note
-    /// This check is fairly strict in order to avoid the need for heavy maintenence,
-    /// thus it may sometimes fail for compatible models.
     pub fn is_compatible_with_scene(&self, other: &MjvScene) -> bool {
         self.layout == other.layout
     }
