@@ -287,8 +287,8 @@ macro_rules! model_layout {
     }};
 }
 
-// Left out: the name, path and buffer size fields, which only their own model reads; the hull and
-// tree tables, which a recompile can reorder; and the values that set_const derives from floats.
+// Left out: the name, path and buffer size fields, which only their own model reads; the hull, tree
+// and octree fields, which a recompile can reorder or resize; and the values set_const derives from floats.
 model_layout! {
     asset_sizes: [
         nmesh,         nmeshvert,     nmeshnormal,   nmeshtexcoord,
@@ -299,35 +299,34 @@ model_layout! {
     sizes: [
         nq,             nv,             nu,             nactuator,
         nout,           na,             nbody,          nbvh,
-        nbvhstatic,     nbvhdynamic,    noct,           njnt,
-        ntree,          nM,             nB,             nC,
-        nD,             ngeom,          nsite,          ncam,
-        nlight,         nflex,          nflexnode,      nflexvert,
-        nflexedge,      nflexelem,      nflexelemdata,  nflexstiffness,
-        nflexbending,   nefm0dof,       nefm0L,         nflexelemedge,
-        nflexshelldata, nflexevpair,    nflextexcoord,  nJfe,
-        nJfv,           nskin,          nskinvert,      nskintexvert,
-        nskinface,      nskinbone,      nskinbonevert,  nmat,
-        npair,          nexclude,       neq,            ntendon,
-        nJten,          nwrap,          nsensor,        nnumeric,
-        nnumericdata,   ntext,          ntextdata,      ntuple,
-        ntupledata,     nkey,           nmocap,         nplugin,
-        npluginattr,    nuser_body,     nuser_jnt,      nuser_geom,
-        nuser_site,     nuser_cam,      nuser_tendon,   nuser_actuator,
-        nuser_sensor,   nnames_map,     nJmom,          nemax,
-        njmax,          nconmax,        npolygonmax,    nmeshdegmax,
-        nuserdata,      nsensordata,    npluginstate,   nhistory,
-        narena
+        nbvhstatic,     nbvhdynamic,    njnt,           ntree,
+        nM,             nB,             nC,             nD,
+        ngeom,          nsite,          ncam,           nlight,
+        nflex,          nflexnode,      nflexvert,      nflexedge,
+        nflexelem,      nflexelemdata,  nflexstiffness, nflexbending,
+        nefm0dof,       nefm0L,         nflexelemedge,  nflexshelldata,
+        nflexevpair,    nflextexcoord,  nJfe,           nJfv,
+        nskin,          nskinvert,      nskintexvert,   nskinface,
+        nskinbone,      nskinbonevert,  nmat,           npair,
+        nexclude,       neq,            ntendon,        nJten,
+        nwrap,          nsensor,        nnumeric,       nnumericdata,
+        ntext,          ntextdata,      ntuple,         ntupledata,
+        nkey,           nmocap,         nplugin,        npluginattr,
+        nuser_body,     nuser_jnt,      nuser_geom,     nuser_site,
+        nuser_cam,      nuser_tendon,   nuser_actuator, nuser_sensor,
+        nnames_map,     nJmom,          nemax,          njmax,
+        nconmax,        npolygonmax,    nmeshdegmax,    nuserdata,
+        nsensordata,    npluginstate,   nhistory,       narena
     ],
     asset_tables: [
         mesh_vertadr,      mesh_vertnum,      mesh_faceadr,      mesh_facenum,
-        mesh_bvhadr,       mesh_bvhnum,       mesh_octadr,       mesh_octnum,
-        mesh_normaladr,    mesh_normalnum,    mesh_texcoordadr,  mesh_texcoordnum,
-        mesh_graphadr,     mesh_face,         mesh_facenormal,   mesh_facetexcoord,
-        mesh_graph,        mesh_polynum,      mesh_polyadr,      mesh_polyvertadr,
-        mesh_polyvertnum,  mesh_polymapadr,   mesh_polymapnum,   hfield_nrow,
-        hfield_ncol,       hfield_adr,        tex_type,          tex_height,
-        tex_width,         tex_nchannel,      tex_adr
+        mesh_bvhadr,       mesh_bvhnum,       mesh_normaladr,    mesh_normalnum,
+        mesh_texcoordadr,  mesh_texcoordnum,  mesh_graphadr,     mesh_face,
+        mesh_facenormal,   mesh_facetexcoord, mesh_graph,        mesh_polynum,
+        mesh_polyadr,      mesh_polyvertadr,  mesh_polyvertnum,  mesh_polymapadr,
+        mesh_polymapnum,   hfield_nrow,       hfield_ncol,       hfield_adr,
+        tex_type,          tex_height,        tex_width,         tex_nchannel,
+        tex_adr
     ],
     tables: [
         body_parentid,       body_rootid,         body_weldid,         body_mocapid,

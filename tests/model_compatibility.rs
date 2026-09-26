@@ -141,7 +141,7 @@ fn is_left_out_field(field: &str) -> bool {
     field.starts_with("name_") || field.ends_with("_pathadr")
         || matches!(field, "names" | "names_map" | "nnames" | "npaths" | "nbuffer")
         || matches!(field, "mesh_extrema" | "mesh_polyvert" | "mesh_polymap")
-        || matches!(field, "bvh_child" | "bvh_nodeid" | "oct_child")
+        || matches!(field, "bvh_child" | "bvh_nodeid" | "oct_child" | "noct" | "mesh_octadr" | "mesh_octnum")
         || matches!(field, "ngravcomp" | "jnt_actuatorid" | "tendon_actuatorid")
 }
 
@@ -212,6 +212,26 @@ fn test_every_gate_accepts_a_safe_write() {
     assert!(MjvScene::new(&base, 100).is_compatible_with_model(&edited));
     assert!(MjvScene::new(&base, 100).is_compatible_with_scene(&MjvScene::new(&edited, 10)));
     assert!(base.body("trunk").unwrap().try_view(&edited).is_ok());
+}
+
+/// A non-uniform mesh scale resizes only the octree of an `sdf` geom, and every gate accepts the result.
+#[test]
+fn test_every_gate_accepts_a_resized_octree() {
+    let sdf = BASE_XML.replace("<site name='s_trunk'/>",
+        "<site name='s_trunk'/>\n    <geom name='g_sdf' type='sdf' mesh='ms' contype='0' conaffinity='0'/>");
+    let base = MjModel::from_xml_string(&sdf).unwrap();
+    let scaled = MjModel::from_xml_string(&sdf.replace("<mesh name='ms'", "<mesh name='ms' scale='3 1 1'")).unwrap();
+    assert_ne!(base.ffi().noct, scaled.ffi().noct, "the scale must resize the octree");
+
+    assert!(base.is_compatible_with_model(&scaled));
+    assert!(base.is_asset_compatible_with_model(&scaled));
+    assert!(MjvScene::new(&base, 100).is_compatible_with_model(&scaled));
+    assert!(base.body("trunk").unwrap().try_view(&scaled).is_ok());
+
+    let mut data = MjData::new(&base);
+    data.step();
+    data.swap_model(&scaled);
+    data.step();
 }
 
 /// A swap installs a compatible model and returns the old one, and data then steps with it.
