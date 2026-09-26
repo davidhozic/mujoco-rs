@@ -4,6 +4,7 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 .. rubric:: Breaking changes
 
 - ``treenum`` is now marked as unsafe to mutate (wrong values can cause out-of-bound reads). Consequently,
+
   - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTendonModelViewMut` is now
     :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`;
   - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tendon_treenum_mut` is now an ``unsafe fn``.
@@ -16,6 +17,16 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   and the ``data`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjEqualityModelViewMut` is now
   :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`. A wrong value in a flex strain equality or an
   interpolated flex shell made a step read out of bounds.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_biastype_mut`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_delay_mut`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>body_simple_mut`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_rigid_mut` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_centered_mut` are now
+  ``unsafe fn``. The ``biastype`` and ``delay`` fields of
+  :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut` and the ``simple`` field of
+  :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjBodyModelViewMut` are now
+  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
+  A value that disagreed with the rest of the model, made a step access memory out of bounds.
 - Removed ``append_cubefiles`` and ``append_textures`` from
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture` and
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial`, respectively.

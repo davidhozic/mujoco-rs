@@ -118,19 +118,18 @@ macro_rules! writable_tables {
 }
 
 writable_tables! {
-    body_simple,           body_sameframe,        body_contype,          body_conaffinity,
-    jnt_group,             jnt_limited,           jnt_actfrclimited,     jnt_actgravcomp,
-    dof_simplenum,         tree_sleep_policy,     geom_contype,          geom_conaffinity,
-    geom_group,            geom_priority,         geom_sameframe,        site_type,
-    site_group,            site_sameframe,        cam_mode,              cam_projection,
-    cam_output,            light_mode,            light_type,            light_castshadow,
-    light_active,          flex_contype,          flex_conaffinity,      flex_priority,
-    flex_internal,         flex_selfcollide,      flex_activelayers,     flex_passive,
-    flex_group,            flex_edgeequality,     flex_rigid,            flexedge_rigid,
-    flex_centered,         flex_flatskin,         skin_group,            tex_colorspace,
-    tex_data,              mat_texuniform,        pair_signature,        exclude_signature,
-    eq_active0,            tendon_group,          tendon_limited,        tendon_actfrclimited,
-    actuator_biastype,     actuator_actlimited,   actuator_actearly,     actuator_group,
+    body_sameframe,        body_contype,          body_conaffinity,      jnt_group,
+    jnt_limited,           jnt_actfrclimited,     jnt_actgravcomp,       dof_simplenum,
+    tree_sleep_policy,     geom_contype,          geom_conaffinity,      geom_group,
+    geom_priority,         geom_sameframe,        site_type,             site_group,
+    site_sameframe,        cam_mode,              cam_projection,        cam_output,
+    light_mode,            light_type,            light_castshadow,      light_active,
+    flex_contype,          flex_conaffinity,      flex_priority,         flex_internal,
+    flex_selfcollide,      flex_activelayers,     flex_passive,          flex_group,
+    flex_edgeequality,     flexedge_rigid,        flex_flatskin,         skin_group,
+    tex_colorspace,        tex_data,              mat_texuniform,        pair_signature,
+    exclude_signature,     eq_active0,            tendon_group,          tendon_limited,
+    tendon_actfrclimited,  actuator_actlimited,   actuator_actearly,     actuator_group,
     actuator_forcelimited, actuator_ctrllimited,  sensor_datatype,       sensor_needstage,
     bvh_depth,             oct_depth,             tuple_objtype,         paths
 }

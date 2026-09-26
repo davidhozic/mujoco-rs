@@ -331,34 +331,35 @@ model_layout! {
     tables: [
         body_parentid,       body_rootid,         body_weldid,         body_mocapid,
         body_jntnum,         body_jntadr,         body_dofnum,         body_dofadr,
-        body_treeid,         body_geomnum,        body_geomadr,        body_plugin,
-        body_bvhadr,         body_bvhnum,         jnt_type,            jnt_qposadr,
-        jnt_dofadr,          jnt_bodyid,          dof_bodyid,          dof_jntid,
-        dof_parentid,        dof_treeid,          dof_Madr,            tree_bodyadr,
-        tree_bodynum,        tree_dofadr,         tree_dofnum,         geom_type,
-        geom_condim,         geom_bodyid,         geom_dataid,         geom_matid,
-        geom_plugin,         site_bodyid,         site_matid,          cam_bodyid,
-        cam_targetbodyid,    cam_resolution,      light_bodyid,        light_targetbodyid,
-        light_texid,         flex_condim,         flex_dim,            flex_matid,
-        flex_interp,         flex_cellnum,        flex_nodeadr,        flex_nodenum,
-        flex_vertadr,        flex_vertnum,        flex_edgeadr,        flex_edgenum,
-        flex_elemadr,        flex_elemnum,        flex_elemdataadr,    flex_stiffnessadr,
-        flex_elemedgeadr,    flex_bendingadr,     flex_shellnum,       flex_shelldataadr,
-        flex_evpairadr,      flex_evpairnum,      flex_texcoordadr,    flex_nodebodyid,
-        flex_vertbodyid,     flex_vertedgeadr,    flex_vertedgenum,    flex_vertedge,
-        flex_edge,           flex_edgeflap,       flex_elem,           flex_elemtexcoord,
-        flex_elemedge,       flex_elemlayer,      flex_shell,          flex_evpair,
-        efm0_dofid,          efm0_L_rownnz,       efm0_L_rowadr,       efm0_L_colind,
-        flex_bvhadr,         flex_bvhnum,         flexedge_J_rownnz,   flexedge_J_rowadr,
-        flexedge_J_colind,   flexvert_J_rownnz,   flexvert_J_rowadr,   flexvert_J_colind,
-        skin_matid,          skin_vertadr,        skin_vertnum,        skin_texcoordadr,
-        skin_faceadr,        skin_facenum,        skin_boneadr,        skin_bonenum,
-        skin_face,           skin_bonevertadr,    skin_bonevertnum,    skin_bonebodyid,
-        skin_bonevertid,     mat_texid,           pair_dim,            pair_geom1,
-        pair_geom2,          eq_type,             eq_obj1id,           eq_obj2id,
-        eq_objtype,          tendon_adr,          tendon_num,          tendon_matid,
-        tendon_treenum,      tendon_treeid,       ten_J_rownnz,        ten_J_rowadr,
-        ten_J_colind,        actuator_trntype,    actuator_dyntype,    actuator_gaintype,
+        body_treeid,         body_geomnum,        body_geomadr,        body_simple,
+        body_plugin,         body_bvhadr,         body_bvhnum,         jnt_type,
+        jnt_qposadr,         jnt_dofadr,          jnt_bodyid,          dof_bodyid,
+        dof_jntid,           dof_parentid,        dof_treeid,          dof_Madr,
+        tree_bodyadr,        tree_bodynum,        tree_dofadr,         tree_dofnum,
+        geom_type,           geom_condim,         geom_bodyid,         geom_dataid,
+        geom_matid,          geom_plugin,         site_bodyid,         site_matid,
+        cam_bodyid,          cam_targetbodyid,    cam_resolution,      light_bodyid,
+        light_targetbodyid,  light_texid,         flex_condim,         flex_dim,
+        flex_matid,          flex_interp,         flex_cellnum,        flex_nodeadr,
+        flex_nodenum,        flex_vertadr,        flex_vertnum,        flex_edgeadr,
+        flex_edgenum,        flex_elemadr,        flex_elemnum,        flex_elemdataadr,
+        flex_stiffnessadr,   flex_elemedgeadr,    flex_bendingadr,     flex_shellnum,
+        flex_shelldataadr,   flex_evpairadr,      flex_evpairnum,      flex_texcoordadr,
+        flex_nodebodyid,     flex_vertbodyid,     flex_vertedgeadr,    flex_vertedgenum,
+        flex_vertedge,       flex_edge,           flex_edgeflap,       flex_elem,
+        flex_elemtexcoord,   flex_elemedge,       flex_elemlayer,      flex_shell,
+        flex_evpair,         efm0_dofid,          efm0_L_rownnz,       efm0_L_rowadr,
+        efm0_L_colind,       flex_rigid,          flex_centered,       flex_bvhadr,
+        flex_bvhnum,         flexedge_J_rownnz,   flexedge_J_rowadr,   flexedge_J_colind,
+        flexvert_J_rownnz,   flexvert_J_rowadr,   flexvert_J_colind,   skin_matid,
+        skin_vertadr,        skin_vertnum,        skin_texcoordadr,    skin_faceadr,
+        skin_facenum,        skin_boneadr,        skin_bonenum,        skin_face,
+        skin_bonevertadr,    skin_bonevertnum,    skin_bonebodyid,     skin_bonevertid,
+        mat_texid,           pair_dim,            pair_geom1,          pair_geom2,
+        eq_type,             eq_obj1id,           eq_obj2id,           eq_objtype,
+        tendon_adr,          tendon_num,          tendon_matid,        tendon_treenum,
+        tendon_treeid,       ten_J_rownnz,        ten_J_rowadr,        ten_J_colind,
+        actuator_trntype,    actuator_dyntype,    actuator_gaintype,   actuator_biastype,
         actuator_ctrladr,    actuator_ctrlnum,    actuator_ctrlspec,   actuator_outadr,
         actuator_outnum,     actuator_actadr,     actuator_actnum,     actuator_trnid,
         actuator_history,    actuator_historyadr, actuator_plugin,     sensor_type,
@@ -1465,7 +1466,7 @@ impl MjModel {
         (mut = unsafe) body_treeid: &[i32; "id of body's kinematic tree; -1: static"; ffi().nbody],
         (mut = unsafe) body_geomnum: &[i32; "number of geoms"; ffi().nbody],
         (mut = unsafe) body_geomadr: &[i32; "start addr of geoms; -1: no geoms"; ffi().nbody],
-        body_simple: &[MjtByte; "1: diag M; 2: diag M, sliders only"; ffi().nbody],
+        (mut = unsafe) body_simple: &[MjtByte; "1: diag M; 2: diag M, sliders only"; ffi().nbody],
         body_sameframe: &[MjtSameFrame [force]; "same frame as inertia"; ffi().nbody],
         body_pos: &[[MjtNum; 3] [force]; "position offset rel. to parent body"; ffi().nbody],
         body_quat: &[[MjtNum; 4] [force]; "orientation offset rel. to parent body"; ffi().nbody],
@@ -1669,9 +1670,9 @@ impl MjModel {
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
         flex_edgeequality: &[i32; "0: none, 1: edges, 2: vertices, 3: strain"; ffi().nflex],
-        flex_rigid: &[MjtBool; "are all vertices in the same body"; ffi().nflex],
+        (mut = unsafe) flex_rigid: &[MjtBool; "are all vertices in the same body"; ffi().nflex],
         flexedge_rigid: &[MjtBool; "are both edge vertices in same body"; ffi().nflexedge],
-        flex_centered: &[MjtBool; "are all vertex coordinates (0,0,0)"; ffi().nflex],
+        (mut = unsafe) flex_centered: &[MjtBool; "are all vertex coordinates (0,0,0)"; ffi().nflex],
         flex_flatskin: &[MjtBool; "render flex skin with flat shading"; ffi().nflex],
         (mut = unsafe) flex_bvhadr: &[i32; "address of bvh root; -1: no bvh"; ffi().nflex],
         (mut = unsafe) flex_bvhnum: &[i32; "number of bounding volumes"; ffi().nflex],
@@ -1819,7 +1820,7 @@ impl MjModel {
         (mut = unsafe) actuator_trntype: &[MjtTrn [force]; "transmission type"; ffi().nactuator],
         (mut = unsafe) actuator_dyntype: &[MjtDyn [force]; "dynamics type"; ffi().nactuator],
         (mut = unsafe) actuator_gaintype: &[MjtGain [force]; "gain type"; ffi().nactuator],
-        actuator_biastype: &[MjtBias [force]; "bias type"; ffi().nactuator],
+        (mut = unsafe) actuator_biastype: &[MjtBias [force]; "bias type"; ffi().nactuator],
         (mut = unsafe) actuator_ctrladr: &[i32; "address of first control"; ffi().nactuator],
         (mut = unsafe) actuator_ctrlnum: &[i32; "number of controls"; ffi().nactuator],
         (mut = unsafe) actuator_ctrlspec: &[i32; "input signature, scoped by gaintype"; ffi().nactuator],
@@ -1831,7 +1832,7 @@ impl MjModel {
         actuator_group: &[i32; "group for visibility"; ffi().nactuator],
         (mut = unsafe) actuator_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nactuator],
         (mut = unsafe) actuator_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nactuator],
-        actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nactuator],
+        (mut = unsafe) actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nactuator],
         actuator_ctrllimited: &[MjtBool; "is control limited"; ffi().nu],
         actuator_forcelimited: &[MjtBool; "is force limited"; ffi().nactuator],
         actuator_actlimited: &[MjtBool; "is activation limited"; ffi().nactuator],
@@ -1967,7 +1968,7 @@ impl Drop for MjModel {
 
 info_with_view!(Model, actuator,
 	[[actuator_] group: i32,
-	 [actuator_] delay: MjtNum, [actuator_] ctrllimited: MjtBool,
+	 [actuator_] ctrllimited: MjtBool,
 	 [actuator_] forcelimited: MjtBool, [actuator_] actlimited: MjtBool,
 	 [actuator_] dynprm: MjtNum, [actuator_] gainprm: MjtNum,
 	 [actuator_] biasprm: MjtNum, [actuator_] actearly: MjtBool,
@@ -1977,14 +1978,15 @@ info_with_view!(Model, actuator,
 	 [actuator_] armature: MjtNum,
 	 [actuator_] cranklength: MjtNum, [actuator_] acc0: MjtNum,
 	 [actuator_] length0: MjtNum, [actuator_] lengthrange: MjtNum,
-	 [actuator_] user: MjtNum, [actuator_] biastype: MjtBias [force]],
+	 [actuator_] user: MjtNum],
 	[[actuator_] trntype: MjtTrn [force], [actuator_] dyntype: MjtDyn [force],
 	 [actuator_] ctrladr: i32, [actuator_] ctrlnum: i32, [actuator_] ctrlspec: i32,
 	 [actuator_] gaintype: MjtGain [force],
 	 [actuator_] outadr: i32, [actuator_] outnum: i32,
 	 [actuator_] trnid: i32, [actuator_] actadr: i32,
 	 [actuator_] actnum: i32, [actuator_] history: i32,
-	 [actuator_] historyadr: i32, [actuator_] plugin: i32],
+	 [actuator_] historyadr: i32, [actuator_] plugin: i32,
+	 [actuator_] delay: MjtNum, [actuator_] biastype: MjtBias [force]],
 	[]);
 
 info_with_view!(Model, body,
@@ -1996,8 +1998,7 @@ info_with_view!(Model, body,
 	 [body_] invweight0: MjtNum, [body_] gravcomp: MjtNum,
 	 [body_] margin: MjtNum,
 	 [body_] contype: i32, [body_] conaffinity: i32,
-	 [body_] user: MjtNum,
-	 [body_] simple: MjtByte],
+	 [body_] user: MjtNum],
 	[[body_] parentid: i32, [body_] rootid: i32,
 	 [body_] weldid: i32, [body_] mocapid: i32,
 	 [body_] jntnum: i32, [body_] jntadr: i32,
@@ -2005,7 +2006,7 @@ info_with_view!(Model, body,
 	 [body_] treeid: i32, [body_] geomnum: i32,
 	 [body_] geomadr: i32,
 	 [body_] bvhadr: i32, [body_] bvhnum: i32,
-	 [body_] plugin: i32],
+	 [body_] plugin: i32, [body_] simple: MjtByte],
 	[]);
 
 info_with_view!(Model, camera,
@@ -2596,15 +2597,21 @@ mod tests {
 
         /* Test write */
         let mut view_mut = actuator_model_info.view_mut(&mut model);
-        view_mut.biastype[0] = MjtBias::mjBIAS_USER;
-        view_mut.delay[0] = 3.0;
+        // SAFETY: the test runs no pipeline stage, so C never reads the new bias type or delay.
+        unsafe {
+            view_mut.biastype.as_mut_slice()[0] = MjtBias::mjBIAS_USER;
+            view_mut.delay.as_mut_slice()[0] = 3.0;
+        }
+        view_mut.gear[0] = 2.0;
 
         assert_eq!(view_mut.biastype[0], MjtBias::mjBIAS_USER);
         assert_eq!(view_mut.delay[0], 3.0);
         view_mut.zero();
 
-        assert_eq!(view_mut.delay[0], 0.0);
-        assert_eq!(view_mut.biastype[0], MjtBias::mjBIAS_NONE);
+        // zero() clears the read-write fields and keeps the unsafe-to-mutate ones.
+        assert_eq!(view_mut.gear[0], 0.0);
+        assert_eq!(view_mut.delay[0], 3.0);
+        assert_eq!(view_mut.biastype[0], MjtBias::mjBIAS_USER);
     }
 
     /// `light_softness` must expose the per-light `softness`, not one of the arrays that bracket
@@ -4013,7 +4020,8 @@ mod tests {
 
         // Mutable enum roundtrip via view
         let mut slider_view_mut = slider_info.view_mut(&mut model);
-        slider_view_mut.biastype[0] = MjtBias::mjBIAS_NONE;
+        // SAFETY: mjBIAS_NONE reads no actuator state.
+        unsafe { slider_view_mut.biastype.as_mut_slice()[0] = MjtBias::mjBIAS_NONE; }
         let slider_view2 = slider_info.view(&model);
         assert_eq!(slider_view2.biastype[0], MjtBias::mjBIAS_NONE);
     }

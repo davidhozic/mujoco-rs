@@ -68,6 +68,38 @@ The ``data`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjEquali
     unsafe { view.data.as_mut_slice()[0] = 0.5; }
 
 
+Actuator bias type and delay, body simple flag and flex flags are unsafe to mutate
+----------------------------------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_biastype_mut`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_delay_mut`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>body_simple_mut`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_rigid_mut` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_centered_mut` are now
+``unsafe fn``. The ``biastype`` and ``delay`` fields of
+:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut` and the ``simple`` field of
+:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjBodyModelViewMut` are now
+:docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
+
+.. code-block:: rust
+
+    // Before
+    model.actuator_biastype_mut()[0] = MjtBias::mjBIAS_NONE;
+    model.body_simple_mut()[1] = 0;
+    let mut view = model.actuator("a").unwrap().view_mut(&mut model);
+    view.delay[0] = 0.0;
+
+    // After
+    // SAFETY: mjBIAS_NONE reads no actuator state, and 0 selects the general mass matrix path.
+    unsafe {
+        model.actuator_biastype_mut()[0] = MjtBias::mjBIAS_NONE;
+        model.body_simple_mut()[1] = 0;
+    }
+    let mut view = model.actuator("a").unwrap().view_mut(&mut model);
+    // SAFETY: a zero delay does not read the history buffer.
+    unsafe { view.delay.as_mut_slice()[0] = 0.0; }
+
+
 Removed ``append_cubefiles`` and ``append_textures``
 ----------------------------------------------------
 
