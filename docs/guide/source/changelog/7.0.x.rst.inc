@@ -7,6 +7,9 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTendonModelViewMut` is now
     :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`;
   - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tendon_treenum_mut` is now an ``unsafe fn``.
+- The ``plugin`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut` and
+  :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjBodyModelViewMut` is now
+  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
 - Removed ``append_cubefiles`` and ``append_textures`` from
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture` and
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial`, respectively.
@@ -103,3 +106,6 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   ``sync_data`` rebuilds the context, and the ``update_*_from`` methods return
   :docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>IncompatibleModel`, when the context
   cannot serve the model. Before, an upload could read out of bounds.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut::<method>zero` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjBodyModelViewMut::<method>zero` no longer set
+  ``plugin`` to ``0``, which bound the actuator or body to plugin instance 0 instead of no plugin (``-1``).

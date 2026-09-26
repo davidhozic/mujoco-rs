@@ -27,6 +27,24 @@ Tendon tree count is unsafe to mutate
     unsafe { view.treenum.as_mut_slice()[0] = 1; }
 
 
+Plugin ids in model views are unsafe to mutate
+----------------------------------------------
+
+The ``plugin`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut` and
+:docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjBodyModelViewMut` is now
+:docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
+
+.. code-block:: rust
+
+    // Before
+    model.actuator("a").unwrap().view_mut(&mut model).plugin[0] = -1;
+
+    // After
+    let mut view = model.actuator("a").unwrap().view_mut(&mut model);
+    // SAFETY: actuator "a" is not bound to a plugin instance.
+    unsafe { view.plugin.as_mut_slice()[0] = -1; }
+
+
 Removed ``append_cubefiles`` and ``append_textures``
 ----------------------------------------------------
 
