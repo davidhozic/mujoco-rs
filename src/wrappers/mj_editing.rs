@@ -107,6 +107,26 @@ pub type MjtOrientation = mjtOrientation;
 pub type MjtCTimer = mjtCTimer;
 /*******************************************************/
 
+/* Capability markers (regular in-tree vs default special case) */
+
+/// Marker for a handle to an element of the model tree.
+/// Used to create full-capability (no hidden methods) ZST handles.
+#[derive(Debug)]
+pub struct InTree;
+/// Marker for a handle to a member of a default class ([`MjsDefault`]).
+///
+/// These ZST handles prevent use of methods that are only supported
+/// if the element is used in a tree, not inside a default
+/// (for example, setting a name is not permitted):
+///
+/// ```compile_fail,E0599
+/// use mujoco_rs::prelude::*;
+/// let mut spec = MjSpec::new();
+/// spec.add_default("cls", None).joint_mut().set_name("x");
+/// ```
+#[derive(Debug)]
+pub struct InDefault;
+
 /******************************
 ** Type aliases
 ******************************/
@@ -978,8 +998,8 @@ unsafe impl Send for SendableSpec {}
 /***************************
 ** Site specification
 ***************************/
-mjs_struct!(Site with SpecObject: MjsSite <= mjsSite);
-impl MjsSite {
+mjs_struct!(Site with SpecObject: MjsSite<Capability> <= mjsSite);
+impl<Capability> MjsSite<Capability> {
     getter_setter! {
         [&] with, get, [
             // frame, size
@@ -1008,8 +1028,8 @@ impl MjsSite {
 /***************************
 ** Joint specification
 ***************************/
-mjs_struct!(Joint with SpecObject: MjsJoint <= mjsJoint);
-impl MjsJoint {
+mjs_struct!(Joint with SpecObject: MjsJoint<Capability> <= mjsJoint);
+impl<Capability> MjsJoint<Capability> {
     getter_setter! {
         [&] with, get, [
             // kinematics
@@ -1063,8 +1083,8 @@ impl MjsJoint {
 /***************************
 ** Geom specification
 ***************************/
-mjs_struct!(Geom with SpecObject: MjsGeom <= mjsGeom);
-impl MjsGeom {
+mjs_struct!(Geom with SpecObject: MjsGeom<Capability> <= mjsGeom);
+impl<Capability> MjsGeom<Capability> {
     getter_setter! {
         [&] with, get, [
             [ffi, ffi_mut] pos: &[f64; 3];                         "geom position.";
@@ -1113,8 +1133,8 @@ impl MjsGeom {
 /***************************
 ** Camera specification
 ***************************/
-mjs_struct!(Camera with SpecObject: MjsCamera <= mjsCamera);
-impl MjsCamera {
+mjs_struct!(Camera with SpecObject: MjsCamera<Capability> <= mjsCamera);
+impl<Capability> MjsCamera<Capability> {
     getter_setter! {
         [&] with, get, [
             [ffi, ffi_mut] pos: &[f64; 3];               "camera position.";
@@ -1148,8 +1168,8 @@ impl MjsCamera {
 /***************************
 ** Light specification
 ***************************/
-mjs_struct!(Light with SpecObject: MjsLight <= mjsLight);
-impl MjsLight {
+mjs_struct!(Light with SpecObject: MjsLight<Capability> <= mjsLight);
+impl<Capability> MjsLight<Capability> {
     getter_setter! {
         [&] with, get, [
             [ffi, ffi_mut] pos: &[f64; 3];               "light position.";
@@ -1237,8 +1257,8 @@ impl MjsFrame {
 /***************************
 ** Actuator specification
 ***************************/
-mjs_struct!(Actuator with SpecObject: MjsActuator <= mjsActuator);
-impl MjsActuator {
+mjs_struct!(Actuator with SpecObject: MjsActuator<Capability> <= mjsActuator);
+impl<Capability> MjsActuator<Capability> {
     getter_setter! {
         [&] with, get, [
             [ffi, ffi_mut] gear: &[f64; 6];                            "gear parameters.";
@@ -1483,7 +1503,7 @@ impl OrientationConfig {
     }
 }
 
-impl MjsActuator {
+impl<Capability> MjsActuator<Capability> {
     /// Configure the actuator to be a motor.
     pub fn set_to_motor(&mut self) {
         // mjs_setToMotor cannot fail; it always returns an empty string.
@@ -1695,8 +1715,8 @@ impl MjsSensor {
 /***************************
 ** Flex specification
 ***************************/
-mjs_struct!(Flex with SpecObject: MjsFlex <= mjsFlex);
-impl MjsFlex {
+mjs_struct!(Flex with SpecObject: MjsFlex<Capability> <= mjsFlex);
+impl<Capability> MjsFlex<Capability> {
     getter_setter! {
         [&] with, get, [
             [ffi, ffi_mut] rgba: &[f32; 4];                                "rgba when material is omitted.";
@@ -1776,8 +1796,8 @@ impl MjsFlex {
 /***************************
 ** Pair specification
 ***************************/
-mjs_struct!(Pair with SpecObject: MjsPair <= mjsPair);
-impl MjsPair {
+mjs_struct!(Pair with SpecObject: MjsPair<Capability> <= mjsPair);
+impl<Capability> MjsPair<Capability> {
     getter_setter! {
         [&] with, get, [
             [ffi, ffi_mut] friction: &[f64; 5];                            "contact friction: slide1, slide2, spin, roll1, roll2.";
@@ -1816,8 +1836,8 @@ impl MjsExclude {
 /***************************
 ** Equality specification
 ***************************/
-mjs_struct!(Equality with SpecObject: MjsEquality <= mjsEquality);
-impl MjsEquality {
+mjs_struct!(Equality with SpecObject: MjsEquality<Capability> <= mjsEquality);
+impl<Capability> MjsEquality<Capability> {
     getter_setter! {
         [&] with, get, [
             [ffi, ffi_mut] data: &[f64; mjNEQDATA as usize];   "data array for equality parameters.";
@@ -1844,8 +1864,8 @@ impl MjsEquality {
 /***************************
 ** Tendon specification
 ***************************/
-mjs_struct!(Tendon with SpecObject: MjsTendon <= mjsTendon);
-impl MjsTendon {
+mjs_struct!(Tendon with SpecObject: MjsTendon<Capability> <= mjsTendon);
+impl<Capability> MjsTendon<Capability> {
     getter_setter! {
         [&] with, get, [
             [ffi, ffi_mut] damping: &[f64; mjNPOLY as usize + 1];       "damping coefficients.";
@@ -1880,7 +1900,11 @@ impl MjsTendon {
     string_set_get_with! {[&]
         material; "name of material for rendering.";
     }
+}
 
+/// In-tree only implementations. Defaults/classes don't support
+/// pre-setting wraps.
+impl MjsTendon {
     /// Wrap a site corresponding to `name`, using the tendon.
     ///
     /// # Panics
@@ -2225,8 +2249,8 @@ impl MjsPlugin {
 /***************************
 ** Mesh specification
 ***************************/
-mjs_struct!(Mesh with SpecObject: MjsMesh <= mjsMesh);
-impl MjsMesh {
+mjs_struct!(Mesh with SpecObject: MjsMesh<Capability> <= mjsMesh);
+impl<Capability> MjsMesh<Capability> {
     getter_setter! {
         [&] with, get, [
             [ffi, ffi_mut] refpos: &[f64; 3];            "reference position.";
@@ -2422,14 +2446,14 @@ impl MjsTexture {
 /***************************
 ** Material specification
 ***************************/
-mjs_struct!(Material with SpecObject: MjsMaterial <= mjsMaterial);
+mjs_struct!(Material with SpecObject: MjsMaterial<Capability> <= mjsMaterial);
 
 /// # Note: texture assignment
 ///
 /// `textures` is a pre-sized string vector of `mjNTEXROLE` entries, one per [`MjtTextureRole`].
 /// Assign one role with [`set_texture`](Self::set_texture).
 /// Replace all roles using [`set_textures`](Self::set_textures).
-impl MjsMaterial {
+impl<Capability> MjsMaterial<Capability> {
     getter_setter! {
         [&] with, get, [
             [ffi, ffi_mut] rgba: &[f32; 4];                               "rgba color.";

@@ -615,17 +615,18 @@ macro_rules! find_x_method_direct {
 /// exchanging two elements would leave each specification holding pointers that the other owns.
 /// Do not give the handle a field of type `$raw`, and do not add [`DerefMut`](std::ops::DerefMut).
 macro_rules! mjs_opaque {
-    ($handle:ident <= $raw:ident, $doc:expr) => {
+    ($handle:ident $(<$cap:ident>)? <= $raw:ident, $doc:expr) => {
         #[doc = $doc]
         #[repr(C)]
-        pub struct $handle {
+        pub struct $handle$(<$cap = crate::wrappers::mj_editing::InTree>)? {
             // A private field with no constructor keeps the handle non-instantiable downstream.
             _data: (),
             // Removes the automatic `Send`, `Sync` and `Unpin`; the element belongs to its spec.
-            _marker: std::marker::PhantomData<(*mut u8, std::marker::PhantomPinned)>,
+            // $cap is used optionally and it allows for a liter variant that is used within `MjsDefault`.
+            _marker: std::marker::PhantomData<(*mut u8, std::marker::PhantomPinned, $($cap)?)>,
         }
 
-        impl $handle {
+        impl$(<$cap>)? $handle$(<$cap>)? {
             /// Returns the FFI struct that the handle stands on.
             pub fn ffi(&self) -> &$raw {
                 // SAFETY: the handle stands at the address of a live, aligned `$raw`, and the cast
@@ -661,7 +662,7 @@ macro_rules! mjs_opaque {
             }
         }
 
-        impl std::fmt::Debug for $handle {
+        impl$(<$cap>)? std::fmt::Debug for $handle$(<$cap>)? {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 std::fmt::Debug::fmt(self.ffi(), f)
             }
@@ -699,10 +700,10 @@ macro_rules! nested_handle {
 /// `SpecItem` implementation.
 macro_rules! mjs_struct {
     (
-        $kind:ident with SpecObject: $handle:ident <= $raw:ident
+        $kind:ident with SpecObject: $handle:ident $(<$cap:ident>)? <= $raw:ident
         $({ $($extra_trait_methods:tt)* })?
     ) => {paste::paste!{
-        mjs_struct!($handle <= $raw $({ $($extra_trait_methods)* })?);
+        mjs_struct!($handle $(<$cap>)? <= $raw $({ $($extra_trait_methods)* })?);
 
         impl SpecObject for $handle {
             const OBJ_TYPE: MjtObj = MjtObj::[<mjOBJ_ $kind:upper>];
@@ -717,14 +718,14 @@ macro_rules! mjs_struct {
     }};
 
     (
-        $handle:ident <= $raw:ident
+        $handle:ident $(<$cap:ident>)? <= $raw:ident
         $({ $($extra_trait_methods:tt)* })?
     ) => {
-        mjs_opaque!($handle <= $raw, concat!(
+        mjs_opaque!($handle $(<$cap>)? <= $raw, concat!(
             stringify!($handle), " specification. An opaque handle for the FFI type [`",
             stringify!($raw), "`], reached through [`ffi`](Self::ffi)."));
 
-        impl $handle {
+        impl$(<$cap>)? $handle$(<$cap>)? {
             /// Return the message appended to compiler errors.
             /// # Panics
             /// Panics if it contains invalid UTF-8.

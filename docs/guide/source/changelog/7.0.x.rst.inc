@@ -47,6 +47,18 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   caused undefined behavior. It implements only the new
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecElement` :sup:`new`, which is now the
   supertrait of ``SpecItem``.
+- The member accessors of :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsDefault` (``joint``,
+  ``geom``, ``actuator`` and the others, with their ``_mut`` variants) now return handles marked with
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>InDefault` :sup:`new`, for example
+  ``&mut MjsJoint<InDefault>``. These handles keep the field accessors, ``info`` and the actuator
+  ``set_to_*`` methods, but no longer implement
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecElement`, ``SpecItem``, ``SpecObject``,
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>FrameChild`,
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>Attach` or
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>UserValued`, because their methods crashed on a
+  default-class member. The handles of these kinds gain a type parameter that defaults to
+  :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>InTree` :sup:`new`, thus writing ``MjsJoint``
+  gives the same result as before.
 - (runtime-breaking) :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force`
   now panics when ``contact_id >= ncon``. Before, it returned ``[0; 6]``. If you want to catch
   out-of-bounds errors, use

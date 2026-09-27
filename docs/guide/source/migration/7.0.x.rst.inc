@@ -198,6 +198,29 @@ also add an import of ``SpecElement``, in addition to updating the type bounds i
     print_name(class);
 
 
+Default-class members have field accessors only
+-----------------------------------------------
+
+The member accessors of :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsDefault` now return
+handles marked with :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>InDefault`, for example
+``&mut MjsJoint<InDefault>``. These handles have no methods of
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecElement` or of the traits built on it
+(``SpecItem``, ``SpecObject``, ``FrameChild``, ``Attach``, ``UserValued``).
+
+The marker is needed to hide all the (trait) methods that aren't actually supported
+and would, prior to the change, just segment fault.
+
+.. code-block:: rust
+
+    // Before
+    let joint: &mut MjsJoint = spec.add_default("cls", None).joint_mut();
+    joint.set_armature(0.1);
+
+    // After
+    let joint: &mut MjsJoint<InDefault> = spec.add_default("cls", None).joint_mut();
+    joint.set_armature(0.1);
+
+
 ``MjData::contact_force`` panics on an invalid ID (runtime-breaking)
 ---------------------------------------------------------------------
 
