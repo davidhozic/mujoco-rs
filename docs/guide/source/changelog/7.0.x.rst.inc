@@ -138,3 +138,6 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut::<method>zero` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjBodyModelViewMut::<method>zero` no longer set
   ``plugin`` to ``0``, which bound the actuator or body to plugin instance 0 instead of no plugin (``-1``).
+- Fixed potential race condition when using separate :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`
+  instances in different threads. |mjr_context| and related wrappers now use a static mutex to prevent
+  parallel access do the same data (``context_count`` in MuJoCo C code).

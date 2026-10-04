@@ -1,11 +1,12 @@
 //! Definitions related to rendering.
 use crate::{array_slice_dyn, getter_setter, mujoco_c::*};
 use crate::error::MjrContextError;
+use crate::util::LockUnpoison;
 
 use super::mj_model::{MjModel, MjModelLayout, MjtTexture, MjtTextureRole};
 
+use std::sync::{Arc, Mutex};
 use std::ffi::CString;
-use std::sync::Arc;
 use std::ptr;
 
 /* Types */
@@ -72,6 +73,11 @@ impl Default for MjrRectangle {
 /***********************************************************************************************************************
 ** MjrContext
 ***********************************************************************************************************************/
+/// A static [`Mutex`] preventing race conditions of the `context_count` C static for tracking count of created contexts.
+/// At the time of writing, `context_count` is used in `mjr_makeContext_offSize`
+/// (and consequently in [`mjr_makeContext`]), [`mjr_freeContext`] and [`mjr_getRendererInfo`].
+static CONTEXT_COUNTER_MUTEX: Mutex<()> = Mutex::new(());
+
 /// Wraps `mjrContext`, the MuJoCo rendering context.
 ///
 /// # Thread safety
@@ -116,11 +122,14 @@ impl MjrContext {
     pub unsafe fn new(model: &MjModel) -> Self {
         // SAFETY: caller guarantees a valid GL context is current (documented above).
         // Box::new_uninit is fully initialized by mjr_defaultContext + mjr_makeContext
-        // before assume_init.
+        // before assume_init. Global (C static) data is protected via `CONTEXT_COUNTER_MUTEX`.
         unsafe {
             let mut c = Box::new_uninit();
             mjr_defaultContext(c.as_mut_ptr());
-            mjr_makeContext(model.ffi(), c.as_mut_ptr(), MjtFontScale::mjFONTSCALE_100 as i32);
+            {
+                let _lock = CONTEXT_COUNTER_MUTEX.lock_unpoison();  // protect `context_count` in C.
+                mjr_makeContext(model.ffi(), c.as_mut_ptr(), MjtFontScale::mjFONTSCALE_100 as i32);
+            }
             Self { ffi: c.assume_init(), layout: Arc::clone(model.layout()) }
         }
     }
@@ -418,7 +427,9 @@ impl MjrContext {
 impl Drop for MjrContext {
     fn drop(&mut self) {
         // SAFETY: self.ffi was fully initialized in new() and has not been freed.
+        // Global (C static) data is protected via `CONTEXT_COUNTER_MUTEX`.
         unsafe {
+            let _lock = CONTEXT_COUNTER_MUTEX.lock_unpoison();  // protect `context_count` in C.
             mjr_freeContext(self.ffi.as_mut());
         }
     }
