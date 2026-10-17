@@ -1128,7 +1128,7 @@ impl MjViewer {
 
         // Build the user menu and process its internal events.
         #[cfg(feature = "viewer-ui")]
-        self.process_user_ui();
+        self.process_user_ui()?;
 
         // Update the scene from data and render
         self.update_scene()?;
@@ -1459,9 +1459,12 @@ impl MjViewer {
 
     /// Builds the user UI and processes its internally raised events.
     #[cfg(feature = "viewer-ui")]
-    fn process_user_ui(&mut self) {
+    fn process_user_ui(&mut self) -> Result<(), MjViewerError> {
         use crate::viewer::ui::UiEvent;
-        let RenderBaseGlState {window, ..} = &self.adapter.state.as_ref().unwrap();
+        let RenderBaseGlState {window,
+            gl_context,
+            gl_surface
+        } = &self.adapter.state.as_ref().unwrap();
 
         let inner_size = window.inner_size();
         let left = self.ui.process(
@@ -1469,6 +1472,9 @@ impl MjViewer {
             &mut self.scene, &mut self.opt,
             &mut self.camera, &self.shared_state,
         );
+
+        // Make context current again after user's custom UI callbacks possibly changing the current context.
+        gl_context.make_current(gl_surface).map_err(MjViewerError::GlutinError)?;
 
         // Adjust the viewport so MuJoCo doesn't draw over the UI
         self.rect_view.left = left as i32;
@@ -1496,6 +1502,8 @@ impl MjViewer {
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Reads the state of requested vsync setting and makes appropriate calls to [`glutin`].
