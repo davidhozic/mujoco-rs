@@ -157,3 +157,8 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 - Fixed potential race condition when using separate :docs-rs:`~mujoco_rs::renderer::<struct>MjRenderer`
   instances in different threads. |mjr_context| and related wrappers now use a static mutex to prevent
   parallel access do the same data (``context_count`` in MuJoCo C code).
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_visual_to` no longer leaves
+  the destination in a state where a stage method (for example ``fwd_velocity``) crashes.
+- :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` now makes the viewer's OpenGL
+  context current again after the user UI callbacks. A callback that made another context current
+  caused the viewer to draw into that context.
