@@ -18,13 +18,12 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`. A wrong value in a flex strain equality or an
   interpolated flex shell made a step read out of bounds.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_biastype_mut`,
-  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_delay_mut`,
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_dynprm_mut`,
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_gainprm_mut`,
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>body_simple_mut`,
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_rigid_mut` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_centered_mut` are now
-  ``unsafe fn``. The ``biastype``, ``delay``, ``dynprm`` and ``gainprm`` fields of
+  ``unsafe fn``. The ``biastype``, ``dynprm`` and ``gainprm`` fields of
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut` and the ``simple`` field of
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjBodyModelViewMut` are now
   :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
@@ -114,6 +113,13 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 
 - Added the :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>FrameChild` :sup:`new` trait
   and its methods, for setting the parent frame of body items/elements.
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecItem::<method>set_name` on a |mjs_wrap| now makes
+  the wrap target the object with the new name. It returned
+  :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>UnsupportedOperation` before.
+
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecObject::<method>delete` now deletes a frame
+  and its subtree. It returned ``UnsupportedOperation`` for a frame before.
 
 - |mjs_body|:
 

@@ -136,7 +136,7 @@ pub trait SpecObject: SpecItem {
     /// tendon, equality, pair and exclude that refers to the subtree.
     ///
     /// # Errors
-    /// - [`MjEditError::UnsupportedOperation`] if the element is a frame or the world body.
+    /// - [`MjEditError::UnsupportedOperation`] if the element is the world body.
     /// - [`MjEditError::DeleteFailed`] if MuJoCo refuses the deletion, which it does while another
     ///   specification holds this one.
     ///

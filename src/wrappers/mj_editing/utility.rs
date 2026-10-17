@@ -184,8 +184,8 @@ pub(crate) unsafe fn write_mjs_vec_byte<T: bytemuck::NoUninit>(source: &[T], des
 /// Deletes `element` from the specification that holds it, with the checks MuJoCo omits.
 ///
 /// # Errors
-/// Returns [`MjEditError::UnsupportedOperation`] for a default class, a frame, a tendon wrap and
-/// the world body, and [`MjEditError::DeleteFailed`] when MuJoCo refuses the deletion.
+/// Returns [`MjEditError::UnsupportedOperation`] for a default class, a tendon wrap and the world
+/// body, and [`MjEditError::DeleteFailed`] when MuJoCo refuses the deletion.
 ///
 /// # Safety
 /// Same contract as [`SpecObject::delete`](super::traits::SpecObject::delete), and `element` must
@@ -193,11 +193,11 @@ pub(crate) unsafe fn write_mjs_vec_byte<T: bytemuck::NoUninit>(source: &[T], des
 pub(crate) unsafe fn delete_element(element: *mut mjsElement) -> Result<(), MjEditError> {
     let elemtype = unsafe { (*element).elemtype };
 
-    // mjCDef is not an mjCBase, so this precedes mjs_getSpec. A frame's type is 100, past the
-    // mjNOBJECT end of the element list MuJoCo indexes with it, and a wrap's slot in it is null.
+    // mjCDef is not an mjCBase, so this precedes mjs_getSpec. A wrap's slot in the element list
+    // that MuJoCo indexes with the type is null.
     if matches!(
         elemtype,
-        mjtObj::mjOBJ_DEFAULT | mjtObj::mjOBJ_FRAME | mjtObj::mjOBJ_UNKNOWN
+        mjtObj::mjOBJ_DEFAULT | mjtObj::mjOBJ_UNKNOWN
     ) {
         return Err(MjEditError::UnsupportedOperation);
     }

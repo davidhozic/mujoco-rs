@@ -1859,7 +1859,7 @@ impl MjModel {
         actuator_group: &[i32; "group for visibility"; ffi().nactuator],
         (mut = unsafe) actuator_history: &[[i32; 2] [force]; "history buffer: [nsample, interp]"; ffi().nactuator],
         (mut = unsafe) actuator_historyadr: &[i32; "address in history buffer; -1: none"; ffi().nactuator],
-        (mut = unsafe) actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nactuator],
+        actuator_delay: &[MjtNum; "delay time in seconds; 0: no delay"; ffi().nactuator],
         actuator_ctrllimited: &[MjtBool; "is control limited"; ffi().nu],
         actuator_forcelimited: &[MjtBool; "is force limited"; ffi().nactuator],
         actuator_actlimited: &[MjtBool; "is activation limited"; ffi().nactuator],
@@ -1995,7 +1995,7 @@ impl Drop for MjModel {
 
 info_with_view!(Model, actuator,
 	[[actuator_] group: i32,
-	 [actuator_] ctrllimited: MjtBool,
+	 [actuator_] delay: MjtNum, [actuator_] ctrllimited: MjtBool,
 	 [actuator_] forcelimited: MjtBool, [actuator_] actlimited: MjtBool,
 	 [actuator_] biasprm: MjtNum, [actuator_] actearly: MjtBool,
 	 [actuator_] ctrlrange: MjtNum, [actuator_] forcerange: MjtNum,
@@ -2012,7 +2012,7 @@ info_with_view!(Model, actuator,
 	 [actuator_] trnid: i32, [actuator_] actadr: i32,
 	 [actuator_] actnum: i32, [actuator_] history: i32,
 	 [actuator_] historyadr: i32, [actuator_] plugin: i32,
-	 [actuator_] delay: MjtNum, [actuator_] biastype: MjtBias [force],
+	 [actuator_] biastype: MjtBias [force],
 	 [actuator_] dynprm: MjtNum, [actuator_] gainprm: MjtNum],
 	[]);
 
@@ -2624,11 +2624,11 @@ mod tests {
 
         /* Test write */
         let mut view_mut = actuator_model_info.view_mut(&mut model);
-        // SAFETY: the test runs no pipeline stage, so C never reads the new bias type or delay.
+        // SAFETY: the test runs no pipeline stage, so C never reads the new bias type.
         unsafe {
             view_mut.biastype.as_mut_slice()[0] = MjtBias::mjBIAS_USER;
-            view_mut.delay.as_mut_slice()[0] = 3.0;
         }
+        view_mut.delay[0] = 3.0;
         view_mut.gear[0] = 2.0;
 
         assert_eq!(view_mut.biastype[0], MjtBias::mjBIAS_USER);
@@ -2637,7 +2637,7 @@ mod tests {
 
         // zero() clears the read-write fields and keeps the unsafe-to-mutate ones.
         assert_eq!(view_mut.gear[0], 0.0);
-        assert_eq!(view_mut.delay[0], 3.0);
+        assert_eq!(view_mut.delay[0], 0.0);
         assert_eq!(view_mut.biastype[0], MjtBias::mjBIAS_USER);
     }
 

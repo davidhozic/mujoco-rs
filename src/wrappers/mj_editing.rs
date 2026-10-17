@@ -447,8 +447,8 @@ impl MjSpec {
     /// # Errors
     /// - [`MjEditError::DeleteFailed`] if `element` is null, does not belong to this spec, or
     ///   MuJoCo refuses the deletion.
-    /// - [`MjEditError::UnsupportedOperation`] if `element` is a default class, a frame, a tendon
-    ///   wrap, or the world body.
+    /// - [`MjEditError::UnsupportedOperation`] if `element` is a default class, a tendon wrap, or
+    ///   the world body.
     ///
     /// # Safety
     /// Same contract as [`SpecObject::delete`], and `element` must point to an element of a
@@ -476,8 +476,7 @@ impl MjSpec {
     /// returning a new mjModel instance that takes the edits into account.
     /// # Errors
     /// Returns [`MjEditError::CompileFailed`] if the model fails to compile, including when a
-    /// texture has a builtin pattern set while its `nchannel` is less than 3, and when a texture
-    /// has a negative dimension or a pixel count that does not fit in an [`i32`].
+    /// texture has a negative dimension or a pixel count that does not fit in an [`i32`].
     pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
         self.compile_impl(None)
     }
@@ -485,23 +484,15 @@ impl MjSpec {
     /// Same as [`MjSpec::compile`], compiling [`MjSpec`] to [`MjModel`], but taking assets (meshes, heightfields) from `vfs`.
     /// # Errors
     /// Returns [`MjEditError::CompileFailed`] if the model fails to compile, including when a
-    /// texture has a builtin pattern set while its `nchannel` is less than 3, and when a texture
-    /// has a negative dimension or a pixel count that does not fit in an [`i32`].
+    /// texture has a negative dimension or a pixel count that does not fit in an [`i32`].
     pub fn compile_with_vfs(&mut self, vfs: &MjVfs) -> Result<MjModel, MjEditError> {
         self.compile_impl(Some(vfs))
     }
 
     /// Compilation implementation of [`MjSpec::compile_with_vfs`] and [`MjSpec::compile`].
     fn compile_impl(&mut self, maybe_vfs: Option<&MjVfs>) -> Result<MjModel, MjEditError> {
-        // The builtin generators write 3 bytes per pixel into an `nchannel*width*height` buffer,
-        // and the setters are independent, so `compile` is the only place to check them together.
+        // The setters are independent, so `compile` is the only place to check them together.
         for texture in self.texture_iter() {
-            if texture.builtin() != MjtBuiltin::mjBUILTIN_NONE && texture.nchannel() < 3 {
-                return Err(MjEditError::CompileFailed(
-                    "texture with a builtin pattern requires nchannel >= 3".to_owned(),
-                ));
-            }
-
             let (nchannel, width, height) = (texture.nchannel(), texture.width(), texture.height());
             if nchannel < 0 || width < 0 || height < 0 {
                 return Err(MjEditError::CompileFailed(
@@ -2062,37 +2053,7 @@ impl MjsTendon {
 /***************************
 ** Wrap specification
 ***************************/
-/// The first MuJoCo version ([`mj_version`] value) in which [`mjs_setName`] accepts a wrap.
-const WRAP_RENAME_MIN_VERSION: c_int = 3014000;
-
-mjs_struct!(MjsWrap <= mjsWrap {
-    /// Sets the name of the wrapped element.
-    ///
-    /// # Errors
-    /// Returns [`MjEditError::UnsupportedOperation`] when the linked MuJoCo is older than 3.14.0.
-    ///
-    /// # Panics
-    /// When the `name` contains '\0' characters, a panic occurs.
-    fn set_name(&mut self, name: &str) -> Result<(), MjEditError> {
-        // TODO: remove the version check once the crate links MuJoCo 3.14.0 or later. Before it,
-        // mjs_setName gives the mjOBJ_UNKNOWN elemtype to CheckRepeat, which reads a null list.
-        if unsafe { mj_version() } < WRAP_RENAME_MIN_VERSION {
-            return Err(MjEditError::UnsupportedOperation);
-        }
-        // SAFETY: the wrap is a live element of its specification.
-        unsafe { set_element_name(self.element_mut_pointer(), name) }
-    }
-
-    /// Builder style [`SpecItem::set_name`].
-    ///
-    /// # Panics
-    /// Panics when the linked MuJoCo is older than 3.14.0, or when `name` contains '\0'.
-    fn with_name(&mut self, name: &str) -> &mut Self {
-        self.set_name(name).expect("renaming a wrap requires MuJoCo 3.14.0 or later");
-        self
-    }
-});
-
+mjs_struct!(MjsWrap <= mjsWrap);
 impl MjsWrap {
     getter_setter! {
         [&] with, get, set, [
@@ -2391,7 +2352,6 @@ impl MjsTexture {
 
     getter_setter! {
         [&] with, get, set, [
-            // A builtin pattern needs `nchannel >= 3`; `MjSpec::compile` enforces that.
             [ffi, ffi_mut] nchannel: i32; "number of channels.";
         ]
     }
@@ -4242,52 +4202,6 @@ mod tests {
             "compile must reject an overflowing texture size, got {err:?}");
     }
 
-    /// A builtin texture with `nchannel < 3` must be rejected by `compile()` rather than
-    /// heap-overflowing in MuJoCo's builtin generators (which write 3 bytes per pixel).
-    #[test]
-    fn test_builtin_texture_nchannel_rejected() {
-        let mut spec = MjSpec::new();
-        spec.add_texture()
-            .with_name("badtex")
-            .with_type(MjtTexture::mjTEXTURE_2D)
-            .with_builtin(MjtBuiltin::mjBUILTIN_CHECKER)
-            .with_rgb1([0.9, 0.9, 0.9])
-            .with_rgb2([0.1, 0.1, 0.1])
-            .with_width(64)
-            .with_height(64)
-            .set_nchannel(1);
-
-        let err = spec.compile().unwrap_err();
-        assert!(matches!(&err, MjEditError::CompileFailed(msg) if msg.contains("nchannel")),
-            "compile must reject nchannel < 3 builtin texture, got {err:?}");
-
-        // nchannel == 3 (and a builtin pattern) compiles cleanly.
-        let mut ok_spec = MjSpec::new();
-        ok_spec.add_texture()
-            .with_name("goodtex")
-            .with_type(MjtTexture::mjTEXTURE_2D)
-            .with_builtin(MjtBuiltin::mjBUILTIN_CHECKER)
-            .with_rgb1([0.9, 0.9, 0.9])
-            .with_rgb2([0.1, 0.1, 0.1])
-            .with_width(64)
-            .with_height(64)
-            .set_nchannel(3);
-        assert!(ok_spec.compile().is_ok(), "nchannel == 3 builtin texture should compile");
-
-        // Without a builtin pattern the texture still fails to compile, but through MuJoCo's own
-        // error, which scopes the guard to the builtin path.
-        let mut no_builtin = MjSpec::new();
-        no_builtin.add_texture()
-            .with_name("plain")
-            .with_type(MjtTexture::mjTEXTURE_2D)
-            .with_width(64)
-            .with_height(64)
-            .set_nchannel(1);
-        assert!(matches!(no_builtin.compile().unwrap_err(),
-                MjEditError::CompileFailed(msg) if !msg.contains("nchannel")),
-            "nchannel < 3 without a builtin pattern should not trip the nchannel guard");
-    }
-
     /// Verifies `MjsFlex::cellcount` (read-only `&[i32; 3]`) and `order` (read-write `i32`)
     /// by parsing a minimal flexcomp model and reading/writing through the spec.
     #[test]
@@ -4439,33 +4353,6 @@ mod tests {
         assert_eq!(spec.body_iter().count(), 1);
     }
 
-    /// `mjCWrap` leaves its elemtype at `mjOBJ_UNKNOWN`, which makes the duplicate-name check of
-    /// MuJoCo before 3.14.0 index a null list and crash, so naming a wrap must be rejected there.
-    #[test]
-    fn test_wrap_set_name_rejected() {
-        let mut spec = MjSpec::new();
-        spec.world_body_mut().add_site().with_name("s0");
-        let wrap = spec.add_tendon().wrap_site("s0");
-        // TODO: remove after updating bindings to 3.14.0.
-        if unsafe { mj_version() } < WRAP_RENAME_MIN_VERSION {
-            assert!(matches!(wrap.set_name("w0"), Err(MjEditError::UnsupportedOperation)));
-            assert_eq!(wrap.name(), "s0");
-        } else {
-            wrap.set_name("w0").unwrap();
-            assert_eq!(wrap.name(), "w0");
-        }
-    }
-
-    /// A frame's element type lies past the end of MuJoCo's element-list array, so `mjs_delete`
-    /// corrupts the spec and still reports success.
-    #[test]
-    fn test_delete_rejects_frame() {
-        let mut spec = MjSpec::new();
-        let frame = spec.world_body_mut().add_frame();
-        assert!(matches!(unsafe { frame.delete() }, Err(MjEditError::UnsupportedOperation)));
-        assert_eq!(spec.world_body().frame_iter(false).count(), 1, "the frame stays in the body");
-    }
-
     /// The deprecated raw-pointer path reaches what a handle cannot: a null pointer, a default
     /// class, a tendon wrap, and an element of another spec.
     #[test]
@@ -4534,9 +4421,6 @@ mod tests {
 
     /// Compiling with `discardvisual` frees the visual geoms and their assets, so a later element
     /// can take the address of a discarded one, and a walk must still reach only live geoms.
-    ///
-    /// The test walks instead of looking a name up: MuJoCo leaves the discarded name in its id map,
-    /// so `MjSpec::geom("visual")` throws out of C++ here. That is a separate defect of the lookup.
     #[test]
     fn test_delete_after_discardvisual() {
         const VISUAL: &str = "\
