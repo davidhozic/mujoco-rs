@@ -19,10 +19,12 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   interpolated flex shell made a step read out of bounds.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_biastype_mut`,
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_delay_mut`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_dynprm_mut`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_gainprm_mut`,
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>body_simple_mut`,
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_rigid_mut` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_centered_mut` are now
-  ``unsafe fn``. The ``biastype`` and ``delay`` fields of
+  ``unsafe fn``. The ``biastype``, ``delay``, ``dynprm`` and ``gainprm`` fields of
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut` and the ``simple`` field of
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjBodyModelViewMut` are now
   :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.

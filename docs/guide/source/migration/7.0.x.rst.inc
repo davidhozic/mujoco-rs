@@ -68,15 +68,17 @@ The ``data`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjEquali
     unsafe { view.data.as_mut_slice()[0] = 0.5; }
 
 
-Actuator bias type and delay, body simple flag and flex flags are unsafe to mutate
-----------------------------------------------------------------------------------
+Actuator bias type, delay and parameters, body simple flag and flex flags are unsafe to mutate
+----------------------------------------------------------------------------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_biastype_mut`,
 :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_delay_mut`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_dynprm_mut`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>actuator_gainprm_mut`,
 :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>body_simple_mut`,
 :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_rigid_mut` and
 :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>flex_centered_mut` are now
-``unsafe fn``. The ``biastype`` and ``delay`` fields of
+``unsafe fn``. The ``biastype``, ``delay``, ``dynprm`` and ``gainprm`` fields of
 :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut` and the ``simple`` field of
 :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjBodyModelViewMut` are now
 :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
@@ -88,6 +90,7 @@ Actuator bias type and delay, body simple flag and flex flags are unsafe to muta
     model.body_simple_mut()[1] = 0;
     let mut view = model.actuator("a").unwrap().view_mut(&mut model);
     view.delay[0] = 0.0;
+    view.gainprm[0] = 2.0;
 
     // After
     // SAFETY: mjBIAS_NONE reads no actuator state, and 0 selects the general mass matrix path.
@@ -96,8 +99,12 @@ Actuator bias type and delay, body simple flag and flex flags are unsafe to muta
         model.body_simple_mut()[1] = 0;
     }
     let mut view = model.actuator("a").unwrap().view_mut(&mut model);
-    // SAFETY: a zero delay does not read the history buffer.
-    unsafe { view.delay.as_mut_slice()[0] = 0.0; }
+    // SAFETY: a zero delay does not read the history buffer, and actuator "a" is not a PID or a DC
+    // motor actuator, so gainprm does not set its number of activation slots.
+    unsafe {
+        view.delay.as_mut_slice()[0] = 0.0;
+        view.gainprm.as_mut_slice()[0] = 2.0;
+    }
 
 
 Tuple object types are unsafe to mutate
