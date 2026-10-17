@@ -47,6 +47,10 @@ pub type MjtJoint = mjtJoint;
 /// elements. These values are used in `m->geom_type` and `m->site_type`.
 pub type MjtGeom = mjtGeom;
 
+/// The real model geom types of [`MjtGeom`].
+/// Contains every variant below [`MjtGeom::mjNGEOMTYPES`].
+pub type MjtGeomBase = _mjtGeomBase;
+
 /// Type of camera projection. Used in `m->cam_projection`.
 pub type MjtProjection = mjtProjection;
 
@@ -135,6 +139,10 @@ pub type MjtCtrlInput = mjtCtrlInput;
 /// MuJoCo object types. These are used, for example, in the support functions `mj_name2id` and
 /// `mj_id2name` to convert between object names and integer ids.
 pub type MjtObj = mjtObj;
+
+/// The real object types of [`MjtObj`]
+/// Contains every variant below [`MjtObj::mjNOBJECT`].
+pub type MjtObjBase = _mjtObjBase;
 
 /// Sensor types. These values are used in `m->sensor_type`.
 pub type MjtSensor = mjtSensor;
