@@ -105,11 +105,11 @@ We can now add our ball's body, geom and joint like so:
             .with_pos([0.0, 0.0, 1.0]);          // position
 
         ball_body.add_geom()
-            .with_size([0.010, 0.0, 0.0])        // set the radius to 10 mm.
-            .with_type(MjtGeom::mjGEOM_SPHERE);  // make this a spherical geom (default).
+            .with_size([0.010, 0.0, 0.0])            // set the radius to 10 mm.
+            .with_type(MjtGeomBase::mjGEOM_SPHERE);  // make this a spherical geom (default).
 
         ball_body.add_joint()
-            .with_type(MjtJoint::mjJNT_FREE);    // make the ball free to move anywhere.
+            .with_type(MjtJoint::mjJNT_FREE);        // make the ball free to move anywhere.
     }
 
 .. note::
@@ -148,15 +148,15 @@ Finally, we can now add the base plane, like so:
             .with_pos([0.0, 0.0, 1.0]);          // position
 
         ball_body.add_geom()
-            .with_size([0.010, 0.0, 0.0])        // set the radius to 10 mm.
-            .with_type(MjtGeom::mjGEOM_SPHERE);  // make this a spherical geom (default).
+            .with_size([0.010, 0.0, 0.0])            // set the radius to 10 mm.
+            .with_type(MjtGeomBase::mjGEOM_SPHERE);  // make this a spherical geom (default).
 
         ball_body.add_joint()
-            .with_type(MjtJoint::mjJNT_FREE);    // make the ball free to move anywhere.
+            .with_type(MjtJoint::mjJNT_FREE);        // make the ball free to move anywhere.
 
         // Add the base plane
         world.add_geom()
-            .with_type(MjtGeom::mjGEOM_PLANE)
+            .with_type(MjtGeomBase::mjGEOM_PLANE)
             .with_size([1.0, 1.0, 1.0]);
     }
 
@@ -182,15 +182,15 @@ compiled specification, so ``save_xml`` and ``save_xml_string`` return
             .with_pos([0.0, 0.0, 1.0]);          // position
 
         ball_body.add_geom()
-            .with_size([0.010, 0.0, 0.0])        // set the radius to 10 mm.
-            .with_type(MjtGeom::mjGEOM_SPHERE);  // make this a spherical geom (default).
+            .with_size([0.010, 0.0, 0.0])            // set the radius to 10 mm.
+            .with_type(MjtGeomBase::mjGEOM_SPHERE);  // make this a spherical geom (default).
 
         ball_body.add_joint()
-            .with_type(MjtJoint::mjJNT_FREE);    // make the ball free to move anywhere.
+            .with_type(MjtJoint::mjJNT_FREE);        // make the ball free to move anywhere.
 
         // Add the base plane
         world.add_geom()
-            .with_type(MjtGeom::mjGEOM_PLANE)
+            .with_type(MjtGeomBase::mjGEOM_PLANE)
             .with_size([1.0, 1.0, 1.0]);
 
         // Compile and save

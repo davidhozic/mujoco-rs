@@ -62,7 +62,7 @@ fn create_model() -> MjModel {
     let main_class = spec.default_mut("main").unwrap();
     main_class.geom_mut()
         .with_solref([timeconst, 0.5])
-        .with_type(MjtGeom::mjGEOM_BOX);
+        .with_type(MjtGeomBase::mjGEOM_BOX);
 
 
     // Create lights
@@ -168,7 +168,7 @@ fn connected_spheres(spec: &mut MjSpec) {
             let ball = world.add_body()
                 .with_pos([i as f64 * 0.5, j as f64 * 0.5, 5.0]);
             ball.add_geom()
-                .with_type(MjtGeom::mjGEOM_SPHERE)
+                .with_type(MjtGeomBase::mjGEOM_SPHERE)
                 .with_size([0.1, 0.0, 0.0])
                 .with_mass(0.001);
 

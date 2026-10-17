@@ -6,7 +6,7 @@ use crate::{getter_setter, mujoco_c::*};
 use crate::error::MjDataError;
 
 use super::mj_statistic::{MjWarningStat, MjTimerStat, MjSolverStat};
-use super::mj_model::{MjModel, MjModelLayout, MjtSameFrame, MjtObj, MjtStage};
+use super::mj_model::{MjModel, MjModelLayout, MjtSameFrame, MjtObjBase, MjtStage};
 use super::mj_model::traits::{ModelTypeMut, ModelType};
 use super::fun::utility::mju_norm_3;
 use super::mj_auxiliary::MjContact;
@@ -182,7 +182,7 @@ impl<M: ModelType> MjData<M> {
     /// When the `name` contains '\0' characters, a panic occurs.
     pub fn joint(&self, name: &str) -> Option<MjJointDataInfo> {
         let model = self.model();
-        let id = model.name_to_id(MjtObj::mjOBJ_JOINT, name)?;
+        let id = model.name_to_id(MjtObjBase::mjOBJ_JOINT, name)?;
         let nq_range = {
             let slice = model.jnt_qposadr();
             crate::util::optional_sparse_addr_range(slice, id, model.nq() as usize).unwrap_or((0, 0))
@@ -1138,7 +1138,7 @@ impl<M: ModelType> MjData<M> {
     /// # Panics
     /// Panics when `obj_type` is unsupported or `obj_id` is out of range.
     /// Use [`MjData::try_object_velocity`] for a fallible alternative.
-    pub fn object_velocity(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> [MjtNum; 6] {
+    pub fn object_velocity(&self, obj_type: MjtObjBase, obj_id: usize, flg_local: bool) -> [MjtNum; 6] {
         self.try_object_velocity(obj_type, obj_id, flg_local).unwrap()
     }
 
@@ -1148,13 +1148,13 @@ impl<M: ModelType> MjData<M> {
     /// - [`MjDataError::UnsupportedObjectType`] when `obj_type` is not one of
     ///   `mjOBJ_BODY`, `mjOBJ_XBODY`, `mjOBJ_GEOM`, `mjOBJ_SITE`, `mjOBJ_CAMERA`.
     /// - [`MjDataError::IndexOutOfBounds`] when `obj_id` is out of range for the given type.
-    pub fn try_object_velocity(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
+    pub fn try_object_velocity(&self, obj_type: MjtObjBase, obj_id: usize, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
         let max_id = match obj_type {
-            MjtObj::mjOBJ_BODY | MjtObj::mjOBJ_XBODY => self.model.ffi().nbody,
-            MjtObj::mjOBJ_GEOM => self.model.ffi().ngeom,
-            MjtObj::mjOBJ_SITE => self.model.ffi().nsite,
-            MjtObj::mjOBJ_CAMERA => self.model.ffi().ncam,
-            _ => return Err(MjDataError::UnsupportedObjectType(obj_type as i32)),
+            MjtObjBase::mjOBJ_BODY | MjtObjBase::mjOBJ_XBODY => self.model.ffi().nbody,
+            MjtObjBase::mjOBJ_GEOM => self.model.ffi().ngeom,
+            MjtObjBase::mjOBJ_SITE => self.model.ffi().nsite,
+            MjtObjBase::mjOBJ_CAMERA => self.model.ffi().ncam,
+            _ => return Err(MjDataError::UnsupportedObjectType(obj_type)),
         };
         if obj_id >= max_id as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "obj_id", id: obj_id, upper: max_id as usize });
@@ -1170,7 +1170,7 @@ impl<M: ModelType> MjData<M> {
     /// # Panics
     /// Panics when `obj_type` is unsupported or `obj_id` is out of range.
     /// Use [`MjData::try_object_acceleration`] for a fallible alternative.
-    pub fn object_acceleration(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> [MjtNum; 6] {
+    pub fn object_acceleration(&self, obj_type: MjtObjBase, obj_id: usize, flg_local: bool) -> [MjtNum; 6] {
         self.try_object_acceleration(obj_type, obj_id, flg_local).unwrap()
     }
 
@@ -1179,13 +1179,13 @@ impl<M: ModelType> MjData<M> {
     /// Returns:
     /// - [`MjDataError::UnsupportedObjectType`] when `obj_type` is not supported.
     /// - [`MjDataError::IndexOutOfBounds`] when `obj_id` is out of range for the given type.
-    pub fn try_object_acceleration(&self, obj_type: MjtObj, obj_id: usize, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
+    pub fn try_object_acceleration(&self, obj_type: MjtObjBase, obj_id: usize, flg_local: bool) -> Result<[MjtNum; 6], MjDataError> {
         let max_id = match obj_type {
-            MjtObj::mjOBJ_BODY | MjtObj::mjOBJ_XBODY => self.model.ffi().nbody,
-            MjtObj::mjOBJ_GEOM => self.model.ffi().ngeom,
-            MjtObj::mjOBJ_SITE => self.model.ffi().nsite,
-            MjtObj::mjOBJ_CAMERA => self.model.ffi().ncam,
-            _ => return Err(MjDataError::UnsupportedObjectType(obj_type as i32)),
+            MjtObjBase::mjOBJ_BODY | MjtObjBase::mjOBJ_XBODY => self.model.ffi().nbody,
+            MjtObjBase::mjOBJ_GEOM => self.model.ffi().ngeom,
+            MjtObjBase::mjOBJ_SITE => self.model.ffi().nsite,
+            MjtObjBase::mjOBJ_CAMERA => self.model.ffi().ncam,
+            _ => return Err(MjDataError::UnsupportedObjectType(obj_type)),
         };
         if obj_id >= max_id as usize {
             return Err(MjDataError::IndexOutOfBounds { kind: "obj_id", id: obj_id, upper: max_id as usize });
@@ -2565,10 +2565,10 @@ mod test {
         let mat = data.angmom_mat(0);
         assert_eq!(mat.len(), (3 * data.model.ffi().nv as usize));
 
-        let vel = data.object_velocity(MjtObj::mjOBJ_BODY, 0, true);
+        let vel = data.object_velocity(MjtObjBase::mjOBJ_BODY, 0, true);
         assert_eq!(vel.len(), 6);
 
-        let acc = data.object_acceleration(MjtObj::mjOBJ_BODY, 0, false);
+        let acc = data.object_acceleration(MjtObjBase::mjOBJ_BODY, 0, false);
         assert_eq!(acc.len(), 6);
     }
 
@@ -2607,8 +2607,8 @@ mod test {
         // Test actual distance between two different geoms (green_sphere and green_sphere2).
         // green_sphere is at (.2, .2, .1) and green_sphere2 is at (.7, .2, .1), both with radius 0.1.
         // Expected distance ~= 0.5 - 2*0.1 = 0.3 (center distance minus both radii).
-        let geom0_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere").unwrap();
-        let geom1_id = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere2").unwrap();
+        let geom0_id = model.name_to_id(MjtObjBase::mjOBJ_GEOM, "green_sphere").unwrap();
+        let geom1_id = model.name_to_id(MjtObjBase::mjOBJ_GEOM, "green_sphere2").unwrap();
 
         let mut ft = [0.0; 6];
         let dist = data.geom_distance(geom0_id, geom1_id, 1.0, Some(&mut ft));
@@ -2764,7 +2764,7 @@ mod test {
         const MODIFIED_VALUE: f64 = 15.0;
 
         let model = MjModel::from_xml_string(MODEL).unwrap();
-        let name = model.id_to_name(MjtObj::mjOBJ_JOINT, BALL_INDEX).unwrap();
+        let name = model.id_to_name(MjtObjBase::mjOBJ_JOINT, BALL_INDEX).unwrap();
 
         let mut data = MjData::new(&model);
         let ball2_joint_info = data.joint(name).unwrap();
@@ -3424,11 +3424,11 @@ mod test {
         let data = model.make_data();
 
         // Unsupported type (mjOBJ_JOINT is not in the match arms)
-        let err = data.try_object_velocity(MjtObj::mjOBJ_JOINT, 0, false).unwrap_err();
-        assert!(matches!(err, MjDataError::UnsupportedObjectType(_)));
+        let err = data.try_object_velocity(MjtObjBase::mjOBJ_JOINT, 0, false).unwrap_err();
+        assert_eq!(err, MjDataError::UnsupportedObjectType(MjtObjBase::mjOBJ_JOINT));
 
         // Out-of-range body ID
-        let err = data.try_object_velocity(MjtObj::mjOBJ_BODY, 9999, false).unwrap_err();
+        let err = data.try_object_velocity(MjtObjBase::mjOBJ_BODY, 9999, false).unwrap_err();
         assert!(matches!(err, MjDataError::IndexOutOfBounds { kind: "obj_id", .. }));
     }
 
@@ -4243,8 +4243,8 @@ mod test {
         let mut data = model.make_data();
         let nv = model.nv() as usize;
 
-        let s1_id = model.name_to_id(MjtObj::mjOBJ_SITE, "s1").unwrap();
-        let s2_id = model.name_to_id(MjtObj::mjOBJ_SITE, "s2").unwrap();
+        let s1_id = model.name_to_id(MjtObjBase::mjOBJ_SITE, "s1").unwrap();
+        let s2_id = model.name_to_id(MjtObjBase::mjOBJ_SITE, "s2").unwrap();
 
         for config in 0..2 {
             if config == 0 {
@@ -4479,8 +4479,8 @@ mod test {
         let nv = model.nv() as usize;
         assert_eq!(nv, 2);
 
-        let s1_id = model.name_to_id(MjtObj::mjOBJ_SITE, "s1").unwrap();
-        let s2_id = model.name_to_id(MjtObj::mjOBJ_SITE, "s2").unwrap();
+        let s1_id = model.name_to_id(MjtObjBase::mjOBJ_SITE, "s1").unwrap();
+        let s2_id = model.name_to_id(MjtObjBase::mjOBJ_SITE, "s2").unwrap();
 
         let to_dense = |data: &MjData<_>, model: &MjModel| -> Vec<MjtNum> {
             let ten_j = data.ten_j();

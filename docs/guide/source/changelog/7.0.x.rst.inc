@@ -27,6 +27,9 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjBodyModelViewMut` are now
   :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
   A value that disagreed with the rest of the model, made a step access memory out of bounds.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tuple_objtype_mut` is now an ``unsafe fn``.
+  The related ``objtype`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTupleModelViewMut` is now
+  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
 - Removed ``append_cubefiles`` and ``append_textures`` from
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture` and
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial`, respectively.
@@ -76,8 +79,21 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>IncompatibleModel` now carry the
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjModelLayout` :sup:`new` of both models instead of
   their signatures.
+- :docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>UnsupportedObjectType` now carries an
+  :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtObjBase` :sup:`new` instead of an ``i32``.
 - Removed ``MjvScene::signature`` and the ``model_signature`` method of every ``Info`` type. Read
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>signature` on the model instead.
+- Model and specification fields and functions that accept only real geom types or real object
+  types now use :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtGeomBase` :sup:`new` and
+  :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtObjBase` :sup:`new`, which hold only the variants
+  below ``mjNGEOMTYPES`` and ``mjNOBJECT``.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor::<method>set_objtype`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor::<method>set_reftype` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTuple::<method>set_objtype` no longer
+  return a ``Result``, and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor::<method>with_objtype` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor::<method>with_reftype` no longer
+  panic, because the type now rejects the invalid object types.
 
 
 .. rubric:: Deprecations

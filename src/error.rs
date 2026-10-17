@@ -11,7 +11,7 @@
 use std::sync::Arc;
 use std::fmt;
 
-use crate::wrappers::mj_model::MjModelLayout;
+use crate::wrappers::mj_model::{MjModelLayout, MjtObjBase};
 
 /// Errors that can occur in [`MjData`](crate::wrappers::MjData) physics data
 /// and Jacobian operations.
@@ -28,9 +28,7 @@ pub enum MjDataError {
         upper: usize,
     },
     /// The provided MuJoCo object type is not supported by this operation.
-    ///
-    /// Contains the raw MuJoCo C object-type code (`mjOBJ_*`).
-    UnsupportedObjectType(i32),
+    UnsupportedObjectType(MjtObjBase),
     /// MuJoCo failed to allocate the requested structure.
     AllocationFailed,
     /// A buffer passed to the operation is too small for the required data.
@@ -92,8 +90,8 @@ impl fmt::Display for MjDataError {
             Self::IndexOutOfBounds { kind, id, upper } => {
                 write!(f, "{kind} {id} is out of bounds [0, {upper})")
             }
-            Self::UnsupportedObjectType(raw) => {
-                write!(f, "object type {raw} is not supported by this operation")
+            Self::UnsupportedObjectType(obj_type) => {
+                write!(f, "object type {obj_type:?} is not supported by this operation")
             }
             Self::AllocationFailed => {
                 write!(f, "MuJoCo allocation failed")

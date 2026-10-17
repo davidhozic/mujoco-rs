@@ -131,7 +131,7 @@ writable_tables! {
     exclude_signature,     eq_active0,            tendon_group,          tendon_limited,
     tendon_actfrclimited,  actuator_actlimited,   actuator_actearly,     actuator_group,
     actuator_forcelimited, actuator_ctrllimited,  sensor_datatype,       sensor_needstage,
-    bvh_depth,             oct_depth,             tuple_objtype,         paths
+    bvh_depth,             oct_depth,             paths
 }
 
 /// Reports whether `field` is a name field, a path address or count, the buffer size, a hull or tree

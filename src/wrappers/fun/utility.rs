@@ -1,5 +1,5 @@
 //! Module containing safe wrappers around utility functions.
-use crate::wrappers::mj_model::MjtGeom;
+use crate::wrappers::mj_model::MjtGeomBase;
 use crate::wrappers::mj_primitive::*;
 use crate::util::checked_c_len;
 use crate::mujoco_c;
@@ -350,7 +350,7 @@ pub fn mju_sqr_mat_td(res: &mut [MjtNum], mat: &[MjtNum], diag: Option<&[MjtNum]
 /// # Note
 /// MuJoCo raises a fatal error, which ends the process, when `geomtype` is not a plane, sphere,
 /// capsule, ellipsoid, cylinder or box.
-pub fn mju_ray_geom(pos: &[MjtNum; 3], mat: &[MjtNum; 9], size: &[MjtNum; 3], pnt: &[MjtNum; 3], vec: &[MjtNum; 3], geomtype: MjtGeom, normal_out: Option<&mut [MjtNum; 3]>) -> MjtNum  {
+pub fn mju_ray_geom(pos: &[MjtNum; 3], mat: &[MjtNum; 9], size: &[MjtNum; 3], pnt: &[MjtNum; 3], vec: &[MjtNum; 3], geomtype: MjtGeomBase, normal_out: Option<&mut [MjtNum; 3]>) -> MjtNum  {
     // SAFETY: all arguments are valid references; nullable parameters use null when None.
     unsafe { mujoco_c::mju_rayGeom(pos, mat, size, pnt, vec, geomtype as i32, normal_out.map_or(ptr::null_mut(), |x| x)) }
 }

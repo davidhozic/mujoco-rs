@@ -436,7 +436,7 @@ macro_rules! info_method {
             #[allow(non_snake_case)]
             pub fn $type_(&self, name: &str) -> Option<[<Mj $type_:camel $info_type Info>]> {
                 let model_ref = self$(.$model())?;
-                let id = model_ref.name_to_id(MjtObj::[<mjOBJ_ $type_:upper>], name)?;
+                let id = model_ref.name_to_id(MjtObjBase::[<mjOBJ_ $type_:upper>], name)?;
                 #[allow(unused)]
                 let model_ffi = model_ref.ffi();
 

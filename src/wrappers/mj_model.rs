@@ -44,7 +44,7 @@ pub type MjtJoint = mjtJoint;
 
 /// Geometric types supported by MuJoCo. The first group are "official" geom types that can be used in the model. The
 /// second group are geom types that cannot be used in the model but are used by the visualizer to add decorative
-/// elements. These values are used in `m->geom_type` and `m->site_type`.
+/// elements.
 pub type MjtGeom = mjtGeom;
 
 /// The real model geom types of [`MjtGeom`].
@@ -140,7 +140,7 @@ pub type MjtCtrlInput = mjtCtrlInput;
 /// `mj_id2name` to convert between object names and integer ids.
 pub type MjtObj = mjtObj;
 
-/// The real object types of [`MjtObj`]
+/// The real object types of [`MjtObj`].
 /// Contains every variant below [`MjtObj::mjNOBJECT`].
 pub type MjtObjBase = _mjtObjBase;
 
@@ -187,11 +187,13 @@ unsafe impl bytemuck::Zeroable for mjtDyn {}
 unsafe impl bytemuck::Zeroable for mjtGain {}
 unsafe impl bytemuck::Zeroable for mjtBias {}
 unsafe impl bytemuck::Zeroable for mjtObj {}
+unsafe impl bytemuck::Zeroable for _mjtObjBase {}
 unsafe impl bytemuck::Zeroable for mjtSameFrame {}
 unsafe impl bytemuck::Zeroable for mjtCamLight {}
 unsafe impl bytemuck::Zeroable for mjtProjection {}
 unsafe impl bytemuck::Zeroable for mjtEq {}
 unsafe impl bytemuck::Zeroable for mjtGeom {}
+unsafe impl bytemuck::Zeroable for _mjtGeomBase {}
 unsafe impl bytemuck::Zeroable for mjtJoint {}
 unsafe impl bytemuck::Zeroable for mjtLightType {}
 unsafe impl bytemuck::Zeroable for mjtSensor {}
@@ -221,8 +223,10 @@ unsafe impl bytemuck::Zeroable for mjtWrap {}
 // into them.
 unsafe impl bytemuck::NoUninit for mjtJoint {}
 unsafe impl bytemuck::NoUninit for mjtGeom {}
+unsafe impl bytemuck::NoUninit for _mjtGeomBase {}
 unsafe impl bytemuck::NoUninit for mjtEq {}
 unsafe impl bytemuck::NoUninit for mjtObj {}
+unsafe impl bytemuck::NoUninit for _mjtObjBase {}
 unsafe impl bytemuck::NoUninit for mjtWrap {}
 unsafe impl bytemuck::NoUninit for mjtTrn {}
 unsafe impl bytemuck::NoUninit for mjtDyn {}
@@ -232,6 +236,20 @@ unsafe impl bytemuck::NoUninit for mjtSensor {}
 unsafe impl bytemuck::NoUninit for mjtDataType {}
 unsafe impl bytemuck::NoUninit for mjtStage {}
 unsafe impl bytemuck::NoUninit for mjtTexture {}
+
+impl From<MjtGeomBase> for MjtGeom {
+    fn from(value: MjtGeomBase) -> Self {
+        // SAFETY: both are `#[repr(u32)]`. Every `MjtGeomBase` discriminant is also part of `MjtGeom`.
+        unsafe { crate::util::force_cast(value) }
+    }
+}
+
+impl From<MjtObjBase> for MjtObj {
+    fn from(value: MjtObjBase) -> Self {
+        // SAFETY: both are `#[repr(u32)]`. Every `MjtObjBase` discriminant is also part of `MjtObj`.
+        unsafe { crate::util::force_cast(value) }
+    }
+}
 
 /*******************************************/
 
@@ -377,10 +395,10 @@ model_layout! {
         plugin,              plugin_stateadr,     plugin_statenum,     plugin_attr,
         plugin_attradr,      numeric_adr,         numeric_size,        text_adr,
         text_size,           text_data,           tuple_adr,           tuple_size,
-        tuple_objid,         B_rownnz,            B_rowadr,            B_colind,
-        M_rownnz,            M_rowadr,            M_colind,            mapM2M,
-        D_rownnz,            D_rowadr,            D_diag,              D_colind,
-        mapM2D,              mapD2M
+        tuple_objtype,       tuple_objid,         B_rownnz,            B_rowadr,
+        B_colind,            M_rownnz,            M_rowadr,            M_colind,
+        mapM2M,              D_rownnz,            D_rowadr,            D_diag,
+        D_colind,            mapM2D,              mapD2M
     ]
 }
 
@@ -838,7 +856,7 @@ impl MjModel {
     /// Wraps [`mj_name2id`].
     /// # Panics
     /// When the `name` contains '\0' characters, a panic occurs.
-    pub fn name_to_id(&self, type_: MjtObj, name: &str) -> Option<usize> {
+    pub fn name_to_id(&self, type_: MjtObjBase, name: &str) -> Option<usize> {
         let c_string = CString::new(name).unwrap();
         let id = unsafe {
             mj_name2id(self.ffi(), type_ as i32, c_string.as_ptr())
@@ -1210,12 +1228,13 @@ impl MjModel {
         unsafe { mj_isDual(self.ffi()) == 1 }
     }
 
-    /// Get name of object with the specified [`MjtObj`] type and id, returns `None` if name not found.
+    /// Get name of object with the specified [`MjtObjBase`] type and id, returns `None` if name not found.
     /// Wraps [`mj_id2name`].
     /// # Panics
-    /// Panics if MuJoCo internally returns a C string that is not valid UTF-8.
-    pub fn id_to_name(&self, type_: MjtObj, id: usize) -> Option<&str> {
-        let ptr = unsafe { mj_id2name(self.ffi(), type_ as i32, id as i32) };
+    /// Panics if `id` does not fit in an `i32`, or if MuJoCo internally returns a C string that is
+    /// not valid UTF-8.
+    pub fn id_to_name(&self, type_: MjtObjBase, id: usize) -> Option<&str> {
+        let ptr = unsafe { mj_id2name(self.ffi(), type_ as i32, checked_c_len(id)) };
         if ptr.is_null() {
             None
         }
@@ -1537,7 +1556,7 @@ impl MjModel {
         (mut = unsafe) tree_dofadr: &[i32; "start addr of dofs"; ffi().ntree],
         (mut = unsafe) tree_dofnum: &[i32; "number of dofs in tree"; ffi().ntree],
         tree_sleep_policy: &[MjtSleepPolicy [force]; "sleep policy"; ffi().ntree],
-        (mut = unsafe) geom_type: &[MjtGeom [force]; "geometric type"; ffi().ngeom],
+        (mut = unsafe) geom_type: &[MjtGeomBase [force]; "geometric type"; ffi().ngeom],
         geom_contype: &[i32; "geom contact type"; ffi().ngeom],
         geom_conaffinity: &[i32; "geom contact affinity"; ffi().ngeom],
         (mut = unsafe) geom_condim: &[i32; "contact dimensionality (1, 3, 4, 6)"; ffi().ngeom],
@@ -1563,7 +1582,7 @@ impl MjModel {
         geom_adhesion: &[MjtNum; "adhesive force of contacts"; ffi().ngeom],
         geom_fluid: &[[MjtNum; mjNFLUID as usize] [force]; "fluid interaction parameters"; ffi().ngeom],
         geom_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().ngeom],
-        site_type: &[MjtGeom [force]; "geom type for rendering"; ffi().nsite],
+        site_type: &[MjtGeomBase [force]; "geom type for rendering"; ffi().nsite],
         (mut = unsafe) site_bodyid: &[i32; "id of site's body"; ffi().nsite],
         (mut = unsafe) site_matid: &[i32; "material id for rendering; -1: none"; ffi().nsite],
         site_group: &[i32; "group for visibility"; ffi().nsite],
@@ -1787,7 +1806,7 @@ impl MjModel {
         (mut = unsafe) eq_type: &[MjtEq [force]; "constraint type"; ffi().neq],
         (mut = unsafe) eq_obj1id: &[i32; "id of object 1"; ffi().neq],
         (mut = unsafe) eq_obj2id: &[i32; "id of object 2"; ffi().neq],
-        (mut = unsafe) eq_objtype: &[MjtObj [force]; "type of both objects"; ffi().neq],
+        (mut = unsafe) eq_objtype: &[MjtObjBase [force]; "type of both objects"; ffi().neq],
         eq_active0: &[MjtBool; "initial enable/disable constraint state"; ffi().neq],
         eq_solref: &[[MjtNum; mjNREF as usize] [force]; "constraint solver reference"; ffi().neq],
         eq_solimp: &[[MjtNum; mjNIMP as usize] [force]; "constraint solver impedance"; ffi().neq],
@@ -1863,9 +1882,9 @@ impl MjModel {
         (mut = unsafe) sensor_type: &[MjtSensor [force]; "sensor type"; ffi().nsensor],
         sensor_datatype: &[MjtDataType [force]; "numeric data type"; ffi().nsensor],
         sensor_needstage: &[MjtStage [force]; "required compute stage"; ffi().nsensor],
-        (mut = unsafe) sensor_objtype: &[MjtObj [force]; "type of sensorized object"; ffi().nsensor],
+        (mut = unsafe) sensor_objtype: &[MjtObjBase [force]; "type of sensorized object"; ffi().nsensor],
         (mut = unsafe) sensor_objid: &[i32; "id of sensorized object"; ffi().nsensor],
-        (mut = unsafe) sensor_reftype: &[MjtObj [force]; "type of reference frame"; ffi().nsensor],
+        (mut = unsafe) sensor_reftype: &[MjtObjBase [force]; "type of reference frame"; ffi().nsensor],
         (mut = unsafe) sensor_refid: &[i32; "id of reference frame; -1: global frame"; ffi().nsensor],
         (mut = unsafe) sensor_intprm: &[[i32; mjNSENS as usize] [force]; "sensor parameters"; ffi().nsensor],
         (mut = unsafe) sensor_dim: &[i32; "number of scalar outputs"; ffi().nsensor],
@@ -1890,7 +1909,7 @@ impl MjModel {
         (mut = unsafe) text_data: &[c_char; "array of all text fields (0-terminated)"; ffi().ntextdata],
         (mut = unsafe) tuple_adr: &[i32; "address of tuple in tuple_objtype/objid/objprm"; ffi().ntuple],
         (mut = unsafe) tuple_size: &[i32; "number of objects in tuple"; ffi().ntuple],
-        tuple_objtype: &[MjtObj [force]; "array of object types in all tuples"; ffi().ntupledata],
+        (mut = unsafe) tuple_objtype: &[MjtObjBase [force]; "array of object types in all tuples"; ffi().ntupledata],
         (mut = unsafe) tuple_objid: &[i32; "array of object ids in all tuples"; ffi().ntupledata],
         tuple_objprm: &[MjtNum; "array of object params in all tuples"; ffi().ntupledata],
         key_time: &[MjtNum; "key time"; ffi().nkey],
@@ -2043,7 +2062,7 @@ info_with_view!(Model, equality,
 	[[eq_] r#type: MjtEq [force],
 	 [eq_] obj1id: i32,
 	 [eq_] obj2id: i32,
-     [eq_] objtype: MjtObj [force],
+     [eq_] objtype: MjtObjBase [force],
 	 [eq_] data: MjtNum],
 	[]);
 
@@ -2065,7 +2084,7 @@ info_with_view!(Model, geom,
 	 [geom_] margin: MjtNum, [geom_] gap: MjtNum,
 	 [geom_] surfacevel: MjtNum, [geom_] adhesion: MjtNum, [geom_] fluid: MjtNum,
 	 [geom_] user: MjtNum, [geom_] rgba: f32],
-	[[geom_] r#type: MjtGeom [force], [geom_] condim: i32,
+	[[geom_] r#type: MjtGeomBase [force], [geom_] condim: i32,
 	 [geom_] bodyid: i32, [geom_] dataid: i32,
 	 [geom_] matid: i32, [geom_] plugin: i32],
 	[]);
@@ -2195,8 +2214,8 @@ info_with_view!(Model, sensor,
 	 [sensor_] r#type: MjtSensor [force],
 	 [sensor_] objid: i32,
 	 [sensor_] refid: i32,
-	 [sensor_] objtype: MjtObj [force],
-	 [sensor_] reftype: MjtObj [force],
+	 [sensor_] objtype: MjtObjBase [force],
+	 [sensor_] reftype: MjtObjBase [force],
 	 [sensor_] dim: i32,
 	 [sensor_] adr: i32,
 	 [sensor_] history: i32,
@@ -2212,7 +2231,7 @@ info_with_view!(Model, site,
 	 [site_] quat: MjtNum,
 	 [site_] user: MjtNum,
 	 [site_] rgba: f32,
-	 [site_] r#type: MjtGeom [force]],
+	 [site_] r#type: MjtGeomBase [force]],
 	[[site_] bodyid: i32,
 	 [site_] matid: i32],
 	[]);
@@ -2262,10 +2281,10 @@ info_with_view!(Model, texture,
 	[[tex_] data: MjtByte]);
 
 info_with_view!(Model, tuple,
-	[[tuple_] objprm: MjtNum,
-	 [tuple_] objtype: MjtObj [force]],
+	[[tuple_] objprm: MjtNum],
 	[[tuple_] adr: i32,
 	 [tuple_] size: i32,
+	 [tuple_] objtype: MjtObjBase [force],
 	 [tuple_] objid: i32],
 	[]);
 
@@ -2649,7 +2668,7 @@ mod tests {
         
         /* Test read */
         assert_eq!(view.dim[0], 1);
-        assert_eq!(view.objtype[0], MjtObj::mjOBJ_SITE);
+        assert_eq!(view.objtype[0], MjtObjBase::mjOBJ_SITE);
         assert_eq!(view.noise[0], 0.0);
         assert_eq!(view.r#type[0], MjtSensor::mjSENS_TOUCH);
 
@@ -2723,7 +2742,7 @@ mod tests {
         let view = model_info.view(&model);
         
         /* Test read */
-        assert_eq!(view.r#type[0], MjtGeom::mjGEOM_SPHERE);
+        assert_eq!(view.r#type[0], MjtGeomBase::mjGEOM_SPHERE);
         assert_eq!(view.size[0], 0.5);
 
         /* Test write */
@@ -2773,7 +2792,7 @@ mod tests {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
 
         // Body with id=1 should exist ("ball")
-        let name = model.id_to_name(MjtObj::mjOBJ_BODY, 1);
+        let name = model.id_to_name(MjtObjBase::mjOBJ_BODY, 1);
         assert_eq!(name, Some("ball"));
     }
 
@@ -2793,7 +2812,7 @@ mod tests {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
 
         // Invalid id should return None
-        let name = model.id_to_name(MjtObj::mjOBJ_BODY, 9999);
+        let name = model.id_to_name(MjtObjBase::mjOBJ_BODY, 9999);
         assert_eq!(name, None);
     }
 
@@ -2868,7 +2887,7 @@ mod tests {
         const SITE_SIZE: [f64; 3] = [0.5, 0.25, 0.5];
         const SITE_POS: [f64; 3] = [5.0, 1.0, 3.0];
         const SITE_RGBA: [f32; 4] = [1.0, 2.0, 3.0, 1.0];
-        const SITE_TYPE: MjtGeom = MjtGeom::mjGEOM_BOX;
+        const SITE_TYPE: MjtGeomBase = MjtGeomBase::mjGEOM_BOX;
 
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("unable to load the model.");
         let info_ball = model.body(BODY_NAME).unwrap();
@@ -2953,7 +2972,7 @@ mod tests {
     fn test_tuple_view() {
         const TUPLE_NAME: &str = "tuple_example";
         const SIZE: i32 = 2;
-        const OBJTYPE: &[MjtObj] = &[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_SITE];
+        const OBJTYPE: &[MjtObjBase] = &[MjtObjBase::mjOBJ_BODY, MjtObjBase::mjOBJ_SITE];
         const OBJPRM: &[f64]  = &[0.5, 1.0];
 
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
@@ -3093,9 +3112,9 @@ mod tests {
         assert_eq!(view_eq.r#type[0], MjtEq::mjEQ_CONNECT);
 
         // Check connected bodies
-        assert_eq!(view_eq.obj1id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body3").unwrap() as i32);
-        assert_eq!(view_eq.obj2id[0], model.name_to_id(MjtObj::mjOBJ_BODY, "eq_body4").unwrap() as i32);
-        assert_eq!(view_eq.objtype[0], MjtObj::mjOBJ_BODY);
+        assert_eq!(view_eq.obj1id[0], model.name_to_id(MjtObjBase::mjOBJ_BODY, "eq_body3").unwrap() as i32);
+        assert_eq!(view_eq.obj2id[0], model.name_to_id(MjtObjBase::mjOBJ_BODY, "eq_body4").unwrap() as i32);
+        assert_eq!(view_eq.objtype[0], MjtObjBase::mjOBJ_BODY);
 
         // Check active
         assert!(view_eq.active0[0]);
@@ -3381,7 +3400,7 @@ mod tests {
         assert!(!jnt_limited[ball_jnt.id]);
     }
 
-    /// Verifies [force]-cast enum for geom_type (*mut i32 -> *mut MjtGeom).
+    /// Verifies [force]-cast enum for geom_type (*mut i32 -> *mut MjtGeomBase).
     #[test]
     fn test_force_cast_geom_type_enum() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
@@ -3393,19 +3412,19 @@ mod tests {
         // Cross-validate
         for i in 0..ngeom {
             let raw_i32 = unsafe { *model.ffi().geom_type.add(i) };
-            let expected: MjtGeom = unsafe { crate::util::force_cast(raw_i32) };
+            let expected: MjtGeomBase = unsafe { crate::util::force_cast(raw_i32) };
             assert_eq!(geom_type[i], expected);
         }
 
         // Verify known geoms
         let sphere_geom = model.geom("green_sphere").unwrap();
-        assert_eq!(geom_type[sphere_geom.id], MjtGeom::mjGEOM_SPHERE);
+        assert_eq!(geom_type[sphere_geom.id], MjtGeomBase::mjGEOM_SPHERE);
 
         let floor_geom = model.geom("floor").unwrap();
-        assert_eq!(geom_type[floor_geom.id], MjtGeom::mjGEOM_PLANE);
+        assert_eq!(geom_type[floor_geom.id], MjtGeomBase::mjGEOM_PLANE);
 
         let rod_geom = model.geom("rod").unwrap();
-        assert_eq!(geom_type[rod_geom.id], MjtGeom::mjGEOM_CYLINDER);
+        assert_eq!(geom_type[rod_geom.id], MjtGeomBase::mjGEOM_CYLINDER);
     }
 
     /// Verifies [force]-cast for geom_size (&[[MjtNum; 3]]), geom_pos (&[[MjtNum; 3]]),
@@ -3559,7 +3578,7 @@ mod tests {
     }
 
     /// Verifies [force]-cast for equality constraint arrays: eq_type (MjtEq),
-    /// eq_objtype (MjtObj), eq_active0 (bool), eq_data (&[[MjtNum; mjNEQDATA]]).
+    /// eq_objtype (MjtObjBase), eq_active0 (bool), eq_data (&[[MjtNum; mjNEQDATA]]).
     #[test]
     fn test_force_cast_equality_model_arrays() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
@@ -3584,7 +3603,7 @@ mod tests {
             assert_eq!(eq_type[i], expected_type);
 
             let raw_objtype = unsafe { *model.ffi().eq_objtype.add(i) };
-            let expected_objtype: MjtObj = unsafe { crate::util::force_cast(raw_objtype) };
+            let expected_objtype: MjtObjBase = unsafe { crate::util::force_cast(raw_objtype) };
             assert_eq!(eq_objtype[i], expected_objtype);
 
             let raw_active = unsafe { *model.ffi().eq_active0.add(i) };
@@ -3594,12 +3613,12 @@ mod tests {
         // Verify known equality: "eq1" is a connect constraint
         let eq1 = model.equality("eq1").unwrap();
         assert_eq!(eq_type[eq1.id], MjtEq::mjEQ_CONNECT);
-        assert_eq!(eq_objtype[eq1.id], MjtObj::mjOBJ_BODY);
+        assert_eq!(eq_objtype[eq1.id], MjtObjBase::mjOBJ_BODY);
         assert!(eq_active0[eq1.id]);
     }
 
     /// Verifies [force]-cast for sensor arrays: sensor_type (MjtSensor), sensor_datatype (MjtDataType),
-    /// sensor_needstage (MjtStage), sensor_objtype (MjtObj), sensor_reftype (MjtObj).
+    /// sensor_needstage (MjtStage), sensor_objtype (MjtObjBase), sensor_reftype (MjtObjBase).
     #[test]
     fn test_force_cast_sensor_model_enums() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
@@ -3631,14 +3650,14 @@ mod tests {
             assert_eq!(sensor_type[i], unsafe { crate::util::force_cast::<_, MjtSensor>(raw_type) });
             assert_eq!(sensor_datatype[i], unsafe { crate::util::force_cast::<_, MjtDataType>(raw_datatype) });
             assert_eq!(sensor_needstage[i], unsafe { crate::util::force_cast::<_, MjtStage>(raw_needstage) });
-            assert_eq!(sensor_objtype[i], unsafe { crate::util::force_cast::<_, MjtObj>(raw_objtype) });
-            assert_eq!(sensor_reftype[i], unsafe { crate::util::force_cast::<_, MjtObj>(raw_reftype) });
+            assert_eq!(sensor_objtype[i], unsafe { crate::util::force_cast::<_, MjtObjBase>(raw_objtype) });
+            assert_eq!(sensor_reftype[i], unsafe { crate::util::force_cast::<_, MjtObjBase>(raw_reftype) });
         }
 
         // Verify known sensor: "touch" is a touch sensor on a site
         let touch = model.sensor("touch").unwrap();
         assert_eq!(sensor_type[touch.id], MjtSensor::mjSENS_TOUCH);
-        assert_eq!(sensor_objtype[touch.id], MjtObj::mjOBJ_SITE);
+        assert_eq!(sensor_objtype[touch.id], MjtObjBase::mjOBJ_SITE);
     }
 
     /// Verifies [force]-cast for actuator enum arrays: trntype (MjtTrn), dyntype (MjtDyn),
@@ -3912,7 +3931,7 @@ mod tests {
         assert!(light_castshadow[l2.id]);
     }
 
-    /// Verifies [force]-cast for the site arrays: site_type (MjtGeom), site_sameframe (MjtSameFrame),
+    /// Verifies [force]-cast for the site arrays: site_type (MjtGeomBase), site_sameframe (MjtSameFrame),
     /// site_size (&[[MjtNum; 3]]), site_pos (&[[MjtNum; 3]]), site_quat (&[[MjtNum; 4]]),
     /// site_rgba (&[[f32; 4]]).
     #[test]
@@ -3935,7 +3954,7 @@ mod tests {
         assert_eq!(site_rgba.len(), nsite);
 
         for i in 0..nsite {
-            assert_eq!(site_type[i], unsafe { crate::util::force_cast::<_, MjtGeom>(*model.ffi().site_type.add(i)) });
+            assert_eq!(site_type[i], unsafe { crate::util::force_cast::<_, MjtGeomBase>(*model.ffi().site_type.add(i)) });
             assert_eq!(site_sameframe[i], unsafe { crate::util::force_cast::<_, MjtSameFrame>(*model.ffi().site_sameframe.add(i)) });
 
             for j in 0..3 {
@@ -4010,13 +4029,13 @@ mod tests {
         // Geom type via view
         let ball2_info = model.geom("ball2").unwrap();
         let ball2_view = ball2_info.view(&model);
-        assert_eq!(ball2_view.r#type[0], MjtGeom::mjGEOM_SPHERE);
+        assert_eq!(ball2_view.r#type[0], MjtGeomBase::mjGEOM_SPHERE);
 
         // Sensor type via view
         let touch_info = model.sensor("touch").unwrap();
         let touch_view = touch_info.view(&model);
         assert_eq!(touch_view.r#type[0], MjtSensor::mjSENS_TOUCH);
-        assert_eq!(touch_view.objtype[0], MjtObj::mjOBJ_SITE);
+        assert_eq!(touch_view.objtype[0], MjtObjBase::mjOBJ_SITE);
 
         // Actuator types via view
         let slider_info = model.actuator("slider").unwrap();
@@ -4407,8 +4426,8 @@ mod tests {
     #[test]
     fn test_max_contacts() {
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
-        let geom1 = model.name_to_id(MjtObj::mjOBJ_GEOM, "green_sphere").unwrap();
-        let geom2 = model.name_to_id(MjtObj::mjOBJ_GEOM, "ball2").unwrap();
+        let geom1 = model.name_to_id(MjtObjBase::mjOBJ_GEOM, "green_sphere").unwrap();
+        let geom2 = model.name_to_id(MjtObjBase::mjOBJ_GEOM, "ball2").unwrap();
 
         let mc = model.max_contacts(geom1, geom2, None);  // pull margin from model.
         assert_eq!(mc, 1);

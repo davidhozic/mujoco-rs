@@ -100,6 +100,27 @@ Actuator bias type and delay, body simple flag and flex flags are unsafe to muta
     unsafe { view.delay.as_mut_slice()[0] = 0.0; }
 
 
+Tuple object types are unsafe to mutate
+---------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tuple_objtype_mut` is now an ``unsafe fn``.
+The ``objtype`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTupleModelViewMut` is now
+:docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
+
+.. code-block:: rust
+
+    // Before
+    model.tuple_objtype_mut()[0] = MjtObjBase::mjOBJ_SITE;
+    model.tuple("t").unwrap().view_mut(&mut model).objtype[0] = MjtObjBase::mjOBJ_SITE;
+
+    // After
+    // SAFETY: tuple_objid[0] is a valid site id.
+    unsafe { model.tuple_objtype_mut()[0] = MjtObjBase::mjOBJ_SITE; }
+    let mut view = model.tuple("t").unwrap().view_mut(&mut model);
+    // SAFETY: the first object id of tuple "t" is a valid site id.
+    unsafe { view.objtype.as_mut_slice()[0] = MjtObjBase::mjOBJ_SITE; }
+
+
 Removed ``append_cubefiles`` and ``append_textures``
 ----------------------------------------------------
 
@@ -281,6 +302,25 @@ and ``model_signature`` of the ``Info`` types are removed. Read the signature fr
     let signature = model.signature();
 
 
+Unsupported-object-type errors now carry the object type
+--------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>UnsupportedObjectType` now holds an
+:docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtObjBase` instead of an ``i32``.
+
+.. code-block:: rust
+
+    // Before
+    if let Err(MjDataError::UnsupportedObjectType(raw)) = data.try_object_velocity(MjtObjBase::mjOBJ_JOINT, 0, false) {
+        println!("object type {raw}");
+    }
+
+    // After
+    if let Err(MjDataError::UnsupportedObjectType(obj_type)) = data.try_object_velocity(MjtObjBase::mjOBJ_JOINT, 0, false) {
+        println!("object type {obj_type:?}");
+    }
+
+
 A model swap refuses more models
 --------------------------------
 
@@ -300,3 +340,29 @@ Otherwise, create a new |mj_data|.
     // After
     // SAFETY: `edited` only changes a joint type, so every size and every address table agrees.
     let old = unsafe { data.swap_model_unchecked(edited) };
+
+
+Real geom and object types use base enums
+-----------------------------------------
+
+Model and specification fields and functions that accept only real geom types or real object
+types now use :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtGeomBase` and
+:docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtObjBase`. The object type setters of
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor` and
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTuple` are no longer fallible.
+
+.. code-block:: rust
+
+    // Before
+    spec.world_body_mut().add_geom().with_type(MjtGeom::mjGEOM_PLANE);
+    sensor.set_objtype(MjtObj::mjOBJ_SITE)?;
+    tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM])?;
+    let id = model.name_to_id(MjtObj::mjOBJ_BODY, "ball");
+    let name = model.id_to_name(model.sensor_objtype()[0], 0);
+
+    // After
+    spec.world_body_mut().add_geom().with_type(MjtGeomBase::mjGEOM_PLANE);
+    sensor.set_objtype(MjtObjBase::mjOBJ_SITE);
+    tuple.set_objtype(&[MjtObjBase::mjOBJ_BODY, MjtObjBase::mjOBJ_GEOM]);
+    let id = model.name_to_id(MjtObjBase::mjOBJ_BODY, "ball");
+    let name = model.id_to_name(model.sensor_objtype()[0], 0);

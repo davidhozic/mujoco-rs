@@ -1013,7 +1013,7 @@ mod test {
         let mut renderer = MjRenderer::builder()
             .rgb(false)
             .depth(true)
-            .camera(MjvCamera::new_fixed(model.name_to_id(MjtObj::mjOBJ_CAMERA, "depth_test").unwrap()))
+            .camera(MjvCamera::new_fixed(model.name_to_id(MjtObjBase::mjOBJ_CAMERA, "depth_test").unwrap()))
             .build(&model)
             .unwrap();
 

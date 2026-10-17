@@ -17,7 +17,7 @@ mod default;
 pub use default::*;
 
 use super::mj_model::{
-    MjModel, MjtObj, MjtGeom, MjtJoint, MjtCamLight,
+    MjModel, MjtObj, MjtObjBase, MjtGeomBase, MjtJoint, MjtCamLight,
     MjtLightType, MjtSensor, MjtDataType, MjtGain,
     MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace,
     MjtTrn, MjtStage, MjtFlexSelf, MjtProjection,
@@ -35,19 +35,6 @@ use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjs_asHField as mjs_asHfie
 use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
 
 /* Validation helpers */
-/// Validates that `t` is a real object type, i.e. an [`MjtObj`] discriminant below
-/// [`MjtObj::mjNOBJECT`].
-fn check_objtype(t: MjtObj) -> Result<(), MjEditError> {
-    // A meta variant indexes `mjCModel::FindObject`'s `mjNOBJECT`-sized array out of bounds.
-    if (t as i32) < (MjtObj::mjNOBJECT as i32) {
-        Ok(())
-    } else {
-        Err(MjEditError::InvalidParameter(format!(
-            "object type must be a real MjtObj below MjtObj::mjNOBJECT, got {t:?}"
-        )))
-    }
-}
-
 /// Validates that a `nuser_*` count is at least `-1` (-1 meaning automatic).
 fn check_nuser(count: i32) -> Result<(), MjEditError> {
     if count < -1 {
@@ -1014,7 +1001,8 @@ impl<Capability> MjsSite<Capability> {
     ]}
 
     getter_setter!([&] with, get, set, [
-        [ffi, ffi_mut] type_ + _: MjtGeom;               "geom type.";
+        // The read casts are sound: C and the setters write only real types into these fields.
+        [ffi, ffi_mut] type_ + _: MjtGeomBase [force];   "geom type.";
         [ffi, ffi_mut] group: i32;                       "group.";
     ]);
 
@@ -1104,7 +1092,7 @@ impl<Capability> MjsGeom<Capability> {
     nested_handle!(plugin: MjsPluginReference; "sdf plugin.");
 
     getter_setter!([&] with, get, set, [
-        [ffi, ffi_mut] type_ + _: MjtGeom;            "geom type.";
+        [ffi, ffi_mut] type_ + _: MjtGeomBase [force]; "geom type.";
         [ffi, ffi_mut] group: i32;                    "group.";
         [ffi, ffi_mut] contype: i32;                  "contact type.";
         [ffi, ffi_mut] conaffinity: i32;              "contact affinity.";
@@ -1690,10 +1678,8 @@ impl MjsSensor {
 
     getter_setter!([&] with, get, set, [
         [ffi, ffi_mut] type_ + _: MjtSensor;          "sensor type.";
-        [ffi, ffi_mut] objtype: MjtObj { check_objtype, "[`MjEditError::InvalidParameter`] when the object type is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
-                                       "object type the sensor refers to.";
-        [ffi, ffi_mut] reftype: MjtObj { check_objtype, "[`MjEditError::InvalidParameter`] when the reference type is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
-                                       "type of referenced object.";
+        [ffi, ffi_mut] objtype: MjtObjBase [force];   "object type the sensor refers to.";
+        [ffi, ffi_mut] reftype: MjtObjBase [force];   "type of referenced object.";
         [ffi, ffi_mut] datatype: MjtDataType;         "data type.";
         [ffi, ffi_mut] cutoff: f64;                   "cutoff for real and positive datatypes.";
         [ffi, ffi_mut] noise: f64;                    "noise stdev.";
@@ -1852,7 +1838,7 @@ impl<Capability> MjsEquality<Capability> {
 
     getter_setter! {[&] with, get, set, [
         [ffi, ffi_mut] type_ + _: MjtEq;   "equality type.";
-        [ffi, ffi_mut] objtype: MjtObj;    "type of both objects.";
+        [ffi, ffi_mut] objtype: MjtObjBase [force]; "type of both objects.";
     ]}
 
     string_set_get_with! {[&]
@@ -2170,10 +2156,7 @@ impl MjsText {
 mjs_struct!(Tuple with SpecObject: MjsTuple <= mjsTuple);
 impl MjsTuple {
     vec_set! {
-        // `compile()` indexes `object_lists_` (size `mjNOBJECT`) with each value and no bounds
-        // check, so the per-element check is what makes this setter safe.
-        objtype: MjtObj => i32 { check_objtype, "[`MjEditError::InvalidParameter`] when any value is not a real object type (i.e. not below [`MjtObj::mjNOBJECT`])" } => MjEditError;
-            "object types. Every value must be a real object type (an `MjtObj` below `mjNOBJECT`).";
+        objtype: MjtObjBase => i32; "object types.";
     }
 
     vec_string_set_append! {
@@ -3084,7 +3067,7 @@ mod tests {
             .with_size([1000.0, 1000.0, 5.0, 5.0]);
 
         spec.world_body_mut().add_geom()
-            .with_type(MjtGeom::mjGEOM_HFIELD)
+            .with_type(MjtGeomBase::mjGEOM_HFIELD)
             .with_hfieldname(HEIGHTMAP_NAME);
 
         (spec, vfs)
@@ -3579,7 +3562,7 @@ mod tests {
         tendon.wrap_site("ball1");
         tendon.wrap_site("ball2");
 
-        spec.world_body_mut().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+        spec.world_body_mut().add_geom().with_type(MjtGeomBase::mjGEOM_PLANE).with_size([1.0; 3]);
 
         spec.compile().unwrap();
     }
@@ -3702,7 +3685,7 @@ mod tests {
         tendon.wrap_site("ball1");
         tendon.wrap_site("ball2");
 
-        spec.world_body_mut().add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+        spec.world_body_mut().add_geom().with_type(MjtGeomBase::mjGEOM_PLANE).with_size([1.0; 3]);
 
         // Iter MjSpec
         assert_eq!(spec.geom_iter_mut().count(), N_GEOM);
@@ -3838,7 +3821,7 @@ mod tests {
 
         tuple.set_objname("body1 body2");
         tuple.set_objprm(&obj_param);
-        tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_BODY]).unwrap();
+        tuple.set_objtype(&[MjtObjBase::mjOBJ_BODY, MjtObjBase::mjOBJ_BODY]);
 
         assert_eq!(tuple.objprm(), &obj_param);
 
@@ -3869,7 +3852,7 @@ mod tests {
         b2.add_site().with_name("s2");
         b2.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+        world.add_geom().with_type(MjtGeomBase::mjGEOM_PLANE).with_size([1.0; 3]);
 
         let tendon = spec.add_tendon().with_range([0.0, 1.0]);
         tendon.wrap_site("s1");
@@ -3912,7 +3895,7 @@ mod tests {
         b2.add_site().with_name("s2");
         b2.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+        world.add_geom().with_type(MjtGeomBase::mjGEOM_PLANE).with_size([1.0; 3]);
 
         // Create 3 tendons, one for each LIMITED enum value
         for (name, val) in [("t_false", mjLIMITED_FALSE), ("t_true", mjLIMITED_TRUE), ("t_auto", mjLIMITED_AUTO)] {
@@ -3960,7 +3943,7 @@ mod tests {
         b2.add_site().with_name("s2");
         b2.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
-        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+        world.add_geom().with_type(MjtGeomBase::mjGEOM_PLANE).with_size([1.0; 3]);
 
         // Set actfrclimited to each variant (with actfrcrange for TRUE/AUTO)
         for (name, val) in [("t_false", mjLIMITED_FALSE), ("t_true", mjLIMITED_TRUE), ("t_auto", mjLIMITED_AUTO)] {
@@ -3992,7 +3975,7 @@ mod tests {
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
-        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+        world.add_geom().with_type(MjtGeomBase::mjGEOM_PLANE).with_size([1.0; 3]);
 
         // Create 3 free joints, one for each align state
         for (name, val) in [("j_false", mjALIGNFREE_FALSE), ("j_true", mjALIGNFREE_TRUE), ("j_auto", mjALIGNFREE_AUTO)] {
@@ -4024,7 +4007,7 @@ mod tests {
 
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
-        world.add_geom().with_type(MjtGeom::mjGEOM_PLANE).with_size([1.0; 3]);
+        world.add_geom().with_type(MjtGeomBase::mjGEOM_PLANE).with_size([1.0; 3]);
 
         for (name, val) in [("j_false", mjLIMITED_FALSE), ("j_true", mjLIMITED_TRUE), ("j_auto", mjLIMITED_AUTO)] {
             let body = world.add_body().with_pos([0.0, 0.0, 1.0]);
@@ -4163,7 +4146,7 @@ mod tests {
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
         world.add_geom()
-            .with_type(MjtGeom::mjGEOM_PLANE)
+            .with_type(MjtGeomBase::mjGEOM_PLANE)
             .with_size([1.0, 1.0, 0.01])
             .with_material("floor");
 
@@ -4390,56 +4373,6 @@ mod tests {
         }
 
         spec.compile().expect("spec with defaulted flex failed to compile");
-    }
-
-    /// Verifies the sensor's objtype protection works.
-    #[test]
-    #[should_panic]
-    fn test_sensor_objtype_failure() {
-        let mut spec = MjSpec::new();
-        spec.add_sensor()
-            .with_objtype(MjtObj::mjOBJ_FRAME);
-    }
-
-    /// Verifies the sensor's reftype protection works.
-    #[test]
-    #[should_panic]
-    fn test_sensor_reftype_failure() {
-        let mut spec = MjSpec::new();
-        spec.add_sensor()
-            .with_reftype(MjtObj::mjOBJ_FRAME);
-    }
-
-    /// Verifies the fallible sensor objtype/reftype setters reject meta variants and accept real ones.
-    #[test]
-    fn test_sensor_objtype_reftype_setters() {
-        let mut spec = MjSpec::new();
-        let sensor = spec.add_sensor();
-
-        assert!(matches!(
-            sensor.set_objtype(MjtObj::mjOBJ_MODEL),
-            Err(MjEditError::InvalidParameter(_))
-        ));
-        assert!(matches!(
-            sensor.set_reftype(MjtObj::mjOBJ_DEFAULT),
-            Err(MjEditError::InvalidParameter(_))
-        ));
-        assert!(sensor.set_objtype(MjtObj::mjOBJ_SITE).is_ok());
-        assert!(sensor.set_reftype(MjtObj::mjOBJ_BODY).is_ok());
-    }
-
-    /// Verifies the tuple's objtype protection rejects meta object types and leaves the
-    /// slice unwritten, while accepting real object types.
-    #[test]
-    fn test_tuple_objtype_validation() {
-        let mut spec = MjSpec::new();
-        let tuple = spec.add_tuple();
-
-        assert!(matches!(
-            tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_FRAME]),
-            Err(MjEditError::InvalidParameter(_))
-        ));
-        assert!(tuple.set_objtype(&[MjtObj::mjOBJ_BODY, MjtObj::mjOBJ_GEOM]).is_ok());
     }
 
     /// Verifies the numeric size setter rejects a negative size (which would undersize the
