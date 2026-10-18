@@ -178,3 +178,6 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 - :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>render` now makes the viewer's OpenGL
   context current again after the user UI callbacks. A callback that made another context current
   caused the viewer to draw into that context.
+- Fixed a hole in :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>overlay`,
+  which allowed non-ASCII input to be passed into the function, causing possible out-of-bound reads.
+  The function now asserts ASCII input and panics on non-ASCII input.

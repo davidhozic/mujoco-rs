@@ -291,8 +291,12 @@ impl MjrContext {
 
     /// Draws a text overlay. The optional `overlay2` parameter displays additional overlay, next to `overlay`.
     /// # Panics
-    /// When the `overlay` or `overlay2` contain '\0' characters, a panic occurs.
+    /// A panic occurs the `overlay` or `overlay2` contain one or both of the following:
+    /// - non-ASCII characters;
+    /// - null bytes.
     pub fn overlay(&mut self, font: MjtFont, gridpos: MjtGridPos, viewport: MjrRectangle, overlay: &str, overlay2: Option<&str>) {
+        assert!(overlay.is_ascii() && overlay2.map_or(true, |o| o.is_ascii()), "the input text must be ASCII");
+
         let c_overlay = CString::new(overlay).unwrap();
         let c_overlay2 = overlay2.map(|x| CString::new(x).unwrap());
 
