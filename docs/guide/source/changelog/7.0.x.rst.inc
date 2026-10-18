@@ -198,3 +198,6 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>resize_offscreen` now
   panic for a ``width`` or ``height`` above ``i32::MAX``, and ``add_aux`` clamps ``samples``.
   Before, the sizes wrapped into negative values.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile` now returns an error
+  for a builtin cube or skybox texture whose size overflows ``i32``. Before, the check used
+  ``height``, which such a texture ignores, and MuJoCo wrote out of bounds.

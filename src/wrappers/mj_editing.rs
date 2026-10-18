@@ -491,7 +491,8 @@ impl MjSpec {
 
     /// Compilation implementation of [`MjSpec::compile_with_vfs`] and [`MjSpec::compile`].
     fn compile_impl(&mut self, maybe_vfs: Option<&MjVfs>) -> Result<MjModel, MjEditError> {
-        // The setters are independent, so `compile` is the only place to check them together.
+        // TODO: temporary. Remove this loop once a MuJoCo release has the texture size checks in
+        // mjCTexture::Compile and the int-safe face offset in mjr_uploadTexture.
         for texture in self.texture_iter() {
             let (nchannel, width, height) = (texture.nchannel(), texture.width(), texture.height());
             if nchannel < 0 || width < 0 || height < 0 {
@@ -499,7 +500,13 @@ impl MjSpec {
                     "texture nchannel, width and height must be non-negative".to_owned(),
                 ));
             }
-            if i64::from(nchannel) * i64::from(width) * i64::from(height) > i64::from(i32::MAX) {
+            // A builtin cube or skybox ignores `height` and fills 6 * width rows.
+            let height = if texture.builtin() != MjtBuiltin::mjBUILTIN_NONE && texture.type_() != MjtTexture::mjTEXTURE_2D {
+                i64::from(height).max(6 * i64::from(width))
+            } else {
+                i64::from(height)
+            };
+            if i64::from(nchannel) * i64::from(width) * height > i64::from(i32::MAX) {
                 return Err(MjEditError::CompileFailed(
                     "texture nchannel*width*height must fit in an i32".to_owned(),
                 ));
@@ -4201,6 +4208,24 @@ mod tests {
         let err = spec.compile().unwrap_err();
         assert!(matches!(&err, MjEditError::CompileFailed(msg) if msg.contains("fit in an i32")),
             "compile must reject an overflowing texture size, got {err:?}");
+    }
+
+    /// A builtin cube texture fills 6 * width rows whatever `height` says, so a width whose cube
+    /// size overflows an `i32` must be rejected even with `height` 1.
+    #[test]
+    fn test_builtin_cube_texture_size_overflow_rejected() {
+        let mut spec = MjSpec::new();
+        spec.add_texture()
+            .with_name("cube")
+            .with_type(MjtTexture::mjTEXTURE_CUBE)
+            .with_builtin(MjtBuiltin::mjBUILTIN_CHECKER)
+            .with_nchannel(3)
+            .with_width(26755)
+            .with_height(1);
+
+        let err = spec.compile().unwrap_err();
+        assert!(matches!(&err, MjEditError::CompileFailed(msg) if msg.contains("fit in an i32")),
+            "compile must reject an overflowing cube texture size, got {err:?}");
     }
 
     /// Verifies `MjsFlex::cellcount` (read-only `&[i32; 3]`) and `order` (read-write `i32`)
