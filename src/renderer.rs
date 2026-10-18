@@ -204,7 +204,7 @@ which can be configured at the top of the model's XML like so:
     /// # Panics
     /// Panics if the GL display reports no framebuffer configuration for the fallback window
     /// (feature `renderer-winit-fallback`).
-    pub fn build<M: ModelType>(self, model: M) -> Result<MjRenderer, RendererError> {
+    pub fn build(self, model: &MjModel) -> Result<MjRenderer, RendererError> {
         // Assume model's maximum should be used
         let mut height = self.height;
         let mut width = self.width;
@@ -221,21 +221,21 @@ which can be configured at the top of the model's XML like so:
 
         // Initialize the rendering context to render to the offscreen buffer.
         // SAFETY: gl_state was just created above, establishing a current GL context.
-        let mut context = unsafe { MjrContext::new(&model) };
+        let mut context = unsafe { MjrContext::new(model) };
         context.offscreen();
         context.change_font(self.font_scale);
 
         let extra_geom = self.num_visual_internal_geom as usize + self.num_visual_user_geom as usize;
-        let (near, far) = model_near_far(&model);
+        let (near, far) = model_near_far(model);
 
         // The 3D scene for visualization
         let scene = MjvScene::new(
-            &*model,
+            model,
             model.ffi().ngeom as usize + extra_geom
         );
 
         let user_scene = MjvScene::new(
-            &*model,
+            model,
             self.num_visual_user_geom as usize
         );
 
@@ -341,7 +341,7 @@ impl MjRenderer {
     /// # Panics
     /// Panics if the GL display reports no framebuffer configuration for the fallback window
     /// (feature `renderer-winit-fallback`).
-    pub fn new<M: ModelType>(model: M, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
+    pub fn new(model: &MjModel, width: usize, height: usize, max_user_geom: usize) -> Result<Self, RendererError> {
         // Saturate instead of truncating: `as u32` would turn an over-large value into a small
         // valid one, so the renderer would silently use dimensions the caller never asked for.
         MjRendererBuilder::new()

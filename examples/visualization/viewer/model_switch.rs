@@ -84,7 +84,7 @@ fn main() {
     let mut viewer = MjViewer::builder()
         .max_user_geoms(0)
         .vsync(true)
-        .build_passive(model_ball.clone())
+        .build_passive(&model_ball)
         .expect("could not launch the viewer");
 
     let shared_state = viewer.state().clone();

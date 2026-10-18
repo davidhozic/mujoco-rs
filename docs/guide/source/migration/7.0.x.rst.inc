@@ -125,6 +125,35 @@ The ``objtype`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTup
     unsafe { view.objtype.as_mut_slice()[0] = MjtObjBase::mjOBJ_SITE; }
 
 
+Viewer, renderer and scene constructors take ``&MjModel``
+---------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive`,
+:docs-rs:`~~mujoco_rs::viewer::<struct>MjViewerBuilder::<method>build_passive`,
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`,
+:docs-rs:`~~mujoco_rs::renderer::<struct>MjRendererBuilder::<method>build` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>new` take the model as
+``&MjModel`` (|mj_model|) instead of a generic model type.
+:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>launch_passive` no longer takes a
+``model`` parameter and uses the model of ``data``.
+
+.. code-block:: rust
+
+    // Before
+    let model = Arc::new(MjModel::from_xml_string(XML).unwrap());
+    let viewer = MjViewer::launch_passive(model.clone(), 0)?;
+    let renderer = MjRenderer::builder().build(model.clone())?;
+    let scene = MjvScene::new(model.clone(), 100);
+    let cpp_viewer = unsafe { MjViewerCpp::launch_passive(&model, &data, 100) };
+
+    // After
+    let model = Arc::new(MjModel::from_xml_string(XML).unwrap());
+    let viewer = MjViewer::launch_passive(&model, 0)?;
+    let renderer = MjRenderer::builder().build(&model)?;
+    let scene = MjvScene::new(&model, 100);
+    let cpp_viewer = unsafe { MjViewerCpp::launch_passive(&data, 100) };
+
+
 Removed ``append_cubefiles`` and ``append_textures``
 ----------------------------------------------------
 

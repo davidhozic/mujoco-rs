@@ -95,6 +95,14 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor::<method>with_objtype` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor::<method>with_reftype` no longer
   panic, because the type now rejects the invalid object types.
+- :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>launch_passive`,
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewerBuilder::<method>build_passive`,
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>new`,
+  :docs-rs:`~~mujoco_rs::renderer::<struct>MjRendererBuilder::<method>build` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>new` now take the model as
+  ``&MjModel`` (|mj_model|) instead of a generic model type, because they only need the reference at construction.
+- :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>launch_passive` no longer takes a
+  ``model`` parameter and uses the model of ``data``.
 
 
 .. rubric:: Deprecations

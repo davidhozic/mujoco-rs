@@ -72,23 +72,25 @@ impl MjViewerCpp {
     /// as the initialization may fail internally in C++ anyway, which we have no way of checking.
     ///
     /// # Safety
-    /// The caller must ensure that both `model` and `data` remain alive and at a stable memory
+    /// The caller must ensure that `data` and its model remain alive and at a stable memory
     /// address for the entire lifetime of the returned [`MjViewerCpp`]. Dropping or moving the
     /// underlying [`MjModel`](crate::wrappers::mj_model::MjModel) or [`MjData`] while the viewer
     /// is alive is undefined behavior.
     /// [`MjViewerCpp::launch_passive`] itself performs the OpenGL initialization and render
     /// steps, so it and [`MjViewerCpp::render`] must be called only on the **main** thread.
-    /// The viewer writes through both pointers, so the caller must treat `model` and `data` as
+    /// The viewer writes through both pointers, so the caller must treat `data` and its model as
     /// mutably borrowed by the viewer, and must not access them while [`MjViewerCpp::sync`] runs.
     ///
     /// # Panics
     /// Panics if the load thread panics.
-    pub unsafe fn launch_passive<M: ModelType + Clone + Send + Sync>(model: M, data: &MjData<M>, max_user_geom: usize) -> Self {
+    pub unsafe fn launch_passive<M: ModelType>(data: &MjData<M>, max_user_geom: usize) -> Self {
+        let model = data.model();
+
         // Allocate on the heap as the data must not be moved due to C++ bindings
         let mut cam = Box::new(MjvCamera::default());
         let mut opt = Box::new(MjvOption::default());
         let mut pert = Box::new(MjvPerturb::default());
-        let mut user_scn = Box::new(MjvScene::new(model.clone(), max_user_geom));
+        let mut user_scn = Box::new(MjvScene::new(model, max_user_geom));
 
         // SAFETY: all pointer arguments are valid (heap-allocated above); the caller guarantees
         // model and data remain alive at stable addresses for the viewer's lifetime.

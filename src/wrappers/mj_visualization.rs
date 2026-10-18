@@ -802,7 +802,7 @@ impl MjvScene {
     ///
     /// # Panics
     /// Panics if `max_geom` exceeds [`i32::MAX`].
-    pub fn new<M: ModelType>(model: M, max_geom: usize) -> Self {
+    pub fn new(model: &MjModel, max_geom: usize) -> Self {
         let model_ffi = model.ffi();
         let layout = Arc::clone(model.layout());
 

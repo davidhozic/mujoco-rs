@@ -33,7 +33,7 @@ impl Simulation {
     pub fn new() -> Self {
         let model = Rc::new(MjModel::from_xml_string(MODEL_XML).unwrap());
         let simulation_state = MjData::new(model.clone());
-        let viewer = MjViewer::launch_passive(model, 0).unwrap();
+        let viewer = MjViewer::launch_passive(&model, 0).unwrap();
         let last_update = Instant::now();
         Self {simulation_state, viewer, last_update}
     }

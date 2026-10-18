@@ -257,7 +257,7 @@ pub struct ViewerSharedState {
 }
 
 impl ViewerSharedState {
-    fn new<M: ModelType>(model: M, max_user_geom: usize) -> Self {
+    fn new(model: &MjModel, max_user_geom: usize) -> Self {
         // Empty values to avoid unnecessary double creation
         let empty: Box<[MjtNum]> = vec![].into_boxed_slice();
         let empty_model = Box::new(MjSpec::new().compile().unwrap());
@@ -288,7 +288,7 @@ impl ViewerSharedState {
             model_reloaded: false,
         };
 
-        shared_state.reload_model(&model, max_user_geom);
+        shared_state.reload_model(model, max_user_geom);
         // The caller builds its scene, render context, camera and UI caches from the same model,
         // so the first frame has nothing to rebuild.
         shared_state.model_reloaded = false;
@@ -827,7 +827,7 @@ impl MjViewer {
     ///   (feature `viewer-ui`).
     /// # Panics
     /// Panics if the GL display reports no usable configuration.
-    pub fn launch_passive<M: ModelType>(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
+    pub fn launch_passive(model: &MjModel, max_user_geom: usize) -> Result<Self, MjViewerError> {
         MjViewerBuilder::new()
             .max_user_geoms(max_user_geom)
             .build_passive(model)
@@ -2015,7 +2015,7 @@ impl MjViewerBuilder {
     ///   (feature `viewer-ui`).
     /// # Panics
     /// Panics if the GL display reports no usable configuration.
-    pub fn build_passive<M: ModelType>(&self, model: M) -> Result<MjViewer, MjViewerError> {
+    pub fn build_passive(&self, model: &MjModel) -> Result<MjViewer, MjViewerError> {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
         let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
         let adapter = RenderBase::new(
@@ -2049,13 +2049,13 @@ impl MjViewerBuilder {
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
         let ngeom = model.ffi().ngeom as usize;
-        let scene = MjvScene::new(&*model, ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
+        let scene = MjvScene::new(model, ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
         // SAFETY: The OpenGL context was made current above via gl_surface.
-        let context = unsafe { MjViewer::make_render_context(&model, gl_surface) };
-        let camera  = MjvCamera::new_free(&model);
+        let context = unsafe { MjViewer::make_render_context(model, gl_surface) };
+        let camera  = MjvCamera::new_free(model);
 
         // Tracking of changes made between syncs
-        let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(&*model, self.max_user_geoms)));
+        let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(model, self.max_user_geoms)));
         let running_flag = shared_state.lock_unpoison().running.clone();
 
         // OpenGL context proxy
@@ -2072,7 +2072,7 @@ impl MjViewerBuilder {
 
         // User interface
         #[cfg(feature = "viewer-ui")]
-        let ui = ui::ViewerUI::new(&model, window, &gl)?;
+        let ui = ui::ViewerUI::new(model, window, &gl)?;
         let mut status = cfg_select! {
             feature = "viewer-ui" => ViewerStatusBit::UI,
             _ => ViewerStatusBit::HELP,
