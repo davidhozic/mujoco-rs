@@ -3,6 +3,7 @@ use crate::{view_creator, info_method, info_with_view, array_slice_dyn};
 use crate::wrappers::mj_auxiliary::{MjVisual, MjStatistic};
 use crate::wrappers::mj_option::MjOption;
 use crate::{getter_setter, mujoco_c::*};
+use crate::util::checked_c_len;
 use crate::error::MjDataError;
 
 use super::mj_statistic::{MjWarningStat, MjTimerStat, MjSolverStat};
@@ -1252,7 +1253,10 @@ impl<M: ModelType> MjData<M> {
     /// Similar semantics to mj_ray, but `vec` is an array of (nray x 3) directions.
     /// If `normals_out` is `Some`, it must be a slice of `nray` elements filled with surface normals. Use `None` to skip normals.
     /// # Panics
-    /// Panics if `normals_out` length does not match `vec.len()`.
+    /// - Panics if `normals_out` length does not match `vec.len()`.
+    /// - Panics if `vec` has more than [`i32::MAX`] rays, or if `bodyexclude` is larger than
+    ///   [`i32::MAX`].
+    ///
     /// Use [`MjData::try_multi_ray`] for a fallible alternative.
     #[allow(clippy::too_many_arguments)]
     pub fn multi_ray(
@@ -1265,12 +1269,16 @@ impl<M: ModelType> MjData<M> {
     /// Fallible version of [`MjData::multi_ray`].
     /// # Errors
     /// Returns [`MjDataError::LengthMismatch`] if `normals_out` length does not match `vec.len()`.
+    /// # Panics
+    /// Panics if `vec` has more than [`i32::MAX`] rays, or if `bodyexclude` is larger than
+    /// [`i32::MAX`].
     #[allow(clippy::too_many_arguments)]
     pub fn try_multi_ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[[MjtNum; 3]], geomgroup: Option<&[MjtByte; mjNGROUP as usize]>,
         flg_static: MjtBool, bodyexclude: Option<usize>, cutoff: MjtNum, normals_out: Option<&mut [[MjtNum; 3]]>
     ) -> Result<(Vec<Option<usize>>, Vec<MjtNum>), MjDataError> {
         let nray = vec.len();
+        let nray_c = checked_c_len::<i32, _>(nray);
         if let Some(buf) = &normals_out
             && buf.len() != nray
         {
@@ -1286,10 +1294,10 @@ impl<M: ModelType> MjData<M> {
             self.model.ffi(), self.ffi_mut(), pnt,
             bytemuck::cast_slice::<[MjtNum; 3], MjtNum>(vec).as_ptr(),
             geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
-            flg_static, bodyexclude.map_or(-1i32, |id| id as i32), geom_id_raw.as_mut_ptr(),
+            flg_static, bodyexclude.map_or(-1, checked_c_len), geom_id_raw.as_mut_ptr(),
             distance.as_mut_ptr(),
             normals_out.map_or(ptr::null_mut(), |x| bytemuck::cast_slice_mut::<[MjtNum; 3], MjtNum>(x).as_mut_ptr()),
-            nray as i32, cutoff
+            nray_c, cutoff
         ) };
 
         let geom_id = geom_id_raw.into_iter().map(|id| if id == -1 { None } else { Some(id as usize) }).collect();
@@ -1301,6 +1309,9 @@ impl<M: ModelType> MjData<M> {
     /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
     /// `geomgroup` and `flg_static` are as in mjvOption; pass `None` for `geomgroup` to skip group exclusion.
     /// A `vec` shorter than `mjMINVAL` reports no intersection, as [`MjData::multi_ray`] does.
+    ///
+    /// # Panics
+    /// Panics if `bodyexclude` is larger than [`i32::MAX`].
     pub fn ray(
         &mut self, pnt: &[MjtNum; 3], vec: &[MjtNum; 3],
         geomgroup: Option<&[MjtByte; mjNGROUP as usize]>, flg_static: MjtBool, bodyexclude: Option<usize>,
@@ -1321,7 +1332,7 @@ impl<M: ModelType> MjData<M> {
             self.model.ffi(), self.ffi(),
             pnt, vec,
             geomgroup.map_or(ptr::null(), |x| x.as_ptr()),
-            flg_static, bodyexclude.map_or(-1i32, |id| id as i32), &mut geom_id_raw,
+            flg_static, bodyexclude.map_or(-1, checked_c_len), &mut geom_id_raw,
             normal_out.map_or(ptr::null_mut(), |x| x)
         ) };
         let geom_id = if geom_id_raw == -1 { None } else { Some(geom_id_raw as usize) };
@@ -3265,6 +3276,25 @@ mod test {
         let swapped_data = swapped.make_data();
         assert!(info.update_layout(&swapped_data).is_err());
         assert_eq!(info.view(&data).data.len(), 3, "a refused re-point must not disturb the Info");
+    }
+
+    /// A `bodyexclude` id above `i32::MAX` must panic.
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn test_ray_body_exclude_above_i32_panics() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut data = model.make_data();
+        let (pnt, vec) = ([0.0; 3], [1.0, 0.0, 0.0]);
+
+        // 1 << 32 wraps to 0 (the world body) under a plain `as i32` cast.
+        let ray = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+            || data.ray(&pnt, &vec, None, true, Some(1 << 32), None)
+        ));
+        assert!(ray.is_err());
+        let multi = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+            || data.multi_ray(&pnt, &[vec], None, true, Some(1 << 32), 10.0, None)
+        ));
+        assert!(multi.is_err());
     }
 
     #[test]

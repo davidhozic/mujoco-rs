@@ -567,7 +567,7 @@ impl MjSpec {
     }
 
     /// Saves the spec to an XML string.
-    /// `buffer_size` controls how many bytes are allocated for the output.
+    /// `buffer_size` controls how many bytes are allocated for the output, at most [`i32::MAX`].
     /// # Errors
     /// - [`MjEditError::XmlBufferTooSmall`] when `buffer_size` is too small.
     ///   The `required_size` field uses `snprintf`-style semantics (bytes to write, excluding NUL),
@@ -578,9 +578,10 @@ impl MjSpec {
     /// within the allocated output buffer.
     pub fn save_xml_string(&self, buffer_size: usize) -> Result<String, MjEditError> {
         let mut error_buff = [0; ERROR_BUF_LEN];
-        let mut result_buff = vec![0u8; buffer_size];
+        let result_size = i32::try_from(buffer_size).unwrap_or(i32::MAX);
+        let mut result_buff = vec![0u8; result_size as usize];
         let result = unsafe { mj_saveXMLString(
-            self.ffi(), result_buff.as_mut_ptr().cast(), result_buff.len() as i32,
+            self.ffi(), result_buff.as_mut_ptr().cast(), result_size,
             error_buff.as_mut_ptr(), error_buff.len() as i32
         ) };
         match result {

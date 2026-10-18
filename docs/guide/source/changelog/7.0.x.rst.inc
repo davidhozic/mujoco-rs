@@ -181,3 +181,20 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 - Fixed a hole in :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>overlay`,
   which allowed non-ASCII input to be passed into the function, causing possible out-of-bound reads.
   The function now asserts ASCII input and panics on non-ASCII input.
+- The vector and matrix functions of ``mujoco_rs::wrappers::fun::utility`` (for example
+  :docs-rs:`~~mujoco_rs::wrappers::fun::utility::<fn>mju_dot`) now panic when a slice or a matrix
+  has more than ``i32::MAX`` elements. Before, the length wrapped and MuJoCo used a wrong range.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>save_xml_string` now clamps
+  ``buffer_size`` to ``i32::MAX``. Before, a larger size wrapped, and MuJoCo could write past the
+  buffer.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>ray` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>multi_ray` now panic for a
+  ``bodyexclude`` above ``i32::MAX``, which wrapped into another body ID before. ``multi_ray`` and
+  ``try_multi_ray`` also panic for more than ``i32::MAX`` rays.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>new_fixed`,
+  ``new_tracking``, ``fix`` and ``track`` now panic for an ID above ``i32::MAX`` in all builds.
+  Before, the ID wrapped into another camera or body ID.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>add_aux` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>resize_offscreen` now
+  panic for a ``width`` or ``height`` above ``i32::MAX``, and ``add_aux`` clamps ``samples``.
+  Before, the sizes wrapped into negative values.

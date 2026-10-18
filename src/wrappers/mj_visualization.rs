@@ -227,12 +227,11 @@ impl MjvCamera {
     /// Creates a new fixed camera.
     ///
     /// # Panics
-    /// In debug builds, panics if `camera_id` exceeds `i32::MAX`.
+    /// Panics if `camera_id` is larger than [`i32::MAX`].
     pub fn new_fixed(camera_id: usize) -> Self {
-        debug_assert!(camera_id <= i32::MAX as usize, "camera_id exceeds i32::MAX");
         mjvCamera_ {
             type_: MjtCamera::mjCAMERA_FIXED as i32,
-            fixedcamid: camera_id as i32,
+            fixedcamid: checked_c_len(camera_id),
             ..Self::default()
         }
     }
@@ -240,12 +239,11 @@ impl MjvCamera {
     /// Creates a new tracking camera to track a body with the given `tracking_id`.
     ///
     /// # Panics
-    /// In debug builds, panics if `tracking_id` exceeds `i32::MAX`.
+    /// Panics if `tracking_id` is larger than [`i32::MAX`].
     pub fn new_tracking(tracking_id: usize) -> Self {
-        debug_assert!(tracking_id <= i32::MAX as usize, "tracking_id exceeds i32::MAX");
         mjvCamera_ {
             type_: MjtCamera::mjCAMERA_TRACKING as i32,
-            trackbodyid: tracking_id as i32,
+            trackbodyid: checked_c_len(tracking_id),
             ..Self::default()
         }
     }
@@ -259,10 +257,14 @@ impl MjvCamera {
     }
 
     /// Sets the camera into tracking mode.
+    ///
+    /// # Panics
+    /// Panics if `tracking_id` is larger than [`i32::MAX`].
     pub fn track(&mut self, tracking_id: usize) {
+        let tracking_id = checked_c_len(tracking_id);
         self.type_ = MjtCamera::mjCAMERA_TRACKING as i32;
         self.fixedcamid = -1;
-        self.trackbodyid = tracking_id as i32;
+        self.trackbodyid = tracking_id;
     }
 
     /// Sets the camera free from tracking.
@@ -272,9 +274,13 @@ impl MjvCamera {
     }
 
     /// Sets the camera to a fixed `camera_id`.
+    ///
+    /// # Panics
+    /// Panics if `camera_id` is larger than [`i32::MAX`].
     pub fn fix(&mut self, camera_id: usize) {
+        let camera_id = checked_c_len(camera_id);
         self.type_ = MjtCamera::mjCAMERA_FIXED as i32;
-        self.fixedcamid = camera_id as i32;
+        self.fixedcamid = camera_id;
         self.trackbodyid = -1;
     }
 
@@ -1288,6 +1294,16 @@ mod tests {
         let data = model.make_data();
         let camera = MjvCamera::new_fixed(0);  // fixedcamid = 0, but ncam = 0 -> out of range
         let _ = camera.frame(&data);
+    }
+
+    /// An id above `i32::MAX` must panic, not wrap to a valid camera or body id.
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn test_camera_id_above_i32_panics() {
+        for set in [|c: &mut MjvCamera| c.fix(1 << 32), |c: &mut MjvCamera| c.track(1 << 32)] {
+            let mut camera = MjvCamera::new_user();
+            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| set(&mut camera))).is_err());
+        }
     }
 
     /// A tracking camera whose body id is out of range must panic in `frame` instead of triggering

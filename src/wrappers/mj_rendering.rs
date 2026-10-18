@@ -1,7 +1,7 @@
 //! Definitions related to rendering.
 use crate::{array_slice_dyn, getter_setter, mujoco_c::*};
+use crate::util::{LockUnpoison, checked_c_len};
 use crate::error::MjrContextError;
-use crate::util::LockUnpoison;
 
 use super::mj_model::{MjModel, MjModelLayout, MjtTexture, MjtTextureRole};
 
@@ -160,19 +160,29 @@ impl MjrContext {
     ///
     /// # Errors
     /// Returns [`MjrContextError::IndexOutOfBounds`] when `index >= mjNAUX` (10).
+    ///
+    /// # Panics
+    /// Panics if `width` or `height` is larger than [`i32::MAX`].
     pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) -> Result<(), MjrContextError> {
         if index >= mjNAUX as usize {
             return Err(MjrContextError::IndexOutOfBounds { id: index, len: mjNAUX as usize });
         }
+        let (width, height) = (checked_c_len::<i32, _>(width), checked_c_len::<i32, _>(height));
+        // C clamps samples to GL_MAX_SAMPLES, thus it would be inconsistent panic just on i32 overflow.
+        let samples = i32::try_from(samples).unwrap_or(i32::MAX);
         // SAFETY: index is bounds-checked above; self.ffi is valid.
-        unsafe { mjr_addAux(index as i32, width as i32, height as i32, samples as i32, self.ffi_mut()); }
+        unsafe { mjr_addAux(index as i32, width, height, samples, self.ffi_mut()); }
         Ok(())
     }
 
     /// Resize offscreen buffers.
+    ///
+    /// # Panics
+    /// Panics if `width` or `height` is larger than [`i32::MAX`].
     pub fn resize_offscreen(&mut self, width: u32, height: u32) {
+        let (width, height) = (checked_c_len::<i32, _>(width), checked_c_len::<i32, _>(height));
         // SAFETY: self.ffi is a valid, fully initialized mjrContext.
-        unsafe { mjr_resizeOffscreen(width as i32, height as i32, self.ffi_mut()); }
+        unsafe { mjr_resizeOffscreen(width, height, self.ffi_mut()); }
     }
 
     /// Re-upload texture to GPU, overwriting previous upload if any.
