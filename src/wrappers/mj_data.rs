@@ -19,6 +19,7 @@ use std::ffi::CString;
 use std::borrow::Cow;
 use std::path::Path;
 use std::fmt::Debug;
+use std::fs::File;
 
 /*******************************************/
 // Types
@@ -381,13 +382,18 @@ impl<M: ModelType> MjData<M> {
     /// `Ok(())` on success.
     /// # Errors
     /// - [`MjDataError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjDataError::IoError`] if the file cannot be opened for writing.
     /// # Panics
     /// When either string contains '\0' characters, a panic occurs.
     pub fn print_formatted<T: AsRef<Path>>(&self, filename: T, float_format: &str) -> Result<(), MjDataError> {
-        let path_str = filename.as_ref().to_str()
+        let path = filename.as_ref();
+        let path_str = path.to_str()
             .ok_or(MjDataError::InvalidUtf8Path)?;
         let c_filename = CString::new(path_str).unwrap();
         let c_float_format = CString::new(float_format).unwrap();
+        // MuJoCo only logs a warning when it cannot open the file, so open it here first.
+        File::create(path)
+            .map_err(|e| MjDataError::IoError { path: path.to_path_buf(), kind: e.kind() })?;
         unsafe { mj_printFormattedData(self.model.ffi(), self.ffi(), c_filename.as_ptr(), c_float_format.as_ptr()) }
         Ok(())
     }
@@ -397,12 +403,17 @@ impl<M: ModelType> MjData<M> {
     /// `Ok(())` on success.
     /// # Errors
     /// - [`MjDataError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjDataError::IoError`] if the file cannot be opened for writing.
     /// # Panics
     /// When the filename contains '\0' characters, a panic occurs.
     pub fn print<T: AsRef<Path>>(&self, filename: T) -> Result<(), MjDataError> {
-        let path_str = filename.as_ref().to_str()
+        let path = filename.as_ref();
+        let path_str = path.to_str()
             .ok_or(MjDataError::InvalidUtf8Path)?;
         let c_filename = CString::new(path_str).unwrap();
+        // MuJoCo only logs a warning when it cannot open the file, so open it here first.
+        File::create(path)
+            .map_err(|e| MjDataError::IoError { path: path.to_path_buf(), kind: e.kind() })?;
         unsafe { mj_printData(self.model.ffi(), self.ffi(), c_filename.as_ptr()) }
         Ok(())
     }

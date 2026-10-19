@@ -8,8 +8,10 @@
 //! - [`MjVfsError`] - virtual file system operations (`MjVfs`).
 //! - [`MjPluginError`] - plugin library loading operations.
 //! - [`GlInitError`] - OpenGL / window initialization (feature-gated).
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::fmt;
+use std::io;
 
 use crate::wrappers::mj_model::{MjModelLayout, MjtObjBase};
 
@@ -82,6 +84,13 @@ pub enum MjDataError {
     ContactBufferFull,
     /// A filesystem path argument contains invalid UTF-8.
     InvalidUtf8Path,
+    /// A file I/O operation failed.
+    IoError {
+        /// Path of the file.
+        path: PathBuf,
+        /// Kind of the I/O failure.
+        kind: io::ErrorKind,
+    },
 }
 
 impl fmt::Display for MjDataError {
@@ -121,6 +130,9 @@ impl fmt::Display for MjDataError {
             }
             Self::InvalidUtf8Path => {
                 write!(f, "path contains invalid UTF-8")
+            }
+            Self::IoError { path, kind } => {
+                write!(f, "file I/O failed for {}: {kind}", path.display())
             }
         }
     }
@@ -420,6 +432,13 @@ pub enum MjModelError {
         /// Exclusive upper bound of the valid range.
         len: usize,
     },
+    /// A file I/O operation failed.
+    IoError {
+        /// Path of the file.
+        path: PathBuf,
+        /// Kind of the I/O failure.
+        kind: io::ErrorKind,
+    },
 }
 
 impl fmt::Display for MjModelError {
@@ -453,6 +472,9 @@ impl fmt::Display for MjModelError {
                 f,
                 "index {id} is out of bounds (length is {len})"
             ),
+            Self::IoError { path, kind } => {
+                write!(f, "file I/O failed for {}: {kind}", path.display())
+            }
         }
     }
 }

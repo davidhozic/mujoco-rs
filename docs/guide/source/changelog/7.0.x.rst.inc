@@ -126,6 +126,13 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` and
   :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError` no longer includes the inner error, because a
   reporter that walks ``source()`` printed it twice. Walk ``source()`` to show the cause.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>print_formatted`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>print` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>print_formatted` now return
+  the new variants :docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>IoError` :sup:`new` and
+  :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>IoError` :sup:`new` when the file
+  cannot be opened. Before, they returned ``Ok(())`` and wrote nothing.
 
 .. rubric:: New features and improvements
 

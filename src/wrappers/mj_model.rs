@@ -21,6 +21,7 @@ use std::ffi::{c_char, CStr, CString, c_int, c_void};
 use std::sync::{OnceLock, Arc};
 use std::ptr::{self, NonNull};
 use std::path::Path;
+use std::fs::File;
 
 pub mod traits;
 
@@ -947,17 +948,21 @@ impl MjModel {
     /// Wraps [`mj_printFormattedModel`].
     /// # Returns
     /// `Ok(())` if the path and format string are valid UTF-8 and contain no interior `\0`
-    /// characters. **Note:** the underlying C function `mj_printFormattedModel` returns `void`,
-    /// so file I/O errors are not detectable; `Ok(())` does **not** guarantee the file was written.
+    /// characters.
     /// # Errors
     /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::IoError`] if the file cannot be opened for writing.
     /// # Panics
     /// When either string contains '\0' characters, a panic occurs.
     pub fn print_formatted<T: AsRef<Path>>(&self, filename: T, float_format: &str) -> Result<(), MjModelError> {
-        let path_str = filename.as_ref().to_str()
+        let path = filename.as_ref();
+        let path_str = path.to_str()
             .ok_or(MjModelError::InvalidUtf8Path)?;
         let c_filename = CString::new(path_str).unwrap();
         let c_float_format = CString::new(float_format).unwrap();
+        // MuJoCo only logs a warning when it cannot open the file, so open it here first.
+        File::create(path)
+            .map_err(|e| MjModelError::IoError { path: path.to_path_buf(), kind: e.kind() })?;
         unsafe { mj_printFormattedModel(self.ffi(), c_filename.as_ptr(), c_float_format.as_ptr()) }
         Ok(())
     }
@@ -967,16 +972,19 @@ impl MjModel {
     /// Wraps [`mj_printModel`].
     /// # Returns
     /// `Ok(())` if the path is valid UTF-8 and contains no interior `\0` characters.
-    /// **Note:** the underlying C function `mj_printModel` returns `void`, so file I/O
-    /// errors are not detectable; `Ok(())` does **not** guarantee the file was written.
     /// # Errors
     /// - [`MjModelError::InvalidUtf8Path`] if the path contains invalid UTF-8.
+    /// - [`MjModelError::IoError`] if the file cannot be opened for writing.
     /// # Panics
     /// When the filename contains '\0' characters, a panic occurs.
     pub fn print<T: AsRef<Path>>(&self, filename: T) -> Result<(), MjModelError> {
-        let path_str = filename.as_ref().to_str()
+        let path = filename.as_ref();
+        let path_str = path.to_str()
             .ok_or(MjModelError::InvalidUtf8Path)?;
         let c_filename = CString::new(path_str).unwrap();
+        // MuJoCo only logs a warning when it cannot open the file, so open it here first.
+        File::create(path)
+            .map_err(|e| MjModelError::IoError { path: path.to_path_buf(), kind: e.kind() })?;
         unsafe { mj_printModel(self.ffi(), c_filename.as_ptr()) }
         Ok(())
     }
