@@ -448,7 +448,7 @@ impl fmt::Display for MjModelError {
             Self::IncompatibleModel { source, destination }=> write!(
                 f, "source = {source:?}, destination = {destination:?}"
             ),
-            Self::VfsError(e) => write!(f, "VFS error: {e}"),
+            Self::VfsError(_) => write!(f, "VFS operation failed"),
             Self::IndexOutOfBounds { id, len } => write!(
                 f,
                 "index {id} is out of bounds (length is {len})"
@@ -559,10 +559,10 @@ impl fmt::Display for GlInitError {
             Self::DisplayBuild(e) => write!(f, "display build failed: {e}"),
             Self::NoWindow => write!(f, "display builder did not create a window"),
             Self::WindowHandle(e) => write!(f, "failed to obtain window handle: {e}"),
-            Self::ContextCreation(e) => write!(f, "GL context creation failed: {e}"),
+            Self::ContextCreation(_) => write!(f, "GL context creation failed"),
             Self::SurfaceAttributes(e) => write!(f, "failed to build surface attributes: {e}"),
-            Self::SurfaceCreation(e) => write!(f, "window surface creation failed: {e}"),
-            Self::MakeCurrent(e) => write!(f, "failed to make GL context current: {e}"),
+            Self::SurfaceCreation(_) => write!(f, "window surface creation failed"),
+            Self::MakeCurrent(_) => write!(f, "failed to make GL context current"),
         }
     }
 }

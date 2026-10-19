@@ -884,17 +884,17 @@ impl Display for RendererError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             #[cfg(feature = "renderer-winit-fallback")]
-            Self::EventLoopError(e) => write!(f, "event loop failed to initialize: {e}"),
-            Self::GlutinError(e) => write!(f, "glutin error: {e}"),
+            Self::EventLoopError(_) => write!(f, "event loop failed to initialize"),
+            Self::GlutinError(_) => write!(f, "glutin operation failed"),
             Self::ZeroDimension => write!(f, "renderer width and height must both be greater than zero"),
             #[cfg(feature = "renderer-winit-fallback")]
-            Self::GlInitFailed(e) => write!(f, "GL initialization failed: {e}"),
+            Self::GlInitFailed(_) => write!(f, "GL initialization failed"),
             Self::RgbDisabled => write!(f, "RGB rendering is not enabled (renderer.with_rgb_rendering(true))"),
             Self::DepthDisabled => write!(f, "depth rendering is not enabled (renderer.with_depth_rendering(true))"),
             Self::DimensionMismatch => write!(f, "the input width and height don't match the renderer's configuration"),
-            Self::IoError(e) => write!(f, "I/O error: {e}"),
-            Self::SceneError(e) => write!(f, "scene error: {e}"),
-            Self::ContextError(e) => write!(f, "rendering context error: {e}"),
+            Self::IoError(_) => write!(f, "I/O operation failed"),
+            Self::SceneError(_) => write!(f, "scene operation failed"),
+            Self::ContextError(_) => write!(f, "rendering context operation failed"),
             Self::IncompatibleModel => write!(f, "the model is not compatible with the scene or the rendering context: call sync_data first"),
         }
     }

@@ -121,6 +121,11 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>InvalidParameter` with MuJoCo's error
   message when MuJoCo fails to create the flex, for example for a missing mesh file. Before, it
   returned ``AllocationFailed`` and lost the message.
+- The ``Display`` output of :docs-rs:`~mujoco_rs::error::<enum>MjModelError`,
+  :docs-rs:`~mujoco_rs::error::<enum>GlInitError`,
+  :docs-rs:`~mujoco_rs::renderer::<enum>RendererError` and
+  :docs-rs:`~mujoco_rs::viewer::<enum>MjViewerError` no longer includes the inner error, because a
+  reporter that walks ``source()`` printed it twice. Walk ``source()`` to show the cause.
 
 .. rubric:: New features and improvements
 
