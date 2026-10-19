@@ -1768,7 +1768,7 @@ impl MjModel {
         (mut = unsafe) skin_bonevertid: &[i32; "mesh ids of vertices in each bone"; ffi().nskinbonevert],
         skin_bonevertweight: &[f32; "weights of vertices in each bone"; ffi().nskinbonevert],
         (mut = unsafe) skin_pathadr: &[i32; "address of asset path for skin; -1: none"; ffi().nskin],
-        hfield_size: &[[MjtNum; 4] [force]; "(x, y, z_top, z_bottom)"; ffi().nhfield],
+        (mut = unsafe) hfield_size: &[[MjtNum; 4] [force]; "(x, y, z_top, z_bottom)"; ffi().nhfield],
         (mut = unsafe) hfield_nrow: &[i32; "number of rows in grid"; ffi().nhfield],
         (mut = unsafe) hfield_ncol: &[i32; "number of columns in grid"; ffi().nhfield],
         (mut = unsafe) hfield_adr: &[i32; "address in hfield_data"; ffi().nhfield],

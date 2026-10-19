@@ -125,6 +125,21 @@ The ``objtype`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTup
     unsafe { view.objtype.as_mut_slice()[0] = MjtObjBase::mjOBJ_SITE; }
 
 
+Height field sizes are unsafe to mutate
+---------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>hfield_size_mut` is now an ``unsafe fn``.
+
+.. code-block:: rust
+
+    // Before
+    model.hfield_size_mut()[0][0] = 2.0;
+
+    // After
+    // SAFETY: every size is positive and finite.
+    unsafe { model.hfield_size_mut()[0][0] = 2.0; }
+
+
 Viewer, renderer and scene constructors take ``&MjModel``
 ---------------------------------------------------------
 

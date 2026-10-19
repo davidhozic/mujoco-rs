@@ -31,6 +31,8 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tuple_objtype_mut` is now an ``unsafe fn``.
   The related ``objtype`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTupleModelViewMut` is now
   :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>hfield_size_mut` is now an ``unsafe fn``.
+  A size that was not positive and finite made a ray cast read out of bounds.
 - Removed ``append_cubefiles`` and ``append_textures`` from
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture` and
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial`, respectively.
