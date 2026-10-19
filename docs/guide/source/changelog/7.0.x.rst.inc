@@ -227,3 +227,6 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   methods that use it, and
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_state_from_data` now panic
   for a ``spec`` with an unknown bit. Before, MuJoCo stopped the process.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>world_body` and
+  ``world_body_mut`` now return the world body even after renames. Before, they would panic
+  when the world body was renamed.

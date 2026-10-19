@@ -777,17 +777,25 @@ impl MjSpec {
     find_x_method_direct! { default }
 
     /// Returns an immutable reference to the world body.
-    /// # Panics
-    /// Panics if the "world" body is not found.
     pub fn world_body(&self) -> &MjsBody {
-        self.body("world").unwrap()
+        // SAFETY: The world body is always the first body of model.
+        // The public API does also not permit deletions of the worldbody.
+        unsafe {
+            MjsBody::from_ffi_ptr(
+                mjs_asBody(mjs_firstElement(self.ffi.as_ptr(), MjtObj::mjOBJ_BODY))
+            )
+        }.unwrap()
     }
 
     /// Returns a mutable reference to the world body.
-    /// # Panics
-    /// Panics if the "world" body is not found.
     pub fn world_body_mut(&mut self) -> &mut MjsBody {
-        self.body_mut("world").unwrap()
+        // SAFETY: The world body is always the first body of model.
+        // The public API does also not permit deletions of the worldbody.
+        unsafe {
+            MjsBody::from_ffi_ptr_mut(
+                mjs_asBody(mjs_firstElement(self.ffi.as_ptr(), MjtObj::mjOBJ_BODY))
+            )
+        }.unwrap()
     }
 }
 
@@ -3250,6 +3258,17 @@ mod tests {
         assert!(world.is_err(), "the world model should not be deletable");
 
         spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_world_body_after_rename() {
+        let mut spec = MjSpec::from_xml_string(MODEL).expect("unable to load the spec");
+        spec.world_body_mut().set_name("ground").unwrap();
+        spec.world_body_mut().add_body().set_name("world").unwrap();
+
+        let world = spec.world_body();
+        assert_eq!(world.name(), "ground");
+        assert_eq!(world.element_pointer(), spec.body("ground").unwrap().element_pointer());
     }
 
     #[test]
