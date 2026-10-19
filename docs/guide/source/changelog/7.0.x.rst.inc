@@ -117,6 +117,10 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 .. rubric:: Error handling
 
 - New variant :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>FrameParentMismatch` :sup:`new`.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>try_add_flexcomp` now returns
+  :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>InvalidParameter` with MuJoCo's error
+  message when MuJoCo fails to create the flex, for example for a missing mesh file. Before, it
+  returned ``AllocationFailed`` and lost the message.
 
 .. rubric:: New features and improvements
 

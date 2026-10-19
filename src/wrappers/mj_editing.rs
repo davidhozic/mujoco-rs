@@ -2786,20 +2786,27 @@ impl MjsBody {
     /// # Panics
     /// Panics if MuJoCo fails to create the flex, or if `name` or any string in
     /// `config` contains an interior NUL byte.
+    ///
+    /// # Note
+    /// Allocation failures cause MuJoCo to abort the process.
+    /// The exception is the loading of a GMSH file, where the method panics.
     pub fn add_flexcomp(&mut self, name: &str, config: &MjFlexcompConfig) -> &mut MjsFlex {
-        self.try_add_flexcomp(name, config).expect("mjs_makeFlex returned null")
+        self.try_add_flexcomp(name, config).unwrap()
     }
 
     /// Fallible version of [`Self::add_flexcomp`]. Wraps [`mjs_makeFlex`].
     ///
     /// # Errors
-    /// - Returns [`MjEditError::InvalidParameter`] when `config.count` has more than [`i32::MAX`]
-    ///   points or `config.cellcount` has a zero entry.
-    /// - Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to create the
-    ///   flex (returns null).
+    /// Returns [`MjEditError::InvalidParameter`] when `config.count` has more than [`i32::MAX`]
+    /// points, when `config.cellcount` has a zero entry, or with MuJoCo's error message when
+    /// MuJoCo fails to create the flex.
     ///
     /// # Panics
     /// Panics if `name` or any string in `config` contains an interior NUL byte.
+    ///
+    /// # Note
+    /// Allocation failures cause MuJoCo to abort the process.
+    /// The exception is the loading of a GMSH file, where the method returns [`MjEditError::InvalidParameter`].
     pub fn try_add_flexcomp(&mut self, name: &str, config: &MjFlexcompConfig)
         -> Result<&mut MjsFlex, MjEditError>
     {
@@ -2862,7 +2869,11 @@ impl MjsBody {
                 config.vfs.map_or(ptr::null(), |v| v.ffi() as *const mjVFS),
             )
         };
-        unsafe { MjsFlex::from_ffi_ptr_mut(ptr) }.ok_or(MjEditError::AllocationFailed)
+        // A null return is always a failed Make, which records its reason in the spec error.
+        // SAFETY: the body belongs to a live spec, and reading its error does not modify it.
+        unsafe { MjsFlex::from_ffi_ptr_mut(ptr) }.ok_or_else(|| MjEditError::InvalidParameter(
+            unsafe { read_spec_error(self.owning_spec().cast_mut()) }
+        ))
     }
 }
 
