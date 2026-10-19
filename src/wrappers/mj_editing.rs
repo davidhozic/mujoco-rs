@@ -4787,7 +4787,10 @@ mod tests {
         // 3 * 1001^3 coordinates overflow an int.
         let config = MjFlexcompConfig::default()
             .with_type("mesh").with_dof("trilinear").with_cellcount([1000, 1000, 1000]);
-        assert!(spec.world_body_mut().try_add_flexcomp("nodes", &config).is_err());
+        let err = spec.world_body_mut().try_add_flexcomp("nodes", &config).unwrap_err();
+        assert!(
+            matches!(&err, MjEditError::InvalidParameter(msg) if msg.contains("cellcount")), "{err:?}"
+        );
 
         // MuJoCo reads cellcount only for an interpolated dof, and a single cell is valid.
         let config = MjFlexcompConfig::default()
