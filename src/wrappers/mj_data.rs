@@ -1387,7 +1387,12 @@ impl<M: ModelType> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::IncompatibleModel`] if `src` was created from a model that is not
     /// compatible with this data's model (see [`MjModel::is_compatible_with_model`]).
+    ///
+    /// # Panics
+    /// Panics if `spec` is not below `1 << mjNSTATE`.
     pub fn copy_state_from_data<N: ModelType>(&mut self, src: &MjData<N>, spec: u32) -> Result<(), MjDataError> {
+        // MuJoCo ends the process through mjERROR for an unknown bit.
+        assert!(spec < 1 << mjtState::mjNSTATE as u32, "state spec {spec:#x} has an unknown bit");
         if !self.model.is_compatible_with_model(&src.model) {
             return Err(MjDataError::IncompatibleModel {
                 source: Arc::clone(src.model.layout()),
@@ -1531,6 +1536,7 @@ impl<M: ModelType> MjData<M> {
     ///
     /// # Panics
     /// A panic will occur if `destination` is smaller than [`MjModel::state_size`] with `spec` passed as parameter.
+    /// A panic will also occur if `spec` is not below `1 << mjNSTATE`.
     /// Use [`MjData::try_read_state_into`] for a fallible alternative.
     pub fn read_state_into(&self, spec: u32, destination: &mut [MjtNum]) -> usize {
         self.try_read_state_into(spec, destination)
@@ -1542,6 +1548,9 @@ impl<M: ModelType> MjData<M> {
     /// # Errors
     /// Returns [`MjDataError::BufferTooSmall`] if `destination` is smaller than
     /// the state size required by `spec`.
+    ///
+    /// # Panics
+    /// Panics if `spec` is not below `1 << mjNSTATE`.
     ///
     /// On success, returns the number of [`MjtNum`] elements written.
     pub fn try_read_state_into(&self, spec: u32, destination: &mut [MjtNum]) -> Result<usize, MjDataError> {
@@ -1561,6 +1570,9 @@ impl<M: ModelType> MjData<M> {
 
     /// Same as [`MjData::read_state_into`], except it allocates
     /// and returns new boxed data containing the state.
+    ///
+    /// # Panics
+    /// Panics if `spec` is not below `1 << mjNSTATE`.
     pub fn state(&self, spec: u32) -> Box<[MjtNum]> {
         let mut destination = vec![0.0; self.model.state_size(spec)].into_boxed_slice();
         Self::read_state_into(self, spec, &mut destination);
@@ -1581,6 +1593,9 @@ impl<M: ModelType> MjData<M> {
     /// - [`MjDataError::InvalidHistoryCursor`] if `spec` selects [`MjtState::mjSTATE_HISTORY`]
     ///   and a cursor slot in `state` lies outside `0..nsample` for its buffer. The history
     ///   buffer keeps its previous contents; every other selected component stays written.
+    ///
+    /// # Panics
+    /// Panics if `spec` is not below `1 << mjNSTATE`.
     pub fn set_state(&mut self, state: &[MjtNum], spec: u32) -> Result<(), MjDataError> {
         let required_len = self.model.state_size(spec);
         if state.len() < required_len {
@@ -5442,5 +5457,21 @@ mod test {
         data.step();
         assert_eq!(data.ncon(), 0);
         assert!(matches!(data.try_contact_force(0), Err(MjDataError::IndexOutOfBounds { kind: "contact", id: 0, upper: 0 }))) ;
+    }
+
+    #[test]
+    #[should_panic(expected = "unknown bit")]
+    fn test_state_size_unknown_spec_bit_panics() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        model.state_size(1 << MjtState::mjNSTATE as u32);
+    }
+
+    #[test]
+    #[should_panic(expected = "unknown bit")]
+    fn test_copy_state_unknown_spec_bit_panics() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let source = model.make_data();
+        let mut destination = model.make_data();
+        let _ = destination.copy_state_from_data(&source, 1 << MjtState::mjNSTATE as u32);
     }
 }

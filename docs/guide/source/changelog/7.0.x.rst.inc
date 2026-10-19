@@ -84,10 +84,11 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtObjBase` :sup:`new` instead of an ``i32``.
 - Removed ``MjvScene::signature`` and the ``model_signature`` method of every ``Info`` type. Read
   :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>signature` on the model instead.
-- Model and specification fields and functions that accept only real geom types or real object
-  types now use :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtGeomBase` :sup:`new` and
-  :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtObjBase` :sup:`new`, which hold only the variants
-  below ``mjNGEOMTYPES`` and ``mjNOBJECT``.
+- Model and specification fields and functions that accept only real geom types, real object
+  types or real texture roles now use :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtGeomBase`
+  :sup:`new`, :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtObjBase` :sup:`new` and
+  :docs-rs:`~mujoco_rs::wrappers::mj_model::<type>MjtTextureRoleBase` :sup:`new`, which hold only
+  the variants below ``mjNGEOMTYPES``, ``mjNOBJECT`` and ``mjNTEXROLE``.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor::<method>set_objtype`,
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsSensor::<method>set_reftype` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTuple::<method>set_objtype` no longer
@@ -201,3 +202,26 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile` now returns an error
   for a builtin cube or skybox texture whose size overflows ``i32``. Before, the check used
   ``height``, which such a texture ignores, and MuJoCo wrote out of bounds.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile` now also returns an
+  error for an invalid flex ``order``, ``cellcount`` or ``condim``, a negative actuator or sensor
+  ``nsample``, a camera projection sensor that does not reference a camera, a mesh ``maxhullvert``
+  in ``0..=3``, a plugin instance without a ``plugin_name``, and a height field whose
+  ``nrow * ncol`` overflows ``i32``. Before, MuJoCo accepted these values and then crashed or read
+  out of bounds.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>try_add_flexcomp` now
+  returns :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>InvalidParameter` for a
+  ``count`` with more than ``i32::MAX`` points or a ``cellcount`` with a zero entry. Before,
+  MuJoCo wrote out of bounds.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>move_` now panics
+  for a camera type other than free, tracking or fixed. Before, MuJoCo stopped the process.
+- The buffer methods of :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`
+  (for example :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>push`)
+  now panic for a negative ``linepnt``, and ``draw`` panics for a negative ``legendoffset``.
+  Before, both read out of bounds.
+- |mjv_scene| ``update`` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update_with_catmask`
+  now panic for a negative ``vis.quality.numslices``. Before, MuJoCo wrote out of bounds.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>state_size`, the state
+  methods that use it, and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_state_from_data` now panic
+  for a ``spec`` with an unknown bit. Before, MuJoCo stopped the process.

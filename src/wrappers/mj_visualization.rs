@@ -293,7 +293,17 @@ impl MjvCamera {
     /// [`MjtMouse::mjMOUSE_TURN_H`], [`MjtMouse::mjMOUSE_ZOOM`], [`MjtMouse::mjMOUSE_MOVE_V_REL`]
     /// or [`MjtMouse::mjMOUSE_MOVE_H_REL`]. A camera of type [`MjtCamera::mjCAMERA_FIXED`] returns
     /// early, before that point.
+    ///
+    /// # Panics
+    /// Panics if `self.type_` is not [`MjtCamera::mjCAMERA_FREE`],
+    /// [`MjtCamera::mjCAMERA_TRACKING`] or [`MjtCamera::mjCAMERA_FIXED`].
     pub fn move_(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum) {
+        // Other camera types end the process through mjERROR in mjv_cameraFrame.
+        assert!(
+            [MjtCamera::mjCAMERA_FREE, MjtCamera::mjCAMERA_TRACKING, MjtCamera::mjCAMERA_FIXED]
+                .iter().any(|&camera_type| self.type_ == camera_type as i32),
+            "camera type must be free, tracking or fixed"
+        );
         unsafe { mjv_moveCamera(model.ffi(), action as i32, dx, dy, self); };
     }
 
@@ -503,7 +513,13 @@ impl MjvFigure {
     /// # Safety
     /// Every `linepnt` entry must lie within `0..=mjMAXLINEPNT`, the capacity of the matching
     /// `linedata` row. Automated checks from Rust side are too expensive.
+    ///
+    /// # Panics
+    /// Panics if `legendoffset` is negative.
     pub unsafe fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
+        // TODO: MuJoCo upstream bug. mjr_figure indexes linename and linergb from legendoffset
+        // with no lower bound. Remove once fixed upstream.
+        assert!(self.legendoffset >= 0, "legendoffset must not be negative");
         // SAFETY: the caller guarantees every `linepnt` entry is within the `linedata` capacity.
         unsafe { mjr_figure(viewport, self, context.ffi()) };
     }
@@ -546,7 +562,7 @@ impl MjvFigure {
     /// Checks if the buffer is full for plot with `plot_index`.
     ///
     /// # Panics
-    /// Panics if `plot_index >= mjMAXLINE`.
+    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is negative.
     ///
     /// Use [`MjvFigure::try_full`] for a fallible alternative.
     pub fn full(&self, plot_index: usize) -> bool {
@@ -554,6 +570,9 @@ impl MjvFigure {
     }
 
     /// Checks if the buffer is full for plot with `plot_index`.
+    ///
+    /// # Panics
+    /// Panics if `linepnt[plot_index]` is negative.
     ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
@@ -563,13 +582,13 @@ impl MjvFigure {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
-        Ok(self.linepnt[plot_index] >= (self.linedata[plot_index].len() / 2) as i32)
+        Ok(self.point_count(plot_index) >= self.linedata[plot_index].len() / 2)
     }
 
     /// Checks if the buffer is empty for plot with `plot_index`.
     ///
     /// # Panics
-    /// Panics if `plot_index >= mjMAXLINE`.
+    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is negative.
     ///
     /// Use [`MjvFigure::try_empty`] for a fallible alternative.
     pub fn empty(&self, plot_index: usize) -> bool {
@@ -577,6 +596,9 @@ impl MjvFigure {
     }
 
     /// Checks if the buffer is empty for plot with `plot_index`.
+    ///
+    /// # Panics
+    /// Panics if `linepnt[plot_index]` is negative.
     ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
@@ -586,10 +608,13 @@ impl MjvFigure {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
-        Ok(self.linepnt[plot_index] == 0)
+        Ok(self.point_count(plot_index) == 0)
     }
 
     /// Pushes a new data point to buffer for the specific plot with `plot_index`.
+    ///
+    /// # Panics
+    /// Panics if `linepnt[plot_index]` is negative.
     ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
@@ -599,9 +624,9 @@ impl MjvFigure {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
+        let point_index = self.point_count(plot_index);
         let plot = &mut self.linedata[plot_index];
         let capacity = plot.len() / 2;
-        let point_index = self.linepnt[plot_index] as usize;
         if point_index >= capacity {
             return Err(MjSceneError::FigureBufferFull { plot_index, capacity });
         }
@@ -666,8 +691,8 @@ impl MjvFigure {
     /// Returns `Some((x, y))` when the plot contains any elements, otherwise `None` is returned.
     ///
     /// # Panics
-    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is above the plot
-    /// capacity of `linedata[plot_index].len() / 2` points.
+    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is negative or above the
+    /// plot capacity of `linedata[plot_index].len() / 2` points.
     ///
     /// Use [`MjvFigure::try_pop_front`] for a fallible alternative.
     pub fn pop_front(&mut self, plot_index: usize) -> Option<(f32, f32)> {
@@ -677,7 +702,7 @@ impl MjvFigure {
     /// Pops the first element from the plot data of plot with `plot_index`.
     ///
     /// # Panics
-    /// Panics if `linepnt[plot_index]` is above the plot capacity of
+    /// Panics if `linepnt[plot_index]` is negative or above the plot capacity of
     /// `linedata[plot_index].len() / 2` points.
     ///
     /// # Errors
@@ -690,13 +715,13 @@ impl MjvFigure {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
-        let len = self.linepnt[plot_index];
-        if len <= 0 {
+        let len = self.point_count(plot_index);
+        if len == 0 {
             return Ok(None);
         }
         let plot_data = &mut self.linedata[plot_index];
         let first = (plot_data[0], plot_data[1]);
-        plot_data.copy_within(2..len as usize * 2, 0);
+        plot_data.copy_within(2..len * 2, 0);
         self.linepnt[plot_index] -= 1;
         Ok(Some(first))
     }
@@ -707,8 +732,8 @@ impl MjvFigure {
     /// Returns `Some((x, y))` when the plot contains any elements, otherwise `None` is returned.
     ///
     /// # Panics
-    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is above the plot
-    /// capacity of `linedata[plot_index].len() / 2` points.
+    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is negative or above the
+    /// plot capacity of `linedata[plot_index].len() / 2` points.
     ///
     /// Use [`MjvFigure::try_pop_back`] for a fallible alternative.
     pub fn pop_back(&mut self, plot_index: usize) -> Option<(f32, f32)> {
@@ -718,7 +743,7 @@ impl MjvFigure {
     /// Pops the last element from the plot data of plot with `plot_index`.
     ///
     /// # Panics
-    /// Panics if `linepnt[plot_index]` is above the plot capacity of
+    /// Panics if `linepnt[plot_index]` is negative or above the plot capacity of
     /// `linedata[plot_index].len() / 2` points.
     ///
     /// # Errors
@@ -731,12 +756,12 @@ impl MjvFigure {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
-        let old_len = self.linepnt[plot_index];
-        if old_len <= 0 {
+        let old_len = self.point_count(plot_index);
+        if old_len == 0 {
             return Ok(None);
         }
         let plot_data = &mut self.linedata[plot_index];
-        let new_start = ((old_len - 1) * 2) as usize;
+        let new_start = (old_len - 1) * 2;
         self.linepnt[plot_index] -= 1;
         Ok(Some((plot_data[new_start], plot_data[new_start + 1])))
     }
@@ -781,6 +806,16 @@ impl MjvFigure {
         }
         self.linepnt[plot_index] -= n as i32;
         Ok(())
+    }
+
+    /// Returns `linepnt[plot_index]` as a point count.
+    ///
+    /// # Panics
+    /// Panics if the entry is negative.
+    fn point_count(&self, plot_index: usize) -> usize {
+        // A negative count would make the buffer look full and non-empty at once.
+        usize::try_from(self.linepnt[plot_index])
+            .unwrap_or_else(|_| panic!("linepnt[{plot_index}] must not be negative"))
     }
 }
 
@@ -900,6 +935,7 @@ impl MjvScene {
     ///   out of range for the model in `data`.
     /// - Panics if `perturb.select` is out of range (greater than or equal to the number of
     ///   bodies) for the model in `data`.
+    /// - Panics if `vis.quality.numslices` of the model in `data` is negative.
     pub fn update_with_catmask<M: ModelType>(
         &mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb,
         cam: &mut MjvCamera, catmask: i32,
@@ -923,6 +959,12 @@ impl MjvScene {
         // MuJoCo does no bound checking for pert->select, thus invalid IDs leads to out-of-bound reads.
         assert!((perturb.select as MjtSize) < data.model().nbody(), "selected perturbated body ID is outside the valid range");
 
+        // TODO: MuJoCo upstream bug. A negative numslices makes mjv_catenary write before its
+        // stack array. Remove once fixed upstream.
+        assert!(
+            data.model().vis().quality.numslices >= 0, "vis.quality.numslices must not be negative"
+        );
+
         unsafe {
             mjv_updateScene(
                 data.model().ffi(), data.ffi_mut(), opt, perturb,
@@ -942,8 +984,8 @@ impl MjvScene {
     ///
     /// # Panics
     /// Panics under the same conditions as [`update_with_catmask`](Self::update_with_catmask):
-    /// an incompatible model, an out-of-range fixed-camera id, or an out-of-range
-    /// `perturb.select`.
+    /// an incompatible model, an out-of-range fixed-camera id, an out-of-range
+    /// `perturb.select`, or a negative `vis.quality.numslices`.
     pub fn update<M: ModelType>(&mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb, cam: &mut MjvCamera) {
         self.update_with_catmask(data, opt, perturb, cam, MjtCatBit::mjCAT_ALL as i32);
     }
@@ -1625,5 +1667,4 @@ mod tests {
         // SAFETY: MjvScene::new zeroes every buffer mjv_makeScene leaves untouched.
         unsafe { scene.probe_dynamic_arrays_unsafe() };
     }
-
 }

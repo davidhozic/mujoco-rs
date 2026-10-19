@@ -6315,3 +6315,18 @@ pub enum _mjtObjBase {
     mjOBJ_KEY = 24,
     mjOBJ_PLUGIN = 25,
 }
+
+#[repr(u32)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Copy)]
+pub enum _mjtTextureRoleBase {
+    mjTEXROLE_USER = 0,
+    mjTEXROLE_RGB = 1,
+    mjTEXROLE_OCCLUSION = 2,
+    mjTEXROLE_ROUGHNESS = 3,
+    mjTEXROLE_METALLIC = 4,
+    mjTEXROLE_NORMAL = 5,
+    mjTEXROLE_OPACITY = 6,
+    mjTEXROLE_EMISSIVE = 7,
+    mjTEXROLE_RGBA = 8,
+    mjTEXROLE_ORM = 9,
+}

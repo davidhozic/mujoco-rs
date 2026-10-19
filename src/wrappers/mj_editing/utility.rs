@@ -821,10 +821,6 @@ macro_rules! vec_string_set_append {
             "Sets the entry at index `role` in `", stringify!($name), "` to `name`. ",
             $comment,
             "\n\n",
-            "# Note\n",
-            "MuJoCo pre-sizes `", stringify!($name), "` with one slot per [`", stringify!($role_ty),
-            "`] value. An index with no slot ends the process through `mju_error`.\n",
-            "\n",
             "# Panics\n",
             "When `name` contains '\\0' characters, a panic occurs."
         )]

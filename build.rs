@@ -73,6 +73,7 @@ mod build_dependencies {
             let count_variant = match enum_name {
                 "mjtGeom"  => "mjNGEOMTYPES",
                 "mjtObj"   => "mjNOBJECT",
+                "mjtTextureRole" => "mjNTEXROLE",
                 _ => return None,
             };
 

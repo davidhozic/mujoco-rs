@@ -173,7 +173,7 @@ to set the elements.
 
     // After
     texture.set_cubefile(MjtCubeFace::Right, "right.png");
-    material.set_texture(MjtTextureRole::mjTEXROLE_RGB, "wood");
+    material.set_texture(MjtTextureRoleBase::mjTEXROLE_RGB, "wood");
 
 
 Removed the frame and body adders of ``MjsFrame``

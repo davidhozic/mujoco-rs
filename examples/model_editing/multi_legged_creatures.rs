@@ -156,7 +156,7 @@ fn build_scene() -> MjModel {
         .with_rgb1([0.2_f64, 0.3, 0.4])
         .with_rgb2([0.3_f64, 0.4, 0.5]);
     let mat = spec.add_material().with_name("floor");
-    mat.set_texture(MjtTextureRole::mjTEXROLE_RGB, "floor");
+    mat.set_texture(MjtTextureRoleBase::mjTEXROLE_RGB, "floor");
     mat.with_texrepeat([5.0_f32, 5.0_f32]);
     mat.with_texuniform(true);
     mat.with_reflectance(0.2_f32);

@@ -69,6 +69,10 @@ pub type MjtTexture = mjtTexture;
 /// uses RGB textures.  These values are used to store the texture index in the material's array `m->mat_texid`.
 pub type MjtTextureRole = mjtTextureRole;
 
+/// The real texture roles of [`MjtTextureRole`].
+/// Contains every variant below [`MjtTextureRole::mjNTEXROLE`].
+pub type MjtTextureRoleBase = _mjtTextureRoleBase;
+
 /// Type of color space encoding for textures.
 pub type MjtColorSpace = mjtColorSpace;
 
@@ -979,9 +983,12 @@ impl MjModel {
 
     /// Return size of state specification. The bits of the integer spec correspond to element fields of [`MjtState`](crate::wrappers::mj_data::MjtState).
     /// Wraps [`mj_stateSize`].
-    /// # Note
-    /// MuJoCo aborts the process through `mjERROR` when `spec` is not below `1 << mjNSTATE`.
+    ///
+    /// # Panics
+    /// Panics if `spec` is not below `1 << mjNSTATE`.
     pub fn state_size(&self, spec: u32) -> usize {
+        // MuJoCo ends the process through mjERROR for an unknown bit.
+        assert!(spec < 1 << mjtState::mjNSTATE as u32, "state spec {spec:#x} has an unknown bit");
         unsafe { mj_stateSize(self.ffi(), spec as i32) as usize }
     }
 
@@ -990,11 +997,9 @@ impl MjModel {
     /// with components specified by `src_spec`.
     ///
     /// Wraps [`mj_extractState`].
-    /// # Note
-    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
-    /// `1 << mjNSTATE`.
     ///
     /// # Panics
+    /// - When `src_spec` is not below `1 << mjNSTATE`.
     /// - When `src.len()` does not equal the size required by `src_spec`.
     /// - When `dst_spec` is not a subset of `src_spec`.
     ///
@@ -1006,9 +1011,8 @@ impl MjModel {
     /// Fallible version of [`MjModel::extract_state`].
     ///
     /// Wraps [`mj_extractState`].
-    /// # Note
-    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
-    /// `1 << mjNSTATE`.
+    /// # Panics
+    /// Panics if `src_spec` is not below `1 << mjNSTATE`.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the extracted state.
     /// # Errors
@@ -1047,11 +1051,9 @@ impl MjModel {
     /// with components specified by `src_spec`.
     ///
     /// Wraps [`mj_extractState`].
-    /// # Note
-    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
-    /// `1 << mjNSTATE`.
     ///
     /// # Panics
+    /// - When `src_spec` is not below `1 << mjNSTATE`.
     /// - When `src.len()` does not equal the size required by `src_spec`.
     /// - When `dst_spec` is not a subset of `src_spec`.
     /// - When `dst` is too small to hold the requested components.
@@ -1064,9 +1066,8 @@ impl MjModel {
     /// Fallible version of [`MjModel::extract_state_into`].
     ///
     /// Wraps [`mj_extractState`].
-    /// # Note
-    /// MuJoCo aborts the process through `mjERROR` when `src_spec` is not below
-    /// `1 << mjNSTATE`.
+    /// # Panics
+    /// Panics if `src_spec` is not below `1 << mjNSTATE`.
     /// # Returns
     /// On success, returns [`Ok`] variant containing the number of elements written to `dst`.
     /// # Errors

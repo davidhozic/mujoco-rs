@@ -21,7 +21,7 @@ use super::mj_model::{
     MjtLightType, MjtSensor, MjtDataType, MjtGain,
     MjtBias, MjtDyn, MjtEq, MjtTexture, MjtColorSpace,
     MjtTrn, MjtStage, MjtFlexSelf, MjtProjection,
-    MjtSleepPolicy, MjtWrap, MjtTextureRole, MjtCubeFace
+    MjtSleepPolicy, MjtWrap, MjtTextureRole, MjtTextureRoleBase, MjtCubeFace
 };
 use super::mj_auxiliary::{MjVfs, MjVisual, MjStatistic, MjLROpt};
 use super::mj_option::MjOption;
@@ -491,8 +491,8 @@ impl MjSpec {
 
     /// Compilation implementation of [`MjSpec::compile_with_vfs`] and [`MjSpec::compile`].
     fn compile_impl(&mut self, maybe_vfs: Option<&MjVfs>) -> Result<MjModel, MjEditError> {
-        // TODO: temporary. Remove this loop once a MuJoCo release has the texture size checks in
-        // mjCTexture::Compile and the int-safe face offset in mjr_uploadTexture.
+        // TODO: MuJoCo upstream bug. mjCTexture::Compile and mjr_uploadTexture compute texture
+        // sizes and offsets in int. Remove once fixed upstream.
         for texture in self.texture_iter() {
             let (nchannel, width, height) = (texture.nchannel(), texture.width(), texture.height());
             if nchannel < 0 || width < 0 || height < 0 {
@@ -501,7 +501,9 @@ impl MjSpec {
                 ));
             }
             // A builtin cube or skybox ignores `height` and fills 6 * width rows.
-            let height = if texture.builtin() != MjtBuiltin::mjBUILTIN_NONE && texture.type_() != MjtTexture::mjTEXTURE_2D {
+            let builtin_cube = texture.builtin() != MjtBuiltin::mjBUILTIN_NONE
+                && texture.type_() != MjtTexture::mjTEXTURE_2D;
+            let height = if builtin_cube {
                 i64::from(height).max(6 * i64::from(width))
             } else {
                 i64::from(height)
@@ -511,6 +513,79 @@ impl MjSpec {
                     "texture nchannel*width*height must fit in an i32".to_owned(),
                 ));
             }
+        }
+
+        // TODO: MuJoCo upstream bug. mjCFlex::Compile does not bound order or cellcount, and the
+        // interpolation code writes past its 27-node buffers. Remove once fixed upstream.
+        for flex in self.flex_iter() {
+            let (order, cellcount) = (flex.order(), flex.cellcount());
+            if !(0..=2).contains(&order) {
+                return Err(MjEditError::CompileFailed(
+                    format!("flex '{}' order {order} must be in 0..=2", flex.name()),
+                ));
+            }
+            if order > 0 && cellcount.iter().any(|&count| count < 1) {
+                return Err(MjEditError::CompileFailed(
+                    format!("flex '{}' cellcount {cellcount:?} must be positive", flex.name()),
+                ));
+            }
+            // TODO: MuJoCo upstream bug. Only the geom compiler checks condim, so an invalid flex
+            // condim aborts in collision. Remove once fixed upstream.
+            if !matches!(flex.condim(), 1 | 3 | 4 | 6) {
+                return Err(MjEditError::CompileFailed(
+                    format!("flex '{}' condim {} must be 1, 3, 4 or 6", flex.name(), flex.condim()),
+                ));
+            }
+        }
+
+        // TODO: MuJoCo upstream bug. The compiler accepts a negative nsample, and mj_advance then
+        // writes the history buffer through address -1. Remove once fixed upstream.
+        let negative_nsample = self.actuator_iter().find(|actuator| actuator.nsample() < 0)
+            .map(|actuator| actuator.name())
+            .or_else(|| {
+                self.sensor_iter().find(|sensor| sensor.nsample() < 0).map(|sensor| sensor.name())
+            });
+        if let Some(name) = negative_nsample {
+            return Err(MjEditError::CompileFailed(
+                format!("actuator or sensor '{name}' nsample must be non-negative"),
+            ));
+        }
+
+        // TODO: MuJoCo upstream bug. mjCSensor::Compile casts the reference of a CAMPROJECTION
+        // sensor to a camera without checking reftype. Remove once fixed upstream.
+        if let Some(sensor) = self.sensor_iter().find(|sensor|
+            sensor.type_() == MjtSensor::mjSENS_CAMPROJECTION
+                && sensor.reftype() != MjtObjBase::mjOBJ_CAMERA
+        ) {
+            return Err(MjEditError::CompileFailed(
+                format!("camera projection sensor '{}' must reference a camera", sensor.name()),
+            ));
+        }
+
+        // TODO: MuJoCo upstream bug. A maxhullvert in 0..=3 builds an invalid qhull option, and
+        // qhull then dereferences NULL. Remove once fixed upstream.
+        if let Some(mesh) = self.mesh_iter().find(|mesh| (0..=3).contains(&mesh.maxhullvert())) {
+            return Err(MjEditError::CompileFailed(
+                format!("mesh '{}' maxhullvert must be -1 or at least 4", mesh.name()),
+            ));
+        }
+
+        // TODO: MuJoCo upstream bug. A plugin instance with an empty plugin_name compiles with
+        // plugin slot -1, and the compiler dereferences NULL. Remove once fixed upstream.
+        if let Some(plugin) = self.plugin_iter().find(|plugin| plugin.plugin_name().is_empty()) {
+            return Err(MjEditError::CompileFailed(
+                format!("plugin instance '{}' needs a plugin_name", plugin.name()),
+            ));
+        }
+
+        // TODO: MuJoCo upstream bug. mjCHField::Compile computes nrow*ncol in int. Remove once
+        // fixed upstream.
+        if let Some(hfield) = self.hfield_iter().find(|hfield|
+            i64::from(hfield.nrow()) * i64::from(hfield.ncol()) > i64::from(i32::MAX)
+        ) {
+            return Err(MjEditError::CompileFailed(
+                format!("height field '{}' nrow*ncol must fit in an i32", hfield.name()),
+            ));
         }
 
         let result = unsafe { MjModel::from_raw(
@@ -2401,7 +2476,7 @@ mjs_struct!(Material with SpecObject: MjsMaterial<Capability> <= mjsMaterial);
 
 /// # Note: texture assignment
 ///
-/// `textures` is a pre-sized string vector of `mjNTEXROLE` entries, one per [`MjtTextureRole`].
+/// `textures` is a pre-sized string vector of `mjNTEXROLE` entries, one per [`MjtTextureRoleBase`].
 /// Assign one role with [`set_texture`](Self::set_texture).
 /// Replace all roles using [`set_textures`](Self::set_textures).
 impl<Capability> MjsMaterial<Capability> {
@@ -2428,7 +2503,7 @@ impl<Capability> MjsMaterial<Capability> {
     }
 
     vec_string_set_append! {
-        textures[MjtTextureRole; MjtTextureRole::mjNTEXROLE as usize] => texture; "names of textures (empty: none).";
+        textures[MjtTextureRoleBase; MjtTextureRole::mjNTEXROLE as usize] => texture; "names of textures (empty: none).";
     }
 }
 
@@ -2710,14 +2785,31 @@ impl MjsBody {
     /// Fallible version of [`Self::add_flexcomp`]. Wraps [`mjs_makeFlex`].
     ///
     /// # Errors
-    /// Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to create the
-    /// flex (returns null).
+    /// - Returns [`MjEditError::InvalidParameter`] when `config.count` has more than [`i32::MAX`]
+    ///   points or `config.cellcount` has a zero entry.
+    /// - Returns [`MjEditError::AllocationFailed`] when MuJoCo fails to create the
+    ///   flex (returns null).
     ///
     /// # Panics
     /// Panics if `name` or any string in `config` contains an interior NUL byte.
     pub fn try_add_flexcomp(&mut self, name: &str, config: &MjFlexcompConfig)
         -> Result<&mut MjsFlex, MjEditError>
     {
+        // TODO: MuJoCo upstream bug. mjCFlexcomp::Make sizes the point index in int and does not
+        // reject a zero cellcount, so both write out of bounds. Remove once fixed upstream.
+        if let Some(count) = config.count
+            && count.iter().map(|&n| u64::from(n)).product::<u64>() > i32::MAX as u64
+        {
+            return Err(MjEditError::InvalidParameter(
+                format!("flexcomp count {count:?} exceeds i32::MAX points"),
+            ));
+        }
+        if let Some(cellcount) = config.cellcount && cellcount.contains(&0) {
+            return Err(MjEditError::InvalidParameter(
+                format!("flexcomp cellcount {cellcount:?} has a zero entry"),
+            ));
+        }
+
         // Owned C strings must outlive the FFI call below.
         let c_name = CString::new(name).unwrap();
         let c_type = config.r#type.map(|s| CString::new(s).unwrap());
@@ -4128,7 +4220,7 @@ mod tests {
             .with_height(512);
 
         let mat = spec.add_material().with_name("floor");
-        mat.set_texture(MjtTextureRole::mjTEXROLE_RGB, "floor");
+        mat.set_texture(MjtTextureRoleBase::mjTEXROLE_RGB, "floor");
 
         let model = spec.compile().unwrap();
         let xml = spec.save_xml_string(8192).unwrap();
@@ -4137,7 +4229,7 @@ mod tests {
         let mat_info = model.material("floor").unwrap();
         let mat_view = mat_info.view(&model);
         let tex_id = mat_view.texid;
-        assert_ne!(tex_id[MjtTextureRole::mjTEXROLE_RGB as usize], -1,
+        assert_ne!(tex_id[MjtTextureRoleBase::mjTEXROLE_RGB as usize], -1,
             "RGB texture slot should be resolved (not -1)");
     }
 
@@ -4159,18 +4251,18 @@ mod tests {
         // An empty value keeps every role slot, so a later role is still settable.
         let last = spec.add_material().with_name("last");
         last.set_textures("");
-        last.set_texture(MjtTextureRole::mjTEXROLE_RGBA, "floor");
+        last.set_texture(MjtTextureRoleBase::mjTEXROLE_RGBA, "floor");
 
         let model = spec.compile().unwrap();
         let floor_id = model.texture("floor").unwrap().id as i32;
         let first = model.material("first").unwrap().view(&model).texid;
         let last = model.material("last").unwrap().view(&model).texid;
         let role_count = MjtTextureRole::mjNTEXROLE as usize;
-        let expected = |role: MjtTextureRole| {
+        let expected = |role: MjtTextureRoleBase| {
             (0..role_count).map(|i| if i == role as usize { floor_id } else { -1 }).collect::<Vec<_>>()
         };
-        assert_eq!(&first[..], expected(MjtTextureRole::mjTEXROLE_USER));
-        assert_eq!(&last[..], expected(MjtTextureRole::mjTEXROLE_RGBA));
+        assert_eq!(&first[..], expected(MjtTextureRoleBase::mjTEXROLE_USER));
+        assert_eq!(&last[..], expected(MjtTextureRoleBase::mjTEXROLE_RGBA));
     }
 
     /// `set_cubefiles` must keep one entry per face: the compiler reads all six faces without a
@@ -4732,5 +4824,87 @@ mod tests {
         // MuJoCo would match the unnamed frame of the body.
         assert_eq!(body.add_geom().set_frame(""), Err(MjEditError::NotFound));
         assert!(matches!(body.add_frame_in(""), Err(MjEditError::NotFound)));
+    }
+
+    /// Compiles `spec` and returns the `CompileFailed` message, so each test below can check that
+    /// the wrapper rejects the spec before MuJoCo reads the bad value.
+    fn compile_error(spec: &mut MjSpec) -> String {
+        match spec.compile() {
+            Err(MjEditError::CompileFailed(msg)) => msg,
+            other => panic!("expected CompileFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_flex_invalid_order_cellcount_and_condim_rejected() {
+        let mut spec = MjSpec::new();
+        spec.add_flex().with_name("f").with_order(3);
+        assert!(compile_error(&mut spec).contains("order 3 must be in 0..=2"));
+
+        let mut spec = MjSpec::new();
+        spec.add_flex().with_name("f").with_order(1).with_cellcount([1, -1, 1]);
+        assert!(compile_error(&mut spec).contains("must be positive"));
+
+        let mut spec = MjSpec::new();
+        spec.add_flex().with_name("f").with_condim(2);
+        assert!(compile_error(&mut spec).contains("condim 2 must be 1, 3, 4 or 6"));
+    }
+
+    #[test]
+    fn test_negative_nsample_rejected() {
+        let mut spec = MjSpec::new();
+        spec.add_actuator().with_name("a").with_nsample(-1);
+        assert!(compile_error(&mut spec).contains("'a' nsample must be non-negative"));
+
+        let mut spec = MjSpec::new();
+        spec.add_sensor().with_name("s").with_nsample(-1);
+        assert!(compile_error(&mut spec).contains("'s' nsample must be non-negative"));
+    }
+
+    #[test]
+    fn test_camera_projection_sensor_without_camera_rejected() {
+        let mut spec = MjSpec::new();
+        spec.add_sensor()
+            .with_name("proj")
+            .with_type(MjtSensor::mjSENS_CAMPROJECTION)
+            .with_reftype(MjtObjBase::mjOBJ_SITE);
+        assert!(compile_error(&mut spec).contains("'proj' must reference a camera"));
+    }
+
+    #[test]
+    fn test_mesh_small_maxhullvert_rejected() {
+        let mut spec = MjSpec::new();
+        spec.add_mesh().with_name("m").with_maxhullvert(3);
+        assert!(compile_error(&mut spec).contains("'m' maxhullvert must be -1 or at least 4"));
+    }
+
+    #[test]
+    fn test_plugin_without_plugin_name_rejected() {
+        let mut spec = MjSpec::new();
+        spec.add_plugin().with_name("p");
+        assert!(compile_error(&mut spec).contains("'p' needs a plugin_name"));
+    }
+
+    #[test]
+    fn test_hfield_size_overflow_rejected() {
+        let mut spec = MjSpec::new();
+        spec.add_hfield().with_name("h").with_nrow(65537).with_ncol(65537);
+        assert!(compile_error(&mut spec).contains("'h' nrow*ncol must fit in an i32"));
+    }
+
+    #[test]
+    fn test_flexcomp_count_overflow_and_zero_cellcount_rejected() {
+        let mut spec = MjSpec::new();
+        let config = MjFlexcompConfig::default().with_count([2049, 2048, 1024]);
+        let err = spec.world_body_mut().try_add_flexcomp("big", &config).unwrap_err();
+        assert!(
+            matches!(&err, MjEditError::InvalidParameter(msg) if msg.contains("exceeds")), "{err:?}"
+        );
+
+        let config = MjFlexcompConfig::default().with_cellcount([1, 0, 1]);
+        let err = spec.world_body_mut().try_add_flexcomp("empty", &config).unwrap_err();
+        assert!(
+            matches!(&err, MjEditError::InvalidParameter(msg) if msg.contains("zero")), "{err:?}"
+        );
     }
 }

@@ -189,7 +189,7 @@ fn create_model() -> MjModel {
     tex.set_data(&vec![128u8; TEX_SIZE * TEX_SIZE * 3]);
 
     let mat = spec.add_material().with_name("tex_mat");
-    mat.set_texture(MjtTextureRole::mjTEXROLE_RGB, "wave_tex");
+    mat.set_texture(MjtTextureRoleBase::mjTEXROLE_RGB, "wave_tex");
 
     /* Wave mesh */
     let n = MESH_N + 1;
