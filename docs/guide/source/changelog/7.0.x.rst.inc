@@ -161,6 +161,7 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
     reports whether a context can serve another model.
 
 *Simulation*
+
 - |mj_data|:
 
   - A fallible method, :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_contact_force` :sup:`new`,
