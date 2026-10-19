@@ -1308,7 +1308,7 @@ impl<M: ModelType> MjData<M> {
     /// Returns `(geomid, distance)` where distance is -1 if no intersection.
     /// If `normal_out` is `Some`, it will be filled with the surface normal at the intersection.
     /// `geomgroup` and `flg_static` are as in mjvOption; pass `None` for `geomgroup` to skip group exclusion.
-    /// A `vec` shorter than `mjMINVAL` reports no intersection, as [`MjData::multi_ray`] does.
+    /// A `vec` shorter than `mjMINVAL` reports no intersection.
     ///
     /// # Panics
     /// Panics if `bodyexclude` is larger than [`i32::MAX`].

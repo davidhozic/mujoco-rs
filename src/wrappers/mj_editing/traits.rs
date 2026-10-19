@@ -70,8 +70,8 @@ pub trait SpecItem: SpecElement {
 
     /// Returns the used default, or `None` when the element carries no default class name.
     ///
-    /// Only a body, joint, geom, site, camera, light, actuator, pair, equality, tendon, mesh or
-    /// material can carry one. Every other element, a frame included, returns `None`.
+    /// For a frame, this is the default of its child class. After a successful
+    /// [`set_default`](Self::set_default), the element returns `Some`.
     fn default(&self) -> Option<&MjsDefault> {
         let ptr = unsafe { mjs_getDefault(self.element_pointer()) };
         // SAFETY: a non-null return points to the mjsDefault owned by a live mjCDef of the spec.
