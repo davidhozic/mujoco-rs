@@ -9,8 +9,8 @@ Tendon tree count is unsafe to mutate
 
 ``treenum`` is now marked as unsafe to mutate (wrong values can cause out-of-bound reads). Consequently,
 
-- :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTendonModelViewMut` is now
-  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`;
+- the ``treenum`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTendonModelViewMut` is
+  now :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`;
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tendon_treenum_mut` is now an ``unsafe fn``.
 
 .. code-block:: rust
@@ -114,8 +114,8 @@ The ``objtype`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTup
 .. code-block:: rust
 
     // Before
-    model.tuple_objtype_mut()[0] = MjtObjBase::mjOBJ_SITE;
-    model.tuple("t").unwrap().view_mut(&mut model).objtype[0] = MjtObjBase::mjOBJ_SITE;
+    model.tuple_objtype_mut()[0] = MjtObj::mjOBJ_SITE;
+    model.tuple("t").unwrap().view_mut(&mut model).objtype[0] = MjtObj::mjOBJ_SITE;
 
     // After
     // SAFETY: tuple_objid[0] is a valid site id.
@@ -359,7 +359,7 @@ Unsupported-object-type errors now carry the object type
 .. code-block:: rust
 
     // Before
-    if let Err(MjDataError::UnsupportedObjectType(raw)) = data.try_object_velocity(MjtObjBase::mjOBJ_JOINT, 0, false) {
+    if let Err(MjDataError::UnsupportedObjectType(raw)) = data.try_object_velocity(MjtObj::mjOBJ_JOINT, 0, false) {
         println!("object type {raw}");
     }
 
@@ -386,7 +386,7 @@ Otherwise, create a new |mj_data|.
     let old = data.swap_model(edited);
 
     // After
-    // SAFETY: `edited` only changes a joint type, so every size and every address table agrees.
+    // SAFETY: `edited` only changes a geom material, so every size and every address table agrees.
     let old = unsafe { data.swap_model_unchecked(edited) };
 
 

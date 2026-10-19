@@ -474,112 +474,39 @@ impl MjSpec {
     /// Compile [`MjSpec`] to [`MjModel`].
     /// A spec can be edited and compiled multiple times,
     /// returning a new mjModel instance that takes the edits into account.
+    ///
+    /// # Safety
+    /// MuJoCo does not validate every spec value. An invalid value, such as a negative texture
+    /// size or a flex `order` above 2, can make MuJoCo crash or access memory out of bounds during
+    /// compilation or later use of the model. The caller must provide valid values.
+    /// 
+    /// We consider these **missing checks** as MuJoCo's **bugs** and thus don't provide
+    /// additional checks due to increased complexity of maintenance.
+    /// 
     /// # Errors
-    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile, including when a
-    /// texture has a negative dimension or a pixel count that does not fit in an [`i32`].
+    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile.
     pub fn compile(&mut self) -> Result<MjModel, MjEditError> {
         self.compile_impl(None)
     }
 
     /// Same as [`MjSpec::compile`], compiling [`MjSpec`] to [`MjModel`], but taking assets (meshes, heightfields) from `vfs`.
+    /// 
+    /// # Safety
+    /// MuJoCo does not validate every spec value. An invalid value, such as a negative texture
+    /// size or a flex `order` above 2, can make MuJoCo crash or access memory out of bounds during
+    /// compilation or later use of the model. The caller must provide valid values.
+    /// 
+    /// We consider these **missing checks** as MuJoCo's **bugs** and thus don't provide
+    /// additional checks due to increased complexity of maintenance.
+    /// 
     /// # Errors
-    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile, including when a
-    /// texture has a negative dimension or a pixel count that does not fit in an [`i32`].
+    /// Returns [`MjEditError::CompileFailed`] if the model fails to compile.
     pub fn compile_with_vfs(&mut self, vfs: &MjVfs) -> Result<MjModel, MjEditError> {
         self.compile_impl(Some(vfs))
     }
 
     /// Compilation implementation of [`MjSpec::compile_with_vfs`] and [`MjSpec::compile`].
     fn compile_impl(&mut self, maybe_vfs: Option<&MjVfs>) -> Result<MjModel, MjEditError> {
-        // TODO: MuJoCo upstream bug. mjCTexture::Compile and mjr_uploadTexture compute texture
-        // sizes and offsets in int. Remove once fixed upstream.
-        for texture in self.texture_iter() {
-            let (nchannel, width, height) = (texture.nchannel(), texture.width(), texture.height());
-            if nchannel < 0 || width < 0 || height < 0 {
-                return Err(MjEditError::CompileFailed(
-                    "texture nchannel, width and height must be non-negative".to_owned(),
-                ));
-            }
-            // A builtin cube or skybox ignores `height` and fills 6 * width rows.
-            let builtin_cube = texture.builtin() != MjtBuiltin::mjBUILTIN_NONE
-                && texture.type_() != MjtTexture::mjTEXTURE_2D;
-            let height = if builtin_cube {
-                i64::from(height).max(6 * i64::from(width))
-            } else {
-                i64::from(height)
-            };
-            if i64::from(nchannel) * i64::from(width) * height > i64::from(i32::MAX) {
-                return Err(MjEditError::CompileFailed(
-                    "texture nchannel*width*height must fit in an i32".to_owned(),
-                ));
-            }
-        }
-
-        // TODO: MuJoCo upstream bug. mjCFlex::Compile does not bound order or cellcount, and the
-        // interpolation code writes past its 27-node buffers. Remove once fixed upstream.
-        for flex in self.flex_iter() {
-            let (order, cellcount) = (flex.order(), flex.cellcount());
-            if !(0..=2).contains(&order) {
-                return Err(MjEditError::CompileFailed(
-                    format!("flex '{}' order {order} must be in 0..=2", flex.name()),
-                ));
-            }
-            if order > 0 && cellcount.iter().any(|&count| count < 1) {
-                return Err(MjEditError::CompileFailed(
-                    format!("flex '{}' cellcount {cellcount:?} must be positive", flex.name()),
-                ));
-            }
-            // TODO: MuJoCo upstream bug. Only the geom compiler checks condim, so an invalid flex
-            // condim aborts in collision. Remove once fixed upstream.
-            if !matches!(flex.condim(), 1 | 3 | 4 | 6) {
-                return Err(MjEditError::CompileFailed(
-                    format!("flex '{}' condim {} must be 1, 3, 4 or 6", flex.name(), flex.condim()),
-                ));
-            }
-        }
-
-        // TODO: MuJoCo upstream bug. The compiler accepts a negative nsample, and mj_advance then
-        // writes the history buffer through address -1. Remove once fixed upstream.
-        let negative_nsample = self.actuator_iter().find(|actuator| actuator.nsample() < 0)
-            .map(|actuator| actuator.name())
-            .or_else(|| {
-                self.sensor_iter().find(|sensor| sensor.nsample() < 0).map(|sensor| sensor.name())
-            });
-        if let Some(name) = negative_nsample {
-            return Err(MjEditError::CompileFailed(
-                format!("actuator or sensor '{name}' nsample must be non-negative"),
-            ));
-        }
-
-        // TODO: MuJoCo upstream bug. mjCSensor::Compile casts the reference of a CAMPROJECTION
-        // sensor to a camera without checking reftype. Remove once fixed upstream.
-        if let Some(sensor) = self.sensor_iter().find(|sensor|
-            sensor.type_() == MjtSensor::mjSENS_CAMPROJECTION
-                && sensor.reftype() != MjtObjBase::mjOBJ_CAMERA
-        ) {
-            return Err(MjEditError::CompileFailed(
-                format!("camera projection sensor '{}' must reference a camera", sensor.name()),
-            ));
-        }
-
-        // TODO: MuJoCo upstream bug. A maxhullvert in 0..=3 builds an invalid qhull option, and
-        // qhull then dereferences NULL. Remove once fixed upstream.
-        if let Some(mesh) = self.mesh_iter().find(|mesh| (0..=3).contains(&mesh.maxhullvert())) {
-            return Err(MjEditError::CompileFailed(
-                format!("mesh '{}' maxhullvert must be -1 or at least 4", mesh.name()),
-            ));
-        }
-
-        // TODO: MuJoCo upstream bug. mjCHField::Compile computes nrow*ncol in int. Remove once
-        // fixed upstream.
-        if let Some(hfield) = self.hfield_iter().find(|hfield|
-            i64::from(hfield.nrow()) * i64::from(hfield.ncol()) > i64::from(i32::MAX)
-        ) {
-            return Err(MjEditError::CompileFailed(
-                format!("height field '{}' nrow*ncol must fit in an i32", hfield.name()),
-            ));
-        }
-
         let result = unsafe { MjModel::from_raw(
             mj_compile(self.ffi.as_ptr(), maybe_vfs.map_or(ptr::null(), |vfs| vfs.ffi()))
         ) };
@@ -2790,10 +2717,12 @@ impl MjsBody {
     ///
     /// # Errors
     /// Returns [`MjEditError::InvalidParameter`] when `config.count` has more than [`i32::MAX`]
-    /// points, when `config.cellcount` is invalid for a trilinear or quadratic `config.dof`, or
-    /// with MuJoCo's error message when MuJoCo fails to create the flex. A valid `cellcount` has
-    /// no zero entry and at most [`i32::MAX`] nodes, and is `[1, 1, 1]` unless `config.r#type`
-    /// is "mesh", "gmsh" or "direct".
+    /// points for a type other than "mesh", "gmsh" or "direct" (`count[0]` alone for a grid or
+    /// circle with `config.dim` 1), when `config.cellcount` is invalid for a trilinear or
+    /// quadratic `config.dof`, or with MuJoCo's error message when MuJoCo fails to create the
+    /// flex. A valid `cellcount` has no zero entry and at most [`i32::MAX`] / 3 nodes. Unless
+    /// `config.r#type` is "mesh", "gmsh" or "direct", it is `[1, 1, 1]`, or for a grid, has at
+    /// most as many nodes as the grid points.
     ///
     /// # Panics
     /// Panics if `name` or any string in `config` contains an interior NUL byte.
@@ -2806,8 +2735,12 @@ impl MjsBody {
     {
         // TODO: MuJoCo upstream bug. mjCFlexcomp::Make sizes the point and node indices in int, and
         // sizes its pinned array from cellcount only for mesh, gmsh and direct. Remove once fixed.
-        if let Some(count) = config.count
-            && count.iter().map(|&n| u64::from(n)).product::<u64>() > i32::MAX as u64
+        let multi_cell = matches!(config.r#type, Some("mesh" | "gmsh" | "direct"));
+        // Mesh, gmsh and direct take their points from data, and a line uses count[0] only.
+        let line = config.dim == 1 && matches!(config.r#type, None | Some("grid" | "circle"));
+        if let Some(count) = config.count && !multi_cell
+            && count.iter().take(if line { 1 } else { 3 }).map(|&n| u64::from(n)).product::<u64>()
+                > i32::MAX as u64
         {
             return Err(MjEditError::InvalidParameter(
                 format!("flexcomp count {count:?} exceeds i32::MAX points"),
@@ -2820,9 +2753,16 @@ impl MjsBody {
         };
         if order > 0 && let Some(cellcount) = config.cellcount {
             let nnode = cellcount.iter().map(|&c| u64::from(c) * order + 1).product::<u64>();
-            let multi_cell = matches!(config.r#type, Some("mesh" | "gmsh" | "direct"));
-            if cellcount.contains(&0) || nnode > i32::MAX as u64
-                || (!multi_cell && cellcount != [1, 1, 1])
+            // The pinned array holds one cell, or at least the points of a grid.
+            let mut capacity = (order + 1).pow(3);
+            if matches!(config.r#type, None | Some("grid")) {
+                let count = config.count.unwrap_or([10; 3]);
+                let npnt = count.iter().take(usize::from(config.dim)).map(|&n| u64::from(n));
+                capacity = capacity.max(npnt.product());
+            }
+            // MuJoCo stores 3 coordinates per node in an int-sized vector.
+            if cellcount.contains(&0) || nnode > i32::MAX as u64 / 3
+                || (!multi_cell && nnode > capacity)
             {
                 return Err(MjEditError::InvalidParameter(format!(
                     "flexcomp cellcount {cellcount:?} is invalid for this type and dof"
@@ -4315,46 +4255,6 @@ mod tests {
             "compile must fail on the last cube face file, got {err:?}");
     }
 
-    /// A user buffer whose `nchannel*width*height` wraps an `i32` to its own length must be
-    /// rejected, because MuJoCo copies the unwrapped product of bytes out of it.
-    #[test]
-    fn test_texture_data_size_overflow_rejected() {
-        const SIDE: i32 = 65537;
-        let wrapped_len = (SIDE as u64 * SIDE as u64 % (1 << 32)) as usize;
-        assert_eq!(wrapped_len, SIDE.wrapping_mul(SIDE) as usize);
-
-        let mut spec = MjSpec::new();
-        let texture = spec.add_texture()
-            .with_name("big")
-            .with_type(MjtTexture::mjTEXTURE_2D)
-            .with_nchannel(1)
-            .with_width(SIDE)
-            .with_height(SIDE);
-        texture.set_data(&vec![0u8; wrapped_len]);
-
-        let err = spec.compile().unwrap_err();
-        assert!(matches!(&err, MjEditError::CompileFailed(msg) if msg.contains("fit in an i32")),
-            "compile must reject an overflowing texture size, got {err:?}");
-    }
-
-    /// A builtin cube texture fills 6 * width rows whatever `height` says, so a width whose cube
-    /// size overflows an `i32` must be rejected even with `height` 1.
-    #[test]
-    fn test_builtin_cube_texture_size_overflow_rejected() {
-        let mut spec = MjSpec::new();
-        spec.add_texture()
-            .with_name("cube")
-            .with_type(MjtTexture::mjTEXTURE_CUBE)
-            .with_builtin(MjtBuiltin::mjBUILTIN_CHECKER)
-            .with_nchannel(3)
-            .with_width(26755)
-            .with_height(1);
-
-        let err = spec.compile().unwrap_err();
-        assert!(matches!(&err, MjEditError::CompileFailed(msg) if msg.contains("fit in an i32")),
-            "compile must reject an overflowing cube texture size, got {err:?}");
-    }
-
     /// Verifies `MjsFlex::cellcount` (read-only `&[i32; 3]`) and `order` (read-write `i32`)
     /// by parsing a minimal flexcomp model and reading/writing through the spec.
     #[test]
@@ -4861,65 +4761,6 @@ mod tests {
         assert!(matches!(body.add_frame_in(""), Err(MjEditError::NotFound)));
     }
 
-    /// Compiles `spec` and returns the `CompileFailed` message, so each test below can check that
-    /// the wrapper rejects the spec before MuJoCo reads the bad value.
-    fn compile_error(spec: &mut MjSpec) -> String {
-        match spec.compile() {
-            Err(MjEditError::CompileFailed(msg)) => msg,
-            other => panic!("expected CompileFailed, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn test_flex_invalid_order_cellcount_and_condim_rejected() {
-        let mut spec = MjSpec::new();
-        spec.add_flex().with_name("f").with_order(3);
-        assert!(compile_error(&mut spec).contains("order 3 must be in 0..=2"));
-
-        let mut spec = MjSpec::new();
-        spec.add_flex().with_name("f").with_order(1).with_cellcount([1, -1, 1]);
-        assert!(compile_error(&mut spec).contains("must be positive"));
-
-        let mut spec = MjSpec::new();
-        spec.add_flex().with_name("f").with_condim(2);
-        assert!(compile_error(&mut spec).contains("condim 2 must be 1, 3, 4 or 6"));
-    }
-
-    #[test]
-    fn test_negative_nsample_rejected() {
-        let mut spec = MjSpec::new();
-        spec.add_actuator().with_name("a").with_nsample(-1);
-        assert!(compile_error(&mut spec).contains("'a' nsample must be non-negative"));
-
-        let mut spec = MjSpec::new();
-        spec.add_sensor().with_name("s").with_nsample(-1);
-        assert!(compile_error(&mut spec).contains("'s' nsample must be non-negative"));
-    }
-
-    #[test]
-    fn test_camera_projection_sensor_without_camera_rejected() {
-        let mut spec = MjSpec::new();
-        spec.add_sensor()
-            .with_name("proj")
-            .with_type(MjtSensor::mjSENS_CAMPROJECTION)
-            .with_reftype(MjtObjBase::mjOBJ_SITE);
-        assert!(compile_error(&mut spec).contains("'proj' must reference a camera"));
-    }
-
-    #[test]
-    fn test_mesh_small_maxhullvert_rejected() {
-        let mut spec = MjSpec::new();
-        spec.add_mesh().with_name("m").with_maxhullvert(3);
-        assert!(compile_error(&mut spec).contains("'m' maxhullvert must be -1 or at least 4"));
-    }
-
-    #[test]
-    fn test_hfield_size_overflow_rejected() {
-        let mut spec = MjSpec::new();
-        spec.add_hfield().with_name("h").with_nrow(65537).with_ncol(65537);
-        assert!(compile_error(&mut spec).contains("'h' nrow*ncol must fit in an i32"));
-    }
-
     #[test]
     fn test_flexcomp_count_overflow_and_invalid_cellcount_rejected() {
         let mut spec = MjSpec::new();
@@ -4928,8 +4769,11 @@ mod tests {
         assert!(
             matches!(&err, MjEditError::InvalidParameter(msg) if msg.contains("exceeds")), "{err:?}"
         );
+        // A line reads count[0] only.
+        let config = config.with_dim(1).with_count([10, 50000, 50000]);
+        spec.world_body_mut().try_add_flexcomp("line", &config).unwrap();
 
-        // A grid has one interpolation cell, so MuJoCo sizes its pinned array for one cell only.
+        // MuJoCo sizes the pinned array of a grid for its points or one cell.
         let grid = MjFlexcompConfig::default()
             .with_type("grid").with_dim(3).with_dof("trilinear").with_count([2, 2, 2]);
         for (name, cellcount) in [("multi", [4, 4, 4]), ("zero", [1, 0, 1])] {
@@ -4940,15 +4784,20 @@ mod tests {
                 "{err:?}"
             );
         }
+        // 3 * 1001^3 coordinates overflow an int.
         let config = MjFlexcompConfig::default()
-            .with_type("mesh").with_dof("quadratic").with_cellcount([65535, 65535, 1]);
+            .with_type("mesh").with_dof("trilinear").with_cellcount([1000, 1000, 1000]);
         assert!(spec.world_body_mut().try_add_flexcomp("nodes", &config).is_err());
 
         // MuJoCo reads cellcount only for an interpolated dof, and a single cell is valid.
         let config = MjFlexcompConfig::default()
             .with_count([3, 3, 1]).with_spacing([0.1; 3]).with_cellcount([0, 0, 0]);
         spec.world_body_mut().try_add_flexcomp("unused", &config).unwrap();
-        let config = grid.with_spacing([0.1; 3]).with_cellcount([1, 1, 1]);
+        let config = grid.clone().with_spacing([0.1; 3]).with_cellcount([1, 1, 1]);
         spec.world_body_mut().try_add_flexcomp("single", &config).unwrap();
+        // MuJoCo's hollow_vs_solid.xml: 98 nodes for 192 points.
+        let config = grid.with_count([8, 2, 12]).with_spacing([0.025, 0.05, 0.025])
+            .with_cellcount([6, 1, 6]);
+        spec.world_body_mut().try_add_flexcomp("hollow", &config).unwrap();
     }
 }

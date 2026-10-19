@@ -1807,10 +1807,6 @@ impl<M: ModelType> MjData<M> {
     ]}
 
     /// Returns the memory layout snapshot of the model this data belongs to.
-    ///
-    /// The buffers were allocated for the model that created this data. That model and
-    /// [`MjData::model`] share one layout, because [`MjData::try_swap_model`] rejects a model
-    /// that does not.
     pub(crate) fn layout(&self) -> &Arc<MjModelLayout> {
         self.model.layout()
     }

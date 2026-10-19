@@ -295,14 +295,20 @@ impl MjvCamera {
     /// early, before that point.
     ///
     /// # Panics
-    /// Panics if `self.type_` is not [`MjtCamera::mjCAMERA_FREE`],
-    /// [`MjtCamera::mjCAMERA_TRACKING`] or [`MjtCamera::mjCAMERA_FIXED`].
+    /// Panics if `action` is a move or turn action and `self.type_` is not
+    /// [`MjtCamera::mjCAMERA_FREE`], [`MjtCamera::mjCAMERA_TRACKING`] or
+    /// [`MjtCamera::mjCAMERA_FIXED`].
     pub fn move_(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum) {
-        // Other camera types end the process through mjERROR in mjv_cameraFrame.
+        // Move and turn call mjv_cameraFrame, which ends the process through mjERROR for other
+        // camera types.
+        let framed = [
+            MjtCamera::mjCAMERA_FREE, MjtCamera::mjCAMERA_TRACKING, MjtCamera::mjCAMERA_FIXED,
+        ].iter().any(|&camera_type| self.type_ == camera_type as i32);
         assert!(
-            [MjtCamera::mjCAMERA_FREE, MjtCamera::mjCAMERA_TRACKING, MjtCamera::mjCAMERA_FIXED]
-                .iter().any(|&camera_type| self.type_ == camera_type as i32),
-            "camera type must be free, tracking or fixed"
+            framed || !matches!(action, MjtMouse::mjMOUSE_MOVE_V | MjtMouse::mjMOUSE_MOVE_H
+                | MjtMouse::mjMOUSE_TURN_V | MjtMouse::mjMOUSE_TURN_H
+                | MjtMouse::mjMOUSE_MOVE_V_REL | MjtMouse::mjMOUSE_MOVE_H_REL),
+            "camera type must be free, tracking or fixed for a move or turn action"
         );
         unsafe { mjv_moveCamera(model.ffi(), action as i32, dx, dy, self); };
     }
@@ -515,11 +521,13 @@ impl MjvFigure {
     /// `linedata` row. Automated checks from Rust side are too expensive.
     ///
     /// # Panics
-    /// Panics if `legendoffset` is negative.
+    /// Panics if `flg_legend` is set and `legendoffset` is negative.
     pub unsafe fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
         // TODO: MuJoCo upstream bug. mjr_figure indexes linename and linergb from legendoffset
         // with no lower bound. Remove once fixed upstream.
-        assert!(self.legendoffset >= 0, "legendoffset must not be negative");
+        assert!(
+            self.flg_legend == 0 || self.legendoffset >= 0, "legendoffset must not be negative"
+        );
         // SAFETY: the caller guarantees every `linepnt` entry is within the `linedata` capacity.
         unsafe { mjr_figure(viewport, self, context.ffi()) };
     }
@@ -935,7 +943,7 @@ impl MjvScene {
     ///   out of range for the model in `data`.
     /// - Panics if `perturb.select` is out of range (greater than or equal to the number of
     ///   bodies) for the model in `data`.
-    /// - Panics if `vis.quality.numslices` of the model in `data` is negative.
+    /// - Panics if `vis.quality.numslices` of the model in `data` is negative or [`i32::MAX`].
     pub fn update_with_catmask<M: ModelType>(
         &mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb,
         cam: &mut MjvCamera, catmask: i32,
@@ -959,10 +967,11 @@ impl MjvScene {
         // MuJoCo does no bound checking for pert->select, thus invalid IDs leads to out-of-bound reads.
         assert!((perturb.select as MjtSize) < data.model().nbody(), "selected perturbated body ID is outside the valid range");
 
-        // TODO: MuJoCo upstream bug. A negative numslices makes mjv_catenary write before its
-        // stack array. Remove once fixed upstream.
+        // TODO: MuJoCo upstream bug. A negative numslices, or numslices + 1 overflowing int, makes
+        // mjv_catenary write outside its stack array. Remove once fixed upstream.
         assert!(
-            data.model().vis().quality.numslices >= 0, "vis.quality.numslices must not be negative"
+            (0..i32::MAX).contains(&data.model().vis().quality.numslices),
+            "vis.quality.numslices must be in 0..i32::MAX"
         );
 
         unsafe {
@@ -985,7 +994,7 @@ impl MjvScene {
     /// # Panics
     /// Panics under the same conditions as [`update_with_catmask`](Self::update_with_catmask):
     /// an incompatible model, an out-of-range fixed-camera id, an out-of-range
-    /// `perturb.select`, or a negative `vis.quality.numslices`.
+    /// `perturb.select`, or a negative or [`i32::MAX`] `vis.quality.numslices`.
     pub fn update<M: ModelType>(&mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb, cam: &mut MjvCamera) {
         self.update_with_catmask(data, opt, perturb, cam, MjtCatBit::mjCAT_ALL as i32);
     }

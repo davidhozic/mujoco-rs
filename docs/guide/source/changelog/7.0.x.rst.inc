@@ -5,8 +5,8 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 
 - ``treenum`` is now marked as unsafe to mutate (wrong values can cause out-of-bound reads). Consequently,
 
-  - :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTendonModelViewMut` is now
-    :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`;
+  - the ``treenum`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTendonModelViewMut`
+    is now :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`;
   - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tendon_treenum_mut` is now an ``unsafe fn``.
 - The ``plugin`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut` and
   :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjBodyModelViewMut` is now
@@ -69,11 +69,13 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   now panics when ``contact_id >= ncon``. Before, it returned ``[0; 6]``. If you want to catch
   out-of-bounds errors, use
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_contact_force` :sup:`new`.
-- (runtime-breaking) :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`,
-  ``is_asset_compatible_with_model`` and the ``Info`` views now compare every size and every
-  integer table that no safe accessor writes, apart from the names, the paths, the buffer size, the
-  collision hulls and trees and the values derived from floats, so they refuse more models, for
-  example a model with a different joint type. Before, a swapped model could make a step or a plugin read or write out of bounds.
+- (runtime-breaking) :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`
+  and the ``Info`` views now compare every size and every integer table that no safe accessor
+  writes, apart from the names, the paths, the buffer size, the collision hulls and trees and the
+  values derived from floats, so they refuse more models, for example a model in which a geom uses
+  a different material. ``is_asset_compatible_with_model`` compares the mesh, height field and
+  texture part of them. Before, a swapped model could make a step or a plugin read or write out of
+  bounds.
 - (runtime-breaking) :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_model`
   and ``is_compatible_with_scene`` now refuse more models, and ``MjvScene::update`` panics on each of
   them. A scene or a user scene that was filled from an accepted, but different, model could read or
@@ -133,6 +135,10 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   the new variants :docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>IoError` :sup:`new` and
   :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>IoError` :sup:`new` when the file
   cannot be opened. Before, they returned ``Ok(())`` and wrote nothing.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile` no longer checks
+  texture values before it calls MuJoCo. Before, it returned an error for a builtin texture with
+  ``nchannel`` below 3, a negative texture size or a texture size that overflows ``i32``. MuJoCo
+  does not check every spec value, so give only valid values.
 
 .. rubric:: New features and improvements
 
@@ -216,27 +222,24 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>resize_offscreen` now
   panic for a ``width`` or ``height`` above ``i32::MAX``, and ``add_aux`` clamps ``samples``.
   Before, the sizes wrapped into negative values.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile` now returns an error
-  for a builtin cube or skybox texture whose size overflows ``i32``. Before, the check used
-  ``height``, which such a texture ignores, and MuJoCo wrote out of bounds.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile` now also returns an
-  error for an invalid flex ``order``, ``cellcount`` or ``condim``, a negative actuator or sensor
-  ``nsample``, a camera projection sensor that does not reference a camera, a mesh ``maxhullvert``
-  in ``0..=3``, and a height field whose ``nrow * ncol`` overflows ``i32``. Before, MuJoCo accepted
-  these values and then crashed or read out of bounds.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>try_add_flexcomp` now
   returns :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>InvalidParameter` for a
   ``count`` with more than ``i32::MAX`` points, or for an invalid ``cellcount`` with a trilinear or
   quadratic ``dof``. Before, MuJoCo wrote out of bounds.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvCamera::<method>move_` now panics
-  for a camera type other than free, tracking or fixed. Before, MuJoCo stopped the process.
-- The buffer methods of :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure`
-  (for example :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>push`)
-  now panic for a negative ``linepnt``, and ``draw`` panics for a negative ``legendoffset``.
-  Before, both read out of bounds.
+  for a move or turn action on a camera type other than free, tracking or fixed. Before, MuJoCo
+  stopped the process.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>push`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>full`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>empty`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>pop_front`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<type>MjvFigure::<method>pop_back` and the
+  ``try_`` variants of the last four now panic for a negative ``linepnt``, and ``draw`` panics for a negative
+  ``legendoffset`` when ``flg_legend`` is set. Before, ``draw`` read out of bounds.
 - |mjv_scene| ``update`` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update_with_catmask`
-  now panic for a negative ``vis.quality.numslices``. Before, MuJoCo wrote out of bounds.
+  now panic for a negative or ``i32::MAX`` ``vis.quality.numslices``. Before, MuJoCo wrote out of
+  bounds.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>state_size`, the state
   methods that use it, and
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>copy_state_from_data` now panic
