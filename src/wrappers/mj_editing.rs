@@ -2790,8 +2790,10 @@ impl MjsBody {
     ///
     /// # Errors
     /// Returns [`MjEditError::InvalidParameter`] when `config.count` has more than [`i32::MAX`]
-    /// points, when `config.cellcount` has a zero entry, or with MuJoCo's error message when
-    /// MuJoCo fails to create the flex.
+    /// points, when `config.cellcount` is invalid for a trilinear or quadratic `config.dof`, or
+    /// with MuJoCo's error message when MuJoCo fails to create the flex. A valid `cellcount` has
+    /// no zero entry and at most [`i32::MAX`] nodes, and is `[1, 1, 1]` unless `config.r#type`
+    /// is "mesh", "gmsh" or "direct".
     ///
     /// # Panics
     /// Panics if `name` or any string in `config` contains an interior NUL byte.
@@ -2802,8 +2804,8 @@ impl MjsBody {
     pub fn try_add_flexcomp(&mut self, name: &str, config: &MjFlexcompConfig)
         -> Result<&mut MjsFlex, MjEditError>
     {
-        // TODO: MuJoCo upstream bug. mjCFlexcomp::Make sizes the point index in int and does not
-        // reject a zero cellcount, so both write out of bounds. Remove once fixed upstream.
+        // TODO: MuJoCo upstream bug. mjCFlexcomp::Make sizes the point and node indices in int, and
+        // sizes its pinned array from cellcount only for mesh, gmsh and direct. Remove once fixed.
         if let Some(count) = config.count
             && count.iter().map(|&n| u64::from(n)).product::<u64>() > i32::MAX as u64
         {
@@ -2811,10 +2813,21 @@ impl MjsBody {
                 format!("flexcomp count {count:?} exceeds i32::MAX points"),
             ));
         }
-        if let Some(cellcount) = config.cellcount && cellcount.contains(&0) {
-            return Err(MjEditError::InvalidParameter(
-                format!("flexcomp cellcount {cellcount:?} has a zero entry"),
-            ));
+        let order = match config.dof {
+            Some("trilinear") => 1,
+            Some("quadratic") => 2,
+            _ => 0,
+        };
+        if order > 0 && let Some(cellcount) = config.cellcount {
+            let nnode = cellcount.iter().map(|&c| u64::from(c) * order + 1).product::<u64>();
+            let multi_cell = matches!(config.r#type, Some("mesh" | "gmsh" | "direct"));
+            if cellcount.contains(&0) || nnode > i32::MAX as u64
+                || (!multi_cell && cellcount != [1, 1, 1])
+            {
+                return Err(MjEditError::InvalidParameter(format!(
+                    "flexcomp cellcount {cellcount:?} is invalid for this type and dof"
+                )));
+            }
         }
 
         // Owned C strings must outlive the FFI call below.
@@ -4908,7 +4921,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flexcomp_count_overflow_and_zero_cellcount_rejected() {
+    fn test_flexcomp_count_overflow_and_invalid_cellcount_rejected() {
         let mut spec = MjSpec::new();
         let config = MjFlexcompConfig::default().with_count([2049, 2048, 1024]);
         let err = spec.world_body_mut().try_add_flexcomp("big", &config).unwrap_err();
@@ -4916,10 +4929,26 @@ mod tests {
             matches!(&err, MjEditError::InvalidParameter(msg) if msg.contains("exceeds")), "{err:?}"
         );
 
-        let config = MjFlexcompConfig::default().with_cellcount([1, 0, 1]);
-        let err = spec.world_body_mut().try_add_flexcomp("empty", &config).unwrap_err();
-        assert!(
-            matches!(&err, MjEditError::InvalidParameter(msg) if msg.contains("zero")), "{err:?}"
-        );
+        // A grid has one interpolation cell, so MuJoCo sizes its pinned array for one cell only.
+        let grid = MjFlexcompConfig::default()
+            .with_type("grid").with_dim(3).with_dof("trilinear").with_count([2, 2, 2]);
+        for (name, cellcount) in [("multi", [4, 4, 4]), ("zero", [1, 0, 1])] {
+            let config = grid.clone().with_cellcount(cellcount);
+            let err = spec.world_body_mut().try_add_flexcomp(name, &config).unwrap_err();
+            assert!(
+                matches!(&err, MjEditError::InvalidParameter(msg) if msg.contains("cellcount")),
+                "{err:?}"
+            );
+        }
+        let config = MjFlexcompConfig::default()
+            .with_type("mesh").with_dof("quadratic").with_cellcount([65535, 65535, 1]);
+        assert!(spec.world_body_mut().try_add_flexcomp("nodes", &config).is_err());
+
+        // MuJoCo reads cellcount only for an interpolated dof, and a single cell is valid.
+        let config = MjFlexcompConfig::default()
+            .with_count([3, 3, 1]).with_spacing([0.1; 3]).with_cellcount([0, 0, 0]);
+        spec.world_body_mut().try_add_flexcomp("unused", &config).unwrap();
+        let config = grid.with_spacing([0.1; 3]).with_cellcount([1, 1, 1]);
+        spec.world_body_mut().try_add_flexcomp("single", &config).unwrap();
     }
 }

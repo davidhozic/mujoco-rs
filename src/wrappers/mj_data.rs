@@ -1696,11 +1696,6 @@ impl<M: ModelType> MjData<M> {
         unsafe {
             mjv_copyData(destination.ffi_mut(), self.model.ffi(), self.ffi());
         }
-
-        // BUG-FIX. The efc array gets set to null in mjv_copyData.
-        // This would otherwise lead to segmentation faults due to read of the NULL-ified efc arrays.
-        // TODO: remove this line when fixed in MuJoCo.
-        unsafe { destination.ffi_mut().nefc = 0 };
         Ok(())
     }
 
