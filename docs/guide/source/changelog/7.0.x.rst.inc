@@ -230,3 +230,6 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>world_body` and
   ``world_body_mut`` now return the world body even after renames. Before, they would panic
   when the world body was renamed.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>max_contacts` and
+  ``try_max_contacts`` now return ``0`` for a negative ``sdf_initpoints``. Before, the value
+  wrapped due to an overflow.

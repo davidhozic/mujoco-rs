@@ -1288,12 +1288,16 @@ impl MjModel {
             return Err(MjModelError::IndexOutOfBounds { id: geom2, len: ngeom });
         }
 
-        Ok(unsafe { mj_maxContact(
+        // SAFETY: both geom ids were checked against ngeom above.
+        let count = unsafe { mj_maxContact(
             self.ffi(),
-            geom1 as i32, geom2 as i32,
+            checked_c_len(geom1), checked_c_len(geom2),
             // if Some(...), pass 0 or 1, otherwise pull from model (-1)
             has_margin.map(|m| m as i32).unwrap_or(-1)
-        ) as u32 })
+        ) };
+
+        // Set to zero when the count ends up being negative due to opt.sdf_initpoints being negative.
+        Ok(u32::try_from(count).unwrap_or(0))
     }
 
     /// Returns the name that the type of actuator `id` gives to its control input `input`, an
@@ -4442,6 +4446,22 @@ mod tests {
 
         // Test invalid geom index.
         assert!( model.try_max_contacts(999, geom2, Some(true)).is_err());
+    }
+
+    /// A negative `sdf_initpoints` must not wrap to a huge contact count.
+    #[test]
+    fn test_max_contacts_negative_sdf_initpoints() {
+        let mut model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let geom1 = model.name_to_id(MjtObjBase::mjOBJ_GEOM, "green_sphere").unwrap();
+        let geom2 = model.name_to_id(MjtObjBase::mjOBJ_GEOM, "ball2").unwrap();
+        // SAFETY: mj_maxContact reads only the type, and the model is never simulated.
+        unsafe { model.geom_type_mut()[geom1] = MjtGeomBase::mjGEOM_SDF; }
+
+        model.opt_mut().sdf_initpoints = 7;
+        assert_eq!(model.max_contacts(geom1, geom2, None), 7);
+
+        model.opt_mut().sdf_initpoints = -1;
+        assert_eq!(model.max_contacts(geom1, geom2, None), 0);
     }
 
     /// Drives the generated sanitizer probes over every dynamic array of |MjModel|. See the
