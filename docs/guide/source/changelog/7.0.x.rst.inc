@@ -224,9 +224,8 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>compile` now also returns an
   error for an invalid flex ``order``, ``cellcount`` or ``condim``, a negative actuator or sensor
   ``nsample``, a camera projection sensor that does not reference a camera, a mesh ``maxhullvert``
-  in ``0..=3``, a plugin instance without a ``plugin_name``, and a height field whose
-  ``nrow * ncol`` overflows ``i32``. Before, MuJoCo accepted these values and then crashed or read
-  out of bounds.
+  in ``0..=3``, and a height field whose ``nrow * ncol`` overflows ``i32``. Before, MuJoCo accepted
+  these values and then crashed or read out of bounds.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>try_add_flexcomp` now
   returns :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>InvalidParameter` for a
   ``count`` with more than ``i32::MAX`` points or a ``cellcount`` with a zero entry. Before,

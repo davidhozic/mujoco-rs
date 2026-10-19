@@ -570,14 +570,6 @@ impl MjSpec {
             ));
         }
 
-        // TODO: MuJoCo upstream bug. A plugin instance with an empty plugin_name compiles with
-        // plugin slot -1, and the compiler dereferences NULL. Remove once fixed upstream.
-        if let Some(plugin) = self.plugin_iter().find(|plugin| plugin.plugin_name().is_empty()) {
-            return Err(MjEditError::CompileFailed(
-                format!("plugin instance '{}' needs a plugin_name", plugin.name()),
-            ));
-        }
-
         // TODO: MuJoCo upstream bug. mjCHField::Compile computes nrow*ncol in int. Remove once
         // fixed upstream.
         if let Some(hfield) = self.hfield_iter().find(|hfield|
@@ -4906,13 +4898,6 @@ mod tests {
         let mut spec = MjSpec::new();
         spec.add_mesh().with_name("m").with_maxhullvert(3);
         assert!(compile_error(&mut spec).contains("'m' maxhullvert must be -1 or at least 4"));
-    }
-
-    #[test]
-    fn test_plugin_without_plugin_name_rejected() {
-        let mut spec = MjSpec::new();
-        spec.add_plugin().with_name("p");
-        assert!(compile_error(&mut spec).contains("'p' needs a plugin_name"));
     }
 
     #[test]
