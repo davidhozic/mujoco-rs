@@ -118,7 +118,7 @@ fn test_integration_view_enum_fields_across_steps() {
     let touch_info = model.sensor("touch_sensor").unwrap();
     let touch_view = touch_info.view(&model);
     assert_eq!(touch_view.r#type[0], MjtSensor::mjSENS_TOUCH);
-    assert_eq!(touch_view.objtype[0], MjtObj::mjOBJ_SITE);
+    assert_eq!(touch_view.objtype[0], MjtObjBase::mjOBJ_SITE);
 
     // Data-side: step and verify body views update
     let free_body_info = data.body("free_body").unwrap();
@@ -444,10 +444,10 @@ fn test_integration_model_enum_slices() {
     let sphere = model.geom("sphere").unwrap();
     let capsule = model.geom("capsule").unwrap();
     let box_geom = model.geom("box").unwrap();
-    assert_eq!(geom_type[floor.id], MjtGeom::mjGEOM_PLANE);
-    assert_eq!(geom_type[sphere.id], MjtGeom::mjGEOM_SPHERE);
-    assert_eq!(geom_type[capsule.id], MjtGeom::mjGEOM_CAPSULE);
-    assert_eq!(geom_type[box_geom.id], MjtGeom::mjGEOM_BOX);
+    assert_eq!(geom_type[floor.id], MjtGeomBase::mjGEOM_PLANE);
+    assert_eq!(geom_type[sphere.id], MjtGeomBase::mjGEOM_SPHERE);
+    assert_eq!(geom_type[capsule.id], MjtGeomBase::mjGEOM_CAPSULE);
+    assert_eq!(geom_type[box_geom.id], MjtGeomBase::mjGEOM_BOX);
 
     // Joint limited bools
     let jnt_limited = model.jnt_limited();

@@ -1,9 +1,11 @@
 //! Definitions related to rendering.
 use crate::{array_slice_dyn, getter_setter, mujoco_c::*};
+use crate::util::{LockUnpoison, checked_c_len};
 use crate::error::MjrContextError;
 
-use super::mj_model::{MjModel, MjtTexture, MjtTextureRole};
+use super::mj_model::{MjModel, MjModelLayout, MjtTexture, MjtTextureRole};
 
+use std::sync::{Arc, Mutex};
 use std::ffi::CString;
 use std::ptr;
 
@@ -71,6 +73,11 @@ impl Default for MjrRectangle {
 /***********************************************************************************************************************
 ** MjrContext
 ***********************************************************************************************************************/
+/// A static [`Mutex`] preventing race conditions of the `context_count` C static for tracking count of created contexts.
+/// At the time of writing, `context_count` is used in `mjr_makeContext_offSize`
+/// (and consequently in [`mjr_makeContext`]), [`mjr_freeContext`] and [`mjr_getRendererInfo`].
+static CONTEXT_COUNTER_MUTEX: Mutex<()> = Mutex::new(());
+
 /// Wraps `mjrContext`, the MuJoCo rendering context.
 ///
 /// # Thread safety
@@ -89,7 +96,8 @@ impl Default for MjrRectangle {
 /// is used.
 #[derive(Debug)]
 pub struct MjrContext {
-    ffi: Box<mjrContext>
+    ffi: Box<mjrContext>,
+    layout: Arc<MjModelLayout>,
 }
 
 impl MjrContext {
@@ -114,12 +122,15 @@ impl MjrContext {
     pub unsafe fn new(model: &MjModel) -> Self {
         // SAFETY: caller guarantees a valid GL context is current (documented above).
         // Box::new_uninit is fully initialized by mjr_defaultContext + mjr_makeContext
-        // before assume_init.
+        // before assume_init. Global (C static) data is protected via `CONTEXT_COUNTER_MUTEX`.
         unsafe {
             let mut c = Box::new_uninit();
             mjr_defaultContext(c.as_mut_ptr());
-            mjr_makeContext(model.ffi(), c.as_mut_ptr(), MjtFontScale::mjFONTSCALE_100 as i32);
-            Self {ffi: c.assume_init()}
+            {
+                let _lock = CONTEXT_COUNTER_MUTEX.lock_unpoison();  // protect `context_count` in C.
+                mjr_makeContext(model.ffi(), c.as_mut_ptr(), MjtFontScale::mjFONTSCALE_100 as i32);
+            }
+            Self { ffi: c.assume_init(), layout: Arc::clone(model.layout()) }
         }
     }
 
@@ -149,19 +160,29 @@ impl MjrContext {
     ///
     /// # Errors
     /// Returns [`MjrContextError::IndexOutOfBounds`] when `index >= mjNAUX` (10).
+    ///
+    /// # Panics
+    /// Panics if `width` or `height` is larger than [`i32::MAX`].
     pub fn add_aux(&mut self, index: usize, width: u32, height: u32, samples: usize) -> Result<(), MjrContextError> {
         if index >= mjNAUX as usize {
             return Err(MjrContextError::IndexOutOfBounds { id: index, len: mjNAUX as usize });
         }
+        let (width, height) = (checked_c_len::<i32, _>(width), checked_c_len::<i32, _>(height));
+        // C clamps samples to GL_MAX_SAMPLES, thus it would be inconsistent panic just on i32 overflow.
+        let samples = i32::try_from(samples).unwrap_or(i32::MAX);
         // SAFETY: index is bounds-checked above; self.ffi is valid.
-        unsafe { mjr_addAux(index as i32, width as i32, height as i32, samples as i32, self.ffi_mut()); }
+        unsafe { mjr_addAux(index as i32, width, height, samples, self.ffi_mut()); }
         Ok(())
     }
 
     /// Resize offscreen buffers.
+    ///
+    /// # Panics
+    /// Panics if `width` or `height` is larger than [`i32::MAX`].
     pub fn resize_offscreen(&mut self, width: u32, height: u32) {
+        let (width, height) = (checked_c_len::<i32, _>(width), checked_c_len::<i32, _>(height));
         // SAFETY: self.ffi is a valid, fully initialized mjrContext.
-        unsafe { mjr_resizeOffscreen(width as i32, height as i32, self.ffi_mut()); }
+        unsafe { mjr_resizeOffscreen(width, height, self.ffi_mut()); }
     }
 
     /// Re-upload texture to GPU, overwriting previous upload if any.
@@ -280,8 +301,12 @@ impl MjrContext {
 
     /// Draws a text overlay. The optional `overlay2` parameter displays additional overlay, next to `overlay`.
     /// # Panics
-    /// When the `overlay` or `overlay2` contain '\0' characters, a panic occurs.
+    /// A panic occurs the `overlay` or `overlay2` contain one or both of the following:
+    /// - non-ASCII characters;
+    /// - null bytes.
     pub fn overlay(&mut self, font: MjtFont, gridpos: MjtGridPos, viewport: MjrRectangle, overlay: &str, overlay2: Option<&str>) {
+        assert!(overlay.is_ascii() && overlay2.is_none_or(str::is_ascii), "the input text must be ASCII");
+
         let c_overlay = CString::new(overlay).unwrap();
         let c_overlay2 = overlay2.map(|x| CString::new(x).unwrap());
 
@@ -293,6 +318,17 @@ impl MjrContext {
             c_overlay2.as_ref().map_or(std::ptr::null(), |x| x.as_ptr()),
             self.ffi()
         ); }
+    }
+
+    /// Reports whether `model` has the [`MjModelLayout`] of the model that created this context.
+    pub fn is_compatible_with_model(&self, model: &MjModel) -> bool {
+        self.layout == *model.layout()
+    }
+
+    /// Reports whether `model` has the mesh, heightfield and texture part of the [`MjModelLayout`]
+    /// of the model that created this context.
+    pub fn is_asset_compatible_with_model(&self, model: &MjModel) -> bool {
+        self.layout.is_asset_equal(model.layout())
     }
 
     /// Reference to the wrapped FFI struct.
@@ -411,7 +447,9 @@ impl MjrContext {
 impl Drop for MjrContext {
     fn drop(&mut self) {
         // SAFETY: self.ffi was fully initialized in new() and has not been freed.
+        // Global (C static) data is protected via `CONTEXT_COUNTER_MUTEX`.
         unsafe {
+            let _lock = CONTEXT_COUNTER_MUTEX.lock_unpoison();  // protect `context_count` in C.
             mjr_freeContext(self.ffi.as_mut());
         }
     }

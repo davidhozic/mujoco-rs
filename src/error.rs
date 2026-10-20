@@ -1,6 +1,6 @@
 //! Error types for MuJoCo-rs operations.
 //!
-//! - [`MjDataError`] - physics data, view-signature, and Jacobian operations.
+//! - [`MjDataError`] - physics data, model-compatibility, and Jacobian operations.
 //! - [`MjSceneError`] - 3-D scene and visualization operations (`MjvScene`).
 //! - [`MjrContextError`] - GPU rendering-context operations (`MjrContext`).
 //! - [`MjEditError`] - model-specification editing operations (`MjSpec`).
@@ -8,7 +8,12 @@
 //! - [`MjVfsError`] - virtual file system operations (`MjVfs`).
 //! - [`MjPluginError`] - plugin library loading operations.
 //! - [`GlInitError`] - OpenGL / window initialization (feature-gated).
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::fmt;
+use std::io;
+
+use crate::wrappers::mj_model::{MjModelLayout, MjtObjBase};
 
 /// Errors that can occur in [`MjData`](crate::wrappers::MjData) physics data
 /// and Jacobian operations.
@@ -25,9 +30,7 @@ pub enum MjDataError {
         upper: usize,
     },
     /// The provided MuJoCo object type is not supported by this operation.
-    ///
-    /// Contains the raw MuJoCo C object-type code (`mjOBJ_*`).
-    UnsupportedObjectType(i32),
+    UnsupportedObjectType(MjtObjBase),
     /// MuJoCo failed to allocate the requested structure.
     AllocationFailed,
     /// A buffer passed to the operation is too small for the required data.
@@ -53,10 +56,10 @@ pub enum MjDataError {
     /// This is returned by APIs that require a matching model memory layout,
     /// including data-copy operations and info-view accessors.
     IncompatibleModel {
-        /// Model signature of the source object.
-        source: u64,
-        /// Model signature of the destination object.
-        destination: u64,
+        /// Layout of the source object's model.
+        source: Arc<MjModelLayout>,
+        /// Layout of the destination object's model.
+        destination: Arc<MjModelLayout>,
     },
     /// The specified actuator or sensor has no associated history buffer.
     NoHistoryBuffer {
@@ -81,6 +84,13 @@ pub enum MjDataError {
     ContactBufferFull,
     /// A filesystem path argument contains invalid UTF-8.
     InvalidUtf8Path,
+    /// A file I/O operation failed.
+    IoError {
+        /// Path of the file.
+        path: PathBuf,
+        /// Kind of the I/O failure.
+        kind: io::ErrorKind,
+    },
 }
 
 impl fmt::Display for MjDataError {
@@ -89,8 +99,8 @@ impl fmt::Display for MjDataError {
             Self::IndexOutOfBounds { kind, id, upper } => {
                 write!(f, "{kind} {id} is out of bounds [0, {upper})")
             }
-            Self::UnsupportedObjectType(raw) => {
-                write!(f, "object type {raw} is not supported by this operation")
+            Self::UnsupportedObjectType(obj_type) => {
+                write!(f, "object type {obj_type:?} is not supported by this operation")
             }
             Self::AllocationFailed => {
                 write!(f, "MuJoCo allocation failed")
@@ -102,13 +112,7 @@ impl fmt::Display for MjDataError {
                      but need at least {needed}"
                 )
             }
-            Self::IncompatibleModel { source, destination } => {
-                write!(
-                    f,
-                    "incompatible model: source signature {source:#X}, \
-                     destination signature {destination:#X}"
-                )
-            }
+            Self::IncompatibleModel { .. } => write!(f, "incompatible model"),
             Self::LengthMismatch { name, expected, got } => {
                 write!(
                     f,
@@ -126,6 +130,9 @@ impl fmt::Display for MjDataError {
             }
             Self::InvalidUtf8Path => {
                 write!(f, "path contains invalid UTF-8")
+            }
+            Self::IoError { path, kind } => {
+                write!(f, "file I/O failed for {}: {kind}", path.display())
             }
         }
     }
@@ -337,6 +344,8 @@ pub enum MjEditError {
         /// Exclusive upper bound of the valid range.
         len: usize,
     },
+    /// The frame belongs to a body different from the one where a frame is being set.
+    FrameParentMismatch,
 }
 
 impl fmt::Display for MjEditError {
@@ -362,6 +371,7 @@ impl fmt::Display for MjEditError {
                 f,
                 "index {id} is out of bounds (length is {len})"
             ),
+            Self::FrameParentMismatch => write!(f, "frame belongs to a different body"),
         }
     }
 }
@@ -408,10 +418,10 @@ pub enum MjModelError {
     },
     /// Two model-bound objects were created from models that are not compatible.
     IncompatibleModel {
-        /// Model signature of the source object.
-        source: u64,
-        /// Model signature of the destination object.
-        destination: u64,
+        /// Layout of the source object's model.
+        source: Arc<MjModelLayout>,
+        /// Layout of the destination object's model.
+        destination: Arc<MjModelLayout>,
     },
     /// A virtual-file-system operation failed while loading a model from a string.
     VfsError(MjVfsError),
@@ -421,6 +431,13 @@ pub enum MjModelError {
         id: usize,
         /// Exclusive upper bound of the valid range.
         len: usize,
+    },
+    /// A file I/O operation failed.
+    IoError {
+        /// Path of the file.
+        path: PathBuf,
+        /// Kind of the I/O failure.
+        kind: io::ErrorKind,
     },
 }
 
@@ -447,18 +464,17 @@ impl fmt::Display for MjModelError {
                      but need at least {needed}"
                 )
             }
-            Self::IncompatibleModel { source, destination } => {
-                write!(
-                    f,
-                    "incompatible model: source signature {source:#X}, \
-                     destination signature {destination:#X}"
-                )
-            }
-            Self::VfsError(e) => write!(f, "VFS error: {e}"),
+            Self::IncompatibleModel { source, destination }=> write!(
+                f, "source = {source:?}, destination = {destination:?}"
+            ),
+            Self::VfsError(_) => write!(f, "VFS operation failed"),
             Self::IndexOutOfBounds { id, len } => write!(
                 f,
                 "index {id} is out of bounds (length is {len})"
             ),
+            Self::IoError { path, kind } => {
+                write!(f, "file I/O failed for {}: {kind}", path.display())
+            }
         }
     }
 }
@@ -565,10 +581,10 @@ impl fmt::Display for GlInitError {
             Self::DisplayBuild(e) => write!(f, "display build failed: {e}"),
             Self::NoWindow => write!(f, "display builder did not create a window"),
             Self::WindowHandle(e) => write!(f, "failed to obtain window handle: {e}"),
-            Self::ContextCreation(e) => write!(f, "GL context creation failed: {e}"),
+            Self::ContextCreation(_) => write!(f, "GL context creation failed"),
             Self::SurfaceAttributes(e) => write!(f, "failed to build surface attributes: {e}"),
-            Self::SurfaceCreation(e) => write!(f, "window surface creation failed: {e}"),
-            Self::MakeCurrent(e) => write!(f, "failed to make GL context current: {e}"),
+            Self::SurfaceCreation(_) => write!(f, "window surface creation failed"),
+            Self::MakeCurrent(_) => write!(f, "failed to make GL context current"),
         }
     }
 }

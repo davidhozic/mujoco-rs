@@ -1,11 +1,12 @@
 //! Definitions related to visualization.
 use std::default::Default;
 use std::mem::MaybeUninit;
+use std::sync::Arc;
 use std::ptr;
 
 use super::mj_rendering::{MjrContext, MjrRectangle};
 use super::mj_primitive::{MjtNum, MjtByte, MjtSize};
-use super::mj_model::{MjModel, MjtGeom, MjtObj};
+use super::mj_model::{MjModel, MjModelLayout, MjtGeom, MjtObj};
 use super::mj_model::traits::ModelType;
 use super::mj_data::MjData;
 use crate::{array_slice_dyn, c_str_as_str_method};
@@ -226,12 +227,11 @@ impl MjvCamera {
     /// Creates a new fixed camera.
     ///
     /// # Panics
-    /// In debug builds, panics if `camera_id` exceeds `i32::MAX`.
+    /// Panics if `camera_id` is larger than [`i32::MAX`].
     pub fn new_fixed(camera_id: usize) -> Self {
-        debug_assert!(camera_id <= i32::MAX as usize, "camera_id exceeds i32::MAX");
         mjvCamera_ {
             type_: MjtCamera::mjCAMERA_FIXED as i32,
-            fixedcamid: camera_id as i32,
+            fixedcamid: checked_c_len(camera_id),
             ..Self::default()
         }
     }
@@ -239,12 +239,11 @@ impl MjvCamera {
     /// Creates a new tracking camera to track a body with the given `tracking_id`.
     ///
     /// # Panics
-    /// In debug builds, panics if `tracking_id` exceeds `i32::MAX`.
+    /// Panics if `tracking_id` is larger than [`i32::MAX`].
     pub fn new_tracking(tracking_id: usize) -> Self {
-        debug_assert!(tracking_id <= i32::MAX as usize, "tracking_id exceeds i32::MAX");
         mjvCamera_ {
             type_: MjtCamera::mjCAMERA_TRACKING as i32,
-            trackbodyid: tracking_id as i32,
+            trackbodyid: checked_c_len(tracking_id),
             ..Self::default()
         }
     }
@@ -258,10 +257,14 @@ impl MjvCamera {
     }
 
     /// Sets the camera into tracking mode.
+    ///
+    /// # Panics
+    /// Panics if `tracking_id` is larger than [`i32::MAX`].
     pub fn track(&mut self, tracking_id: usize) {
+        let tracking_id = checked_c_len(tracking_id);
         self.type_ = MjtCamera::mjCAMERA_TRACKING as i32;
         self.fixedcamid = -1;
-        self.trackbodyid = tracking_id as i32;
+        self.trackbodyid = tracking_id;
     }
 
     /// Sets the camera free from tracking.
@@ -271,9 +274,13 @@ impl MjvCamera {
     }
 
     /// Sets the camera to a fixed `camera_id`.
+    ///
+    /// # Panics
+    /// Panics if `camera_id` is larger than [`i32::MAX`].
     pub fn fix(&mut self, camera_id: usize) {
+        let camera_id = checked_c_len(camera_id);
         self.type_ = MjtCamera::mjCAMERA_FIXED as i32;
-        self.fixedcamid = camera_id as i32;
+        self.fixedcamid = camera_id;
         self.trackbodyid = -1;
     }
 
@@ -286,7 +293,23 @@ impl MjvCamera {
     /// [`MjtMouse::mjMOUSE_TURN_H`], [`MjtMouse::mjMOUSE_ZOOM`], [`MjtMouse::mjMOUSE_MOVE_V_REL`]
     /// or [`MjtMouse::mjMOUSE_MOVE_H_REL`]. A camera of type [`MjtCamera::mjCAMERA_FIXED`] returns
     /// early, before that point.
+    ///
+    /// # Panics
+    /// Panics if `action` is a move or turn action and `self.type_` is not
+    /// [`MjtCamera::mjCAMERA_FREE`], [`MjtCamera::mjCAMERA_TRACKING`] or
+    /// [`MjtCamera::mjCAMERA_FIXED`].
     pub fn move_(&mut self, action: MjtMouse, model: &MjModel, dx: MjtNum, dy: MjtNum) {
+        // Move and turn call mjv_cameraFrame, which ends the process through mjERROR for other
+        // camera types.
+        let framed = [
+            MjtCamera::mjCAMERA_FREE, MjtCamera::mjCAMERA_TRACKING, MjtCamera::mjCAMERA_FIXED,
+        ].iter().any(|&camera_type| self.type_ == camera_type as i32);
+        assert!(
+            framed || !matches!(action, MjtMouse::mjMOUSE_MOVE_V | MjtMouse::mjMOUSE_MOVE_H
+                | MjtMouse::mjMOUSE_TURN_V | MjtMouse::mjMOUSE_TURN_H
+                | MjtMouse::mjMOUSE_MOVE_V_REL | MjtMouse::mjMOUSE_MOVE_H_REL),
+            "camera type must be free, tracking or fixed for a move or turn action"
+        );
         unsafe { mjv_moveCamera(model.ffi(), action as i32, dx, dy, self); };
     }
 
@@ -496,7 +519,15 @@ impl MjvFigure {
     /// # Safety
     /// Every `linepnt` entry must lie within `0..=mjMAXLINEPNT`, the capacity of the matching
     /// `linedata` row. Automated checks from Rust side are too expensive.
+    ///
+    /// # Panics
+    /// Panics if `flg_legend` is set and `legendoffset` is negative.
     pub unsafe fn draw(&mut self, viewport: MjrRectangle, context: &MjrContext) {
+        // TODO: MuJoCo upstream bug. mjr_figure indexes linename and linergb from legendoffset
+        // with no lower bound. Remove once fixed upstream.
+        assert!(
+            self.flg_legend == 0 || self.legendoffset >= 0, "legendoffset must not be negative"
+        );
         // SAFETY: the caller guarantees every `linepnt` entry is within the `linedata` capacity.
         unsafe { mjr_figure(viewport, self, context.ffi()) };
     }
@@ -539,7 +570,7 @@ impl MjvFigure {
     /// Checks if the buffer is full for plot with `plot_index`.
     ///
     /// # Panics
-    /// Panics if `plot_index >= mjMAXLINE`.
+    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is negative.
     ///
     /// Use [`MjvFigure::try_full`] for a fallible alternative.
     pub fn full(&self, plot_index: usize) -> bool {
@@ -547,6 +578,9 @@ impl MjvFigure {
     }
 
     /// Checks if the buffer is full for plot with `plot_index`.
+    ///
+    /// # Panics
+    /// Panics if `linepnt[plot_index]` is negative.
     ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
@@ -556,13 +590,13 @@ impl MjvFigure {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
-        Ok(self.linepnt[plot_index] >= (self.linedata[plot_index].len() / 2) as i32)
+        Ok(self.point_count(plot_index) >= self.linedata[plot_index].len() / 2)
     }
 
     /// Checks if the buffer is empty for plot with `plot_index`.
     ///
     /// # Panics
-    /// Panics if `plot_index >= mjMAXLINE`.
+    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is negative.
     ///
     /// Use [`MjvFigure::try_empty`] for a fallible alternative.
     pub fn empty(&self, plot_index: usize) -> bool {
@@ -570,6 +604,9 @@ impl MjvFigure {
     }
 
     /// Checks if the buffer is empty for plot with `plot_index`.
+    ///
+    /// # Panics
+    /// Panics if `linepnt[plot_index]` is negative.
     ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
@@ -579,10 +616,13 @@ impl MjvFigure {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
-        Ok(self.linepnt[plot_index] == 0)
+        Ok(self.point_count(plot_index) == 0)
     }
 
     /// Pushes a new data point to buffer for the specific plot with `plot_index`.
+    ///
+    /// # Panics
+    /// Panics if `linepnt[plot_index]` is negative.
     ///
     /// # Errors
     /// Returns [`MjSceneError::InvalidPlotIndex`] if `plot_index >= mjMAXLINE`.
@@ -592,9 +632,9 @@ impl MjvFigure {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
+        let point_index = self.point_count(plot_index);
         let plot = &mut self.linedata[plot_index];
         let capacity = plot.len() / 2;
-        let point_index = self.linepnt[plot_index] as usize;
         if point_index >= capacity {
             return Err(MjSceneError::FigureBufferFull { plot_index, capacity });
         }
@@ -659,8 +699,8 @@ impl MjvFigure {
     /// Returns `Some((x, y))` when the plot contains any elements, otherwise `None` is returned.
     ///
     /// # Panics
-    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is above the plot
-    /// capacity of `linedata[plot_index].len() / 2` points.
+    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is negative or above the
+    /// plot capacity of `linedata[plot_index].len() / 2` points.
     ///
     /// Use [`MjvFigure::try_pop_front`] for a fallible alternative.
     pub fn pop_front(&mut self, plot_index: usize) -> Option<(f32, f32)> {
@@ -670,7 +710,7 @@ impl MjvFigure {
     /// Pops the first element from the plot data of plot with `plot_index`.
     ///
     /// # Panics
-    /// Panics if `linepnt[plot_index]` is above the plot capacity of
+    /// Panics if `linepnt[plot_index]` is negative or above the plot capacity of
     /// `linedata[plot_index].len() / 2` points.
     ///
     /// # Errors
@@ -683,13 +723,13 @@ impl MjvFigure {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
-        let len = self.linepnt[plot_index];
-        if len <= 0 {
+        let len = self.point_count(plot_index);
+        if len == 0 {
             return Ok(None);
         }
         let plot_data = &mut self.linedata[plot_index];
         let first = (plot_data[0], plot_data[1]);
-        plot_data.copy_within(2..len as usize * 2, 0);
+        plot_data.copy_within(2..len * 2, 0);
         self.linepnt[plot_index] -= 1;
         Ok(Some(first))
     }
@@ -700,8 +740,8 @@ impl MjvFigure {
     /// Returns `Some((x, y))` when the plot contains any elements, otherwise `None` is returned.
     ///
     /// # Panics
-    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is above the plot
-    /// capacity of `linedata[plot_index].len() / 2` points.
+    /// Panics if `plot_index >= mjMAXLINE`, or if `linepnt[plot_index]` is negative or above the
+    /// plot capacity of `linedata[plot_index].len() / 2` points.
     ///
     /// Use [`MjvFigure::try_pop_back`] for a fallible alternative.
     pub fn pop_back(&mut self, plot_index: usize) -> Option<(f32, f32)> {
@@ -711,7 +751,7 @@ impl MjvFigure {
     /// Pops the last element from the plot data of plot with `plot_index`.
     ///
     /// # Panics
-    /// Panics if `linepnt[plot_index]` is above the plot capacity of
+    /// Panics if `linepnt[plot_index]` is negative or above the plot capacity of
     /// `linedata[plot_index].len() / 2` points.
     ///
     /// # Errors
@@ -724,12 +764,12 @@ impl MjvFigure {
         if plot_index >= mjMAXLINE as usize {
             return Err(MjSceneError::InvalidPlotIndex { plot_index, max_plots: mjMAXLINE as usize });
         }
-        let old_len = self.linepnt[plot_index];
-        if old_len <= 0 {
+        let old_len = self.point_count(plot_index);
+        if old_len == 0 {
             return Ok(None);
         }
         let plot_data = &mut self.linedata[plot_index];
-        let new_start = ((old_len - 1) * 2) as usize;
+        let new_start = (old_len - 1) * 2;
         self.linepnt[plot_index] -= 1;
         Ok(Some((plot_data[new_start], plot_data[new_start + 1])))
     }
@@ -775,53 +815,22 @@ impl MjvFigure {
         self.linepnt[plot_index] -= n as i32;
         Ok(())
     }
+
+    /// Returns `linepnt[plot_index]` as a point count.
+    ///
+    /// # Panics
+    /// Panics if the entry is negative.
+    fn point_count(&self, plot_index: usize) -> usize {
+        // A negative count would make the buffer look full and non-empty at once.
+        usize::try_from(self.linepnt[plot_index])
+            .unwrap_or_else(|_| panic!("linepnt[{plot_index}] must not be negative"))
+    }
 }
 
 
 /***********************************************************************************************************************
 ** MjvScene
 ***********************************************************************************************************************/
-/// Snapshot of the [`MjModel`] quantities that fix the size of every buffer that
-/// [`MjvScene::new`] allocates, and the two element counts that bound the `objid` of a flex geom
-/// and of a skin geom.
-///
-/// The compilation signature is no entry here: `mj_saveModel` does not write it, so a model that
-/// came back from a buffer carries a zero and would be refused against the scene it built. The
-/// entries below stand on their own. The flex tables are kept whole: `mjv_makeScene` sizes the
-/// flex face buffer from `flex_dim`, `flex_elemnum`, `flex_shellnum` and `flex_elemlayer`
-/// together, so no scalar total replaces them.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct MjvSceneLayout {
-    nflexedge: MjtSize,
-    nflexvert: MjtSize,
-    // `mjv_addGeoms` gives a skin geom the skin id as its `objid`, and `mjr_render` reads
-    // `skinfacenum[objid]` of the scene and `skinvertVBO[objid]` of the context. Both arrays hold
-    // one entry per skin of the model that built them.
-    nskin: MjtSize,
-    nskinvert: MjtSize,
-    flex_dim: Vec<i32>,
-    flex_elemnum: Vec<i32>,
-    flex_shellnum: Vec<i32>,
-    flex_elemlayer: Vec<i32>,
-}
-
-impl From<&MjModel> for MjvSceneLayout {
-    fn from(model: &MjModel) -> Self {
-        let ffi = model.ffi();
-        Self {
-            nflexedge: ffi.nflexedge,
-            nflexvert: ffi.nflexvert,
-            nskin: ffi.nskin,
-            nskinvert: ffi.nskinvert,
-            flex_dim: model.flex_dim().to_vec(),
-            flex_elemnum: model.flex_elemnum().to_vec(),
-            flex_shellnum: model.flex_shellnum().to_vec(),
-            flex_elemlayer: model.flex_elemlayer().to_vec(),
-        }
-    }
-}
-
-
 /// 3D scene visualization.
 /// This struct provides a way to render visual-only geometry.
 ///
@@ -831,10 +840,10 @@ impl From<&MjModel> for MjvSceneLayout {
 #[derive(Debug)]
 pub struct MjvScene {
     ffi: Box<mjvScene>,
-    layout: MjvSceneLayout,
-    /// Reported by [`MjvScene::signature`] and named in the panic of an incompatible model. It
-    /// decides nothing: `MjvSceneLayout` carries every size the scene depends on.
-    signature: u64,
+    layout: Arc<MjModelLayout>,
+    nflexedge: MjtSize,
+    nflexvert: MjtSize,
+    nskinvert: MjtSize,
 }
 
 impl MjvScene {
@@ -842,9 +851,9 @@ impl MjvScene {
     ///
     /// # Panics
     /// Panics if `max_geom` exceeds [`i32::MAX`].
-    pub fn new<M: ModelType>(model: M, max_geom: usize) -> Self {
+    pub fn new(model: &MjModel, max_geom: usize) -> Self {
         let model_ffi = model.ffi();
-        let layout = MjvSceneLayout::from(&*model);
+        let layout = Arc::clone(model.layout());
 
         // SAFETY: The struct memory gets initialized properly before assumed initialized.
         // The uninitialized memory, not part of the struct, gets zeroed below this unsafe block.
@@ -865,8 +874,8 @@ impl MjvScene {
             unsafe { std::slice::from_raw_parts(scene.flexfacenum, nflex) }
             .iter().map(|&n| n as usize).sum()
         };
-        let nflexvert = layout.nflexvert as usize;
-        let nskinvert = layout.nskinvert as usize;
+        let nflexvert = model_ffi.nflexvert as usize;
+        let nskinvert = model_ffi.nskinvert as usize;
         let maxgeom = scene.maxgeom as usize;
         let buffers: [(*mut u8, usize); 9] = [
             (scene.geoms.cast(),        maxgeom * size_of::<mjvGeom>()),
@@ -886,28 +895,19 @@ impl MjvScene {
             }
         }
 
-        Self { ffi: scene, layout, signature: model.signature() }
+        Self {
+            ffi: scene, layout, nflexedge: model_ffi.nflexedge, nflexvert: model_ffi.nflexvert,
+            nskinvert: model_ffi.nskinvert,
+        }
     }
 
-    /// Returns the model signature this scene was created for.
-    pub fn signature(&self) -> u64 {
-        self.signature
-    }
-
-    /// Reports whether `model` can take the place of the model that created this scene.
-    ///
-    /// The scene buffers hold one entry per flex face, flex vertex, flex edge and skin vertex of
-    /// the model that created them, and `mjv_updateScene` refills them with the counts of the
-    /// model it receives. The test covers every count that sizes such a buffer, plus the flex and
-    /// skin counts that bound the `objid` a geom carries into those buffers.
-    /// [`MjvScene::signature`] takes no part: `mj_saveModel` does not write it, so a model that
-    /// came back from a buffer would be refused against the scene it built.
+    /// Reports whether `model` has the [`MjModelLayout`] of the model that created this scene.
     pub fn is_compatible_with_model(&self, model: &MjModel) -> bool {
-        self.layout == MjvSceneLayout::from(model)
+        self.layout == *model.layout()
     }
 
-    /// Reports whether `other` was created for a model that is compatible with this scene's
-    /// model.
+    /// Reports whether `other` and this scene were created for models with an equal
+    /// [`MjModelLayout`].
     ///
     /// A geom that moves between two scenes keeps its `objid`, which the renderer uses as an
     /// unchecked index into the destination scene's flex and skin arrays.
@@ -917,11 +917,7 @@ impl MjvScene {
 
     /// Panics if `model` is not compatible with the model used to create the scene.
     fn assert_compatible(&self, model: &MjModel) {
-        assert!(
-            self.is_compatible_with_model(model),
-            "the model is not compatible with the scene: scene signature {:#X}, model signature {:#X}",
-            self.signature, model.signature()
-        );
+        assert!(self.is_compatible_with_model(model), "the model is not compatible with the scene");
     }
 
     /// Updates the scene from the current simulation state in `data`.
@@ -947,6 +943,7 @@ impl MjvScene {
     ///   out of range for the model in `data`.
     /// - Panics if `perturb.select` is out of range (greater than or equal to the number of
     ///   bodies) for the model in `data`.
+    /// - Panics if `vis.quality.numslices` of the model in `data` is negative or [`i32::MAX`].
     pub fn update_with_catmask<M: ModelType>(
         &mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb,
         cam: &mut MjvCamera, catmask: i32,
@@ -970,6 +967,13 @@ impl MjvScene {
         // MuJoCo does no bound checking for pert->select, thus invalid IDs leads to out-of-bound reads.
         assert!((perturb.select as MjtSize) < data.model().nbody(), "selected perturbated body ID is outside the valid range");
 
+        // TODO: MuJoCo upstream bug. A negative numslices, or numslices + 1 overflowing int, makes
+        // mjv_catenary write outside its stack array. Remove once fixed upstream.
+        assert!(
+            (0..i32::MAX).contains(&data.model().vis().quality.numslices),
+            "vis.quality.numslices must be in 0..i32::MAX"
+        );
+
         unsafe {
             mjv_updateScene(
                 data.model().ffi(), data.ffi_mut(), opt, perturb,
@@ -989,8 +993,8 @@ impl MjvScene {
     ///
     /// # Panics
     /// Panics under the same conditions as [`update_with_catmask`](Self::update_with_catmask):
-    /// a model-signature mismatch, an out-of-range fixed-camera id, or an out-of-range
-    /// `perturb.select`.
+    /// an incompatible model, an out-of-range fixed-camera id, an out-of-range
+    /// `perturb.select`, or a negative or [`i32::MAX`] `vis.quality.numslices`.
     pub fn update<M: ModelType>(&mut self, data: &mut MjData<M>, opt: &MjvOption, perturb: &MjvPerturb, cam: &mut MjvCamera) {
         self.update_with_catmask(data, opt, perturb, cam, MjtCatBit::mjCAT_ALL as i32);
     }
@@ -1148,10 +1152,10 @@ impl MjvScene {
     // Scalar length arrays
     array_slice_dyn! {
         probe = probe_dynamic_arrays;
-        (mut = unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; layout.nflexedge],
-        flexvert: &[[f32; 3] [force]; "flex vertices"; layout.nflexvert],
-        skinvert: &[[f32; 3] [force]; "skin vertex data"; layout.nskinvert],
-        skinnormal: &[[f32; 3] [force]; "skin normal data"; layout.nskinvert],
+        (mut = unsafe) flexedge: &[[i32; 2] [force]; "flex edge data"; nflexedge],
+        flexvert: &[[f32; 3] [force]; "flex vertices"; nflexvert],
+        skinvert: &[[f32; 3] [force]; "skin vertex data"; nskinvert],
+        skinnormal: &[[f32; 3] [force]; "skin normal data"; nskinvert],
         (mut = unsafe) geoms: &[MjvGeom; "buffer for geoms"; ffi.ngeom],
         geomorder: &[i32; "buffer for ordering geoms by distance to camera"; ffi.ngeom],
         (mut = unsafe) flexedgeadr: &[i32; "address of flex edges"; ffi.nflex],
@@ -1318,86 +1322,6 @@ mod tests {
     }
 
     #[test]
-    fn test_scene_is_compatible_with_model() {
-        let three = flex_model("name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'");
-        let two = flex_model("name='f' dim='1' body='v0 v1' vertex='0 0 0 0 0 0' element='0 1'");
-        assert_eq!(three.signature(), two.signature(), "the pair must share a signature");
-        assert_ne!(three.nflexvert(), two.nflexvert());
-
-        let scene = MjvScene::new(&three, 100);
-        assert!(scene.is_compatible_with_model(&three));
-        assert!(!scene.is_compatible_with_model(&two));
-    }
-
-    /// A model that carries `skins` and nothing else, so that only the skin counts change.
-    fn skin_model(skins: &str) -> MjModel {
-        let xml = format!(
-            "<mujoco><asset>{skins}</asset><worldbody>\
-<body name='b'><joint name='j' type='hinge' axis='0 0 1'/><geom size='0.1'/></body>\
-</worldbody></mujoco>"
-        );
-        MjModel::from_xml_string(&xml).unwrap()
-    }
-
-    /// `mjv_addGeoms` gives a skin geom the skin id as its `objid`, and `mjr_render` reads
-    /// `skinfacenum[objid]` of the scene with it. A model that holds more skins than the scene
-    /// must be refused, even when it needs no larger buffer.
-    #[test]
-    fn test_scene_rejects_a_larger_skin_count_at_an_equal_vertex_total() {
-        let one = skin_model(
-            "<skin name='s' vertex='0 0 0  1 0 0  0 1 0  1 1 0  2 0 0  2 1 0' \
-                   face='0 1 2  1 3 2  1 4 3  4 5 3'>\
-             <bone body='b' bindpos='0 0 0' bindquat='1 0 0 0' \
-                   vertid='0 1 2 3 4 5' vertweight='1 1 1 1 1 1'/></skin>"
-        );
-        let two = skin_model(
-            "<skin name='s1' vertex='0 0 0  1 0 0  0 1 0' face='0 1 2'>\
-             <bone body='b' bindpos='0 0 0' bindquat='1 0 0 0' \
-                   vertid='0 1 2' vertweight='1 1 1'/></skin>\
-             <skin name='s2' vertex='0 0 1  1 0 1  0 1 1' face='0 1 2'>\
-             <bone body='b' bindpos='0 0 0' bindquat='1 0 0 0' \
-                   vertid='0 1 2' vertweight='1 1 1'/></skin>"
-        );
-        // Every scene buffer is the same size in both, so only nskin separates the pair.
-        assert_eq!(one.nskinvert(), two.nskinvert());
-        assert_ne!(one.nskin(), two.nskin());
-
-        let scene = MjvScene::new(&one, 100);
-        assert!(scene.is_compatible_with_model(&one));
-        assert!(!scene.is_compatible_with_model(&two));
-    }
-
-    /// `mj_saveModel` writes no signature, so `mj_loadModel` returns a zero. A scene that tested
-    /// the signature would refuse the saved copy of the very model it was created for.
-    #[test]
-    fn test_scene_accepts_the_saved_copy_of_its_own_model() {
-        let model = flex_model(
-            "name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'"
-        );
-        let scene = MjvScene::new(&model, 100);
-
-        let mut buffer = vec![0u8; model.size()];
-        model.save_to_buffer(&mut buffer).unwrap();
-        let reloaded = MjModel::from_buffer(&buffer).unwrap();
-
-        assert_ne!(model.signature(), reloaded.signature(),
-                   "mj_loadModel now restores the signature");
-        assert!(scene.is_compatible_with_model(&reloaded),
-                "the scene refuses the saved copy of its own model");
-    }
-
-    #[test]
-    fn test_scene_is_compatible_with_scene() {
-        let three = flex_model("name='f' dim='1' body='v0 v1 v2' vertex='0 0 0 0 0 0 0 0 0' element='0 1 1 2'");
-        let two = flex_model("name='f' dim='1' body='v0 v1' vertex='0 0 0 0 0 0' element='0 1'");
-
-        let scene = MjvScene::new(&three, 100);
-        let same = MjvScene::new(&three, 10);
-        let other = MjvScene::new(&two, 100);
-        assert!(scene.is_compatible_with_scene(&same), "maxgeom must not affect compatibility");
-        assert!(!scene.is_compatible_with_scene(&other));
-    }
-    #[test]
     #[allow(non_snake_case)]
     fn test_MjvGeom() {
         let model = load_model();
@@ -1421,6 +1345,16 @@ mod tests {
         let data = model.make_data();
         let camera = MjvCamera::new_fixed(0);  // fixedcamid = 0, but ncam = 0 -> out of range
         let _ = camera.frame(&data);
+    }
+
+    /// An id above `i32::MAX` must panic, not wrap to a valid camera or body id.
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn test_camera_id_above_i32_panics() {
+        for set in [|c: &mut MjvCamera| c.fix(1 << 32), |c: &mut MjvCamera| c.track(1 << 32)] {
+            let mut camera = MjvCamera::new_user();
+            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| set(&mut camera))).is_err());
+        }
     }
 
     /// A tracking camera whose body id is out of range must panic in `frame` instead of triggering
@@ -1742,5 +1676,4 @@ mod tests {
         // SAFETY: MjvScene::new zeroes every buffer mjv_makeScene leaves untouched.
         unsafe { scene.probe_dynamic_arrays_unsafe() };
     }
-
 }

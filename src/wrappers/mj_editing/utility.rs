@@ -1,7 +1,7 @@
 //! Utilities for model editing purposes.
 use std::ffi::{CStr, CString};
 
-use super::{MjSpec, MjsBody, MjsFrame, SpecItem};
+use super::{MjSpec, MjsBody, MjsFrame, SpecElement};
 use crate::util::checked_c_len;
 use crate::error::MjEditError;
 use crate::mujoco_c::*;
@@ -131,6 +131,28 @@ pub(crate) unsafe fn write_mjs_vec_string(source: &str, destination: *mut mjStri
     }
 }
 
+/// Replaces `destination` (C++) with the whitespace-split entries of `source`, followed by empty
+/// entries up to `len` entries in total.
+///
+/// # Safety
+/// `destination` must point to a valid `mjStringVec` object.
+///
+/// # Panics
+/// When the `source` contains '\0' characters, a panic occurs.
+pub(crate) unsafe fn write_mjs_vec_string_padded(source: &str, destination: *mut mjStringVec, len: usize) {
+    let entries: Vec<_> = source.split(|c: char| c.is_ascii_whitespace() || c == '\x0B')
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| CString::new(entry).unwrap())
+        .collect();
+    let padding = std::iter::repeat_n(c"", len.saturating_sub(entries.len()));
+    unsafe {
+        mjs_setStringVec(destination, c"".as_ptr());
+        for entry in entries.iter().map(CString::as_c_str).chain(padding) {
+            mjs_appendString(destination, entry.as_ptr());
+        }
+    }
+}
+
 /// Appends `source` as a single entry to `destination` (C++).
 ///
 /// # Safety
@@ -162,8 +184,8 @@ pub(crate) unsafe fn write_mjs_vec_byte<T: bytemuck::NoUninit>(source: &[T], des
 /// Deletes `element` from the specification that holds it, with the checks MuJoCo omits.
 ///
 /// # Errors
-/// Returns [`MjEditError::UnsupportedOperation`] for a default class, a frame, a tendon wrap and
-/// the world body, and [`MjEditError::DeleteFailed`] when MuJoCo refuses the deletion.
+/// Returns [`MjEditError::UnsupportedOperation`] for a default class, a tendon wrap and the world
+/// body, and [`MjEditError::DeleteFailed`] when MuJoCo refuses the deletion.
 ///
 /// # Safety
 /// Same contract as [`SpecObject::delete`](super::traits::SpecObject::delete), and `element` must
@@ -171,11 +193,11 @@ pub(crate) unsafe fn write_mjs_vec_byte<T: bytemuck::NoUninit>(source: &[T], des
 pub(crate) unsafe fn delete_element(element: *mut mjsElement) -> Result<(), MjEditError> {
     let elemtype = unsafe { (*element).elemtype };
 
-    // mjCDef is not an mjCBase, so this precedes mjs_getSpec. A frame's type is 100, past the
-    // mjNOBJECT end of the element list MuJoCo indexes with it, and a wrap's slot in it is null.
+    // mjCDef is not an mjCBase, so this precedes mjs_getSpec. A wrap's slot in the element list
+    // that MuJoCo indexes with the type is null.
     if matches!(
         elemtype,
-        mjtObj::mjOBJ_DEFAULT | mjtObj::mjOBJ_FRAME | mjtObj::mjOBJ_UNKNOWN
+        mjtObj::mjOBJ_DEFAULT | mjtObj::mjOBJ_UNKNOWN
     ) {
         return Err(MjEditError::UnsupportedOperation);
     }
@@ -207,6 +229,48 @@ pub(crate) unsafe fn read_spec_error(spec: *mut mjSpec) -> String {
     } else {
         unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned()
     }
+}
+
+/// Sets the name of `element`. Wraps [`mjs_setName`].
+///
+/// # Errors
+/// Returns [`MjEditError::AlreadyExists`] when an element with the same name already exists.
+///
+/// # Safety
+/// `element` must point to a live element of a specification, other than a default class.
+///
+/// # Panics
+/// When the `name` contains '\0' characters, a panic occurs.
+pub(crate) unsafe fn set_element_name(element: *mut mjsElement, name: &str) -> Result<(), MjEditError> {
+    let c_name = CString::new(name).unwrap();  // panics on interior NUL bytes.
+    if unsafe { mjs_setName(element, c_name.as_ptr()) } != 0 {
+        return Err(MjEditError::AlreadyExists);
+    }
+    Ok(())
+}
+
+/// Returns the frame named `name` in the specification of `element`.
+///
+/// # Errors
+/// Returns [`MjEditError::NotFound`] when `name` is empty or no frame has that name.
+///
+/// # Safety
+/// `element` must point to a live element of a specification.
+///
+/// # Panics
+/// When the `name` contains '\0' characters, a panic occurs.
+pub(crate) unsafe fn find_frame(element: *const mjsElement, name: &str) -> Result<*mut mjsFrame, MjEditError> {
+    // MuJoCo matches an empty name to the first unnamed frame.
+    if name.is_empty() {
+        return Err(MjEditError::NotFound);
+    }
+
+    let c_name = CString::new(name).unwrap();  // panics on interior NUL bytes only.
+    let frame = unsafe { mjs_findFrame(mjs_getSpec(element), c_name.as_ptr()) };
+    if frame.is_null() {
+        return Err(MjEditError::NotFound);
+    }
+    Ok(frame)
 }
 
 
@@ -332,6 +396,10 @@ macro_rules! add_x_method_by_frame {
                 "# Note\n",
                 "MuJoCo ends the process when the allocation fails."
             )]
+            #[deprecated(
+                since = "7.0.0",
+                note = "add the element to the body and call `FrameChild::with_frame`"
+            )]
             #[expect(deprecated, reason = "try_add_* keeps the implementation until it is removed")]
             pub fn [<add_ $name>](&mut self) -> &mut [<Mjs $name:camel>] {
                 self.[<try_add_ $name>]()
@@ -383,6 +451,10 @@ macro_rules! add_x_method_by_frame {
                 "default class.\n\n",
                 "# Panics\n",
                 "When the `class_name` contains '\\0' characters, a panic occurs."
+            )]
+            #[deprecated(
+                since = "7.0.0",
+                note = "add the element to the body and call `FrameChild::with_frame`"
             )]
             pub fn [<add_ $name _with_class>](&mut self, class_name: &str)
                 -> Result<&mut [<Mjs $name:camel>], MjEditError>
@@ -543,17 +615,18 @@ macro_rules! find_x_method_direct {
 /// exchanging two elements would leave each specification holding pointers that the other owns.
 /// Do not give the handle a field of type `$raw`, and do not add [`DerefMut`](std::ops::DerefMut).
 macro_rules! mjs_opaque {
-    ($handle:ident <= $raw:ident, $doc:expr) => {
+    ($handle:ident $(<$cap:ident>)? <= $raw:ident, $doc:expr) => {
         #[doc = $doc]
         #[repr(C)]
-        pub struct $handle {
+        pub struct $handle$(<$cap = crate::wrappers::mj_editing::InTree>)? {
             // A private field with no constructor keeps the handle non-instantiable downstream.
             _data: (),
             // Removes the automatic `Send`, `Sync` and `Unpin`; the element belongs to its spec.
-            _marker: std::marker::PhantomData<(*mut u8, std::marker::PhantomPinned)>,
+            // $cap is used optionally and it allows for a liter variant that is used within `MjsDefault`.
+            _marker: std::marker::PhantomData<(*mut u8, std::marker::PhantomPinned, $($cap)?)>,
         }
 
-        impl $handle {
+        impl$(<$cap>)? $handle$(<$cap>)? {
             /// Returns the FFI struct that the handle stands on.
             pub fn ffi(&self) -> &$raw {
                 // SAFETY: the handle stands at the address of a live, aligned `$raw`, and the cast
@@ -589,7 +662,7 @@ macro_rules! mjs_opaque {
             }
         }
 
-        impl std::fmt::Debug for $handle {
+        impl$(<$cap>)? std::fmt::Debug for $handle$(<$cap>)? {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 std::fmt::Debug::fmt(self.ffi(), f)
             }
@@ -627,10 +700,10 @@ macro_rules! nested_handle {
 /// `SpecItem` implementation.
 macro_rules! mjs_struct {
     (
-        $kind:ident with SpecObject: $handle:ident <= $raw:ident
+        $kind:ident with SpecObject: $handle:ident $(<$cap:ident>)? <= $raw:ident
         $({ $($extra_trait_methods:tt)* })?
     ) => {paste::paste!{
-        mjs_struct!($handle <= $raw $({ $($extra_trait_methods)* })?);
+        mjs_struct!($handle $(<$cap>)? <= $raw $({ $($extra_trait_methods)* })?);
 
         impl SpecObject for $handle {
             const OBJ_TYPE: MjtObj = MjtObj::[<mjOBJ_ $kind:upper>];
@@ -645,14 +718,14 @@ macro_rules! mjs_struct {
     }};
 
     (
-        $handle:ident <= $raw:ident
+        $handle:ident $(<$cap:ident>)? <= $raw:ident
         $({ $($extra_trait_methods:tt)* })?
     ) => {
-        mjs_opaque!($handle <= $raw, concat!(
+        mjs_opaque!($handle $(<$cap>)? <= $raw, concat!(
             stringify!($handle), " specification. An opaque handle for the FFI type [`",
             stringify!($raw), "`], reached through [`ffi`](Self::ffi)."));
 
-        impl $handle {
+        impl$(<$cap>)? $handle$(<$cap>)? {
             /// Return the message appended to compiler errors.
             /// # Panics
             /// Panics if it contains invalid UTF-8.
@@ -672,11 +745,13 @@ macro_rules! mjs_struct {
 
         impl crate::wrappers::mj_editing::traits::sealed::Sealed for $handle {}
 
-        impl SpecItem for $handle {
+        impl SpecElement for $handle {
             fn element_pointer(&self) -> *const mjsElement {
                 self.ffi().element
             }
+        }
 
+        impl SpecItem for $handle {
             $($(
                 $extra_trait_methods
             )*)?
@@ -741,15 +816,11 @@ macro_rules! vec_string_set_append {
 
     // Indexed variant: the vector is pre-sized with one entry per enum variant, so an entry is
     // set by index rather than appended.
-    ($name:ident[$role_ty:ty] => $singular:ident; $comment:expr $(;)?) => {paste::paste!{
+    ($name:ident[$role_ty:ty; $len:expr] => $singular:ident; $comment:expr $(;)?) => {paste::paste!{
         #[doc = concat!(
             "Sets the entry at index `role` in `", stringify!($name), "` to `name`. ",
             $comment,
             "\n\n",
-            "# Note\n",
-            "MuJoCo pre-sizes `", stringify!($name), "` with one slot per [`", stringify!($role_ty),
-            "`] value. An index with no slot ends the process through `mju_error`.\n",
-            "\n",
             "# Panics\n",
             "When `name` contains '\\0' characters, a panic occurs."
         )]
@@ -778,6 +849,7 @@ macro_rules! vec_string_set_append {
         #[doc = concat!(
             "Replaces the entire `", stringify!($name), "` vector with whitespace-split entries from `value`. ",
             $comment,
+            " Empty entries fill the vector up to one entry per [`", stringify!($role_ty), "`] value.",
             "\n\n",
             "<div class=\"warning\">\n\n",
             "This replaces the pre-sized vector. Prefer [`set_",
@@ -789,24 +861,7 @@ macro_rules! vec_string_set_append {
         )]
         pub fn [<set_ $name>](&mut self, value: &str) {
             // SAFETY: self.$name is a valid mjStringVec pointer for the lifetime of self.
-            unsafe { write_mjs_vec_string(value, self.ffi().$name) };
-        }
-
-        #[doc = concat!(
-            "Appends `value` to the end of `", stringify!($name), "`. ",
-            $comment,
-            "\n\n",
-            "<div class=\"warning\">\n\n",
-            "Appending extends past the pre-sized vector. Prefer [`set_",
-            stringify!($singular), "`](Self::set_", stringify!($singular),
-            ") to set individual entries by role.\n\n",
-            "</div>\n\n",
-            "# Panics\n",
-            "When the `value` contains '\\0' characters, a panic occurs."
-        )]
-        pub fn [<append_ $name>](&mut self, value: &str) {
-            // SAFETY: self.$name is a valid mjStringVec pointer for the lifetime of self.
-            unsafe { append_mjs_vec_string(value, self.ffi().$name) };
+            unsafe { write_mjs_vec_string_padded(value, self.ffi().$name, $len) };
         }
     }};
 }

@@ -45,7 +45,7 @@ impl CustomSimulation {
     fn new(model_xml_string: &str) -> Self {
         let model = Rc::new(MjModel::from_xml_string(model_xml_string).expect("could not load the model"));
         let data = MjData::new(model.clone());
-        let mut viewer = MjViewer::launch_passive(model.clone(), 100)
+        let mut viewer = MjViewer::launch_passive(&model, 100)
             .expect("could not launch the viewer");
 
         // Common user-state storage, which can be used in multiple ui callbacks.

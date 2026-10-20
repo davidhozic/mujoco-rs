@@ -15,7 +15,7 @@ use egui_winit::egui;
 use egui_winit;
 use log::info;
 
-use crate::wrappers::mj_model::{MjModel, MjtObj, MjtJoint, MjtDisableBit, MjtEnableBit};
+use crate::wrappers::mj_model::{MjModel, MjtObjBase, MjtJoint, MjtDisableBit, MjtEnableBit};
 use crate::wrappers::mj_visualization::{MjvOption, MjvCamera, MjtCamera, MjvScene};
 use crate::wrappers::fun::{mju_normalize_3, mju_normalize_4, mju_quat_2_vel};
 use crate::viewer::{ViewerSharedState, ViewerStatusBit, MjViewerError};
@@ -351,7 +351,7 @@ impl ViewerUI {
     /// Must be called whenever the active model changes.
     pub(crate) fn update_caches(&mut self, model: &MjModel) {
         self.camera_names = (0..model.ncam()).map(|i| {
-            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_CAMERA, i as usize) {
+            if let Some(name) = model.id_to_name(MjtObjBase::mjOBJ_CAMERA, i as usize) {
                 name.to_string()
             } else { format!("Camera {i}") }
         }).collect();
@@ -361,7 +361,7 @@ impl ViewerUI {
             let ctrl_start = model.actuator_ctrladr()[idx_actuator] as usize;
             let num_inputs = model.actuator_ctrlnum()[idx_actuator] as usize;
 
-            let name = model.id_to_name(MjtObj::mjOBJ_ACTUATOR, idx_actuator)
+            let name = model.id_to_name(MjtObjBase::mjOBJ_ACTUATOR, idx_actuator)
                 .map(|name| name.to_string())
                 .unwrap_or_else(|| format!("Actuator {idx_actuator}"));
 
@@ -385,7 +385,7 @@ impl ViewerUI {
         }).collect();
 
         self.joint_info = (0..model.njnt() as usize).map(|idx_joint| {
-            let name = model.id_to_name(MjtObj::mjOBJ_JOINT, idx_joint)
+            let name = model.id_to_name(MjtObjBase::mjOBJ_JOINT, idx_joint)
                 .map(|name| name.to_string())
                 .unwrap_or_else(|| format!("Joint {idx_joint}"));
 
@@ -436,7 +436,7 @@ impl ViewerUI {
         }).collect();
 
         self.equality_names = (0..model.neq()).map(|i| {
-            if let Some(name) = model.id_to_name(MjtObj::mjOBJ_EQUALITY, i as usize) {
+            if let Some(name) = model.id_to_name(MjtObjBase::mjOBJ_EQUALITY, i as usize) {
                 name.to_string()
             } else { format!("Equality {i}") }
         }).collect();
@@ -860,7 +860,7 @@ impl ViewerUI {
                                 MjtCamera::mjCAMERA_FIXED => self.camera_names[camera.fixedcamid as usize].to_string(),
                                 MjtCamera::mjCAMERA_TRACKING => {
                                     let bid = camera.trackbodyid as usize;
-                                    if let Some(name) = model.id_to_name(MjtObj::mjOBJ_BODY, bid) {
+                                    if let Some(name) = model.id_to_name(MjtObjBase::mjOBJ_BODY, bid) {
                                         format!("Tracking: {}", name)
                                     } else {
                                         format!("Tracking: Body {}", bid)
@@ -1687,7 +1687,7 @@ impl ViewerUI {
                                     .num_columns(CAMERA_MODAL_BUTTONS_PER_ROW)
                                     .show(ui, |ui| {
                                         for body_id in 0..nbody as usize {
-                                            let body_name = if let Some(name) = model.id_to_name(MjtObj::mjOBJ_BODY, body_id) {
+                                            let body_name = if let Some(name) = model.id_to_name(MjtObjBase::mjOBJ_BODY, body_id) {
                                                 name.to_string()
                                             } else {
                                                 format!("Body {}", body_id)

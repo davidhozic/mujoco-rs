@@ -193,7 +193,8 @@ dirty-flag mechanism. The upload takes effect before the next call to
 :docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>render`.
 All methods return ``Result<(), RendererError>`` ---
 :docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>IncompatibleModel` is returned
-when the model is not compatible with the renderer's current scene,
+when the mesh, heightfield and texture layout of the model differs from that of the rendering context
+(:docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>is_asset_compatible_with_model`),
 :docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>ContextError` when the asset
 ID is out of range (singular methods only), and
 :docs-rs:`~~mujoco_rs::renderer::<enum>RendererError::<variant>GlutinError` if the OpenGL context

@@ -12,7 +12,6 @@ use std::f64::consts::TAU;
 use std::time::Duration;
 use mujoco_rs::prelude::*;
 use mujoco_rs::wrappers::mj_editing::{MjsBody, MjtBuiltin};
-use mujoco_rs::wrappers::mj_model::MjtTextureRole;
 use mujoco_rs::viewer::MjViewer;
 use env_logger::Env;
 
@@ -65,7 +64,7 @@ fn add_leg(torso: &mut MjsBody, n: usize, l: usize, angle: f64, rgba: [f32; 4]) 
         .with_axis([0.0, 0.0, 1.0]);
 
     thigh.add_geom()
-        .with_type(MjtGeom::mjGEOM_CAPSULE)
+        .with_type(MjtGeomBase::mjGEOM_CAPSULE)
         .with_fromto([0.0, 0.0, 0.0, LEG_LEN, 0.0, 0.0])  // extends in local +X
         .with_size([LEG_LEN / 4.0, 0.0, 0.0])
         .with_rgba(rgba);
@@ -83,7 +82,7 @@ fn add_leg(torso: &mut MjsBody, n: usize, l: usize, angle: f64, rgba: [f32; 4]) 
         .with_axis([0.0, 1.0, 0.0]);
 
     shin.add_geom()
-        .with_type(MjtGeom::mjGEOM_CAPSULE)
+        .with_type(MjtGeomBase::mjGEOM_CAPSULE)
         .with_fromto([0.0, 0.0, 0.0, 0.0, 0.0, -LEG_LEN])  // hangs straight down
         .with_size([LEG_LEN / 5.0, 0.0, 0.0])
         .with_rgba(rgba);
@@ -101,7 +100,7 @@ fn add_creature(spec: &mut MjSpec, n: usize, n_legs: usize, cx: f64, cy: f64) {
         torso.add_joint().with_type(MjtJoint::mjJNT_FREE);
 
         torso.add_geom()
-            .with_type(MjtGeom::mjGEOM_ELLIPSOID)
+            .with_type(MjtGeomBase::mjGEOM_ELLIPSOID)
             .with_size([TORSO_R, TORSO_R, TORSO_R * 0.5])
             .with_rgba(rgba);
 
@@ -156,13 +155,13 @@ fn build_scene() -> MjModel {
         .with_rgb1([0.2_f64, 0.3, 0.4])
         .with_rgb2([0.3_f64, 0.4, 0.5]);
     let mat = spec.add_material().with_name("floor");
-    mat.set_texture(MjtTextureRole::mjTEXROLE_RGB, "floor");
+    mat.set_texture(MjtTextureRoleBase::mjTEXROLE_RGB, "floor");
     mat.with_texrepeat([5.0_f32, 5.0_f32]);
     mat.with_texuniform(true);
     mat.with_reflectance(0.2_f32);
 
     spec.world_body_mut().add_geom()
-        .with_type(MjtGeom::mjGEOM_PLANE)
+        .with_type(MjtGeomBase::mjGEOM_PLANE)
         .with_size([2.0, 2.0, 0.1])
         .with_material("floor");
 

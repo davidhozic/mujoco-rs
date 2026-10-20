@@ -209,7 +209,7 @@ on how to use the viewer in a multi-threaded way:
         .window_name("My Threaded Simulation")  // text shown in the window title bar.
         .max_user_geoms(100)
         .vsync(true)  // let the viewer select the appropriate refresh rate.
-        .build_passive(model.clone())
+        .build_passive(&model)
         .expect("could not launch the viewer");
 
     let shared_state = viewer.state().clone();
@@ -493,7 +493,7 @@ Here is an example of using the C++ wrapper:
         let model = MjModel::from_xml_string(EXAMPLE_MODEL).expect("could not load the model");
         let mut data = MjData::new(&model);
         // SAFETY: model and data are kept alive and at a stable address.
-        let mut viewer = unsafe { MjViewerCpp::launch_passive(&model, &data, 100) };
+        let mut viewer = unsafe { MjViewerCpp::launch_passive(&data, 100) };
         let step = model.opt().timestep;
         while viewer.running() {
             viewer.sync();

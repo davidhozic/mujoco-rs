@@ -137,7 +137,7 @@ pub enum MjViewerError {
     /// A rendering-context operation failed (e.g. a pixel-read buffer is too small or the
     /// viewport has invalid dimensions).
     ContextError(crate::error::MjrContextError),
-    /// The model's structure signature does not match the viewer's passive model.
+    /// The model is not compatible with the viewer's passive model.
     /// Call [`ViewerSharedState::sync_model`] or [`ViewerSharedState::sync_data`] first.
     IncompatibleModel,
     /// The asset ID is out of range.
@@ -153,12 +153,12 @@ pub enum MjViewerError {
 impl Display for MjViewerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EventLoopError(e) => write!(f, "event loop failed to initialize: {e}"),
-            Self::GlutinError(e) => write!(f, "glutin error: {e}"),
+            Self::EventLoopError(_) => write!(f, "event loop failed to initialize"),
+            Self::GlutinError(_) => write!(f, "glutin operation failed"),
             Self::PainterInitError(e) => write!(f, "failed to initialize egui painter: {e}"),
-            Self::GlInitFailed(e) => write!(f, "GL initialization failed: {e}"),
-            Self::SceneError(e) => write!(f, "scene error: {e}"),
-            Self::ContextError(e) => write!(f, "rendering context error: {e}"),
+            Self::GlInitFailed(_) => write!(f, "GL initialization failed"),
+            Self::SceneError(_) => write!(f, "scene operation failed"),
+            Self::ContextError(_) => write!(f, "rendering context operation failed"),
             Self::IncompatibleModel => write!(f, "the model is not compatible with the passive model: call sync_model / sync_data first"),
             Self::IndexOutOfBounds { id, len } => write!(f, "asset id {id} is out of range [0, {len})"),
         }
@@ -257,7 +257,7 @@ pub struct ViewerSharedState {
 }
 
 impl ViewerSharedState {
-    fn new<M: ModelType>(model: M, max_user_geom: usize) -> Self {
+    fn new(model: &MjModel, max_user_geom: usize) -> Self {
         // Empty values to avoid unnecessary double creation
         let empty: Box<[MjtNum]> = vec![].into_boxed_slice();
         let empty_model = Box::new(MjSpec::new().compile().unwrap());
@@ -288,7 +288,7 @@ impl ViewerSharedState {
             model_reloaded: false,
         };
 
-        shared_state.reload_model(&model, max_user_geom);
+        shared_state.reload_model(model, max_user_geom);
         // The caller builds its scene, render context, camera and UI caches from the same model,
         // so the first frame has nothing to rebuild.
         shared_state.model_reloaded = false;
@@ -827,7 +827,7 @@ impl MjViewer {
     ///   (feature `viewer-ui`).
     /// # Panics
     /// Panics if the GL display reports no usable configuration.
-    pub fn launch_passive<M: ModelType>(model: M, max_user_geom: usize) -> Result<Self, MjViewerError> {
+    pub fn launch_passive(model: &MjModel, max_user_geom: usize) -> Result<Self, MjViewerError> {
         MjViewerBuilder::new()
             .max_user_geoms(max_user_geom)
             .build_passive(model)
@@ -899,7 +899,7 @@ impl MjViewer {
     /// If you rely on the shared state to stay the same during the callback, either:
     /// - don't swap the model without reopening the viewer or
     /// - lock the shared-state throughout entire callback (but be careful to not create deadlocks) or
-    /// - compare [`MjModel::signature`] against the signature of the expected model.
+    /// - check the model against the expected model with [`MjModel::is_compatible_with_model`].
     ///
     /// # Example
     /// ```no_run
@@ -990,7 +990,7 @@ impl MjViewer {
     /// viewer's passive model and the incoming model.
     /// This is a proxy to [`ViewerSharedState::sync_model`].
     ///
-    /// Detects model changes via signature comparison and reloads internal state if needed.
+    /// Detects model changes with [`MjModel::is_compatible_with_model`] and reloads internal state if needed.
     /// After a reload, the passive model mirrors the incoming model's defaults, so the
     /// first merge is effectively a no-op. On subsequent calls, viewer UI changes and
     /// simulation-side changes are merged bidirectionally.
@@ -1128,7 +1128,7 @@ impl MjViewer {
 
         // Build the user menu and process its internal events.
         #[cfg(feature = "viewer-ui")]
-        self.process_user_ui();
+        self.process_user_ui()?;
 
         // Update the scene from data and render
         self.update_scene()?;
@@ -1459,9 +1459,12 @@ impl MjViewer {
 
     /// Builds the user UI and processes its internally raised events.
     #[cfg(feature = "viewer-ui")]
-    fn process_user_ui(&mut self) {
+    fn process_user_ui(&mut self) -> Result<(), MjViewerError> {
         use crate::viewer::ui::UiEvent;
-        let RenderBaseGlState {window, ..} = &self.adapter.state.as_ref().unwrap();
+        let RenderBaseGlState {window,
+            gl_context,
+            gl_surface
+        } = &self.adapter.state.as_ref().unwrap();
 
         let inner_size = window.inner_size();
         let left = self.ui.process(
@@ -1469,6 +1472,9 @@ impl MjViewer {
             &mut self.scene, &mut self.opt,
             &mut self.camera, &self.shared_state,
         );
+
+        // Make context current again after user's custom UI callbacks possibly changing the current context.
+        gl_context.make_current(gl_surface).map_err(MjViewerError::GlutinError)?;
 
         // Adjust the viewport so MuJoCo doesn't draw over the UI
         self.rect_view.left = left as i32;
@@ -1496,6 +1502,8 @@ impl MjViewer {
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Reads the state of requested vsync setting and makes appropriate calls to [`glutin`].
@@ -2007,7 +2015,7 @@ impl MjViewerBuilder {
     ///   (feature `viewer-ui`).
     /// # Panics
     /// Panics if the GL display reports no usable configuration.
-    pub fn build_passive<M: ModelType>(&self, model: M) -> Result<MjViewer, MjViewerError> {
+    pub fn build_passive(&self, model: &MjModel) -> Result<MjViewer, MjViewerError> {
         let (w, h) = MJ_VIEWER_DEFAULT_SIZE_PX;
         let mut event_loop = EventLoop::new().map_err(MjViewerError::EventLoopError)?;
         let adapter = RenderBase::new(
@@ -2041,13 +2049,13 @@ impl MjViewerBuilder {
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
         let ngeom = model.ffi().ngeom as usize;
-        let scene = MjvScene::new(&*model, ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
+        let scene = MjvScene::new(model, ngeom + self.max_user_geoms + EXTRA_SCENE_GEOM_SPACE);
         // SAFETY: The OpenGL context was made current above via gl_surface.
-        let context = unsafe { MjViewer::make_render_context(&model, gl_surface) };
-        let camera  = MjvCamera::new_free(&model);
+        let context = unsafe { MjViewer::make_render_context(model, gl_surface) };
+        let camera  = MjvCamera::new_free(model);
 
         // Tracking of changes made between syncs
-        let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(&*model, self.max_user_geoms)));
+        let shared_state = Arc::new(Mutex::new(ViewerSharedState::new(model, self.max_user_geoms)));
         let running_flag = shared_state.lock_unpoison().running.clone();
 
         // OpenGL context proxy
@@ -2064,7 +2072,7 @@ impl MjViewerBuilder {
 
         // User interface
         #[cfg(feature = "viewer-ui")]
-        let ui = ui::ViewerUI::new(&model, window, &gl)?;
+        let ui = ui::ViewerUI::new(model, window, &gl)?;
         let mut status = cfg_select! {
             feature = "viewer-ui" => ViewerStatusBit::UI,
             _ => ViewerStatusBit::HELP,
