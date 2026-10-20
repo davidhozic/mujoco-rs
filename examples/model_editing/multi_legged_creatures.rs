@@ -12,7 +12,6 @@ use std::f64::consts::TAU;
 use std::time::Duration;
 use mujoco_rs::prelude::*;
 use mujoco_rs::wrappers::mj_editing::{MjsBody, MjtBuiltin};
-use mujoco_rs::wrappers::mj_model::MjtTextureRole;
 use mujoco_rs::viewer::MjViewer;
 use env_logger::Env;
 
