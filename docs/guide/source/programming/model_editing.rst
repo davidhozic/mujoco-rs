@@ -381,8 +381,8 @@ Most elements can be removed from a specification with the ``unsafe``
 :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecObject::<method>delete`, called on the
 handle of the element. A default class and a tendon wrap are no
 :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecObject`, so they carry no ``delete`` at all.
-The world body and a frame do carry it, and it returns
-:docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>UnsupportedOperation` for them.
+The world body does carry it, and it returns
+:docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>UnsupportedOperation` for it.
 
 .. code-block:: rust
 
@@ -400,10 +400,11 @@ keeps a deleted element allocated until the specification drops, so a second del
 element frees it twice. The caller carries three obligations:
 
 - Delete each element at most once.
-- Do not delete an element that the deletion of a body already took out of the specification.
-- Do not use the handle of an element that the deletion of a body freed.
+- Do not delete an element that the deletion of a body or a frame already took out of the
+  specification.
+- Do not use the handle of an element that the deletion of a body or a frame freed.
 
-Deleting a body deletes its whole subtree, and it frees every keyframe, and every actuator, sensor,
+Deleting a body or a frame deletes its whole subtree, and it frees every keyframe, and every actuator, sensor,
 tendon, equality, pair and exclude that refers to the subtree. The last two obligations follow from
 that: an iterator collected before such a deletion still hands out the handles it took.
 
