@@ -68,6 +68,11 @@ path = "examples/visualization/viewer/cpp_viewer.rs"
 required-features = ["cpp-viewer"]
 
 [[example]]
+name = "cpp_viewer_threaded"
+path = "examples/visualization/viewer/cpp_viewer_threaded.rs"
+required-features = ["cpp-viewer"]
+
+[[example]]
 name = "chaotic_pendulum"
 path = "examples/simulation/chaotic_pendulum.rs"
 required-features = ["viewer"]
