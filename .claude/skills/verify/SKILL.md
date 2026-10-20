@@ -277,21 +277,44 @@ Concretely:
 
 The file must be self-contained (inline `<style>`), ASCII-only, and contain:
 
-- A header and a short **method note** describing the phases and the ten concern groups (A-J).
-- An **overview table** of all findings accumulated this chat:
-  `ID | Severity (pill) | Category (badge) | One-line description | Location | Fix applied? | Status`
-  If no findings exist, the table says "No bugs confirmed in this session."
-- One **finding card** per finding: ID, severity, title, status badge, location,
-  a **concise (< 300 words)** description quoting both the Rust code value and the C reference
-  value, and a **"Fix"** section describing what was changed (or what needs to change).
-- A **"Confirmed OK"** section listing notable items that were checked and found correct
-  (file:line, what was verified, result).
+**No prose anywhere in the report**: no method note, no introduction, no paragraphs. Only the
+lists below. Every description is a fragment of at most ~8 words.
+
+1. **Compact list** (top of page) of all findings accumulated this chat, grouped by severity
+   (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`; omit empty groups). One line per finding:
+   `ID  file:line  item: problem  [status]`. Each ID links to its detail entry. If no findings
+   exist, the list is the single line "No bugs confirmed in this session."
+
+   ```
+   HIGH
+     V1  mj_data.rs:640    xquat: stride 3, C says 4               [open]
+   LOW
+     V2  mj_model.rs:2210  jnt_range: length nbody, C says njnt    [fixed]
+   ```
+
+2. **Detail list** (below), one entry per finding, same order. Header line
+   `ID  SEVERITY  category  status` (category: concern group `A`-`J`), then labeled fields,
+   each at most one line except quoted code:
+
+   ```
+   V1  HIGH  B  open
+   Where:   src/wrappers/mj_data.rs:640 (info_method! Body, xquat)
+   Problem: quaternion read with stride 3; every body after 0 is misaligned.
+   Rust:    xquat: 3
+   C:       mjtNum* xquat;  // (nbody x 4)   mjdata.h:211
+   Fix:     change the stride to 4.
+   ```
+
+   `Fix` states what changed (`Fixed`) or what must change (`Open`, `Wont Fix`).
+
+3. **Confirmed OK**: one line each, `file:line  item  -> OK (what was checked)`, inside a
+   `details` element.
 
 Styling: use the same Claude aesthetic as `mujoco-rs-memory-safety-audit.html` -- ivory canvas
-background, coral accent, warm near-black ink, Georgia serif headings, rounded pill badges, white
-finding cards on the canvas, and a hairline-border overview table. Severity pills
-(`sev-critical/high/medium/low/info`), status badges (`st-open` / `st-fixed` / `st-wont-fix`),
-category badges `cat-a` through `cat-j` each in a distinct hue.
+background, coral accent, warm near-black ink, Georgia serif headings. Render both lists in a
+monospace font on white blocks, with the columns aligned. Color the severity group headings
+(`sev-critical/high/medium/low/info`) and the status tags (`st-open` / `st-fixed` /
+`st-wont-fix`).
 
 Statuses:
 
@@ -301,4 +324,4 @@ Statuses:
 | **Fixed** | Fix was applied in Phase 5 of this or a prior run this chat |
 | **Wont Fix** | Confirmed but intentionally deferred (e.g. upstream MuJoCo issue) |
 
-After writing the file, present the overview table to the user as a plain-text summary.
+After writing the file, present the compact list to the user verbatim, with no added prose.

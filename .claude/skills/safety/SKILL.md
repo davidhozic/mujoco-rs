@@ -148,30 +148,51 @@ Concretely:
 
 The file must be self-contained (inline `<style>`), ASCII-only, and contain:
 
-- A header and a short **method note** describing the passes and the four dimensions.
-- An **overview table** of all findings accumulated this chat: `ID | Severity (pill) |
-  Dimension (badge) | One-line description | Location(s) | Reachable from safe code? | Status`.
-  Findings that were fixed this session appear with status `fixed`. If no findings exist yet,
-  the table says "No findings confirmed in this session."
-- One **finding card** per finding: ID, severity, title, status badge, location(s), a **concise
-  (< 500 words)** mechanism explanation, a **"Safe-code trigger"** code snippet, and a **"Fix"**
-  suggestion (description of a fix only -- do NOT implement it).
-- An **"Observations & hardening recommendations"** section containing ONLY items that were
-  **actually verified against `mujoco/src/` or `mujoco/include/`** during this session (cite
-  file:line). **Do NOT include any observation not verified against the actual C/C++ source.**
-  Unverified hypotheticals ("if X were to do Y...") are forbidden.
-- An **"Areas reviewed and found sound"** section: negative results (what was checked and is OK).
+**No prose anywhere in the report**: no method note, no introduction, no paragraphs. Only the
+lists below. Every description is a fragment of at most ~8 words.
+
+1. **Compact list** (top of page) of all findings accumulated this chat, grouped by severity
+   (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `UNCERTAIN`; omit empty groups). One line per finding:
+   `ID  file:line  item: problem  [status]`. Each ID links to its detail entry. If no findings
+   exist, the list is the single line "No findings confirmed in this session."
+
+   ```
+   HIGH
+     S1  mj_rendering.rs:412  geoms_mut: matid unchecked -> OOB read     [open]
+     S2  mj_data.rs:88        Send impl: no M: Send bound                [open]
+   MEDIUM
+     S3  mj_model.rs:1301     name(): &str outlives model                [fixed]
+   ```
+
+2. **Detail list** (below), one entry per finding, same order. Header line
+   `ID  SEVERITY  dimension  status` (dimension: `mem` / `thread` / `mut` / `life`), then
+   labeled fields, each at most one line except the code:
+
+   ```
+   S1  HIGH  mem  open
+   Where:   src/wrappers/mj_rendering.rs:412 (MjvScene::geoms_mut)
+   Problem: C indexes the material table with matid and does no bounds check.
+   Trigger:
+       scene.geoms_mut()[0].matid = 9999;
+       renderer.render(&scene);   // OOB read in mjr_render
+   Fix:     make geoms_mut an unsafe fn.
+   ```
+
+   `Trigger` is a minimal safe-code snippet. `Fix` describes a fix only; do NOT implement it.
+
+3. **Observations**: one line each, `mujoco/src/...:line  fact`. Include ONLY items that were
+   **actually verified against `mujoco/src/` or `mujoco/include/`** during this session.
+   Unverified hypotheticals ("if X were to do Y...") are forbidden.
+4. **Found sound**: one line each, `item  -> OK (reason fragment)`, inside a `details` element.
 
 Styling: reproduce the same Claude aesthetic as `mujoco-rs-memory-safety-audit.html` -- ivory
-canvas background, coral accent, warm near-black ink, Georgia serif headings, rounded pill badges,
-white finding cards on the canvas, expandable `details` elements for the "Areas reviewed and found
-sound" section, and bordered observation boxes for the hardening notes. Severity pills
-(`sev-critical/high/medium/low/uncertain`), status badges (`st-open` / `st-fixed` /
-`st-defer-mujoco` / `st-open-latent`), inline dimension badges (`dm-memory` / `dm-thread` /
-`dm-mutability` / `dm-lifetime`) styled as bordered chips rather than pills.
+canvas background, coral accent, warm near-black ink, Georgia serif headings. Render both lists
+in a monospace font on white blocks, with the columns aligned. Color the severity group headings
+(`sev-critical/high/medium/low/uncertain`) and the status tags (`st-open` / `st-fixed` /
+`st-defer-mujoco` / `st-open-latent`).
 
 ## After the audit
 
 Assign statuses using the table in Phase 4 -- do NOT pause to ask the user. Present the
-overview table to the user as a plain-text summary. No interactive questions. Do NOT modify
+compact list to the user verbatim, with no added prose. No interactive questions. Do NOT modify
 any source files, tests, docs, or the changelog -- the audit is strictly read-only.
