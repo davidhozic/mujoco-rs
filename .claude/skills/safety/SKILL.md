@@ -18,8 +18,9 @@ Obey **all** files in `.claude/rules/` at all times. Re-read them after any cont
 - **Stride/length/type correctness is OUT of scope** -- that is `/verify`'s job. Do not duplicate
   it.
 - **The audit is read-only.** No source files, tests, or docs are modified as part of the audit.
-  The only output is the HTML report. Fixes, changelog entries, and regression guards are out of
-  scope -- the audit just identifies and documents findings.
+  The outputs are the HTML report and the repro examples (see "Repro examples"). Fixes, changelog
+  entries, and regression guards are out of scope -- the audit just identifies and documents
+  findings.
 
 ## The four dimensions
 
@@ -82,6 +83,7 @@ not read, the candidate must be dropped.
 ### Phase 2 -- TRIAGE / DEDUP (barrier)
 Collect all candidates; dedupe by location+mechanism; drop out-of-scope items
 (unsafe-only-reachable; stride/length/type).
+The classify step after Phase 3 assigns the origin section (A or B, see the Deliverable).
 
 ### Phase 3 -- ADVERSARIAL VERIFICATION (pipeline, per surviving candidate)
 For each candidate spawn, independently:
@@ -98,7 +100,7 @@ For thread-safety and other type-level claims, settle disputes with **compile-le
   type-checks against the *real* types -- e.g. that
   `body.geom_iter_mut(true).collect::<Vec<&mut MjsGeom>>()` followed by `thread::scope` spawning
   per-handle compiles, and that `&mut MjsGeom: Send`.
-Delete all throwaway probes afterward.
+Name throwaway probes `examples/repro_tmpcheck_<tag>.rs` and delete them afterward.
 
 ### Phase 4 -- COMPLETENESS CRITIC
 A final agent asks: "which dimension / module / `Send`-`Sync` site / claim was not covered or not
@@ -128,6 +130,28 @@ export LD_LIBRARY_PATH="$MUJOCO_DYNAMIC_LINK_DIR"
 (See the `build` and `run-example` skills.) Use `cargo check` for type-level probes; only
 `cargo build`/`run` when demonstrating a runtime crash.
 
+## Repro examples
+
+Write one runnable reproduction example per confirmed finding, after the IDs are final. The user
+keeps and runs them, so do not delete them.
+
+1. Make sure `.git/info/excludes` contains `/examples/repro_*.rs`. If it does not, append it with a comment
+   that marks it temporary ("remove before commit"), and tell the user.
+2. Write `examples/repro_safety_<ID>.rs` (`<ID>` is `S1`, `S2`, ...). Use the public crate API
+   (`use mujoco_rs::prelude::*`, an inline MJCF model). Do not register it in `Cargo.toml`; Cargo
+   discovers it.
+3. Start the file with a `//!` header: the ID, the problem in one line, the exact run command (env
+   vars and `--features`), and the expected symptom.
+   For a thread or type-level finding, also write `examples/repro_safety_<ID>_standalone.rs`: a
+   program without the crate that mirrors the pattern and shows the UB under Miri.
+4. `cargo check --example repro_safety_<ID>` must pass. Run it with `timeout 60` when this machine
+   can, and record the result.
+5. Add a `Repro:` field (file and run command) to each detail entry of the report.
+
+Only `repro_safety_<ID>*.rs` files stay in `examples/`. Name any intermediate probe
+`examples/repro_tmpcheck_<tag>.rs` and delete it after use. Move any other leftover probe to
+`~/.cache/mujoco-rs-results/<agent>-<task>/`.
+
 ## Deliverable -- a single self-contained HTML report
 
 Write/overwrite `mujoco-rs-memory-safety-audit.html` at the repo root.
@@ -147,6 +171,20 @@ Concretely:
   chats or from memory.
 
 The file must be self-contained (inline `<style>`), ASCII-only, and contain:
+
+**Two origin sections.** Split both the compact list and the detail list into two sections, each
+grouped by severity inside. Assign the origin when the finding is classified, not after the report.
+
+- **A. Our wrappers / usage**: the defect is in our code. Examples: a wrong length or contract, a
+  missing `(read = unsafe)` / `(mut = unsafe)` marking, an unsound `Send`/`Sync`, a viewer or
+  renderer logic bug, a `build.rs` bug.
+- **B. Inadequate MuJoCo checks**: MuJoCo accepts an invalid input or state without validation, and
+  the guard must go into our wrapper. Examples: an `int` overflow in a size product, an unchecked
+  index or format string, no stage-order check. Every `Defer (MuJoCo)` finding goes here.
+
+Headings: `1A. Compact list: Our wrappers / usage`, `1B. Compact list: Inadequate MuJoCo checks`,
+`2A. Details: ...`, `2B. Details: ...`. Omit empty severity groups. Write "None." for an empty
+section.
 
 **No prose anywhere in the report**: no method note, no introduction, no paragraphs. Only the
 lists below. Every description is a fragment of at most ~8 words.
@@ -195,4 +233,5 @@ in a monospace font on white blocks, with the columns aligned. Color the severit
 
 Assign statuses using the table in Phase 4 -- do NOT pause to ask the user. Present the
 compact list to the user verbatim, with no added prose. No interactive questions. Do NOT modify
-any source files, tests, docs, or the changelog -- the audit is strictly read-only.
+any source files, tests, docs, or the changelog -- the audit is strictly read-only (the repro
+examples are the only files it adds).

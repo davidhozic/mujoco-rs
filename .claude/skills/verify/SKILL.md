@@ -215,10 +215,13 @@ Three independent evaluators each read all Phase 2-3 reports and:
 - Deduplicate identical findings (same file + same issue).
 - Assign final severity: Critical / High / Medium / Low / Info.
 - Flag false positives.
+- Assign the origin section: A or B (see the Deliverable).
 
 Majority-vote on severity; take the highest severity when votes are split.
 
 ### Phase 5 -- FIX (single agent, sequential)
+
+Write the repro examples (see "Repro examples") before this phase, so that they exercise the unfixed code.
 
 A single agent applies all Critical and High fixes in sequence:
 
@@ -259,6 +262,27 @@ Substitute `X.Y.Z` from the `+mj-X.Y.Z` suffix in `Cargo.toml`. Both vars must b
 `important-context.md`. For `cargo check` (type-checking only, no link), only
 `MUJOCO_DYNAMIC_LINK_DIR` is strictly required.
 
+## Repro examples
+
+Write one runnable reproduction example per confirmed finding, after the IDs are final. The user
+keeps and runs them, so do not delete them.
+
+1. Make sure `.git/info/excludes` contains `/examples/repro_*.rs`. If it does not, append it with a comment
+   that marks it temporary ("remove before commit"), and tell the user.
+2. Write `examples/repro_verify_<ID>.rs` (`<ID>` is `V1`, `V2`, ...). Use the public crate API
+   (`use mujoco_rs::prelude::*`, an inline MJCF model). Do not register it in `Cargo.toml`; Cargo
+   discovers it.
+3. Start the file with a `//!` header: the ID, the problem in one line, the exact run command (env
+   vars and `--features`), and the expected symptom. The example prints the wrong value next to an
+   independently derived expected value, or triggers the panic or abort.
+4. `cargo check --example repro_verify_<ID>` must pass. Run it with `timeout 60` when this machine
+   can, and record the result.
+5. Add a `Repro:` field (file and run command) to each detail entry of the report.
+
+Only `repro_verify_<ID>*.rs` files stay in `examples/`. Name any intermediate probe
+`examples/repro_tmpcheck_<tag>.rs` and delete it after use. Move any other leftover probe to
+`~/.cache/mujoco-rs-results/<agent>-<task>/`.
+
 ## Deliverable -- a single self-contained HTML report
 
 Write/overwrite `mujoco-rs-verify-report.html` at the repo root after Phase 5 (fixes applied).
@@ -276,6 +300,20 @@ Concretely:
 - If this is the first `/verify` run in this chat, start with an empty finding list.
 
 The file must be self-contained (inline `<style>`), ASCII-only, and contain:
+
+**Two origin sections.** Split both the compact list and the detail list into two sections, each
+grouped by severity inside. Assign the origin when the finding is classified, not after the report.
+
+- **A. Our wrappers / usage**: the defect is in our code. Examples: a wrong length or contract, a
+  missing `(read = unsafe)` / `(mut = unsafe)` marking, an unsound `Send`/`Sync`, a viewer or
+  renderer logic bug, a `build.rs` bug.
+- **B. Inadequate MuJoCo checks**: MuJoCo accepts an invalid input or state without validation, and
+  the guard must go into our wrapper. Examples: an `int` overflow in a size product, an unchecked
+  index or format string, no stage-order check.
+
+Headings: `1A. Compact list: Our wrappers / usage`, `1B. Compact list: Inadequate MuJoCo checks`,
+`2A. Details: ...`, `2B. Details: ...`. Omit empty severity groups. Write "None." for an empty
+section.
 
 **No prose anywhere in the report**: no method note, no introduction, no paragraphs. Only the
 lists below. Every description is a fragment of at most ~8 words.
