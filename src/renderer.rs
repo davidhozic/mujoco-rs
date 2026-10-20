@@ -430,7 +430,8 @@ impl MjRenderer {
     }
 
     fn prepare_upload(&self, model: &MjModel) -> Result<(), RendererError> {
-        if !(self.scene.is_compatible_with_model(model) && self.context.is_compatible_with_model(model)) {
+        // An upload reads only the asset arrays of `model` and writes only the context.
+        if !self.context.is_asset_compatible_with_model(model) {
             return Err(RendererError::IncompatibleModel);
         }
         self.gl_state.make_current().map_err(RendererError::GlutinError)
@@ -453,8 +454,8 @@ impl MjRenderer {
     /// Re-uploads the texture with `texture_id` from `model` to the GPU immediately.
     ///
     /// # Errors
-    /// - [`RendererError::IncompatibleModel`] if `model` is not compatible with the renderer's scene
-    ///   or rendering context.
+    /// - [`RendererError::IncompatibleModel`] if the mesh, heightfield and texture part of the
+    ///   layout of `model` differs from that of the rendering context.
     /// - [`RendererError::ContextError`] if `texture_id >= model.ntex()`.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_texture_from(&self, model: &MjModel, texture_id: usize) -> Result<(), RendererError> {
@@ -464,8 +465,8 @@ impl MjRenderer {
     /// Re-uploads all textures from `model` to the GPU immediately.
     ///
     /// # Errors
-    /// - [`RendererError::IncompatibleModel`] if `model` is not compatible with the renderer's scene
-    ///   or rendering context.
+    /// - [`RendererError::IncompatibleModel`] if the mesh, heightfield and texture part of the
+    ///   layout of `model` differs from that of the rendering context.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_textures_from(&self, model: &MjModel) -> Result<(), RendererError> {
         self.update_all_from_impl(model, model.ntex() as usize, MjrContext::upload_texture)
@@ -480,8 +481,8 @@ impl MjRenderer {
     /// hull graph data (`mesh_graph`).
     ///
     /// # Errors
-    /// - [`RendererError::IncompatibleModel`] if `model` is not compatible with the renderer's scene
-    ///   or rendering context.
+    /// - [`RendererError::IncompatibleModel`] if the mesh, heightfield and texture part of the
+    ///   layout of `model` differs from that of the rendering context.
     /// - [`RendererError::ContextError`] if `mesh_id >= model.nmesh()`.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_mesh_from(&self, model: &MjModel, mesh_id: usize) -> Result<(), RendererError> {
@@ -497,8 +498,8 @@ impl MjRenderer {
     /// hull graph data (`mesh_graph`).
     ///
     /// # Errors
-    /// - [`RendererError::IncompatibleModel`] if `model` is not compatible with the renderer's scene
-    ///   or rendering context.
+    /// - [`RendererError::IncompatibleModel`] if the mesh, heightfield and texture part of the
+    ///   layout of `model` differs from that of the rendering context.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_meshes_from(&self, model: &MjModel) -> Result<(), RendererError> {
         self.update_all_from_impl(model, model.nmesh() as usize, MjrContext::upload_mesh)
@@ -507,8 +508,8 @@ impl MjRenderer {
     /// Re-uploads the heightfield with `hfield_id` from `model` to the GPU immediately.
     ///
     /// # Errors
-    /// - [`RendererError::IncompatibleModel`] if `model` is not compatible with the renderer's scene
-    ///   or rendering context.
+    /// - [`RendererError::IncompatibleModel`] if the mesh, heightfield and texture part of the
+    ///   layout of `model` differs from that of the rendering context.
     /// - [`RendererError::ContextError`] if `hfield_id >= model.nhfield()`.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_hfield_from(&self, model: &MjModel, hfield_id: usize) -> Result<(), RendererError> {
@@ -518,8 +519,8 @@ impl MjRenderer {
     /// Re-uploads all heightfields from `model` to the GPU immediately.
     ///
     /// # Errors
-    /// - [`RendererError::IncompatibleModel`] if `model` is not compatible with the renderer's scene
-    ///   or rendering context.
+    /// - [`RendererError::IncompatibleModel`] if the mesh, heightfield and texture part of the
+    ///   layout of `model` differs from that of the rendering context.
     /// - [`RendererError::GlutinError`] if the OpenGL context cannot be made current.
     pub fn update_hfields_from(&self, model: &MjModel) -> Result<(), RendererError> {
         self.update_all_from_impl(model, model.nhfield() as usize, MjrContext::upload_hfield)
@@ -1024,6 +1025,39 @@ mod test {
 
         assert_relative_eq!(min, max, epsilon = 1e-4);
         assert_relative_eq!(min, 2.25, epsilon = 1e-4);
+    }
+
+    /// An upload accepts a model whose moved vertex changes the mesh hull, and refuses a model
+    /// with another mesh count.
+    /// This is only run on Linux due to EGL requirements (winit cannot be used on multiple threads).
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_upload_gate() {
+        let xml = |vertex: &str, extra: &str| format!("<mujoco><asset><mesh name='m' vertex='0 0 0  1 0 0  \
+            0 1 0  0 0 1  {vertex}  .5 .5 -.3'/>{extra}</asset><worldbody><geom type='mesh' mesh='m'/>\
+            </worldbody></mujoco>");
+        let base = MjModel::from_xml_string(&xml("1 1 1", "")).unwrap();
+        let moved = MjModel::from_xml_string(&xml("1.2 1.1 1", "")).unwrap();
+        let extra = MjModel::from_xml_string(&xml("1 1 1", "<mesh name='n' vertex='0 0 0  1 0 0  0 1 0  0 0 1'/>"))
+            .unwrap();
+        assert_ne!(base.mesh_graph(), moved.mesh_graph(), "the move must change the hull");
+
+        let renderer = MjRenderer::builder().build(&base).unwrap();
+        renderer.update_mesh_from(&moved, 0).unwrap();
+        renderer.update_meshes_from(&moved).unwrap();
+        assert!(matches!(renderer.update_mesh_from(&extra, 0), Err(RendererError::IncompatibleModel)));
+    }
+
+    /// This is only run on Linux due to EGL requirements (winit cannot be used on multiple threads).
+    #[test]
+    #[cfg(target_os = "linux")]
+    #[should_panic(expected = "ASCII")]
+    fn test_overlay_non_ascii_panics() {
+        let model = MjModel::from_xml_string(MODEL).unwrap();
+        let mut renderer = MjRenderer::builder().build(&model).unwrap();
+        renderer.context.overlay(
+            MjtFont::mjFONT_NORMAL, MjtGridPos::mjGRID_TOPLEFT, MjrRectangle::default(), "\u{e9}", None
+        );
     }
 
     /// Decode a PNG file and return the raw pixel bytes.

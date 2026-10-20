@@ -141,7 +141,8 @@ fn is_left_out_field(field: &str) -> bool {
         || matches!(field, "names" | "names_map" | "nnames" | "npaths" | "nbuffer")
         || matches!(field, "mesh_extrema" | "mesh_polyvert" | "mesh_polymap")
         || matches!(field, "bvh_child" | "bvh_nodeid" | "oct_child" | "noct" | "mesh_octadr" | "mesh_octnum")
-        || matches!(field, "ngravcomp" | "jnt_actuatorid" | "tendon_actuatorid")
+        || matches!(field, "ngravcomp" | "jnt_actuatorid" | "tendon_actuatorid" | "body_simple" | "flex_centered")
+        || matches!(field, "mesh_face" | "mesh_facenormal" | "mesh_facetexcoord" | "mesh_graph")
 }
 
 /// Returns the base model XML with the mesh vertices moved, so the compiler builds another hull and tree.
@@ -298,6 +299,51 @@ fn test_the_asset_gate_refuses_a_mesh() {
         .replace("texcoord='0 0  1 0  0 1  1 1'", "texcoord='0 0  1 0  0 1  1 1  0 0'")).unwrap();
     assert!(!base.is_asset_compatible_with_model(&other));
     assert!(!base.is_compatible_with_model(&other));
+}
+
+/// A moved mesh vertex changes the face and hull content only, which every gate accepts.
+#[test]
+fn test_every_gate_accepts_a_moved_vertex() {
+    let xml = |vertex: &str| format!("<mujoco><asset><mesh name='m' vertex='0 0 0  1 0 0  0 1 0  0 0 1  \
+        {vertex}  .5 .5 -.3'/></asset><worldbody><geom type='mesh' mesh='m'/></worldbody></mujoco>");
+    let base = MjModel::from_xml_string(&xml("1 1 1")).unwrap();
+    let moved = MjModel::from_xml_string(&xml("1.2 1.1 1")).unwrap();
+    assert_ne!(base.mesh_graph(), moved.mesh_graph(), "the move must change the hull");
+
+    assert!(base.is_asset_compatible_with_model(&moved));
+    assert!(base.is_compatible_with_model(&moved));
+    assert!(MjvScene::new(&base, 100).is_compatible_with_model(&moved));
+
+    let mut data = MjData::new(&base);
+    data.step();
+    data.swap_model(&moved);
+    data.step();
+}
+
+/// A moved geom or flex vertex changes only flags that the compiler derives from floats,
+/// which every gate accepts.
+#[test]
+fn test_every_gate_accepts_a_moved_position() {
+    let base = base();
+    let edits = [
+        ("<geom name='g_sp' size='.03'/>", "<geom name='g_sp' pos='.2 0 0' size='.03'/>"),
+        ("vertex='0 0 0 0 0 0 0 0 0'", "vertex='.01 0 0 0 0 0 0 0 0'"),
+    ];
+    for (from, to) in edits {
+        let moved = MjModel::from_xml_string(&BASE_XML.replace(from, to)).unwrap();
+        assert!(
+            base.body_simple() != moved.body_simple() || base.flex_centered() != moved.flex_centered(),
+            "{to} must change a derived flag"
+        );
+        assert!(base.is_compatible_with_model(&moved), "{to}");
+        assert!(MjvScene::new(&base, 100).is_compatible_with_model(&moved), "{to}");
+        assert!(base.body("trunk").unwrap().try_view(&moved).is_ok(), "{to}");
+
+        let mut data = MjData::new(&base);
+        data.step();
+        data.swap_model(&moved);
+        data.step();
+    }
 }
 
 /// A saved and reloaded model passes every gate against the model it came from.

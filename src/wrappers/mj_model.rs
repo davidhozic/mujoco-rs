@@ -272,7 +272,7 @@ pub struct MjModelLayout {
 
 impl MjModelLayout {
     /// Reports whether the mesh, heightfield and texture parts of the two layouts are equal.
-    fn is_asset_equal(&self, other: &MjModelLayout) -> bool {
+    pub(crate) fn is_asset_equal(&self, other: &MjModelLayout) -> bool {
         self.asset_sizes == other.asset_sizes && self.asset_tables == other.asset_tables
     }
 }
@@ -318,8 +318,8 @@ macro_rules! model_layout {
     }};
 }
 
-// Left out: the name, path and buffer size fields, which only their own model reads; the hull, tree
-// and octree fields, which a recompile can reorder or resize; and the values set_const derives from floats.
+// Left out: the name, path and buffer size fields, which only their own model reads; the mesh content
+// and bvh node and octree fields, which a vertex can change; and the values derived from floats.
 model_layout! {
     asset_sizes: [
         nmesh,         nmeshvert,     nmeshnormal,   nmeshtexcoord,
@@ -352,8 +352,7 @@ model_layout! {
     asset_tables: [
         mesh_vertadr,      mesh_vertnum,      mesh_faceadr,      mesh_facenum,
         mesh_bvhadr,       mesh_bvhnum,       mesh_normaladr,    mesh_normalnum,
-        mesh_texcoordadr,  mesh_texcoordnum,  mesh_graphadr,     mesh_face,
-        mesh_facenormal,   mesh_facetexcoord, mesh_graph,        mesh_polynum,
+        mesh_texcoordadr,  mesh_texcoordnum,  mesh_graphadr,     mesh_polynum,
         mesh_polyadr,      mesh_polyvertadr,  mesh_polyvertnum,  mesh_polymapadr,
         mesh_polymapnum,   hfield_nrow,       hfield_ncol,       hfield_adr,
         tex_type,          tex_height,        tex_width,         tex_nchannel,
@@ -362,48 +361,48 @@ model_layout! {
     tables: [
         body_parentid,       body_rootid,         body_weldid,         body_mocapid,
         body_jntnum,         body_jntadr,         body_dofnum,         body_dofadr,
-        body_treeid,         body_geomnum,        body_geomadr,        body_simple,
-        body_plugin,         body_bvhadr,         body_bvhnum,         jnt_type,
-        jnt_qposadr,         jnt_dofadr,          jnt_bodyid,          dof_bodyid,
-        dof_jntid,           dof_parentid,        dof_treeid,          dof_Madr,
-        tree_bodyadr,        tree_bodynum,        tree_dofadr,         tree_dofnum,
-        geom_type,           geom_condim,         geom_bodyid,         geom_dataid,
-        geom_matid,          geom_plugin,         site_bodyid,         site_matid,
-        cam_bodyid,          cam_targetbodyid,    cam_resolution,      light_bodyid,
-        light_targetbodyid,  light_texid,         flex_condim,         flex_dim,
-        flex_matid,          flex_interp,         flex_cellnum,        flex_nodeadr,
-        flex_nodenum,        flex_vertadr,        flex_vertnum,        flex_edgeadr,
-        flex_edgenum,        flex_elemadr,        flex_elemnum,        flex_elemdataadr,
-        flex_stiffnessadr,   flex_elemedgeadr,    flex_bendingadr,     flex_shellnum,
-        flex_shelldataadr,   flex_evpairadr,      flex_evpairnum,      flex_texcoordadr,
-        flex_nodebodyid,     flex_vertbodyid,     flex_vertedgeadr,    flex_vertedgenum,
-        flex_vertedge,       flex_edge,           flex_edgeflap,       flex_elem,
-        flex_elemtexcoord,   flex_elemedge,       flex_elemlayer,      flex_shell,
-        flex_evpair,         efm0_dofid,          efm0_L_rownnz,       efm0_L_rowadr,
-        efm0_L_colind,       flex_rigid,          flex_centered,       flex_bvhadr,
-        flex_bvhnum,         flexedge_J_rownnz,   flexedge_J_rowadr,   flexedge_J_colind,
-        flexvert_J_rownnz,   flexvert_J_rowadr,   flexvert_J_colind,   skin_matid,
-        skin_vertadr,        skin_vertnum,        skin_texcoordadr,    skin_faceadr,
-        skin_facenum,        skin_boneadr,        skin_bonenum,        skin_face,
-        skin_bonevertadr,    skin_bonevertnum,    skin_bonebodyid,     skin_bonevertid,
-        mat_texid,           pair_dim,            pair_geom1,          pair_geom2,
-        eq_type,             eq_obj1id,           eq_obj2id,           eq_objtype,
-        tendon_adr,          tendon_num,          tendon_matid,        tendon_treenum,
-        tendon_treeid,       ten_J_rownnz,        ten_J_rowadr,        ten_J_colind,
-        actuator_trntype,    actuator_dyntype,    actuator_gaintype,   actuator_biastype,
-        actuator_ctrladr,    actuator_ctrlnum,    actuator_ctrlspec,   actuator_outadr,
-        actuator_outnum,     actuator_actadr,     actuator_actnum,     actuator_trnid,
-        actuator_history,    actuator_historyadr, actuator_plugin,     sensor_type,
-        sensor_objtype,      sensor_objid,        sensor_reftype,      sensor_refid,
-        sensor_intprm,       sensor_dim,          sensor_adr,          sensor_history,
-        sensor_historyadr,   sensor_plugin,       wrap_type,           wrap_objid,
-        plugin,              plugin_stateadr,     plugin_statenum,     plugin_attr,
-        plugin_attradr,      numeric_adr,         numeric_size,        text_adr,
-        text_size,           text_data,           tuple_adr,           tuple_size,
-        tuple_objtype,       tuple_objid,         B_rownnz,            B_rowadr,
-        B_colind,            M_rownnz,            M_rowadr,            M_colind,
-        mapM2M,              D_rownnz,            D_rowadr,            D_diag,
-        D_colind,            mapM2D,              mapD2M
+        body_treeid,         body_geomnum,        body_geomadr,        body_plugin,
+        body_bvhadr,         body_bvhnum,         jnt_type,            jnt_qposadr,
+        jnt_dofadr,          jnt_bodyid,          dof_bodyid,          dof_jntid,
+        dof_parentid,        dof_treeid,          dof_Madr,            tree_bodyadr,
+        tree_bodynum,        tree_dofadr,         tree_dofnum,         geom_type,
+        geom_condim,         geom_bodyid,         geom_dataid,         geom_matid,
+        geom_plugin,         site_bodyid,         site_matid,          cam_bodyid,
+        cam_targetbodyid,    cam_resolution,      light_bodyid,        light_targetbodyid,
+        light_texid,         flex_condim,         flex_dim,            flex_matid,
+        flex_interp,         flex_cellnum,        flex_nodeadr,        flex_nodenum,
+        flex_vertadr,        flex_vertnum,        flex_edgeadr,        flex_edgenum,
+        flex_elemadr,        flex_elemnum,        flex_elemdataadr,    flex_stiffnessadr,
+        flex_elemedgeadr,    flex_bendingadr,     flex_shellnum,       flex_shelldataadr,
+        flex_evpairadr,      flex_evpairnum,      flex_texcoordadr,    flex_nodebodyid,
+        flex_vertbodyid,     flex_vertedgeadr,    flex_vertedgenum,    flex_vertedge,
+        flex_edge,           flex_edgeflap,       flex_elem,           flex_elemtexcoord,
+        flex_elemedge,       flex_elemlayer,      flex_shell,          flex_evpair,
+        efm0_dofid,          efm0_L_rownnz,       efm0_L_rowadr,       efm0_L_colind,
+        flex_rigid,          flex_bvhadr,         flex_bvhnum,         flexedge_J_rownnz,
+        flexedge_J_rowadr,   flexedge_J_colind,   flexvert_J_rownnz,   flexvert_J_rowadr,
+        flexvert_J_colind,   skin_matid,          skin_vertadr,        skin_vertnum,
+        skin_texcoordadr,    skin_faceadr,        skin_facenum,        skin_boneadr,
+        skin_bonenum,        skin_face,           skin_bonevertadr,    skin_bonevertnum,
+        skin_bonebodyid,     skin_bonevertid,     mat_texid,           pair_dim,
+        pair_geom1,          pair_geom2,          eq_type,             eq_obj1id,
+        eq_obj2id,           eq_objtype,          tendon_adr,          tendon_num,
+        tendon_matid,        tendon_treenum,      tendon_treeid,       ten_J_rownnz,
+        ten_J_rowadr,        ten_J_colind,        actuator_trntype,    actuator_dyntype,
+        actuator_gaintype,   actuator_biastype,   actuator_ctrladr,    actuator_ctrlnum,
+        actuator_ctrlspec,   actuator_outadr,     actuator_outnum,     actuator_actadr,
+        actuator_actnum,     actuator_trnid,      actuator_history,    actuator_historyadr,
+        actuator_plugin,     sensor_type,         sensor_objtype,      sensor_objid,
+        sensor_reftype,      sensor_refid,        sensor_intprm,       sensor_dim,
+        sensor_adr,          sensor_history,      sensor_historyadr,   sensor_plugin,
+        wrap_type,           wrap_objid,          plugin,              plugin_stateadr,
+        plugin_statenum,     plugin_attr,         plugin_attradr,      numeric_adr,
+        numeric_size,        text_adr,            text_size,           text_data,
+        tuple_adr,           tuple_size,          tuple_objtype,       tuple_objid,
+        B_rownnz,            B_rowadr,            B_colind,            M_rownnz,
+        M_rowadr,            M_colind,            mapM2M,              D_rownnz,
+        D_rowadr,            D_diag,              D_colind,            mapM2D,
+        mapD2M
     ]
 }
 
@@ -2818,6 +2817,18 @@ mod tests {
 
         assert!(model.print_formatted(TMP_FILE, "%.2f").is_ok());
         fs::remove_file(TMP_FILE).unwrap();
+    }
+
+    #[test]
+    fn test_print_to_missing_directory_fails() {
+        use std::io::ErrorKind::NotFound;
+        const MISSING: &str = "/nonexistent_mujoco_rs_dir/print.txt";
+        let model = MjModel::from_xml_string(EXAMPLE_MODEL).unwrap();
+        let data = MjData::new(&model);
+        assert!(matches!(model.print(MISSING), Err(MjModelError::IoError { kind: NotFound, .. })));
+        assert!(matches!(model.print_formatted(MISSING, "%.2f"), Err(MjModelError::IoError { kind: NotFound, .. })));
+        assert!(matches!(data.print(MISSING), Err(MjDataError::IoError { kind: NotFound, .. })));
+        assert!(matches!(data.print_formatted(MISSING, "%.2f"), Err(MjDataError::IoError { kind: NotFound, .. })));
     }
 
     #[test]

@@ -2598,7 +2598,8 @@ impl MjsBody {
 #[derive(Debug, Clone)]
 pub struct MjFlexcompConfig<'a> {
     /// Flexcomp type: "grid", "box", "cylinder", "ellipsoid", "square", "disc", "circle", "mesh",
-    /// "gmsh" or "direct". MuJoCo falls back to "grid" for `None` and for any other string.
+    /// "gmsh" or "direct". MuJoCo falls back to "grid" for `None` and for any other string, but
+    /// can use "mesh" for `None` when `file` names a mesh asset of the specification.
     pub r#type: Option<&'a str>,
     /// Dimensionality of the flex object (1, 2, or 3); ignored for types that imply it.
     /// Defaults to MuJoCo's default (2).
@@ -2635,7 +2636,8 @@ pub struct MjFlexcompConfig<'a> {
     pub quat: Option<[f64; 4]>,
     /// Flexcomp origin used to build a volumetric mesh from a surface mesh.
     pub origin: Option<[f64; 3]>,
-    /// File to load the surface or volumetric mesh from.
+    /// File to load the surface or volumetric mesh from, or the name of a mesh asset of the
+    /// specification.
     pub file: Option<&'a str>,
     /// Virtual file system used to resolve the mesh file.
     pub vfs: Option<&'a MjVfs>,
@@ -2722,7 +2724,8 @@ impl MjsBody {
     /// quadratic `config.dof`, or with MuJoCo's error message when MuJoCo fails to create the
     /// flex. A valid `cellcount` has no zero entry and at most [`i32::MAX`] / 3 nodes. Unless
     /// `config.r#type` is "mesh", "gmsh" or "direct", it is `[1, 1, 1]`, or for a grid, has at
-    /// most as many nodes as the grid points.
+    /// most as many nodes as the grid points. A `None` type counts as a grid here, so pass
+    /// `Some("mesh")` for a mesh asset.
     ///
     /// # Panics
     /// Panics if `name` or any string in `config` contains an interior NUL byte.
@@ -2735,6 +2738,8 @@ impl MjsBody {
     {
         // TODO: MuJoCo upstream bug. mjCFlexcomp::Make sizes the point and node indices in int, and
         // sizes its pinned array from cellcount only for mesh, gmsh and direct. Remove once fixed.
+        // MuJoCo's mesh-asset lookup for a `None` type reads a name map that only a compile
+        // updates, so `None` keeps the grid limits.
         let multi_cell = matches!(config.r#type, Some("mesh" | "gmsh" | "direct"));
         // Mesh, gmsh and direct take their points from data, and a line uses count[0] only.
         let line = config.dim == 1 && matches!(config.r#type, None | Some("grid" | "circle"));
@@ -4566,6 +4571,24 @@ mod tests {
         assert_eq!(spec.body_iter().count(), 1);
     }
 
+    #[test]
+    #[ignore = "MuJoCo 3.12.0 crashes when it deletes a frame; enable on MuJoCo 3.16.0"]
+    fn test_delete_frame_deletes_subtree() {
+        let mut spec = MjSpec::new();
+        let world = spec.world_body_mut();
+        world.add_frame().with_name("f");
+        let body = world.add_body().with_frame("f").unwrap();
+        body.add_joint().with_name("j");
+        body.add_geom().with_size([0.1, 0.0, 0.0]);
+        world.add_geom().with_size([0.1, 0.0, 0.0]);
+
+        assert!(unsafe { spec.frame_mut("f").unwrap().delete() }.is_ok());
+        assert!(spec.frame_mut("f").is_none());
+        let model = spec.compile().unwrap();
+        // Only the world body and its own geom stay.
+        assert_eq!((model.nbody(), model.njnt(), model.ngeom()), (1, 0, 1));
+    }
+
     /// Tests the attachment mechanism (wrapper around [`mjs_attach`]).
     #[test]
     fn test_attachment() {
@@ -4788,6 +4811,19 @@ mod tests {
         let config = MjFlexcompConfig::default()
             .with_type("mesh").with_dof("trilinear").with_cellcount([1000, 1000, 1000]);
         let err = spec.world_body_mut().try_add_flexcomp("nodes", &config).unwrap_err();
+        assert!(
+            matches!(&err, MjEditError::InvalidParameter(msg) if msg.contains("cellcount")), "{err:?}"
+        );
+
+        // MuJoCo builds a grid for a mesh asset that the last compile did not name. The compiled
+        // mesh fills the name map; with an empty map MuJoCo searches linearly instead.
+        spec.add_mesh().with_name("early")
+            .set_uservert(&[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
+        spec.compile().unwrap();
+        spec.add_mesh().with_name("late");
+        let config = MjFlexcompConfig::default().with_dof("trilinear").with_count([3, 3, 1])
+            .with_cellcount([10, 10, 10]).with_file("late");
+        let err = spec.world_body_mut().try_add_flexcomp("late", &config).unwrap_err();
         assert!(
             matches!(&err, MjEditError::InvalidParameter(msg) if msg.contains("cellcount")), "{err:?}"
         );

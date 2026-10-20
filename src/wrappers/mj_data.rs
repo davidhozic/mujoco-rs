@@ -155,8 +155,9 @@ impl<M: ModelType> MjData<M> {
     /// This exists because [`MjModelLayout`] is overly strict in order to ease the crate's maintenance.
     ///
     /// # Safety
-    /// The model ``m`` must be compatible such that the expected memory
-    /// structure is preserved for the needed use.
+    /// The `model` must be compatible such that the expected memory
+    /// structure is preserved for the needed use. Each plugin instance must also keep its plugin
+    /// (an equal `plugin` table), because this data holds the state that plugin created.
     pub unsafe fn swap_model_unchecked(&mut self, model: M) -> M {
         std::mem::replace(&mut self.model, model)
     }
@@ -1864,7 +1865,8 @@ impl<M: ModelTypeMut> MjData<M> {
     /// 
     /// It is the caller's responsibility to ensure that every size of a changed or swapped model
     /// stays equal, and that every index, count and address table stays in bounds for the buffers
-    /// of this data, as for [`MjData::swap_model_unchecked`].
+    /// of this data, and that each plugin instance keeps its plugin, as for
+    /// [`MjData::swap_model_unchecked`].
     /// 
     /// For safe swapping consider [`MjData::swap_model`] or [`MjData::try_swap_model`] for a fallible alternative.
     ///

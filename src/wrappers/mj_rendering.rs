@@ -325,6 +325,12 @@ impl MjrContext {
         self.layout == *model.layout()
     }
 
+    /// Reports whether `model` has the mesh, heightfield and texture part of the [`MjModelLayout`]
+    /// of the model that created this context.
+    pub fn is_asset_compatible_with_model(&self, model: &MjModel) -> bool {
+        self.layout.is_asset_equal(model.layout())
+    }
+
     /// Reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjrContext {
         &self.ffi

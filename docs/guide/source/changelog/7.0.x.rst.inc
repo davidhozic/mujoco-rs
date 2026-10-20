@@ -31,6 +31,8 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>tuple_objtype_mut` is now an ``unsafe fn``.
   The related ``objtype`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjTupleModelViewMut` is now
   :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
+- (runtime-breaking) The ``zero`` method of a mutable view no longer zeroes the fields that are now
+  ``PointerViewUnsafeMut`` (above). Write these fields through the unsafe view if you need them zeroed.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>hfield_size_mut` is now an ``unsafe fn``.
   A size that was not positive and finite made a ray cast read out of bounds.
 - Removed ``append_cubefiles`` and ``append_textures`` from
@@ -71,10 +73,10 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
   :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_contact_force` :sup:`new`.
 - (runtime-breaking) :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`
   and the ``Info`` views now compare every size and every integer table that no safe accessor
-  writes, apart from the names, the paths, the buffer size, the collision hulls and trees and the
-  values derived from floats, so they refuse more models, for example a model in which a geom uses
-  a different material. ``is_asset_compatible_with_model`` compares the mesh, height field and
-  texture part of them. Before, a swapped model could make a step or a plugin read or write out of
+  writes, apart from the names, the paths, the buffer size, the mesh faces and hulls, the bounding
+  volume and octree nodes and the values derived from floats, so they refuse more models, for
+  example a model in which a geom uses a different material. ``is_asset_compatible_with_model`` compares the mesh, height
+  field and texture part of them. Before, a swapped model could make a step or a plugin read or write out of
   bounds.
 - (runtime-breaking) :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_model`
   and ``is_compatible_with_scene`` now refuse more models, and ``MjvScene::update`` panics on each of
@@ -165,6 +167,8 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 
   - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>is_compatible_with_model` :sup:`new`
     reports whether a context can serve another model.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_rendering::<struct>MjrContext::<method>is_asset_compatible_with_model` :sup:`new`
+    reports whether a context can take an asset upload from another model.
 
 *Simulation*
 
