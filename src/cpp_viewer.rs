@@ -13,7 +13,6 @@ use log::{debug, warn};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::ffi::CString;
 
 #[repr(C)]
 struct mujoco_Simulate { _unused: [u8; 0] }
@@ -41,11 +40,12 @@ pub struct MjCppViewerSharedState<M: ModelTypeMut> {
     simulate: Option<*mut mujoco_Simulate>,
     data: MjData<M>,
     running: Arc<AtomicBool>,
+    user_geoms: Vec<MjvGeom>,
 }
 
 impl<M: ModelTypeMut> MjCppViewerSharedState<M> {
     fn new(simulate: *mut mujoco_Simulate, data: MjData<M>, running: Arc<AtomicBool>) -> Self {
-        Self { simulate: Some(simulate), data, running }
+        Self { simulate: Some(simulate), data, running, user_geoms: Vec::new() }
     }
 
     // Called by `MjViewerCpp::drop` before the Simulate instance is destroyed, so later syncs
@@ -74,6 +74,23 @@ impl<M: ModelTypeMut> MjCppViewerSharedState<M> {
     /// Returns `true` when the viewer is still running (is open) and `false` otherwise.
     pub fn running(&self) -> bool {
         self.running.load(Ordering::Relaxed)
+    }
+
+    /// Returns a slice of additional user geoms that will be drawn into the scene,
+    /// in addition to the actual scene elements.
+    /// Use [`Self::user_geoms_mut`] for a mutable reference to the actual [`Vec`] of the data.
+    pub fn user_geoms(&self) -> &[MjvGeom] {
+        &self.user_geoms
+    }
+
+    /// Returns a mutable reference to the [`Vec`] holding [`MjvGeom`] objects which
+    /// are drawn upon each render call to the C++ (Simulate) viewer.
+    ///
+    /// # Safety
+    /// Every geom must be valid for rendering with the viewer's model: each index field
+    /// (`dataid`, `matid`, `texid`, `objid`) is `-1` or in range of its model array.
+    pub unsafe fn user_geoms_mut(&mut self) -> &mut Vec<MjvGeom> {
+        &mut self.user_geoms
     }
 
     /// Syncs the simulation state with the C++ viewer.
@@ -106,6 +123,11 @@ pub struct MjViewerCpp<M: ModelTypeMut> {
     state: Arc<Mutex<MjCppViewerSharedState<M>>>,
     running: Arc<AtomicBool>,
 
+    /* Fields used by C++ Simulate. Needed here due to Simulate requiring pointers to them.
+       We could potentially have them owned by the C++ viewer, however, that would then be a
+       greater refactor. The latter could cause more merge conflicts when upgrading to newer
+       MuJoCo versions, thus I recommend you do not change it, to whomever decides to
+       attempt this in the future :) .*/
     user_scn: Box<MjvScene>,
     _cam: Box<MjvCamera>,
     _opt: Box<MjvOption>,
@@ -116,11 +138,6 @@ impl<M: ModelTypeMut> MjViewerCpp<M> {
     /// Returns whether the viewer window is still open.
     pub fn running(&self) -> bool {
         self.running.load(Ordering::Relaxed)
-    }
-
-    /// Returns a mutable reference to the user scene for drawing custom visual-only geoms.
-    pub fn user_scn_mut(&mut self) -> &mut MjvScene {
-        &mut self.user_scn
     }
 
     /// Launches a wrapper around MuJoCo's C++ viewer. The `max_user_geom` parameter
@@ -163,11 +180,9 @@ impl<M: ModelTypeMut> MjViewerCpp<M> {
             let sim = sim_usize as *mut mujoco_Simulate;
             let m = model_usize as *mut mjModel_;
             let d = data_usize as *mut mjData_;
-            let c_filename = CString::new("file.xml").unwrap();
             // SAFETY: m and d point into the heap allocations of `data`, which the returned
             // viewer owns, and `M: ModelTypeMut` gives it exclusive access to the model.
-            // c_filename outlives this call.
-            unsafe { mujoco_cSimulate_Load(sim, m, d, c_filename.as_ptr()) };
+            unsafe { mujoco_cSimulate_Load(sim, m, d, c"file.xml".as_ptr()) };
         });
 
         while !load_thread.is_finished() {
@@ -193,8 +208,32 @@ impl<M: ModelTypeMut> MjViewerCpp<M> {
 
     /// Returns the shared state that holds the simulation data.
     /// Clone the [`Arc`] to step and sync the simulation from another thread.
-    pub fn state(&mut self) -> &Arc<Mutex<MjCppViewerSharedState<M>>> {
+    pub fn state(&self) -> &Arc<Mutex<MjCppViewerSharedState<M>>> {
         &self.state
+    }
+
+    /// Synchronizes user-added visual-only geometries ([`MjvGeom`]) with the
+    /// internal user scene, which MuJoCo's C++ Simulate viewer uses for the
+    /// actual additional rendering of user geometries.
+    /// 
+    /// # Note
+    /// This method clears the user-geom buffer contained in the shared state.
+    ///
+    /// # Panics
+    /// Panics when the shared state holds more geoms than the `max_user_geom` given to
+    /// [`MjViewerCpp::launch_passive`].
+    pub fn sync_user_geoms(&mut self) {
+        let geoms = &mut self.state.lock_unpoison().user_geoms;
+        let n_geom = geoms.len();
+
+        assert!(n_geom <= self.user_scn.maxgeom() as usize, "too many user geoms");
+
+        // SAFETY: `n_geom <= maxgeom`.
+        unsafe {
+            self.user_scn.ffi_mut().ngeom = n_geom as i32;
+            self.user_scn.geoms_mut()[..n_geom].clone_from_slice(geoms);
+            geoms.clear();
+        }
     }
 
     /// Renders the simulation.
@@ -207,6 +246,7 @@ impl<M: ModelTypeMut> MjViewerCpp<M> {
         if !self.running() {
             return Err("render called after viewer has been closed!");
         }
+
         // SAFETY: self.sim is valid until drop. The viewer is not `Send`, so this runs on the
         // main thread that `launch_passive` was called on.
         if unsafe { mujoco_cSimulate_RenderStep(self.sim) } == 0 {
