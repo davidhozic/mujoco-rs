@@ -92,6 +92,12 @@ pub type MjtOrientation = mjtOrientation;
 
 /// Compiler timing categories, used in `mjs_getTimer`.
 pub type MjtCTimer = mjtCTimer;
+
+/// Physical policy of a frame's scale.
+pub type MjtScaling = mjtScaling;
+
+/// Actuator element, which owns its shortcut parameters.
+pub type MjtActuator = mjtActuator;
 /*******************************************************/
 
 /* Capability markers (regular in-tree vs default special case) */
@@ -165,13 +171,15 @@ impl MjsCompiler {
         [ffi, ffi_mut] usethread: bool;               "use multiple threads to speed up compiler.";
         [ffi, ffi_mut] fusestatic: bool;              "fuse static bodies with parent.";
         [ffi, ffi_mut] saveinertial: bool;            "save explicit inertial clause for all bodies to XML.";
+        [ffi, ffi_mut] savecompiled: bool;            "save values as compiled, not as written in the spec.";
+        [ffi, ffi_mut] savecanonical: bool;           "save quaternions and radians, not the notation of the spec.";
         [ffi, ffi_mut] alignfree: bool;               "align free joints with inertial frame.";
     ]}
 
     getter_setter! {[&] with, get, set, [
         [ffi, ffi_mut] boundmass: f64;                "enforce minimum body mass.";
         [ffi, ffi_mut] boundinertia: f64;             "enforce minimum body diagonal inertia.";
-        [ffi, ffi_mut] settotalmass: f64;             "rescale masses and inertias; <=0: ignore.";
+        [ffi, ffi_mut] settotalmass: f64;             "(deprecated) rescale masses and inertias; <=0: ignore.";
     ]}
 
     getter_setter! {[&] with, get, set, [
@@ -1011,6 +1019,7 @@ impl<Capability> MjsSite<Capability> {
 
     string_set_get_with! {[&]
         material; "name of material.";
+        meshname; "mesh attached to site.";
     }
 }
 
@@ -1206,6 +1215,14 @@ impl MjsFrame {
             [ffi, ffi_mut] pos: &[f64; 3];               "frame position.";
             [ffi, ffi_mut] quat: &[f64; 4];              "frame orientation.";
             [ffi, ffi_mut] alt: &MjsOrientation;         "alternative orientation.";
+            [ffi, ffi_mut] scale: &[f64; 3];             "scale of the frame's contents.";
+        ]
+    }
+
+    getter_setter! {
+        [&] with, get, set, [
+            [ffi, ffi_mut] scaling: MjtScaling;          "physical policy of the scale.";
+            [ffi, ffi_mut] massscale: f64;               "mass factor of the contents; 0: ratio of volumes.";
         ]
     }
 
@@ -1267,6 +1284,7 @@ impl<Capability> MjsActuator<Capability> {
     nested_handle!(plugin: MjsPluginReference; "actuator plugin.");
 
     getter_setter!([&] with, get, set, [
+        [ffi, ffi_mut] type_ + _: MjtActuator;        "element the actuator is written with.";
         [ffi, ffi_mut] gaintype: MjtGain;             "gain type.";
         [ffi, ffi_mut] biastype: MjtBias;             "bias type.";
         [ffi, ffi_mut] dyntype: MjtDyn;               "dyn type.";
@@ -1737,12 +1755,12 @@ impl<Capability> MjsFlex<Capability> {
             [ffi, ffi_mut] thickness: f64;          "thickness (2D only).";
             [ffi, ffi_mut] elastic2d: i32;          "2D passive forces; 0: none, 1: bending, 2: stretching, 3: both.";
             [ffi, ffi_mut] order: i32;              "interpolation order (1: trilinear, 2: quadratic).";
+            [ffi, ffi_mut] elastic3d: i32;          "experimental 3D material (mjSpec only); 0: Saint Venant-Kirchhoff, 1: Stable Neo-Hookean.";
         ]
     }
 
     getter_setter! {
         [&] with, get, set, [
-            [ffi, ffi_mut] internal: bool;       "enable internal collisions.";
             [ffi, ffi_mut] flatskin: bool;       "render flex skin with flat shading.";
             [ffi, ffi_mut] passive: bool;        "mode for passive collisions.";
         ]        
@@ -2241,6 +2259,8 @@ impl<Capability> MjsMesh<Capability> {
         usernormal: f32;             "user normal data.";
         usertexcoord: f32;           "user texcoord data.";
         userface: i32;               "user vertex indices.";
+        usernode: f64;               "user volume node coordinates.";
+        usertet: i32;                "user tetrahedral cell indices.";
     }
 
     vec_set! {
@@ -2859,6 +2879,7 @@ impl MjsBody {
             [ffi, ffi_mut] mocap: bool;                   "whether this is a mocap body.";
             [ffi, ffi_mut] explicitinertial: bool;        "whether to save the body with explicit inertial clause.";
             [ffi, ffi_mut] simple: bool;                  "simple body optimization (false: disabled, true: auto).";
+            [ffi, ffi_mut] fuse: bool;                    "fuse with parent when static (0: false, 1: auto).";
         ]
     }
 

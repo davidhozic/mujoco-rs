@@ -124,14 +124,14 @@ writable_tables! {
     geom_priority,         geom_sameframe,        site_type,             site_group,
     site_sameframe,        cam_mode,              cam_projection,        cam_output,
     light_mode,            light_type,            light_castshadow,      light_active,
-    flex_contype,          flex_conaffinity,      flex_priority,         flex_internal,
-    flex_selfcollide,      flex_activelayers,     flex_passive,          flex_group,
-    flex_edgeequality,     flexedge_rigid,        flex_flatskin,         skin_group,
-    tex_colorspace,        tex_data,              mat_texuniform,        pair_signature,
-    exclude_signature,     eq_active0,            tendon_group,          tendon_limited,
-    tendon_actfrclimited,  actuator_actlimited,   actuator_actearly,     actuator_group,
-    actuator_forcelimited, actuator_ctrllimited,  sensor_datatype,       sensor_needstage,
-    bvh_depth,             oct_depth,             paths
+    flex_contype,          flex_conaffinity,      flex_priority,         flex_selfcollide,
+    flex_activelayers,     flex_passive,          flex_group,            flex_edgeequality,
+    flexedge_rigid,        flex_flatskin,         skin_group,            tex_colorspace,
+    tex_data,              mat_texuniform,        pair_signature,        exclude_signature,
+    eq_active0,            tendon_group,          tendon_limited,        tendon_actfrclimited,
+    actuator_actlimited,   actuator_actearly,     actuator_group,        actuator_forcelimited,
+    actuator_ctrllimited,  sensor_datatype,       sensor_needstage,      bvh_depth,
+    oct_depth,             paths
 }
 
 /// Reports whether `field` is a name field, a path address or count, the buffer size, a hull or tree

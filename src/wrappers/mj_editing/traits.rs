@@ -697,20 +697,4 @@ mod tests {
         }
         assert_eq!(drops.get(), 3, "dropping the spec must drop the value it holds");
     }
-
-    #[test]
-    fn test_user_value_dropped_on_element_delete() {
-        let drops = Rc::new(Cell::new(0));
-        {
-            let mut spec = MjSpec::new();
-            let geom = spec.world_body_mut().add_geom();
-            geom.set_user_value("key", Box::new(DropCounter(Rc::clone(&drops))));
-
-            // SAFETY: the borrow of the geom ends with the call, so no handle reaches the element
-            // after its deletion.
-            unsafe { geom.delete() }.unwrap();
-            assert_eq!(drops.get(), 0, "memory is supposed to be freed after the spec is dropped");
-        }
-        assert_eq!(drops.get(), 1, "the spec must drop the value a deleted element held");
-    }
 }

@@ -335,8 +335,8 @@ model_layout! {
         ngeom,          nsite,          ncam,           nlight,
         nflex,          nflexnode,      nflexvert,      nflexedge,
         nflexelem,      nflexelemdata,  nflexstiffness, nflexbending,
-        nefm0dof,       nefm0L,         nflexelemedge,  nflexshelldata,
-        nflexevpair,    nflextexcoord,  nJfe,           nJfv,
+        nefm0dof,       nefm0L,         nefmCvert,      nflexelemedge,
+        nflexshelldata, nflextexcoord,  nJfe,           nJfv,
         nskin,          nskinvert,      nskintexvert,   nskinface,
         nskinbone,      nskinbonevert,  nmat,           npair,
         nexclude,       neq,            ntendon,        nJten,
@@ -367,42 +367,41 @@ model_layout! {
         dof_parentid,        dof_treeid,          dof_Madr,            tree_bodyadr,
         tree_bodynum,        tree_dofadr,         tree_dofnum,         geom_type,
         geom_condim,         geom_bodyid,         geom_dataid,         geom_matid,
-        geom_plugin,         site_bodyid,         site_matid,          cam_bodyid,
-        cam_targetbodyid,    cam_resolution,      light_bodyid,        light_targetbodyid,
-        light_texid,         flex_condim,         flex_dim,            flex_matid,
-        flex_interp,         flex_cellnum,        flex_nodeadr,        flex_nodenum,
-        flex_vertadr,        flex_vertnum,        flex_edgeadr,        flex_edgenum,
-        flex_elemadr,        flex_elemnum,        flex_elemdataadr,    flex_stiffnessadr,
-        flex_elemedgeadr,    flex_bendingadr,     flex_shellnum,       flex_shelldataadr,
-        flex_evpairadr,      flex_evpairnum,      flex_texcoordadr,    flex_nodebodyid,
-        flex_vertbodyid,     flex_vertedgeadr,    flex_vertedgenum,    flex_vertedge,
-        flex_edge,           flex_edgeflap,       flex_elem,           flex_elemtexcoord,
-        flex_elemedge,       flex_elemlayer,      flex_shell,          flex_evpair,
-        efm0_dofid,          efm0_L_rownnz,       efm0_L_rowadr,       efm0_L_colind,
-        flex_rigid,          flex_bvhadr,         flex_bvhnum,         flexedge_J_rownnz,
-        flexedge_J_rowadr,   flexedge_J_colind,   flexvert_J_rownnz,   flexvert_J_rowadr,
-        flexvert_J_colind,   skin_matid,          skin_vertadr,        skin_vertnum,
-        skin_texcoordadr,    skin_faceadr,        skin_facenum,        skin_boneadr,
-        skin_bonenum,        skin_face,           skin_bonevertadr,    skin_bonevertnum,
-        skin_bonebodyid,     skin_bonevertid,     mat_texid,           pair_dim,
-        pair_geom1,          pair_geom2,          eq_type,             eq_obj1id,
-        eq_obj2id,           eq_objtype,          tendon_adr,          tendon_num,
-        tendon_matid,        tendon_treenum,      tendon_treeid,       ten_J_rownnz,
-        ten_J_rowadr,        ten_J_colind,        actuator_trntype,    actuator_dyntype,
-        actuator_gaintype,   actuator_biastype,   actuator_ctrladr,    actuator_ctrlnum,
-        actuator_ctrlspec,   actuator_outadr,     actuator_outnum,     actuator_actadr,
-        actuator_actnum,     actuator_trnid,      actuator_history,    actuator_historyadr,
-        actuator_plugin,     sensor_type,         sensor_objtype,      sensor_objid,
-        sensor_reftype,      sensor_refid,        sensor_intprm,       sensor_dim,
-        sensor_adr,          sensor_history,      sensor_historyadr,   sensor_plugin,
-        wrap_type,           wrap_objid,          plugin,              plugin_stateadr,
-        plugin_statenum,     plugin_attr,         plugin_attradr,      numeric_adr,
-        numeric_size,        text_adr,            text_size,           text_data,
-        tuple_adr,           tuple_size,          tuple_objtype,       tuple_objid,
-        B_rownnz,            B_rowadr,            B_colind,            M_rownnz,
-        M_rowadr,            M_colind,            mapM2M,              D_rownnz,
-        D_rowadr,            D_diag,              D_colind,            mapM2D,
-        mapD2M
+        geom_plugin,         site_bodyid,         site_dataid,         site_matid,
+        cam_bodyid,          cam_targetbodyid,    cam_resolution,      light_bodyid,
+        light_targetbodyid,  light_texid,         flex_condim,         flex_dim,
+        flex_matid,          flex_interp,         flex_cellnum,        flex_nodeadr,
+        flex_nodenum,        flex_vertadr,        flex_vertnum,        flex_edgeadr,
+        flex_edgenum,        flex_elemadr,        flex_elemnum,        flex_elemdataadr,
+        flex_stiffnessadr,   flex_elemedgeadr,    flex_bendingadr,     flex_shellnum,
+        flex_shelldataadr,   flex_texcoordadr,    flex_nodebodyid,     flex_vertbodyid,
+        flex_vertedgeadr,    flex_vertedgenum,    flex_vertedge,       flex_edge,
+        flex_edgeflap,       flex_elem,           flex_elemtexcoord,   flex_elemedge,
+        flex_elemlayer,      flex_shell,          efm0_dofid,          efm0_L_rownnz,
+        efm0_L_rowadr,       efm0_L_colind,       efmC_perm,           flex_rigid,
+        flex_bvhadr,         flex_bvhnum,         flexedge_J_rownnz,   flexedge_J_rowadr,
+        flexedge_J_colind,   flexvert_J_rownnz,   flexvert_J_rowadr,   flexvert_J_colind,
+        skin_matid,          skin_vertadr,        skin_vertnum,        skin_texcoordadr,
+        skin_faceadr,        skin_facenum,        skin_boneadr,        skin_bonenum,
+        skin_face,           skin_bonevertadr,    skin_bonevertnum,    skin_bonebodyid,
+        skin_bonevertid,     mat_texid,           pair_dim,            pair_geom1,
+        pair_geom2,          eq_type,             eq_obj1id,           eq_obj2id,
+        eq_objtype,          tendon_adr,          tendon_num,          tendon_matid,
+        tendon_treenum,      tendon_treeid,       ten_J_rownnz,        ten_J_rowadr,
+        ten_J_colind,        actuator_trntype,    actuator_dyntype,    actuator_gaintype,
+        actuator_biastype,   actuator_ctrladr,    actuator_ctrlnum,    actuator_ctrlspec,
+        actuator_outadr,     actuator_outnum,     actuator_actadr,     actuator_actnum,
+        actuator_trnid,      actuator_history,    actuator_historyadr, actuator_plugin,
+        sensor_type,         sensor_objtype,      sensor_objid,        sensor_reftype,
+        sensor_refid,        sensor_intprm,       sensor_dim,          sensor_adr,
+        sensor_history,      sensor_historyadr,   sensor_plugin,       wrap_type,
+        wrap_objid,          plugin,              plugin_stateadr,     plugin_statenum,
+        plugin_attr,         plugin_attradr,      numeric_adr,         numeric_size,
+        text_adr,            text_size,           text_data,           tuple_adr,
+        tuple_size,          tuple_objtype,       tuple_objid,         B_rownnz,
+        B_rowadr,            B_colind,            M_rownnz,            M_rowadr,
+        M_colind,            mapM2M,              D_rownnz,            D_rowadr,
+        D_diag,              D_colind,            mapM2D,              mapD2M
     ]
 }
 
@@ -503,7 +502,7 @@ impl MjModel {
     /// Returns [`MjModelError::LoadFailed`] if MuJoCo fails to parse the MJB buffer.
     /// # Panics
     /// When the linked MuJoCo version does not match the expected from MuJoCo-rs, or when `data`
-    /// is longer than [`i32::MAX`] bytes.
+    /// is longer than [`MjtSize::MAX`] bytes.
     pub fn from_buffer(data: &[u8]) -> Result<Self, MjModelError> {
         assert_mujoco_version();
         unsafe {
@@ -804,7 +803,7 @@ impl MjModel {
     }
 
     info_method! { Model, site,
-        [r#type: 1, bodyid: 1, matid: 1,
+        [r#type: 1, bodyid: 1, dataid: 1, matid: 1,
         group: 1, sameframe: 1, size: 3,
         pos: 3, quat: 4, rgba: 4],
         [user: nuser_site],
@@ -930,7 +929,7 @@ impl MjModel {
         }
         unsafe { mj_saveModel(
             self.ffi(), ptr::null(),
-            buffer.as_mut_ptr() as *mut c_void, buffer.len() as i32
+            buffer.as_mut_ptr() as *mut c_void, checked_c_len(buffer.len())
         ) };
         Ok(())
     }
@@ -1409,9 +1408,9 @@ impl MjModel {
         [ffi] nflexbending: MjtSize; "number of bending parameters in all flexes";
         [ffi] nefm0dof: MjtSize; "number of dofs covered by the constant metric factor.";
         [ffi] nefm0L: MjtSize; "number of non-zeros in the constant metric factor.";
+        [ffi] nefmCvert: MjtSize; "number of sparse metric factor ordering slots.";
         [ffi] nflexelemedge: MjtSize; "number of element edge ids in all flexes.";
         [ffi] nflexshelldata: MjtSize; "number of shell fragment vertex ids in all flexes.";
-        [ffi] nflexevpair: MjtSize; "number of element-vertex pairs in all flexes.";
         [ffi] nflextexcoord: MjtSize; "number of vertices with texture coordinates.";
         [ffi] nJfe: MjtSize; "number of non-zeros in sparse flexedge Jacobian matrix.";
         [ffi] nJfv: MjtSize; "number of non-zeros in sparse flexvert Jacobian matrix.";
@@ -1596,6 +1595,7 @@ impl MjModel {
         geom_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().ngeom],
         site_type: &[MjtGeomBase [force]; "geom type for rendering"; ffi().nsite],
         (mut = unsafe) site_bodyid: &[i32; "id of site's body"; ffi().nsite],
+        (mut = unsafe) site_dataid: &[i32; "id of site's mesh; -1: none"; ffi().nsite],
         (mut = unsafe) site_matid: &[i32; "material id for rendering; -1: none"; ffi().nsite],
         site_group: &[i32; "group for visibility"; ffi().nsite],
         site_sameframe: &[MjtSameFrame [force]; "same frame as body"; ffi().nsite],
@@ -1650,7 +1650,6 @@ impl MjModel {
         flex_friction: &[[MjtNum; 3] [force]; "friction for (slide, spin, roll)"; ffi().nflex],
         flex_margin: &[MjtNum; "geometric inflation for contact"; ffi().nflex],
         flex_gap: &[MjtNum; "additional contact detection buffer"; ffi().nflex],
-        flex_internal: &[MjtBool; "internal flex collision enabled"; ffi().nflex],
         flex_selfcollide: &[MjtFlexSelf [force]; "self collision mode"; ffi().nflex],
         flex_activelayers: &[i32; "number of active element layers, 3D only"; ffi().nflex],
         flex_passive: &[i32; "passive collisions enabled"; ffi().nflex],
@@ -1673,8 +1672,6 @@ impl MjModel {
         (mut = unsafe) flex_bendingadr: &[i32; "first bending data address"; ffi().nflex],
         (mut = unsafe) flex_shellnum: &[i32; "number of shells"; ffi().nflex],
         (mut = unsafe) flex_shelldataadr: &[i32; "first shell data address"; ffi().nflex],
-        (mut = unsafe) flex_evpairadr: &[i32; "first evpair address"; ffi().nflex],
-        (mut = unsafe) flex_evpairnum: &[i32; "number of evpairs"; ffi().nflex],
         (mut = unsafe) flex_texcoordadr: &[i32; "address in flex_texcoord; -1: none"; ffi().nflex],
         (mut = unsafe) flex_nodebodyid: &[i32; "node body ids"; ffi().nflexnode],
         (mut = unsafe) flex_vertbodyid: &[i32; "vertex body ids"; ffi().nflexvert],
@@ -1688,7 +1685,6 @@ impl MjModel {
         (mut = unsafe) flex_elemedge: &[i32; "element edge ids"; ffi().nflexelemedge],
         (mut = unsafe) flex_elemlayer: &[i32; "element distance from surface, 3D only"; ffi().nflexelem],
         (mut = unsafe) flex_shell: &[i32; "shell fragment vertex ids (dim per frag)"; ffi().nflexshelldata],
-        (mut = unsafe) flex_evpair: &[[i32; 2] [force]; "(element, vertex) collision pairs"; ffi().nflexevpair],
         flex_vert: &[[MjtNum; 3] [force]; "vertex positions in local body frames"; ffi().nflexvert],
         flex_vert0: &[[MjtNum; 3] [force]; "vertex positions in qpos0 on [0, 1]^d"; ffi().nflexvert],
         flex_vertmetric: &[[MjtNum; 4] [force]; "inverse of reference shape matrix"; ffi().nflexvert],
@@ -1705,6 +1701,7 @@ impl MjModel {
         (mut = unsafe) efm0_L_rowadr: &[i32; "constant metric factor row addresses"; ffi().nefm0dof],
         (mut = unsafe) efm0_L_colind: &[i32; "constant metric factor column indices"; ffi().nefm0L],
         efm0_L: &[MjtNum; "factor of M + (dt^2+dt*d)*K_bend"; ffi().nefm0L],
+        (mut = unsafe) efmC_perm: &[i32; "sparse factor order: vertex dof or -1"; ffi().nefmCvert],
         flex_damping: &[MjtNum; "Rayleigh's damping coefficient"; ffi().nflex],
         flex_edgestiffness: &[MjtNum; "edge stiffness"; ffi().nflex],
         flex_edgedamping: &[MjtNum; "edge damping"; ffi().nflex],
@@ -2245,6 +2242,7 @@ info_with_view!(Model, site,
 	 [site_] rgba: f32,
 	 [site_] r#type: MjtGeomBase [force]],
 	[[site_] bodyid: i32,
+	 [site_] dataid: i32,
 	 [site_] matid: i32],
 	[]);
 

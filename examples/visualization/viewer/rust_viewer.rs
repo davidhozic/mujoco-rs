@@ -68,7 +68,7 @@ fn main() {
 
 const EXAMPLE_MODEL: &str = stringify! {
 <mujoco model="ball_trampoline">
-  <option solver="CG" integrator="implicitfast"/>
+  <option solver="CG" integrator="discrete"/>
 
   <statistic center="0 0 0.8" extent="2.2"/>
 
