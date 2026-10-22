@@ -607,6 +607,82 @@ impl MjSpec {
         }
     }
 
+    /// Fuse the static bodies of the spec with their parents. A body without joints is replaced by
+    /// a frame in its parent, which has the pose of the body and holds its geoms, sites, cameras,
+    /// lights, frames and child bodies, in the same coordinates as before.
+    /// The inertia of the body is added to that of the parent. The compiled model has the same
+    /// kinematics and dynamics, with fewer bodies. Bodies which cannot be fused without changing
+    /// the model are kept.
+    ///
+    /// Wraps [`mjs_fuseStatic`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::CompileFailed`] with MuJoCo's error message if the fuse fails.
+    pub fn fuse_static(&mut self) -> Result<(), MjEditError> {
+        self.fuse_static_impl(None)
+    }
+
+    /// Same as [`MjSpec::fuse_static`] except it uses a virtual filesystem from which asset files are read.
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::CompileFailed`] with MuJoCo's error message if the fuse fails.
+    pub fn fuse_static_with_vfs(&mut self, vfs: &MjVfs) -> Result<(), MjEditError> {
+        self.fuse_static_impl(Some(vfs))
+    }
+
+    fn fuse_static_impl(&mut self, vfs: Option<&MjVfs>) -> Result<(), MjEditError> {
+        // SAFETY: MjSpec's pointer can't be invalid here, nor can MjVfs's.
+        let n_fused_bodies = unsafe { mjs_fuseStatic(
+            self.ffi_mut(),
+            vfs.map_or(ptr::null(), |vfs| vfs.ffi())
+        ) };
+
+        // TODO: in future MuJoCo versions (probably 3.17.0+; depends on MuJoCo versioning), this number
+        // will be the number of fused geoms. Currently, this is ignored.
+        if n_fused_bodies == -1 {
+            // SAFETY: error is guaranteed (by C code) to be set.
+            return Err(MjEditError::CompileFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }));
+        }
+
+        Ok(())
+    }
+
+    /// Discard the elements of the spec which are only visual: materials, textures, geoms which
+    /// do not collide, and meshes which are then not used. An element which another element
+    /// refers to by name is kept. Inertia, which a body infers from discarded geoms, becomes its
+    /// explicit inertial.
+    ///
+    /// Wraps [`mjs_discardVisual`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::CompileFailed`] with MuJoCo's error message if the discard fails.
+    pub fn discard_visual(&mut self) -> Result<(), MjEditError> {
+        self.discard_visual_impl(None)
+    }
+
+    /// Same as [`MjSpec::discard_visual`] except it uses a virtual filesystem from which asset files are read.
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::CompileFailed`] with MuJoCo's error message if the discard fails.
+    pub fn discard_visual_with_vfs(&mut self, vfs: &MjVfs) -> Result<(), MjEditError> {
+        self.discard_visual_impl(Some(vfs))
+    }
+
+    fn discard_visual_impl(&mut self, vfs: Option<&MjVfs>) -> Result<(), MjEditError> {
+        // SAFETY: MjSpec's pointer can't be invalid here, nor can MjVfs's.
+        let result = unsafe { mjs_discardVisual(
+            self.ffi_mut(),
+            vfs.map_or(ptr::null(), |vfs| vfs.ffi())
+        ) };
+
+        if result == -1 {
+            // SAFETY: error is guaranteed (by C code) to be set.
+            return Err(MjEditError::CompileFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }));
+        }
+
+        Ok(())
+    }
+
     /// Encode [`MjSpec`] to `filepath` using an encoder registered for encoding `content_type`.
     /// When the `filepath`'s extension is '.xml', the MuJoCo's internal
     /// XML encoder will be used. Similarly, the MuJoCo's internal
@@ -2845,6 +2921,41 @@ impl MjsBody {
             unsafe { read_spec_error(self.owning_spec().cast_mut()) }
         ))
     }
+
+    /// Compute the body's mass, inertial frame and diagonal inertia from its geoms, and write
+    /// them into the spec. A body that already has an explicit inertial is left unchanged.
+    ///
+    /// Wraps [`mjs_adoptInertial`].
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::CompileFailed`] with MuJoCo's error message if the body is the
+    /// world body, if the compiler's `inertiafromgeom` is "true", or if the spec fails to resolve.
+    pub fn adopt_inertial(&mut self) -> Result<(), MjEditError> {
+        self.adopt_inertial_impl(None)
+    }
+
+    /// Same as [`MjsBody::adopt_inertial`] except it uses a virtual filesystem from which asset files are read.
+    ///
+    /// # Errors
+    /// Returns [`MjEditError::CompileFailed`] with MuJoCo's error message if the adoption fails.
+    pub fn adopt_inertial_with_vfs(&mut self, vfs: &MjVfs) -> Result<(), MjEditError> {
+        self.adopt_inertial_impl(Some(vfs))
+    }
+
+    fn adopt_inertial_impl(&mut self, vfs: Option<&MjVfs>) -> Result<(), MjEditError> {
+        // SAFETY: MjsBody's pointer can't be invalid here, nor can MjVfs's.
+        let result = unsafe { mjs_adoptInertial(
+            self.ffi_mut(),
+            vfs.map_or(ptr::null(), |vfs| vfs.ffi())
+        ) };
+
+        if result == -1 {
+            // SAFETY: error is guaranteed (by C code) to be set.
+            return Err(MjEditError::CompileFailed(unsafe { read_spec_error(self.owning_spec().cast_mut()) }));
+        }
+
+        Ok(())
+    }
 }
 
 impl MjsBody {
@@ -3095,6 +3206,45 @@ mod tests {
         assert_eq!(compiled.opt().timestep, TIMESTEP);
 
         spec.compile().unwrap();
+    }
+
+    #[test]
+    fn test_fuse_static() {
+        let mut spec = MjSpec::from_xml_string("<mujoco><worldbody><body><freejoint/>
+            <geom size='0.1' mass='1'/><body pos='0.5 0 0'><geom size='0.1' mass='2'/></body>
+            </body></worldbody></mujoco>").unwrap();
+        assert_eq!(spec.body_iter().count(), 3);  // worldbody + two bodies
+        spec.fuse_static().unwrap();
+
+        let model = spec.compile().unwrap();
+        assert_eq!(model.nbody(), 2); // worldbody + one non-static body
+        assert_eq!(model.body_mass()[1], 3.0);
+    }
+
+    #[test]
+    fn test_discard_visual() {
+        let mut spec = MjSpec::from_xml_string("<mujoco><asset><material name='red'/></asset>
+            <worldbody><body><freejoint/><geom size='0.1' mass='1'/>
+            <geom size='0.1' mass='2' contype='0' conaffinity='0' material='red'/>
+            </body></worldbody></mujoco>").unwrap();
+        spec.discard_visual().unwrap();
+
+        assert_eq!(spec.geom_iter().count(), 1);
+        assert_eq!(spec.material_iter().count(), 0);
+        let model = spec.compile().unwrap();
+        assert_eq!(model.body_mass()[1], 3.0);  // The discarded geom's mass is kept.
+    }
+
+    #[test]
+    fn test_adopt_inertial() {
+        let mut spec = MjSpec::from_xml_string("<mujoco><worldbody><body name='b'><freejoint/>
+            <geom pos='0.5 0 0' size='0.1' mass='2'/></body></worldbody></mujoco>").unwrap();
+        assert!(spec.world_body_mut().adopt_inertial().is_err());
+
+        let body = spec.body_mut("b").unwrap();
+        body.adopt_inertial().unwrap();
+        assert_eq!(body.mass(), 2.0);
+        assert_eq!(body.ipos(), &[0.5, 0.0, 0.0]);
     }
 
     /// A spec whose only asset is a fake heightfield (`N_ROW_COLUMN` for width, height and data)

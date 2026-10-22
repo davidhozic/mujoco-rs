@@ -160,6 +160,19 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
 
   - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>add_frame_in` :sup:`new`
     for adding a nested frame.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>adopt_inertial` :sup:`new` and
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>adopt_inertial_with_vfs` :sup:`new`
+    compute the inertial of a body from its geoms and write it into the spec.
+
+- |mj_spec|:
+
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>fuse_static` :sup:`new` and
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>fuse_static_with_vfs` :sup:`new`
+    fuse the static bodies with their parents
+    (:docs-rs:`~mujoco_rs::mujoco_c::<fn>mjs_fuseStatic`).
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>discard_visual` :sup:`new` and
+    :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>discard_visual_with_vfs` :sup:`new`
+    discard the elements which are only visual.
 
 *Rendering*
 
@@ -178,6 +191,9 @@ Unreleased [7.0.0] (MuJoCo 3.12.0)
     has been created for handling out-of-bound errors.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model_unchecked` :sup:`new`
     swaps in a model that the compatibility check refuses.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>is_point_inside_site` :sup:`new`
+    and :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_is_point_inside_site` :sup:`new`
+    report whether a point is inside a site (:docs-rs:`~mujoco_rs::mujoco_c::<fn>mj_insideSite`).
 
 - |mj_model|:
 

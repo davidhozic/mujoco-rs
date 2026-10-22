@@ -328,6 +328,30 @@ impl<M: ModelType> MjData<M> {
         Ok(force)
     }
 
+    /// Returns `true` when `point` is inside the site `site_id` (the convex hull for a mesh site).
+    /// Wraps [`mj_insideSite`].
+    ///
+    /// # Panics
+    /// Panics when `site_id >= nsite`.
+    /// For a fallible version, consider [`MjData::try_is_point_inside_site`].
+    pub fn is_point_inside_site(&self, site_id: usize, point: &[MjtNum; 3]) -> bool {
+        self.try_is_point_inside_site(site_id, point).unwrap()
+    }
+
+    /// Fallible version of [`MjData::is_point_inside_site`].
+    ///
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `site_id >= nsite`.
+    pub fn try_is_point_inside_site(&self, site_id: usize, point: &[MjtNum; 3]) -> Result<bool, MjDataError> {
+        let nsite = self.model.ffi().nsite as usize;
+        if site_id >= nsite {
+            return Err(MjDataError::IndexOutOfBounds { kind: "site_id", id: site_id, upper: nsite });
+        }
+
+        // SAFETY: mj_insideSite does not check `site_id`; the check above keeps it below `nsite`.
+        Ok(unsafe { mj_insideSite(self.model.ffi(), self.ffi(), site_id as i32, point) } != 0)
+    }
+
     /* Partially auto-generated */
 
     /// Reset data to defaults.
@@ -5602,6 +5626,20 @@ mod test {
         data.step();
         assert_eq!(data.ncon(), 0);
         assert!(matches!(data.try_contact_force(0), Err(MjDataError::IndexOutOfBounds { kind: "contact", id: 0, upper: 0 }))) ;
+    }
+
+    #[test]
+    fn test_is_point_inside_site() {
+        let model = MjModel::from_xml_string("<mujoco><worldbody><body pos='1 0 0'>
+            <site type='box' size='0.1 0.1 0.1'/></body></worldbody></mujoco>").unwrap();
+        let mut data = MjData::new(Box::new(model));
+        data.forward();
+        assert!(data.is_point_inside_site(0, &[1.05, 0.0, 0.0]));
+        assert!(!data.is_point_inside_site(0, &[0.0, 0.0, 0.0]));
+        assert!(matches!(
+            data.try_is_point_inside_site(1, &[0.0; 3]),
+            Err(MjDataError::IndexOutOfBounds { kind: "site_id", id: 1, upper: 1 })
+        ));
     }
 
     #[test]
