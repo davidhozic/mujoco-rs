@@ -316,7 +316,6 @@ fn main() {
         }
 
         println!("cargo::rustc-link-lib=static=mujoco");
-        println!("cargo::rustc-link-lib=static=lodepng");
         println!("cargo::rustc-link-lib=static=tinyxml2");
         println!("cargo::rustc-link-lib=static=qhullstatic_r");
         println!("cargo::rustc-link-lib=static=ccd");
