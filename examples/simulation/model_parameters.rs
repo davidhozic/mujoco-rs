@@ -5,7 +5,7 @@
 //! [`MjData::swap_model`].
 //!
 //! Not all model parameters are safe to change at runtime.
-//! See [MuJoCo's docs](https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#mjmodel-changes)
+//! See [MuJoCo's docs](https://mujoco.readthedocs.io/en/3.16.0/programming/simulation.html#mjmodel-changes)
 //! for the full list.
 
 use mujoco_rs::prelude::*;

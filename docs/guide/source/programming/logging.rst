@@ -6,7 +6,7 @@ Logging
 
 MuJoCo uses its own logging system, more in detail described in
 `their documentation (C code guide)
-<https://mujoco.readthedocs.io/en/3.12.0/programming/simulation.html#errors-warnings-logging>`__.
+<https://mujoco.readthedocs.io/en/3.16.0/programming/simulation.html#errors-warnings-logging>`__.
 
 
 Pure wrappers

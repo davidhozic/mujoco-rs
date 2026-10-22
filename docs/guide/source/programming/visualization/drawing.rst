@@ -19,7 +19,7 @@ There are three things that expose a scene for drawing custom visual-only geoms:
 
 - :ref:`mj_rust_viewer` (:docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>user_scene_mut`).
 - :ref:`mj_renderer` (:docs-rs:`~~mujoco_rs::renderer::<struct>MjRenderer::<method>user_scene_mut`).
-- :ref:`mj_cpp_viewer` (:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>user_scn_mut`).
+- :ref:`mj_cpp_viewer` (:docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjCppViewerSharedState::<method>user_geoms_mut`).
 
 
 Drawing to a scene

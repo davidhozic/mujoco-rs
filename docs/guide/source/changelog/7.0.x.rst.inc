@@ -1,4 +1,4 @@
-Unreleased [7.0.0] (MuJoCo 3.12.0)
+Unreleased [7.0.0] (MuJoCo 3.16.0)
 ==================================
 
 .. rubric:: Breaking changes

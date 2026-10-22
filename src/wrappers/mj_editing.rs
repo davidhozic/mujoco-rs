@@ -4743,7 +4743,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "MuJoCo 3.12.0 crashes when it deletes a frame; enable on MuJoCo 3.16.0"]
     fn test_delete_frame_deletes_subtree() {
         let mut spec = MjSpec::new();
         let world = spec.world_body_mut();
