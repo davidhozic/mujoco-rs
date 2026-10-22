@@ -666,12 +666,13 @@ impl<M: ModelType> MjData<M> {
         Ok(())
     }
 
-    /// Initializes the actuator history buffer for actuator `id` (wraps `mj_initCtrlHistory`).
+    /// Initializes the actuator history buffer for actuator `id`. Wraps [`mj_initCtrlHistory`].
     /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
     /// `values`: control values slice of length `nsample * ctrlnum`.
     /// # Note
-    /// The timestamps must be strictly increasing, whether they come from `times` or from the
-    /// existing buffer; otherwise MuJoCo reports an error and stops the process.
+    /// The timestamps must be strictly increasing; otherwise MuJoCo reports an error and stops
+    /// the process. `None` works only when no step has run since the last reset (or the last
+    /// history initialization), because a step leaves the stored timestamps out of order.
     /// # Errors
     /// - [`MjDataError::IndexOutOfBounds`] if `id >= nactuator`.
     /// - [`MjDataError::NoHistoryBuffer`] if the actuator has no history buffer.
@@ -709,13 +710,14 @@ impl<M: ModelType> MjData<M> {
         Ok(())
     }
 
-    /// Initializes the sensor history buffer for sensor `id` (wraps `mj_initSensorHistory`).
+    /// Initializes the sensor history buffer for sensor `id`. Wraps [`mj_initSensorHistory`].
     /// `times`: optional timestamps slice of length `nsample`; `None` keeps existing timestamps.
     /// `values`: sensor values slice of length `nsample * dim`.
     /// `phase`: time phase offset.
     /// # Note
-    /// The timestamps must be strictly increasing, whether they come from `times` or from the
-    /// existing buffer; otherwise MuJoCo reports an error and stops the process.
+    /// The timestamps must be strictly increasing; otherwise MuJoCo reports an error and stops
+    /// the process. `None` works only when no step has run since the last reset (or the last
+    /// history initialization), because a step leaves the stored timestamps out of order.
     /// # Errors
     /// - [`MjDataError::IndexOutOfBounds`] if `id >= nsensor`.
     /// - [`MjDataError::NoHistoryBuffer`] if the sensor has no history buffer.
@@ -754,15 +756,68 @@ impl<M: ModelType> MjData<M> {
         Ok(())
     }
 
+    /// Same as [`MjData::read_ctrl`], except the value(s) are written into `dst` instead of being returned.
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nactuator`.
+    /// Returns [`MjDataError::LengthMismatch`] when `dst.len() != actuator_ctrlnum[id]`.
+    pub fn read_ctrl_into(&self, id: usize, time: MjtNum, interp: i32, dst: &mut [MjtNum]) -> Result<(), MjDataError> {
+        let nactuator = self.model.ffi().nactuator as usize;
+        if id >= nactuator {
+            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nactuator });
+        }
+
+        let dim = self.model.actuator_ctrlnum()[id] as usize;
+        if dst.len() != dim {
+            return Err(MjDataError::LengthMismatch { name: "dst", expected: dim, got: dst.len() });
+        }
+        let ptr = unsafe { mj_readCtrl(self.model.ffi(), self.ffi(), id as i32, time, dst.as_mut_ptr(), interp) };
+        if !ptr.is_null() {
+            // C returned a pointer (no interpolation) - copy into dst.
+            dst.copy_from_slice(unsafe { std::slice::from_raw_parts(ptr, dim) });
+        }
+        Ok(())
+    }
+
+    /// Same as [`MjData::read_ctrl`], except the value(s) are returned as a stack-allocated `[MjtNum; N]`.
+    /// # Panics
+    /// Panics when `id >= nactuator` or `N != actuator_ctrlnum[id]`.
+    /// Use [`MjData::try_read_ctrl_fixed`] for a fallible alternative.
+    pub fn read_ctrl_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> [MjtNum; N] {
+        self.try_read_ctrl_fixed(id, time, interp).unwrap()
+    }
+
+    /// Fallible version of [`MjData::read_ctrl_fixed`].
+    /// # Errors
+    /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nactuator`.
+    /// Returns [`MjDataError::LengthMismatch`] when `N != actuator_ctrlnum[id]`.
+    pub fn try_read_ctrl_fixed<const N: usize>(&self, id: usize, time: MjtNum, interp: i32) -> Result<[MjtNum; N], MjDataError> {
+        let nactuator = self.model.ffi().nactuator as usize;
+        if id >= nactuator {
+            return Err(MjDataError::IndexOutOfBounds { kind: "actuator_id", id, upper: nactuator });
+        }
+
+        let dim = self.model.actuator_ctrlnum()[id] as usize;
+        if N != dim {
+            return Err(MjDataError::LengthMismatch { name: "N", expected: dim, got: N });
+        }
+        let mut out = [0.0 as MjtNum; N];
+        let ptr = unsafe { mj_readCtrl(self.model.ffi(), self.ffi(), id as i32, time, out.as_mut_ptr(), interp) };
+        if !ptr.is_null() {
+            out.copy_from_slice(unsafe { std::slice::from_raw_parts(ptr, N) });
+        }
+        Ok(out)
+    }
+
     /// Read the control value(s) for an actuator at a given time, taking delays into account.
-    /// If no history buffer exists, [`Cow::Borrowed`] is returned, containing actuator’s slice of mjData.ctrl.
+    /// If no history buffer exists, [`Cow::Borrowed`] is returned, containing actuator’s slice of [`MjData::ctrl`].
     /// If a history buffer exists (i.e., the actuator's nsample > 0), read from the delay buffer at
     /// `time - `[`MjModel::actuator_delay`]`[id]`.
     /// 
-    /// When interpolation is used (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear, 2=cubic),
-    /// and is required (`time` doesn't exactly match one in buffer), [`Cow::Owned`] is returned with the
-    /// interpolated result. When interpolation is not required, [`Cow::Borrowed`] is returned, containing actuator's
-    /// slice in the delay buffer.
+    /// When linear or cubic interpolation is used (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear,
+    /// 2=cubic), and is required (`time - delay` lies strictly between two samples in buffer, without matching one),
+    /// [`Cow::Owned`] is returned with the interpolated result. Otherwise (exact match, ZOH, or `time - delay` outside
+    /// the buffer's time range), [`Cow::Borrowed`] is returned, containing actuator's slice in the delay buffer.
+    /// See also [`read_ctrl_fixed`](Self::read_ctrl_fixed), [`read_ctrl_into`](Self::read_ctrl_into).
     /// # Panics
     /// Panics when `id >= nactuator`. Use [`MjData::try_read_ctrl`] for a fallible alternative.
     pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> Cow<'_, [MjtNum]> {
@@ -807,9 +862,7 @@ impl<M: ModelType> MjData<M> {
         )
     }
 
-    /// Reads sensor `id` at `time` into `dst` (`interp`: -1=use the model's `interp` setting,
-    /// 0=ZOH, 1=linear, 2=cubic).
-    /// `dst` must be exactly `sensor_dim[id]` elements long.
+    /// Same as [`MjData::read_sensor`], except the value(s) are written into `dst` instead of being returned.
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
     /// Returns [`MjDataError::LengthMismatch`] when `dst.len() != sensor_dim[id]`.
@@ -831,9 +884,7 @@ impl<M: ModelType> MjData<M> {
         Ok(())
     }
 
-    /// Reads sensor `id` at `time` into a stack-allocated `[MjtNum; N]`
-    /// (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear, 2=cubic). `N` must match `sensor_dim[id]`.
-    /// See also [`read_sensor`](Self::read_sensor), [`read_sensor_into`](Self::read_sensor_into).
+    /// Same as [`MjData::read_sensor`], except the value(s) are returned as a stack-allocated `[MjtNum; N]`.
     /// # Panics
     /// Panics when `id >= nsensor` or `N != sensor_dim[id]`.
     /// Use [`MjData::try_read_sensor_fixed`] for a fallible alternative.
@@ -864,10 +915,15 @@ impl<M: ModelType> MjData<M> {
         Ok(out)
     }
 
-    /// Reads sensor `id` at `time` (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear, 2=cubic).
-    ///
-    /// Returns [`Cow::Borrowed`] (zero-copy) for exact matches, ZOH, and extrapolation.
-    /// Returns [`Cow::Owned`] for linear/cubic interpolation.
+    /// Read the sensor value(s) for a sensor at a given time, taking delays into account.
+    /// If no history buffer exists, [`Cow::Borrowed`] is returned, containing sensor's slice of [`MjData::sensordata`].
+    /// If a history buffer exists (i.e., the sensor's nsample > 0), read from the delay buffer at
+    /// `time - `[`MjModel::sensor_delay`]`[id]`.
+    /// 
+    /// When linear or cubic interpolation is used (`interp`: -1=use the model's `interp` setting, 0=ZOH, 1=linear,
+    /// 2=cubic), and is required (`time - delay` lies strictly between two samples in buffer, without matching one),
+    /// [`Cow::Owned`] is returned with the interpolated result. Otherwise (exact match, ZOH, or `time - delay` outside
+    /// the buffer's time range), [`Cow::Borrowed`] is returned, containing sensor's slice in the delay buffer.
     /// See also [`read_sensor_fixed`](Self::read_sensor_fixed), [`read_sensor_into`](Self::read_sensor_into).
     /// # Panics
     /// Panics when `id >= nsensor`. Use [`MjData::try_read_sensor`] for a fallible alternative.
@@ -2778,7 +2834,7 @@ mod test {
     fn test_init_history_ctrl_and_sensor() {
         const HIST_MODEL: &str = r#"
 <mujoco>
-  <option timestep="0.01"/>
+  <option timestep="0.015625"/>
   <worldbody>
     <body name="body">
       <joint name="slide" type="slide"/>
@@ -2786,10 +2842,10 @@ mod test {
     </body>
   </worldbody>
   <actuator>
-    <motor name="motor0" joint="slide" delay="0.05" nsample="6"/>
+    <motor name="motor0" joint="slide" delay="0.0625" nsample="6"/>
   </actuator>
   <sensor>
-    <jointpos name="jointpos0" joint="slide" delay="0.025" interp="linear" nsample="4"/>
+    <jointpos name="jointpos0" joint="slide" delay="0.03125" interp="linear" nsample="4"/>
   </sensor>
 </mujoco>
 "#;
@@ -2797,31 +2853,54 @@ mod test {
         let model = MjModel::from_xml_string(HIST_MODEL).unwrap();
         let mut data = model.make_data();
 
-        let times_ctrl: Vec<MjtNum> = (0..6).map(|i| i as MjtNum * 0.01).collect();
-        let values_ctrl = vec![1.2345; 6];
+        // mj_readCtrl and mj_readSensor read at (time - delay). Times are binary-exact, because C
+        // interpolates a time that rounds to just above a sample instead of matching it.
+        let timestep = model.opt().timestep;
+        let delay_ctrl = model.actuator_delay()[0];
+        let times_ctrl: Vec<MjtNum> = (0..model.actuator_history()[0][0]).map(|i| MjtNum::from(i) * timestep).collect();
+        let values_ctrl = vec![10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
         data.init_ctrl_history(0, Some(&times_ctrl), &values_ctrl).unwrap();
 
-        // read back via safe wrapper: exact-match should return provided value
-        let Cow::Borrowed([val, ..]) = data.read_ctrl(0, times_ctrl[2], 0) else {
-            panic!("read_ctrl should return one dimension because we are reading a motor");
+        // exact match -> Cow::Borrowed
+        let Cow::Borrowed(&[val]) = data.read_ctrl(0, times_ctrl[2] + delay_ctrl, 1) else {
+            panic!("exact match should yield Cow::Borrowed with one control");
         };
-        assert_relative_eq!(*val, values_ctrl[2], epsilon=1e-12);
+        assert_relative_eq!(val, 30.0, epsilon=1e-12);
 
-        // sensor history via wrapper
-        let times_sens: Vec<MjtNum> = (0..4).map(|i| i as MjtNum * 0.01).collect();
-        // sensor dim for jointpos is 1
-        let values_sens = vec![std::f64::consts::E; 4];
+        // ZOH between samples -> Cow::Borrowed of the older sample
+        let mid_ctrl = (times_ctrl[1] + times_ctrl[2]) / 2.0 + delay_ctrl;
+        let Cow::Borrowed(&[val]) = data.read_ctrl(0, mid_ctrl, 0) else {
+            panic!("ZOH should yield Cow::Borrowed with one control");
+        };
+        assert_relative_eq!(val, 20.0, epsilon=1e-12);
+
+        // linear interpolation -> Cow::Owned
+        let Cow::Owned(interpolated) = data.read_ctrl(0, mid_ctrl, 1) else {
+            panic!("interpolation should yield Cow::Owned");
+        };
+        assert_eq!(interpolated.len(), 1);
+        assert_relative_eq!(interpolated[0], 25.0, epsilon=1e-9);
+
+        // the variants agree with read_ctrl on both paths
+        for (time, expected) in [(times_ctrl[2] + delay_ctrl, 30.0), (mid_ctrl, 25.0)] {
+            assert_relative_eq!(data.read_ctrl_fixed::<1>(0, time, 1)[0], expected, epsilon=1e-9);
+            let mut dst = [0.0];
+            data.read_ctrl_into(0, time, 1, &mut dst).unwrap();
+            assert_relative_eq!(dst[0], expected, epsilon=1e-9);
+        }
+
+        // sensor history via wrapper (sensor dim for jointpos is 1)
+        let delay_sens = model.sensor_delay()[0];
+        let times_sens: Vec<MjtNum> = (0..model.sensor_history()[0][0]).map(|i| MjtNum::from(i) * timestep).collect();
+        let values_sens = vec![1.0, 2.0, 3.0, 4.0];
         data.init_sensor_history(0, Some(&times_sens), &values_sens, 0.0).unwrap();
 
-        let got = data.read_sensor_fixed::<1>(0, times_sens[1], 0);
-        assert_eq!(got.len(), 1);
+        let got = data.read_sensor_fixed::<1>(0, times_sens[1] + delay_sens, 0);
         assert_relative_eq!(got[0], values_sens[1], epsilon=1e-12);
 
-        // also test interpolation path (time between samples)
-        let interp_res = data.read_sensor_fixed::<1>(0, 0.005, 1);
-        assert_eq!(interp_res.len(), 1);
-        // values are identical here, but ensure we get a value
-        assert_relative_eq!(interp_res[0], values_sens[0], epsilon=1e-12);
+        // interpolation path (time between samples)
+        let interp_res = data.read_sensor_fixed::<1>(0, (times_sens[0] + times_sens[1]) / 2.0 + delay_sens, 1);
+        assert_relative_eq!(interp_res[0], 1.5, epsilon=1e-9);
     }
 
     #[test]
@@ -3066,7 +3145,7 @@ mod test {
         // Cow::Borrowed (exact time match) and Cow::Owned (interpolation) paths.
         const HIST_MODEL: &str = r#"
 <mujoco>
-  <option timestep="0.01"/>
+  <option timestep="0.015625"/>
   <worldbody>
     <body>
       <joint name="slide" type="slide"/>
@@ -3074,16 +3153,17 @@ mod test {
     </body>
   </worldbody>
   <sensor>
-    <jointpos name="jp" joint="slide" delay="0.03" interp="linear" nsample="4"/>
+    <jointpos name="jp" joint="slide" delay="0.03125" interp="linear" nsample="4"/>
   </sensor>
 </mujoco>
 "#;
         let model = MjModel::from_xml_string(HIST_MODEL).unwrap();
         let mut data = model.make_data();
-        let delay = 0.03;
+        let delay = model.sensor_delay()[0];
 
         // Seed the history buffer with known distinct values.
-        let hist_times: Vec<_> = (0..4).map(|i| i as MjtNum * 0.01).collect();
+        let timestep = model.opt().timestep;
+        let hist_times: Vec<_> = (0..model.sensor_history()[0][0]).map(|i| MjtNum::from(i) * timestep).collect();
         let values = vec![10.0, 20.0, 30.0, 40.0]; // dim==1 for jointpos
         data.init_sensor_history(0, Some(&hist_times), &values, 0.0).unwrap();
 
@@ -3091,16 +3171,21 @@ mod test {
         // entry at hist_times[i] we must pass time = hist_times[i] + delay.
 
         // exact match -> Cow::Borrowed
-        let query_time = hist_times[2] + delay; // 0.02 + 0.03 = 0.05
+        let query_time = hist_times[2] + delay;
         let cow = data.read_sensor(0, query_time, 0);
         assert_eq!(cow.len(), 1);
         assert_relative_eq!(cow[0], 30.0, epsilon = 1e-12);
         assert!(matches!(cow, std::borrow::Cow::Borrowed(_)),
                 "exact match should yield Cow::Borrowed");
+        // exact match with interpolation requested -> still Cow::Borrowed
+        let cow = data.read_sensor(0, query_time, 1);
+        assert_relative_eq!(cow[0], 30.0, epsilon = 1e-12);
+        assert!(matches!(cow, std::borrow::Cow::Borrowed(_)),
+                "exact match with interp=1 should yield Cow::Borrowed");
 
         // interpolation -> Cow::Owned
-        // midpoint between hist_times[1]=0.01 and hist_times[2]=0.02 -> internal time 0.015
-        let interp_query = (hist_times[1] + hist_times[2]) / 2.0 + delay; // 0.045
+        // midpoint between hist_times[1] and hist_times[2]
+        let interp_query = (hist_times[1] + hist_times[2]) / 2.0 + delay;
         let cow_interp = data.read_sensor(0, interp_query, 1);
         assert_eq!(cow_interp.len(), 1);
         assert_relative_eq!(cow_interp[0], 25.0, epsilon = 1e-6); // linear interp of 20 and 30
