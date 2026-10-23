@@ -1325,6 +1325,20 @@ impl MjModel {
         }
     }
 
+    /// Creates a copy of this [`MjModel`] which embeds all of its assets
+    /// (some of which may be loaded by reference in this [`MjModel`]).
+    /// 
+    /// Wraps [`mj_embedAssets`].
+    pub fn to_embed_assets(&self) -> Result<MjModel, MjModelError> {
+        let mut error = [0; 500];
+        // SAFETY: the ffi pointer is always valid while MjModel exists. Error length is checked and can't overflow.
+        let embedded_ptr = unsafe {
+            mj_embedAssets(self.ptr.as_ptr(), error.as_mut_ptr(), error.len() as i32)
+        };
+
+        Self::check_raw_model(embedded_ptr, &error)
+    }
+
     /* FFI */
     /// Returns a reference to the wrapped FFI struct.
     pub fn ffi(&self) -> &mjModel {
@@ -2317,7 +2331,7 @@ info_with_view!(Model, key,
 #[expect(clippy::needless_range_loop,
          reason = "the loop indices drive FFI pointer arithmetic, ptr.add(i * stride + j)")]
 mod tests {
-    use crate::assert_relative_eq;
+    use crate::{assert_relative_eq, wrappers::{MjSpec, SpecItem, mj_editing::MjtEmbed}};
 
     use super::*;
     use std::fs;
@@ -4495,5 +4509,42 @@ mod tests {
 
         // SAFETY: no accessor of this block needs a pipeline stage; the compiler fills the model.
         unsafe { model.probe_dynamic_arrays_unsafe() };
+    }
+
+    #[test]
+    fn test_embedding_of_model() {
+        const TEX_NAME: &str = "someTexture.png";
+        const PNG_PATH: &str = "_TMP_someTexture.png";
+        const PNG_DATA: &[u8] = &[  // 1x1 PNG
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+            0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00,
+            0x0C, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x60, 0x60, 0x60, 0x00,
+            0x00, 0x00, 0x04, 0x00, 0x01, 0xF6, 0x17, 0x38, 0x55, 0x00, 0x00, 0x00,
+            0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        ];
+
+        std::fs::write(PNG_PATH, PNG_DATA).unwrap();
+
+        let mut spec = MjSpec::new();
+        spec.add_texture()
+            .with_file(PNG_PATH)
+            .with_name(TEX_NAME)
+            .set_embed(MjtEmbed::mjEMBED_FALSE);
+
+        let model = spec.compile().unwrap();
+        
+        // A by-reference texture stores its path, but no pixels.
+        assert_eq!(model.ffi().ntexdata, 0);
+        assert_eq!(model.tex_data().len(), 0);
+        assert_ne!(model.tex_pathadr()[0], -1);
+
+        // A embedded texture stores everything.
+        let model = model.to_embed_assets().unwrap();
+        assert_eq!(model.ffi().ntexdata, 1 * 1 * 3);
+        assert_eq!(model.tex_data().len(), model.ffi().ntexdata as usize);
+        assert_ne!(model.tex_pathadr()[0], -1);
+
+        std::fs::remove_file(PNG_PATH).unwrap();
     }
 }
