@@ -5,7 +5,7 @@
 [![Crates.io](https://img.shields.io/crates/v/mujoco-rs.svg)](https://crates.io/crates/mujoco-rs)
 
 > [!IMPORTANT]
-> **Upgrading from 6.x to 7.x?** The 7.0.0 release updated MuJoCo to 3.16.0.
+> **Upgrading from 6.x to 7.x?** The 7.0.0 release updated MuJoCo to 3.17.0.
 > Read the [migration guide](https://mujoco-rs.readthedocs.io/en/v7.0.x/migration.html)
 > before upgrading.
 
@@ -20,7 +20,7 @@ More detailed documentation is available at the:
 - [**Guide book**](https://mujoco-rs.readthedocs.io/en/v7.0.x/)
 
 ## MuJoCo version
-This library uses FFI bindings to MuJoCo **3.16.0**.
+This library uses FFI bindings to MuJoCo **3.17.0**.
 
 ## Minimum Rust version
 Rust version 1.95 or newer is required.
