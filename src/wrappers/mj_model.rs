@@ -137,8 +137,8 @@ pub type MjtBias = mjtBias;
 /// Orientation input charts of so3 actuators. These values are used in `m->actuator_ctrlspec`.
 pub type MjtCtrlChart = mjtCtrlChart;
 
-/// Input signature bits of servo-family (`pid`, `dcmotor`) actuators. These values are OR-ed into
-/// `m->actuator_ctrlspec`.
+/// Input bitflags of actuators: the input subset of `pid` and `dcmotor` actuators, and the declared
+/// input of actuators with fixed or affine gain. These values are OR-ed into `m->actuator_ctrlspec`.
 pub type MjtCtrlInput = mjtCtrlInput;
 
 /// MuJoCo object types. These are used, for example, in the support functions `mj_name2id` and
@@ -367,41 +367,42 @@ model_layout! {
         dof_parentid,        dof_treeid,          dof_Madr,            tree_bodyadr,
         tree_bodynum,        tree_dofadr,         tree_dofnum,         geom_type,
         geom_condim,         geom_bodyid,         geom_dataid,         geom_matid,
-        geom_plugin,         site_bodyid,         site_dataid,         site_matid,
-        cam_bodyid,          cam_targetbodyid,    cam_resolution,      light_bodyid,
-        light_targetbodyid,  light_texid,         flex_condim,         flex_dim,
-        flex_matid,          flex_interp,         flex_cellnum,        flex_nodeadr,
-        flex_nodenum,        flex_vertadr,        flex_vertnum,        flex_edgeadr,
-        flex_edgenum,        flex_elemadr,        flex_elemnum,        flex_elemdataadr,
-        flex_stiffnessadr,   flex_elemedgeadr,    flex_bendingadr,     flex_shellnum,
-        flex_shelldataadr,   flex_texcoordadr,    flex_nodebodyid,     flex_vertbodyid,
-        flex_vertedgeadr,    flex_vertedgenum,    flex_vertedge,       flex_edge,
-        flex_edgeflap,       flex_elem,           flex_elemtexcoord,   flex_elemedge,
-        flex_elemlayer,      flex_shell,          efm0_dofid,          efm0_L_rownnz,
-        efm0_L_rowadr,       efm0_L_colind,       efmC_perm,           flex_rigid,
-        flex_bvhadr,         flex_bvhnum,         flexedge_J_rownnz,   flexedge_J_rowadr,
-        flexedge_J_colind,   flexvert_J_rownnz,   flexvert_J_rowadr,   flexvert_J_colind,
-        skin_matid,          skin_vertadr,        skin_vertnum,        skin_texcoordadr,
-        skin_faceadr,        skin_facenum,        skin_boneadr,        skin_bonenum,
-        skin_face,           skin_bonevertadr,    skin_bonevertnum,    skin_bonebodyid,
-        skin_bonevertid,     mat_texid,           pair_dim,            pair_geom1,
-        pair_geom2,          eq_type,             eq_obj1id,           eq_obj2id,
-        eq_objtype,          tendon_adr,          tendon_num,          tendon_matid,
-        tendon_treenum,      tendon_treeid,       ten_J_rownnz,        ten_J_rowadr,
-        ten_J_colind,        actuator_trntype,    actuator_dyntype,    actuator_gaintype,
-        actuator_biastype,   actuator_ctrladr,    actuator_ctrlnum,    actuator_ctrlspec,
-        actuator_outadr,     actuator_outnum,     actuator_actadr,     actuator_actnum,
-        actuator_trnid,      actuator_history,    actuator_historyadr, actuator_plugin,
-        sensor_type,         sensor_objtype,      sensor_objid,        sensor_reftype,
-        sensor_refid,        sensor_intprm,       sensor_dim,          sensor_adr,
-        sensor_history,      sensor_historyadr,   sensor_plugin,       wrap_type,
-        wrap_objid,          plugin,              plugin_stateadr,     plugin_statenum,
-        plugin_attr,         plugin_attradr,      numeric_adr,         numeric_size,
-        text_adr,            text_size,           text_data,           tuple_adr,
-        tuple_size,          tuple_objtype,       tuple_objid,         B_rownnz,
-        B_rowadr,            B_colind,            M_rownnz,            M_rowadr,
-        M_colind,            mapM2M,              D_rownnz,            D_rowadr,
-        D_diag,              D_colind,            mapM2D,              mapD2M
+        geom_plugin,         site_type,           site_bodyid,         site_dataid,
+        site_matid,          cam_bodyid,          cam_targetbodyid,    cam_resolution,
+        light_bodyid,        light_targetbodyid,  light_texid,         flex_condim,
+        flex_dim,            flex_matid,          flex_interp,         flex_cellnum,
+        flex_nodeadr,        flex_nodenum,        flex_vertadr,        flex_vertnum,
+        flex_edgeadr,        flex_edgenum,        flex_elemadr,        flex_elemnum,
+        flex_elemdataadr,    flex_stiffnessadr,   flex_elemedgeadr,    flex_bendingadr,
+        flex_shellnum,       flex_shelldataadr,   flex_texcoordadr,    flex_nodebodyid,
+        flex_vertbodyid,     flex_vertedgeadr,    flex_vertedgenum,    flex_vertedge,
+        flex_edge,           flex_edgeflap,       flex_elem,           flex_elemtexcoord,
+        flex_elemedge,       flex_elemlayer,      flex_shell,          efm0_dofid,
+        efm0_L_rownnz,       efm0_L_rowadr,       efm0_L_colind,       efmC_perm,
+        flex_rigid,          flex_bvhadr,         flex_bvhnum,         flexedge_J_rownnz,
+        flexedge_J_rowadr,   flexedge_J_colind,   flexvert_J_rownnz,   flexvert_J_rowadr,
+        flexvert_J_colind,   skin_matid,          skin_vertadr,        skin_vertnum,
+        skin_texcoordadr,    skin_faceadr,        skin_facenum,        skin_boneadr,
+        skin_bonenum,        skin_face,           skin_bonevertadr,    skin_bonevertnum,
+        skin_bonebodyid,     skin_bonevertid,     mat_texid,           pair_dim,
+        pair_geom1,          pair_geom2,          eq_type,             eq_obj1id,
+        eq_obj2id,           eq_objtype,          tendon_adr,          tendon_num,
+        tendon_matid,        tendon_treenum,      tendon_treeid,       ten_J_rownnz,
+        ten_J_rowadr,        ten_J_colind,        actuator_trntype,    actuator_dyntype,
+        actuator_gaintype,   actuator_biastype,   actuator_ctrladr,    actuator_ctrlnum,
+        actuator_ctrlspec,   actuator_outadr,     actuator_outnum,     actuator_actadr,
+        actuator_actnum,     actuator_trnid,      actuator_history,    actuator_historyadr,
+        actuator_plugin,     sensor_type,         sensor_objtype,      sensor_objid,
+        sensor_reftype,      sensor_refid,        sensor_intprm,       sensor_dim,
+        sensor_adr,          sensor_history,      sensor_historyadr,   sensor_plugin,
+        wrap_type,           wrap_objid,          plugin,              plugin_stateadr,
+        plugin_statenum,     plugin_attr,         plugin_attradr,      numeric_adr,
+        numeric_size,        text_adr,            text_size,           text_data,
+        tuple_adr,           tuple_size,          tuple_objtype,       tuple_objid,
+        B_rownnz,            B_rowadr,            B_colind,            M_rownnz,
+        M_rowadr,            M_colind,            mapM2M,              D_rownnz,
+        D_rowadr,            D_diag,              D_colind,            mapM2D,
+        mapD2M
     ]
 }
 
@@ -832,7 +833,7 @@ impl MjModel {
     info_method! { Model, texture,
         [r#type: 1, colorspace: 1, height: 1,
         width: 1, nchannel: 1,
-        adr: 1, pathadr: 1],
+        adr: 1, pathadr: 1, contenttypeadr: 1],
         [],
         [data: ntexdata]
     }
@@ -1405,7 +1406,7 @@ impl MjModel {
         [ffi] nflexelem: MjtSize; "number of elements in all flexes.";
         [ffi] nflexelemdata: MjtSize; "number of element vertex ids in all flexes.";
         [ffi] nflexstiffness: MjtSize; "number of stiffness parameters in all flexes.";
-        [ffi] nflexbending: MjtSize; "number of bending parameters in all flexes";
+        [ffi] nflexbending: MjtSize; "number of bending parameters in all flexes.";
         [ffi] nefm0dof: MjtSize; "number of dofs covered by the constant metric factor.";
         [ffi] nefm0L: MjtSize; "number of non-zeros in the constant metric factor.";
         [ffi] nefmCvert: MjtSize; "number of sparse metric factor ordering slots.";
@@ -1593,7 +1594,7 @@ impl MjModel {
         geom_adhesion: &[MjtNum; "adhesive force of contacts"; ffi().ngeom],
         geom_fluid: &[[MjtNum; mjNFLUID as usize] [force]; "fluid interaction parameters"; ffi().ngeom],
         geom_rgba: &[[f32; 4] [force]; "rgba when material is omitted"; ffi().ngeom],
-        site_type: &[MjtGeomBase [force]; "geom type for rendering"; ffi().nsite],
+        (mut = unsafe) site_type: &[MjtGeomBase [force]; "geom type for rendering"; ffi().nsite],
         (mut = unsafe) site_bodyid: &[i32; "id of site's body"; ffi().nsite],
         (mut = unsafe) site_dataid: &[i32; "id of site's mesh; -1: none"; ffi().nsite],
         (mut = unsafe) site_matid: &[i32; "material id for rendering; -1: none"; ffi().nsite],
@@ -1790,6 +1791,7 @@ impl MjModel {
         (mut = unsafe) tex_adr: &[MjtSize; "start address in tex_data"; ffi().ntex],
         tex_data: &[MjtByte; "pixel values"; ffi().ntexdata],
         (mut = unsafe) tex_pathadr: &[i32; "address of texture asset path; -1: none"; ffi().ntex],
+        (mut = unsafe) tex_contenttypeadr: &[i32; "content type address in paths; -1: none"; ffi().ntex],
         (mut = unsafe) mat_texid: &[[i32; MjtTextureRole::mjNTEXROLE as usize] [force]; "indices of textures; -1: none"; ffi().nmat],
         mat_texuniform: &[MjtBool; "make texture cube uniform"; ffi().nmat],
         mat_texrepeat: &[[f32; 2] [force]; "texture repetition for 2d mapping"; ffi().nmat],
@@ -1947,7 +1949,7 @@ impl MjModel {
         (mut = unsafe) name_pluginadr: &[i32; "plugin instance name pointers"; ffi().nplugin],
         (mut = unsafe) names: &[c_char; "names of all objects, 0-terminated"; ffi().nnames],
         (mut = unsafe) names_map: &[i32; "internal hash map of names"; ffi().nnames_map],
-        paths: &[c_char; "paths to assets, 0-terminated"; ffi().npaths],
+        (mut = unsafe) paths: &[c_char; "resolved paths to assets, 0-terminated"; ffi().npaths],
         (mut = unsafe) B_rownnz: &[i32; "body-dof: non-zeros in each row"; ffi().nbody],
         (mut = unsafe) B_rowadr: &[i32; "body-dof: row addresses"; ffi().nbody],
         (mut = unsafe) B_colind: &[i32; "body-dof: column indices"; ffi().nB],
@@ -2099,11 +2101,12 @@ info_with_view!(Model, geom,
 	[]);
 
 info_with_view!(Model, hfield,
-	[[hfield_] size: MjtNum],
-	[[hfield_] nrow: i32,
+	[],
+	[[hfield_] size: MjtNum,
+	 [hfield_] nrow: i32,
 	 [hfield_] ncol: i32,
 	 [hfield_] adr: i32,
-     [hfield_] pathadr: i32],
+	 [hfield_] pathadr: i32],
 	[[hfield_] data: f32]);
 
 info_with_view!(Model, joint,
@@ -2239,9 +2242,9 @@ info_with_view!(Model, site,
 	 [site_] pos: MjtNum,
 	 [site_] quat: MjtNum,
 	 [site_] user: MjtNum,
-	 [site_] rgba: f32,
-	 [site_] r#type: MjtGeomBase [force]],
-	[[site_] bodyid: i32,
+	 [site_] rgba: f32],
+	[[site_] r#type: MjtGeomBase [force],
+	 [site_] bodyid: i32,
 	 [site_] dataid: i32,
 	 [site_] matid: i32],
 	[]);
@@ -2287,7 +2290,8 @@ info_with_view!(Model, texture,
 	 [tex_] width: i32,
 	 [tex_] nchannel: i32,
 	 [tex_] adr: MjtSize,
-	 [tex_] pathadr: i32],
+	 [tex_] pathadr: i32,
+	 [tex_] contenttypeadr: i32],
 	[[tex_] data: MjtByte]);
 
 info_with_view!(Model, tuple,

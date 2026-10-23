@@ -1192,7 +1192,7 @@ impl MjvScene {
         [ffi] nflex: i32; "number of flexes.";
         [ffi] nskin: i32; "number of skins.";
         [ffi] nlight: i32; "number of lights currently in buffer.";
-        [ffi] status: i32; "status; 0: ok, 1: geoms exhausted.";
+        [ffi] status: i32; "status; 0: ok, 1: geoms exhausted, warning issued.";
     ]}
 
     getter_setter! {get, [

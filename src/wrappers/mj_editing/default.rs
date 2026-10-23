@@ -1,7 +1,7 @@
 //! Module implements [`MjsDefault`], the handle of a default class.
 
 use crate::wrappers::mj_editing::{
-    MjsJoint, MjsGeom, MjsSite, MjsCamera, MjsLight, MjsFlex, MjsMesh, MjsMaterial,
+    MjsJoint, MjsGeom, MjsSite, MjsCamera, MjsLight, MjsFlex, MjsMesh, MjsTexture, MjsMaterial,
     MjsPair, MjsEquality, MjsTendon, MjsActuator, InDefault
 };
 use crate::mujoco_c::*;
@@ -34,7 +34,7 @@ mjs_opaque!(MjsDefault <= mjsDefault,
 
 impl MjsDefault {
     default_accessor_wrapper! {
-        joint, geom, site, camera, light, flex, mesh, material,
+        joint, geom, site, camera, light, flex, mesh, texture, material,
         pair, equality, tendon, actuator
     }
 }

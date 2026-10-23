@@ -1,6 +1,6 @@
 .. _migrate_unreleased:
 
-Unreleased [7.0.0] (MuJoCo 3.16.0)
+Unreleased [7.0.0] (MuJoCo 3.17.0)
 ==================================
 
 
@@ -129,15 +129,63 @@ Height field sizes are unsafe to mutate
 ---------------------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>hfield_size_mut` is now an ``unsafe fn``.
+The ``size`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjHfieldModelViewMut` is now
+:docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
 
 .. code-block:: rust
 
     // Before
     model.hfield_size_mut()[0][0] = 2.0;
+    model.hfield("h").unwrap().view_mut(&mut model).size[0] = 2.0;
 
     // After
     // SAFETY: every size is positive and finite.
     unsafe { model.hfield_size_mut()[0][0] = 2.0; }
+    let mut view = model.hfield("h").unwrap().view_mut(&mut model);
+    // SAFETY: the size is positive and finite.
+    unsafe { view.size.as_mut_slice()[0] = 2.0; }
+
+
+Site types and asset paths are unsafe to mutate
+-----------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>site_type_mut` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>paths_mut` are now ``unsafe fn``.
+The ``r#type`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjSiteModelViewMut` is now
+:docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
+
+.. code-block:: rust
+
+    // Before
+    model.site_type_mut()[0] = MjtGeom::mjGEOM_BOX;
+    model.site("s").unwrap().view_mut(&mut model).r#type[0] = MjtGeom::mjGEOM_BOX;
+
+    // After
+    // SAFETY: a box site needs no mesh data.
+    unsafe { model.site_type_mut()[0] = MjtGeomBase::mjGEOM_BOX; }
+    let mut view = model.site("s").unwrap().view_mut(&mut model);
+    // SAFETY: a box site needs no mesh data.
+    unsafe { view.r#type.as_mut_slice()[0] = MjtGeomBase::mjGEOM_BOX; }
+
+
+More constraint arrays of ``MjData`` are unsafe to read
+-------------------------------------------------------
+
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_diag_a`, ``efc_kbip``, ``efc_d``,
+``efc_r``, ``iefc_d``, ``iefc_r``, ``efc_y`` and ``efc_ar`` are now ``unsafe fn``, and so are their
+``_mut`` variants. MuJoCo does not zero these arrays, so read them only after the pipeline stage
+that computes them. ``efc_y`` and ``efc_ar`` stay uninitialized under some solver settings.
+
+.. code-block:: rust
+
+    // Before
+    data.step1();
+    let impedance = data.efc_kbip()[0][2];
+
+    // After
+    data.forward();
+    // SAFETY: forward built the constraints, so efc_kbip holds computed values.
+    let impedance = unsafe { data.efc_kbip() }[0][2];
 
 
 Viewer, renderer and scene constructors take ``&MjModel``

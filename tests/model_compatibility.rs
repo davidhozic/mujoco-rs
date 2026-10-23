@@ -121,24 +121,24 @@ writable_tables! {
     body_sameframe,        body_contype,          body_conaffinity,      jnt_group,
     jnt_limited,           jnt_actfrclimited,     jnt_actgravcomp,       dof_simplenum,
     tree_sleep_policy,     geom_contype,          geom_conaffinity,      geom_group,
-    geom_priority,         geom_sameframe,        site_type,             site_group,
-    site_sameframe,        cam_mode,              cam_projection,        cam_output,
-    light_mode,            light_type,            light_castshadow,      light_active,
-    flex_contype,          flex_conaffinity,      flex_priority,         flex_selfcollide,
-    flex_activelayers,     flex_passive,          flex_group,            flex_edgeequality,
-    flexedge_rigid,        flex_flatskin,         skin_group,            tex_colorspace,
-    tex_data,              mat_texuniform,        pair_signature,        exclude_signature,
-    eq_active0,            tendon_group,          tendon_limited,        tendon_actfrclimited,
-    actuator_actlimited,   actuator_actearly,     actuator_group,        actuator_forcelimited,
-    actuator_ctrllimited,  sensor_datatype,       sensor_needstage,      bvh_depth,
-    oct_depth,             paths
+    geom_priority,         geom_sameframe,        site_group,            site_sameframe,
+    cam_mode,              cam_projection,        cam_output,            light_mode,
+    light_type,            light_castshadow,      light_active,          flex_contype,
+    flex_conaffinity,      flex_priority,         flex_selfcollide,      flex_activelayers,
+    flex_passive,          flex_group,            flex_edgeequality,     flexedge_rigid,
+    flex_flatskin,         skin_group,            tex_colorspace,        tex_data,
+    mat_texuniform,        pair_signature,        exclude_signature,     eq_active0,
+    tendon_group,          tendon_limited,        tendon_actfrclimited,  actuator_actlimited,
+    actuator_actearly,     actuator_group,        actuator_forcelimited, actuator_ctrllimited,
+    sensor_datatype,       sensor_needstage,      bvh_depth,             oct_depth
 }
 
-/// Reports whether `field` is a name field, a path address or count, the buffer size, a hull or tree
+/// Reports whether `field` is a name field, a path field, the buffer size, a hull or tree
 /// table, or a value that `set_const` derives from floats, which the layout leaves out.
 fn is_left_out_field(field: &str) -> bool {
     field.starts_with("name_") || field.ends_with("_pathadr")
-        || matches!(field, "names" | "names_map" | "nnames" | "npaths" | "nbuffer")
+        || matches!(field, "names" | "names_map" | "nnames" | "paths" | "npaths" | "nbuffer")
+        || field == "tex_contenttypeadr"
         || matches!(field, "mesh_extrema" | "mesh_polyvert" | "mesh_polymap")
         || matches!(field, "bvh_child" | "bvh_nodeid" | "oct_child" | "noct" | "mesh_octadr" | "mesh_octnum")
         || matches!(field, "ngravcomp" | "jnt_actuatorid" | "tendon_actuatorid" | "body_simple" | "flex_centered")

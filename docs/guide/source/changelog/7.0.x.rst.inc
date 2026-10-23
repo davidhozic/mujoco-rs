@@ -1,7 +1,13 @@
-Unreleased [7.0.0] (MuJoCo 3.16.0)
+Unreleased [7.0.0] (MuJoCo 3.17.0)
 ==================================
 
 .. rubric:: Breaking changes
+
+- MuJoCo-rs now builds against MuJoCo 3.17.0 FFI, which rolls up the upstream 3.13.0, 3.14.0,
+  3.15.0, 3.16.0 and 3.17.0 releases.
+  This directly affects all the wrappers, separate changelog will not be provided.
+  See MuJoCo's changelog for this release:
+  https://mujoco.readthedocs.io/en/3.17.0/changelog.html
 
 - ``treenum`` is now marked as unsafe to mutate (wrong values can cause out-of-bound reads). Consequently,
 
@@ -33,8 +39,27 @@ Unreleased [7.0.0] (MuJoCo 3.16.0)
   :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
 - (runtime-breaking) The ``zero`` method of a mutable view no longer zeroes the fields that are now
   ``PointerViewUnsafeMut`` (above). Write these fields through the unsafe view if you need them zeroed.
-- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>hfield_size_mut` is now an ``unsafe fn``.
-  A size that was not positive and finite made a ray cast read out of bounds.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>hfield_size_mut` is now an ``unsafe fn``,
+  and the ``size`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjHfieldModelViewMut` is now
+  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>site_type_mut` is now an ``unsafe fn``,
+  and the ``r#type`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjSiteModelViewMut` is now
+  :docs-rs:`~mujoco_rs::util::<struct>PointerViewUnsafeMut`.
+  A wrong site type made a sensor or the scene update read out of bounds.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>paths_mut` is now an ``unsafe fn``.
+  A path without its terminating zero made MuJoCo read past the end of the buffer.
+- :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_diag_a`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_kbip`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_d`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_r`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>iefc_d`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>iefc_r`,
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_y` and
+  :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_ar` are now ``unsafe fn``,
+  and so are their ``_mut`` variants.
+  A read taken before the pipeline stage that computes the array returns uninitialized memory,
+  and ``efc_y`` and ``efc_ar`` stay uninitialized under some solver settings.
+  Run that stage first, see :ref:`migrate_unreleased`.
 - Removed ``append_cubefiles`` and ``append_textures`` from
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture` and
   :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial`, respectively.

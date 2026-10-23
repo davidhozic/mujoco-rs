@@ -1911,7 +1911,7 @@ impl<M: ModelType> MjData<M> {
         [ffi] nefmT: i32; "number of tendons with terms in the metric.";
         [ffi] nefmA: i32; "number of actuators with terms in the metric.";
         [ffi] nefmdof: i32; "number of 3x3 blocks in the effective-metric preconditioner.";
-        [ffi] nefmL: i32; "size of the effective-metric block storage (9*nefmdof).";
+        [ffi] nefmL: i32; "size of efm_L (9*nefmdof plus optional Cholesky or island tail).";
         [ffi] nY: i32; "number of non-zeros in constraint inverse inertia square root.";
         [ffi] nA: i32; "number of non-zeros in constraint inverse inertia matrix.";
         [ffi] nisland: i32; "number of detected constraint islands.";
@@ -2151,7 +2151,7 @@ impl<M: ModelType> MjData<M> {
         (mut = unsafe) moment_colind: &[i32; "column indices in sparse Jacobian"; model.ffi().nJmom],
         actuator_moment: &[MjtNum; "actuator moments"; model.ffi().nJmom],
         crb: &[[MjtNum; 10] [force]; "com-based composite inertia and mass"; model.ffi().nbody],
-        M: &[MjtNum; "inertia (compressed sparse row)"; model.ffi().nC],
+        M: &[MjtNum; "inertia (sparse)"; model.ffi().nC],
         qLD: &[MjtNum; "L'*D*L factorization of M (sparse)"; model.ffi().nC],
         qLDiagInv: &[MjtNum; "1/diag(D)"; model.ffi().nv],
         bvh_active: &[MjtBool; "was bounding volume checked for collision"; model.ffi().nbvh],
@@ -2198,10 +2198,10 @@ impl<M: ModelType> MjData<M> {
         efc_pos: &[MjtNum; "constraint position (equality, contact)"; ffi().nefc],
         efc_margin: &[MjtNum; "inclusion margin (contact)"; ffi().nefc],
         efc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],
-        efc_diagA: &[MjtNum; "diagonal of A matrix, approximate or exact"; ffi().nefc],
-        efc_KBIP: &[[MjtNum; 4] [force]; "stiffness, damping, impedance, imp'"; ffi().nefc],
-        efc_D: &[MjtNum; "constraint mass"; ffi().nefc],
-        efc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
+        (read = unsafe) efc_diagA: &[MjtNum; "diagonal of A matrix, approximate or exact"; ffi().nefc],
+        (read = unsafe) efc_KBIP: &[[MjtNum; 4] [force]; "stiffness, damping, impedance, imp'"; ffi().nefc],
+        (read = unsafe) efc_D: &[MjtNum; "constraint mass"; ffi().nefc],
+        (read = unsafe) efc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
         (mut = unsafe) tendon_efcadr: &[i32; "first efc address involving tendon; -1: none"; model.ffi().ntendon],
         (mut = unsafe) tree_island: &[i32; "island id of this tree; -1: none"; model.ffi().ntree],
         (mut = unsafe) island_ntree: &[i32; "number of trees in this island"; ffi().nisland],
@@ -2226,16 +2226,16 @@ impl<M: ModelType> MjData<M> {
         (mut = unsafe) iefc_type: &[MjtConstraint [force]; "constraint type"; ffi().nefc],
         (mut = unsafe) iefc_id: &[i32; "id of object of specified type"; ffi().nefc],
         iefc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],
-        iefc_D: &[MjtNum; "constraint mass"; ffi().nefc],
-        iefc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
+        (read = unsafe) iefc_D: &[MjtNum; "constraint mass"; ffi().nefc],
+        (read = unsafe) iefc_R: &[MjtNum; "inverse constraint mass"; ffi().nefc],
         (mut = unsafe) efc_Y_rownnz: &[i32; "number of non-zeros in Y row"; ffi().nefc],
         (mut = unsafe) efc_Y_rowadr: &[i32; "row start address in Y colind array"; ffi().nefc],
         (mut = unsafe) efc_Y_colind: &[i32; "column indices in sparse Y"; ffi().nY],
-        efc_Y: &[MjtNum; "whitened Jacobian Y = J*M^(-1/2)"; ffi().nY],
+        (read = unsafe) efc_Y: &[MjtNum; "whitened Jacobian Y = J*M^(-1/2)"; ffi().nY],
         (mut = unsafe) efc_AR_rownnz: &[i32; "number of non-zeros in AR"; ffi().nefc],
-        (mut = unsafe) efc_AR_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
+        (mut = unsafe) efc_AR_rowadr: &[i32; "row start address in AR colind array"; ffi().nefc],
         (mut = unsafe) efc_AR_colind: &[i32; "column indices in sparse AR"; ffi().nA],
-        efc_AR: &[MjtNum; "J*inv(M)*J' + R"; ffi().nA],
+        (read = unsafe) efc_AR: &[MjtNum; "J*inv(M)*J' + R"; ffi().nA],
         (read = unsafe) efc_vel: &[MjtNum; "velocity in constraint space: J*qvel"; ffi().nefc],
         (read = unsafe) efc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
         (read = unsafe) efm_c: &[MjtNum; "smooth-force shift h*K*qvel"; model.ffi().nv],
@@ -2257,7 +2257,7 @@ impl<M: ModelType> MjData<M> {
         (mut = unsafe) efm_dofid: &[i32; "block k -> dof address of its vertex triple"; ffi().nefmdof],
         (mut = unsafe) efm_con_ind: &[i32; "contact rows, packed [nnz, conid, colind...]"; ffi().nefmcon],
         efm_con_val: &[MjtNum; "contact rows, packed [scale, force, val...]"; ffi().nefmcon],
-        (read = unsafe) efm_L: &[MjtNum; "factored 3x3 diagonal blocks of M+K"; ffi().nefmL],
+        (read = unsafe) efm_L: &[MjtNum; "factored 3x3 blocks of M+K and packed tail data"; ffi().nefmL],
         (read = unsafe) efc_b: &[MjtNum; "linear cost term: J*qacc_smooth - aref"; ffi().nefc],
         (read = unsafe) iefc_aref: &[MjtNum; "reference pseudo-acceleration"; ffi().nefc],
         (read = unsafe) iefc_state: &[MjtConstraintState [force]; "constraint state"; ffi().nefc],
@@ -4166,7 +4166,8 @@ mod test {
 
         let nefc = data.ffi().nefc as usize;
         if nefc > 0 {
-            let efc_kbip = data.efc_kbip();
+            // SAFETY: step() ran the full pipeline, which fills efc_KBIP.
+            let efc_kbip = unsafe { data.efc_kbip() };
             assert_eq!(efc_kbip.len(), nefc);
             for i in 0..nefc {
                 for j in 0..4 {
@@ -5041,7 +5042,8 @@ mod test {
             }
 
             // efc_KBIP should be populated
-            let kbip = data.efc_kbip();
+            // SAFETY: The model was stepped above, so the full pipeline filled efc_KBIP.
+            let kbip = unsafe { data.efc_kbip() };
             assert_eq!(kbip.len(), nefc);
             for i in 0..nefc {
                 for j in 0..4 {
