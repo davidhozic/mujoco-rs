@@ -4537,7 +4537,7 @@ mod tests {
 
         // A embedded texture stores everything.
         let model = model.to_embed_assets().unwrap();
-        assert_eq!(model.ffi().ntexdata, 1 * 1 * 3);
+        assert_eq!(model.ffi().ntexdata, 3);
         assert_eq!(model.tex_data().len(), model.ffi().ntexdata as usize);
         assert_ne!(model.tex_pathadr()[0], -1);
 

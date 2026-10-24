@@ -170,7 +170,7 @@ fn header_fields() -> (BTreeSet<String>, BTreeSet<String>) {
 
     let sizes = entries(section("#define MJMODEL_SIZES", "\n\n")).into_iter()
         .map(|entry| entry[0].clone()).collect();
-    let tables = entries(section("#define MJMODEL_POINTERS_BODY", "#define MJDATA_POINTERS")).into_iter()
+    let tables = entries(section("#define MJMODEL_POINTERS_BODY", "#define MJSETCONST_ARRAYS")).into_iter()
         .filter(|entry| !matches!(entry[0].as_str(), "mjtNum" | "float"))
         .map(|entry| entry[1].clone()).collect();
     (sizes, tables)
