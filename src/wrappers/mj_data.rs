@@ -293,14 +293,14 @@ impl<M: ModelType> MjData<M> {
     /// # Note
     /// This function will return valid results only after running the constraint solver.
     /// The solver runs in [`MjData::step`], [`MjData::step2`] (requires a call to [`MjData::step1`]
-    /// first) and [`MjData::forward`]).
+    /// first) and [`MjData::forward`].
     /// 
     /// Calling it after the constraint array (`efc_force`) is allocated but not initialized
     /// (e.g., after calling [`MjData::step1`]) will result in garbage values.
     ///
     /// # Panics
     /// Panics when `contact_id` is outside the range of valid contact IDs.
-    /// For fallible version, consider [`MjData::try_contact_force`].
+    /// For a fallible version, consider [`MjData::try_contact_force`].
     pub fn contact_force(&self, contact_id: usize) -> [MjtNum; 6] {
         self.try_contact_force(contact_id).unwrap()
     }
@@ -781,6 +781,7 @@ impl<M: ModelType> MjData<M> {
     }
 
     /// Same as [`MjData::read_ctrl`], except the value(s) are written into `dst` instead of being returned.
+    /// Wraps [`mj_readCtrl`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nactuator`.
     /// Returns [`MjDataError::LengthMismatch`] when `dst.len() != actuator_ctrlnum[id]`.
@@ -794,6 +795,8 @@ impl<M: ModelType> MjData<M> {
         if dst.len() != dim {
             return Err(MjDataError::LengthMismatch { name: "dst", expected: dim, got: dst.len() });
         }
+        // SAFETY: id < nactuator was checked and dst holds actuator_ctrlnum[id] elements, which is the
+        // length mj_readCtrl writes and the length of the slice behind a returned pointer.
         let ptr = unsafe { mj_readCtrl(self.model.ffi(), self.ffi(), id as i32, time, dst.as_mut_ptr(), interp) };
         if !ptr.is_null() {
             // C returned a pointer (no interpolation) - copy into dst.
@@ -803,6 +806,7 @@ impl<M: ModelType> MjData<M> {
     }
 
     /// Same as [`MjData::read_ctrl`], except the value(s) are returned as a stack-allocated `[MjtNum; N]`.
+    /// Wraps [`mj_readCtrl`].
     /// # Panics
     /// Panics when `id >= nactuator` or `N != actuator_ctrlnum[id]`.
     /// Use [`MjData::try_read_ctrl_fixed`] for a fallible alternative.
@@ -825,6 +829,8 @@ impl<M: ModelType> MjData<M> {
             return Err(MjDataError::LengthMismatch { name: "N", expected: dim, got: N });
         }
         let mut out = [0.0 as MjtNum; N];
+        // SAFETY: id < nactuator was checked and out holds actuator_ctrlnum[id] elements, which is the
+        // length mj_readCtrl writes and the length of the slice behind a returned pointer.
         let ptr = unsafe { mj_readCtrl(self.model.ffi(), self.ffi(), id as i32, time, out.as_mut_ptr(), interp) };
         if !ptr.is_null() {
             out.copy_from_slice(unsafe { std::slice::from_raw_parts(ptr, N) });
@@ -833,7 +839,7 @@ impl<M: ModelType> MjData<M> {
     }
 
     /// Read the control value(s) for an actuator at a given time, taking delays into account.
-    /// If no history buffer exists, [`Cow::Borrowed`] is returned, containing actuator’s slice of [`MjData::ctrl`].
+    /// If no history buffer exists, [`Cow::Borrowed`] is returned, containing actuator's slice of [`MjData::ctrl`].
     /// If a history buffer exists (i.e., the actuator's nsample > 0), read from the delay buffer at
     /// `time - `[`MjModel::actuator_delay`]`[id]`.
     /// 
@@ -842,6 +848,7 @@ impl<M: ModelType> MjData<M> {
     /// [`Cow::Owned`] is returned with the interpolated result. Otherwise (exact match, ZOH, or `time - delay` outside
     /// the buffer's time range), [`Cow::Borrowed`] is returned, containing actuator's slice in the delay buffer.
     /// See also [`read_ctrl_fixed`](Self::read_ctrl_fixed), [`read_ctrl_into`](Self::read_ctrl_into).
+    /// Wraps [`mj_readCtrl`].
     /// # Panics
     /// Panics when `id >= nactuator`. Use [`MjData::try_read_ctrl`] for a fallible alternative.
     pub fn read_ctrl(&self, id: usize, time: MjtNum, interp: i32) -> Cow<'_, [MjtNum]> {
@@ -867,6 +874,8 @@ impl<M: ModelType> MjData<M> {
             (Vec::new(), true)
         } else { (vec![0.0; dim], false) };
 
+        // SAFETY: id < nactuator was checked. The buffer is empty when C returns a pointer and holds
+        // actuator_ctrlnum[id] elements when C interpolates into it.
         let ptr = unsafe { mj_readCtrl(
             self.model.ffi(), self.ffi(),
             id as i32, time,
@@ -887,6 +896,7 @@ impl<M: ModelType> MjData<M> {
     }
 
     /// Same as [`MjData::read_sensor`], except the value(s) are written into `dst` instead of being returned.
+    /// Wraps [`mj_readSensor`].
     /// # Errors
     /// Returns [`MjDataError::IndexOutOfBounds`] when `id >= nsensor`.
     /// Returns [`MjDataError::LengthMismatch`] when `dst.len() != sensor_dim[id]`.
@@ -909,6 +919,7 @@ impl<M: ModelType> MjData<M> {
     }
 
     /// Same as [`MjData::read_sensor`], except the value(s) are returned as a stack-allocated `[MjtNum; N]`.
+    /// Wraps [`mj_readSensor`].
     /// # Panics
     /// Panics when `id >= nsensor` or `N != sensor_dim[id]`.
     /// Use [`MjData::try_read_sensor_fixed`] for a fallible alternative.
@@ -949,6 +960,7 @@ impl<M: ModelType> MjData<M> {
     /// [`Cow::Owned`] is returned with the interpolated result. Otherwise (exact match, ZOH, or `time - delay` outside
     /// the buffer's time range), [`Cow::Borrowed`] is returned, containing sensor's slice in the delay buffer.
     /// See also [`read_sensor_fixed`](Self::read_sensor_fixed), [`read_sensor_into`](Self::read_sensor_into).
+    /// Wraps [`mj_readSensor`].
     /// # Panics
     /// Panics when `id >= nsensor`. Use [`MjData::try_read_sensor`] for a fallible alternative.
     pub fn read_sensor(&self, id: usize, time: MjtNum, interp: i32) -> Cow<'_, [MjtNum]> {
@@ -1928,6 +1940,14 @@ impl<M: ModelType> MjData<M> {
         self.model.layout()
     }
 
+    /// Returns the number of initialized entries in `efc_J`.
+    fn efc_j_len(&self) -> usize {
+        // Dense mode sizes nJ by the counted rows, but MuJoCo skips an empty non-contact row;
+        // sparse nJ never exceeds nefc * nv.
+        let nefc_nv = (self.ffi().nefc as usize).strict_mul(self.model.ffi().nv as usize);
+        (self.ffi().nJ as usize).min(nefc_nv)
+    }
+
     getter_setter! {get, [
         [ffi] efm_active: bool; "implicit effective metric M+K is active (see mj_effBuild).";
     ]}
@@ -2194,7 +2214,7 @@ impl<M: ModelType> MjData<M> {
         (read = unsafe) efc_J_rowadr: &[i32; "row start address in colind array"; ffi().nefc],
         (read = unsafe) efc_J_rowsuper: &[i32; "number of subsequent rows in supernode"; ffi().nefc],
         (read = unsafe) efc_J_colind: &[i32; "column indices in constraint Jacobian"; ffi().nJ],
-        efc_J: &[MjtNum; "constraint Jacobian"; ffi().nJ],
+        efc_J: &[MjtNum; "constraint Jacobian"; efc_j_len()],
         efc_pos: &[MjtNum; "constraint position (equality, contact)"; ffi().nefc],
         efc_margin: &[MjtNum; "inclusion margin (contact)"; ffi().nefc],
         efc_frictionloss: &[MjtNum; "frictionloss (friction)"; ffi().nefc],

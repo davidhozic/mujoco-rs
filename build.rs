@@ -9,19 +9,22 @@ use std::env;
 mod build_dependencies {
     use bindgen::callbacks::{DeriveInfo, EnumVariantValue, ParseCallbacks};
     use super::*;
-    use std::{cell::RefCell, collections::{BTreeMap, BTreeSet}, fs, sync::Arc};
+    use std::{cell::RefCell, collections::{BTreeMap, BTreeSet}, fs, rc::Rc};
+
+    /// The safe variants (name and value) of each enum, in declaration order.
+    type EnumSafeVariants = Rc<RefCell<BTreeMap<String, Vec<(String, u64)>>>>;
 
     #[derive(Debug)]
     struct BindgenOverrides {
         /// The variants of each enum that come before its count variant (e.g., `mjNOBJECT`).
         /// RefCell due to bindgen API limits.
-        enum_safe_variants: Arc<RefCell<BTreeMap<String, Vec<(String, u64)>>>>,
+        enum_safe_variants: EnumSafeVariants,
         /// The enums whose count variant was already seen, thus no later variant is safe.
         enum_safe_exhausted: RefCell<BTreeSet<String>>,
     }
 
     impl BindgenOverrides {
-        fn new(enum_safe_variants: Arc<RefCell<BTreeMap<String, Vec<(String, u64)>>>>) -> Self {
+        fn new(enum_safe_variants: EnumSafeVariants) -> Self {
             Self { enum_safe_variants, enum_safe_exhausted: RefCell::new(BTreeSet::new()) }
         }
     }
@@ -66,7 +69,7 @@ mod build_dependencies {
             variant_value: bindgen::callbacks::EnumVariantValue,
         ) -> Option<bindgen::callbacks::EnumVariantCustomBehavior>
         {
-            let Some(enum_name) = enum_name.and_then(|n| n.strip_prefix("enum ")) else { return None; };
+            let enum_name = enum_name.and_then(|n| n.strip_prefix("enum "))?;
             let mut borrow_safe_variants = self.enum_safe_variants.borrow_mut();
             let mut borrow_exhausted = self.enum_safe_exhausted.borrow_mut();
 
@@ -102,7 +105,7 @@ mod build_dependencies {
         let include_dir_mujoco = current_dir.join("mujoco/include/mujoco");
 
         // The variants of each enum that come before its count variant. These form the base enums.
-        let enum_safe_variants = Arc::new(RefCell::new(BTreeMap::new()));
+        let enum_safe_variants = Rc::new(RefCell::new(BTreeMap::new()));
 
         // Generate bindings
         let bindings_mujoco = bindgen::Builder::default()

@@ -698,7 +698,7 @@ impl MjSpec {
         Ok(n_discarded_visual as u32)
     }
 
-    /// Deduplicates assets such that the first asset's name of its group (i.e., textures, meshes, etc.) is used,
+    /// Deduplicates assets such that the first asset's name of its group (textures and meshes) is used,
     /// while other duplicates get removed and their usages repointed to the first asset.
     /// 
     /// Wraps [`mjs_dedupAssets`].
@@ -1655,8 +1655,9 @@ impl<Capability> MjsActuator<Capability> {
     /// [`MjsActuator::set_to_position`], but integrates the control signal into an activation
     /// variable.
     /// # Errors
-    /// Returns [`MjEditError::InvalidParameter`] when `inheritrange` is set together with an
-    /// activation range.
+    /// Returns [`MjEditError::InvalidParameter`] when the configuration is rejected, e.g. `kv` and
+    /// `dampratio` are both set, a value that must be non-negative is negative, or `inheritrange`
+    /// is set together with an activation range.
     pub fn set_to_int_velocity(&mut self, config: IntVelocityConfig) -> Result<(), MjEditError> {
         let IntVelocityConfig { kp, inheritrange, mut kv, mut dampratio, mut timeconst } = config;
         let c_err_msg = unsafe { mjs_setToIntVelocity(

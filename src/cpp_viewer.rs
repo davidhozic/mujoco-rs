@@ -3,6 +3,7 @@
 //! This module exposes [`MjViewerCpp`], which requires static linking against a patched MuJoCo
 //! build. It is only available when the `cpp-viewer` Cargo feature is enabled.
 //! For most use cases, the Rust-native [`crate::viewer::MjViewer`] is recommended instead.
+use crate::wrappers::mj_rendering::CONTEXT_COUNTER_MUTEX;
 use crate::wrappers::mj_model::traits::ModelTypeMut;
 use crate::wrappers::mj_visualization::*;
 use crate::wrappers::mj_data::MjData;
@@ -171,8 +172,13 @@ impl<M: ModelTypeMut> MjViewerCpp<M> {
         let model_usize = model.as_raw_ptr() as usize;
         let data_usize = data.as_raw_ptr() as usize;
 
-        // SAFETY: `simulate` is non-null; the caller guarantees this is the main thread.
-        unsafe { mujoco_cSimulate_RenderInit(simulate) };
+        // RenderInit, RenderStep and destroy can create or free the context, so they hold the lock.
+        // Load must not hold it, because it waits for a render step.
+        {
+            let _lock = CONTEXT_COUNTER_MUTEX.lock_unpoison();
+            // SAFETY: `simulate` is non-null; the caller guarantees this is the main thread.
+            unsafe { mujoco_cSimulate_RenderInit(simulate) };
+        }
 
         // Load on another thread, since the viewer internally blocks until loaded.
         // This is intentional and is the intended way of using the C++ viewer.
@@ -186,8 +192,11 @@ impl<M: ModelTypeMut> MjViewerCpp<M> {
         });
 
         while !load_thread.is_finished() {
-            // SAFETY: same pointer and thread as `mujoco_cSimulate_RenderInit` above.
-            let running = unsafe { mujoco_cSimulate_RenderStep(simulate) };
+            let running = {
+                let _lock = CONTEXT_COUNTER_MUTEX.lock_unpoison();
+                // SAFETY: same pointer and thread as `mujoco_cSimulate_RenderInit` above.
+                unsafe { mujoco_cSimulate_RenderStep(simulate) }
+            };
             if running == 0 {
                 // Window closed during model load; stop rendering.
                 warn!("the C++ viewer window closed while the model was loading");
@@ -247,9 +256,13 @@ impl<M: ModelTypeMut> MjViewerCpp<M> {
             return Err("render called after viewer has been closed!");
         }
 
-        // SAFETY: self.sim is valid until drop. The viewer is not `Send`, so this runs on the
-        // main thread that `launch_passive` was called on.
-        if unsafe { mujoco_cSimulate_RenderStep(self.sim) } == 0 {
+        let running = {
+            let _lock = CONTEXT_COUNTER_MUTEX.lock_unpoison();
+            // SAFETY: self.sim is valid until drop. The viewer is not `Send`, so this runs on the
+            // main thread that `launch_passive` was called on.
+            unsafe { mujoco_cSimulate_RenderStep(self.sim) }
+        };
+        if running == 0 {
             self.running.store(false, Ordering::Relaxed);
         }
         Ok(())
@@ -272,6 +285,7 @@ impl<M: ModelTypeMut> Drop for MjViewerCpp<M> {
         // ExitRequest signals the C++ side to shut down, and destroy frees the allocation.
         unsafe {
             mujoco_cSimulate_ExitRequest(self.sim);
+            let _lock = CONTEXT_COUNTER_MUTEX.lock_unpoison();
             mujoco_cSimulate_destroy(self.sim);
         }
     }

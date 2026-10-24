@@ -691,7 +691,8 @@ macro_rules! nested_handle {
 
 
 /// Creates the wrapper `$handle` around the FFI struct `$raw`. It also implements the methods
-/// `info()` and `set_info()`, and the traits `Sealed` and [`SpecItem`](super::traits::SpecItem).
+/// `info()` and `set_info()`, and the traits `Sealed`, [`SpecElement`](super::traits::SpecElement),
+/// [`SpecItem`](super::traits::SpecItem) and [`UserValued`](super::traits::UserValued).
 /// The handles are deliberately neither [`Send`] nor [`Sync`].
 ///
 /// A leading `$kind with SpecObject:` also implements [`SpecObject`](super::traits::SpecObject).

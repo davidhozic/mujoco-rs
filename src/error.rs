@@ -467,9 +467,7 @@ impl fmt::Display for MjModelError {
                      but need at least {needed}"
                 )
             }
-            Self::IncompatibleModel { source, destination }=> write!(
-                f, "source = {source:?}, destination = {destination:?}"
-            ),
+            Self::IncompatibleModel { .. } => write!(f, "incompatible model"),
             Self::VfsError(_) => write!(f, "VFS operation failed"),
             Self::IndexOutOfBounds { id, len } => write!(
                 f,

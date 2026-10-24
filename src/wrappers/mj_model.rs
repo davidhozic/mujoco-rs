@@ -1329,6 +1329,10 @@ impl MjModel {
     /// (some of which may be loaded by reference in this [`MjModel`]).
     /// 
     /// Wraps [`mj_embedAssets`].
+    ///
+    /// # Errors
+    /// Returns [`MjModelError::LoadFailed`] with MuJoCo's error message when a by-reference asset
+    /// does not resolve.
     pub fn to_embed_assets(&self) -> Result<MjModel, MjModelError> {
         let mut error = [0; 500];
         // SAFETY: the ffi pointer is always valid while MjModel exists. Error length is checked and can't overflow.

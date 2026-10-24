@@ -73,10 +73,10 @@ impl Default for MjrRectangle {
 /***********************************************************************************************************************
 ** MjrContext
 ***********************************************************************************************************************/
-/// A static [`Mutex`] preventing race conditions of the `context_count` C static for tracking count of created contexts.
-/// At the time of writing, `context_count` is used in `mjr_makeContext_offSize`
-/// (and consequently in [`mjr_makeContext`]), [`mjr_freeContext`] and [`mjr_getRendererInfo`].
-static CONTEXT_COUNTER_MUTEX: Mutex<()> = Mutex::new(());
+/// Serializes calls that change the C static `context_count` in MuJoCo's code.
+/// This happens in [`mjr_makeContext`], [`mjr_freeContext`]
+///  and in C++ viewer's calls that create or free its context.
+pub(crate) static CONTEXT_COUNTER_MUTEX: Mutex<()> = Mutex::new(());
 
 /// Wraps `mjrContext`, the MuJoCo rendering context.
 ///
@@ -97,7 +97,7 @@ static CONTEXT_COUNTER_MUTEX: Mutex<()> = Mutex::new(());
 #[derive(Debug)]
 pub struct MjrContext {
     ffi: Box<mjrContext>,
-    layout: Arc<MjModelLayout>,
+    pub(crate) layout: Arc<MjModelLayout>,
 }
 
 impl MjrContext {
@@ -127,7 +127,7 @@ impl MjrContext {
             let mut c = Box::new_uninit();
             mjr_defaultContext(c.as_mut_ptr());
             {
-                let _lock = CONTEXT_COUNTER_MUTEX.lock_unpoison();  // protect `context_count` in C.
+                let _lock = CONTEXT_COUNTER_MUTEX.lock_unpoison();
                 mjr_makeContext(model.ffi(), c.as_mut_ptr(), MjtFontScale::mjFONTSCALE_100 as i32);
             }
             Self { ffi: c.assume_init(), layout: Arc::clone(model.layout()) }
@@ -300,12 +300,16 @@ impl MjrContext {
     }
 
     /// Draws a text overlay. The optional `overlay2` parameter displays additional overlay, next to `overlay`.
+    ///
     /// # Panics
-    /// A panic occurs the `overlay` or `overlay2` contain one or both of the following:
-    /// - non-ASCII characters;
-    /// - null bytes.
+    /// Panics if `overlay` or `overlay2` contains a byte at or above 0x7F (non-ASCII or DEL) or a
+    /// NUL byte.
     pub fn overlay(&mut self, font: MjtFont, gridpos: MjtGridPos, viewport: MjrRectangle, overlay: &str, overlay2: Option<&str>) {
-        assert!(overlay.is_ascii() && overlay2.is_none_or(str::is_ascii), "the input text must be ASCII");
+        // C indexes charWidth/charWidthBig (127 entries) with each byte.
+        assert!(
+            overlay.bytes().chain(overlay2.unwrap_or("").bytes()).all(|b| b < 0x7F),
+            "the input text must be ASCII without DEL"
+        );
 
         let c_overlay = CString::new(overlay).unwrap();
         let c_overlay2 = overlay2.map(|x| CString::new(x).unwrap());
@@ -449,7 +453,7 @@ impl Drop for MjrContext {
         // SAFETY: self.ffi was fully initialized in new() and has not been freed.
         // Global (C static) data is protected via `CONTEXT_COUNTER_MUTEX`.
         unsafe {
-            let _lock = CONTEXT_COUNTER_MUTEX.lock_unpoison();  // protect `context_count` in C.
+            let _lock = CONTEXT_COUNTER_MUTEX.lock_unpoison();
             mjr_freeContext(self.ffi.as_mut());
         }
     }

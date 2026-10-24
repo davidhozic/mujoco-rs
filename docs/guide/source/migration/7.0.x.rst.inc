@@ -1,7 +1,7 @@
-.. _migrate_unreleased:
+.. _migrate_7_0_0:
 
-Unreleased [7.0.0] (MuJoCo 3.17.0)
-==================================
+Migrating to 7.0.0
+==================
 
 
 Tendon tree count is unsafe to mutate
@@ -171,9 +171,10 @@ The ``r#type`` field of :docs-rs:`~mujoco_rs::wrappers::mj_model::<struct>MjSite
 ``zero`` of a mutable view skips the unsafe fields
 --------------------------------------------------
 
-The ``zero`` method of a mutable view no longer zeroes the fields that are now
-``PointerViewUnsafeMut`` (above). Write these fields through the unsafe view if you need them
-zeroed.
+The ``zero`` method of a mutable view (e.g.
+:docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjActuatorModelViewMut::<method>zero`) no longer
+zeroes the fields that are now ``PointerViewUnsafeMut`` (above). Write these fields through the
+unsafe view if you need them zeroed.
 
 .. code-block:: rust
 
@@ -191,8 +192,16 @@ zeroed.
 More constraint arrays of ``MjData`` are unsafe to read
 -------------------------------------------------------
 
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_diag_a`, ``efc_kbip``, ``efc_d``,
-``efc_r``, ``iefc_d``, ``iefc_r``, ``efc_y``, ``efc_ar``, ``efm_c`` and ``efm_l`` are now
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_diag_a`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_kbip`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_d`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_r`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>iefc_d`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>iefc_r`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_y`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efc_ar`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efm_c` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>efm_l` are now
 ``unsafe fn``, and so are their ``_mut`` variants. MuJoCo does not zero these arrays, so read them
 only after the pipeline stage
 that computes them. ``efc_y`` and ``efc_ar`` stay uninitialized under some solver settings.
@@ -245,7 +254,8 @@ the data through :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method
 Replace ``user_scn_mut`` with
 :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjCppViewerSharedState::<method>user_geoms_mut` and
 :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync_user_geoms`.
-The latter method is unsafe due to the ability of users to write invalid IDs into <TODO-LINK-TO-MJVGEOM>.
+The former method is unsafe due to the ability of users to write invalid IDs into
+:docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom`.
 
 .. code-block:: rust
 
@@ -281,7 +291,8 @@ The latter method is unsafe due to the ability of users to write invalid IDs int
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_ctrl` and
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_read_ctrl` return a
-``Cow<[MjtNum]>`` with one value per control of the actuator. To avoid heap allocation, use
+``Cow<[MjtNum]>`` (:docs-rs:`~mujoco_rs::wrappers::mj_primitive::<type>MjtNum`) with one value per
+control of the actuator. To avoid heap allocation, use
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_ctrl_fixed` or
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>read_ctrl_into`.
 
@@ -373,7 +384,10 @@ for other items.
 Renaming a default class caused undefined behavior.
 
 It now implements only the new supertrait :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecElement`,
-the latter holding ``element_pointer``, ``element_mut_pointer`` and ``name``.
+the latter holding
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecElement::<tymethod>element_pointer`,
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecElement::<method>element_mut_pointer` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_editing::<trait>SpecElement::<method>name`.
 
 Code that previously relied on (or imported explicitly) ``SpecItem`` directly should
 also add an import of ``SpecElement``, in addition to updating the type bounds in generics.
@@ -399,12 +413,14 @@ Default-class members have field accessors only
 
 The member accessors of :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>MjsDefault` now return
 handles marked with :docs-rs:`~mujoco_rs::wrappers::mj_editing::<struct>InDefault`, for example
-``&mut MjsJoint<InDefault>``. These handles have no methods of
+``&mut MjsJoint<InDefault>`` (|mjs_joint|). These handles have no methods of
 :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecElement` or of the traits built on it
-(``SpecItem``, ``SpecObject``, ``FrameChild``, ``Attach``, ``UserValued``).
+(``SpecItem``, :docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>SpecObject`, ``FrameChild``,
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>Attach`,
+:docs-rs:`~mujoco_rs::wrappers::mj_editing::<trait>UserValued`).
 
 The marker is needed to hide all the (trait) methods that aren't actually supported
-and would, prior to the change, just segment fault.
+and would, prior to the change, cause a segmentation fault.
 
 .. code-block:: rust
 
@@ -421,7 +437,7 @@ and would, prior to the change, just segment fault.
 ---------------------------------------------------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>contact_force` now panics when
-``contact_id >= ncon``. Use 
+``contact_id >= ncon``. Use
 :docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_contact_force` to handle an
 invalid ID.
 
@@ -438,7 +454,9 @@ invalid ID.
 ---------------------------------------------------
 
 :docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>is_compatible_with_model`
-now refuses more models, and ``MjvScene::update`` panics on such a model. If you reuse one scene
+now refuses more models, and
+:docs-rs:`~~mujoco_rs::wrappers::mj_visualization::<struct>MjvScene::<method>update`
+panics on such a model. If you reuse one scene
 for several models, create a new scene when the check fails.
 
 .. code-block:: rust
@@ -501,7 +519,8 @@ Unsupported-object-type errors now carry the object type
 A model swap refuses more models
 --------------------------------
 
-:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` and ``try_swap_model``
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>swap_model` and
+:docs-rs:`~~mujoco_rs::wrappers::mj_data::<struct>MjData::<method>try_swap_model`
 now refuse a model that differs in a size or in an integer table that no safe accessor writes,
 apart from the names, the paths, the buffer size, the mesh faces and hulls, the bounding volume
 and octree nodes and the values derived from floats.
