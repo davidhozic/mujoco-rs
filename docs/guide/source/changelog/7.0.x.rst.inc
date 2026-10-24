@@ -269,6 +269,9 @@ Unreleased [7.0.0] (MuJoCo 3.17.0)
 
 .. rubric:: Bug fixes
 
+- :docs-rs:`~~mujoco_rs::viewer::<struct>ViewerSharedState::<method>update_texture_from` and
+  :docs-rs:`~~mujoco_rs::viewer::<struct>MjViewer::<method>update_texture_from` no longer panic on a
+  texture loaded by-reference to |mj_model|.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsMaterial::<method>set_textures` and
   :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsTexture::<method>set_cubefiles` now fill
   the remaining needed parts of the vector with empty entries. A shorter length of vectors caused

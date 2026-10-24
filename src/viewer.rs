@@ -448,16 +448,18 @@ impl ViewerSharedState {
         if texture_id >= ntex {
             return Err(MjViewerError::IndexOutOfBounds { id: texture_id, len: ntex });
         }
-        let tex_adr = model.tex_adr()[texture_id] as usize;
-        let tex_width = model.tex_width()[texture_id] as usize;
-        let tex_height = model.tex_height()[texture_id] as usize;
-        let tex_nchannel = model.tex_nchannel()[texture_id] as usize;
-        let tex_len = tex_width * tex_height * tex_nchannel;
-        // SAFETY: the asset memory and the bounds are verified above; tex_len is derived from
-        // the texture's own metadata, so the slice cannot exceed the allocation.
-        unsafe { self.data_passive.model_mut() }
-            .tex_data_mut()[tex_adr..tex_adr + tex_len]
-            .copy_from_slice(&model.tex_data()[tex_adr..tex_adr + tex_len]);
+        // By-reference textures (tex_adr == -1) are always re-read from files.
+        if let Ok(tex_adr) = usize::try_from(model.tex_adr()[texture_id]) {
+            let tex_width = model.tex_width()[texture_id] as usize;
+            let tex_height = model.tex_height()[texture_id] as usize;
+            let tex_nchannel = model.tex_nchannel()[texture_id] as usize;
+            let tex_len = tex_width * tex_height * tex_nchannel;
+            // SAFETY: the asset memory and the bounds are verified above; tex_len is derived from
+            // the texture's own metadata, so the slice cannot exceed the allocation.
+            unsafe { self.data_passive.model_mut() }
+                .tex_data_mut()[tex_adr..tex_adr + tex_len]
+                .copy_from_slice(&model.tex_data()[tex_adr..tex_adr + tex_len]);
+        }
         self.texture_reupload_pending.insert(texture_id);
         Ok(())
     }
@@ -2144,6 +2146,8 @@ bitflags! {
 
 #[cfg(test)]
 mod tests {
+    use crate::wrappers::{MjSpec, SpecItem, mj_editing::MjtEmbed};
+
     use super::*;
 
     /// A model with a free joint, whose `qpos0` holds a unit quaternion.
@@ -2153,6 +2157,27 @@ mod tests {
     const MODEL_HINGE: &str =
         "<mujoco><option gravity=\"0 0 -1\"/><worldbody><body><joint type=\"hinge\"/>\
          <geom size=\"0.1\"/></body></worldbody></mujoco>";
+
+    #[test]
+    fn test_update_texture_from_by_reference() {
+        const PNG_PATH: &str = "_TMP_viewer_byref_texture.png";
+        std::fs::write(PNG_PATH, crate::util::testing::PNG_1X1).unwrap();
+
+        let mut spec = MjSpec::new();
+        spec.add_texture()
+            .with_file(PNG_PATH)
+            .with_name("texture")
+            .set_embed(MjtEmbed::mjEMBED_FALSE);
+
+        let model = spec.compile();
+        std::fs::remove_file(PNG_PATH).unwrap();
+        let model = model.unwrap();
+        assert_eq!(model.tex_adr()[0], -1);
+
+        let mut state = ViewerSharedState::new(&model, 0);
+        state.update_texture_from(&model, 0).unwrap();
+        assert!(state.texture_reupload_pending.contains(&0));
+    }
 
     /// A reload replaces the passive model, so the merge shadow must describe the new one. A stale
     /// shadow makes the next `sync_model` overwrite the caller's own edit.

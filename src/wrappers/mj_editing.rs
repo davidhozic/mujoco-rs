@@ -664,6 +664,9 @@ impl MjSpec {
     ///
     /// Wraps [`mjs_discardVisual`].
     ///
+    /// # Returns
+    /// When [`Ok`] is returned, it wraps the number of discarded elements.
+    ///
     /// # Errors
     /// Returns [`MjEditError::OperationFailed`] with MuJoCo's error message if the discard fails.
     pub fn discard_visual(&mut self) -> Result<u32, MjEditError> {
@@ -2831,8 +2834,8 @@ impl<'a> MjFlexcompConfig<'a> {
             pos: [f64; 3];        "the translation of all points relative to the parent body frame.";
             quat: [f64; 4];       "the quaternion rotation of all points around the position offset.";
             origin: [f64; 3];     "the flexcomp origin used to build a volumetric mesh from a surface mesh.";
-            file: &'a str;        "the file to load the surface or volumetric mesh from.";
-            vfs: &'a MjVfs;       "the virtual file system used to resolve the mesh file.";
+            file: &'a str;        "the name of a mesh asset in the spec, or else the file to load the surface or volumetric mesh from.";
+            vfs: &'a MjVfs;       "the virtual file system used to resolve the mesh file (unused for a mesh asset).";
         ]
     }
 }

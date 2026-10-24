@@ -1802,7 +1802,7 @@ impl MjModel {
         (mut = unsafe) tex_height: &[i32; "number of rows in texture image"; ffi().ntex],
         (mut = unsafe) tex_width: &[i32; "number of columns in texture image"; ffi().ntex],
         (mut = unsafe) tex_nchannel: &[i32; "number of channels in texture image"; ffi().ntex],
-        (mut = unsafe) tex_adr: &[MjtSize; "start address in tex_data"; ffi().ntex],
+        (mut = unsafe) tex_adr: &[MjtSize; "start address in tex_data; -1 when loaded by-reference from file (i.e., not embedded in tex_data)"; ffi().ntex],
         tex_data: &[MjtByte; "pixel values"; ffi().ntexdata],
         (mut = unsafe) tex_pathadr: &[i32; "address of texture asset path; -1: none"; ffi().ntex],
         (mut = unsafe) tex_contenttypeadr: &[i32; "content type address in paths; -1: none"; ffi().ntex],
@@ -4515,16 +4515,8 @@ mod tests {
     fn test_embedding_of_model() {
         const TEX_NAME: &str = "someTexture.png";
         const PNG_PATH: &str = "_TMP_someTexture.png";
-        const PNG_DATA: &[u8] = &[  // 1x1 PNG
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
-            0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00,
-            0x0C, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x60, 0x60, 0x60, 0x00,
-            0x00, 0x00, 0x04, 0x00, 0x01, 0xF6, 0x17, 0x38, 0x55, 0x00, 0x00, 0x00,
-            0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
-        ];
 
-        std::fs::write(PNG_PATH, PNG_DATA).unwrap();
+        std::fs::write(PNG_PATH, crate::util::testing::PNG_1X1).unwrap();
 
         let mut spec = MjSpec::new();
         spec.add_texture()

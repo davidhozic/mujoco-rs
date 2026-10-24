@@ -132,8 +132,8 @@ pub trait SpecObject: SpecItem {
 
     /// Delete the element from the specification that holds it.
     ///
-    /// Deleting a body or a frame deletes its subtree, and frees every keyframe, and every actuator,
-    /// sensor, tendon, equality, pair and exclude that refers to the subtree.
+    /// Deleting a body or a frame deletes its subtree, and frees every actuator, sensor, tendon,
+    /// equality, pair and exclude that refers to the subtree.
     ///
     /// # Errors
     /// - [`MjEditError::UnsupportedOperation`] if the element is the world body.
@@ -143,9 +143,9 @@ pub trait SpecObject: SpecItem {
     /// # Safety
     /// - Delete each element at most once. MuJoCo keeps the element allocated until the
     ///   specification drops, so a second deletion frees it twice.
-    /// - Do not delete an element that the deletion of a body or a frame already took out of the
-    ///   specification. An iterator collected before that deletion still hands out its handle.
-    /// - Do not use the handle of an element that the deletion of a body or a frame freed.
+    /// - Do not delete an element that an earlier deletion already took out of the specification.
+    ///   An iterator collected before that deletion still hands out its handle.
+    /// - Do not use the handle of an element that an earlier deletion freed.
     ///
     /// # Examples
     /// ```

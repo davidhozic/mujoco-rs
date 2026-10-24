@@ -7,7 +7,7 @@ use std::fmt::Display;
 
 use crate::mujoco_c::{mj_version, mjVERSION_HEADER};
 
-/// Helpers that only the generated sanitizer probes use.
+/// Helpers for the generated sanitizer probes, and fixtures for the in-crate tests.
 #[cfg(test)]
 pub(crate) mod testing;
 
