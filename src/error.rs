@@ -313,6 +313,8 @@ pub enum MjEditError {
     CompileFailed(String),
     /// MuJoCo failed to save the spec to XML.
     SaveFailed(String),
+    /// Some operation on [`MjSpec`](crate::wrappers::mj_editing::MjSpec) failed in MuJoCo.
+    OperationFailed(String),
     /// A referenced element (e.g. parent default class) was not found.
     NotFound,
     /// An element with the same name already exists.
@@ -356,6 +358,7 @@ impl fmt::Display for MjEditError {
             Self::ParseFailed(msg) => write!(f, "parse failed: {msg}"),
             Self::CompileFailed(msg) => write!(f, "compilation failed: {msg}"),
             Self::SaveFailed(msg) => write!(f, "save failed: {msg}"),
+            Self::OperationFailed(msg) => write!(f, "operation failed: {msg}"),
             Self::NotFound => write!(f, "referenced element not found"),
             Self::AlreadyExists => write!(f, "element with the same name already exists"),
             Self::UnsupportedOperation => write!(f, "this operation is not supported"),

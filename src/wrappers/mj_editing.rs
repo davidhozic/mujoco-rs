@@ -630,7 +630,7 @@ impl MjSpec {
     /// When [`Ok`] is returned, it wraps the number of fused bodies.
     /// 
     /// # Errors
-    /// Returns [`MjEditError::CompileFailed`] with MuJoCo's error message if the fuse fails.
+    /// Returns [`MjEditError::OperationFailed`] with MuJoCo's error message if the fuse fails.
     pub fn fuse_static(&mut self) -> Result<u32, MjEditError> {
         self.fuse_static_impl(None)
     }
@@ -649,7 +649,7 @@ impl MjSpec {
 
         if n_fused_bodies == -1 {
             // SAFETY: error is guaranteed (by C code) to be set.
-            return Err(MjEditError::CompileFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }));
+            return Err(MjEditError::OperationFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }));
         }
 
         // n_fused_bodies is either -1 or >=0, guaranteed by MuJoCo..
@@ -665,7 +665,7 @@ impl MjSpec {
     /// Wraps [`mjs_discardVisual`].
     ///
     /// # Errors
-    /// Returns [`MjEditError::CompileFailed`] with MuJoCo's error message if the discard fails.
+    /// Returns [`MjEditError::OperationFailed`] with MuJoCo's error message if the discard fails.
     pub fn discard_visual(&mut self) -> Result<u32, MjEditError> {
         self.discard_visual_impl(None)
     }
@@ -673,7 +673,7 @@ impl MjSpec {
     /// Same as [`MjSpec::discard_visual`] except it uses a virtual filesystem from which asset files are read.
     ///
     /// # Errors
-    /// Returns [`MjEditError::CompileFailed`] with MuJoCo's error message if the discard fails.
+    /// Returns [`MjEditError::OperationFailed`] with MuJoCo's error message if the discard fails.
     pub fn discard_visual_with_vfs(&mut self, vfs: &MjVfs) -> Result<u32, MjEditError> {
         self.discard_visual_impl(Some(vfs))
     }
@@ -687,12 +687,38 @@ impl MjSpec {
 
         if n_discarded_visual == -1 {
             // SAFETY: error is guaranteed (by C code) to be set.
-            return Err(MjEditError::CompileFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }));
+            return Err(MjEditError::OperationFailed(unsafe { read_spec_error(self.ffi.as_ptr()) }));
         }
 
         // n_discarded_visual is either -1 or >=0, guaranteed by MuJoCo.
         debug_assert!(n_discarded_visual >= 0, "MuJoCo should return either -1 or >= 0");
         Ok(n_discarded_visual as u32)
+    }
+
+    /// Deduplicates assets such that the first asset's name of its group (i.e., textures, meshes, etc.) is used,
+    /// while other duplicates get removed and their usages repointed to the first asset.
+    /// 
+    /// Wraps [`mjs_dedupAssets`].
+    /// 
+    /// # Returns
+    /// When successful, [`Ok`] is returned with the count of deduplicated assets wrapped inside.
+    /// 
+    /// # Errors
+    /// When deduplication fails for any reason, [`MjEditError::OperationFailed`] is returned, containing
+    /// the actual error message in [`String`] form. This message is given by MuJoCo internally.
+    pub fn dedup_assets(&mut self) -> Result<u32, MjEditError> {
+        // SAFETY: the ffi pointer is always valid while MjSpec exists and only safe API is used by the user.
+        let n_deduped = unsafe { mjs_dedupAssets(self.ffi.as_mut()) };
+
+        // Error, set via C++ API.
+        if n_deduped < 0 {
+            // SAFETY: the ffi pointer is always valid as said above. The error is guaranteed to be set in the C++ API.
+            let error = unsafe { read_spec_error(self.ffi.as_ptr()) };
+            return Err(MjEditError::OperationFailed(error))
+        }
+
+        // SAFETY: n_deduped is guaranteed here to be >= 0.
+        Ok(n_deduped as u32)
     }
 
     /// Encode [`MjSpec`] to `filepath` using an encoder registered for encoding `content_type`.
@@ -2946,7 +2972,7 @@ impl MjsBody {
     /// Wraps [`mjs_adoptInertial`].
     ///
     /// # Errors
-    /// Returns [`MjEditError::CompileFailed`] with MuJoCo's error message if the body is the
+    /// Returns [`MjEditError::OperationFailed`] with MuJoCo's error message if the body is the
     /// world body, if the compiler's `inertiafromgeom` is "true", or if the spec fails to resolve.
     pub fn adopt_inertial(&mut self) -> Result<(), MjEditError> {
         self.adopt_inertial_impl(None)
@@ -2955,7 +2981,7 @@ impl MjsBody {
     /// Same as [`MjsBody::adopt_inertial`] except it uses a virtual filesystem from which asset files are read.
     ///
     /// # Errors
-    /// Returns [`MjEditError::CompileFailed`] with MuJoCo's error message if the adoption fails.
+    /// Returns [`MjEditError::OperationFailed`] with MuJoCo's error message if the adoption fails.
     pub fn adopt_inertial_with_vfs(&mut self, vfs: &MjVfs) -> Result<(), MjEditError> {
         self.adopt_inertial_impl(Some(vfs))
     }
@@ -2969,7 +2995,7 @@ impl MjsBody {
 
         if result == -1 {
             // SAFETY: error is guaranteed (by C code) to be set.
-            return Err(MjEditError::CompileFailed(unsafe { read_spec_error(self.owning_spec().cast_mut()) }));
+            return Err(MjEditError::OperationFailed(unsafe { read_spec_error(self.owning_spec().cast_mut()) }));
         }
 
         Ok(())
@@ -5026,5 +5052,22 @@ mod tests {
         let config = grid.with_count([8, 2, 12]).with_spacing([0.025, 0.05, 0.025])
             .with_cellcount([6, 1, 6]);
         spec.world_body_mut().try_add_flexcomp("hollow", &config).unwrap();
+    }
+
+    #[test]
+    fn test_asset_deduplication() {
+        let mut spec = MjSpec::new();
+
+        spec.add_texture()
+            .with_name("name 1")
+            .with_file("localfile.png");
+        spec.add_texture()
+            .with_name("name 2")
+            .with_file("localfile.png");
+
+        assert_eq!(spec.texture_iter().count(), 2, "two duplicated textures must exist.");
+        assert_eq!(spec.dedup_assets().unwrap(), 1, "one asset (second texture) should be deduped.");
+        assert_eq!(spec.texture_iter().count(), 1, "only one texture should exist after deduplication.");
+        assert_eq!(spec.texture_iter().next().unwrap().name(), "name 1", "the first texture's name must be used");
     }
 }

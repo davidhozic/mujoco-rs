@@ -173,6 +173,8 @@ Unreleased [7.0.0] (MuJoCo 3.17.0)
 .. rubric:: Error handling
 
 - New variant :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>FrameParentMismatch` :sup:`new`.
+- New variant :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>OperationFailed` :sup:`new`
+  holds MuJoCo's error message when a spec operation other than compilation fails.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>try_add_flexcomp` now returns
   :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>InvalidParameter` with MuJoCo's error
   message when MuJoCo fails to create the flex, for example for a missing mesh file. Before, it
@@ -225,6 +227,8 @@ Unreleased [7.0.0] (MuJoCo 3.17.0)
   - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>discard_visual` :sup:`new` and
     :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>discard_visual_with_vfs` :sup:`new`
     discard the elements which are only visual.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjSpec::<method>dedup_assets` :sup:`new`
+    removes duplicate assets and points their users to the first asset of each group.
 
 *Rendering*
 
