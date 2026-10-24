@@ -110,7 +110,7 @@ impl<M: ModelType> MjData<M> {
     /// # Notes
     /// This method only validates the model memory layout.
     /// **Not all model parameters are safe (for correct simulation) to change at runtime.**
-    /// See [here](https://mujoco.readthedocs.io/en/3.16.0/programming/simulation.html#mjmodel-changes)
+    /// See [here](https://mujoco.readthedocs.io/en/3.17.0/programming/simulation.html#mjmodel-changes)
     /// to see what parameters can be changed.
     /// 
     /// If `M` implements [`ModelTypeMut`], prefer
@@ -1967,7 +1967,7 @@ impl<M: ModelTypeMut> MjData<M> {
     /// (e.g., timestep, gravity) without having to rebuild the simulation.
     ///
     /// **Not all model parameters are safe to change at runtime.**
-    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.16.0/programming/simulation.html#mjmodel-changes)
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.17.0/programming/simulation.html#mjmodel-changes)
     /// for a list of parameters that are safe to change.
     ///
     /// Only available when the inner model type `M` implements [`ModelTypeMut`]
@@ -2059,7 +2059,7 @@ impl<M: ModelTypeMut> MjData<M> {
     /// 
     /// # Note
     /// MuJoCo aborts the process through `mjERROR` when the model is inconsistent.
-    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.16.0/programming/simulation.html#mjmodel-changes)
+    /// See [MuJoCo's documentation](https://mujoco.readthedocs.io/en/3.17.0/programming/simulation.html#mjmodel-changes)
     /// for information about safety of model changes.
     pub fn set_const(&mut self) {
         // SAFETY: All modifications are local to the owned data.

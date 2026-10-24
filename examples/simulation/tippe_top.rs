@@ -15,7 +15,7 @@
 //! built into the model gives a better view of the inversion).
 //!
 //! Based on the MuJoCo Python tutorial:
-//! <https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/tutorial.ipynb>
+//! <https://colab.research.google.com/github/google-deepmind/mujoco/blob/3.17.0/python/tutorial.ipynb>
 
 use std::time::Duration;
 

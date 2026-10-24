@@ -1,7 +1,7 @@
 //! The example shows how to procedurally generate terrain.
 //! It generates a terrain of stair regions.
 //! The example is adapted from the MuJoCo Python's model editing tutorial:
-//! https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb#scrollTo=P2F0ObC2T8w8&line=40&uniqifier=1
+//! https://colab.research.google.com/github/google-deepmind/mujoco/blob/3.17.0/python/mjspec.ipynb#scrollTo=P2F0ObC2T8w8&line=40&uniqifier=1
 //! 
 //! This example uses the viewer in single-threaded fashion.
 use mujoco_rs::viewer::MjViewer;
@@ -95,7 +95,7 @@ fn create_model() -> MjModel {
 
 /// Generates a body of stair shape.
 /// This is adapted from MuJoCo Python's model editing tutorial:
-/// https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb#scrollTo=dtFWSSwWSgeD&line=1&uniqifier=1
+/// https://colab.research.google.com/github/google-deepmind/mujoco/blob/3.17.0/python/mjspec.ipynb#scrollTo=dtFWSSwWSgeD&line=1&uniqifier=1
 fn stairs(spec: &mut MjSpec, grid_loc: [f64; 2] , num_stairs: u32, direction: i8, name: &str) {
     const SQUARE_LENGTH: f64 = 2.0;
     const V_SIZE: f64 = 0.076;

@@ -21,7 +21,7 @@ Additional prerequisites for MuJoCo-rs
 
 In addition to the emsdk prerequisites described in MuJoCo's
 `WebAssembly bindings README
-<https://github.com/google-deepmind/mujoco/blob/3.16.0/wasm/README.md#prerequisites>`_,
+<https://github.com/google-deepmind/mujoco/blob/3.17.0/wasm/README.md#prerequisites>`_,
 which pins emsdk 4.0.10, you need:
 
 1. **Rust wasm32-unknown-emscripten target**
@@ -60,7 +60,7 @@ To clone the official release:
 
 ::
 
-    git clone https://github.com/google-deepmind/mujoco.git --branch 3.16.0 --depth 1
+    git clone https://github.com/google-deepmind/mujoco.git --branch 3.17.0 --depth 1
 
 Then build (replace ``mujoco`` with the path to whichever source you chose):
 
