@@ -256,6 +256,9 @@ Replace ``user_scn_mut`` with
 :docs-rs:`~~mujoco_rs::cpp_viewer::<struct>MjViewerCpp::<method>sync_user_geoms`.
 The former method is unsafe due to the ability of users to write invalid IDs into
 :docs-rs:`~mujoco_rs::wrappers::mj_visualization::<type>MjvGeom`.
+``MjViewerCpp`` no longer implements ``Send`` and ``Sync``. To step the simulation in another
+thread, send a clone of the shared state to that thread and keep the viewer on the thread that
+created it.
 
 .. code-block:: rust
 

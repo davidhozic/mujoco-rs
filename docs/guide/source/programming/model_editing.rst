@@ -163,9 +163,11 @@ Finally, we can now add the base plane, like so:
 
 This concludes the specification's definition.
 We can now compile it to a model and save it to an MJB (binary) file.
-The specification can also be saved to an MJCF (XML) file. MuJoCo writes MJCF only from a
-compiled specification, so ``save_xml`` and ``save_xml_string`` return
-:docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>SaveFailed` when ``compile`` did not run:
+The specification can also be saved to an MJCF (XML) file. By default (compiler option
+``savecompiled`` set), MuJoCo writes MJCF only from a compiled specification, thus ``save_xml`` and
+``save_xml_string`` return
+:docs-rs:`~mujoco_rs::error::<enum>MjEditError::<variant>SaveFailed` when the
+model was not compiled (``compile()``):
 
 .. code-block:: rust
     :emphasize-lines: 24-28
@@ -209,13 +211,10 @@ The compiled |mj_model| can also be swapped into a running simulation using
 as described in the :ref:`basic_sim` chapter. The swap keeps the existing |mj_data|, so it accepts
 only a compatible model, which can be checked by
 :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>is_compatible_with_model`.
-A compatible model keeps the element tree, the ``nq`` of each joint and
-the type of each sensor, and every size that fixes an |mj_data| buffer, such as ``nuserdata``,
-``na`` and ``nout``. Most attribute changes therefore keep compatibility, while an added or
-deleted element, a joint type change that alters ``nq`` (for example ``hinge`` to ``ball``), a
-changed sensor type or a changed actuator dynamics type breaks it; ``swap_model`` then panics and
-``try_swap_model`` returns
-:docs-rs:`~~mujoco_rs::error::<enum>MjDataError::<variant>IncompatibleModel`.
+A compatible model shares the same element tree, type of each element (joint, geom, site, etc.),
+material of each element, and every size that fixes an |mj_data| buffer, such as
+``nuserdata``, ``na`` and ``nout``. Most numeric attribute changes therefore keep compatibility,
+while structural changes (e.g., an added or deleted element, a changed joint type, etc.) break compatibility.
 
 
 .. _model_editing_send:
@@ -404,7 +403,7 @@ element frees it twice. The caller carries three obligations:
   specification.
 - Do not use the handle of an element that the deletion of a body or a frame freed.
 
-Deleting a body or a frame deletes its whole subtree, and it frees every keyframe, and every actuator, sensor,
+Deleting a body or a frame deletes its whole subtree, and it frees every actuator, sensor,
 tendon, equality, pair and exclude that refers to the subtree. The last two obligations follow from
 that: an iterator collected before such a deletion still hands out the handles it took.
 
