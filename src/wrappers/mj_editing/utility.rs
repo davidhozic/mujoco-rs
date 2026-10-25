@@ -2,7 +2,7 @@
 use std::ffi::{CStr, CString};
 
 use super::{MjSpec, MjsBody, MjsFrame, SpecElement};
-use crate::util::checked_c_len;
+use crate::util::{checked_c_len, string_from_c};
 use crate::error::MjEditError;
 use crate::mujoco_c::*;
 
@@ -227,7 +227,7 @@ pub(crate) unsafe fn read_spec_error(spec: *mut mjSpec) -> String {
     if ptr.is_null() {
         "Unknown error".to_owned()
     } else {
-        unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned()
+        unsafe { string_from_c(ptr) }
     }
 }
 

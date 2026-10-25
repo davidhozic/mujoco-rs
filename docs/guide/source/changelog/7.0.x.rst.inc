@@ -188,6 +188,8 @@
 .. rubric:: Error handling
 
 - New variant :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>FrameParentMismatch` :sup:`new`.
+- New variant :docs-rs:`~~mujoco_rs::error::<enum>MjModelError::<variant>AssetLoadFailed` :sup:`new`
+  holds MuJoCo's error message when an asset of an existing model fails to load.
 - New variant :docs-rs:`~~mujoco_rs::error::<enum>MjEditError::<variant>OperationFailed` :sup:`new`
   holds MuJoCo's error message when a spec operation other than compilation fails.
 - :docs-rs:`~~mujoco_rs::wrappers::mj_editing::<struct>MjsBody::<method>try_add_flexcomp` now returns
@@ -277,6 +279,8 @@
     returns the layout that the compatibility checks compare.
   - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>to_embed_assets` :sup:`new`
     returns a copy of the model that embeds all of its assets.
+  - :docs-rs:`~~mujoco_rs::wrappers::mj_model::<struct>MjModel::<method>load_texture` :sup:`new`
+    decodes a texture to raw bytes or borrows the model data when the texture is embedded.
 
 .. rubric:: New examples
 

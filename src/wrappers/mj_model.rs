@@ -3,7 +3,7 @@ use crate::{
     view_creator, info_method, info_with_view,
     array_slice_dyn, getter_setter
 };
-use crate::util::{assert_mujoco_version, checked_c_len, ERROR_BUF_LEN};
+use crate::util::{ERROR_BUF_LEN, assert_mujoco_version, checked_c_len, optional_sparse_addr_range, string_from_c};
 use crate::error::{MjDataError, MjModelError};
 use crate::wrappers::mj_option::MjOption;
 use crate::wrappers::mj_data::MjData;
@@ -20,6 +20,7 @@ use std::fmt::{Formatter, Debug, Result as FmtResult};
 use std::ffi::{c_char, CStr, CString, c_int, c_void};
 use std::sync::{OnceLock, Arc};
 use std::ptr::{self, NonNull};
+use std::borrow::Cow;
 use std::path::Path;
 use std::fs::File;
 
@@ -463,7 +464,7 @@ impl MjModel {
             error_buffer.as_mut_ptr(), error_buffer.len() as c_int
         ) };
 
-        Self::check_raw_model(raw_ptr, &error_buffer)
+        Self::check_raw_model(raw_ptr, &error_buffer, MjModelError::LoadFailed)
             .inspect(|_| debug!("loaded the model from \"{path_str}\""))
     }
 
@@ -492,7 +493,7 @@ impl MjModel {
             error_buffer.as_mut_ptr(), error_buffer.len() as c_int
         ) };
 
-        Self::check_raw_model(raw_ptr, &error_buffer)
+        Self::check_raw_model(raw_ptr, &error_buffer, MjModelError::LoadFailed)
     }
 
     /// Loads the model from MJB raw data.
@@ -556,7 +557,7 @@ impl MjModel {
 
     /// Creates a [`MjModel`] from a raw pointer.
     pub(crate) fn from_raw(ptr: *mut mjModel) -> Result<Self, MjModelError> {
-        Self::check_raw_model(ptr, &[0])
+        Self::check_raw_model(ptr, &[0], MjModelError::LoadFailed)
     }
 
     /// Saves the last loaded XML to `filename`.
@@ -584,11 +585,8 @@ impl MjModel {
             },
             _ => {
                 // SAFETY: error is zero-initialised and MuJoCo NUL-terminates the message it
-                // writes into it; the resulting CStr borrows the stack buffer and is consumed
-                // before the buffer goes out of scope.
-                let cstr_error = unsafe { CStr::from_ptr(error.as_ptr()) }
-                    .to_string_lossy()
-                    .into_owned();
+                // writes into it.
+                let cstr_error = unsafe { string_from_c(error.as_ptr()) };
                 Err(MjModelError::SaveFailed(cstr_error))
             },
         }
@@ -660,16 +658,19 @@ impl MjModel {
 
     /// Wraps a raw model pointer returned by MuJoCo load functions.
     /// Returns an error with the C error-buffer message if the pointer is null.
-    fn check_raw_model(ptr_model: *mut mjModel, error_buffer: &[c_char]) -> Result<Self, MjModelError> {
+    fn check_raw_model(
+        ptr_model: *mut mjModel,
+        error_buffer: &[c_char],
+        variant: impl FnOnce(String) -> MjModelError
+    ) -> Result<Self, MjModelError>
+    {
         match NonNull::new(ptr_model) {
             Some(nn) => Ok(Self { ptr: nn, layout: OnceLock::new() }),
             None => {
                 // SAFETY: error_buffer is zero-initialised and MuJoCo always
                 // NUL-terminates the message it writes into it.
-                let message = unsafe { CStr::from_ptr(error_buffer.as_ptr()) }
-                    .to_string_lossy()
-                    .into_owned();
-                Err(MjModelError::LoadFailed(message))
+                let message = unsafe { string_from_c(error_buffer.as_ptr()) };
+                Err(variant(message))
             }
         }
     }
@@ -1331,7 +1332,7 @@ impl MjModel {
     /// Wraps [`mj_embedAssets`].
     ///
     /// # Errors
-    /// Returns [`MjModelError::LoadFailed`] with MuJoCo's error message when a by-reference asset
+    /// Returns [`MjModelError::AssetLoadFailed`] with MuJoCo's error message when a by-reference asset
     /// does not resolve.
     pub fn to_embed_assets(&self) -> Result<MjModel, MjModelError> {
         let mut error = [0; 500];
@@ -1340,7 +1341,60 @@ impl MjModel {
             mj_embedAssets(self.ptr.as_ptr(), error.as_mut_ptr(), error.len() as i32)
         };
 
-        Self::check_raw_model(embedded_ptr, &error)
+        Self::check_raw_model(embedded_ptr, &error, MjModelError::AssetLoadFailed)
+    }
+
+    /// Decodes texture `id` to raw bytes with [`MjModel::tex_nchannel`] channels. An embedded
+    /// texture borrows its slice of [`MjModel::tex_data`].
+    /// Wraps [`mj_loadTexture`].
+    ///
+    /// # Errors
+    /// - [`MjModelError::IndexOutOfBounds`] when `id >= ntex`.
+    /// - [`MjModelError::AssetLoadFailed`] with MuJoCo's error message if a by-reference texture
+    ///   fails to load.
+    pub fn load_texture(&self, id: usize) -> Result<Cow<'_, [MjtByte]>, MjModelError> {
+        if id >= self.ntex() as usize {  // ntex can't be negative unless user used the unsafe API to make it such.
+            return Err(MjModelError::IndexOutOfBounds { id, len: self.ntex() as usize });
+        }
+
+        if let Some((start, length)) =
+            optional_sparse_addr_range(self.tex_adr(), id, self.ntexdata() as usize)
+        {
+            return Ok(Cow::Borrowed(&self.tex_data()[start..start+length]));
+        }
+
+        let mut data = ptr::null_mut();
+        let mut width = 0;
+        let mut height = 0;
+        let mut error = [0; 500];
+        // SAFETY: ffi pointer is always valid when this function is called, id is checked for overflows,
+        // null fields indicate no data and don't need to be non-null, error-array size fits in `c_int` of any size.
+        let result = unsafe { mj_loadTexture(
+                self.ptr.as_ptr(),
+                checked_c_len(id),
+                &mut data,
+                &mut width, &mut height, ptr::null_mut(),
+                error.as_mut_ptr(),
+                error.len() as c_int  // Can't overflow
+            ) };
+
+        if result != 0 {
+            // SAFETY: error is zero-initialised and MuJoCo NULL-terminates the message it writes.
+            let message = unsafe { string_from_c(error.as_ptr()) };
+            return Err(MjModelError::AssetLoadFailed(message));
+        }
+
+        // SAFETY: `data` pointer is guaranteed to be valid by `mj_loadTexture`, lengths
+        // are provided by `mj_loadTexture` and tex_nchannel is always valid when user
+        // uses MuJoCo-rs via safe-only code.
+        let r = Cow::Owned(unsafe { std::slice::from_raw_parts(
+            data, self.tex_nchannel()[id] as usize * width as usize * height as usize
+        ).to_vec()});
+
+        // SAFETY: `data` was loaded inside `mj_loadTexture` using `mju_malloc`.
+        unsafe { mju_free(data as *mut c_void) };
+
+        Ok(r)
     }
 
     /* FFI */

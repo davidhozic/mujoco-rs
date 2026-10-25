@@ -32,7 +32,7 @@ use crate::getter_setter;
 
 // Re-export with lowercase 'f' to fix method generation
 use crate::mujoco_c::{mjs_addHField as mjs_addHfield, mjs_asHField as mjs_asHfield};
-use crate::util::{assert_mujoco_version, ERROR_BUF_LEN};
+use crate::util::{assert_mujoco_version, string_from_c, ERROR_BUF_LEN};
 
 /* Validation helpers */
 /// Validates that a `nuser_*` count is at least `-1` (-1 meaning automatic).
@@ -430,9 +430,7 @@ impl MjSpec {
         if spec_ptr.is_null() {
             // SAFETY: error_buffer is zero-initialised and MuJoCo always
             // NUL-terminates the message it writes into it.
-            let message = unsafe { CStr::from_ptr(error_buffer.as_ptr()) }
-                .to_string_lossy()
-                .into_owned();
+            let message = unsafe { string_from_c(error_buffer.as_ptr()) };
             Err(MjEditError::ParseFailed(message))
         }
         else {
@@ -577,9 +575,7 @@ impl MjSpec {
             _ => {
                 // SAFETY: error_buff is zero-initialised and MuJoCo always
                 // NUL-terminates the message it writes into it.
-                let message = unsafe { CStr::from_ptr(error_buff.as_ptr()) }
-                    .to_string_lossy()
-                    .into_owned();
+                let message = unsafe { string_from_c(error_buff.as_ptr()) };
                 Err(MjEditError::SaveFailed(message))
             }
         }
@@ -609,9 +605,7 @@ impl MjSpec {
             _ => {
                 // SAFETY: error_buff is zero-initialised and MuJoCo always
                 // NUL-terminates the message it writes into it.
-                let message = unsafe { CStr::from_ptr(error_buff.as_ptr()) }
-                    .to_string_lossy()
-                    .into_owned();
+                let message = unsafe { string_from_c(error_buff.as_ptr()) };
                 Err(MjEditError::SaveFailed(message))
             }
         }
@@ -802,9 +796,7 @@ pub(crate) fn encode(
     // == -1 means error, >= 0 mean the number of bytes written
     if result == -1 {
         // SAFETY: MuJoCo NUL-terminates the error buffer.
-        let message = unsafe { CStr::from_ptr(error_buff.as_ptr()) }
-            .to_string_lossy()
-            .into_owned();
+        let message = unsafe { string_from_c(error_buff.as_ptr()) };
         return Err(message);
     }
 
