@@ -3368,15 +3368,17 @@ mod tests {
         let mut spec_no_assets = MjSpec::from_parse_vfs(PATH_MJZ_NO_ASSETS, "application/zip", &vfs_no_assets)
             .expect("MJZ parsing failed");
 
-        std::fs::remove_file(PATH_MJZ).unwrap();
-        std::fs::remove_file(PATH_MJZ_NO_ASSETS).unwrap();
-
         // Read both from their VFS. Only the first has the heightfield in the VFS.
         assert!(model.is_compatible_with_model(&spec_mjz.compile_with_vfs(&vfs_mjz).unwrap()));
         assert!(matches!(
             spec_no_assets.compile_with_vfs(&vfs_no_assets),
             Err(MjEditError::CompileFailed(_))
         ));
+
+        drop(vfs_mjz);  // Allow files to be removed on Windows.
+        drop(vfs_no_assets);
+        std::fs::remove_file(PATH_MJZ).unwrap();
+        std::fs::remove_file(PATH_MJZ_NO_ASSETS).unwrap();
     }
 
     #[test]
